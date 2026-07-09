@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Miami-Dade Foreclosure Lead Tracker</title>
+<style>
+:root{color-scheme:light dark}
+body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#0f1420;color:#e8ecf3}
+header{padding:14px 20px;background:#161d2e;position:sticky;top:0;z-index:5;box-shadow:0 2px 8px #0008}
+h1{font-size:17px;margin:0 0 8px}
+.sub{color:#9fb0cc;font-weight:400}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,select,input{background:#222b42;color:#e8ecf3;border:1px solid #33405f;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer}
+button.active{background:#3b82f6;border-color:#3b82f6}
+input{width:240px;cursor:text}
+.stats{font-size:12px;color:#9fb0cc;margin-left:auto}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1200px}
+th{position:sticky;top:0;background:#1b2438;padding:8px 6px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none}
+td{padding:7px 6px;border-bottom:1px solid #1e2740;vertical-align:top}
+tr:hover td{background:#182137}
+.A{color:#4ade80;font-weight:700}.B{color:#fbbf24;font-weight:700}.C{color:#64748b}
+.money{white-space:nowrap;text-align:right}
+.hs{color:#4ade80}
+a{color:#60a5fa;text-decoration:none}
+a:hover{text-decoration:underline}
+select.status{padding:3px 6px;font-size:12px}
+textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;border:1px solid #2a3654;border-radius:5px;font-size:12px;padding:3px 5px}
+.urgent{color:#f87171;font-weight:700}
+.warn{color:#fbbf24;font-size:11px}
+.links a{margin-right:6px}
+</style></head><body>
+<header>
+<h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated __UPDATED__ · notes save in your own browser</span></h1>
+<div class="controls">
+<button class="tf active" data-t="A">Tier A</button>
+<button class="tf" data-t="B">Tier B</button>
+<button class="tf" data-t="C">Tier C</button>
+<button class="tf" data-t="ALL">All</button>
+<input id="q" placeholder="Search owner / address / case #">
+<button id="exp">Export CSV (with my notes)</button>
+<span class="stats" id="stats"></span>
+</div>
+</header>
+<div class="tblwrap">
+<table id="tbl"><thead><tr>
+<th data-k="tier">Tier</th><th data-k="score">Score</th><th data-k="auction">Auction</th><th data-k="days">Days</th>
+<th data-k="owners">Owner(s)</th><th data-k="addr">Property</th><th data-k="mail">Mailing Address</th>
+<th data-k="value">Value</th><th data-k="judg">Judgment</th><th data-k="eq">Equity%</th><th data-k="hs">HS</th>
+<th>Links</th><th>Status</th><th>Notes</th>
+</tr></thead><tbody id="tb"></tbody></table>
+</div>
+<script>
+const NL = String.fromCharCode(10);
+const BOM = String.fromCharCode(65279);
+const DATA = __DATA__;
+const LS = 'fcLeadNotes';
+let notes = {};
+try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
+let tier = 'A', q = '', sortK = 'score', sortD = -1;
+const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
+function view(){
+  let rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
+  if(q){ const s=q.toLowerCase(); rows = rows.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail).toLowerCase().includes(s)); }
+  rows = rows.slice();
+  rows.sort((a,b) => (a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD);
+  return rows;
+}
+function render(){
+  const rows = view();
+  document.getElementById('stats').textContent = rows.length + ' leads shown / ' + DATA.length + ' total';
+  document.getElementById('tb').innerHTML = rows.map(r => {
+    const n = notes[r.case] || {status:'', note:''};
+    const links = [];
+    if(r.zillow) links.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
+    if(r.pa) links.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener">Appraiser</a>');
+    if(r.auc) links.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener">Auction</a>');
+    return '<tr>'+
+    '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td><td>'+r.score+'</td><td>'+esc(r.auction)+'</td>'+
+    '<td class="'+(r.days<7?'urgent':'')+'">'+r.days+'</td>'+
+    '<td>'+esc(r.owners)+'</td>'+
+    '<td>'+esc(r.addr)+(r.warn?'<div class="warn">'+esc(r.warn)+'</div>':'')+'</td>'+
+    '<td>'+esc(r.mail)+'</td>'+
+    '<td class="money">'+fmt(r.value)+'</td><td class="money">'+fmt(r.judg)+'</td>'+
+    '<td class="money">'+(r.eq?r.eq+'%':'')+'</td><td class="hs">'+(r.hs?'&#10004;':'')+'</td>'+
+    '<td class="links">'+links.join('')+'</td>'+
+    '<td><select class="status" data-c="'+esc(r.case)+'">'+
+      ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'].map(s =>
+        '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select></td>'+
+    '<td><textarea class="notes" data-c="'+esc(r.case)+'">'+esc(n.note)+'</textarea></td></tr>';
+  }).join('');
+}
+document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tf').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); tier = b.dataset.t; render();
+});
+document.getElementById('q').oninput = e => { q = e.target.value; render(); };
+document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
+  const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
+});
+document.getElementById('tb').addEventListener('change', e => {
+  const c = e.target.dataset.c; if(!c) return;
+  notes[c] = notes[c] || {status:'', note:''};
+  if(e.target.classList.contains('status')) notes[c].status = e.target.value;
+  else notes[c].note = e.target.value;
+  save();
+});
+document.getElementById('exp').onclick = () => {
+  const head = ['tier','score','auction_date','days','case','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','status','notes'];
+  const q2 = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+  const lines = [head.join(',')].concat(view().map(r => {
+    const n = notes[r.case]||{};
+    return [r.tier,r.score,r.auction,r.days,r.case,r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',n.status||'',n.note||''].map(q2).join(',');
+  }));
+  const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'foreclosure-leads-tracked.csv'; a.click();
+};
+render();
+</script></body></html>
