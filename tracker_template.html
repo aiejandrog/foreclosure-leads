@@ -40,10 +40,23 @@ textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;bord
 <button id="exp">Export CSV (with my notes)</button>
 <span class="stats" id="stats"></span>
 </div>
+<div class="controls" style="margin-top:8px">
+<label>Filed <input id="fy1" type="number" placeholder="from yr" style="width:76px"> &ndash; <input id="fy2" type="number" placeholder="to yr" style="width:76px"></label>
+<label>Auction <input id="ad1" type="date" style="width:140px"> &ndash; <input id="ad2" type="date" style="width:140px"></label>
+<button id="clr">Clear dates</button>
+</div>
+<div class="controls" style="margin-top:8px">
+<span style="color:#9fb0cc;font-size:12px">Lookup any county property:</span>
+<input id="lk" placeholder="address, owner, folio or LLC" style="width:280px">
+<button class="lkb" data-s="zillow">Zillow</button>
+<button class="lkb" data-s="appr">Appraiser</button>
+<button class="lkb" data-s="clerk">Clerk / Foreclosure</button>
+<button class="lkb" data-s="sunbiz">Owner / LLC</button>
+</div>
 </header>
 <div class="tblwrap">
 <table id="tbl"><thead><tr>
-<th data-k="tier">Tier</th><th data-k="score">Score</th><th data-k="auction">Auction</th><th data-k="days">Days</th>
+<th data-k="tier">Tier</th><th data-k="score">Score</th><th data-k="auction">Auction</th><th data-k="days">Days</th><th data-k="filed">Filed</th>
 <th data-k="owners">Owner(s)</th><th data-k="addr">Property</th><th data-k="mail">Mailing Address</th>
 <th data-k="value">Value</th><th data-k="judg">Judgment</th><th data-k="eq">Equity%</th><th data-k="hs">HS</th>
 <th>Links</th><th>Status</th><th>Notes</th>
@@ -57,12 +70,18 @@ const LS = 'fcLeadNotes';
 let notes = {};
 try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 let tier = 'A', q = '', sortK = 'score', sortD = -1;
+let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
 function view(){
   let rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
   if(q){ const s=q.toLowerCase(); rows = rows.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail).toLowerCase().includes(s)); }
+  if(fy1) rows = rows.filter(r => r.filed && r.filed >= +fy1);
+  if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
+  if(ad1) rows = rows.filter(r => toISO(r.auction) >= ad1);
+  if(ad2) rows = rows.filter(r => toISO(r.auction) <= ad2);
   rows = rows.slice();
   rows.sort((a,b) => (a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD);
   return rows;
@@ -79,6 +98,7 @@ function render(){
     return '<tr>'+
     '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td><td>'+r.score+'</td><td>'+esc(r.auction)+'</td>'+
     '<td class="'+(r.days<7?'urgent':'')+'">'+r.days+'</td>'+
+    '<td>'+(r.filed||'')+'</td>'+
     '<td>'+esc(r.owners)+'</td>'+
     '<td>'+esc(r.addr)+(r.warn?'<div class="warn">'+esc(r.warn)+'</div>':'')+'</td>'+
     '<td>'+esc(r.mail)+'</td>'+
@@ -96,6 +116,27 @@ document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
   b.classList.add('active'); tier = b.dataset.t; render();
 });
 document.getElementById('q').oninput = e => { q = e.target.value; render(); };
+document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
+document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
+document.getElementById('ad1').oninput = e => { ad1 = e.target.value; render(); };
+document.getElementById('ad2').oninput = e => { ad2 = e.target.value; render(); };
+document.getElementById('clr').onclick = () => {
+  fy1 = fy2 = ad1 = ad2 = '';
+  ['fy1','fy2','ad1','ad2'].forEach(id => document.getElementById(id).value = '');
+  render();
+};
+document.querySelectorAll('.lkb').forEach(b => b.onclick = () => {
+  const v = document.getElementById('lk').value.trim();
+  if(!v) return;
+  const e2 = encodeURIComponent(v);
+  const urls = {
+    zillow: 'https://www.zillow.com/homes/' + e2 + '_rb/',
+    appr:   'https://www.google.com/search?q=' + e2 + '+county+property+appraiser',
+    clerk:  'https://www.google.com/search?q=' + e2 + '+clerk+of+courts+foreclosure+case',
+    sunbiz: 'https://www.google.com/search?q=' + e2 + '+site%3Asearch.sunbiz.org'
+  };
+  window.open(urls[b.dataset.s], '_blank', 'noopener');
+});
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
   const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
 });
@@ -107,11 +148,11 @@ document.getElementById('tb').addEventListener('change', e => {
   save();
 });
 document.getElementById('exp').onclick = () => {
-  const head = ['tier','score','auction_date','days','case','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','status','notes'];
+  const head = ['tier','score','auction_date','days','filed_year','case','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','status','notes'];
   const q2 = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,r.score,r.auction,r.days,r.case,r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,r.score,r.auction,r.days,r.filed||'',r.case,r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');

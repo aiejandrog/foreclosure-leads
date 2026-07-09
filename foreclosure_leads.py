@@ -164,6 +164,8 @@ def qualify(leads):
         except: days = 0
         r['days_to_auction'] = days
         case = r.get('Case #','')
+        fy = re.match(r'(\d{4})-', case)
+        r['filing_year'] = int(fy.group(1)) if fy else 0
         # CC = county-court case, almost always HOA/condo assoc foreclosure: equity is real but a
         # senior mortgage may exist that the judgment amount doesn't show
         is_hoa = bool(re.search(r'-CC-', case))
@@ -204,6 +206,7 @@ def make_tracker(leads):
         'eq': r.get('equity_pct',0), 'hs': bool(r.get('homestead')),
         'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
         'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
+        'filed': r.get('filing_year',0),
     } for r in leads]
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read()
     html = tpl.replace('__DATA__', json.dumps(slim)).replace('__UPDATED__', f"{date.today():%Y-%m-%d}")
@@ -221,7 +224,7 @@ def main():
     leads.sort(key=lambda r: -r['score'])
     json.dump(leads, open(os.path.join(HERE,'leads_final.json'),'w'), indent=1)
     make_tracker(leads)
-    cols = ['tier','score','AuctionDate','days_to_auction','Case #','owners','Address','mailing_address',
+    cols = ['tier','score','AuctionDate','days_to_auction','Case #','filing_year','owners','Address','mailing_address',
             'market_value','judgment','equity','equity_pct','homestead','warning','dor_desc','beds','baths',
             'living_area','last_sale_price','last_sale_date','year_folio','zillow_url','pa_url','disqualifiers']
     out_csv = os.path.join(DESKTOP, f"Miami-Dade Foreclosure Leads - {date.today():%Y-%m-%d}.csv")
