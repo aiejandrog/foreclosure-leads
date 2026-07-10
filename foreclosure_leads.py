@@ -255,7 +255,7 @@ def qualify(leads):
         addr = r.get('Address','').replace(',',' ')
         r['zillow_url'] = 'https://www.zillow.com/homes/' + urllib.parse.quote(addr) + '_rb/' if addr.strip() else ''
         folio = re.sub(r'\D','', r.get('Folio',''))
-        r['pa_url'] = 'https://www.miamidade.gov/Apps/PA/propertysearch/#/?folio=' + folio if folio else ''
+        r['pa_url'] = 'https://apps.miamidadepa.gov/PropertySearch/#/?folio=' + folio if folio else ''
         r['auction_url'] = f"{BASE}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={r.get('AuctionDate','')}"
         # owner purchase year (from PA sales history)
         sd = re.search(r'(\d{4})$', (r.get('last_sale_date','') or '').strip())
@@ -273,9 +273,9 @@ def qualify(leads):
         # case_type comes from the Clerk API (enrich_clerk); fall back to a heuristic if unresolved
         if not r.get('case_type'):
             r['case_type'] = 'HOA/Condo' if re.search(r'-CC-', r.get('Case #','')) else 'Mortgage/Other'
-        # tax-collector lookup link by folio (delinquent taxes/certificates; Cloudflare-walled to scrape,
-        # so this is a reliable one-click lookup instead)
-        r['tax_url'] = ('https://miamidade.county-taxes.com/public/search?search_query=' + folio) if folio else ''
+        # tax-collector DIRECT parcel page by folio (delinquent taxes/certs/full bill history).
+        # Cloudflare-walled to scrape, so this is a reliable one-click deep-link straight to the parcel.
+        r['tax_url'] = ('https://miamidade.county-taxes.com/public/real_estate/parcels/' + folio) if folio else ''
         # mortgage-risk: an HOA/condo judgment often hides a senior mortgage. If a lender is a
         # co-defendant, the true payoff is higher than the association judgment shown -> flag it.
         defs = (r.get('defendants','') or '').upper()
