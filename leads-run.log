@@ -1,0 +1,47 @@
+==== run Fri 07/10/2026 13:47:50.99 ==== 
+C:\Users\olqbb\AppData\Roaming\Python\Python311\site-packages\requests\__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.4.0.post2)/charset_normalizer (3.4.4) doesn't match a supported version!
+  warnings.warn(
+auction dates found: ['07/13/2026 (31)', '07/14/2026 (3)', '07/15/2026 (7)', '07/20/2026 (26)', '07/21/2026 (5)', '07/22/2026 (2)', '07/27/2026 (26)', '07/28/2026 (2)', '07/29/2026 (11)', '08/03/2026 (29)', '08/04/2026 (18)', '08/05/2026 (4)', '08/10/2026 (42)', '08/12/2026 (3)', '08/17/2026 (28)', '08/18/2026 (1)', '08/19/2026 (2)', '08/24/2026 (34)', '08/25/2026 (2)', '08/26/2026 (5)', '08/31/2026 (15)']
+07/13/2026: 31 pending (pages=4)
+07/14/2026: 3 pending (pages=1)
+07/15/2026: 7 pending (pages=1)
+07/20/2026: 26 pending (pages=3)
+07/21/2026: 5 pending (pages=1)
+07/22/2026: 2 pending (pages=1)
+07/27/2026: 26 pending (pages=3)
+07/28/2026: 2 pending (pages=1)
+07/29/2026: 11 pending (pages=2)
+08/03/2026: 29 pending (pages=3)
+08/04/2026: 18 pending (pages=2)
+08/05/2026: 4 pending (pages=1)
+08/10/2026: 42 pending (pages=5)
+08/12/2026: 3 pending (pages=1)
+08/17/2026: 28 pending (pages=3)
+08/18/2026: 1 pending (pages=1)
+08/19/2026: 2 pending (pages=1)
+08/24/2026: 34 pending (pages=4)
+08/25/2026: 2 pending (pages=1)
+08/26/2026: 5 pending (pages=1)
+08/31/2026: 15 pending (pages=2)
+scraped 296 pending auctions
+enriched 20/296
+enriched 40/296
+enriched 60/296
+enriched 80/296
+enriched 100/296
+enriched 120/296
+enriched 140/296
+enriched 160/296
+enriched 180/296
+enriched 200/296
+clerk 40/296 (40 matched)
+clerk 80/296 (80 matched)
+clerk 120/296 (120 matched)
+clerk 160/296 (160 matched)
+clerk 200/296 (200 matched)
+clerk 240/296 (240 matched)
+clerk 280/296 (280 matched)
+clerk enrichment: 296/296 cases resolved
+tracker written: docs/index.html + Desktop
+DONE: 296 leads | Tier A: 47 | Tier B: 40
+CSV: C:\Users\olqbb\OneDrive\Desktop\Miami-Dade Foreclosure Leads - 2026-07-10.csv
