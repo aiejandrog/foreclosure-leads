@@ -14,17 +14,23 @@ button.active{background:#3b82f6;border-color:#3b82f6}
 input{width:240px;cursor:text}
 .stats{font-size:12px;color:#9fb0cc;margin-left:auto}
 .tblwrap{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1480px}
-th{position:sticky;top:0;background:#1b2438;padding:8px 6px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none}
-td{padding:7px 6px;border-bottom:1px solid #1e2740;vertical-align:top}
-tr:hover td{background:#182137}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
+th{position:sticky;top:0;background:#1b2438;padding:9px 8px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:2px solid #2a3654;font-size:11.5px;letter-spacing:.02em;color:#c7d3e8}
+td{padding:9px 8px;border-bottom:1px solid #1c2540;vertical-align:top;line-height:1.4;overflow:hidden}
+tbody tr:nth-child(even) td{background:#121a29}
+tbody tr:hover td{background:#1c2740}
 .A{color:#4ade80;font-weight:700}.B{color:#fbbf24;font-weight:700}.C{color:#64748b}
-.money{white-space:nowrap;text-align:right}
-.hs{color:#4ade80}
+.money{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.submeta{font-size:11px;color:#9fb0cc;margin-top:3px;font-variant-numeric:tabular-nums}
+.clip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hs{color:#4ade80;font-weight:600}
 a{color:#60a5fa;text-decoration:none}
 a:hover{text-decoration:underline}
-select.status{padding:3px 6px;font-size:12px}
-textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;border:1px solid #2a3654;border-radius:5px;font-size:12px;padding:3px 5px}
+select.status{padding:4px 5px;font-size:11.5px;width:100%;box-sizing:border-box}
+textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a2338;color:#e8ecf3;border:1px solid #2a3654;border-radius:5px;font-size:12px;padding:4px 6px;resize:vertical}
+.links{line-height:1.9}
 .urgent{color:#f87171;font-weight:700}
 .warn{color:#fbbf24;font-size:11px}
 .meta{color:#8fa2c4;font-size:11px}
@@ -44,6 +50,10 @@ textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;bord
 <button class="tf" data-t="C">Tier C</button>
 <button class="tf" data-t="ALL">All</button>
 <input id="q" placeholder="Search owner / address / case #">
+<label style="font-size:12px">Sort <select id="sortby">
+<option value="_profit">Est. Profit</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
+<option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option>
+</select></label>
 <button id="exp">Export CSV (with my notes)</button>
 <span class="stats" id="stats"></span>
 </div>
@@ -70,10 +80,19 @@ textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;bord
 </div>
 </header>
 <div class="tblwrap">
-<table id="tbl"><thead><tr>
-<th data-k="tier">Tier</th><th data-k="_profit" style="color:#4ade80">Est. Profit &#9660;</th><th data-k="_roi">ROI</th><th data-k="_cash">Cash In</th><th data-k="score">Score</th><th data-k="auction">Auction</th><th data-k="days">Days</th><th data-k="filed">Filed</th><th data-k="bought">Bought</th><th data-k="ctype">Type</th>
-<th data-k="owners">Owner(s)</th><th data-k="addr">Property</th><th data-k="mail">Mailing Address</th>
-<th data-k="value">Value</th><th data-k="judg">Judgment</th><th data-k="eq">Equity%</th><th data-k="hs">HS</th>
+<table id="tbl">
+<colgroup>
+<col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:120px"><col style="width:96px"><col style="width:210px"><col style="width:250px"><col style="width:158px"><col style="width:150px"><col style="width:132px"><col style="width:150px">
+</colgroup>
+<thead><tr>
+<th data-k="tier">Tier</th>
+<th data-k="_profit" style="color:#4ade80">Est. Profit &#9660;</th>
+<th data-k="score">Score</th>
+<th data-k="auction">Auction</th>
+<th data-k="ctype">Type</th>
+<th data-k="owners">Owner / vs Plaintiff</th>
+<th data-k="addr">Property &amp; Numbers</th>
+<th data-k="mail">Mailing</th>
 <th>Links</th><th>Status</th><th>Notes</th>
 </tr></thead><tbody id="tb"></tbody></table>
 </div>
@@ -91,6 +110,7 @@ let deal = {costpct: 10, upmode: 'scale', upflat: 5000};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
+const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); return n>=1e6 ? s+'$'+(n/1e6).toFixed(2)+'M' : n>=1e3 ? s+'$'+Math.round(n/1e3)+'k' : s+'$'+Math.round(n); };
 function upfrontFor(judg){
   if(deal.upmode==='flat') return +deal.upflat || 0;
   return Math.min(8000, Math.max(3500, 3500 + 0.02*judg));   // scale to debt
@@ -136,31 +156,35 @@ function render(){
     if(r.people) links.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener">People</a>');
     if(r.tax) links.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener">Taxes</a>');
     if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
-    const bought = r.bought ? r.bought + (r.bprice ? '<div class="meta">' + fmt(r.bprice) + '</div>' : '') : '';
     const ctype = r.ctype ? '<span class="'+(r.ctype.indexOf('HOA')>-1?'hoa':'mtg')+'">'+esc(r.ctype)+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
-    const prof = '<span class="'+pcls+'">'+fmt0(r._profit)+'</span>' +
-      (r.mr ? '<div class="mrwarn" title="HOA judgment likely hides a senior mortgage - verify true payoff on the docket">&#9888; mortgage risk</div>' : '');
+    // Profit cell: big profit, then ROI + cash sub-line, then mortgage flag
+    const prof = '<span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
+      (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash</div>':'')+
+      (r.mr?'<div class="mrwarn" title="HOA judgment likely hides a senior mortgage - verify true payoff on the docket">&#9888; mortgage risk</div>':'');
+    // Auction cell: date, countdown, filed/bought sub-lines
+    const auc = '<div>'+esc(r.auction)+'</div>'+
+      '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
+      (r.filed||r.bought?'<div class="meta">'+(r.filed?'filed '+r.filed:'')+(r.bought?' · bought '+r.bought:'')+'</div>':'');
+    // Owner cell: owner names, plaintiff (clamped), count of other defendants
+    const ndefs = r.defs ? r.defs.split(';').filter(x=>x.trim()).length : 0;
+    const owner = '<div class="clamp2" title="'+esc(r.owners)+'">'+esc(r.owners)+'</div>'+
+      (r.plaintiff?'<div class="meta clip" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+
+      (ndefs?'<div class="meta" title="'+esc(r.defs)+'">+ '+ndefs+' also named</div>':'');
+    // Property cell: address, then compact numbers line, then any warning
+    const prop = '<div class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</div>'+
+      '<div class="submeta">'+fmtK(r.value)+' val · '+fmtK(r.judg)+' owed'+(r.eq?' · '+r.eq+'% eq':'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     return '<tr>'+
     '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
-    '<td class="money">'+prof+'</td>'+
-    '<td class="money">'+(r._cash>0?Math.round(r._roi)+'%':'')+'</td>'+
-    '<td class="money meta">'+fmt(r._cash)+'</td>'+
-    '<td>'+r.score+'</td><td>'+esc(r.auction)+'</td>'+
-    '<td class="'+(r.days<7?'urgent':'')+'">'+r.days+'</td>'+
-    '<td>'+(r.filed||'')+'</td>'+
-    '<td>'+bought+'</td>'+
+    '<td class="num">'+prof+'</td>'+
+    '<td class="num">'+r.score+'</td>'+
+    '<td>'+auc+'</td>'+
     '<td>'+ctype+'</td>'+
-    '<td>'+esc(r.owners)+
-      (r.plaintiff?'<div class="meta">Plaintiff: '+esc(r.plaintiff)+'</div>':'')+
-      (r.defs?'<div class="meta">Also named: '+esc(r.defs)+'</div>':'')+'</td>'+
-    '<td>'+esc(r.addr)+
-      (r.warn?'<div class="warn">'+esc(r.warn)+'</div>':'')+
-      (r.taxdue?'<div class="tax">Taxes due: '+esc(r.taxdue)+'</div>':'')+'</td>'+
-    '<td>'+esc(r.mail)+'</td>'+
-    '<td class="money">'+fmt(r.value)+'</td><td class="money">'+fmt(r.judg)+'</td>'+
-    '<td class="money">'+(r.eq?r.eq+'%':'')+'</td><td class="hs">'+(r.hs?'&#10004;':'')+'</td>'+
-    '<td class="links">'+links.join('')+'</td>'+
+    '<td>'+owner+'</td>'+
+    '<td>'+prop+'</td>'+
+    '<td class="clip" title="'+esc(r.mail)+'">'+esc(r.mail)+'</td>'+
+    '<td class="links">'+links.join(' ')+'</td>'+
     '<td><select class="status" data-c="'+esc(r.case)+'">'+
       ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'].map(s =>
         '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select></td>'+
@@ -182,6 +206,11 @@ function dealChanged(){ recompute(); saveDeal(); render(); }
 document.getElementById('costpct').oninput = e => { deal.costpct = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('upmode').onchange = e => { deal.upmode = e.target.value; syncDealUI(); dealChanged(); };
 document.getElementById('upflat').oninput = e => { deal.upflat = e.target.value===''?0:+e.target.value; dealChanged(); };
+document.getElementById('sortby').onchange = e => {
+  sortK = e.target.value;
+  sortD = (sortK==='days') ? 1 : -1;   // soonest auction first; everything else high-to-low
+  render();
+};
 document.getElementById('q').oninput = e => { q = e.target.value; render(); };
 document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
 document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
