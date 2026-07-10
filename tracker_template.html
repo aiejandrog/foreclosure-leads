@@ -48,6 +48,28 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 .hoa{color:#fbbf24;font-size:11px;font-weight:600}
 .mtg{color:#8fa2c4;font-size:11px}
 .links a{margin-right:6px;white-space:nowrap}
+/* mobile cards */
+#cards{display:none;padding:8px 10px 40px}
+.card{background:#131b2b;border:1px solid #26314c;border-radius:10px;padding:12px 13px;margin-bottom:11px}
+.chead{display:flex;align-items:center;gap:9px;margin-bottom:6px;flex-wrap:wrap}
+.cbadge{display:inline-block;min-width:20px;text-align:center;padding:1px 7px;border-radius:6px;background:#1c2740;font-weight:700}
+.cprofit{font-size:20px;font-weight:800}
+.cscore{margin-left:auto;font-size:12px;color:#9fb0cc}
+.cowner{font-weight:700;font-size:14px;margin-top:6px;line-height:1.3}
+.caddr{margin-top:6px;font-size:13px}
+.clinks{margin-top:9px;display:flex;flex-wrap:wrap;gap:4px 12px}
+.clinks a{font-size:14px;padding:3px 0}
+.cctl{display:flex;gap:8px;margin-top:10px}
+.cctl select{flex:0 0 auto;max-width:48%}
+.cctl textarea{flex:1}
+@media(max-width:860px){
+  header{padding:10px 12px}
+  h1{font-size:15px}
+  .controls{gap:6px}
+  input#q{width:100%}
+  .tblwrap{display:none}
+  #cards{display:block}
+}
 </style></head><body>
 <header>
 <h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated __UPDATED__ · notes save in your own browser</span></h1>
@@ -103,6 +125,7 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <th>Links</th><th>Status</th><th>Notes</th>
 </tr></thead><tbody id="tb"></tbody></table>
 </div>
+<div id="cards"></div>
 <script>
 const NL = String.fromCharCode(10);
 const BOM = String.fromCharCode(65279);
@@ -154,7 +177,8 @@ function render(){
   const totp = prof.reduce((s,r) => s + r._profit, 0);
   const ds = document.getElementById('dealsum');
   if(ds) ds.textContent = prof.length + ' profitable in view · ' + fmt(totp) + ' total est. profit';
-  document.getElementById('tb').innerHTML = rows.map(r => {
+  const trs = [], cards = [];
+  rows.forEach(r => {
     const n = notes[r.case] || {status:'', note:''};
     const links = [];
     if(r.zillow) links.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
@@ -186,21 +210,43 @@ function render(){
     const prop = '<div class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</div>'+
       '<div class="submeta">'+fmtK(r.value)+' val · '+fmtK(r.judg)+' owed'+(r.eq?' · '+r.eq+'% eq':'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
-    return '<tr>'+
-    '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
-    '<td class="num">'+prof+'</td>'+
-    '<td class="num">'+r.score+'</td>'+
-    '<td>'+auc+'</td>'+
-    '<td>'+ctype+'</td>'+
-    '<td>'+owner+'</td>'+
-    '<td>'+prop+'</td>'+
-    '<td class="clip" title="'+esc(r.mail)+'">'+esc(r.mail)+'</td>'+
-    '<td class="links">'+links.join(' ')+'</td>'+
-    '<td><select class="status" data-c="'+esc(r.case)+'">'+
-      ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'].map(s =>
-        '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select></td>'+
-    '<td><textarea class="notes" data-c="'+esc(r.case)+'">'+esc(n.note)+'</textarea></td></tr>';
-  }).join('');
+    const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'];
+    const statusSel = '<select class="status" data-c="'+esc(r.case)+'">'+
+      opts.map(s => '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select>';
+    const notesTa = '<textarea class="notes" data-c="'+esc(r.case)+'" placeholder="notes">'+esc(n.note)+'</textarea>';
+    trs.push('<tr>'+
+      '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
+      '<td class="num">'+prof+'</td>'+
+      '<td class="num">'+r.score+'</td>'+
+      '<td>'+auc+'</td>'+
+      '<td>'+ctype+'</td>'+
+      '<td>'+owner+'</td>'+
+      '<td>'+prop+'</td>'+
+      '<td class="clip" title="'+esc(r.mail)+'">'+esc(r.mail)+'</td>'+
+      '<td class="links">'+links.join(' ')+'</td>'+
+      '<td>'+statusSel+'</td>'+
+      '<td>'+notesTa+'</td></tr>');
+    // mobile card
+    cards.push('<div class="card">'+
+      '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
+        '<span class="'+pcls+' cprofit">'+fmt0(r._profit)+'</span>'+
+        '<span class="cscore">Score '+r.score+'</span></div>'+
+      (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash to acquire</div>':'')+
+      (r.mr?'<div class="mrwarn">&#9888; mortgage risk - verify payoff</div>':'')+
+      '<div class="cowner">'+esc(r.owners)+'</div>'+
+      (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+
+      defsHtml+
+      '<div class="caddr">'+esc(r.addr)+'</div>'+
+      '<div class="submeta">'+fmtK(r.value)+' val · '+fmtK(r.judg)+' owed'+(r.eq?' · '+r.eq+'% eq':'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
+      (r.mail?'<div class="meta">&#9993; '+esc(r.mail)+'</div>':'')+
+      '<div class="clinks">'+links.join(' ')+'</div>'+
+      '<div class="cctl">'+statusSel+notesTa+'</div>'+
+      '</div>');
+  });
+  document.getElementById('tb').innerHTML = trs.join('');
+  const cc = document.getElementById('cards');
+  if(cc) cc.innerHTML = cards.join('');
 }
 document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tf').forEach(x=>x.classList.remove('active'));
