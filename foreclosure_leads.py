@@ -260,16 +260,23 @@ def qualify(leads):
         # owner purchase year (from PA sales history)
         sd = re.search(r'(\d{4})$', (r.get('last_sale_date','') or '').strip())
         r['bought_year'] = int(sd.group(1)) if sd else 0
-        # TruePeopleSearch prefill for human owners (companies get Sunbiz instead)
+        # TruePeopleSearch prefill for human owners (companies get Sunbiz instead).
+        # TPS is DataDome-walled to bots (verified 2026-07-10) -> can't auto-scrape; this pre-fills
+        # the search so ONE click in a real browser lands on the person. Normalize the messy
+        # multi-surname owner ("KATHY CARIDAD PUPO QUEVEDO") to First + last token ("KATHY QUEVEDO")
+        # so the search actually returns matches.
         first_owner = (r.get('owners','') or '').split(';')[0].strip()
-        is_company = bool(re.search(r'\b(LLC|CORP|INC|TRUST|TRS|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|LE|REM)\b', first_owner, re.I))
+        first_owner = re.sub(r'\b(LE|REM|TRS|JR|SR|II|III|IV|&|ETAL|ET AL)\b', '', first_owner, flags=re.I).strip()
+        is_company = bool(re.search(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD)\b', first_owner, re.I))
+        toks = [t for t in re.split(r'[\s,]+', first_owner) if len(t) > 1]
         zm = re.search(r'(\d{5})\s*$', r.get('Address','') or '')
-        if first_owner and not is_company:
-            q = urllib.parse.quote(first_owner)
+        if len(toks) >= 2 and not is_company:
+            name = toks[0] + ' ' + toks[-1]                 # First + last surname token
             z = ('&citystatezip=' + zm.group(1)) if zm else ''
-            r['people_url'] = f"https://www.truepeoplesearch.com/results?name={q}{z}"
+            r['people_url'] = "https://www.truepeoplesearch.com/results?name=" + urllib.parse.quote(name) + z
+            r['people_name'] = name
         else:
-            r['people_url'] = ''
+            r['people_url'] = ''; r['people_name'] = ''
         # case_type comes from the Clerk API (enrich_clerk); fall back to a heuristic if unresolved
         if not r.get('case_type'):
             r['case_type'] = 'HOA/Condo' if re.search(r'-CC-', r.get('Case #','')) else 'Mortgage/Other'
