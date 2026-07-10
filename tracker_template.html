@@ -78,6 +78,8 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <button class="tf" data-t="B">Tier B</button>
 <button class="tf" data-t="C">Tier C</button>
 <button class="tf" data-t="ALL">All</button>
+<button id="wk" title="Only leads with an auction in the next 7 days">&#9889; This week</button>
+<button id="hd" title="Hide leads you marked Dead or DO NOT CONTACT">Hide dead</button>
 <input id="q" placeholder="Search owner / address / case #">
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_profit">Est. Profit</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
@@ -135,6 +137,7 @@ let notes = {};
 try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
+let weekOnly = false, hideDead = false;
 // deal-model controls (persisted)
 let deal = {costpct: 10, upmode: 'scale', upflat: 5000};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
@@ -166,6 +169,8 @@ function view(){
   if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
   if(ad1) rows = rows.filter(r => toISO(r.auction) >= ad1);
   if(ad2) rows = rows.filter(r => toISO(r.auction) <= ad2);
+  if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
+  if(hideDead) rows = rows.filter(r => { const s=(notes[r.case]||{}).status; return s!=='Dead' && s!=='DO NOT CONTACT'; });
   rows = rows.slice();
   rows.sort((a,b) => (a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD);
   return rows;
@@ -268,6 +273,8 @@ document.getElementById('sortby').onchange = e => {
   sortD = (sortK==='days') ? 1 : -1;   // soonest auction first; everything else high-to-low
   render();
 };
+document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
+document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
 document.getElementById('q').oninput = e => { q = e.target.value; render(); };
 document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
 document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
