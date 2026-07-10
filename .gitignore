@@ -4,3 +4,4 @@ _check.js
 *.csv
 __pycache__/
 browser-profile/
+leads-run.log
