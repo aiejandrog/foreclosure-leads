@@ -27,7 +27,11 @@ select.status{padding:3px 6px;font-size:12px}
 textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;border:1px solid #2a3654;border-radius:5px;font-size:12px;padding:3px 5px}
 .urgent{color:#f87171;font-weight:700}
 .warn{color:#fbbf24;font-size:11px}
-.links a{margin-right:6px}
+.meta{color:#8fa2c4;font-size:11px}
+.tax{color:#f87171;font-size:11px;font-weight:600}
+.hoa{color:#fbbf24;font-size:11px;font-weight:600}
+.mtg{color:#8fa2c4;font-size:11px}
+.links a{margin-right:6px;white-space:nowrap}
 </style></head><body>
 <header>
 <h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated __UPDATED__ · notes save in your own browser</span></h1>
@@ -56,7 +60,7 @@ textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;bord
 </header>
 <div class="tblwrap">
 <table id="tbl"><thead><tr>
-<th data-k="tier">Tier</th><th data-k="score">Score</th><th data-k="auction">Auction</th><th data-k="days">Days</th><th data-k="filed">Filed</th>
+<th data-k="tier">Tier</th><th data-k="score">Score</th><th data-k="auction">Auction</th><th data-k="days">Days</th><th data-k="filed">Filed</th><th data-k="bought">Bought</th><th data-k="ctype">Type</th>
 <th data-k="owners">Owner(s)</th><th data-k="addr">Property</th><th data-k="mail">Mailing Address</th>
 <th data-k="value">Value</th><th data-k="judg">Judgment</th><th data-k="eq">Equity%</th><th data-k="hs">HS</th>
 <th>Links</th><th>Status</th><th>Notes</th>
@@ -95,12 +99,23 @@ function render(){
     if(r.zillow) links.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
     if(r.pa) links.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener">Appraiser</a>');
     if(r.auc) links.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener">Auction</a>');
+    if(r.people) links.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener">People</a>');
+    if(r.tax) links.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener">Taxes</a>');
+    if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
+    const bought = r.bought ? r.bought + (r.bprice ? '<div class="meta">' + fmt(r.bprice) + '</div>' : '') : '';
+    const ctype = r.ctype ? '<span class="'+(r.ctype.indexOf('HOA')>-1?'hoa':'mtg')+'">'+esc(r.ctype)+'</span>' : '';
     return '<tr>'+
     '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td><td>'+r.score+'</td><td>'+esc(r.auction)+'</td>'+
     '<td class="'+(r.days<7?'urgent':'')+'">'+r.days+'</td>'+
     '<td>'+(r.filed||'')+'</td>'+
-    '<td>'+esc(r.owners)+'</td>'+
-    '<td>'+esc(r.addr)+(r.warn?'<div class="warn">'+esc(r.warn)+'</div>':'')+'</td>'+
+    '<td>'+bought+'</td>'+
+    '<td>'+ctype+'</td>'+
+    '<td>'+esc(r.owners)+
+      (r.plaintiff?'<div class="meta">Plaintiff: '+esc(r.plaintiff)+'</div>':'')+
+      (r.defs?'<div class="meta">Also named: '+esc(r.defs)+'</div>':'')+'</td>'+
+    '<td>'+esc(r.addr)+
+      (r.warn?'<div class="warn">'+esc(r.warn)+'</div>':'')+
+      (r.taxdue?'<div class="tax">Taxes due: '+esc(r.taxdue)+'</div>':'')+'</td>'+
     '<td>'+esc(r.mail)+'</td>'+
     '<td class="money">'+fmt(r.value)+'</td><td class="money">'+fmt(r.judg)+'</td>'+
     '<td class="money">'+(r.eq?r.eq+'%':'')+'</td><td class="hs">'+(r.hs?'&#10004;':'')+'</td>'+
@@ -148,11 +163,11 @@ document.getElementById('tb').addEventListener('change', e => {
   save();
 });
 document.getElementById('exp').onclick = () => {
-  const head = ['tier','score','auction_date','days','filed_year','case','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','status','notes'];
+  const head = ['tier','score','auction_date','days','filed_year','bought_year','bought_price','case_type','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','taxes_due','warning','zillow','appraiser','people_search','status','notes'];
   const q2 = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,r.score,r.auction,r.days,r.filed||'',r.case,r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.ctype||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.taxdue||'',r.warn||'',r.zillow||'',r.pa||'',r.people||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');

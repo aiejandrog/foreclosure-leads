@@ -101,10 +101,20 @@ def scrape_date(page, d, attempt=1):
     print(f"{d}: {len(items)} pending (pages={pages})")
     return items
 
+PROFILE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'browser-profile')
+
 def scrape():
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_context(user_agent=UA, viewport={"width":1400,"height":1000}).new_page()
+        # if the user has logged into realforeclose via login-setup.bat, reuse that profile so
+        # any logged-in-only fields (case detail, judgment docs) flow into the generic extractor
+        if os.path.isdir(PROFILE_DIR):
+            ctx = p.chromium.launch_persistent_context(PROFILE_DIR, headless=True,
+                user_agent=UA, viewport={"width":1400,"height":1000})
+            browser = ctx
+            page = ctx.new_page()
+        else:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_context(user_agent=UA, viewport={"width":1400,"height":1000}).new_page()
         leads = []
         for d in discover_dates(page):
             leads += scrape_date(page, d)
@@ -152,6 +162,59 @@ def enrich(leads):
         time.sleep(0.35)
     return leads
 
+CLERK = "https://www2.miamidadeclerk.gov"
+
+def classify(case_type, plaintiff):
+    ct = (case_type or '').upper()
+    pl = (plaintiff or '').upper()
+    if re.search(r'\b(ASSOCIATION|ASSN|CONDO|HOMEOWNER|MASTER ASSOC|HOA|TOWNHOM|VILLAS?|COMMUNITY)\b', pl):
+        return 'HOA/Condo'
+    if 'RPMF' in ct or re.search(r'\b(BANK|MORTGAGE|LOAN|FINANCIAL|CAPITAL|FUNDING|LENDING|N\.?A\.?|TRUST|SERVICING|WELLS FARGO|CHASE|CITI|ROCKET|CROSSCOUNTRY|FREEDOM|LAKEVIEW|PENNYMAC|NEWREZ|CARRINGTON)\b', pl):
+        return 'Bank/Mortgage'
+    if re.search(r'\b(CITY OF|COUNTY|STATE OF|MIAMI-DADE|CODE ENF)\b', pl):
+        return 'Govt/Code'
+    if 'RPMF' in ct or 'FORECLOS' in ct:
+        return 'Mortgage/Other'
+    return 'Other'
+
+def enrich_clerk(leads):
+    """Miami-Dade Clerk OCS API: plaintiff, defendants, case type + a deep-link that lands
+    directly on the case page (parties, dockets, final judgment). Fully public, no login."""
+    s = requests.Session()
+    s.headers.update({'User-Agent': UA, 'Referer': CLERK + '/ocs/'})
+    ok = 0
+    for i, r in enumerate(leads):
+        case = (r.get('Case #') or '').strip()
+        r['plaintiff'] = r['defendants'] = r['docket_url'] = ''
+        if not re.match(r'\d{4}-\d+-\w+-\d+', case):
+            continue
+        try:
+            enc = s.get(f"{CLERK}/ocs/api/CaseInfo/encrypt/{case}", timeout=20).json()
+            qs = enc.get('qs')
+            if not qs: continue
+            d = s.post(f"{CLERK}/ocs/api/CaseInfo/GetSingleCaseResult?qs={qs}",
+                       headers={'Content-Type': 'application/json'}, data='""', timeout=20).json()
+            if not d or d.get('caseID', -1) == -1:
+                continue
+            parties = d.get('parties', []) or []
+            plaintiffs = [p.get('partyName','').strip() for p in parties if 'PLAINTIFF' in (p.get('partyTypeDesc','') or '').upper()]
+            defs = [p.get('partyName','').strip() for p in parties if 'DEFENDANT' in (p.get('partyTypeDesc','') or '').upper()]
+            r['plaintiff'] = plaintiffs[0] if plaintiffs else ''
+            # skip the first defendant (that's the owner, already shown) -> "also named"
+            extra = [x for x in defs[1:] if x][:6]
+            r['defendants'] = '; '.join(extra)
+            r['clerk_case_type'] = d.get('caseType','')
+            r['case_status'] = d.get('caseStatus','')
+            r['docket_url'] = f"{CLERK}/ocs/searchResults?qs={qs}"
+            r['case_type'] = classify(d.get('caseType',''), r['plaintiff'])
+            ok += 1
+        except Exception:
+            pass
+        if (i+1) % 40 == 0: print(f"clerk {i+1}/{len(leads)} ({ok} matched)")
+        time.sleep(0.25)
+    print(f"clerk enrichment: {ok}/{len(leads)} cases resolved")
+    return leads
+
 def qualify(leads):
     today = datetime.now()
     for r in leads:
@@ -194,6 +257,25 @@ def qualify(leads):
         folio = re.sub(r'\D','', r.get('Folio',''))
         r['pa_url'] = 'https://www.miamidade.gov/Apps/PA/propertysearch/#/?folio=' + folio if folio else ''
         r['auction_url'] = f"{BASE}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={r.get('AuctionDate','')}"
+        # owner purchase year (from PA sales history)
+        sd = re.search(r'(\d{4})$', (r.get('last_sale_date','') or '').strip())
+        r['bought_year'] = int(sd.group(1)) if sd else 0
+        # TruePeopleSearch prefill for human owners (companies get Sunbiz instead)
+        first_owner = (r.get('owners','') or '').split(';')[0].strip()
+        is_company = bool(re.search(r'\b(LLC|CORP|INC|TRUST|TRS|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|LE|REM)\b', first_owner, re.I))
+        zm = re.search(r'(\d{5})\s*$', r.get('Address','') or '')
+        if first_owner and not is_company:
+            q = urllib.parse.quote(first_owner)
+            z = ('&citystatezip=' + zm.group(1)) if zm else ''
+            r['people_url'] = f"https://www.truepeoplesearch.com/results?name={q}{z}"
+        else:
+            r['people_url'] = ''
+        # case_type comes from the Clerk API (enrich_clerk); fall back to a heuristic if unresolved
+        if not r.get('case_type'):
+            r['case_type'] = 'HOA/Condo' if re.search(r'-CC-', r.get('Case #','')) else 'Mortgage/Other'
+        # tax-collector lookup link by folio (delinquent taxes/certificates; Cloudflare-walled to scrape,
+        # so this is a reliable one-click lookup instead)
+        r['tax_url'] = ('https://miamidade.county-taxes.com/public/search?search_query=' + folio) if folio else ''
     return leads
 
 def make_tracker(leads):
@@ -207,6 +289,11 @@ def make_tracker(leads):
         'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
         'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
         'filed': r.get('filing_year',0),
+        'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
+        'people': r.get('people_url',''), 'ctype': r.get('case_type',''),
+        'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
+        'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
+        'cstatus': r.get('case_status',''),
     } for r in leads]
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read()
     html = tpl.replace('__DATA__', json.dumps(slim)).replace('__UPDATED__', f"{date.today():%Y-%m-%d}")
@@ -220,7 +307,9 @@ def main():
     leads = scrape()
     print(f"scraped {len(leads)} pending auctions")
     json.dump(leads, open(os.path.join(HERE,'leads_raw.json'),'w'), indent=1)
-    leads = qualify(enrich(leads))
+    leads = enrich(leads)
+    leads = enrich_clerk(leads)
+    leads = qualify(leads)
     leads.sort(key=lambda r: -r['score'])
     json.dump(leads, open(os.path.join(HERE,'leads_final.json'),'w'), indent=1)
     make_tracker(leads)
