@@ -276,6 +276,13 @@ def qualify(leads):
         # tax-collector lookup link by folio (delinquent taxes/certificates; Cloudflare-walled to scrape,
         # so this is a reliable one-click lookup instead)
         r['tax_url'] = ('https://miamidade.county-taxes.com/public/search?search_query=' + folio) if folio else ''
+        # mortgage-risk: an HOA/condo judgment often hides a senior mortgage. If a lender is a
+        # co-defendant, the true payoff is higher than the association judgment shown -> flag it.
+        defs = (r.get('defendants','') or '').upper()
+        r['mortgage_risk'] = bool(r.get('case_type','').startswith('HOA') and re.search(
+            r'BANK|MORTGAGE|LOAN|FINANCIAL|CAPITAL|FUNDING|LENDING|SERVICING|FEDERAL CREDIT|'
+            r'FANNIE|FREDDIE|HOUSING AND URBAN|SECRETARY OF HOUSING|BANC|LENDER|\bN\.?A\.?\b|'
+            r'CITIMORTGAGE|WELLS FARGO|CHASE|NATIONSTAR|PENNYMAC|NEWREZ|CARRINGTON|LAKEVIEW', defs))
     return leads
 
 def make_tracker(leads):
@@ -293,7 +300,7 @@ def make_tracker(leads):
         'people': r.get('people_url',''), 'ctype': r.get('case_type',''),
         'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
         'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
-        'cstatus': r.get('case_status',''),
+        'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
     } for r in leads]
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read()
     html = tpl.replace('__DATA__', json.dumps(slim)).replace('__UPDATED__', f"{date.today():%Y-%m-%d}")

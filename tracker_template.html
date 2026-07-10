@@ -14,7 +14,7 @@ button.active{background:#3b82f6;border-color:#3b82f6}
 input{width:240px;cursor:text}
 .stats{font-size:12px;color:#9fb0cc;margin-left:auto}
 .tblwrap{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1200px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1480px}
 th{position:sticky;top:0;background:#1b2438;padding:8px 6px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none}
 td{padding:7px 6px;border-bottom:1px solid #1e2740;vertical-align:top}
 tr:hover td{background:#182137}
@@ -28,6 +28,9 @@ textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;bord
 .urgent{color:#f87171;font-weight:700}
 .warn{color:#fbbf24;font-size:11px}
 .meta{color:#8fa2c4;font-size:11px}
+.profpos{color:#4ade80;font-weight:700;font-size:14px}
+.profneg{color:#f87171;font-weight:700;font-size:14px}
+.mrwarn{color:#fbbf24;font-size:10px;font-weight:600}
 .tax{color:#f87171;font-size:11px;font-weight:600}
 .hoa{color:#fbbf24;font-size:11px;font-weight:600}
 .mtg{color:#8fa2c4;font-size:11px}
@@ -49,6 +52,14 @@ textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;bord
 <label>Auction <input id="ad1" type="date" style="width:140px"> &ndash; <input id="ad2" type="date" style="width:140px"></label>
 <button id="clr">Clear dates</button>
 </div>
+<div class="controls" style="margin-top:8px;background:#12192a;padding:8px 10px;border-radius:8px;border:1px solid #26314c">
+<span style="color:#4ade80;font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
+<label style="font-size:12px">Costs % of value <input id="costpct" type="number" value="10" min="0" max="40" style="width:56px"></label>
+<label style="font-size:12px">Upfront to owner
+<select id="upmode"><option value="scale">Scale to debt ($3.5k&ndash;$8k)</option><option value="flat">Flat amount</option></select></label>
+<input id="upflat" type="number" value="5000" step="500" style="width:84px;display:none" title="flat upfront $">
+<span class="stats" id="dealsum" style="margin-left:0"></span>
+</div>
 <div class="controls" style="margin-top:8px">
 <span style="color:#9fb0cc;font-size:12px">Lookup any county property:</span>
 <input id="lk" placeholder="address, owner, folio or LLC" style="width:280px">
@@ -60,7 +71,7 @@ textarea.notes{width:140px;min-height:26px;background:#1a2338;color:#e8ecf3;bord
 </header>
 <div class="tblwrap">
 <table id="tbl"><thead><tr>
-<th data-k="tier">Tier</th><th data-k="score">Score</th><th data-k="auction">Auction</th><th data-k="days">Days</th><th data-k="filed">Filed</th><th data-k="bought">Bought</th><th data-k="ctype">Type</th>
+<th data-k="tier">Tier</th><th data-k="_profit" style="color:#4ade80">Est. Profit &#9660;</th><th data-k="_roi">ROI</th><th data-k="_cash">Cash In</th><th data-k="score">Score</th><th data-k="auction">Auction</th><th data-k="days">Days</th><th data-k="filed">Filed</th><th data-k="bought">Bought</th><th data-k="ctype">Type</th>
 <th data-k="owners">Owner(s)</th><th data-k="addr">Property</th><th data-k="mail">Mailing Address</th>
 <th data-k="value">Value</th><th data-k="judg">Judgment</th><th data-k="eq">Equity%</th><th data-k="hs">HS</th>
 <th>Links</th><th>Status</th><th>Notes</th>
@@ -73,9 +84,28 @@ const DATA = __DATA__;
 const LS = 'fcLeadNotes';
 let notes = {};
 try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
-let tier = 'A', q = '', sortK = 'score', sortD = -1;
+let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
+// deal-model controls (persisted)
+let deal = {costpct: 10, upmode: 'scale', upflat: 5000};
+try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
+const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
+function upfrontFor(judg){
+  if(deal.upmode==='flat') return +deal.upflat || 0;
+  return Math.min(8000, Math.max(3500, 3500 + 0.02*judg));   // scale to debt
+}
+function recompute(){
+  DATA.forEach(r => {
+    const judg = r.judg||0, val = r.value||0;
+    const up = upfrontFor(judg);
+    const costs = val * ((+deal.costpct||0)/100);
+    r._up = up; r._costs = costs;
+    r._cash = judg + up + costs;                 // cash to acquire free & clear
+    r._profit = val - r._cash;                   // net profit on resale
+    r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
+  });
+}
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
@@ -93,6 +123,10 @@ function view(){
 function render(){
   const rows = view();
   document.getElementById('stats').textContent = rows.length + ' leads shown / ' + DATA.length + ' total';
+  const prof = rows.filter(r => r._profit > 0);
+  const totp = prof.reduce((s,r) => s + r._profit, 0);
+  const ds = document.getElementById('dealsum');
+  if(ds) ds.textContent = prof.length + ' profitable in view · ' + fmt(totp) + ' total est. profit';
   document.getElementById('tb').innerHTML = rows.map(r => {
     const n = notes[r.case] || {status:'', note:''};
     const links = [];
@@ -104,8 +138,15 @@ function render(){
     if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
     const bought = r.bought ? r.bought + (r.bprice ? '<div class="meta">' + fmt(r.bprice) + '</div>' : '') : '';
     const ctype = r.ctype ? '<span class="'+(r.ctype.indexOf('HOA')>-1?'hoa':'mtg')+'">'+esc(r.ctype)+'</span>' : '';
+    const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
+    const prof = '<span class="'+pcls+'">'+fmt0(r._profit)+'</span>' +
+      (r.mr ? '<div class="mrwarn" title="HOA judgment likely hides a senior mortgage - verify true payoff on the docket">&#9888; mortgage risk</div>' : '');
     return '<tr>'+
-    '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td><td>'+r.score+'</td><td>'+esc(r.auction)+'</td>'+
+    '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
+    '<td class="money">'+prof+'</td>'+
+    '<td class="money">'+(r._cash>0?Math.round(r._roi)+'%':'')+'</td>'+
+    '<td class="money meta">'+fmt(r._cash)+'</td>'+
+    '<td>'+r.score+'</td><td>'+esc(r.auction)+'</td>'+
     '<td class="'+(r.days<7?'urgent':'')+'">'+r.days+'</td>'+
     '<td>'+(r.filed||'')+'</td>'+
     '<td>'+bought+'</td>'+
@@ -130,6 +171,17 @@ document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tf').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); tier = b.dataset.t; render();
 });
+function saveDeal(){ try { localStorage.setItem('fcDeal', JSON.stringify(deal)); } catch(e) {} }
+function syncDealUI(){
+  document.getElementById('costpct').value = deal.costpct;
+  document.getElementById('upmode').value = deal.upmode;
+  document.getElementById('upflat').value = deal.upflat;
+  document.getElementById('upflat').style.display = deal.upmode==='flat' ? '' : 'none';
+}
+function dealChanged(){ recompute(); saveDeal(); render(); }
+document.getElementById('costpct').oninput = e => { deal.costpct = e.target.value===''?0:+e.target.value; dealChanged(); };
+document.getElementById('upmode').onchange = e => { deal.upmode = e.target.value; syncDealUI(); dealChanged(); };
+document.getElementById('upflat').oninput = e => { deal.upflat = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('q').oninput = e => { q = e.target.value; render(); };
 document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
 document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
@@ -163,15 +215,17 @@ document.getElementById('tb').addEventListener('change', e => {
   save();
 });
 document.getElementById('exp').onclick = () => {
-  const head = ['tier','score','auction_date','days','filed_year','bought_year','bought_price','case_type','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','taxes_due','warning','zillow','appraiser','people_search','status','notes'];
+  const head = ['tier','est_profit','roi_pct','cash_in','upfront','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','people_search','case_page','status','notes'];
   const q2 = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.ctype||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.taxdue||'',r.warn||'',r.zillow||'',r.pa||'',r.people||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,Math.round(r._profit),Math.round(r._roi),Math.round(r._cash),Math.round(r._up),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'foreclosure-leads-tracked.csv'; a.click();
 };
+syncDealUI();
+recompute();
 render();
 </script></body></html>
