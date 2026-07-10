@@ -3,3 +3,4 @@ leads_final.json
 _check.js
 *.csv
 __pycache__/
+browser-profile/
