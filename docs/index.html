@@ -102,6 +102,13 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
+<span style="color:#9fb0cc;font-size:12px">Letter sender (goes on every letter):</span>
+<input id="sName" placeholder="Sender name" style="width:150px">
+<input id="sLLC" placeholder="LLC / company" style="width:160px">
+<input id="sPhone" placeholder="Phone" style="width:130px">
+<span class="stats" id="sendersaved" style="margin-left:0"></span>
+</div>
+<div class="controls" style="margin-top:8px">
 <span style="color:#9fb0cc;font-size:12px">Lookup any county property:</span>
 <input id="lk" placeholder="address, owner, folio or LLC" style="width:280px">
 <button class="lkb" data-s="zillow">Zillow</button>
@@ -138,6 +145,8 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 let weekOnly = false, hideDead = false;
+let sender = {name:'', llc:'', phone:''};
+try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
 let deal = {costpct: 10, upmode: 'scale', upflat: 5000};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
@@ -160,6 +169,49 @@ function recompute(){
   });
 }
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
+function genLetter(r){
+  const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR LLC]', sP = sender.phone || '[YOUR PHONE]';
+  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const first = owner.split(' ')[0] || owner;
+  const addr = esc(r.addr), mail = esc(r.mail||r.addr), dt = esc(r.auction);
+  const EN = `<p>Dear ${esc(owner)},</p>
+<p>My name is ${esc(sN)}, a local real estate investor here in Miami. Public court records show the property at <b>${addr}</b> has a foreclosure sale scheduled for <b>${dt}</b>.</p>
+<p>You still have options before that date, and most people in this situation are never told what they are:</p>
+<ul><li>If the sale brings more than you owe, that surplus belongs to <b>you</b>, not the bank.</li>
+<li>The payoff amount on file is often outdated and can be recalculated.</li>
+<li>If you have equity, selling before the auction almost always puts more money in your pocket than losing it at auction.</li></ul>
+<p>I am not an attorney and this is not legal advice. I buy properties directly, with cash, and close before auction deadlines &mdash; and when buying isn't the right fit, I'll tell you plainly what your better option is, even if it doesn't involve me.</p>
+<p>If you'd like to talk &mdash; no cost, no obligation, no pressure &mdash; call or text me at <b>${esc(sP)}</b>. Even if the auction is days away, there may still be time.</p>
+<p>Respectfully,<br>${esc(sN)}<br>${esc(sL)}<br>${esc(sP)}</p>`;
+  const ES = `<p>Estimado/a ${esc(first)},</p>
+<p>Mi nombre es ${esc(sN)}, inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Los registros p&uacute;blicos de la corte muestran que la propiedad en <b>${addr}</b> tiene una subasta de ejecuci&oacute;n hipotecaria programada para el <b>${dt}</b>.</p>
+<p>Usted todav&iacute;a tiene opciones antes de esa fecha, y a la mayor&iacute;a nunca se las explican:</p>
+<ul><li>Si la subasta vende por m&aacute;s de lo que usted debe, ese excedente le pertenece a <b>usted</b>, no al banco.</li>
+<li>El monto del pago que consta en el expediente suele estar desactualizado y se puede recalcular.</li>
+<li>Si tiene plusval&iacute;a, vender antes de la subasta casi siempre le deja m&aacute;s dinero que perderla en la subasta.</li></ul>
+<p>No soy abogado y esto no es asesor&iacute;a legal. Compro propiedades directamente, en efectivo, y cierro antes de la fecha l&iacute;mite &mdash; y cuando comprar no es lo mejor para usted, se lo digo con franqueza, aunque no me beneficie.</p>
+<p>Si desea hablar &mdash; sin costo, sin obligaci&oacute;n, sin presi&oacute;n &mdash; ll&aacute;meme o env&iacute;eme un mensaje al <b>${esc(sP)}</b>. Aunque falten pocos d&iacute;as para la subasta, todav&iacute;a puede haber tiempo.</p>
+<p>Respetuosamente,<br>${esc(sN)}<br>${esc(sL)}<br>${esc(sP)}</p>`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><title>Letter - ${esc(owner)}</title>
+<style>
+body{font-family:Georgia,serif;max-width:660px;margin:0 auto;padding:40px;color:#111;line-height:1.5}
+.bar{background:#eee;padding:10px;margin:-40px -40px 30px;display:flex;gap:8px;font-family:Arial}
+.bar button{padding:8px 14px;cursor:pointer;border:1px solid #999;background:#fff;border-radius:5px}
+.bar button.on{background:#2563eb;color:#fff;border-color:#2563eb}
+.addr{color:#555;font-size:13px;margin-bottom:24px}
+ul{margin:10px 0}
+@media print{.bar{display:none}body{padding:0}}
+</style></head><body>
+<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">&#128424; Print / Save PDF</button></div>
+<div class="addr">${esc(sN)}<br>${esc(sL)}<br><br>${new Date().toLocaleDateString()}<br><br>${esc(owner)}<br>${mail.replace(/, /g,'<br>')}</div>
+<div id="body-en">${EN}</div>
+<div id="body-es" style="display:none">${ES}</div>
+<script>function show(l){document.getElementById('body-en').style.display=l==='en'?'block':'none';document.getElementById('body-es').style.display=l==='es'?'block':'none';document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(w){ w.document.write(doc); w.document.close(); }
+}
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
 function view(){
@@ -192,6 +244,7 @@ function render(){
     if(r.people) links.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener">People</a>');
     if(r.tax) links.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener">Taxes</a>');
     if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
+    links.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">&#9993; Letter</a>');
     const ctype = r.ctype ? '<span class="'+(r.ctype.indexOf('HOA')>-1?'hoa':'mtg')+'">'+esc(r.ctype)+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
     // Profit cell: big profit, then ROI + cash sub-line, then mortgage flag
@@ -275,6 +328,23 @@ document.getElementById('sortby').onchange = e => {
 };
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
+// letter sender persistence
+function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
+Object.entries({name:'sName', llc:'sLLC', phone:'sPhone'}).forEach(([k,id]) => {
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.value = sender[k] || '';
+  el.oninput = e => { sender[k] = e.target.value; saveSender(); };
+});
+saveSender();
+// letter generation (delegated for both table + cards)
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.lettergen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) genLetter(r);
+});
 document.getElementById('q').oninput = e => { q = e.target.value; render(); };
 document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
 document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
