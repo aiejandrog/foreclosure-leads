@@ -169,7 +169,7 @@ input.ph::placeholder{color:#5a7d66}
 <span style="color:#c084fc;font-size:11px" title="These two apply to Tax Deed leads only">| Tax deed:</span>
 <label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:44px">%</label>
 <label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:64px"></label>
-<label style="font-size:12px" title="Tax deed only: contested/equity parcels bid UP toward market — set the % of market value you assume the winning bid lands at. Lower it only for parcels you know are uncontested.">win bid <input id="tdclear" type="number" value="85" min="0" max="100" style="width:48px">% of market</label>
+<label style="font-size:12px" title="Tax deed only: the MOST you'd pay at auction, as % of market value (your disciplined ceiling that still leaves room for quiet title + costs + profit). Equity parcels bid up — if live bidding passes this, walk. Raise it if you're willing to pay closer to market.">win bid <input id="tdclear" type="number" value="70" min="0" max="100" style="width:48px">% of market</label>
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
@@ -223,7 +223,7 @@ let weekOnly = false, hideDead = false, tdOnly = false;
 let sender = {name:'', llc:'', phone:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
-let deal = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 85};
+let deal = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
@@ -236,7 +236,7 @@ function recompute(){
   const costPct = Math.max(0, +deal.costpct || 0) / 100;
   const quietTitle = Math.max(0, +deal.quiettitle || 3000);     // tax-deed only
   const bidOver = Math.max(0, +deal.bidover || 0) / 100;        // tax-deed only
-  const clearPct = Math.max(0, +deal.tdclear || 85) / 100;     // tax-deed: equity parcels bid to ~this % of market
+  const clearPct = Math.max(0, +deal.tdclear || 70) / 100;     // tax-deed: max you'd pay at auction as % of market (disciplined ceiling)
   DATA.forEach(r => {
     const judg = r.judg||0, val = r.value||0;
     // per-lead adjustments the user researches on the docket/title (saved with this case's notes)
@@ -610,7 +610,7 @@ document.getElementById('costpct').oninput = e => { deal.costpct = e.target.valu
 document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value===''?75:+e.target.value; dealChanged(); };
 document.getElementById('bidover').oninput = e => { deal.bidover = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('quiettitle').oninput = e => { deal.quiettitle = e.target.value===''?0:+e.target.value; dealChanged(); };
-document.getElementById('tdclear').oninput = e => { deal.tdclear = e.target.value===''?85:+e.target.value; dealChanged(); };
+document.getElementById('tdclear').oninput = e => { deal.tdclear = e.target.value===''?70:+e.target.value; dealChanged(); };
 document.getElementById('sortby').onchange = e => {
   sortK = e.target.value;
   sortD = (sortK==='days') ? 1 : -1;   // soonest auction first; everything else high-to-low
