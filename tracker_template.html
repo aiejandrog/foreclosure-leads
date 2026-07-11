@@ -83,7 +83,23 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 #advtog.active{background:#3b82f6;border-color:#3b82f6}
 #toTop{position:fixed;right:18px;bottom:18px;z-index:40;display:none;background:#3b82f6;color:#fff;border:none;border-radius:22px;padding:10px 15px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px #0009}
 #toTop:hover{background:#2563eb}
+#gate{display:none;position:fixed;inset:0;z-index:100;background:#0f1420;align-items:center;justify-content:center}
+#gate .box{background:#161d2e;border:1px solid #2a3654;border-radius:12px;padding:28px 26px;max-width:340px;width:90%;text-align:center;box-shadow:0 8px 30px #000a}
+#gate h2{font-size:16px;margin:0 0 6px}
+#gate p{font-size:12.5px;color:#9fb0cc;margin:0 0 16px}
+#gate input{width:100%;box-sizing:border-box;text-align:center;font-size:15px;padding:10px;margin-bottom:10px}
+#gate button{width:100%;background:#3b82f6;border-color:#3b82f6;color:#fff;font-weight:700;padding:10px}
+#gateerr{color:#f87171;font-size:12px;min-height:16px;margin-top:8px}
+a.phone{color:#4ade80;font-weight:600}
+a.phone.dnc{color:#fbbf24}
 </style></head><body>
+<div id="gate"><div class="box">
+<h2>&#128274; Private lead tracker</h2>
+<p>Enter the password to view leads.</p>
+<input id="gatepw" type="password" placeholder="Password" autocomplete="off">
+<button id="gatego">Unlock</button>
+<div id="gateerr"></div>
+</div></div>
 <header>
 <h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated __UPDATED__ · notes save in your own browser</span></h1>
 <div class="controls">
@@ -147,7 +163,7 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <th data-k="score">Score</th>
 <th data-k="auction">Auction</th>
 <th data-k="ctype">Type</th>
-<th data-k="owners">Owner / vs Plaintiff</th>
+<th data-k="owners">Owner / Case</th>
 <th data-k="addr">Property &amp; Numbers</th>
 <th data-k="mail">Mailing</th>
 <th>Links</th><th>Status</th><th>Notes</th>
@@ -157,7 +173,8 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <script>
 const NL = String.fromCharCode(10);
 const BOM = String.fromCharCode(65279);
-const DATA = __DATA__;
+const RAW = __DATA__;
+let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
 const LS = 'fcLeadNotes';
 let notes = {};
 try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
@@ -171,6 +188,7 @@ let deal = {costpct: 10, buypct: 80, quiettitle: 3000, bidover: 20};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
+const fmtPhone = d => { d=String(d||'').replace(/\D/g,''); return d.length===10 ? '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6) : d; };
 const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); const k=Math.round(n/1e3);
   return (n>=1e6 || k>=1000) ? s+'$'+(n/1e6).toFixed(2)+'M' : n>=1e3 ? s+'$'+k+'k' : s+'$'+Math.round(n); };
 function recompute(){
@@ -308,6 +326,11 @@ function render(){
     if(r.pa) links.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener">Appraiser</a>');
     if(r.auc) links.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener">Auction</a>');
     if(r.people) links.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener">People</a>');
+    // skip-traced phones (present only when unlocked / on the local copy). MANUAL dial only.
+    (r.phones||[]).slice(0,3).forEach((ph,i) => {
+      const dnc = (r.phdnc||[])[i];
+      links.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">&#9742; '+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
+    });
     if(r.tax) links.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener">Taxes</a>');
     if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
     links.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">&#9993; Letter</a>');
@@ -334,9 +357,12 @@ function render(){
       ? '<div class="defwrap"><button class="deftog" type="button">+ '+dlist.length+' also named</button>'+
         '<div class="deflist">'+dlist.map(d=>'<div>'+esc(d)+'</div>').join('')+'</div></div>'
       : '';
+    // Owner cell. FC: owner -> "vs plaintiff" -> defendants. TD: no plaintiff exists (it's a county
+    // tax sale, not a lawsuit) -> say so plainly + show the Certificate #.
     const owner = '<div class="clamp2" title="'+esc(r.owners)+'">'+esc(r.owners)+'</div>'+
-      (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+
-      defsHtml;
+      (r.st==='TD'
+        ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
+        : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
@@ -367,8 +393,9 @@ function render(){
       (r.ju&&!r._nodata?'<div class="warn">debt not posted - assumes $0 owed</div>':'')+
       (r.mr?'<div class="mrwarn">&#9888; mortgage risk - verify payoff</div>':'')+
       '<div class="cowner">'+esc(r.owners)+'</div>'+
-      (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+
-      defsHtml+
+      (r.st==='TD'
+        ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
+        : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
@@ -521,7 +548,45 @@ document.getElementById('exp').onclick = () => {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'foreclosure-leads-tracked.csv'; a.click();
 };
-syncDealUI();
-recompute();
-render();
+// ---- private gate: if the payload is encrypted, ask for the password and decrypt in-browser ----
+async function decryptPayload(enc, password){
+  const dec = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt: dec(enc.salt), iterations: enc.it||200000, hash:'SHA-256'},
+    baseKey, {name:'AES-GCM', length:256}, false, ['decrypt']);
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, key, dec(enc.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function boot(){
+  if(!Array.isArray(RAW) && RAW && RAW.enc){
+    const gate = document.getElementById('gate'), inp = document.getElementById('gatepw'),
+          btn = document.getElementById('gatego'), err = document.getElementById('gateerr');
+    gate.style.display = 'flex';
+    const tryPw = async (pw) => {
+      try { DATA = await decryptPayload(RAW, pw); return true; } catch(e){ return false; }
+    };
+    // auto-unlock if we already have the password this browser session
+    const saved = (()=>{ try { return sessionStorage.getItem('fcPw'); } catch(e){ return null; } })();
+    if(saved && await tryPw(saved)){ gate.style.display='none'; }
+    else {
+      await new Promise(resolve => {
+        const attempt = async () => {
+          err.textContent = '';
+          if(await tryPw(inp.value)){
+            try { sessionStorage.setItem('fcPw', inp.value); } catch(e){}
+            gate.style.display='none'; resolve();
+          } else { err.textContent = 'Wrong password'; inp.select(); }
+        };
+        btn.onclick = attempt;
+        inp.onkeydown = e => { if(e.key==='Enter') attempt(); };
+        inp.focus();
+      });
+    }
+  }
+  syncDealUI();
+  recompute();
+  render();
+}
+boot();
 </script></body></html>

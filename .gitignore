@@ -5,3 +5,6 @@ _check.js
 __pycache__/
 browser-profile/
 leads-run.log
+batchdata.key
+site.pass
+skiptrace_results.json

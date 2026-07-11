@@ -16,6 +16,8 @@ from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DESKTOP = r"C:\Users\olqbb\OneDrive\Desktop"
+RESULTS_FILE = os.path.join(HERE, 'skiptrace_results.json')   # local phone cache (gitignored)
+PASS_FILE = os.path.join(HERE, 'site.pass')                    # shared-site password (gitignored)
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 BASE = "https://miamidade.realforeclose.com/index.cfm"
 
@@ -322,36 +324,80 @@ def qualify(leads):
             r'CITIMORTGAGE|WELLS FARGO|CHASE|NATIONSTAR|PENNYMAC|NEWREZ|CARRINGTON|LAKEVIEW', defs))
     return leads
 
+def _esc_json(obj):
+    # Escape HTML-significant chars in embedded JSON so a county field containing "</script>"
+    # can't break out of the inline <script> and inject/kill the page.
+    return json.dumps(obj).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+
+def _encrypt_payload(plaintext, password):
+    """AES-GCM-256 with a PBKDF2-SHA256 key. Round-trips with the template's Web Crypto decrypt.
+    Output is a small JSON object of base64 strings (no HTML-special chars)."""
+    import base64
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    salt, iv = os.urandom(16), os.urandom(12)
+    iters = 200000
+    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=iters).derive(password.encode('utf-8'))
+    ct = AESGCM(key).encrypt(iv, plaintext.encode('utf-8'), None)   # ciphertext has the 16-byte tag appended
+    b64 = lambda x: base64.b64encode(x).decode()
+    return {'enc': 1, 'it': iters, 'salt': b64(salt), 'iv': b64(iv), 'ct': b64(ct)}
+
 def make_tracker(leads):
-    slim = [{
-        'tier': r.get('tier',''), 'score': r.get('score',0),
-        'auction': r.get('AuctionDate',''), 'days': r.get('days_to_auction',0),
-        'case': r.get('Case #',''), 'owners': r.get('owners',''),
-        'addr': r.get('Address',''), 'mail': r.get('mailing_address',''),
-        'value': r.get('market_value',0) or 0, 'judg': r.get('judgment',0) or 0,
-        'eq': r.get('equity_pct',0), 'hs': bool(r.get('homestead')),
-        'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
-        'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
-        'filed': r.get('filing_year',0),
-        'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
-        'people': r.get('people_url',''), 'ctype': r.get('case_type',''),
-        'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
-        'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
-        'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
-        'ju': bool(r.get('judgment_unknown')),
-        'st': r.get('sale_type','FC'), 'obid': r.get('opening_bid',0) or 0,
-        'cert': r.get('Certificate #',''),
-    } for r in leads]
-    tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read()
-    # Escape HTML-significant chars in the embedded JSON so a county field containing "</script>"
-    # (or "<img onerror=>") can't break out of the inline <script> and inject/kill the page.
-    dat = json.dumps(slim).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
-    html = tpl.replace('__DATA__', dat).replace('__UPDATED__', f"{date.today():%Y-%m-%d}")
+    # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
+    st = {}
+    if os.path.exists(RESULTS_FILE):
+        try: st = json.load(open(RESULTS_FILE, encoding='utf-8'))
+        except Exception: st = {}
+    slim = []
+    for r in leads:
+        d = {
+            'tier': r.get('tier',''), 'score': r.get('score',0),
+            'auction': r.get('AuctionDate',''), 'days': r.get('days_to_auction',0),
+            'case': r.get('Case #',''), 'owners': r.get('owners',''),
+            'addr': r.get('Address',''), 'mail': r.get('mailing_address',''),
+            'value': r.get('market_value',0) or 0, 'judg': r.get('judgment',0) or 0,
+            'eq': r.get('equity_pct',0), 'hs': bool(r.get('homestead')),
+            'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
+            'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
+            'filed': r.get('filing_year',0),
+            'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
+            'people': r.get('people_url',''), 'ctype': r.get('case_type',''),
+            'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
+            'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
+            'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
+            'ju': bool(r.get('judgment_unknown')),
+            'st': r.get('sale_type','FC'), 'obid': r.get('opening_bid',0) or 0,
+            'cert': r.get('Certificate #',''),
+        }
+        hit = st.get(r.get('Case #',''))
+        if hit and hit.get('phones'):
+            d['phones'] = [p.get('number') for p in hit['phones'] if p.get('number')][:4]
+            d['phdnc'] = [bool(p.get('dnc')) for p in hit['phones']][:4]
+            d['emails'] = (hit.get('emails') or [])[:3]
+        slim.append(d)
+
+    tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{date.today():%Y-%m-%d}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
-    for out in [os.path.join(HERE,'docs','index.html'),
-                os.path.join(DESKTOP,'Foreclosure Lead Tracker.html')]:
-        open(out,'w',encoding='utf-8').write(html)
-    print('tracker written: docs/index.html + Desktop')
+    docs = os.path.join(HERE,'docs','index.html')
+    desktop = os.path.join(DESKTOP,'Foreclosure Lead Tracker.html')
+
+    # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
+    open(desktop,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(slim)))
+
+    # Shared docs/index.html: ENCRYPTED (with phones) when a site.pass exists, else PLAINTEXT with
+    # phones STRIPPED. This guarantees personal phone numbers never hit the public web unencrypted.
+    pw = ''
+    if os.path.exists(PASS_FILE):
+        pw = open(PASS_FILE, encoding='utf-8').read().strip()
+    if pw:
+        enc = _encrypt_payload(json.dumps(slim), pw)
+        open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', json.dumps(enc)))
+        print('tracker written: docs/index.html (ENCRYPTED gate) + Desktop (plaintext)')
+    else:
+        nophone = [{k: v for k, v in d.items() if k not in ('phones','phdnc','emails')} for d in slim]
+        open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(nophone)))
+        print('tracker written: docs/index.html (public, phone-free) + Desktop')
 
 def main():
     leads = scrape()
