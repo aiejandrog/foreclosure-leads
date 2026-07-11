@@ -52,6 +52,7 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 .tax{color:#f87171;font-size:11px;font-weight:600}
 .hoa{color:#fbbf24;font-size:11px;font-weight:600}
 .mtg{color:#8fa2c4;font-size:11px}
+.tdt{color:#c084fc;font-size:11px;font-weight:700}
 .links a{margin-right:6px;white-space:nowrap}
 /* mobile cards */
 #cards{display:none;padding:8px 10px 40px}
@@ -85,6 +86,7 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <button class="tf" data-t="ALL">All</button>
 <button id="wk" title="Only leads with an auction in the next 7 days">&#9889; This week</button>
 <button id="hd" title="Hide leads you marked Dead or DO NOT CONTACT">Hide dead</button>
+<button id="td" title="Only tax-deed sales (Jose's business)">&#127991; Tax deeds</button>
 <input id="q" placeholder="Search owner / address / case #">
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_profit">Est. Profit</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
@@ -102,6 +104,9 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <span style="color:#4ade80;font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
 <label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="80" min="40" max="100" style="width:52px">% of market value</label>
 <label style="font-size:12px" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:48px">%</label>
+<span style="color:#c084fc;font-size:11px" title="These two apply to Tax Deed leads only">| Tax deed:</span>
+<label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:44px">%</label>
+<label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:64px"></label>
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
@@ -147,11 +152,11 @@ let notes = {};
 try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false;
+let weekOnly = false, hideDead = false, tdOnly = false;
 let sender = {name:'', llc:'', phone:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
-let deal = {costpct: 10, buypct: 80};
+let deal = {costpct: 10, buypct: 80, quiettitle: 3000, bidover: 20};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
@@ -161,13 +166,29 @@ function recompute(){
   const bpRaw = (deal.buypct===''||deal.buypct==null||isNaN(+deal.buypct)) ? 80 : +deal.buypct;
   const buyPct = Math.max(0, bpRaw) / 100;                       // honor an explicit 0
   const costPct = Math.max(0, +deal.costpct || 0) / 100;
+  const quietTitle = Math.max(0, +deal.quiettitle || 3000);     // tax-deed only
+  const bidOver = Math.max(0, +deal.bidover || 0) / 100;        // tax-deed only
   DATA.forEach(r => {
     const judg = r.judg||0, val = r.value||0;
     // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
     if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; return; }
     r._nodata = false;
-    // You profit by buying BELOW market, then reselling. Your purchase is your discounted offer,
-    // but it can never be less than the debt you must pay off to take clean title.
+    if(r.st === 'TD'){
+      // TAX DEED: you win at auction (opening bid + a markup), then must clear title (quiet title)
+      // before you can resell. Profit = resale value - winning bid - quiet title - resale costs.
+      const obid = r.obid || judg || 0;
+      const winbid = obid * (1 + bidOver);
+      const costs = val * costPct;
+      r._equity = val - obid;
+      r._purchase = winbid;
+      r._cash = winbid + quietTitle + costs;
+      r._profit = val - r._cash;
+      r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
+      r._tight = (winbid + quietTitle >= val);   // bid+title eats the value -> no margin
+      return;
+    }
+    // FORECLOSURE: you profit by buying BELOW market, then reselling. Your purchase is your discounted
+    // offer, but it can never be less than the debt you must pay off to take clean title.
     const offer = val * buyPct;
     const purchase = Math.max(offer, judg);
     const costs = val * costPct;
@@ -187,7 +208,16 @@ function genLetter(r){
   const owner = titleCase((r.owners||'').split(';')[0].trim());
   const first = owner.split(' ')[0] || owner;
   const addr = esc(r.addr), mail = esc(r.mail||r.addr), dt = esc(r.auction);
-  const EN = `<p>Dear ${esc(owner)},</p>
+  const td = (r.st === 'TD');
+  const EN = td ? `<p>Dear ${esc(owner)},</p>
+<p>My name is ${esc(sN)}, a local real estate investor here in Miami. Public records show the property at <b>${addr}</b> is scheduled for a <b>tax deed sale on ${dt}</b> because of unpaid property taxes.</p>
+<p>Most people don't realize what that means, or that they still have options before that date:</p>
+<ul><li>You can still stop the sale by paying the back taxes (redeeming) any time up until the auction.</li>
+<li>If you can't or don't want to keep it, selling to me before the sale puts cash in your pocket instead of losing the property to the county.</li>
+<li>If it sells at auction for more than the taxes owed, that surplus may belong to <b>you</b> &mdash; but only if you claim it.</li></ul>
+<p>I am not an attorney and this is not legal advice. I buy properties directly, with cash, and can close before the tax-deed deadline &mdash; and if selling isn't your best move, I'll tell you plainly.</p>
+<p>If you'd like to talk &mdash; no cost, no obligation, no pressure &mdash; call or text me at <b>${esc(sP)}</b>. Even if the sale is close, there may still be time.</p>
+<p>Respectfully,<br>${esc(sN)}<br>${esc(sL)}<br>${esc(sP)}</p>` : `<p>Dear ${esc(owner)},</p>
 <p>My name is ${esc(sN)}, a local real estate investor here in Miami. Public court records show the property at <b>${addr}</b> has a foreclosure sale scheduled for <b>${dt}</b>.</p>
 <p>You still have options before that date, and most people in this situation are never told what they are:</p>
 <ul><li>If the sale brings more than you owe, that surplus belongs to <b>you</b>, not the bank.</li>
@@ -196,7 +226,15 @@ function genLetter(r){
 <p>I am not an attorney and this is not legal advice. I buy properties directly, with cash, and close before auction deadlines &mdash; and when buying isn't the right fit, I'll tell you plainly what your better option is, even if it doesn't involve me.</p>
 <p>If you'd like to talk &mdash; no cost, no obligation, no pressure &mdash; call or text me at <b>${esc(sP)}</b>. Even if the auction is days away, there may still be time.</p>
 <p>Respectfully,<br>${esc(sN)}<br>${esc(sL)}<br>${esc(sP)}</p>`;
-  const ES = `<p>Estimado/a ${esc(first)},</p>
+  const ES = td ? `<p>Estimado/a ${esc(first)},</p>
+<p>Mi nombre es ${esc(sN)}, inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Los registros p&uacute;blicos muestran que la propiedad en <b>${addr}</b> tiene una <b>subasta de tax deed (deuda de impuestos) programada para el ${dt}</b> por impuestos sin pagar.</p>
+<p>La mayor&iacute;a no sabe lo que eso significa, ni que todav&iacute;a tiene opciones antes de esa fecha:</p>
+<ul><li>Puede detener la subasta pagando los impuestos atrasados en cualquier momento antes de la subasta.</li>
+<li>Si no puede o no quiere conservarla, vend&eacute;rmela antes de la subasta le deja dinero en el bolsillo en lugar de perder la propiedad ante el condado.</li>
+<li>Si se vende por m&aacute;s de lo que se debe en impuestos, ese excedente puede pertenecerle a <b>usted</b> &mdash; pero solo si lo reclama.</li></ul>
+<p>No soy abogado y esto no es asesor&iacute;a legal. Compro propiedades directamente, en efectivo, y puedo cerrar antes de la fecha l&iacute;mite del tax deed &mdash; y si vender no es lo mejor para usted, se lo digo con franqueza.</p>
+<p>Si desea hablar &mdash; sin costo, sin obligaci&oacute;n, sin presi&oacute;n &mdash; ll&aacute;meme o env&iacute;eme un mensaje al <b>${esc(sP)}</b>. Aunque la subasta est&eacute; cerca, todav&iacute;a puede haber tiempo.</p>
+<p>Respetuosamente,<br>${esc(sN)}<br>${esc(sL)}<br>${esc(sP)}</p>` : `<p>Estimado/a ${esc(first)},</p>
 <p>Mi nombre es ${esc(sN)}, inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Los registros p&uacute;blicos de la corte muestran que la propiedad en <b>${addr}</b> tiene una subasta de ejecuci&oacute;n hipotecaria programada para el <b>${dt}</b>.</p>
 <p>Usted todav&iacute;a tiene opciones antes de esa fecha, y a la mayor&iacute;a nunca se las explican:</p>
 <ul><li>Si la subasta vende por m&aacute;s de lo que usted debe, ese excedente le pertenece a <b>usted</b>, no al banco.</li>
@@ -234,6 +272,7 @@ function view(){
   if(ad1) rows = rows.filter(r => toISO(r.auction) >= ad1);
   if(ad2) rows = rows.filter(r => toISO(r.auction) <= ad2);
   if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
+  if(tdOnly) rows = rows.filter(r => r.st === 'TD');
   if(hideDead) rows = rows.filter(r => { const s=(notes[r.case]||{}).status; return s!=='Dead' && s!=='DO NOT CONTACT'; });
   rows = rows.slice();
   rows.sort((a,b) => {
@@ -264,7 +303,7 @@ function render(){
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
     links.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">&#128203; Copy all</a>');
-    const ctype = r.ctype ? '<span class="'+(r.ctype.indexOf('HOA')>-1?'hoa':'mtg')+'">'+esc(r.ctype)+'</span>' : '';
+    const ctype = r.ctype ? '<span class="'+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'">'+esc(r.ctype)+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
     // Profit cell: big profit, then ROI + cash sub-line, then flags. "no value data" when un-enriched.
     const prof = r._nodata
@@ -289,7 +328,7 @@ function render(){
       defsHtml;
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+fmtK(r.value)+' val · '+fmtK(r.judg)+' owed'+(r.eq?' · '+r.eq+'% eq':'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'];
     const statusSel = '<select class="status" data-c="'+esc(r.case)+'">'+
@@ -320,7 +359,7 @@ function render(){
       (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+
       defsHtml+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+fmtK(r.value)+' val · '+fmtK(r.judg)+' owed'+(r.eq?' · '+r.eq+'% eq':'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline">&#9993; <span>'+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+links.join(' ')+'</div>'+
@@ -339,10 +378,14 @@ function saveDeal(){ try { localStorage.setItem('fcDeal', JSON.stringify(deal));
 function syncDealUI(){
   document.getElementById('costpct').value = deal.costpct;
   document.getElementById('buypct').value = deal.buypct;
+  document.getElementById('bidover').value = deal.bidover;
+  document.getElementById('quiettitle').value = deal.quiettitle;
 }
 function dealChanged(){ recompute(); saveDeal(); render(); }
 document.getElementById('costpct').oninput = e => { deal.costpct = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value===''?80:+e.target.value; dealChanged(); };
+document.getElementById('bidover').oninput = e => { deal.bidover = e.target.value===''?0:+e.target.value; dealChanged(); };
+document.getElementById('quiettitle').oninput = e => { deal.quiettitle = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('sortby').onchange = e => {
   sortK = e.target.value;
   sortD = (sortK==='days') ? 1 : -1;   // soonest auction first; everything else high-to-low
@@ -350,6 +393,7 @@ document.getElementById('sortby').onchange = e => {
 };
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
+document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
 Object.entries({name:'sName', llc:'sLLC', phone:'sPhone'}).forEach(([k,id]) => {

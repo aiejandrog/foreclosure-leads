@@ -36,6 +36,8 @@ EXTRACT_JS = """
     rec.Address = addr.join(', ');
     const a = item.querySelector('a[href*="folio="]');
     rec.Folio = a ? (a.href.split('folio=')[1] || '') : '';
+    // tax-deed items show the folio as plain text in the Parcel ID cell (no link)
+    if (!rec.Folio && rec['Parcel ID'] && /\\d/.test(rec['Parcel ID'])) rec.Folio = rec['Parcel ID'].replace(/\\D/g,'');
     out.push(rec);
   });
   const max = document.getElementById('maxWA');
@@ -49,8 +51,8 @@ CAL_JS = """
   document.querySelectorAll('.CALBOX').forEach(box => {
     const dayid = box.getAttribute('dayid');
     const txt = box.innerText.replace(/\\s+/g, ' ').trim();
-    const m = txt.match(/Foreclosure\\s+(\\d+)\\s*\\/\\s*(\\d+)/);
-    if (dayid && m) days.push({date: dayid, remaining: parseInt(m[1])});
+    const m = txt.match(/(Foreclosure|Tax Deed)\\s+(\\d+)\\s*\\/\\s*(\\d+)/);
+    if (dayid && m) days.push({date: dayid, remaining: parseInt(m[2]), saletype: m[1] === 'Tax Deed' ? 'TD' : 'FC'});
   });
   return JSON.stringify(days);
 }
@@ -66,17 +68,19 @@ def discover_dates(page):
         for d in json.loads(page.evaluate(CAL_JS)):
             dt = datetime.strptime(d['date'], '%m/%d/%Y').date()
             if dt >= today and d['remaining'] > 0 and d['date'] not in [x[0] for x in dates]:
-                dates.append((d['date'], d['remaining']))
-    print(f"auction dates found: {[f'{d} ({n})' for d, n in dates]}")
-    return [d for d, _ in dates]
+                dates.append((d['date'], d['saletype']))
+    print(f"auction dates found: {[f'{d} [{st}]' for d, st in dates]}")
+    return dates   # list of (date, saletype)
 
-def scrape_date(page, d, attempt=1):
+def scrape_date(page, d, saletype='FC', attempt=1):
     page.goto(f"{BASE}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={d}", timeout=45000)
+    # tax-deed lists render slower; give them a longer settle window
+    tmo = 40000 if saletype == 'TD' else 25000
     try:
-        page.wait_for_selector('#Area_W .AUCTION_DETAILS tr', timeout=25000, state='attached')
+        page.wait_for_selector('#Area_W .AUCTION_DETAILS tr', timeout=tmo, state='attached')
     except Exception:
         if attempt == 1:
-            return scrape_date(page, d, attempt=2)
+            return scrape_date(page, d, saletype, attempt=2)
         print(f"{d}: no waiting auctions rendered"); return []
     data = json.loads(page.evaluate(EXTRACT_JS))
     items = list(data['items'])
@@ -97,8 +101,10 @@ def scrape_date(page, d, attempt=1):
                 items += data['items']; pages += 1; advanced = True
                 break
         if not advanced: break
-    for rec in items: rec['AuctionDate'] = d
-    print(f"{d}: {len(items)} pending (pages={pages})")
+    for rec in items:
+        rec['AuctionDate'] = d
+        rec['sale_type'] = saletype
+    print(f"{d} [{saletype}]: {len(items)} pending (pages={pages})")
     return items
 
 PROFILE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'browser-profile')
@@ -116,8 +122,8 @@ def scrape():
             browser = p.chromium.launch(headless=True)
             page = browser.new_context(user_agent=UA, viewport={"width":1400,"height":1000}).new_page()
         leads = []
-        for d in discover_dates(page):
-            leads += scrape_date(page, d)
+        for d, saletype in discover_dates(page):
+            leads += scrape_date(page, d, saletype)
         browser.close()
     seen, out = set(), []
     for r in leads:
@@ -189,7 +195,8 @@ def enrich_clerk(leads):
     for i, r in enumerate(leads):
         case = (r.get('Case #') or '').strip()
         r['plaintiff'] = r['defendants'] = r['docket_url'] = ''
-        if not re.match(r'\d{4}-\d+-\w+-\d+', case):
+        # tax-deed cases (e.g. 2026A00097) aren't in the civil OCS system - skip
+        if r.get('sale_type') == 'TD' or not re.match(r'\d{4}-\d+-\w+-\d+', case):
             continue
         try:
             enc = s.get(f"{CLERK}/ocs/api/CaseInfo/encrypt/{case}", timeout=20).json()
@@ -221,26 +228,38 @@ def enrich_clerk(leads):
 def qualify(leads):
     today = datetime.now()
     for r in leads:
-        judg = money(r.get('Final Judgment Amount',''))
+        td = (r.get('sale_type') == 'TD')
         mkt = r.get('market_value',0) or 0
-        r['judgment'] = judg
+        # TAX DEED: the money you pay is the Opening Bid, not a judgment. Title is unclean (needs quiet
+        # title) and some liens survive - but for scoring, the spread is value - opening bid.
+        if td:
+            judg = money(r.get('Opening Bid',''))
+            r['opening_bid'] = judg
+            r['judgment'] = judg          # reuse the money plumbing (the tracker branches on sale_type)
+            r['case_type'] = 'Tax Deed'
+            r['judgment_unknown'] = False
+            is_hoa = False
+        else:
+            judg = money(r.get('Final Judgment Amount',''))
+            r['judgment'] = judg
+            r['opening_bid'] = 0
+            r['judgment_unknown'] = (judg == 0)
+            case0 = r.get('Case #','')
+            is_hoa = bool(re.search(r'-CC-', case0))
         r['equity'] = mkt - judg if mkt else 0
         r['equity_pct'] = round(r['equity']/mkt*100,1) if mkt else 0
         try: days = (datetime.strptime(r['AuctionDate'],'%m/%d/%Y') - today).days
         except: days = 0
         r['days_to_auction'] = days
         case = r.get('Case #','')
-        fy = re.match(r'(\d{4})-', case)
+        fy = re.match(r'(\d{4})', case)
         r['filing_year'] = int(fy.group(1)) if fy else 0
-        # CC = county-court case, almost always HOA/condo assoc foreclosure: equity is real but a
-        # senior mortgage may exist that the judgment amount doesn't show
-        is_hoa = bool(re.search(r'-CC-', case))
         # a blank/$0 judgment = the debt isn't posted yet, NOT $0 owed. Don't credit full equity.
-        r['judgment_unknown'] = (judg == 0)
         if r['judgment_unknown']:
             r['equity'] = 0; r['equity_pct'] = 0
-        r['warning'] = ('judgment not posted - debt unknown' if r['judgment_unknown']
-                        else ('HOA/assoc case - verify senior mortgage on docket' if is_hoa else ''))
+        r['warning'] = ('tax-deed: verify surviving liens (IRS 120d / municipal / HOA) + quiet title to resell' if td
+                        else 'judgment not posted - debt unknown' if r['judgment_unknown']
+                        else 'HOA/assoc case - verify senior mortgage on docket' if is_hoa else '')
         ep = r['equity_pct']
         # granular 0-100 so leads rank instead of clustering
         score = 0.0
@@ -254,8 +273,9 @@ def qualify(leads):
         elif r.get('enriched'): score += 4
         if is_hoa: score -= 6                                     # payoff uncertainty
         dq = []
-        if mkt and mkt < 100000: dq.append('low value')
-        if mkt and ep < 15: dq.append('thin/negative equity')
+        # for tax deeds the cheap parcels ARE the play (small opening bid vs value), so no low-value cut
+        if not td and mkt and mkt < 100000: dq.append('low value')
+        if mkt and ep < 15: dq.append('thin margin' if td else 'thin/negative equity')
         if not r.get('Address','').strip(): dq.append('no address')
         if not mkt: dq.append('no value data')
         if r['judgment_unknown']: dq.append('judgment not posted')
@@ -319,6 +339,8 @@ def make_tracker(leads):
         'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
         'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
         'ju': bool(r.get('judgment_unknown')),
+        'st': r.get('sale_type','FC'), 'obid': r.get('opening_bid',0) or 0,
+        'cert': r.get('Certificate #',''),
     } for r in leads]
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read()
     # Escape HTML-significant chars in the embedded JSON so a county field containing "</script>"
@@ -346,8 +368,8 @@ def main():
     leads.sort(key=lambda r: -r['score'])
     json.dump(leads, open(os.path.join(HERE,'leads_final.json'),'w'), indent=1)
     make_tracker(leads)
-    cols = ['tier','score','AuctionDate','days_to_auction','Case #','filing_year','owners','Address','mailing_address',
-            'market_value','judgment','equity','equity_pct','homestead','warning','dor_desc','beds','baths',
+    cols = ['tier','score','sale_type','AuctionDate','days_to_auction','Case #','opening_bid','filing_year','owners','Address','mailing_address',
+            'market_value','judgment','equity','equity_pct','homestead','case_type','warning','dor_desc','beds','baths',
             'living_area','last_sale_price','last_sale_date','year_folio','zillow_url','pa_url','disqualifiers']
     out_csv = os.path.join(DESKTOP, f"Miami-Dade Foreclosure Leads - {date.today():%Y-%m-%d}.csv")
     with open(out_csv,'w',newline='',encoding='utf-8-sig') as f:
@@ -355,7 +377,8 @@ def main():
         w.writeheader()
         for r in leads: w.writerow(r)
     a = sum(1 for r in leads if r['tier']=='A'); b = sum(1 for r in leads if r['tier']=='B')
-    print(f"DONE: {len(leads)} leads | Tier A: {a} | Tier B: {b}")
+    fc = sum(1 for r in leads if r.get('sale_type')!='TD'); td = sum(1 for r in leads if r.get('sale_type')=='TD')
+    print(f"DONE: {len(leads)} leads ({fc} foreclosure, {td} tax deed) | Tier A: {a} | Tier B: {b}")
     print(f"CSV: {out_csv}")
 
 if __name__ == '__main__':
