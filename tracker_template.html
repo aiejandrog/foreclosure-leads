@@ -24,6 +24,11 @@ tbody tr:hover td{background:#1c2740}
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .submeta{font-size:11px;color:#9fb0cc;margin-top:3px;font-variant-numeric:tabular-nums}
 .clip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpy{background:#233150;border:1px solid #34456a;color:#9fc0ff;font-size:11px;padding:1px 6px;border-radius:5px;cursor:pointer;line-height:1.5;vertical-align:middle}
+.cpy:hover{background:#2c3d61}
+.cpy.ok{background:#166534;border-color:#166534;color:#fff}
+.addrline{display:flex;align-items:center;gap:6px}
+.addrline .clip{flex:1}
 .clamp2{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .hs{color:#4ade80;font-weight:600}
 .defwrap{margin-top:2px}
@@ -170,6 +175,7 @@ function recompute(){
 }
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
+const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">&#128203;</button>';
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR LLC]', sP = sender.phone || '[YOUR PHONE]';
   const owner = titleCase((r.owners||'').split(';')[0].trim());
@@ -245,6 +251,9 @@ function render(){
     if(r.tax) links.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener">Taxes</a>');
     if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
     links.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">&#9993; Letter</a>');
+    const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
+      'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
+    links.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">&#128203; Copy all</a>');
     const ctype = r.ctype ? '<span class="'+(r.ctype.indexOf('HOA')>-1?'hoa':'mtg')+'">'+esc(r.ctype)+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
     // Profit cell: big profit, then ROI + cash sub-line, then mortgage flag
@@ -264,8 +273,8 @@ function render(){
     const owner = '<div class="clamp2" title="'+esc(r.owners)+'">'+esc(r.owners)+'</div>'+
       (r.plaintiff?'<div class="meta clip" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+
       defsHtml;
-    // Property cell: address, then compact numbers line, then any warning
-    const prop = '<div class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</div>'+
+    // Property cell: address (with copy), compact numbers line, any warning
+    const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+fmtK(r.value)+' val · '+fmtK(r.judg)+' owed'+(r.eq?' · '+r.eq+'% eq':'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'];
@@ -280,7 +289,7 @@ function render(){
       '<td>'+ctype+'</td>'+
       '<td>'+owner+'</td>'+
       '<td>'+prop+'</td>'+
-      '<td class="clip" title="'+esc(r.mail)+'">'+esc(r.mail)+'</td>'+
+      '<td><div class="addrline"><span class="clip" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
       '<td class="links">'+links.join(' ')+'</td>'+
       '<td>'+statusSel+'</td>'+
       '<td>'+notesTa+'</td></tr>');
@@ -294,10 +303,10 @@ function render(){
       '<div class="cowner">'+esc(r.owners)+'</div>'+
       (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+
       defsHtml+
-      '<div class="caddr">'+esc(r.addr)+'</div>'+
+      '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+fmtK(r.value)+' val · '+fmtK(r.judg)+' owed'+(r.eq?' · '+r.eq+'% eq':'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
-      (r.mail?'<div class="meta">&#9993; '+esc(r.mail)+'</div>':'')+
+      (r.mail?'<div class="meta addrline">&#9993; <span>'+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+links.join(' ')+'</div>'+
       '<div class="cctl">'+statusSel+notesTa+'</div>'+
       '</div>');
@@ -345,6 +354,28 @@ document.addEventListener('click', e => {
   const r = DATA.find(x => x.case === a.dataset.c);
   if(r) genLetter(r);
 });
+// copy buttons (address + copy-all), delegated for table + cards
+document.addEventListener('click', e => {
+  const btn = e.target.closest && e.target.closest('.cpy, .cpy2');
+  if(!btn) return;
+  e.preventDefault();
+  const text = btn.dataset.copy || '';
+  const flash = () => {
+    const orig = btn.innerHTML; btn.classList.add('ok');
+    btn.innerHTML = btn.classList.contains('cpy2') ? '&#10003; Copied' : '&#10003;';
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('ok'); }, 1100);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(flash, () => fallbackCopy(text, flash));
+  } else fallbackCopy(text, flash);
+});
+function fallbackCopy(text, done){
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done && done(); } catch(e) {}
+  document.body.removeChild(ta);
+}
 document.getElementById('q').oninput = e => { q = e.target.value; render(); };
 document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
 document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
