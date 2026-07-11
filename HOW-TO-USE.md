@@ -4,7 +4,24 @@
 
 ---
 
-## 🔑 Turning on phone numbers (skip tracing) — one-time setup
+## ☎️ Getting phone numbers — the FREE way (do this first)
+
+Every lead has a **☎ phone box** and a **People** button. To get a number for free:
+1. Click **People** — it opens TruePeopleSearch with the owner's name + zip already filled in.
+2. Read their phone off that page (it's free and works every time when *you* do it by hand).
+3. Type the number into the **☎ phone box** on that lead.
+
+Once you type it, it turns into a green **click-to-call** link, saves automatically, and shows up in
+your CSV export. No cost, ever. *(Heads-up: the phone you type saves on THIS device only — like your
+notes — so it doesn't sync to Jose's phone. Export the CSV to share.)*
+
+> Why not have the tool grab the phone automatically for free? TruePeopleSearch blocks robots on
+> purpose — it works for your hands but not for a script (tested and confirmed). The paid option below
+> is the only reliable way to fully automate it.
+
+---
+
+## 🔑 Optional: fully automatic phones (paid, ~$0.20 each) — one-time setup
 
 The tool can pull each owner's **phone number** so you can call, not just mail. Phones are private,
 so this is set up so they're **never** shown on the open web — the shared site gets **password-locked**
