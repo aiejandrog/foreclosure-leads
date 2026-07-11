@@ -100,10 +100,8 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 </div>
 <div class="controls" style="margin-top:8px;background:#12192a;padding:8px 10px;border-radius:8px;border:1px solid #26314c">
 <span style="color:#4ade80;font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
-<label style="font-size:12px">Costs % of value <input id="costpct" type="number" value="10" min="0" max="40" style="width:56px"></label>
-<label style="font-size:12px">Upfront to owner
-<select id="upmode"><option value="scale">Scale to debt ($3.5k&ndash;$8k)</option><option value="flat">Flat amount</option></select></label>
-<input id="upflat" type="number" value="5000" step="500" style="width:84px;display:none" title="flat upfront $">
+<label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="80" min="40" max="100" style="width:52px">% of market value</label>
+<label style="font-size:12px" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:48px">%</label>
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
@@ -125,7 +123,7 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <div class="tblwrap">
 <table id="tbl">
 <colgroup>
-<col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:120px"><col style="width:96px"><col style="width:210px"><col style="width:240px"><col style="width:190px"><col style="width:150px"><col style="width:132px"><col style="width:150px">
+<col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:118px"><col style="width:90px"><col style="width:246px"><col style="width:238px"><col style="width:186px"><col style="width:150px"><col style="width:132px"><col style="width:150px">
 </colgroup>
 <thead><tr>
 <th data-k="tier">Tier</th>
@@ -153,24 +151,27 @@ let weekOnly = false, hideDead = false;
 let sender = {name:'', llc:'', phone:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
-let deal = {costpct: 10, upmode: 'scale', upflat: 5000};
+let deal = {costpct: 10, buypct: 80};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
 const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); return n>=1e6 ? s+'$'+(n/1e6).toFixed(2)+'M' : n>=1e3 ? s+'$'+Math.round(n/1e3)+'k' : s+'$'+Math.round(n); };
-function upfrontFor(judg){
-  if(deal.upmode==='flat') return +deal.upflat || 0;
-  return Math.min(8000, Math.max(3500, 3500 + 0.02*judg));   // scale to debt
-}
 function recompute(){
+  const buyPct = Math.max(0, +deal.buypct || 80) / 100;
+  const costPct = Math.max(0, +deal.costpct || 0) / 100;
   DATA.forEach(r => {
     const judg = r.judg||0, val = r.value||0;
-    const up = upfrontFor(judg);
-    const costs = val * ((+deal.costpct||0)/100);
-    r._up = up; r._costs = costs;
-    r._cash = judg + up + costs;                 // cash to acquire free & clear
-    r._profit = val - r._cash;                   // net profit on resale
+    // You profit by buying BELOW market, then reselling. Your purchase is your discounted offer,
+    // but it can never be less than the debt you must pay off to take clean title.
+    const offer = val * buyPct;
+    const purchase = Math.max(offer, judg);
+    const costs = val * costPct;
+    r._equity = val - judg;            // total equity in the property (the opportunity size)
+    r._purchase = purchase;
+    r._cash = purchase + costs;        // all-in money to acquire + carry + resell
+    r._profit = val - r._cash;         // realistic profit = resale - what you paid - costs
     r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
+    r._tight = (judg > offer);         // debt eats your discount -> thin/negative, flag it
   });
 }
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -258,7 +259,8 @@ function render(){
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
     // Profit cell: big profit, then ROI + cash sub-line, then mortgage flag
     const prof = '<span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
-      (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash</div>':'')+
+      (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
+      (r._tight?'<div class="warn" title="The debt owed is more than your discounted offer, so there is little or no margin. Negotiate below the debt or pass.">thin: debt &gt; offer</div>':'')+
       (r.mr?'<div class="mrwarn" title="HOA judgment likely hides a senior mortgage - verify true payoff on the docket">&#9888; mortgage risk</div>':'');
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction)+'</div>'+
@@ -271,7 +273,7 @@ function render(){
         '<div class="deflist">'+dlist.map(d=>'<div>'+esc(d)+'</div>').join('')+'</div></div>'
       : '';
     const owner = '<div class="clamp2" title="'+esc(r.owners)+'">'+esc(r.owners)+'</div>'+
-      (r.plaintiff?'<div class="meta clip" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+
+      (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+
       defsHtml;
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
@@ -322,14 +324,11 @@ document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
 function saveDeal(){ try { localStorage.setItem('fcDeal', JSON.stringify(deal)); } catch(e) {} }
 function syncDealUI(){
   document.getElementById('costpct').value = deal.costpct;
-  document.getElementById('upmode').value = deal.upmode;
-  document.getElementById('upflat').value = deal.upflat;
-  document.getElementById('upflat').style.display = deal.upmode==='flat' ? '' : 'none';
+  document.getElementById('buypct').value = deal.buypct;
 }
 function dealChanged(){ recompute(); saveDeal(); render(); }
 document.getElementById('costpct').oninput = e => { deal.costpct = e.target.value===''?0:+e.target.value; dealChanged(); };
-document.getElementById('upmode').onchange = e => { deal.upmode = e.target.value; syncDealUI(); dealChanged(); };
-document.getElementById('upflat').oninput = e => { deal.upflat = e.target.value===''?0:+e.target.value; dealChanged(); };
+document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value===''?80:+e.target.value; dealChanged(); };
 document.getElementById('sortby').onchange = e => {
   sortK = e.target.value;
   sortD = (sortK==='days') ? 1 : -1;   // soonest auction first; everything else high-to-low
@@ -416,11 +415,11 @@ document.getElementById('tb').addEventListener('change', e => {
   save();
 });
 document.getElementById('exp').onclick = () => {
-  const head = ['tier','est_profit','roi_pct','cash_in','upfront','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','people_search','case_page','status','notes'];
+  const head = ['tier','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','people_search','case_page','status','notes'];
   const q2 = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,Math.round(r._profit),Math.round(r._roi),Math.round(r._cash),Math.round(r._up),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,Math.round(r._profit),Math.round(r._roi),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');
