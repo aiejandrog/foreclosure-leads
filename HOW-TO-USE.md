@@ -49,6 +49,10 @@ Click these to dig into any house:
 ### 1. Find the best houses to work
 The list is already sorted with the most profitable on top. Want the urgent ones?
 Click **⚡ This week** to see only houses with an auction in the next 7 days. Act on those first.
+Want only **tax deeds** (Jose's business)? Click **🏷 Tax deeds** — those are properties going up for
+back taxes, often with a tiny opening bid. For those, the "Est. Profit" already subtracts what you'd
+pay at auction, a **quiet-title cost (~$3,000)** to clean up the title so you can resell, and costs.
+⚠️ Tax deeds are "buyer beware" — always read the red warning and check for surviving liens before you bid.
 
 ### 2. Send a letter to the owner
 1. **One time only:** at the top, fill in the **"Letter sender"** boxes with Jose's name, LLC, and phone.
