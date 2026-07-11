@@ -13,6 +13,9 @@ ones we want to help (and make money on). The website finds them for us automati
 Every house is one row. Reading left to right, the important stuff is:
 
 - **Est. Profit** (big green number) — how much money we could make on this house. Biggest is on top.
+  It assumes we **buy the house below what it's worth** (the "You buy at __% of market value" box up top,
+  default 80%) and resell it. The profit is the discount we get — NOT the owner's whole equity. Want to
+  see it if we negotiate a better price? Lower that % and every number updates.
 - **Score** — how *good/easy* the lead is (0–100). High = the owner has lots of equity and time.
 - **Auction** — the day the house gets sold at auction. "in 5d" means 5 days away. Red = hurry!
 - **Owner** — the person who owns the house (who we mail/call).
