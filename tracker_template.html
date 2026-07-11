@@ -379,7 +379,7 @@ function dealModalBody(r){
   const pcls = r._profit>=0 ? 'profpos' : 'profneg';
   const figure = r._profit!=null ? ' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>' : '';
   return '<div class="dm-head">'+
-      '<div class="dm-title">'+owner+'</div>'+
+      '<div class="dm-title">'+owner+' '+copyBtn((r.owners||'').split(';')[0].trim(),'owner name')+'</div>'+
       '<div class="dm-sub">'+esc(r.addr)+' · '+(r.st==='TD'?'Tax deed':'Foreclosure')+' · auction '+esc(r.auction)+'</div>'+
       '<div class="dm-verdict">'+verdictBadge(r)+figure+'</div>'+
       (r._why?'<div class="dm-why">'+esc(r._why)+'</div>':'')+
@@ -540,7 +540,7 @@ function render(){
       : '';
     // Owner cell. FC: owner -> "vs plaintiff" -> defendants. TD: no plaintiff exists (it's a county
     // tax sale, not a lawsuit) -> say so plainly + show the Certificate #.
-    const owner = '<div class="clamp2" title="'+esc(r.owners)+'">'+esc(r.owners)+'</div>'+
+    const owner = '<div class="addrline"><span class="clamp2" title="'+esc(r.owners)+'">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
       (r.st==='TD'
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
@@ -576,7 +576,7 @@ function render(){
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._why)+'</div>':'')+
       (!r._nodata&&r._verdict!=='VERIFY'&&r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash to acquire</div>':'')+
       (r.mr&&r._verdict!=='VERIFY'?'<div class="mrwarn">&#9888; mortgage risk - verify payoff</div>':'')+
-      '<div class="cowner">'+esc(r.owners)+'</div>'+
+      '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
       (r.st==='TD'
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
