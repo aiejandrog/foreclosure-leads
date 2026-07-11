@@ -92,6 +92,8 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 #gateerr{color:#f87171;font-size:12px;min-height:16px;margin-top:8px}
 a.phone{color:#4ade80;font-weight:600}
 a.phone.dnc{color:#fbbf24}
+input.ph{width:100%;box-sizing:border-box;font-size:12px;padding:4px 6px;margin-bottom:4px;background:#12261a;border:1px solid #2a4a35;border-radius:5px;color:#bff3d0}
+input.ph::placeholder{color:#5a7d66}
 </style></head><body>
 <div id="gate"><div class="box">
 <h2>&#128274; Private lead tracker</h2>
@@ -325,12 +327,14 @@ function render(){
     if(r.zillow) links.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
     if(r.pa) links.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener">Appraiser</a>');
     if(r.auc) links.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener">Auction</a>');
-    if(r.people) links.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener">People</a>');
+    if(r.people) links.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Free lookup on TruePeopleSearch — find the phone, then type it in the phone box on this lead">People</a>');
     // skip-traced phones (present only when unlocked / on the local copy). MANUAL dial only.
     (r.phones||[]).slice(0,3).forEach((ph,i) => {
       const dnc = (r.phdnc||[])[i];
       links.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">&#9742; '+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
     });
+    // phone you looked up on TruePeopleSearch and typed into the phone box (saved on this device)
+    if(n.phone) links.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">&#9742; '+esc(fmtPhone(n.phone))+'</a>');
     if(r.tax) links.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener">Taxes</a>');
     if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
     links.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">&#9993; Letter</a>');
@@ -371,6 +375,8 @@ function render(){
     const statusSel = '<select class="status" data-c="'+esc(r.case)+'">'+
       opts.map(s => '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select>';
     const notesTa = '<textarea class="notes" data-c="'+esc(r.case)+'" placeholder="notes">'+esc(n.note)+'</textarea>';
+    // free manual phone: look it up via the People button, then type it here (saves on this device)
+    const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="&#9742; phone" value="'+esc(n.phone||'')+'">';
     trs.push('<tr>'+
       '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
       '<td class="num">'+prof+'</td>'+
@@ -382,7 +388,7 @@ function render(){
       '<td><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
       '<td class="links">'+links.join(' ')+'</td>'+
       '<td>'+statusSel+'</td>'+
-      '<td>'+notesTa+'</td></tr>');
+      '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
     cards.push('<div class="card">'+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
@@ -401,7 +407,7 @@ function render(){
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline">&#9993; <span>'+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+links.join(' ')+'</div>'+
-      '<div class="cctl">'+statusSel+notesTa+'</div>'+
+      '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
       '</div>');
   });
   document.getElementById('tb').innerHTML = trs.join('');
@@ -533,16 +539,17 @@ document.addEventListener('change', e => {
   notes[c] = notes[c] || {status:'', note:''};
   if(e.target.classList.contains('status')) notes[c].status = e.target.value;
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
+  else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
   else return;
   save();
 });
 document.getElementById('exp').onclick = () => {
-  const head = ['tier','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','people_search','case_page','status','notes'];
+  const head = ['tier','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','phone','zillow','appraiser','people_search','case_page','status','notes'];
   // prefix a ' to any cell starting with = + - @ so Excel/Sheets can't run it as a formula
   const q2 = v => { let s = String(v==null?'':v); if(/^[=+\-@\t\r]/.test(s)) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,Math.round(r._profit),Math.round(r._roi),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,Math.round(r._profit),Math.round(r._roi),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');
