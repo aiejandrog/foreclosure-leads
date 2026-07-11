@@ -5,7 +5,8 @@
 <style>
 :root{color-scheme:light dark}
 body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#0f1420;color:#e8ecf3}
-header{padding:14px 20px;background:#161d2e;position:sticky;top:0;z-index:5;box-shadow:0 2px 8px #0008}
+header{padding:14px 20px;background:#161d2e;position:sticky;top:0;z-index:5;box-shadow:0 2px 8px #0008;transition:transform .25s ease}
+header.hdn{transform:translateY(-105%)}
 h1{font-size:17px;margin:0 0 8px}
 .sub{color:#9fb0cc;font-weight:400}
 .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -76,6 +77,12 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
   .tblwrap{display:none}
   #cards{display:block}
 }
+#advpanel{overflow:hidden;max-height:600px;transition:max-height .28s ease;opacity:1}
+#advpanel.collapsed{max-height:0;opacity:0}
+#advtog{background:#233150;border-color:#34456a}
+#advtog.active{background:#3b82f6;border-color:#3b82f6}
+#toTop{position:fixed;right:18px;bottom:18px;z-index:40;display:none;background:#3b82f6;color:#fff;border:none;border-radius:22px;padding:10px 15px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px #0009}
+#toTop:hover{background:#2563eb}
 </style></head><body>
 <header>
 <h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated __UPDATED__ · notes save in your own browser</span></h1>
@@ -92,9 +99,11 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <option value="_profit">Est. Profit</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
 <option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option>
 </select></label>
+<button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">&#9881; Filters &amp; setup</button>
 <button id="exp">Export CSV (with my notes)</button>
 <span class="stats" id="stats"></span>
 </div>
+<div id="advpanel" class="collapsed">
 <div class="controls" style="margin-top:8px">
 <label>Filed <input id="fy1" type="number" placeholder="from yr" style="width:76px"> &ndash; <input id="fy2" type="number" placeholder="to yr" style="width:76px"></label>
 <label>Auction <input id="ad1" type="date" style="width:140px"> &ndash; <input id="ad2" type="date" style="width:140px"></label>
@@ -124,7 +133,9 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 <button class="lkb" data-s="clerk">Clerk / Foreclosure</button>
 <button class="lkb" data-s="sunbiz">Owner / LLC</button>
 </div>
+</div>
 </header>
+<button id="toTop" title="Scroll back to top">&#8593; Top</button>
 <div class="tblwrap">
 <table id="tbl">
 <colgroup>
@@ -394,6 +405,30 @@ document.getElementById('sortby').onchange = e => {
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
 document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
+// collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
+(function(){
+  const panel = document.getElementById('advpanel'), tog = document.getElementById('advtog');
+  let open = false;
+  try { open = localStorage.getItem('fcAdvOpen') === '1'; } catch(e) {}
+  const apply = () => { panel.classList.toggle('collapsed', !open); tog.classList.toggle('active', open); };
+  apply();
+  tog.onclick = () => { open = !open; try { localStorage.setItem('fcAdvOpen', open?'1':'0'); } catch(e){} apply(); };
+})();
+// smooth header auto-hide (slide away on scroll-down, back on scroll-up) + scroll-to-top button
+(function(){
+  const btn = document.getElementById('toTop'), header = document.querySelector('header');
+  let lastY = 0;
+  const onScroll = () => {
+    const y = window.scrollY;
+    btn.style.display = (y > 320) ? 'block' : 'none';
+    if(y > lastY && y > 180) header.classList.add('hdn');       // scrolling down -> hide
+    else header.classList.remove('hdn');                        // scrolling up -> show
+    lastY = y;
+  };
+  window.addEventListener('scroll', onScroll, {passive:true});
+  btn.onclick = () => { window.scrollTo({top:0, behavior:'smooth'}); header.classList.remove('hdn'); };
+  onScroll();
+})();
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
 Object.entries({name:'sName', llc:'sLLC', phone:'sPhone'}).forEach(([k,id]) => {
