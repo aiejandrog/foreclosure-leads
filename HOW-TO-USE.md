@@ -36,6 +36,8 @@ Click these to dig into any house:
 - **Taxes** — shows if they owe back taxes on the property.
 - **Case ▸** — opens the actual court case: the full story, all the people involved, and the judgment.
 - **✉ Letter** — makes a ready-to-print letter for that owner (see below). This is the money button.
+- **📋 (next to an address)** — copies the WHOLE address (even the part cut off by "...").
+- **📋 Copy all** — copies everything about the house (owner, address, mailing, case #, auction) at once.
 
 ---
 
