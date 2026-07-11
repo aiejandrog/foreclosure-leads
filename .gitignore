@@ -1,6 +1,7 @@
 leads_raw.json
 leads_final.json
 _check.js
+_*.py
 *.csv
 __pycache__/
 browser-profile/
@@ -8,3 +9,4 @@ leads-run.log
 batchdata.key
 site.pass
 skiptrace_results.json
+tps_cookies.txt

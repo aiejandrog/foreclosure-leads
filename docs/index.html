@@ -94,6 +94,30 @@ a.phone{color:#4ade80;font-weight:600}
 a.phone.dnc{color:#fbbf24}
 input.ph{width:100%;box-sizing:border-box;font-size:12px;padding:4px 6px;margin-bottom:4px;background:#12261a;border:1px solid #2a4a35;border-radius:5px;color:#bff3d0}
 input.ph::placeholder{color:#5a7d66}
+/* worth-it verdict badges */
+.vb{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;letter-spacing:.03em;vertical-align:middle}
+.vb3{background:#166534;color:#d9ffe6}
+.vb2{background:#7c5e12;color:#ffe9b8}
+.vb1{background:#3a2530;color:#f7b7c2}
+.vbv{background:#1e3a5f;color:#bcd8ff}
+/* deal-analysis expandable */
+.dealwrap{margin-top:6px}
+.dealtog{background:#1b2740;border:1px solid #2f3f60;color:#9fc0ff;font-size:10.5px;padding:2px 8px;border-radius:8px;cursor:pointer;line-height:1.4}
+.dealtog:hover{background:#243458}
+.dealtog.open{background:#26406b;color:#fff}
+.dealbody{max-height:0;overflow:hidden;transition:max-height .3s ease}
+.dealbody.open{max-height:1200px;margin-top:6px}
+.dealmath{background:#0f1726;border:1px solid #23304c;border-radius:7px;padding:7px 9px;font-size:11.5px}
+.mathline{display:flex;justify-content:space-between;gap:12px;padding:1px 0;color:#c2cfe6;font-variant-numeric:tabular-nums}
+.mathline.tot{border-top:1px solid #2a3654;margin-top:3px;padding-top:4px;font-weight:800;color:#e8ecf3}
+.dealadj{display:flex;flex-wrap:wrap;gap:6px 10px;margin-top:7px}
+.dealadj label{font-size:10.5px;color:#9fb0cc;display:flex;flex-direction:column;gap:2px}
+.dealadj input[type=number]{width:120px;font-size:11px;padding:3px 5px}
+.dealadj .occlbl{flex-direction:row;align-items:center;gap:5px;align-self:flex-end}
+.dealadj input[type=checkbox]{width:auto;cursor:pointer}
+.dealflags{margin-top:7px;font-size:10.5px;color:#e0b35a;line-height:1.5}
+.dealflags>div{padding:1px 0}
+.dealstrat{margin-top:7px;font-size:11.5px;color:#cdd8ec;line-height:1.5;background:#141d30;border-left:3px solid #3b82f6;padding:6px 9px;border-radius:0 6px 6px 0}
 </style></head><body>
 <div id="gate"><div class="box">
 <h2>&#128274; Private lead tracker</h2>
@@ -114,7 +138,7 @@ input.ph::placeholder{color:#5a7d66}
 <button id="td" title="Only tax-deed sales (Jose's business)">&#127991; Tax deeds</button>
 <input id="q" placeholder="Search owner / address / case #">
 <label style="font-size:12px">Sort <select id="sortby">
-<option value="_profit">Est. Profit</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
+<option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
 <option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option>
 </select></label>
 <button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">&#9881; Filters &amp; setup</button>
@@ -129,11 +153,12 @@ input.ph::placeholder{color:#5a7d66}
 </div>
 <div class="controls" style="margin-top:8px;background:#12192a;padding:8px 10px;border-radius:8px;border:1px solid #26314c">
 <span style="color:#4ade80;font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
-<label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="80" min="40" max="100" style="width:52px">% of market value</label>
+<label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="75" min="40" max="100" style="width:52px">% of market value</label>
 <label style="font-size:12px" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:48px">%</label>
 <span style="color:#c084fc;font-size:11px" title="These two apply to Tax Deed leads only">| Tax deed:</span>
 <label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:44px">%</label>
 <label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:64px"></label>
+<label style="font-size:12px" title="Tax deed only: contested/equity parcels bid UP toward market — set the % of market value you assume the winning bid lands at. Lower it only for parcels you know are uncontested.">win bid <input id="tdclear" type="number" value="85" min="0" max="100" style="width:48px">% of market</label>
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
@@ -180,13 +205,14 @@ let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty un
 const LS = 'fcLeadNotes';
 let notes = {};
 try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
+const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 let weekOnly = false, hideDead = false, tdOnly = false;
 let sender = {name:'', llc:'', phone:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
-let deal = {costpct: 10, buypct: 80, quiettitle: 3000, bidover: 20};
+let deal = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 85};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
@@ -194,42 +220,147 @@ const fmtPhone = d => { d=String(d||'').replace(/\D/g,''); return d.length===10 
 const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); const k=Math.round(n/1e3);
   return (n>=1e6 || k>=1000) ? s+'$'+(n/1e6).toFixed(2)+'M' : n>=1e3 ? s+'$'+k+'k' : s+'$'+Math.round(n); };
 function recompute(){
-  const bpRaw = (deal.buypct===''||deal.buypct==null||isNaN(+deal.buypct)) ? 80 : +deal.buypct;
+  const bpRaw = (deal.buypct===''||deal.buypct==null||isNaN(+deal.buypct)) ? 75 : +deal.buypct;
   const buyPct = Math.max(0, bpRaw) / 100;                       // honor an explicit 0
   const costPct = Math.max(0, +deal.costpct || 0) / 100;
   const quietTitle = Math.max(0, +deal.quiettitle || 3000);     // tax-deed only
   const bidOver = Math.max(0, +deal.bidover || 0) / 100;        // tax-deed only
+  const clearPct = Math.max(0, +deal.tdclear || 85) / 100;     // tax-deed: equity parcels bid to ~this % of market
   DATA.forEach(r => {
     const judg = r.judg||0, val = r.value||0;
+    // per-lead adjustments the user researches on the docket/title (saved with this case's notes)
+    const nn = notes[r.case] || {};
+    const slien = Math.max(0, +nn.slien || 0);   // surviving senior / 1st mortgage (HOA/junior cases)
+    const mlien = Math.max(0, +nn.mlien || 0);   // surviving municipal / code / IRS liens
+    const occ = !!nn.occ;                         // occupied -> eviction cost + no interior look
+    const evict = occ ? Math.max(4000, val*0.02) : 0;
+    r._slien=slien; r._mlien=mlien; r._occ=occ; r._evict=evict;
     // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
-    if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; return; }
+    if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; return; }
     r._nodata = false;
+    const costs = val * costPct;
     if(r.st === 'TD'){
-      // TAX DEED: you win at auction (opening bid + a markup), then must clear title (quiet title)
-      // before you can resell. Profit = resale value - winning bid - quiet title - resale costs.
+      // TAX DEED: win at the public auction (opening bid + markup), then clear title before resale.
+      // Municipal/code/IRS liens can survive on top (FS 197.552); homestead lifts the opening-bid floor.
       const obid = r.obid || judg || 0;
-      const winbid = obid * (1 + bidOver);
-      const costs = val * costPct;
+      // Realistic winning bid: an equity parcel gets bid UP toward market (you can't win a $494k
+      // property for the $900 opening). Floor the bid at clearPct% of market unless the opening-bid+
+      // markup path is already higher (high-tax / low-equity parcels that clear near the opening).
+      const winbid = Math.max(obid * (1 + bidOver), Math.min(val * clearPct, val));
       r._equity = val - obid;
       r._purchase = winbid;
-      r._cash = winbid + quietTitle + costs;
+      r._cash = winbid + quietTitle + costs + mlien + evict;
       r._profit = val - r._cash;
       r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
-      r._tight = (winbid + quietTitle >= val);   // bid+title eats the value -> no margin
-      return;
+      r._tight = (winbid + quietTitle >= val);
+    } else if(r.mr){
+      // HOA / JUNIOR foreclosure: you bid the small association judgment, but the 1st mortgage SURVIVES.
+      // Without that payoff the deal is unknowable -> setVerdict() forces VERIFY.
+      const bid = judg;
+      r._equity = val - judg - slien;
+      r._purchase = bid + slien;
+      r._cash = bid + slien + costs + mlien + evict;
+      r._profit = val - r._cash;
+      r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
+      r._tight = (r._cash >= val);
+    } else {
+      // 1ST-MORTGAGE FORECLOSURE: buy BELOW market, but never below the debt you must clear.
+      const offer = val * buyPct;
+      const purchase = Math.max(offer, judg);
+      r._equity = val - judg;
+      r._purchase = purchase;
+      r._cash = purchase + costs + mlien + evict;
+      r._profit = val - r._cash;
+      r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
+      r._tight = (judg > offer);
     }
-    // FORECLOSURE: you profit by buying BELOW market, then reselling. Your purchase is your discounted
-    // offer, but it can never be less than the debt you must pay off to take clean title.
-    const offer = val * buyPct;
-    const purchase = Math.max(offer, judg);
-    const costs = val * costPct;
-    r._equity = val - judg;            // total equity in the property (the opportunity size)
-    r._purchase = purchase;
-    r._cash = purchase + costs;        // all-in money to acquire + carry + resell
-    r._profit = val - r._cash;         // realistic profit = resale - what you paid - costs
-    r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
-    r._tight = (judg > offer);         // debt eats your discount -> thin/negative, flag it
+    setVerdict(r, {slien, val});
   });
+}
+// ---- worth-it verdict + per-lead deal analysis ----
+function setVerdict(r, x){
+  const val = x.val;
+  // never show a profit we can't stand behind
+  if(r.ju){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2;
+    r._why='Final judgment not posted — the debt is unknown. Confirm it on the docket before trusting any profit.'; return; }
+  if(r.st!=='TD' && r.mr && !x.slien){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2;
+    r._why='HOA / junior case — the 1st mortgage survives this sale and is unknown. Look it up and enter it below (usually a trap if large).'; return; }
+  const p=r._profit, roi=r._roi||0;
+  const strongRoi=r.st==='TD'?20:15, margRoi=r.st==='TD'?8:6;
+  let v,rank,why;
+  if(p>=20000 && roi>=strongRoi && !r._tight){ v='STRONG'; rank=3; why='Solid return ('+Math.round(roi)+'% ROI) after a realistic price, costs and any surviving liens.'; }
+  else if(p>0 && roi>=margRoi){ v='MARGINAL'; rank=2; why='Real but thin ('+Math.round(roi)+'% ROI) — only works if your price and cost estimates hold.'; }
+  else { v='PASS'; rank=1; why = p<=0 ? 'No profit once the price, costs and liens are covered.' : 'Margin too thin ('+Math.round(roi)+'% ROI) for the risk.'; }
+  if(r.st==='TD' && r.hs && rank>2){ rank=2; v='MARGINAL'; why='Homestead: the opening bid already includes ½ the assessed value, so the entry floor is high.'; }
+  if(r.st==='TD' && val>0 && (r._equity/val)>0.55 && rank>2){ rank=2; v='MARGINAL'; why='Equity parcel — competitive tax-deed auctions bid these near market, erasing most of the paper margin. Consider the surplus play instead.'; }
+  if(r._occ && rank>2){ rank=2; v='MARGINAL'; why='Occupied — eviction cost/time is baked in and you get no interior inspection at auction.'; }
+  r._verdict=v; r._vrank=rank; r._why=why;
+}
+const fmtMoney = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
+function verdictBadge(r){ return r._verdict==='VERIFY' ? '<span class="vb vbv">VERIFY</span>' : '<span class="vb vb'+r._vrank+'">'+r._verdict+'</span>'; }
+function mathLine(label,val,tot){ return '<div class="mathline'+(tot?' tot':'')+'"><span>'+esc(label)+'</span><span>'+fmtMoney(val)+'</span></div>'; }
+function dealFlags(r){
+  const f=[], nn=notes[r.case]||{};
+  if(r.ju) f.push('Final judgment not posted — debt unknown; verify on the docket.');
+  if(r.st!=='TD' && r.mr) f.push('HOA / junior case: the 1st mortgage survives — must be looked up.');
+  if(r.st==='TD'){ f.push('Tax-deed title is not insurable until quiet title (~$1.5-5k, 3-6 mo).');
+    f.push('Code-enforcement / municipal / IRS liens can survive the deed (FS 197.552).'); }
+  if(r.st==='TD' && r.hs) f.push('Homestead: opening bid includes ½ the assessed value (FS 197.502).');
+  if(nn.occ) f.push('Occupied — eviction cost/time included; no interior inspection at auction.');
+  if(r.days>=0 && r.days<=3) f.push('Redemption stays open until the deed issues / full payment to the clerk — not final at the hammer.');
+  return f;
+}
+function dealStrategy(r){
+  if(r.st==='TD'){
+    let s='Tax-deed public auction (realtaxdeed / LienHub). ';
+    if(r.hs) s+='Homestead — opening bid already carries ½ the assessed value, so an equity homestead bids near market; expect thin margin. ';
+    s+='Budget quiet title ($1.5-5k, 3-6 months) before you can resell or insure, and pull City + County code-enforcement / utility liens separately — those survive the deed. ';
+    if(r._equity!=null && r.value && r._equity/r.value>0.55) s+='Big paper spread means heavy competition; if it bids to market, chase the surplus (former owner’s money) instead of the deed. ';
+    return s.trim();
+  }
+  if(r.mr){
+    return 'HOA / junior foreclosure — the 1st mortgage SURVIVES the sale. Pull the docket + a title search, enter the mortgage payoff below, and only bid if value minus (your bid + that mortgage + costs) still clears. If it is large, walk.';
+  }
+  let s='';
+  if(r.days>21) s+='Best play: reach the owner BEFORE the auction — you can inspect and run title first (auction buyers cannot). ';
+  s+='At auction your floor is the final judgment ('+fmtK(r.judg)+'), not the clerk’s posted opening bid (often a nominal $100). ';
+  if(r._equity!=null && r.value && r._equity/r.value>0.35) s+='Solid equity spread. ';
+  s+='Confirm no unpaid property taxes or code liens ride on top. ';
+  if(r.days>21) s+='If the owner keeps any interest (lease-back/buy-back) with a lis pendens recorded, FS 501.1377 applies — use a compliant written contract with the 3-day cancellation.';
+  return s.trim();
+}
+function dealBlock(r){
+  if(r._nodata) return '';
+  const nn = notes[r.case]||{};
+  const isOpen = expanded.has(r.case);
+  const flags = dealFlags(r);
+  let mathHtml;
+  if(r._profit==null){
+    mathHtml = '<div class="dealmath"><div class="mathline"><span>Est. profit</span><span>unknown until verified</span></div></div>';
+  } else {
+    const costs = r.value*(Math.max(0,+deal.costpct||0)/100);
+    const rows = [ mathLine('Market value', r.value) ];
+    if(r.st==='TD'){ rows.push(mathLine('Est. winning bid', -r._purchase)); rows.push(mathLine('Quiet title', -(Math.max(0,+deal.quiettitle||3000)))); }
+    else if(r.mr){ rows.push(mathLine('Auction bid (est.)', -r.judg)); if(r._slien) rows.push(mathLine('Surviving 1st mortgage', -r._slien)); }
+    else { rows.push(mathLine('Your purchase', -r._purchase)); }
+    rows.push(mathLine('Costs ('+(+deal.costpct||0)+'%)', -costs));
+    if(r._mlien) rows.push(mathLine('Other surviving liens', -r._mlien));
+    if(r._evict) rows.push(mathLine('Eviction / carry', -r._evict));
+    rows.push(mathLine('Est. profit', r._profit, true));
+    mathHtml = '<div class="dealmath">'+rows.join('')+
+      '<div class="mathline"><span>ROI</span><span>'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</span></div></div>';
+  }
+  const adj = '<div class="dealadj">'+
+    '<label>1st mortgage / senior lien $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||'')+'" placeholder="0"></label>'+
+    '<label>Other surviving liens $<input class="mlien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.mlien||'')+'" placeholder="0"></label>'+
+    '<label class="occlbl"><input class="occ" data-c="'+esc(r.case)+'" type="checkbox"'+(nn.occ?' checked':'')+'> occupied</label>'+
+  '</div>';
+  const flagsHtml = flags.length ? '<div class="dealflags">'+flags.map(f=>'<div>&#9888; '+esc(f)+'</div>').join('')+'</div>' : '';
+  return '<div class="dealwrap">'+
+    '<button class="dealtog'+(isOpen?' open':'')+'" data-c="'+esc(r.case)+'" type="button">'+(isOpen?'&#9662;':'&#9656;')+' Deal analysis</button>'+
+    '<div class="dealbody'+(isOpen?' open':'')+'">'+mathHtml+adj+flagsHtml+
+      '<div class="dealstrat"><b>Move:</b> '+esc(dealStrategy(r))+'</div>'+
+    '</div></div>';
 }
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
@@ -315,7 +446,8 @@ function view(){
 }
 function render(){
   const rows = view();
-  document.getElementById('stats').textContent = rows.length + ' leads shown / ' + DATA.length + ' total';
+  const _sc = rows.filter(r=>r._verdict==='STRONG').length, _mc = rows.filter(r=>r._verdict==='MARGINAL').length;
+  document.getElementById('stats').textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
   // live count on the Hide-dead button so it's obvious what it tracks
   const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
   const hd = document.getElementById('hd');
@@ -348,13 +480,18 @@ function render(){
     const ctype = r.ctype ? '<span class="'+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'">'+esc(r.ctype)+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
     // Profit cell: big profit, then ROI + cash sub-line, then flags. "no value data" when un-enriched.
-    const prof = r._nodata
-      ? '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>'
-      : '<span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
+    let prof;
+    if(r._nodata){
+      prof = '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
+    } else if(r._verdict==='VERIFY'){
+      prof = verdictBadge(r)+'<div class="warn" style="margin-top:4px">'+esc(r._why)+'</div>'+dealBlock(r);
+    } else {
+      prof = verdictBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
         (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
-        (r.ju?'<div class="warn" title="Final judgment not posted yet - the debt is unknown, so this profit assumes $0 owed. Verify on the docket.">debt not posted</div>':'')+
-        (r._tight?'<div class="warn" title="The debt owed is more than your discounted offer, so there is little or no margin. Negotiate below the debt or pass.">thin: debt &gt; offer</div>':'')+
-        (r.mr?'<div class="mrwarn" title="HOA judgment likely hides a senior mortgage - verify true payoff on the docket">&#9888; mortgage risk</div>':'');
+        (r._tight?'<div class="warn" title="Costs/debt eat the margin. Negotiate lower or pass.">thin margin</div>':'')+
+        (r.mr?'<div class="mrwarn" title="HOA/junior case — first mortgage survives; entered below">&#9888; mortgage risk</div>':'')+
+        dealBlock(r);
+    }
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction)+'</div>'+
       '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
@@ -397,11 +534,12 @@ function render(){
     cards.push('<div class="card">'+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
-                  :'<span class="'+pcls+' cprofit">'+fmt0(r._profit)+'</span>')+
+                  : r._verdict==='VERIFY' ? verdictBadge(r)
+                  : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
-      (!r._nodata&&r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash to acquire</div>':'')+
-      (r.ju&&!r._nodata?'<div class="warn">debt not posted - assumes $0 owed</div>':'')+
-      (r.mr?'<div class="mrwarn">&#9888; mortgage risk - verify payoff</div>':'')+
+      (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._why)+'</div>':'')+
+      (!r._nodata&&r._verdict!=='VERIFY'&&r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash to acquire</div>':'')+
+      (r.mr&&r._verdict!=='VERIFY'?'<div class="mrwarn">&#9888; mortgage risk - verify payoff</div>':'')+
       '<div class="cowner">'+esc(r.owners)+'</div>'+
       (r.st==='TD'
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
@@ -411,6 +549,7 @@ function render(){
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline">&#9993; <span>'+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+links.join(' ')+'</div>'+
+      dealBlock(r)+
       '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
       '</div>');
   });
@@ -428,12 +567,14 @@ function syncDealUI(){
   document.getElementById('buypct').value = deal.buypct;
   document.getElementById('bidover').value = deal.bidover;
   document.getElementById('quiettitle').value = deal.quiettitle;
+  document.getElementById('tdclear').value = deal.tdclear;
 }
 function dealChanged(){ recompute(); saveDeal(); render(); }
 document.getElementById('costpct').oninput = e => { deal.costpct = e.target.value===''?0:+e.target.value; dealChanged(); };
-document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value===''?80:+e.target.value; dealChanged(); };
+document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value===''?75:+e.target.value; dealChanged(); };
 document.getElementById('bidover').oninput = e => { deal.bidover = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('quiettitle').oninput = e => { deal.quiettitle = e.target.value===''?0:+e.target.value; dealChanged(); };
+document.getElementById('tdclear').oninput = e => { deal.tdclear = e.target.value===''?85:+e.target.value; dealChanged(); };
 document.getElementById('sortby').onchange = e => {
   sortK = e.target.value;
   sortD = (sortK==='days') ? 1 : -1;   // soonest auction first; everything else high-to-low
@@ -538,22 +679,33 @@ document.addEventListener('click', e => {
   const list = btn.parentElement.querySelector('.deflist');
   if(list) list.classList.toggle('open');
 });
+// deal-analysis expand/collapse (works in table + cards); track open rows so re-render keeps them open
+document.addEventListener('click', e => {
+  const btn = e.target.closest && e.target.closest('.dealtog');
+  if(!btn) return;
+  const c = btn.dataset.c;
+  if(expanded.has(c)) expanded.delete(c); else expanded.add(c);
+  render();
+});
 document.addEventListener('change', e => {
   const c = e.target.dataset && e.target.dataset.c; if(!c) return;
   notes[c] = notes[c] || {status:'', note:''};
   if(e.target.classList.contains('status')) { notes[c].status = e.target.value; save(); render(); return; }
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
   else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
+  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; save(); recompute(); render(); return; }
+  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; save(); recompute(); render(); return; }
+  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; save(); recompute(); render(); return; }
   else return;
   save();
 });
 document.getElementById('exp').onclick = () => {
-  const head = ['tier','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','phone','zillow','appraiser','people_search','case_page','status','notes'];
+  const head = ['tier','verdict','verdict_reason','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','phone','zillow','appraiser','people_search','case_page','status','notes'];
   // prefix a ' to any cell starting with = + - @ so Excel/Sheets can't run it as a formula
   const q2 = v => { let s = String(v==null?'':v); if(/^[=+\-@\t\r]/.test(s)) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,Math.round(r._profit),Math.round(r._roi),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,r._verdict||'',r._why||'',Math.round(r._profit||0),Math.round(r._roi||0),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');
