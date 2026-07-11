@@ -100,24 +100,34 @@ input.ph::placeholder{color:#5a7d66}
 .vb2{background:#7c5e12;color:#ffe9b8}
 .vb1{background:#3a2530;color:#f7b7c2}
 .vbv{background:#1e3a5f;color:#bcd8ff}
-/* deal-analysis expandable */
-.dealwrap{margin-top:6px}
-.dealtog{background:#1b2740;border:1px solid #2f3f60;color:#9fc0ff;font-size:10.5px;padding:2px 8px;border-radius:8px;cursor:pointer;line-height:1.4}
-.dealtog:hover{background:#243458}
-.dealtog.open{background:#26406b;color:#fff}
-.dealbody{max-height:0;overflow:hidden;transition:max-height .3s ease}
-.dealbody.open{max-height:1200px;margin-top:6px}
-.dealmath{background:#0f1726;border:1px solid #23304c;border-radius:7px;padding:7px 9px;font-size:11.5px}
-.mathline{display:flex;justify-content:space-between;gap:12px;padding:1px 0;color:#c2cfe6;font-variant-numeric:tabular-nums}
-.mathline.tot{border-top:1px solid #2a3654;margin-top:3px;padding-top:4px;font-weight:800;color:#e8ecf3}
-.dealadj{display:flex;flex-wrap:wrap;gap:6px 10px;margin-top:7px}
-.dealadj label{font-size:10.5px;color:#9fb0cc;display:flex;flex-direction:column;gap:2px}
-.dealadj input[type=number]{width:120px;font-size:11px;padding:3px 5px}
-.dealadj .occlbl{flex-direction:row;align-items:center;gap:5px;align-self:flex-end}
-.dealadj input[type=checkbox]{width:auto;cursor:pointer}
-.dealflags{margin-top:7px;font-size:10.5px;color:#e0b35a;line-height:1.5}
-.dealflags>div{padding:1px 0}
-.dealstrat{margin-top:7px;font-size:11.5px;color:#cdd8ec;line-height:1.5;background:#141d30;border-left:3px solid #3b82f6;padding:6px 9px;border-radius:0 6px 6px 0}
+/* deal-analysis trigger button */
+.dealtog{margin-top:6px;background:#1b2740;border:1px solid #2f3f60;color:#9fc0ff;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:8px;cursor:pointer;line-height:1.4}
+.dealtog:hover{background:#26406b;color:#fff}
+/* deal-analysis modal */
+#dealmodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show{display:block}
+.dm-backdrop{position:absolute;inset:0;background:#060a12cc;backdrop-filter:blur(2px)}
+.dm-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,94vw);max-height:90vh;overflow-y:auto;background:#141b2b;border:1px solid #2c3a5a;border-radius:14px;box-shadow:0 18px 60px #000b;padding:20px 22px 22px}
+.dm-close{position:absolute;top:10px;right:12px;background:none;border:none;color:#9fb0cc;font-size:24px;line-height:1;cursor:pointer;padding:2px 8px}
+.dm-close:hover{color:#fff}
+.dm-head{margin:0 30px 14px 0;padding-bottom:12px;border-bottom:1px solid #26314c}
+.dm-title{font-size:17px;font-weight:800;line-height:1.25}
+.dm-sub{font-size:12.5px;color:#9fb0cc;margin-top:3px}
+.dm-verdict{margin-top:9px;display:flex;align-items:center;gap:9px;font-size:20px;font-weight:800}
+.dm-why{font-size:12px;color:#c4d0e6;margin-top:6px;line-height:1.5}
+.dm-sec{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#7d8db0;margin:16px 0 6px}
+.dealmath{background:#0f1726;border:1px solid #23304c;border-radius:9px;padding:11px 13px;font-size:13px}
+.mathline{display:flex;justify-content:space-between;gap:12px;padding:2px 0;color:#c2cfe6;font-variant-numeric:tabular-nums}
+.mathline.tot{border-top:1px solid #2a3654;margin-top:5px;padding-top:6px;font-weight:800;font-size:14px;color:#e8ecf3}
+.dealadj{display:flex;flex-wrap:wrap;gap:11px 14px;align-items:flex-end}
+.dealadj label{font-size:11px;color:#9fb0cc;display:flex;flex-direction:column;gap:3px}
+.dealadj input[type=number]{width:130px;font-size:13px;padding:6px 8px}
+.dealadj .occlbl{flex-direction:row;align-items:center;gap:6px;padding-bottom:6px}
+.dealadj input[type=checkbox]{width:auto;cursor:pointer;transform:scale(1.2)}
+.dealflags{font-size:12px;color:#e0b35a;line-height:1.55}
+.dealflags>div{padding:2px 0}
+.dealstrat{font-size:13px;color:#dde6f5;line-height:1.55;background:#101a2e;border-left:3px solid #3b82f6;padding:10px 13px;border-radius:0 8px 8px 0}
+@media(max-width:860px){ .dm-card{width:96vw;padding:18px 16px 20px} }
 </style></head><body>
 <div id="gate"><div class="box">
 <h2>&#128274; Private lead tracker</h2>
@@ -126,6 +136,7 @@ input.ph::placeholder{color:#5a7d66}
 <button id="gatego">Unlock</button>
 <div id="gateerr"></div>
 </div></div>
+<div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <header>
 <h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated __UPDATED__ · notes save in your own browser</span></h1>
 <div class="controls">
@@ -329,10 +340,12 @@ function dealStrategy(r){
   if(r.days>21) s+='If the owner keeps any interest (lease-back/buy-back) with a lis pendens recorded, FS 501.1377 applies — use a compliant written contract with the 3-day cancellation.';
   return s.trim();
 }
-function dealBlock(r){
+function dealTrigger(r){
   if(r._nodata) return '';
+  return '<button class="dealtog" data-c="'+esc(r.case)+'" type="button">&#128202; Deal analysis</button>';
+}
+function dealAnalysisHTML(r){
   const nn = notes[r.case]||{};
-  const isOpen = expanded.has(r.case);
   const flags = dealFlags(r);
   let mathHtml;
   if(r._profit==null){
@@ -351,17 +364,40 @@ function dealBlock(r){
       '<div class="mathline"><span>ROI</span><span>'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</span></div></div>';
   }
   const adj = '<div class="dealadj">'+
-    '<label>1st mortgage / senior lien $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||'')+'" placeholder="0"></label>'+
-    '<label>Other surviving liens $<input class="mlien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.mlien||'')+'" placeholder="0"></label>'+
+    (r.mr ? '<label>Surviving 1st mortgage $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||'')+'" placeholder="0"></label>' : '')+
+    '<label>Surviving liens (code/muni/IRS) $<input class="mlien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.mlien||'')+'" placeholder="0"></label>'+
     '<label class="occlbl"><input class="occ" data-c="'+esc(r.case)+'" type="checkbox"'+(nn.occ?' checked':'')+'> occupied</label>'+
   '</div>';
   const flagsHtml = flags.length ? '<div class="dealflags">'+flags.map(f=>'<div>&#9888; '+esc(f)+'</div>').join('')+'</div>' : '';
-  return '<div class="dealwrap">'+
-    '<button class="dealtog'+(isOpen?' open':'')+'" data-c="'+esc(r.case)+'" type="button">'+(isOpen?'&#9662;':'&#9656;')+' Deal analysis</button>'+
-    '<div class="dealbody'+(isOpen?' open':'')+'">'+mathHtml+adj+flagsHtml+
-      '<div class="dealstrat"><b>Move:</b> '+esc(dealStrategy(r))+'</div>'+
-    '</div></div>';
+  return '<div class="dm-sec">The math</div>'+mathHtml+
+    '<div class="dm-sec">Adjust for what you find (docket / title)</div>'+adj+
+    (flagsHtml?'<div class="dm-sec">Watch out for</div>'+flagsHtml:'')+
+    '<div class="dm-sec">Recommended move</div><div class="dealstrat">'+esc(dealStrategy(r))+'</div>';
 }
+function dealModalBody(r){
+  const owner = esc((r.owners||'').split(';')[0].trim());
+  const pcls = r._profit>=0 ? 'profpos' : 'profneg';
+  const figure = r._profit!=null ? ' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>' : '';
+  return '<div class="dm-head">'+
+      '<div class="dm-title">'+owner+'</div>'+
+      '<div class="dm-sub">'+esc(r.addr)+' · '+(r.st==='TD'?'Tax deed':'Foreclosure')+' · auction '+esc(r.auction)+'</div>'+
+      '<div class="dm-verdict">'+verdictBadge(r)+figure+'</div>'+
+      (r._why?'<div class="dm-why">'+esc(r._why)+'</div>':'')+
+    '</div>'+ dealAnalysisHTML(r);
+}
+let dealModalCase = null;
+function openDealModal(caseId){
+  const r = DATA.find(x=>x.case===caseId); if(!r) return;
+  dealModalCase = caseId;
+  document.getElementById('dmbody').innerHTML = dealModalBody(r);
+  document.getElementById('dealmodal').classList.add('show');
+}
+function refreshDealModal(){
+  if(!dealModalCase) return;
+  const r = DATA.find(x=>x.case===dealModalCase);
+  if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r);
+}
+function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); }
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
 const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">&#128203;</button>';
@@ -484,13 +520,13 @@ function render(){
     if(r._nodata){
       prof = '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
     } else if(r._verdict==='VERIFY'){
-      prof = verdictBadge(r)+'<div class="warn" style="margin-top:4px">'+esc(r._why)+'</div>'+dealBlock(r);
+      prof = verdictBadge(r)+'<div class="warn" style="margin-top:4px">'+esc(r._why)+'</div>'+dealTrigger(r);
     } else {
       prof = verdictBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
         (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
         (r._tight?'<div class="warn" title="Costs/debt eat the margin. Negotiate lower or pass.">thin margin</div>':'')+
         (r.mr?'<div class="mrwarn" title="HOA/junior case — first mortgage survives; entered below">&#9888; mortgage risk</div>':'')+
-        dealBlock(r);
+        dealTrigger(r);
     }
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction)+'</div>'+
@@ -549,7 +585,7 @@ function render(){
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline">&#9993; <span>'+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+links.join(' ')+'</div>'+
-      dealBlock(r)+
+      dealTrigger(r)+
       '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
       '</div>');
   });
@@ -679,23 +715,26 @@ document.addEventListener('click', e => {
   const list = btn.parentElement.querySelector('.deflist');
   if(list) list.classList.toggle('open');
 });
-// deal-analysis expand/collapse (works in table + cards); track open rows so re-render keeps them open
+// deal-analysis: open the modal for this lead (works in table + cards)
 document.addEventListener('click', e => {
   const btn = e.target.closest && e.target.closest('.dealtog');
   if(!btn) return;
-  const c = btn.dataset.c;
-  if(expanded.has(c)) expanded.delete(c); else expanded.add(c);
-  render();
+  openDealModal(btn.dataset.c);
 });
+// close the modal: X button, backdrop click, or Escape
+document.addEventListener('click', e => {
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))) closeDealModal();
+});
+document.addEventListener('keydown', e => { if(e.key==='Escape' && dealModalCase) closeDealModal(); });
 document.addEventListener('change', e => {
   const c = e.target.dataset && e.target.dataset.c; if(!c) return;
   notes[c] = notes[c] || {status:'', note:''};
   if(e.target.classList.contains('status')) { notes[c].status = e.target.value; save(); render(); return; }
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
   else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
-  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; save(); recompute(); render(); return; }
-  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; save(); recompute(); render(); return; }
-  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; save(); recompute(); render(); return; }
+  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; save(); recompute(); render(); refreshDealModal(); return; }
   else return;
   save();
 });
