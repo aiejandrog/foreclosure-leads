@@ -9,7 +9,7 @@ Phase 2: enrich each parcel via the Miami-Dade Property Appraiser public API
          (owner, mailing address, market value, homestead, beds/baths, last sale).
 Phase 3: qualify + score (equity/lead-time/homestead/value), write CSV sorted best-first.
 """
-import json, re, time, csv, os, urllib.parse
+import json, re, time, csv, os, sys, urllib.parse
 from datetime import datetime, date, timedelta
 import requests
 from playwright.sync_api import sync_playwright
@@ -167,7 +167,10 @@ CLERK = "https://www2.miamidadeclerk.gov"
 def classify(case_type, plaintiff):
     ct = (case_type or '').upper()
     pl = (plaintiff or '').upper()
-    if re.search(r'\b(ASSOCIATION|ASSN|CONDO|HOMEOWNER|MASTER ASSOC|HOA|TOWNHOM|VILLAS?|COMMUNITY)\b', pl):
+    # A bank named "... National Association" would falsely match the HOA regex on "ASSOCIATION".
+    # Strip that lender suffix before the HOA test; real HOAs are never "National Association".
+    pl_h = re.sub(r'\bNATIONAL\s+ASSOCIATION\b', ' ', pl)
+    if re.search(r'\b(ASSOCIATION|ASSN|CONDO|HOMEOWNER|MASTER ASSOC|HOA|TOWNHOM|VILLAS?|COMMUNITY)\b', pl_h):
         return 'HOA/Condo'
     if 'RPMF' in ct or re.search(r'\b(BANK|MORTGAGE|LOAN|FINANCIAL|CAPITAL|FUNDING|LENDING|N\.?A\.?|TRUST|SERVICING|WELLS FARGO|CHASE|CITI|ROCKET|CROSSCOUNTRY|FREEDOM|LAKEVIEW|PENNYMAC|NEWREZ|CARRINGTON)\b', pl):
         return 'Bank/Mortgage'
@@ -232,7 +235,12 @@ def qualify(leads):
         # CC = county-court case, almost always HOA/condo assoc foreclosure: equity is real but a
         # senior mortgage may exist that the judgment amount doesn't show
         is_hoa = bool(re.search(r'-CC-', case))
-        r['warning'] = 'HOA/assoc case - verify senior mortgage on docket' if is_hoa else ''
+        # a blank/$0 judgment = the debt isn't posted yet, NOT $0 owed. Don't credit full equity.
+        r['judgment_unknown'] = (judg == 0)
+        if r['judgment_unknown']:
+            r['equity'] = 0; r['equity_pct'] = 0
+        r['warning'] = ('judgment not posted - debt unknown' if r['judgment_unknown']
+                        else ('HOA/assoc case - verify senior mortgage on docket' if is_hoa else ''))
         ep = r['equity_pct']
         # granular 0-100 so leads rank instead of clustering
         score = 0.0
@@ -249,6 +257,8 @@ def qualify(leads):
         if mkt and mkt < 100000: dq.append('low value')
         if mkt and ep < 15: dq.append('thin/negative equity')
         if not r.get('Address','').strip(): dq.append('no address')
+        if not mkt: dq.append('no value data')
+        if r['judgment_unknown']: dq.append('judgment not posted')
         r['score'] = round(score) if not dq else min(round(score), 40)
         r['disqualifiers'] = '; '.join(dq)
         r['tier'] = 'A' if r['score']>=70 and not dq else ('B' if r['score']>=50 and not dq else 'C')
@@ -308,9 +318,13 @@ def make_tracker(leads):
         'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
         'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
         'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
+        'ju': bool(r.get('judgment_unknown')),
     } for r in leads]
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read()
-    html = tpl.replace('__DATA__', json.dumps(slim)).replace('__UPDATED__', f"{date.today():%Y-%m-%d}")
+    # Escape HTML-significant chars in the embedded JSON so a county field containing "</script>"
+    # (or "<img onerror=>") can't break out of the inline <script> and inject/kill the page.
+    dat = json.dumps(slim).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+    html = tpl.replace('__DATA__', dat).replace('__UPDATED__', f"{date.today():%Y-%m-%d}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     for out in [os.path.join(HERE,'docs','index.html'),
                 os.path.join(DESKTOP,'Foreclosure Lead Tracker.html')]:
@@ -320,6 +334,11 @@ def make_tracker(leads):
 def main():
     leads = scrape()
     print(f"scraped {len(leads)} pending auctions")
+    # Guard the live site: a broken/blocked scrape must never overwrite a good tracker with an
+    # empty one. Bail before regenerating anything (leads_*.json are gitignored, so nothing commits).
+    if len(leads) < 20:
+        print(f"ABORT: only {len(leads)} leads scraped (expected 100+). Not regenerating the site.")
+        sys.exit(1)
     json.dump(leads, open(os.path.join(HERE,'leads_raw.json'),'w'), indent=1)
     leads = enrich(leads)
     leads = enrich_clerk(leads)

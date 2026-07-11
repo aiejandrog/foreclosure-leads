@@ -155,12 +155,17 @@ let deal = {costpct: 10, buypct: 80};
 try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
-const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); return n>=1e6 ? s+'$'+(n/1e6).toFixed(2)+'M' : n>=1e3 ? s+'$'+Math.round(n/1e3)+'k' : s+'$'+Math.round(n); };
+const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); const k=Math.round(n/1e3);
+  return (n>=1e6 || k>=1000) ? s+'$'+(n/1e6).toFixed(2)+'M' : n>=1e3 ? s+'$'+k+'k' : s+'$'+Math.round(n); };
 function recompute(){
-  const buyPct = Math.max(0, +deal.buypct || 80) / 100;
+  const bpRaw = (deal.buypct===''||deal.buypct==null||isNaN(+deal.buypct)) ? 80 : +deal.buypct;
+  const buyPct = Math.max(0, bpRaw) / 100;                       // honor an explicit 0
   const costPct = Math.max(0, +deal.costpct || 0) / 100;
   DATA.forEach(r => {
     const judg = r.judg||0, val = r.value||0;
+    // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
+    if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; return; }
+    r._nodata = false;
     // You profit by buying BELOW market, then reselling. Your purchase is your discounted offer,
     // but it can never be less than the debt you must pay off to take clean title.
     const offer = val * buyPct;
@@ -231,7 +236,11 @@ function view(){
   if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
   if(hideDead) rows = rows.filter(r => { const s=(notes[r.case]||{}).status; return s!=='Dead' && s!=='DO NOT CONTACT'; });
   rows = rows.slice();
-  rows.sort((a,b) => (a[sortK]>b[sortK]?1:a[sortK]<b[sortK]?-1:0)*sortD);
+  rows.sort((a,b) => {
+    let x = a[sortK], y = b[sortK];
+    if(x==null) x = -Infinity; if(y==null) y = -Infinity;   // no-data leads sink to the bottom
+    return (x>y?1:x<y?-1:0)*sortD;
+  });
   return rows;
 }
 function render(){
@@ -257,11 +266,14 @@ function render(){
     links.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">&#128203; Copy all</a>');
     const ctype = r.ctype ? '<span class="'+(r.ctype.indexOf('HOA')>-1?'hoa':'mtg')+'">'+esc(r.ctype)+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
-    // Profit cell: big profit, then ROI + cash sub-line, then mortgage flag
-    const prof = '<span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
-      (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
-      (r._tight?'<div class="warn" title="The debt owed is more than your discounted offer, so there is little or no margin. Negotiate below the debt or pass.">thin: debt &gt; offer</div>':'')+
-      (r.mr?'<div class="mrwarn" title="HOA judgment likely hides a senior mortgage - verify true payoff on the docket">&#9888; mortgage risk</div>':'');
+    // Profit cell: big profit, then ROI + cash sub-line, then flags. "no value data" when un-enriched.
+    const prof = r._nodata
+      ? '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>'
+      : '<span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
+        (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
+        (r.ju?'<div class="warn" title="Final judgment not posted yet - the debt is unknown, so this profit assumes $0 owed. Verify on the docket.">debt not posted</div>':'')+
+        (r._tight?'<div class="warn" title="The debt owed is more than your discounted offer, so there is little or no margin. Negotiate below the debt or pass.">thin: debt &gt; offer</div>':'')+
+        (r.mr?'<div class="mrwarn" title="HOA judgment likely hides a senior mortgage - verify true payoff on the docket">&#9888; mortgage risk</div>':'');
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction)+'</div>'+
       '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
@@ -298,9 +310,11 @@ function render(){
     // mobile card
     cards.push('<div class="card">'+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
-        '<span class="'+pcls+' cprofit">'+fmt0(r._profit)+'</span>'+
+        (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
+                  :'<span class="'+pcls+' cprofit">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
-      (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash to acquire</div>':'')+
+      (!r._nodata&&r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash to acquire</div>':'')+
+      (r.ju&&!r._nodata?'<div class="warn">debt not posted - assumes $0 owed</div>':'')+
       (r.mr?'<div class="mrwarn">&#9888; mortgage risk - verify payoff</div>':'')+
       '<div class="cowner">'+esc(r.owners)+'</div>'+
       (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+
@@ -400,23 +414,26 @@ document.querySelectorAll('.lkb').forEach(b => b.onclick = () => {
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
   const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
 });
-document.getElementById('tb').addEventListener('click', e => {
+// document-level so it works in BOTH the desktop table (#tb) and mobile cards (#cards)
+document.addEventListener('click', e => {
   const btn = e.target.closest && e.target.closest('.deftog');
   if(!btn) return;
   btn.classList.toggle('open');
   const list = btn.parentElement.querySelector('.deflist');
   if(list) list.classList.toggle('open');
 });
-document.getElementById('tb').addEventListener('change', e => {
-  const c = e.target.dataset.c; if(!c) return;
+document.addEventListener('change', e => {
+  const c = e.target.dataset && e.target.dataset.c; if(!c) return;
   notes[c] = notes[c] || {status:'', note:''};
   if(e.target.classList.contains('status')) notes[c].status = e.target.value;
-  else notes[c].note = e.target.value;
+  else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
+  else return;
   save();
 });
 document.getElementById('exp').onclick = () => {
   const head = ['tier','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','zillow','appraiser','people_search','case_page','status','notes'];
-  const q2 = v => '"' + String(v==null?'':v).replace(/"/g,'""') + '"';
+  // prefix a ' to any cell starting with = + - @ so Excel/Sheets can't run it as a formula
+  const q2 = v => { let s = String(v==null?'':v); if(/^[=+\-@\t\r]/.test(s)) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
     return [r.tier,Math.round(r._profit),Math.round(r._roi),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
