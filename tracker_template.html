@@ -110,7 +110,7 @@ input.ph::placeholder{color:#5a7d66}
 <button class="tf" data-t="C">Tier C</button>
 <button class="tf" data-t="ALL">All</button>
 <button id="wk" title="Only leads with an auction in the next 7 days">&#9889; This week</button>
-<button id="hd" title="Hide leads you marked Dead or DO NOT CONTACT">Hide dead</button>
+<button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">&#127991; Tax deeds</button>
 <input id="q" placeholder="Search owner / address / case #">
 <label style="font-size:12px">Sort <select id="sortby">
@@ -316,6 +316,10 @@ function view(){
 function render(){
   const rows = view();
   document.getElementById('stats').textContent = rows.length + ' leads shown / ' + DATA.length + ' total';
+  // live count on the Hide-dead button so it's obvious what it tracks
+  const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
+  const hd = document.getElementById('hd');
+  if(hd) hd.textContent = 'Hide dead' + (deadN ? ' ('+deadN+')' : '');
   const prof = rows.filter(r => r._profit > 0);
   const totp = prof.reduce((s,r) => s + r._profit, 0);
   const ds = document.getElementById('dealsum');
@@ -537,7 +541,7 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   const c = e.target.dataset && e.target.dataset.c; if(!c) return;
   notes[c] = notes[c] || {status:'', note:''};
-  if(e.target.classList.contains('status')) notes[c].status = e.target.value;
+  if(e.target.classList.contains('status')) { notes[c].status = e.target.value; save(); render(); return; }
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
   else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
   else return;
