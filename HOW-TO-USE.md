@@ -2,6 +2,33 @@
 
 **The website:** https://aiejandrog.github.io/foreclosure-leads/
 
+---
+
+## 🔑 Turning on phone numbers (skip tracing) — one-time setup
+
+The tool can pull each owner's **phone number** so you can call, not just mail. Phones are private,
+so this is set up so they're **never** shown on the open web — the shared site gets **password-locked**
+and the phones are encrypted behind it.
+
+**One-time setup:**
+1. **Get a BatchData key** at batchdata.io (pay-per-lookup, ~$0.20 each, no monthly fee). Put it in a
+   file named **`batchdata.key`** inside the `foreclosure-leads` folder. (This file never leaves your PC.)
+2. **Pick a site password.** Put it in a file named **`site.pass`** in the same folder. This is the
+   password you and Jose type to open the site. Text Jose the password separately (not the same way you
+   send the link).
+
+**To pull phones for your best leads:**
+- Open a terminal in the folder and run: `python skiptrace.py --dry-run` (shows who + the cost, no charge),
+  then `python skiptrace.py` to actually pull phones for Tier-A owners.
+- Next time the site updates, the phones show up as green **☎ click-to-call** links next to "People".
+  A **yellow (DNC)** phone means *do not call that number* — it's on the do-not-call list.
+
+**Important:** Once `site.pass` exists, the shared link asks for the password before showing anything.
+No password file = the site stays public but with **no phone numbers** (safe by default). Always dial
+by hand, never a robo-dialer or mass text.
+
+---
+
 This is a list of houses in Miami-Dade where the owner is about to lose their home at a
 foreclosure auction. Some of them have a LOT of value and only owe a little bit — those are the
 ones we want to help (and make money on). The website finds them for us automatically.
