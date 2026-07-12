@@ -414,6 +414,10 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .empty-s{font-size:13px;margin-top:6px;color:var(--muted)}
 .empty-reset{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:9px 18px;color:var(--ink);cursor:pointer;font-weight:600;box-shadow:var(--sh-1)}
 .empty-reset:hover{border-color:var(--gold);color:var(--gold-d)}
+/* active sort-column indicator */
+th.sorted{color:var(--ink)}
+th.sorted::after{content:'\25BE';font-size:9px;margin-left:6px;color:var(--gold-d);vertical-align:middle}
+th.sorted[data-dir="asc"]::after{content:'\25B4'}
 /* Orbitron tech-label layer + gold accents (tranchi signature) */
 :root{--f-label:'Orbitron','Space Grotesk',sans-serif}
 .brand .tag,.dm-sec,.cstat .k,#intro .tg,th{font-family:var(--f-label);font-weight:600}
@@ -563,7 +567,7 @@ body.modal-open{overflow:hidden}
 </colgroup>
 <thead><tr>
 <th data-k="tier">Tier</th>
-<th data-k="_profit" style="color:var(--green-ink)">Est. Profit &#9660;</th>
+<th data-k="_profit" style="color:var(--green-ink)">Est. Profit</th>
 <th data-k="score">Score</th>
 <th data-k="auction">Auction</th>
 <th data-k="ctype">Type</th>
@@ -858,6 +862,12 @@ function view(){
 }
 function render(){
   const rows = view();
+  // sort-direction indicator on the active column header
+  document.querySelectorAll('th[data-k]').forEach(th=>{
+    const on = th.dataset.k===sortK;
+    th.classList.toggle('sorted', on);
+    if(on) th.dataset.dir = sortD<0 ? 'desc' : 'asc'; else th.removeAttribute('data-dir');
+  });
   const _sc = rows.filter(r=>r._verdict==='STRONG').length, _mc = rows.filter(r=>r._verdict==='MARGINAL').length;
   document.getElementById('stats').textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
   // KPI band — live portfolio metrics for the current view
