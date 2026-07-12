@@ -138,6 +138,21 @@ def money(s):
     try: return float(re.sub(r'[^\d.]','', s or '') or 0)
     except: return 0.0
 
+def _has_homestead(benefits):
+    """True only for the real Homestead EXEMPTION. The PA 'Benefit' array also carries a
+    'Non-Homestead Cap' assessment reduction (the cap for NON-homesteaded parcels) whose
+    description literally contains the substring 'homestead' — so a naive `'homestead' in desc`
+    falsely flags LLCs, rentals and second homes as owner-occupied. Require Type == Exemption
+    and exclude the non-homestead cap. (Genuine homestead = Type 'Exemption', Desc 'Homestead'.)"""
+    for b in (benefits or []):
+        desc = (b.get('Description', '') or '').lower()
+        typ = (b.get('Type', '') or '').strip().lower()
+        if 'non-homestead' in desc or 'non homestead' in desc:
+            continue
+        if typ == 'exemption' and 'homestead' in desc:
+            return True
+    return False
+
 def enrich(leads):
     s = requests.Session(); s.headers['User-Agent'] = UA
     for i, r in enumerate(leads):
@@ -163,7 +178,7 @@ def enrich(leads):
             'market_value': mkt, 'dor_desc': pi.get('DORDescription',''),
             'beds': pi.get('BedroomCount',0), 'baths': pi.get('BathroomCount',0),
             'living_area': pi.get('BuildingHeatedArea',0), 'year_folio': pi.get('FolioNumber',''),
-            'homestead': any('homestead' in (b.get('Description','') or '').lower() for b in benefits),
+            'homestead': _has_homestead(benefits),
             'last_sale_price': last_sale.get('SalePrice',0), 'last_sale_date': last_sale.get('DateOfSale',''),
         })
         if (i+1) % 20 == 0: print(f"enriched {i+1}/{len(leads)}")
