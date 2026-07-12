@@ -780,11 +780,13 @@ function view(){
   if(tdOnly) rows = rows.filter(r => r.st === 'TD');
   if(hideDead) rows = rows.filter(r => { const s=(notes[r.case]||{}).status; return s!=='Dead' && s!=='DO NOT CONTACT'; });
   rows = rows.slice();
-  rows.sort((a,b) => {
-    let x = a[sortK], y = b[sortK];
-    if(x==null) x = -Infinity; if(y==null) y = -Infinity;   // no-data leads sink to the bottom
-    return (x>y?1:x<y?-1:0)*sortD;
-  });
+  const sortVal = r => {
+    // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
+    // (else "12/01/2025" would sort after "07/01/2026"). Use the ISO yyyymmdd number.
+    if(sortK==='auction'){ const n = +toISO(r.auction).replace(/-/g,''); return n || -Infinity; }
+    const x = r[sortK]; return (x==null) ? -Infinity : x;   // no-data leads sink to the bottom
+  };
+  rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
   return rows;
 }
 function render(){
