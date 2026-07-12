@@ -472,7 +472,7 @@ body.modal-open{overflow:hidden}
 #welcome{position:fixed;top:0;left:0;right:0;z-index:250;display:flex;justify-content:center;pointer-events:none}
 .wtoast{margin-top:30px;display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh-3),0 0 0 1px rgba(201,168,76,.18);padding:13px 24px 13px 15px;opacity:0;transform:translateY(-30px) scale(.94);transition:opacity .45s ease,transform .6s cubic-bezier(.2,.9,.3,1.35)}
 .wtoast.show{opacity:1;transform:translateY(0) scale(1)}
-.wtoast.out{opacity:0;transform:translateY(-16px) scale(.98);transition:opacity .4s ease,transform .45s cubic-bezier(.4,0,1,1)}
+.wtoast.out{opacity:0;transform:translateY(-10px) scale(.985);transition:opacity .7s cubic-bezier(.4,0,.2,1),transform .8s var(--e-lux)}
 .wcheck{width:36px;height:36px;border-radius:50%;background:var(--gold-grad);display:grid;place-items:center;flex:0 0 auto;box-shadow:0 5px 16px rgba(201,168,76,.45)}
 .wcheck::after{content:'';display:block;width:11px;height:6px;border-left:2.5px solid #2a2205;border-bottom:2.5px solid #2a2205;transform:rotate(-45deg);margin-top:-3px}
 .wtext{display:flex;flex-direction:column;line-height:1.1}
@@ -1227,7 +1227,7 @@ function showWelcome(name){
   setTimeout(()=>{ if(card) card.classList.add('show'); }, 30);      // paint hidden state, then slide in
   const hold = reduce ? 1600 : 2600;
   setTimeout(()=>{ if(card){ card.classList.remove('show'); card.classList.add('out'); } }, hold);
-  setTimeout(()=>{ el.innerHTML=''; }, hold + 600);
+  setTimeout(()=>{ el.innerHTML=''; }, hold + 900);   // let the slower fade-out finish before removal
 }
 async function boot(){
   const lb = document.getElementById('lockbtn');
