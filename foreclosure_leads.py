@@ -381,10 +381,13 @@ def _encrypt_multi(plaintext, codes):
     iv = os.urandom(12)
     ct = AESGCM(mk).encrypt(iv, plaintext.encode('utf-8'), None)
     keys = []
-    for _label, code in codes:
+    for label, code in codes:
         salt, kiv = os.urandom(16), os.urandom(12)
         wk = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=iters).derive(code.encode('utf-8'))
-        wct = AESGCM(wk).encrypt(kiv, mk, None)           # wrap the master key with this person's code
+        # wrap {master key + this person's NAME} under their code. The name rides ENCRYPTED, so the
+        # public file never reveals it, but their own code decrypts it -> personalized "welcome".
+        blob = json.dumps({'mk': b64(mk), 'name': label}).encode('utf-8')
+        wct = AESGCM(wk).encrypt(kiv, blob, None)
         keys.append({'salt': b64(salt), 'iv': b64(kiv), 'ct': b64(wct)})
     return {'enc': 2, 'it': iters, 'iv': b64(iv), 'ct': b64(ct), 'keys': keys}
 

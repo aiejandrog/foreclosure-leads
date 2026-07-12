@@ -428,6 +428,16 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .lockbtn{display:none;align-self:center;margin-left:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:5px 13px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .14s}
 .lockbtn:hover{border-color:var(--gold);color:var(--gold-d)}
 body.modal-open{overflow:hidden}
+/* personalized welcome toast */
+#welcome{position:fixed;top:0;left:0;right:0;z-index:250;display:flex;justify-content:center;pointer-events:none}
+.wtoast{margin-top:30px;display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh-3),0 0 0 1px rgba(201,168,76,.18);padding:13px 24px 13px 15px;opacity:0;transform:translateY(-30px) scale(.94);transition:opacity .45s ease,transform .6s cubic-bezier(.2,.9,.3,1.35)}
+.wtoast.show{opacity:1;transform:translateY(0) scale(1)}
+.wtoast.out{opacity:0;transform:translateY(-16px) scale(.98);transition:opacity .4s ease,transform .45s cubic-bezier(.4,0,1,1)}
+.wcheck{width:36px;height:36px;border-radius:50%;background:var(--gold-grad);display:grid;place-items:center;flex:0 0 auto;box-shadow:0 5px 16px rgba(201,168,76,.45)}
+.wcheck::after{content:'';display:block;width:11px;height:6px;border-left:2.5px solid #2a2205;border-bottom:2.5px solid #2a2205;transform:rotate(-45deg);margin-top:-3px}
+.wtext{display:flex;flex-direction:column;line-height:1.1}
+.whi{font-family:var(--f-label);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-2);font-weight:600}
+.wname{font-family:var(--f-display);font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.01em;margin-top:3px}
 /* KPI stat band */
 .kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
 .kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
@@ -439,6 +449,7 @@ body.modal-open{overflow:hidden}
 @media(max-width:860px){ .kpis{padding:12px 12px 2px;gap:9px} .kpi{min-width:calc(50% - 5px);padding:12px 13px} .kpi .kv{font-size:22px} }
 </style></head><body>
 <div id="intro"><div class="lg"><div class="wm">DEAL<b>FLOW</b></div><div class="tg">Miami-Dade Deal Engine</div><div class="bar"><i></i></div></div></div>
+<div id="welcome"></div>
 <div id="gate"><div class="box">
 <div class="gate-brand">DEAL<b>FLOW</b></div>
 <div class="gate-eyebrow">Private &middot; Invite only</div>
@@ -536,6 +547,7 @@ const NL = String.fromCharCode(10);
 const BOM = String.fromCharCode(65279);
 const RAW = __DATA__;
 let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
+let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
 const LS = 'fcLeadNotes';
 let notes = {};
 try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
@@ -1129,13 +1141,16 @@ async function decryptPayload(enc, password){
     {name:'PBKDF2', salt: dec(salt), iterations: enc.it||200000, hash:'SHA-256'},
     baseKey, {name:'AES-GCM', length:256}, false, ['decrypt']);
   if(enc.enc === 2){
-    // ENVELOPE (per-person codes): try to unwrap the random master key with this code against each
-    // wrapped-key blob; the one that matches this person's code decrypts the shared payload.
+    // ENVELOPE (per-person codes): each wrapped blob holds {master key, name} sealed under one code.
+    // Try each; the one this code opens gives us the master key (decrypts the shared payload) AND
+    // the person's name (for the personalized welcome). Name never appears in plaintext in the file.
     for(const k of enc.keys){
       try{
         const wk = await derive(k.salt);
-        const mkRaw = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(k.iv)}, wk, dec(k.ct));
-        const mk = await crypto.subtle.importKey('raw', mkRaw, {name:'AES-GCM'}, false, ['decrypt']);
+        const blobRaw = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(k.iv)}, wk, dec(k.ct));
+        const blob = JSON.parse(new TextDecoder().decode(blobRaw));   // {mk, name}
+        unlockName = blob.name || '';
+        const mk = await crypto.subtle.importKey('raw', dec(blob.mk), {name:'AES-GCM'}, false, ['decrypt']);
         const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, mk, dec(enc.ct));
         return JSON.parse(new TextDecoder().decode(pt));
       }catch(e){ /* this code doesn't open this wrapped key — try the next */ }
@@ -1147,8 +1162,20 @@ async function decryptPayload(enc, password){
   const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, key, dec(enc.ct));
   return JSON.parse(new TextDecoder().decode(pt));
 }
+function showWelcome(name){
+  const el = document.getElementById('welcome'); if(!el || !name) return;
+  el.innerHTML = '<div class="wtoast"><span class="wcheck"></span><div class="wtext">'+
+    '<span class="whi">Welcome back</span><span class="wname">'+esc(name)+'</span></div></div>';
+  const card = el.querySelector('.wtoast');
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  setTimeout(()=>{ if(card) card.classList.add('show'); }, 30);      // paint hidden state, then slide in
+  const hold = reduce ? 1600 : 2600;
+  setTimeout(()=>{ if(card){ card.classList.remove('show'); card.classList.add('out'); } }, hold);
+  setTimeout(()=>{ el.innerHTML=''; }, hold + 600);
+}
 async function boot(){
   const lb = document.getElementById('lockbtn');
+  let manual = false;
   if(!Array.isArray(RAW) && RAW && RAW.enc){
     const gate = document.getElementById('gate'), inp = document.getElementById('gatepw'),
           btn = document.getElementById('gatego'), err = document.getElementById('gateerr');
@@ -1165,7 +1192,7 @@ async function boot(){
           err.textContent = '';
           if(await tryPw(inp.value)){
             try { localStorage.setItem('fcPw', inp.value); } catch(e){}
-            gate.style.display='none'; resolve();
+            manual = true; gate.style.display='none'; resolve();
           } else { err.textContent = 'Wrong code — check with the person who shared this'; inp.select(); }
         };
         btn.onclick = attempt;
@@ -1179,6 +1206,7 @@ async function boot(){
   syncDealUI();
   recompute();
   render();
+  if(manual && unlockName) showWelcome(unlockName);   // greet them only when they actually enter a code
 }
 boot();
 // intro reveal: hold briefly, fade out, remove (respects reduced-motion)
