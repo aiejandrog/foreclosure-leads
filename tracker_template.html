@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://api.fontshare.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Grotesk:wght@500;600;700&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
 <link href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@600,700&display=swap" rel="stylesheet">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231A2B4A'/%3E%3Crect x='10.5' y='10.5' width='11' height='11' rx='2' fill='none' stroke='%23C9A84C' stroke-width='2.6' transform='rotate(45 16 16)'/%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231A2B4A'/%3E%3Ctext x='16' y='23.5' font-family='Arial,Helvetica,sans-serif' font-size='21' font-weight='800' fill='%23C9A84C' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E">
 <style>
 :root{color-scheme:light dark}
 body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#0f1420;color:#e8ecf3}
@@ -395,6 +395,12 @@ th{letter-spacing:.09em;font-size:9.5px}
 tbody tr.rv3 td:first-child{box-shadow:inset 3px 0 0 var(--green)}
 tbody tr.rv2 td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
 tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
+/* wordmark logo (no icon) + clean risk dot + svg copy glyph */
+.brand .wm{font-size:23px;letter-spacing:-.025em}
+.dealflags .flag{position:relative;padding-left:15px}
+.dealflags .flag::before{content:'';position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:50%;background:var(--amber)}
+.cpy svg{display:block}
+#intro .wm{font-size:34px}
 /* KPI stat band */
 .kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
 .kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
@@ -405,9 +411,9 @@ tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 .kpi .ks{font-size:11px;color:var(--muted);margin-top:5px}
 @media(max-width:860px){ .kpis{padding:12px 12px 2px;gap:9px} .kpi{min-width:calc(50% - 5px);padding:12px 13px} .kpi .kv{font-size:22px} }
 </style></head><body>
-<div id="intro"><div class="lg"><div class="mk"><i></i></div><div class="wm">DEAL<b>FLOW</b></div><div class="tg">Miami-Dade Deal Engine</div><div class="bar"><i></i></div></div></div>
+<div id="intro"><div class="lg"><div class="wm">DEAL<b>FLOW</b></div><div class="tg">Miami-Dade Deal Engine</div><div class="bar"><i></i></div></div></div>
 <div id="gate"><div class="box">
-<h2>&#128274; Private lead tracker</h2>
+<h2>Private access</h2>
 <p>Enter the password to view leads.</p>
 <input id="gatepw" type="password" placeholder="Password" autocomplete="off">
 <button id="gatego">Unlock</button>
@@ -416,7 +422,6 @@ tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <header>
 <div class="brand">
-<div class="mark"><i></i></div>
 <div>
 <div class="wm">DEAL<b>FLOW</b></div>
 <div class="tag">Miami-Dade · Foreclosure &amp; Tax-Deed Intelligence</div>
@@ -429,15 +434,15 @@ tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 <button class="tf" data-t="B">Tier B</button>
 <button class="tf" data-t="C">Tier C</button>
 <button class="tf" data-t="ALL">All</button>
-<button id="wk" title="Only leads with an auction in the next 7 days">&#9889; This week</button>
+<button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
-<button id="td" title="Only tax-deed sales (Jose's business)">&#127991; Tax deeds</button>
+<button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <input id="q" placeholder="Search owner / address / case #">
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
 <option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option>
 </select></label>
-<button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">&#9881; Filters &amp; setup</button>
+<button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">Filters &amp; setup</button>
 <button id="exp">Export CSV (with my notes)</button>
 <span class="stats" id="stats"></span>
 </div>
@@ -634,7 +639,7 @@ function dealStrategy(r){
 }
 function dealTrigger(r){
   if(r._nodata) return '';
-  return '<button class="dealtog" data-c="'+esc(r.case)+'" type="button">&#128202; Deal analysis</button>';
+  return '<button class="dealtog" data-c="'+esc(r.case)+'" type="button">Deal analysis</button>';
 }
 function dealAnalysisHTML(r){
   const nn = notes[r.case]||{};
@@ -660,7 +665,7 @@ function dealAnalysisHTML(r){
     '<label>Surviving liens (code/muni/IRS) $<input class="mlien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.mlien||'')+'" placeholder="0"></label>'+
     '<label class="occlbl"><input class="occ" data-c="'+esc(r.case)+'" type="checkbox"'+(nn.occ?' checked':'')+'> occupied</label>'+
   '</div>';
-  const flagsHtml = flags.length ? '<div class="dealflags">'+flags.map(f=>'<div>&#9888; '+esc(f)+'</div>').join('')+'</div>' : '';
+  const flagsHtml = flags.length ? '<div class="dealflags">'+flags.map(f=>'<div class="flag">'+esc(f)+'</div>').join('')+'</div>' : '';
   return '<div class="dm-sec">The math</div>'+mathHtml+
     '<div class="dm-sec">Adjust for what you find (docket / title)</div>'+adj+
     (flagsHtml?'<div class="dm-sec">Watch out for</div>'+flagsHtml:'')+
@@ -692,7 +697,8 @@ function refreshDealModal(){
 function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); }
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
-const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">&#128203;</button>';
+const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">'+COPY_SVG+'</button>';
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR LLC]', sP = sender.phone || '[YOUR PHONE]';
   const owner = titleCase((r.owners||'').split(';')[0].trim());
@@ -743,7 +749,7 @@ body{font-family:Georgia,serif;max-width:660px;margin:0 auto;padding:40px;color:
 ul{margin:10px 0}
 @media print{.bar{display:none}body{padding:0}}
 </style></head><body>
-<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">&#128424; Print / Save PDF</button></div>
+<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">Print / Save PDF</button></div>
 <div class="addr">${esc(sN)}<br>${esc(sL)}<br><br>${new Date().toLocaleDateString()}<br><br>${esc(owner)}<br>${mail.replace(/, /g,'<br>')}</div>
 <div id="body-en">${EN}</div>
 <div id="body-es" style="display:none">${ES}</div>
@@ -805,16 +811,16 @@ function render(){
     // skip-traced phones (present only when unlocked / on the local copy). MANUAL dial only.
     (r.phones||[]).slice(0,3).forEach((ph,i) => {
       const dnc = (r.phdnc||[])[i];
-      links.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">&#9742; '+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
+      links.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">'+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
     });
     // phone you looked up on TruePeopleSearch and typed into the phone box (saved on this device)
-    if(n.phone) links.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">&#9742; '+esc(fmtPhone(n.phone))+'</a>');
+    if(n.phone) links.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">'+esc(fmtPhone(n.phone))+'</a>');
     if(r.tax) links.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener">Taxes</a>');
     if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
-    links.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">&#9993; Letter</a>');
+    links.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
-    links.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">&#128203; Copy all</a>');
+    links.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
     const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
     const ctype = r.ctype ? '<span class="chip '+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'" title="'+esc(r.ctype)+'">'+ctypeTxt+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
@@ -828,7 +834,7 @@ function render(){
       prof = verdictBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
         (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
         (r._tight?'<div class="warn" title="Costs/debt eat the margin. Negotiate lower or pass.">thin margin</div>':'')+
-        (r.mr?'<div class="mrwarn" title="HOA/junior case — first mortgage survives; entered below">&#9888; mortgage risk</div>':'')+
+        (r.mr?'<div class="mrwarn" title="HOA/junior case — first mortgage survives; entered below">mortgage risk</div>':'')+
         dealTrigger(r);
     }
     // Auction cell: date, countdown, filed/bought sub-lines
@@ -856,7 +862,7 @@ function render(){
       opts.map(s => '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select>';
     const notesTa = '<textarea class="notes" data-c="'+esc(r.case)+'" placeholder="notes">'+esc(n.note)+'</textarea>';
     // free manual phone: look it up via the People button, then type it here (saves on this device)
-    const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="&#9742; phone" value="'+esc(n.phone||'')+'">';
+    const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="phone" value="'+esc(n.phone||'')+'">';
     trs.push('<tr class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+'">'+
       '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
       '<td class="num">'+prof+'</td>'+
@@ -882,7 +888,7 @@ function render(){
         '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+
         '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v">'+(r.eq?r.eq+'%':'—')+'</div></div>'+
       '</div>':'')+
-      (r.mr&&r._verdict!=='VERIFY'?'<div class="mrwarn">&#9888; mortgage risk - verify payoff</div>':'')+
+      (r.mr&&r._verdict!=='VERIFY'?'<div class="mrwarn">mortgage risk - verify payoff</div>':'')+
       '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
       (r.st==='TD'
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
@@ -890,7 +896,7 @@ function render(){
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
-      (r.mail?'<div class="meta addrline">&#9993; <span>'+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
+      (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+links.join(' ')+'</div>'+
       dealTrigger(r)+
       '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
