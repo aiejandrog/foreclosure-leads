@@ -215,7 +215,9 @@ tbody tr:nth-child(even) td{background:#FBFCFE}
 tbody tr:hover td{background:#F3F8FF}
 tbody tr td:first-child{box-shadow:inset 3px 0 0 transparent}
 .A{color:var(--green-ink);font-weight:700}.B{color:var(--amber-ink);font-weight:700}.C{color:var(--muted)}
-.money,.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-family:var(--f-num)}
+.money,.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--f-num)}
+.profpos,.profneg{white-space:nowrap}
+td.num .warn,td.num .mrwarn,td.num .submeta{white-space:normal;overflow-wrap:anywhere}
 .submeta{font-size:11px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
 .meta{color:var(--muted);font-size:11px}
 .clip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -425,6 +427,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 .gate-foot{font-family:var(--f-label);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);margin-top:18px}
 .lockbtn{display:none;align-self:center;margin-left:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:5px 13px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .14s}
 .lockbtn:hover{border-color:var(--gold);color:var(--gold-d)}
+body.modal-open{overflow:hidden}
 /* KPI stat band */
 .kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
 .kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
@@ -544,7 +547,7 @@ let sender = {name:'', llc:'', phone:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
-const DEAL_VER = '2026-07-12';   // bump when defaults change -> stale saved settings are ignored once (auto-heal)
+const DEAL_VER = '2026-07-12b';  // bump when defaults change -> stale saved settings are ignored once (auto-heal)
 let deal = Object.assign({}, DEAL_DEFAULTS);
 try {
   if(localStorage.getItem('fcDealVer') === DEAL_VER) deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}'));
@@ -617,9 +620,9 @@ function recompute(){
 function setVerdict(r, x){
   const val = x.val;
   // never show a profit we can't stand behind
-  if(r.ju){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2;
+  if(r.ju){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2; r._whyShort='Judgment not posted — verify on docket';
     r._why='Final judgment not posted — the debt is unknown. Confirm it on the docket before trusting any profit.'; return; }
-  if(r.st!=='TD' && r.mr && !x.slien){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2;
+  if(r.st!=='TD' && r.mr && !x.slien){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2; r._whyShort='1st mortgage unknown — look it up';
     r._why='HOA / junior case — the 1st mortgage survives this sale and is unknown. Look it up and enter it below (usually a trap if large).'; return; }
   const p=r._profit, roi=r._roi||0;
   const strongRoi=r.st==='TD'?20:15, margRoi=r.st==='TD'?8:6;
@@ -716,13 +719,14 @@ function openDealModal(caseId){
   dealModalCase = caseId;
   document.getElementById('dmbody').innerHTML = dealModalBody(r);
   document.getElementById('dealmodal').classList.add('show');
+  document.body.classList.add('modal-open');   // lock background scroll -> the popup holds focus
 }
 function refreshDealModal(){
   if(!dealModalCase) return;
   const r = DATA.find(x=>x.case===dealModalCase);
   if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r);
 }
-function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); }
+function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
 const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
@@ -859,7 +863,7 @@ function render(){
     if(r._nodata){
       prof = '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
     } else if(r._verdict==='VERIFY'){
-      prof = verdictBadge(r)+'<div class="warn" style="margin-top:4px">'+esc(r._why)+'</div>'+dealTrigger(r);
+      prof = verdictBadge(r)+'<div class="warn" style="margin-top:4px;white-space:normal">'+esc(r._whyShort||r._why)+'</div>'+dealTrigger(r);
     } else {
       prof = verdictBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
         (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
@@ -912,7 +916,7 @@ function render(){
                   : r._verdict==='VERIFY' ? verdictBadge(r)
                   : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
-      (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._why)+'</div>':'')+
+      (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
         '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+

@@ -262,7 +262,10 @@ def qualify(leads):
             r['opening_bid'] = 0
             r['judgment_unknown'] = (judg == 0)
             case0 = r.get('Case #','')
-            is_hoa = bool(re.search(r'-CC-', case0))
+            # HOA/junior signal: the case-number format (-CC-) OR the plaintiff-derived case_type.
+            # Many HOA foreclosures are classified by plaintiff (case_type "HOA/Condo") without a
+            # -CC- number, so keying only on the number missed them and left their fake equity scored.
+            is_hoa = bool(re.search(r'-CC-', case0)) or (r.get('case_type','') or '').upper().startswith('HOA')
         r['equity'] = mkt - judg if mkt else 0
         r['equity_pct'] = round(r['equity']/mkt*100,1) if mkt else 0
         try: days = (datetime.strptime(r['AuctionDate'],'%m/%d/%Y') - today).days
@@ -280,7 +283,11 @@ def qualify(leads):
         ep = r['equity_pct']
         # granular 0-100 so leads rank instead of clustering
         score = 0.0
-        if mkt: score += min(42.0, max(0.0, ep) * 0.42)          # equity, 0-42
+        # Equity only counts when the judgment reflects the TRUE debt. For an HOA/junior (-CC-)
+        # foreclosure the judgment is the tiny association lien, not the surviving 1st mortgage, so
+        # "equity" is fake-high (a $13k lien on a $348k condo reads as 96%). Don't credit it there —
+        # otherwise these unverifiable leads wrongly rank Tier A. (judgment_unknown already zeroed ep.)
+        if mkt and not is_hoa: score += min(42.0, max(0.0, ep) * 0.42)   # equity, 0-42
         score += min(18.0, max(0, days) * 1.0)                    # runway, 0-18
         score += 12 if r.get('homestead') else 0                  # owner-occupied
         if 200000 <= mkt <= 1000000: score += 14                  # value band
