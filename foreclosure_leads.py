@@ -346,6 +346,12 @@ def qualify(leads):
             r'CITIMORTGAGE|WELLS FARGO|CHASE|NATIONSTAR|PENNYMAC|NEWREZ|CARRINGTON|LAKEVIEW', defs))
     return leads
 
+def _clean_addr(s):
+    # County/PA data formats the state as "FL- 33184" or "FL, 33184"; normalize to "FL 33184"
+    # so addresses read cleanly everywhere (table, cards, copy, CSV, and the mailed letters).
+    s = re.sub(r'\bFL[-,]\s*', 'FL ', s or '')
+    return re.sub(r'\s{2,}', ' ', s).strip()
+
 def _esc_json(obj):
     # Escape HTML-significant chars in embedded JSON so a county field containing "</script>"
     # can't break out of the inline <script> and inject/kill the page.
@@ -426,7 +432,7 @@ def make_tracker(leads):
             'tier': r.get('tier',''), 'score': r.get('score',0),
             'auction': r.get('AuctionDate',''), 'days': r.get('days_to_auction',0),
             'case': r.get('Case #',''), 'owners': r.get('owners',''),
-            'addr': r.get('Address',''), 'mail': r.get('mailing_address',''),
+            'addr': _clean_addr(r.get('Address','')), 'mail': _clean_addr(r.get('mailing_address','')),
             'value': r.get('market_value',0) or 0, 'judg': r.get('judgment',0) or 0,
             'eq': r.get('equity_pct',0), 'hs': bool(r.get('homestead')),
             'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
