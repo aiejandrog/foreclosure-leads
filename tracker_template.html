@@ -398,14 +398,15 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 /* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
 .brand .wm{transition:filter .3s ease,letter-spacing .45s var(--e-lux)}
 .brand:hover .wm{letter-spacing:-.006em}
-.brand .wm b{color:var(--gold-d);background-image:linear-gradient(115deg,#C9A84C 0%,#B08A32 16%,#C9A84C 34%,#EFDFA0 46%,#FFF6D8 50%,#EFDFA0 54%,#C9A84C 66%,#B08A32 84%,#C9A84C 100%);background-size:200% auto;filter:drop-shadow(0 0 8px rgba(201,168,76,.18));transition:filter .45s var(--e-lux)}
+.brand .wm b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));transition:filter .45s var(--e-lux);animation:wmShine 3.6s linear infinite}
 @supports ((-webkit-background-clip:text) or (background-clip:text)){
-  .brand .wm b{-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:wmShine 5.5s linear infinite}
+  .brand .wm b{-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 }
-@keyframes wmShine{0%{background-position:0% center}100%{background-position:200% center}}
-.brand:hover .wm b{filter:drop-shadow(0 0 12px rgba(201,168,76,.4)) drop-shadow(0 1px 2px rgba(160,126,40,.25)) brightness(1.06)}
+@keyframes wmShine{0%{background-position:120% center}100%{background-position:-120% center}}
+.brand:hover .wm b{filter:drop-shadow(0 0 14px rgba(201,168,76,.55)) drop-shadow(0 1px 2px rgba(160,126,40,.25)) brightness(1.07)}
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
+  .brand .wm b{animation-duration:3.6s!important}   /* keep the logo flowing on its own (explicit request; low-risk color shimmer) */
 }
 /* empty state (no leads match the current filters) */
 .empty{text-align:center;padding:56px 24px}
@@ -461,7 +462,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 #advpanel{padding:2px 16px 14px}
 /* premium access gate */
 .gate-brand{font-family:var(--f-display);font-weight:700;font-size:27px;letter-spacing:-.02em;color:var(--ink);margin-bottom:12px}
-.gate-brand b{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.gate-brand b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:wmShine 3.6s linear infinite}
 .gate-eyebrow{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-d);margin-bottom:16px}
 #gate input{letter-spacing:.06em}
 .gate-foot{font-family:var(--f-label);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);margin-top:18px}
