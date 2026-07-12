@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Miami-Dade Foreclosure Lead Tracker</title>
 <style>
 :root{color-scheme:light dark}
@@ -138,7 +141,7 @@ input.ph::placeholder{color:#5a7d66}
 </div></div>
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <header>
-<h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated 2026-07-11 · notes save in your own browser</span></h1>
+<h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated 2026-07-12 · notes save in your own browser</span></h1>
 <div class="controls">
 <button class="tf active" data-t="A">Tier A</button>
 <button class="tf" data-t="B">Tier B</button>
@@ -170,6 +173,7 @@ input.ph::placeholder{color:#5a7d66}
 <label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:44px">%</label>
 <label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:64px"></label>
 <label style="font-size:12px" title="Tax deed only: the MOST you'd pay at auction, as % of market value (your disciplined ceiling that still leaves room for quiet title + costs + profit). Equity parcels bid up — if live bidding passes this, walk. Raise it if you're willing to pay closer to market.">win bid <input id="tdclear" type="number" value="70" min="0" max="100" style="width:48px">% of market</label>
+<button id="dealreset" style="font-size:11px;padding:3px 9px" title="Reset the deal model (buy %, costs, tax-deed win-bid) back to the recommended defaults. Use this if every lead is showing PASS.">&#8635; Reset defaults</button>
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
@@ -223,8 +227,13 @@ let weekOnly = false, hideDead = false, tdOnly = false;
 let sender = {name:'', llc:'', phone:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
-let deal = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
-try { deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}')); } catch(e) {}
+const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
+const DEAL_VER = '2026-07-12';   // bump when defaults change -> stale saved settings are ignored once (auto-heal)
+let deal = Object.assign({}, DEAL_DEFAULTS);
+try {
+  if(localStorage.getItem('fcDealVer') === DEAL_VER) deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}'));
+  else { localStorage.removeItem('fcDeal'); localStorage.setItem('fcDealVer', DEAL_VER); }
+} catch(e) {}
 const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
 const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
 const fmtPhone = d => { d=String(d||'').replace(/\D/g,''); return d.length===10 ? '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6) : d; };
@@ -597,7 +606,7 @@ document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tf').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); tier = b.dataset.t; render();
 });
-function saveDeal(){ try { localStorage.setItem('fcDeal', JSON.stringify(deal)); } catch(e) {} }
+function saveDeal(){ try { localStorage.setItem('fcDeal', JSON.stringify(deal)); localStorage.setItem('fcDealVer', DEAL_VER); } catch(e) {} }
 function syncDealUI(){
   document.getElementById('costpct').value = deal.costpct;
   document.getElementById('buypct').value = deal.buypct;
@@ -611,6 +620,7 @@ document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value=
 document.getElementById('bidover').oninput = e => { deal.bidover = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('quiettitle').oninput = e => { deal.quiettitle = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('tdclear').oninput = e => { deal.tdclear = e.target.value===''?70:+e.target.value; dealChanged(); };
+document.getElementById('dealreset').onclick = () => { deal = Object.assign({}, DEAL_DEFAULTS); saveDeal(); syncDealUI(); recompute(); render(); };
 document.getElementById('sortby').onchange = e => {
   sortK = e.target.value;
   sortD = (sortK==='days') ? 1 : -1;   // soonest auction first; everything else high-to-low
