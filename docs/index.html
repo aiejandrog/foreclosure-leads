@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://api.fontshare.com">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Grotesk:wght@500;600;700&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
 <link href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@600,700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231A2B4A'/%3E%3Crect x='10.5' y='10.5' width='11' height='11' rx='2' fill='none' stroke='%23C9A84C' stroke-width='2.6' transform='rotate(45 16 16)'/%3E%3C/svg%3E">
 <style>
 :root{color-scheme:light dark}
 body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#0f1420;color:#e8ecf3}
@@ -384,6 +385,16 @@ th{letter-spacing:.09em;font-size:9.5px}
 #gate button{background:var(--gold-grad);border:none;color:#2a2205;font-weight:700;box-shadow:0 6px 20px rgba(201,168,76,.35)}
 #gate button:hover{background:linear-gradient(120deg,#D4B658,#F0DC94);box-shadow:0 8px 26px rgba(201,168,76,.45)}
 .dealtog::before{content:'\25B8';color:var(--gold-d);font-size:9px}
+/* type chips (tranchi deal-type language) */
+.chip{display:inline-block;font-family:var(--f-label);font-size:8.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:var(--pill);border:1px solid var(--line);white-space:nowrap;line-height:1.5}
+.chip.mtg{background:#EEF2F8;color:#48566E}
+.chip.hoa{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
+.chip.tdt{background:var(--gold-soft);color:var(--gold-d);border-color:rgba(201,168,76,.35)}
+.chip.tax{background:var(--red-soft);color:var(--red-ink)}
+/* desktop row verdict accent (mirrors the mobile card spine) */
+tbody tr.rv3 td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+tbody tr.rv2 td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
+tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 /* KPI stat band */
 .kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
 .kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
@@ -469,7 +480,7 @@ th{letter-spacing:.09em;font-size:9.5px}
 <div class="tblwrap">
 <table id="tbl">
 <colgroup>
-<col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:118px"><col style="width:90px"><col style="width:246px"><col style="width:238px"><col style="width:186px"><col style="width:150px"><col style="width:132px"><col style="width:150px">
+<col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:118px"><col style="width:96px"><col style="width:246px"><col style="width:238px"><col style="width:186px"><col style="width:150px"><col style="width:132px"><col style="width:150px">
 </colgroup>
 <thead><tr>
 <th data-k="tier">Tier</th>
@@ -804,7 +815,8 @@ function render(){
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
     links.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">&#128203; Copy all</a>');
-    const ctype = r.ctype ? '<span class="'+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'">'+esc(r.ctype)+'</span>' : '';
+    const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
+    const ctype = r.ctype ? '<span class="chip '+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'" title="'+esc(r.ctype)+'">'+ctypeTxt+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
     // Profit cell: big profit, then ROI + cash sub-line, then flags. "no value data" when un-enriched.
     let prof;
@@ -845,7 +857,7 @@ function render(){
     const notesTa = '<textarea class="notes" data-c="'+esc(r.case)+'" placeholder="notes">'+esc(n.note)+'</textarea>';
     // free manual phone: look it up via the People button, then type it here (saves on this device)
     const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="&#9742; phone" value="'+esc(n.phone||'')+'">';
-    trs.push('<tr>'+
+    trs.push('<tr class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+'">'+
       '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
       '<td class="num">'+prof+'</td>'+
       '<td class="num">'+r.score+'</td>'+
