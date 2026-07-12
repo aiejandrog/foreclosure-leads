@@ -414,6 +414,10 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .empty-s{font-size:13px;margin-top:6px;color:var(--muted)}
 .empty-reset{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:9px 18px;color:var(--ink);cursor:pointer;font-weight:600;box-shadow:var(--sh-1)}
 .empty-reset:hover{border-color:var(--gold);color:var(--gold-d)}
+/* status color-coding */
+select.status.st-dead{color:var(--red);border-color:#f0cccc;background:#fdf3f3}
+select.status.st-hot{color:var(--green-ink);border-color:#bfe6cd;background:#f0faf3;font-weight:600}
+select.status.st-active{color:var(--ink);border-color:rgba(201,168,76,.4)}
 /* active sort-column indicator */
 th.sorted{color:var(--ink)}
 th.sorted::after{content:'\25BE';font-size:9px;margin-left:6px;color:var(--gold-d);vertical-align:middle}
@@ -946,7 +950,10 @@ function render(){
       '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'];
-    const statusSel = '<select class="status" data-c="'+esc(r.case)+'">'+
+    const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
+                : (n.status==='Appointment'||n.status==='Called - talked') ? 'st-hot'
+                : (n.status ? 'st-active' : '');
+    const statusSel = '<select class="status '+stcls+'" data-c="'+esc(r.case)+'">'+
       opts.map(s => '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select>';
     const notesTa = '<textarea class="notes" data-c="'+esc(r.case)+'" placeholder="notes">'+esc(n.note)+'</textarea>';
     // free manual phone: look it up via the People button, then type it here (saves on this device)
@@ -1151,6 +1158,12 @@ document.addEventListener('click', e => {
   if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))) closeDealModal();
 });
 document.addEventListener('keydown', e => { if(e.key==='Escape' && dealModalCase) closeDealModal(); });
+// "/" focuses search (unless already typing in a field)
+document.addEventListener('keydown', e => {
+  if(e.key==='/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'')){
+    e.preventDefault(); const q=document.getElementById('q'); if(q) q.focus();
+  }
+});
 document.addEventListener('change', e => {
   const c = e.target.dataset && e.target.dataset.c; if(!c) return;
   notes[c] = notes[c] || {status:'', note:''};
