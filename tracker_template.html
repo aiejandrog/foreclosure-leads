@@ -175,8 +175,9 @@ body{font-family:var(--f-body);margin:0;background:
 ::-webkit-scrollbar-track{background:transparent}
 
 /* header */
-header{padding:15px 22px 13px;background:rgba(246,248,251,.8);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(255,255,255,.6) inset;transition:transform .32s cubic-bezier(.4,0,.2,1)}
+header{padding:15px 22px 13px;background:rgba(246,248,251,.8);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(255,255,255,.6) inset;transition:transform .5s cubic-bezier(.16,1,.3,1),box-shadow .35s ease;will-change:transform}
 header.hdn{transform:translateY(-106%)}
+header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 10px 30px rgba(16,27,51,.11)}
 .brand{display:flex;align-items:center;gap:13px;margin:0 0 13px}
 .brand .mark{width:38px;height:38px;border-radius:11px;background:var(--navy-grad);display:grid;place-items:center;box-shadow:var(--sh-2),0 0 0 1px rgba(201,168,76,.25) inset;flex:0 0 auto}
 .brand .mark i{width:16px;height:16px;border:2.5px solid var(--gold);border-radius:3px;transform:rotate(45deg);display:block;box-shadow:0 0 10px rgba(201,168,76,.4)}
@@ -199,8 +200,9 @@ input::placeholder{color:var(--muted-2)}
 .tf.active{background:var(--navy-grad);color:#fff;border-color:transparent;box-shadow:var(--sh-2)}
 button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 #wk.active,#hd.active,#td.active{background:var(--gold);border-color:var(--gold);color:#3a2c05}
-#advtog{border-radius:var(--pill)}
-#advtog.active{background:var(--navy);border-color:var(--navy);color:#fff}
+#advtog{border-radius:var(--pill);background:var(--surface);color:var(--ink);border-color:var(--line);font-weight:600}
+#advtog:hover{border-color:var(--gold);color:var(--gold-d)}
+#advtog.active{background:var(--gold-soft);border-color:var(--gold);color:var(--gold-d)}
 #exp{border-radius:var(--pill);font-weight:600}
 
 /* table */
@@ -952,17 +954,22 @@ document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classL
 // smooth header auto-hide (slide away on scroll-down, back on scroll-up) + scroll-to-top button
 (function(){
   const btn = document.getElementById('toTop'), header = document.querySelector('header');
-  let lastY = 0;
-  const onScroll = () => {
+  let lastY = 0, ticking = false;
+  const update = () => {
     const y = window.scrollY;
-    btn.style.display = (y > 320) ? 'block' : 'none';
-    if(y > lastY && y > 180) header.classList.add('hdn');       // scrolling down -> hide
-    else header.classList.remove('hdn');                        // scrolling up -> show
-    lastY = y;
+    btn.style.display = (y > 340) ? 'block' : 'none';
+    const dy = y - lastY;
+    if(Math.abs(dy) > 5){                                        // ignore micro-jitter so it doesn't flicker
+      if(dy > 0 && y > 130) header.classList.add('hdn');        // scrolling down past the header -> glide up
+      else header.classList.remove('hdn');                       // any upward scroll -> smartly bring it back
+      lastY = y;
+    }
+    header.classList.toggle('scrolled', y > 6);                  // subtle elevation once you leave the top
+    ticking = false;
   };
-  window.addEventListener('scroll', onScroll, {passive:true});
+  window.addEventListener('scroll', () => { if(!ticking){ ticking = true; requestAnimationFrame(update); } }, {passive:true});
   btn.onclick = () => { window.scrollTo({top:0, behavior:'smooth'}); header.classList.remove('hdn'); };
-  onScroll();
+  update();
 })();
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
