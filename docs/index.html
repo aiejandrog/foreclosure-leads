@@ -4,7 +4,12 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Miami-Dade Foreclosure Lead Tracker</title>
+<title>DEALFLOW — Miami-Dade Foreclosure &amp; Tax-Deed Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Grotesk:wght@500;600;700&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@600,700&display=swap" rel="stylesheet">
 <style>
 :root{color-scheme:light dark}
 body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#0f1420;color:#e8ecf3}
@@ -131,7 +136,265 @@ input.ph::placeholder{color:#5a7d66}
 .dealflags>div{padding:2px 0}
 .dealstrat{font-size:13px;color:#dde6f5;line-height:1.55;background:#101a2e;border-left:3px solid #3b82f6;padding:10px 13px;border-radius:0 8px 8px 0}
 @media(max-width:860px){ .dm-card{width:96vw;padding:18px 16px 20px} }
+
+/* ============================================================
+   DEALFLOW — premium light navy+gold redesign (tranchi-grade)
+   This block is appended last so it re-skins everything above.
+   ============================================================ */
+:root{
+  color-scheme:light;
+  --bg:#EDF1F7; --bg-2:#F6F8FB; --surface:#FFFFFF; --surface-2:#F4F7FB;
+  --ink:#16233F; --ink-2:#3B4A66; --muted:#64748B; --muted-2:#93A0B4;
+  --line:rgba(22,35,63,.11); --line-2:rgba(22,35,63,.06);
+  --navy:#1A2B4A; --navy-grad:linear-gradient(135deg,#0F1B33 0%,#1A2B4A 46%,#20386A 100%);
+  --gold:#C9A84C; --gold-d:#A07E28; --gold-l:#E8D48B; --gold-soft:rgba(201,168,76,.14);
+  --gold-grad:linear-gradient(120deg,#C9A84C,#E8D48B);
+  --green:#0F9D58; --green-ink:#0A7A42; --green-soft:#E4F5EC;
+  --amber:#C98A12; --amber-ink:#8A5F0C; --amber-soft:#FAF0D8;
+  --red:#DC2626; --red-ink:#B31B1B; --red-soft:#FBE8E8;
+  --blue:#2563EB; --blue-ink:#1E50C8; --blue-soft:#E7F0FE;
+  --r-xs:6px; --r-sm:9px; --r:13px; --r-lg:18px; --r-xl:24px; --pill:999px;
+  --sh-1:0 1px 2px rgba(16,27,51,.06);
+  --sh-2:0 4px 16px rgba(16,27,51,.07),0 1px 3px rgba(16,27,51,.05);
+  --sh-3:0 24px 60px rgba(16,27,51,.18),0 4px 12px rgba(16,27,51,.06);
+  --f-display:'General Sans','Space Grotesk',system-ui,sans-serif;
+  --f-body:'DM Sans','Inter',system-ui,-apple-system,sans-serif;
+  --f-num:'Space Grotesk','DM Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{font-family:var(--f-body);margin:0;background:
+  radial-gradient(1200px 600px at 100% -10%,rgba(201,168,76,.06),transparent 60%),
+  radial-gradient(1000px 500px at -10% 0%,rgba(26,43,74,.05),transparent 55%),
+  var(--bg);
+  color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:.001em}
+::selection{background:var(--gold-soft);color:var(--ink)}
+::-webkit-scrollbar{height:11px;width:11px}
+::-webkit-scrollbar-thumb{background:rgba(22,35,63,.18);border-radius:10px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(22,35,63,.32);background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* header */
+header{padding:15px 22px 13px;background:rgba(246,248,251,.8);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(255,255,255,.6) inset;transition:transform .32s cubic-bezier(.4,0,.2,1)}
+header.hdn{transform:translateY(-106%)}
+.brand{display:flex;align-items:center;gap:13px;margin:0 0 13px}
+.brand .mark{width:38px;height:38px;border-radius:11px;background:var(--navy-grad);display:grid;place-items:center;box-shadow:var(--sh-2),0 0 0 1px rgba(201,168,76,.25) inset;flex:0 0 auto}
+.brand .mark i{width:16px;height:16px;border:2.5px solid var(--gold);border-radius:3px;transform:rotate(45deg);display:block;box-shadow:0 0 10px rgba(201,168,76,.4)}
+.brand .wm{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:-.02em;color:var(--ink);line-height:1.05}
+.brand .wm b{color:var(--gold-d);font-weight:700}
+.brand .tag{font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:.01em}
+.brand .spacer{flex:1}
+.brand .upd{font-size:11px;color:var(--muted-2);text-align:right;align-self:center;font-variant-numeric:tabular-nums}
+h1{font-size:17px;margin:0 0 8px;font-family:var(--f-display);font-weight:700;color:var(--ink)}
+.sub{color:var(--muted);font-weight:400}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,select,input{font-family:var(--f-body);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-sm);padding:7px 13px;font-size:13px;cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s,color .15s}
+button:hover{border-color:rgba(22,35,63,.28);box-shadow:var(--sh-1)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+input{width:240px;cursor:text}
+input::placeholder{color:var(--muted-2)}
+.stats{font-size:12px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+/* filter chips */
+.tf{border-radius:var(--pill);padding:7px 15px;font-weight:600;color:var(--ink-2)}
+.tf.active{background:var(--navy-grad);color:#fff;border-color:transparent;box-shadow:var(--sh-2)}
+button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+#wk.active,#hd.active,#td.active{background:var(--gold);border-color:var(--gold);color:#3a2c05}
+#advtog{border-radius:var(--pill)}
+#advtog.active{background:var(--navy);border-color:var(--navy);color:#fff}
+#exp{border-radius:var(--pill);font-weight:600}
+
+/* table */
+.tblwrap{overflow-x:auto;padding:6px 16px 48px}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
+th{position:sticky;top:0;z-index:1;background:var(--bg);padding:11px 12px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:1px solid var(--line);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+th:hover{color:var(--ink)}
+td{padding:12px;border-bottom:1px solid var(--line-2);vertical-align:top;line-height:1.45;background:var(--surface)}
+tbody tr:nth-child(even) td{background:#FBFCFE}
+tbody tr:hover td{background:#F3F8FF}
+tbody tr td:first-child{box-shadow:inset 3px 0 0 transparent}
+.A{color:var(--green-ink);font-weight:700}.B{color:var(--amber-ink);font-weight:700}.C{color:var(--muted)}
+.money,.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-family:var(--f-num)}
+.submeta{font-size:11px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.meta{color:var(--muted);font-size:11px}
+.clip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.addrline{display:flex;align-items:flex-start;gap:6px}
+.addrline .clip,.addrline .clamp2{flex:1}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hs{color:var(--green-ink);font-weight:700}
+.cpy{background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);font-size:11px;padding:2px 7px;border-radius:var(--r-xs);cursor:pointer;line-height:1.5;vertical-align:middle;transition:all .12s}
+.cpy:hover{background:var(--gold-soft);border-color:var(--gold);color:var(--gold-d)}
+.cpy.ok{background:var(--green);border-color:var(--green);color:#fff}
+.defwrap{margin-top:2px}
+.deftog{background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);font-size:10.5px;padding:2px 9px;border-radius:var(--pill);cursor:pointer;line-height:1.4}
+.deftog:hover{background:var(--gold-soft);border-color:var(--gold);color:var(--gold-d)}
+.deftog.open{background:var(--navy);border-color:var(--navy);color:#fff}
+.deflist{max-height:0;overflow:hidden;transition:max-height .28s ease;font-size:11px;color:var(--ink-2)}
+.deflist.open{max-height:340px;margin-top:4px}
+.deflist>div{padding:2px 0;border-bottom:1px solid var(--line-2)}
+a{color:var(--blue-ink);text-decoration:none;font-weight:500}
+a:hover{text-decoration:underline}
+select.status{padding:5px 6px;font-size:11.5px;width:100%;box-sizing:border-box;border-radius:var(--r-xs)}
+textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-xs);font-size:12px;padding:6px 8px;resize:vertical;font-family:var(--f-body)}
+textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+.links{line-height:2}
+.links a{margin-right:8px;white-space:nowrap}
+.urgent{color:var(--red);font-weight:700}
+.warn{color:var(--amber-ink);font-size:11px}
+.profpos{color:var(--green-ink);font-weight:800;font-size:15px;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.profneg{color:var(--red);font-weight:800;font-size:15px;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.mrwarn{color:var(--amber-ink);font-size:10px;font-weight:600}
+.tax{color:var(--red);font-size:11px;font-weight:600}
+.hoa{color:var(--amber-ink);font-size:11px;font-weight:600}
+.mtg{color:var(--muted);font-size:11px}
+.tdt{color:var(--gold-d);font-size:11px;font-weight:700}
+
+/* worth-it verdict badges — refined pills with dot */
+.vb{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-body);font-size:10px;font-weight:700;padding:3px 9px 3px 8px;border-radius:var(--pill);letter-spacing:.05em;text-transform:uppercase;line-height:1;border:1px solid transparent;vertical-align:middle}
+.vb::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
+.vb3{background:var(--green-soft);color:var(--green-ink);border-color:#c2e6cf}
+.vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
+.vb1{background:#EDF0F5;color:#647089;border-color:var(--line)}
+.vbv{background:var(--blue-soft);color:var(--blue-ink);border-color:#cadcfb}
+
+/* deal-analysis trigger */
+.dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font-family:var(--f-body);font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--pill);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .14s;box-shadow:var(--sh-1)}
+.dealtog:hover{border-color:var(--gold);color:var(--gold-d);box-shadow:var(--sh-2);transform:translateY(-1px)}
+
+/* deal-analysis modal */
+#dealmodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show{display:block}
+.dm-backdrop{position:absolute;inset:0;background:rgba(12,20,38,.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:dmFade .2s ease}
+.dm-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(580px,94vw);max-height:90vh;overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--sh-3);padding:26px 26px 24px;animation:dmPop .28s cubic-bezier(.2,.9,.3,1.15)}
+.dm-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--gold-grad);border-radius:var(--r-xl) var(--r-xl) 0 0}
+.dm-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:var(--r-xs)}
+.dm-close:hover{color:var(--ink);background:var(--surface-2)}
+.dm-head{margin:0 30px 16px 0;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.dm-title{font-family:var(--f-display);font-size:20px;font-weight:700;line-height:1.2;letter-spacing:-.01em;color:var(--ink)}
+.dm-sub{font-size:12.5px;color:var(--muted);margin-top:4px}
+.dm-verdict{margin-top:11px;display:flex;align-items:center;gap:10px;font-family:var(--f-num);font-size:22px;font-weight:800}
+.dm-why{font-size:12.5px;color:var(--ink-2);margin-top:7px;line-height:1.55}
+.dm-sec{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted-2);margin:18px 0 7px}
+.dealmath{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px;font-size:13px}
+.mathline{display:flex;justify-content:space-between;gap:12px;padding:3px 0;color:var(--ink-2);font-variant-numeric:tabular-nums;font-family:var(--f-num)}
+.mathline span:first-child{font-family:var(--f-body);color:var(--muted)}
+.mathline.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:800;font-size:15px;color:var(--ink)}
+.mathline.tot span:first-child{color:var(--ink);font-weight:700}
+.dealadj{display:flex;flex-wrap:wrap;gap:12px 15px;align-items:flex-end}
+.dealadj label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px;font-weight:500}
+.dealadj input[type=number]{width:135px;font-size:13px;padding:7px 9px;font-family:var(--f-num)}
+.dealadj .occlbl{flex-direction:row;align-items:center;gap:7px;padding-bottom:7px}
+.dealadj input[type=checkbox]{width:auto;cursor:pointer;transform:scale(1.25);accent-color:var(--gold)}
+.dealflags{font-size:12px;color:var(--amber-ink);line-height:1.6}
+.dealflags>div{padding:2px 0}
+.dealstrat{font-size:13px;color:var(--ink);line-height:1.6;background:var(--gold-soft);border-left:3px solid var(--gold);padding:11px 14px;border-radius:0 var(--r-sm) var(--r-sm) 0}
+
+/* mobile cards — tranchi deal-card language */
+#cards{display:none;padding:14px 12px 52px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 16px 15px;margin-bottom:13px;box-shadow:var(--sh-2);position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--muted-2)}
+.card.v3::before{background:var(--green)}
+.card.v2::before{background:var(--amber)}
+.card.v1::before{background:var(--muted-2)}
+.card.vv::before{background:var(--blue)}
+.chead{display:flex;align-items:center;gap:9px;margin-bottom:6px;flex-wrap:wrap}
+.cbadge{display:inline-block;min-width:22px;text-align:center;padding:2px 8px;border-radius:var(--r-xs);background:var(--surface-2);border:1px solid var(--line);font-weight:700}
+.cbadge.A{color:var(--green-ink)}.cbadge.B{color:var(--amber-ink)}.cbadge.C{color:var(--muted)}
+.cprofit{font-family:var(--f-num);font-size:22px;font-weight:800}
+.cscore{margin-left:auto;font-size:12px;color:var(--muted)}
+.cowner{font-family:var(--f-display);font-weight:600;font-size:15px;margin-top:6px;line-height:1.3;color:var(--ink)}
+.caddr{margin-top:6px;font-size:13px}
+.cstats{display:flex;gap:8px;margin-top:11px}
+.cstat{flex:1;background:var(--surface-2);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:8px 10px}
+.cstat .k{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:600}
+.cstat .v{font-family:var(--f-num);font-size:15px;font-weight:700;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums}
+.clinks{margin-top:11px;display:flex;flex-wrap:wrap;gap:5px 14px;padding-top:11px;border-top:1px solid var(--line-2)}
+.clinks a{font-size:14px;padding:3px 0}
+.cctl{display:flex;gap:8px;margin-top:10px}
+.cctl select{flex:0 0 auto;max-width:48%}
+.cctl textarea{flex:1}
+
+/* advanced panel */
+#advpanel{overflow:hidden;max-height:640px;transition:max-height .3s ease,opacity .3s ease;opacity:1}
+#advpanel.collapsed{max-height:0;opacity:0}
+.dealpanel{margin-top:8px;background:var(--surface);padding:11px 13px;border-radius:var(--r);border:1px solid var(--line);box-shadow:var(--sh-1)}
+
+/* scroll-to-top */
+#toTop{position:fixed;right:20px;bottom:20px;z-index:40;display:none;background:var(--navy);color:#fff;border:none;border-radius:var(--pill);padding:11px 17px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-3)}
+#toTop:hover{background:var(--ink)}
+
+/* private gate */
+#gate{display:none;position:fixed;inset:0;z-index:100;background:var(--navy-grad);align-items:center;justify-content:center}
+#gate .box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-xl);padding:32px 30px;max-width:360px;width:90%;text-align:center;box-shadow:var(--sh-3);position:relative;overflow:hidden}
+#gate .box::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--gold-grad)}
+#gate h2{font-family:var(--f-display);font-size:18px;margin:0 0 6px;color:var(--ink)}
+#gate p{font-size:12.5px;color:var(--muted);margin:0 0 16px}
+#gate input{width:100%;box-sizing:border-box;text-align:center;font-size:15px;padding:11px;margin-bottom:10px}
+#gate button{width:100%;background:var(--navy);border-color:var(--navy);color:#fff;font-weight:700;padding:11px;border-radius:var(--r-sm)}
+#gate button:hover{background:var(--ink)}
+#gateerr{color:var(--red);font-size:12px;min-height:16px;margin-top:8px}
+
+/* saved phones */
+a.phone{color:var(--green-ink);font-weight:700}
+a.phone.dnc{color:var(--amber-ink)}
+input.ph{width:100%;box-sizing:border-box;font-size:12px;padding:6px 8px;margin-bottom:5px;background:#F0FAF3;border:1px solid #CFE9D6;border-radius:var(--r-xs);color:#0A7A42;font-family:var(--f-num)}
+input.ph::placeholder{color:#8FBFA0}
+
+/* intro reveal */
+#intro{position:fixed;inset:0;z-index:300;background:var(--navy-grad);display:grid;place-items:center;transition:opacity .55s ease,visibility .55s}
+#intro.done{opacity:0;visibility:hidden}
+#intro .lg{display:flex;flex-direction:column;align-items:center;gap:15px}
+#intro .mk{width:66px;height:66px;border-radius:17px;background:rgba(255,255,255,.05);border:1px solid rgba(201,168,76,.45);display:grid;place-items:center;animation:introPop .75s cubic-bezier(.2,.9,.3,1.35)}
+#intro .mk i{width:26px;height:26px;border:2.5px solid var(--gold);border-radius:5px;transform:rotate(45deg);display:block;box-shadow:0 0 18px rgba(201,168,76,.5)}
+#intro .wm{font-family:var(--f-display);font-weight:700;font-size:27px;letter-spacing:.01em;color:#fff;opacity:0;transform:translateY(9px);animation:introUp .6s .22s forwards}
+#intro .wm b{color:var(--gold-l)}
+#intro .tg{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);opacity:0;transform:translateY(9px);animation:introUp .6s .36s forwards}
+#intro .bar{width:130px;height:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:6px}
+#intro .bar i{display:block;height:100%;width:45%;border-radius:3px;background:var(--gold-grad);animation:introBar 1.1s ease-in-out infinite}
+@keyframes introPop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+@keyframes introUp{to{opacity:1;transform:translateY(0)}}
+@keyframes introBar{0%{transform:translateX(-130%)}100%{transform:translateX(330%)}}
+@keyframes dmFade{from{opacity:0}to{opacity:1}}
+@keyframes dmPop{from{opacity:0;transform:translate(-50%,-46%) scale(.97)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes appIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+header{animation:appIn .5s .05s both}
+.tblwrap,#cards{animation:appIn .55s .12s both}
+
+@media(max-width:860px){
+  header{padding:12px 13px 10px}
+  .brand .wm{font-size:18px}
+  .brand .upd{display:none}
+  .controls{gap:6px}
+  input#q{width:100%}
+  .tblwrap{display:none}
+  #cards{display:block}
+}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
+}
+/* Orbitron tech-label layer + gold accents (tranchi signature) */
+:root{--f-label:'Orbitron','Space Grotesk',sans-serif}
+.brand .tag,.dm-sec,.cstat .k,#intro .tg,th{font-family:var(--f-label);font-weight:600}
+th{letter-spacing:.09em;font-size:9.5px}
+.dm-sec{letter-spacing:.13em}
+.cstat .k{letter-spacing:.1em}
+.brand .tag{letter-spacing:.13em;text-transform:uppercase;font-size:9px;color:var(--muted-2)}
+#intro .tg{font-family:var(--f-label)}
+.brand .wm b{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+#intro .wm b{background:linear-gradient(120deg,#E8D48B,#C9A84C);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+/* primary CTA = gold-gradient pill, white ink, soft gold glow */
+#gate button{background:var(--gold-grad);border:none;color:#2a2205;font-weight:700;box-shadow:0 6px 20px rgba(201,168,76,.35)}
+#gate button:hover{background:linear-gradient(120deg,#D4B658,#F0DC94);box-shadow:0 8px 26px rgba(201,168,76,.45)}
+.dealtog::before{content:'\25B8';color:var(--gold-d);font-size:9px}
+/* KPI stat band */
+.kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
+.kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
+.kpi.gold::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold-grad)}
+.kpi .kl{font-family:var(--f-label);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);font-weight:600}
+.kpi .kv{font-family:var(--f-num);font-size:27px;font-weight:800;color:var(--ink);margin-top:6px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .kv.g{color:var(--green-ink)}
+.kpi .ks{font-size:11px;color:var(--muted);margin-top:5px}
+@media(max-width:860px){ .kpis{padding:12px 12px 2px;gap:9px} .kpi{min-width:calc(50% - 5px);padding:12px 13px} .kpi .kv{font-size:22px} }
 </style></head><body>
+<div id="intro"><div class="lg"><div class="mk"><i></i></div><div class="wm">DEAL<b>FLOW</b></div><div class="tg">Miami-Dade Deal Engine</div><div class="bar"><i></i></div></div></div>
 <div id="gate"><div class="box">
 <h2>&#128274; Private lead tracker</h2>
 <p>Enter the password to view leads.</p>
@@ -141,7 +404,15 @@ input.ph::placeholder{color:#5a7d66}
 </div></div>
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <header>
-<h1>Miami-Dade Foreclosure Lead Tracker <span class="sub">— updated 2026-07-12 · notes save in your own browser</span></h1>
+<div class="brand">
+<div class="mark"><i></i></div>
+<div>
+<div class="wm">DEAL<b>FLOW</b></div>
+<div class="tag">Miami-Dade · Foreclosure &amp; Tax-Deed Intelligence</div>
+</div>
+<span class="spacer"></span>
+<span class="upd">Updated 2026-07-12 · notes saved on this device</span>
+</div>
 <div class="controls">
 <button class="tf active" data-t="A">Tier A</button>
 <button class="tf" data-t="B">Tier B</button>
@@ -165,11 +436,11 @@ input.ph::placeholder{color:#5a7d66}
 <label>Auction <input id="ad1" type="date" style="width:140px"> &ndash; <input id="ad2" type="date" style="width:140px"></label>
 <button id="clr">Clear dates</button>
 </div>
-<div class="controls" style="margin-top:8px;background:#12192a;padding:8px 10px;border-radius:8px;border:1px solid #26314c">
-<span style="color:#4ade80;font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
+<div class="controls dealpanel">
+<span style="color:var(--gold-d);font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
 <label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="75" min="40" max="100" style="width:52px">% of market value</label>
 <label style="font-size:12px" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:48px">%</label>
-<span style="color:#c084fc;font-size:11px" title="These two apply to Tax Deed leads only">| Tax deed:</span>
+<span style="color:var(--gold-d);font-size:11px;font-weight:600" title="These two apply to Tax Deed leads only">| Tax deed:</span>
 <label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:44px">%</label>
 <label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:64px"></label>
 <label style="font-size:12px" title="Tax deed only: the MOST you'd pay at auction, as % of market value (your disciplined ceiling that still leaves room for quiet title + costs + profit). Equity parcels bid up — if live bidding passes this, walk. Raise it if you're willing to pay closer to market.">win bid <input id="tdclear" type="number" value="70" min="0" max="100" style="width:48px">% of market</label>
@@ -177,14 +448,14 @@ input.ph::placeholder{color:#5a7d66}
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
-<span style="color:#9fb0cc;font-size:12px">Letter sender (goes on every letter):</span>
+<span style="color:var(--muted);font-size:12px">Letter sender (goes on every letter):</span>
 <input id="sName" placeholder="Sender name" style="width:150px">
 <input id="sLLC" placeholder="LLC / company" style="width:160px">
 <input id="sPhone" placeholder="Phone" style="width:130px">
 <span class="stats" id="sendersaved" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
-<span style="color:#9fb0cc;font-size:12px">Lookup any county property:</span>
+<span style="color:var(--muted);font-size:12px">Lookup any county property:</span>
 <input id="lk" placeholder="address, owner, folio or LLC" style="width:280px">
 <button class="lkb" data-s="zillow">Zillow</button>
 <button class="lkb" data-s="appr">Appraiser</button>
@@ -193,6 +464,7 @@ input.ph::placeholder{color:#5a7d66}
 </div>
 </div>
 </header>
+<div id="kpis" class="kpis"></div>
 <button id="toTop" title="Scroll back to top">&#8593; Top</button>
 <div class="tblwrap">
 <table id="tbl">
@@ -201,7 +473,7 @@ input.ph::placeholder{color:#5a7d66}
 </colgroup>
 <thead><tr>
 <th data-k="tier">Tier</th>
-<th data-k="_profit" style="color:#4ade80">Est. Profit &#9660;</th>
+<th data-k="_profit" style="color:var(--green-ink)">Est. Profit &#9660;</th>
 <th data-k="score">Score</th>
 <th data-k="auction">Auction</th>
 <th data-k="ctype">Type</th>
@@ -493,6 +765,16 @@ function render(){
   const rows = view();
   const _sc = rows.filter(r=>r._verdict==='STRONG').length, _mc = rows.filter(r=>r._verdict==='MARGINAL').length;
   document.getElementById('stats').textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
+  // KPI band — live portfolio metrics for the current view
+  const _kp = rows.filter(r=>r._profit>0), _tot = _kp.reduce((s,r)=>s+r._profit,0);
+  const _avg = _kp.length ? Math.round(_kp.reduce((s,r)=>s+(r._roi||0),0)/_kp.length) : 0;
+  const _td = rows.filter(r=>r.st==='TD'&&!r._nodata).length;
+  const _kpi = (l,v,s,cls)=>'<div class="kpi'+(cls?' '+cls:'')+'"><div class="kl">'+l+'</div><div class="kv'+(cls==='gold'?' g':'')+'">'+v+'</div><div class="ks">'+s+'</div></div>';
+  const _kb = document.getElementById('kpis');
+  if(_kb) _kb.innerHTML = _kpi('Strong deals', _sc, rows.length+' in view')
+    + _kpi('Est. profit · view', fmtK(_tot), _kp.length+' profitable', 'gold')
+    + _kpi('Avg ROI', _avg+'%', 'on profitable deals')
+    + _kpi('Tax-deed plays', _td, 'Jose&rsquo;s lane');
   // live count on the Hide-dead button so it's obvious what it tracks
   const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
   const hd = document.getElementById('hd');
@@ -576,14 +858,18 @@ function render(){
       '<td>'+statusSel+'</td>'+
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
-    cards.push('<div class="card">'+
+    cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)
                   : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._why)+'</div>':'')+
-      (!r._nodata&&r._verdict!=='VERIFY'&&r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' cash to acquire</div>':'')+
+      (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
+        '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
+        '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+
+        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v">'+(r.eq?r.eq+'%':'—')+'</div></div>'+
+      '</div>':'')+
       (r.mr&&r._verdict!=='VERIFY'?'<div class="mrwarn">&#9888; mortgage risk - verify payoff</div>':'')+
       '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
       (r.st==='TD'
@@ -801,4 +1087,10 @@ async function boot(){
   render();
 }
 boot();
+// intro reveal: hold briefly, fade out, remove (respects reduced-motion)
+(function(){
+  var i = document.getElementById('intro'); if(!i) return;
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches){ i.parentNode && i.parentNode.removeChild(i); return; }
+  setTimeout(function(){ i.classList.add('done'); setTimeout(function(){ i.parentNode && i.parentNode.removeChild(i); }, 650); }, 1300);
+})();
 </script></body></html>
