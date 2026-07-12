@@ -401,6 +401,13 @@ tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 .dealflags .flag::before{content:'';position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:50%;background:var(--amber)}
 .cpy svg{display:block}
 #intro .wm{font-size:34px}
+/* number/date fields: hide spinner arrows + tighter centered padding so values aren't clipped */
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+#advpanel input[type=number],.dealpanel input[type=number]{padding:7px 8px;text-align:center}
+#advpanel input[type=date]{padding:6px 9px;width:150px}
+/* advanced panel now sits below the compact sticky header, so it scrolls away instead of pinning */
+#advpanel{padding:2px 16px 14px}
 /* KPI stat band */
 .kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
 .kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
@@ -446,20 +453,21 @@ tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 <button id="exp">Export CSV (with my notes)</button>
 <span class="stats" id="stats"></span>
 </div>
+</header>
 <div id="advpanel" class="collapsed">
 <div class="controls" style="margin-top:8px">
-<label>Filed <input id="fy1" type="number" placeholder="from yr" style="width:76px"> &ndash; <input id="fy2" type="number" placeholder="to yr" style="width:76px"></label>
+<label>Filed <input id="fy1" type="number" placeholder="from" style="width:74px"> &ndash; <input id="fy2" type="number" placeholder="to" style="width:74px"></label>
 <label>Auction <input id="ad1" type="date" style="width:140px"> &ndash; <input id="ad2" type="date" style="width:140px"></label>
 <button id="clr">Clear dates</button>
 </div>
 <div class="controls dealpanel">
 <span style="color:var(--gold-d);font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
-<label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="75" min="40" max="100" style="width:52px">% of market value</label>
-<label style="font-size:12px" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:48px">%</label>
+<label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="75" min="40" max="100" style="width:60px">% of market value</label>
+<label style="font-size:12px" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:56px">%</label>
 <span style="color:var(--gold-d);font-size:11px;font-weight:600" title="These two apply to Tax Deed leads only">| Tax deed:</span>
-<label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:44px">%</label>
-<label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:64px"></label>
-<label style="font-size:12px" title="Tax deed only: the MOST you'd pay at auction, as % of market value (your disciplined ceiling that still leaves room for quiet title + costs + profit). Equity parcels bid up — if live bidding passes this, walk. Raise it if you're willing to pay closer to market.">win bid <input id="tdclear" type="number" value="70" min="0" max="100" style="width:48px">% of market</label>
+<label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:56px">%</label>
+<label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:82px"></label>
+<label style="font-size:12px" title="Tax deed only: the MOST you'd pay at auction, as % of market value (your disciplined ceiling that still leaves room for quiet title + costs + profit). Equity parcels bid up — if live bidding passes this, walk. Raise it if you're willing to pay closer to market.">win bid <input id="tdclear" type="number" value="70" min="0" max="100" style="width:60px">% of market</label>
 <button id="dealreset" style="font-size:11px;padding:3px 9px" title="Reset the deal model (buy %, costs, tax-deed win-bid) back to the recommended defaults. Use this if every lead is showing PASS.">&#8635; Reset defaults</button>
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
@@ -479,7 +487,6 @@ tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
 <button class="lkb" data-s="sunbiz">Owner / LLC</button>
 </div>
 </div>
-</header>
 <div id="kpis" class="kpis"></div>
 <button id="toTop" title="Scroll back to top">&#8593; Top</button>
 <div class="tblwrap">
