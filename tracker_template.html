@@ -496,6 +496,7 @@ body.modal-open{overflow:hidden}
 <h2>Enter your access code</h2>
 <p>This deal intelligence is private. Enter the code you were given &mdash; this device stays unlocked afterward.</p>
 <input id="gatepw" type="password" placeholder="Access code" autocomplete="off" autocapitalize="off" spellcheck="false">
+<input id="gatephrase" type="password" placeholder="Secret phrase — leave blank if none" autocomplete="off" autocapitalize="off" spellcheck="false">
 <button id="gatego">Unlock</button>
 <div id="gateerr"></div>
 <div class="gate-foot">End-to-end encrypted &middot; Miami-Dade Deal Engine</div>
@@ -1235,8 +1236,15 @@ async function boot(){
     const gate = document.getElementById('gate'), inp = document.getElementById('gatepw'),
           btn = document.getElementById('gatego'), err = document.getElementById('gateerr');
     gate.style.display = 'flex';
+    const SEP = '\x1f', phraseEl = document.getElementById('gatephrase');
     const tryPw = async (pw) => {
       try { DATA = await decryptPayload(RAW, pw); return true; } catch(e){ return false; }
+    };
+    // try the code alone, then code+phrase (for shared/team codes). Return the secret that worked.
+    const tryUnlock = async (code, phrase) => {
+      const cands = phrase ? [code, code + SEP + phrase] : [code];
+      for(const s of cands){ if(await tryPw(s)) return s; }
+      return null;
     };
     // device-remember: once unlocked on this device it stays unlocked (localStorage, not per-tab)
     const saved = (()=>{ try { return localStorage.getItem('fcPw'); } catch(e){ return null; } })();
@@ -1245,13 +1253,15 @@ async function boot(){
       await new Promise(resolve => {
         const attempt = async () => {
           err.textContent = '';
-          if(await tryPw(inp.value)){
-            try { localStorage.setItem('fcPw', inp.value); } catch(e){}
+          const s = await tryUnlock(inp.value.trim(), phraseEl ? phraseEl.value.trim() : '');
+          if(s){
+            try { localStorage.setItem('fcPw', s); } catch(e){}
             manual = true; gate.style.display='none'; resolve();
-          } else { err.textContent = 'Wrong code — check with the person who shared this'; inp.select(); }
+          } else { err.textContent = 'Wrong code or phrase — check with the person who shared this'; inp.select(); }
         };
         btn.onclick = attempt;
         inp.onkeydown = e => { if(e.key==='Enter') attempt(); };
+        if(phraseEl) phraseEl.onkeydown = e => { if(e.key==='Enter') attempt(); };
         inp.focus();
       });
     }

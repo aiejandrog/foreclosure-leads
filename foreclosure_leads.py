@@ -398,9 +398,12 @@ def _encrypt_multi(plaintext, codes):
     return {'enc': 2, 'it': iters, 'iv': b64(iv), 'ct': b64(ct), 'keys': keys}
 
 def _load_codes():
-    """Access codes for the shared site. Prefer site.codes (one 'Label = CODE' per person, so each
-    person has their own); fall back to a single shared site.pass. Both are gitignored. Returns
-    a list of (label, code)."""
+    """Access entries for the shared site (site.codes, gitignored). Each line is either
+        Label = CODE                 -> an individual code
+        Label = CODE | PHRASE        -> a shared/team code that ALSO requires a secret phrase
+    The wrap secret is CODE, or CODE + <unit-sep> + PHRASE when a phrase is set (both halves
+    needed to unlock). Falls back to a single shared site.pass. Returns a list of (label, secret)."""
+    SEP = '\x1f'
     codes_file = os.path.join(HERE, 'site.codes')
     if os.path.exists(codes_file):
         out = []
@@ -408,10 +411,15 @@ def _load_codes():
             line = line.strip()
             if not line or line.startswith('#') or '=' not in line:
                 continue
-            label, code = line.split('=', 1)
-            label, code = label.strip(), code.strip()
-            if code:
-                out.append((label or 'user', code))
+            label, rest = line.split('=', 1)
+            label = label.strip()
+            if '|' in rest:
+                code, phrase = (x.strip() for x in rest.split('|', 1))
+                secret = (code + SEP + phrase) if phrase else code
+            else:
+                secret = rest.strip()
+            if secret:
+                out.append((label or 'user', secret))
         if out:
             return out
     if os.path.exists(PASS_FILE):
