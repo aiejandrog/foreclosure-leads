@@ -1125,9 +1125,25 @@ document.getElementById('exp').onclick = () => {
 async function decryptPayload(enc, password){
   const dec = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
   const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
-  const key = await crypto.subtle.deriveKey(
-    {name:'PBKDF2', salt: dec(enc.salt), iterations: enc.it||200000, hash:'SHA-256'},
+  const derive = salt => crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt: dec(salt), iterations: enc.it||200000, hash:'SHA-256'},
     baseKey, {name:'AES-GCM', length:256}, false, ['decrypt']);
+  if(enc.enc === 2){
+    // ENVELOPE (per-person codes): try to unwrap the random master key with this code against each
+    // wrapped-key blob; the one that matches this person's code decrypts the shared payload.
+    for(const k of enc.keys){
+      try{
+        const wk = await derive(k.salt);
+        const mkRaw = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(k.iv)}, wk, dec(k.ct));
+        const mk = await crypto.subtle.importKey('raw', mkRaw, {name:'AES-GCM'}, false, ['decrypt']);
+        const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, mk, dec(enc.ct));
+        return JSON.parse(new TextDecoder().decode(pt));
+      }catch(e){ /* this code doesn't open this wrapped key — try the next */ }
+    }
+    throw new Error('no matching code');
+  }
+  // legacy single shared key (enc:1)
+  const key = await derive(enc.salt);
   const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, key, dec(enc.ct));
   return JSON.parse(new TextDecoder().decode(pt));
 }

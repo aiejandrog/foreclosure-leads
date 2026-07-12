@@ -365,6 +365,52 @@ def _encrypt_payload(plaintext, password):
     b64 = lambda x: base64.b64encode(x).decode()
     return {'enc': 1, 'it': iters, 'salt': b64(salt), 'iv': b64(iv), 'ct': b64(ct)}
 
+def _encrypt_multi(plaintext, codes):
+    """Envelope encryption for PER-PERSON access codes, no backend needed. One random master key
+    encrypts the payload once; that master key is then wrapped separately under EACH person's code
+    (PBKDF2-SHA256 -> AES-GCM). Any valid code unwraps the master key and decrypts the same data.
+    Revoke one person by dropping their line from site.codes + rebuilding. Labels are NOT emitted
+    (the public file never reveals who has access). codes: list of (label, code)."""
+    import base64
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    b64 = lambda x: base64.b64encode(x).decode()
+    iters = 200000
+    mk = os.urandom(32)                                   # random 256-bit master data key
+    iv = os.urandom(12)
+    ct = AESGCM(mk).encrypt(iv, plaintext.encode('utf-8'), None)
+    keys = []
+    for _label, code in codes:
+        salt, kiv = os.urandom(16), os.urandom(12)
+        wk = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=iters).derive(code.encode('utf-8'))
+        wct = AESGCM(wk).encrypt(kiv, mk, None)           # wrap the master key with this person's code
+        keys.append({'salt': b64(salt), 'iv': b64(kiv), 'ct': b64(wct)})
+    return {'enc': 2, 'it': iters, 'iv': b64(iv), 'ct': b64(ct), 'keys': keys}
+
+def _load_codes():
+    """Access codes for the shared site. Prefer site.codes (one 'Label = CODE' per person, so each
+    person has their own); fall back to a single shared site.pass. Both are gitignored. Returns
+    a list of (label, code)."""
+    codes_file = os.path.join(HERE, 'site.codes')
+    if os.path.exists(codes_file):
+        out = []
+        for line in open(codes_file, encoding='utf-8'):
+            line = line.strip()
+            if not line or line.startswith('#') or '=' not in line:
+                continue
+            label, code = line.split('=', 1)
+            label, code = label.strip(), code.strip()
+            if code:
+                out.append((label or 'user', code))
+        if out:
+            return out
+    if os.path.exists(PASS_FILE):
+        pw = open(PASS_FILE, encoding='utf-8').read().strip()
+        if pw:
+            return [('shared', pw)]
+    return []
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -409,13 +455,11 @@ def make_tracker(leads):
 
     # Shared docs/index.html: ENCRYPTED (with phones) when a site.pass exists, else PLAINTEXT with
     # phones STRIPPED. This guarantees personal phone numbers never hit the public web unencrypted.
-    pw = ''
-    if os.path.exists(PASS_FILE):
-        pw = open(PASS_FILE, encoding='utf-8').read().strip()
-    if pw:
-        enc = _encrypt_payload(json.dumps(slim), pw)
+    codes = _load_codes()
+    if codes:
+        enc = _encrypt_multi(json.dumps(slim), codes)
         open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', json.dumps(enc)))
-        print('tracker written: docs/index.html (ENCRYPTED gate) + Desktop (plaintext)')
+        print(f'tracker written: docs/index.html (ENCRYPTED · {len(codes)} access code(s)) + Desktop (plaintext)')
     else:
         nophone = [{k: v for k, v in d.items() if k not in ('phones','phdnc','emails')} for d in slim]
         open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(nophone)))
