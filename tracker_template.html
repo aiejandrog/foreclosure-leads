@@ -373,6 +373,13 @@ header{animation:appIn .5s .05s both}
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
 }
+/* empty state (no leads match the current filters) */
+.empty{text-align:center;padding:56px 24px}
+.emptycell{border:none!important;background:transparent!important}
+.empty-t{font-family:var(--f-display);font-size:18px;font-weight:600;color:var(--ink)}
+.empty-s{font-size:13px;margin-top:6px;color:var(--muted)}
+.empty-reset{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:9px 18px;color:var(--ink);cursor:pointer;font-weight:600;box-shadow:var(--sh-1)}
+.empty-reset:hover{border-color:var(--gold);color:var(--gold-d)}
 /* Orbitron tech-label layer + gold accents (tranchi signature) */
 :root{--f-label:'Orbitron','Space Grotesk',sans-serif}
 .brand .tag,.dm-sec,.cstat .k,#intro .tg,th{font-family:var(--f-label);font-weight:600}
@@ -913,10 +920,28 @@ function render(){
       '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
       '</div>');
   });
-  document.getElementById('tb').innerHTML = trs.join('');
   const cc = document.getElementById('cards');
+  if(!rows.length){
+    const msg = '<div class="empty"><div class="empty-t">No leads match these filters</div>'+
+      '<div class="empty-s">Try a wider tier, date range, or a different search.</div>'+
+      '<button class="empty-reset" type="button">Clear all filters</button></div>';
+    document.getElementById('tb').innerHTML = '<tr><td colspan="11" class="emptycell">'+msg+'</td></tr>';
+    if(cc) cc.innerHTML = msg;
+    return;
+  }
+  document.getElementById('tb').innerHTML = trs.join('');
   if(cc) cc.innerHTML = cards.join('');
 }
+function resetFilters(){
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=tdOnly=false;
+  const g=id=>document.getElementById(id);
+  if(g('q')) g('q').value='';
+  ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
+  ['wk','hd','td'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
+  document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
+  render();
+}
+document.addEventListener('click', e => { if(e.target.closest && e.target.closest('.empty-reset')) resetFilters(); });
 document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tf').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); tier = b.dataset.t; render();
