@@ -417,6 +417,14 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 #advpanel input[type=date]{padding:6px 9px;width:150px}
 /* advanced panel now sits below the compact sticky header, so it scrolls away instead of pinning */
 #advpanel{padding:2px 16px 14px}
+/* premium access gate */
+.gate-brand{font-family:var(--f-display);font-weight:700;font-size:27px;letter-spacing:-.02em;color:var(--ink);margin-bottom:12px}
+.gate-brand b{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.gate-eyebrow{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-d);margin-bottom:16px}
+#gate input{letter-spacing:.06em}
+.gate-foot{font-family:var(--f-label);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);margin-top:18px}
+.lockbtn{display:none;align-self:center;margin-left:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:5px 13px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .14s}
+.lockbtn:hover{border-color:var(--gold);color:var(--gold-d)}
 /* KPI stat band */
 .kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
 .kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
@@ -429,11 +437,14 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 </style></head><body>
 <div id="intro"><div class="lg"><div class="wm">DEAL<b>FLOW</b></div><div class="tg">Miami-Dade Deal Engine</div><div class="bar"><i></i></div></div></div>
 <div id="gate"><div class="box">
-<h2>Private access</h2>
-<p>Enter the password to view leads.</p>
-<input id="gatepw" type="password" placeholder="Password" autocomplete="off">
+<div class="gate-brand">DEAL<b>FLOW</b></div>
+<div class="gate-eyebrow">Private &middot; Invite only</div>
+<h2>Enter your access code</h2>
+<p>This deal intelligence is private. Enter the code you were given &mdash; this device stays unlocked afterward.</p>
+<input id="gatepw" type="password" placeholder="Access code" autocomplete="off" autocapitalize="off" spellcheck="false">
 <button id="gatego">Unlock</button>
 <div id="gateerr"></div>
+<div class="gate-foot">End-to-end encrypted &middot; Miami-Dade Deal Engine</div>
 </div></div>
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <header>
@@ -444,6 +455,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 </div>
 <span class="spacer"></span>
 <span class="upd">Updated __UPDATED__ · notes saved on this device</span>
+<button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
 <div class="controls">
 <button class="tf active" data-t="A">Tier A</button>
@@ -1116,6 +1128,7 @@ async function decryptPayload(enc, password){
   return JSON.parse(new TextDecoder().decode(pt));
 }
 async function boot(){
+  const lb = document.getElementById('lockbtn');
   if(!Array.isArray(RAW) && RAW && RAW.enc){
     const gate = document.getElementById('gate'), inp = document.getElementById('gatepw'),
           btn = document.getElementById('gatego'), err = document.getElementById('gateerr');
@@ -1123,23 +1136,25 @@ async function boot(){
     const tryPw = async (pw) => {
       try { DATA = await decryptPayload(RAW, pw); return true; } catch(e){ return false; }
     };
-    // auto-unlock if we already have the password this browser session
-    const saved = (()=>{ try { return sessionStorage.getItem('fcPw'); } catch(e){ return null; } })();
+    // device-remember: once unlocked on this device it stays unlocked (localStorage, not per-tab)
+    const saved = (()=>{ try { return localStorage.getItem('fcPw'); } catch(e){ return null; } })();
     if(saved && await tryPw(saved)){ gate.style.display='none'; }
     else {
       await new Promise(resolve => {
         const attempt = async () => {
           err.textContent = '';
           if(await tryPw(inp.value)){
-            try { sessionStorage.setItem('fcPw', inp.value); } catch(e){}
+            try { localStorage.setItem('fcPw', inp.value); } catch(e){}
             gate.style.display='none'; resolve();
-          } else { err.textContent = 'Wrong password'; inp.select(); }
+          } else { err.textContent = 'Wrong code — check with the person who shared this'; inp.select(); }
         };
         btn.onclick = attempt;
         inp.onkeydown = e => { if(e.key==='Enter') attempt(); };
         inp.focus();
       });
     }
+    // show a Lock control so a shared device can be re-locked (clears the remembered code)
+    if(lb){ lb.style.display='inline-block'; lb.onclick = () => { try { localStorage.removeItem('fcPw'); } catch(e){} location.reload(); }; }
   }
   syncDealUI();
   recompute();
