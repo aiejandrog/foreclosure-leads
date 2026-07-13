@@ -342,6 +342,11 @@ def qualify(leads):
         first_owner = (r.get('owners','') or '').split(';')[0].strip()
         first_owner = re.sub(r'\b(LE|REM|TRS|JR|SR|II|III|IV|&|ETAL|ET AL)\b', '', first_owner, flags=re.I).strip()
         r['owner_clean'] = re.sub(r'\s{2,}', ' ', first_owner).strip()   # for the Official Records name search
+        # Estimated ANNUAL property tax (the delinquent balance is Cloudflare-walled, not scrapable).
+        # Miami-Dade aggregate millage ~2% of taxable value; homestead runs lower (exemptions + SOH cap).
+        # Rough, clearly labeled in the UI as an estimate to verify via the Taxes link.
+        _mv = r.get('market_value', 0) or 0
+        r['est_annual_tax'] = round(_mv * (0.013 if r.get('homestead') else 0.021)) if _mv else 0
         is_company = bool(re.search(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD)\b', first_owner, re.I))
         toks = [t for t in re.split(r'[\s,]+', first_owner) if len(t) > 1]
         zm = re.search(r'(\d{5})\s*$', r.get('Address','') or '')
@@ -485,6 +490,7 @@ def make_tracker(leads):
             'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
             'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
             'ip': bool(r.get('indiv_plaintiff')), 'oname': r.get('owner_clean',''),
+            'etax': r.get('est_annual_tax',0),
             'ju': bool(r.get('judgment_unknown')),
             'st': r.get('sale_type','FC'), 'obid': r.get('opening_bid',0) or 0,
             'cert': r.get('Certificate #',''),

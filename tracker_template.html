@@ -290,6 +290,7 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 .dealadj input[type=number]{width:135px;font-size:13px;padding:7px 9px;font-family:var(--f-num)}
 .dealadj .occlbl{flex-direction:row;align-items:center;gap:7px;padding-bottom:7px}
 .dealadj input[type=checkbox]{width:auto;cursor:pointer;transform:scale(1.25);accent-color:var(--gold)}
+.dealadj .esthint{font-size:10px;color:var(--muted-2);font-weight:400;margin-top:2px;font-style:italic}
 .dealflags{font-size:12px;color:var(--amber-ink);line-height:1.6}
 .dealflags>div{padding:2px 0}
 .dealstrat{font-size:13px;color:var(--ink);line-height:1.6;background:var(--gold-soft);border-left:3px solid var(--gold);padding:11px 14px;border-radius:0 var(--r-sm) var(--r-sm) 0}
@@ -631,9 +632,10 @@ function recompute(){
     const nn = notes[r.case] || {};
     const slien = Math.max(0, +nn.slien || 0);   // surviving senior / 1st mortgage (HOA/junior cases)
     const mlien = Math.max(0, +nn.mlien || 0);   // surviving municipal / code / IRS liens
+    const btax = Math.max(0, +nn.btax || 0);     // delinquent property taxes — first-priority lien, survives FC (FS 197.122)
     const occ = !!nn.occ;                         // occupied -> eviction cost + no interior look
     const evict = occ ? Math.max(4000, val*0.02) : 0;
-    r._slien=slien; r._mlien=mlien; r._occ=occ; r._evict=evict;
+    r._slien=slien; r._mlien=mlien; r._btax=btax; r._occ=occ; r._evict=evict;
     // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
     if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; return; }
     r._nodata = false;
@@ -648,7 +650,7 @@ function recompute(){
       const winbid = Math.max(obid * (1 + bidOver), Math.min(val * clearPct, val));
       r._equity = val - obid;
       r._purchase = winbid;
-      r._cash = winbid + quietTitle + costs + mlien + evict;
+      r._cash = winbid + quietTitle + costs + mlien + btax + evict;
       r._profit = val - r._cash;
       r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
       r._tight = (winbid + quietTitle >= val);
@@ -658,7 +660,7 @@ function recompute(){
       const bid = judg;
       r._equity = val - judg - slien;
       r._purchase = bid + slien;
-      r._cash = bid + slien + costs + mlien + evict;
+      r._cash = bid + slien + costs + mlien + btax + evict;
       r._profit = val - r._cash;
       r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
       r._tight = (r._cash >= val);
@@ -668,7 +670,7 @@ function recompute(){
       const purchase = Math.max(offer, judg);
       r._equity = val - judg;
       r._purchase = purchase;
-      r._cash = purchase + costs + mlien + evict;
+      r._cash = purchase + costs + mlien + btax + evict;
       r._profit = val - r._cash;
       r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
       r._tight = (judg > offer);
@@ -749,6 +751,7 @@ function dealAnalysisHTML(r){
     else if(r.mr){ rows.push(mathLine('Auction bid (est.)', -r.judg)); if(r._slien) rows.push(mathLine('Surviving 1st mortgage', -r._slien)); }
     else { rows.push(mathLine('Your purchase', -r._purchase)); }
     rows.push(mathLine('Costs ('+(+deal.costpct||0)+'%)', -costs));
+    if(r._btax) rows.push(mathLine('Back property taxes', -r._btax));
     if(r._mlien) rows.push(mathLine('Other surviving liens', -r._mlien));
     if(r._evict) rows.push(mathLine('Eviction / carry', -r._evict));
     rows.push(mathLine('Est. profit', r._profit, true));
@@ -757,6 +760,7 @@ function dealAnalysisHTML(r){
   }
   const adj = '<div class="dealadj">'+
     (r.mr ? '<label>Surviving 1st mortgage $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||'')+'" placeholder="0"></label>' : '')+
+    '<label>Back property taxes $<input class="btax" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.btax||'')+'" placeholder="0">'+(r.etax?'<span class="esthint">~'+fmt0(r.etax)+'/yr est · verify on Taxes</span>':'')+'</label>'+
     '<label>Surviving liens (code/muni/IRS) $<input class="mlien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.mlien||'')+'" placeholder="0"></label>'+
     '<label class="occlbl"><input class="occ" data-c="'+esc(r.case)+'" type="checkbox"'+(nn.occ?' checked':'')+'> occupied</label>'+
   '</div>';
@@ -1195,6 +1199,7 @@ document.addEventListener('change', e => {
   else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
   else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
   else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
   else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; save(); recompute(); render(); refreshDealModal(); return; }
   else return;
   save();
