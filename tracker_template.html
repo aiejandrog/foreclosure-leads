@@ -964,7 +964,8 @@ function render(){
     if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="Miami-Dade Property Appraiser record">Appraiser</a>');
     if(r.zillow) gProp.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
     if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
-    if(r.auc) gProp.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="RealForeclose auction page — requires a free RealForeclose login to view">Auction</a>');
+    // Auction button removed: RealForeclose login-walls + bot-blocks direct links (always 403s cold);
+    // the auction data (case, judgment, sale date) is already on the lead. Restore = re-add this line.
     // DO — actions.
     gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
