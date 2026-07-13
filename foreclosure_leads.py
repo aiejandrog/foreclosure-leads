@@ -385,8 +385,18 @@ def qualify(leads):
                          r'SERIES|PARTNERS|GROUP|INVESTMENT|ENTERPRISE)\b', pl, re.I) \
                or re.search(r'BANK|\bSB\b|\bFSB\b|\bBK\b|\bN\.?A\.?\b', pl, re.I)   # compound bank names (Servbank, USBank)
         indiv_plaintiff = bool(pl) and not _ent and bool(re.search(r'[A-Za-z]{2},\s*[A-Za-z]{2}', pl))
+        # "bank-like" plaintiff = an institutional lender whose judgment IS the senior debt (no hidden 1st).
+        bank_like = bool(re.search(
+            r'BANK|MORTGAGE|LENDING|SERVICING|FINANCIAL|SAVINGS|FEDERAL|FANNIE|FREDDIE|HUD|SECRETARY|'
+            r'\bN\.?A\.?\b|\bFSB\b|\bSB\b|BANC|CREDIT UNION|NATIONSTAR|PENNYMAC|NEWREZ|CARRINGTON|LAKEVIEW|'
+            r'WELLS FARGO|CHASE|CITI|ROCKET|FREEDOM|SELENE|SHELLPOINT|RUSHMORE|SPECIALIZED|MR COOPER|'
+            r'CROSSCOUNTRY|LOANDEPOT|FLAGSTAR|\bLOAN\b', pl, re.I))
+        # (c) any NON-bank plaintiff (individual OR private LLC/fund/trust) on an FC with real apparent
+        #     equity -> the shown judgment is likely a private/junior note and a senior 1st mortgage
+        #     probably survives unshown. Bias toward "verify via Official Records" (now one click).
+        suspect_equity = (not td) and bool(pl) and (not bank_like) and (r.get('equity_pct', 0) or 0) >= 40
         r['indiv_plaintiff'] = indiv_plaintiff
-        r['mortgage_risk'] = bool(hoa_hidden_mtg or (not td and indiv_plaintiff))
+        r['mortgage_risk'] = bool(hoa_hidden_mtg or (not td and (indiv_plaintiff or suspect_equity)))
     return leads
 
 def _clean_addr(s):
