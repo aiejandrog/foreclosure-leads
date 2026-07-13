@@ -408,15 +408,16 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 /* copy micro-lift */
 .cpy{transition:transform .16s var(--e-lux),background .16s ease,border-color .16s ease,color .16s ease}
 .cpy:hover{transform:translateY(-1px)}
-/* lead links: a gold underline draws in on hover */
-.links a,.clinks a{position:relative;text-decoration:none;transition:color .2s var(--e-lux)}
+/* lead links, ONE coherent system grouped by purpose (gold underline draws in on hover):
+   base = slate (info/nav) · .dig = gold (investigate: loans, cases, people, docket) · .phone = green (call) */
+.links a,.clinks a{position:relative;text-decoration:none;color:var(--muted);font-weight:500;transition:color .2s var(--e-lux)}
 .links a::after,.clinks a::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--gold-grad);transform:scaleX(0);transform-origin:100% 50%;transition:transform .3s var(--e-lux)}
 .links a:hover,.clinks a:hover{color:var(--gold-d);text-decoration:none}
 .links a:hover::after,.clinks a:hover::after{transform:scaleX(1);transform-origin:0 50%}
-/* "People" = the optional deeper-research link: a permanent faint gold hairline that brightens on hover, so it reads as a deliberate "dig deeper" tool rather than just another link */
-.links a.research,.clinks a.research{color:var(--gold-d)}
-.links a.research::after,.clinks a.research::after{transform:scaleX(1);transform-origin:0 50%;opacity:.32}
-.links a.research:hover::after,.clinks a.research:hover::after{opacity:1}
+.links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:600}
+.links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
+.links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
+.lsep{display:inline-block;width:1px;height:11px;margin:0 4px 0 5px;background:var(--line-2);vertical-align:-1px;opacity:.55}
 /* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
 .brand .wm{display:inline-block;transition:filter .35s ease}
 .brand .wm b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));transition:filter .45s var(--e-lux);animation:wmShine 3.6s linear infinite}
@@ -937,30 +938,32 @@ function render(){
   const trs = [], cards = [];
   rows.forEach(r => {
     const n = notes[r.case] || {status:'', note:''};
-    const links = [];
-    if(r.zillow) links.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
-    if(r.pa) links.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener">Appraiser</a>');
-    if(r.auc) links.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener">Auction</a>');
-    if(r.people) links.push('<a class="research" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — opens TruePeopleSearch for relatives, extra numbers and address history. The phone is already on this card; use this only when you want more. TPS may ask you to verify you are human.">People</a>');
-    // Official Records: the true-debt check. The judgment shown is only ONE lien — search the owner
-    // here for every recorded mortgage/lien/judgment before trusting the equity. Copies the name on click.
-    if(r.oname) links.push('<a class="research recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Miami-Dade Official Records — every recorded mortgage, lien and judgment on this owner (their LOANS). On the site: click Name/Document (left menu) and PASTE the owner name (this click copied it). The judgment shown is only ONE debt — a senior or 2nd mortgage can hide here and erase the equity.">Records</a>');
-    // OCS court cases. Direct-to-results when we generated a search token; else open + copy name.
-    if(r.ocsqs) links.push('<a class="research" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+r.ocsqs+'" target="_blank" rel="noopener" title="Opens this owner\'s Miami-Dade COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several people; match by case.">Cases</a>');
-    else if(r.oname) links.push('<a class="research recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Miami-Dade COURT cases — search this owner for their OTHER cases: more foreclosures, lawsuits, judgments, probate, divorce. On the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
-    // skip-traced phones (present only when unlocked / on the local copy). MANUAL dial only.
+    // ---- links, grouped by purpose:  CALL (green) · INVESTIGATE (gold) · PROPERTY (slate) · DO ----
+    const gCall = [], gDig = [], gProp = [], gDo = [];
+    // CALL — skip-traced + saved phones. Manual dial only; DNC-flagged in amber.
     (r.phones||[]).slice(0,3).forEach((ph,i) => {
       const dnc = (r.phdnc||[])[i];
-      links.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">'+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
+      gCall.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">'+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
     });
-    // phone you looked up on TruePeopleSearch and typed into the phone box (saved on this device)
-    if(n.phone) links.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">'+esc(fmtPhone(n.phone))+'</a>');
-    if(r.tax) links.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener">Taxes</a>');
-    if(r.docket) links.push('<a href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="Opens the Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
-    links.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
+    if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">'+esc(fmtPhone(n.phone))+'</a>');
+    // INVESTIGATE — the owner's people, their loans, their other cases, this docket.
+    if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
+    if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+r.recqs+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
+    else if(r.oname) gDig.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
+    if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+r.ocsqs+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
+    else if(r.oname) gDig.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
+    if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="This lead\'s Clerk case page: parties, dockets, final judgment">Case&#9656;</a>');
+    // PROPERTY — value + county pages.
+    if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="Miami-Dade Property Appraiser record">Appraiser</a>');
+    if(r.zillow) gProp.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
+    if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
+    if(r.auc) gProp.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="RealForeclose auction page — requires a free RealForeclose login to view">Auction</a>');
+    // DO — actions.
+    gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
-    links.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
+    gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
+    const linksHtml = [gCall, gDig, gProp, gDo].filter(g => g.length).map(g => g.join(' ')).join('<span class="lsep"></span>');
     const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
     const ctype = r.ctype ? '<span class="chip '+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'" title="'+esc(r.ctype)+'">'+ctypeTxt+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
@@ -1015,7 +1018,7 @@ function render(){
       '<td>'+owner+'</td>'+
       '<td>'+prop+'</td>'+
       '<td><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
-      '<td class="links">'+links.join(' ')+'</td>'+
+      '<td class="links">'+linksHtml+'</td>'+
       '<td>'+statusSel+'</td>'+
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
@@ -1040,7 +1043,7 @@ function render(){
       '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
-      '<div class="clinks">'+links.join(' ')+'</div>'+
+      '<div class="clinks">'+linksHtml+'</div>'+
       dealTrigger(r)+
       '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
       '</div>');

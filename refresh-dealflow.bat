@@ -22,20 +22,26 @@ if errorlevel 1 (
   goto :end
 )
 
-echo [2/4] Skip-tracing owner phones...
+echo [2/5] Generating direct court-case + records links (new owners only; cached)...
+python gen_cases_qs.py >> "%LOG%" 2>&1
+python gen_records_qs.py >> "%LOG%" 2>&1
+
+echo [3/5] Skip-tracing owner phones...
 if exist tracerfy.key goto :phones
 if exist batchdata.key goto :phones
 echo     no phone key present - skipping phones ^(leads still publish^).>> "%LOG%"
 echo     (no phone key - leads only)
-goto :publish
+goto :rebuild
 
 :phones
 python skiptrace.py >> "%LOG%" 2>&1
-echo [3/4] Merging phones into the site...
+
+:rebuild
+echo [4/5] Rebuilding the site (cases + phones baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 
 :publish
-echo [4/4] Publishing to the live site...
+echo [5/5] Publishing to the live site...
 git add docs/index.html >> "%LOG%" 2>&1
 git commit -m "refresh: auto lead + phone update" >> "%LOG%" 2>&1
 if errorlevel 1 (
