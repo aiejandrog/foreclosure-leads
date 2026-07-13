@@ -945,8 +945,9 @@ function render(){
     // Official Records: the true-debt check. The judgment shown is only ONE lien — search the owner
     // here for every recorded mortgage/lien/judgment before trusting the equity. Copies the name on click.
     if(r.oname) links.push('<a class="research recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Miami-Dade Official Records — every recorded mortgage, lien and judgment on this owner (their LOANS). On the site: click Name/Document (left menu) and PASTE the owner name (this click copied it). The judgment shown is only ONE debt — a senior or 2nd mortgage can hide here and erase the equity.">Records</a>');
-    // OCS court search: the owner's OTHER cases — more foreclosures, lawsuits, judgments, divorces.
-    if(r.oname) links.push('<a class="research recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Miami-Dade COURT cases — search this owner for their OTHER cases: more foreclosures, lawsuits, judgments, probate, divorce. On the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
+    // OCS court cases. Direct-to-results when we generated a search token; else open + copy name.
+    if(r.ocsqs) links.push('<a class="research" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+r.ocsqs+'" target="_blank" rel="noopener" title="Opens this owner\'s Miami-Dade COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several people; match by case.">Cases</a>');
+    else if(r.oname) links.push('<a class="research recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Miami-Dade COURT cases — search this owner for their OTHER cases: more foreclosures, lawsuits, judgments, probate, divorce. On the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
     // skip-traced phones (present only when unlocked / on the local copy). MANUAL dial only.
     (r.phones||[]).slice(0,3).forEach((ph,i) => {
       const dnc = (r.phdnc||[])[i];

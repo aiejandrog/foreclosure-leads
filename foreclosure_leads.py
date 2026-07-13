@@ -477,6 +477,12 @@ def make_tracker(leads):
     if os.path.exists(RESULTS_FILE):
         try: st = json.load(open(RESULTS_FILE, encoding='utf-8'))
         except Exception: st = {}
+    # direct-to-results OCS "Cases" tokens per owner (produced by gen_cases_qs.py, gitignored)
+    cq = {}
+    _cqf = os.path.join(HERE, 'cases_qs.json')
+    if os.path.exists(_cqf):
+        try: cq = json.load(open(_cqf, encoding='utf-8'))
+        except Exception: cq = {}
     slim = []
     for r in leads:
         d = {
@@ -495,6 +501,7 @@ def make_tracker(leads):
             'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
             'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
             'ip': bool(r.get('indiv_plaintiff')), 'oname': r.get('owner_clean',''),
+            'ocsqs': cq.get(r.get('owner_clean',''), ''),
             'etax': r.get('est_annual_tax',0),
             'ju': bool(r.get('judgment_unknown')),
             'st': r.get('sale_type','FC'), 'obid': r.get('opening_bid',0) or 0,
