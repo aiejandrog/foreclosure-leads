@@ -879,15 +879,23 @@ ul{margin:10px 0}
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
 function view(){
-  let rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
-  if(q){ const s=q.toLowerCase(); rows = rows.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail).toLowerCase().includes(s)); }
-  if(fy1) rows = rows.filter(r => r.filed && r.filed >= +fy1);
-  if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
-  if(ad1) rows = rows.filter(r => toISO(r.auction) >= ad1);
-  if(ad2) rows = rows.filter(r => toISO(r.auction) <= ad2);
-  if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
-  if(tdOnly) rows = rows.filter(r => r.st === 'TD');
-  if(hideDead) rows = rows.filter(r => { const s=(notes[r.case]||{}).status; return s!=='Dead' && s!=='DO NOT CONTACT'; });
+  let rows;
+  if(q){
+    // Smart search: it does NOT matter which tier or filter you're on — a search spans the ENTIRE
+    // list and ignores every other filter, so you always find the lead. Matches owner, address,
+    // case #, mailing address, plaintiff and co-defendants.
+    const s = q.toLowerCase();
+    rows = DATA.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail+' '+(r.plaintiff||'')+' '+(r.defs||'')+' '+(r.oname||'')).toLowerCase().includes(s));
+  } else {
+    rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
+    if(fy1) rows = rows.filter(r => r.filed && r.filed >= +fy1);
+    if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
+    if(ad1) rows = rows.filter(r => toISO(r.auction) >= ad1);
+    if(ad2) rows = rows.filter(r => toISO(r.auction) <= ad2);
+    if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
+    if(tdOnly) rows = rows.filter(r => r.st === 'TD');
+    if(hideDead) rows = rows.filter(r => { const st=(notes[r.case]||{}).status; return st!=='Dead' && st!=='DO NOT CONTACT'; });
+  }
   rows = rows.slice();
   const sortVal = r => {
     // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
