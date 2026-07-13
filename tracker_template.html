@@ -208,7 +208,21 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 #exp{border-radius:var(--pill);font-weight:600}
 
 /* table */
-.tblwrap{overflow-x:auto;padding:6px 16px 48px}
+.tblscroll{position:relative}
+.tblwrap{overflow-x:auto;padding:6px 16px 48px;position:relative;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;scrollbar-width:thin;transition:box-shadow .3s var(--e-lux)}
+/* edge-fade hints: inset shadows stay pinned to the visible edges (don't scroll with content),
+   so they signal "there's more this way." Toggled by JS based on scroll position. */
+.tblwrap.canright{box-shadow:inset -52px 0 34px -34px rgba(22,35,63,.30)}
+.tblwrap.canleft{box-shadow:inset 52px 0 34px -34px rgba(22,35,63,.30)}
+.tblwrap.canleft.canright{box-shadow:inset 52px 0 34px -34px rgba(22,35,63,.30),inset -52px 0 34px -34px rgba(22,35,63,.30)}
+/* gold "scroll →" pill pinned to the bottom-right of the scroll area; fades out after first scroll */
+.scrollnudge{position:absolute;right:20px;bottom:54px;z-index:6;pointer-events:none;background:var(--gold-grad);
+  color:#1A2B4A;font-size:11px;font-weight:800;letter-spacing:.02em;padding:6px 12px;border-radius:20px;
+  box-shadow:0 6px 18px -5px rgba(201,168,76,.6);white-space:nowrap;opacity:0;transform:translateX(8px);
+  transition:opacity .45s var(--e-lux),transform .45s var(--e-lux)}
+.scrollnudge.on{opacity:.97;transform:translateX(0);animation:nudgeBob 1.5s ease-in-out infinite}
+@keyframes nudgeBob{0%,100%{transform:translateX(0)}50%{transform:translateX(6px)}}
+@media(prefers-reduced-motion:reduce){.scrollnudge.on{animation:none}}
 table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
 th{position:sticky;top:0;z-index:1;background:var(--bg);padding:11px 12px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:1px solid var(--line);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 th:hover{color:var(--ink)}
@@ -573,6 +587,7 @@ body.modal-open{overflow:hidden}
 </div>
 <div id="kpis" class="kpis"></div>
 <button id="toTop" title="Scroll back to top">&#8593; Top</button>
+<div class="tblscroll">
 <div class="tblwrap">
 <table id="tbl">
 <colgroup>
@@ -589,6 +604,8 @@ body.modal-open{overflow:hidden}
 <th data-k="mail">Mailing</th>
 <th>Links</th><th>Status</th><th>Notes</th>
 </tr></thead><tbody id="tb"></tbody></table>
+</div>
+<div class="scrollnudge">scroll <b>&#8594;</b></div>
 </div>
 <div id="cards"></div>
 <script>
@@ -1316,6 +1333,40 @@ function stampFreshness(){
   }catch(e){}
 }
 stampFreshness();
+// Smart horizontal scroll for the wide table: move the mouse toward either edge and it auto-scrolls
+// (speed ramps as you near the edge); gold fades hint there's more; a one-time "scroll →" nudge shows
+// on load and fades after first scroll. Mobile keeps native touch/swipe — the fades + nudge still guide.
+(function(){
+  var wrap=document.querySelector('.tblwrap'); if(!wrap) return;
+  var nudge=document.querySelector('.scrollnudge');
+  var scrolled=false, coarse=window.matchMedia('(pointer:coarse)').matches;
+  function maxX(){ return wrap.scrollWidth - wrap.clientWidth; }
+  function update(){
+    var mx=maxX();
+    wrap.classList.toggle('canleft', wrap.scrollLeft>4);
+    wrap.classList.toggle('canright', wrap.scrollLeft < mx-4);
+    if(nudge) nudge.classList.toggle('on', !scrolled && mx>40 && wrap.scrollLeft<4);
+  }
+  wrap.addEventListener('scroll', function(){ if(wrap.scrollLeft>4) scrolled=true; update(); }, {passive:true});
+  window.addEventListener('resize', update);
+  var tb=document.getElementById('tb');
+  if(tb && window.MutationObserver){ new MutationObserver(function(){ setTimeout(update,30); }).observe(tb,{childList:true}); }
+  if(!coarse){
+    var vx=0, raf=null;
+    function step(){ if(vx){ wrap.scrollLeft+=vx; if(wrap.scrollLeft>4) scrolled=true; update(); raf=requestAnimationFrame(step); } else raf=null; }
+    wrap.addEventListener('mousemove', function(e){
+      var mx=maxX(); if(mx<=0){ vx=0; return; }
+      var r=wrap.getBoundingClientRect(), x=e.clientX-r.left, edge=Math.min(150, r.width*0.15), p;
+      if(x > r.width-edge){ p=(x-(r.width-edge))/edge; vx=Math.max(1,Math.ceil(p*p*20)); }
+      else if(x < edge){ p=(edge-x)/edge; vx=-Math.max(1,Math.ceil(p*p*20)); }
+      else vx=0;
+      if(vx && !raf) raf=requestAnimationFrame(step);
+    });
+    wrap.addEventListener('mouseleave', function(){ vx=0; });
+  }
+  setTimeout(update, 120);
+  window.addEventListener('load', update);
+})();
 // intro reveal: hold briefly, fade out, remove (respects reduced-motion)
 (function(){
   var i = document.getElementById('intro'); if(!i) return;
