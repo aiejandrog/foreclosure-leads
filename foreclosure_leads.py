@@ -153,12 +153,19 @@ def _has_homestead(benefits):
             return True
     return False
 
+def _valid_folio(s):
+    """A real Miami-Dade folio is exactly 13 digits. Multi-parcel or blank entries (e.g. the county's
+    'MULTIPLE PARCELS' placeholder) strip down to junk like '20' — reject those so we never fire a
+    doomed PA lookup or build a broken Appraiser/Tax deep-link. Returns the 13-digit folio or ''."""
+    f = re.sub(r'\D', '', s or '')
+    return f if len(f) == 13 else ''
+
 def enrich(leads):
     s = requests.Session(); s.headers['User-Agent'] = UA
     for i, r in enumerate(leads):
-        folio = re.sub(r'\D','', r.get('Folio',''))
+        folio = _valid_folio(r.get('Folio',''))
         r['enriched'] = False
-        if not folio: continue
+        if not folio: continue   # skip non-parcel / multi-parcel rows (no real folio to look up)
         try:
             d = s.get("https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx",
                 params={"Operation":"GetPropertySearchByFolio","clientAppName":"PropertySearch","folioNumber":folio},
@@ -230,6 +237,10 @@ def enrich_clerk(leads):
             # skip the first defendant (that's the owner, already shown) -> "also named"
             extra = [x for x in defs[1:] if x][:6]
             r['defendants'] = '; '.join(extra)
+            # PA owner needs a folio; a folio-less case still names the owner as the 1st defendant,
+            # so recover it instead of showing a blank owner on an otherwise real, workable lead.
+            if not (r.get('owners') or '').strip() and defs and defs[0]:
+                r['owners'] = defs[0]
             r['clerk_case_type'] = d.get('caseType','')
             r['case_status'] = d.get('caseStatus','')
             r['docket_url'] = f"{CLERK}/ocs/searchResults?qs={qs}"
@@ -308,8 +319,17 @@ def qualify(leads):
         r['tier'] = 'A' if r['score']>=70 and not dq else ('B' if r['score']>=50 and not dq else 'C')
         addr = r.get('Address','').replace(',',' ')
         r['zillow_url'] = 'https://www.zillow.com/homes/' + urllib.parse.quote(addr) + '_rb/' if addr.strip() else ''
-        folio = re.sub(r'\D','', r.get('Folio',''))
-        r['pa_url'] = 'https://apps.miamidadepa.gov/PropertySearch/#/?folio=' + folio if folio else ''
+        folio = _valid_folio(r.get('Folio',''))
+        r['pa_url'] = ('https://apps.miamidadepa.gov/PropertySearch/#/?folio=' + folio) if folio else ''
+        # No valid folio -> no Property Appraiser data (value/homestead/links). Two DIFFERENT honest
+        # cases; don't lump them, and never show a broken folio link (pa_url/tax_url already blanked):
+        if not folio:
+            _pf = (str(r.get('Folio','')) + ' ' + str(r.get('Parcel ID',''))).upper()
+            if 'MULTIPLE' in _pf:
+                r['warning'] = 'multiple parcels - open the case / auction to view all properties'
+            elif not r['warning']:
+                # a real case whose parcel just wasn't linked: owner/value come from the docket, not PA
+                r['warning'] = 'parcel not linked - verify property & value via the docket'
         r['auction_url'] = f"{BASE}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={r.get('AuctionDate','')}"
         # owner purchase year (from PA sales history)
         sd = re.search(r'(\d{4})$', (r.get('last_sale_date','') or '').strip())
@@ -490,6 +510,16 @@ def main():
     if len(leads) < 20:
         print(f"ABORT: only {len(leads)} leads scraped (expected 100+). Not regenerating the site.")
         sys.exit(1)
+    # Defensive dedupe: the calendar can list the same auction item twice. Collapse exact repeats
+    # (same case + folio + auction date) so a duplicate never becomes two rows in the tracker.
+    seen, deduped = set(), []
+    for r in leads:
+        key = (r.get('Case #','').strip(), r.get('Folio','').strip(), r.get('AuctionDate','').strip())
+        if key in seen: continue
+        seen.add(key); deduped.append(r)
+    if len(deduped) < len(leads):
+        print(f"deduped {len(leads) - len(deduped)} exact-duplicate row(s)")
+    leads = deduped
     json.dump(leads, open(os.path.join(HERE,'leads_raw.json'),'w'), indent=1)
     leads = enrich(leads)
     leads = enrich_clerk(leads)
