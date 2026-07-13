@@ -341,6 +341,7 @@ def qualify(leads):
         # so the search actually returns matches.
         first_owner = (r.get('owners','') or '').split(';')[0].strip()
         first_owner = re.sub(r'\b(LE|REM|TRS|JR|SR|II|III|IV|&|ETAL|ET AL)\b', '', first_owner, flags=re.I).strip()
+        r['owner_clean'] = re.sub(r'\s{2,}', ' ', first_owner).strip()   # for the Official Records name search
         is_company = bool(re.search(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD)\b', first_owner, re.I))
         toks = [t for t in re.split(r'[\s,]+', first_owner) if len(t) > 1]
         zm = re.search(r'(\d{5})\s*$', r.get('Address','') or '')
@@ -357,13 +358,25 @@ def qualify(leads):
         # tax-collector DIRECT parcel page by folio (delinquent taxes/certs/full bill history).
         # Cloudflare-walled to scrape, so this is a reliable one-click deep-link straight to the parcel.
         r['tax_url'] = ('https://miamidade.county-taxes.com/public/real_estate/parcels/' + folio) if folio else ''
-        # mortgage-risk: an HOA/condo judgment often hides a senior mortgage. If a lender is a
-        # co-defendant, the true payoff is higher than the association judgment shown -> flag it.
+        # mortgage-risk: the judgment shown may be only ONE debt. Two ways a senior mortgage hides
+        # behind apparent equity -> both force an Official Records lien check before trusting it:
+        #  (a) HOA/condo judgment with a lender co-defendant (the tiny assoc lien, 1st mtg survives).
+        #  (b) an INDIVIDUAL plaintiff (not a bank/servicer) on a mortgage foreclosure - almost always
+        #      a private or 2nd-position note, so a bank 1st mortgage very likely survives unshown.
         defs = (r.get('defendants','') or '').upper()
-        r['mortgage_risk'] = bool(r.get('case_type','').startswith('HOA') and re.search(
+        hoa_hidden_mtg = bool(r.get('case_type','').startswith('HOA') and re.search(
             r'BANK|MORTGAGE|LOAN|FINANCIAL|CAPITAL|FUNDING|LENDING|SERVICING|FEDERAL CREDIT|'
             r'FANNIE|FREDDIE|HOUSING AND URBAN|SECRETARY OF HOUSING|BANC|LENDER|\bN\.?A\.?\b|'
             r'CITIMORTGAGE|WELLS FARGO|CHASE|NATIONSTAR|PENNYMAC|NEWREZ|CARRINGTON|LAKEVIEW', defs))
+        pl = (r.get('plaintiff', '') or '')
+        _ent = re.search(r'\b(LLC|CORP|INC|MORTGAGE|LOAN|FINANC|CAPITAL|FUNDING|LENDING|SERVICING|'
+                         r'TRUST|ASSOC|ASSN|FUND|HOLDINGS|LP|LTD|COMPANY|CREDIT UNION|FEDERAL|FANNIE|'
+                         r'FREDDIE|HUD|SECRETARY|BANC|NATIONSTAR|PENNYMAC|NEWREZ|CARRINGTON|LAKEVIEW|'
+                         r'SERIES|PARTNERS|GROUP|INVESTMENT|ENTERPRISE)\b', pl, re.I) \
+               or re.search(r'BANK|\bSB\b|\bFSB\b|\bBK\b|\bN\.?A\.?\b', pl, re.I)   # compound bank names (Servbank, USBank)
+        indiv_plaintiff = bool(pl) and not _ent and bool(re.search(r'[A-Za-z]{2},\s*[A-Za-z]{2}', pl))
+        r['indiv_plaintiff'] = indiv_plaintiff
+        r['mortgage_risk'] = bool(hoa_hidden_mtg or (not td and indiv_plaintiff))
     return leads
 
 def _clean_addr(s):
@@ -471,6 +484,7 @@ def make_tracker(leads):
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
             'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
             'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
+            'ip': bool(r.get('indiv_plaintiff')), 'oname': r.get('owner_clean',''),
             'ju': bool(r.get('judgment_unknown')),
             'st': r.get('sale_type','FC'), 'obid': r.get('opening_bid',0) or 0,
             'cert': r.get('Certificate #',''),

@@ -682,8 +682,12 @@ function setVerdict(r, x){
   // never show a profit we can't stand behind
   if(r.ju){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2; r._whyShort='Judgment not posted — verify on docket';
     r._why='Final judgment not posted — the debt is unknown. Confirm it on the docket before trusting any profit.'; return; }
-  if(r.st!=='TD' && r.mr && !x.slien){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2; r._whyShort='1st mortgage unknown — look it up';
-    r._why='HOA / junior case — the 1st mortgage survives this sale and is unknown. Look it up and enter it below (usually a trap if large).'; return; }
+  if(r.st!=='TD' && r.mr && !x.slien){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2;
+    r._whyShort = r.ip ? 'Private plaintiff — senior mortgage likely; verify' : '1st mortgage unknown — look it up';
+    r._why = r.ip
+      ? 'The plaintiff is an individual, not a bank — almost always a private or 2nd-position note, so a senior 1st mortgage very likely survives this sale and is NOT in the judgment shown. That "equity" can be fiction. Open Records, search the owner for every recorded mortgage/lien, then enter the senior balance below before trusting this.'
+      : 'HOA / junior case — the 1st mortgage survives this sale and is unknown. Open Records, look it up and enter it below (usually a trap if large).';
+    return; }
   const p=r._profit, roi=r._roi||0;
   const strongRoi=r.st==='TD'?20:15, margRoi=r.st==='TD'?8:6;
   let v,rank,why;
@@ -701,7 +705,7 @@ function mathLine(label,val,tot){ return '<div class="mathline'+(tot?' tot':'')+
 function dealFlags(r){
   const f=[], nn=notes[r.case]||{};
   if(r.ju) f.push('Final judgment not posted — debt unknown; verify on the docket.');
-  if(r.st!=='TD' && r.mr) f.push('HOA / junior case: the 1st mortgage survives — must be looked up.');
+  if(r.st!=='TD' && r.mr) f.push(r.ip ? 'Private (individual) plaintiff: a senior 1st mortgage likely survives — verify in Official Records.' : 'HOA / junior case: the 1st mortgage survives — must be looked up.');
   if(r.st==='TD'){ f.push('Tax-deed title is not insurable until quiet title (~$1.5-5k, 3-6 mo).');
     f.push('Code-enforcement / municipal / IRS liens can survive the deed (FS 197.552).'); }
   if(r.st==='TD' && r.hs) f.push('Homestead: opening bid includes ½ the assessed value (FS 197.502).');
@@ -908,6 +912,9 @@ function render(){
     if(r.pa) links.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener">Appraiser</a>');
     if(r.auc) links.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener">Auction</a>');
     if(r.people) links.push('<a class="research" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — opens TruePeopleSearch for relatives, extra numbers and address history. The phone is already on this card; use this only when you want more. TPS may ask you to verify you are human.">People</a>');
+    // Official Records: the true-debt check. The judgment shown is only ONE lien — search the owner
+    // here for every recorded mortgage/lien/judgment before trusting the equity. Copies the name on click.
+    if(r.oname) links.push('<a class="research recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch.aspx" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Miami-Dade Official Records — search this owner for ALL recorded mortgages, liens and judgments. The judgment shown is only one debt; a senior or 2nd mortgage can hide here and erase the equity. Click copies the owner name — paste it into Party Name.">Records</a>');
     // skip-traced phones (present only when unlocked / on the local copy). MANUAL dial only.
     (r.phones||[]).slice(0,3).forEach((ph,i) => {
       const dnc = (r.phdnc||[])[i];
@@ -1146,6 +1153,14 @@ document.querySelectorAll('.lkb').forEach(b => b.onclick = () => {
 });
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
   const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
+});
+// Records link: copy the owner name so it can be pasted into Official Records "Party Name" (the page
+// is an ASP form that can't be prefilled by URL). The anchor still opens the search in a new tab.
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a.recsearch'); if(!a) return;
+  const o = (a.dataset.o || '').trim(); if(!o) return;
+  const orig = a.textContent, flash = () => { a.textContent = '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, flash); else flash();
 });
 // document-level so it works in BOTH the desktop table (#tb) and mobile cards (#cards)
 document.addEventListener('click', e => {
