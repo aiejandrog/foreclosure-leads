@@ -248,7 +248,10 @@ def main():
         return
 
     cookies = load_cookies()
-    session = cffi_requests.Session(impersonate="chrome120")
+    # "chrome" = newest fingerprint curl_cffi ships (146 as of 0.15). The cookies are minted by the
+    # user's real Chrome (150) — an old pinned fingerprint (chrome120) contradicts them and gets the
+    # session flagged much faster. Keep this generic so library upgrades track new Chrome releases.
+    session = cffi_requests.Session(impersonate="chrome")
     for k, v in cookies.items():
         session.cookies.set(k, v, domain=".truepeoplesearch.com")
 
