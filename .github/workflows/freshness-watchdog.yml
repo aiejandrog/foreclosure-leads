@@ -1,0 +1,50 @@
+name: DEALFLOW freshness watchdog
+
+# Runs in the FREE GitHub cloud (can reach the published site; the county scrape stays on the
+# residential PC where it isn't IP-blocked). Every day it checks how old the live data is and, if
+# the refresh silently failed, opens/updates a GitHub issue -> GitHub emails Alejandro. No secrets.
+
+on:
+  schedule:
+    - cron: '0 15 * * *'      # 15:00 UTC  (~11:00 AM ET) — a couple hours after the 9 AM PC refresh
+  workflow_dispatch: {}        # allow a manual "Run workflow" from the Actions tab
+
+permissions:
+  issues: write                # so it can open/comment the alert issue with the built-in token
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check live-site data age
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const STALE_DAYS = 3;   // 1-day misses (PC asleep, catches up) don't alarm; 3+ = broken
+            const URL = 'https://aiejandrog.github.io/foreclosure-leads/';
+            const res = await fetch(URL, { cache: 'no-store' });
+            if (!res.ok) { core.setFailed(`Site fetch failed: HTTP ${res.status}`); return; }
+            const html = await res.text();
+            const m = html.match(/id="upddate">(\d{4}-\d{2}-\d{2})/);
+            if (!m) { core.setFailed('Could not find the "Updated" date stamp on the live site.'); return; }
+            const built = new Date(m[1] + 'T12:00:00Z');
+            const days = Math.floor((Date.now() - built.getTime()) / 86400000);
+            core.info(`Live DEALFLOW data was built ${m[1]} — ${days} day(s) old.`);
+            const { owner, repo } = context.repo;
+            const open = await github.rest.issues.listForRepo({ owner, repo, state: 'open', labels: 'stale-data' });
+            if (days >= STALE_DAYS) {
+              const body = `The live site's data was last refreshed **${m[1]}** — **${days} days ago**.\n\n` +
+                `The weekly/daily refresh on your PC likely failed (or the machine was off). ` +
+                `Check \`leads-run.log\`, or just double-click \`refresh-dealflow.bat\` to catch up.\n\n` +
+                `_(This alert is from the free cloud watchdog; it re-checks daily and will comment again if it stays stale.)_`;
+              if (open.data.length) {
+                await github.rest.issues.createComment({ owner, repo, issue_number: open.data[0].number, body });
+              } else {
+                await github.rest.issues.create({ owner, repo, title: `⚠️ DEALFLOW data is stale (${days} days old)`, body, labels: ['stale-data'] });
+              }
+              core.setFailed(`DEALFLOW data is ${days} days stale (>= ${STALE_DAYS}).`);
+            } else if (open.data.length) {
+              // data is fresh again -> close the alert
+              await github.rest.issues.update({ owner, repo, issue_number: open.data[0].number, state: 'closed' });
+              core.info(`Data fresh again (${days}d) — closed the stale-data alert.`);
+            }
