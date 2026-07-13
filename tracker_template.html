@@ -418,6 +418,8 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
 .links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
 .lsep{display:inline-block;width:1px;height:11px;margin:0 4px 0 5px;background:var(--line-2);vertical-align:-1px;opacity:.55}
+.eqfake{color:var(--muted-2)!important;font-style:italic;font-weight:400}
+.cstat .v.eqfake{color:var(--muted-2);font-style:italic}
 /* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
 .brand .wm{display:inline-block;transition:filter .35s ease}
 .brand .wm b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));transition:filter .45s var(--e-lux);animation:wmShine 3.6s linear infinite}
@@ -902,6 +904,7 @@ function view(){
     // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
     // (else "12/01/2025" would sort after "07/01/2026"). Use the ISO yyyymmdd number.
     if(sortK==='auction'){ const n = +toISO(r.auction).replace(/-/g,''); return n || -Infinity; }
+    if(sortK==='eq' && r.eqfake) return -1;   // gross/unverified equity sinks (don't top the sort on a $9k lien)
     const x = r[sortK]; return (x==null) ? -Infinity : x;   // no-data leads sink to the bottom
   };
   rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
@@ -998,7 +1001,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?(r.eqfake?' · <span class="eqfake" title="Gross equity — an HOA/junior lien or a hidden senior mortgage inflates this. Verify the real debt via Records.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -1032,7 +1035,7 @@ function render(){
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
         '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+
-        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v">'+(r.eq?r.eq+'%':'—')+'</div></div>'+
+        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+(r.eqfake?' eqfake':'')+'">'+(r.eq?(r.eqfake?'~'+r.eq+'%':r.eq+'%'):'—')+'</div></div>'+
       '</div>':'')+
       (r.mr&&r._verdict!=='VERIFY'?'<div class="mrwarn">mortgage risk - verify payoff</div>':'')+
       '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
@@ -1040,7 +1043,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq'):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?(r.eqfake?' · <span class="eqfake" title="Gross equity — an HOA/junior lien or a hidden senior mortgage inflates this. Verify the real debt via Records.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+

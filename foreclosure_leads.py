@@ -341,11 +341,17 @@ def qualify(leads):
         # so the search actually returns matches.
         first_owner = (r.get('owners','') or '').split(';')[0].strip()
         first_owner = re.sub(r'\b(LE|REM|TRS|JR|SR|II|III|IV|&|ETAL|ET AL)\b', '', first_owner, flags=re.I).strip()
-        # owner_clean = a clean name for the Records/Cases party searches. Strip spouse markers
-        # ("&W HELEN" / "&H JOHN" / "ET UX") and legal suffixes that otherwise break a party-name match.
+        # owner_clean = a clean "First [Middle] Last" name for the Records/Cases party searches.
+        # Strip spouse markers ("&W HELEN"/"ET UX"), legal suffixes, and a dangling "&"; and normalize
+        # the Clerk "Last, First M" format (folio-less leads recover the owner as defendant[0]) to
+        # First-Last so the name searches don't come back reversed.
         _oc = (r.get('owners', '') or '').split(';')[0].strip()
         _oc = re.sub(r'\s*&\s*[WH]\b.*$', '', _oc, flags=re.I)
         _oc = re.sub(r'\b(ET\s?UX|ET\s?VIR|H/W|W/H|LE|REM|TRS|JR|SR|II|III|IV|ETAL|ET AL)\b', '', _oc, flags=re.I)
+        _oc = re.sub(r'\s*&\s*$', '', _oc).strip()
+        if ',' in _oc:
+            _last, _, _rest = _oc.partition(',')
+            _oc = (_rest.strip() + ' ' + _last.strip()).strip()
         r['owner_clean'] = re.sub(r'\s{2,}', ' ', _oc).strip()
         # Estimated ANNUAL property tax (the delinquent balance is Cloudflare-walled, not scrapable).
         # Miami-Dade aggregate millage ~2% of taxable value; homestead runs lower (exemptions + SOH cap).
@@ -397,6 +403,9 @@ def qualify(leads):
         suspect_equity = (not td) and bool(pl) and (not bank_like) and (r.get('equity_pct', 0) or 0) >= 40
         r['indiv_plaintiff'] = indiv_plaintiff
         r['mortgage_risk'] = bool(hoa_hidden_mtg or (not td and (indiv_plaintiff or suspect_equity)))
+        # eq_fake: the shown equity_pct is gross/unverified (HOA-junior lien or a hidden senior mortgage),
+        # so the UI mutes it and sinks it on the Equity sort instead of ranking a $9k-lien lead as 98% equity.
+        r['eq_fake'] = bool(is_hoa or r['mortgage_risk'])
     return leads
 
 def _clean_addr(s):
@@ -507,7 +516,7 @@ def make_tracker(leads):
             'case': r.get('Case #',''), 'owners': r.get('owners',''),
             'addr': _clean_addr(r.get('Address','')), 'mail': _clean_addr(r.get('mailing_address','')),
             'value': r.get('market_value',0) or 0, 'judg': r.get('judgment',0) or 0,
-            'eq': r.get('equity_pct',0), 'hs': bool(r.get('homestead')),
+            'eq': r.get('equity_pct',0), 'eqfake': bool(r.get('eq_fake')), 'hs': bool(r.get('homestead')),
             'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),

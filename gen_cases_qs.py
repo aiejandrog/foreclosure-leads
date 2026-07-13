@@ -20,7 +20,10 @@ CACHE = os.path.join(HERE, 'cases_qs.json')
 SITE_KEY = '6Le7np8qAAAAAAEMezDvhuXyKV4EA6BWZTvdK_E6'
 BASE = 'https://www2.miamidadeclerk.gov/ocs/'
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
-COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|TR|EST|ESTATE|MTGE|SVCS)\b', re.I)
+COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|TR|EST|ESTATE|MTGE|SVCS|'
+                        r'UNITED STATES|STATE OF|COUNTY|CITY OF|DEPARTMENT|SECRETARY|\bUSA\b)\b', re.I)
+MAX_HITS = 100   # a real individual owner rarely has >100 filings; more = common-name over-match -> skip (fallback)
+DEADLINE_SEC = int(os.environ.get('GEN_DEADLINE','480'))   # never let generation eat the scheduled task's 30-min kill: stop after 8 min, resume next run
 
 # mints a reCaptcha token, runs the party-name search, verifies it returns cases. Returns {success,qs,count}.
 JS = r"""
@@ -91,7 +94,10 @@ def main():
                 if a == 3: raise
                 pg.wait_for_timeout(4000)
         pg.wait_for_timeout(2500)
+        _start = time.time()
         for oc, lf in items:
+            if time.time() - _start > DEADLINE_SEC:
+                print(f"  .. 8-min budget hit; stopping (rest resume next run)"); break
             try:
                 res = None
                 for attempt in range(2):
@@ -100,9 +106,12 @@ def main():
                     except Exception:
                         if attempt == 1: raise
                         pg.wait_for_timeout(2500)
-                if res and res.get('success') and res.get('qs') and res.get('count', 0) > 0:
+                _n = res.get('count', 0) if res else 0
+                if res and res.get('success') and res.get('qs') and 0 < _n <= MAX_HITS:
                     cache[oc] = res['qs']; ok += 1
-                    print(f"  ok  {oc:32} {res['count']} case(s)")
+                    print(f"  ok  {oc:32} {_n} case(s)")
+                elif _n > MAX_HITS:
+                    print(f"  ~~  {oc:32} too common ({_n}), skip -> fallback")
                 else:
                     print(f"  --  {oc:32} no cases")
                 json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=1)  # save as we go

@@ -22,9 +22,9 @@ if errorlevel 1 (
   goto :end
 )
 
-echo [2/5] Generating direct court-case + records links (new owners only; cached)...
-python gen_cases_qs.py >> "%LOG%" 2>&1
-python gen_records_qs.py >> "%LOG%" 2>&1
+echo [2/5] Generating direct court-case + records links (new owners only; capped so publish is never starved)...
+python gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
+python gen_records_qs.py --limit 40 >> "%LOG%" 2>&1
 
 echo [3/5] Skip-tracing owner phones...
 if exist tracerfy.key goto :phones

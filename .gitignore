@@ -14,3 +14,7 @@ site.codes
 tracerfy.key
 cases_qs.json
 records_qs.json
+full.json
+pa_probe.json
+*_probe.json
+nonad.html
