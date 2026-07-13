@@ -186,6 +186,8 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 10px 30px rgba(1
 .brand .tag{font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:.01em}
 .brand .spacer{flex:1}
 .brand .upd{font-size:11px;color:var(--muted-2);text-align:right;align-self:center;font-variant-numeric:tabular-nums}
+.brand .upd.stale{color:#c2410c !important;-webkit-text-fill-color:#c2410c !important;font-weight:700}
+.brand .upd.stale #upddate{color:#c2410c !important;-webkit-text-fill-color:#c2410c !important}
 h1{font-size:17px;margin:0 0 8px;font-family:var(--f-display);font-weight:700;color:var(--ink)}
 .sub{color:var(--muted);font-weight:400}
 .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
@@ -367,6 +369,7 @@ header{animation:appIn .5s .05s both}
   header{padding:12px 13px 10px}
   .brand .wm{font-size:18px}
   .brand .upd{display:none}
+  .brand .upd.stale{display:inline-block}
   .controls{gap:6px}
   input#q{width:100%}
   .tblwrap{display:none}
@@ -509,7 +512,7 @@ body.modal-open{overflow:hidden}
 <div class="tag">Miami-Dade · Foreclosure &amp; Tax-Deed Intelligence</div>
 </div>
 <span class="spacer"></span>
-<span class="upd">Updated __UPDATED__ · notes saved on this device</span>
+<span class="upd" id="upd">Updated <b id="upddate">__UPDATED__</b><span id="stalemark"></span> · notes saved on this device</span>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
 <div class="controls">
@@ -1274,6 +1277,20 @@ async function boot(){
   if(manual && unlockName) showWelcome(unlockName);   // greet them only when they actually enter a code
 }
 boot();
+// Freshness signal: read the build date stamped into the header and tell the user, at a glance,
+// whether the data is current or the auto-refresh has silently gone stale (auctions are time-sensitive).
+function stampFreshness(){
+  try{
+    var el=document.getElementById('upddate'); if(!el) return;
+    var d=new Date((el.textContent||'').trim()+'T12:00:00'); if(isNaN(d.getTime())) return;
+    var days=Math.floor((Date.now()-d.getTime())/86400000);
+    var mark=document.getElementById('stalemark'), upd=document.getElementById('upd');
+    if(days>=3){ if(upd) upd.classList.add('stale'); if(mark) mark.textContent=' · '+days+'d old — refresh overdue'; }
+    else if(days<=0){ if(mark) mark.textContent=' · today'; }
+    else { if(mark) mark.textContent=' · '+days+'d ago'; }
+  }catch(e){}
+}
+stampFreshness();
 // intro reveal: hold briefly, fade out, remove (respects reduced-motion)
 (function(){
   var i = document.getElementById('intro'); if(!i) return;
