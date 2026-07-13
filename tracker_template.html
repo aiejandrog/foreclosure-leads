@@ -1365,14 +1365,20 @@ stampFreshness();
     var vx=0, raf=null;
     function step(){ if(vx){ wrap.scrollLeft+=vx; if(wrap.scrollLeft>4) scrolled=true; update(); raf=requestAnimationFrame(step); } else raf=null; }
     wrap.addEventListener('mousemove', function(e){
+      // NEVER auto-scroll while the pointer is over something clickable — otherwise the button slides
+      // out from under the cursor and the click misses ("nothing happens when I press it").
+      if(e.target.closest('a,button,input,select,textarea,label,[role=button]')){ vx=0; return; }
       var mx=maxX(); if(mx<=0){ vx=0; return; }
-      var r=wrap.getBoundingClientRect(), x=e.clientX-r.left, edge=Math.min(150, r.width*0.15), p;
-      if(x > r.width-edge){ p=(x-(r.width-edge))/edge; vx=Math.max(1,Math.ceil(p*p*20)); }
-      else if(x < edge){ p=(edge-x)/edge; vx=-Math.max(1,Math.ceil(p*p*20)); }
+      // thin edge strip only, so it never covers the content/links area
+      var r=wrap.getBoundingClientRect(), x=e.clientX-r.left, edge=Math.min(64, r.width*0.07), p;
+      if(x > r.width-edge){ p=(x-(r.width-edge))/edge; vx=Math.max(1,Math.ceil(p*p*14)); }
+      else if(x < edge){ p=(edge-x)/edge; vx=-Math.max(1,Math.ceil(p*p*14)); }
       else vx=0;
       if(vx && !raf) raf=requestAnimationFrame(step);
     });
     wrap.addEventListener('mouseleave', function(){ vx=0; });
+    // the instant a click begins, halt any scroll so the target can't drift mid-press
+    wrap.addEventListener('mousedown', function(){ vx=0; });
   }
   setTimeout(update, 120);
   window.addEventListener('load', update);
