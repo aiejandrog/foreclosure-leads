@@ -398,6 +398,10 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .links a::after,.clinks a::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--gold-grad);transform:scaleX(0);transform-origin:100% 50%;transition:transform .3s var(--e-lux)}
 .links a:hover,.clinks a:hover{color:var(--gold-d);text-decoration:none}
 .links a:hover::after,.clinks a:hover::after{transform:scaleX(1);transform-origin:0 50%}
+/* "People" = the optional deeper-research link: a permanent faint gold hairline that brightens on hover, so it reads as a deliberate "dig deeper" tool rather than just another link */
+.links a.research,.clinks a.research{color:var(--gold-d)}
+.links a.research::after,.clinks a.research::after{transform:scaleX(1);transform-origin:0 50%;opacity:.32}
+.links a.research:hover::after,.clinks a.research:hover::after{opacity:1}
 /* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
 .brand .wm{display:inline-block;transition:filter .35s ease}
 .brand .wm b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));transition:filter .45s var(--e-lux);animation:wmShine 3.6s linear infinite}
@@ -903,7 +907,7 @@ function render(){
     if(r.zillow) links.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
     if(r.pa) links.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener">Appraiser</a>');
     if(r.auc) links.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener">Auction</a>');
-    if(r.people) links.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Free lookup on TruePeopleSearch — find the phone, then type it in the phone box on this lead">People</a>');
+    if(r.people) links.push('<a class="research" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — opens TruePeopleSearch for relatives, extra numbers and address history. The phone is already on this card; use this only when you want more. TPS may ask you to verify you are human.">People</a>');
     // skip-traced phones (present only when unlocked / on the local copy). MANUAL dial only.
     (r.phones||[]).slice(0,3).forEach((ph,i) => {
       const dnc = (r.phdnc||[])[i];
