@@ -341,7 +341,12 @@ def qualify(leads):
         # so the search actually returns matches.
         first_owner = (r.get('owners','') or '').split(';')[0].strip()
         first_owner = re.sub(r'\b(LE|REM|TRS|JR|SR|II|III|IV|&|ETAL|ET AL)\b', '', first_owner, flags=re.I).strip()
-        r['owner_clean'] = re.sub(r'\s{2,}', ' ', first_owner).strip()   # for the Official Records name search
+        # owner_clean = a clean name for the Records/Cases party searches. Strip spouse markers
+        # ("&W HELEN" / "&H JOHN" / "ET UX") and legal suffixes that otherwise break a party-name match.
+        _oc = (r.get('owners', '') or '').split(';')[0].strip()
+        _oc = re.sub(r'\s*&\s*[WH]\b.*$', '', _oc, flags=re.I)
+        _oc = re.sub(r'\b(ET\s?UX|ET\s?VIR|H/W|W/H|LE|REM|TRS|JR|SR|II|III|IV|ETAL|ET AL)\b', '', _oc, flags=re.I)
+        r['owner_clean'] = re.sub(r'\s{2,}', ' ', _oc).strip()
         # Estimated ANNUAL property tax (the delinquent balance is Cloudflare-walled, not scrapable).
         # Miami-Dade aggregate millage ~2% of taxable value; homestead runs lower (exemptions + SOH cap).
         # Rough, clearly labeled in the UI as an estimate to verify via the Taxes link.
