@@ -417,7 +417,9 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:600}
 .links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
 .links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
-.lsep{display:inline-block;width:1px;height:11px;margin:0 4px 0 5px;background:var(--line-2);vertical-align:-1px;opacity:.55}
+/* links laid out as clean even bands, one functional group per row (phones · investigate · property · actions) */
+.links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;line-height:1.5}
+.links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:5px}
 .eqfake{color:var(--muted-2)!important;font-style:italic;font-weight:400}
 .cstat .v.eqfake{color:var(--muted-2);font-style:italic}
 /* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
@@ -968,7 +970,7 @@ function render(){
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
     gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
-    const linksHtml = [gCall, gDig, gProp, gDo].filter(g => g.length).map(g => g.join(' ')).join('<span class="lsep"></span>');
+    const linksHtml = [gCall, gDig, gProp, gDo].filter(g => g.length).map(g => '<div class="lgrp">'+g.join('')+'</div>').join('');
     const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
     const ctype = r.ctype ? '<span class="chip '+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'" title="'+esc(r.ctype)+'">'+ctypeTxt+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
