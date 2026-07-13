@@ -396,14 +396,13 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .links a:hover,.clinks a:hover{color:var(--gold-d);text-decoration:none}
 .links a:hover::after,.clinks a:hover::after{transform:scaleX(1);transform-origin:0 50%}
 /* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
-.brand .wm{transition:filter .3s ease,letter-spacing .45s var(--e-lux)}
-.brand:hover .wm{letter-spacing:-.006em}
+.brand .wm{display:inline-block;transition:filter .35s ease}
 .brand .wm b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));transition:filter .45s var(--e-lux);animation:wmShine 3.6s linear infinite}
 @supports ((-webkit-background-clip:text) or (background-clip:text)){
   .brand .wm b{-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 }
 @keyframes wmShine{0%{background-position:120% center}100%{background-position:-120% center}}
-.brand:hover .wm b{filter:drop-shadow(0 0 14px rgba(201,168,76,.55)) drop-shadow(0 1px 2px rgba(160,126,40,.25)) brightness(1.07)}
+.brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(201,168,76,.55)) drop-shadow(0 1px 2px rgba(160,126,40,.25)) brightness(1.07)}
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
   .brand .wm b{animation-duration:3.6s!important}   /* keep the logo flowing on its own (explicit request; low-risk color shimmer) */
