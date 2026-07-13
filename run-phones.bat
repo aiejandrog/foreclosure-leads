@@ -1,7 +1,8 @@
 @echo off
-rem One-click phone refresh via BatchData (licensed, ~$0.20/lead). Traces Tier-A owners ->
-rem rebuilds the tracker with phones baked in -> pushes to the live site.
-rem PREREQ: batchdata.key present (gitignored) AND the BatchData account has a funded balance.
+rem One-click phone refresh (licensed skip-trace). Traces Tier-A owners -> rebuilds the tracker
+rem with phones baked in -> pushes to the live site.
+rem PREREQ: a provider key present (gitignored) - tracerfy.key (no minimum) or batchdata.key.
+rem   skiptrace.py auto-detects whichever key exists (tracerfy preferred).
 rem To change how many you spend on: add  --limit N  or  --tier B  after skiptrace.py below.
 cd /d "%~dp0"
 echo ==== phones run %date% %time% ====
