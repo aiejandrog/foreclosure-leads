@@ -1,7 +1,8 @@
 """Miami-Dade pending-foreclosure lead pipeline — one-command rerun.
 
 Usage:  python foreclosure_leads.py
-Output: Desktop CSV "Miami-Dade Foreclosure Leads - <today>.csv" + leads_final.json here.
+Output: Desktop\DEALFLOW\ CSV "Miami-Dade Foreclosure Leads - <today>.csv" + tracker HTML;
+        leads_final.json stays here in the project.
 
 Phase 1: auto-discover auction dates (current + next month) from the RealForeclose calendar,
          scrape every "Auctions Waiting" case (#Area_W) with pagination.
@@ -16,6 +17,8 @@ from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DESKTOP = r"C:\Users\olqbb\OneDrive\Desktop"
+DEALFLOW_DIR = os.path.join(DESKTOP, "DEALFLOW")   # tidy: tracker + daily CSV land here, not loose on the Desktop
+                                                   # (if you rename this Desktop folder, update this one line)
 RESULTS_FILE = os.path.join(HERE, 'skiptrace_results.json')   # local phone cache (gitignored)
 PASS_FILE = os.path.join(HERE, 'site.pass')                    # shared-site password (gitignored)
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
@@ -549,7 +552,8 @@ def make_tracker(leads):
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{date.today():%Y-%m-%d}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')
-    desktop = os.path.join(DESKTOP,'Foreclosure Lead Tracker.html')
+    os.makedirs(DEALFLOW_DIR, exist_ok=True)
+    desktop = os.path.join(DEALFLOW_DIR,'Foreclosure Lead Tracker.html')
 
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     open(desktop,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(slim)))
@@ -594,7 +598,8 @@ def main():
     cols = ['tier','score','sale_type','AuctionDate','days_to_auction','Case #','opening_bid','filing_year','owners','Address','mailing_address',
             'market_value','judgment','equity','equity_pct','homestead','case_type','warning','dor_desc','beds','baths',
             'living_area','last_sale_price','last_sale_date','year_folio','zillow_url','pa_url','disqualifiers']
-    out_csv = os.path.join(DESKTOP, f"Miami-Dade Foreclosure Leads - {date.today():%Y-%m-%d}.csv")
+    os.makedirs(DEALFLOW_DIR, exist_ok=True)
+    out_csv = os.path.join(DEALFLOW_DIR, f"Miami-Dade Foreclosure Leads - {date.today():%Y-%m-%d}.csv")
     with open(out_csv,'w',newline='',encoding='utf-8-sig') as f:
         w = csv.DictWriter(f, fieldnames=cols, extrasaction='ignore')
         w.writeheader()
