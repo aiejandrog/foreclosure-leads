@@ -604,7 +604,10 @@ body.modal-open{overflow:hidden}
 <input id="sName" placeholder="Sender name" style="width:150px">
 <input id="sLLC" placeholder="LLC / company" style="width:160px">
 <input id="sPhone" placeholder="Phone" style="width:130px">
+<input id="sTitle" placeholder="Title (e.g. Acquisitions)" style="width:150px">
+<input id="sEmail" placeholder="Your email (for the signature)" style="width:190px">
 <input id="sAddr" placeholder="Mailing address (for email compliance)" style="width:230px">
+<input id="sWeb" placeholder="Website (optional)" style="width:150px">
 <span class="stats" id="sendersaved" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
@@ -652,7 +655,7 @@ const expanded = new Set();   // case #s whose Deal-analysis panel is open (surv
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 let weekOnly = false, hideDead = false, tdOnly = false, ncOnly = false, dueOnly = false;
-let sender = {name:'', llc:'', phone:'', addr:''};
+let sender = {name:'', llc:'', phone:'', addr:'', title:'', email:'', web:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
@@ -1101,22 +1104,25 @@ function genScript(r){
 // ---- per-lead OUTREACH EMAIL: one generic foreclosure email, auto-filled per prospect so each reads
 //      personal. Opens pre-addressed to the owner's skip-traced email (EN/ES), or Copy to paste. ----
 function genEmail(r){
-  const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]', sA = (sender.addr||'').trim();
+  const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
+  const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
   const owner = titleCase((r.owners||'').split(';')[0].trim());
   const first = owner.split(' ')[0] || owner;
   const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
   const street = (addr.split(',')[0]||addr).trim();
+  const plaintiff = (r.plaintiff||'').trim();   // the bank / association foreclosing — personalizes it
   const emails = (r.emails||[]).slice(0,3);
   const to = emails[0]||'';
-  const sig = `${sN}\n${sL}\n${sP}`+(sA?`\n${sA}`:'');
-  const subjEN = td ? `${first}, about the tax sale on ${street}` : `${first}, about your property at ${street}`;
-  const subjES = td ? `${first}, sobre la venta por impuestos en ${street}` : `${first}, sobre su propiedad en ${street}`;
+  // professional signature block (blank fields skipped)
+  const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
+  const subjEN = `Regarding your property at ${street}`;
+  const subjES = `Referente a su propiedad en ${street}`;
   const bodyEN = td
-    ? `Hi ${first},\n\nMy name is ${sN} with ${sL} — I'm a local real-estate investor here in Miami. I saw in the public record that your property at ${addr} is set for a tax-deed sale on ${dt} over unpaid property taxes, and I wanted to reach out to you directly.\n\nYou still have options before that date. You can pay the back taxes to keep it, or sell it before the sale so you walk away with cash instead of losing it to the county — and if it sells for more than the taxes owed, that surplus may be yours to claim. I'm not an attorney and this isn't legal advice; I buy directly, with cash, and can close before the deadline.\n\nIf you'd like to talk — no cost, no pressure — call or text me at ${sP}, or just reply to this email.\n\n${sig}\n\nIf you'd rather I not reach out again, just reply "stop" and I won't.`
-    : `Hi ${first},\n\nMy name is ${sN} with ${sL} — I'm a local real-estate investor here in Miami. I came across the public record that your home at ${addr} has a foreclosure sale scheduled for ${dt}, and I wanted to reach out to you directly.\n\nYou still have options before that date, and I may be able to help — whether that's buying it before the auction so you walk away with cash, or just pointing you the right way. And if it sells for more than you owe, that surplus belongs to you, not the bank. I'm not an attorney and this isn't legal advice; I buy houses directly, with cash, and can close before the deadline.\n\nIf you'd like to talk — no cost, no pressure — call or text me at ${sP}, or just reply to this email.\n\n${sig}\n\nIf you'd rather I not reach out again, just reply "stop" and I won't.`;
+    ? `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}. County records show it is scheduled for a tax deed sale on ${dt} due to unpaid property taxes.\n\nI am a local real estate investor here in Miami, and I work with owners before these sales. You may still have options, including paying the back taxes to keep the property, or selling it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you as well.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`
+    : `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}. According to those records, the foreclosure sale is scheduled for ${dt}.\n\nI am a local real estate investor here in Miami, and I work with owners in this situation before the sale date. Depending on what is owed, you may have more options than it seems, including selling before the auction so you walk away with cash instead of losing the property. If it sells for more than the debt, any surplus may belong to you.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`;
   const bodyES = td
-    ? `Hola ${first},\n\nMe llamo ${sN}, de ${sL} — soy inversionista de bienes raíces aquí en Miami. Vi en los registros públicos que su propiedad en ${addr} está programada para una subasta de tax deed el ${dt} por impuestos sin pagar, y quise comunicarme con usted directamente.\n\nTodavía tiene opciones antes de esa fecha. Puede pagar los impuestos atrasados para conservarla, o venderla antes de la subasta para irse con dinero en lugar de perderla ante el condado — y si se vende por más de lo que se debe en impuestos, ese excedente podría ser suyo si lo reclama. No soy abogado y esto no es asesoría legal; compro directo, en efectivo, y puedo cerrar antes de la fecha límite.\n\nSi desea hablar — sin costo, sin presión — llámeme o escríbame al ${sP}, o simplemente responda a este correo.\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, responda "stop" y no lo haré.`
-    : `Hola ${first},\n\nMe llamo ${sN}, de ${sL} — soy inversionista de bienes raíces aquí en Miami. Encontré en los registros públicos que su casa en ${addr} tiene una subasta de ejecución hipotecaria programada para el ${dt}, y quise comunicarme con usted directamente.\n\nTodavía tiene opciones antes de esa fecha, y quizá pueda ayudarle — ya sea comprándola antes de la subasta para que usted salga con dinero en el bolsillo, o simplemente orientándole. Y si se vende por más de lo que debe, ese excedente le pertenece a usted, no al banco. No soy abogado y esto no es asesoría legal; compro casas directo, en efectivo, y puedo cerrar antes de la fecha límite.\n\nSi desea hablar — sin costo, sin presión — llámeme o escríbame al ${sP}, o simplemente responda a este correo.\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, responda "stop" y no lo haré.`;
+    ? `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}. Los registros del condado muestran que está programada para una subasta de tax deed el ${dt} por impuestos sin pagar.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios antes de estas ventas. Todavía puede tener opciones, incluyendo pagar los impuestos atrasados para conservar la propiedad, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente también podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`
+    : `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}, la cual según los registros públicos se encuentra actualmente en proceso de ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}. Según esos registros, la subasta está programada para el ${dt}.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios en esta situación antes de la fecha de la venta. Según lo que se deba, es posible que tenga más opciones de las que parece, incluyendo vender antes de la subasta para salir con dinero en lugar de perder la propiedad. Si se vende por más de lo adeudado, cualquier excedente podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`;
   const D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
   const recip = emails.length
@@ -1142,7 +1148,7 @@ function genEmail(r){
 <div class="lbl">To</div><div class="to">${recip}</div>
 <div class="lbl">Subject</div><div class="subj" id="subjline"></div>
 <div class="lbl">Message</div><div class="body" id="bodybox"></div>
-<div class="hint">Every prospect's name, address and sale date fill in automatically, so each email reads personally. It sends as <b>${esc(sL)}</b> — review before you hit send.</div>${compHint}
+<div class="hint">Every prospect's name, address and sale date fill in automatically, so each email reads personally. It sends as <b>${esc(sL)}</b>. Review before you hit send.</div>${compHint}
 <script>var D=${Djson}, to=${JSON.stringify(to)}, cur='en';
 function show(l){cur=l;document.getElementById('subjline').textContent=D[l].subj;document.getElementById('bodybox').textContent=D[l].body;document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}
 function openMail(){location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body);}
@@ -1423,7 +1429,7 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
 })();
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
-Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr'}).forEach(([k,id]) => {
+Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr', title:'sTitle', email:'sEmail', web:'sWeb'}).forEach(([k,id]) => {
   const el = document.getElementById(id);
   if(!el) return;
   el.value = sender[k] || '';
