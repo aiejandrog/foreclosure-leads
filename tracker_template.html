@@ -101,6 +101,7 @@ textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a23
 #gateerr{color:#f87171;font-size:12px;min-height:16px;margin-top:8px}
 a.phone{color:#4ade80;font-weight:600}
 a.phone.dnc{color:#fbbf24}
+a.email{color:#8ab4f0;font-weight:600;word-break:break-all}
 input.ph{width:100%;box-sizing:border-box;font-size:12px;padding:4px 6px;margin-bottom:4px;background:#12261a;border:1px solid #2a4a35;border-radius:5px;color:#bff3d0}
 input.ph::placeholder{color:#5a7d66}
 /* worth-it verdict badges */
@@ -417,6 +418,7 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:600}
 .links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
 .links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
+.links a.email,.clinks a.email{color:#5a7db0;font-weight:600;word-break:break-all}
 /* links laid out as clean even bands, one functional group per row (phones · investigate · property · actions) */
 .links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;line-height:1.5}
 .links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:5px}
@@ -575,10 +577,11 @@ body.modal-open{overflow:hidden}
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
-<span style="color:var(--muted);font-size:12px">Letter sender (goes on every letter):</span>
+<span style="color:var(--muted);font-size:12px">Sender identity (used on letters, call scripts &amp; emails — use Jose's entity):</span>
 <input id="sName" placeholder="Sender name" style="width:150px">
 <input id="sLLC" placeholder="LLC / company" style="width:160px">
 <input id="sPhone" placeholder="Phone" style="width:130px">
+<input id="sAddr" placeholder="Mailing address (for email compliance)" style="width:230px">
 <span class="stats" id="sendersaved" style="margin-left:0"></span>
 </div>
 <div class="controls" style="margin-top:8px">
@@ -626,7 +629,7 @@ const expanded = new Set();   // case #s whose Deal-analysis panel is open (surv
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 let weekOnly = false, hideDead = false, tdOnly = false;
-let sender = {name:'', llc:'', phone:''};
+let sender = {name:'', llc:'', phone:'', addr:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
@@ -1020,6 +1023,60 @@ function genScript(r){
   const w = window.open('', '_blank');
   if(w){ w.document.write(doc); w.document.close(); }
 }
+// ---- per-lead OUTREACH EMAIL: one generic foreclosure email, auto-filled per prospect so each reads
+//      personal. Opens pre-addressed to the owner's skip-traced email (EN/ES), or Copy to paste. ----
+function genEmail(r){
+  const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]', sA = (sender.addr||'').trim();
+  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const first = owner.split(' ')[0] || owner;
+  const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
+  const street = (addr.split(',')[0]||addr).trim();
+  const emails = (r.emails||[]).slice(0,3);
+  const to = emails[0]||'';
+  const sig = `${sN}\n${sL}\n${sP}`+(sA?`\n${sA}`:'');
+  const subjEN = td ? `${first}, about the tax sale on ${street}` : `${first}, about your property at ${street}`;
+  const subjES = td ? `${first}, sobre la venta por impuestos en ${street}` : `${first}, sobre su propiedad en ${street}`;
+  const bodyEN = td
+    ? `Hi ${first},\n\nMy name is ${sN} with ${sL} — I'm a local real-estate investor here in Miami. I saw in the public record that your property at ${addr} is set for a tax-deed sale on ${dt} over unpaid property taxes, and I wanted to reach out to you directly.\n\nYou still have options before that date. You can pay the back taxes to keep it, or sell it before the sale so you walk away with cash instead of losing it to the county — and if it sells for more than the taxes owed, that surplus may be yours to claim. I'm not an attorney and this isn't legal advice; I buy directly, with cash, and can close before the deadline.\n\nIf you'd like to talk — no cost, no pressure — call or text me at ${sP}, or just reply to this email.\n\n${sig}\n\nIf you'd rather I not reach out again, just reply "stop" and I won't.`
+    : `Hi ${first},\n\nMy name is ${sN} with ${sL} — I'm a local real-estate investor here in Miami. I came across the public record that your home at ${addr} has a foreclosure sale scheduled for ${dt}, and I wanted to reach out to you directly.\n\nYou still have options before that date, and I may be able to help — whether that's buying it before the auction so you walk away with cash, or just pointing you the right way. And if it sells for more than you owe, that surplus belongs to you, not the bank. I'm not an attorney and this isn't legal advice; I buy houses directly, with cash, and can close before the deadline.\n\nIf you'd like to talk — no cost, no pressure — call or text me at ${sP}, or just reply to this email.\n\n${sig}\n\nIf you'd rather I not reach out again, just reply "stop" and I won't.`;
+  const bodyES = td
+    ? `Hola ${first},\n\nMe llamo ${sN}, de ${sL} — soy inversionista de bienes raíces aquí en Miami. Vi en los registros públicos que su propiedad en ${addr} está programada para una subasta de tax deed el ${dt} por impuestos sin pagar, y quise comunicarme con usted directamente.\n\nTodavía tiene opciones antes de esa fecha. Puede pagar los impuestos atrasados para conservarla, o venderla antes de la subasta para irse con dinero en lugar de perderla ante el condado — y si se vende por más de lo que se debe en impuestos, ese excedente podría ser suyo si lo reclama. No soy abogado y esto no es asesoría legal; compro directo, en efectivo, y puedo cerrar antes de la fecha límite.\n\nSi desea hablar — sin costo, sin presión — llámeme o escríbame al ${sP}, o simplemente responda a este correo.\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, responda "stop" y no lo haré.`
+    : `Hola ${first},\n\nMe llamo ${sN}, de ${sL} — soy inversionista de bienes raíces aquí en Miami. Encontré en los registros públicos que su casa en ${addr} tiene una subasta de ejecución hipotecaria programada para el ${dt}, y quise comunicarme con usted directamente.\n\nTodavía tiene opciones antes de esa fecha, y quizá pueda ayudarle — ya sea comprándola antes de la subasta para que usted salga con dinero en el bolsillo, o simplemente orientándole. Y si se vende por más de lo que debe, ese excedente le pertenece a usted, no al banco. No soy abogado y esto no es asesoría legal; compro casas directo, en efectivo, y puedo cerrar antes de la fecha límite.\n\nSi desea hablar — sin costo, sin presión — llámeme o escríbame al ${sP}, o simplemente responda a este correo.\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, responda "stop" y no lo haré.`;
+  const D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
+  const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
+  const recip = emails.length
+    ? emails.map((e,i)=>'<a href="mailto:'+esc(e)+'"'+(i===0?' class="primary"':'')+'>'+esc(e)+'</a>').join(' ') + (emails.length>1?' <span class="mut">(first = primary)</span>':'')
+    : '<span class="warn">No email on file — use <b>Copy email</b> and paste it, or find one via the People link.</span>';
+  const compHint = sA ? '' : '<div class="hint warn">Add your mailing address under <b>Filters &amp; setup → Sender</b> so the email is CAN-SPAM compliant.</div>';
+  const CSS = `body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:680px;margin:0 auto;padding:0 20px 50px;color:#12203a;font-size:15px;line-height:1.5}
+  .bar{background:#0e1b33;padding:10px 14px;margin:0 -20px 20px;display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+  .bar button{padding:8px 13px;cursor:pointer;border:1px solid #33436a;background:#16233f;color:#cdd8ef;border-radius:6px;font-size:14px}
+  .bar button.on{background:#c69a3a;color:#1a1205;border-color:#c69a3a;font-weight:700}
+  .bar .act{background:#1f7a44;color:#fff;border-color:#1f7a44;font-weight:700}
+  h1{font-size:18px;margin:2px 0 2px}.sub{color:#5b6b8c;font-size:13px;margin-bottom:14px}
+  .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8a97b5;font-weight:700;margin:16px 0 5px}
+  .to a{color:#2b6cb0;margin-right:8px;text-decoration:none}.to .primary{font-weight:700}
+  .subj{background:#f2f4f8;border:1px solid #e2e7f0;border-radius:7px;padding:9px 12px;font-weight:600}
+  .body{white-space:pre-wrap;background:#fff;border:1px solid #e2e7f0;border-radius:8px;padding:16px 17px;font-size:15px}
+  .mut{color:#8a97b5}.warn{color:#b4402e}
+  .hint{font-size:12px;color:#5b6b8c;margin-top:14px;background:#f2f4f8;border-radius:7px;padding:9px 12px}
+  @media print{.bar{display:none}}`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Email - ${esc(owner)}</title><style>${CSS}</style></head><body>
+<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button class="act" onclick="openMail()">Open in email app</button><button class="act" id="cpy" onclick="copyEmail()">Copy email</button></div>
+<h1>${esc(owner)}</h1><div class="sub">${esc(addr)} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${esc(dt)}</b></div>
+<div class="lbl">To</div><div class="to">${recip}</div>
+<div class="lbl">Subject</div><div class="subj" id="subjline"></div>
+<div class="lbl">Message</div><div class="body" id="bodybox"></div>
+<div class="hint">Every prospect's name, address and sale date fill in automatically, so each email reads personally. It sends as <b>${esc(sL)}</b> — review before you hit send.</div>${compHint}
+<script>var D=${Djson}, to=${JSON.stringify(to)}, cur='en';
+function show(l){cur=l;document.getElementById('subjline').textContent=D[l].subj;document.getElementById('bodybox').textContent=D[l].body;document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}
+function openMail(){location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body);}
+function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;navigator.clipboard.writeText(t).then(function(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);});}
+show('en');<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(w){ w.document.write(doc); w.document.close(); }
+}
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
 function view(){
@@ -1092,6 +1149,10 @@ function render(){
       gCall.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">'+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
     });
     if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">'+esc(fmtPhone(n.phone))+'</a>');
+    // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
+    (r.emails||[]).slice(0,2).forEach(em => {
+      gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
+    });
     // INVESTIGATE — the owner's people, their loans, their other cases, this docket.
     if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
     if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+r.recqs+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
@@ -1111,6 +1172,7 @@ function render(){
     // DO — actions.
     gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
     gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
+    gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
     gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
@@ -1279,7 +1341,7 @@ document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classL
 })();
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
-Object.entries({name:'sName', llc:'sLLC', phone:'sPhone'}).forEach(([k,id]) => {
+Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr'}).forEach(([k,id]) => {
   const el = document.getElementById(id);
   if(!el) return;
   el.value = sender[k] || '';
@@ -1301,6 +1363,14 @@ document.addEventListener('click', e => {
   e.preventDefault();
   const r = DATA.find(x => x.case === a.dataset.c);
   if(r) genScript(r);
+});
+// outreach-email generation (delegated for both table + cards)
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.emailgen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) genEmail(r);
 });
 // copy buttons (address + copy-all), delegated for table + cards
 document.addEventListener('click', e => {
@@ -1396,12 +1466,12 @@ document.addEventListener('change', e => {
   save();
 });
 document.getElementById('exp').onclick = () => {
-  const head = ['tier','verdict','verdict_reason','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','phone','zillow','appraiser','people_search','case_page','status','notes'];
+  const head = ['tier','verdict','verdict_reason','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','phone','email','zillow','appraiser','people_search','case_page','status','notes'];
   // prefix a ' to any cell starting with = + - @ so Excel/Sheets can't run it as a formula
   const q2 = v => { let s = String(v==null?'':v); if(/^[=+\-@\t\r]/.test(s)) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,r._verdict||'',r._why||'',Math.round(r._profit||0),Math.round(r._roi||0),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,r._verdict||'',r._why||'',Math.round(r._profit||0),Math.round(r._roi||0),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),((r.emails||[]).join(' | ')),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');
