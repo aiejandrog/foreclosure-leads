@@ -40,6 +40,9 @@ EXTRACT_JS = """
     rec.Folio = a ? (a.href.split('folio=')[1] || '') : '';
     // tax-deed items show the folio as plain text in the Parcel ID cell (no link)
     if (!rec.Folio && rec['Parcel ID'] && /\\d/.test(rec['Parcel ID'])) rec.Folio = rec['Parcel ID'].replace(/\\D/g,'');
+    // RealForeclose gives each auction item a stable id (aid="1506095"); #AITEM_<aid> scrolls the
+    // day's auction page straight to THIS case, so the Auction link lands on the exact parcel.
+    rec.AID = item.getAttribute('aid') || '';
     out.push(rec);
   });
   const max = document.getElementById('maxWA');
@@ -330,7 +333,11 @@ def qualify(leads):
             elif not r['warning']:
                 # a real case whose parcel just wasn't linked: owner/value come from the docket, not PA
                 r['warning'] = 'parcel not linked - verify property & value via the docket'
-        r['auction_url'] = f"{BASE}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={r.get('AuctionDate','')}"
+        _aid = str(r.get('AID', '') or '').strip()
+        # #AITEM_<aid> deep-links to THIS case on the day's auction page; without an aid, still open the
+        # correct day's list (never a broken link).
+        r['auction_url'] = (f"{BASE}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={r.get('AuctionDate','')}"
+                            + (f"#AITEM_{_aid}" if _aid else ""))
         # owner purchase year (from PA sales history)
         sd = re.search(r'(\d{4})$', (r.get('last_sale_date','') or '').strip())
         r['bought_year'] = int(sd.group(1)) if sd else 0
