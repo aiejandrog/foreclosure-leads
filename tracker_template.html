@@ -964,8 +964,11 @@ function render(){
     if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="Miami-Dade Property Appraiser record">Appraiser</a>');
     if(r.zillow) gProp.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
     if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
-    // Auction button removed: RealForeclose login-walls + bot-blocks direct links (always 403s cold);
-    // the auction data (case, judgment, sale date) is already on the lead. Restore = re-add this line.
+    // Auction: the live RealForeclose sale page for this date (all parcels + bidding). RealForeclose
+    // returns 200 to a real browser; a bare/no-UA request 403s at their AWS load balancer, so it can
+    // LOOK dead from a script — it isn't. May need a free RealForeclose login for bid detail, and the
+    // site can be geo-restricted outside the US (e.g. abroad), so we don't gate the button on a probe.
+    if(r.auc) gProp.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
     // DO — actions.
     gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
