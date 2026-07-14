@@ -1,0 +1,1720 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>DEALFLOW — Miami-Dade Foreclosure &amp; Tax-Deed Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://api.fontshare.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Space+Grotesk:wght@500;600;700&family=Orbitron:wght@600;700;800&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@600,700&display=swap" rel="stylesheet">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231A2B4A'/%3E%3Ctext x='16' y='23.5' font-family='Arial,Helvetica,sans-serif' font-size='21' font-weight='800' fill='%23C9A84C' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E">
+<style>
+:root{color-scheme:light dark}
+body{font-family:Segoe UI,system-ui,sans-serif;margin:0;background:#0f1420;color:#e8ecf3}
+header{padding:14px 20px;background:#161d2e;position:sticky;top:0;z-index:5;box-shadow:0 2px 8px #0008;transition:transform .25s ease}
+header.hdn{transform:translateY(-105%)}
+h1{font-size:17px;margin:0 0 8px}
+.sub{color:#9fb0cc;font-weight:400}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,select,input{background:#222b42;color:#e8ecf3;border:1px solid #33405f;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer}
+button.active{background:#3b82f6;border-color:#3b82f6}
+input{width:240px;cursor:text}
+.stats{font-size:12px;color:#9fb0cc;margin-left:auto}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
+th{position:sticky;top:0;background:#1b2438;padding:9px 8px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:2px solid #2a3654;font-size:11.5px;letter-spacing:.02em;color:#c7d3e8}
+td{padding:9px 8px;border-bottom:1px solid #1c2540;vertical-align:top;line-height:1.4}
+tbody tr:nth-child(even) td{background:#121a29}
+tbody tr:hover td{background:#1c2740}
+.A{color:#4ade80;font-weight:700}.B{color:#fbbf24;font-weight:700}.C{color:#64748b}
+.money{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.submeta{font-size:11px;color:#9fb0cc;margin-top:3px;font-variant-numeric:tabular-nums}
+.clip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cpy{background:#233150;border:1px solid #34456a;color:#9fc0ff;font-size:11px;padding:1px 6px;border-radius:5px;cursor:pointer;line-height:1.5;vertical-align:middle}
+.cpy:hover{background:#2c3d61}
+.cpy.ok{background:#166534;border-color:#166534;color:#fff}
+.addrline{display:flex;align-items:flex-start;gap:6px}
+.addrline .clip,.addrline .clamp2{flex:1}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hs{color:#4ade80;font-weight:600}
+.defwrap{margin-top:2px}
+.deftog{background:#233150;border:1px solid #34456a;color:#9fc0ff;font-size:10.5px;padding:2px 8px;border-radius:10px;cursor:pointer;line-height:1.4}
+.deftog:hover{background:#2c3d61}
+.deftog.open{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.deflist{max-height:0;overflow:hidden;transition:max-height .28s ease;font-size:11px;color:#aab8d4}
+.deflist.open{max-height:340px;margin-top:4px}
+.deflist>div{padding:2px 0;border-bottom:1px solid #1c2540}
+a{color:#60a5fa;text-decoration:none}
+a:hover{text-decoration:underline}
+select.status{padding:4px 5px;font-size:11.5px;width:100%;box-sizing:border-box}
+textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:#1a2338;color:#e8ecf3;border:1px solid #2a3654;border-radius:5px;font-size:12px;padding:4px 6px;resize:vertical}
+.links{line-height:1.9}
+.urgent{color:#f87171;font-weight:700}
+.warn{color:#fbbf24;font-size:11px}
+.meta{color:#8fa2c4;font-size:11px}
+.profpos{color:#4ade80;font-weight:700;font-size:14px}
+.profneg{color:#f87171;font-weight:700;font-size:14px}
+.mrwarn{color:#fbbf24;font-size:10px;font-weight:600}
+.tax{color:#f87171;font-size:11px;font-weight:600}
+.hoa{color:#fbbf24;font-size:11px;font-weight:600}
+.mtg{color:#8fa2c4;font-size:11px}
+.tdt{color:#c084fc;font-size:11px;font-weight:700}
+.links a{margin-right:6px;white-space:nowrap}
+/* mobile cards */
+#cards{display:none;padding:8px 10px 40px}
+.card{background:#131b2b;border:1px solid #26314c;border-radius:10px;padding:12px 13px;margin-bottom:11px}
+.chead{display:flex;align-items:center;gap:9px;margin-bottom:6px;flex-wrap:wrap}
+.cbadge{display:inline-block;min-width:20px;text-align:center;padding:1px 7px;border-radius:6px;background:#1c2740;font-weight:700}
+.cprofit{font-size:20px;font-weight:800}
+.cscore{margin-left:auto;font-size:12px;color:#9fb0cc}
+.cowner{font-weight:700;font-size:14px;margin-top:6px;line-height:1.3}
+.caddr{margin-top:6px;font-size:13px}
+.clinks{margin-top:9px;display:flex;flex-wrap:wrap;gap:4px 12px}
+.clinks a{font-size:14px;padding:3px 0}
+.cctl{display:flex;gap:8px;margin-top:10px}
+.cctl select{flex:0 0 auto;max-width:48%}
+.cctl textarea{flex:1}
+@media(max-width:860px){
+  header{padding:10px 12px}
+  h1{font-size:15px}
+  .controls{gap:6px}
+  input#q{width:100%}
+  .tblwrap{display:none}
+  #cards{display:block}
+}
+#advpanel{overflow:hidden;max-height:600px;transition:max-height .28s ease;opacity:1}
+#advpanel.collapsed{max-height:0;opacity:0}
+#advtog{background:#233150;border-color:#34456a}
+#advtog.active{background:#3b82f6;border-color:#3b82f6}
+#toTop{position:fixed;right:18px;bottom:18px;z-index:40;display:none;background:#3b82f6;color:#fff;border:none;border-radius:22px;padding:10px 15px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px #0009}
+#toTop:hover{background:#2563eb}
+#gate{display:none;position:fixed;inset:0;z-index:100;background:#0f1420;align-items:center;justify-content:center}
+#gate .box{background:#161d2e;border:1px solid #2a3654;border-radius:12px;padding:28px 26px;max-width:340px;width:90%;text-align:center;box-shadow:0 8px 30px #000a}
+#gate h2{font-size:16px;margin:0 0 6px}
+#gate p{font-size:12.5px;color:#9fb0cc;margin:0 0 16px}
+#gate input{width:100%;box-sizing:border-box;text-align:center;font-size:15px;padding:10px;margin-bottom:10px}
+#gate button{width:100%;background:#3b82f6;border-color:#3b82f6;color:#fff;font-weight:700;padding:10px}
+#gateerr{color:#f87171;font-size:12px;min-height:16px;margin-top:8px}
+a.phone{color:#4ade80;font-weight:600}
+a.phone.dnc{color:#fbbf24}
+a.email{color:#8ab4f0;font-weight:600;word-break:break-all}
+input.ph{width:100%;box-sizing:border-box;font-size:12px;padding:4px 6px;margin-bottom:4px;background:#12261a;border:1px solid #2a4a35;border-radius:5px;color:#bff3d0}
+input.ph::placeholder{color:#5a7d66}
+/* worth-it verdict badges */
+.vb{display:inline-block;font-size:10px;font-weight:800;padding:1px 6px;border-radius:5px;letter-spacing:.03em;vertical-align:middle}
+.vb3{background:#166534;color:#d9ffe6}
+.vb2{background:#7c5e12;color:#ffe9b8}
+.vb1{background:#3a2530;color:#f7b7c2}
+.vbv{background:#1e3a5f;color:#bcd8ff}
+/* deal-analysis trigger button */
+.dealtog{margin-top:6px;background:#1b2740;border:1px solid #2f3f60;color:#9fc0ff;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:8px;cursor:pointer;line-height:1.4}
+.dealtog:hover{background:#26406b;color:#fff}
+/* deal-analysis modal */
+#dealmodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show{display:block}
+.dm-backdrop{position:absolute;inset:0;background:#060a12cc;backdrop-filter:blur(2px)}
+.dm-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,94vw);max-height:90vh;overflow-y:auto;background:#141b2b;border:1px solid #2c3a5a;border-radius:14px;box-shadow:0 18px 60px #000b;padding:20px 22px 22px}
+.dm-close{position:absolute;top:10px;right:12px;background:none;border:none;color:#9fb0cc;font-size:24px;line-height:1;cursor:pointer;padding:2px 8px}
+.dm-close:hover{color:#fff}
+.dm-head{margin:0 30px 14px 0;padding-bottom:12px;border-bottom:1px solid #26314c}
+.dm-title{font-size:17px;font-weight:800;line-height:1.25}
+.dm-sub{font-size:12.5px;color:#9fb0cc;margin-top:3px}
+.dm-verdict{margin-top:9px;display:flex;align-items:center;gap:9px;font-size:20px;font-weight:800}
+.dm-why{font-size:12px;color:#c4d0e6;margin-top:6px;line-height:1.5}
+.dm-sec{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#7d8db0;margin:16px 0 6px}
+.dealmath{background:#0f1726;border:1px solid #23304c;border-radius:9px;padding:11px 13px;font-size:13px}
+.mathline{display:flex;justify-content:space-between;gap:12px;padding:2px 0;color:#c2cfe6;font-variant-numeric:tabular-nums}
+.mathline.tot{border-top:1px solid #2a3654;margin-top:5px;padding-top:6px;font-weight:800;font-size:14px;color:#e8ecf3}
+.dealadj{display:flex;flex-wrap:wrap;gap:11px 14px;align-items:flex-end}
+.dealadj label{font-size:11px;color:#9fb0cc;display:flex;flex-direction:column;gap:3px}
+.dealadj input[type=number]{width:130px;font-size:13px;padding:6px 8px}
+.dealadj .occlbl{flex-direction:row;align-items:center;gap:6px;padding-bottom:6px}
+.dealadj input[type=checkbox]{width:auto;cursor:pointer;transform:scale(1.2)}
+.dealflags{font-size:12px;color:#e0b35a;line-height:1.55}
+.dealflags>div{padding:2px 0}
+.dealstrat{font-size:13px;color:#dde6f5;line-height:1.55;background:#101a2e;border-left:3px solid #3b82f6;padding:10px 13px;border-radius:0 8px 8px 0}
+@media(max-width:860px){ .dm-card{width:96vw;padding:18px 16px 20px} }
+
+/* ============================================================
+   DEALFLOW — premium light navy+gold redesign (tranchi-grade)
+   This block is appended last so it re-skins everything above.
+   ============================================================ */
+:root{
+  color-scheme:light;
+  --bg:#EDF1F7; --bg-2:#F6F8FB; --surface:#FFFFFF; --surface-2:#F4F7FB;
+  --ink:#16233F; --ink-2:#3B4A66; --muted:#64748B; --muted-2:#93A0B4;
+  --line:rgba(22,35,63,.11); --line-2:rgba(22,35,63,.06);
+  --navy:#1A2B4A; --navy-grad:linear-gradient(135deg,#0F1B33 0%,#1A2B4A 46%,#20386A 100%);
+  --gold:#C9A84C; --gold-d:#A07E28; --gold-l:#E8D48B; --gold-soft:rgba(201,168,76,.14);
+  --gold-grad:linear-gradient(120deg,#C9A84C,#E8D48B);
+  --green:#0F9D58; --green-ink:#0A7A42; --green-soft:#E4F5EC;
+  --amber:#C98A12; --amber-ink:#8A5F0C; --amber-soft:#FAF0D8;
+  --red:#DC2626; --red-ink:#B31B1B; --red-soft:#FBE8E8;
+  --blue:#2563EB; --blue-ink:#1E50C8; --blue-soft:#E7F0FE;
+  --r-xs:6px; --r-sm:9px; --r:13px; --r-lg:18px; --r-xl:24px; --pill:999px;
+  --sh-1:0 1px 2px rgba(16,27,51,.06);
+  --sh-2:0 4px 16px rgba(16,27,51,.07),0 1px 3px rgba(16,27,51,.05);
+  --sh-3:0 24px 60px rgba(16,27,51,.18),0 4px 12px rgba(16,27,51,.06);
+  --f-display:'General Sans','Space Grotesk',system-ui,sans-serif;
+  --f-body:'DM Sans','Inter',system-ui,-apple-system,sans-serif;
+  --f-num:'Space Grotesk','DM Sans',system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+body{font-family:var(--f-body);margin:0;background:
+  radial-gradient(1200px 600px at 100% -10%,rgba(201,168,76,.06),transparent 60%),
+  radial-gradient(1000px 500px at -10% 0%,rgba(26,43,74,.05),transparent 55%),
+  var(--bg);
+  color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:.001em}
+::selection{background:var(--gold-soft);color:var(--ink)}
+::-webkit-scrollbar{height:11px;width:11px}
+::-webkit-scrollbar-thumb{background:rgba(22,35,63,.18);border-radius:10px;border:3px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(22,35,63,.32);background-clip:content-box}
+::-webkit-scrollbar-track{background:transparent}
+
+/* header */
+header{padding:15px 22px 13px;background:rgba(246,248,251,.8);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border-bottom:1px solid var(--line);box-shadow:0 1px 0 rgba(255,255,255,.6) inset;transition:transform .5s cubic-bezier(.16,1,.3,1),box-shadow .35s ease;will-change:transform}
+header.hdn{transform:translateY(-106%)}
+header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 10px 30px rgba(16,27,51,.11)}
+.brand{display:flex;align-items:center;gap:13px;margin:0 0 13px}
+.brand .mark{width:38px;height:38px;border-radius:11px;background:var(--navy-grad);display:grid;place-items:center;box-shadow:var(--sh-2),0 0 0 1px rgba(201,168,76,.25) inset;flex:0 0 auto}
+.brand .mark i{width:16px;height:16px;border:2.5px solid var(--gold);border-radius:3px;transform:rotate(45deg);display:block;box-shadow:0 0 10px rgba(201,168,76,.4)}
+.brand .wm{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:-.02em;color:var(--ink);line-height:1.05}
+.brand .wm b{color:var(--gold-d);font-weight:700}
+.brand .tag{font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:.01em}
+.brand .spacer{flex:1}
+.brand .upd{font-size:11px;color:var(--muted-2);text-align:right;align-self:center;font-variant-numeric:tabular-nums}
+.brand .upd.stale{color:#c2410c !important;-webkit-text-fill-color:#c2410c !important;font-weight:700}
+.brand .upd.stale #upddate{color:#c2410c !important;-webkit-text-fill-color:#c2410c !important}
+h1{font-size:17px;margin:0 0 8px;font-family:var(--f-display);font-weight:700;color:var(--ink)}
+.sub{color:var(--muted);font-weight:400}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button,select,input{font-family:var(--f-body);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-sm);padding:7px 13px;font-size:13px;cursor:pointer;transition:border-color .15s,box-shadow .15s,background .15s,color .15s}
+button:hover{border-color:rgba(22,35,63,.28);box-shadow:var(--sh-1)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+input{width:240px;cursor:text}
+input::placeholder{color:var(--muted-2)}
+.stats{font-size:12px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+/* filter chips */
+.tf{border-radius:var(--pill);padding:7px 15px;font-weight:600;color:var(--ink-2)}
+.tf.active{background:var(--navy-grad);color:#fff;border-color:transparent;box-shadow:var(--sh-2)}
+button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
+#wk.active,#hd.active,#td.active{background:var(--gold);border-color:var(--gold);color:#3a2c05}
+#advtog{border-radius:var(--pill);background:var(--surface);color:var(--ink);border-color:var(--line);font-weight:600}
+#advtog:hover{border-color:var(--gold);color:var(--gold-d)}
+#advtog.active{background:var(--gold-soft);border-color:var(--gold);color:var(--gold-d)}
+#exp{border-radius:var(--pill);font-weight:600}
+
+/* table */
+.tblscroll{position:relative}
+.tblwrap{overflow-x:auto;padding:6px 16px 48px;position:relative;scroll-behavior:smooth;-webkit-overflow-scrolling:touch;scrollbar-width:thin;transition:box-shadow .3s var(--e-lux)}
+/* edge-fade hints: inset shadows stay pinned to the visible edges (don't scroll with content),
+   so they signal "there's more this way." Toggled by JS based on scroll position. */
+.tblwrap.canright{box-shadow:inset -52px 0 34px -34px rgba(22,35,63,.30)}
+.tblwrap.canleft{box-shadow:inset 52px 0 34px -34px rgba(22,35,63,.30)}
+.tblwrap.canleft.canright{box-shadow:inset 52px 0 34px -34px rgba(22,35,63,.30),inset -52px 0 34px -34px rgba(22,35,63,.30)}
+/* gold "scroll →" pill pinned to the bottom-right of the scroll area; fades out after first scroll */
+.scrollnudge{position:absolute;right:20px;bottom:54px;z-index:6;pointer-events:none;background:var(--gold-grad);
+  color:#1A2B4A;font-size:11px;font-weight:800;letter-spacing:.02em;padding:6px 12px;border-radius:20px;
+  box-shadow:0 6px 18px -5px rgba(201,168,76,.6);white-space:nowrap;opacity:0;transform:translateX(8px);
+  transition:opacity .45s var(--e-lux),transform .45s var(--e-lux)}
+.scrollnudge.on{opacity:.97;transform:translateX(0);animation:nudgeBob 1.5s ease-in-out infinite}
+@keyframes nudgeBob{0%,100%{transform:translateX(0)}50%{transform:translateX(6px)}}
+@media(prefers-reduced-motion:reduce){.scrollnudge.on{animation:none}}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
+th{position:sticky;top:0;z-index:1;background:var(--bg);padding:11px 12px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:1px solid var(--line);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+th:hover{color:var(--ink)}
+td{padding:12px;border-bottom:1px solid var(--line-2);vertical-align:top;line-height:1.45;background:var(--surface)}
+tbody tr:nth-child(even) td{background:#FBFCFE}
+tbody tr:hover td{background:#F3F8FF}
+tbody tr td:first-child{box-shadow:inset 3px 0 0 transparent}
+.A{color:var(--green-ink);font-weight:700}.B{color:var(--amber-ink);font-weight:700}.C{color:var(--muted)}
+.money,.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--f-num)}
+.profpos,.profneg{white-space:nowrap}
+td.num .warn,td.num .mrwarn,td.num .submeta{white-space:normal;overflow-wrap:anywhere}
+.submeta{font-size:11px;color:var(--muted);margin-top:3px;font-variant-numeric:tabular-nums}
+.meta{color:var(--muted);font-size:11px}
+.clip{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.addrline{display:flex;align-items:flex-start;gap:6px}
+.addrline .clip,.addrline .clamp2{flex:1}
+.clamp2{display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.hs{color:var(--green-ink);font-weight:700}
+.cpy{background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);font-size:11px;padding:2px 7px;border-radius:var(--r-xs);cursor:pointer;line-height:1.5;vertical-align:middle;transition:all .12s}
+.cpy:hover{background:var(--gold-soft);border-color:var(--gold);color:var(--gold-d)}
+.cpy.ok{background:var(--green);border-color:var(--green);color:#fff}
+.defwrap{margin-top:2px}
+.deftog{background:var(--surface-2);border:1px solid var(--line);color:var(--ink-2);font-size:10.5px;padding:2px 9px;border-radius:var(--pill);cursor:pointer;line-height:1.4}
+.deftog:hover{background:var(--gold-soft);border-color:var(--gold);color:var(--gold-d)}
+.deftog.open{background:var(--navy);border-color:var(--navy);color:#fff}
+.deflist{max-height:0;overflow:hidden;transition:max-height .28s ease;font-size:11px;color:var(--ink-2)}
+.deflist.open{max-height:340px;margin-top:4px}
+.deflist>div{padding:2px 0;border-bottom:1px solid var(--line-2)}
+a{color:var(--blue-ink);text-decoration:none;font-weight:500}
+a:hover{text-decoration:underline}
+select.status{padding:5px 6px;font-size:11.5px;width:100%;box-sizing:border-box;border-radius:var(--r-xs)}
+textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-xs);font-size:12px;padding:6px 8px;resize:vertical;font-family:var(--f-body)}
+textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+.links{line-height:2}
+.links a{margin-right:8px;white-space:nowrap}
+.urgent{color:var(--red);font-weight:700}
+.warn{color:var(--amber-ink);font-size:11px}
+.profpos{color:var(--green-ink);font-weight:800;font-size:15px;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.profneg{color:var(--red);font-weight:800;font-size:15px;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.mrwarn{color:var(--amber-ink);font-size:10px;font-weight:600}
+.tax{color:var(--red);font-size:11px;font-weight:600}
+.hoa{color:var(--amber-ink);font-size:11px;font-weight:600}
+.mtg{color:var(--muted);font-size:11px}
+.tdt{color:var(--gold-d);font-size:11px;font-weight:700}
+
+/* worth-it verdict badges — refined pills with dot */
+.vb{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-body);font-size:10px;font-weight:700;padding:3px 9px 3px 8px;border-radius:var(--pill);letter-spacing:.05em;text-transform:uppercase;line-height:1;border:1px solid transparent;vertical-align:middle}
+.vb::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
+.vb3{background:var(--green-soft);color:var(--green-ink);border-color:#c2e6cf}
+.vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
+.vb1{background:#EDF0F5;color:#647089;border-color:var(--line)}
+.vbv{background:var(--blue-soft);color:var(--blue-ink);border-color:#cadcfb}
+
+/* deal-analysis trigger */
+.dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font-family:var(--f-body);font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--pill);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .14s;box-shadow:var(--sh-1)}
+.dealtog:hover{border-color:var(--gold);color:var(--gold-d);box-shadow:var(--sh-2);transform:translateY(-1px)}
+
+/* deal-analysis modal */
+#dealmodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show{display:block}
+.dm-backdrop{position:absolute;inset:0;background:rgba(12,20,38,.5);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);animation:dmFade .2s ease}
+.dm-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(580px,94vw);max-height:90vh;overflow-y:auto;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-xl);box-shadow:var(--sh-3);padding:26px 26px 24px;animation:dmPop .28s cubic-bezier(.2,.9,.3,1.15)}
+.dm-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--gold-grad);border-radius:var(--r-xl) var(--r-xl) 0 0}
+.dm-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:var(--r-xs)}
+.dm-close:hover{color:var(--ink);background:var(--surface-2)}
+/* contact / follow-up tracker */
+#logmodal{display:none;position:fixed;inset:0;z-index:120}
+#logmodal.show{display:block}
+#logmodal .dm-card{max-width:440px}
+.cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;cursor:pointer}
+.cx{font-size:10px;padding:1px 6px;border-radius:9px;white-space:nowrap;line-height:1.7}
+.cx-new{background:var(--surface-2);color:var(--muted)}
+.cx-done{background:rgba(74,222,128,.14);color:#8fe3ab}
+.cx-fu{background:rgba(138,180,240,.16);color:#9cc0f0}
+.cx-due{background:rgba(251,191,36,.2);color:#f4c150;font-weight:700}
+.qlogwrap{display:flex;flex-wrap:wrap;gap:7px}
+.qlog{padding:9px 12px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:8px;cursor:pointer;font-size:14px}
+.qlog:hover{border-color:#c69a3a;color:#e8c877}
+.fuwrap{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--ink)}
+.fuset{padding:5px 10px;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);border-radius:7px;cursor:pointer;font-size:12px}
+.fuset:hover{color:var(--ink);border-color:#c69a3a}
+.lhist{margin:4px 0 8px;padding-left:16px;font-size:12px;color:var(--muted)}
+.lhist li{margin:3px 0}
+.lundo{font-size:11px;padding:3px 9px;border:1px solid var(--line);background:none;color:var(--muted);border-radius:6px;cursor:pointer}
+.mut{color:var(--muted)}
+.dm-head{margin:0 30px 16px 0;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.dm-title{font-family:var(--f-display);font-size:20px;font-weight:700;line-height:1.2;letter-spacing:-.01em;color:var(--ink)}
+.dm-sub{font-size:12.5px;color:var(--muted);margin-top:4px}
+.dm-verdict{margin-top:11px;display:flex;align-items:center;gap:10px;font-family:var(--f-num);font-size:22px;font-weight:800}
+.dm-why{font-size:12.5px;color:var(--ink-2);margin-top:7px;line-height:1.55}
+.dm-sec{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted-2);margin:18px 0 7px}
+.dealmath{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:13px 15px;font-size:13px}
+.mathline{display:flex;justify-content:space-between;gap:12px;padding:3px 0;color:var(--ink-2);font-variant-numeric:tabular-nums;font-family:var(--f-num)}
+.mathline span:first-child{font-family:var(--f-body);color:var(--muted)}
+.mathline.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:800;font-size:15px;color:var(--ink)}
+.mathline.tot span:first-child{color:var(--ink);font-weight:700}
+.dealadj{display:flex;flex-wrap:wrap;gap:12px 15px;align-items:flex-end}
+.dealadj label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px;font-weight:500}
+.dealadj input[type=number]{width:135px;font-size:13px;padding:7px 9px;font-family:var(--f-num)}
+.dealadj .occlbl{flex-direction:row;align-items:center;gap:7px;padding-bottom:7px}
+.dealadj input[type=checkbox]{width:auto;cursor:pointer;transform:scale(1.25);accent-color:var(--gold)}
+.dealadj .esthint{font-size:10px;color:var(--muted-2);font-weight:400;margin-top:2px;font-style:italic}
+.dealflags{font-size:12px;color:var(--amber-ink);line-height:1.6}
+.dealflags>div{padding:2px 0}
+.dealstrat{font-size:13px;color:var(--ink);line-height:1.6;background:var(--gold-soft);border-left:3px solid var(--gold);padding:11px 14px;border-radius:0 var(--r-sm) var(--r-sm) 0}
+
+/* mobile cards — tranchi deal-card language */
+#cards{display:none;padding:14px 12px 52px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:16px 16px 15px;margin-bottom:13px;box-shadow:var(--sh-2);position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--muted-2)}
+.card.v3::before{background:var(--green)}
+.card.v2::before{background:var(--amber)}
+.card.v1::before{background:var(--muted-2)}
+.card.vv::before{background:var(--blue)}
+.chead{display:flex;align-items:center;gap:9px;margin-bottom:6px;flex-wrap:wrap}
+.cbadge{display:inline-block;min-width:22px;text-align:center;padding:2px 8px;border-radius:var(--r-xs);background:var(--surface-2);border:1px solid var(--line);font-weight:700}
+.cbadge.A{color:var(--green-ink)}.cbadge.B{color:var(--amber-ink)}.cbadge.C{color:var(--muted)}
+.cprofit{font-family:var(--f-num);font-size:22px;font-weight:800}
+.cscore{margin-left:auto;font-size:12px;color:var(--muted)}
+.cowner{font-family:var(--f-display);font-weight:600;font-size:15px;margin-top:6px;line-height:1.3;color:var(--ink)}
+.caddr{margin-top:6px;font-size:13px}
+.cstats{display:flex;gap:8px;margin-top:11px}
+.cstat{flex:1;background:var(--surface-2);border:1px solid var(--line-2);border-radius:var(--r-sm);padding:8px 10px}
+.cstat .k{font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-2);font-weight:600}
+.cstat .v{font-family:var(--f-num);font-size:15px;font-weight:700;color:var(--ink);margin-top:2px;font-variant-numeric:tabular-nums}
+.clinks{margin-top:11px;display:flex;flex-wrap:wrap;gap:5px 14px;padding-top:11px;border-top:1px solid var(--line-2)}
+.clinks a{font-size:14px;padding:3px 0}
+.cctl{display:flex;gap:8px;margin-top:10px}
+.cctl select{flex:0 0 auto;max-width:48%}
+.cctl textarea{flex:1}
+
+/* advanced panel */
+#advpanel{overflow:hidden;max-height:640px;transition:max-height .3s ease,opacity .3s ease;opacity:1}
+#advpanel.collapsed{max-height:0;opacity:0}
+.dealpanel{margin-top:8px;background:var(--surface);padding:11px 13px;border-radius:var(--r);border:1px solid var(--line);box-shadow:var(--sh-1)}
+
+/* scroll-to-top */
+#toTop{position:fixed;right:20px;bottom:20px;z-index:40;display:none;background:var(--navy);color:#fff;border:none;border-radius:var(--pill);padding:11px 17px;font-size:13px;font-weight:700;cursor:pointer;box-shadow:var(--sh-3)}
+#toTop:hover{background:var(--ink)}
+
+/* private gate */
+#gate{display:none;position:fixed;inset:0;z-index:100;background:var(--navy-grad);align-items:center;justify-content:center}
+#gate .box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-xl);padding:32px 30px;max-width:360px;width:90%;text-align:center;box-shadow:var(--sh-3);position:relative;overflow:hidden}
+#gate .box::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--gold-grad)}
+#gate h2{font-family:var(--f-display);font-size:18px;margin:0 0 6px;color:var(--ink)}
+#gate p{font-size:12.5px;color:var(--muted);margin:0 0 16px}
+#gate input{width:100%;box-sizing:border-box;text-align:center;font-size:15px;padding:11px;margin-bottom:10px}
+#gate button{width:100%;background:var(--navy);border-color:var(--navy);color:#fff;font-weight:700;padding:11px;border-radius:var(--r-sm)}
+#gate button:hover{background:var(--ink)}
+#gateerr{color:var(--red);font-size:12px;min-height:16px;margin-top:8px}
+
+/* saved phones */
+a.phone{color:var(--green-ink);font-weight:700}
+a.phone.dnc{color:var(--amber-ink)}
+input.ph{width:100%;box-sizing:border-box;font-size:12px;padding:6px 8px;margin-bottom:5px;background:#F0FAF3;border:1px solid #CFE9D6;border-radius:var(--r-xs);color:#0A7A42;font-family:var(--f-num)}
+input.ph::placeholder{color:#8FBFA0}
+
+/* intro reveal */
+#intro{position:fixed;inset:0;z-index:300;background:var(--navy-grad);display:grid;place-items:center;transition:opacity .55s ease,visibility .55s}
+#intro.done{opacity:0;visibility:hidden}
+#intro .lg{display:flex;flex-direction:column;align-items:center;gap:15px}
+#intro .mk{width:66px;height:66px;border-radius:17px;background:rgba(255,255,255,.05);border:1px solid rgba(201,168,76,.45);display:grid;place-items:center;animation:introPop .75s cubic-bezier(.2,.9,.3,1.35)}
+#intro .mk i{width:26px;height:26px;border:2.5px solid var(--gold);border-radius:5px;transform:rotate(45deg);display:block;box-shadow:0 0 18px rgba(201,168,76,.5)}
+#intro .wm{font-family:var(--f-display);font-weight:700;font-size:27px;letter-spacing:.01em;color:#fff;opacity:0;transform:translateY(9px);animation:introUp .6s .22s forwards}
+#intro .wm b{color:var(--gold-l)}
+#intro .tg{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);opacity:0;transform:translateY(9px);animation:introUp .6s .36s forwards}
+#intro .bar{width:130px;height:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:6px}
+#intro .bar i{display:block;height:100%;width:45%;border-radius:3px;background:var(--gold-grad);animation:introBar 1.1s ease-in-out infinite}
+@keyframes introPop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
+@keyframes introUp{to{opacity:1;transform:translateY(0)}}
+@keyframes introBar{0%{transform:translateX(-130%)}100%{transform:translateX(330%)}}
+@keyframes dmFade{from{opacity:0}to{opacity:1}}
+@keyframes dmPop{from{opacity:0;transform:translate(-50%,-46%) scale(.97)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes appIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+header{animation:appIn .5s .05s both}
+.tblwrap,#cards{animation:appIn .55s .12s both}
+
+@media(max-width:860px){
+  header{padding:12px 13px 10px}
+  .brand .wm{font-size:18px}
+  .brand .upd{display:none}
+  .brand .upd.stale{display:inline-block}
+  .controls{gap:6px}
+  input#q{width:100%}
+  .tblwrap{display:none}
+  #cards{display:block}
+}
+:root{--e-lux:cubic-bezier(.22,1,.36,1);--e-snap:cubic-bezier(.2,0,.4,1)}
+/* ===== smooth hover / press micro-interactions ===== */
+button,.tf,.dealtog,.lkb,.lockbtn,select{transition:transform .28s var(--e-lux),box-shadow .28s var(--e-lux),border-color .22s var(--e-lux),background-color .22s var(--e-lux),color .22s var(--e-lux),filter .22s var(--e-lux)}
+button:not(.active):not(.cpy):not(:disabled):hover,.dealtog:hover,.lkb:hover{transform:translateY(-2px);border-color:rgba(201,168,76,.45);background-color:#FFFDF8;box-shadow:0 1px 2px rgba(22,35,63,.05),0 8px 20px -8px rgba(22,35,63,.14),0 4px 18px -4px rgba(201,168,76,.20)}
+button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);transition-duration:.1s;transition-timing-function:var(--e-snap)}
+/* filter chips */
+.tf:hover{transform:translateY(-1px);border-color:rgba(201,168,76,.4);background-color:rgba(201,168,76,.06);box-shadow:0 3px 10px -4px rgba(22,35,63,.12)}
+.tf:active{transform:translateY(0) scale(.97);transition-duration:.09s;transition-timing-function:var(--e-snap)}
+.tf.active:hover{transform:translateY(-1px);filter:brightness(1.1);box-shadow:0 3px 12px -4px rgba(22,35,63,.3),0 0 0 1px rgba(201,168,76,.35)}
+/* gold CTA (gate unlock): a brighter gradient cross-fades in on hover */
+#gate button{position:relative;isolation:isolate;overflow:hidden}
+#gate button::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(120deg,#E8D48B,#C9A84C 60%,#E8D48B);opacity:0;transition:opacity .32s var(--e-lux)}
+#gate button:hover{transform:translateY(-2px);box-shadow:0 2px 6px -2px rgba(160,126,40,.45),0 10px 28px -8px rgba(201,168,76,.5)}
+#gate button:hover::before{opacity:1}
+#gate button:active{transform:translateY(0) scale(.98);transition-duration:.1s}
+/* copy micro-lift */
+.cpy{transition:transform .16s var(--e-lux),background .16s ease,border-color .16s ease,color .16s ease}
+.cpy:hover{transform:translateY(-1px)}
+/* lead links, ONE coherent system grouped by purpose (gold underline draws in on hover):
+   base = slate (info/nav) · .dig = gold (investigate: loans, cases, people, docket) · .phone = green (call) */
+.links a,.clinks a{position:relative;text-decoration:none;color:var(--muted);font-weight:500;transition:color .2s var(--e-lux)}
+.links a::after,.clinks a::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--gold-grad);transform:scaleX(0);transform-origin:100% 50%;transition:transform .3s var(--e-lux)}
+.links a:hover,.clinks a:hover{color:var(--gold-d);text-decoration:none}
+.links a:hover::after,.clinks a:hover::after{transform:scaleX(1);transform-origin:0 50%}
+.links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:600}
+.links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
+.links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
+.links a.email,.clinks a.email{color:#5a7db0;font-weight:600;word-break:break-all}
+/* links laid out as clean even bands, one functional group per row (phones · investigate · property · actions) */
+.links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;line-height:1.5}
+.links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:5px}
+.eqfake{color:var(--muted-2)!important;font-style:italic;font-weight:400}
+.cstat .v.eqfake{color:var(--muted-2);font-style:italic}
+/* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
+.brand .wm{display:inline-block;transition:filter .35s ease}
+.brand .wm b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));transition:filter .45s var(--e-lux);animation:wmShine 3.6s linear infinite}
+@supports ((-webkit-background-clip:text) or (background-clip:text)){
+  .brand .wm b{-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
+}
+@keyframes wmShine{0%{background-position:120% center}100%{background-position:-120% center}}
+.brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(201,168,76,.55)) drop-shadow(0 1px 2px rgba(160,126,40,.25)) brightness(1.07)}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
+  .brand .wm b{animation-duration:3.6s!important}   /* keep the logo flowing on its own (explicit request; low-risk color shimmer) */
+}
+/* empty state (no leads match the current filters) */
+.empty{text-align:center;padding:56px 24px}
+.emptycell{border:none!important;background:transparent!important}
+.empty-t{font-family:var(--f-display);font-size:18px;font-weight:600;color:var(--ink)}
+.empty-s{font-size:13px;margin-top:6px;color:var(--muted)}
+.empty-reset{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:9px 18px;color:var(--ink);cursor:pointer;font-weight:600;box-shadow:var(--sh-1)}
+.empty-reset:hover{border-color:var(--gold);color:var(--gold-d)}
+/* status color-coding */
+select.status.st-dead{color:var(--red);border-color:#f0cccc;background:#fdf3f3}
+select.status.st-hot{color:var(--green-ink);border-color:#bfe6cd;background:#f0faf3;font-weight:600}
+select.status.st-active{color:var(--ink);border-color:rgba(201,168,76,.4)}
+/* active sort-column indicator */
+th.sorted{color:var(--ink)}
+th.sorted::after{content:'\25BE';font-size:9px;margin-left:6px;color:var(--gold-d);vertical-align:middle}
+th.sorted[data-dir="asc"]::after{content:'\25B4'}
+/* Orbitron tech-label layer + gold accents (tranchi signature) */
+:root{--f-label:'Orbitron','Space Grotesk',sans-serif}
+.brand .tag,.dm-sec,.cstat .k,#intro .tg,th{font-family:var(--f-label);font-weight:600}
+th{letter-spacing:.09em;font-size:9.5px}
+.dm-sec{letter-spacing:.13em}
+.cstat .k{letter-spacing:.1em}
+.brand .tag{letter-spacing:.13em;text-transform:uppercase;font-size:9px;color:var(--muted-2)}
+#intro .tg{font-family:var(--f-label)}
+.brand .wm b{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+#intro .wm b{background:linear-gradient(120deg,#E8D48B,#C9A84C);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+/* primary CTA = gold-gradient pill, white ink, soft gold glow */
+#gate button{background:var(--gold-grad);border:none;color:#2a2205;font-weight:700;box-shadow:0 6px 20px rgba(201,168,76,.35)}
+#gate button:hover{background:linear-gradient(120deg,#D4B658,#F0DC94);box-shadow:0 8px 26px rgba(201,168,76,.45)}
+.dealtog::before{content:'\25B8';color:var(--gold-d);font-size:9px}
+/* type chips (tranchi deal-type language) */
+.chip{display:inline-block;font-family:var(--f-label);font-size:8.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:var(--pill);border:1px solid var(--line);white-space:nowrap;line-height:1.5}
+.chip.mtg{background:#EEF2F8;color:#48566E}
+.chip.hoa{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
+.chip.tdt{background:var(--gold-soft);color:var(--gold-d);border-color:rgba(201,168,76,.35)}
+.chip.tax{background:var(--red-soft);color:var(--red-ink)}
+/* desktop row verdict accent (mirrors the mobile card spine) */
+tbody tr.rv3 td:first-child{box-shadow:inset 3px 0 0 var(--green)}
+tbody tr.rv2 td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
+tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
+/* wordmark logo (no icon) + clean risk dot + svg copy glyph */
+.brand .wm{font-size:23px;letter-spacing:-.025em}
+.dealflags .flag{position:relative;padding-left:15px}
+.dealflags .flag::before{content:'';position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:50%;background:var(--amber)}
+.cpy svg{display:block}
+#intro .wm{font-size:34px}
+/* number/date fields: hide spinner arrows + tighter centered padding so values aren't clipped */
+input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+input[type=number]{-moz-appearance:textfield;appearance:textfield}
+#advpanel input[type=number],.dealpanel input[type=number]{padding:7px 8px;text-align:center}
+#advpanel input[type=date]{padding:6px 9px;width:150px}
+/* advanced panel now sits below the compact sticky header, so it scrolls away instead of pinning */
+#advpanel{padding:2px 16px 14px}
+/* premium access gate */
+.gate-brand{font-family:var(--f-display);font-weight:700;font-size:27px;letter-spacing:-.02em;color:var(--ink);margin-bottom:12px}
+.gate-brand b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:wmShine 3.6s linear infinite}
+.gate-eyebrow{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-d);margin-bottom:16px}
+#gate input{letter-spacing:.06em}
+.gate-foot{font-family:var(--f-label);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);margin-top:18px}
+.lockbtn{display:none;align-self:center;margin-left:12px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:5px 13px;font-size:11px;font-weight:600;color:var(--muted);cursor:pointer;transition:all .14s}
+.lockbtn:hover{border-color:var(--gold);color:var(--gold-d)}
+body.modal-open{overflow:hidden}
+/* personalized welcome toast */
+#welcome{position:fixed;top:0;left:0;right:0;z-index:250;display:flex;justify-content:center;pointer-events:none}
+.wtoast{margin-top:30px;display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh-3),0 0 0 1px rgba(201,168,76,.18);padding:13px 24px 13px 15px;opacity:0;transform:translateY(-30px) scale(.94);transition:opacity .45s ease,transform .6s cubic-bezier(.2,.9,.3,1.35)}
+.wtoast.show{opacity:1;transform:translateY(0) scale(1)}
+.wtoast.out{opacity:0;transform:translateY(-10px) scale(.985);transition:opacity .7s cubic-bezier(.4,0,.2,1),transform .8s var(--e-lux)}
+.wcheck{width:36px;height:36px;border-radius:50%;background:var(--gold-grad);display:grid;place-items:center;flex:0 0 auto;box-shadow:0 5px 16px rgba(201,168,76,.45)}
+.wcheck::after{content:'';display:block;width:11px;height:6px;border-left:2.5px solid #2a2205;border-bottom:2.5px solid #2a2205;transform:rotate(-45deg);margin-top:-3px}
+.wtext{display:flex;flex-direction:column;line-height:1.1}
+.whi{font-family:var(--f-label);font-size:8.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted-2);font-weight:600}
+.wname{font-family:var(--f-display);font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.01em;margin-top:3px}
+/* KPI stat band */
+.kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
+.kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
+.kpi.gold::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold-grad)}
+.kpi .kl{font-family:var(--f-label);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);font-weight:600}
+.kpi .kv{font-family:var(--f-num);font-size:27px;font-weight:800;color:var(--ink);margin-top:6px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .kv.g{color:var(--green-ink)}
+.kpi .ks{font-size:11px;color:var(--muted);margin-top:5px}
+@media(max-width:860px){ .kpis{padding:12px 12px 2px;gap:9px} .kpi{min-width:calc(50% - 5px);padding:12px 13px} .kpi .kv{font-size:22px} }
+</style></head><body>
+<div id="intro"><div class="lg"><div class="wm">DEAL<b>FLOW</b></div><div class="tg">Miami-Dade Deal Engine</div><div class="bar"><i></i></div></div></div>
+<div id="welcome"></div>
+<div id="gate"><div class="box">
+<div class="gate-brand">DEAL<b>FLOW</b></div>
+<div class="gate-eyebrow">Private &middot; Invite only</div>
+<h2>Enter your access code</h2>
+<p>This deal intelligence is private. Enter the code you were given &mdash; this device stays unlocked afterward.</p>
+<input id="gatepw" type="password" placeholder="Access code" autocomplete="off" autocapitalize="off" spellcheck="false">
+<input id="gatephrase" type="password" placeholder="Secret phrase — leave blank if none" autocomplete="off" autocapitalize="off" spellcheck="false">
+<button id="gatego">Unlock</button>
+<div id="gateerr"></div>
+<div class="gate-foot">End-to-end encrypted &middot; Miami-Dade Deal Engine</div>
+</div></div>
+<div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
+<div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
+<header>
+<div class="brand">
+<div>
+<div class="wm">DEAL<b>FLOW</b></div>
+<div class="tag">Miami-Dade · Foreclosure &amp; Tax-Deed Intelligence</div>
+</div>
+<span class="spacer"></span>
+<span class="upd" id="upd">Updated <b id="upddate">2026-07-14</b><span id="stalemark"></span> · notes saved on this device</span>
+<button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
+</div>
+<div class="controls">
+<button class="tf active" data-t="A">Tier A</button>
+<button class="tf" data-t="B">Tier B</button>
+<button class="tf" data-t="C">Tier C</button>
+<button class="tf" data-t="ALL">All</button>
+<button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
+<button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
+<button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
+<button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
+<button id="due" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days">⚡ Due</button>
+<input id="q" placeholder="Search owner / address / case #">
+<label style="font-size:12px">Sort <select id="sortby">
+<option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
+<option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option><option value="next">Follow-up due</option>
+</select></label>
+<button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">Filters &amp; setup</button>
+<button id="exp">Export CSV (with my notes)</button>
+<span class="stats" id="stats"></span>
+</div>
+</header>
+<div id="advpanel" class="collapsed">
+<div class="controls" style="margin-top:8px">
+<label>Filed <input id="fy1" type="number" placeholder="from" style="width:74px"> &ndash; <input id="fy2" type="number" placeholder="to" style="width:74px"></label>
+<label>Auction <input id="ad1" type="date" style="width:140px"> &ndash; <input id="ad2" type="date" style="width:140px"></label>
+<button id="clr">Clear dates</button>
+</div>
+<div class="controls dealpanel">
+<span style="color:var(--gold-d);font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
+<label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="75" min="40" max="100" style="width:60px">% of market value</label>
+<label style="font-size:12px" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:56px">%</label>
+<span style="color:var(--gold-d);font-size:11px;font-weight:600" title="These two apply to Tax Deed leads only">| Tax deed:</span>
+<label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:56px">%</label>
+<label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:82px"></label>
+<label style="font-size:12px" title="Tax deed only: the MOST you'd pay at auction, as % of market value (your disciplined ceiling that still leaves room for quiet title + costs + profit). Equity parcels bid up — if live bidding passes this, walk. Raise it if you're willing to pay closer to market.">win bid <input id="tdclear" type="number" value="70" min="0" max="100" style="width:60px">% of market</label>
+<button id="dealreset" style="font-size:11px;padding:3px 9px" title="Reset the deal model (buy %, costs, tax-deed win-bid) back to the recommended defaults. Use this if every lead is showing PASS.">&#8635; Reset defaults</button>
+<span class="stats" id="dealsum" style="margin-left:0"></span>
+</div>
+<div class="controls" style="margin-top:8px">
+<span style="color:var(--muted);font-size:12px">Sender identity (used on letters, call scripts &amp; emails — use Jose's entity):</span>
+<input id="sName" placeholder="Sender name" style="width:150px">
+<input id="sLLC" placeholder="LLC / company" style="width:160px">
+<input id="sPhone" placeholder="Phone" style="width:130px">
+<input id="sTitle" placeholder="Title (e.g. Acquisitions)" style="width:150px">
+<input id="sEmail" placeholder="Your email (for the signature)" style="width:190px">
+<input id="sAddr" placeholder="Mailing address (for email compliance)" style="width:230px">
+<input id="sWeb" placeholder="Website (optional)" style="width:150px">
+<span class="stats" id="sendersaved" style="margin-left:0"></span>
+</div>
+<div class="controls" style="margin-top:8px">
+<span style="color:var(--muted);font-size:12px">Lookup any county property:</span>
+<input id="lk" placeholder="address, owner, folio or LLC" style="width:280px">
+<button class="lkb" data-s="zillow">Zillow</button>
+<button class="lkb" data-s="appr">Appraiser</button>
+<button class="lkb" data-s="clerk">Clerk / Foreclosure</button>
+<button class="lkb" data-s="sunbiz">Owner / LLC</button>
+</div>
+</div>
+<div id="kpis" class="kpis"></div>
+<button id="toTop" title="Scroll back to top">&#8593; Top</button>
+<div class="tblscroll">
+<div class="tblwrap">
+<table id="tbl">
+<colgroup>
+<col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:118px"><col style="width:96px"><col style="width:246px"><col style="width:238px"><col style="width:186px"><col style="width:150px"><col style="width:132px"><col style="width:150px">
+</colgroup>
+<thead><tr>
+<th data-k="tier">Tier</th>
+<th data-k="_profit" style="color:var(--green-ink)">Est. Profit</th>
+<th data-k="score">Score</th>
+<th data-k="auction">Auction</th>
+<th data-k="ctype">Type</th>
+<th data-k="owners">Owner / Case</th>
+<th data-k="addr">Property &amp; Numbers</th>
+<th data-k="mail">Mailing</th>
+<th>Links</th><th>Status</th><th>Notes</th>
+</tr></thead><tbody id="tb"></tbody></table>
+</div>
+<div class="scrollnudge">scroll <b>&#8594;</b></div>
+</div>
+<div id="cards"></div>
+<script>
+const NL = String.fromCharCode(10);
+const BOM = String.fromCharCode(65279);
+const RAW = [{"tier": "A", "score": 91, "st": "FC", "case": "2024-000101-CA-01", "auction": "08/10/2026", "days": 27, "filed": 2024, "bought": 2008, "bprice": 205000, "owners": "ROBERT A JOHNSON", "oname": "Robert Johnson", "addr": "842 NW 9TH ST, MIAMI, FL 33136", "mail": "842 NW 9TH ST, MIAMI, FL 33136", "value": 655000, "judg": 286000, "eq": 56, "hs": true, "ctype": "Bank/Mortgage", "plaintiff": "Wells Fargo Bank, National Association", "defs": "Robert A Johnson; Unknown Tenant #1", "pa": "#", "zillow": "#", "tax": "#", "auc": "#", "people": "#", "docket": "#", "recqs": "sample", "ocsqs": "sample", "etax": 6550, "phones": ["3055550101", "7865550102", "3055550103"], "phdnc": [false, false, true], "emails": ["rjohnson@example.com", "r.johnson@example.net"]}, {"tier": "A", "score": 84, "st": "FC", "case": "2023-000212-CA-01", "auction": "08/03/2026", "days": 20, "filed": 2023, "bought": 1998, "bprice": 92000, "owners": "MARIA C GONZALEZ", "oname": "Maria Gonzalez", "addr": "1450 SW 27TH AVE, MIAMI, FL 33145", "mail": "1450 SW 27TH AVE, MIAMI, FL 33145", "value": 720000, "judg": 41000, "eq": 94, "eqfake": true, "hs": true, "ctype": "HOA/Condo", "mr": true, "plaintiff": "Brickell Bay Condominium Association, Inc.", "defs": "Maria C Gonzalez; Mortgage Electronic Registration Systems", "pa": "#", "zillow": "#", "tax": "#", "auc": "#", "people": "#", "docket": "#", "recqs": "sample", "ocsqs": "sample", "etax": 7200, "phones": ["3055550140"], "phdnc": [false], "emails": ["mgonzalez@example.com"]}, {"tier": "A", "score": 80, "st": "FC", "case": "2025-000318-CA-01", "auction": "08/17/2026", "days": 34, "filed": 2025, "bought": 2016, "bprice": 330000, "owners": "DAVID R WILLIAMS", "oname": "David Williams", "addr": "3120 CORAL WAY, MIAMI, FL 33145", "mail": "PO BOX 33-1120, MIAMI, FL 33233", "value": 540000, "judg": 250000, "eq": 54, "ip": true, "mr": true, "ctype": "Bank/Mortgage", "plaintiff": "Gabriel Herrera (individual)", "defs": "David R Williams; Susan Williams", "pa": "#", "zillow": "#", "tax": "#", "auc": "#", "people": "#", "docket": "#", "recqs": "sample", "ocsqs": "sample", "etax": 5400, "phones": [], "phdnc": [], "emails": []}, {"tier": "B", "score": 72, "st": "TD", "case": "2026A00219", "auction": "08/06/2026", "days": 23, "filed": 0, "bought": 2004, "bprice": 18000, "owners": "GROVER T JACKSON", "oname": "Grover Jackson", "addr": "18320 SW 117TH AVE, MIAMI, FL 33177", "mail": "18320 SW 117TH AVE, MIAMI, FL 33177", "value": 312000, "obid": 15899, "eq": 95, "cert": "2023-04871", "ctype": "", "pa": "#", "zillow": "#", "tax": "#", "auc": "#", "people": "#", "recqs": "sample", "ocsqs": "sample", "etax": 3900, "phones": ["7865550188", "3055550189"], "phdnc": [false, false], "emails": ["gjackson@example.com"]}, {"tier": "B", "score": 63, "st": "TD", "case": "2026A00244", "auction": "08/06/2026", "days": 23, "filed": 0, "bought": 1991, "bprice": 47000, "owners": "ELENA M RIVERA", "oname": "Elena Rivera", "addr": "725 NE 82ND TER, MIAMI, FL 33138", "mail": "725 NE 82ND TER, MIAMI, FL 33138", "value": 268000, "obid": 22400, "eq": 58, "hs": true, "cert": "2023-05120", "pa": "#", "zillow": "#", "tax": "#", "auc": "#", "people": "#", "recqs": "sample", "ocsqs": "sample", "etax": 3100, "phones": [], "phdnc": [], "emails": []}, {"tier": "B", "score": 58, "st": "FC", "case": "2022-000455-CA-01", "auction": "08/24/2026", "days": 41, "filed": 2022, "bought": 2019, "bprice": 410000, "owners": "JAMES P OCONNOR", "oname": "James Oconnor", "addr": "9955 SW 88TH ST, MIAMI, FL 33176", "mail": "9955 SW 88TH ST, MIAMI, FL 33176", "value": 455000, "judg": 398000, "eq": 13, "ctype": "Bank/Mortgage", "plaintiff": "JPMorgan Chase Bank, National Association", "defs": "James P Oconnor", "pa": "#", "zillow": "#", "tax": "#", "auc": "#", "people": "#", "docket": "#", "recqs": "sample", "ocsqs": "sample", "etax": 4550, "phones": ["3055550170"], "phdnc": [false], "emails": []}, {"tier": "C", "score": 40, "st": "FC", "case": "2021-000560-CA-01", "auction": "08/31/2026", "days": 48, "filed": 2021, "owners": "UNKNOWN HEIRS OF FRANK MILLER", "oname": "", "addr": "MULTIPLE PARCELS - SEE CASE", "mail": "", "value": 0, "judg": 0, "ju": true, "warn": "parcel not linked - verify property \u0026 value via the docket", "ctype": "Bank/Mortgage", "plaintiff": "Deutsche Bank National Trust Company", "defs": "Unknown Heirs; Estate of Frank Miller", "docket": "#", "ocsqs": "sample", "phones": [], "phdnc": [], "emails": []}];
+let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
+let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
+const LS = 'fcLeadNotes';
+let notes = {};
+try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
+const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
+let tier = 'A', q = '', sortK = '_profit', sortD = -1;
+let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
+let weekOnly = false, hideDead = false, tdOnly = false, ncOnly = false, dueOnly = false;
+let sender = {name:'', llc:'', phone:'', addr:'', title:'', email:'', web:''};
+try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
+// deal-model controls (persisted)
+const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
+const DEAL_VER = '2026-07-12b';  // bump when defaults change -> stale saved settings are ignored once (auto-heal)
+let deal = Object.assign({}, DEAL_DEFAULTS);
+try {
+  if(localStorage.getItem('fcDealVer') === DEAL_VER) deal = Object.assign(deal, JSON.parse(localStorage.getItem('fcDeal')||'{}'));
+  else { localStorage.removeItem('fcDeal'); localStorage.setItem('fcDealVer', DEAL_VER); }
+} catch(e) {}
+const fmt = n => n ? '$' + Math.round(n).toLocaleString() : '';
+const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
+const fmtPhone = d => { d=String(d||'').replace(/\D/g,''); return d.length===10 ? '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6) : d; };
+const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); const k=Math.round(n/1e3);
+  return (n>=1e6 || k>=1000) ? s+'$'+(n/1e6).toFixed(2)+'M' : n>=1e3 ? s+'$'+k+'k' : s+'$'+Math.round(n); };
+function recompute(){
+  const bpRaw = (deal.buypct===''||deal.buypct==null||isNaN(+deal.buypct)) ? 75 : +deal.buypct;
+  const buyPct = Math.max(0, bpRaw) / 100;                       // honor an explicit 0
+  const costPct = Math.max(0, +deal.costpct || 0) / 100;
+  const quietTitle = Math.max(0, +deal.quiettitle || 3000);     // tax-deed only
+  const bidOver = Math.max(0, +deal.bidover || 0) / 100;        // tax-deed only
+  const clearPct = Math.max(0, +deal.tdclear || 70) / 100;     // tax-deed: max you'd pay at auction as % of market (disciplined ceiling)
+  DATA.forEach(r => {
+    const judg = r.judg||0, val = r.value||0;
+    // per-lead adjustments the user researches on the docket/title (saved with this case's notes)
+    const nn = notes[r.case] || {};
+    const slien = Math.max(0, +nn.slien || 0);   // surviving senior / 1st mortgage (HOA/junior cases)
+    const mlien = Math.max(0, +nn.mlien || 0);   // surviving municipal / code / IRS liens
+    const btax = Math.max(0, +nn.btax || 0);     // delinquent property taxes — first-priority lien, survives FC (FS 197.122)
+    const occ = !!nn.occ;                         // occupied -> eviction cost + no interior look
+    const evict = occ ? Math.max(4000, val*0.02) : 0;
+    r._slien=slien; r._mlien=mlien; r._btax=btax; r._occ=occ; r._evict=evict;
+    // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
+    if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; return; }
+    r._nodata = false;
+    const costs = val * costPct;
+    if(r.st === 'TD'){
+      // TAX DEED: win at the public auction (opening bid + markup), then clear title before resale.
+      // Municipal/code/IRS liens can survive on top (FS 197.552); homestead lifts the opening-bid floor.
+      const obid = r.obid || judg || 0;
+      // Realistic winning bid: an equity parcel gets bid UP toward market (you can't win a $494k
+      // property for the $900 opening). Floor the bid at clearPct% of market unless the opening-bid+
+      // markup path is already higher (high-tax / low-equity parcels that clear near the opening).
+      const winbid = Math.max(obid * (1 + bidOver), Math.min(val * clearPct, val));
+      r._equity = val - obid;
+      r._purchase = winbid;
+      r._cash = winbid + quietTitle + costs + mlien + btax + evict;
+      r._profit = val - r._cash;
+      r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
+      r._tight = (winbid + quietTitle >= val);
+    } else if(r.mr){
+      // HOA / JUNIOR foreclosure: you bid the small association judgment, but the 1st mortgage SURVIVES.
+      // Without that payoff the deal is unknowable -> setVerdict() forces VERIFY.
+      const bid = judg;
+      r._equity = val - judg - slien;
+      r._purchase = bid + slien;
+      r._cash = bid + slien + costs + mlien + btax + evict;
+      r._profit = val - r._cash;
+      r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
+      r._tight = (r._cash >= val);
+    } else {
+      // 1ST-MORTGAGE FORECLOSURE: buy BELOW market, but never below the debt you must clear.
+      const offer = val * buyPct;
+      const purchase = Math.max(offer, judg);
+      r._equity = val - judg;
+      r._purchase = purchase;
+      r._cash = purchase + costs + mlien + btax + slien + evict;   // slien = a senior mortgage found in Official Records that ranks ahead of this case
+      r._profit = val - r._cash;
+      r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
+      r._tight = (judg > offer);
+    }
+    setVerdict(r, {slien, val});
+  });
+}
+// ---- worth-it verdict + per-lead deal analysis ----
+function setVerdict(r, x){
+  const val = x.val;
+  // never show a profit we can't stand behind
+  if(r.ju){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2; r._whyShort='Judgment not posted — verify on docket';
+    r._why='Final judgment not posted — the debt is unknown. Confirm it on the docket before trusting any profit.'; return; }
+  if(r.st!=='TD' && r.mr && !x.slien){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2;
+    r._whyShort = r.ip ? 'Private plaintiff — senior mortgage likely; verify' : '1st mortgage unknown — look it up';
+    r._why = r.ip
+      ? 'The plaintiff is an individual, not a bank — almost always a private or 2nd-position note, so a senior 1st mortgage very likely survives this sale and is NOT in the judgment shown. That "equity" can be fiction. Open Records, search the owner for every recorded mortgage/lien, then enter the senior balance below before trusting this.'
+      : 'HOA / junior case — the 1st mortgage survives this sale and is unknown. Open Records, look it up and enter it below (usually a trap if large).';
+    return; }
+  const p=r._profit, roi=r._roi||0;
+  const strongRoi=r.st==='TD'?20:15, margRoi=r.st==='TD'?8:6;
+  let v,rank,why;
+  if(p>=20000 && roi>=strongRoi && !r._tight){ v='STRONG'; rank=3; why='Solid return ('+Math.round(roi)+'% ROI) after a realistic price, costs and any surviving liens.'; }
+  else if(p>0 && roi>=margRoi){ v='MARGINAL'; rank=2; why='Real but thin ('+Math.round(roi)+'% ROI) — only works if your price and cost estimates hold.'; }
+  else { v='PASS'; rank=1; why = p<=0 ? 'No profit once the price, costs and liens are covered.' : 'Margin too thin ('+Math.round(roi)+'% ROI) for the risk.'; }
+  if(r.st==='TD' && r.hs && rank>2){ rank=2; v='MARGINAL'; why='Homestead: the opening bid already includes ½ the assessed value, so the entry floor is high.'; }
+  if(r.st==='TD' && val>0 && (r._equity/val)>0.55 && rank>2){ rank=2; v='MARGINAL'; why='Equity parcel — competitive tax-deed auctions bid these near market, erasing most of the paper margin. Consider the surplus play instead.'; }
+  if(r._occ && rank>2){ rank=2; v='MARGINAL'; why='Occupied — eviction cost/time is baked in and you get no interior inspection at auction.'; }
+  r._verdict=v; r._vrank=rank; r._why=why;
+}
+const fmtMoney = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
+function verdictBadge(r){ return r._verdict==='VERIFY' ? '<span class="vb vbv">VERIFY</span>' : '<span class="vb vb'+r._vrank+'">'+r._verdict+'</span>'; }
+function mathLine(label,val,tot){ return '<div class="mathline'+(tot?' tot':'')+'"><span>'+esc(label)+'</span><span>'+fmtMoney(val)+'</span></div>'; }
+function dealFlags(r){
+  const f=[], nn=notes[r.case]||{};
+  if(r.ju) f.push('Final judgment not posted — debt unknown; verify on the docket.');
+  if(r.st!=='TD' && r.mr) f.push(r.ip ? 'Private (individual) plaintiff: a senior 1st mortgage likely survives — verify in Official Records.' : 'HOA / junior case: the 1st mortgage survives — must be looked up.');
+  if(r.st==='TD'){ f.push('Tax-deed title is not insurable until quiet title (~$1.5-5k, 3-6 mo).');
+    f.push('Code-enforcement / municipal / IRS liens can survive the deed (FS 197.552).'); }
+  if(r.st==='TD' && r.hs) f.push('Homestead: opening bid includes ½ the assessed value (FS 197.502).');
+  if(nn.occ) f.push('Occupied — eviction cost/time included; no interior inspection at auction.');
+  if(r.days>=0 && r.days<=3) f.push('Redemption stays open until the deed issues / full payment to the clerk — not final at the hammer.');
+  return f;
+}
+function dealStrategy(r){
+  if(r.st==='TD'){
+    let s='Tax-deed public auction (realtaxdeed / LienHub). ';
+    if(r.hs) s+='Homestead — opening bid already carries ½ the assessed value, so an equity homestead bids near market; expect thin margin. ';
+    s+='Budget quiet title ($1.5-5k, 3-6 months) before you can resell or insure, and pull City + County code-enforcement / utility liens separately — those survive the deed. ';
+    if(r._equity!=null && r.value && r._equity/r.value>0.55) s+='Big paper spread means heavy competition; if it bids to market, chase the surplus (former owner’s money) instead of the deed. ';
+    return s.trim();
+  }
+  if(r.mr){
+    return 'HOA / junior foreclosure — the 1st mortgage SURVIVES the sale. Pull the docket + a title search, enter the mortgage payoff below, and only bid if value minus (your bid + that mortgage + costs) still clears. If it is large, walk.';
+  }
+  let s='';
+  if(r.days>21) s+='Best play: reach the owner BEFORE the auction — you can inspect and run title first (auction buyers cannot). ';
+  s+='At auction your floor is the final judgment ('+fmtK(r.judg)+'), not the clerk’s posted opening bid (often a nominal $100). ';
+  if(r._equity!=null && r.value && r._equity/r.value>0.35) s+='Solid equity spread. ';
+  s+='Confirm no unpaid property taxes or code liens ride on top. ';
+  if(r.days>21) s+='If the owner keeps any interest (lease-back/buy-back) with a lis pendens recorded, FS 501.1377 applies — use a compliant written contract with the 3-day cancellation.';
+  return s.trim();
+}
+function dealTrigger(r){
+  if(r._nodata) return '';
+  return '<button class="dealtog" data-c="'+esc(r.case)+'" type="button">Deal analysis</button>';
+}
+function dealAnalysisHTML(r){
+  const nn = notes[r.case]||{};
+  const flags = dealFlags(r);
+  let mathHtml;
+  if(r._profit==null){
+    mathHtml = '<div class="dealmath"><div class="mathline"><span>Est. profit</span><span>unknown until verified</span></div></div>';
+  } else {
+    const costs = r.value*(Math.max(0,+deal.costpct||0)/100);
+    const rows = [ mathLine('Market value', r.value) ];
+    if(r.st==='TD'){ rows.push(mathLine('Est. winning bid', -r._purchase)); rows.push(mathLine('Quiet title', -(Math.max(0,+deal.quiettitle||3000)))); }
+    else if(r.mr){ rows.push(mathLine('Auction bid (est.)', -r.judg)); if(r._slien) rows.push(mathLine('Surviving 1st mortgage', -r._slien)); }
+    else { rows.push(mathLine('Your purchase', -r._purchase)); }
+    rows.push(mathLine('Costs ('+(+deal.costpct||0)+'%)', -costs));
+    if(r._slien && !r.mr) rows.push(mathLine('Senior / 1st mortgage', -r._slien));
+    if(r._btax) rows.push(mathLine('Back property taxes', -r._btax));
+    if(r._mlien) rows.push(mathLine('Other surviving liens', -r._mlien));
+    if(r._evict) rows.push(mathLine('Eviction / carry', -r._evict));
+    rows.push(mathLine('Est. profit', r._profit, true));
+    mathHtml = '<div class="dealmath">'+rows.join('')+
+      '<div class="mathline"><span>ROI</span><span>'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</span></div></div>';
+  }
+  const adj = '<div class="dealadj">'+
+    (r.st!=='TD' ? '<label>Senior / 1st mortgage $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||'')+'" placeholder="0">'+(r.mr?'':'<span class="esthint">only if Records shows one senior to this case</span>')+'</label>' : '')+
+    '<label>Back property taxes $<input class="btax" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.btax||'')+'" placeholder="0">'+(r.etax?'<span class="esthint">~'+fmt0(r.etax)+'/yr est · verify on Taxes</span>':'')+'</label>'+
+    '<label>Surviving liens (code/muni/IRS) $<input class="mlien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.mlien||'')+'" placeholder="0"></label>'+
+    '<label class="occlbl"><input class="occ" data-c="'+esc(r.case)+'" type="checkbox"'+(nn.occ?' checked':'')+'> occupied</label>'+
+  '</div>';
+  const flagsHtml = flags.length ? '<div class="dealflags">'+flags.map(f=>'<div class="flag">'+esc(f)+'</div>').join('')+'</div>' : '';
+  return '<div class="dm-sec">The math</div>'+mathHtml+
+    '<div class="dm-sec">Adjust for what you find (docket / title)</div>'+adj+
+    (flagsHtml?'<div class="dm-sec">Watch out for</div>'+flagsHtml:'')+
+    '<div class="dm-sec">Recommended move</div><div class="dealstrat">'+esc(dealStrategy(r))+'</div>';
+}
+function dealModalBody(r){
+  const owner = esc((r.owners||'').split(';')[0].trim());
+  const pcls = r._profit>=0 ? 'profpos' : 'profneg';
+  const figure = r._profit!=null ? ' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>' : '';
+  return '<div class="dm-head">'+
+      '<div class="dm-title">'+owner+' '+copyBtn((r.owners||'').split(';')[0].trim(),'owner name')+'</div>'+
+      '<div class="dm-sub">'+esc(r.addr)+' · '+(r.st==='TD'?'Tax deed':'Foreclosure')+' · auction '+esc(r.auction)+'</div>'+
+      '<div class="dm-verdict">'+verdictBadge(r)+figure+'</div>'+
+      (r._why?'<div class="dm-why">'+esc(r._why)+'</div>':'')+
+    '</div>'+ dealAnalysisHTML(r);
+}
+let dealModalCase = null;
+function openDealModal(caseId){
+  const r = DATA.find(x=>x.case===caseId); if(!r) return;
+  dealModalCase = caseId;
+  document.getElementById('dmbody').innerHTML = dealModalBody(r);
+  document.getElementById('dealmodal').classList.add('show');
+  document.body.classList.add('modal-open');   // lock background scroll -> the popup holds focus
+}
+function refreshDealModal(){
+  if(!dealModalCase) return;
+  const r = DATA.find(x=>x.case===dealModalCase);
+  if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r);
+}
+function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+// ---- contact / follow-up tracker (mini-CRM; per-device, in the same notes[] localStorage) ----
+function _today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
+function _rel(iso){ const n=_dneg(iso); if(n===null) return ''; if(n===0) return 'today'; return n<0 ? (-n)+'d ago' : 'in '+n+'d'; }
+const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}'};
+function contactChip(r){
+  const n=notes[r.case]||{}, ts=n.touches||[]; let h='';
+  if(ts.length){ const last=ts[ts.length-1];
+    h+='<span class="cx cx-done" title="'+esc(ts.length+' touch(es) — last: '+last.ch+' '+last.out+' on '+last.d)+'">'+(CH_ICON[last.ch]||'•')+' '+_rel(last.d)+(ts.length>1?' ·'+ts.length:'')+'</span>';
+  } else h+='<span class="cx cx-new" title="Not contacted yet">not contacted</span>';
+  if(n.next){ const d=_dneg(n.next); h+='<span class="cx '+(d<=0?'cx-due':'cx-fu')+'" title="'+esc('Follow-up '+n.next)+'">'+(d<0?'overdue '+(-d)+'d':d===0?'due today':'fu '+_rel(n.next))+'</span>'; }
+  return h;
+}
+function _setNext(n, days){ if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.touches=n.touches||[]; n.touches.push({d:_today(), ch:ch, out:out}); if(opt.status) n.status=opt.status; if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); }
+function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
+const QUICKLOG=[
+  {lbl:'☎ No answer', ch:'call', out:'no answer', status:'Called - no answer', nextDays:2},
+  {lbl:'☎ Left message', ch:'call', out:'left message', status:'Called - no answer', nextDays:3},
+  {lbl:'☎ Spoke', ch:'call', out:'spoke', status:'Called - talked', nextDays:5},
+  {lbl:'⭐ Callback set', ch:'call', out:'callback set', status:'Appointment', nextDays:2},
+  {lbl:'✉ Emailed', ch:'email', out:'emailed', nextDays:4},
+  {lbl:'✉ Letter sent', ch:'letter', out:'letter sent', status:'Letter sent', nextDays:7},
+  {lbl:'\u{1f4ac} Texted', ch:'text', out:'texted', nextDays:3},
+  {lbl:'✕ Not interested', ch:'call', out:'not interested', status:'Dead', next:''}
+];
+function logModalBody(r){
+  const n=notes[r.case]||{}, ts=(n.touches||[]).slice().reverse();
+  const owner=esc((r.owners||'').split(';')[0].trim());
+  const btns=QUICKLOG.map((q,i)=>'<button class="qlog" data-c="'+esc(r.case)+'" data-i="'+i+'" type="button">'+q.lbl+'</button>').join('');
+  const fu = n.next ? '<b>'+esc(n.next)+'</b> <span class="mut">('+_rel(n.next)+')</span>' : '<span class="mut">none set</span>';
+  const fub='<button class="fuset" data-c="'+esc(r.case)+'" data-d="2" type="button">+2d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="5" type="button">+5d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="14" type="button">+2w</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="0" type="button">clear</button>';
+  const hist = ts.length ? '<ul class="lhist">'+ts.map(t=>'<li>'+esc(t.d)+' · '+(CH_ICON[t.ch]||'')+' '+esc(t.out)+'</li>').join('')+'</ul><button class="lundo" data-c="'+esc(r.case)+'" type="button">Undo last</button>' : '<div class="mut">No touches logged yet.</div>';
+  return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+(r.days>=0?'in '+r.days+'d':'passed')+'</div></div>'+
+    '<div class="dm-sec">Log a touch — one tap</div><div class="qlogwrap">'+btns+'</div>'+
+    '<div class="dm-sec">Follow-up date</div><div class="fuwrap">Next: '+fu+' &nbsp;'+fub+'</div>'+
+    '<div class="dm-sec">History</div>'+hist;
+}
+let logModalCase=null;
+function openLogModal(c){ const r=DATA.find(x=>x.case===c); if(!r) return; logModalCase=c; document.getElementById('logbody').innerHTML=logModalBody(r); document.getElementById('logmodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function refreshLogModal(){ if(logModalCase){ const r=DATA.find(x=>x.case===logModalCase); if(r) document.getElementById('logbody').innerHTML=logModalBody(r); } }
+function closeLogModal(){ logModalCase=null; document.getElementById('logmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+document.addEventListener('click', e => {
+  const open=e.target.closest && e.target.closest('.logbtn, .cxwrap');
+  if(open){ e.preventDefault(); if(open.dataset.c) openLogModal(open.dataset.c); return; }
+  const q=e.target.closest && e.target.closest('.qlog');
+  if(q){ e.preventDefault(); const spec=QUICKLOG[+q.dataset.i]; if(spec){ logTouch(q.dataset.c, spec.ch, spec.out, spec); refreshLogModal(); render(); } return; }
+  const fs=e.target.closest && e.target.closest('.fuset');
+  if(fs){ e.preventDefault(); const n=notes[fs.dataset.c]=notes[fs.dataset.c]||{status:'',note:''}; _setNext(n, +fs.dataset.d); save(); refreshLogModal(); render(); return; }
+  const un=e.target.closest && e.target.closest('.lundo');
+  if(un){ e.preventDefault(); const n=notes[un.dataset.c]; if(n&&n.touches&&n.touches.length){ n.touches.pop(); save(); refreshLogModal(); render(); } return; }
+});
+const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
+const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">'+COPY_SVG+'</button>';
+function genLetter(r){
+  const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
+  const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
+  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const first = owner.split(' ')[0] || owner;
+  const addr = esc(r.addr), mail = esc(r.mail||r.addr), dt = esc(r.auction);
+  const td = (r.st === 'TD');
+  const plaintiff = esc((r.plaintiff||'').trim());
+  const sigHtml = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).map(esc).join('<br>');
+  const EN = td ? `<p>Dear ${esc(owner)},</p>
+<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which county records show is scheduled for a <b>tax deed sale on ${dt}</b> due to unpaid property taxes.</p>
+<p>I wanted to reach out in case it helps to know your options before that date:</p>
+<ul><li>You can still keep the property by paying the back taxes any time before the sale.</li>
+<li>If keeping it is not realistic, selling before the sale can put cash in your pocket rather than losing it to the county.</li>
+<li>If it sells for more than the taxes owed, any surplus may belong to you, though it has to be claimed.</li></ul>
+<p>I am not an attorney, and nothing here is legal advice. I purchase properties directly, with cash, and can close before the deadline. If selling is not your best move, I will tell you honestly.</p>
+<p>There is no cost and no obligation to talk. You can reach me at <b>${esc(sP)}</b>. Even if the sale is close, there may still be time.</p>
+<p>Thank you for your time.</p>
+<p>Respectfully,<br><br>${sigHtml}</p>` : `<p>Dear ${esc(owner)},</p>
+<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}, with a sale scheduled for <b>${dt}</b>.</p>
+<p>I understand this can be a stressful situation, and I wanted to reach out in case it helps to know your options before that date:</p>
+<ul><li>If the property sells for more than you owe, any surplus belongs to you, not the lender.</li>
+<li>Selling before the auction is often better for you than losing it at the courthouse, and it can put cash in your pocket.</li>
+<li>The amount on file is not always current, and it is worth confirming before the sale.</li></ul>
+<p>I am not an attorney, and nothing here is legal advice. I purchase properties directly, with cash, and can close before the deadline. If buying is not the right fit for you, I am glad to point you in a better direction, even if it does not involve me.</p>
+<p>There is no cost and no obligation to talk. You can reach me at <b>${esc(sP)}</b>. Even if the sale is close, there may still be time.</p>
+<p>Thank you for your time.</p>
+<p>Respectfully,<br><br>${sigHtml}</p>`;
+  const ES = td ? `<p>Estimado/a ${esc(first)},</p>
+<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros del condado tiene una <b>subasta de tax deed programada para el ${dt}</b> por impuestos sin pagar.</p>
+<p>Quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
+<ul><li>Todav&iacute;a puede conservar la propiedad pagando los impuestos atrasados en cualquier momento antes de la subasta.</li>
+<li>Si conservarla no es realista, vender antes de la subasta puede dejarle dinero en el bolsillo en lugar de perderla ante el condado.</li>
+<li>Si se vende por m&aacute;s de lo que se debe en impuestos, cualquier excedente podr&iacute;a corresponderle a usted, aunque hay que reclamarlo.</li></ul>
+<p>No soy abogado y nada de esto es asesor&iacute;a legal. Compro propiedades directamente, en efectivo, y puedo cerrar antes de la fecha l&iacute;mite. Si vender no es lo mejor para usted, se lo dir&eacute; con honestidad.</p>
+<p>No hay costo ni compromiso por conversar. Puede comunicarse conmigo al <b>${esc(sP)}</b>. Aunque la subasta est&eacute; cerca, todav&iacute;a puede haber tiempo.</p>
+<p>Gracias por su tiempo.</p>
+<p>Respetuosamente,<br><br>${sigHtml}</p>` : `<p>Estimado/a ${esc(first)},</p>
+<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros p&uacute;blicos se encuentra actualmente en proceso de ejecuci&oacute;n hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}, con una subasta programada para el <b>${dt}</b>.</p>
+<p>Entiendo que puede ser una situaci&oacute;n estresante, y quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
+<ul><li>Si la propiedad se vende por m&aacute;s de lo que usted debe, cualquier excedente le pertenece a usted, no al prestamista.</li>
+<li>Vender antes de la subasta suele ser mejor para usted que perderla en el juzgado, y puede dejarle dinero en el bolsillo.</li>
+<li>El monto que consta en el expediente no siempre est&aacute; actualizado, y conviene confirmarlo antes de la venta.</li></ul>
+<p>No soy abogado y nada de esto es asesor&iacute;a legal. Compro propiedades directamente, en efectivo, y puedo cerrar antes de la fecha l&iacute;mite. Si comprar no es lo adecuado para usted, con gusto le oriento hacia una mejor opci&oacute;n, aunque no me incluya.</p>
+<p>No hay costo ni compromiso por conversar. Puede comunicarse conmigo al <b>${esc(sP)}</b>. Aunque la subasta est&eacute; cerca, todav&iacute;a puede haber tiempo.</p>
+<p>Gracias por su tiempo.</p>
+<p>Respetuosamente,<br><br>${sigHtml}</p>`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><title>Letter - ${esc(owner)}</title>
+<style>
+body{font-family:Georgia,serif;max-width:660px;margin:0 auto;padding:40px;color:#111;line-height:1.5}
+.bar{background:#eee;padding:10px;margin:-40px -40px 30px;display:flex;gap:8px;font-family:Arial}
+.bar button{padding:8px 14px;cursor:pointer;border:1px solid #999;background:#fff;border-radius:5px}
+.bar button.on{background:#2563eb;color:#fff;border-color:#2563eb}
+.addr{color:#555;font-size:13px;margin-bottom:24px}
+ul{margin:10px 0}
+@media print{.bar{display:none}body{padding:0}}
+</style></head><body>
+<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">Print / Save PDF</button></div>
+<div class="addr">${esc(sN)}<br>${esc(sL)}<br><br>${new Date().toLocaleDateString()}<br><br>${esc(owner)}<br>${mail.replace(/, /g,'<br>')}</div>
+<div id="body-en">${EN}</div>
+<div id="body-es" style="display:none">${ES}</div>
+<script>function show(l){document.getElementById('body-en').style.display=l==='en'?'block':'none';document.getElementById('body-es').style.display=l==='es'?'block':'none';document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(w){ w.document.write(doc); w.document.close(); }
+}
+// ---- per-lead PHONE SCRIPT: what to actually say when you call this owner (EN/ES, tailored) ----
+function genScript(r){
+  const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
+  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const first = esc(owner.split(' ')[0] || owner);
+  const addr = esc(r.addr), dt = esc(r.auction);
+  const td = (r.st === 'TD');
+  const nn = notes[r.case] || {};
+  const verify = !!(r.ju || (!td && r.mr) || r._verdict === 'VERIFY');   // debt unknown / senior lien likely -> discover, don't promise
+  const vb = r._verdict || '';
+  const daysEN = r.days >= 0 ? ('in ' + r.days + ' day' + (r.days===1?'':'s')) : 'already past';
+  const daysES = r.days >= 0 ? ('en ' + r.days + ' día' + (r.days===1?'':'s')) : 'ya pasó';
+  const phones = (r.phones||[]).map((p,i)=>({num:p, dnc:(r.phdnc||[])[i]}));
+  const phBlock = lang => phones.length
+    ? '<ul class="ph">' + phones.map(p=>'<li><b>'+esc(fmtPhone(p.num))+'</b>'+(p.dnc?' <span class="dnc">'+(lang==='en'?'(DO NOT CALL, on the Do-Not-Call list)':'(NO LLAMAR, lista Do-Not-Call)')+'</span>':'')+'</li>').join('') + '</ul>'
+    : '<p class="muted">'+(lang==='en'?'No phone pulled yet. Use the <b>People</b> link on the lead to find one, then dial by hand.':'Aún no hay teléfono. Use el enlace <b>People</b> del contacto para encontrarlo y marque a mano.')+'</p>';
+  const badge = vb ? '<span class="vbadge vb-'+vb.toLowerCase()+'">'+vb+'</span> ' : '';
+
+  const goalEN = td ? 'They can still stop the sale by paying the back taxes, or sell to you before the county takes it. Find out whether paying is realistic and what they want to do.'
+    : verify ? 'The real debt on this home is unknown, and a senior mortgage may erase the equity. Your one job on this call is to find out what is actually owed. Do not promise a price.'
+    : 'There is likely real equity worth protecting. Build trust, confirm the numbers, and offer to go over their options before the sale.';
+  const goalES = td ? 'Todavía pueden detener la venta pagando los impuestos atrasados, o vendérsela a usted antes de que el condado se la quede. Averigüe si pagar es realista y qué quieren hacer.'
+    : verify ? 'La deuda real sobre esta casa es desconocida, y una primera hipoteca podría borrar la plusvalía. Su única meta en esta llamada es averiguar cuánto se debe realmente. No prometa un precio.'
+    : 'Es probable que haya plusvalía real que proteger. Genere confianza, confirme los números y ofrezca repasar sus opciones antes de la subasta.';
+
+  const openEN = td
+    ? `Hello, is this ${first}? My name is ${esc(sN)}, and I am a local real estate investor here in Miami with ${esc(sL)}. I am reaching out because county records show the property at <b>${addr}</b> is scheduled for a <b>tax deed sale on ${dt}</b>, which is ${daysEN}, due to unpaid property taxes. I know this can be a stressful thing to hear about. Do you have a couple of minutes? I may be able to help, and if I cannot, I will be honest with you.`
+    : `Hello, is this ${first}? My name is ${esc(sN)}, and I am a local real estate investor here in Miami with ${esc(sL)}. I am reaching out because public records show your home at <b>${addr}</b> has a <b>foreclosure sale scheduled for ${dt}</b>, which is ${daysEN}. I know this can be a stressful call to get. Do you have a couple of minutes? I may be able to help, and even if I cannot, I will be honest with you.`;
+  const openES = td
+    ? `Hola, ¿hablo con ${first}? Me llamo ${esc(sN)} y soy inversionista de bienes raíces aquí en Miami, de ${esc(sL)}. Me comunico porque los registros del condado muestran que la propiedad en <b>${addr}</b> está programada para una <b>subasta de tax deed el ${dt}</b>, es decir ${daysES}, por impuestos sin pagar. Sé que esto puede ser estresante de escuchar. ¿Tiene un par de minutos? Quizá pueda ayudarle, y si no puedo, se lo diré con honestidad.`
+    : `Hola, ¿hablo con ${first}? Me llamo ${esc(sN)} y soy inversionista de bienes raíces aquí en Miami, de ${esc(sL)}. Me comunico porque los registros públicos muestran que su casa en <b>${addr}</b> tiene una <b>subasta de ejecución hipotecaria el ${dt}</b>, es decir ${daysES}. Sé que esta puede ser una llamada estresante de recibir. ¿Tiene un par de minutos? Quizá pueda ayudarle, y aunque no pueda, se lo diré con honestidad.`;
+
+  const offerEN = td ? `You still have a couple of options. You can pay the back taxes and keep the home, or sell it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you, though it has to be claimed. There is no cost and no obligation to talk it through.`
+    : verify ? `I want to be honest with you. Until I confirm what is actually owed on the house, I cannot give you a number, and I would not want to guess. If you can help me find the mortgage balance, I can tell you fairly quickly whether I can help, and I will put it in writing. There is no cost and no obligation.`
+    : `Depending on what is owed, you may have real options here. Selling before the auction is often better for you than losing the home at the courthouse, and it can put cash in your pocket. If it sells for more than you owe, any surplus belongs to you, not the lender. There is no cost and no obligation to talk it over.`;
+  const offerES = td ? `Todavía tiene un par de opciones. Puede pagar los impuestos atrasados y conservar la casa, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente podría corresponderle a usted, aunque hay que reclamarlo. No hay costo ni compromiso por conversarlo.`
+    : verify ? `Quiero ser honesto con usted. Hasta confirmar cuánto se debe realmente sobre la casa, no puedo darle una cifra, y no quisiera adivinar. Si me ayuda a averiguar el saldo de la hipoteca, puedo decirle bastante rápido si puedo ayudarle, y se lo pondré por escrito. No hay costo ni compromiso.`
+    : `Según lo que se deba, es posible que tenga opciones reales. Vender antes de la subasta suele ser mejor para usted que perder la casa en el juzgado, y puede dejarle dinero en el bolsillo. Si se vende por más de lo que debe, cualquier excedente le pertenece a usted, no al prestamista. No hay costo ni compromiso por conversarlo.`;
+
+  const discEN = [
+    `Are you still living in the home, or is it rented out?`,
+    `<b>Is there still a mortgage on it, and roughly what is the balance?</b> &nbsp;<span class="key">← the key question</span>`,
+    `Besides that, are there any other loans, liens, HOA dues, or back taxes on the property?`,
+    `Have you already got a plan going, maybe with the bank, a lawyer, or someone else?`,
+    `If you had your pick, what would you want to happen, keep it or walk away with something in your pocket?`
+  ];
+  const discES = [
+    `¿Todavía vive en la casa, o está alquilada?`,
+    `<b>¿Todavía hay una hipoteca sobre la casa, y más o menos cuál es el saldo?</b> &nbsp;<span class="key">← la pregunta clave</span>`,
+    `Aparte de eso, ¿hay otros préstamos, gravámenes, cuotas de HOA o impuestos atrasados sobre la propiedad?`,
+    `¿Ya tiene algún plan en marcha, con el banco, un abogado, o alguien más?`,
+    `Si pudiera elegir, ¿qué querría que pasara, conservarla o salir con algo de dinero en el bolsillo?`
+  ];
+  if(td){ discEN.splice(1,0,`Are you in a position to pay the back taxes to keep it, or is that just not realistic right now?`);
+          discES.splice(1,0,`¿Está en posición de pagar los impuestos atrasados para conservarla, o eso no es realista ahora mismo?`); }
+
+  const objEN = [
+    [`"How much will you give me?"`, `That is a fair question. I would only be guessing until I confirm what is owed. If you can get me that, I will have a real number for you quickly, in writing.`],
+    [`"Is this a scam?"`, `You are right to be careful. I am local, I buy with my own cash, you never pay me anything, and everything goes in writing with time for you to read it. You are welcome to look me up.`],
+    [`"I've got it handled / I have a lawyer."`, `That is good to hear. Keep my number, and if anything changes before ${dt}, feel free to call. No pressure at all.`],
+    [`"I'm not interested."`, `I understand, and I will not keep you. Let me leave my number in case things change before the sale. I wish you the best either way.`]
+  ];
+  const objES = [
+    [`"¿Cuánto me daría?"`, `Es una pregunta justa. Estaría adivinando hasta confirmar lo que se debe. Si me lo consigue, le doy una cifra real rápido, por escrito.`],
+    [`"¿Esto es una estafa?"`, `Hace bien en tener cuidado. Soy local, compro con mi propio efectivo, usted nunca me paga nada, y todo va por escrito con tiempo para que lo lea. Con gusto puede verificarme.`],
+    [`"Ya lo tengo resuelto / tengo abogado."`, `Me alegra escucharlo. Guarde mi número, y si algo cambia antes del ${dt}, con gusto me llama. Sin ninguna presión.`],
+    [`"No me interesa."`, `Entiendo, y no le quito más tiempo. Déjeme darle mi número por si las cosas cambian antes de la subasta. Le deseo lo mejor.`]
+  ];
+
+  const closeEN = `If it would help, we could set a time to go over your options${verify?', once we know what is owed':''}. Would that be useful, or would you rather I send you something in writing first? Whatever is easier for you.`;
+  const closeES = `Si le sirve, podríamos acordar un momento para repasar sus opciones${verify?', una vez que sepamos lo que se debe':''}. ¿Le resultaría útil, o prefiere que primero le envíe algo por escrito? Lo que le sea más fácil.`;
+  const leaveEN = `Either way, here's my direct number: <b>${esc(sP)}</b>. I'm ${esc(sN)} with ${esc(sL)}.`;
+  const leaveES = `De cualquier forma, le dejo mi número directo: <b>${esc(sP)}</b>. Soy ${esc(sN)} de ${esc(sL)}.`;
+
+  const compEN = [
+    `Dial by hand. You are calling as <b>${esc(sL)}</b>, not personally.`,
+    `Skip any number marked <span class="dnc">DO NOT CALL</span> below.`,
+    `Say you are an investor, <b>not an attorney</b>. This is not legal advice.`,
+    `Never name a price until you have confirmed what is owed.`,
+    `If they would keep any stake (rent-back or buy-back), it must be a <b>written contract with a 3-day right to cancel</b> (FL 501.1377).`
+  ];
+  const compES = [
+    `Marque a mano. Usted llama como <b>${esc(sL)}</b>, no de forma personal.`,
+    `Omita cualquier número marcado <span class="dnc">NO LLAMAR</span> abajo.`,
+    `Diga que es inversionista, <b>no abogado</b>. Esto no es asesoría legal.`,
+    `Nunca dé un precio hasta confirmar lo que se debe.`,
+    `Si conservan alguna parte (renta de vuelta o recompra), debe ser un <b>contrato por escrito con 3 días para cancelar</b> (FL 501.1377).`
+  ];
+  if(!td && r.hs){ compEN.push(`This looks like a long-held homestead, likely a family home. Go slow, be respectful, and listen more than you talk.`);
+                   compES.push(`Parece una vivienda familiar de muchos años. Vaya despacio, con respeto, y escuche más de lo que habla.`); }
+
+  const T = {
+    en:{goal:'Your goal on this call', before:'Before you dial', nums:'Numbers to try', open:'Say this (the opening)', ask:'Ask, then listen', offer:'What you can offer', push:'If they push back', close:'Close', after:"After the call: set the lead's Status and note what you learned (mortgage balance, liens, who decides, motivation) in its Notes on the tracker."},
+    es:{goal:'Su objetivo en esta llamada', before:'Antes de llamar', nums:'Números para marcar', open:'Diga esto (la apertura)', ask:'Pregunte, y escuche', offer:'Lo que puede ofrecer', push:'Si le ponen objeciones', close:'Cierre', after:'Después de la llamada: marque el Estado del contacto y anote lo aprendido (saldo de hipoteca, gravámenes, quién decide, motivación) en las Notas del tablero.'}
+  };
+  const S = { en:{goal:goalEN,comp:compEN,open:openEN,disc:discEN,offer:offerEN,obj:objEN,close:closeEN,leave:leaveEN},
+              es:{goal:goalES,comp:compES,open:openES,disc:discES,offer:offerES,obj:objES,close:closeES,leave:leaveES} };
+  const render = lang => `
+    <div class="goal"><span class="lbl">${T[lang].goal}</span>${badge}${S[lang].goal}</div>
+    <div class="sec">${T[lang].before}</div><div class="comp"><ul>${S[lang].comp.map(c=>`<li>${c}</li>`).join('')}</ul></div>
+    <div class="sec">${T[lang].nums}</div>${phBlock(lang)}
+    <div class="sec">${T[lang].open}</div><div class="say">${S[lang].open}</div>
+    <div class="sec">${T[lang].ask}</div><ol class="disc">${S[lang].disc.map(d=>`<li>${d}</li>`).join('')}</ol>
+    <div class="sec">${T[lang].offer}</div><div class="say">${S[lang].offer}</div>
+    <div class="sec">${T[lang].push}</div><div class="obj">${S[lang].obj.map(o=>`<div class="qa"><div class="q">${o[0]}</div><div class="a">${o[1]}</div></div>`).join('')}</div>
+    <div class="sec">${T[lang].close}</div><div class="say">${S[lang].close}<br><br>${S[lang].leave}</div>
+    <div class="after">${T[lang].after}</div>`;
+
+  const CSS = `body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:0 auto;padding:30px 22px 60px;color:#12203a;line-height:1.5;font-size:16px}
+  .bar{background:#0e1b33;padding:10px 14px;margin:-30px -22px 22px;display:flex;gap:8px;position:sticky;top:0;z-index:5}
+  .bar button{padding:8px 14px;cursor:pointer;border:1px solid #33436a;background:#16233f;color:#cdd8ef;border-radius:6px;font-size:14px}
+  .bar button.on{background:#c69a3a;color:#1a1205;border-color:#c69a3a;font-weight:700}
+  h1{font-size:20px;margin:0 0 2px}.subh{color:#5b6b8c;font-size:13px;margin-bottom:8px}.subh b{color:#b4402e}
+  .sec{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#8a97b5;font-weight:700;margin:22px 0 7px;border-top:1px solid #e7ebf3;padding-top:13px}
+  .goal{background:#eef3ff;border:1px solid #d5e0f5;border-left:4px solid #3f6bd0;border-radius:8px;padding:12px 14px;font-weight:600}
+  .goal .lbl{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#3f6bd0;margin-bottom:4px;font-weight:700}
+  .vbadge{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:5px;vertical-align:1px}
+  .vb-strong{background:#1f7a44;color:#fff}.vb-marginal{background:#b7791f;color:#fff}.vb-pass{background:#6b7280;color:#fff}.vb-verify{background:#b4402e;color:#fff}
+  .comp{background:#fdf6ec;border:1px solid #f0dcbf;border-radius:8px;padding:4px 16px}.comp ul{margin:8px 0;padding-left:18px}.comp li{margin:7px 0}
+  .dnc{color:#b4402e;font-weight:700}
+  .say{background:#f7f9fc;border:1px solid #e7ebf3;border-radius:8px;padding:13px 15px;font-size:17px}
+  .disc{padding-left:22px;margin:0}.disc li{margin:9px 0}.key{color:#b4402e;font-weight:700;font-size:13px}
+  .ph{padding-left:20px;margin:0}.ph li{margin:5px 0;font-size:18px}
+  .obj .qa{margin:11px 0}.obj .q{font-weight:700;color:#0e1b33}.obj .a{color:#33425f;margin-top:2px}
+  .after{margin-top:22px;font-size:13px;color:#5b6b8c;background:#f2f4f8;border-radius:8px;padding:10px 13px}
+  .muted{color:#8a97b5}
+  @media print{.bar{display:none}body{padding:0;max-width:none;font-size:12pt}.sec{page-break-after:avoid}.say,.goal,.comp{break-inside:avoid}}`;
+
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Call script - ${esc(owner)}</title><style>${CSS}</style></head><body>
+<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">Print</button></div>
+<h1>${esc(owner)}</h1>
+<div class="subh">${addr} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${dt}</b> &middot; ${esc(r.case)}</div>
+<div id="body-en">${render('en')}</div>
+<div id="body-es" style="display:none">${render('es')}</div>
+<script>function show(l){document.getElementById('body-en').style.display=l==='en'?'block':'none';document.getElementById('body-es').style.display=l==='es'?'block':'none';document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(w){ w.document.write(doc); w.document.close(); }
+}
+// ---- per-lead OUTREACH EMAIL: one generic foreclosure email, auto-filled per prospect so each reads
+//      personal. Opens pre-addressed to the owner's skip-traced email (EN/ES), or Copy to paste. ----
+function genEmail(r){
+  const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
+  const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
+  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const first = owner.split(' ')[0] || owner;
+  const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
+  const street = (addr.split(',')[0]||addr).trim();
+  const plaintiff = (r.plaintiff||'').trim();   // the bank / association foreclosing — personalizes it
+  const emails = (r.emails||[]).slice(0,3);
+  const to = emails[0]||'';
+  // professional signature block (blank fields skipped)
+  const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
+  const subjEN = `Regarding your property at ${street}`;
+  const subjES = `Referente a su propiedad en ${street}`;
+  const bodyEN = td
+    ? `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}. County records show it is scheduled for a tax deed sale on ${dt} due to unpaid property taxes.\n\nI am a local real estate investor here in Miami, and I work with owners before these sales. You may still have options, including paying the back taxes to keep the property, or selling it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you as well.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`
+    : `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}. According to those records, the foreclosure sale is scheduled for ${dt}.\n\nI am a local real estate investor here in Miami, and I work with owners in this situation before the sale date. Depending on what is owed, you may have more options than it seems, including selling before the auction so you walk away with cash instead of losing the property. If it sells for more than the debt, any surplus may belong to you.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`;
+  const bodyES = td
+    ? `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}. Los registros del condado muestran que está programada para una subasta de tax deed el ${dt} por impuestos sin pagar.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios antes de estas ventas. Todavía puede tener opciones, incluyendo pagar los impuestos atrasados para conservar la propiedad, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente también podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`
+    : `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}, la cual según los registros públicos se encuentra actualmente en proceso de ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}. Según esos registros, la subasta está programada para el ${dt}.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios en esta situación antes de la fecha de la venta. Según lo que se deba, es posible que tenga más opciones de las que parece, incluyendo vender antes de la subasta para salir con dinero en lugar de perder la propiedad. Si se vende por más de lo adeudado, cualquier excedente podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`;
+  const D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
+  const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
+  const recip = emails.length
+    ? emails.map((e,i)=>'<a href="mailto:'+esc(e)+'"'+(i===0?' class="primary"':'')+'>'+esc(e)+'</a>').join(' ') + (emails.length>1?' <span class="mut">(first = primary)</span>':'')
+    : '<span class="warn">No email on file — use <b>Copy email</b> and paste it, or find one via the People link.</span>';
+  const compHint = sA ? '' : '<div class="hint warn">Add your mailing address under <b>Filters &amp; setup → Sender</b> so the email is CAN-SPAM compliant.</div>';
+  const CSS = `body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:680px;margin:0 auto;padding:0 20px 50px;color:#12203a;font-size:15px;line-height:1.5}
+  .bar{background:#0e1b33;padding:10px 14px;margin:0 -20px 20px;display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
+  .bar button{padding:8px 13px;cursor:pointer;border:1px solid #33436a;background:#16233f;color:#cdd8ef;border-radius:6px;font-size:14px}
+  .bar button.on{background:#c69a3a;color:#1a1205;border-color:#c69a3a;font-weight:700}
+  .bar .act{background:#1f7a44;color:#fff;border-color:#1f7a44;font-weight:700}
+  h1{font-size:18px;margin:2px 0 2px}.sub{color:#5b6b8c;font-size:13px;margin-bottom:14px}
+  .lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8a97b5;font-weight:700;margin:16px 0 5px}
+  .to a{color:#2b6cb0;margin-right:8px;text-decoration:none}.to .primary{font-weight:700}
+  .subj{background:#f2f4f8;border:1px solid #e2e7f0;border-radius:7px;padding:9px 12px;font-weight:600}
+  .body{white-space:pre-wrap;background:#fff;border:1px solid #e2e7f0;border-radius:8px;padding:16px 17px;font-size:15px}
+  .mut{color:#8a97b5}.warn{color:#b4402e}
+  .hint{font-size:12px;color:#5b6b8c;margin-top:14px;background:#f2f4f8;border-radius:7px;padding:9px 12px}
+  @media print{.bar{display:none}}`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Email - ${esc(owner)}</title><style>${CSS}</style></head><body>
+<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button class="act" onclick="openMail()">Open in email app</button><button class="act" id="cpy" onclick="copyEmail()">Copy email</button></div>
+<h1>${esc(owner)}</h1><div class="sub">${esc(addr)} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${esc(dt)}</b></div>
+<div class="lbl">To</div><div class="to">${recip}</div>
+<div class="lbl">Subject</div><div class="subj" id="subjline"></div>
+<div class="lbl">Message</div><div class="body" id="bodybox"></div>
+<div class="hint">Every prospect's name, address and sale date fill in automatically, so each email reads personally. It sends as <b>${esc(sL)}</b>. Review before you hit send.</div>${compHint}
+<script>var D=${Djson}, to=${JSON.stringify(to)}, cur='en';
+function show(l){cur=l;document.getElementById('subjline').textContent=D[l].subj;document.getElementById('bodybox').textContent=D[l].body;document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}
+function openMail(){location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body);}
+function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;navigator.clipboard.writeText(t).then(function(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);});}
+show('en');<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(w){ w.document.write(doc); w.document.close(); }
+}
+const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
+function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
+function view(){
+  let rows;
+  if(q){
+    // Smart search: it does NOT matter which tier or filter you're on — a search spans the ENTIRE
+    // list and ignores every other filter, so you always find the lead. Matches owner, address,
+    // case #, mailing address, plaintiff and co-defendants.
+    const s = q.toLowerCase();
+    rows = DATA.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail+' '+(r.plaintiff||'')+' '+(r.defs||'')+' '+(r.oname||'')).toLowerCase().includes(s));
+  } else {
+    rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
+    if(fy1) rows = rows.filter(r => r.filed && r.filed >= +fy1);
+    if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
+    if(ad1) rows = rows.filter(r => toISO(r.auction) >= ad1);
+    if(ad2) rows = rows.filter(r => toISO(r.auction) <= ad2);
+    if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
+    if(tdOnly) rows = rows.filter(r => r.st === 'TD');
+    if(hideDead) rows = rows.filter(r => { const st=(notes[r.case]||{}).status; return st!=='Dead' && st!=='DO NOT CONTACT'; });
+    if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
+    if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
+  }
+  rows = rows.slice();
+  const sortVal = r => {
+    // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
+    // (else "12/01/2025" would sort after "07/01/2026"). Use the ISO yyyymmdd number.
+    if(sortK==='next'){ const nx=(notes[r.case]||{}).next; return nx ? +nx.replace(/-/g,'') : Infinity; }   // soonest follow-up first; no follow-up sinks
+    if(sortK==='auction'){ const n = +toISO(r.auction).replace(/-/g,''); return n || -Infinity; }
+    // gross/unverified equity stays rankable but muted; only a TINY junior lien (<8% of value) reading
+    // ~98% equity is pure noise -> sink it (keeps real high-equity leads like San Pedro rankable).
+    if(sortK==='eq' && r.eqfake && r.value>0 && (r.judg||0)/r.value < 0.08) return -1;
+    const x = r[sortK]; return (x==null) ? -Infinity : x;   // no-data leads sink to the bottom
+  };
+  rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
+  return rows;
+}
+function render(){
+  const rows = view();
+  // sort-direction indicator on the active column header
+  document.querySelectorAll('th[data-k]').forEach(th=>{
+    const on = th.dataset.k===sortK;
+    th.classList.toggle('sorted', on);
+    if(on) th.dataset.dir = sortD<0 ? 'desc' : 'asc'; else th.removeAttribute('data-dir');
+  });
+  const _sc = rows.filter(r=>r._verdict==='STRONG').length, _mc = rows.filter(r=>r._verdict==='MARGINAL').length;
+  document.getElementById('stats').textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
+  // KPI band — live portfolio metrics for the current view
+  const _kp = rows.filter(r=>r._profit>0), _tot = _kp.reduce((s,r)=>s+r._profit,0);
+  const _avg = _kp.length ? Math.round(_kp.reduce((s,r)=>s+(r._roi||0),0)/_kp.length) : 0;
+  const _td = rows.filter(r=>r.st==='TD'&&!r._nodata).length;
+  const _kpi = (l,v,s,cls)=>'<div class="kpi'+(cls?' '+cls:'')+'"><div class="kl">'+l+'</div><div class="kv'+(cls==='gold'?' g':'')+'">'+v+'</div><div class="ks">'+s+'</div></div>';
+  const _kb = document.getElementById('kpis');
+  if(_kb) _kb.innerHTML = _kpi('Strong deals', _sc, rows.length+' in view')
+    + _kpi('Est. profit · view', fmtK(_tot), _kp.length+' profitable', 'gold')
+    + _kpi('Avg ROI', _avg+'%', 'on profitable deals')
+    + _kpi('Tax-deed plays', _td, 'Jose&rsquo;s lane');
+  // live count on the Hide-dead button so it's obvious what it tracks
+  const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
+  const hd = document.getElementById('hd');
+  if(hd) hd.textContent = 'Hide dead' + (deadN ? ' ('+deadN+')' : '');
+  const prof = rows.filter(r => r._profit > 0);
+  const totp = prof.reduce((s,r) => s + r._profit, 0);
+  const ds = document.getElementById('dealsum');
+  if(ds) ds.textContent = prof.length + ' profitable in view · ' + fmt(totp) + ' total est. profit';
+  const trs = [], cards = [];
+  rows.forEach(r => {
+    const n = notes[r.case] || {status:'', note:''};
+    // ---- links, grouped by purpose:  CALL (green) · INVESTIGATE (gold) · PROPERTY (slate) · DO ----
+    const gCall = [], gDig = [], gProp = [], gDo = [];
+    // CALL — skip-traced + saved phones. Manual dial only; DNC-flagged in amber.
+    (r.phones||[]).slice(0,3).forEach((ph,i) => {
+      const dnc = (r.phdnc||[])[i];
+      gCall.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">'+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
+    });
+    if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">'+esc(fmtPhone(n.phone))+'</a>');
+    // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
+    (r.emails||[]).slice(0,2).forEach(em => {
+      gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
+    });
+    // INVESTIGATE — the owner's people, their loans, their other cases, this docket.
+    if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
+    if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+r.recqs+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
+    else if(r.oname) gDig.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
+    if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+r.ocsqs+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
+    else if(r.oname) gDig.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
+    if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
+    // PROPERTY — value + county pages.
+    if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="Miami-Dade Property Appraiser record">Appraiser</a>');
+    if(r.zillow) gProp.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
+    if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
+    // Auction: the live RealForeclose sale page for this date (all parcels + bidding). RealForeclose
+    // returns 200 to a real browser; a bare/no-UA request 403s at their AWS load balancer, so it can
+    // LOOK dead from a script — it isn't. May need a free RealForeclose login for bid detail, and the
+    // site can be geo-restricted outside the US (e.g. abroad), so we don't gate the button on a probe.
+    if(r.auc) gProp.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
+    // DO — actions.
+    gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
+    gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
+    gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
+    gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter, set a follow-up date, and see the contact history for this lead">Log</a>');
+    const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
+      'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
+    gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
+    const linksHtml = [gCall, gDig, gProp, gDo].filter(g => g.length).map(g => '<div class="lgrp">'+g.join('')+'</div>').join('');
+    const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
+    const ctype = r.ctype ? '<span class="chip '+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'" title="'+esc(r.ctype)+'">'+ctypeTxt+'</span>' : '';
+    const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
+    // Profit cell: big profit, then ROI + cash sub-line, then flags. "no value data" when un-enriched.
+    let prof;
+    if(r._nodata){
+      prof = '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
+    } else if(r._verdict==='VERIFY'){
+      prof = verdictBadge(r)+'<div class="warn" style="margin-top:4px;white-space:normal">'+esc(r._whyShort||r._why)+'</div>'+dealTrigger(r);
+    } else {
+      prof = verdictBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
+        (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
+        (r._tight?'<div class="warn" title="Costs/debt eat the margin. Negotiate lower or pass.">thin margin</div>':'')+
+        (r.mr?'<div class="mrwarn" title="HOA/junior case — first mortgage survives; entered below">mortgage risk</div>':'')+
+        dealTrigger(r);
+    }
+    // Auction cell: date, countdown, filed/bought sub-lines
+    const auc = '<div>'+esc(r.auction)+'</div>'+
+      '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
+      (r.filed||r.bought?'<div class="meta">'+(r.filed?'filed '+r.filed:'')+(r.bought?' · bought '+r.bought:'')+'</div>':'');
+    // Owner cell: owner names, plaintiff (clamped), count of other defendants
+    const dlist = r.defs ? r.defs.split(';').map(x=>x.trim()).filter(Boolean) : [];
+    const defsHtml = dlist.length
+      ? '<div class="defwrap"><button class="deftog" type="button">+ '+dlist.length+' also named</button>'+
+        '<div class="deflist">'+dlist.map(d=>'<div>'+esc(d)+'</div>').join('')+'</div></div>'
+      : '';
+    // Owner cell. FC: owner -> "vs plaintiff" -> defendants. TD: no plaintiff exists (it's a county
+    // tax sale, not a lawsuit) -> say so plainly + show the Certificate #.
+    const owner = '<div class="addrline"><span class="clamp2" title="'+esc(r.owners)+'">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
+      (r.st==='TD'
+        ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
+        : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
+    // Property cell: address (with copy), compact numbers line, any warning
+    const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
+      '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?(r.eqfake?' · <span class="eqfake" title="Gross equity — an HOA/junior lien or a hidden senior mortgage inflates this. Verify the real debt via Records.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
+    const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'];
+    const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
+                : (n.status==='Appointment'||n.status==='Called - talked') ? 'st-hot'
+                : (n.status ? 'st-active' : '');
+    const statusSel = '<select class="status '+stcls+'" data-c="'+esc(r.case)+'">'+
+      opts.map(s => '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select>';
+    const notesTa = '<textarea class="notes" data-c="'+esc(r.case)+'" placeholder="notes">'+esc(n.note)+'</textarea>';
+    // free manual phone: look it up via the People button, then type it here (saves on this device)
+    const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="phone" value="'+esc(n.phone||'')+'">';
+    trs.push('<tr class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+'">'+
+      '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
+      '<td class="num">'+prof+'</td>'+
+      '<td class="num">'+r.score+'</td>'+
+      '<td>'+auc+'</td>'+
+      '<td>'+ctype+'</td>'+
+      '<td>'+owner+'</td>'+
+      '<td>'+prop+'</td>'+
+      '<td><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
+      '<td class="links">'+linksHtml+'</td>'+
+      '<td><div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+statusSel+'</td>'+
+      '<td>'+phoneInp+notesTa+'</td></tr>');
+    // mobile card
+    cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
+      '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
+        (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
+                  : r._verdict==='VERIFY' ? verdictBadge(r)
+                  : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
+        '<span class="cscore">Score '+r.score+'</span></div>'+
+      (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
+      (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
+        '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
+        '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+
+        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+(r.eqfake?' eqfake':'')+'">'+(r.eq?(r.eqfake?'~'+r.eq+'%':r.eq+'%'):'—')+'</div></div>'+
+      '</div>':'')+
+      (r.mr&&r._verdict!=='VERIFY'?'<div class="mrwarn">mortgage risk - verify payoff</div>':'')+
+      '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
+      (r.st==='TD'
+        ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
+        : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
+      '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
+      '<div class="submeta">'+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?(r.eqfake?' · <span class="eqfake" title="Gross equity — an HOA/junior lien or a hidden senior mortgage inflates this. Verify the real debt via Records.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
+      (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
+      '<div class="clinks">'+linksHtml+'</div>'+
+      dealTrigger(r)+
+      '<div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+
+      '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
+      '</div>');
+  });
+  const cc = document.getElementById('cards');
+  if(!rows.length){
+    const msg = '<div class="empty"><div class="empty-t">No leads match these filters</div>'+
+      '<div class="empty-s">Try a wider tier, date range, or a different search.</div>'+
+      '<button class="empty-reset" type="button">Clear all filters</button></div>';
+    document.getElementById('tb').innerHTML = '<tr><td colspan="11" class="emptycell">'+msg+'</td></tr>';
+    if(cc) cc.innerHTML = msg;
+    return;
+  }
+  document.getElementById('tb').innerHTML = trs.join('');
+  if(cc) cc.innerHTML = cards.join('');
+}
+function resetFilters(){
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=tdOnly=ncOnly=dueOnly=false;
+  const g=id=>document.getElementById(id);
+  if(g('q')) g('q').value='';
+  ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
+  ['wk','hd','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
+  document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
+  render();
+}
+document.addEventListener('click', e => { if(e.target.closest && e.target.closest('.empty-reset')) resetFilters(); });
+document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.tf').forEach(x=>x.classList.remove('active'));
+  b.classList.add('active'); tier = b.dataset.t; render();
+});
+function saveDeal(){ try { localStorage.setItem('fcDeal', JSON.stringify(deal)); localStorage.setItem('fcDealVer', DEAL_VER); } catch(e) {} }
+function syncDealUI(){
+  document.getElementById('costpct').value = deal.costpct;
+  document.getElementById('buypct').value = deal.buypct;
+  document.getElementById('bidover').value = deal.bidover;
+  document.getElementById('quiettitle').value = deal.quiettitle;
+  document.getElementById('tdclear').value = deal.tdclear;
+}
+function dealChanged(){ recompute(); saveDeal(); render(); }
+document.getElementById('costpct').oninput = e => { deal.costpct = e.target.value===''?0:+e.target.value; dealChanged(); };
+document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value===''?75:+e.target.value; dealChanged(); };
+document.getElementById('bidover').oninput = e => { deal.bidover = e.target.value===''?0:+e.target.value; dealChanged(); };
+document.getElementById('quiettitle').oninput = e => { deal.quiettitle = e.target.value===''?0:+e.target.value; dealChanged(); };
+document.getElementById('tdclear').oninput = e => { deal.tdclear = e.target.value===''?70:+e.target.value; dealChanged(); };
+document.getElementById('dealreset').onclick = () => { deal = Object.assign({}, DEAL_DEFAULTS); saveDeal(); syncDealUI(); recompute(); render(); };
+document.getElementById('sortby').onchange = e => {
+  sortK = e.target.value;
+  sortD = (sortK==='days'||sortK==='next') ? 1 : -1;   // soonest auction / soonest follow-up first; everything else high-to-low
+  render();
+};
+document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
+document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
+document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
+document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
+document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
+// collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
+(function(){
+  const panel = document.getElementById('advpanel'), tog = document.getElementById('advtog');
+  let open = false;
+  try { open = localStorage.getItem('fcAdvOpen') === '1'; } catch(e) {}
+  const apply = () => { panel.classList.toggle('collapsed', !open); tog.classList.toggle('active', open); };
+  apply();
+  tog.onclick = () => { open = !open; try { localStorage.setItem('fcAdvOpen', open?'1':'0'); } catch(e){} apply(); };
+})();
+// smooth header auto-hide (slide away on scroll-down, back on scroll-up) + scroll-to-top button
+(function(){
+  const btn = document.getElementById('toTop'), header = document.querySelector('header');
+  let lastY = 0, ticking = false;
+  const update = () => {
+    const y = window.scrollY;
+    btn.style.display = (y > 340) ? 'block' : 'none';
+    const dy = y - lastY;
+    if(Math.abs(dy) > 5){                                        // ignore micro-jitter so it doesn't flicker
+      if(dy > 0 && y > 130) header.classList.add('hdn');        // scrolling down past the header -> glide up
+      else header.classList.remove('hdn');                       // any upward scroll -> smartly bring it back
+      lastY = y;
+    }
+    header.classList.toggle('scrolled', y > 6);                  // subtle elevation once you leave the top
+    ticking = false;
+  };
+  window.addEventListener('scroll', () => { if(!ticking){ ticking = true; requestAnimationFrame(update); } }, {passive:true});
+  btn.onclick = () => { window.scrollTo({top:0, behavior:'smooth'}); header.classList.remove('hdn'); };
+  update();
+})();
+// letter sender persistence
+function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
+Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr', title:'sTitle', email:'sEmail', web:'sWeb'}).forEach(([k,id]) => {
+  const el = document.getElementById(id);
+  if(!el) return;
+  el.value = sender[k] || '';
+  el.oninput = e => { sender[k] = e.target.value; saveSender(); };
+});
+saveSender();
+// letter generation (delegated for both table + cards)
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.lettergen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) genLetter(r);
+});
+// phone-script generation (delegated for both table + cards)
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.scriptgen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) genScript(r);
+});
+// outreach-email generation (delegated for both table + cards)
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.emailgen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) genEmail(r);
+});
+// copy buttons (address + copy-all), delegated for table + cards
+document.addEventListener('click', e => {
+  const btn = e.target.closest && e.target.closest('.cpy, .cpy2');
+  if(!btn) return;
+  e.preventDefault();
+  const text = btn.dataset.copy || '';
+  const flash = () => {
+    const orig = btn.innerHTML; btn.classList.add('ok');
+    btn.innerHTML = btn.classList.contains('cpy2') ? '&#10003; Copied' : '&#10003;';
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('ok'); }, 1100);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(flash, () => fallbackCopy(text, flash));
+  } else fallbackCopy(text, flash);
+});
+function fallbackCopy(text, done){
+  const ta = document.createElement('textarea');
+  ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); done && done(); } catch(e) {}
+  document.body.removeChild(ta);
+}
+document.getElementById('q').oninput = e => { q = e.target.value; render(); };
+document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
+document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
+document.getElementById('ad1').oninput = e => { ad1 = e.target.value; render(); };
+document.getElementById('ad2').oninput = e => { ad2 = e.target.value; render(); };
+document.getElementById('clr').onclick = () => {
+  fy1 = fy2 = ad1 = ad2 = '';
+  ['fy1','fy2','ad1','ad2'].forEach(id => document.getElementById(id).value = '');
+  render();
+};
+document.querySelectorAll('.lkb').forEach(b => b.onclick = () => {
+  const v = document.getElementById('lk').value.trim();
+  if(!v) return;
+  const e2 = encodeURIComponent(v);
+  const urls = {
+    zillow: 'https://www.zillow.com/homes/' + e2 + '_rb/',
+    appr:   'https://www.google.com/search?q=' + e2 + '+county+property+appraiser',
+    clerk:  'https://www.google.com/search?q=' + e2 + '+clerk+of+courts+foreclosure+case',
+    sunbiz: 'https://www.google.com/search?q=' + e2 + '+site%3Asearch.sunbiz.org'
+  };
+  window.open(urls[b.dataset.s], '_blank', 'noopener');
+});
+document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
+  const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
+});
+// Records link: copy the owner name so it can be pasted into Official Records "Party Name" (the page
+// is an ASP form that can't be prefilled by URL). The anchor still opens the search in a new tab.
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a.recsearch'); if(!a) return;
+  const o = (a.dataset.o || '').trim(); if(!o) return;
+  const orig = a.textContent, flash = () => { a.textContent = '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, flash); else flash();
+});
+// document-level so it works in BOTH the desktop table (#tb) and mobile cards (#cards)
+document.addEventListener('click', e => {
+  const btn = e.target.closest && e.target.closest('.deftog');
+  if(!btn) return;
+  btn.classList.toggle('open');
+  const list = btn.parentElement.querySelector('.deflist');
+  if(list) list.classList.toggle('open');
+});
+// deal-analysis: open the modal for this lead (works in table + cards)
+document.addEventListener('click', e => {
+  const btn = e.target.closest && e.target.closest('.dealtog');
+  if(!btn) return;
+  openDealModal(btn.dataset.c);
+});
+// close the modal: X button, backdrop click, or Escape
+document.addEventListener('click', e => {
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); }
+});
+document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); } });
+// "/" focuses search (unless already typing in a field)
+document.addEventListener('keydown', e => {
+  if(e.key==='/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'')){
+    e.preventDefault(); const q=document.getElementById('q'); if(q) q.focus();
+  }
+});
+document.addEventListener('change', e => {
+  const c = e.target.dataset && e.target.dataset.c; if(!c) return;
+  notes[c] = notes[c] || {status:'', note:''};
+  if(e.target.classList.contains('status')) { notes[c].status = e.target.value; save(); render(); return; }
+  else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
+  else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
+  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; save(); recompute(); render(); refreshDealModal(); return; }
+  else return;
+  save();
+});
+document.getElementById('exp').onclick = () => {
+  const head = ['tier','verdict','verdict_reason','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','phone','email','last_contact','touches','last_outcome','next_followup','zillow','appraiser','people_search','case_page','status','notes'];
+  // prefix a ' to any cell starting with = + - @ so Excel/Sheets can't run it as a formula
+  const q2 = v => { let s = String(v==null?'':v); if(/^[=+\-@\t\r]/.test(s)) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
+  const lines = [head.join(',')].concat(view().map(r => {
+    const n = notes[r.case]||{};
+    return [r.tier,r._verdict||'',r._why||'',Math.round(r._profit||0),Math.round(r._roi||0),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),((r.emails||[]).join(' | ')),(n.touches&&n.touches.length?n.touches[n.touches.length-1].d:''),(n.touches?n.touches.length:0),(n.touches&&n.touches.length?(n.touches[n.touches.length-1].ch+' '+n.touches[n.touches.length-1].out):''),(n.next||''),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
+  }));
+  const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'foreclosure-leads-tracked.csv'; a.click();
+};
+// ---- private gate: if the payload is encrypted, ask for the password and decrypt in-browser ----
+async function decryptPayload(enc, password){
+  const dec = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+  const baseKey = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  const derive = salt => crypto.subtle.deriveKey(
+    {name:'PBKDF2', salt: dec(salt), iterations: enc.it||200000, hash:'SHA-256'},
+    baseKey, {name:'AES-GCM', length:256}, false, ['decrypt']);
+  if(enc.enc === 2){
+    // ENVELOPE (per-person codes): each wrapped blob holds {master key, name} sealed under one code.
+    // Try each; the one this code opens gives us the master key (decrypts the shared payload) AND
+    // the person's name (for the personalized welcome). Name never appears in plaintext in the file.
+    for(const k of enc.keys){
+      try{
+        const wk = await derive(k.salt);
+        const blobRaw = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(k.iv)}, wk, dec(k.ct));
+        const blob = JSON.parse(new TextDecoder().decode(blobRaw));   // {mk, name}
+        unlockName = blob.name || '';
+        const mk = await crypto.subtle.importKey('raw', dec(blob.mk), {name:'AES-GCM'}, false, ['decrypt']);
+        const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, mk, dec(enc.ct));
+        return JSON.parse(new TextDecoder().decode(pt));
+      }catch(e){ /* this code doesn't open this wrapped key — try the next */ }
+    }
+    throw new Error('no matching code');
+  }
+  // legacy single shared key (enc:1)
+  const key = await derive(enc.salt);
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, key, dec(enc.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+function showWelcome(name){
+  const el = document.getElementById('welcome'); if(!el || !name) return;
+  el.innerHTML = '<div class="wtoast"><span class="wcheck"></span><div class="wtext">'+
+    '<span class="whi">Welcome back</span><span class="wname">'+esc(name)+'</span></div></div>';
+  const card = el.querySelector('.wtoast');
+  const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  setTimeout(()=>{ if(card) card.classList.add('show'); }, 30);      // paint hidden state, then slide in
+  const hold = reduce ? 1600 : 2600;
+  setTimeout(()=>{ if(card){ card.classList.remove('show'); card.classList.add('out'); } }, hold);
+  setTimeout(()=>{ el.innerHTML=''; }, hold + 900);   // let the slower fade-out finish before removal
+}
+async function boot(){
+  const lb = document.getElementById('lockbtn');
+  let manual = false;
+  if(!Array.isArray(RAW) && RAW && RAW.enc){
+    const gate = document.getElementById('gate'), inp = document.getElementById('gatepw'),
+          btn = document.getElementById('gatego'), err = document.getElementById('gateerr');
+    gate.style.display = 'flex';
+    const SEP = '\x1f', phraseEl = document.getElementById('gatephrase');
+    const tryPw = async (pw) => {
+      try { DATA = await decryptPayload(RAW, pw); return true; } catch(e){ return false; }
+    };
+    // try the code alone, then code+phrase (for shared/team codes). Return the secret that worked.
+    const tryUnlock = async (code, phrase) => {
+      const cands = phrase ? [code, code + SEP + phrase] : [code];
+      for(const s of cands){ if(await tryPw(s)) return s; }
+      return null;
+    };
+    // device-remember: once unlocked on this device it stays unlocked (localStorage, not per-tab)
+    const saved = (()=>{ try { return localStorage.getItem('fcPw'); } catch(e){ return null; } })();
+    if(saved && await tryPw(saved)){ gate.style.display='none'; }
+    else {
+      await new Promise(resolve => {
+        const attempt = async () => {
+          err.textContent = '';
+          const s = await tryUnlock(inp.value.trim(), phraseEl ? phraseEl.value.trim() : '');
+          if(s){
+            try { localStorage.setItem('fcPw', s); } catch(e){}
+            manual = true; gate.style.display='none'; resolve();
+          } else { err.textContent = 'Wrong code or phrase — check with the person who shared this'; inp.select(); }
+        };
+        btn.onclick = attempt;
+        inp.onkeydown = e => { if(e.key==='Enter') attempt(); };
+        if(phraseEl) phraseEl.onkeydown = e => { if(e.key==='Enter') attempt(); };
+        inp.focus();
+      });
+    }
+    // show a Lock control so a shared device can be re-locked (clears the remembered code)
+    if(lb){ lb.style.display='inline-block'; lb.onclick = () => { try { localStorage.removeItem('fcPw'); } catch(e){} location.reload(); }; }
+  }
+  syncDealUI();
+  recompute();
+  render();
+  if(manual && unlockName) showWelcome(unlockName);   // greet them only when they actually enter a code
+}
+boot();
+// Freshness signal: read the build date stamped into the header and tell the user, at a glance,
+// whether the data is current or the auto-refresh has silently gone stale (auctions are time-sensitive).
+function stampFreshness(){
+  try{
+    var el=document.getElementById('upddate'); if(!el) return;
+    var d=new Date((el.textContent||'').trim()+'T12:00:00'); if(isNaN(d.getTime())) return;
+    var days=Math.floor((Date.now()-d.getTime())/86400000);
+    var mark=document.getElementById('stalemark'), upd=document.getElementById('upd');
+    if(days>=3){ if(upd) upd.classList.add('stale'); if(mark) mark.textContent=' · '+days+'d old — refresh overdue'; }
+    else if(days<=0){ if(mark) mark.textContent=' · today'; }
+    else { if(mark) mark.textContent=' · '+days+'d ago'; }
+  }catch(e){}
+}
+stampFreshness();
+// Smart horizontal scroll for the wide table: move the mouse toward either edge and it auto-scrolls
+// (speed ramps as you near the edge); gold fades hint there's more; a one-time "scroll →" nudge shows
+// on load and fades after first scroll. Mobile keeps native touch/swipe — the fades + nudge still guide.
+(function(){
+  var wrap=document.querySelector('.tblwrap'); if(!wrap) return;
+  var nudge=document.querySelector('.scrollnudge');
+  var scrolled=false, coarse=window.matchMedia('(pointer:coarse)').matches;
+  function maxX(){ return wrap.scrollWidth - wrap.clientWidth; }
+  function update(){
+    var mx=maxX();
+    wrap.classList.toggle('canleft', wrap.scrollLeft>4);
+    wrap.classList.toggle('canright', wrap.scrollLeft < mx-4);
+    if(nudge) nudge.classList.toggle('on', !scrolled && mx>40 && wrap.scrollLeft<4);
+  }
+  wrap.addEventListener('scroll', function(){ if(wrap.scrollLeft>4) scrolled=true; update(); }, {passive:true});
+  window.addEventListener('resize', update);
+  var tb=document.getElementById('tb');
+  if(tb && window.MutationObserver){ new MutationObserver(function(){ setTimeout(update,30); }).observe(tb,{childList:true}); }
+  if(!coarse){
+    var vx=0, raf=null;
+    function step(){ if(vx){ wrap.scrollLeft+=vx; if(wrap.scrollLeft>4) scrolled=true; update(); raf=requestAnimationFrame(step); } else raf=null; }
+    wrap.addEventListener('mousemove', function(e){
+      // NEVER auto-scroll while the pointer is over something clickable — otherwise the button slides
+      // out from under the cursor and the click misses ("nothing happens when I press it").
+      if(e.target.closest('a,button,input,select,textarea,label,[role=button]')){ vx=0; return; }
+      var mx=maxX(); if(mx<=0){ vx=0; return; }
+      // thin edge strip only, so it never covers the content/links area
+      var r=wrap.getBoundingClientRect(), x=e.clientX-r.left, edge=Math.min(64, r.width*0.07), p;
+      if(x > r.width-edge){ p=(x-(r.width-edge))/edge; vx=Math.max(1,Math.ceil(p*p*14)); }
+      else if(x < edge){ p=(edge-x)/edge; vx=-Math.max(1,Math.ceil(p*p*14)); }
+      else vx=0;
+      if(vx && !raf) raf=requestAnimationFrame(step);
+    });
+    wrap.addEventListener('mouseleave', function(){ vx=0; });
+    // the instant a click begins, halt any scroll so the target can't drift mid-press
+    wrap.addEventListener('mousedown', function(){ vx=0; });
+  }
+  setTimeout(update, 120);
+  window.addEventListener('load', update);
+})();
+// intro reveal: hold briefly, fade out, remove (respects reduced-motion)
+(function(){
+  var i = document.getElementById('intro'); if(!i) return;
+  if(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches){ i.parentNode && i.parentNode.removeChild(i); return; }
+  setTimeout(function(){ i.classList.add('done'); setTimeout(function(){ i.parentNode && i.parentNode.removeChild(i); }, 650); }, 1300);
+})();
+</script></body></html>
