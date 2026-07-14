@@ -289,6 +289,26 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 .dm-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--gold-grad);border-radius:var(--r-xl) var(--r-xl) 0 0}
 .dm-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:var(--r-xs)}
 .dm-close:hover{color:var(--ink);background:var(--surface-2)}
+/* contact / follow-up tracker */
+#logmodal{display:none;position:fixed;inset:0;z-index:120}
+#logmodal.show{display:block}
+#logmodal .dm-card{max-width:440px}
+.cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;cursor:pointer}
+.cx{font-size:10px;padding:1px 6px;border-radius:9px;white-space:nowrap;line-height:1.7}
+.cx-new{background:var(--surface-2);color:var(--muted)}
+.cx-done{background:rgba(74,222,128,.14);color:#8fe3ab}
+.cx-fu{background:rgba(138,180,240,.16);color:#9cc0f0}
+.cx-due{background:rgba(251,191,36,.2);color:#f4c150;font-weight:700}
+.qlogwrap{display:flex;flex-wrap:wrap;gap:7px}
+.qlog{padding:9px 12px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:8px;cursor:pointer;font-size:14px}
+.qlog:hover{border-color:#c69a3a;color:#e8c877}
+.fuwrap{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--ink)}
+.fuset{padding:5px 10px;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);border-radius:7px;cursor:pointer;font-size:12px}
+.fuset:hover{color:var(--ink);border-color:#c69a3a}
+.lhist{margin:4px 0 8px;padding-left:16px;font-size:12px;color:var(--muted)}
+.lhist li{margin:3px 0}
+.lundo{font-size:11px;padding:3px 9px;border:1px solid var(--line);background:none;color:var(--muted);border-radius:6px;cursor:pointer}
+.mut{color:var(--muted)}
 .dm-head{margin:0 30px 16px 0;padding-bottom:14px;border-bottom:1px solid var(--line)}
 .dm-title{font-family:var(--f-display);font-size:20px;font-weight:700;line-height:1.2;letter-spacing:-.01em;color:var(--ink)}
 .dm-sub{font-size:12.5px;color:var(--muted);margin-top:4px}
@@ -531,6 +551,7 @@ body.modal-open{overflow:hidden}
 <div class="gate-foot">End-to-end encrypted &middot; Miami-Dade Deal Engine</div>
 </div></div>
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
+<div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
 <header>
 <div class="brand">
 <div>
@@ -549,10 +570,12 @@ body.modal-open{overflow:hidden}
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
+<button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
+<button id="due" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days">⚡ Due</button>
 <input id="q" placeholder="Search owner / address / case #">
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
-<option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option>
+<option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option><option value="next">Follow-up due</option>
 </select></label>
 <button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">Filters &amp; setup</button>
 <button id="exp">Export CSV (with my notes)</button>
@@ -628,7 +651,7 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, tdOnly = false;
+let weekOnly = false, hideDead = false, tdOnly = false, ncOnly = false, dueOnly = false;
 let sender = {name:'', llc:'', phone:'', addr:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
@@ -821,6 +844,58 @@ function refreshDealModal(){
   if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r);
 }
 function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+// ---- contact / follow-up tracker (mini-CRM; per-device, in the same notes[] localStorage) ----
+function _today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
+function _rel(iso){ const n=_dneg(iso); if(n===null) return ''; if(n===0) return 'today'; return n<0 ? (-n)+'d ago' : 'in '+n+'d'; }
+const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}'};
+function contactChip(r){
+  const n=notes[r.case]||{}, ts=n.touches||[]; let h='';
+  if(ts.length){ const last=ts[ts.length-1];
+    h+='<span class="cx cx-done" title="'+esc(ts.length+' touch(es) — last: '+last.ch+' '+last.out+' on '+last.d)+'">'+(CH_ICON[last.ch]||'•')+' '+_rel(last.d)+(ts.length>1?' ·'+ts.length:'')+'</span>';
+  } else h+='<span class="cx cx-new" title="Not contacted yet">not contacted</span>';
+  if(n.next){ const d=_dneg(n.next); h+='<span class="cx '+(d<=0?'cx-due':'cx-fu')+'" title="'+esc('Follow-up '+n.next)+'">'+(d<0?'overdue '+(-d)+'d':d===0?'due today':'fu '+_rel(n.next))+'</span>'; }
+  return h;
+}
+function _setNext(n, days){ if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.touches=n.touches||[]; n.touches.push({d:_today(), ch:ch, out:out}); if(opt.status) n.status=opt.status; if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); }
+function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
+const QUICKLOG=[
+  {lbl:'☎ No answer', ch:'call', out:'no answer', status:'Called - no answer', nextDays:2},
+  {lbl:'☎ Left message', ch:'call', out:'left message', status:'Called - no answer', nextDays:3},
+  {lbl:'☎ Spoke', ch:'call', out:'spoke', status:'Called - talked', nextDays:5},
+  {lbl:'⭐ Callback set', ch:'call', out:'callback set', status:'Appointment', nextDays:2},
+  {lbl:'✉ Emailed', ch:'email', out:'emailed', nextDays:4},
+  {lbl:'✉ Letter sent', ch:'letter', out:'letter sent', status:'Letter sent', nextDays:7},
+  {lbl:'\u{1f4ac} Texted', ch:'text', out:'texted', nextDays:3},
+  {lbl:'✕ Not interested', ch:'call', out:'not interested', status:'Dead', next:''}
+];
+function logModalBody(r){
+  const n=notes[r.case]||{}, ts=(n.touches||[]).slice().reverse();
+  const owner=esc((r.owners||'').split(';')[0].trim());
+  const btns=QUICKLOG.map((q,i)=>'<button class="qlog" data-c="'+esc(r.case)+'" data-i="'+i+'" type="button">'+q.lbl+'</button>').join('');
+  const fu = n.next ? '<b>'+esc(n.next)+'</b> <span class="mut">('+_rel(n.next)+')</span>' : '<span class="mut">none set</span>';
+  const fub='<button class="fuset" data-c="'+esc(r.case)+'" data-d="2" type="button">+2d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="5" type="button">+5d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="14" type="button">+2w</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="0" type="button">clear</button>';
+  const hist = ts.length ? '<ul class="lhist">'+ts.map(t=>'<li>'+esc(t.d)+' · '+(CH_ICON[t.ch]||'')+' '+esc(t.out)+'</li>').join('')+'</ul><button class="lundo" data-c="'+esc(r.case)+'" type="button">Undo last</button>' : '<div class="mut">No touches logged yet.</div>';
+  return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+(r.days>=0?'in '+r.days+'d':'passed')+'</div></div>'+
+    '<div class="dm-sec">Log a touch — one tap</div><div class="qlogwrap">'+btns+'</div>'+
+    '<div class="dm-sec">Follow-up date</div><div class="fuwrap">Next: '+fu+' &nbsp;'+fub+'</div>'+
+    '<div class="dm-sec">History</div>'+hist;
+}
+let logModalCase=null;
+function openLogModal(c){ const r=DATA.find(x=>x.case===c); if(!r) return; logModalCase=c; document.getElementById('logbody').innerHTML=logModalBody(r); document.getElementById('logmodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function refreshLogModal(){ if(logModalCase){ const r=DATA.find(x=>x.case===logModalCase); if(r) document.getElementById('logbody').innerHTML=logModalBody(r); } }
+function closeLogModal(){ logModalCase=null; document.getElementById('logmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+document.addEventListener('click', e => {
+  const open=e.target.closest && e.target.closest('.logbtn, .cxwrap');
+  if(open){ e.preventDefault(); if(open.dataset.c) openLogModal(open.dataset.c); return; }
+  const q=e.target.closest && e.target.closest('.qlog');
+  if(q){ e.preventDefault(); const spec=QUICKLOG[+q.dataset.i]; if(spec){ logTouch(q.dataset.c, spec.ch, spec.out, spec); refreshLogModal(); render(); } return; }
+  const fs=e.target.closest && e.target.closest('.fuset');
+  if(fs){ e.preventDefault(); const n=notes[fs.dataset.c]=notes[fs.dataset.c]||{status:'',note:''}; _setNext(n, +fs.dataset.d); save(); refreshLogModal(); render(); return; }
+  const un=e.target.closest && e.target.closest('.lundo');
+  if(un){ e.preventDefault(); const n=notes[un.dataset.c]; if(n&&n.touches&&n.touches.length){ n.touches.pop(); save(); refreshLogModal(); render(); } return; }
+});
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
 const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
@@ -1096,11 +1171,14 @@ function view(){
     if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
     if(tdOnly) rows = rows.filter(r => r.st === 'TD');
     if(hideDead) rows = rows.filter(r => { const st=(notes[r.case]||{}).status; return st!=='Dead' && st!=='DO NOT CONTACT'; });
+    if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
+    if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
   }
   rows = rows.slice();
   const sortVal = r => {
     // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
     // (else "12/01/2025" would sort after "07/01/2026"). Use the ISO yyyymmdd number.
+    if(sortK==='next'){ const nx=(notes[r.case]||{}).next; return nx ? +nx.replace(/-/g,'') : Infinity; }   // soonest follow-up first; no follow-up sinks
     if(sortK==='auction'){ const n = +toISO(r.auction).replace(/-/g,''); return n || -Infinity; }
     // gross/unverified equity stays rankable but muted; only a TINY junior lien (<8% of value) reading
     // ~98% equity is pure noise -> sink it (keeps real high-equity leads like San Pedro rankable).
@@ -1173,6 +1251,7 @@ function render(){
     gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
     gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
     gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
+    gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
     gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
@@ -1232,7 +1311,7 @@ function render(){
       '<td>'+prop+'</td>'+
       '<td><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
       '<td class="links">'+linksHtml+'</td>'+
-      '<td>'+statusSel+'</td>'+
+      '<td><div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+statusSel+'</td>'+
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
     cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
@@ -1258,6 +1337,7 @@ function render(){
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
       dealTrigger(r)+
+      '<div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+
       '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
       '</div>');
   });
@@ -1274,11 +1354,11 @@ function render(){
   if(cc) cc.innerHTML = cards.join('');
 }
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=tdOnly=false;
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=tdOnly=ncOnly=dueOnly=false;
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
-  ['wk','hd','td'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
+  ['wk','hd','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
   document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
   render();
 }
@@ -1304,12 +1384,14 @@ document.getElementById('tdclear').oninput = e => { deal.tdclear = e.target.valu
 document.getElementById('dealreset').onclick = () => { deal = Object.assign({}, DEAL_DEFAULTS); saveDeal(); syncDealUI(); recompute(); render(); };
 document.getElementById('sortby').onchange = e => {
   sortK = e.target.value;
-  sortD = (sortK==='days') ? 1 : -1;   // soonest auction first; everything else high-to-low
+  sortD = (sortK==='days'||sortK==='next') ? 1 : -1;   // soonest auction / soonest follow-up first; everything else high-to-low
   render();
 };
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
 document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
+document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
+document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
 // collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
 (function(){
   const panel = document.getElementById('advpanel'), tog = document.getElementById('advtog');
@@ -1443,9 +1525,9 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))) closeDealModal();
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); }
 });
-document.addEventListener('keydown', e => { if(e.key==='Escape' && dealModalCase) closeDealModal(); });
+document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); } });
 // "/" focuses search (unless already typing in a field)
 document.addEventListener('keydown', e => {
   if(e.key==='/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'')){
@@ -1466,12 +1548,12 @@ document.addEventListener('change', e => {
   save();
 });
 document.getElementById('exp').onclick = () => {
-  const head = ['tier','verdict','verdict_reason','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','phone','email','zillow','appraiser','people_search','case_page','status','notes'];
+  const head = ['tier','verdict','verdict_reason','est_profit','roi_pct','cash_in','your_purchase','total_equity','case_type','mortgage_risk','score','auction_date','days','filed_year','bought_year','bought_price','case','plaintiff','defendants','owners','property','mailing_address','value','judgment','equity_pct','homestead','warning','phone','email','last_contact','touches','last_outcome','next_followup','zillow','appraiser','people_search','case_page','status','notes'];
   // prefix a ' to any cell starting with = + - @ so Excel/Sheets can't run it as a formula
   const q2 = v => { let s = String(v==null?'':v); if(/^[=+\-@\t\r]/.test(s)) s = "'"+s; return '"'+s.replace(/"/g,'""')+'"'; };
   const lines = [head.join(',')].concat(view().map(r => {
     const n = notes[r.case]||{};
-    return [r.tier,r._verdict||'',r._why||'',Math.round(r._profit||0),Math.round(r._roi||0),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),((r.emails||[]).join(' | ')),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
+    return [r.tier,r._verdict||'',r._why||'',Math.round(r._profit||0),Math.round(r._roi||0),Math.round(r._cash),Math.round(r._purchase),Math.round(r._equity),r.ctype||'',r.mr?'YES':'',r.score,r.auction,r.days,r.filed||'',r.bought||'',r.bprice||'',r.case,r.plaintiff||'',r.defs||'',r.owners,r.addr,r.mail,r.value,r.judg,r.eq,r.hs,r.warn||'',(n.phone||(r.phones&&r.phones[0])||''),((r.emails||[]).join(' | ')),(n.touches&&n.touches.length?n.touches[n.touches.length-1].d:''),(n.touches?n.touches.length:0),(n.touches&&n.touches.length?(n.touches[n.touches.length-1].ch+' '+n.touches[n.touches.length-1].out):''),(n.next||''),r.zillow||'',r.pa||'',r.people||'',r.docket||'',n.status||'',n.note||''].map(q2).join(',');
   }));
   const blob = new Blob([BOM + lines.join(NL)], {type:'text/csv'});
   const a = document.createElement('a');
