@@ -344,14 +344,7 @@ def qualify(leads):
         # owner purchase year (from PA sales history)
         sd = re.search(r'(\d{4})$', (r.get('last_sale_date','') or '').strip())
         r['bought_year'] = int(sd.group(1)) if sd else 0
-        # TruePeopleSearch prefill for human owners (companies get Sunbiz instead).
-        # TPS is DataDome-walled to bots (verified 2026-07-10) -> can't auto-scrape; this pre-fills
-        # the search so ONE click in a real browser lands on the person. Normalize the messy
-        # multi-surname owner ("KATHY CARIDAD PUPO QUEVEDO") to First + last token ("KATHY QUEVEDO")
-        # so the search actually returns matches.
-        first_owner = (r.get('owners','') or '').split(';')[0].strip()
-        first_owner = re.sub(r'\b(LE|REM|TRS|JR|SR|II|III|IV|&|ETAL|ET AL)\b', '', first_owner, flags=re.I).strip()
-        # owner_clean = a clean "First [Middle] Last" name for the Records/Cases party searches.
+        # owner_clean = a clean "First [Middle] Last" name for the People/Records/Cases party searches.
         # Strip spouse markers ("&W HELEN"/"ET UX"), legal suffixes, and a dangling "&"; and normalize
         # the Clerk "Last, First M" format (folio-less leads recover the owner as defendant[0]) to
         # First-Last so the name searches don't come back reversed.
@@ -368,11 +361,17 @@ def qualify(leads):
         # Rough, clearly labeled in the UI as an estimate to verify via the Taxes link.
         _mv = r.get('market_value', 0) or 0
         r['est_annual_tax'] = round(_mv * (0.013 if r.get('homestead') else 0.021)) if _mv else 0
-        is_company = bool(re.search(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD)\b', first_owner, re.I))
-        toks = [t for t in re.split(r'[\s,]+', first_owner) if len(t) > 1]
+        # TruePeopleSearch prefill (companies get no People link). DataDome walls bots, so this only
+        # pre-fills the search for ONE human click. Build the name from owner_clean — which already
+        # strips the spouse ("&W HELEN"), suffixes, and flips the Clerk "Last, First" order — so we
+        # search the actual OWNER, never a welded owner-first + spouse-first name ("JAMES HELEN") or a
+        # reversed Last/First ("VASQUEZ A.").  (Bug reported by Jose 2026-07-14.)
+        is_company = bool(re.search(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD)\b', r['owner_clean'], re.I))
+        _pt = [t.strip('.') for t in r['owner_clean'].split()]
+        _pt = [t for t in _pt if len(t) > 1]
         zm = re.search(r'(\d{5})\s*$', r.get('Address','') or '')
-        if len(toks) >= 2 and not is_company:
-            name = toks[0] + ' ' + toks[-1]                 # First + last surname token
+        if len(_pt) >= 2 and not is_company:
+            name = _pt[0] + ' ' + _pt[-1]                   # First + last surname, from the CLEAN owner
             z = ('&citystatezip=' + zm.group(1)) if zm else ''
             r['people_url'] = "https://www.truepeoplesearch.com/results?name=" + urllib.parse.quote(name) + z
             r['people_name'] = name
