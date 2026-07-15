@@ -22,6 +22,17 @@ if errorlevel 1 (
   goto :end
 )
 
+rem  Publish the fresh leads NOW, before the slower cases/records/phones steps -- so even if a
+rem  later step is slow or fails, the newest leads are already live on the site.
+echo [1b/5] Publishing fresh leads immediately...
+git add docs/index.html >> "%LOG%" 2>&1
+git commit -m "refresh: fresh leads" >> "%LOG%" 2>&1
+if not errorlevel 1 (
+  git push origin main >> "%LOG%" 2>&1
+  if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
+  echo     fresh leads pushed - enrichment continues below.>> "%LOG%"
+)
+
 echo [2/5] Generating direct court-case + records links (new owners only; capped so publish is never starved)...
 python gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
 python gen_records_qs.py --limit 40 >> "%LOG%" 2>&1

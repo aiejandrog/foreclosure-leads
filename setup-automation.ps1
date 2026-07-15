@@ -26,7 +26,7 @@ foreach ($t in $old) {
 $action   = New-ScheduledTaskAction -Execute $bat -WorkingDirectory $repo
 $trigger  = New-ScheduledTaskTrigger -Daily -At '9:00AM'
 $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -WakeToRun `
-              -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew `
+              -ExecutionTimeLimit (New-TimeSpan -Minutes 120) -MultipleInstances IgnoreNew `
               -RunOnlyIfNetworkAvailable
 try {
   Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings `
@@ -35,7 +35,7 @@ try {
   # WakeToRun can require elevation; fall back to a still-reliable catch-up task
   Write-Host "  (WakeToRun needs admin - registering without wake; StartWhenAvailable still catches up)"
   $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable `
-                -ExecutionTimeLimit (New-TimeSpan -Minutes 30) -MultipleInstances IgnoreNew -RunOnlyIfNetworkAvailable
+                -ExecutionTimeLimit (New-TimeSpan -Minutes 120) -MultipleInstances IgnoreNew -RunOnlyIfNetworkAvailable
   Register-ScheduledTask -TaskName $name -Action $action -Trigger $trigger -Settings $settings `
     -Description 'Pull new Miami-Dade auction leads + skip-trace phones, rebuild and publish DEALFLOW.' -Force | Out-Null
 }
