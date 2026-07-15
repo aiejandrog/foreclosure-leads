@@ -262,8 +262,8 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 .links a{margin-right:8px;white-space:nowrap}
 .urgent{color:var(--red);font-weight:700}
 .warn{color:var(--amber-ink);font-size:11px}
-.profpos{color:var(--green-ink);font-weight:800;font-size:15px;font-family:var(--f-num);font-variant-numeric:tabular-nums}
-.profneg{color:var(--red);font-weight:800;font-size:15px;font-family:var(--f-num);font-variant-numeric:tabular-nums}
+.profpos{color:var(--green-ink);font-weight:800;font-size:19px;font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.profneg{color:var(--red);font-weight:800;font-size:19px;font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .mrwarn{color:var(--amber-ink);font-size:10px;font-weight:600}
 .tax{color:var(--red);font-size:11px;font-weight:600}
 .hoa{color:var(--amber-ink);font-size:11px;font-weight:600}
@@ -530,12 +530,19 @@ body.modal-open{overflow:hidden}
 .wname{font-family:var(--f-display);font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.01em;margin-top:3px}
 /* KPI stat band */
 .kpis{display:flex;gap:12px;padding:16px 16px 2px;flex-wrap:wrap}
-.kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:14px 17px;box-shadow:var(--sh-1);position:relative;overflow:hidden}
+.kpi{flex:1;min-width:158px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);padding:15px 18px;box-shadow:var(--sh-2);position:relative;overflow:hidden;transition:transform .28s var(--e-lux),box-shadow .28s var(--e-lux)}
+.kpi:hover{transform:translateY(-2px);box-shadow:var(--sh-3)}
 .kpi.gold::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold-grad)}
 .kpi .kl{font-family:var(--f-label);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);font-weight:600}
-.kpi .kv{font-family:var(--f-num);font-size:27px;font-weight:800;color:var(--ink);margin-top:6px;line-height:1;font-variant-numeric:tabular-nums}
+.kpi .kv{font-family:var(--f-num);font-size:31px;font-weight:800;color:var(--ink);margin-top:7px;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .kpi .kv.g{color:var(--green-ink)}
-.kpi .ks{font-size:11px;color:var(--muted);margin-top:5px}
+.kpi .ks{font-size:11px;color:var(--muted);margin-top:6px}
+/* hero KPI: the Est. profit card goes full navy with gold numerals — the focal metric */
+.kpi.gold{background:var(--navy-grad);border-color:transparent;box-shadow:var(--sh-3)}
+.kpi.gold::before{height:3px}
+.kpi.gold .kl{color:rgba(232,212,139,.9)}
+.kpi.gold .kv,.kpi.gold .kv.g{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.kpi.gold .ks{color:rgba(255,255,255,.6)}
 @media(max-width:860px){ .kpis{padding:12px 12px 2px;gap:9px} .kpi{min-width:calc(50% - 5px);padding:12px 13px} .kpi .kv{font-size:22px} }
 </style></head><body>
 <div id="intro"><div class="lg"><div class="wm">DEAL<b>FLOW</b></div><div class="tg">Miami-Dade Deal Engine</div><div class="bar"><i></i></div></div></div>
