@@ -24,6 +24,27 @@ PASS_FILE = os.path.join(HERE, 'site.pass')                    # shared-site pas
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
 BASE = "https://miamidade.realforeclose.com/index.cfm"
 
+# non-human parties named on a foreclosure case (bank/HOA/county/tenant/gov) — never a person to call.
+# Company words are matched mostly as SUBSTRINGS (they never occur inside real person names), so glued
+# forms like CITIFINANCIAL / CORPORATION / SERVICING are caught; a few short ones keep word boundaries.
+_PARTY_JUNK = re.compile(
+    r'(LLC|L\.L\.C|\bCORP|INCORPORAT|\bINC\b|\bCO\b|\bLP\b|\bLTD\b|PLLC|'
+    r'BANK|TRUST|MORTGAGE|SERVICING|SERVICE|FINANCIAL|FINANCE|FUNDING|\bFUND\b|CAPITAL|CREDIT|LENDING|\bLOAN|'
+    r'ASSOCIAT|\bASSN\b|CONDOMINIUM|\bCONDO\b|HOMEOWNER|\bHOA\b|FANNIE|FREDDIE|FEDERAL|\bNA\b|N\.A\.|'
+    r'COUNTY|CITY OF|STATE OF|UNITED STATES|DEPARTMENT|\bDEPT\b|SECRETARY|\bUSA\b|\bIRS\b|TREASURY|REVENUE|TAX COLLECTOR|'
+    r'ELEVATOR|UTILIT|ELECTRIC|\bWATER\b|\bSEWER\b|\bGROUP\b|PARTNER|HOLDING|INVESTMENT|PROPERT|REALTY|ENTERPRISE|SOLUTION|SYSTEM|MANAGEMENT|DEVELOPMENT|BUILDER|CONSTRUCTION|'
+    r'UNKNOWN|TENANT|OCCUPANT|JOHN DOE|JANE DOE|ANY AND ALL|\bCLERK\b|ESTATE OF|LIENOR)', re.I)
+
+def _clean_party(raw):
+    """Clean one named party to 'First [Middle] Last': strip suffixes/spouse markers, flip 'Last, First'."""
+    s = (raw or '').strip()
+    s = re.sub(r'\b(ET\s?UX|ET\s?VIR|H/W|W/H|LE|REM|TRS|JR|SR|II|III|IV|ETAL|ET AL)\b', '', s, flags=re.I)
+    s = re.sub(r'\s*&\s*[WH]\b.*$', '', s, flags=re.I)   # drop "&W SPOUSE" tail
+    s = re.sub(r'\s*&\s*$', '', s).strip()
+    if ',' in s:
+        _a, _, _b = s.partition(','); s = (_b.strip() + ' ' + _a.strip()).strip()
+    return re.sub(r'\s{2,}', ' ', s).strip()
+
 # NOTE (2026-07-09): auction detail rows use <td> label cells, NOT <th>. Waiting list = #Area_W only.
 EXTRACT_JS = """
 () => {
@@ -377,6 +398,35 @@ def qualify(leads):
             r['people_name'] = name
         else:
             r['people_url'] = ''; r['people_name'] = ''
+        # CO-PARTIES: every OTHER party named on the case, cleaned + deduped. Each human (co-owner,
+        # spouse, relative living with the owner) gets its own People-search URL so you can reach them;
+        # companies (bank/HOA/county/tenant) carry no URL and render muted for context. BatchData/TPS
+        # can't auto-list relatives, but the case already names them — this surfaces + links them.
+        _named, _seen = [], set()
+        _octoks = [t for t in r['owner_clean'].split() if len(t) > 1]
+        _primary_key = (_octoks[0].lower(), _octoks[-1].lower()) if len(_octoks) >= 2 else None
+        for _raw in re.split(r'\s*;\s*', (r.get('defendants', '') or '')):
+            _raw = _raw.strip()
+            if not _raw:
+                continue
+            if _PARTY_JUNK.search(_raw):                        # bank/HOA/county/tenant -> show as-is, no link
+                nm = re.sub(r'\s{2,}', ' ', _raw).strip(); key = ('co', nm.lower()); _url = ''
+            else:                                               # person -> "First Last" + a People-search link
+                nm = _clean_party(_raw)
+                ptoks = [t.strip('.') for t in nm.split() if len(t.strip('.')) > 1]
+                if len(ptoks) < 2:
+                    continue
+                key = (ptoks[0].lower(), ptoks[-1].lower())
+                if key == _primary_key:
+                    continue
+                _sn = ptoks[0] + ' ' + ptoks[-1]
+                _z = ('&citystatezip=' + zm.group(1)) if zm else ''
+                _url = "https://www.truepeoplesearch.com/results?name=" + urllib.parse.quote(_sn) + _z
+            if key in _seen:
+                continue
+            _seen.add(key)
+            _named.append({'name': nm, 'url': _url})
+        r['named'] = _named[:10]
         # case_type comes from the Clerk API (enrich_clerk); fall back to a heuristic if unresolved
         if not r.get('case_type'):
             r['case_type'] = 'HOA/Condo' if re.search(r'-CC-', r.get('Case #','')) else 'Mortgage/Other'
@@ -532,6 +582,7 @@ def make_tracker(leads):
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
             'people': r.get('people_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
+            'named': r.get('named', []),   # [{name,url}] co-parties: humans get a People-search URL, companies ''
             'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
             'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
             'ip': bool(r.get('indiv_plaintiff')), 'oname': r.get('owner_clean',''),

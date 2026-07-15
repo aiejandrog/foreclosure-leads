@@ -254,6 +254,9 @@ td.num .warn,td.num .mrwarn,td.num .submeta{white-space:normal;overflow-wrap:any
 .deflist{max-height:0;overflow:hidden;transition:max-height .28s ease;font-size:11px;color:var(--ink-2)}
 .deflist.open{max-height:340px;margin-top:4px}
 .deflist>div{padding:2px 0;border-bottom:1px solid var(--line-2)}
+.deflist a.kin{color:var(--gold-d);text-decoration:none;font-weight:600}
+.deflist a.kin:hover{text-decoration:underline}
+.deflist .defco{color:var(--muted-2)}
 a{color:var(--blue-ink);text-decoration:none;font-weight:500}
 a:hover{text-decoration:underline}
 select.status{padding:5px 6px;font-size:11.5px;width:100%;box-sizing:border-box;border-radius:var(--r-xs)}
@@ -1301,10 +1304,15 @@ function render(){
       '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
       (r.filed||r.bought?'<div class="meta">'+(r.filed?'filed '+r.filed:'')+(r.bought?' · bought '+r.bought:'')+'</div>':'');
     // Owner cell: owner names, plaintiff (clamped), count of other defendants
-    const dlist = r.defs ? r.defs.split(';').map(x=>x.trim()).filter(Boolean) : [];
-    const defsHtml = dlist.length
-      ? '<div class="defwrap"><button class="deftog" type="button">+ '+dlist.length+' also named</button>'+
-        '<div class="deflist">'+dlist.map(d=>'<div>'+esc(d)+'</div>').join('')+'</div></div>'
+    // Co-parties named on the case. Each human (co-owner / spouse / relative) is a clickable People
+    // search so you can reach them; companies (bank/HOA/county/tenant) render muted for context.
+    const named = r.named || [];
+    const kinN = named.filter(k => k.url).length;
+    const defsHtml = named.length
+      ? '<div class="defwrap"><button class="deftog" type="button">+ '+named.length+' also named'+(kinN?' &middot; '+kinN+' to look up':'')+'</button>'+
+        '<div class="deflist">'+named.map(k => k.url
+            ? '<div><a class="kin" href="'+esc(k.url)+'" target="_blank" rel="noopener" title="Person named on this case (co-owner / spouse / relative). Opens TruePeopleSearch for their number and their own relatives.">'+esc(titleCase(k.name))+' ↗</a></div>'
+            : '<div class="defco">'+esc(titleCase(k.name))+'</div>').join('')+'</div></div>'
       : '';
     // Owner cell. FC: owner -> "vs plaintiff" -> defendants. TD: no plaintiff exists (it's a county
     // tax sale, not a lawsuit) -> say so plainly + show the Certificate #.
