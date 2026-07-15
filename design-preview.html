@@ -353,8 +353,15 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 .lkcalc label{display:block;font-size:11px;color:var(--muted);font-weight:700}
 .lkcalc input{width:100%;box-sizing:border-box;margin-top:3px;padding:8px 9px;border:1px solid var(--line);border-radius:var(--r-xs);font-size:14px;font-family:var(--f-num);background:var(--bg-2);color:var(--ink)}
 .lkcalc input:focus{outline:none;border-color:var(--gold)}
-.lkcalc .lkout{font-size:14px;margin-top:12px;color:var(--ink-2)}
+.lkcalc .lkout{font-size:14px;margin-top:8px;color:var(--ink-2)}
 .lkcalc .lkout b{font-family:var(--f-num);font-size:24px;letter-spacing:-.02em;color:var(--green-ink)}
+.lkph{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);font-weight:800;margin:14px 0 2px}
+.lkph2{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-d);font-weight:800;margin:16px 0 6px;padding-top:12px;border-top:1px dashed var(--line)}
+.lkdd{background:var(--bg-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 13px;margin-top:10px}
+.lkdd-row{display:flex;justify-content:space-between;gap:12px;padding:4px 0;font-size:13px;color:var(--ink-2)}
+.lkdd-row b{font-family:var(--f-num);font-weight:800;color:var(--ink)}
+.lkdd-row.big{border-top:1px solid var(--line);margin-top:3px;padding-top:7px;font-size:13.5px;font-weight:700;color:var(--ink)}
+.lkdd-row.big b{font-size:19px;color:var(--green-ink)}
 .lknote{font-size:11.5px;color:var(--muted);margin-top:7px;line-height:1.45}.lknote a{color:var(--gold-d)}
 .lkfoot{font-size:10.5px;color:var(--muted-2);margin-top:14px;text-align:center}
 /* links + multi-match picker */
@@ -1656,7 +1663,27 @@ async function lkQ(where){
 }
 function openLookupModal(h){ document.getElementById('lookupbody').innerHTML=h; document.getElementById('lookupmodal').classList.add('show'); document.body.classList.add('modal-open'); }
 function closeLookupModal(){ document.getElementById('lookupmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
-function lkCalc(){ const g=id=>+((document.getElementById(id)||{}).value)||0; const lp=g('lklp'),cm=g('lkcm'),cc=g('lkcc'),po=g('lkpo'); const net=lp-lp*cm/100-lp*cc/100-po; const el=document.getElementById('lknet'); if(el){ el.textContent=lkM(net); el.style.color = net<0 ? '#b4402e' : '#1f7a44'; } }
+function lkCalc(){
+  const g=id=>+((document.getElementById(id)||{}).value)||0;
+  const GN='#0A7A42', RD='#b4402e';
+  const lp=g('lklp'),cm=g('lkcm'),cc=g('lkcc'),po=g('lkpo');
+  // A) retail seller-net
+  const net=lp-lp*cm/100-lp*cc/100-po;
+  const el=document.getElementById('lknet'); if(el){ el.textContent=lkM(net); el.style.color = net<0?RD:GN; }
+  const n1=document.getElementById('lknote1');
+  if(n1) n1.textContent = net<0
+    ? 'Underwater at this price — the owner would bring money to closing. Maximum motivation to deal.'
+    : (net<50000 ? 'Thin equity ('+lkM(net)+') after payoff and costs — barely worth a retail sale. Motivated.'
+                 : 'Real equity ('+lkM(net)+') — the owner may prefer a straight retail sale to any discount.');
+  // B) walk-away acquisition
+  const arv=g('lkarv'),cash=g('lkcash'),stop=g('lkstop'),rehab=g('lkrehab');
+  const exit=arv*(cm+cc)/100, fronted=cash+stop+rehab, allin=po+fronted+exit, profit=arv-allin;
+  const set=(id,txt,neg)=>{const e=document.getElementById(id); if(e){ e.textContent=txt; if(neg!=null) e.style.color=neg?RD:GN; }};
+  set('lkallin', lkM(allin));
+  set('lkprofit', lkM(profit), profit<0);
+  const roi = fronted>0 ? profit/fronted : 0;
+  set('lkmult', fronted>0 ? (profit>0 ? roi.toFixed(1)+'×  ('+Math.round(roi*100)+'% on '+lkM(fronted)+' risked)' : 'loss on '+lkM(fronted)+' risked') : '—', profit<0);
+}
 function lkLead(folio){ folio=String(folio||'').replace(/\D/g,''); return DATA.find(r=>String(r.folio||'').replace(/\D/g,'')===folio || (((r.pa||'').match(/folio=(\d+)/)||[])[1]===folio)); }
 function lkKV(k,v){ return '<div class="lkkv"><span>'+esc(k)+'</span><b>'+v+'</b></div>'; }
 function lkPick(folio){ const a=lkResults[folio]; if(a) openLookupModal(lkReport(a)); }
@@ -1752,13 +1779,30 @@ function lkReport(a){
     +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find in Deal analysis.</div>';
   // ---- seller-net calculator ----
   const po = lead ? Math.round(td?lead.obid:lead.judg) : 0;
-  const calc='<div class="lksec">Seller-net calculator</div><div class="lkcard lkcalc"><div class="lkcgrid">'
-      +'<label>List / sale price $<input id="lklp" type="number" value="'+(val||'')+'" oninput="lkCalc()"></label>'
-      +'<label>Commission %<input id="lkcm" type="number" value="6" step="0.5" oninput="lkCalc()"></label>'
-      +'<label>Closing costs %<input id="lkcc" type="number" value="2" step="0.5" oninput="lkCalc()"></label>'
-      +'<label>Payoff (mortgages+liens+HOA) $<input id="lkpo" type="number" value="'+po+'" oninput="lkCalc()"></label>'
-      +'</div><div class="lkout">Seller walks with &asymp; <b id="lknet">&mdash;</b></div>'
-      +'<div class="lknote">Payoff prefill = '+(lead?'the foreclosure judgment &mdash; add the 2nd/HOA once known':'0 &mdash; enter the real payoff')+'. The number that talks a seller off a fantasy price.</div></div>';
+  const calc='<div class="lksec">Deal desk</div><div class="lkcard lkcalc">'
+      +'<div class="lkcgrid">'
+        +'<label>List / market price $<input id="lklp" type="number" value="'+(val||'')+'" oninput="lkCalc()"></label>'
+        +'<label>Total payoff (all mortgages+liens+HOA) $<input id="lkpo" type="number" value="'+po+'" oninput="lkCalc()"></label>'
+        +'<label>Sale commission %<input id="lkcm" type="number" value="6" step="0.5" oninput="lkCalc()"></label>'
+        +'<label>Closing costs %<input id="lkcc" type="number" value="2" step="0.5" oninput="lkCalc()"></label>'
+      +'</div>'
+      +'<div class="lkph">A · If the owner just sells retail</div>'
+      +'<div class="lkout">Owner walks with &asymp; <b id="lknet">&mdash;</b></div>'
+      +'<div class="lknote" id="lknote1">The number that shows a seller they\'re stuck &mdash; the reason to deal.</div>'
+      +'<div class="lkph2">B &middot; The walk-away acquisition play</div>'
+      +'<div class="lkcgrid">'
+        +'<label>Cash to owner to walk $<input id="lkcash" type="number" placeholder="10000" oninput="lkCalc()"></label>'
+        +'<label>Cost to stop the sale $<input id="lkstop" type="number" placeholder="500" oninput="lkCalc()"></label>'
+        +'<label>Rehab budget $<input id="lkrehab" type="number" placeholder="30000" oninput="lkCalc()"></label>'
+        +'<label>Your resale / ARV $<input id="lkarv" type="number" value="'+(val||'')+'" oninput="lkCalc()"></label>'
+      +'</div>'
+      +'<div class="lkdd">'
+        +'<div class="lkdd-row"><span>Your all-in (payoff + cash + stop + rehab + exit)</span><b id="lkallin">&mdash;</b></div>'
+        +'<div class="lkdd-row"><span>Your net profit</span><b id="lkprofit">&mdash;</b></div>'
+        +'<div class="lkdd-row big"><span>Return on cash you actually risk</span><b id="lkmult">&mdash;</b></div>'
+      +'</div>'
+      +'<div class="lknote">Cash risked = cash-to-owner + stop-sale + rehab (the money you front &mdash; Jose\'s &ldquo;$10k &rarr; $50k&rdquo;). The payoff + your resale costs come out of the resale at closing. Rehab and exit costs are NOT optional &mdash; keep it honest.</div>'
+      +'<div class="lknote" style="color:var(--amber-ink)"><b>FS 501.1377:</b> any purchase from a homeowner in foreclosure needs a written 12pt contract, a 3-day right to cancel, no upfront fees, and a title/attorney closing. Buyer entity = Jose\'s LLC.</div></div>';
   // ---- links ----
   let L=[['Appraiser','https://apps.miamidadepa.gov/PropertySearch/#/?folio='+folio],
     ['Taxes','https://miamidade.county-taxes.com/public/real_estate/parcels/'+folio],
