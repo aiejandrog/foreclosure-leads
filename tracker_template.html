@@ -608,7 +608,7 @@ body.modal-open{overflow:hidden}
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="due" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days">⚡ Due</button>
-<input id="q" placeholder="Search owner / address / case #">
+<input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list.">
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
 <option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option><option value="next">Follow-up due</option>
@@ -1660,8 +1660,8 @@ function lkReport(a){
       +'<div class="lknote">PA value '+lkM(val)+'. Payoff prefill = '+(lead?'the foreclosure judgment':'0 — enter it')+'; replace with real payoff letters + the HOA estoppel.</div></div>'
     +'<div class="lksec">Dig deeper</div><div class="lkcard lklinks">'+links+'</div>';
 }
-async function runLookup(){
-  const v=(document.getElementById('lk').value||'').trim(); if(!v) return;
+async function runLookup(rawVal){
+  const v=((typeof rawVal==='string'?rawVal:(document.getElementById('lk').value||''))).trim(); if(!v) return;
   openLookupModal('<div class="lktitle">Looking up…</div><div class="lksub">'+esc(v)+'</div>');
   const digits=v.replace(/\D/g,'');
   const where = (digits.length===13 && digits===v.replace(/[^0-9-]/g,'').replace(/-/g,'')) ? "FOLIO='"+digits+"'" : "TRUE_SITE_ADDR LIKE '"+v.toUpperCase().replace(/'/g,"''")+"%'";
@@ -1676,8 +1676,11 @@ async function runLookup(){
     openLookupModal('<div class="lktitle">'+rows.length+' matches</div><div class="lksub">Pick the property:</div>'+list);
   }catch(err){ openLookupModal('<div class="lktitle">Lookup failed</div><div class="lksub">'+esc(String(err.message||err))+'</div><div class="lknote">The county GIS may be momentarily down. Use the Appraiser button, or try again.</div>'); }
 }
-document.getElementById('lkfull').onclick = runLookup;
+document.getElementById('lkfull').onclick = () => runLookup();
 document.getElementById('lk').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); runLookup(); } });
+// SMART SEARCH BAR: typing filters the leads live; pressing Enter pulls the full county report on
+// whatever you typed (address / 13-digit folio / owner) — same engine as the Desktop lookup tool.
+document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); runLookup((e.target.value||'').trim()); } });
 document.addEventListener('click', e=>{
   const pk = e.target.closest && e.target.closest('.lkpick'); if(pk){ lkPick(pk.dataset.folio); return; }
   const go = e.target.closest && e.target.closest('.lkgoto'); if(go){ e.preventDefault(); closeLookupModal();
