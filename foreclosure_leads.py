@@ -609,6 +609,10 @@ def make_tracker(leads):
             'addr': _clean_addr(r.get('Address','')), 'mail': _clean_addr(r.get('mailing_address','')),
             'value': r.get('market_value',0) or 0, 'judg': r.get('judgment',0) or 0,
             'eq': r.get('equity_pct',0), 'eqfake': bool(r.get('eq_fake')), 'hs': bool(r.get('homestead')),
+            # condo -> the displayed equity is a GROSS upper bound: a special assessment (40-yr recert) or a
+            # 2nd mortgage can erase it and neither is in public data. Drives the "verify equity" caveat + a
+            # MARGINAL cap until the association estoppel is entered. (Lesson from the Hondroulis condo deal.)
+            'condo': bool(re.search(r'CONDO', str(r.get('dor_desc','') or ''), re.I)),
             'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),

@@ -21,7 +21,7 @@ FAKE = [
     {"tier":"A","score":91,"st":"FC","case":"2024-000101-CA-01","auction":"08/10/2026","days":27,
      "filed":2024,"bought":2008,"bprice":205000,"owners":"ROBERT A JOHNSON","oname":"Robert Johnson",
      "addr":"842 NW 9TH ST, MIAMI, FL 33136","mail":"842 NW 9TH ST, MIAMI, FL 33136",
-     "value":655000,"judg":286000,"eq":56,"hs":True,"ctype":"Bank/Mortgage",
+     "value":655000,"judg":286000,"eq":56,"hs":True,"condo":True,"ctype":"Bank/Mortgage",
      "plaintiff":"Wells Fargo Bank, National Association","defs":"Robert A Johnson; Unknown Tenant #1",
      "pa":"#","zillow":"#","tax":"#","auc":"#","people":"#","docket":"#","recqs":"sample","ocsqs":"sample",
      "etax":6550,"phones":["3055550101","7865550102","3055550103"],"phdnc":[False,False,True],
@@ -46,7 +46,7 @@ FAKE = [
     {"tier":"B","score":72,"st":"TD","case":"2026A00219","auction":"08/06/2026","days":23,
      "filed":0,"bought":2004,"bprice":18000,"owners":"GROVER T JACKSON","oname":"Grover Jackson",
      "addr":"18320 SW 117TH AVE, MIAMI, FL 33177","mail":"18320 SW 117TH AVE, MIAMI, FL 33177",
-     "value":312000,"obid":15899,"eq":95,"cert":"2023-04871","ctype":"","st":"TD",
+     "value":312000,"obid":15899,"eq":95,"condo":True,"cert":"2023-04871","ctype":"","st":"TD",
      "pa":"#","zillow":"#","tax":"#","auc":"#","people":"#","recqs":"sample","ocsqs":"sample",
      "etax":3900,"phones":["7865550188","3055550189"],"phdnc":[False,False],"emails":["gjackson@example.com"]},
 
