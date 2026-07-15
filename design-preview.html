@@ -489,6 +489,8 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .empty-s{font-size:13px;margin-top:6px;color:var(--muted)}
 .empty-reset{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);padding:9px 18px;color:var(--ink);cursor:pointer;font-weight:600;box-shadow:var(--sh-1)}
 .empty-reset:hover{border-color:var(--gold);color:var(--gold-d)}
+.empty-lookup{display:block;margin:14px auto 0;background:var(--gold-d,#c69a3a);color:#1a1205;border:1px solid #c69a3a;border-radius:var(--pill);padding:11px 22px;cursor:pointer;font-weight:800;font-size:14px;box-shadow:var(--sh-1)}
+.empty-lookup:hover{filter:brightness(1.05);transform:translateY(-1px)}
 /* status color-coding */
 select.status.st-dead{color:var(--red);border-color:#f0cccc;background:#fdf3f3}
 select.status.st-hot{color:var(--green-ink);border-color:#bfe6cd;background:#f0faf3;font-weight:600}
@@ -1419,9 +1421,14 @@ function render(){
   });
   const cc = document.getElementById('cards');
   if(!rows.length){
-    const msg = '<div class="empty"><div class="empty-t">No leads match these filters</div>'+
-      '<div class="empty-s">Try a wider tier, date range, or a different search.</div>'+
-      '<button class="empty-reset" type="button">Clear all filters</button></div>';
+    const qv = (document.getElementById('q').value||'').trim();
+    const cta = qv
+      ? '<div class="empty-s">“'+esc(qv)+'” isn\'t one of your auction leads. Pull it straight from county records:</div>'+
+        '<button class="empty-lookup" type="button">Full county report on “'+esc(qv)+'” &rarr;</button>'+
+        '<button class="empty-reset" type="button" style="margin-top:8px">Clear search</button>'
+      : '<div class="empty-s">Try a wider tier, date range, or a different search.</div>'+
+        '<button class="empty-reset" type="button">Clear all filters</button>';
+    const msg = '<div class="empty"><div class="empty-t">No leads match these filters</div>'+cta+'</div>';
     document.getElementById('tb').innerHTML = '<tr><td colspan="11" class="emptycell">'+msg+'</td></tr>';
     if(cc) cc.innerHTML = msg;
     return;
@@ -1581,6 +1588,18 @@ let lkResults={};
 function lkM(n){ n=+n||0; return (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString(); }
 function lkD(s){ s=String(s||''); return /^\d{8}$/.test(s) ? s.slice(4,6)+'/'+s.slice(6,8)+'/'+s.slice(0,4) : (s||'—'); }
 function lkFF(f){ f=String(f||'').replace(/\D/g,''); return f.length===13 ? f.slice(0,2)+'-'+f.slice(2,6)+'-'+f.slice(6,9)+'-'+f.slice(9) : f; }
+// normalize a human-typed address to Miami-Dade's terse format: 109TH->109, APT/UNIT/# dropped,
+// AVENUE->AVE, NORTHWEST->NW, etc. ("231 NW 109th Ave Apt 215" -> "231 NW 109 AVE 215")
+function lkNorm(s){ return String(s||'').toUpperCase()
+  .replace(/[.,]/g,' ')
+  .replace(/\b(?:APT|APARTMENT|UNIT|STE|SUITE)\b|#/g,' ')
+  .replace(/\b(\d+)(ST|ND|RD|TH)\b/g,'$1')                         // ordinals: 109TH->109 (attached only)
+  .replace(/\bAVENUE\b/g,'AVE').replace(/\bAV\b/g,'AVE')
+  .replace(/\bSTREET\b/g,'ST').replace(/\bDRIVE\b/g,'DR').replace(/\bROAD\b/g,'RD')
+  .replace(/\bBOULEVARD\b/g,'BLVD').replace(/\bCOURT\b/g,'CT').replace(/\bTERRACE\b/g,'TER')
+  .replace(/\bPLACE\b/g,'PL').replace(/\bLANE\b/g,'LN').replace(/\bCIRCLE\b/g,'CIR').replace(/\bHIGHWAY\b/g,'HWY')
+  .replace(/\bNORTHWEST\b/g,'NW').replace(/\bNORTHEAST\b/g,'NE').replace(/\bSOUTHWEST\b/g,'SW').replace(/\bSOUTHEAST\b/g,'SE')
+  .replace(/\s+/g,' ').trim(); }
 async function lkQ(where){
   const u=GIS+'?where='+encodeURIComponent(where)+'&outFields='+encodeURIComponent(LK_F)+'&returnGeometry=false&orderByFields=TRUE_SITE_ADDR&resultRecordCount=30&f=json';
   const r=await fetch(u); if(!r.ok) throw new Error('county GIS returned '+r.status);
@@ -1664,10 +1683,16 @@ async function runLookup(rawVal){
   const v=((typeof rawVal==='string'?rawVal:(document.getElementById('lk').value||''))).trim(); if(!v) return;
   openLookupModal('<div class="lktitle">Looking up…</div><div class="lksub">'+esc(v)+'</div>');
   const digits=v.replace(/\D/g,'');
-  const where = (digits.length===13 && digits===v.replace(/[^0-9-]/g,'').replace(/-/g,'')) ? "FOLIO='"+digits+"'" : "TRUE_SITE_ADDR LIKE '"+v.toUpperCase().replace(/'/g,"''")+"%'";
+  const isFolio = (digits.length===13 && digits===v.replace(/[^0-9-]/g,'').replace(/-/g,''));
+  const qesc = s => s.replace(/'/g,"''");
   try{
-    let rows=await lkQ(where);
-    if(!rows.length && digits.length!==13) rows=await lkQ("TRUE_OWNER1 LIKE '%"+v.toUpperCase().replace(/'/g,"''")+"%'");  // fallback: owner name
+    let rows;
+    if(isFolio){ rows=await lkQ("FOLIO='"+digits+"'"); }
+    else {
+      rows=await lkQ("TRUE_SITE_ADDR LIKE '"+qesc(lkNorm(v))+"%'");                    // normalized address
+      if(!rows.length) rows=await lkQ("TRUE_SITE_ADDR LIKE '"+qesc(v.toUpperCase())+"%'"); // raw, as typed
+      if(!rows.length) rows=await lkQ("TRUE_OWNER1 LIKE '%"+qesc(v.toUpperCase())+"%'");    // owner-name fallback
+    }
     lkResults={}; rows.forEach(a=>{ lkResults[String(a.FOLIO||'').replace(/\D/g,'')]=a; });
     if(!rows.length){ openLookupModal('<div class="lktitle">No match</div><div class="lksub">Nothing found for “'+esc(v)+'”. Try the county format, e.g. <b>1760 NE 160 ST</b>, or paste the 13-digit folio.</div>'); return; }
     if(rows.length===1){ openLookupModal(lkReport(rows[0])); lkCalc(); return; }
@@ -1684,7 +1709,8 @@ document.getElementById('q').addEventListener('keydown', e=>{ if(e.key==='Enter'
 document.addEventListener('click', e=>{
   const pk = e.target.closest && e.target.closest('.lkpick'); if(pk){ lkPick(pk.dataset.folio); return; }
   const go = e.target.closest && e.target.closest('.lkgoto'); if(go){ e.preventDefault(); closeLookupModal();
-    const qel=document.getElementById('q'); if(qel){ qel.value=go.dataset.c; qel.dispatchEvent(new Event('input',{bubbles:true})); qel.scrollIntoView&&qel.scrollIntoView({block:'center',behavior:'smooth'}); } }
+    const qel=document.getElementById('q'); if(qel){ qel.value=go.dataset.c; qel.dispatchEvent(new Event('input',{bubbles:true})); qel.scrollIntoView&&qel.scrollIntoView({block:'center',behavior:'smooth'}); } return; }
+  const lu = e.target.closest && e.target.closest('.empty-lookup'); if(lu){ runLookup((document.getElementById('q').value||'').trim()); return; }
 });
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
   const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
