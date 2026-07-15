@@ -628,6 +628,7 @@ def make_tracker(leads):
             'ju': bool(r.get('judgment_unknown')),
             'st': r.get('sale_type','FC'), 'obid': r.get('opening_bid',0) or 0,
             'cert': r.get('Certificate #',''),
+            'folio': _valid_folio(r.get('Folio','')),   # lets the in-site property lookup cross-check any parcel against this auction list
         }
         hit = st.get(r.get('Case #',''))
         if hit and hit.get('phones'):

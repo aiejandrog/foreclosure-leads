@@ -294,6 +294,27 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 .dm-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;background:var(--gold-grad);border-radius:var(--r-xl) var(--r-xl) 0 0}
 .dm-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:24px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:var(--r-xs)}
 .dm-close:hover{color:var(--ink);background:var(--surface-2)}
+/* property lookup modal (shares .dm-card / .dm-backdrop / .dm-close) */
+#lookupmodal{display:none;position:fixed;inset:0;z-index:121}
+#lookupmodal.show{display:block}
+#lookupmodal .dm-card{width:min(720px,95vw)}
+.lktitle{font-size:19px;font-weight:800;margin:0 30px 2px 0;color:var(--ink)}
+.lksub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+.lksec{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--gold-d,#b7863a);font-weight:800;margin:16px 0 7px}
+.lkcard{background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:4px 0}
+.lkkv{display:flex;justify-content:space-between;gap:14px;padding:4px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.lkkv:last-child{border-bottom:none}.lkkv span{color:var(--muted)}.lkkv b{text-align:right}
+.lkchip{display:inline-block;background:var(--surface-3,#e7ebf3);border-radius:5px;padding:1px 7px;font-size:11px;font-weight:800;vertical-align:1px}
+.lkchip.hot{background:#b4402e;color:#fff}.lkchip.warn{background:#b7791f;color:#fff}
+.lktbl{width:100%;border-collapse:collapse;font-size:12.5px}.lktbl td{padding:3px 6px;border-bottom:1px solid var(--line)}
+.lklinks a{display:inline-block;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);text-decoration:none;border-radius:7px;padding:6px 11px;font-size:13px;margin:3px 5px 3px 0}
+.lklinks a:hover{border-color:var(--gold-d,#c69a3a)}
+.lkcalc label{display:block;font-size:12.5px;margin:7px 0 2px;color:var(--muted)}
+.lkcalc input{width:150px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:14px;background:var(--surface);color:var(--ink)}
+.lkcalc .lkout{font-size:15px;margin-top:11px}.lkcalc .lkout b{font-size:21px;color:#1f7a44}
+.lknote{font-size:12px;color:var(--muted);margin-top:8px}.lknote a{color:var(--gold-d,#b7863a)}
+.lkpick{display:block;width:100%;text-align:left;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 12px;margin:5px 0;cursor:pointer;font-size:13.5px}
+.lkpick:hover{border-color:var(--gold-d,#c69a3a);background:var(--surface)}
 /* contact / follow-up tracker */
 #logmodal{display:none;position:fixed;inset:0;z-index:120}
 #logmodal.show{display:block}
@@ -566,6 +587,7 @@ body.modal-open{overflow:hidden}
 </div></div>
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
+<div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
 <header>
 <div class="brand">
 <div>
@@ -627,7 +649,8 @@ body.modal-open{overflow:hidden}
 </div>
 <div class="controls" style="margin-top:8px">
 <span style="color:var(--muted);font-size:12px">Lookup any county property:</span>
-<input id="lk" placeholder="address, owner, folio or LLC" style="width:280px">
+<input id="lk" placeholder="address or 13-digit folio — then Full report" style="width:280px">
+<button id="lkfull" class="lkb" style="background:var(--gold-d,#c69a3a);color:#1a1205;font-weight:700;border-color:#c69a3a" title="Full county workup for ANY Miami-Dade property — owner, value, sales, foreclosure cross-check, seller-net math (works right here, no download)">Full report</button>
 <button class="lkb" data-s="zillow">Zillow</button>
 <button class="lkb" data-s="appr">Appraiser</button>
 <button class="lkb" data-s="clerk">Clerk / Foreclosure</button>
@@ -1539,7 +1562,7 @@ document.getElementById('clr').onclick = () => {
   ['fy1','fy2','ad1','ad2'].forEach(id => document.getElementById(id).value = '');
   render();
 };
-document.querySelectorAll('.lkb').forEach(b => b.onclick = () => {
+document.querySelectorAll('.lkb[data-s]').forEach(b => b.onclick = () => {
   const v = document.getElementById('lk').value.trim();
   if(!v) return;
   const e2 = encodeURIComponent(v);
@@ -1551,6 +1574,109 @@ document.querySelectorAll('.lkb').forEach(b => b.onclick = () => {
   };
   window.open(urls[b.dataset.s], '_blank', 'noopener');
 });
+// ---- IN-SITE PROPERTY LOOKUP: full county workup for ANY parcel, live from Miami-Dade GIS (CORS-open) ----
+const GIS='https://gisweb.miamidade.gov/arcgis/rest/services/MD_ComparableSales/MapServer/5/query';
+const LK_F='FOLIO,TRUE_OWNER1,TRUE_SITE_ADDR,TRUE_SITE_CITY,TRUE_SITE_ZIP_CODE,TRUE_MAILING_ADDR1,TRUE_MAILING_CITY,TRUE_MAILING_STATE,TRUE_MAILING_ZIP_CODE,DOR_DESC,CONDO_FLAG,SUBDIVISION,BEDROOM_COUNT,BATHROOM_COUNT,BUILDING_HEATED_AREA,LOT_SIZE,YEAR_BUILT,TOTAL_VAL_CUR,TOTAL_VAL_PRI,TOTAL_VAL_2_PRI,ASSESSED_VAL_CUR,ASSESSED_VAL_PRI,HSTEAD_EX_VAL_CUR,HSTEAD_EX_VAL_PRI,ASSESSMENT_YEAR_CUR,ASSESSMENT_YEAR_PRI,DOS_1,PRICE_1,DOS_2,PRICE_2,DOS_3,PRICE_3';
+let lkResults={};
+function lkM(n){ n=+n||0; return (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString(); }
+function lkD(s){ s=String(s||''); return /^\d{8}$/.test(s) ? s.slice(4,6)+'/'+s.slice(6,8)+'/'+s.slice(0,4) : (s||'—'); }
+function lkFF(f){ f=String(f||'').replace(/\D/g,''); return f.length===13 ? f.slice(0,2)+'-'+f.slice(2,6)+'-'+f.slice(6,9)+'-'+f.slice(9) : f; }
+async function lkQ(where){
+  const u=GIS+'?where='+encodeURIComponent(where)+'&outFields='+encodeURIComponent(LK_F)+'&returnGeometry=false&orderByFields=TRUE_SITE_ADDR&resultRecordCount=30&f=json';
+  const r=await fetch(u); if(!r.ok) throw new Error('county GIS returned '+r.status);
+  const j=await r.json(); if(j.error) throw new Error((j.error&&j.error.message)||'query error');
+  return (j.features||[]).map(x=>x.attributes);
+}
+function openLookupModal(h){ document.getElementById('lookupbody').innerHTML=h; document.getElementById('lookupmodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function closeLookupModal(){ document.getElementById('lookupmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+function lkCalc(){ const g=id=>+((document.getElementById(id)||{}).value)||0; const lp=g('lklp'),cm=g('lkcm'),cc=g('lkcc'),po=g('lkpo'); const el=document.getElementById('lknet'); if(el) el.textContent=lkM(lp-lp*cm/100-lp*cc/100-po); }
+function lkLead(folio){ folio=String(folio||'').replace(/\D/g,''); return DATA.find(r=>String(r.folio||'').replace(/\D/g,'')===folio || (((r.pa||'').match(/folio=(\d+)/)||[])[1]===folio)); }
+function lkKV(k,v){ return '<div class="lkkv"><span>'+esc(k)+'</span><b>'+v+'</b></div>'; }
+function lkPick(folio){ const a=lkResults[folio]; if(a) openLookupModal(lkReport(a)); }
+function lkReport(a){
+  const folio=String(a.FOLIO||'').replace(/\D/g,''), owner=a.TRUE_OWNER1||'—';
+  const site=(a.TRUE_SITE_ADDR||'').trim(), city=(a.TRUE_SITE_CITY||'').trim(), zip=String(a.TRUE_SITE_ZIP_CODE||'').slice(0,5);
+  const mailAddr=(a.TRUE_MAILING_ADDR1||'').trim();
+  const mail=[mailAddr,a.TRUE_MAILING_CITY,a.TRUE_MAILING_STATE,String(a.TRUE_MAILING_ZIP_CODE||'').slice(0,5)].filter(Boolean).join(' ');
+  const absentee = site&&mailAddr && site.split(' ')[0]!==mailAddr.split(' ')[0];
+  const condo=(a.CONDO_FLAG==='Y'), isCo=/\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD)\b/i.test(owner);
+  const hs=(+a.HSTEAD_EX_VAL_CUR||+a.HSTEAD_EX_VAL_PRI||0)>0;
+  const val=+a.TOTAL_VAL_CUR||+a.TOTAL_VAL_PRI||0;
+  const pt=owner.replace(/\s*&\s*[WH]\b.*$/i,'').split(/\s+/).map(t=>t.replace(/\./g,'')).filter(t=>t.length>1);
+  const nm=pt.length>=2?encodeURIComponent(pt[0]+' '+pt[pt.length-1]):'';
+  const people=(nm&&!isCo)?('https://www.truepeoplesearch.com/results?name='+nm+(zip?'&citystatezip='+zip:'')):'';
+  const paddr=(site&&!isCo)?('https://www.truepeoplesearch.com/resultaddress?streetaddress='+encodeURIComponent(site)+'&citystatezip='+encodeURIComponent((city||'MIAMI')+', FL '+zip)):'';
+  const lead=lkLead(folio);
+  // property
+  let prop=lkKV('Owner(s)', esc(owner)+(isCo?' <span class="lkchip">COMPANY</span>':''))
+    +lkKV('Site', esc((site||'—')+(city?', '+city:'')+(zip?' '+zip:'')))
+    +lkKV('Mailing', esc(mail||'—')+(absentee?' <span class="lkchip warn">ABSENTEE</span>':''))
+    +lkKV('Folio', lkFF(folio))
+    +lkKV('Type', esc(a.DOR_DESC||'—')+(condo?' <span class="lkchip">CONDO</span>':''))
+    +lkKV('Bed / Bath / SqFt', (a.BEDROOM_COUNT!=null?a.BEDROOM_COUNT:'?')+' / '+(a.BATHROOM_COUNT!=null?a.BATHROOM_COUNT:'?')+' / '+(a.BUILDING_HEATED_AREA!=null?(+a.BUILDING_HEATED_AREA).toLocaleString():'?'))
+    +lkKV('Built / Lot', (a.YEAR_BUILT||'?')+' / '+(a.LOT_SIZE!=null?(+a.LOT_SIZE).toLocaleString()+' sqft':'?'))
+    +lkKV('Homestead', hs?'YES':'no');
+  // value (up to 3 yrs)
+  const vy=[['TOTAL_VAL_CUR','ASSESSED_VAL_CUR','ASSESSMENT_YEAR_CUR'],['TOTAL_VAL_PRI','ASSESSED_VAL_PRI','ASSESSMENT_YEAR_PRI'],['TOTAL_VAL_2_PRI',null,null]];
+  let vals=vy.filter(y=>+a[y[0]]>0).map(y=>lkKV(String(a[y[2]]||'').trim()||'value', 'market '+lkM(a[y[0]])+(y[1]&&+a[y[1]]?' · assessed '+lkM(a[y[1]]):''))).join('')||lkKV('value','not yet certified');
+  // sales
+  let sales=[1,2,3].map(i=>({d:a['DOS_'+i],p:+a['PRICE_'+i]})).filter(s=>s.p>0).map(s=>lkKV(lkD(s.d), lkM(s.p))).join('')||'<div class="lkkv"><span>—</span><b>no priced sales on record</b></div>';
+  // foreclosure cross-check
+  let fc;
+  if(lead){ const td=lead.st==='TD';
+    fc=lkKV('Status','<span class="lkchip hot">'+(td?'TAX-DEED SALE':'FORECLOSURE')+'</span> '+esc(lead.ctype||''))
+      +lkKV('Case', esc(lead.case||''))
+      +lkKV('Auction', esc(lead.auction||'')+' ('+(lead.days>=0?lead.days+' days':'past')+')')
+      +lkKV(td?'Opening bid':'Judgment', lkM(td?lead.obid:lead.judg))
+      +lkKV('Plaintiff', esc(lead.plaintiff||'—'))
+      +'<div class="lknote"><a href="#" onclick="closeLookupModal();document.getElementById(\'q\').value='+JSON.stringify(esc(lead.case))+';q=document.getElementById(\'q\').value;render();return false;">Show this lead in the tracker →</a></div>';
+  } else { fc='<div class="lkkv"><span>DEALFLOW list</span><b>not on the current auction list (no pending FC/TD sale found)</b></div>'; }
+  // links
+  let L=[['Appraiser','https://apps.miamidadepa.gov/PropertySearch/#/?folio='+folio],
+    ['Taxes','https://miamidade.county-taxes.com/public/real_estate/parcels/'+folio],
+    ['Zillow','https://www.zillow.com/homes/'+encodeURIComponent((site||folio)+' MIAMI FL')+'_rb/'],
+    ['Maps','https://www.google.com/maps/search/'+encodeURIComponent(site+', Miami FL')]];
+  if(people) L.push(['People (name)',people]); if(paddr) L.push(['People (address)',paddr]);
+  L.push(['Official Records','https://onlineservices.miamidadeclerk.gov/officialrecords/']);
+  L.push(['Court cases','https://www2.miamidadeclerk.gov/ocs/']);
+  if(lead&&lead.docket) L.unshift(['Docket (this case)',lead.docket]);
+  if(lead&&lead.auc) L.splice(1,0,['Auction page',lead.auc]);
+  const links=L.map(x=>'<a href="'+esc(x[1])+'" target="_blank" rel="noopener">'+esc(x[0])+'</a>').join('');
+  const orName = pt.length>=2 ? esc(pt.slice(1).join(' ')+' '+pt[0]) : esc(owner);
+  const po = lead ? Math.round(lead.st==='TD'?lead.obid:lead.judg) : 0;
+  return '<div class="lktitle">'+esc(site||lkFF(folio))+'</div>'
+    +'<div class="lksub">Miami-Dade county data · live · verify anything load-bearing on the linked sources</div>'
+    +'<div class="lksec">Property</div><div class="lkcard">'+prop+'</div>'
+    +'<div class="lksec">Value (Property Appraiser)</div><div class="lkcard">'+vals+'</div>'
+    +'<div class="lksec">Sales history</div><div class="lkcard">'+sales+'</div>'
+    +'<div class="lksec">Foreclosure / auction status</div><div class="lkcard">'+fc+'</div>'
+    +'<div class="lksec">Recorded mortgages &amp; liens</div><div class="lkcard"><div class="lknote">The county bot-walls automated record searches, so this can\'t auto-pull here. Open <a href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener">Official Records</a>, search Name/Document for <b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) — that\'s an open 2nd. Enter it in Deal analysis.</div></div>'
+    +'<div class="lksec">Seller-net calculator</div><div class="lkcard lkcalc">'
+      +'<label>List / sale price $</label><input id="lklp" type="number" value="'+(val||'')+'" oninput="lkCalc()">'
+      +'<label>Commission %</label><input id="lkcm" type="number" value="6" step="0.5" oninput="lkCalc()">'
+      +'<label>Closing costs %</label><input id="lkcc" type="number" value="2" step="0.5" oninput="lkCalc()">'
+      +'<label>Total payoff (mortgages + liens + HOA) $</label><input id="lkpo" type="number" value="'+po+'" oninput="lkCalc()">'
+      +'<div class="lkout">Seller walks with &asymp; <b id="lknet">—</b></div>'
+      +'<div class="lknote">PA value '+lkM(val)+'. Payoff prefill = '+(lead?'the foreclosure judgment':'0 — enter it')+'; replace with real payoff letters + the HOA estoppel.</div></div>'
+    +'<div class="lksec">Dig deeper</div><div class="lkcard lklinks">'+links+'</div>';
+}
+async function runLookup(){
+  const v=(document.getElementById('lk').value||'').trim(); if(!v) return;
+  openLookupModal('<div class="lktitle">Looking up…</div><div class="lksub">'+esc(v)+'</div>');
+  const digits=v.replace(/\D/g,'');
+  const where = (digits.length===13 && digits===v.replace(/[^0-9-]/g,'').replace(/-/g,'')) ? "FOLIO='"+digits+"'" : "TRUE_SITE_ADDR LIKE '"+v.toUpperCase().replace(/'/g,"''")+"%'";
+  try{
+    let rows=await lkQ(where);
+    if(!rows.length && digits.length!==13) rows=await lkQ("TRUE_OWNER1 LIKE '%"+v.toUpperCase().replace(/'/g,"''")+"%'");  // fallback: owner name
+    lkResults={}; rows.forEach(a=>{ lkResults[String(a.FOLIO||'').replace(/\D/g,'')]=a; });
+    if(!rows.length){ openLookupModal('<div class="lktitle">No match</div><div class="lksub">Nothing found for “'+esc(v)+'”. Try the county format, e.g. <b>1760 NE 160 ST</b>, or paste the 13-digit folio.</div>'); return; }
+    if(rows.length===1){ openLookupModal(lkReport(rows[0])); lkCalc(); return; }
+    let list=rows.slice(0,30).map(a=>'<button class="lkpick" onclick="lkPick('+JSON.stringify(String(a.FOLIO||'').replace(/\D/g,''))+')"><b>'+esc((a.TRUE_SITE_ADDR||'').trim())+'</b> · '+esc(a.TRUE_OWNER1||'')+'</button>').join('');
+    openLookupModal('<div class="lktitle">'+rows.length+' matches</div><div class="lksub">Pick the property:</div>'+list);
+  }catch(err){ openLookupModal('<div class="lktitle">Lookup failed</div><div class="lksub">'+esc(String(err.message||err))+'</div><div class="lknote">The county GIS may be momentarily down. Use the Appraiser button, or try again.</div>'); }
+}
+document.getElementById('lkfull').onclick = runLookup;
+document.getElementById('lk').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); runLookup(); } });
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
   const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
 });
@@ -1578,9 +1704,9 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); }
 });
-document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); } });
+document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); } });
 // "/" focuses search (unless already typing in a field)
 document.addEventListener('keydown', e => {
   if(e.key==='/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'')){
