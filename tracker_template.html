@@ -618,6 +618,7 @@ body.modal-open{overflow:hidden}
 <input id="sName" placeholder="Sender name" style="width:150px">
 <input id="sLLC" placeholder="LLC / company" style="width:160px">
 <input id="sPhone" placeholder="Phone" style="width:130px">
+<input id="sPartner" placeholder="Partner / closer name (call script)" style="width:200px">
 <input id="sTitle" placeholder="Title (e.g. Acquisitions)" style="width:150px">
 <input id="sEmail" placeholder="Your email (for the signature)" style="width:190px">
 <input id="sAddr" placeholder="Mailing address (for email compliance)" style="width:230px">
@@ -669,7 +670,7 @@ const expanded = new Set();   // case #s whose Deal-analysis panel is open (surv
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 let weekOnly = false, hideDead = false, tdOnly = false, ncOnly = false, dueOnly = false;
-let sender = {name:'', llc:'', phone:'', addr:'', title:'', email:'', web:''};
+let sender = {name:'', llc:'', phone:'', addr:'', title:'', email:'', web:'', partner:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
@@ -986,6 +987,9 @@ ul{margin:10px 0}
 // ---- per-lead PHONE SCRIPT: what to actually say when you call this owner (EN/ES, tailored) ----
 function genScript(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
+  const partner = (sender.partner||'').trim() || '[PARTNER]';   // the closer/expert on the two-step callback
+  const days = r.days >= 0 ? r.days : 0;
+  const hi = (new Date().getHours() < 12) ? 'morning' : 'afternoon';
   const owner = titleCase((r.owners||'').split(';')[0].trim());
   const first = esc(owner.split(' ')[0] || owner);
   const addr = esc(r.addr), dt = esc(r.auction);
@@ -1001,82 +1005,82 @@ function genScript(r){
     : '<p class="muted">'+(lang==='en'?'No phone pulled yet. Use the <b>People</b> link on the lead to find one, then dial by hand.':'Aún no hay teléfono. Use el enlace <b>People</b> del contacto para encontrarlo y marque a mano.')+'</p>';
   const badge = vb ? '<span class="vbadge vb-'+vb.toLowerCase()+'">'+vb+'</span> ' : '';
 
-  const goalEN = td ? 'They can still stop the sale by paying the back taxes, or sell to you before the county takes it. Find out whether paying is realistic and what they want to do.'
-    : verify ? 'The real debt on this home is unknown, and a senior mortgage may erase the equity. Your one job on this call is to find out what is actually owed. Do not promise a price.'
-    : 'There is likely real equity worth protecting. Build trust, confirm the numbers, and offer to go over their options before the sale.';
-  const goalES = td ? 'Todavía pueden detener la venta pagando los impuestos atrasados, o vendérsela a usted antes de que el condado se la quede. Averigüe si pagar es realista y qué quieren hacer.'
-    : verify ? 'La deuda real sobre esta casa es desconocida, y una primera hipoteca podría borrar la plusvalía. Su única meta en esta llamada es averiguar cuánto se debe realmente. No prometa un precio.'
-    : 'Es probable que haya plusvalía real que proteger. Genere confianza, confirme los números y ofrezca repasar sus opciones antes de la subasta.';
+  const goalEN = td
+    ? 'Qualify fast, then book the callback. Find out what happened, whether they can pay the back taxes or want to sell, and what else is owed. Then set a SPECIFIC time with ' + esc(partner) + ' on the line.'
+    : verify ? 'Qualify and book the callback with ' + esc(partner) + '. The real debt here is unknown and a senior mortgage may erase the equity, so your #1 job is the mortgage balance. Do NOT promise a price or promise you will stop the sale.'
+    : 'Qualify fast, then book the callback. Find out what happened, keep vs sell, and what is owed. Then set a SPECIFIC time with ' + esc(partner) + ' on the line to lay out their options.';
+  const goalES = td
+    ? 'Califique rápido y agende la llamada. Averigüe qué pasó, si pueden pagar los impuestos atrasados o quieren vender, y qué más se debe. Luego fije una hora ESPECÍFICA con ' + esc(partner) + ' en la línea.'
+    : verify ? 'Califique y agende la llamada con ' + esc(partner) + '. La deuda real es desconocida y una primera hipoteca podría borrar la plusvalía, así que su prioridad #1 es el saldo de la hipoteca. NO prometa un precio ni prometa que detendrá la venta.'
+    : 'Califique rápido y agende la llamada. Averigüe qué pasó, conservar vs vender, y qué se debe. Luego fije una hora ESPECÍFICA con ' + esc(partner) + ' en la línea para repasar sus opciones.';
 
   const openEN = td
-    ? `Hello, is this ${first}? My name is ${esc(sN)}, and I am a local real estate investor here in Miami with ${esc(sL)}. I am reaching out because county records show the property at <b>${addr}</b> is scheduled for a <b>tax deed sale on ${dt}</b>, which is ${daysEN}, due to unpaid property taxes. I know this can be a stressful thing to hear about. Do you have a couple of minutes? I may be able to help, and if I cannot, I will be honest with you.`
-    : `Hello, is this ${first}? My name is ${esc(sN)}, and I am a local real estate investor here in Miami with ${esc(sL)}. I am reaching out because public records show your home at <b>${addr}</b> has a <b>foreclosure sale scheduled for ${dt}</b>, which is ${daysEN}. I know this can be a stressful call to get. Do you have a couple of minutes? I may be able to help, and even if I cannot, I will be honest with you.`;
+    ? `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a tax-deed sale set for <b>${dt}</b>, that's ${days} days out. We may be able to help, but I need 60 seconds to see if we can, or if you're already working with someone. You got a minute?`
+    : `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a sale date set for <b>${dt}</b>, that's ${days} days out. We may be able to stop it, but I need 60 seconds to see if we can help, or if you're already working with someone. You got a minute?`;
   const openES = td
-    ? `Hola, ¿hablo con ${first}? Me llamo ${esc(sN)} y soy inversionista de bienes raíces aquí en Miami, de ${esc(sL)}. Me comunico porque los registros del condado muestran que la propiedad en <b>${addr}</b> está programada para una <b>subasta de tax deed el ${dt}</b>, es decir ${daysES}, por impuestos sin pagar. Sé que esto puede ser estresante de escuchar. ¿Tiene un par de minutos? Quizá pueda ayudarle, y si no puedo, se lo diré con honestidad.`
-    : `Hola, ¿hablo con ${first}? Me llamo ${esc(sN)} y soy inversionista de bienes raíces aquí en Miami, de ${esc(sL)}. Me comunico porque los registros públicos muestran que su casa en <b>${addr}</b> tiene una <b>subasta de ejecución hipotecaria el ${dt}</b>, es decir ${daysES}. Sé que esta puede ser una llamada estresante de recibir. ¿Tiene un par de minutos? Quizá pueda ayudarle, y aunque no pueda, se lo diré con honestidad.`;
+    ? `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una subasta de tax deed fijada para el <b>${dt}</b>, es decir en ${days} días. Quizá podamos ayudarle, pero necesito 60 segundos para ver si podemos, o si ya está trabajando con alguien. ¿Tiene un minuto?`
+    : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una fecha de subasta fijada para el <b>${dt}</b>, es decir en ${days} días. Quizá podamos detenerla, pero necesito 60 segundos para ver si podemos ayudarle, o si ya está trabajando con alguien. ¿Tiene un minuto?`;
 
-  const offerEN = td ? `You still have a couple of options. You can pay the back taxes and keep the home, or sell it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you, though it has to be claimed. There is no cost and no obligation to talk it through.`
-    : verify ? `I want to be honest with you. Until I confirm what is actually owed on the house, I cannot give you a number, and I would not want to guess. If you can help me find the mortgage balance, I can tell you fairly quickly whether I can help, and I will put it in writing. There is no cost and no obligation.`
-    : `Depending on what is owed, you may have real options here. Selling before the auction is often better for you than losing the home at the courthouse, and it can put cash in your pocket. If it sells for more than you owe, any surplus belongs to you, not the lender. There is no cost and no obligation to talk it over.`;
-  const offerES = td ? `Todavía tiene un par de opciones. Puede pagar los impuestos atrasados y conservar la casa, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente podría corresponderle a usted, aunque hay que reclamarlo. No hay costo ni compromiso por conversarlo.`
-    : verify ? `Quiero ser honesto con usted. Hasta confirmar cuánto se debe realmente sobre la casa, no puedo darle una cifra, y no quisiera adivinar. Si me ayuda a averiguar el saldo de la hipoteca, puedo decirle bastante rápido si puedo ayudarle, y se lo pondré por escrito. No hay costo ni compromiso.`
-    : `Según lo que se deba, es posible que tenga opciones reales. Vender antes de la subasta suele ser mejor para usted que perder la casa en el juzgado, y puede dejarle dinero en el bolsillo. Si se vende por más de lo que debe, cualquier excedente le pertenece a usted, no al prestamista. No hay costo ni compromiso por conversarlo.`;
+  const offerEN = `Here's how this works. I'm not the guy who stops sales, my partner ${esc(partner)} is, he's been doing this 30 years. I'm going to pull your file right now, see exactly what we're dealing with on your lender, and brief him. Then I'll call you back at <b>[set a REAL clock time, e.g. 1:15 PM]</b> with ${esc(partner)} on the line. He'll lay out what we can actually do${verify?" once we confirm what's owed":''}, whether that's buying it before the sale so you walk away with cash, getting you more time, or pointing you to the right resource. No cost, no pressure, no commitment. You around then?`;
+  const offerES = `Así funciona. Yo no soy quien detiene las ventas, mi socio ${esc(partner)} sí, lleva 30 años en esto. Voy a sacar su expediente ahora mismo, ver exactamente qué tenemos con su prestamista, y ponerlo al tanto. Luego le devuelvo la llamada a las <b>[fije una hora real, ej. 1:15 PM]</b> con ${esc(partner)} en la línea. Él le explicará qué podemos hacer${verify?' una vez que confirmemos lo que se debe':''}, ya sea comprarla antes de la subasta para que salga con dinero, conseguirle más tiempo, u orientarle al recurso correcto. Sin costo, sin presión, sin compromiso. ¿Estará disponible?`;
 
   const discEN = [
-    `Are you still living in the home, or is it rented out?`,
-    `<b>Is there still a mortgage on it, and roughly what is the balance?</b> &nbsp;<span class="key">← the key question</span>`,
-    `Besides that, are there any other loans, liens, HOA dues, or back taxes on the property?`,
-    `Have you already got a plan going, maybe with the bank, a lawyer, or someone else?`,
-    `If you had your pick, what would you want to happen, keep it or walk away with something in your pocket?`
+    `Before I go further, are you already working with someone on this, a law firm or another company? &nbsp;<span class="key">(real law firm → tell them to stick with it; nobody / something sketchy → keep going)</span>`,
+    `What happened? How'd you end up in foreclosure? &nbsp;<span class="key">(let them talk, then: "Man, I'm sorry, that's a lot.")</span>`,
+    `Where's your head at, are you trying to save the house, or is it time to get out with some cash and start clean, no eviction on your record?`,
+    `<b>If keeping it:</b> are you back on your feet income-wise, or still underwater month to month? &nbsp; <b>If selling:</b> do you have equity, or are you upside down?`,
+    `<b>Is there still a mortgage on it, and roughly what's the balance? Any other liens, HOA, or back taxes?</b> &nbsp;<span class="key">← the numbers ${esc(partner)} needs</span>`
   ];
   const discES = [
-    `¿Todavía vive en la casa, o está alquilada?`,
-    `<b>¿Todavía hay una hipoteca sobre la casa, y más o menos cuál es el saldo?</b> &nbsp;<span class="key">← la pregunta clave</span>`,
-    `Aparte de eso, ¿hay otros préstamos, gravámenes, cuotas de HOA o impuestos atrasados sobre la propiedad?`,
-    `¿Ya tiene algún plan en marcha, con el banco, un abogado, o alguien más?`,
-    `Si pudiera elegir, ¿qué querría que pasara, conservarla o salir con algo de dinero en el bolsillo?`
+    `Antes de seguir, ¿ya está trabajando con alguien en esto, un bufete u otra compañía? &nbsp;<span class="key">(bufete real → dígale que siga con ellos; nadie / algo dudoso → continúe)</span>`,
+    `¿Qué pasó? ¿Cómo llegó a la ejecución hipotecaria? &nbsp;<span class="key">(déjelo hablar, luego: "Cuánto lo siento, es mucho.")</span>`,
+    `¿Qué está pensando, quiere salvar la casa, o ya es momento de salir con algo de dinero y empezar de nuevo, sin una eviction en su historial?`,
+    `<b>Si la conserva:</b> ¿ya está estable de ingresos, o sigue ahogado mes a mes? &nbsp; <b>Si vende:</b> ¿tiene plusvalía, o está por debajo de lo que debe?`,
+    `<b>¿Todavía hay una hipoteca, y más o menos cuál es el saldo? ¿Otros gravámenes, HOA o impuestos atrasados?</b> &nbsp;<span class="key">← los números que ${esc(partner)} necesita</span>`
   ];
-  if(td){ discEN.splice(1,0,`Are you in a position to pay the back taxes to keep it, or is that just not realistic right now?`);
-          discES.splice(1,0,`¿Está en posición de pagar los impuestos atrasados para conservarla, o eso no es realista ahora mismo?`); }
+  if(td){ discEN.splice(3,0,`Can you pay the back taxes to keep it, or is that just not realistic right now?`);
+          discES.splice(3,0,`¿Puede pagar los impuestos atrasados para conservarla, o eso no es realista ahora mismo?`); }
 
   const objEN = [
-    [`"How much will you give me?"`, `That is a fair question. I would only be guessing until I confirm what is owed. If you can get me that, I will have a real number for you quickly, in writing.`],
-    [`"Is this a scam?"`, `You are right to be careful. I am local, I buy with my own cash, you never pay me anything, and everything goes in writing with time for you to read it. You are welcome to look me up.`],
-    [`"I've got it handled / I have a lawyer."`, `That is good to hear. Keep my number, and if anything changes before ${dt}, feel free to call. No pressure at all.`],
-    [`"I'm not interested."`, `I understand, and I will not keep you. Let me leave my number in case things change before the sale. I wish you the best either way.`]
+    [`"I'm already working with someone."`, `Good, who with? If it's a real law firm or a legit company, honestly, stick with them. If you're not sure who they are, just be careful, a lot of bad actors circle people in your spot. Either way I'll be straight with you.`],
+    [`"Can you just help me right now?" / hesitates on the callback`, `I hear you, but your sale is in ${days} days and this is the window ${esc(partner)} has today. If it's not a priority right now, tell me, so I don't waste his time or yours.`],
+    [`"Is this a scam?"`, `Fair, you should be careful. We're local, there's no cost, you never pay us anything up front, and nothing happens without it in writing for you to review. You're welcome to look us up.`],
+    [`"How much will you give me?"`, `Fair question, but I'd be guessing until we confirm what's owed, that's exactly what ${esc(partner)} and I pin down before anyone throws out a number.`]
   ];
   const objES = [
-    [`"¿Cuánto me daría?"`, `Es una pregunta justa. Estaría adivinando hasta confirmar lo que se debe. Si me lo consigue, le doy una cifra real rápido, por escrito.`],
-    [`"¿Esto es una estafa?"`, `Hace bien en tener cuidado. Soy local, compro con mi propio efectivo, usted nunca me paga nada, y todo va por escrito con tiempo para que lo lea. Con gusto puede verificarme.`],
-    [`"Ya lo tengo resuelto / tengo abogado."`, `Me alegra escucharlo. Guarde mi número, y si algo cambia antes del ${dt}, con gusto me llama. Sin ninguna presión.`],
-    [`"No me interesa."`, `Entiendo, y no le quito más tiempo. Déjeme darle mi número por si las cosas cambian antes de la subasta. Le deseo lo mejor.`]
+    [`"Ya estoy trabajando con alguien."`, `Bien, ¿con quién? Si es un bufete real o una compañía seria, sinceramente, siga con ellos. Si no está seguro de quiénes son, tenga cuidado, hay muchos aprovechados rondando a la gente en su situación. De cualquier forma le hablaré con franqueza.`],
+    [`"¿Puede ayudarme ahora mismo?" / duda con la hora`, `Le entiendo, pero su subasta es en ${days} días y esta es la ventana que ${esc(partner)} tiene hoy. Si no es prioridad ahora, dígame, para no hacerle perder su tiempo ni el suyo.`],
+    [`"¿Esto es una estafa?"`, `Justo, debe tener cuidado. Somos locales, no hay costo, usted nunca paga nada por adelantado, y nada pasa sin que esté por escrito para que lo revise. Con gusto puede verificarnos.`],
+    [`"¿Cuánto me daría?"`, `Buena pregunta, pero estaría adivinando hasta confirmar lo que se debe, eso es justo lo que ${esc(partner)} y yo definimos antes de dar una cifra.`]
   ];
 
-  const closeEN = `If it would help, we could set a time to go over your options${verify?', once we know what is owed':''}. Would that be useful, or would you rather I send you something in writing first? Whatever is easier for you.`;
-  const closeES = `Si le sirve, podríamos acordar un momento para repasar sus opciones${verify?', una vez que sepamos lo que se debe':''}. ¿Le resultaría útil, o prefiere que primero le envíe algo por escrito? Lo que le sea más fácil.`;
-  const leaveEN = `Either way, here's my direct number: <b>${esc(sP)}</b>. I'm ${esc(sN)} with ${esc(sL)}.`;
-  const leaveES = `De cualquier forma, le dejo mi número directo: <b>${esc(sP)}</b>. Soy ${esc(sN)} de ${esc(sL)}.`;
+  const closeEN = `Good. Pick up when you see the call, I'll be bringing ${esc(partner)} in. And ${first}, be careful who you talk to between now and then, a lot of bad actors circle people in this spot. Wait for our call. Deal?`;
+  const closeES = `Bien. Conteste cuando vea la llamada, traeré a ${esc(partner)} conmigo. Y ${first}, tenga cuidado con quién habla mientras tanto, hay muchos aprovechados rondando en esta situación. Espere nuestra llamada. ¿Trato hecho?`;
+  const leaveEN = `If they won't lock a time: here's my direct line, <b>${esc(sP)}</b>, it's ${esc(sN)} with ${esc(sL)}. Call me the second anything changes before ${dt}.`;
+  const leaveES = `Si no fijan hora: le dejo mi línea directa, <b>${esc(sP)}</b>, soy ${esc(sN)} de ${esc(sL)}. Llámeme apenas algo cambie antes del ${dt}.`;
 
   const compEN = [
-    `Dial by hand. You are calling as <b>${esc(sL)}</b>, not personally.`,
+    `Dial by hand. You're calling as <b>${esc(sL)}</b>, not personally.`,
     `Skip any number marked <span class="dnc">DO NOT CALL</span> below.`,
-    `Say you are an investor, <b>not an attorney</b>. This is not legal advice.`,
-    `Never name a price until you have confirmed what is owed.`,
-    `If they would keep any stake (rent-back or buy-back), it must be a <b>written contract with a 3-day right to cancel</b> (FL 501.1377).`
+    `You are <b>not an attorney and not their lender</b>, say so. This is not legal advice.`,
+    `Do NOT promise you <b>will</b> stop the sale, say you <b>may be able to help</b>. Never name a price before the debt is confirmed.`,
+    `Set a <b>real clock time</b> for the callback and keep it. "30 minutes" with no time is a trust-killer.`,
+    `If they'd keep any stake (rent-back / buy-back) or sign anything, it needs a <b>written contract with a 3-day right to cancel</b> (FL 501.1377).`
   ];
   const compES = [
     `Marque a mano. Usted llama como <b>${esc(sL)}</b>, no de forma personal.`,
     `Omita cualquier número marcado <span class="dnc">NO LLAMAR</span> abajo.`,
-    `Diga que es inversionista, <b>no abogado</b>. Esto no es asesoría legal.`,
-    `Nunca dé un precio hasta confirmar lo que se debe.`,
-    `Si conservan alguna parte (renta de vuelta o recompra), debe ser un <b>contrato por escrito con 3 días para cancelar</b> (FL 501.1377).`
+    `Usted <b>no es abogado ni es su prestamista</b>, dígalo. Esto no es asesoría legal.`,
+    `NO prometa que <b>detendrá</b> la venta, diga que <b>quizá pueda ayudar</b>. Nunca dé un precio antes de confirmar la deuda.`,
+    `Fije una <b>hora real</b> para la devolución de llamada y cúmplala. "30 minutos" sin hora destruye la confianza.`,
+    `Si conservan alguna parte (renta de vuelta / recompra) o firman algo, debe ser un <b>contrato por escrito con 3 días para cancelar</b> (FL 501.1377).`
   ];
   if(!td && r.hs){ compEN.push(`This looks like a long-held homestead, likely a family home. Go slow, be respectful, and listen more than you talk.`);
                    compES.push(`Parece una vivienda familiar de muchos años. Vaya despacio, con respeto, y escuche más de lo que habla.`); }
 
   const T = {
-    en:{goal:'Your goal on this call', before:'Before you dial', nums:'Numbers to try', open:'Say this (the opening)', ask:'Ask, then listen', offer:'What you can offer', push:'If they push back', close:'Close', after:"After the call: set the lead's Status and note what you learned (mortgage balance, liens, who decides, motivation) in its Notes on the tracker."},
-    es:{goal:'Su objetivo en esta llamada', before:'Antes de llamar', nums:'Números para marcar', open:'Diga esto (la apertura)', ask:'Pregunte, y escuche', offer:'Lo que puede ofrecer', push:'Si le ponen objeciones', close:'Cierre', after:'Después de la llamada: marque el Estado del contacto y anote lo aprendido (saldo de hipoteca, gravámenes, quién decide, motivación) en las Notas del tablero.'}
+    en:{goal:'Your goal on this call', before:'Before you dial', nums:'Numbers to try', open:'Say this (the opener)', ask:'Ask, then listen (qualify)', offer:'The handoff (book the callback)', push:'If they push back', close:'Lock it in', after:"After the call: set the lead's Status, log the callback time you set, and note what you learned (mortgage balance, liens, who decides, motivation) in its Notes on the tracker."},
+    es:{goal:'Su objetivo en esta llamada', before:'Antes de llamar', nums:'Números para marcar', open:'Diga esto (el abridor)', ask:'Pregunte y escuche (califique)', offer:'El pase (agende la llamada)', push:'Si le ponen objeciones', close:'Ciérrelo', after:'Después de la llamada: marque el Estado, registre la hora de devolución que fijó, y anote lo aprendido (saldo de hipoteca, gravámenes, quién decide, motivación) en las Notas del tablero.'}
   };
   const S = { en:{goal:goalEN,comp:compEN,open:openEN,disc:discEN,offer:offerEN,obj:objEN,close:closeEN,leave:leaveEN},
               es:{goal:goalES,comp:compES,open:openES,disc:discES,offer:offerES,obj:objES,close:closeES,leave:leaveES} };
@@ -1455,7 +1459,7 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
 })();
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
-Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr', title:'sTitle', email:'sEmail', web:'sWeb'}).forEach(([k,id]) => {
+Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr', title:'sTitle', email:'sEmail', web:'sWeb', partner:'sPartner'}).forEach(([k,id]) => {
   const el = document.getElementById(id);
   if(!el) return;
   el.value = sender[k] || '';
