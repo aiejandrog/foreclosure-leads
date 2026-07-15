@@ -480,7 +480,9 @@ th{letter-spacing:.09em;font-size:9.5px}
 .cstat .k{letter-spacing:.1em}
 .brand .tag{letter-spacing:.13em;text-transform:uppercase;font-size:9px;color:var(--muted-2)}
 #intro .tg{font-family:var(--f-label)}
-.brand .wm b{background:var(--gold-grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+/* keep the SPECULAR SHINE (background-image + 220% size so wmShine has room to sweep); a `background`
+   shorthand here would reset background-size to auto and freeze the animation into a flat gradient. */
+.brand .wm b{background-image:linear-gradient(100deg,#BE9633 0%,#CBAA50 34%,#F7E7A8 47%,#FFFBEC 50%,#F7E7A8 53%,#CBAA50 66%,#BE9633 100%);background-size:220% auto;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:wmShine 3.6s linear infinite}
 #intro .wm b{background:linear-gradient(120deg,#E8D48B,#C9A84C);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 /* primary CTA = gold-gradient pill, white ink, soft gold glow */
 #gate button{background:var(--gold-grad);border:none;color:#2a2205;font-weight:700;box-shadow:0 6px 20px rgba(201,168,76,.35)}
