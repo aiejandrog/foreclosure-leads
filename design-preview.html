@@ -1589,7 +1589,7 @@ async function lkQ(where){
 }
 function openLookupModal(h){ document.getElementById('lookupbody').innerHTML=h; document.getElementById('lookupmodal').classList.add('show'); document.body.classList.add('modal-open'); }
 function closeLookupModal(){ document.getElementById('lookupmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
-function lkCalc(){ const g=id=>+((document.getElementById(id)||{}).value)||0; const lp=g('lklp'),cm=g('lkcm'),cc=g('lkcc'),po=g('lkpo'); const el=document.getElementById('lknet'); if(el) el.textContent=lkM(lp-lp*cm/100-lp*cc/100-po); }
+function lkCalc(){ const g=id=>+((document.getElementById(id)||{}).value)||0; const lp=g('lklp'),cm=g('lkcm'),cc=g('lkcc'),po=g('lkpo'); const net=lp-lp*cm/100-lp*cc/100-po; const el=document.getElementById('lknet'); if(el){ el.textContent=lkM(net); el.style.color = net<0 ? '#b4402e' : '#1f7a44'; } }
 function lkLead(folio){ folio=String(folio||'').replace(/\D/g,''); return DATA.find(r=>String(r.folio||'').replace(/\D/g,'')===folio || (((r.pa||'').match(/folio=(\d+)/)||[])[1]===folio)); }
 function lkKV(k,v){ return '<div class="lkkv"><span>'+esc(k)+'</span><b>'+v+'</b></div>'; }
 function lkPick(folio){ const a=lkResults[folio]; if(a) openLookupModal(lkReport(a)); }
@@ -1629,7 +1629,7 @@ function lkReport(a){
       +lkKV('Auction', esc(lead.auction||'')+' ('+(lead.days>=0?lead.days+' days':'past')+')')
       +lkKV(td?'Opening bid':'Judgment', lkM(td?lead.obid:lead.judg))
       +lkKV('Plaintiff', esc(lead.plaintiff||'—'))
-      +'<div class="lknote"><a href="#" onclick="closeLookupModal();document.getElementById(\'q\').value='+JSON.stringify(esc(lead.case))+';q=document.getElementById(\'q\').value;render();return false;">Show this lead in the tracker →</a></div>';
+      +'<div class="lknote"><a href="#" class="lkgoto" data-c="'+esc(lead.case)+'">Show this lead in the tracker →</a></div>';
   } else { fc='<div class="lkkv"><span>DEALFLOW list</span><b>not on the current auction list (no pending FC/TD sale found)</b></div>'; }
   // links
   let L=[['Appraiser','https://apps.miamidadepa.gov/PropertySearch/#/?folio='+folio],
@@ -1671,12 +1671,18 @@ async function runLookup(){
     lkResults={}; rows.forEach(a=>{ lkResults[String(a.FOLIO||'').replace(/\D/g,'')]=a; });
     if(!rows.length){ openLookupModal('<div class="lktitle">No match</div><div class="lksub">Nothing found for “'+esc(v)+'”. Try the county format, e.g. <b>1760 NE 160 ST</b>, or paste the 13-digit folio.</div>'); return; }
     if(rows.length===1){ openLookupModal(lkReport(rows[0])); lkCalc(); return; }
-    let list=rows.slice(0,30).map(a=>'<button class="lkpick" onclick="lkPick('+JSON.stringify(String(a.FOLIO||'').replace(/\D/g,''))+')"><b>'+esc((a.TRUE_SITE_ADDR||'').trim())+'</b> · '+esc(a.TRUE_OWNER1||'')+'</button>').join('');
+    let list=rows.slice(0,30).map(a=>'<button class="lkpick" data-folio="'+String(a.FOLIO||'').replace(/\D/g,'')+'"><b>'+esc((a.TRUE_SITE_ADDR||'').trim())+'</b> · '+esc(a.TRUE_OWNER1||'')+'</button>').join('');
+    if(rows.length>30) list+='<div class="lknote">Showing first 30 of '+rows.length+' — narrow the address for the rest.</div>';
     openLookupModal('<div class="lktitle">'+rows.length+' matches</div><div class="lksub">Pick the property:</div>'+list);
   }catch(err){ openLookupModal('<div class="lktitle">Lookup failed</div><div class="lksub">'+esc(String(err.message||err))+'</div><div class="lknote">The county GIS may be momentarily down. Use the Appraiser button, or try again.</div>'); }
 }
 document.getElementById('lkfull').onclick = runLookup;
 document.getElementById('lk').addEventListener('keydown', e=>{ if(e.key==='Enter'){ e.preventDefault(); runLookup(); } });
+document.addEventListener('click', e=>{
+  const pk = e.target.closest && e.target.closest('.lkpick'); if(pk){ lkPick(pk.dataset.folio); return; }
+  const go = e.target.closest && e.target.closest('.lkgoto'); if(go){ e.preventDefault(); closeLookupModal();
+    const qel=document.getElementById('q'); if(qel){ qel.value=go.dataset.c; qel.dispatchEvent(new Event('input',{bubbles:true})); qel.scrollIntoView&&qel.scrollIntoView({block:'center',behavior:'smooth'}); } }
+});
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
   const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
 });
