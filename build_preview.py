@@ -72,7 +72,12 @@ FAKE = [
      "docket":"#","ocsqs":"sample","phones":[],"phdnc":[],"emails":[]},
 ]
 
-tpl = open(os.path.join(HERE, "tracker_template.html"), encoding="utf-8").read().replace("__UPDATED__", "2026-07-14")
+# give every human-owner fake lead an address-search link too (mirrors the pipeline's people_addr_url)
+for _f in FAKE:
+    if _f.get("people") and _f.get("addr") and "," in _f["addr"]:
+        _f["peopleaddr"] = "#"
+
+tpl = open(os.path.join(HERE, "tracker_template.html"), encoding="utf-8").read().replace("__UPDATED__", "2026-07-14 12:00")
 html = tpl.replace("__DATA__", F._esc_json(FAKE))
 out = os.path.join(HERE, "design-preview.html")
 open(out, "w", encoding="utf-8").write(html)

@@ -45,6 +45,32 @@ def _clean_party(raw):
         _a, _, _b = s.partition(','); s = (_b.strip() + ' ' + _a.strip()).strip()
     return re.sub(r'\s{2,}', ' ', s).strip()
 
+
+def people_addr_url(mailing, address, is_company):
+    """TruePeopleSearch ADDRESS search: returns only the people who actually live at an address, so the
+    owner can be told apart from same-name strangers (BatchData gives no age/DOB to disambiguate). Prefer
+    the mailing address (where the owner actually lives — matters for absentee owners), fall back to the
+    property address, skip PO boxes (address search is useless on a box). Returns '' when not resolvable."""
+    src = (mailing or '').strip()
+    if not src or re.search(r'\bP\.?\s*O\.?\s*BOX\b', src, re.I):
+        src = (address or '').strip()
+    if not src or is_company or re.search(r'\bP\.?\s*O\.?\s*BOX\b', src, re.I):
+        return ''
+    parts = [p.strip() for p in src.split(',') if p.strip()]
+    if len(parts) < 2:
+        return ''
+    street = parts[0]
+    rest = ' '.join(parts[1:])                                  # "MIAMI FL 33184-2809"
+    mz = re.search(r'(\d{5})(?:-\d{4})?\s*$', rest)             # 5-digit zip (drop +4)
+    zp = mz.group(1) if mz else ''
+    rn = (rest[:mz.start()] if mz else rest).strip()           # "MIAMI FL"
+    sm = re.search(r'\b([A-Za-z]{2})\s*$', rn)                  # trailing state
+    st = sm.group(1).upper() if sm else 'FL'
+    city = (rn[:sm.start()] if sm else rn).strip()
+    csz = (city + ', ' + st + (' ' + zp if zp else '')).strip(' ,')
+    return ("https://www.truepeoplesearch.com/resultaddress?streetaddress="
+            + urllib.parse.quote(street) + "&citystatezip=" + urllib.parse.quote(csz))
+
 # NOTE (2026-07-09): auction detail rows use <td> label cells, NOT <th>. Waiting list = #Area_W only.
 EXTRACT_JS = """
 () => {
@@ -398,6 +424,13 @@ def qualify(leads):
             r['people_name'] = name
         else:
             r['people_url'] = ''; r['people_name'] = ''
+        # ADDRESS-based People search. A name search on TPS returns many same-name people and there is
+        # no way to tell which is the owner (BatchData returns NO age/DOB — confirmed against the live
+        # API). Searching by the ADDRESS instead returns the 1-3 people who actually live there, which
+        # pinpoints the owner. Prefer the mailing address (where the owner actually lives, which matters
+        # for absentee owners); fall back to the property address; skip PO boxes (address search is
+        # useless on a box). TPS /resultaddress route, same domain as the name search.
+        r['people_addr_url'] = people_addr_url(r.get('mailing_address', ''), r.get('Address', ''), is_company)
         # CO-PARTIES: every OTHER party named on the case, cleaned + deduped. Each human (co-owner,
         # spouse, relative living with the owner) gets its own People-search URL so you can reach them;
         # companies (bank/HOA/county/tenant) carry no URL and render muted for context. BatchData/TPS
@@ -580,7 +613,7 @@ def make_tracker(leads):
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
-            'people': r.get('people_url',''), 'ctype': r.get('case_type',''),
+            'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
             'named': r.get('named', []),   # [{name,url}] co-parties: humans get a People-search URL, companies ''
             'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
@@ -599,7 +632,7 @@ def make_tracker(leads):
             d['emails'] = (hit.get('emails') or [])[:3]
         slim.append(d)
 
-    tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{date.today():%Y-%m-%d}")
+    tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')
     os.makedirs(DEALFLOW_DIR, exist_ok=True)
