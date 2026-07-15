@@ -230,8 +230,9 @@ th:hover{color:var(--ink)}
 td{padding:11px 12px;border-bottom:1px solid var(--line-2);vertical-align:middle;line-height:1.45;background:var(--surface)}
 td.links,td.owncell,td.propcell{vertical-align:top}
 tbody tr:nth-child(even) td{background:#FBFCFE}
-tbody tr:hover td{background:#F3F8FF}
+tbody tr:hover td{background:#FCF8EF}
 tbody tr td:first-child{box-shadow:inset 3px 0 0 transparent}
+tbody tr{transition:background .18s var(--e-lux)}
 .A{color:var(--green-ink);font-weight:700}.B{color:var(--amber-ink);font-weight:700}.C{color:var(--muted)}
 .money,.num{text-align:right;font-variant-numeric:tabular-nums;font-family:var(--f-num)}
 .profpos,.profneg{white-space:nowrap}
@@ -273,10 +274,10 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 /* worth-it verdict badges — refined pills with dot */
 .vb{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-body);font-size:10px;font-weight:700;padding:3px 9px 3px 8px;border-radius:var(--pill);letter-spacing:.05em;text-transform:uppercase;line-height:1;border:1px solid transparent;vertical-align:middle}
 .vb::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
-.vb3{background:var(--green-soft);color:var(--green-ink);border-color:#c2e6cf}
-.vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
+.vb3{background:var(--green-soft);color:var(--green-ink);border-color:#c2e6cf;box-shadow:0 1px 7px rgba(15,157,88,.20)}
+.vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0;box-shadow:0 1px 7px rgba(201,138,18,.18)}
 .vb1{background:#EDF0F5;color:#647089;border-color:var(--line)}
-.vbv{background:var(--blue-soft);color:var(--blue-ink);border-color:#cadcfb}
+.vbv{background:var(--blue-soft);color:var(--blue-ink);border-color:#cadcfb;box-shadow:0 1px 7px rgba(37,99,235,.16)}
 
 /* deal-analysis trigger */
 .dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font-family:var(--f-body);font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--pill);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .14s;box-shadow:var(--sh-1)}
