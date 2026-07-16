@@ -33,6 +33,15 @@ if not errorlevel 1 (
   echo     fresh leads pushed - enrichment continues below.>> "%LOG%"
 )
 
+rem  Re-scrape the OTHER counties too (Miami-Dade was done above by foreclosure_leads.py). county_leads.py
+rem  has its own thin-scrape guard, so a blocked county keeps its last good file. The fresh county leads
+rem  land in the final rebuild (step 4) which re-merges every *_leads.json.
+echo [1c/5] Refreshing Broward + Palm Beach auctions (statewide cadastral enrich)...
+python county_leads.py --county broward >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! Broward scrape thin/failed - kept last good Broward file.>> "%LOG%"
+python county_leads.py --county "palm beach" >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! Palm Beach scrape thin/failed - kept last good Palm Beach file.>> "%LOG%"
+
 echo [2/5] Generating direct court-case + records links (new owners only; capped so publish is never starved)...
 python gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
 python gen_records_qs.py --limit 40 >> "%LOG%" 2>&1

@@ -131,6 +131,16 @@ def main():
     slim = to_slim(key, cfg, base, items)
     got = sum(1 for s in slim if s['value']); aN = sum(1 for s in slim if s['tier'] == 'A')
     out = os.path.join(HERE, key.lower().replace(' ', '') + '_leads.json')
+    # Safety guard (matches foreclosure_leads.py): a blocked/thin scrape must NEVER overwrite a good
+    # file with an empty one. Bail and leave the last good snapshot in place so the site stays populated.
+    MIN = 10
+    if len(slim) < MIN:
+        prev = 0
+        if os.path.exists(out):
+            try: prev = len(json.load(open(out, encoding='utf-8')))
+            except Exception: prev = 0
+        print(f"ABORT: only {len(slim)} {key} leads scraped (< {MIN}). Keeping the existing {prev}-lead file.")
+        raise SystemExit(1)
     json.dump(slim, open(out, 'w', encoding='utf-8'), indent=1)
     print(f"DONE: {len(slim)} {key} leads ({got} enriched, {aN} Tier A) -> {os.path.basename(out)}")
 
