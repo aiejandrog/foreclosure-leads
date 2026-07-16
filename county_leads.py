@@ -42,6 +42,21 @@ COUNTIES = {
 }
 
 
+def _people_name(owner):
+    """'First Last' for a TruePeopleSearch NAME query from an FDOR owner name (stored as LAST FIRST[,] MIDDLE)."""
+    s = re.sub(r'\s*&.*$', '', owner or '')
+    s = re.sub(r'\b(H/[EW]|ET\s?UX|ET\s?AL|TRS?|JR|SR|II+|III|IV|LE|REM|EST|ESTATE)\b', '', s, flags=re.I)
+    if ',' in s:
+        last, _, first = s.partition(',')
+    else:
+        toks = [t for t in s.split() if len(t.strip('.')) > 1]
+        if len(toks) < 2:
+            return ''
+        last, first = toks[0], toks[1]
+    last = last.strip('. '); first = (first.split() or [''])[0].strip('. ')
+    return (first + ' ' + last).strip() if (first and last) else ''
+
+
 def _clean_owner(name):
     s = re.sub(r'\s*&\s*[WH]\b.*$', '', name or '', flags=re.I)
     s = re.sub(r'\b(ET\s?UX|ET\s?VIR|H/W|TRS|JR|SR|II|III|IV|ETAL|ET AL|LE|REM)\b', '', s, flags=re.I)
@@ -96,14 +111,13 @@ def to_slim(county, cfg, base, items):
         tier = 'A' if (val and eqp >= 40 and 0 <= days <= 45) else ('B' if val and eqp >= 15 else 'C')
         z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio) + ' FL') + '_rb/'
         auc = base + '?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=' + r.get('AuctionDate', '') + ('#AITEM_' + r['AID'] if r.get('AID') else '')
-        # People search — build from the CLEANED name (oname = "FIRST LAST"; the raw owner is "LAST,FIRST"
-        # so a whitespace split can't parse it — that's why Broward barely had any). Same logic as
-        # Miami-Dade: first + last surname. Skip companies/trusts and address-named entities ("...LAND TR").
-        zip5 = (re.search(r'(\d{5})', addr) or [None, ''])[1] if addr else ''
-        _pt = [t.strip('.') for t in (oname or '').split() if len(t.strip('.')) > 1]
+        # People NAME search — TruePeopleSearch wants "First Last". FDOR owner names are "LAST FIRST[,] MIDDLE",
+        # so build the query with _people_name() (handles both comma + space forms). zip is at the END of the
+        # address (not the street number). Skip companies/trusts and address-named entities ("...LAND TR").
+        zip5 = (re.search(r'(\d{5})(?:-\d{4})?\s*$', addr) or [None, ''])[1] if addr else ''
+        _nm = _people_name(owner)
         _ent = bool(re.search(r'\b(TR|TRS|EST|ESTATE|FUND|PROPERT|REALTY|HOMES|GROUP|INVEST|ENTERPRISE|LAND|ASSN|ASSOC)\b', owner, re.I))
-        if len(_pt) >= 2 and not is_co and not _ent and not re.match(r'^\s*\d', oname or ''):
-            _nm = _pt[0] + ' ' + _pt[-1]
+        if _nm and not is_co and not _ent and not re.match(r'^\s*\d', owner or ''):
             people = 'https://www.truepeoplesearch.com/results?name=' + urllib.parse.quote(_nm) + ('&citystatezip=' + zip5 if zip5 else '')
         else:
             people = ''
