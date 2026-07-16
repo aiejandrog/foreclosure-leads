@@ -90,5 +90,9 @@ if errorlevel 1 (
 ) else (
   echo     health OK.
 )
+rem  Self-report: writes DEALFLOW-STATUS.txt to the Desktop + a tray notification, so an unattended
+rem  7 AM run tells you whether it worked without needing anyone watching.
+echo [report] Writing run status to Desktop + notification...
+python run_report.py >> "%LOG%" 2>&1
 echo ==================== done %date% %time% ====================>> "%LOG%"
 endlocal
