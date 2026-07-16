@@ -58,3 +58,16 @@ when it's broken** instead of lying quietly (Pillar 2), across **more than one c
 - Never surface a fabricated number: a suggested lien from records is labeled "suggested — verify," and the
   money math only trusts what the user confirms.
 - Compliance lives in the operation, not the tool (FS 501.1377 etc. — already surfaced).
+
+
+## TESTED & RULED OUT (2026-07-16) — don't re-buy these
+The path to ~100% lien coverage was blocked by the county's reCAPTCHA bot-wall. I tested every option:
+- **Paid property-data API (BatchData, existing key):** RULED OUT. Returned mortgageHistory=0 / freeAndClear=true
+  on Hondroulis — a property in DOUBLE foreclosure with ~$291k of mortgages. Aggregator mortgage data is
+  stale/incomplete; it would re-introduce the fantasy-equity lie. Keep BatchData for skip-trace only.
+- **Captcha-solver (2Captcha, $5):** RULED OUT. Solves the reCAPTCHA v3 fine, but the county server rejects
+  the solved tokens (isValidSearch:false at min_score 0.3 / 0.7 / 0.9). Its score validation beats the solver.
+- **VERDICT:** the FREE county Official Records are the most accurate source (records_liens.py got it right);
+  the only barrier is the bot-wall, which can't be bought or solved cheaply. Coverage (136/218 = 62%) grows
+  opportunistically via the weekly refresh when the wall relaxes. Do NOT escalate (proxies/farms) or buy data
+  APIs for a two-person op. Per-deal gap is covered by the in-tool Records link + the title agent.
