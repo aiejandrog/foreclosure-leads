@@ -673,9 +673,17 @@ def make_tracker(leads):
                     _d['orliens'] = _h.get('liens', [])
                     _d['orjunior'] = _h.get('junior', 0)
                     _d['orconf'] = _h.get('conf', '')
+                # skip-traced phones/emails for this county lead (skiptrace.py now covers all counties)
+                _ph = st.get(_d.get('case', ''))
+                if _ph and _ph.get('phones'):
+                    _d['phones'] = [p.get('number') for p in _ph['phones'] if p.get('number')][:4]
+                    _d['phdnc'] = [bool(p.get('dnc')) for p in _ph['phones']][:4]
+                    _d['emails'] = (_ph.get('emails') or [])[:3]
             slim.extend(xl)
             _nl = sum(1 for _d in xl if _d.get('orliens'))
-            print(f"merged {len(xl)} leads from {os.path.basename(_xf)}" + (f" ({_nl} with lien chains)" if _nl else ""))
+            _np = sum(1 for _d in xl if _d.get('phones'))
+            print(f"merged {len(xl)} leads from {os.path.basename(_xf)}" +
+                  (f" ({_nl} with lien chains)" if _nl else "") + (f" ({_np} with phones)" if _np else ""))
         except Exception as e:
             print(f"skip {_xf}: {e}")
 

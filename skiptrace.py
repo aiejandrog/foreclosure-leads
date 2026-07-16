@@ -25,6 +25,7 @@ Usage:
 Compliance: providers filter TCPA-restricted numbers by default (we keep that). Still, dial MANUALLY,
 scrub against the federal DNC list, and never autodial/text these owners (FL FTSA + TCPA).
 """
+import glob as _glob
 import json, os, re, sys, time, argparse
 from datetime import date
 import requests
@@ -35,6 +36,23 @@ RESULTS = os.path.join(HERE, 'skiptrace_results.json')
 UA = 'foreclosure-leads-skiptrace/1.1'
 
 COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|TR|EST|ESTATE)\b', re.I)
+
+
+# ---- schema helpers: work across Miami-Dade (leads_final.json) AND county files (broward/palmbeach_leads.json)
+def _case(r):  return (r.get('Case #', '') or r.get('case', '') or '').strip()
+def _mailaddr(r): return r.get('mailing_address', '') or r.get('mail', '') or ''
+def _propaddr(r): return r.get('Address', '') or r.get('addr', '') or ''
+
+def load_all_leads():
+    """Miami-Dade + every county <name>_leads.json (skip scratch/_-prefixed + the raw MD file), county-tagged."""
+    leads = list(json.load(open(LEADS, encoding='utf-8')))
+    for f in sorted(_glob.glob(os.path.join(HERE, '*_leads.json'))):
+        bn = os.path.basename(f)
+        if bn in ('leads_final.json', 'leads_raw.json') or bn.startswith('_'):
+            continue
+        try: leads.extend(json.load(open(f, encoding='utf-8')))
+        except Exception as e: print(f"skip {bn}: {e}")
+    return leads
 
 
 # ---- providers -------------------------------------------------------------------------------
@@ -106,31 +124,39 @@ def is_company(owner):
     return bool(COMPANY_RE.search(owner or ''))
 
 def parse_addr(s):
-    """PA mailing/site addresses are comma-joined 'Street[, Unit], City, State, Zip'. Parse positionally."""
+    """Parse a comma-joined address across all the formats we produce:
+       Miami-Dade mailing  'Street, City, FL, 33184-2809'  (state as its own part)
+       county mailing (new) 'Street, City, FL 33401'        (state+zip in the last part)
+       county property      'Street, City, 33025'           (no state -> implied FL, all our counties are FL)
+    """
     parts = [p.strip() for p in (s or '').split(',') if p.strip()]
-    if not parts:
+    if len(parts) < 2:
         return None
-    zc = ''
-    m = re.search(r'(\d{5})(?:-\d{4})?$', parts[-1])
-    if m: zc = m.group(1)
-    state = parts[-2] if len(parts) >= 2 and re.fullmatch(r'[A-Za-z]{2}', parts[-2]) else ''
-    if not (zc and state):
+    last = parts[-1]
+    zm = re.search(r'(\d{5})(?:-\d{4})?$', last)
+    if not zm:
         return None
-    city = parts[-3] if len(parts) >= 3 else ''
-    street = ', '.join(parts[:-3]) if len(parts) > 3 else ''
+    zc = zm.group(1)
+    sm = re.search(r'\b([A-Za-z]{2})\b\s+\d{5}', last)                     # "FL 33401" in the last part
+    if sm:
+        state, city, street = sm.group(1).upper(), parts[-2], ', '.join(parts[:-2])
+    elif len(parts) >= 3 and re.fullmatch(r'[A-Za-z]{2}', parts[-2]):      # "..., City, FL, 33184"
+        state, city, street = parts[-2].upper(), parts[-3], ', '.join(parts[:-3])
+    else:                                                                  # "..., City, 33025" -> FL implied
+        state, city, street = 'FL', parts[-2], ', '.join(parts[:-2])
     if not (street and city):
         return None
-    return {'street': street, 'city': city, 'state': state.upper(), 'zip': zc}
+    return {'street': street, 'city': city, 'state': state, 'zip': zc}
 
 def address_for(lead):
     # prefer the mailing address (where the owner actually is, incl. absentee owners), fall back to the property
-    return parse_addr(lead.get('mailing_address', '')) or parse_addr(lead.get('Address', ''))
+    return parse_addr(_mailaddr(lead)) or parse_addr(_propaddr(lead))
 
 def select(leads, args):
     out = []
     for r in leads:
         if args.case:
-            if (r.get('Case #', '') or '') != args.case:
+            if _case(r) != args.case:
                 continue
         elif not args.all:
             if (r.get('tier', '') or '') != args.tier:
@@ -168,11 +194,11 @@ def main():
     provider = pick_provider(args.provider)
     cost_per = PROVIDERS[provider]['cost']
 
-    leads = json.load(open(LEADS, encoding='utf-8'))
+    leads = load_all_leads()                                    # Miami-Dade + Broward + Palm Beach
     results = json.load(open(RESULTS, encoding='utf-8')) if os.path.exists(RESULTS) else {}
 
     picked = select(leads, args)
-    todo = [r for r in picked if args.refresh or (r.get('Case #', '') not in results)]
+    todo = [r for r in picked if args.refresh or (_case(r) not in results)]
     if args.limit:
         todo = todo[:args.limit]
 
@@ -197,12 +223,12 @@ def main():
     s = requests.Session()
     ok = 0
     for i, r in enumerate(todo, 1):
-        case = r.get('Case #', '') or (r.get('Folio', '') or f'row{i}')
+        case = _case(r) or (r.get('Folio', '') or r.get('folio', '') or f'row{i}')
         try:
             phones, emails = trace_one(s, provider, key, r, raw=args.raw)
             results[case] = {
                 'name': (r.get('owners', '') or '').split(';')[0].strip(),
-                'address': r.get('mailing_address', '') or r.get('Address', ''),
+                'address': _mailaddr(r) or _propaddr(r), 'county': r.get('county', 'MIAMI-DADE'),
                 'phones': phones, 'emails': emails, 'traced': f"{date.today():%Y-%m-%d}", 'source': provider,
             }
             if phones: ok += 1

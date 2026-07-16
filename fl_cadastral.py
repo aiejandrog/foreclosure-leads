@@ -57,8 +57,16 @@ def _norm(a):
         v = a.get(k)
         try: return round(float(v)) if v not in (None, '') else 0
         except Exception: return 0
-    mail = ' '.join(str(a.get(k, '') or '') for k in ('OWN_ADDR1', 'OWN_CITY', 'OWN_STATE', 'OWN_ZIPCD')).strip()
-    site = ' '.join(str(a.get(k, '') or '') for k in ('PHY_ADDR1', 'PHY_CITY', 'PHY_ZIPCD')).strip()
+    # Clean, comma-delimited addresses matching the Miami-Dade format ("STREET, CITY, FL ZIP") — the raw
+    # cadastral spells the state "Florida" with no commas, which read as broken in the Mailing column.
+    def _addr(street_k, city_k, state_k, zip_k=None):
+        st = str(a.get(state_k, '') or '').strip() if state_k else 'FL'
+        if st.upper() in ('FL', 'FLORIDA'): st = 'FL'
+        z = str(a.get(zip_k, '') or '').strip() if zip_k else ''
+        parts = [str(a.get(street_k, '') or '').strip(), str(a.get(city_k, '') or '').strip(), (st + ' ' + z).strip()]
+        return re.sub(r'\s{2,}', ' ', ', '.join(p for p in parts if p)).strip()
+    mail = _addr('OWN_ADDR1', 'OWN_CITY', 'OWN_STATE', 'OWN_ZIPCD')
+    site = _addr('PHY_ADDR1', 'PHY_CITY', None, 'PHY_ZIPCD')
     return {
         'parcel_id': a.get('PARCEL_ID', ''), 'county_no': a.get('CO_NO'),
         'owner': (a.get('OWN_NAME') or '').strip(),
