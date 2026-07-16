@@ -583,12 +583,42 @@ def _load_codes():
     return []
 
 def _fc_type(case):
-    """Classify a foreclosure by its court case number. HOA/county-court cases foreclose a small assessment
-    and the WHOLE first mortgage SURVIVES the sale; circuit cases ARE the mortgage foreclosure.
-    Broward/PB: CACE=circuit(mortgage), COCE/CONO/COWE/COSO=county(HOA). Miami-Dade: -CA-=circuit, -CC-=county."""
+    """FALLBACK-ONLY classifier from the court case number, used when no plaintiff is available. The prefix
+    is a POOR proxy — HOAs routinely foreclose in CIRCUIT court (a CACE number), so a CACE is NOT reliably a
+    mortgage foreclosure. Prefer _fc_type_plaintiff() (the real signal) whenever a plaintiff name is known.
+    Broward/PB: CACE=circuit, COCE/CONO/COWE/COSO=county. Miami-Dade: -CA-=circuit, -CC-=county."""
     c = (case or '').upper()
     if c.startswith('CACE') or '-CA-' in c: return 'MORTGAGE'
     if c.startswith(('COCE', 'CONO', 'COWE', 'COSO')) or '-CC-' in c: return 'HOA'
+    return ''
+
+
+# --- TRUE foreclosure type from the PLAINTIFF name (mirrors broward_liens._fc_type_plaintiff) ------
+# Who is foreclosing decides the type, not the case-number prefix: HOAs sue in circuit court constantly.
+# BANK-CHARTER GUARD WINS FIRST so a national-bank trustee ("U S BANK TRUST COMPANY NATIONAL ASSN") is
+# never misread as an HOA just because its charter name ends in "ASSN".
+_BANK_RE = re.compile(
+    r'\bBANK\b|\bN\.?\s?A\.?\b|NATIONAL\s+ASS(?:N|OC(?:IATION)?)|\bTRUST(?!EES?\s+OF)|\bSAVINGS\b|'
+    r'\bMORTGAGE\b|\bLOANS?\b|\bFINANCIAL\b|\bFUNDING\b|\bSERVICING\b|\bFEDERAL\b|CREDIT\s+UNION|'
+    r'\bFANNIE\b|\bFREDDIE\b|\bFNMA\b|\bFHLMC\b', re.I)
+_HOA_RE = re.compile(
+    r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|\bVILLAS?\b|COMMUNITY|PROPERTY\s+OWNERS?|'
+    r'TOWNHO|MAINTENANCE', re.I)
+_ASSN_RE = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
+_LENDER_CORP_RE = re.compile(r'\bLLC\b|\bL\.?\s?P\.?\b|\bLLP\b', re.I)
+
+
+def _fc_type_plaintiff(plaintiff):
+    """'MORTGAGE' | 'HOA' | '' from a foreclosure plaintiff name. Bank-charter guard wins first."""
+    p = (plaintiff or '').upper()
+    if not p.strip():
+        return ''
+    if _BANK_RE.search(p):
+        return 'MORTGAGE'
+    if _HOA_RE.search(p) or _ASSN_RE.search(p):
+        return 'HOA'
+    if _LENDER_CORP_RE.search(p):
+        return 'MORTGAGE'
     return ''
 
 
@@ -692,11 +722,17 @@ def make_tracker(leads):
                 try: xrl = json.load(open(_lf, encoding='utf-8'))
                 except Exception: xrl = {}
             for _d in xl:
-                _cft = _fc_type(_d.get('case', ''))
-                if _cft:                                             # case-type classification works with zero records
-                    _d['ftype'] = _cft
-                    if _cft == 'HOA': _d['ctype'] = 'HOA'; _d['mr'] = True   # first mortgage survives an HOA sale
                 _h = xrl.get(_d.get('case', ''))
+                # TRUE type: the recorded-chain plaintiff (broward_liens.analyze -> _h['ftype']) is
+                # authoritative and OVERRIDES the case-number prefix, which mislabels HOA-in-circuit-court
+                # cases (CACE) as MORTGAGE. The slim lead's own plaintiff-or-prefix guess is the next
+                # fallback (when no chain was traced), then the bare prefix as a last resort.
+                _cft = (_h.get('ftype') if _h else '') or _d.get('ftype') or _fc_type(_d.get('case', ''))
+                if _cft == 'HOA':
+                    _d['ftype'] = 'HOA'; _d['ctype'] = 'HOA'; _d['mr'] = True   # whole 1st mortgage survives an HOA sale
+                elif _cft == 'MORTGAGE':
+                    _d['ftype'] = 'MORTGAGE'; _d['mr'] = False                  # a real mortgage foreclosure — direct equity
+                    if (_d.get('ctype') or '').upper().startswith('HOA'): _d['ctype'] = 'Bank/Mortgage'
                 if _h and _h.get('liens'):
                     _d['orliens'] = _h.get('liens', [])
                     _d['orjunior'] = _h.get('junior', 0)

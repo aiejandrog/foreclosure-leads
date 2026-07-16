@@ -131,8 +131,9 @@ INVESTOR_RE = re.compile(r'\bLAND\s*TR(?:UST)?\b|\bLLC\b|\bINC\b|\bCORP\b|\bL\.?
 
 
 def _fc_type(case):
-    """Classify a foreclosure by its court case number. HOA/county-court cases foreclose a small assessment
-    and the WHOLE first mortgage survives the sale; circuit cases ARE the mortgage foreclosure."""
+    """FALLBACK-ONLY classifier: guess from the court case number when we have no plaintiff to read.
+    The prefix is a POOR proxy — HOAs routinely foreclose in CIRCUIT court (a CACE number), so a CACE is
+    NOT reliably a mortgage foreclosure. Prefer _plaintiff_ftype() (below) whenever the chain is available."""
     c = (case or '').upper()
     if c.startswith('CACE'):                       # Broward/PB circuit civil
         return 'MORTGAGE'
@@ -145,10 +146,64 @@ def _fc_type(case):
     return ''
 
 
+# --- TRUE foreclosure type from the PLAINTIFF name -----------------------------------------------
+# The real signal isn't the case-number prefix, it's who is foreclosing. HOAs sue in circuit court all
+# the time (CACE-26-000767 = SANDPIPER COVE HOMEOWNERS ASSN), so the plaintiff, not the prefix, decides.
+# BANK-CHARTER GUARD WINS FIRST so a national-bank trustee ("U S BANK TRUST COMPANY NATIONAL ASSN") is
+# never misread as an HOA just because its charter name ends in "ASSN".
+_BANK_RE = re.compile(
+    r'\bBANK\b|\bN\.?\s?A\.?\b|NATIONAL\s+ASS(?:N|OC(?:IATION)?)|\bTRUST(?!EES?\s+OF)|\bSAVINGS\b|'
+    r'\bMORTGAGE\b|\bLOANS?\b|\bFINANCIAL\b|\bFUNDING\b|\bSERVICING\b|\bFEDERAL\b|CREDIT\s+UNION|'
+    r'\bFANNIE\b|\bFREDDIE\b|\bFNMA\b|\bFHLMC\b', re.I)
+_HOA_RE = re.compile(
+    r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|\bVILLAS?\b|COMMUNITY|PROPERTY\s+OWNERS?|'
+    r'TOWNHO|MAINTENANCE', re.I)
+# a bare ASSN/ASSOC(IATION) counts as HOA only when NOT preceded by NATIONAL (that's a bank charter, above)
+_ASSN_RE = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
+# a bare corporate note-holder (LLC/LP) with no association term is a lender/note-buyer, not an HOA
+_LENDER_CORP_RE = re.compile(r'\bLLC\b|\bL\.?\s?P\.?\b|\bLLP\b', re.I)
+
+
+def _fc_type_plaintiff(plaintiff):
+    """'MORTGAGE' | 'HOA' | '' from a foreclosure plaintiff name. Bank-charter guard wins first."""
+    p = (plaintiff or '').upper()
+    if not p.strip():
+        return ''
+    if _BANK_RE.search(p):
+        return 'MORTGAGE'
+    if _HOA_RE.search(p) or _ASSN_RE.search(p):
+        return 'HOA'
+    if _LENDER_CORP_RE.search(p):                   # "... LLC/LP" as a lender, no association terms
+        return 'MORTGAGE'
+    return ''
+
+
+def _plaintiff_ftype(docs, lc):
+    """TRUE type from the plaintiff (CrossPartyName) on the chain rows whose CaseNumber == the lead case.
+    A bank-charter plaintiff on ANY such row is decisive (returns MORTGAGE); else an association plaintiff
+    yields HOA; else '' (unknown -> caller falls back to the case-number prefix)."""
+    if not lc:
+        return ''
+    result = ''
+    for d in docs or []:
+        if (d.get('CaseNumber') or '').upper() != lc:
+            continue
+        t = _fc_type_plaintiff(d.get('CrossPartyName'))
+        if t == 'MORTGAGE':
+            return 'MORTGAGE'                       # bank/lender plaintiff — decisive
+        if t == 'HOA':
+            result = 'HOA'
+    return result
+
+
 def analyze(docs, owner, judgment, ftype='', lead_case=''):
     """Open-mortgage picture + deal-killer flags for the subject owner. Precision > recall: guards force
     conf='low' on common names / MERS ambiguity so we never assert a fantasy (the template shows low-conf
     flags as 'possible - verify', never solid red)."""
+    lc = (lead_case or '').upper()
+    # TRUE type from the plaintiff on THIS case's rows overrides the case-number prefix guess passed in as
+    # `ftype` (which mislabels HOA-in-circuit-court cases as MORTGAGE). Prefix stays as the fallback.
+    ftype = _plaintiff_ftype(docs, lc) or ftype
     key = _lf(owner)
     base = {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'surv': 0, 'surv_first': 0,
             'ftype': ftype, 'deeded': None, 'deed_conf': '', 'second_fc': None, 'conf': 'none', 'nrec': 0}
@@ -200,7 +255,6 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
     # --- already deeded to another investor? (the McNulty / "you're too late" signal) -----------
     # "Recent" is anchored to THIS foreclosure's lis-pendens (a deed only counts if it post-dates the filing),
     # else ~1 year before the newest record on file — never the earliest old lien in a decades-long chain.
-    lc = (lead_case or '').upper()
     latest = max([_jsdate(d.get('RecordDate')) for d in docs] or ['2026-01-01'])
     floor = str(int(latest[:4]) - 1) + latest[4:]
     lp = [_jsdate(d.get('RecordDate')) for d in exact

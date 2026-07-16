@@ -105,7 +105,10 @@ def to_slim(county, cfg, base, items):
     for r in items:
         folio = re.sub(r'\D', '', r.get('Folio', '') or '')
         judg = F.money(r.get('Final Judgment Amount', ''))
-        ftype = F._fc_type(r.get('Case #', ''))          # HOA (whole 1st mortgage survives) vs MORTGAGE foreclosure
+        # TRUE type from the auction plaintiff (bank-charter guard wins first); the case-number prefix is
+        # only the fallback when the auction gives no plaintiff. The recorded-chain plaintiff later overrides
+        # this in make_tracker() for any lead we actually trace (broward_liens).
+        ftype = F._fc_type_plaintiff(r.get('Plaintiff', '')) or F._fc_type(r.get('Case #', ''))
         addr = F._clean_addr(r.get('Address', ''))
         val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''
         if folio:
