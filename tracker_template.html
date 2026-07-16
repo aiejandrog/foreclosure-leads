@@ -530,6 +530,15 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 .links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:600}
 .links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
 .links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
+/* compliance gates: DNC numbers are visible but NOT dialable; opted-out leads show a hard stop */
+span.phone.nodial{color:var(--amber-ink);text-decoration:line-through;cursor:not-allowed;opacity:.85}
+span.phone.dncgate{color:#e05252;font-weight:700;cursor:not-allowed}
+/* Plan-today action sheet */
+.planls{list-style:none;margin:4px 0 10px;padding:0}
+.planls li{padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45}
+.planls li .mut{font-size:12px}
+.planlog{margin-top:3px;padding:2px 9px;font-size:11px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);color:var(--ink);cursor:pointer}
+.planlog:hover{background:var(--surface-2)}
 .links a.email,.clinks a.email{color:#5a7db0;font-weight:600;word-break:break-all}
 /* links laid out as clean even bands, one functional group per row (phones · investigate · property · actions) */
 .links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 13px;line-height:1.35}
@@ -656,6 +665,7 @@ body.modal-open{overflow:hidden}
 </div></div>
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
+<div id="planmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="planbody"></div></div></div>
 <div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
 <header>
 <div class="brand">
@@ -678,6 +688,7 @@ body.modal-open{overflow:hidden}
 <button id="hf" title="Hide leads the records already flagged as dead: already deeded to another investor, or an HOA case hiding a mortgage bigger than the equity (underwater). Off by default so nothing disappears silently.">Hide flagged</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
+<button id="plan" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script.">📋 Plan today</button>
 <button id="due" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days">⚡ Due</button>
 <input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list.">
 <label style="font-size:12px">Sort <select id="sortby">
@@ -992,7 +1003,7 @@ function closeDealModal(){ dealModalCase=null; document.getElementById('dealmoda
 function _today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
 function _rel(iso){ const n=_dneg(iso); if(n===null) return ''; if(n===0) return 'today'; return n<0 ? (-n)+'d ago' : 'in '+n+'d'; }
-const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}'};
+const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}', door:'\u{1f6aa}'};
 function contactChip(r){
   const n=notes[r.case]||{}, ts=n.touches||[]; let h='';
   if(ts.length){ const last=ts[ts.length-1];
@@ -1002,8 +1013,87 @@ function contactChip(r){
   return h;
 }
 function _setNext(n, days){ if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.touches=n.touches||[]; n.touches.push({d:_today(), ch:ch, out:out}); if(opt.status) n.status=opt.status; if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); }
+function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.touches=n.touches||[]; n.touches.push({d:_today(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout) n.optout=_today(); } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); }
 function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
+// ---- cadence engine: WHICH channel WHEN, keyed to days-until-auction + touch history. ----
+// Content-agnostic by design: Jose sends mail/email using HIS OWN script — this only schedules.
+// Rules from the verified research: mail needs >=~5 business days to land (else door replaces it);
+// mail-then-door beats either alone; warm responders get the phone; never go quiet inside the window.
+function nextAction(r){
+  const n=notes[r.case]||{}, ts=n.touches||[];
+  if(n.status==='DO NOT CONTACT' || n.status==='Dead') return null;
+  const days=r.days;
+  if(days<0) return {ch:'surplus', lbl:'Auction passed — surplus check', why:'if it sold above the debt the owner is owed the surplus (Fla. Stat. 45.032)'};
+  const mailOK = days>=7;                        // ~5 business days of USPS runway
+  const cnt = c => ts.filter(t=>t.ch===c).length;
+  const doorN=cnt('door'), mailN=cnt('letter');
+  const spoke = ts.some(t=>/spoke|talked|callback/i.test(t.out||''));
+  if(spoke) return {ch:'call', lbl:'Warm follow-up — they engaged', why:'responder: your script, human pace'};
+  if(!ts.length) return mailOK
+    ? {ch:'letter', lbl:'Mail #1 (your script)'+(days<=30?' + plan the door':''), why:'first touch — a letter lands in 2-5 days'}
+    : {ch:'door', lbl:'DOOR — only '+days+'d left, mail too slow', why:'letters cannot arrive before the sale'};
+  const last=ts[ts.length-1], age=-_dneg(last.d);
+  if(mailN>=1 && doorN===0 && age>=2) return {ch:'door', lbl:'Door knock #1 — letter has landed', why:'mail-then-door converts best'};
+  if(doorN>=1 && mailN<2 && mailOK && age>=3) return {ch:'letter', lbl:'Mail #2 (different look, your script)', why:'keep warm through the window'};
+  if(doorN===1 && age>=5) return {ch:'door', lbl:'Door knock #2', why:'recognition compounds — you are not a stranger now'};
+  if(age>=4) return mailOK
+    ? {ch:'letter', lbl:'Next touch — mail or email (your script)', why:'do not go quiet inside the window'}
+    : {ch:'door', lbl:'Door again — inside the mail window', why:'do not go quiet inside the window'};
+  return null;                                   // touched recently; nothing due yet
+}
+const NA_ICON = {letter:'✉', door:'\u{1f6aa}', call:'☎', surplus:'\u{1f4b0}'};
+function planRows(){
+  const today=_today();
+  const due=[];
+  DATA.forEach(r=>{
+    const n=notes[r.case]||{};
+    if(n.status==='DO NOT CONTACT'||n.status==='Dead') return;
+    const a=nextAction(r); if(!a) return;
+    const fuDue = n.next && n.next<=today;
+    const started = !!(n.touches||[]).length;
+    // fresh leads only enter the plan when they're worth a two-person day: value known, inside 30
+    // days, and not already flagged dead by the records
+    const fresh = !started && r.value>0 && r.days>=0 && r.days<=30 && !(typeof isFlaggedDead==='function' && isFlaggedDead(r));
+    if(fuDue || (started && a) || fresh) due.push({r:r, a:a, fu:fuDue,
+      _p:(fuDue?0:started?1:2)*1e9 + (r.days<0?999:r.days)*1e6 - Math.min(999999,Math.round((r.value-(r.judg||0))/1000))});
+  });
+  due.sort((x,y)=> x._p - y._p);          // follow-ups first, then in-progress, then fresh; near auctions + big equity first
+  return due;
+}
+const PLAN_CAP = 40;                       // a day two people can actually work; the rest is shown as a count
+function planModalBody(){
+  const all=planRows();
+  if(!all.length) return '<div class="dm-head"><div class="dm-title">Plan today</div></div><div class="mut" style="padding:10px 2px">Nothing due — every live lead was touched recently. Come back tomorrow.</div>';
+  const due=all.slice(0,PLAN_CAP), hidden=all.length-due.length;
+  const grp={door:[],letter:[],call:[],surplus:[]};
+  due.forEach(d=>{ (grp[d.a.ch]=grp[d.a.ch]||[]).push(d); });
+  const sec=(title,arr,hint)=>{
+    if(!arr||!arr.length) return '';
+    let h='<div class="dm-sec">'+title+' ('+arr.length+')'+(hint?' <span class="mut" style="font-weight:400">— '+hint+'</span>':'')+'</div><ul class="planls">';
+    arr.forEach(d=>{
+      const r=d.r, city=(r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||[])[1]||'';
+      h+='<li><b>'+esc((r.owners||'').split(';')[0].split('&')[0].trim())+'</b> · '+esc(r.addr)
+        +' · <b>'+(r.days>=0?r.days+'d to auction':'passed')+'</b>'
+        +(d.fu?' · <span class="cx cx-due">follow-up due</span>':'')
+        +'<div class="mut">'+esc(d.a.lbl)+' — '+esc(d.a.why)+'</div>'
+        +'<button class="planlog" data-c="'+esc(r.case)+'" type="button">open log</button></li>';
+    });
+    return h+'</ul>';
+  };
+  // door leads grouped roughly by city so a knock route falls out of the list order
+  grp.door.sort((a,b)=>{ const ca=(a.r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||['',''])[1], cb=(b.r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||['',''])[1]; return ca<cb?-1:ca>cb?1:a.r.days-b.r.days; });
+  const txt = due.map(d=>{ const r=d.r; return (NA_ICON[d.a.ch]||'')+' '+(r.owners||'').split(';')[0].split('&')[0].trim()+' — '+r.addr+' — '+(r.days>=0?r.days+'d':'passed')+' — '+d.a.lbl; }).join('\n');
+  return '<div class="dm-head"><div class="dm-title">Plan today — top '+due.length+' action'+(due.length>1?'s':'')+'</div>'
+    +'<div class="dm-sub">Ranked: follow-ups due, then in-progress, then fresh — nearest auction + biggest equity first. '
+    +(hidden>0?'<b>'+hidden+' more</b> are due but not shown (finish these first). ':'')
+    +'Channel + timing only — the words are your script. '+copyBtn(txt,'the whole plan as text')+' copy list</div></div>'
+    + sec('\u{1f6aa} DOOR (grouped by city — drive this order)', grp.door, 'weekday 4-6pm or Sat 10-2')
+    + sec('✉ MAIL — send with your script', grp.letter, 'hand-addressed, real stamp, no logo')
+    + sec('☎ WARM follow-ups (responders only)', grp.call, 'manual dial, 8am-8pm')
+    + sec('\u{1f4b0} SURPLUS checks', grp.surplus, '');
+}
+function openPlanModal(){ document.getElementById('planbody').innerHTML=planModalBody(); document.getElementById('planmodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function closePlanModal(){ document.getElementById('planmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
 const QUICKLOG=[
   {lbl:'☎ No answer', ch:'call', out:'no answer', status:'Called - no answer', nextDays:2},
   {lbl:'☎ Left message', ch:'call', out:'left message', status:'Called - no answer', nextDays:3},
@@ -1012,6 +1102,9 @@ const QUICKLOG=[
   {lbl:'✉ Emailed', ch:'email', out:'emailed', nextDays:4},
   {lbl:'✉ Letter sent', ch:'letter', out:'letter sent', status:'Letter sent', nextDays:7},
   {lbl:'\u{1f4ac} Texted', ch:'text', out:'texted', nextDays:3},
+  {lbl:'\u{1f6aa} Door — no answer', ch:'door', out:'knocked, no answer (hanger left)', status:'Door - no answer', nextDays:3},
+  {lbl:'\u{1f6aa} Door — spoke', ch:'door', out:'knocked, spoke with owner', status:'Door - spoke', nextDays:1},
+  {lbl:'⛔ Said STOP', ch:'call', out:'asked to stop all contact', status:'DO NOT CONTACT', next:''},
   {lbl:'✕ Not interested', ch:'call', out:'not interested', status:'Dead', next:''}
 ];
 function logModalBody(r){
@@ -1039,6 +1132,8 @@ document.addEventListener('click', e => {
   if(fs){ e.preventDefault(); const n=notes[fs.dataset.c]=notes[fs.dataset.c]||{status:'',note:''}; _setNext(n, +fs.dataset.d); save(); refreshLogModal(); render(); return; }
   const un=e.target.closest && e.target.closest('.lundo');
   if(un){ e.preventDefault(); const n=notes[un.dataset.c]; if(n&&n.touches&&n.touches.length){ n.touches.pop(); save(); refreshLogModal(); render(); } return; }
+  const pl=e.target.closest && e.target.closest('.planlog');
+  if(pl){ e.preventDefault(); closePlanModal(); openLogModal(pl.dataset.c); return; }
 });
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
@@ -1392,16 +1487,24 @@ function render(){
     const n = notes[r.case] || {status:'', note:''};
     // ---- links, grouped by purpose:  CALL (green) · INVESTIGATE (gold) · PROPERTY (slate) · DO ----
     const gCall = [], gDig = [], gProp = [], gDo = [];
-    // CALL — skip-traced + saved phones. Manual dial only; DNC-flagged in amber.
-    (r.phones||[]).slice(0,3).forEach((ph,i) => {
-      const dnc = (r.phdnc||[])[i];
-      gCall.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">'+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
-    });
-    if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">'+esc(fmtPhone(n.phone))+'</a>');
-    // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
-    (r.emails||[]).slice(0,2).forEach(em => {
-      gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
-    });
+    // CALL — skip-traced + saved phones. HARD DNC GATE: DNC-flagged numbers render as non-clickable
+    // text (no tel:) so a flagged number can't be tap-dialed by accident. Even manual calls to
+    // DNC-registered numbers are actionable — Duguid only killed the autodialer theory, not DNC.
+    const optedOut = n.status === 'DO NOT CONTACT';
+    if(optedOut){
+      gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
+    } else {
+      (r.phones||[]).slice(0,3).forEach((ph,i) => {
+        const dnc = (r.phdnc||[])[i];
+        if(dnc) gCall.push('<span class="phone dnc nodial" title="DNC-registered — DO NOT DIAL (manual dials to DNC numbers are still actionable). Reach this owner by mail or the door instead.">'+esc(fmtPhone(ph))+' (DNC — mail/door only)</span>');
+        else gCall.push('<a class="phone" href="tel:'+esc(ph)+'" title="Skip-traced owner phone — manual dial only, one number at a time, 8am-8pm">'+esc(fmtPhone(ph))+'</a>');
+      });
+      if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a>');
+      // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
+      (r.emails||[]).slice(0,2).forEach(em => {
+        gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
+      });
+    }
     // INVESTIGATE — the owner's people, their loans, their other cases, this docket.
     if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
     if(r.peopleaddr) gDig.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
@@ -1421,11 +1524,14 @@ function render(){
     // LOOK dead from a script — it isn't. May need a free RealForeclose login for bid detail, and the
     // site can be geo-restricted outside the US (e.g. abroad), so we don't gate the button on a probe.
     if(r.auc) gProp.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
-    // DO — actions.
-    gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
-    gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
-    gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
-    gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter, set a follow-up date, and see the contact history for this lead">Log</a>');
+    // DO — actions. Outreach generators are suppressed once a lead opts out (only Log/Copy remain,
+    // so the opt-out itself stays auditable).
+    if(!optedOut){
+      gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
+      gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
+      gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
+    }
+    gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
     gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
@@ -1472,7 +1578,7 @@ function render(){
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
-    const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'];
+    const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
                 : (n.status==='Appointment'||n.status==='Called - talked') ? 'st-hot'
                 : (n.status ? 'st-active' : '');
@@ -1588,6 +1694,7 @@ document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.cl
 document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
 document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
 document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
+document.getElementById('plan').onclick = () => openPlanModal();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
 // collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
 (function(){
@@ -1998,7 +2105,7 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); }
 });
 document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); } });
 // "/" focuses search (unless already typing in a field)
@@ -2010,7 +2117,14 @@ document.addEventListener('keydown', e => {
 document.addEventListener('change', e => {
   const c = e.target.dataset && e.target.dataset.c; if(!c) return;
   notes[c] = notes[c] || {status:'', note:''};
-  if(e.target.classList.contains('status')) { notes[c].status = e.target.value; save(); render(); return; }
+  if(e.target.classList.contains('status')) {
+    notes[c].status = e.target.value;
+    // opt-out ledger: stamp the date a lead says stop (FTSA 15-day cure / provable-compliance evidence);
+    // clear the stamp only if the status is deliberately moved off DO NOT CONTACT.
+    if(e.target.value === 'DO NOT CONTACT'){ if(!notes[c].optout) notes[c].optout = _today(); }
+    else if(notes[c].optout) delete notes[c].optout;
+    save(); render(); return;
+  }
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
   else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
   else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
