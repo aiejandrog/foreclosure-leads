@@ -2,6 +2,9 @@ leads_raw.json
 leads_final.json
 _check.js
 _*.py
+_*.html
+_*.json
+_*.txt
 *.csv
 __pycache__/
 browser-profile/
@@ -23,3 +26,4 @@ health.json
 captcha.key
 broward_leads.json
 *_leads.json
+*_liens.json

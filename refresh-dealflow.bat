@@ -39,6 +39,8 @@ python gen_records_qs.py --limit 40 >> "%LOG%" 2>&1
 
 echo [2b/5] Pulling recorded mortgage chains -> surviving 2nd mortgages (cached tokens; fast, no bot-wall)...
 python records_liens.py --all --cached-only >> "%LOG%" 2>&1
+rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
+if exist broward_leads.json python broward_liens.py --all >> "%LOG%" 2>&1
 
 echo [3/5] Skip-tracing owner phones...
 if exist tracerfy.key goto :phones

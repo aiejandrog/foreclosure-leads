@@ -657,8 +657,22 @@ def make_tracker(leads):
             continue
         try:
             xl = json.load(open(_xf, encoding='utf-8'))
+            # Bake the recorded lien chain for this county if a sibling <county>_liens.json exists
+            # (broward_liens.py etc.) — same schema/fields as Miami-Dade's records_liens merge above.
+            _lf = _xf[:-len('_leads.json')] + '_liens.json'
+            xrl = {}
+            if os.path.exists(_lf):
+                try: xrl = json.load(open(_lf, encoding='utf-8'))
+                except Exception: xrl = {}
+            for _d in xl:
+                _h = xrl.get(_d.get('case', ''))
+                if _h and _h.get('liens'):
+                    _d['orliens'] = _h.get('liens', [])
+                    _d['orjunior'] = _h.get('junior', 0)
+                    _d['orconf'] = _h.get('conf', '')
             slim.extend(xl)
-            print(f"merged {len(xl)} leads from {os.path.basename(_xf)}")
+            _nl = sum(1 for _d in xl if _d.get('orliens'))
+            print(f"merged {len(xl)} leads from {os.path.basename(_xf)}" + (f" ({_nl} with lien chains)" if _nl else ""))
         except Exception as e:
             print(f"skip {_xf}: {e}")
 

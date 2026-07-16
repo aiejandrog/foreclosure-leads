@@ -55,10 +55,22 @@ Parallel recon mapped all 8 data sources for Broward + Palm Beach (2026-07-16). 
   (countyname.realforeclose.com, browser-render like Miami-Dade). Broward folio=12-digit, PB PCN=17-digit.
 - [x] Broward auction scrape (broward.py) + statewide-cadastral enrich + make_tracker merge + a
       county filter/chip on the site. LIVE: 209 Broward leads (100 enriched, 42 Tier A). 490 leads total.
-- [ ] Broward clerk enrichment (CaseSearchECA API) + lien feed (free bulk OR index).
+- [x] **Broward lien chain — THE Pillar-1 win for county #2 (`broward_liens.py`).** Broward's Official
+      Records (AcclaimWeb) is DISCLAIMER-gated, NOT reCAPTCHA-gated — so unlike Miami-Dade we get the full
+      recorded mortgage/satisfaction chain per owner. (Cloudflare blocks python-requests + headless + curl_cffi;
+      the native Windows curl binary passes, so the module shells out to curl. `Search/GridResults` returns
+      clean Telerik JSON.) Conservative analyze() mirrors records_liens.py: exact (last,first) + borrower-side
+      (Party="From") + same-institution satisfaction match + hard guards (common name / MERS / >3 open → conf
+      'low'). Batch: 193 traced, 57 lien chains on the site, **5 confident surviving-2nds** (GEDEUS $88k,
+      ARZOLA $60k, KREHMEYER $55k, …). Wired into make_tracker via a generic `<county>_liens.json` merge +
+      refresh-dealflow.bat. So Broward's equity number is now backed by real records, not a guess.
 - [x] Multi-county data model: leads tagged by county; auto-populated county filter + BROWARD chip.
-- [ ] In-site lookup → statewide via fl_cadastral for non-Miami-Dade (MD keeps its richer GIS).
-- [ ] Palm Beach second (auctions + fl_cadastral enrich; clerk/liens browser-gated like Miami-Dade).
+- [x] In-site lookup → statewide via fl_cadastral for non-Miami-Dade (MD keeps its richer GIS). Any FL
+      address/parcel resolves; Promise.race hard-timeout so a slow/down free host degrades to "No match"
+      instead of hanging; report header is county-aware (no more "Miami-Dade" on a Broward lookup).
+- [x] Palm Beach second (auctions + fl_cadastral enrich; clerk/liens browser-gated like Miami-Dade).
+      LIVE: 155 PB leads (133 enriched, 57 Tier A). PB records ARE captcha-walled (Landmark reCAPTCHA) so
+      PB liens are the next target — the Broward curl-session pattern won't port (different vendor).
 
 ## Pillar 4 — DEPTH  *(from the original roadmap, sequence after 1–3)*
 - [ ] Surplus-recovery module (capital-light income: former-owner surplus after over-bid sales).

@@ -1,0 +1,239 @@
+"""Pillar 3 (Broward) — pull the recorded mortgage/lien chain for Broward leads. No captcha.
+
+Broward's Official Records (AcclaimWeb, officialrecords.broward.org) is DISCLAIMER-gated but NOT
+reCAPTCHA-gated — unlike Miami-Dade's wall that caps us at 62%. The catch: Cloudflare bot-management
+blocks python-requests' TLS fingerprint AND headless browsers AND curl_cffi's chrome impersonation;
+only the native Windows curl binary (Schannel TLS) passes. So this shells out to `curl`.
+
+Flow (one session):  GET Disclaimer -> POST disclaimer=true -> per owner: POST name search
+(all doc/book types) -> POST Search/GridResults (Telerik JSON). GridResults returns
+  {data:[{Name,Party,CrossPartyName,RecordDate,BookPage,InstrumentNumber,Consideration,
+          DocTypeDescription,DocLegalDescription,ParcelNumber,...}], total}.
+
+analyze() mirrors records_liens.py — PRECISION OVER RECALL. Broward has no folio on the docs and
+common names return decades of unrelated people, so we isolate by EXACT (last, first) name + the
+borrower side, mark a mortgage OPEN unless a later same-institution satisfaction/release exists, and
+apply hard confidence guards (common name / MERS ambiguity -> conf='low', no surviving-2nd number).
+Output -> broward_liens.json (gitignored), keyed by Case #, SAME schema as records_liens.json so
+make_tracker bakes orliens/orjunior/orconf for Broward leads exactly like Miami-Dade.
+
+Usage:
+  python broward_liens.py --case CACE-24-003040       # one lead (prove it)
+  python broward_liens.py --tier A                     # a tier
+  python broward_liens.py --all                        # every human-owner Broward lead not yet traced
+  python broward_liens.py --all --limit 20             # cap the run
+"""
+import argparse, json, os, re, subprocess, tempfile, time
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+LEADS = os.path.join(HERE, 'broward_leads.json')
+OUT = os.path.join(HERE, 'broward_liens.json')          # Case # -> lien result (gitignored)
+BASE = 'https://officialrecords.broward.org/AcclaimWeb'
+JAR = os.path.join(tempfile.gettempdir(), 'brw_liens_cookies.txt')
+UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|USA|COUNTY|CITY OF|CHURCH|'
+                        r'MINISTR|ESTATE OF|PROPERT|REALTY|CAPITAL|FUND|INVEST|HOMES|ENTERPRISE|PARTNERS|MGMT|'
+                        r'MANAGEMENT|VENTURES|GROUP|EQUITIES|ACQUISITION|WORSHIP|TABERNACLE|TEMPLE|CONGREGATION)\b', re.I)
+MERS_RE = re.compile(r'ELECTRONIC REGISTRATION|\bMERS\b|MORTGAGE ELECTRONIC', re.I)
+# fixed "all document/book types" code lists (from the SearchTypeName form; stable). Fetched live at
+# session start when possible, else these fallbacks keep the search valid.
+DOCTYPES_FALLBACK = ('174,175,173,176,177,178,163,171,165,137,172,168,169,166,167,190,189,170,230,155,162,164,'
+    '139,138,131,132,134,133,135,136,157,154,156,158,153,112,151,152,161,224,160,159,181,229,147,144,145,141,'
+    '142,148,143,150,146,186,227,226,228,127,129,130,128,123,187,188,179,122,124,126,125,118,120,121,119,180,'
+    '113,114,115,116')
+BOOKTYPES_FALLBACK = '2,11,20,27,32,28,33'
+
+
+# ---- curl transport (only fingerprint Cloudflare lets through here) ---------------------------
+def _curl(url, post=None, timeout=45):
+    cmd = ['curl', '-s', '-m', str(timeout), '-A', UA, '-c', JAR, '-b', JAR,
+           '-H', 'Accept: text/html,application/json,*/*;q=0.8', '-H', 'Accept-Language: en-US,en;q=0.9']
+    if post is not None:
+        cmd += ['-X', 'POST', '-H', 'Content-Type: application/x-www-form-urlencoded',
+                '-H', 'X-Requested-With: XMLHttpRequest', '-H', 'Referer: ' + BASE + '/Search/SearchTypeName']
+        for k, v in post:
+            cmd += ['--data-urlencode', f'{k}={v}']
+    cmd += [url]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout + 10)
+        return r.stdout or ''
+    except Exception:
+        return ''
+
+
+def start_session():
+    """Accept the disclaimer and read the all-types code lists off the search form."""
+    _curl(BASE + '/Search/Disclaimer')
+    _curl(BASE + '/Search/Disclaimer', post=[('disclaimer', 'true')])
+    form = _curl(BASE + '/Search/SearchTypeName')
+    if 'SearchOnName' not in form:
+        return None                                    # blocked / no session
+    dts = ','.join(dict.fromkeys(re.findall(r'name="DocTypeInfoCheckBox"[^>]*value="(\d+)"', form))) or DOCTYPES_FALLBACK
+    bts = ','.join(dict.fromkeys(re.findall(r'name="BookTypeInfoCheckBox"[^>]*value="(\d+)"', form))) or BOOKTYPES_FALLBACK
+    return {'doctypes': dts, 'booktypes': bts}
+
+
+def search_docs(sess, search_name):
+    """Run a name search and return the full document list (list of dicts) or None if blocked."""
+    resp = _curl(BASE + '/Search/SearchTypeName?Length=6', post=[
+        ('PartyType', 'Both'), ('SearchOnName', search_name), ('IsParsedName', 'false'),
+        ('AllowAutoCompleteCB', 'false'), ('DateRangeList', ' '),
+        ('DocTypes', sess['doctypes']), ('DocTypesDisplay-input', 'All'), ('DocTypesDisplay', 'All'),
+        ('BookTypes', sess['booktypes']), ('BookTypesDisplay', 'All'),
+        ('RecordDateFrom', '1/1/1985'), ('RecordDateTo', time.strftime('%-m/%-d/%Y') if os.name != 'nt' else time.strftime('%m/%d/%Y')),
+    ])
+    if 'ShowError' in resp:                             # invalid criteria (shouldn't happen with full code lists)
+        return None
+    grid = _curl(BASE + '/Search/GridResults', post=[('page', '1'), ('size', '400'), ('sort', ''), ('group', ''), ('filter', '')])
+    try:
+        j = json.loads(grid)
+    except Exception:
+        return None
+    return j.get('data', [])
+
+
+# ---- parse the chain: open vs satisfied, isolate the surviving junior --------------------------
+def _num(x):
+    try: return float(x or 0)
+    except Exception: return 0
+
+def _jsdate(s):
+    m = re.search(r'/Date\((-?\d+)', s or '')
+    if not m: return '0000-00-00'
+    ms = int(m.group(1))
+    # avoid tz libs: derive Y-M-D from the epoch ms directly (UTC)
+    import datetime
+    return (datetime.datetime(1970, 1, 1) + datetime.timedelta(milliseconds=ms)).strftime('%Y-%m-%d')
+
+def _lf(name):
+    """('LAST','FIRST') alpha-upper from an official-records / lead owner string. Middle names dropped."""
+    s = re.sub(r'\s*&\s*[WH].*$', '', (name or '').upper())          # drop '&W HELEN', '& H ...'
+    s = re.sub(r'\bH/[EW]\b|\bET\s?UX\b|\bET\s?AL\b|\bTRS?\b|\bJR\b|\bSR\b|\bII+\b', '', s)
+    if ',' in s:
+        last, _, rest = s.partition(',')
+    else:
+        toks = s.split(); last, rest = (toks[0], ' '.join(toks[1:])) if toks else ('', '')
+    la = re.sub(r'[^A-Z]', '', last)
+    ft = re.sub(r'[^A-Z]', '', (rest.split() or [''])[0])
+    return (la, ft)
+
+def _inst(s):
+    """Normalize a lender/institution name for satisfaction<->mortgage matching."""
+    s = (s or '').upper()
+    s = re.sub(r'\b(NA|N A|NATIONAL ASSN|NATIONAL ASSOCIATION|FSB|FA|INC|CORP|CO|LLC|LP|USA|'
+               r'TRUST COMPANY|MTGE|MORTGAGE|GROUP|GRP|SVGS|SAVINGS|HOME LOANS?|FINANCIAL|SERVICES?|BANK)\b', '', s)
+    return re.sub(r'[^A-Z]', '', s)
+
+
+def analyze(docs, owner, judgment):
+    """Open-mortgage picture for the subject owner. Precision > recall: guards force conf='low' (and no
+    surviving-2nd number) on common names or MERS ambiguity, so we never surface a fantasy 2nd."""
+    key = _lf(owner)
+    if not key[0]:
+        return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'conf': 'none', 'nrec': 0}
+    exact = [d for d in docs if _lf(d.get('Name')) == key]           # exact (last, first) — excludes namesakes
+    def is_m(d): return (d.get('DocTypeDescription') or '').upper().startswith('MORTGAGE')
+    def is_s(d): return bool(re.search(r'SATISF|RELEASE|REVOKE|TERMINAT', (d.get('DocTypeDescription') or '').upper()))
+    def borrower(d): return (d.get('Party') or '').strip().upper() == 'FROM'   # owner is mortgagor/grantor, not the lender
+    morts = [d for d in exact if is_m(d) and borrower(d) and _num(d.get('Consideration')) > 0]   # priced mortgages the owner OWES
+    sats = [d for d in exact if is_s(d)]
+    for d in morts + sats: d['_dt'] = _jsdate(d.get('RecordDate'))
+    used = set(); liens = []; opens = []
+    for m in sorted(morts, key=lambda x: x['_dt']):
+        lend = _inst(m.get('CrossPartyName'))
+        mers = bool(MERS_RE.search(m.get('CrossPartyName') or ''))
+        is_open = True
+        if lend and not mers:                                        # match a later same-institution release
+            for i, s in enumerate(sats):
+                if i in used: continue
+                if s['_dt'] >= m['_dt'] and _inst(s.get('CrossPartyName')) == lend:
+                    used.add(i); is_open = False; break
+        row = {'d': m['_dt'], 'amt': round(_num(m.get('Consideration'))),
+               'party': (m.get('CrossPartyName') or '')[:40], 'bp': m.get('BookPage', ''),
+               'st': 'OPEN' if is_open else 'SATISFIED', 'mers': mers}
+        liens.append(row)
+        if is_open: opens.append(row)
+    conf = 'ok'
+    if not exact: conf = 'none'
+    if len(exact) > 35: conf = 'low'                                 # common name -> many people/properties
+    if len(morts) > 5: conf = 'low'
+    if len(opens) > 3: conf = 'low'                                  # one residential parcel rarely has >3 truly-open mtgs
+    if sum(1 for o in opens if o['mers']) and len(opens) > 1: conf = 'low'   # MERS can't be uniquely paired
+    junior = first = 0
+    if opens:
+        anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
+        fore = min(opens, key=anchor)                               # the foreclosing 1st (nearest judgment, else largest)
+        first = fore['amt']
+        junior = sum(o['amt'] for o in opens if o is not fore)
+    return {'liens': [{k: v for k, v in r.items() if k != 'mers'} for r in liens],
+            'open_count': len(opens), 'junior': junior, 'first_est': first, 'conf': conf, 'nrec': len(exact)}
+
+
+def _search_name(lead):
+    """Build a 'LAST, FIRST' AcclaimWeb query from the lead's raw owner string."""
+    raw = (lead.get('owners', '') or '').upper()
+    raw = re.sub(r'\s*&\s*[WH].*$', '', raw); raw = re.sub(r'\bH/[EW]\b', '', raw).strip()
+    if ',' in raw:
+        last, _, rest = raw.partition(','); return f"{last.strip()}, {rest.strip()}"
+    return raw
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--case', default='')
+    ap.add_argument('--tier', default='')
+    ap.add_argument('--all', action='store_true')
+    ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--refresh', action='store_true', help='re-trace even already-cached cases')
+    a = ap.parse_args()
+
+    leads = json.load(open(LEADS, encoding='utf-8'))
+    out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
+
+    picked = []
+    for r in leads:
+        case = r.get('case', '') or ''
+        if a.case and case != a.case: continue
+        if a.tier and (r.get('tier', '') or '') != a.tier: continue
+        owner = r.get('owners', '') or ''
+        if not owner or COMPANY_RE.search(owner): continue          # companies: no personal chain to isolate
+        if case in out and not (a.refresh or a.case): continue
+        picked.append(r)
+    if a.limit: picked = picked[:a.limit]
+
+    print(f"{len(picked)} Broward lead(s) to trace via AcclaimWeb (no captcha, curl session)")
+    if not picked:
+        return
+    sess = start_session()
+    if not sess:
+        print("ABORT: could not establish an AcclaimWeb session (Cloudflare block / site down). Try again later.")
+        return
+    print(f"session up (doctypes {sess['doctypes'].count(',')+1}, booktypes {sess['booktypes'].count(',')+1})")
+
+    done = hits = blocked = 0
+    for r in picked:
+        case = r.get('case', ''); owner = r.get('owners', ''); judg = _num(r.get('judg'))
+        docs = search_docs(sess, _search_name(r))
+        if docs is None:
+            blocked += 1
+            print(f"  --  {case:18} {owner[:26]:26} (blocked / no data)")
+            if blocked >= 5 and blocked == done + blocked:          # session died early -> re-establish once
+                sess = start_session() or sess
+            time.sleep(0.8); continue
+        res = analyze(docs, owner, judg)
+        res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = owner
+        out[case] = res
+        done += 1
+        flag = ''
+        if res['open_count'] >= 2 and res['conf'] == 'ok':
+            hits += 1; flag = f"  <-- OPEN 2ND ~${res['junior']:,} (of {res['open_count']} open, conf ok)"
+        elif res['open_count'] >= 2:
+            flag = f"  ({res['open_count']} open mtgs, conf {res['conf']} — verify)"
+        print(f"  ok  {case:18} {owner[:26]:26} {res['nrec']:>3} recs / {len(res['liens'])} mtg{flag}")
+        json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+        time.sleep(0.5)
+    print(f"\nDONE: {done} traced ({hits} confident surviving-2nd, {blocked} blocked). -> broward_liens.json")
+
+
+if __name__ == '__main__':
+    main()

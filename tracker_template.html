@@ -1770,8 +1770,10 @@ function lkReport(a){
   if(hs) chips+='<span class="lkchip green">HOMESTEAD</span>';
   if(absentee) chips+='<span class="lkchip warn">ABSENTEE OWNER</span>';
   if(isCo) chips+='<span class="lkchip">COMPANY-OWNED</span>';
+  const ctyLbl = (lead && lead.county) ? lead.county.toLowerCase().replace(/\b\w/g,m=>m.toUpperCase())
+                : (a._cad ? 'Florida' : 'Miami-Dade');
   const head='<div class="lktitle">'+esc(site||lkFF(folio))+'</div>'
-    +'<div class="lksub">'+esc((city?city+' ':'')+(zip||''))+' &middot; folio '+lkFF(folio)+' &middot; live Miami-Dade county data</div>'
+    +'<div class="lksub">'+esc((city?city+' ':'')+(zip||''))+' &middot; folio '+lkFF(folio)+' &middot; live '+esc(ctyLbl)+' county data</div>'
     +(chips?'<div class="lkchips">'+chips+'</div>':'');
   // ---- foreclosure alert band (front and center, not buried) ----
   let alert='';
