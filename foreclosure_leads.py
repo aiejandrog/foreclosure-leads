@@ -113,12 +113,12 @@ CAL_JS = """
 }
 """
 
-def discover_dates(page):
+def discover_dates(page, base=BASE):
     today = date.today()
     next_month = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
     dates = []
     for cal in [today, next_month]:
-        page.goto(f"{BASE}?zaction=USER&zmethod=CALENDAR&selCalDate={cal:%m/%d/%Y}", timeout=45000)
+        page.goto(f"{base}?zaction=USER&zmethod=CALENDAR&selCalDate={cal:%m/%d/%Y}", timeout=45000)
         page.wait_for_selector('.CALBOX', timeout=20000)
         for d in json.loads(page.evaluate(CAL_JS)):
             dt = datetime.strptime(d['date'], '%m/%d/%Y').date()
@@ -127,15 +127,15 @@ def discover_dates(page):
     print(f"auction dates found: {[f'{d} [{st}]' for d, st in dates]}")
     return dates   # list of (date, saletype)
 
-def scrape_date(page, d, saletype='FC', attempt=1):
-    page.goto(f"{BASE}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={d}", timeout=45000)
+def scrape_date(page, d, saletype='FC', attempt=1, base=BASE):
+    page.goto(f"{base}?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE={d}", timeout=45000)
     # tax-deed lists render slower; give them a longer settle window
     tmo = 40000 if saletype == 'TD' else 25000
     try:
         page.wait_for_selector('#Area_W .AUCTION_DETAILS tr', timeout=tmo, state='attached')
     except Exception:
         if attempt == 1:
-            return scrape_date(page, d, saletype, attempt=2)
+            return scrape_date(page, d, saletype, attempt=2, base=base)
         print(f"{d}: no waiting auctions rendered"); return []
     data = json.loads(page.evaluate(EXTRACT_JS))
     items = list(data['items'])
@@ -647,7 +647,19 @@ def make_tracker(leads):
             d['phones'] = [p.get('number') for p in hit['phones'] if p.get('number')][:4]
             d['phdnc'] = [bool(p.get('dnc')) for p in hit['phones']][:4]
             d['emails'] = (hit.get('emails') or [])[:3]
+        d['county'] = 'MIAMI-DADE'
         slim.append(d)
+
+    # Merge other counties (produced by broward.py etc., already in slim shape, county-tagged, gitignored).
+    for extra in ('broward_leads.json',):
+        _xf = os.path.join(HERE, extra)
+        if os.path.exists(_xf):
+            try:
+                xl = json.load(open(_xf, encoding='utf-8'))
+                slim.extend(xl)
+                print(f"merged {len(xl)} leads from {extra}")
+            except Exception as e:
+                print(f"skip {extra}: {e}")
 
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
