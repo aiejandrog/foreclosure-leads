@@ -1030,7 +1030,7 @@ function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
 const CTY_LINKS = {
   'MIAMI-DADE': { pa:f=>'https://apps.miamidadepa.gov/PropertySearch/#/?folio='+f, tax:f=>'https://miamidade.county-taxes.com/public/real_estate/parcels/'+f,
     records:'https://onlineservices.miamidadeclerk.gov/officialrecords/', cases:'https://www2.miamidadeclerk.gov/ocs/', place:'MIAMI FL' },
-  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>'https://broward.county-taxes.com/public/real_estate/parcels/'+f,
+  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>'https://county-taxes.net/broward',
     records:'https://officialrecords.broward.org/AcclaimWeb/', cases:'https://www.browardclerk.org/Web2/CaseSearchECA/', place:'BROWARD COUNTY FL' },
   'PALM BEACH': { pa:f=>'https://pbcpao.gov/Property/Details?parcelId='+f, tax:f=>'https://pbctax.publicaccessnow.com/',
     records:'https://erec.mypalmbeachclerk.com/', cases:'https://appsgp.mypalmbeachclerk.com/eCaseView/', place:'PALM BEACH COUNTY FL' },
@@ -1762,6 +1762,14 @@ function lkReport(a){
   const people=(nm&&!isCo)?('https://www.truepeoplesearch.com/results?name='+nm+(zip?'&citystatezip='+zip:'')):'';
   const paddr=(site&&!isCo)?('https://www.truepeoplesearch.com/resultaddress?streetaddress='+encodeURIComponent(site)+'&citystatezip='+encodeURIComponent((city||'MIAMI')+', FL '+zip)):'';
   const lead=lkLead(folio);
+  // COUNTY-AWARE links: a matched lead carries its own correct URLs; a cadastral-only lookup knows its
+  // county from CO_NO (a._county); otherwise default Miami-Dade. Used by BOTH the records + links sections.
+  const cty = (lead && lead.county) || (a._cad && a._county) || 'MIAMI-DADE';
+  const CL = CTY_LINKS[cty];                                  // null only for an unsupported FL county
+  const paURL  = (lead&&lead.pa)      || (CL ? CL.pa(folio) : '');
+  const taxURL = (lead&&lead.tax)     || (CL ? CL.tax(folio) : '');
+  const recURL = (lead&&lead.records) || (CL ? CL.records : '');
+  const casURL = (lead&&lead.cases)   || (CL ? CL.cases : '');
   const td = lead && lead.st==='TD';
   // ---- computed intelligence (what makes this a report, not a form-dump) ----
   const heated=+a.BUILDING_HEATED_AREA||0;
@@ -1848,7 +1856,7 @@ function lkReport(a){
       +'<div class="lknote">Amounts are original loan size (from doc tax) &mdash; a real payoff shrinks with principal paid, grows with arrears. '+(condo?'Condo: still get the association estoppel for the special assessment. ':'')+'Confirm with a payoff letter.</div></div>';
   } else {
     rec+='<div class="lkcallout"><b>Manual step &mdash; the county blocks websites from pulling this.</b> Open '
-      +'<a href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener">Official Records</a>, search Name/Document for '
+      +'<a href="'+esc(recURL||'https://onlineservices.miamidadeclerk.gov/officialrecords/')+'" target="_blank" rel="noopener">'+esc(ctyName(cty))+' Official Records</a>, search Name/Document for '
       +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find in Deal analysis.</div>';
   }
   // ---- seller-net calculator ----
@@ -1878,13 +1886,8 @@ function lkReport(a){
       +'<div class="lknote">Cash risked = cash-to-owner + stop-sale + rehab (the money you front &mdash; Jose\'s &ldquo;$10k &rarr; $50k&rdquo;). The payoff + your resale costs come out of the resale at closing. Rehab and exit costs are NOT optional &mdash; keep it honest.</div>'
       +'<div class="lknote" style="color:var(--amber-ink)"><b>FS 501.1377:</b> any purchase from a homeowner in foreclosure needs a written 12pt contract, a 3-day right to cancel, no upfront fees, and a title/attorney closing. Buyer entity = Jose\'s LLC.</div></div>';
   // ---- links (COUNTY-AWARE: a Broward/PB property must never get Miami-Dade URLs) ----
-  const cty = (lead && lead.county) || (a._cad && a._county) || 'MIAMI-DADE';
-  const CL = CTY_LINKS[cty];                                  // null only for an unsupported FL county
+  // cty / CL / paURL / taxURL / recURL / casURL are hoisted just after lkLead() above.
   const placeQ = city ? (city+' FL') : (CL ? CL.place : 'FL');
-  const paURL  = (lead&&lead.pa)      || (CL ? CL.pa(folio) : '');
-  const taxURL = (lead&&lead.tax)     || (CL ? CL.tax(folio) : '');
-  const recURL = (lead&&lead.records) || (CL ? CL.records : '');
-  const casURL = (lead&&lead.cases)   || (CL ? CL.cases : '');
   let L=[];
   if(paURL) L.push(['Appraiser', paURL]);
   if(taxURL) L.push(['Taxes', taxURL]);

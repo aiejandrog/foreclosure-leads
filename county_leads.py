@@ -24,8 +24,9 @@ COUNTIES = {
         'sub': 'broward', 'co_no': 16,
         # BCPA's Angular SPA can't deep-link; the legacy RecInfo.asp endpoint opens the parcel directly (12-digit folio, no dashes).
         'pa': lambda f: 'https://bcpa.net/RecInfo.asp?URL_Folio=' + f,
-        # Grant Street TaxSys — folio-addressable (browser-only; bare curl 403s but it renders the parcel).
-        'tax': lambda f: 'https://broward.county-taxes.com/public/real_estate/parcels/' + f,
+        # The county-taxes.com/.../parcels/{folio} deep-link is Cloudflare-walled on its redirect and never
+        # resolves for a normal click (verified) — link the tax portal LANDING, which loads + lets you search.
+        'tax': lambda f: 'https://county-taxes.net/broward',
         'records': 'https://officialrecords.broward.org/AcclaimWeb/',   # Official Records (mortgages/liens) — disclaimer-gated search, no URL deep-link
         'cases': 'https://www.browardclerk.org/Web2/CaseSearchECA/',    # court case search
     },
