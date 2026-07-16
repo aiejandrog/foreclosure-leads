@@ -348,6 +348,16 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 .lkass{font-style:normal;font-weight:500;font-size:11px;color:var(--muted)}
 .lkcallout{background:var(--amber-soft);border:1px solid rgba(201,138,18,.35);border-left:3px solid var(--amber);border-radius:var(--r-sm);padding:10px 13px;font-size:12.5px;color:var(--ink-2);line-height:1.5}
 .lkcallout a{color:var(--gold-d);font-weight:700}
+.lkcallout.hot{background:var(--red-soft);border-color:rgba(220,38,38,.35);border-left-color:var(--red)}
+.lkcallout.hot b{color:var(--red-ink)}
+.lkliens{margin-top:9px;width:100%;table-layout:fixed;border-collapse:collapse}
+.lkliens th{text-align:left;font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:700;padding:3px 8px;border-bottom:1px solid var(--line)}
+.lkliens td{padding:4px 8px;font-size:12.5px;border-bottom:1px solid var(--line-2)}
+.lkliens th:nth-child(1),.lkliens td:nth-child(1){width:78px}
+.lkliens td:nth-child(2){white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lkliens th:nth-child(3),.lkliens td:nth-child(3){width:88px;text-align:right}
+.lkliens th:nth-child(4),.lkliens td:nth-child(4){width:72px}
+.lkliens td.lkbad{color:var(--red-ink);font-weight:800}.lkliens td.lkok{color:var(--muted-2)}
 /* calculator */
 .lkcgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:9px;margin-top:3px}
 .lkcalc label{display:block;font-size:11px;color:var(--muted);font-weight:700}
@@ -1771,14 +1781,25 @@ function lkReport(a){
     +'<div><div class="lksec">Value (Property Appraiser)</div><div class="lkcard">'+vals+'</div>'
     +'<div class="lksec">Sales history</div><div class="lkcard">'+sales+'</div></div>'
     +'</div>';
-  // ---- records callout ----
+  // ---- records: show the REAL open-mortgage chain when we pulled it, else the manual fallback ----
   const orName = pt.length>=2 ? esc(pt.slice(1).join(' ')+' '+pt[0]) : esc(owner);
-  const rec='<div class="lksec">Recorded mortgages &amp; liens</div>'
-    +'<div class="lkcallout"><b>Manual step &mdash; the county blocks websites from pulling this.</b> Open '
-    +'<a href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener">Official Records</a>, search Name/Document for '
-    +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find in Deal analysis.</div>';
+  let rec='<div class="lksec">Recorded mortgages &amp; liens</div>';
+  if(lead && lead.orliens && lead.orliens.length){
+    const rows=lead.orliens.map(l=>'<tr><td>'+esc(l.d)+'</td><td>'+esc(l.party)+'</td><td style="text-align:right">'+lkM(l.amt)+'</td>'
+      +'<td class="'+(l.st==='OPEN'?'lkbad':'lkok')+'">'+esc(l.st)+'</td></tr>').join('');
+    const jr=+lead.orjunior||0, low=(lead.orconf!=='ok');
+    const call = jr>0
+      ? '<div class="lkcallout '+(low?'':'hot')+'"><b>Surviving 2nd mortgage &asymp; '+lkM(jr)+'</b> &mdash; an OPEN loan beyond the one being foreclosed, so it does NOT get wiped at the sale. '+(low?'Low confidence (common name / busy record) &mdash; verify.':'Pulled from Official Records.')+' This is the number that makes the raw equity a lie.</div>'
+      : '<div class="lknote" style="margin-bottom:8px">Only the foreclosing loan is open on record &mdash; no surviving 2nd found.</div>';
+    rec+='<div class="lkcard">'+call+'<table class="lktbl lkliens"><tr><th>Recorded</th><th>Lender</th><th>Amount</th><th>Status</th></tr>'+rows+'</table>'
+      +'<div class="lknote">Amounts are original loan size (from doc tax) &mdash; a real payoff shrinks with principal paid, grows with arrears. '+(condo?'Condo: still get the association estoppel for the special assessment. ':'')+'Confirm with a payoff letter.</div></div>';
+  } else {
+    rec+='<div class="lkcallout"><b>Manual step &mdash; the county blocks websites from pulling this.</b> Open '
+      +'<a href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener">Official Records</a>, search Name/Document for '
+      +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find in Deal analysis.</div>';
+  }
   // ---- seller-net calculator ----
-  const po = lead ? Math.round(td?lead.obid:lead.judg) : 0;
+  const po = lead ? Math.round((td?lead.obid:lead.judg) + (lead.orconf==='ok'?(+lead.orjunior||0):0)) : 0;   // auto-add the confirmed surviving 2nd
   const calc='<div class="lksec">Deal desk</div><div class="lkcard lkcalc">'
       +'<div class="lkcgrid">'
         +'<label>List / market price $<input id="lklp" type="number" value="'+(val||'')+'" oninput="lkCalc()"></label>'

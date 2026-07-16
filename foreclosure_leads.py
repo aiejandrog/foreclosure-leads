@@ -600,6 +600,13 @@ def make_tracker(leads):
     if os.path.exists(_rqf):
         try: rq = json.load(open(_rqf, encoding='utf-8'))
         except Exception: rq = {}
+    # recorded open-mortgage chain per lead (produced by records_liens.py, gitignored) — turns the equity
+    # number from a guess into fact by surfacing the real surviving 2nd mortgage.
+    rl = {}
+    _rlf = os.path.join(HERE, 'records_liens.json')
+    if os.path.exists(_rlf):
+        try: rl = json.load(open(_rlf, encoding='utf-8'))
+        except Exception: rl = {}
     slim = []
     for r in leads:
         d = {
@@ -630,6 +637,11 @@ def make_tracker(leads):
             'cert': r.get('Certificate #',''),
             'folio': _valid_folio(r.get('Folio','')),   # lets the in-site property lookup cross-check any parcel against this auction list
         }
+        rlh = rl.get(r.get('Case #',''))
+        if rlh and rlh.get('liens'):
+            d['orliens'] = rlh.get('liens', [])          # the recorded mortgage chain (open/satisfied + amounts)
+            d['orjunior'] = rlh.get('junior', 0)         # suggested surviving 2nd (open mtgs beyond the foreclosing 1st)
+            d['orconf'] = rlh.get('conf', '')            # 'ok' = isolated + sane; 'low' = common name / verify
         hit = st.get(r.get('Case #',''))
         if hit and hit.get('phones'):
             d['phones'] = [p.get('number') for p in hit['phones'] if p.get('number')][:4]
