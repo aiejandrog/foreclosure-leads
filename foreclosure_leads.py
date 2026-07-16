@@ -582,6 +582,27 @@ def _load_codes():
             return [('shared', pw)]
     return []
 
+def _fc_type(case):
+    """Classify a foreclosure by its court case number. HOA/county-court cases foreclose a small assessment
+    and the WHOLE first mortgage SURVIVES the sale; circuit cases ARE the mortgage foreclosure.
+    Broward/PB: CACE=circuit(mortgage), COCE/CONO/COWE/COSO=county(HOA). Miami-Dade: -CA-=circuit, -CC-=county."""
+    c = (case or '').upper()
+    if c.startswith('CACE') or '-CA-' in c: return 'MORTGAGE'
+    if c.startswith(('COCE', 'CONO', 'COWE', 'COSO')) or '-CC-' in c: return 'HOA'
+    return ''
+
+
+def _fwd_flags(d, h, ftype):
+    """Bake the deal-killer flags from a lien result (records_liens/broward_liens) onto a slim lead. Missing
+    keys (e.g. Miami-Dade records that predate the flag fields) are simply skipped."""
+    d['orftype'] = h.get('ftype') or ftype
+    if h.get('surv'): d['orsurv'] = h.get('surv', 0)                 # total open mortgage that survives an HOA sale
+    if h.get('surv_first'): d['orsurvfirst'] = h.get('surv_first', 0)  # the first mortgage (headline number)
+    if h.get('deeded'):                                             # already deeded to another investor
+        d['ordeeded'] = h['deeded']; d['ordeedconf'] = h.get('deed_conf', '')
+    if h.get('second_fc'): d['orsecond'] = h['second_fc']           # a separate CACE mortgage foreclosure
+
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -609,6 +630,7 @@ def make_tracker(leads):
         except Exception: rl = {}
     slim = []
     for r in leads:
+        _ft = _fc_type(r.get('Case #', ''))          # HOA (whole 1st mortgage survives) vs MORTGAGE foreclosure
         d = {
             'tier': r.get('tier',''), 'score': r.get('score',0),
             'auction': r.get('AuctionDate',''), 'days': r.get('days_to_auction',0),
@@ -628,7 +650,7 @@ def make_tracker(leads):
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
             'named': r.get('named', []),   # [{name,url}] co-parties: humans get a People-search URL, companies ''
             'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
-            'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')),
+            'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')) or _ft == 'HOA', 'ftype': _ft,
             'ip': bool(r.get('indiv_plaintiff')), 'oname': r.get('owner_clean',''),
             'ocsqs': cq.get(r.get('owner_clean',''), ''), 'recqs': rq.get(r.get('owner_clean',''), ''),
             'etax': r.get('est_annual_tax',0),
@@ -642,6 +664,8 @@ def make_tracker(leads):
             d['orliens'] = rlh.get('liens', [])          # the recorded mortgage chain (open/satisfied + amounts)
             d['orjunior'] = rlh.get('junior', 0)         # suggested surviving 2nd (open mtgs beyond the foreclosing 1st)
             d['orconf'] = rlh.get('conf', '')            # 'ok' = isolated + sane; 'low' = common name / verify
+        if rlh:
+            _fwd_flags(d, rlh, _ft)                       # surviving-1st / TAKEN / 2nd-foreclosure flags
         hit = st.get(r.get('Case #',''))
         if hit and hit.get('phones'):
             d['phones'] = [p.get('number') for p in hit['phones'] if p.get('number')][:4]
@@ -668,11 +692,17 @@ def make_tracker(leads):
                 try: xrl = json.load(open(_lf, encoding='utf-8'))
                 except Exception: xrl = {}
             for _d in xl:
+                _cft = _fc_type(_d.get('case', ''))
+                if _cft:                                             # case-type classification works with zero records
+                    _d['ftype'] = _cft
+                    if _cft == 'HOA': _d['ctype'] = 'HOA'; _d['mr'] = True   # first mortgage survives an HOA sale
                 _h = xrl.get(_d.get('case', ''))
                 if _h and _h.get('liens'):
                     _d['orliens'] = _h.get('liens', [])
                     _d['orjunior'] = _h.get('junior', 0)
                     _d['orconf'] = _h.get('conf', '')
+                if _h:
+                    _fwd_flags(_d, _h, _cft)                          # surviving-1st / TAKEN / 2nd-foreclosure flags
                 # skip-traced phones/emails for this county lead (skiptrace.py now covers all counties)
                 _ph = st.get(_d.get('case', ''))
                 if _ph and _ph.get('phones'):

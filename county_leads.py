@@ -105,6 +105,7 @@ def to_slim(county, cfg, base, items):
     for r in items:
         folio = re.sub(r'\D', '', r.get('Folio', '') or '')
         judg = F.money(r.get('Final Judgment Amount', ''))
+        ftype = F._fc_type(r.get('Case #', ''))          # HOA (whole 1st mortgage survives) vs MORTGAGE foreclosure
         addr = F._clean_addr(r.get('Address', ''))
         val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''
         if folio:
@@ -144,11 +145,11 @@ def to_slim(county, cfg, base, items):
             'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': False, 'hs': hs, 'condo': condo,
             'st': st, 'obid': 0, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
             'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr,
-            'ctype': 'Bank/Mortgage', 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
+            'ctype': ('HOA' if ftype == 'HOA' else 'Bank/Mortgage'), 'ftype': ftype, 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
             # county leads have no per-case docket token (no clerk enrichment) -> no Docket button; the
             # Records/Cases buttons point to THIS county's official-records + court-case search portals.
             'docket': '', 'records': cfg['records'], 'cases': cfg['cases'],
-            'cstatus': '', 'mr': False, 'ip': False, 'ju': (judg <= 0),
+            'cstatus': '', 'mr': (ftype == 'HOA'), 'ip': False, 'ju': (judg <= 0),
             'bought': bought, 'bprice': bprice, 'filed': 0, 'etax': 0,
             'warn': ('' if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': '',
         })

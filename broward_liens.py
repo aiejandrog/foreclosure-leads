@@ -125,12 +125,35 @@ def _inst(s):
     return re.sub(r'[^A-Z]', '', s)
 
 
-def analyze(docs, owner, judgment):
-    """Open-mortgage picture for the subject owner. Precision > recall: guards force conf='low' (and no
-    surviving-2nd number) on common names or MERS ambiguity, so we never surface a fantasy 2nd."""
+# an investor grantee on a recent deed = the deal was already worked (land trust / LLC / holding co).
+INVESTOR_RE = re.compile(r'\bLAND\s*TR(?:UST)?\b|\bLLC\b|\bINC\b|\bCORP\b|\bL\.?P\.?\b|\bLTD\b|\bGROUP\b|\bHOMES?\b|'
+                         r'PROPERT|REALTY|CAPITAL|\bFUND\b|INVEST|HOLDINGS|VENTURES|EQUITIES|ACQUISITION|PARTNERS', re.I)
+
+
+def _fc_type(case):
+    """Classify a foreclosure by its court case number. HOA/county-court cases foreclose a small assessment
+    and the WHOLE first mortgage survives the sale; circuit cases ARE the mortgage foreclosure."""
+    c = (case or '').upper()
+    if c.startswith('CACE'):                       # Broward/PB circuit civil
+        return 'MORTGAGE'
+    if c.startswith(('COCE', 'CONO', 'COWE', 'COSO')):   # Broward/PB county court (HOA / code)
+        return 'HOA'
+    if '-CA-' in c:                                # Miami-Dade circuit
+        return 'MORTGAGE'
+    if '-CC-' in c:                               # Miami-Dade county court
+        return 'HOA'
+    return ''
+
+
+def analyze(docs, owner, judgment, ftype='', lead_case=''):
+    """Open-mortgage picture + deal-killer flags for the subject owner. Precision > recall: guards force
+    conf='low' on common names / MERS ambiguity so we never assert a fantasy (the template shows low-conf
+    flags as 'possible - verify', never solid red)."""
     key = _lf(owner)
+    base = {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'surv': 0, 'surv_first': 0,
+            'ftype': ftype, 'deeded': None, 'deed_conf': '', 'second_fc': None, 'conf': 'none', 'nrec': 0}
     if not key[0]:
-        return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'conf': 'none', 'nrec': 0}
+        return base
     exact = [d for d in docs if _lf(d.get('Name')) == key]           # exact (last, first) — excludes namesakes
     def is_m(d): return (d.get('DocTypeDescription') or '').upper().startswith('MORTGAGE')
     def is_s(d): return bool(re.search(r'SATISF|RELEASE|REVOKE|TERMINAT', (d.get('DocTypeDescription') or '').upper()))
@@ -159,23 +182,80 @@ def analyze(docs, owner, judgment):
     if len(morts) > 5: conf = 'low'
     if len(opens) > 3: conf = 'low'                                  # one residential parcel rarely has >3 truly-open mtgs
     if sum(1 for o in opens if o['mers']) and len(opens) > 1: conf = 'low'   # MERS can't be uniquely paired
-    junior = first = 0
+
+    # --- surviving mortgage ---------------------------------------------------------------------
+    # HOA sale: the WHOLE first mortgage survives, so DON'T anchor to the tiny HOA judgment. Otherwise
+    # (a mortgage foreclosure) the foreclosing 1st is wiped and only a real 2nd survives.
+    surv = surv_first = junior = first = 0
     if opens:
-        anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
-        fore = min(opens, key=anchor)                               # the foreclosing 1st (nearest judgment, else largest)
-        first = fore['amt']
-        junior = sum(o['amt'] for o in opens if o is not fore)
+        if ftype == 'HOA':
+            surv = sum(o['amt'] for o in opens)                     # total open loan stack that survives
+            surv_first = max(o['amt'] for o in opens)               # the first mortgage (headline number)
+        else:
+            anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
+            fore = min(opens, key=anchor)                           # the foreclosing 1st (nearest judgment, else largest)
+            first = fore['amt']
+            junior = surv = sum(o['amt'] for o in opens if o is not fore)   # the surviving 2nd
+
+    # --- already deeded to another investor? (the McNulty / "you're too late" signal) -----------
+    # "Recent" is anchored to THIS foreclosure's lis-pendens (a deed only counts if it post-dates the filing),
+    # else ~1 year before the newest record on file — never the earliest old lien in a decades-long chain.
+    lc = (lead_case or '').upper()
+    latest = max([_jsdate(d.get('RecordDate')) for d in docs] or ['2026-01-01'])
+    floor = str(int(latest[:4]) - 1) + latest[4:]
+    lp = [_jsdate(d.get('RecordDate')) for d in exact
+          if (d.get('CaseNumber') or '').upper() == lc and 'LIS PEND' in (d.get('DocTypeDescription') or '').upper()]
+    anchor_dt = min(lp) if lp else floor
+    deeded = None
+    deeds = sorted([d for d in exact if (d.get('DocTypeDescription') or '').upper().startswith('DEED')
+                    and borrower(d)], key=lambda x: _jsdate(x.get('RecordDate')), reverse=True)
+    for d in deeds:
+        dd = _jsdate(d.get('RecordDate')); grantee = (d.get('CrossPartyName') or '').strip()
+        if not grantee or dd < anchor_dt:
+            continue
+        g = re.sub(r'[^A-Z]', '', grantee.upper())
+        investor = bool(INVESTOR_RE.search(grantee)) and key[0] not in g   # a company/trust, not a same-surname family deed
+        if investor:
+            deeded = {'d': dd, 'grantee': grantee[:40]}
+            break
+    # the deed flag has its OWN confidence — an exact-name, post-filing deed to a clearly-named company is
+    # reliable even when the mortgage chain is noisy; only a very common name (huge record set) downgrades it.
+    deed_conf = ('ok' if (deeded and len(exact) <= 45) else ('low' if deeded else ''))
+
+    # --- a SECOND, hidden foreclosure? (the Bloom / Tucker signal). Only meaningful when THIS lead is the
+    # small HOA case: a CACE mortgage foreclosure running underneath it. For a lead that's already a mortgage
+    # foreclosure, another CACE is just namesake noise, so we don't flag it. ---
+    second_fc = None
+    if ftype == 'HOA':
+        for d in sorted(exact, key=lambda x: _jsdate(x.get('RecordDate')), reverse=True):
+            cn = (d.get('CaseNumber') or '').strip().upper()
+            if not cn or cn == lc:
+                continue
+            if not re.search(r'LIS PEND|FINAL JUDG|CERT', (d.get('DocTypeDescription') or '').upper()):
+                continue
+            if cn.startswith('CACE') or '-CA-' in cn:               # a circuit = mortgage foreclosure
+                second_fc = {'case': cn, 'party': (d.get('CrossPartyName') or '')[:40]}
+                break
+
     return {'liens': [{k: v for k, v in r.items() if k != 'mers'} for r in liens],
-            'open_count': len(opens), 'junior': junior, 'first_est': first, 'conf': conf, 'nrec': len(exact)}
+            'open_count': len(opens), 'junior': junior, 'first_est': first,
+            'surv': surv, 'surv_first': surv_first, 'ftype': ftype,
+            'deeded': deeded, 'deed_conf': deed_conf, 'second_fc': second_fc, 'conf': conf, 'nrec': len(exact)}
 
 
 def _search_name(lead):
-    """Build a 'LAST, FIRST' AcclaimWeb query from the lead's raw owner string."""
+    """Build a 'LAST, FIRST' AcclaimWeb query from the lead's raw owner string. Use the FIRST given name only
+    (drop the middle initial): AcclaimWeb narrows on the middle initial and misses records indexed without it
+    (e.g. a 2015 mortgage under 'MCNULTY, CHRISTINE' vs the lead's 'MCNULTY, CHRISTINE A'). _lf() re-isolates
+    the exact (last, first) afterward, so broadening the query only helps recall."""
     raw = (lead.get('owners', '') or '').upper()
     raw = re.sub(r'\s*&\s*[WH].*$', '', raw); raw = re.sub(r'\bH/[EW]\b', '', raw).strip()
     if ',' in raw:
-        last, _, rest = raw.partition(','); return f"{last.strip()}, {rest.strip()}"
-    return raw
+        last, _, rest = raw.partition(',')
+        first = (rest.strip().split() or [''])[0]
+        return f"{last.strip()}, {first}" if first else last.strip()
+    toks = raw.split()
+    return f"{toks[0]}, {toks[1]}" if len(toks) >= 2 else raw
 
 
 def main():
@@ -220,16 +300,19 @@ def main():
             if blocked >= 5 and blocked == done + blocked:          # session died early -> re-establish once
                 sess = start_session() or sess
             time.sleep(0.8); continue
-        res = analyze(docs, owner, judg)
+        ftype = _fc_type(case)
+        res = analyze(docs, owner, judg, ftype=ftype, lead_case=case)
         res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = owner
         out[case] = res
         done += 1
-        flag = ''
-        if res['open_count'] >= 2 and res['conf'] == 'ok':
-            hits += 1; flag = f"  <-- OPEN 2ND ~${res['junior']:,} (of {res['open_count']} open, conf ok)"
-        elif res['open_count'] >= 2:
-            flag = f"  ({res['open_count']} open mtgs, conf {res['conf']} — verify)"
-        print(f"  ok  {case:18} {owner[:26]:26} {res['nrec']:>3} recs / {len(res['liens'])} mtg{flag}")
+        flags = []
+        if res['deeded']: flags.append(f"TAKEN->{res['deeded']['grantee']}")
+        if res['second_fc']: flags.append(f"2ND-FC {res['second_fc']['case']}")
+        if ftype == 'HOA' and res['surv_first']: flags.append(f"surv 1st ~${res['surv_first']:,}")
+        elif res['open_count'] >= 2 and res['junior']: flags.append(f"2nd ~${res['junior']:,}")
+        if flags: hits += 1
+        flag = ('  <-- ' + ' | '.join(flags) + f" (conf {res['conf']})") if flags else ''
+        print(f"  ok  {case:18} {owner[:26]:26} {ftype or '?':8} {res['nrec']:>3} recs{flag}")
         json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
         time.sleep(0.5)
     print(f"\nDONE: {done} traced ({hits} confident surviving-2nd, {blocked} blocked). -> broward_liens.json")

@@ -269,6 +269,7 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 .profpos{color:var(--green-ink);font-weight:800;font-size:19px;font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .profneg{color:var(--red);font-weight:800;font-size:19px;font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
 .mrwarn{color:var(--amber-ink);font-size:10px;font-weight:600}
+.mrwarn.under{color:var(--red-ink);font-weight:800}
 .tax{color:var(--red);font-size:11px;font-weight:600}
 .hoa{color:var(--amber-ink);font-size:11px;font-weight:600}
 .mtg{color:var(--muted);font-size:11px}
@@ -674,6 +675,7 @@ body.modal-open{overflow:hidden}
 <select id="cty" title="Filter by county" style="padding:7px 10px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);color:var(--ink);font-weight:600;font-size:13px;cursor:pointer"><option value="">All counties</option></select>
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
+<button id="hf" title="Hide leads the records already flagged as dead: already deeded to another investor, or an HOA case hiding a mortgage bigger than the equity (underwater). Off by default so nothing disappears silently.">Hide flagged</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="due" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days">⚡ Due</button>
@@ -761,7 +763,11 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '';
+let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '';
+// a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
+// surviving first mortgage exceeds the equity above the judgment (underwater).
+function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
+  (r.orsurvfirst && r.value && (+r.orsurvfirst) > (r.value - (r.judg||0)))); }
 let sender = {name:'', llc:'', phone:'', addr:'', title:'', email:'', web:'', partner:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
@@ -870,6 +876,18 @@ function setVerdict(r, x){
 }
 const fmtMoney = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
 function verdictBadge(r){ return r._verdict==='VERIFY' ? '<span class="vb vbv">VERIFY</span>' : '<span class="vb vb'+r._vrank+'">'+r._verdict+'</span>'; }
+// deal-killer chips: 🔴 TAKEN (already deeded to an investor) · 🟠 2ND FORECLOSURE (a separate mortgage case).
+// Conservative: solid red only when high-confidence; low-confidence shows amber "MAYBE SOLD / verify".
+function flagChips(r){ let o='';
+  if(r.ordeeded){ const hi=(r.ordeedconf==='ok');
+    o+='<span class="chip '+(hi?'tax':'hoa')+'" title="A deed was recorded '+esc(r.ordeeded.d||'')+' to '+esc(r.ordeeded.grantee||'an investor')+' &mdash; the owner appears to have already sold this'+(hi?'.':' (possible only, common name &mdash; verify in Records).')+'">'+(hi?'TAKEN':'MAYBE SOLD')+'</span>'; }
+  if(r.orsecond){ o+='<span class="chip hoa" title="A SEPARATE mortgage foreclosure is also running: '+esc(r.orsecond.case||'')+(r.orsecond.party?' &mdash; '+esc(r.orsecond.party):'')+'. The small HOA case hides it; verify the mortgage payoff.">2ND FORECLOSURE</span>'; }
+  return o; }
+// surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk")
+function mrText(r){ const s=+r.orsurvfirst||0;
+  if(s>0){ const under=(r.value && s > (r.value-(r.judg||0)));
+    return '<div class="mrwarn'+(under?' under':'')+'" title="A first mortgage of about $'+Math.round(s).toLocaleString()+' survives this HOA/junior sale &mdash; it is NOT wiped by the auction. '+(r.orconf==='ok'?'':'Recorded original size on a common-name record &mdash; verify the payoff.')+(under?' It exceeds the equity &mdash; likely underwater.':'')+'">surviving 1st mtg &asymp; $'+Math.round(s/1000)+'k'+(under?' &mdash; underwater':'')+'</div>'; }
+  return r.mr?'<div class="mrwarn" title="HOA/junior foreclosure &mdash; the first mortgage survives the sale; verify the payoff before valuing the equity.">first mtg survives &mdash; verify</div>':''; }
 function mathLine(label,val,tot){ return '<div class="mathline'+(tot?' tot':'')+'"><span>'+esc(label)+'</span><span>'+fmtMoney(val)+'</span></div>'; }
 function dealFlags(r){
   const f=[], nn=notes[r.case]||{};
@@ -1322,6 +1340,7 @@ function view(){
     if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
     if(tdOnly) rows = rows.filter(r => r.st === 'TD');
     if(hideDead) rows = rows.filter(r => { const st=(notes[r.case]||{}).status; return st!=='Dead' && st!=='DO NOT CONTACT'; });
+    if(hideFlagged) rows = rows.filter(r => !isFlaggedDead(r));
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
   }
@@ -1424,9 +1443,10 @@ function render(){
       prof = verdictBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
         (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
         (r._tight?'<div class="warn" title="Costs/debt eat the margin. Negotiate lower or pass.">thin margin</div>':'')+
-        (r.mr?'<div class="mrwarn" title="HOA/junior case — first mortgage survives; entered below">mortgage risk</div>':'')+
+        mrText(r)+
         dealTrigger(r);
     }
+    const _fc = flagChips(r); if(_fc) prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FORECLOSURE up top
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction)+'</div>'+
       '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
@@ -1480,13 +1500,14 @@ function render(){
                   : r._verdict==='VERIFY' ? verdictBadge(r)
                   : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
+      (flagChips(r)?'<div class="fchips">'+flagChips(r)+'</div>':'')+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
         '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+
         '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+((r.eqfake||(r.st!=='TD'&&r.condo))?' eqfake':'')+'">'+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?'~'+r.eq+'%':r.eq+'%'):'—')+'</div></div>'+
       '</div>':'')+
-      (r.mr&&r._verdict!=='VERIFY'?'<div class="mrwarn">mortgage risk - verify payoff</div>':'')+
+      (r._verdict!=='VERIFY'?mrText(r):'')+
       '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
       (r.st==='TD'
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
@@ -1519,11 +1540,11 @@ function render(){
   if(cc) cc.innerHTML = cards.join('');
 }
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=tdOnly=ncOnly=dueOnly=false;
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=false;
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
-  ['wk','hd','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
+  ['wk','hd','hf','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
   document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
   render();
 }
@@ -1564,6 +1585,7 @@ function initCountyFilter(){ if(_ctyInit) return; const sel=document.getElementB
 }
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
+document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
 document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
 document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
@@ -1848,10 +1870,16 @@ function lkReport(a){
   if(lead && lead.orliens && lead.orliens.length){
     const rows=lead.orliens.map(l=>'<tr><td>'+esc(l.d)+'</td><td>'+esc(l.party)+'</td><td style="text-align:right">'+lkM(l.amt)+'</td>'
       +'<td class="'+(l.st==='OPEN'?'lkbad':'lkok')+'">'+esc(l.st)+'</td></tr>').join('');
-    const jr=+lead.orjunior||0, low=(lead.orconf!=='ok');
-    const call = jr>0
-      ? '<div class="lkcallout '+(low?'':'hot')+'"><b>Surviving 2nd mortgage &asymp; '+lkM(jr)+'</b> &mdash; an OPEN loan beyond the one being foreclosed, so it does NOT get wiped at the sale. '+(low?'Low confidence (common name / busy record) &mdash; verify.':'Pulled from Official Records.')+' This is the number that makes the raw equity a lie.</div>'
-      : '<div class="lknote" style="margin-bottom:8px">Only the foreclosing loan is open on record &mdash; no surviving 2nd found.</div>';
+    const hoa=(lead.orftype==='HOA'), low=(lead.orconf!=='ok');
+    const sv = hoa ? (+lead.orsurvfirst||0) : (+lead.orjunior||0);
+    let call='';
+    if(lead.ordeeded){ const hi=(lead.ordeedconf==='ok');
+      call += '<div class="lkcallout '+(hi?'hot':'')+'"><b>'+(hi?'Already sold':'Possibly already sold')+'</b> &mdash; a deed was recorded '+esc(lead.ordeeded.d||'')+' to <b>'+esc(lead.ordeeded.grantee||'an investor')+'</b>. '+(hi?'Another investor already took the deed &mdash; this one is likely gone.':'Common name &mdash; verify in Records before relying on it.')+'</div>'; }
+    if(lead.orsecond){
+      call += '<div class="lkcallout"><b>Second foreclosure running</b> &mdash; besides this HOA case there is a mortgage foreclosure ('+esc(lead.orsecond.case||'')+(lead.orsecond.party?', '+esc(lead.orsecond.party):'')+') also active. The small HOA number hides it &mdash; verify the mortgage payoff.</div>'; }
+    call += sv>0
+      ? '<div class="lkcallout '+(low?'':'hot')+'"><b>Surviving '+(hoa?'FIRST':'2nd')+' mortgage &asymp; '+lkM(sv)+'</b> &mdash; '+(hoa?'this whole loan SURVIVES the sale (only the ~'+lkM(lead.judg||0)+' HOA lien is being foreclosed), so it is NOT wiped.':'an OPEN loan beyond the one being foreclosed, so it does NOT get wiped at the sale.')+' '+(low?'Original recorded size on a common-name record &mdash; verify the payoff.':'Pulled from Official Records.')+' This is the number that makes the raw equity a lie.</div>'
+      : '<div class="lknote" style="margin-bottom:8px">'+(hoa?'No open mortgage found on record &mdash; but confirm, since an HOA sale leaves any mortgage in place.':'Only the foreclosing loan is open on record &mdash; no surviving 2nd found.')+'</div>';
     rec+='<div class="lkcard">'+call+'<table class="lktbl lkliens"><tr><th>Recorded</th><th>Lender</th><th>Amount</th><th>Status</th></tr>'+rows+'</table>'
       +'<div class="lknote">Amounts are original loan size (from doc tax) &mdash; a real payoff shrinks with principal paid, grows with arrears. '+(condo?'Condo: still get the association estoppel for the special assessment. ':'')+'Confirm with a payoff letter.</div></div>';
   } else {
@@ -1860,7 +1888,11 @@ function lkReport(a){
       +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find in Deal analysis.</div>';
   }
   // ---- seller-net calculator ----
-  const po = lead ? Math.round((td?lead.obid:lead.judg) + (lead.orconf==='ok'?(+lead.orjunior||0):0)) : 0;   // auto-add the confirmed surviving 2nd
+  // auto-add the surviving loan to the payoff ONLY when confident: HOA sale -> the whole first mortgage
+  // survives; mortgage foreclosure -> a surviving 2nd. Low-confidence numbers are shown as a warning, not
+  // auto-subtracted (conservative), so the user enters what they confirm.
+  const _survAdd = lead ? (lead.orftype==='HOA' ? (+lead.orsurvfirst||0) : (+lead.orjunior||0)) : 0;
+  const po = lead ? Math.round((td?lead.obid:lead.judg) + (lead.orconf==='ok'?_survAdd:0)) : 0;
   const calc='<div class="lksec">Deal desk</div><div class="lkcard lkcalc">'
       +'<div class="lkcgrid">'
         +'<label>List / market price $<input id="lklp" type="number" value="'+(val||'')+'" oninput="lkCalc()"></label>'

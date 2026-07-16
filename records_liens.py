@@ -85,12 +85,23 @@ def mint_and_fetch(owner_lf, budget=70):
 
 
 # ---- parse the chain: open vs satisfied, isolate the surviving junior --------------------------
-def analyze(models, folio, judgment):
+def _fc_type(case):
+    """HOA/county-court (whole 1st mortgage survives) vs circuit mortgage foreclosure. Miami-Dade case format
+    uses -CA- (circuit) / -CC- (county); also handle the Broward-style CACE/COCE prefixes defensively."""
+    c = (case or '').upper()
+    if '-CA-' in c or c.startswith('CACE'): return 'MORTGAGE'
+    if '-CC-' in c or c.startswith(('COCE', 'CONO', 'COWE', 'COSO')): return 'HOA'
+    return ''
+
+
+def analyze(models, folio, judgment, ftype=''):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
-    by, we return nothing rather than risk a namesake's mortgages polluting the number."""
+    by, we return nothing rather than risk a namesake's mortgages polluting the number.
+    ftype='HOA' means the whole first mortgage survives the sale (surface `surv`), not just a 2nd."""
     fol = norm_folio(folio)
     if not fol:
-        return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'conf': 'none'}
+        return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'surv': 0, 'surv_first': 0,
+                'ftype': ftype, 'conf': 'none'}
     # ANCHOR the subject's subdivision from a record that DOES carry the subject folio (usually the deed).
     # folio is blank on most newer mortgages, but subdivision is consistent — so subdivision + owner-name
     # isolates the property, while folio alone would drop the very mortgages we need.
@@ -126,19 +137,23 @@ def analyze(models, folio, judgment):
         liens.append(row)
         if is_open:
             opens.append(row)
-    junior = 0; first_amt = 0
+    junior = first_amt = surv = surv_first = 0
     if opens:
-        anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
-        fore = min(opens, key=anchor)                  # the foreclosing 1st (closest to judgment, else largest)
-        first_amt = fore['amt']
-        junior = sum(o['amt'] for o in opens if o is not fore)
+        if ftype == 'HOA':                             # HOA sale: the WHOLE first mortgage survives
+            surv = sum(o['amt'] for o in opens)
+            surv_first = max(o['amt'] for o in opens)
+        else:
+            anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
+            fore = min(opens, key=anchor)              # the foreclosing 1st (closest to judgment, else largest)
+            first_amt = fore['amt']
+            junior = surv = sum(o['amt'] for o in opens if o is not fore)
     # confidence: we must have isolated by a real anchor, sane count, and not a common-name over-match
     conf = 'ok'
     if not subj_subdiv: conf = 'low'                   # couldn't anchor the property (no folio-carrying record)
     if len(opens) > 4: conf = 'low'                    # one parcel rarely has >4 live mortgages
     if len(models) > 45: conf = 'low'                  # busy/common name -> results unreliable
     return {'liens': liens, 'open_count': len(opens), 'junior': junior, 'first_est': first_amt,
-            'conf': conf, 'subdiv': subj_subdiv}
+            'surv': surv, 'surv_first': surv_first, 'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv}
 
 
 def main():
@@ -189,7 +204,7 @@ def main():
         if models is None:
             print(f"  --  {case:22} {oc:26} (no records / blocked)")
             continue
-        res = analyze(models, folio, judg)
+        res = analyze(models, folio, judg, ftype=_fc_type(case))
         res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
         out[case] = res
         done += 1
