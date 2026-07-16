@@ -650,16 +650,17 @@ def make_tracker(leads):
         d['county'] = 'MIAMI-DADE'
         slim.append(d)
 
-    # Merge other counties (produced by broward.py etc., already in slim shape, county-tagged, gitignored).
-    for extra in ('broward_leads.json',):
-        _xf = os.path.join(HERE, extra)
-        if os.path.exists(_xf):
-            try:
-                xl = json.load(open(_xf, encoding='utf-8'))
-                slim.extend(xl)
-                print(f"merged {len(xl)} leads from {extra}")
-            except Exception as e:
-                print(f"skip {extra}: {e}")
+    # Merge other counties: any <county>_leads.json (produced by county_leads.py — already slim + county-tagged).
+    import glob as _glob
+    for _xf in sorted(_glob.glob(os.path.join(HERE, '*_leads.json'))):
+        if os.path.basename(_xf) in ('leads_final.json', 'leads_raw.json'):
+            continue
+        try:
+            xl = json.load(open(_xf, encoding='utf-8'))
+            slim.extend(xl)
+            print(f"merged {len(xl)} leads from {os.path.basename(_xf)}")
+        except Exception as e:
+            print(f"skip {_xf}: {e}")
 
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
