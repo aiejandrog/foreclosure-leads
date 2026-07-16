@@ -53,9 +53,10 @@ Parallel recon mapped all 8 data sources for Broward + Palm Beach (2026-07-16). 
   which *solves the reCAPTCHA lien-wall that capped Miami-Dade at 62%*. Palm Beach walls both its clerk
   (eCaseView reCAPTCHA v3) and its records (Landmark reCAPTCHA v2). Auctions are identical for both
   (countyname.realforeclose.com, browser-render like Miami-Dade). Broward folio=12-digit, PB PCN=17-digit.
-- [ ] Broward auction scrape — point the RealForeclose scraper at broward.realforeclose.com (browser).
+- [x] Broward auction scrape (broward.py) + statewide-cadastral enrich + make_tracker merge + a
+      county filter/chip on the site. LIVE: 209 Broward leads (100 enriched, 42 Tier A). 490 leads total.
 - [ ] Broward clerk enrichment (CaseSearchECA API) + lien feed (free bulk OR index).
-- [ ] Multi-county data model: tag leads by county; site filters/labels by county.
+- [x] Multi-county data model: leads tagged by county; auto-populated county filter + BROWARD chip.
 - [ ] In-site lookup → statewide via fl_cadastral for non-Miami-Dade (MD keeps its richer GIS).
 - [ ] Palm Beach second (auctions + fl_cadastral enrich; clerk/liens browser-gated like Miami-Dade).
 
