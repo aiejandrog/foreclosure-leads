@@ -38,9 +38,26 @@ The whole thing rests on fragile county scraping. One page change and pieces go 
 - [ ] Surface the source-health line in the site header (bake health.json into the build). *(polish, later)*
 - [ ] Graceful fallbacks: if an enrichment source is down, keep the last good value + flag it stale. *(later)*
 
-## Pillar 3 — SCALE  *(one county → real coverage)*
-- [ ] Broward (same RealAuction platform) — generalize the scraper with a county base-URL param → ~2–3× volume.
-- [ ] Palm Beach next (same platform).
+## Pillar 3 — SCALE  *(one county → real coverage)*  — RECON DONE, BUILD STARTED
+Parallel recon mapped all 8 data sources for Broward + Palm Beach (2026-07-16). Key findings:
+
+- **THE UNLOCK — statewide enrichment, one CORS-open API.** The FL DOR "Florida_Statewide_Cadastral"
+  ArcGIS layer (services9.arcgis.com/Gh9awoU677aKree0/…/FeatureServer/0) is public + `Access-Control-
+  Allow-Origin: *` + covers all 67 counties (keyed CO_NO). Returns owner, market value (JV), assessed,
+  homestead (JV_HMSTD), living sqft, year, last 2 sales — by parcel or address. So **owner+value for ANY
+  FL county needs NO per-county Property Appraiser integration**, and it works straight from the browser.
+  Gap: no beds/baths (annual roll). CO_NO alphabetical from 11: Broward=16, Miami-Dade=53, Palm Beach=60.
+  - [x] Built `fl_cadastral.py` (enrich by parcel or county+address; backoff for the free host's throttling).
+- **BUILD BROWARD FIRST (not Palm Beach).** Why: Broward's clerk is a plain no-captcha API
+  (browardclerk.org/Web2/CaseSearchECA) and Broward has a FREE bulk Official-Records feed (no captcha) —
+  which *solves the reCAPTCHA lien-wall that capped Miami-Dade at 62%*. Palm Beach walls both its clerk
+  (eCaseView reCAPTCHA v3) and its records (Landmark reCAPTCHA v2). Auctions are identical for both
+  (countyname.realforeclose.com, browser-render like Miami-Dade). Broward folio=12-digit, PB PCN=17-digit.
+- [ ] Broward auction scrape — point the RealForeclose scraper at broward.realforeclose.com (browser).
+- [ ] Broward clerk enrichment (CaseSearchECA API) + lien feed (free bulk OR index).
+- [ ] Multi-county data model: tag leads by county; site filters/labels by county.
+- [ ] In-site lookup → statewide via fl_cadastral for non-Miami-Dade (MD keeps its richer GIS).
+- [ ] Palm Beach second (auctions + fl_cadastral enrich; clerk/liens browser-gated like Miami-Dade).
 
 ## Pillar 4 — DEPTH  *(from the original roadmap, sequence after 1–3)*
 - [ ] Surplus-recovery module (capital-light income: former-owner surplus after over-bid sales).
