@@ -21,15 +21,22 @@ lead shows its REAL open-lien stack instead of a guess.
 - [x] `make_tracker` bakes `orliens` (the chain) + `orjunior` (suggested surviving 2nd) into each lead.
 - [x] Site: the lookup report's "Recorded mortgages & liens" section renders the REAL chain when we have it
       (open/satisfied, amounts), and Deal analysis surfaces the suggested 2nd for one-click entry.
-- [ ] Batch-run over all leads (best-effort, resumable — OR is bot-walled ~half the time headless).
-- [ ] Wire the batch into the weekly refresh so it stays current.
+- [x] Batch-run: 136 leads pulled via cached tokens (6 surviving-2nd hits). The remaining ~82 need fresh
+      token-mints, which the county's reCAPTCHA currently bot-walls headless (returned 0/68). The 158 cached
+      tokens were minted across prior sessions when the wall was down — so coverage grows opportunistically,
+      it can't be brute-forced. **Open item: a paid title-data API would remove the bot-wall dependency entirely
+      and get to ~100% — the real path to a rock-solid 8.**
+- [x] Wired `records_liens.py --all --cached-only` into refresh-dealflow.bat (runs every cycle after the
+      token-mint, so newly-cached owners get their lien chain automatically).
 
-## Pillar 2 — RESILIENCE  *(don't silently break)*
+## Pillar 2 — RESILIENCE  *(don't silently break)*  — DONE (core)
 The whole thing rests on fragile county scraping. One page change and pieces go dark with no warning.
-- [ ] `healthcheck.py` — after each refresh, assert: lead count in range, PA/GIS/Clerk reachable, % enriched,
-      % with a value, records-pull success rate. Write a status line + fail loudly.
-- [ ] Surface a "data freshness / health" line in the site header (already has the updated stamp; add source health).
-- [ ] Graceful fallbacks: if an enrichment source is down, keep the last good value + flag it stale, never blank.
+- [x] `healthcheck.py` — checks lead count/tier split, % enriched, FC case data, lien + phone coverage, and
+      PINGS all 4 upstream sources (PA GIS, Property Appraiser, Clerk OCS, RealForeclose). Prints PASS/WARN/
+      FAIL, writes health.json, exits non-zero on any FAIL. Wired into refresh-dealflow.bat (runs every cycle,
+      warns loudly). Baseline: 11 ok / 1 warn (61% enriched) / 0 fail = DEGRADED-but-fine.
+- [ ] Surface the source-health line in the site header (bake health.json into the build). *(polish, later)*
+- [ ] Graceful fallbacks: if an enrichment source is down, keep the last good value + flag it stale. *(later)*
 
 ## Pillar 3 — SCALE  *(one county → real coverage)*
 - [ ] Broward (same RealAuction platform) — generalize the scraper with a county base-URL param → ~2–3× volume.

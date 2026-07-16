@@ -72,5 +72,12 @@ echo     Pushed - live site updates in ~1-2 min.>> "%LOG%"
 echo     DONE - pushed. Refresh the site in ~1-2 min.
 
 :end
+echo [health] Checking shipped data + upstream sources...
+python healthcheck.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     ^!^! HEALTH: a source is DOWN or the data looks wrong - see leads-run.log.
+) else (
+  echo     health OK.
+)
 echo ==================== done %date% %time% ====================>> "%LOG%"
 endlocal
