@@ -37,6 +37,9 @@ echo [2/5] Generating direct court-case + records links (new owners only; capped
 python gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
 python gen_records_qs.py --limit 40 >> "%LOG%" 2>&1
 
+echo [2b/5] Pulling recorded mortgage chains -> surviving 2nd mortgages (cached tokens; fast, no bot-wall)...
+python records_liens.py --all --cached-only >> "%LOG%" 2>&1
+
 echo [3/5] Skip-tracing owner phones...
 if exist tracerfy.key goto :phones
 if exist batchdata.key goto :phones
