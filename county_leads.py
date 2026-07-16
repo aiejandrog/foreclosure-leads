@@ -96,15 +96,25 @@ def to_slim(county, cfg, base, items):
         tier = 'A' if (val and eqp >= 40 and 0 <= days <= 45) else ('B' if val and eqp >= 15 else 'C')
         z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio) + ' FL') + '_rb/'
         auc = base + '?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=' + r.get('AuctionDate', '') + ('#AITEM_' + r['AID'] if r.get('AID') else '')
-        pt = [t for t in re.sub(r'\s*&.*$', '', owner).split() if len(t.strip('.')) > 1]
+        # People search — build from the CLEANED name (oname = "FIRST LAST"; the raw owner is "LAST,FIRST"
+        # so a whitespace split can't parse it — that's why Broward barely had any). Same logic as
+        # Miami-Dade: first + last surname. Skip companies/trusts and address-named entities ("...LAND TR").
         zip5 = (re.search(r'(\d{5})', addr) or [None, ''])[1] if addr else ''
-        people = ('https://www.truepeoplesearch.com/results?name=' + urllib.parse.quote(pt[0] + ' ' + pt[-1]) + ('&citystatezip=' + zip5 if zip5 else '')) if (len(pt) >= 2 and not is_co) else ''
+        _pt = [t.strip('.') for t in (oname or '').split() if len(t.strip('.')) > 1]
+        _ent = bool(re.search(r'\b(TR|TRS|EST|ESTATE|FUND|PROPERT|REALTY|HOMES|GROUP|INVEST|ENTERPRISE|LAND|ASSN|ASSOC)\b', owner, re.I))
+        if len(_pt) >= 2 and not is_co and not _ent and not re.match(r'^\s*\d', oname or ''):
+            _nm = _pt[0] + ' ' + _pt[-1]
+            people = 'https://www.truepeoplesearch.com/results?name=' + urllib.parse.quote(_nm) + ('&citystatezip=' + zip5 if zip5 else '')
+        else:
+            people = ''
+        # People-by-ADDRESS (pinpoints the owner among same-name strangers) — reuse the Miami-Dade builder.
+        peopleaddr = F.people_addr_url(mail, addr, is_co or _ent)
         slim.append({
             'county': county, 'tier': tier, 'score': score, 'auction': r.get('AuctionDate', ''), 'days': days,
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname,
             'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': False, 'hs': hs, 'condo': condo,
             'st': st, 'obid': 0, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
-            'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': '',
+            'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr,
             'ctype': 'Bank/Mortgage', 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
             # county leads have no per-case docket token (no clerk enrichment) -> no Docket button; the
             # Records/Cases buttons point to THIS county's official-records + court-case search portals.
