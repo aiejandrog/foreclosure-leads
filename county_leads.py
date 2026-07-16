@@ -17,18 +17,26 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|USA|COUNTY|CITY OF|CHURCH|MINISTR)\b', re.I)
 
 # One row per county. subdomain -> RealForeclose; co_no -> FDOR cadastral; links -> county PA/tax/clerk.
+# Per-county DIRECT deep-links, verified against real parcels (2026-07-16). PA links open the exact
+# parcel by folio; tax/records/cases are the correct county portals (some are search-only — see notes).
 COUNTIES = {
     'BROWARD': {
         'sub': 'broward', 'co_no': 16,
-        'pa': lambda f: 'https://web.bcpa.net/BcpaClient/#/Record-Search',
+        # BCPA's Angular SPA can't deep-link; the legacy RecInfo.asp endpoint opens the parcel directly (12-digit folio, no dashes).
+        'pa': lambda f: 'https://bcpa.net/RecInfo.asp?URL_Folio=' + f,
+        # Grant Street TaxSys — folio-addressable (browser-only; bare curl 403s but it renders the parcel).
         'tax': lambda f: 'https://broward.county-taxes.com/public/real_estate/parcels/' + f,
-        'clerk': 'https://www.browardclerk.org/Web2/CaseSearchECA/',
+        'records': 'https://officialrecords.broward.org/AcclaimWeb/',   # Official Records (mortgages/liens) — disclaimer-gated search, no URL deep-link
+        'cases': 'https://www.browardclerk.org/Web2/CaseSearchECA/',    # court case search
     },
     'PALM BEACH': {
         'sub': 'palmbeach', 'co_no': 60,
-        'pa': lambda f: 'https://pbcpao.gov/Property/Details?parcelId=' + f,
-        'tax': lambda f: 'https://pbctax.manatron.com/Accounts/AccountDetails.aspx?p=' + f,
-        'clerk': 'https://appsgp.mypalmbeachclerk.com/eCaseView/',
+        'pa': lambda f: 'https://pbcpao.gov/Property/Details?parcelId=' + f,   # direct parcel (17-digit PCN, no dashes)
+        # manatron.com is retired; the PublicAccessNow portal's true deep-link needs a non-derivable Aumentum
+        # account id, so link the portal (user searches by PCN/address there).
+        'tax': lambda f: 'https://pbctax.publicaccessnow.com/',
+        'records': 'https://erec.mypalmbeachclerk.com/',                 # Official Records search
+        'cases': 'https://appsgp.mypalmbeachclerk.com/eCaseView/',       # court case search
     },
 }
 
@@ -97,7 +105,10 @@ def to_slim(county, cfg, base, items):
             'st': st, 'obid': 0, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
             'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': '',
             'ctype': 'Bank/Mortgage', 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
-            'docket': cfg['clerk'], 'cstatus': '', 'mr': False, 'ip': False, 'ju': (judg <= 0),
+            # county leads have no per-case docket token (no clerk enrichment) -> no Docket button; the
+            # Records/Cases buttons point to THIS county's official-records + court-case search portals.
+            'docket': '', 'records': cfg['records'], 'cases': cfg['cases'],
+            'cstatus': '', 'mr': False, 'ip': False, 'ju': (judg <= 0),
             'bought': bought, 'bprice': bprice, 'filed': 0, 'etax': 0,
             'warn': ('' if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': '',
         })

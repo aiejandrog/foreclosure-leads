@@ -1024,6 +1024,17 @@ document.addEventListener('click', e => {
 });
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
+function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
+// Per-county DIRECT deep-links, verified against real parcels (2026-07-16). Drives the lookup report's
+// "Dig deeper" links so a Broward/Palm Beach property never gets Miami-Dade URLs. pa() takes the folio.
+const CTY_LINKS = {
+  'MIAMI-DADE': { pa:f=>'https://apps.miamidadepa.gov/PropertySearch/#/?folio='+f, tax:f=>'https://miamidade.county-taxes.com/public/real_estate/parcels/'+f,
+    records:'https://onlineservices.miamidadeclerk.gov/officialrecords/', cases:'https://www2.miamidadeclerk.gov/ocs/', place:'MIAMI FL' },
+  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>'https://broward.county-taxes.com/public/real_estate/parcels/'+f,
+    records:'https://officialrecords.broward.org/AcclaimWeb/', cases:'https://www.browardclerk.org/Web2/CaseSearchECA/', place:'BROWARD COUNTY FL' },
+  'PALM BEACH': { pa:f=>'https://pbcpao.gov/Property/Details?parcelId='+f, tax:f=>'https://pbctax.publicaccessnow.com/',
+    records:'https://erec.mypalmbeachclerk.com/', cases:'https://appsgp.mypalmbeachclerk.com/eCaseView/', place:'PALM BEACH COUNTY FL' },
+};
 const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">'+COPY_SVG+'</button>';
 function genLetter(r){
@@ -1376,12 +1387,14 @@ function render(){
     if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
     if(r.peopleaddr) gDig.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
     if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+r.recqs+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
+    else if(r.records) gDig.push('<a class="dig recsearch" href="'+esc(r.records)+'" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — mortgages/liens/judgments. On the site search by Name or Parcel and PASTE the owner (this click copied it).')+'">Records</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
     if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+r.ocsqs+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
+    else if(r.cases) gDig.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="'+esc(ctyName(r.county)+' court case search — pick Party Name and PASTE the owner (this click copied it).')+'">Cases</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
     if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
     // PROPERTY — value + county pages.
-    if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="Miami-Dade Property Appraiser record">Appraiser</a>');
+    if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
     if(r.zillow) gProp.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
     if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
     // Auction: the live RealForeclose sale page for this date (all parcels + bidding). RealForeclose
@@ -1666,8 +1679,10 @@ const LK_F='FOLIO,TRUE_OWNER1,TRUE_SITE_ADDR,TRUE_SITE_CITY,TRUE_SITE_ZIP_CODE,T
 // STATEWIDE fallback: FL DOR cadastral (CORS-open, all 67 counties) — used when the Miami-Dade GIS misses,
 // so the lookup works for Broward / Palm Beach / anywhere. Mapped into the same shape the report reads.
 const CAD='https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/Florida_Statewide_Cadastral/FeatureServer/0/query';
-const CAD_F='PARCEL_ID,OWN_NAME,OWN_ADDR1,OWN_CITY,OWN_STATE,OWN_ZIPCD,PHY_ADDR1,PHY_CITY,PHY_ZIPCD,DOR_UC,JV,AV_NSD,TV_NSD,JV_HMSTD,LND_SQFOOT,TOT_LVG_AR,ACT_YR_BLT,SALE_PRC1,SALE_YR1,SALE_PRC2,SALE_YR2';
+const CAD_F='CO_NO,PARCEL_ID,OWN_NAME,OWN_ADDR1,OWN_CITY,OWN_STATE,OWN_ZIPCD,PHY_ADDR1,PHY_CITY,PHY_ZIPCD,DOR_UC,JV,AV_NSD,TV_NSD,JV_HMSTD,LND_SQFOOT,TOT_LVG_AR,ACT_YR_BLT,SALE_PRC1,SALE_YR1,SALE_PRC2,SALE_YR2';
+const CAD_CO={16:'BROWARD',53:'MIAMI-DADE',60:'PALM BEACH'};   // CO_NO -> county (the 3 we have link configs for)
 function lkCadMap(a){ const hs=(+a.JV_HMSTD||0)>0; return {
+  _county: CAD_CO[+a.CO_NO]||'',
   FOLIO:a.PARCEL_ID, TRUE_OWNER1:a.OWN_NAME, TRUE_SITE_ADDR:a.PHY_ADDR1, TRUE_SITE_CITY:a.PHY_CITY, TRUE_SITE_ZIP_CODE:a.PHY_ZIPCD,
   TRUE_MAILING_ADDR1:a.OWN_ADDR1, TRUE_MAILING_CITY:a.OWN_CITY, TRUE_MAILING_STATE:a.OWN_STATE, TRUE_MAILING_ZIP_CODE:a.OWN_ZIPCD,
   DOR_DESC:'FL DOR use code '+(a.DOR_UC||'?'), CONDO_FLAG:(String(a.DOR_UC)==='0400'?'Y':'N'), SUBDIVISION:'',
@@ -1747,6 +1762,14 @@ function lkReport(a){
   const people=(nm&&!isCo)?('https://www.truepeoplesearch.com/results?name='+nm+(zip?'&citystatezip='+zip:'')):'';
   const paddr=(site&&!isCo)?('https://www.truepeoplesearch.com/resultaddress?streetaddress='+encodeURIComponent(site)+'&citystatezip='+encodeURIComponent((city||'MIAMI')+', FL '+zip)):'';
   const lead=lkLead(folio);
+  // COUNTY-AWARE links: a matched lead carries its own correct URLs; a cadastral-only lookup knows its
+  // county from CO_NO (a._county); otherwise default Miami-Dade. Used by BOTH the records + links sections.
+  const cty = (lead && lead.county) || (a._cad && a._county) || 'MIAMI-DADE';
+  const CL = CTY_LINKS[cty];                                  // null only for an unsupported FL county
+  const paURL  = (lead&&lead.pa)      || (CL ? CL.pa(folio) : '');
+  const taxURL = (lead&&lead.tax)     || (CL ? CL.tax(folio) : '');
+  const recURL = (lead&&lead.records) || (CL ? CL.records : '');
+  const casURL = (lead&&lead.cases)   || (CL ? CL.cases : '');
   const td = lead && lead.st==='TD';
   // ---- computed intelligence (what makes this a report, not a form-dump) ----
   const heated=+a.BUILDING_HEATED_AREA||0;
@@ -1833,7 +1856,7 @@ function lkReport(a){
       +'<div class="lknote">Amounts are original loan size (from doc tax) &mdash; a real payoff shrinks with principal paid, grows with arrears. '+(condo?'Condo: still get the association estoppel for the special assessment. ':'')+'Confirm with a payoff letter.</div></div>';
   } else {
     rec+='<div class="lkcallout"><b>Manual step &mdash; the county blocks websites from pulling this.</b> Open '
-      +'<a href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener">Official Records</a>, search Name/Document for '
+      +'<a href="'+esc(recURL||'https://onlineservices.miamidadeclerk.gov/officialrecords/')+'" target="_blank" rel="noopener">'+esc(ctyName(cty))+' Official Records</a>, search Name/Document for '
       +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find in Deal analysis.</div>';
   }
   // ---- seller-net calculator ----
@@ -1862,14 +1885,17 @@ function lkReport(a){
       +'</div>'
       +'<div class="lknote">Cash risked = cash-to-owner + stop-sale + rehab (the money you front &mdash; Jose\'s &ldquo;$10k &rarr; $50k&rdquo;). The payoff + your resale costs come out of the resale at closing. Rehab and exit costs are NOT optional &mdash; keep it honest.</div>'
       +'<div class="lknote" style="color:var(--amber-ink)"><b>FS 501.1377:</b> any purchase from a homeowner in foreclosure needs a written 12pt contract, a 3-day right to cancel, no upfront fees, and a title/attorney closing. Buyer entity = Jose\'s LLC.</div></div>';
-  // ---- links ----
-  let L=[['Appraiser','https://apps.miamidadepa.gov/PropertySearch/#/?folio='+folio],
-    ['Taxes','https://miamidade.county-taxes.com/public/real_estate/parcels/'+folio],
-    ['Zillow','https://www.zillow.com/homes/'+encodeURIComponent((site||folio)+' MIAMI FL')+'_rb/'],
-    ['Maps','https://www.google.com/maps/search/'+encodeURIComponent(site+', Miami FL')]];
+  // ---- links (COUNTY-AWARE: a Broward/PB property must never get Miami-Dade URLs) ----
+  // cty / CL / paURL / taxURL / recURL / casURL are hoisted just after lkLead() above.
+  const placeQ = city ? (city+' FL') : (CL ? CL.place : 'FL');
+  let L=[];
+  if(paURL) L.push(['Appraiser', paURL]);
+  if(taxURL) L.push(['Taxes', taxURL]);
+  L.push(['Zillow', (lead&&lead.zillow) || ('https://www.zillow.com/homes/'+encodeURIComponent((site||folio)+' '+placeQ)+'_rb/')]);
+  L.push(['Maps','https://www.google.com/maps/search/'+encodeURIComponent(site+(city?', '+city:'')+' FL')]);
   if(people) L.push(['People (name)',people]); if(paddr) L.push(['People (address)',paddr]);
-  L.push(['Official Records','https://onlineservices.miamidadeclerk.gov/officialrecords/']);
-  L.push(['Court cases','https://www2.miamidadeclerk.gov/ocs/']);
+  if(recURL) L.push([ctyName(cty)+' Official Records', recURL]);
+  if(casURL) L.push(['Court cases', casURL]);
   if(lead&&lead.docket) L.unshift(['Docket (this case)',lead.docket]);
   if(lead&&lead.auc) L.splice(1,0,['Auction page',lead.auc]);
   const links=L.map(x=>'<a href="'+esc(x[1])+'" target="_blank" rel="noopener">'+esc(x[0])+'</a>').join('');
