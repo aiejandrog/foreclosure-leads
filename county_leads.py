@@ -27,7 +27,7 @@ COUNTIES = {
         # The county-taxes.com/.../parcels/{folio} deep-link is Cloudflare-walled on its redirect and never
         # resolves for a normal click (verified) — link the tax portal LANDING, which loads + lets you search.
         'tax': lambda f: 'https://county-taxes.net/broward',
-        'records': 'https://officialrecords.broward.org/AcclaimWeb/',   # Official Records (mortgages/liens) — disclaimer-gated search, no URL deep-link
+        'records': 'https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName',   # lands on the NAME search form (via disclaimer), not the generic portal
         'cases': 'https://www.browardclerk.org/Web2/CaseSearchECA/',    # court case search
     },
     'PALM BEACH': {
@@ -36,10 +36,25 @@ COUNTIES = {
         # manatron.com is retired; the PublicAccessNow portal's true deep-link needs a non-derivable Aumentum
         # account id, so link the portal (user searches by PCN/address there).
         'tax': lambda f: 'https://pbctax.publicaccessnow.com/',
-        'records': 'https://erec.mypalmbeachclerk.com/',                 # Official Records search
+        'records': 'https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection=',   # Landmark NAME search
         'cases': 'https://appsgp.mypalmbeachclerk.com/eCaseView/',       # court case search
     },
 }
+
+
+def _rec_name(owner):
+    """'Last, First' for the Official-Records / court-case NAME search (AcclaimWeb + Landmark want last-first)
+    — the OPPOSITE of the TruePeopleSearch order. Copied to the clipboard when the Records/Cases button is clicked."""
+    s = re.sub(r'\s*&.*$', '', owner or '')
+    s = re.sub(r'\b(H/[EW]|ET\s?UX|ET\s?AL|TRS?|JR|SR|II+|III|IV|LE|REM)\b', '', s, flags=re.I).strip()
+    if ',' in s:
+        last, _, first = s.partition(',')
+    else:
+        toks = s.split()
+        if len(toks) < 2:
+            return s.strip()
+        last, first = toks[0], ' '.join(toks[1:])
+    return (last.strip() + ', ' + first.strip()).strip(', ')
 
 
 def _people_name(owner):
@@ -125,7 +140,7 @@ def to_slim(county, cfg, base, items):
         peopleaddr = F.people_addr_url(mail, addr, is_co or _ent)
         slim.append({
             'county': county, 'tier': tier, 'score': score, 'auction': r.get('AuctionDate', ''), 'days': days,
-            'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname,
+            'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
             'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': False, 'hs': hs, 'condo': condo,
             'st': st, 'obid': 0, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
             'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr,
