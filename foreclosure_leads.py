@@ -653,7 +653,10 @@ def make_tracker(leads):
     # Merge other counties: any <county>_leads.json (produced by county_leads.py — already slim + county-tagged).
     import glob as _glob
     for _xf in sorted(_glob.glob(os.path.join(HERE, '*_leads.json'))):
-        if os.path.basename(_xf) in ('leads_final.json', 'leads_raw.json'):
+        _bn = os.path.basename(_xf)
+        # skip the MD files and any scratch/backup (_-prefixed) file so a stray _bak_*_leads.json can't
+        # get double-merged into the site.
+        if _bn in ('leads_final.json', 'leads_raw.json') or _bn.startswith('_'):
             continue
         try:
             xl = json.load(open(_xf, encoding='utf-8'))
