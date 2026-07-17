@@ -801,8 +801,16 @@ function netEqPct(r){
   if(r.orconf==='ok' && r.orsurv && r.value) return Math.round((r.value - (r.judg||0) - r.orsurv) / r.value * 100);
   return r.eq||0;
 }
-let sender = {name:'', llc:'', phone:'', addr:'', title:'', email:'', web:'', partner:''};
+let sender = {name:'Jose', llc:'Miami Solutions Group', phone:'', addr:'', title:'', email:'', web:'', partner:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
+// One-time correction: a real sent email went out signed "Alejandro Gonzalez" — the outreach entity must
+// never carry his name (his name/money/accounts go on nothing, per the hard rule this whole tool runs on).
+// If THIS device's already-saved sender name matches that, silently correct it back to the right default
+// and persist the fix — no manual retyping required. Runs once; harmless no-op after that.
+if (/^alejandro(\s+gonzalez)?$/i.test((sender.name||'').trim())) {
+  sender.name = 'Jose';
+  try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e) {}
+}
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
 const DEAL_VER = '2026-07-12b';  // bump when defaults change -> stale saved settings are ignored once (auto-heal)
