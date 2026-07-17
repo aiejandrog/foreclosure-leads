@@ -1167,6 +1167,18 @@ document.addEventListener('click', e => {
 });
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
+// County data stores owner names as "LAST,FIRST" — often with NO space after the comma. The old
+// `titleCase(raw).split(' ')[0]` broke on that: with no space anywhere in "Salazar,Gladys", split(' ')
+// returned the WHOLE string as the "first name" — a real sent email opened "Hi Salazar,Gladys,". Reorders
+// to "First Last" so the greeting AND the first-name extraction both work correctly everywhere.
+function _ownerName(raw){
+  const s = (raw||'').trim();
+  if(!s) return '';
+  const ci = s.indexOf(',');
+  if(ci === -1) return titleCase(s);
+  const last = s.slice(0, ci).trim(), first = s.slice(ci+1).trim();
+  return titleCase((first+' '+last).replace(/\s{2,}/g,' ').trim());
+}
 function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
 // Per-county DIRECT deep-links, verified against real parcels (2026-07-16). Drives the lookup report's
 // "Dig deeper" links so a Broward/Palm Beach property never gets Miami-Dade URLs. pa() takes the folio.
@@ -1183,7 +1195,7 @@ const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
-  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
   const first = owner.split(' ')[0] || owner;
   const addr = esc(r.addr), mail = esc(r.mail||r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
@@ -1259,7 +1271,7 @@ ul{margin:10px 0}
 // Prints one hanger per page (fold in half on the dashed line) + a field cheat-card the visitor keeps.
 function genHanger(r){
   const sN = sender.name || '[YOUR NAME]', sP = sender.phone || '[YOUR PHONE]', sL=(sender.llc||'').trim();
-  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
   const first = owner.split(' ')[0] || owner;
   const addr = esc(r.addr), dt = esc(r.auction);
   const area = titleCase(((r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||[])[1]||'the area').trim());
@@ -1348,7 +1360,7 @@ body{font-family:Georgia,serif;color:#111;margin:0;padding:0}
 function genContract(r){
   const sN = sender.name || '[BUYER NAME]', sL = (sender.llc||'').trim() || '[BUYER ENTITY]';
   const sP = sender.phone || '[BUYER PHONE]', sA = (sender.addr||'').trim() || '[BUYER BUSINESS ADDRESS]';
-  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
   const addr = esc(r.addr), folio = esc(r.folio||''), county = esc(ctyName(r.county)), caseNo = esc((r.case||'').trim());
   const today = new Date().toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'});
   const doc = `<!doctype html><html><head><meta charset="utf-8"><title>DRAFT Purchase Agreement - ${esc(owner)}</title>
@@ -1487,7 +1499,7 @@ function genScript(r){
   const partner = (sender.partner||'').trim() || '[PARTNER]';   // the closer/expert on the two-step callback
   const days = r.days >= 0 ? r.days : 0;
   const hi = (new Date().getHours() < 12) ? 'morning' : 'afternoon';
-  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
   const first = esc(owner.split(' ')[0] || owner);
   const addr = esc(r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
@@ -1633,7 +1645,7 @@ function genScript(r){
 function genEmail(r){
   const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
   const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
-  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
   const first = owner.split(' ')[0] || owner;
   const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
   const street = (addr.split(',')[0]||addr).trim();
