@@ -1198,7 +1198,7 @@ function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
 const CTY_LINKS = {
   'MIAMI-DADE': { pa:f=>'https://apps.miamidadepa.gov/PropertySearch/#/?folio='+f, tax:f=>'https://miamidade.county-taxes.com/public/real_estate/parcels/'+f,
     records:'https://onlineservices.miamidadeclerk.gov/officialrecords/', cases:'https://www2.miamidadeclerk.gov/ocs/', place:'MIAMI FL' },
-  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>'https://county-taxes.net/broward',
+  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>'https://county-taxes.net/broward/property-tax',
     records:'https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName', cases:'https://www.browardclerk.org/Web2/CaseSearchECA/', place:'BROWARD COUNTY FL' },
   'PALM BEACH': { pa:f=>'https://pbcpao.gov/Property/Details?parcelId='+f, tax:f=>'https://pbctax.publicaccessnow.com/',
     records:'https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection=', cases:'https://appsgp.mypalmbeachclerk.com/eCaseView/', place:'PALM BEACH COUNTY FL' },
@@ -1839,7 +1839,17 @@ function render(){
     // PROPERTY — value + county pages.
     if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
     if(r.zillow) gProp.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
-    if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
+    // Broward's tax portal (county-taxes.net) is Cloudflare-walled and uses opaque per-parcel UUID tokens
+    // that CANNOT be built from a folio (verified 2026-07-18: the working link is base64 of an internal
+    // "broward:real_estate:parents:<uuid>" id, and the search that resolves it is bot-blocked). So there's
+    // no honest one-click deep-link. Best achievable: open the tax SEARCH page and copy the folio to the
+    // clipboard so it's one tap + paste + Enter. Other counties keep their working folio deep-links.
+    if(r.tax){
+      if(/county-taxes\.net\/broward/.test(r.tax) && r.folio)
+        gProp.push('<a class="taxsearch" href="https://county-taxes.net/broward/property-tax" target="_blank" rel="noopener" data-folio="'+esc(r.folio)+'" title="Broward tax search. This county portal has no working per-parcel link (Cloudflare-walled, internal IDs), so this opens the search box and COPIES the folio '+esc(r.folio)+' — paste it, press Enter, and you get the bill + any delinquent taxes / certificates.">Taxes</a>');
+      else
+        gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
+    }
     // Auction: the live RealForeclose sale page for this date (all parcels + bidding). RealForeclose
     // returns 200 to a real browser; a bare/no-UA request 403s at their AWS load balancer, so it can
     // LOOK dead from a script — it isn't. May need a free RealForeclose login for bid detail, and the
@@ -2440,6 +2450,13 @@ document.addEventListener('click', e => {
   const o = (a.dataset.o || '').trim(); if(!o) return;
   const orig = a.textContent, flash = () => { a.textContent = '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
   if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, flash); else flash();
+});
+// Broward Taxes: copy the folio (the portal can't be deep-linked — see the render comment) + open the search.
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a.taxsearch'); if(!a) return;
+  const f = (a.dataset.folio || '').trim(); if(!f) return;
+  const orig = a.textContent, flash = () => { a.textContent = '✓ folio copied — paste it'; setTimeout(() => { a.textContent = orig; }, 1600); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(f).then(flash, flash); else flash();
 });
 // document-level so it works in BOTH the desktop table (#tb) and mobile cards (#cards)
 document.addEventListener('click', e => {

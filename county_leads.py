@@ -26,7 +26,7 @@ COUNTIES = {
         'pa': lambda f: 'https://bcpa.net/RecInfo.asp?URL_Folio=' + f,
         # The county-taxes.com/.../parcels/{folio} deep-link is Cloudflare-walled on its redirect and never
         # resolves for a normal click (verified) — link the tax portal LANDING, which loads + lets you search.
-        'tax': lambda f: 'https://county-taxes.net/broward',
+        'tax': lambda f: 'https://county-taxes.net/broward/property-tax',
         'records': 'https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName',   # lands on the NAME search form (via disclaimer), not the generic portal
         'cases': 'https://www.browardclerk.org/Web2/CaseSearchECA/',    # court case search
     },
