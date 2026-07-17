@@ -24,7 +24,7 @@ button.active{background:#3b82f6;border-color:#3b82f6}
 input{width:240px;cursor:text}
 .stats{font-size:12px;color:#9fb0cc;margin-left:auto}
 .tblwrap{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1770px;table-layout:fixed}
 th{position:sticky;top:0;background:#1b2438;padding:9px 8px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:2px solid #2a3654;font-size:11.5px;letter-spacing:.02em;color:#c7d3e8}
 td{padding:9px 8px;border-bottom:1px solid #1c2540;vertical-align:top;line-height:1.4}
 tbody tr:nth-child(even) td{background:#121a29}
@@ -226,11 +226,11 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 .scrollnudge.on{opacity:.97;transform:translateX(0);animation:nudgeBob 1.5s ease-in-out infinite}
 @keyframes nudgeBob{0%,100%{transform:translateX(0)}50%{transform:translateX(6px)}}
 @media(prefers-reduced-motion:reduce){.scrollnudge.on{animation:none}}
-table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1770px;table-layout:fixed}
 th{position:sticky;top:0;z-index:1;background:var(--bg);padding:11px 12px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:1px solid var(--line);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 th:hover{color:var(--ink)}
-td{padding:11px 12px;border-bottom:1px solid var(--line-2);vertical-align:middle;line-height:1.45;background:var(--surface)}
-td.links,td.owncell,td.propcell{vertical-align:top}
+td{padding:12px;border-bottom:1px solid var(--line-2);vertical-align:top;line-height:1.45;background:var(--surface)}
+td.links,td.owncell,td.propcell,td.mailcell{vertical-align:top}
 tbody tr:nth-child(even) td{background:#FBFCFE}
 tbody tr:hover td{background:#FCF8EF}
 tbody tr td:first-child{box-shadow:inset 3px 0 0 transparent}
@@ -261,11 +261,11 @@ td.num .warn,td.num .mrwarn,td.num .submeta{white-space:normal;overflow-wrap:any
 .deflist .defco{color:var(--muted-2)}
 a{color:var(--blue-ink);text-decoration:none;font-weight:500}
 a:hover{text-decoration:underline}
-select.status{padding:5px 6px;font-size:11.5px;width:100%;box-sizing:border-box;border-radius:var(--r-xs)}
-textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-xs);font-size:12px;padding:6px 8px;resize:vertical;font-family:var(--f-body)}
+select.status{padding:5px 6px;height:30px;font-size:11px;width:100%;box-sizing:border-box;border-radius:var(--r-xs)}
+textarea.notes{width:100%;box-sizing:border-box;min-height:40px;background:transparent;color:var(--ink);border:1px solid var(--line-2);border-radius:var(--r-xs);font-size:12px;padding:6px 8px;resize:vertical;font-family:var(--f-body)}
+textarea.notes:hover{border-color:var(--line)}
 textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
-.links{line-height:1.5}
-.links a{margin-right:8px;white-space:nowrap}
+.links{line-height:1.4}
 .urgent{color:var(--red);font-weight:700}
 .warn{color:var(--amber-ink);font-size:11px}
 .profpos{color:var(--green-ink);font-weight:800;font-size:19px;font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
@@ -288,6 +288,17 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 /* deal-analysis trigger */
 .dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font-family:var(--f-body);font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--pill);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .14s;box-shadow:var(--sh-1)}
 .dealtog:hover{border-color:var(--gold);color:var(--gold-d);box-shadow:var(--sh-2);transform:translateY(-1px)}
+/* profit cell — one structured right-aligned deal summary, not loose ornaments */
+td.num .fchips{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:3px;margin-bottom:5px}
+td.num .fchips:empty{display:none;margin:0}
+td.num .vb{margin-bottom:4px}
+td.num .submeta{margin-top:2px}
+td.num .warn,td.num .mrwarn{margin-top:3px}
+td.num .dealtog{margin-top:7px;box-shadow:none;background:transparent;border-color:transparent;padding:3px 4px;color:var(--gold-d)}
+td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-shadow:none;transform:none}
+/* owner / property cells — primary line leads, metadata recedes */
+td.owncell .addrline,td.propcell .addrline,td.mailcell .addrline{font-weight:600;line-height:1.35}
+td.owncell .meta,td.owncell .submeta,td.propcell .submeta,td.propcell .warn{font-size:10.5px;line-height:1.4;margin-top:4px;font-weight:400}
 
 /* deal-analysis modal */
 #dealmodal{display:none;position:fixed;inset:0;z-index:120}
@@ -308,16 +319,17 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 #planmodal.show{display:block}
 #planmodal .dm-card{width:min(640px,95vw);max-height:86vh}
 /* property photo thumbnail (row + card) + swipe gallery lightbox */
-.pcell{width:132px}
-.pthumb{display:block;width:124px;height:92px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;padding:0;position:relative}
+.pcell{width:172px}
+.pthumb{display:block;width:148px;height:110px;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;padding:0;position:relative;box-shadow:0 2px 8px -3px rgba(16,28,52,.18);transition:border-color .2s var(--e-lux),box-shadow .2s var(--e-lux),transform .2s var(--e-lux)}
 .pthumb img{width:100%;height:100%;object-fit:cover;display:block}
 .pthumb:hover{border-color:var(--gold);box-shadow:var(--sh-2);transform:translateY(-1px)}
-.pthumb.noimg,.pthumb.imgfail{display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--muted);cursor:default;opacity:.7}
+.pthumb.noimg,.pthumb.imgfail{display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--muted);cursor:default;opacity:.7;box-shadow:none}
 .pthumb.imgfail img{display:none}
-.pcount{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(4,8,16,.72));color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;text-align:center;padding:8px 2px 2px;pointer-events:none;text-transform:uppercase}
+/* photo count badge — quiet pill, top-right; no kind lettering, no gradient band over the photo */
+.pcount{position:absolute;top:7px;right:7px;background:rgba(10,16,28,.62);backdrop-filter:blur(2px);color:#fff;font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:2px 8px;border-radius:var(--pill);pointer-events:none}
 .phero{position:relative;width:100%;height:260px;border-radius:10px;overflow:hidden;margin-bottom:10px;cursor:pointer;border:1px solid var(--line)}
 .phero img{width:100%;height:100%;object-fit:cover;display:block}
-.phero .pcount{font-size:10px;padding:16px 6px 6px;text-align:left}
+.phero .pcount{font-size:10.5px;padding:3px 10px}
 .gstage.imgfail .gimg{display:none}
 .gstage.imgfail::before{content:'\1F3E0  image unavailable';display:flex;align-items:center;justify-content:center;min-height:240px;font-size:15px;color:var(--muted);letter-spacing:.02em}
 #gallerymodal{display:none;position:fixed;inset:0;z-index:130}
@@ -423,7 +435,7 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 #logmodal{display:none;position:fixed;inset:0;z-index:120}
 #logmodal.show{display:block}
 #logmodal .dm-card{max-width:440px}
-.cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;cursor:pointer}
+.cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px;cursor:pointer}
 .cx{font-size:10px;padding:1px 6px;border-radius:9px;white-space:nowrap;line-height:1.7}
 .cx-new{background:var(--surface-2);color:var(--muted)}
 .cx-done{background:rgba(74,222,128,.14);color:#8fe3ab}
@@ -508,7 +520,8 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 /* saved phones */
 a.phone{color:var(--green-ink);font-weight:700}
 a.phone.dnc{color:var(--amber-ink)}
-input.ph{width:100%;box-sizing:border-box;font-size:12px;padding:6px 8px;margin-bottom:5px;background:#F0FAF3;border:1px solid #CFE9D6;border-radius:var(--r-xs);color:#0A7A42;font-family:var(--f-num)}
+input.ph{width:100%;box-sizing:border-box;font-size:12px;height:30px;padding:5px 8px;margin-bottom:5px;background:transparent;border:1px solid var(--line-2);border-radius:var(--r-xs);color:#0A7A42;font-family:var(--f-num)}
+input.ph:hover,input.ph:not(:placeholder-shown){border-color:#CFE9D6;background:#F7FCF9}
 input.ph::placeholder{color:#8FBFA0}
 
 /* intro reveal */
@@ -559,15 +572,14 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 /* copy micro-lift */
 .cpy{transition:transform .16s var(--e-lux),background .16s ease,border-color .16s ease,color .16s ease}
 .cpy:hover{transform:translateY(-1px)}
-/* lead links, ONE coherent system grouped by purpose (gold underline draws in on hover):
+/* lead links, ONE coherent chip system grouped by purpose:
    base = slate (info/nav) · .dig = gold (investigate: loans, cases, people, docket) · .phone = green (call) */
-.links a,.clinks a{position:relative;text-decoration:none;color:var(--muted);font-weight:500;transition:color .2s var(--e-lux)}
-.links a::after,.clinks a::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--gold-grad);transform:scaleX(0);transform-origin:100% 50%;transition:transform .3s var(--e-lux)}
-.links a:hover,.clinks a:hover{color:var(--gold-d);text-decoration:none}
-.links a:hover::after,.clinks a:hover::after{transform:scaleX(1);transform-origin:0 50%}
-.links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:600}
-.links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
-.links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
+.links a,.clinks a{display:inline-flex;align-items:center;text-decoration:none;color:var(--ink-2);font-weight:600;font-size:10.5px;line-height:1;padding:3px 8px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);white-space:nowrap;transition:color .16s var(--e-lux),border-color .16s var(--e-lux),background .16s var(--e-lux),transform .16s var(--e-lux)}
+.links a:hover,.clinks a:hover{color:var(--gold-d);border-color:var(--gold);background:var(--gold-soft);text-decoration:none;transform:translateY(-1px)}
+.links a.dig,.clinks a.dig{color:var(--gold-d);border-color:#E4D7AE;background:var(--gold-soft)}
+.links a.phone,.clinks a.phone{color:var(--green-ink);border-color:#CFE9D6;background:#F0FAF3;font-weight:700}
+.links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink);border-color:#EAD9B0;background:#FBF6E9}
+.links span.phone,.clinks span.phone{display:inline-flex;align-items:center;font-size:11px;line-height:1.3;padding:4px 9px;border:1px dashed var(--line);border-radius:var(--pill);background:var(--surface-2)}
 /* compliance gates: DNC numbers are visible but NOT dialable; opted-out leads show a hard stop */
 span.phone.nodial{color:var(--amber-ink);text-decoration:line-through;cursor:not-allowed;opacity:.85}
 span.phone.dncgate{color:#e05252;font-weight:700;cursor:not-allowed}
@@ -579,8 +591,8 @@ span.phone.dncgate{color:#e05252;font-weight:700;cursor:not-allowed}
 .planlog:hover{background:var(--surface-2)}
 .links a.email,.clinks a.email{color:#5a7db0;font-weight:600;word-break:break-all}
 /* links laid out as clean even bands, one functional group per row (phones · investigate · property · actions) */
-.links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 13px;line-height:1.35}
-.links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:3px}
+.links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:center;gap:4px;line-height:1.3}
+.links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:6px;padding-top:6px;border-top:1px dashed var(--line-2)}
 .eqfake{color:var(--muted-2)!important;font-style:italic;font-weight:400}
 .cstat .v.eqfake{color:var(--muted-2);font-style:italic}
 /* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
@@ -788,7 +800,8 @@ body.modal-open{overflow:hidden}
 <div class="tblwrap">
 <table id="tbl">
 <colgroup>
-<col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:116px"><col style="width:92px"><col style="width:238px"><col style="width:230px"><col style="width:124px"><col style="width:300px"><col style="width:126px"><col style="width:150px">
+<!-- 12 cols for 12 columns — the Photo col was missing, shifting every width one column left -->
+<col style="width:172px"><col style="width:44px"><col style="width:150px"><col style="width:50px"><col style="width:106px"><col style="width:78px"><col style="width:210px"><col style="width:230px"><col style="width:150px"><col style="width:330px"><col style="width:130px"><col style="width:150px">
 </colgroup>
 <thead><tr>
 <th>Photo</th>
@@ -1193,12 +1206,11 @@ function imgFB(img){
   const el = img.closest('.pthumb') || img.closest('.phero') || img.closest('.gstage');
   if(el) el.classList.add('imgfail');
 }
-function _kindLabel(k){ return k==='aerial' ? 'aerial' : k==='street' ? 'street view' : ''; }
 function _photoThumb(r, eager){
   const ph = r.photos || [];
   if(ph.length) return '<button class="pthumb" data-c="'+esc(r.case)+'" type="button" title="View property photos">'
     + '<img src="'+esc(ph[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'
-    + '<span class="pcount">'+(ph.length>1?'▣ '+ph.length : _kindLabel(r.photo_kind))+'</span></button>';
+    + (ph.length>1?'<span class="pcount">▣ '+ph.length+'</span>':'')+'</button>';
   return '<div class="pthumb noimg" title="No image available">\u{1f3e0}</div>';
 }
 function galleryBody(r){
@@ -2033,15 +2045,15 @@ function render(){
       '<td class="num">'+r.score+'</td>'+
       '<td>'+auc+'</td>'+
       '<td>'+ctype+'</td>'+
-      '<td>'+owner+'</td>'+
-      '<td>'+prop+'</td>'+
-      '<td><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
+      '<td class="owncell">'+owner+'</td>'+
+      '<td class="propcell">'+prop+'</td>'+
+      '<td class="mailcell"><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
       '<td class="links">'+linksHtml+'</td>'+
       '<td><div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+statusSel+'</td>'+
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
     cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
-      ((r.photos||[]).length?'<div class="phero pthumb" data-c="'+esc(r.case)+'"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)"><span class="pcount">'+(r.photos.length>1?'▣ '+r.photos.length+' photos':(r.photo_kind==='aerial'?'satellite aerial':r.photo_kind==='street'?'street view':''))+'</span></div>':'')+
+      ((r.photos||[]).length?'<div class="phero pthumb" data-c="'+esc(r.case)+'"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</div>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)
