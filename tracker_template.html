@@ -116,6 +116,8 @@ input.ph::placeholder{color:#5a7d66}
 /* deal-analysis modal */
 #dealmodal{display:none;position:fixed;inset:0;z-index:120}
 #dealmodal.show{display:block}
+#planmodal{display:none;position:fixed;inset:0;z-index:121}
+#planmodal.show{display:block}
 .dm-backdrop{position:absolute;inset:0;background:#060a12cc;backdrop-filter:blur(2px)}
 .dm-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,94vw);max-height:90vh;overflow-y:auto;background:#141b2b;border:1px solid #2c3a5a;border-radius:14px;box-shadow:0 18px 60px #000b;padding:20px 22px 22px}
 .dm-close{position:absolute;top:10px;right:12px;background:none;border:none;color:#9fb0cc;font-size:24px;line-height:1;cursor:pointer;padding:2px 8px}
@@ -299,6 +301,12 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 #lookupmodal{display:none;position:fixed;inset:0;z-index:121}
 #lookupmodal.show{display:block}
 #lookupmodal .dm-card{width:min(760px,95vw);background:var(--bg-2)}
+/* plan-today modal (shares .dm-card / .dm-backdrop / .dm-close) — was missing its display:none/fixed
+   rule entirely, so the empty shell rendered inline in the page flow instead of as a hidden overlay
+   (looked like a stray floating box with just the close X, under the header, before first open) */
+#planmodal{display:none;position:fixed;inset:0;z-index:121}
+#planmodal.show{display:block}
+#planmodal .dm-card{width:min(640px,95vw);max-height:86vh}
 .lktitle{font-family:var(--f-display);font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 30px 1px 0;color:var(--ink)}
 .lksub{color:var(--muted);font-size:12px;margin-bottom:8px}
 .lkchips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 14px}
