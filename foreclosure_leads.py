@@ -66,6 +66,32 @@ def cyberbg_url(name, address):
     city = _slug(m.group(1)) if m else ''
     return 'https://www.cyberbackgroundchecks.com/people/' + slug + '/fl' + ('/' + city if city else '')
 
+def cyberbg_addr_url(mailing, address, is_company):
+    """CyberBackgroundChecks ADDRESS search — verified 2026-07-17: often surfaces things the NAME search
+    misses. Live test (Bazile-Medley, 6816 SW 5th St, Pembroke Pines): revealed she's ABSENTEE — this is
+    her CURRENT address, distinct from the foreclosure property's mailing address on file with the county
+    (meaning official notices may not be reaching her) — plus a phone BatchData never returned, and
+    confirmed a family relation matching a decades-old deed. URL pattern /address/{street-slug}/{city-slug}/fl
+    (no dashes needed in the street — slugified same as the name search). Prefer mailing over property
+    address for the same absentee-owner reason as people_addr_url; skip PO boxes/companies."""
+    src = (mailing or '').strip()
+    if not src or re.search(r'\bP\.?\s*O\.?\s*BOX\b', src, re.I):
+        src = (address or '').strip()
+    if not src or is_company or re.search(r'\bP\.?\s*O\.?\s*BOX\b', src, re.I):
+        return ''
+    parts = [p.strip() for p in src.split(',') if p.strip()]
+    if len(parts) < 2:
+        return ''
+    street = _slug(parts[0])
+    rest = ' '.join(parts[1:])
+    mz = re.search(r'(\d{5})(?:-\d{4})?\s*$', rest)
+    rn = (rest[:mz.start()] if mz else rest).strip()
+    sm = re.search(r'\b([A-Za-z]{2})\s*$', rn)
+    city = _slug(rn[:sm.start()] if sm else rn)
+    if not street or not city:
+        return ''
+    return 'https://www.cyberbackgroundchecks.com/address/' + street + '/' + city + '/fl'
+
 def people_addr_url(mailing, address, is_company):
     """TruePeopleSearch ADDRESS search: returns only the people who actually live at an address, so the
     owner can be told apart from same-name strangers (BatchData gives no age/DOB to disambiguate). Prefer
@@ -445,6 +471,7 @@ def qualify(leads):
             r['cyberbg_url'] = cyberbg_url(name, r.get('Address', ''))
         else:
             r['people_url'] = ''; r['people_name'] = ''; r['cyberbg_url'] = ''
+        r['cyberbg_addr_url'] = cyberbg_addr_url(r.get('mailing_address', ''), r.get('Address', ''), is_company)
         # ADDRESS-based People search. A name search on TPS returns many same-name people and there is
         # no way to tell which is the owner (BatchData returns NO age/DOB — confirmed against the live
         # API). Searching by the ADDRESS instead returns the 1-3 people who actually live there, which
@@ -697,7 +724,7 @@ def make_tracker(leads):
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
-            'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'ctype': r.get('case_type',''),
+            'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
             'named': r.get('named', []),   # [{name,url}] co-parties: humans get a People-search URL, companies ''
             'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
