@@ -307,6 +307,34 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 #planmodal{display:none;position:fixed;inset:0;z-index:121}
 #planmodal.show{display:block}
 #planmodal .dm-card{width:min(640px,95vw);max-height:86vh}
+/* property photo thumbnail (row + card) + swipe gallery lightbox */
+.pcell{width:78px}
+.pthumb{display:block;width:70px;height:52px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;padding:0;position:relative}
+.pthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.pthumb:hover{border-color:var(--gold);box-shadow:var(--sh-2);transform:translateY(-1px)}
+.pthumb.noimg,.pthumb.imgfail{display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--muted);cursor:default;opacity:.7}
+.pthumb.imgfail img{display:none}
+.pcount{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(4,8,16,.72));color:#fff;font-size:8px;font-weight:700;letter-spacing:.04em;text-align:center;padding:7px 2px 2px;pointer-events:none;text-transform:uppercase}
+.phero{position:relative;width:100%;height:158px;border-radius:10px;overflow:hidden;margin-bottom:10px;cursor:pointer;border:1px solid var(--line)}
+.phero img{width:100%;height:100%;object-fit:cover;display:block}
+.phero .pcount{font-size:10px;padding:16px 6px 6px;text-align:left}
+#gallerymodal{display:none;position:fixed;inset:0;z-index:130}
+#gallerymodal.show{display:block}
+#gallerymodal .gcard{width:min(880px,96vw);max-height:92vh;padding:0;overflow:hidden;background:#0d1526;border:1px solid #26324c}
+.ghead{display:flex;align-items:center;gap:10px;padding:15px 48px 12px 18px}
+.gtitle{font-family:var(--f-display);font-size:16px;font-weight:700;color:#fff;flex:1;letter-spacing:-.01em;line-height:1.25}
+.gtag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:var(--pill);background:rgba(255,255,255,.1);color:#cbd5e8;white-space:nowrap}
+.gtag.gz{background:var(--gold-grad);color:#1a1205}
+.gstage{position:relative;background:#05070d;display:flex;align-items:center;justify-content:center;min-height:340px;max-height:66vh}
+.gimg{max-width:100%;max-height:66vh;object-fit:contain;display:block}
+.gnav{position:absolute;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;border:none;background:rgba(0,0,0,.5);color:#fff;font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.gnav:hover{background:var(--gold);color:#1a1205}
+.gprev{left:12px}.gnext{right:12px}
+.gfoot{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;gap:12px}
+.gcount{color:#9fb0cc;font-size:12px;font-weight:600}
+.gzbtn{background:var(--gold-grad);color:#1a1205!important;font-weight:700;font-size:13px;padding:9px 16px;border-radius:var(--pill);text-decoration:none}
+.gzbtn:hover{filter:brightness(1.06)}
+@media(max-width:860px){ .gstage{min-height:240px} .gnav{width:36px;height:36px;font-size:22px} .ghead .gtitle{font-size:14px} }
 .lktitle{font-family:var(--f-display);font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 30px 1px 0;color:var(--ink)}
 .lksub{color:var(--muted);font-size:12px;margin-bottom:8px}
 .lkchips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 14px}
@@ -677,6 +705,7 @@ body.modal-open{overflow:hidden}
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
 <div id="planmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="planbody"></div></div></div>
+<div id="gallerymodal"><div class="dm-backdrop"></div><div class="dm-card gcard"><button class="dm-close" type="button" title="Close">&times;</button><div id="gallerybody"></div></div></div>
 <div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
 <header>
 <div class="brand">
@@ -760,6 +789,7 @@ body.modal-open{overflow:hidden}
 <col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:116px"><col style="width:92px"><col style="width:238px"><col style="width:230px"><col style="width:124px"><col style="width:300px"><col style="width:126px"><col style="width:150px">
 </colgroup>
 <thead><tr>
+<th>Photo</th>
 <th data-k="tier">Tier</th>
 <th data-k="_profit" style="color:var(--green-ink)">Est. Profit</th>
 <th data-k="score">Score</th>
@@ -1147,6 +1177,41 @@ function planModalBody(){
 }
 function openPlanModal(){ document.getElementById('planbody').innerHTML=planModalBody(); document.getElementById('planmodal').classList.add('show'); document.body.classList.add('modal-open'); }
 function closePlanModal(){ document.getElementById('planmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+// ---- property PHOTO thumbnail + swipe gallery ----------------------------------------------------
+// photos[] = real Zillow listing photos where the property is listed, else 1 keyless satellite aerial.
+// Thumbnail (left of each row / top of each card) opens a lightbox that swipes through the images, with a
+// "View on Zillow" button (real listing when we have one, else the address search). Replaces the old text link.
+let galleryCase = null, galleryIdx = 0;
+function _photoThumb(r, eager){
+  const ph = r.photos || [];
+  if(ph.length) return '<button class="pthumb" data-c="'+esc(r.case)+'" type="button" title="View property photos">'
+    + '<img src="'+esc(ph[0])+'"'+(eager?'':' loading="lazy"')+' alt="property" onerror="this.closest(\'.pthumb\').classList.add(\'imgfail\')">'
+    + '<span class="pcount">'+(ph.length>1?'▣ '+ph.length : (r.photo_kind==='aerial'?'aerial':''))+'</span></button>';
+  return '<div class="pthumb noimg" title="No image available">\u{1f3e0}</div>';
+}
+function galleryBody(r){
+  const ph = r.photos || []; if(!ph.length) return '';
+  const i = Math.max(0, Math.min(galleryIdx, ph.length-1));
+  const z = r.zlisting || r.zillow || '';
+  const tag = r.photo_kind==='zillow' ? '<span class="gtag gz">Zillow listing</span>'
+            : r.photo_kind==='aerial' ? '<span class="gtag">Satellite aerial</span>' : '';
+  return '<div class="ghead"><div class="gtitle">'+esc(titleCase(r.addr||''))+'</div>'+tag+'</div>'+
+    '<div class="gstage">'+
+      (ph.length>1?'<button class="gnav gprev" type="button" aria-label="Previous">‹</button>':'')+
+      '<img class="gimg" src="'+esc(ph[i])+'" alt="property">'+
+      (ph.length>1?'<button class="gnav gnext" type="button" aria-label="Next">›</button>':'')+
+    '</div>'+
+    '<div class="gfoot">'+
+      (ph.length>1?'<span class="gcount">'+(i+1)+' / '+ph.length+'</span>':'<span></span>')+
+      (z?'<a class="gzbtn" href="'+esc(z)+'" target="_blank" rel="noopener">View on Zillow ↗</a>':'')+
+    '</div>';
+}
+function openGallery(c){ const r=DATA.find(x=>x.case===c); if(!r||!(r.photos||[]).length) return;
+  galleryCase=c; galleryIdx=0; document.getElementById('gallerybody').innerHTML=galleryBody(r);
+  document.getElementById('gallerymodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function galleryNav(delta){ const r=DATA.find(x=>x.case===galleryCase); if(!r) return; const n=(r.photos||[]).length; if(!n) return;
+  galleryIdx=(galleryIdx+delta+n)%n; document.getElementById('gallerybody').innerHTML=galleryBody(r); }
+function closeGallery(){ galleryCase=null; document.getElementById('gallerymodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
 const QUICKLOG=[
   {lbl:'☎ No answer', ch:'call', out:'no answer', status:'Called - no answer', nextDays:2},
   {lbl:'☎ Left message', ch:'call', out:'left message', status:'Called - no answer', nextDays:3},
@@ -1187,7 +1252,20 @@ document.addEventListener('click', e => {
   if(un){ e.preventDefault(); const n=notes[un.dataset.c]; if(n&&n.touches&&n.touches.length){ n.touches.pop(); save(); refreshLogModal(); render(); } return; }
   const pl=e.target.closest && e.target.closest('.planlog');
   if(pl){ e.preventDefault(); closePlanModal(); openLogModal(pl.dataset.c); return; }
+  const pt=e.target.closest && e.target.closest('.pthumb[data-c]');
+  if(pt){ e.preventDefault(); openGallery(pt.dataset.c); return; }
+  const gn=e.target.closest && e.target.closest('.gnext'); if(gn){ e.preventDefault(); galleryNav(1); return; }
+  const gp=e.target.closest && e.target.closest('.gprev'); if(gp){ e.preventDefault(); galleryNav(-1); return; }
 });
+// gallery: keyboard arrows + Esc when open, and touch-swipe on the stage
+document.addEventListener('keydown', e => {
+  if(!galleryCase) return;
+  if(e.key==='ArrowRight') galleryNav(1); else if(e.key==='ArrowLeft') galleryNav(-1); else if(e.key==='Escape') closeGallery();
+});
+(function(){ let x0=null;
+  document.addEventListener('touchstart', e => { if(galleryCase && e.target.closest && e.target.closest('.gstage')) x0=e.touches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend', e => { if(x0===null) return; const dx=e.changedTouches[0].clientX-x0; x0=null; if(Math.abs(dx)>40) galleryNav(dx<0?1:-1); }, {passive:true});
+})();
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
 // County data stores owner names as "LAST,FIRST" — often with NO space after the comma. The old
@@ -1802,7 +1880,8 @@ function render(){
   const ds = document.getElementById('dealsum');
   if(ds) ds.textContent = prof.length + ' profitable in view · ' + fmt(totp) + ' total est. profit';
   const trs = [], cards = [];
-  rows.forEach(r => {
+  rows.forEach((r, _ri) => {
+    const _eager = _ri < 14;   // eager-load the above-the-fold thumbnails so the first screen is instant
     const n = notes[r.case] || {status:'', note:''};
     // ---- links, grouped by purpose:  CALL (green) · INVESTIGATE (gold) · PROPERTY (slate) · DO ----
     const gCall = [], gDig = [], gProp = [], gDo = [];
@@ -1848,7 +1927,8 @@ function render(){
     if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
     // PROPERTY — value + county pages.
     if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
-    if(r.zillow) gProp.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
+    // Zillow text link removed — the property PHOTO (left of the row / top of the card) is now the path to
+    // Zillow: click it -> swipe gallery -> "View on Zillow" (real listing when known, else address search).
     // Broward's tax portal (county-taxes.net) is Cloudflare-walled and uses opaque per-parcel UUID tokens
     // that CANNOT be built from a folio (verified 2026-07-18: the working link is base64 of an internal
     // "broward:real_estate:parents:<uuid>" id, and the search that resolves it is bot-blocked). So there's
@@ -1931,6 +2011,7 @@ function render(){
     // free manual phone: look it up via the People button, then type it here (saves on this device)
     const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="phone" value="'+esc(n.phone||'')+'">';
     trs.push('<tr class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+'">'+
+      '<td class="pcell">'+_photoThumb(r, _eager)+'</td>'+
       '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
       '<td class="num">'+prof+'</td>'+
       '<td class="num">'+r.score+'</td>'+
@@ -1944,6 +2025,7 @@ function render(){
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
     cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
+      ((r.photos||[]).length?'<div class="phero pthumb" data-c="'+esc(r.case)+'"><img src="'+esc(r.photos[0])+'"'+(_eager?'':' loading="lazy"')+' alt="property"><span class="pcount">'+(r.photos.length>1?'▣ '+r.photos.length+' photos':(r.photo_kind==='aerial'?'satellite aerial':''))+'</span></div>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)
@@ -1981,7 +2063,7 @@ function render(){
       : '<div class="empty-s">Try a wider tier, date range, or a different search.</div>'+
         '<button class="empty-reset" type="button">Clear all filters</button>';
     const msg = '<div class="empty"><div class="empty-t">No leads match these filters</div>'+cta+'</div>';
-    document.getElementById('tb').innerHTML = '<tr><td colspan="11" class="emptycell">'+msg+'</td></tr>';
+    document.getElementById('tb').innerHTML = '<tr><td colspan="12" class="emptycell">'+msg+'</td></tr>';
     if(cc) cc.innerHTML = msg;
     return;
   }
@@ -2484,7 +2566,7 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); }
 });
 document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); } });
 // "/" focuses search (unless already typing in a field)
