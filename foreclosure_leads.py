@@ -726,6 +726,10 @@ def make_tracker(leads):
             'vac': bool(re.search(r'VACANT', str(r.get('dor_desc','') or ''), re.I)),
             'co': bool(re.search(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|PROPERT|REALTY|CAPITAL|GROUP|INVEST|EQUIT)\b', str(r.get('owners','') or ''), re.I)),
             'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
+            # property photos (from property_photos.py). County leads pass through via slim.extend, but the
+            # Miami-Dade dict is rebuilt with explicit keys, so photos MUST be copied here or every MD lead
+            # loses its image.
+            'photos': r.get('photos', []) or [], 'zlisting': r.get('zlisting',''), 'photo_kind': r.get('photo_kind',''),
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
