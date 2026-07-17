@@ -1577,12 +1577,22 @@ function render(){
     if(optedOut){
       gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
     } else {
+      // Good numbers get their own tappable line (the whole point is to make them easy to spot).
+      // DNC numbers collapse into ONE line instead of repeating "(DNC — mail/door only)" per number —
+      // 3 struck-through lines read as clutter/broken, not as useful data. Nothing is lost: the full
+      // list is still in the title tooltip.
+      const dncPh = [];
       (r.phones||[]).slice(0,3).forEach((ph,i) => {
-        const dnc = (r.phdnc||[])[i];
-        if(dnc) gCall.push('<span class="phone dnc nodial" title="DNC-registered — DO NOT DIAL (manual dials to DNC numbers are still actionable). Reach this owner by mail or the door instead.">'+esc(fmtPhone(ph))+' (DNC — mail/door only)</span>');
+        if((r.phdnc||[])[i]) dncPh.push(ph);
         else gCall.push('<a class="phone" href="tel:'+esc(ph)+'" title="Skip-traced owner phone — manual dial only, one number at a time, 8am-8pm">'+esc(fmtPhone(ph))+'</a>');
       });
       if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a>');
+      if(dncPh.length){
+        const list = dncPh.map(fmtPhone).join(', ');
+        const label = dncPh.length===1 ? fmtPhone(dncPh[0])+' — DNC, mail/door only'
+                                        : dncPh.length+' more on file — DNC, mail/door only';
+        gCall.push('<span class="phone dnc nodial" title="DO NOT DIAL — '+esc(list)+'. Manual dials to DNC-registered numbers are still actionable; reach this owner by mail or the door instead.">'+esc(label)+'</span>');
+      }
       // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
       (r.emails||[]).slice(0,2).forEach(em => {
         gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
