@@ -1216,6 +1216,81 @@ ul{margin:10px 0}
   const w = window.open('', '_blank');
   if(w){ w.document.write(doc); w.document.close(); }
 }
+// ---- NEIGHBOR-SAFE DOOR HANGER: a fold-and-tape leave-behind for the door visit. ----
+// Privacy is the whole point: folded + taped, the OUTSIDE shows ONLY the owner's first name.
+// The word "foreclosure" never appears anywhere (public record or not, no neighbor should read it, and
+// denial-stage owners bin anything that says it). The message + auction date live INSIDE the fold.
+// Prints one hanger per page (fold in half on the dashed line) + a field cheat-card the visitor keeps.
+function genHanger(r){
+  const sN = sender.name || '[YOUR NAME]', sP = sender.phone || '[YOUR PHONE]', sL=(sender.llc||'').trim();
+  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const first = owner.split(' ')[0] || owner;
+  const addr = esc(r.addr), dt = esc(r.auction);
+  const area = titleCase(((r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||[])[1]||'the area').trim());
+  // INSIDE message — warm, private, no "foreclosure"/"auction" wording, urgency by date only. EN + ES.
+  const inEN = `<p class="hi">Hi ${esc(first)},</p>
+<p>I stopped by your home today. My name is <b>${esc(sN)}</b> — I'm a local homeowner-helper and buyer here in ${esc(area)}. <b>I'm not the bank, not the county, and not a bill collector.</b></p>
+<p>I came by because I think I may be able to help with your property at <b>${addr}</b>, and it would be worth a quick talk <b>before ${dt}</b>. There's no cost and no pressure — if I can't help, I'll tell you straight.</p>
+<p class="call">Please call or text me anytime:<br><b class="ph">${esc(sP)}</b></p>
+<p class="sig">— ${esc(sN)}${sL?'<br>'+esc(sL):''}</p>`;
+  const inES = `<p class="hi">Hola ${esc(first)},</p>
+<p>Pas&eacute; por su casa hoy. Mi nombre es <b>${esc(sN)}</b>, ayudo y compro casas aqu&iacute; en ${esc(area)}. <b>No soy del banco, ni del condado, ni cobrador.</b></p>
+<p>Vine porque creo que puedo ayudarle con su propiedad en <b>${addr}</b>, y valdr&iacute;a la pena hablar <b>antes del ${dt}</b>. Sin costo y sin presi&oacute;n — si no puedo ayudar, se lo dir&eacute; con franqueza.</p>
+<p class="call">Ll&aacute;meme o env&iacute;eme un mensaje cuando quiera:<br><b class="ph">${esc(sP)}</b></p>
+<p class="sig">— ${esc(sN)}${sL?'<br>'+esc(sL):''}</p>`;
+  // TENANT-INTEL script — often whoever answers is a renter who doesn't know the owner is losing the place.
+  // Get the owner's number WITHOUT disclosing their business to a stranger; offer to keep the tenant posted.
+  const tenant = `<b>If a tenant / not the owner answers:</b>
+<p>"Hi — I'm trying to reach <b>${esc(owner)}</b>, the owner of this property, about something time-sensitive with the house. I'm not with the bank or the county. Do you happen to have a phone number or email for them?"</p>
+<p><i>Don't say why.</i> If they press: "It's about the property itself — there's a deadline coming up that affects it, and I'd hate for them to miss it. It could affect you too as a resident, which is exactly why I'd want to keep you in the loop."</p>
+<p>If they help: "I really appreciate it — I'll keep you posted on anything that affects your living situation." Then get <b>their</b> name + number too, and log it in the lead notes.</p>`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><title>Door hanger - ${esc(first)}</title>
+<style>
+body{font-family:Georgia,serif;color:#111;margin:0;padding:0}
+.bar{background:#eee;padding:10px 16px;display:flex;gap:8px;font-family:Arial;flex-wrap:wrap;align-items:center}
+.bar button{padding:8px 14px;cursor:pointer;border:1px solid #999;background:#fff;border-radius:5px}
+.bar button.on{background:#2563eb;color:#fff;border-color:#2563eb}
+.bar .note{font-size:12px;color:#555;margin-left:auto}
+.sheet{width:5.5in;margin:24px auto;border:1px solid #ccc}
+.fold{border-top:2px dashed #999;position:relative;height:0}
+.fold span{position:absolute;left:8px;top:-9px;background:#fff;padding:0 6px;font-family:Arial;font-size:10px;color:#999}
+.panel{padding:26px 30px;min-height:3.1in;box-sizing:border-box}
+.front{display:flex;align-items:center;justify-content:center;text-align:center}
+.front .fn{font-size:46px;font-weight:700;font-family:'Segoe Script','Bradley Hand',cursive}
+.front .sub{font-family:Arial;font-size:12px;color:#666;letter-spacing:.12em;text-transform:uppercase;margin-top:14px}
+.inside p{margin:0 0 12px;line-height:1.5;font-size:15px}
+.inside .hi{font-size:17px}
+.inside .call{text-align:center;margin-top:16px}
+.inside .ph{font-size:22px}
+.inside .sig{margin-top:16px;font-style:italic}
+.card{width:5.5in;margin:24px auto;border:1px dashed #bbb;padding:18px 22px;font-family:Arial;font-size:13px;line-height:1.45;background:#fafafa}
+.card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#444}
+.card p{margin:0 0 9px}
+.card .tip{background:#fff4d6;border-left:3px solid #e0a800;padding:8px 10px;margin:10px 0}
+@media print{.bar,.screen-only{display:none}.sheet,.card{margin:0 auto 0.3in;page-break-inside:avoid}}
+</style></head><body>
+<div class="bar">
+  <button id="en" class="on" onclick="show('en')">English</button>
+  <button id="es" onclick="show('es')">Espa&ntilde;ol</button>
+  <button onclick="window.print()">Print / Save PDF</button>
+  <span class="note">Print &rarr; fold on the dashed line (name faces out) &rarr; tape shut &amp; tuck in the door. Never the mailbox.</span>
+</div>
+<div class="sheet">
+  <div class="panel inside" id="msg">${inEN}</div>
+  <div class="fold"><span>FOLD HERE — name faces out</span></div>
+  <div class="panel front"><div><div class="fn">${esc(first)}</div><div class="sub">Personal &middot; please open</div></div></div>
+</div>
+<div class="card">
+  <h3>Field card — keep this, don't leave it</h3>
+  <div class="tip"><b>Placement:</b> door handle, jamb, or under the mat with a small piece of removable tape. <b>Not</b> the mailbox (federal violation) and <b>not</b> anywhere a neighbor can read it — folded name-out is the whole point.</div>
+  <div id="tcard">${tenant}</div>
+  <p style="color:#666"><b>Lead:</b> ${esc(owner)} &middot; ${addr} &middot; talk before ${dt}</p>
+</div>
+<script>function show(l){document.getElementById('msg').innerHTML=l==='en'?${JSON.stringify(inEN)}:${JSON.stringify(inES)};document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(w){ w.document.write(doc); w.document.close(); }
+}
 // ---- per-lead PHONE SCRIPT: what to actually say when you call this owner (EN/ES, tailored) ----
 function genScript(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
@@ -1528,6 +1603,7 @@ function render(){
     // so the opt-out itself stays auditable).
     if(!optedOut){
       gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
+      gDo.push('<a href="#" class="hangergen" data-c="'+esc(r.case)+'" title="Neighbor-safe door hanger to leave on the visit: folds so only the owner\'s first name shows, message + date inside. Includes a tenant-intel script. Print, fold, tape to the door (never the mailbox).">Door hanger</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
     }
@@ -1741,6 +1817,14 @@ document.addEventListener('click', e => {
   e.preventDefault();
   const r = DATA.find(x => x.case === a.dataset.c);
   if(r) genLetter(r);
+});
+// door-hanger generation (delegated for both table + cards)
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.hangergen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) genHanger(r);
 });
 // phone-script generation (delegated for both table + cards)
 document.addEventListener('click', e => {
