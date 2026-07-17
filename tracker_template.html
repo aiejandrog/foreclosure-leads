@@ -801,16 +801,18 @@ function netEqPct(r){
   if(r.orconf==='ok' && r.orsurv && r.value) return Math.round((r.value - (r.judg||0) - r.orsurv) / r.value * 100);
   return r.eq||0;
 }
-let sender = {name:'Jose', llc:'Miami Solutions Group', phone:'', addr:'', title:'', email:'', web:'', partner:''};
+// Prefilled outreach identity — Alejandro fronts Miami Solutions Group directly on the foreclosure side
+// (distinct from the cousin-Jose tax-deed entity). Every generated letter/email/script/contract fills
+// these in automatically so nothing has to be typed; a device can still override any field in Sender setup.
+let sender = {name:'Alejandro Gonzalez', llc:'Miami Solutions Group', phone:'(786) 631-1823', addr:'', title:'', email:'', web:'', partner:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
-// One-time correction: a real sent email went out signed "Alejandro Gonzalez" — the outreach entity must
-// never carry his name (his name/money/accounts go on nothing, per the hard rule this whole tool runs on).
-// If THIS device's already-saved sender name matches that, silently correct it back to the right default
-// and persist the fix — no manual retyping required. Runs once; harmless no-op after that.
-if (/^alejandro(\s+gonzalez)?$/i.test((sender.name||'').trim())) {
-  sender.name = 'Jose';
-  try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e) {}
-}
+// Migration: an earlier build briefly forced the name to "Jose" and persisted it on some devices. If a
+// device has exactly that stale value saved with no custom company set, clear the saved name so the new
+// default (above) takes over. A device that deliberately set a different name keeps it.
+try {
+  const _sv = JSON.parse(localStorage.getItem('fcSender')||'{}');
+  if (_sv && _sv.name === 'Jose') { delete _sv.name; localStorage.setItem('fcSender', JSON.stringify(_sv)); sender.name = 'Alejandro Gonzalez'; }
+} catch(e) {}
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
 const DEAL_VER = '2026-07-12b';  // bump when defaults change -> stale saved settings are ignored once (auto-heal)
