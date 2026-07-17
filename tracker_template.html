@@ -694,6 +694,7 @@ body.modal-open{overflow:hidden}
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
 <button id="hf" title="Hide leads the records already flagged as dead: already deeded to another investor, or an HOA case hiding a mortgage bigger than the equity (underwater). Off by default so nothing disappears silently.">Hide flagged</button>
+<button id="eq30" title="Only leads with 30%+ real equity — excludes gross/unverified equity (an HOA case hiding a big first mortgage can show 90%+ on paper) and anything the records already flagged dead (already sold, or underwater once the real mortgage is counted).">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="plan" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script.">📋 Plan today</button>
@@ -782,7 +783,7 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '';
+let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false;
 // a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
@@ -1519,6 +1520,11 @@ function view(){
     if(tdOnly) rows = rows.filter(r => r.st === 'TD');
     if(hideDead) rows = rows.filter(r => { const st=(notes[r.case]||{}).status; return st!=='Dead' && st!=='DO NOT CONTACT'; });
     if(hideFlagged) rows = rows.filter(r => !isFlaggedDead(r));
+    // 30%+ equity, TRUSTED: excludes eqfake (gross/unverified — HOA junior lien or a hidden senior
+    // mortgage can show 90%+ equity that isn't real) and anything the records already flagged dead
+    // (deeded away / underwater once the surviving mortgage is counted) — a raw >=30% number alone
+    // would resurface exactly the fantasy-equity leads the deal-killer flags exist to catch.
+    if(eq30Only) rows = rows.filter(r => (r.eq||0) >= 30 && !r.eqfake && !isFlaggedDead(r));
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
   }
@@ -1787,6 +1793,7 @@ function initCountyFilter(){ if(_ctyInit) return; const sel=document.getElementB
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
 document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
+document.getElementById('eq30').onclick = e => { eq30Only = !eq30Only; e.target.classList.toggle('active', eq30Only); render(); };
 document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
 document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
 document.getElementById('plan').onclick = () => openPlanModal();
@@ -2138,6 +2145,10 @@ function lkReport(a){
   if(people) L.push(['People (name)',people]); if(paddr) L.push(['People (address)',paddr]);
   if(recURL) L.push([ctyName(cty)+' Official Records', recURL]);
   if(casURL) L.push(['Court cases', casURL]);
+  // Propwire requires a login for any real search (confirmed 2026-07-17 — no address deep-link works
+  // unauthenticated, the app just hangs on "Loading..."). No point faking a per-property link that
+  // won't resolve; this is a plain reference to their free-signup home search, address in hand.
+  L.push(['Propwire (comps/valuation — free sign-in)', 'https://propwire.com/']);
   if(lead&&lead.docket) L.unshift(['Docket (this case)',lead.docket]);
   if(lead&&lead.auc) L.splice(1,0,['Auction page',lead.auc]);
   const links=L.map(x=>'<a href="'+esc(x[1])+'" target="_blank" rel="noopener">'+esc(x[0])+'</a>').join('');
