@@ -694,7 +694,7 @@ body.modal-open{overflow:hidden}
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
 <button id="hf" title="Hide leads the records already flagged as dead: already deeded to another investor, or an HOA case hiding a mortgage bigger than the equity (underwater). Off by default so nothing disappears silently.">Hide flagged</button>
-<button id="eq30" title="Only leads with 30%+ real equity — excludes gross/unverified equity (an HOA case hiding a big first mortgage can show 90%+ on paper) and anything the records already flagged dead (already sold, or underwater once the real mortgage is counted).">30%+ equity</button>
+<button id="eq30" title="Only leads with 30%+ REAL equity: nets out a chain-verified surviving mortgage where we have one (an HOA case with a small judgment can show 90%+ gross while a real first mortgage eats most of it), excludes gross/unverified equity, and excludes anything the records already flagged dead (already sold, or underwater once the real mortgage is counted).">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="plan" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script.">📋 Plan today</button>
@@ -788,6 +788,16 @@ let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncO
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
   (r.orsurvfirst && r.value && (+r.orsurvfirst) > (r.value - (r.judg||0)))); }
+// Real equity — nets out a CHAIN-VERIFIED surviving mortgage (orsurv) when we have one. The raw `eq`
+// field ignores it everywhere else in the app (it's shown separately as the mrwarn callout), which is
+// fine for a quick scan but wrong for a filter people use to decide who gets a knock: an HOA case with
+// a small judgment can show 90%+ gross while a real first mortgage eats most of the real equity (e.g. a
+// lead showing 97% gross can be ~25% once a $174k surviving mortgage is counted). Falls back to the raw
+// field when there's no verified surv data to correct with.
+function netEqPct(r){
+  if(r.orconf==='ok' && r.orsurv && r.value) return Math.round((r.value - (r.judg||0) - r.orsurv) / r.value * 100);
+  return r.eq||0;
+}
 let sender = {name:'', llc:'', phone:'', addr:'', title:'', email:'', web:'', partner:''};
 try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
 // deal-model controls (persisted)
@@ -1524,7 +1534,7 @@ function view(){
     // mortgage can show 90%+ equity that isn't real) and anything the records already flagged dead
     // (deeded away / underwater once the surviving mortgage is counted) — a raw >=30% number alone
     // would resurface exactly the fantasy-equity leads the deal-killer flags exist to catch.
-    if(eq30Only) rows = rows.filter(r => (r.eq||0) >= 30 && !r.eqfake && !isFlaggedDead(r));
+    if(eq30Only) rows = rows.filter(r => netEqPct(r) >= 30 && !r.eqfake && !isFlaggedDead(r));
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
   }
