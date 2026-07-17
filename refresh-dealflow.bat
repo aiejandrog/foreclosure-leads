@@ -62,8 +62,8 @@ goto :rebuild
 python skiptrace.py >> "%LOG%" 2>&1
 
 :rebuild
-echo [3b/5] Property photos (satellite aerials -^> docs/img; add --zillow for listing photos where listed)...
-python property_photos.py >> "%LOG%" 2>&1
+echo [3b/5] Property photos (Zillow listings for Tier A + Street View when keyed + satellite aerials -^> docs/img)...
+python property_photos.py --zillow --tier A >> "%LOG%" 2>&1
 
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1

@@ -308,16 +308,18 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 #planmodal.show{display:block}
 #planmodal .dm-card{width:min(640px,95vw);max-height:86vh}
 /* property photo thumbnail (row + card) + swipe gallery lightbox */
-.pcell{width:78px}
-.pthumb{display:block;width:70px;height:52px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;padding:0;position:relative}
+.pcell{width:132px}
+.pthumb{display:block;width:124px;height:92px;border-radius:8px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;padding:0;position:relative}
 .pthumb img{width:100%;height:100%;object-fit:cover;display:block}
 .pthumb:hover{border-color:var(--gold);box-shadow:var(--sh-2);transform:translateY(-1px)}
 .pthumb.noimg,.pthumb.imgfail{display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--muted);cursor:default;opacity:.7}
 .pthumb.imgfail img{display:none}
-.pcount{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(4,8,16,.72));color:#fff;font-size:8px;font-weight:700;letter-spacing:.04em;text-align:center;padding:7px 2px 2px;pointer-events:none;text-transform:uppercase}
-.phero{position:relative;width:100%;height:158px;border-radius:10px;overflow:hidden;margin-bottom:10px;cursor:pointer;border:1px solid var(--line)}
+.pcount{position:absolute;left:0;right:0;bottom:0;background:linear-gradient(transparent,rgba(4,8,16,.72));color:#fff;font-size:10px;font-weight:700;letter-spacing:.04em;text-align:center;padding:8px 2px 2px;pointer-events:none;text-transform:uppercase}
+.phero{position:relative;width:100%;height:260px;border-radius:10px;overflow:hidden;margin-bottom:10px;cursor:pointer;border:1px solid var(--line)}
 .phero img{width:100%;height:100%;object-fit:cover;display:block}
 .phero .pcount{font-size:10px;padding:16px 6px 6px;text-align:left}
+.gstage.imgfail .gimg{display:none}
+.gstage.imgfail::before{content:'\1F3E0  image unavailable';display:flex;align-items:center;justify-content:center;min-height:240px;font-size:15px;color:var(--muted);letter-spacing:.02em}
 #gallerymodal{display:none;position:fixed;inset:0;z-index:130}
 #gallerymodal.show{display:block}
 #gallerymodal .gcard{width:min(880px,96vw);max-height:92vh;padding:0;overflow:hidden;background:#0d1526;border:1px solid #26324c}
@@ -1182,23 +1184,35 @@ function closePlanModal(){ document.getElementById('planmodal').classList.remove
 // Thumbnail (left of each row / top of each card) opens a lightbox that swipes through the images, with a
 // "View on Zillow" button (real listing when we have one, else the address search). Replaces the old text link.
 let galleryCase = null, galleryIdx = 0;
+// onerror chain: local img/ file missing (e.g. the bare HTML was shared without its img folder)
+// -> swap to the absolute Esri aerial URL (data-fb, cleared first so a dead network can't loop)
+// -> only then show the imgfail house icon.
+function imgFB(img){
+  const fb = img.dataset.fb || '';
+  if(fb){ img.dataset.fb=''; img.src=fb; return; }
+  const el = img.closest('.pthumb') || img.closest('.phero') || img.closest('.gstage');
+  if(el) el.classList.add('imgfail');
+}
+function _kindLabel(k){ return k==='aerial' ? 'aerial' : k==='street' ? 'street view' : ''; }
 function _photoThumb(r, eager){
   const ph = r.photos || [];
   if(ph.length) return '<button class="pthumb" data-c="'+esc(r.case)+'" type="button" title="View property photos">'
-    + '<img src="'+esc(ph[0])+'"'+(eager?'':' loading="lazy"')+' alt="property" onerror="this.closest(\'.pthumb\').classList.add(\'imgfail\')">'
-    + '<span class="pcount">'+(ph.length>1?'▣ '+ph.length : (r.photo_kind==='aerial'?'aerial':''))+'</span></button>';
+    + '<img src="'+esc(ph[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'
+    + '<span class="pcount">'+(ph.length>1?'▣ '+ph.length : _kindLabel(r.photo_kind))+'</span></button>';
   return '<div class="pthumb noimg" title="No image available">\u{1f3e0}</div>';
 }
 function galleryBody(r){
   const ph = r.photos || []; if(!ph.length) return '';
   const i = Math.max(0, Math.min(galleryIdx, ph.length-1));
-  const z = r.zlisting || r.zillow || '';
+  const z = r.zlisting || r.zillow ||
+            (r.addr ? 'https://www.zillow.com/homes/'+encodeURIComponent(r.addr)+'_rb/' : '');
   const tag = r.photo_kind==='zillow' ? '<span class="gtag gz">Zillow listing</span>'
-            : r.photo_kind==='aerial' ? '<span class="gtag">Satellite aerial</span>' : '';
+            : r.photo_kind==='aerial' ? '<span class="gtag">Satellite aerial</span>'
+            : r.photo_kind==='street' ? '<span class="gtag">Street View</span>' : '';
   return '<div class="ghead"><div class="gtitle">'+esc(titleCase(r.addr||''))+'</div>'+tag+'</div>'+
     '<div class="gstage">'+
       (ph.length>1?'<button class="gnav gprev" type="button" aria-label="Previous">‹</button>':'')+
-      '<img class="gimg" src="'+esc(ph[i])+'" alt="property">'+
+      '<img class="gimg" src="'+esc(ph[i])+'" data-fb="'+esc(r.aurl||'')+'" alt="property" onerror="imgFB(this)">'+
       (ph.length>1?'<button class="gnav gnext" type="button" aria-label="Next">›</button>':'')+
     '</div>'+
     '<div class="gfoot">'+
@@ -1801,7 +1815,7 @@ function openMail(){location.href='mailto:'+encodeURIComponent(to)+'?subject='+e
 // pre-filled — vs. a plain mailto: link, which opens whatever the DEVICE'S default mail app is (Outlook,
 // nothing configured, etc.), not necessarily Gmail. Uses whichever Google account is already signed in.
 function openGmail(){window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body),'_blank');}
-function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;navigator.clipboard.writeText(t).then(function(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);});}
+function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;function ok(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);}function fb(){var a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();try{document.execCommand('copy');ok();}catch(e){}document.body.removeChild(a);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,fb);}else{fb();}}
 show('en');<\/script>
 </body></html>`;
   const w = window.open('', '_blank');
@@ -1918,15 +1932,16 @@ function render(){
     if(r.peopleaddr) gDig.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
     if(r.cyberbg) gDig.push('<a class="dig" href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks — a second source, often better than TruePeopleSearch: free detail page (one more click) shows every phone with carrier + last-reported date, up to 7 emails, RELATIVES (separate from associates — good for the tenant-intel play), and prior addresses. Cross-check against the People links above.">CyberBG</a>');
     if(r.cyberbgaddr) gDig.push('<a class="dig" href="'+esc(r.cyberbgaddr)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by ADDRESS — pinpoints who actually lives there now, distinct from a name search. Often reveals if the owner has moved (absentee — mail/calls to the property may not reach them), surfaces phones the name search misses, and confirms family/relatives at the address.">CyberBG&nbsp;addr</a>');
-    if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+r.recqs+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
+    if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+esc(r.recqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
     else if(r.records) gDig.push('<a class="dig recsearch" href="'+esc(r.records)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
-    if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+r.ocsqs+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
+    if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
     else if(r.cases) gDig.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' court case search — pick Party Name and PASTE the owner (copied last-first).')+'">Cases</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
     if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
     // PROPERTY — value + county pages.
     if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
+    else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' property appraiser')+'" target="_blank" rel="noopener" title="No direct appraiser record link for this parcel — opens a Google search for the address on the county appraiser instead.">Appraiser&nbsp;⌕</a>');
     // Zillow text link removed — the property PHOTO (left of the row / top of the card) is now the path to
     // Zillow: click it -> swipe gallery -> "View on Zillow" (real listing when known, else address search).
     // Broward's tax portal (county-taxes.net) is Cloudflare-walled and uses opaque per-parcel UUID tokens
@@ -1940,6 +1955,7 @@ function render(){
       else
         gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
     }
+    else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No direct tax-bill link for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
     // Auction: the live RealForeclose sale page for this date (all parcels + bidding). RealForeclose
     // returns 200 to a real browser; a bare/no-UA request 403s at their AWS load balancer, so it can
     // LOOK dead from a script — it isn't. May need a free RealForeclose login for bid detail, and the
@@ -2025,7 +2041,7 @@ function render(){
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
     cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
-      ((r.photos||[]).length?'<div class="phero pthumb" data-c="'+esc(r.case)+'"><img src="'+esc(r.photos[0])+'"'+(_eager?'':' loading="lazy"')+' alt="property"><span class="pcount">'+(r.photos.length>1?'▣ '+r.photos.length+' photos':(r.photo_kind==='aerial'?'satellite aerial':''))+'</span></div>':'')+
+      ((r.photos||[]).length?'<div class="phero pthumb" data-c="'+esc(r.case)+'"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)"><span class="pcount">'+(r.photos.length>1?'▣ '+r.photos.length+' photos':(r.photo_kind==='aerial'?'satellite aerial':r.photo_kind==='street'?'street view':''))+'</span></div>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)
@@ -2541,14 +2557,15 @@ document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('a.recsearch'); if(!a) return;
   const o = (a.dataset.o || '').trim(); if(!o) return;
   const orig = a.textContent, flash = () => { a.textContent = '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, flash); else flash();
+  // navigator.clipboard silently rejects on file:// (non-secure context) — fall back to execCommand
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, () => fallbackCopy(o, flash)); else fallbackCopy(o, flash);
 });
 // Broward Taxes: copy the folio (the portal can't be deep-linked — see the render comment) + open the search.
 document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('a.taxsearch'); if(!a) return;
   const f = (a.dataset.folio || '').trim(); if(!f) return;
   const orig = a.textContent, flash = () => { a.textContent = '✓ folio copied — paste it'; setTimeout(() => { a.textContent = orig; }, 1600); };
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(f).then(flash, flash); else flash();
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(f).then(flash, () => fallbackCopy(f, flash)); else fallbackCopy(f, flash);
 });
 // document-level so it works in BOTH the desktop table (#tb) and mobile cards (#cards)
 document.addEventListener('click', e => {

@@ -10,7 +10,7 @@ Phase 2: enrich each parcel via the Miami-Dade Property Appraiser public API
          (owner, mailing address, market value, homestead, beds/baths, last sale).
 Phase 3: qualify + score (equity/lead-time/homestead/value), write CSV sorted best-first.
 """
-import json, re, time, csv, os, sys, urllib.parse
+import json, re, time, csv, os, sys, shutil, urllib.parse
 from datetime import datetime, date, timedelta
 import requests
 from playwright.sync_api import sync_playwright
@@ -730,6 +730,7 @@ def make_tracker(leads):
             # Miami-Dade dict is rebuilt with explicit keys, so photos MUST be copied here or every MD lead
             # loses its image.
             'photos': r.get('photos', []) or [], 'zlisting': r.get('zlisting',''), 'photo_kind': r.get('photo_kind',''),
+            'aurl': r.get('aurl',''),   # absolute Esri fallback so a bare emailed HTML still shows photos
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
@@ -818,6 +819,28 @@ def make_tracker(leads):
 
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     open(desktop,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(slim)))
+
+    # P0: the template references photos as relative 'img/<name>.jpg', which only resolves next to
+    # docs/index.html (docs/img/). Ship the referenced files beside the Desktop copy too, or every
+    # image in the investor-facing file is a broken grey box. Idempotent (size-compare) + fail-soft
+    # per file so a locked OneDrive handle can never kill the build.
+    try:
+        srcdir = os.path.join(HERE, 'docs', 'img')
+        dstdir = os.path.join(DEALFLOW_DIR, 'img')
+        os.makedirs(dstdir, exist_ok=True)
+        names = {p.split('/', 1)[1] for d in slim for p in (d.get('photos') or [])
+                 if isinstance(p, str) and p.startswith('img/')}
+        n_copied = 0
+        for name in names:
+            s, t = os.path.join(srcdir, name), os.path.join(dstdir, name)
+            try:
+                if os.path.exists(s) and (not os.path.exists(t) or os.path.getsize(t) != os.path.getsize(s)):
+                    shutil.copy2(s, t); n_copied += 1
+            except Exception:
+                pass
+        if n_copied: print(f"copied {n_copied} photos -> DEALFLOW\\img")
+    except Exception as e:
+        print('photo copy to DEALFLOW skipped:', e)
 
     # Shared docs/index.html: ENCRYPTED (with phones) when a site.pass exists, else PLAINTEXT with
     # phones STRIPPED. This guarantees personal phone numbers never hit the public web unencrypted.

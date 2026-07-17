@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dealflow-docs",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8799", "--directory", "docs"],
+      "port": 8799
+    },
+    {
+      "name": "dealflow-desktop",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8742", "--directory", "C:/Users/olqbb/OneDrive/Desktop/DEALFLOW"],
+      "port": 8742
+    }
+  ]
+}
