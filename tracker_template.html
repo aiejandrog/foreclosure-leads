@@ -804,14 +804,17 @@ function netEqPct(r){
 // Prefilled outreach identity — Alejandro fronts Miami Solutions Group directly on the foreclosure side
 // (distinct from the cousin-Jose tax-deed entity). Every generated letter/email/script/contract fills
 // these in automatically so nothing has to be typed; a device can still override any field in Sender setup.
-let sender = {name:'Alejandro Gonzalez', llc:'Miami Solutions Group', phone:'(786) 631-1823', addr:'', title:'', email:'', web:'', partner:''};
-try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
-// Migration: an earlier build briefly forced the name to "Jose" and persisted it on some devices. If a
-// device has exactly that stale value saved with no custom company set, clear the saved name so the new
-// default (above) takes over. A device that deliberately set a different name keeps it.
+const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Miami Solutions Group', phone:'(786) 631-1823', addr:'', title:'', email:'', web:'', partner:''};
+let sender = Object.assign({}, SENDER_DEFAULTS);
+// CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
+// Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
+// blanks clobber the defaults, so a real generated email went out showing [YOUR NAME]/[YOUR COMPANY]/
+// [YOUR PHONE] even though defaults were set. Only merge saved values that actually have content; the old
+// auto-injected "Jose" is treated as unset so the current identity wins.
 try {
-  const _sv = JSON.parse(localStorage.getItem('fcSender')||'{}');
-  if (_sv && _sv.name === 'Jose') { delete _sv.name; localStorage.setItem('fcSender', JSON.stringify(_sv)); sender.name = 'Alejandro Gonzalez'; }
+  const saved = JSON.parse(localStorage.getItem('fcSender')||'{}');
+  if (saved.name === 'Jose') delete saved.name;
+  for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
 } catch(e) {}
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
