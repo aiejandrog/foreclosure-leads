@@ -605,6 +605,9 @@ th{letter-spacing:.09em;font-size:9.5px}
 .chip.hoa{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
 .chip.tdt{background:var(--gold-soft);color:var(--gold-d);border-color:rgba(201,168,76,.35)}
 .chip.tax{background:var(--red-soft);color:var(--red-ink)}
+.chip.vok{background:var(--green-soft,#e4f7ea);color:var(--green-ink);border-color:#bfe6c9}
+.chip.vlow{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
+.chip.vnone{background:var(--surface-2,#eee);color:var(--muted);border-color:var(--line)}
 /* desktop row verdict accent (mirrors the mobile card spine) */
 tbody tr.rv3 td:first-child{box-shadow:inset 3px 0 0 var(--green)}
 tbody tr.rv2 td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
@@ -913,6 +916,14 @@ function flagChips(r){ let o='';
     o+='<span class="chip '+(hi?'tax':'hoa')+'" title="A deed was recorded '+esc(r.ordeeded.d||'')+' to '+esc(r.ordeeded.grantee||'an investor')+' &mdash; the owner appears to have already sold this'+(hi?'.':' (possible only, common name &mdash; verify in Records).')+'">'+(hi?'TAKEN':'MAYBE SOLD')+'</span>'; }
   if(r.orsecond){ o+='<span class="chip hoa" title="A SEPARATE mortgage foreclosure is also running: '+esc(r.orsecond.case||'')+(r.orsecond.party?' &mdash; '+esc(r.orsecond.party):'')+'. The small HOA case hides it; verify the mortgage payoff.">2ND FORECLOSURE</span>'; }
   return o; }
+// records-verification status: is this lead's equity/flags a REAL, chain-checked number, or a raw guess
+// nobody has looked at yet? Every lead gets one of these three — separate from flagChips (which only
+// fires on a positive finding) so "nothing to flag" and "never checked" can't be mistaken for each other.
+function verifyChip(r){
+  if(r.orconf==='ok') return '<span class="chip vok" title="A recorded mortgage/lien chain was pulled and isolated with confidence for this property. The surviving-mortgage and TAKEN/2ND-FORECLOSURE flags above (if any) are records-verified, not a guess.">&#10003;&nbsp;Records verified</span>';
+  if(r.orconf==='low') return '<span class="chip vlow" title="A lien chain was pulled, but the owner\'s name was too common to isolate with confidence &mdash; these records may include a stranger\'s mortgages. Verify manually in Official Records before relying on the equity or flags shown.">~&nbsp;Low-confidence check</span>';
+  return '<span class="chip vnone" title="No recorded mortgage/lien chain has been pulled for this property yet. The equity % shown is a RAW estimate (value minus the foreclosure judgment only) and has NOT been checked for a hidden surviving mortgage, an already-recorded sale, or a second foreclosure. Verify in Official Records before contacting or making an offer.">&#9711;&nbsp;Not yet verified</span>';
+}
 // surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk")
 function mrText(r){ const s=+r.orsurvfirst||0;
   if(s>0){ const under=(r.value && s > (r.value-(r.judg||0)));
@@ -1817,7 +1828,7 @@ function render(){
         mrText(r)+
         dealTrigger(r);
     }
-    const _fc = flagChips(r); if(_fc) prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FORECLOSURE up top
+    const _fc = flagChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FORECLOSURE + verification status up top
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction)+'</div>'+
       '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
@@ -1871,7 +1882,7 @@ function render(){
                   : r._verdict==='VERIFY' ? verdictBadge(r)
                   : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
-      (flagChips(r)?'<div class="fchips">'+flagChips(r)+'</div>':'')+
+      '<div class="fchips">'+flagChips(r)+verifyChip(r)+'</div>'+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
