@@ -1658,7 +1658,7 @@ function genEmail(r){
   .hint{font-size:12px;color:#5b6b8c;margin-top:14px;background:#f2f4f8;border-radius:7px;padding:9px 12px}
   @media print{.bar{display:none}}`;
   const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Email - ${esc(owner)}</title><style>${CSS}</style></head><body>
-<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button class="act" onclick="openMail()">Open in email app</button><button class="act" id="cpy" onclick="copyEmail()">Copy email</button></div>
+<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button class="act" onclick="openGmail()">Open in Gmail</button><button class="act" onclick="openMail()">Open in email app</button><button class="act" id="cpy" onclick="copyEmail()">Copy email</button></div>
 <h1>${esc(owner)}</h1><div class="sub">${esc(addr)} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${esc(dt)}</b></div>
 <div class="lbl">To</div><div class="to">${recip}</div>
 <div class="lbl">Subject</div><div class="subj" id="subjline"></div>
@@ -1667,6 +1667,10 @@ function genEmail(r){
 <script>var D=${Djson}, to=${JSON.stringify(to)}, cur='en';
 function show(l){cur=l;document.getElementById('subjline').textContent=D[l].subj;document.getElementById('bodybox').textContent=D[l].body;document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}
 function openMail(){location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body);}
+// Opens Gmail's own compose UI (web or the Gmail app, if it's the registered handler) with everything
+// pre-filled — vs. a plain mailto: link, which opens whatever the DEVICE'S default mail app is (Outlook,
+// nothing configured, etc.), not necessarily Gmail. Uses whichever Google account is already signed in.
+function openGmail(){window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body),'_blank');}
 function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;navigator.clipboard.writeText(t).then(function(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);});}
 show('en');<\/script>
 </body></html>`;
