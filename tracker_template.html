@@ -1188,9 +1188,15 @@ function genLetter(r){
   const addr = esc(r.addr), mail = esc(r.mail||r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
   const plaintiff = esc((r.plaintiff||'').trim());
+  // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
+  // site — a concrete credibility signal (this isn't a scam letter, here's the exact record) — included
+  // wherever the tool actually has one, never fabricated when it's blank.
+  const caseNo = esc((r.case||'').trim());
+  const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
+  const caseTagES = caseNo ? (td ? ` (N&uacute;m. de certificado/caso ${caseNo})` : ` (Caso N&uacute;m. ${caseNo})`) : '';
   const sigHtml = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).map(esc).join('<br>');
   const EN = td ? `<p>Dear ${esc(owner)},</p>
-<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which county records show is scheduled for a <b>tax deed sale on ${dt}</b> due to unpaid property taxes.</p>
+<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which county records show is scheduled for a <b>tax deed sale on ${dt}</b>${caseTagEN} due to unpaid property taxes.</p>
 <p>I wanted to reach out in case it helps to know your options before that date:</p>
 <ul><li>You can still keep the property by paying the back taxes any time before the sale.</li>
 <li>If keeping it is not realistic, selling before the sale can put cash in your pocket rather than losing it to the county.</li>
@@ -1199,7 +1205,7 @@ function genLetter(r){
 <p>There is no cost and no obligation to talk. You can reach me at <b>${esc(sP)}</b>. Even if the sale is close, there may still be time.</p>
 <p>Thank you for your time.</p>
 <p>Respectfully,<br><br>${sigHtml}</p>` : `<p>Dear ${esc(owner)},</p>
-<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}, with a sale scheduled for <b>${dt}</b>.</p>
+<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale scheduled for <b>${dt}</b>.</p>
 <p>I understand this can be a stressful situation, and I wanted to reach out in case it helps to know your options before that date:</p>
 <ul><li>If the property sells for more than you owe, any surplus belongs to you, not the lender.</li>
 <li>Selling before the auction is often better for you than losing it at the courthouse, and it can put cash in your pocket.</li>
@@ -1209,7 +1215,7 @@ function genLetter(r){
 <p>Thank you for your time.</p>
 <p>Respectfully,<br><br>${sigHtml}</p>`;
   const ES = td ? `<p>Estimado/a ${esc(first)},</p>
-<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros del condado tiene una <b>subasta de tax deed programada para el ${dt}</b> por impuestos sin pagar.</p>
+<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros del condado tiene una <b>subasta de tax deed programada para el ${dt}</b>${caseTagES} por impuestos sin pagar.</p>
 <p>Quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
 <ul><li>Todav&iacute;a puede conservar la propiedad pagando los impuestos atrasados en cualquier momento antes de la subasta.</li>
 <li>Si conservarla no es realista, vender antes de la subasta puede dejarle dinero en el bolsillo en lugar de perderla ante el condado.</li>
@@ -1218,7 +1224,7 @@ function genLetter(r){
 <p>No hay costo ni compromiso por conversar. Puede comunicarse conmigo al <b>${esc(sP)}</b>. Aunque la subasta est&eacute; cerca, todav&iacute;a puede haber tiempo.</p>
 <p>Gracias por su tiempo.</p>
 <p>Respetuosamente,<br><br>${sigHtml}</p>` : `<p>Estimado/a ${esc(first)},</p>
-<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros p&uacute;blicos se encuentra actualmente en proceso de ejecuci&oacute;n hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}, con una subasta programada para el <b>${dt}</b>.</p>
+<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros p&uacute;blicos se encuentra actualmente en proceso de ejecuci&oacute;n hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con una subasta programada para el <b>${dt}</b>.</p>
 <p>Entiendo que puede ser una situaci&oacute;n estresante, y quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
 <ul><li>Si la propiedad se vende por m&aacute;s de lo que usted debe, cualquier excedente le pertenece a usted, no al prestamista.</li>
 <li>Vender antes de la subasta suele ser mejor para usted que perderla en el juzgado, y puede dejarle dinero en el bolsillo.</li>
@@ -1343,7 +1349,7 @@ function genContract(r){
   const sN = sender.name || '[BUYER NAME]', sL = (sender.llc||'').trim() || '[BUYER ENTITY]';
   const sP = sender.phone || '[BUYER PHONE]', sA = (sender.addr||'').trim() || '[BUYER BUSINESS ADDRESS]';
   const owner = titleCase((r.owners||'').split(';')[0].trim());
-  const addr = esc(r.addr), folio = esc(r.folio||''), county = esc(ctyName(r.county));
+  const addr = esc(r.addr), folio = esc(r.folio||''), county = esc(ctyName(r.county)), caseNo = esc((r.case||'').trim());
   const today = new Date().toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'});
   const doc = `<!doctype html><html><head><meta charset="utf-8"><title>DRAFT Purchase Agreement - ${esc(owner)}</title>
 <style>
@@ -1382,7 +1388,8 @@ ol li{margin:6px 0}
 <h2>2. Property</h2>
 <p>The real property located at <b>${addr}</b>, ${county} County, Florida, Folio/Parcel No. ${folio||'[FOLIO]'},
 together with all improvements, fixtures, and appurtenances (the &ldquo;Property&rdquo;). Legal description:
-<span class="fill">[CONFIRM EXACT LEGAL DESCRIPTION FROM TITLE COMMITMENT / PROPERTY APPRAISER RECORD BEFORE USE — do not rely on this address alone]</span>.</p>
+<span class="fill">[CONFIRM EXACT LEGAL DESCRIPTION FROM TITLE COMMITMENT / PROPERTY APPRAISER RECORD BEFORE USE — do not rely on this address alone]</span>.
+${caseNo?'The Property is presently subject to a pending court proceeding, '+county+' County Case No. <b>'+caseNo+'</b>, and this Agreement is expressly contingent on Buyer confirming the current status of that case and all amounts owed prior to Closing.':''}</p>
 
 <h2>3. Purchase Price &amp; Terms</h2>
 <div class="fillrow">Purchase Price: $<input type="text" placeholder="0.00" style="width:140px"> &nbsp; All cash, no financing contingency.</div>
@@ -1494,6 +1501,11 @@ function genScript(r){
     ? '<ul class="ph">' + phones.map(p=>'<li><b>'+esc(fmtPhone(p.num))+'</b>'+(p.dnc?' <span class="dnc">'+(lang==='en'?'(DO NOT CALL, on the Do-Not-Call list)':'(NO LLAMAR, lista Do-Not-Call)')+'</span>':'')+'</li>').join('') + '</ul>'
     : '<p class="muted">'+(lang==='en'?'No phone pulled yet. Use the <b>People</b> link on the lead to find one, then dial by hand.':'Aún no hay teléfono. Use el enlace <b>People</b> del contacto para encontrarlo y marque a mano.')+'</p>';
   const badge = vb ? '<span class="vbadge vb-'+vb.toLowerCase()+'">'+vb+'</span> ' : '';
+  // A real case/certificate number to cite verbally — makes clear this is a specific, real court file
+  // you pulled, not a cold mass-market script. Optional to say; included wherever the tool has one.
+  const caseNo = esc((r.case||'').trim());
+  const caseTagEN = caseNo ? `, case number ${caseNo}` : '';
+  const caseTagES = caseNo ? `, número de caso ${caseNo}` : '';
 
   const goalEN = td
     ? 'Qualify fast, then book the callback. Find out what happened, whether they can pay the back taxes or want to sell, and what else is owed. Then set a SPECIFIC time with ' + esc(partner) + ' on the line.'
@@ -1505,11 +1517,11 @@ function genScript(r){
     : 'Califique rápido y agende la llamada. Averigüe qué pasó, conservar vs vender, y qué se debe. Luego fije una hora ESPECÍFICA con ' + esc(partner) + ' en la línea para repasar sus opciones.';
 
   const openEN = td
-    ? `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a tax-deed sale set for <b>${dt}</b>, that's ${days} days out. We may be able to help, but I need 60 seconds to see if we can, or if you're already working with someone. You got a minute?`
-    : `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a sale date set for <b>${dt}</b>, that's ${days} days out. We may be able to stop it, but I need 60 seconds to see if we can help, or if you're already working with someone. You got a minute?`;
+    ? `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a tax-deed sale set for <b>${dt}</b>${caseTagEN}, that's ${days} days out. We may be able to help, but I need 60 seconds to see if we can, or if you're already working with someone. You got a minute?`
+    : `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a sale date set for <b>${dt}</b>${caseTagEN}, that's ${days} days out. We may be able to stop it, but I need 60 seconds to see if we can help, or if you're already working with someone. You got a minute?`;
   const openES = td
-    ? `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una subasta de tax deed fijada para el <b>${dt}</b>, es decir en ${days} días. Quizá podamos ayudarle, pero necesito 60 segundos para ver si podemos, o si ya está trabajando con alguien. ¿Tiene un minuto?`
-    : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una fecha de subasta fijada para el <b>${dt}</b>, es decir en ${days} días. Quizá podamos detenerla, pero necesito 60 segundos para ver si podemos ayudarle, o si ya está trabajando con alguien. ¿Tiene un minuto?`;
+    ? `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una subasta de tax deed fijada para el <b>${dt}</b>${caseTagES}, es decir en ${days} días. Quizá podamos ayudarle, pero necesito 60 segundos para ver si podemos, o si ya está trabajando con alguien. ¿Tiene un minuto?`
+    : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una fecha de subasta fijada para el <b>${dt}</b>${caseTagES}, es decir en ${days} días. Quizá podamos detenerla, pero necesito 60 segundos para ver si podemos ayudarle, o si ya está trabajando con alguien. ¿Tiene un minuto?`;
 
   const offerEN = `Here's how this works. I'm not the guy who stops sales, my partner ${esc(partner)} is, he's been doing this 30 years. I'm going to pull your file right now, see exactly what we're dealing with on your lender, and brief him. Then I'll call you back at <b>[set a REAL clock time, e.g. 1:15 PM]</b> with ${esc(partner)} on the line. He'll lay out what we can actually do${verify?" once we confirm what's owed":''}, whether that's buying it before the sale so you walk away with cash, getting you more time, or pointing you to the right resource. No cost, no pressure, no commitment. You around then?`;
   const offerES = `Así funciona. Yo no soy quien detiene las ventas, mi socio ${esc(partner)} sí, lleva 30 años en esto. Voy a sacar su expediente ahora mismo, ver exactamente qué tenemos con su prestamista, y ponerlo al tanto. Luego le devuelvo la llamada a las <b>[fije una hora real, ej. 1:15 PM]</b> con ${esc(partner)} en la línea. Él le explicará qué podemos hacer${verify?' una vez que confirmemos lo que se debe':''}, ya sea comprarla antes de la subasta para que salga con dinero, conseguirle más tiempo, u orientarle al recurso correcto. Sin costo, sin presión, sin compromiso. ¿Estará disponible?`;
@@ -1626,6 +1638,11 @@ function genEmail(r){
   const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
   const street = (addr.split(',')[0]||addr).trim();
   const plaintiff = (r.plaintiff||'').trim();   // the bank / association foreclosing — personalizes it
+  // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
+  // site — a concrete credibility signal — included wherever the tool actually has one, never fabricated.
+  const caseNo = (r.case||'').trim();
+  const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
+  const caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
   const emails = (r.emails||[]).slice(0,3);
   const to = emails[0]||'';
   // professional signature block (blank fields skipped)
@@ -1633,11 +1650,11 @@ function genEmail(r){
   const subjEN = `Regarding your property at ${street}`;
   const subjES = `Referente a su propiedad en ${street}`;
   const bodyEN = td
-    ? `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}. County records show it is scheduled for a tax deed sale on ${dt} due to unpaid property taxes.\n\nI am a local real estate investor here in Miami, and I work with owners before these sales. You may still have options, including paying the back taxes to keep the property, or selling it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you as well.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`
-    : `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}. According to those records, the foreclosure sale is scheduled for ${dt}.\n\nI am a local real estate investor here in Miami, and I work with owners in this situation before the sale date. Depending on what is owed, you may have more options than it seems, including selling before the auction so you walk away with cash instead of losing the property. If it sells for more than the debt, any surplus may belong to you.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`;
+    ? `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}. County records show it is scheduled for a tax deed sale on ${dt}${caseTagEN} due to unpaid property taxes.\n\nI am a local real estate investor here in Miami, and I work with owners before these sales. You may still have options, including paying the back taxes to keep the property, or selling it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you as well.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`
+    : `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. According to those records, the foreclosure sale is scheduled for ${dt}.\n\nI am a local real estate investor here in Miami, and I work with owners in this situation before the sale date. Depending on what is owed, you may have more options than it seems, including selling before the auction so you walk away with cash instead of losing the property. If it sells for more than the debt, any surplus may belong to you.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`;
   const bodyES = td
-    ? `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}. Los registros del condado muestran que está programada para una subasta de tax deed el ${dt} por impuestos sin pagar.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios antes de estas ventas. Todavía puede tener opciones, incluyendo pagar los impuestos atrasados para conservar la propiedad, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente también podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`
-    : `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}, la cual según los registros públicos se encuentra actualmente en proceso de ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}. Según esos registros, la subasta está programada para el ${dt}.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios en esta situación antes de la fecha de la venta. Según lo que se deba, es posible que tenga más opciones de las que parece, incluyendo vender antes de la subasta para salir con dinero en lugar de perder la propiedad. Si se vende por más de lo adeudado, cualquier excedente podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`;
+    ? `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}. Los registros del condado muestran que está programada para una subasta de tax deed el ${dt}${caseTagES} por impuestos sin pagar.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios antes de estas ventas. Todavía puede tener opciones, incluyendo pagar los impuestos atrasados para conservar la propiedad, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente también podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`
+    : `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}, la cual según los registros públicos se encuentra actualmente en proceso de ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Según esos registros, la subasta está programada para el ${dt}.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios en esta situación antes de la fecha de la venta. Según lo que se deba, es posible que tenga más opciones de las que parece, incluyendo vender antes de la subasta para salir con dinero en lugar de perder la propiedad. Si se vende por más de lo adeudado, cualquier excedente podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`;
   const D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
   const recip = emails.length
