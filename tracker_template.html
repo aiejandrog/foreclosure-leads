@@ -696,7 +696,7 @@ body.modal-open{overflow:hidden}
 <select id="cty" title="Filter by county" style="padding:7px 10px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);color:var(--ink);font-weight:600;font-size:13px;cursor:pointer"><option value="">All counties</option></select>
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
-<button id="hf" title="Hide leads the records already flagged as dead: already deeded to another investor, or an HOA case hiding a mortgage bigger than the equity (underwater). Off by default so nothing disappears silently.">Hide flagged</button>
+<button id="hf" title="Hide leads that don't fit the homeowner-rescue model: already deeded to another investor, HOA case hiding a mortgage bigger than the equity (underwater), or VACANT LAND (no homeowner, speculative land value). Off by default so nothing disappears silently.">Hide flagged</button>
 <button id="eq30" title="Only leads with 30%+ REAL equity: nets out a chain-verified surviving mortgage where we have one (an HOA case with a small judgment can show 90%+ gross while a real first mortgage eats most of it), excludes gross/unverified equity, and excludes anything the records already flagged dead (already sold, or underwater once the real mortgage is counted).">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
@@ -791,6 +791,16 @@ let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncO
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
   (r.orsurvfirst && r.value && (+r.orsurvfirst) > (r.value - (r.judg||0)))); }
+// VACANT LAND is a systematic false-positive for the homeowner-rescue model: no owner-occupant to help,
+// and the "equity" rides on a speculative land value (e.g. Ocean Breeze 777 LLC's $2.1M raw lots that
+// doubled in a year). Treated like a flagged-dead lead so "Hide flagged" clears it and the 30%+ equity
+// filter excludes it — but NOT hidden by default (badge stays visible; nothing disappears silently).
+// Company-owned is only a context tag, NOT a suppressor — a small landlord LLC can still be a real seller.
+function notForModel(r){ return !!r.vac; }
+function landChips(r){ let o='';
+  if(r.vac) o+='<span class="chip vlow" title="VACANT LAND — no homeowner to help, and the equity shown rides on a speculative raw-land value. A systematic false-positive for this list; verify a real market value + a developer buyer before spending time.">&#127957; VACANT LAND</span>';
+  if(r.co)  o+='<span class="chip vnone" title="COMPANY-OWNED (LLC/Corp/Trust). Not a distressed homeowner — likely a sophisticated investor who knows the value; different negotiation, no FS 501.1377 homeowner protections. Context only, not a red flag.">LLC-OWNED</span>';
+  return o; }
 // Real equity — nets out a CHAIN-VERIFIED surviving mortgage (orsurv) when we have one. The raw `eq`
 // field ignores it everywhere else in the app (it's shown separately as the mrwarn callout), which is
 // fine for a quick scan but wrong for a filter people use to decide who gets a knock: an HOA case with
@@ -1739,12 +1749,12 @@ function view(){
     if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
     if(tdOnly) rows = rows.filter(r => r.st === 'TD');
     if(hideDead) rows = rows.filter(r => { const st=(notes[r.case]||{}).status; return st!=='Dead' && st!=='DO NOT CONTACT'; });
-    if(hideFlagged) rows = rows.filter(r => !isFlaggedDead(r));
+    if(hideFlagged) rows = rows.filter(r => !isFlaggedDead(r) && !notForModel(r));
     // 30%+ equity, TRUSTED: excludes eqfake (gross/unverified — HOA junior lien or a hidden senior
     // mortgage can show 90%+ equity that isn't real) and anything the records already flagged dead
     // (deeded away / underwater once the surviving mortgage is counted) — a raw >=30% number alone
     // would resurface exactly the fantasy-equity leads the deal-killer flags exist to catch.
-    if(eq30Only) rows = rows.filter(r => netEqPct(r) >= 30 && !r.eqfake && !isFlaggedDead(r));
+    if(eq30Only) rows = rows.filter(r => netEqPct(r) >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r));
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
   }
@@ -1885,7 +1895,7 @@ function render(){
         mrText(r)+
         dealTrigger(r);
     }
-    const _fc = flagChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FORECLOSURE + verification status up top
+    const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction)+'</div>'+
       '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
@@ -1939,7 +1949,7 @@ function render(){
                   : r._verdict==='VERIFY' ? verdictBadge(r)
                   : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
-      '<div class="fchips">'+flagChips(r)+verifyChip(r)+'</div>'+
+      '<div class="fchips">'+flagChips(r)+landChips(r)+verifyChip(r)+'</div>'+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+

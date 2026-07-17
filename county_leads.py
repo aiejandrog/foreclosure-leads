@@ -110,7 +110,7 @@ def to_slim(county, cfg, base, items):
         # this in make_tracker() for any lead we actually trace (broward_liens).
         ftype = F._fc_type_plaintiff(r.get('Plaintiff', '')) or F._fc_type(r.get('Case #', ''))
         addr = F._clean_addr(r.get('Address', ''))
-        val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''
+        val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''; vac = False
         if folio:
             try: info = fl_cadastral.enrich(parcel_id=folio)
             except Exception: info = None
@@ -118,6 +118,11 @@ def to_slim(county, cfg, base, items):
                 val, owner, hs = info['market_value'], info['owner'], info['homestead']
                 mail, bprice, bought = info['mail_addr'], info['last_sale_price'], info['last_sale_year']
                 condo = bool(re.search(r'CONDO', info.get('legal', ''), re.I)) or str(info.get('use_code', '')) in ('0400', '400', '04')
+                # VACANT LAND: FDOR use code 0 = vacant residential (e.g. '000'/'0000'), 10 vacant
+                # commercial, 40 vacant industrial, 70 vacant institutional. No homeowner + speculative
+                # land value = a systematic false-positive for the homeowner-rescue model.
+                _uc = str(info.get('use_code', '') or '').strip()
+                vac = (_uc.lstrip('0') == '') and _uc != '' or _uc in ('10', '1000', '40', '4000', '70', '7000')
                 oname = _clean_owner(owner)
         try:
             days = (datetime.strptime(r.get('AuctionDate', ''), '%m/%d/%Y').date() - today).days
@@ -151,6 +156,7 @@ def to_slim(county, cfg, base, items):
             'county': county, 'tier': tier, 'score': score, 'auction': r.get('AuctionDate', ''), 'days': days,
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
             'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': False, 'hs': hs, 'condo': condo,
+            'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')),
             'st': st, 'obid': 0, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
             'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr, 'cyberbg': cyberbg, 'cyberbgaddr': cyberbgaddr,
             'ctype': ('HOA' if ftype == 'HOA' else 'Bank/Mortgage'), 'ftype': ftype, 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],

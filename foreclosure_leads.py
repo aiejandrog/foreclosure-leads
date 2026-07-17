@@ -720,6 +720,11 @@ def make_tracker(leads):
             # 2nd mortgage can erase it and neither is in public data. Drives the "verify equity" caveat + a
             # MARGINAL cap until the association estoppel is entered. (Lesson from the Hondroulis condo deal.)
             'condo': bool(re.search(r'CONDO', str(r.get('dor_desc','') or ''), re.I)),
+            # VACANT LAND (no homeowner + speculative land value) and COMPANY-OWNED — systematic
+            # false-positives for the homeowner-rescue model; badged in the UI so a big-equity vacant
+            # lot / LLC (e.g. Ocean Breeze 777 LLC's $2.1M raw lots) can't masquerade as a live lead.
+            'vac': bool(re.search(r'VACANT', str(r.get('dor_desc','') or ''), re.I)),
+            'co': bool(re.search(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|PROPERT|REALTY|CAPITAL|GROUP|INVEST|EQUIT)\b', str(r.get('owners','') or ''), re.I)),
             'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),
