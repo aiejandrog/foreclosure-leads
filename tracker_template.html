@@ -2332,12 +2332,20 @@ function lkReport(a){
   // unauthenticated, the app just hangs on "Loading..."). No point faking a per-property link that
   // won't resolve; this is a plain reference to their free-signup home search, address in hand.
   L.push(['Propwire (comps/valuation — free sign-in)', 'https://propwire.com/']);
+  // Auction.com only lists bank-owned/trustee-engaged sales on their own platform — confirmed live
+  // 2026-07-17 that a real lead's address just returns unrelated county listings, and their `?q=`
+  // param is silently ignored (no address filtering exists). NOT useful for finding THIS property —
+  // useful for checking later if a TAKEN/already-sold property resurfaced as bank-owned REO.
+  const AC_SLUG = {'BROWARD':'Broward-county','MIAMI-DADE':'Miami-Dade-county','PALM BEACH':'Palm-Beach-county'}[cty];
+  if(AC_SLUG) L.push(['Auction.com — '+ctyName(cty)+' (county browse, NOT this address — see note)', 'https://www.auction.com/residential/fl/'+AC_SLUG]);
   if(lead&&lead.docket) L.unshift(['Docket (this case)',lead.docket]);
   if(lead&&lead.auc) L.splice(1,0,['Auction page',lead.auc]);
   const links=L.map(x=>'<a href="'+esc(x[1])+'" target="_blank" rel="noopener">'+esc(x[0])+'</a>').join('');
   return head+alert+stats+grid+rec+calc
     +'<div class="lksec">Dig deeper</div><div class="lkcard lklinks">'+links+'</div>'
-    +'<div class="lkfoot">Live county data &mdash; verify anything load-bearing on the linked sources.</div>';
+    +'<div class="lkfoot">Live county data &mdash; verify anything load-bearing on the linked sources.'
+    +(AC_SLUG?' Auction.com note: it only carries bank-owned/trustee sales listed on their own platform, not county-courthouse foreclosure sales like this one — the link opens their live '+esc(ctyName(cty))+' inventory in case this property (or one you already lost to a taken/underwater flag) resurfaces there as REO, not as a lookup for it now.':'')
+    +'</div>';
 }
 async function runLookup(rawVal){
   const v=((typeof rawVal==='string'?rawVal:(document.getElementById('lk').value||''))).trim(); if(!v) return;
