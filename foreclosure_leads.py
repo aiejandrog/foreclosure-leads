@@ -46,6 +46,26 @@ def _clean_party(raw):
     return re.sub(r'\s{2,}', ' ', s).strip()
 
 
+def _slug(s):
+    return re.sub(r'-+', '-', re.sub(r'[^a-z0-9]+', '-', (s or '').lower())).strip('-')
+
+def cyberbg_url(name, address):
+    """CyberBackgroundChecks NAME search — verified 2026-07-17 against live leads (Shembel, Lawrence):
+    free (no paywall/captcha) detail page shows 5-10 phones w/ carrier + last-reported date, up to 7
+    emails, prior addresses, RELATIVES (separate from associates — good for the tenant/relative bypass),
+    and property basics. Consistently surfaced MORE phones than BatchData on both test leads. URL pattern
+    /people/{first}-{last}/fl/{city-slug} (falls back to state-only if city can't be parsed); one click
+    from there to VIEW DETAILS for the free full page. `name` is a 'First Last' string (reuse the TPS name)."""
+    toks = [t for t in (name or '').split() if t]
+    if len(toks) < 2:
+        return ''
+    slug = _slug(' '.join(toks))
+    if not slug:
+        return ''
+    m = re.search(r',\s*([^,]+?)\s*,\s*[A-Z]{2}\s*\d{5}', address or '')
+    city = _slug(m.group(1)) if m else ''
+    return 'https://www.cyberbackgroundchecks.com/people/' + slug + '/fl' + ('/' + city if city else '')
+
 def people_addr_url(mailing, address, is_company):
     """TruePeopleSearch ADDRESS search: returns only the people who actually live at an address, so the
     owner can be told apart from same-name strangers (BatchData gives no age/DOB to disambiguate). Prefer
@@ -422,8 +442,9 @@ def qualify(leads):
             z = ('&citystatezip=' + zm.group(1)) if zm else ''
             r['people_url'] = "https://www.truepeoplesearch.com/results?name=" + urllib.parse.quote(name) + z
             r['people_name'] = name
+            r['cyberbg_url'] = cyberbg_url(name, r.get('Address', ''))
         else:
-            r['people_url'] = ''; r['people_name'] = ''
+            r['people_url'] = ''; r['people_name'] = ''; r['cyberbg_url'] = ''
         # ADDRESS-based People search. A name search on TPS returns many same-name people and there is
         # no way to tell which is the owner (BatchData returns NO age/DOB — confirmed against the live
         # API). Searching by the ADDRESS instead returns the 1-3 people who actually live there, which
@@ -676,7 +697,7 @@ def make_tracker(leads):
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
-            'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'ctype': r.get('case_type',''),
+            'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
             'named': r.get('named', []),   # [{name,url}] co-parties: humans get a People-search URL, companies ''
             'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),

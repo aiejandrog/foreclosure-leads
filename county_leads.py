@@ -142,12 +142,16 @@ def to_slim(county, cfg, base, items):
             people = ''
         # People-by-ADDRESS (pinpoints the owner among same-name strangers) — reuse the Miami-Dade builder.
         peopleaddr = F.people_addr_url(mail, addr, is_co or _ent)
+        # CyberBackgroundChecks NAME search (free detail page: phones w/ last-reported date, emails,
+        # relatives+associates — verified 2026-07-17 to out-return BatchData on both a Broward and a
+        # Sunrise lead). Same gate as the TPS name search: skip companies/trusts/address-named entities.
+        cyberbg = F.cyberbg_url(_nm, addr) if (_nm and not is_co and not _ent) else ''
         slim.append({
             'county': county, 'tier': tier, 'score': score, 'auction': r.get('AuctionDate', ''), 'days': days,
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
             'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': False, 'hs': hs, 'condo': condo,
             'st': st, 'obid': 0, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
-            'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr,
+            'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr, 'cyberbg': cyberbg,
             'ctype': ('HOA' if ftype == 'HOA' else 'Bank/Mortgage'), 'ftype': ftype, 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
             # county leads have no per-case docket token (no clerk enrichment) -> no Docket button; the
             # Records/Cases buttons point to THIS county's official-records + court-case search portals.
