@@ -14,7 +14,7 @@ Usage:
   python property_photos.py            # geocode + aerial for all leads (fast, guaranteed)
   python property_photos.py --zillow   # also attempt the Zillow listing-photo layer (slower, fail-soft)
 """
-import argparse, csv, io, json, os, re, threading, time
+import argparse, csv, io, json, math, os, re, threading, time
 from concurrent.futures import ThreadPoolExecutor
 import requests
 try:
@@ -44,6 +44,52 @@ def _sv_key():
         if os.path.exists(p):
             k = open(p, encoding='utf-8').read().strip()
     return k
+
+# FDOR statewide cadastral (same layer fl_cadastral.py uses) — parcel POLYGONS by folio. The polygon
+# centroid is the true parcel location (rooftop-grade, keyless), which lets us aim the Street View
+# camera at the house instead of trusting Google's address auto-aim (which loves lawns and bushes).
+CADASTRAL = ('https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/'
+             'Florida_Statewide_Cadastral/FeatureServer/0/query')
+
+def _bearing(lat1, lon1, lat2, lon2):
+    """Compass bearing (deg) from point 1 -> point 2. This is the Street View 'heading' param."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dl = math.radians(lon2 - lon1)
+    y = math.sin(dl) * math.cos(p2)
+    x = math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(dl)
+    return (math.degrees(math.atan2(y, x)) + 360) % 360
+
+def _dist_m(lat1, lon1, lat2, lon2):
+    R = 6371000.0
+    dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
+    h = math.sin(dp/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dl/2)**2
+    return 2 * R * math.asin(math.sqrt(h))
+
+def _parcel_centroids(folios, sess):
+    """{folio(digits): (lat, lon)} — batched IN() queries against the FDOR cadastral, with backoff."""
+    out = {}
+    todo = [f for f in dict.fromkeys(folios) if f and f.isdigit()]
+    for i in range(0, len(todo), 80):
+        batch = todo[i:i+80]
+        where = "PARCEL_ID IN (%s)" % ','.join("'%s'" % f for f in batch)
+        for t in range(3):
+            try:
+                r = sess.get(CADASTRAL, params={'where': where, 'outFields': 'PARCEL_ID',
+                             'returnGeometry': 'true', 'outSR': 4326, 'f': 'json'}, timeout=60)
+                j = r.json()
+                if j.get('error'):
+                    raise RuntimeError(j['error'].get('message', 'query error'))
+                for f in j.get('features', []):
+                    rings = (f.get('geometry') or {}).get('rings') or []
+                    if not rings or len(rings[0]) < 2: continue
+                    pts = rings[0][:-1] if rings[0][0] == rings[0][-1] else rings[0]
+                    lon = sum(p[0] for p in pts) / len(pts)
+                    lat = sum(p[1] for p in pts) / len(pts)
+                    out[str(f['attributes']['PARCEL_ID'])] = (lat, lon)
+                break
+            except Exception:
+                time.sleep(2 * (t + 1))
+    return out
 
 
 def _addr_of(r):
@@ -76,9 +122,13 @@ def _aerial_url(lat, lon, d=0.0009):
     bbox = f"{lon-d},{lat-d},{lon+d},{lat+d}"
     return ESRI.format(bbox=bbox)
 
-def _download_streetview(addr, fname, key, sess):
-    """Front-of-house photo by address (Google geocodes internally, so this even covers Census
-    geocode misses). Free metadata check first so 'no imagery here' never burns a paid request.
+def _download_streetview(addr, fname, key, sess, target=None):
+    """Front-of-house photo, AIM-LOCKED when we know the parcel's true location (FDOR centroid,
+    else Census coords): find the nearest outdoor pano, compute the camera->parcel compass bearing,
+    and request that exact pano with an explicit heading — Google's address auto-aim faces lawns/
+    bushes too often to trust. Distance-gated: a pano >150m out can't see the house (gated
+    community), so fall through to the aerial instead of shipping a useless shot.
+    Free metadata check first so 'no imagery here' never burns a paid request.
     Returns 'img/<fname>_sv.jpg' or ''. Idempotent like the aerial download."""
     os.makedirs(IMGDIR, exist_ok=True)
     path = os.path.join(IMGDIR, fname + '_sv.jpg')
@@ -86,11 +136,21 @@ def _download_streetview(addr, fname, key, sess):
     if os.path.exists(path) and os.path.getsize(path) > 3000:
         return rel
     try:
-        m = sess.get(SV_META, params={'location': addr, 'source': 'outdoor', 'key': key}, timeout=15)
+        loc = f"{target[0]},{target[1]}" if target else addr
+        m = sess.get(SV_META, params={'location': loc, 'source': 'outdoor', 'radius': 80, 'key': key}, timeout=15)
         if m.status_code != 200 or m.json().get('status') != 'OK':
             return ''
-        r = sess.get(SV_IMG, params={'location': addr, 'size': '640x420', 'fov': 80,
-                                     'source': 'outdoor', 'key': key}, timeout=25)
+        md = m.json()
+        pl = md.get('location') or {}
+        params = {'size': '640x420', 'fov': 72, 'pitch': 0, 'source': 'outdoor', 'key': key}
+        if target and md.get('pano_id') and pl.get('lat') is not None:
+            if _dist_m(pl['lat'], pl['lng'], target[0], target[1]) > 150:
+                return ''
+            params['pano'] = md['pano_id']
+            params['heading'] = round(_bearing(pl['lat'], pl['lng'], target[0], target[1]), 1)
+        else:
+            params['location'] = loc
+        r = sess.get(SV_IMG, params=params, timeout=25)
         if r.status_code == 200 and 'image' in (r.headers.get('content-type') or '') and len(r.content) > 3000:
             tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
             with open(tmp, 'wb') as f:
@@ -251,11 +311,13 @@ def main():
     svkey = _sv_key()
     if svkey:
         todo = [(r, _folio(r), _addr_of(r)) for r in all_leads if not r['photos']]
+        cents = _parcel_centroids([f for _, f, _ in todo], sess)
+        print(f"  parcel centroids for camera aim: {len(cents)} (FDOR cadastral)")
         def _dsv(job):
             r, folio, addr = job
             if not (addr and folio): return (r, '')
             s = requests.Session(); s.headers.update({'User-Agent': UA})
-            return (r, _download_streetview(addr, folio, svkey, s))
+            return (r, _download_streetview(addr, folio, svkey, s, cents.get(folio) or coords.get(addr)))
         with ThreadPoolExecutor(max_workers=8) as ex:
             for i, (r, rel) in enumerate(ex.map(_dsv, todo), 1):
                 if rel: r['photos'] = [rel]; r['photo_kind'] = 'street'; n_sv += 1
