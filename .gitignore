@@ -29,3 +29,5 @@ broward_leads.json
 *_liens.json
 streetview.key
 sv_blocked.json
+lob.key
+dealflow-mail-batch-*.json
