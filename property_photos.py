@@ -435,6 +435,15 @@ def main():
         todo = [(r, _folio(r), _addr_of(r)) for r in all_leads if not r['photos'] and not _is_vacant(r)]
         cents = _parcel_centroids([f for _, f, _ in todo], sess)
         print(f"  parcel centroids for camera aim: {len(cents)} (FDOR cadastral)")
+        # Backfill aurl for leads whose Census geocode failed but FDOR knows the parcel — that
+        # gives the tracker's <img data-fb=> onerror an actual satellite URL instead of an empty
+        # attribute, so bare-emailed HTMLs still show aerials for these leads too.
+        _backfilled = 0
+        for r, folio, _addr in todo:
+            if not r.get('aurl') and folio in cents:
+                r['aurl'] = _aerial_url(cents[folio][0], cents[folio][1])
+                _backfilled += 1
+        if _backfilled: print(f"  backfilled aurl for {_backfilled} leads via FDOR")
         def _dsv(job):
             r, folio, addr = job
             if not (addr and folio): return (r, '')
@@ -462,8 +471,11 @@ def main():
             if rel: r['photos'] = [rel]; r['photo_kind'] = 'appraiser'; n_bcpa += 1
             if i % 40 == 0: print(f"  ...bcpa {i}/{len(todo)}")
 
-    # 4) Aerial fallback — PARALLEL download (Esri is a public tile service, safe to hit concurrently)
-    todo = [(r, _folio(r), coords.get(_addr_of(r))) for r in all_leads if not r['photos']]
+    # 4) Aerial fallback — PARALLEL download (Esri is a public tile service, safe to hit concurrently).
+    # Coordinate priority: Census geocode first, else the FDOR parcel centroid we fetched for camera
+    # aim (works for leads with a folio but no successful Census hit — recovers a handful of misses).
+    cents_all = locals().get('cents') or {}
+    todo = [(r, _folio(r), coords.get(_addr_of(r)) or cents_all.get(_folio(r))) for r in all_leads if not r['photos']]
     def _do(job):
         r, folio, c = job
         if not (c and folio): return (r, '')
