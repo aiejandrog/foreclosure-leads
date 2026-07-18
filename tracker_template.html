@@ -893,9 +893,12 @@ table{font-size:12px;border:1px solid rgba(205,190,155,.13);border-radius:10px;o
 th{background:#122338;color:#aebdcb;border-bottom:1px solid rgba(201,168,76,.31);padding:11px 12px;font-family:var(--f-label);font-size:8.5px;letter-spacing:.13em}
 th:hover,th.sorted{color:var(--gold-l);background:#172a40}
 td{background:rgba(11,22,36,.96);color:#d8d9d5;border-bottom-color:rgba(205,190,155,.075);padding:12px}
-tbody tr:nth-child(even) td{background:rgba(14,27,43,.97)}
-tbody tr:hover td{background:linear-gradient(90deg,rgba(201,168,76,.10),rgba(18,34,52,.98) 40%,rgba(13,27,42,.98))}
+tbody tr:nth-child(even) td{background:#101b2c}
+/* hover: a SOLID dark lift (not a gradient — a solid transitions cleanly from the solid base; a
+   solid->gradient transition can't interpolate and flickers) + a gold left-edge accent for premium feel */
+tbody tr:hover td{background:#1a2942}
 tbody tr td:first-child{box-shadow:inset 3px 0 0 transparent}
+tbody tr:hover td:first-child{box-shadow:inset 3px 0 0 var(--gold)}
 .submeta,.meta{color:#8f9eb0}.A{color:var(--verdigris-ink)}.B{color:var(--gold-l)}.C{color:#8392a4}
 .profpos{color:var(--verdigris-ink);text-shadow:0 0 16px rgba(99,196,181,.13)}.profneg{color:var(--red-ink)}
 .chip{background:rgba(255,255,255,.035);border-color:rgba(205,190,155,.15)}
