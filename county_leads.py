@@ -147,6 +147,10 @@ def to_slim(county, cfg, base, items):
         eff_eq = 0 if eqfake else eqp
         score = max(0, min(100, round(eff_eq) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
         tier = 'A' if (val and eff_eq >= 40 and 0 <= days <= 45) else ('B' if val and eff_eq >= 15 else 'C')
+        # city-only address — can't be mailed/driven/knocked; cap at C (mirrors the MD disqualifier)
+        no_street = not re.match(r'^\s*(?:\d[\d-]*|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s+\S', addr or '', re.I)
+        if no_street:
+            tier = 'C'; score = min(score, 40)
         z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio) + ' FL') + '_rb/'
         auc = base + '?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=' + r.get('AuctionDate', '') + ('#AITEM_' + r['AID'] if r.get('AID') else '')
         # People NAME search — TruePeopleSearch wants "First Last". FDOR owner names are "LAST FIRST[,] MIDDLE",
@@ -179,7 +183,7 @@ def to_slim(county, cfg, base, items):
             'docket': '', 'records': cfg['records'], 'cases': cfg['cases'],
             'cstatus': '', 'mr': mr, 'ip': False, 'ju': (judg <= 0),
             'bought': bought, 'bprice': bprice, 'filed': 0, 'etax': 0,
-            'warn': ('' if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': '',
+            'warn': (('no street address - verify parcel first' if no_street else '') if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': '',
         })
     return slim
 

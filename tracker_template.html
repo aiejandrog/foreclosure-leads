@@ -739,7 +739,7 @@ body.modal-open{overflow:hidden}
 <div class="tag">South Florida · Foreclosure &amp; Tax-Deed Intelligence</div>
 </div>
 <span class="spacer"></span>
-<span class="upd" id="upd">Updated <b id="upddate">__UPDATED__</b><span id="stalemark"></span> · notes saved on this device</span>
+<span class="upd" id="upd">Updated <b id="upddate">__UPDATED__</b><span id="stalemark"></span> · auto-refreshes daily 9am · notes saved on this device</span>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
 <div class="controls">
@@ -1037,6 +1037,7 @@ function dealStrategy(r){
   if(r.days>21) s+='Best play: reach the owner BEFORE the auction — you can inspect and run title first (auction buyers cannot). ';
   s+='At auction your floor is the final judgment ('+fmtK(r.judg)+'), not the clerk’s posted opening bid (often a nominal $100). ';
   if(r._equity!=null && r.value && r._equity/r.value>0.35) s+='Solid equity spread — but confirm it is REAL: pull Official Records for a 2nd mortgage/HELOC (the judgment only shows the foreclosing loan). ';
+  s+='The value shown is the county tax-roll number, not ARV — run your own comps before pricing an offer. ';
   if(r.condo) s+='Condo — order the association estoppel for dues + any special assessment (40-yr recert) before you trust the spread. ';
   s+='Confirm no unpaid property taxes or code liens ride on top. ';
   if(r.days>21) s+='If the owner keeps any interest (lease-back/buy-back) with a lis pendens recorded, FS 501.1377 applies — use a compliant written contract with the 3-day cancellation.';
@@ -1054,7 +1055,7 @@ function dealAnalysisHTML(r){
     mathHtml = '<div class="dealmath"><div class="mathline"><span>Est. profit</span><span>unknown until verified</span></div></div>';
   } else {
     const costs = r.value*(Math.max(0,+deal.costpct||0)/100);
-    const rows = [ mathLine('Market value', r.value) ];
+    const rows = [ mathLine('County market value', r.value) ];
     if(r.st==='TD'){ rows.push(mathLine('Est. winning bid', -r._purchase)); rows.push(mathLine('Quiet title', -(Math.max(0,+deal.quiettitle||3000)))); }
     else if(r.mr){
       // HOA/junior: you pay the small bid, then the surviving mortgages ride ON TOP — itemize each.

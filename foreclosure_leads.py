@@ -411,6 +411,10 @@ def qualify(leads):
         if not td and mkt and mkt < 100000: dq.append('low value')
         if mkt and ep < 15: dq.append('thin margin' if td else 'thin/negative equity')
         if not r.get('Address','').strip(): dq.append('no address')
+        # city-only address ("HOMESTEAD, FL 33034") — can't be mailed, driven, or door-knocked, and
+        # blank-street + huge-equity is a classic lien-trap profile. Never let it headline Tier A.
+        elif not re.match(r'^\s*(?:\d[\d-]*|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s+\S',
+                          r.get('Address',''), re.I): dq.append('no street address - verify parcel first')
         if not mkt: dq.append('no value data')
         if r['judgment_unknown']: dq.append('judgment not posted')
         r['score'] = round(score) if not dq else min(round(score), 40)
@@ -541,11 +545,32 @@ def qualify(leads):
         #     equity -> the shown judgment is likely a private/junior note and a senior 1st mortgage
         #     probably survives unshown. Bias toward "verify via Official Records" (now one click).
         suspect_equity = (not td) and bool(pl) and (not bank_like) and (r.get('equity_pct', 0) or 0) >= 40
+        # (d) TINY judgment relative to value on a RECENTLY-bought property — even from a name-brand
+        #     bank. Nobody holds 80% equity a year after purchase, so a small bank judgment there is a
+        #     junior/partial position (HELOC/2nd) with the senior 1st likely surviving unshown
+        #     (e.g. $68k Nationstar judgment on a $356k house bought last year). LONG tenure is the
+        #     honest exception: 15+ years explains a tiny judgment as a paid-down senior (a 1983 condo
+        #     with an $18k Chase balance is plausibly REAL 90% equity), so those stay unflagged.
+        _mv = r.get('market_value', 0) or 0
+        _jd = r.get('judgment', 0) or 0
+        _by = r.get('bought_year') or 0
+        tiny_recent = (not td) and _mv > 0 and 0 < _jd and (_jd / _mv) < 0.20 \
+                      and (r.get('equity_pct', 0) or 0) >= 40 and (not _by or _by >= today.year - 15)
         r['indiv_plaintiff'] = indiv_plaintiff
-        r['mortgage_risk'] = bool(hoa_hidden_mtg or (not td and (indiv_plaintiff or suspect_equity)))
+        r['mortgage_risk'] = bool(hoa_hidden_mtg or (not td and (indiv_plaintiff or suspect_equity or tiny_recent)))
         # eq_fake: the shown equity_pct is gross/unverified (HOA-junior lien or a hidden senior mortgage),
         # so the UI mutes it and sinks it on the Equity sort instead of ranking a $9k-lien lead as 98% equity.
         r['eq_fake'] = bool(is_hoa or r['mortgage_risk'])
+        # MIXED-SIGNAL FIX ("why is it ranked A if you're telling me to verify it"): a lead whose
+        # equity we just flagged as unverified must not headline Tier A on that same equity. Strip the
+        # equity points scoring credited and re-tier — mirrors the county scrapers, which zero eff_eq
+        # for eqfake before scoring. (is_hoa leads never received equity points, nothing to strip.)
+        # (disqualified leads are already capped at 40/C — subtracting from the capped score would
+        # over-penalize them, and there is no A/B mixed signal to fix there anyway)
+        if r['eq_fake'] and not is_hoa and not td and not r.get('disqualifiers'):
+            _pts = min(42.0, max(0.0, (r.get('equity_pct', 0) or 0)) * 0.42)
+            r['score'] = max(0, round((r.get('score') or 0) - _pts))
+            r['tier'] = 'A' if r['score'] >= 70 else ('B' if r['score'] >= 50 else 'C')
     return leads
 
 def _clean_addr(s):
