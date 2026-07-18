@@ -4,7 +4,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>DEALFLOW — Miami-Dade Foreclosure &amp; Tax-Deed Engine</title>
+<title>DEALFLOW — South Florida Foreclosure &amp; Tax-Deed Engine</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://api.fontshare.com">
@@ -24,7 +24,7 @@ button.active{background:#3b82f6;border-color:#3b82f6}
 input{width:240px;cursor:text}
 .stats{font-size:12px;color:#9fb0cc;margin-left:auto}
 .tblwrap{overflow-x:auto}
-table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1770px;table-layout:fixed}
 th{position:sticky;top:0;background:#1b2438;padding:9px 8px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:2px solid #2a3654;font-size:11.5px;letter-spacing:.02em;color:#c7d3e8}
 td{padding:9px 8px;border-bottom:1px solid #1c2540;vertical-align:top;line-height:1.4}
 tbody tr:nth-child(even) td{background:#121a29}
@@ -116,6 +116,8 @@ input.ph::placeholder{color:#5a7d66}
 /* deal-analysis modal */
 #dealmodal{display:none;position:fixed;inset:0;z-index:120}
 #dealmodal.show{display:block}
+#planmodal{display:none;position:fixed;inset:0;z-index:121}
+#planmodal.show{display:block}
 .dm-backdrop{position:absolute;inset:0;background:#060a12cc;backdrop-filter:blur(2px)}
 .dm-card{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(560px,94vw);max-height:90vh;overflow-y:auto;background:#141b2b;border:1px solid #2c3a5a;border-radius:14px;box-shadow:0 18px 60px #000b;padding:20px 22px 22px}
 .dm-close{position:absolute;top:10px;right:12px;background:none;border:none;color:#9fb0cc;font-size:24px;line-height:1;cursor:pointer;padding:2px 8px}
@@ -148,27 +150,31 @@ input.ph::placeholder{color:#5a7d66}
   --bg:#EDF1F7; --bg-2:#F6F8FB; --surface:#FFFFFF; --surface-2:#F4F7FB;
   --ink:#16233F; --ink-2:#3B4A66; --muted:#64748B; --muted-2:#93A0B4;
   --line:rgba(22,35,63,.11); --line-2:rgba(22,35,63,.06);
-  --navy:#1A2B4A; --navy-grad:linear-gradient(135deg,#0F1B33 0%,#1A2B4A 46%,#20386A 100%);
-  --gold:#C9A84C; --gold-d:#A07E28; --gold-l:#E8D48B; --gold-soft:rgba(201,168,76,.14);
+  --navy:#1A2B4A; --navy-deep:#0F1B33; --navy-lift:#20386A; --navy-grad:linear-gradient(135deg,#0F1B33 0%,#1A2B4A 46%,#20386A 100%);
+  --gold:#C9A84C; --gold-d:#A07E28; --gold-l:#E8D48B; --gold-soft:rgba(201,168,76,.14); --gold-ink:#2a2205;
   --gold-grad:linear-gradient(120deg,#C9A84C,#E8D48B);
+  /* proper SPECULAR shine: flat gold base (constant across the word) with a single tight bright streak
+     at 50%. The old version ramped through mid-tones 34-66%, brightening the WHOLE word as it panned
+     (the "swipe" glitch); keeping the base constant makes only a thin highlight travel across. */
+  --gold-shine:linear-gradient(115deg,#C9A84C 0%,#C9A84C 43%,#EFDF9E 48%,#FFFDF6 50%,#EFDF9E 52%,#C9A84C 57%,#C9A84C 100%);
   --green:#0F9D58; --green-ink:#0A7A42; --green-soft:#E4F5EC;
   --amber:#C98A12; --amber-ink:#8A5F0C; --amber-soft:#FAF0D8;
   --red:#DC2626; --red-ink:#B31B1B; --red-soft:#FBE8E8;
   --blue:#2563EB; --blue-ink:#1E50C8; --blue-soft:#E7F0FE;
+  --bg-wash:radial-gradient(1200px 600px at 100% -10%,rgba(201,168,76,.06),transparent 60%),radial-gradient(1000px 500px at -10% 0%,rgba(26,43,74,.05),transparent 55%),var(--bg);
   --r-xs:6px; --r-sm:9px; --r:13px; --r-lg:18px; --r-xl:24px; --pill:999px;
   --sh-1:0 1px 2px rgba(16,27,51,.06);
   --sh-2:0 4px 16px rgba(16,27,51,.07),0 1px 3px rgba(16,27,51,.05);
   --sh-3:0 24px 60px rgba(16,27,51,.18),0 4px 12px rgba(16,27,51,.06);
+  --sh-hover:0 1px 2px rgba(22,35,63,.05),0 8px 20px -8px rgba(22,35,63,.14),0 4px 18px -4px rgba(201,168,76,.20);
+  --sh-gold:0 6px 20px rgba(201,168,76,.35); --sh-gold-hover:0 8px 26px rgba(201,168,76,.45);
   --f-display:'General Sans','Space Grotesk',system-ui,sans-serif;
   --f-body:'DM Sans','Inter',system-ui,-apple-system,sans-serif;
   --f-num:'Space Grotesk','DM Sans',system-ui,sans-serif;
+  --f-label:'Orbitron','Space Grotesk',sans-serif;
 }
 *{box-sizing:border-box}
-body{font-family:var(--f-body);margin:0;background:
-  radial-gradient(1200px 600px at 100% -10%,rgba(201,168,76,.06),transparent 60%),
-  radial-gradient(1000px 500px at -10% 0%,rgba(26,43,74,.05),transparent 55%),
-  var(--bg);
-  color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:.001em}
+body{font-family:var(--f-body);margin:0;background:var(--bg-wash);color:var(--ink);-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:.001em}
 ::selection{background:var(--gold-soft);color:var(--ink)}
 ::-webkit-scrollbar{height:11px;width:11px}
 ::-webkit-scrollbar-thumb{background:rgba(22,35,63,.18);border-radius:10px;border:3px solid transparent;background-clip:content-box}
@@ -180,8 +186,6 @@ header{padding:15px 22px 13px;background:rgba(246,248,251,.8);backdrop-filter:sa
 header.hdn{transform:translateY(-106%)}
 header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.6) inset,0 10px 30px rgba(16,27,51,.11)}
 .brand{display:flex;align-items:center;gap:13px;margin:0 0 13px}
-.brand .mark{width:38px;height:38px;border-radius:11px;background:var(--navy-grad);display:grid;place-items:center;box-shadow:var(--sh-2),0 0 0 1px rgba(201,168,76,.25) inset;flex:0 0 auto}
-.brand .mark i{width:16px;height:16px;border:2.5px solid var(--gold);border-radius:3px;transform:rotate(45deg);display:block;box-shadow:0 0 10px rgba(201,168,76,.4)}
 .brand .wm{font-family:var(--f-display);font-weight:700;font-size:20px;letter-spacing:-.02em;color:var(--ink);line-height:1.05}
 .brand .wm b{color:var(--gold-d);font-weight:700}
 .brand .tag{font-size:11px;color:var(--muted);margin-top:3px;letter-spacing:.01em}
@@ -201,6 +205,18 @@ input::placeholder{color:var(--muted-2)}
 /* filter chips */
 .tf{border-radius:var(--pill);padding:7px 15px;font-weight:600;color:var(--ink-2)}
 .tf.active{background:var(--navy-grad);color:#fff;border-color:transparent;box-shadow:var(--sh-2)}
+/* grouped filter pills: a small label + a hairline divider keep the bar organized */
+.fgroup{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.flbl{font-family:var(--f-label);font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2);margin-right:1px}
+.fdiv{width:1px;align-self:stretch;min-height:24px;background:var(--line);margin:0 4px}
+/* COUNTY filter pills — blue accent so they read as a distinct axis from the navy Tier pills, each with a live count */
+.cf{border-radius:var(--pill);padding:7px 13px;font-weight:600;font-size:13px;color:var(--ink-2);display:inline-flex;align-items:center;gap:7px;line-height:1}
+.cf .cfn{font-size:11px;font-weight:800;color:var(--muted);background:var(--surface-2);border-radius:var(--pill);padding:1px 7px;min-width:16px;text-align:center;font-variant-numeric:tabular-nums}
+.cf:hover{transform:translateY(-1px);border-color:var(--blue);background:var(--blue-soft);color:var(--blue-ink)}
+.cf:active{transform:translateY(0) scale(.97)}
+.cf.active{background:var(--blue-soft);border-color:var(--blue);color:var(--blue-ink);box-shadow:0 2px 9px -3px rgba(37,99,235,.4)}
+.cf.active .cfn{background:#fff;color:var(--blue-ink)}
+@media(max-width:860px){ .flbl{display:none} .fdiv{display:none} }
 button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 #wk.active,#hd.active,#td.active{background:var(--gold);border-color:var(--gold);color:#3a2c05}
 #advtog{border-radius:var(--pill);background:var(--surface);color:var(--ink);border-color:var(--line);font-weight:600}
@@ -224,13 +240,13 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 .scrollnudge.on{opacity:.97;transform:translateX(0);animation:nudgeBob 1.5s ease-in-out infinite}
 @keyframes nudgeBob{0%,100%{transform:translateX(0)}50%{transform:translateX(6px)}}
 @media(prefers-reduced-motion:reduce){.scrollnudge.on{animation:none}}
-table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1400px;table-layout:fixed}
+table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1770px;table-layout:fixed}
 th{position:sticky;top:0;z-index:1;background:var(--bg);padding:11px 12px;text-align:left;cursor:pointer;white-space:nowrap;user-select:none;border-bottom:1px solid var(--line);font-size:10.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 th:hover{color:var(--ink)}
-td{padding:11px 12px;border-bottom:1px solid var(--line-2);vertical-align:middle;line-height:1.45;background:var(--surface)}
-td.links,td.owncell,td.propcell{vertical-align:top}
+td{padding:12px;border-bottom:1px solid var(--line-2);vertical-align:top;line-height:1.45;background:var(--surface)}
+td.links,td.owncell,td.propcell,td.mailcell{vertical-align:top}
 tbody tr:nth-child(even) td{background:#FBFCFE}
-tbody tr:hover td{background:#FCF8EF}
+tbody tr:hover td{background:#F3F8FF}
 tbody tr td:first-child{box-shadow:inset 3px 0 0 transparent}
 tbody tr{transition:background .18s var(--e-lux)}
 .A{color:var(--green-ink);font-weight:700}.B{color:var(--amber-ink);font-weight:700}.C{color:var(--muted)}
@@ -259,11 +275,11 @@ td.num .warn,td.num .mrwarn,td.num .submeta{white-space:normal;overflow-wrap:any
 .deflist .defco{color:var(--muted-2)}
 a{color:var(--blue-ink);text-decoration:none;font-weight:500}
 a:hover{text-decoration:underline}
-select.status{padding:5px 6px;font-size:11.5px;width:100%;box-sizing:border-box;border-radius:var(--r-xs)}
-textarea.notes{width:100%;box-sizing:border-box;min-height:44px;background:var(--surface-2);color:var(--ink);border:1px solid var(--line);border-radius:var(--r-xs);font-size:12px;padding:6px 8px;resize:vertical;font-family:var(--f-body)}
+select.status{padding:5px 6px;height:30px;font-size:11px;width:100%;box-sizing:border-box;border-radius:var(--r-xs)}
+textarea.notes{width:100%;box-sizing:border-box;min-height:40px;background:transparent;color:var(--ink);border:1px solid var(--line-2);border-radius:var(--r-xs);font-size:12px;padding:6px 8px;resize:vertical;font-family:var(--f-body)}
+textarea.notes:hover{border-color:var(--line)}
 textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
-.links{line-height:1.5}
-.links a{margin-right:8px;white-space:nowrap}
+.links{line-height:1.4}
 .urgent{color:var(--red);font-weight:700}
 .warn{color:var(--amber-ink);font-size:11px}
 .profpos{color:var(--green-ink);font-weight:800;font-size:19px;font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
@@ -276,7 +292,7 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 .tdt{color:var(--gold-d);font-size:11px;font-weight:700}
 
 /* worth-it verdict badges — refined pills with dot */
-.vb{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-body);font-size:10px;font-weight:700;padding:3px 9px 3px 8px;border-radius:var(--pill);letter-spacing:.05em;text-transform:uppercase;line-height:1;border:1px solid transparent;vertical-align:middle}
+.vb{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-label);font-size:8.5px;font-weight:600;padding:3px 9px 3px 8px;border-radius:var(--pill);letter-spacing:.08em;text-transform:uppercase;line-height:1;border:1px solid transparent;vertical-align:middle}
 .vb::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
 .vb3{background:var(--green-soft);color:var(--green-ink);border-color:#c2e6cf;box-shadow:0 1px 7px rgba(15,157,88,.20)}
 .vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0;box-shadow:0 1px 7px rgba(201,138,18,.18)}
@@ -286,6 +302,19 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 /* deal-analysis trigger */
 .dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font-family:var(--f-body);font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--pill);cursor:pointer;display:inline-flex;align-items:center;gap:5px;transition:all .14s;box-shadow:var(--sh-1)}
 .dealtog:hover{border-color:var(--gold);color:var(--gold-d);box-shadow:var(--sh-2);transform:translateY(-1px)}
+/* profit cell — one structured right-aligned deal summary, not loose ornaments */
+td.num .fchips{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:3px;margin-bottom:5px}
+td.num .fchips:empty{display:none;margin:0}
+/* a long verify/flag chip (e.g. "Low-confidence check") must WRAP inside the narrow profit column, never overflow into the tier/score cells */
+td.num .fchips .chip{box-sizing:border-box;max-width:100%;white-space:normal;overflow-wrap:break-word;text-align:right}
+td.num .vb{margin-bottom:4px}
+td.num .submeta{margin-top:2px}
+td.num .warn,td.num .mrwarn{margin-top:3px}
+td.num .dealtog{margin-top:7px;box-shadow:none;background:transparent;border-color:transparent;padding:3px 4px;color:var(--gold-d)}
+td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-shadow:none;transform:none}
+/* owner / property cells — primary line leads, metadata recedes */
+td.owncell .addrline,td.propcell .addrline,td.mailcell .addrline{font-weight:600;line-height:1.35}
+td.owncell .meta,td.owncell .submeta,td.propcell .submeta,td.propcell .warn{font-size:10.5px;line-height:1.4;margin-top:4px;font-weight:400}
 
 /* deal-analysis modal */
 #dealmodal{display:none;position:fixed;inset:0;z-index:120}
@@ -299,6 +328,43 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 #lookupmodal{display:none;position:fixed;inset:0;z-index:121}
 #lookupmodal.show{display:block}
 #lookupmodal .dm-card{width:min(760px,95vw);background:var(--bg-2)}
+/* plan-today modal (shares .dm-card / .dm-backdrop / .dm-close) — was missing its display:none/fixed
+   rule entirely, so the empty shell rendered inline in the page flow instead of as a hidden overlay
+   (looked like a stray floating box with just the close X, under the header, before first open) */
+#planmodal{display:none;position:fixed;inset:0;z-index:121}
+#planmodal.show{display:block}
+#planmodal .dm-card{width:min(640px,95vw);max-height:86vh}
+/* property photo thumbnail (row + card) + swipe gallery lightbox */
+.pcell{width:172px}
+.pthumb{display:block;width:148px;height:110px;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);cursor:pointer;padding:0;position:relative;box-shadow:0 2px 8px -3px rgba(16,28,52,.18);transition:border-color .2s var(--e-lux),box-shadow .2s var(--e-lux),transform .2s var(--e-lux)}
+.pthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.pthumb:hover{border-color:var(--gold);box-shadow:var(--sh-2);transform:translateY(-1px)}
+.pthumb.noimg,.pthumb.imgfail{display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--muted);cursor:default;opacity:.7;box-shadow:none}
+.pthumb.imgfail img{display:none}
+/* photo count badge — quiet pill, top-right; no kind lettering, no gradient band over the photo */
+.pcount{position:absolute;top:7px;right:7px;background:rgba(10,16,28,.62);backdrop-filter:blur(2px);color:#fff;font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:2px 8px;border-radius:var(--pill);pointer-events:none}
+.phero{position:relative;width:100%;height:260px;border-radius:10px;overflow:hidden;margin-bottom:10px;cursor:pointer;border:1px solid var(--line)}
+.phero img{width:100%;height:100%;object-fit:cover;display:block}
+.phero .pcount{font-size:10.5px;padding:3px 10px}
+.gstage.imgfail .gimg{display:none}
+.gstage.imgfail::before{content:'\1F3E0  image unavailable';display:flex;align-items:center;justify-content:center;min-height:240px;font-size:15px;color:var(--muted);letter-spacing:.02em}
+#gallerymodal{display:none;position:fixed;inset:0;z-index:130}
+#gallerymodal.show{display:block}
+#gallerymodal .gcard{width:min(880px,96vw);max-height:92vh;padding:0;overflow:hidden;background:#0d1526;border:1px solid #26324c}
+.ghead{display:flex;align-items:center;gap:10px;padding:15px 48px 12px 18px}
+.gtitle{font-family:var(--f-display);font-size:16px;font-weight:700;color:#fff;flex:1;letter-spacing:-.01em;line-height:1.25}
+.gtag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:var(--pill);background:rgba(255,255,255,.1);color:#cbd5e8;white-space:nowrap}
+.gtag.gz{background:var(--gold-grad);color:#1a1205}
+.gstage{position:relative;background:#05070d;display:flex;align-items:center;justify-content:center;min-height:340px;max-height:66vh}
+.gimg{max-width:100%;max-height:66vh;object-fit:contain;display:block}
+.gnav{position:absolute;top:50%;transform:translateY(-50%);width:42px;height:42px;border-radius:50%;border:none;background:rgba(0,0,0,.5);color:#fff;font-size:26px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.gnav:hover{background:var(--gold);color:#1a1205}
+.gprev{left:12px}.gnext{right:12px}
+.gfoot{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;gap:12px}
+.gcount{color:#9fb0cc;font-size:12px;font-weight:600}
+.gzbtn{background:var(--gold-grad);color:#1a1205!important;font-weight:700;font-size:13px;padding:9px 16px;border-radius:var(--pill);text-decoration:none}
+.gzbtn:hover{filter:brightness(1.06)}
+@media(max-width:860px){ .gstage{min-height:240px} .gnav{width:36px;height:36px;font-size:22px} .ghead .gtitle{font-size:14px} }
 .lktitle{font-family:var(--f-display);font-size:22px;font-weight:700;letter-spacing:-.02em;margin:0 30px 1px 0;color:var(--ink)}
 .lksub{color:var(--muted);font-size:12px;margin-bottom:8px}
 .lkchips{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 14px}
@@ -384,8 +450,53 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 /* contact / follow-up tracker */
 #logmodal{display:none;position:fixed;inset:0;z-index:120}
 #logmodal.show{display:block}
+#syncmodal{display:none;position:fixed;inset:0;z-index:122}
+#syncmodal.show{display:block}
+#syncmodal .dm-card{width:min(560px,94vw)}
+/* [Cursor cloud edit] Mail-batch modal was missing its overlay rule, so it rendered inline (no fixed/backdrop) and the sticky header intercepted clicks. Mirror the other modals. */
+#mailmodal{display:none;position:fixed;inset:0;z-index:122}
+#mailmodal.show{display:block}
+#mailmodal .dm-card{width:min(680px,95vw);max-height:86vh}
+.syncrow{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line-2)}
+.syncrow:last-child{border-bottom:none}
+.syncrow .si{font-size:22px;line-height:1}
+.syncrow .st{font-family:var(--f-display);font-weight:700;font-size:15px;color:var(--ink)}
+.syncrow .sd{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45}
+.syncbtn2{margin-top:8px;background:var(--navy);color:#fff;border:1px solid var(--navy);border-radius:var(--pill);font-weight:700;font-size:12.5px;padding:7px 16px;cursor:pointer}
+.syncbtn2:hover{background:var(--gold-d);border-color:var(--gold-d)}
+.syncres{margin-top:14px;padding:13px 15px;border-radius:var(--r-md);background:#F0FAF3;border:1px solid #CFE9D6;font-size:13px;line-height:1.5;color:#0A5B33}
+.syncres.warn{background:#FBF6E9;border-color:#EAD9B0;color:#7a5a10}
+.syncres b{font-family:var(--f-num)}
+.syncfresh{font-size:10px;color:var(--muted-2);font-weight:600;margin-left:2px}
+#syncbtn.syncstale{border-color:#e0a020;background:#FBF6E9;color:#7a5a10}
+#syncbtn.syncstale .syncfresh{color:#b45309}
+/* opt-out audit ledger (FTSA paper trail) in the contact-log modal */
+.optledger{margin-top:12px;padding:11px 13px;border-radius:var(--r-md);background:#FBF3F3;border:1px solid #EAD0D0}
+.optledger .olt{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#a13636;margin-bottom:6px}
+.optledger .ole{font-size:12px;color:#5a2c2c;line-height:1.5;font-variant-numeric:tabular-nums}
+.optledger .ole b{font-family:var(--f-num)}
+/* dialed-after-opt-out red flag — the FTSA violation a plaintiff hunts for */
+.cx.cx-viol{background:#fdeaea;border:1px solid #e6a3a3;color:#a11212;font-weight:800}
+.optviol{margin:12px 0;padding:12px 14px;border-radius:var(--r-md);background:#fdeaea;border:1.5px solid #d94b4b}
+.optviol .ovt{font-size:13px;font-weight:800;letter-spacing:.03em;color:#8f0f0f;margin-bottom:6px}
+.optviol .ovl{font-size:12.5px;color:#6b1a1a;line-height:1.5}
+.optviol .ovl b{font-family:var(--f-num)}
+.optviol .ovul{margin:6px 0 6px 18px;padding:0;font-size:12.5px;color:#5a1414;line-height:1.6}
+.optviol .ovul b{font-family:var(--f-num)}
+.optviol .ovnote{font-size:11.5px;color:#7a3b3b;margin-top:6px;line-height:1.45}
+.statviol{color:#a11212;font-weight:800}
+/* team auto-sync UI */
+.syncrow.syncauto{background:linear-gradient(180deg,#F7FBFF,#F0F7FF);border:1px solid #cfe0f5;border-radius:var(--r-md);padding:14px;margin-top:2px}
+.synctag{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1b6fd6;background:#e4efff;border:1px solid #bcd8ff;border-radius:var(--pill);padding:2px 8px;vertical-align:middle;margin-left:6px}
+.synckeyrow{display:flex;gap:8px;margin-top:9px}
+.synckeyrow input{flex:1;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:var(--r-xs);font-family:var(--f-body)}
+.syncbtn2.ghost{background:transparent;color:var(--ink-2);border-color:var(--line)}
+.syncbtn2.ghost:hover{background:var(--surface-2);color:var(--ink);border-color:var(--gold)}
+.syncstat{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 9px;border-radius:var(--pill);vertical-align:middle;margin-left:6px;background:#E9F7EE;border:1px solid #BFE6CC;color:#0A7A42}
+.syncstat.warn{background:#FBF6E9;border-color:#EAD9B0;color:#8a6a12}
+#syncstatline{font-size:12px;color:var(--muted);margin-top:6px}
 #logmodal .dm-card{max-width:440px}
-.cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px;cursor:pointer}
+.cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px;cursor:pointer}
 .cx{font-size:10px;padding:1px 6px;border-radius:9px;white-space:nowrap;line-height:1.7}
 .cx-new{background:var(--surface-2);color:var(--muted)}
 .cx-done{background:rgba(74,222,128,.14);color:#8fe3ab}
@@ -470,21 +581,19 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 /* saved phones */
 a.phone{color:var(--green-ink);font-weight:700}
 a.phone.dnc{color:var(--amber-ink)}
-input.ph{width:100%;box-sizing:border-box;font-size:12px;padding:6px 8px;margin-bottom:5px;background:#F0FAF3;border:1px solid #CFE9D6;border-radius:var(--r-xs);color:#0A7A42;font-family:var(--f-num)}
+input.ph{width:100%;box-sizing:border-box;font-size:12px;height:30px;padding:5px 8px;margin-bottom:5px;background:transparent;border:1px solid var(--line-2);border-radius:var(--r-xs);color:#0A7A42;font-family:var(--f-num)}
+input.ph:hover,input.ph:not(:placeholder-shown){border-color:#CFE9D6;background:#F7FCF9}
 input.ph::placeholder{color:#8FBFA0}
 
 /* intro reveal */
 #intro{position:fixed;inset:0;z-index:300;background:var(--navy-grad);display:grid;place-items:center;transition:opacity .55s ease,visibility .55s}
 #intro.done{opacity:0;visibility:hidden}
 #intro .lg{display:flex;flex-direction:column;align-items:center;gap:15px}
-#intro .mk{width:66px;height:66px;border-radius:17px;background:rgba(255,255,255,.05);border:1px solid rgba(201,168,76,.45);display:grid;place-items:center;animation:introPop .75s cubic-bezier(.2,.9,.3,1.35)}
-#intro .mk i{width:26px;height:26px;border:2.5px solid var(--gold);border-radius:5px;transform:rotate(45deg);display:block;box-shadow:0 0 18px rgba(201,168,76,.5)}
 #intro .wm{font-family:var(--f-display);font-weight:700;font-size:27px;letter-spacing:.01em;color:#fff;opacity:0;transform:translateY(9px);animation:introUp .6s .22s forwards}
 #intro .wm b{color:var(--gold-l)}
 #intro .tg{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:rgba(255,255,255,.55);opacity:0;transform:translateY(9px);animation:introUp .6s .36s forwards}
 #intro .bar{width:130px;height:3px;border-radius:3px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:6px}
 #intro .bar i{display:block;height:100%;width:45%;border-radius:3px;background:var(--gold-grad);animation:introBar 1.1s ease-in-out infinite}
-@keyframes introPop{from{opacity:0;transform:scale(.7)}to{opacity:1;transform:scale(1)}}
 @keyframes introUp{to{opacity:1;transform:translateY(0)}}
 @keyframes introBar{0%{transform:translateX(-130%)}100%{transform:translateX(330%)}}
 @keyframes dmFade{from{opacity:0}to{opacity:1}}
@@ -494,7 +603,9 @@ header{animation:appIn .5s .05s both}
 .tblwrap,#cards{animation:appIn .55s .12s both}
 
 @media(max-width:860px){
-  header{padding:12px 13px 10px}
+  /* the sticky filter header is 350px+ tall — on a phone it would permanently eat half the
+     screen, so let it scroll away; the ↑ Top button brings the filters back in one tap */
+  header{padding:12px 13px 10px;position:static}
   .brand .wm{font-size:18px}
   .brand .upd{display:none}
   .brand .upd.stale{display:inline-block}
@@ -502,6 +613,15 @@ header{animation:appIn .5s .05s both}
   input#q{width:100%}
   .tblwrap{display:none}
   #cards{display:block}
+  /* mobile: link groups stack as bands (not a flex jumble) and chips grow to touch size.
+     #cards-scoped so these beat the base chip rules that appear later in the stylesheet. */
+  .clinks{display:block}
+  #cards .clinks .lgrp{gap:6px}
+  #cards .clinks a{font-size:12.5px;padding:8px 12px}
+  #cards .clinks span.phone{font-size:12.5px;padding:8px 12px}
+  #cards select.status,#cards input.ph{height:38px;font-size:13px}
+  #cards textarea.notes{min-height:52px;font-size:13px}
+  .phero{height:220px}
 }
 :root{--e-lux:cubic-bezier(.22,1,.36,1);--e-snap:cubic-bezier(.2,0,.4,1)}
 /* ===== smooth hover / press micro-interactions ===== */
@@ -521,32 +641,49 @@ button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);tran
 /* copy micro-lift */
 .cpy{transition:transform .16s var(--e-lux),background .16s ease,border-color .16s ease,color .16s ease}
 .cpy:hover{transform:translateY(-1px)}
-/* lead links, ONE coherent system grouped by purpose (gold underline draws in on hover):
+/* lead links, ONE coherent chip system grouped by purpose:
    base = slate (info/nav) · .dig = gold (investigate: loans, cases, people, docket) · .phone = green (call) */
-.links a,.clinks a{position:relative;text-decoration:none;color:var(--muted);font-weight:500;transition:color .2s var(--e-lux)}
+.links a,.clinks a{position:relative;text-decoration:none;color:var(--muted);font-weight:500;font-size:12.5px;transition:color .2s var(--e-lux)}
 .links a::after,.clinks a::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:var(--gold-grad);transform:scaleX(0);transform-origin:100% 50%;transition:transform .3s var(--e-lux)}
 .links a:hover,.clinks a:hover{color:var(--gold-d);text-decoration:none}
 .links a:hover::after,.clinks a:hover::after{transform:scaleX(1);transform-origin:0 50%}
 .links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:600}
 .links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
 .links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
+.links span.phone,.clinks span.phone{display:inline-flex;align-items:center;font-size:11px;line-height:1.3;padding:4px 9px;border:1px dashed var(--line);border-radius:var(--pill);background:var(--surface-2)}
+/* compliance gates: DNC numbers are visible but NOT dialable; opted-out leads show a hard stop */
+span.phone.nodial{color:var(--amber-ink);text-decoration:line-through;cursor:not-allowed;opacity:.85}
+span.phone.dncgate{color:#e05252;font-weight:700;cursor:not-allowed}
+/* Plan-today action sheet */
+.planls{list-style:none;margin:4px 0 10px;padding:0}
+.planls li{padding:8px 6px;border-bottom:1px solid var(--line);font-size:13px;line-height:1.45}
+.planls li .mut{font-size:12px}
+.planlog{margin-top:3px;padding:2px 9px;font-size:11px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);color:var(--ink);cursor:pointer}
+.planlog:hover{background:var(--surface-2)}
 .links a.email,.clinks a.email{color:#5a7db0;font-weight:600;word-break:break-all}
 /* links laid out as clean even bands, one functional group per row (phones · investigate · property · actions) */
-.links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:1px 13px;line-height:1.35}
-.links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:3px}
+.links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;line-height:1.5}
+.links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:5px}
 .eqfake{color:var(--muted-2)!important;font-style:italic;font-weight:400}
 .cstat .v.eqfake{color:var(--muted-2);font-style:italic}
 /* ===== exclusive animated wordmark — breathes open + slow specular shine ===== */
 .brand .wm{display:inline-block;transition:filter .35s ease}
-.brand .wm b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#BE9633 38%,#E8D48B 46%,#FFFBEC 50%,#E8D48B 54%,#BE9633 62%,#BE9633 100%);background-size:300% auto;background-repeat:no-repeat;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));transition:filter .45s var(--e-lux);animation:wmShine 3.6s linear infinite}
+.brand .wm b{color:var(--gold-d);background-image:var(--gold-shine);background-size:200% auto;background-repeat:repeat;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));transition:filter .45s var(--e-lux);animation:wmShine 5s linear infinite}
 @supports ((-webkit-background-clip:text) or (background-clip:text)){
   .brand .wm b{-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 }
-@keyframes wmShine{0%{background-position:0% center}100%{background-position:100% center}}
+/* FIX: was 120% -> -120%, which slid the 220%/no-repeat gradient ENTIRELY off the text at the
+   extremes — FLOW went transparent (invisible) for a chunk of every cycle. The safe range for a
+   no-repeat gradient wider than the box is 0% -> 100%: the gradient always fully covers the text,
+   and the highlight (at gradient-50%) still sweeps right-to-left across the word. */
+/* SEAMLESS loop: background-repeat is now 'repeat' and both ends of --gold-shine are the same gold,
+   so moving the position by exactly one full tile (200%) returns to an identical frame — the highlight
+   glides off one edge exactly as the next glides in. No snap-back, no disappearing, no awkward jump. */
+@keyframes wmShine{from{background-position:0% center}to{background-position:-200% center}}
 .brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(201,168,76,.55)) drop-shadow(0 1px 2px rgba(160,126,40,.25)) brightness(1.07)}
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
-  .brand .wm b{animation-duration:3.6s!important}   /* keep the logo flowing on its own (explicit request; low-risk color shimmer) */
+  .brand .wm b{animation-duration:5s!important}   /* keep the logo flowing on its own (explicit request; low-risk color shimmer) */
 }
 /* empty state (no leads match the current filters) */
 .empty{text-align:center;padding:56px 24px}
@@ -576,11 +713,11 @@ th{letter-spacing:.09em;font-size:9.5px}
 #intro .tg{font-family:var(--f-label)}
 /* keep the SPECULAR SHINE (background-image + 220% size so wmShine has room to sweep); a `background`
    shorthand here would reset background-size to auto and freeze the animation into a flat gradient. */
-.brand .wm b{background-image:linear-gradient(100deg,#BE9633 0%,#BE9633 38%,#E8D48B 46%,#FFFBEC 50%,#E8D48B 54%,#BE9633 62%,#BE9633 100%);background-size:300% auto;background-repeat:no-repeat;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:wmShine 3.6s linear infinite}
+.brand .wm b{background-image:var(--gold-shine);background-size:200% auto;background-repeat:repeat;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;animation:wmShine 5s linear infinite}
 #intro .wm b{background:linear-gradient(120deg,#E8D48B,#C9A84C);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
 /* primary CTA = gold-gradient pill, white ink, soft gold glow */
-#gate button{background:var(--gold-grad);border:none;color:#2a2205;font-weight:700;box-shadow:0 6px 20px rgba(201,168,76,.35)}
-#gate button:hover{background:linear-gradient(120deg,#D4B658,#F0DC94);box-shadow:0 8px 26px rgba(201,168,76,.45)}
+#gate button{background:var(--gold-grad);border:none;color:var(--gold-ink);font-weight:700;box-shadow:var(--sh-gold)}
+#gate button:hover{background:linear-gradient(120deg,#D4B658,#F0DC94);box-shadow:var(--sh-gold-hover)}
 .dealtog::before{content:'\25B8';color:var(--gold-d);font-size:9px}
 /* type chips (tranchi deal-type language) */
 .chip{display:inline-block;font-family:var(--f-label);font-size:8.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding:3px 9px;border-radius:var(--pill);border:1px solid var(--line);white-space:nowrap;line-height:1.5}
@@ -588,10 +725,13 @@ th{letter-spacing:.09em;font-size:9.5px}
 .chip.hoa{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
 .chip.tdt{background:var(--gold-soft);color:var(--gold-d);border-color:rgba(201,168,76,.35)}
 .chip.tax{background:var(--red-soft);color:var(--red-ink)}
+.chip.vok{background:var(--green-soft,#e4f7ea);color:var(--green-ink);border-color:#bfe6c9}
+.chip.vlow{background:var(--amber-soft);color:var(--amber-ink);border-color:#eeddb0}
+.chip.vnone{background:var(--surface-2,#eee);color:var(--muted);border-color:var(--line)}
 /* desktop row verdict accent (mirrors the mobile card spine) */
-tbody tr.rv3 td:first-child{box-shadow:inset 3px 0 0 var(--green)}
-tbody tr.rv2 td:first-child{box-shadow:inset 3px 0 0 var(--amber)}
-tbody tr.rvv td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
+tbody tr.rv3 td:first-child{box-shadow:inset 4px 0 0 var(--green)}
+tbody tr.rv2 td:first-child{box-shadow:inset 4px 0 0 var(--amber)}
+tbody tr.rvv td:first-child{box-shadow:inset 4px 0 0 var(--blue)}
 /* wordmark logo (no icon) + clean risk dot + svg copy glyph */
 .brand .wm{font-size:23px;letter-spacing:-.025em}
 .dealflags .flag{position:relative;padding-left:15px}
@@ -607,7 +747,7 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
 #advpanel{padding:2px 16px 14px}
 /* premium access gate */
 .gate-brand{font-family:var(--f-display);font-weight:700;font-size:27px;letter-spacing:-.02em;color:var(--ink);margin-bottom:12px}
-.gate-brand b{color:var(--gold-d);background-image:linear-gradient(100deg,#BE9633 0%,#BE9633 38%,#E8D48B 46%,#FFFBEC 50%,#E8D48B 54%,#BE9633 62%,#BE9633 100%);background-size:300% auto;background-repeat:no-repeat;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:wmShine 3.6s linear infinite}
+.gate-brand b{color:var(--gold-d);background-image:var(--gold-shine);background-size:200% auto;background-repeat:repeat;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;animation:wmShine 5s linear infinite}
 .gate-eyebrow{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--gold-d);margin-bottom:16px}
 #gate input{letter-spacing:.06em}
 .gate-foot{font-family:var(--f-label);font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);margin-top:18px}
@@ -656,28 +796,38 @@ body.modal-open{overflow:hidden}
 </div></div>
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
+<div id="planmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="planbody"></div></div></div>
+<div id="gallerymodal"><div class="dm-backdrop"></div><div class="dm-card gcard"><button class="dm-close" type="button" title="Close">&times;</button><div id="gallerybody"></div></div></div>
 <div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
+<div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
+<div id="mailmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="mailbody"></div></div></div>
+<input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <header>
 <div class="brand">
 <div>
 <div class="wm">DEAL<b>FLOW</b></div>
-<div class="tag">Miami-Dade · Foreclosure &amp; Tax-Deed Intelligence</div>
+<div class="tag">South Florida · Foreclosure &amp; Tax-Deed Intelligence</div>
 </div>
 <span class="spacer"></span>
-<span class="upd" id="upd">Updated <b id="upddate">2026-07-14 12:00</b><span id="stalemark"></span> · notes saved on this device</span>
+<span class="upd" id="upd">Updated <b id="upddate">2026-07-14 12:00</b><span id="stalemark"></span> · auto-refreshes daily 9am · notes saved on this device</span>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
 <div class="controls">
-<button class="tf active" data-t="A">Tier A</button>
-<button class="tf" data-t="B">Tier B</button>
-<button class="tf" data-t="C">Tier C</button>
+<span class="fgroup" role="group" aria-label="Tier"><span class="flbl">Tier</span>
+<button class="tf active" data-t="A">A</button>
+<button class="tf" data-t="B">B</button>
+<button class="tf" data-t="C">C</button>
 <button class="tf" data-t="ALL">All</button>
-<select id="cty" title="Filter by county" style="padding:7px 10px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);color:var(--ink);font-weight:600;font-size:13px;cursor:pointer"><option value="">All counties</option></select>
+</span>
+<span class="fgroup" id="ctygroup" role="group" aria-label="County"></span>
+<span class="fdiv"></span>
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
-<button id="hf" title="Hide leads the records already flagged as dead: already deeded to another investor, or an HOA case hiding a mortgage bigger than the equity (underwater). Off by default so nothing disappears silently.">Hide flagged</button>
+<button id="hf" title="Hide leads that don't fit the homeowner-rescue model: already deeded to another investor, HOA case hiding a mortgage bigger than the equity (underwater), or VACANT LAND (no homeowner, speculative land value). Off by default so nothing disappears silently.">Hide flagged</button>
+<button id="eq30" title="Only leads with 30%+ REAL equity: nets out a chain-verified surviving mortgage where we have one (an HOA case with a small judgment can show 90%+ gross while a real first mortgage eats most of it), excludes gross/unverified equity, and excludes anything the records already flagged dead (already sold, or underwater once the real mortgage is counted).">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
+<button id="plan" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script.">📋 Plan today</button>
 <button id="due" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days">⚡ Due</button>
 <input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list.">
 <label style="font-size:12px">Sort <select id="sortby">
@@ -686,6 +836,8 @@ body.modal-open{overflow:hidden}
 </select></label>
 <button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">Filters &amp; setup</button>
 <button id="exp">Export CSV (with my notes)</button>
+<button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins.">⇄ Sync / team <span id="syncfresh" class="syncfresh"></span></button>
+<button id="mailbatch" title="Prepare a batch of homeowner-rescue letters to send as real mail via Lob. Picks Tier A/B leads with a real owner, a deliverable mailing address, and an auction 5+ days out, minus anyone opted out. You review and download the batch here; your Lob key never touches this page.">&#9993; Mail batch</button>
 <span class="stats" id="stats"></span>
 </div>
 </header>
@@ -734,9 +886,11 @@ body.modal-open{overflow:hidden}
 <div class="tblwrap">
 <table id="tbl">
 <colgroup>
-<col style="width:44px"><col style="width:150px"><col style="width:52px"><col style="width:116px"><col style="width:92px"><col style="width:238px"><col style="width:230px"><col style="width:124px"><col style="width:300px"><col style="width:126px"><col style="width:150px">
+<!-- 12 cols for 12 columns — the Photo col was missing, shifting every width one column left -->
+<col style="width:172px"><col style="width:44px"><col style="width:150px"><col style="width:50px"><col style="width:106px"><col style="width:78px"><col style="width:210px"><col style="width:230px"><col style="width:150px"><col style="width:330px"><col style="width:130px"><col style="width:150px">
 </colgroup>
 <thead><tr>
+<th>Photo</th>
 <th data-k="tier">Tier</th>
 <th data-k="_profit" style="color:var(--green-ink)">Est. Profit</th>
 <th data-k="score">Score</th>
@@ -763,13 +917,46 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '';
+let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false;
 // a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
   (r.orsurvfirst && r.value && (+r.orsurvfirst) > (r.value - (r.judg||0)))); }
-let sender = {name:'', llc:'', phone:'', addr:'', title:'', email:'', web:'', partner:''};
-try { sender = Object.assign(sender, JSON.parse(localStorage.getItem('fcSender')||'{}')); } catch(e) {}
+// VACANT LAND is a systematic false-positive for the homeowner-rescue model: no owner-occupant to help,
+// and the "equity" rides on a speculative land value (e.g. Ocean Breeze 777 LLC's $2.1M raw lots that
+// doubled in a year). Treated like a flagged-dead lead so "Hide flagged" clears it and the 30%+ equity
+// filter excludes it — but NOT hidden by default (badge stays visible; nothing disappears silently).
+// Company-owned is only a context tag, NOT a suppressor — a small landlord LLC can still be a real seller.
+function notForModel(r){ return !!r.vac; }
+function landChips(r){ let o='';
+  if(r.vac) o+='<span class="chip vlow" title="VACANT LAND — no homeowner to help, and the equity shown rides on a speculative raw-land value. A systematic false-positive for this list; verify a real market value + a developer buyer before spending time.">&#127957; VACANT LAND</span>';
+  if(r.co)  o+='<span class="chip vnone" title="COMPANY-OWNED (LLC/Corp/Trust). Not a distressed homeowner — likely a sophisticated investor who knows the value; different negotiation, no FS 501.1377 homeowner protections. Context only, not a red flag.">LLC-OWNED</span>';
+  return o; }
+// Real equity — nets out a CHAIN-VERIFIED surviving mortgage (orsurv) when we have one. The raw `eq`
+// field ignores it everywhere else in the app (it's shown separately as the mrwarn callout), which is
+// fine for a quick scan but wrong for a filter people use to decide who gets a knock: an HOA case with
+// a small judgment can show 90%+ gross while a real first mortgage eats most of the real equity (e.g. a
+// lead showing 97% gross can be ~25% once a $174k surviving mortgage is counted). Falls back to the raw
+// field when there's no verified surv data to correct with.
+function netEqPct(r){
+  if(r.orconf==='ok' && r.orsurv && r.value) return Math.round((r.value - (r.judg||0) - r.orsurv) / r.value * 100);
+  return r.eq||0;
+}
+// Prefilled outreach identity — Alejandro fronts Miami Solutions Group directly on the foreclosure side
+// (distinct from the cousin-Jose tax-deed entity). Every generated letter/email/script/contract fills
+// these in automatically so nothing has to be typed; a device can still override any field in Sender setup.
+const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Miami Solutions Group', phone:'(786) 631-1823', addr:'', title:'', email:'', web:'', partner:''};
+let sender = Object.assign({}, SENDER_DEFAULTS);
+// CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
+// Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
+// blanks clobber the defaults, so a real generated email went out showing [YOUR NAME]/[YOUR COMPANY]/
+// [YOUR PHONE] even though defaults were set. Only merge saved values that actually have content; the old
+// auto-injected "Jose" is treated as unset so the current identity wins.
+try {
+  const saved = JSON.parse(localStorage.getItem('fcSender')||'{}');
+  if (saved.name === 'Jose') delete saved.name;
+  for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
+} catch(e) {}
 // deal-model controls (persisted)
 const DEAL_DEFAULTS = {costpct: 10, buypct: 75, quiettitle: 3000, bidover: 20, tdclear: 70};
 const DEAL_VER = '2026-07-12b';  // bump when defaults change -> stale saved settings are ignored once (auto-heal)
@@ -883,6 +1070,14 @@ function flagChips(r){ let o='';
     o+='<span class="chip '+(hi?'tax':'hoa')+'" title="A deed was recorded '+esc(r.ordeeded.d||'')+' to '+esc(r.ordeeded.grantee||'an investor')+' &mdash; the owner appears to have already sold this'+(hi?'.':' (possible only, common name &mdash; verify in Records).')+'">'+(hi?'TAKEN':'MAYBE SOLD')+'</span>'; }
   if(r.orsecond){ o+='<span class="chip hoa" title="A SEPARATE mortgage foreclosure is also running: '+esc(r.orsecond.case||'')+(r.orsecond.party?' &mdash; '+esc(r.orsecond.party):'')+'. The small HOA case hides it; verify the mortgage payoff.">2ND FORECLOSURE</span>'; }
   return o; }
+// records-verification status: is this lead's equity/flags a REAL, chain-checked number, or a raw guess
+// nobody has looked at yet? Every lead gets one of these three — separate from flagChips (which only
+// fires on a positive finding) so "nothing to flag" and "never checked" can't be mistaken for each other.
+function verifyChip(r){
+  if(r.orconf==='ok') return '<span class="chip vok" title="A recorded mortgage/lien chain was pulled and isolated with confidence for this property. The surviving-mortgage and TAKEN/2ND-FORECLOSURE flags above (if any) are records-verified, not a guess.">&#10003;&nbsp;Records verified</span>';
+  if(r.orconf==='low') return '<span class="chip vlow" title="A lien chain was pulled, but the owner\'s name was too common to isolate with confidence &mdash; these records may include a stranger\'s mortgages. Verify manually in Official Records before relying on the equity or flags shown.">~&nbsp;Low-confidence check</span>';
+  return '<span class="chip vnone" title="No recorded mortgage/lien chain has been pulled for this property yet. The equity % shown is a RAW estimate (value minus the foreclosure judgment only) and has NOT been checked for a hidden surviving mortgage, an already-recorded sale, or a second foreclosure. Verify in Official Records before contacting or making an offer.">&#9711;&nbsp;Not yet verified</span>';
+}
 // surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk")
 function mrText(r){ const s=+r.orsurvfirst||0;
   if(s>0){ const under=(r.value && s > (r.value-(r.judg||0)));
@@ -917,6 +1112,7 @@ function dealStrategy(r){
   if(r.days>21) s+='Best play: reach the owner BEFORE the auction — you can inspect and run title first (auction buyers cannot). ';
   s+='At auction your floor is the final judgment ('+fmtK(r.judg)+'), not the clerk’s posted opening bid (often a nominal $100). ';
   if(r._equity!=null && r.value && r._equity/r.value>0.35) s+='Solid equity spread — but confirm it is REAL: pull Official Records for a 2nd mortgage/HELOC (the judgment only shows the foreclosing loan). ';
+  s+='The value shown is the county tax-roll number, not ARV — run your own comps before pricing an offer. ';
   if(r.condo) s+='Condo — order the association estoppel for dues + any special assessment (40-yr recert) before you trust the spread. ';
   s+='Confirm no unpaid property taxes or code liens ride on top. ';
   if(r.days>21) s+='If the owner keeps any interest (lease-back/buy-back) with a lis pendens recorded, FS 501.1377 applies — use a compliant written contract with the 3-day cancellation.';
@@ -934,14 +1130,23 @@ function dealAnalysisHTML(r){
     mathHtml = '<div class="dealmath"><div class="mathline"><span>Est. profit</span><span>unknown until verified</span></div></div>';
   } else {
     const costs = r.value*(Math.max(0,+deal.costpct||0)/100);
-    const rows = [ mathLine('Market value', r.value) ];
+    const rows = [ mathLine('County market value', r.value) ];
     if(r.st==='TD'){ rows.push(mathLine('Est. winning bid', -r._purchase)); rows.push(mathLine('Quiet title', -(Math.max(0,+deal.quiettitle||3000)))); }
-    else if(r.mr){ rows.push(mathLine('Auction bid (est.)', -r.judg)); if(r._slien) rows.push(mathLine('Surviving 1st mortgage', -r._slien)); }
-    else { rows.push(mathLine('Your purchase', -r._purchase)); }
+    else if(r.mr){
+      // HOA/junior: you pay the small bid, then the surviving mortgages ride ON TOP — itemize each.
+      rows.push(mathLine('Auction bid (est.)', -r.judg));
+      if(r._slien) rows.push(mathLine('Surviving 1st mortgage', -r._slien));
+      if(r._jlien) rows.push(mathLine('2nd / junior mortgage', -r._jlien));
+      if(r._assess) rows.push(mathLine('HOA / special assessment', -r._assess));
+    }
+    else {
+      // 1st-mortgage foreclosure: the purchase price ALREADY clears every mortgage + assessment (they are
+      // paid FROM the price, not stacked on top — see recompute() 'debt'), so they must NOT be re-listed
+      // as separate deductions or the rows undershoot Est. profit by their sum. One line, labeled.
+      const _dbt = (r._slien||0)+(r._jlien||0)+(r._assess||0);
+      rows.push(mathLine('Your purchase'+(_dbt>0?' (clears all mortgages)':''), -r._purchase));
+    }
     rows.push(mathLine('Costs ('+(+deal.costpct||0)+'%)', -costs));
-    if(r._slien && !r.mr) rows.push(mathLine('Senior / 1st mortgage', -r._slien));
-    if(r.st!=='TD' && r._jlien) rows.push(mathLine('2nd / junior mortgage', -r._jlien));
-    if(r.st!=='TD' && r._assess) rows.push(mathLine('HOA / special assessment', -r._assess));
     if(r._btax) rows.push(mathLine('Back property taxes', -r._btax));
     if(r._mlien) rows.push(mathLine('Other surviving liens', -r._mlien));
     if(r._evict) rows.push(mathLine('Eviction / carry', -r._evict));
@@ -990,11 +1195,55 @@ function refreshDealModal(){
 function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
 // ---- contact / follow-up tracker (mini-CRM; per-device, in the same notes[] localStorage) ----
 function _today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _nowTS(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return _today()+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
+// FTSA compliance audit trail: append a timestamped opt-out/suppression event to a lead's ledger.
+// 'set-local' = an operator marked DO NOT CONTACT here; 'suppressed-here' = a teammate's opt-out
+// arrived via merge and started suppressing on THIS device. This is the paper trail for a lawyer.
+function _optLog(n, act, src){ n.optlog = n.optlog || []; n.optlog.push({ts:_nowTS(), tsu:Date.now(), act:act, src:src||(localStorage.getItem('fcDevice')||'this device')}); }
+// FTSA red flag: any outreach logged AFTER a lead's opt-out date is the exact violation a plaintiff
+// hunts for. The team merge makes this RETROACTIVE — a call you logged at 3pm, before a teammate's
+// 2pm opt-out synced onto your device at 9pm, becomes an after-opt-out contact the moment it merges.
+// Surfaced loudly (row + log modal + header) so it gets cured and documented, never buried.
+const _OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};
+// the opt-out's EFFECTIVE moment: the second-resolution 'set-local' timestamp from the audit ledger
+// (authoritative — that's when the owner said stop). Falls back to null for legacy leads that opted
+// out before the ledger existed, where we only have a date.
+// EFFECTIVE opt-out state, derived from the AUDIT LEDGER (authoritative), not the mutable n.optout
+// scalar — a status change can delete the scalar, but enforcement must survive it. A later
+// 'cleared-local' event reverses an earlier opt-out (deliberate correction of a mistaken opt-out).
+// Returns {out, ts, tsu}: ts (string, for display/same-device compare), tsu (epoch ms, skew-proof).
+function _effOptout(n){
+  if(!n) return {out:false, ts:null, tsu:null};
+  const evs = (n.optlog||[]).filter(e => e.act==='set-local' || e.act==='suppressed-here' || e.act==='cleared-local');
+  if(!evs.length) return {out: !!n.optout, ts:null, tsu:null};   // legacy leads: trust the scalar
+  const key = e => (typeof e.tsu==='number' ? e.tsu : (Date.parse((e.ts||'').replace(' ','T')) || 0));
+  let latest = evs[0]; evs.forEach(e => { if(key(e) >= key(latest)) latest = e; });
+  if(latest.act === 'cleared-local') return {out:false, ts:null, tsu:null};
+  let ts=null, tsu=null;
+  evs.forEach(e => { if(e.act!=='cleared-local'){ if(e.ts && (!ts || e.ts<ts)) ts=e.ts; if(typeof e.tsu==='number' && (tsu==null || e.tsu<tsu)) tsu=e.tsu; } });
+  return {out:true, ts, tsu};
+}
+function _optoutTS(n){ return _effOptout(n).ts; }
+function _optoutTSU(n){ return _effOptout(n).tsu; }
+function _isOptedOut(n){ return _effOptout(n).out; }
+function _dialedAfter(n){
+  if(!n || !n.touches || !_isOptedOut(n)) return [];
+  const ots = _optoutTS(n), otsu = _optoutTSU(n);
+  const optoutDate = n.optout || (ots ? ots.slice(0,10) : null);
+  return n.touches.filter(t => {
+    if(!_OUTREACH_CH[t.ch]) return false;
+    if(otsu!=null && typeof t.tsu==='number') return t.tsu > otsu;   // skew-proof absolute compare
+    if(ots && t.ts) return t.ts > ots;                              // same-device second-resolution
+    return t.d && optoutDate && t.d > optoutDate;                   // legacy date-only fallback
+  });
+}
 function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
 function _rel(iso){ const n=_dneg(iso); if(n===null) return ''; if(n===0) return 'today'; return n<0 ? (-n)+'d ago' : 'in '+n+'d'; }
-const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}'};
+const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}', door:'\u{1f6aa}'};
 function contactChip(r){
   const n=notes[r.case]||{}, ts=n.touches||[]; let h='';
+  const viol=_dialedAfter(n);
+  if(viol.length){ const lv=viol[viol.length-1]; h+='<span class="cx cx-viol" title="'+esc(viol.length+' outreach touch(es) logged AFTER this owner opted out ('+n.optout+') — FTSA violation risk. Most recent: '+lv.ch+' on '+lv.d+'. Open the log to see the trail and document the cure.')+'">⚠ contacted after opt-out</span>'; }
   if(ts.length){ const last=ts[ts.length-1];
     h+='<span class="cx cx-done" title="'+esc(ts.length+' touch(es) — last: '+last.ch+' '+last.out+' on '+last.d)+'">'+(CH_ICON[last.ch]||'•')+' '+_rel(last.d)+(ts.length>1?' ·'+ts.length:'')+'</span>';
   } else h+='<span class="cx cx-new" title="Not contacted yet">not contacted</span>';
@@ -1002,8 +1251,146 @@ function contactChip(r){
   return h;
 }
 function _setNext(n, days){ if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.touches=n.touches||[]; n.touches.push({d:_today(), ch:ch, out:out}); if(opt.status) n.status=opt.status; if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); }
+function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''};
+  // PREVENTIVE FTSA guard (dial-time): block logging an outreach touch on a lead ALREADY opted out —
+  // unless this very touch is the one recording the opt-out ("Said STOP"). Shifts the tool from
+  // forensic ("here's the violation you committed") to preventive ("you're about to contact a DNC lead
+  // — stop"). If they proceed anyway (to document a genuine mistake for the cure trail), it's allowed
+  // and _dialedAfter still flags it.
+  if(_isOptedOut(n) && _OUTREACH_CH[ch] && opt.status !== 'DO NOT CONTACT'){
+    if(typeof confirm === 'function' && !confirm('⚠ STOP — this owner opted out on '+n.optout+'.\n\nLogging a '+ch+' is an FTSA violation (~$500+ per contact). Only proceed to DOCUMENT a contact that already happened by mistake — it will be flagged for your cure records.\n\nLog this '+ch+' anyway?')) return false;
+  }
+  n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), tsu:Date.now(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); return true; }
 function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
+// ---- cadence engine: WHICH channel WHEN, keyed to days-until-auction + touch history. ----
+// Content-agnostic by design: Jose sends mail/email using HIS OWN script — this only schedules.
+// Rules from the verified research: mail needs >=~5 business days to land (else door replaces it);
+// mail-then-door beats either alone; warm responders get the phone; never go quiet inside the window.
+function nextAction(r){
+  const n=notes[r.case]||{}, ts=n.touches||[];
+  if(n.status==='DO NOT CONTACT' || n.status==='Dead') return null;
+  const days=r.days;
+  if(days<0) return {ch:'surplus', lbl:'Auction passed — surplus check', why:'if it sold above the debt the owner is owed the surplus (Fla. Stat. 45.032)'};
+  const mailOK = days>=7;                        // ~5 business days of USPS runway
+  const cnt = c => ts.filter(t=>t.ch===c).length;
+  const doorN=cnt('door'), mailN=cnt('letter');
+  const spoke = ts.some(t=>/spoke|talked|callback/i.test(t.out||''));
+  if(spoke) return {ch:'call', lbl:'Warm follow-up — they engaged', why:'responder: your script, human pace'};
+  if(!ts.length) return mailOK
+    ? {ch:'letter', lbl:'Mail #1 (your script)'+(days<=30?' + plan the door':''), why:'first touch — a letter lands in 2-5 days'}
+    : {ch:'door', lbl:'DOOR — only '+days+'d left, mail too slow', why:'letters cannot arrive before the sale'};
+  const last=ts[ts.length-1], age=-_dneg(last.d);
+  if(mailN>=1 && doorN===0 && age>=2) return {ch:'door', lbl:'Door knock #1 — letter has landed', why:'mail-then-door converts best'};
+  if(doorN>=1 && mailN<2 && mailOK && age>=3) return {ch:'letter', lbl:'Mail #2 (different look, your script)', why:'keep warm through the window'};
+  if(doorN===1 && age>=5) return {ch:'door', lbl:'Door knock #2', why:'recognition compounds — you are not a stranger now'};
+  if(age>=4) return mailOK
+    ? {ch:'letter', lbl:'Next touch — mail or email (your script)', why:'do not go quiet inside the window'}
+    : {ch:'door', lbl:'Door again — inside the mail window', why:'do not go quiet inside the window'};
+  return null;                                   // touched recently; nothing due yet
+}
+const NA_ICON = {letter:'✉', door:'\u{1f6aa}', call:'☎', surplus:'\u{1f4b0}'};
+function planRows(){
+  const today=_today();
+  const due=[];
+  DATA.forEach(r=>{
+    const n=notes[r.case]||{};
+    if(n.status==='DO NOT CONTACT'||n.status==='Dead') return;
+    const a=nextAction(r); if(!a) return;
+    const fuDue = n.next && n.next<=today;
+    const started = !!(n.touches||[]).length;
+    // fresh leads only enter the plan when they're worth a two-person day: value known, inside 30
+    // days, and not already flagged dead by the records
+    const fresh = !started && r.value>0 && r.days>=0 && r.days<=30 && !(typeof isFlaggedDead==='function' && isFlaggedDead(r));
+    if(fuDue || (started && a) || fresh) due.push({r:r, a:a, fu:fuDue,
+      _p:(fuDue?0:started?1:2)*1e9 + (r.days<0?999:r.days)*1e6 - Math.min(999999,Math.round((r.value-(r.judg||0))/1000))});
+  });
+  due.sort((x,y)=> x._p - y._p);          // follow-ups first, then in-progress, then fresh; near auctions + big equity first
+  return due;
+}
+const PLAN_CAP = 40;                       // a day two people can actually work; the rest is shown as a count
+function planModalBody(){
+  const all=planRows();
+  if(!all.length) return '<div class="dm-head"><div class="dm-title">Plan today</div></div><div class="mut" style="padding:10px 2px">Nothing due — every live lead was touched recently. Come back tomorrow.</div>';
+  const due=all.slice(0,PLAN_CAP), hidden=all.length-due.length;
+  const grp={door:[],letter:[],call:[],surplus:[]};
+  due.forEach(d=>{ (grp[d.a.ch]=grp[d.a.ch]||[]).push(d); });
+  const sec=(title,arr,hint)=>{
+    if(!arr||!arr.length) return '';
+    let h='<div class="dm-sec">'+title+' ('+arr.length+')'+(hint?' <span class="mut" style="font-weight:400">— '+hint+'</span>':'')+'</div><ul class="planls">';
+    arr.forEach(d=>{
+      const r=d.r, city=(r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||[])[1]||'';
+      h+='<li><b>'+esc((r.owners||'').split(';')[0].split('&')[0].trim())+'</b> · '+esc(r.addr)
+        +' · <b>'+(r.days>=0?r.days+'d to auction':'passed')+'</b>'
+        +(d.fu?' · <span class="cx cx-due">follow-up due</span>':'')
+        +'<div class="mut">'+esc(d.a.lbl)+' — '+esc(d.a.why)+'</div>'
+        +'<button class="planlog" data-c="'+esc(r.case)+'" type="button">open log</button></li>';
+    });
+    return h+'</ul>';
+  };
+  // door leads grouped roughly by city so a knock route falls out of the list order
+  grp.door.sort((a,b)=>{ const ca=(a.r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||['',''])[1], cb=(b.r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||['',''])[1]; return ca<cb?-1:ca>cb?1:a.r.days-b.r.days; });
+  const txt = due.map(d=>{ const r=d.r; return (NA_ICON[d.a.ch]||'')+' '+(r.owners||'').split(';')[0].split('&')[0].trim()+' — '+r.addr+' — '+(r.days>=0?r.days+'d':'passed')+' — '+d.a.lbl; }).join('\n');
+  return '<div class="dm-head"><div class="dm-title">Plan today — top '+due.length+' action'+(due.length>1?'s':'')+'</div>'
+    +'<div class="dm-sub">Ranked: follow-ups due, then in-progress, then fresh — nearest auction + biggest equity first. '
+    +(hidden>0?'<b>'+hidden+' more</b> are due but not shown (finish these first). ':'')
+    +'Channel + timing only — the words are your script. '+copyBtn(txt,'the whole plan as text')+' copy list</div></div>'
+    + sec('\u{1f6aa} DOOR (grouped by city — drive this order)', grp.door, 'weekday 4-6pm or Sat 10-2')
+    + sec('✉ MAIL — send with your script', grp.letter, 'hand-addressed, real stamp, no logo')
+    + sec('☎ WARM follow-ups (responders only)', grp.call, 'manual dial, 8am-8pm')
+    + sec('\u{1f4b0} SURPLUS checks', grp.surplus, '');
+}
+function openPlanModal(){ document.getElementById('planbody').innerHTML=planModalBody(); document.getElementById('planmodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function closePlanModal(){ document.getElementById('planmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+// ---- property PHOTO thumbnail + swipe gallery ----------------------------------------------------
+// photos[] = real Zillow listing photos where the property is listed, else 1 keyless satellite aerial.
+// Thumbnail (left of each row / top of each card) opens a lightbox that swipes through the images, with a
+// "View on Zillow" button (real listing when we have one, else the address search). Replaces the old text link.
+let galleryCase = null, galleryIdx = 0;
+// onerror chain: local img/ file missing (e.g. the bare HTML was shared without its img folder)
+// -> swap to the absolute Esri aerial URL (data-fb, cleared first so a dead network can't loop)
+// -> only then show the imgfail house icon.
+function imgFB(img){
+  const fb = img.dataset.fb || '';
+  if(fb){ img.dataset.fb=''; img.src=fb; return; }
+  const el = img.closest('.pthumb') || img.closest('.phero') || img.closest('.gstage');
+  if(el) el.classList.add('imgfail');
+}
+// photo click = straight to Zillow (real listing when known, else address search) in a new tab.
+// No data-c attribute -> the gallery-popup delegate ('.pthumb[data-c]') never intercepts.
+function _zurl(r){ return r.zlisting || r.zillow || (r.addr ? 'https://www.zillow.com/homes/'+encodeURIComponent(r.addr)+'_rb/' : ''); }
+function _photoThumb(r, eager){
+  const ph = r.photos || [];
+  if(!ph.length) return '<div class="pthumb noimg" title="No image available">\u{1f3e0}</div>';
+  const z = _zurl(r);
+  return '<a class="pthumb"'+(z?' href="'+esc(z)+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow">'
+    + '<img src="'+esc(ph[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'
+    + (ph.length>1?'<span class="pcount">▣ '+ph.length+'</span>':'')+'</a>';
+}
+function galleryBody(r){
+  const ph = r.photos || []; if(!ph.length) return '';
+  const i = Math.max(0, Math.min(galleryIdx, ph.length-1));
+  const z = r.zlisting || r.zillow ||
+            (r.addr ? 'https://www.zillow.com/homes/'+encodeURIComponent(r.addr)+'_rb/' : '');
+  const tag = r.photo_kind==='zillow' ? '<span class="gtag gz">Zillow listing</span>'
+            : r.photo_kind==='aerial' ? '<span class="gtag">Satellite aerial</span>'
+            : r.photo_kind==='street' ? '<span class="gtag">Street View</span>' : '';
+  return '<div class="ghead"><div class="gtitle">'+esc(titleCase(r.addr||''))+'</div>'+tag+'</div>'+
+    '<div class="gstage">'+
+      (ph.length>1?'<button class="gnav gprev" type="button" aria-label="Previous">‹</button>':'')+
+      '<img class="gimg" src="'+esc(ph[i])+'" data-fb="'+esc(r.aurl||'')+'" alt="property" onerror="imgFB(this)">'+
+      (ph.length>1?'<button class="gnav gnext" type="button" aria-label="Next">›</button>':'')+
+    '</div>'+
+    '<div class="gfoot">'+
+      (ph.length>1?'<span class="gcount">'+(i+1)+' / '+ph.length+'</span>':'<span></span>')+
+      (z?'<a class="gzbtn" href="'+esc(z)+'" target="_blank" rel="noopener">View on Zillow ↗</a>':'')+
+    '</div>';
+}
+function openGallery(c){ const r=DATA.find(x=>x.case===c); if(!r||!(r.photos||[]).length) return;
+  galleryCase=c; galleryIdx=0; document.getElementById('gallerybody').innerHTML=galleryBody(r);
+  document.getElementById('gallerymodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function galleryNav(delta){ const r=DATA.find(x=>x.case===galleryCase); if(!r) return; const n=(r.photos||[]).length; if(!n) return;
+  galleryIdx=(galleryIdx+delta+n)%n; document.getElementById('gallerybody').innerHTML=galleryBody(r); }
+function closeGallery(){ galleryCase=null; document.getElementById('gallerymodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
 const QUICKLOG=[
   {lbl:'☎ No answer', ch:'call', out:'no answer', status:'Called - no answer', nextDays:2},
   {lbl:'☎ Left message', ch:'call', out:'left message', status:'Called - no answer', nextDays:3},
@@ -1012,6 +1399,9 @@ const QUICKLOG=[
   {lbl:'✉ Emailed', ch:'email', out:'emailed', nextDays:4},
   {lbl:'✉ Letter sent', ch:'letter', out:'letter sent', status:'Letter sent', nextDays:7},
   {lbl:'\u{1f4ac} Texted', ch:'text', out:'texted', nextDays:3},
+  {lbl:'\u{1f6aa} Door — no answer', ch:'door', out:'knocked, no answer (hanger left)', status:'Door - no answer', nextDays:3},
+  {lbl:'\u{1f6aa} Door — spoke', ch:'door', out:'knocked, spoke with owner', status:'Door - spoke', nextDays:1},
+  {lbl:'⛔ Said STOP', ch:'call', out:'asked to stop all contact', status:'DO NOT CONTACT', next:''},
   {lbl:'✕ Not interested', ch:'call', out:'not interested', status:'Dead', next:''}
 ];
 function logModalBody(r){
@@ -1021,10 +1411,21 @@ function logModalBody(r){
   const fu = n.next ? '<b>'+esc(n.next)+'</b> <span class="mut">('+_rel(n.next)+')</span>' : '<span class="mut">none set</span>';
   const fub='<button class="fuset" data-c="'+esc(r.case)+'" data-d="2" type="button">+2d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="5" type="button">+5d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="14" type="button">+2w</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="0" type="button">clear</button>';
   const hist = ts.length ? '<ul class="lhist">'+ts.map(t=>'<li>'+esc(t.d)+' · '+(CH_ICON[t.ch]||'')+' '+esc(t.out)+'</li>').join('')+'</ul><button class="lundo" data-c="'+esc(r.case)+'" type="button">Undo last</button>' : '<div class="mut">No touches logged yet.</div>';
+  // FTSA opt-out audit ledger — a timestamped, teammate-attributed suppression trail (the "wave at a
+  // plaintiff's lawyer" evidence). Only shown once a lead has been opted out.
+  const _actLbl = {'set-local':'marked DO NOT CONTACT', 'suppressed-here':'opt-out synced in — suppressed on this device', 'cleared-local':'do-not-contact CLEARED on this device'};
+  const viol = _dialedAfter(n);
+  const violBanner = viol.length ? '<div class="optviol"><div class="ovt">⚠ CONTACT AFTER OPT-OUT — FTSA RISK</div>'+
+    '<div class="ovl">Owner opted out <b>'+esc(n.optout)+'</b>, but these outreach touches are logged after that:</div>'+
+    '<ul class="ovul">'+viol.map(t=>'<li><b>'+esc(t.ts||t.d)+'</b> · '+(CH_ICON[t.ch]||'')+' '+esc(t.out||t.ch)+'</li>').join('')+'</ul>'+
+    '<div class="ovnote">Do not contact again. If this surfaced after a team merge, the touch predates your knowledge of the opt-out — note the cure here for the record.</div></div>' : '';
+  const ledger = (n.optlog && n.optlog.length) ? '<div class="optledger"><div class="olt">🚫 Do-not-contact audit trail</div>'+
+    n.optlog.slice().reverse().map(ev=>'<div class="ole"><b>'+esc(ev.ts||'')+'</b> · '+esc(_actLbl[ev.act]||ev.act||'')+(ev.src?' · '+esc(ev.src):'')+'</div>').join('')+'</div>' : '';
   return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+(r.days>=0?'in '+r.days+'d':'passed')+'</div></div>'+
+    violBanner+
     '<div class="dm-sec">Log a touch — one tap</div><div class="qlogwrap">'+btns+'</div>'+
     '<div class="dm-sec">Follow-up date</div><div class="fuwrap">Next: '+fu+' &nbsp;'+fub+'</div>'+
-    '<div class="dm-sec">History</div>'+hist;
+    '<div class="dm-sec">History</div>'+hist+ledger;
 }
 let logModalCase=null;
 function openLogModal(c){ const r=DATA.find(x=>x.case===c); if(!r) return; logModalCase=c; document.getElementById('logbody').innerHTML=logModalBody(r); document.getElementById('logmodal').classList.add('show'); document.body.classList.add('modal-open'); }
@@ -1039,16 +1440,43 @@ document.addEventListener('click', e => {
   if(fs){ e.preventDefault(); const n=notes[fs.dataset.c]=notes[fs.dataset.c]||{status:'',note:''}; _setNext(n, +fs.dataset.d); save(); refreshLogModal(); render(); return; }
   const un=e.target.closest && e.target.closest('.lundo');
   if(un){ e.preventDefault(); const n=notes[un.dataset.c]; if(n&&n.touches&&n.touches.length){ n.touches.pop(); save(); refreshLogModal(); render(); } return; }
+  const pl=e.target.closest && e.target.closest('.planlog');
+  if(pl){ e.preventDefault(); closePlanModal(); openLogModal(pl.dataset.c); return; }
+  const pt=e.target.closest && e.target.closest('.pthumb[data-c]');
+  if(pt){ e.preventDefault(); openGallery(pt.dataset.c); return; }
+  const gn=e.target.closest && e.target.closest('.gnext'); if(gn){ e.preventDefault(); galleryNav(1); return; }
+  const gp=e.target.closest && e.target.closest('.gprev'); if(gp){ e.preventDefault(); galleryNav(-1); return; }
 });
+// gallery: keyboard arrows + Esc when open, and touch-swipe on the stage
+document.addEventListener('keydown', e => {
+  if(!galleryCase) return;
+  if(e.key==='ArrowRight') galleryNav(1); else if(e.key==='ArrowLeft') galleryNav(-1); else if(e.key==='Escape') closeGallery();
+});
+(function(){ let x0=null;
+  document.addEventListener('touchstart', e => { if(galleryCase && e.target.closest && e.target.closest('.gstage')) x0=e.touches[0].clientX; }, {passive:true});
+  document.addEventListener('touchend', e => { if(x0===null) return; const dx=e.changedTouches[0].clientX-x0; x0=null; if(Math.abs(dx)>40) galleryNav(dx<0?1:-1); }, {passive:true});
+})();
 const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, m=>m.toUpperCase()); }
+// County data stores owner names as "LAST,FIRST" — often with NO space after the comma. The old
+// `titleCase(raw).split(' ')[0]` broke on that: with no space anywhere in "Salazar,Gladys", split(' ')
+// returned the WHOLE string as the "first name" — a real sent email opened "Hi Salazar,Gladys,". Reorders
+// to "First Last" so the greeting AND the first-name extraction both work correctly everywhere.
+function _ownerName(raw){
+  const s = (raw||'').trim();
+  if(!s) return '';
+  const ci = s.indexOf(',');
+  if(ci === -1) return titleCase(s);
+  const last = s.slice(0, ci).trim(), first = s.slice(ci+1).trim();
+  return titleCase((first+' '+last).replace(/\s{2,}/g,' ').trim());
+}
 function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
 // Per-county DIRECT deep-links, verified against real parcels (2026-07-16). Drives the lookup report's
 // "Dig deeper" links so a Broward/Palm Beach property never gets Miami-Dade URLs. pa() takes the folio.
 const CTY_LINKS = {
   'MIAMI-DADE': { pa:f=>'https://apps.miamidadepa.gov/PropertySearch/#/?folio='+f, tax:f=>'https://miamidade.county-taxes.com/public/real_estate/parcels/'+f,
     records:'https://onlineservices.miamidadeclerk.gov/officialrecords/', cases:'https://www2.miamidadeclerk.gov/ocs/', place:'MIAMI FL' },
-  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>'https://county-taxes.net/broward',
+  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>'https://county-taxes.net/broward/property-tax',
     records:'https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName', cases:'https://www.browardclerk.org/Web2/CaseSearchECA/', place:'BROWARD COUNTY FL' },
   'PALM BEACH': { pa:f=>'https://pbcpao.gov/Property/Details?parcelId='+f, tax:f=>'https://pbctax.publicaccessnow.com/',
     records:'https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection=', cases:'https://appsgp.mypalmbeachclerk.com/eCaseView/', place:'PALM BEACH COUNTY FL' },
@@ -1058,14 +1486,20 @@ const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
-  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
   const first = owner.split(' ')[0] || owner;
   const addr = esc(r.addr), mail = esc(r.mail||r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
   const plaintiff = esc((r.plaintiff||'').trim());
+  // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
+  // site — a concrete credibility signal (this isn't a scam letter, here's the exact record) — included
+  // wherever the tool actually has one, never fabricated when it's blank.
+  const caseNo = esc((r.case||'').trim());
+  const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
+  const caseTagES = caseNo ? (td ? ` (N&uacute;m. de certificado/caso ${caseNo})` : ` (Caso N&uacute;m. ${caseNo})`) : '';
   const sigHtml = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).map(esc).join('<br>');
   const EN = td ? `<p>Dear ${esc(owner)},</p>
-<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which county records show is scheduled for a <b>tax deed sale on ${dt}</b> due to unpaid property taxes.</p>
+<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which county records show is scheduled for a <b>tax deed sale on ${dt}</b>${caseTagEN} due to unpaid property taxes.</p>
 <p>I wanted to reach out in case it helps to know your options before that date:</p>
 <ul><li>You can still keep the property by paying the back taxes any time before the sale.</li>
 <li>If keeping it is not realistic, selling before the sale can put cash in your pocket rather than losing it to the county.</li>
@@ -1074,7 +1508,7 @@ function genLetter(r){
 <p>There is no cost and no obligation to talk. You can reach me at <b>${esc(sP)}</b>. Even if the sale is close, there may still be time.</p>
 <p>Thank you for your time.</p>
 <p>Respectfully,<br><br>${sigHtml}</p>` : `<p>Dear ${esc(owner)},</p>
-<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}, with a sale scheduled for <b>${dt}</b>.</p>
+<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale scheduled for <b>${dt}</b>.</p>
 <p>I understand this can be a stressful situation, and I wanted to reach out in case it helps to know your options before that date:</p>
 <ul><li>If the property sells for more than you owe, any surplus belongs to you, not the lender.</li>
 <li>Selling before the auction is often better for you than losing it at the courthouse, and it can put cash in your pocket.</li>
@@ -1084,7 +1518,7 @@ function genLetter(r){
 <p>Thank you for your time.</p>
 <p>Respectfully,<br><br>${sigHtml}</p>`;
   const ES = td ? `<p>Estimado/a ${esc(first)},</p>
-<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros del condado tiene una <b>subasta de tax deed programada para el ${dt}</b> por impuestos sin pagar.</p>
+<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros del condado tiene una <b>subasta de tax deed programada para el ${dt}</b>${caseTagES} por impuestos sin pagar.</p>
 <p>Quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
 <ul><li>Todav&iacute;a puede conservar la propiedad pagando los impuestos atrasados en cualquier momento antes de la subasta.</li>
 <li>Si conservarla no es realista, vender antes de la subasta puede dejarle dinero en el bolsillo en lugar de perderla ante el condado.</li>
@@ -1093,7 +1527,7 @@ function genLetter(r){
 <p>No hay costo ni compromiso por conversar. Puede comunicarse conmigo al <b>${esc(sP)}</b>. Aunque la subasta est&eacute; cerca, todav&iacute;a puede haber tiempo.</p>
 <p>Gracias por su tiempo.</p>
 <p>Respetuosamente,<br><br>${sigHtml}</p>` : `<p>Estimado/a ${esc(first)},</p>
-<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros p&uacute;blicos se encuentra actualmente en proceso de ejecuci&oacute;n hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}, con una subasta programada para el <b>${dt}</b>.</p>
+<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros p&uacute;blicos se encuentra actualmente en proceso de ejecuci&oacute;n hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con una subasta programada para el <b>${dt}</b>.</p>
 <p>Entiendo que puede ser una situaci&oacute;n estresante, y quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
 <ul><li>Si la propiedad se vende por m&aacute;s de lo que usted debe, cualquier excedente le pertenece a usted, no al prestamista.</li>
 <li>Vender antes de la subasta suele ser mejor para usted que perderla en el juzgado, y puede dejarle dinero en el bolsillo.</li>
@@ -1121,13 +1555,242 @@ ul{margin:10px 0}
   const w = window.open('', '_blank');
   if(w){ w.document.write(doc); w.document.close(); }
 }
+// ---- NEIGHBOR-SAFE DOOR HANGER: a fold-and-tape leave-behind for the door visit. ----
+// Privacy is the whole point: folded + taped, the OUTSIDE shows ONLY the owner's first name.
+// The word "foreclosure" never appears anywhere (public record or not, no neighbor should read it, and
+// denial-stage owners bin anything that says it). The message + auction date live INSIDE the fold.
+// Prints one hanger per page (fold in half on the dashed line) + a field cheat-card the visitor keeps.
+function genHanger(r){
+  const sN = sender.name || '[YOUR NAME]', sP = sender.phone || '[YOUR PHONE]', sL=(sender.llc||'').trim();
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
+  const first = owner.split(' ')[0] || owner;
+  const addr = esc(r.addr), dt = esc(r.auction);
+  const area = titleCase(((r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||[])[1]||'the area').trim());
+  // INSIDE message — warm, private, no "foreclosure"/"auction" wording, urgency by date only. EN + ES.
+  const inEN = `<p class="hi">Hi ${esc(first)},</p>
+<p>I stopped by your home today. My name is <b>${esc(sN)}</b> — I'm a local homeowner-helper and buyer here in ${esc(area)}. <b>I'm not the bank, not the county, and not a bill collector.</b></p>
+<p>I came by because I think I may be able to help with your property at <b>${addr}</b>, and it would be worth a quick talk <b>before ${dt}</b>. There's no cost and no pressure — if I can't help, I'll tell you straight.</p>
+<p class="call">Please call or text me anytime:<br><b class="ph">${esc(sP)}</b></p>
+<p class="sig">— ${esc(sN)}${sL?'<br>'+esc(sL):''}</p>`;
+  const inES = `<p class="hi">Hola ${esc(first)},</p>
+<p>Pas&eacute; por su casa hoy. Mi nombre es <b>${esc(sN)}</b>, ayudo y compro casas aqu&iacute; en ${esc(area)}. <b>No soy del banco, ni del condado, ni cobrador.</b></p>
+<p>Vine porque creo que puedo ayudarle con su propiedad en <b>${addr}</b>, y valdr&iacute;a la pena hablar <b>antes del ${dt}</b>. Sin costo y sin presi&oacute;n — si no puedo ayudar, se lo dir&eacute; con franqueza.</p>
+<p class="call">Ll&aacute;meme o env&iacute;eme un mensaje cuando quiera:<br><b class="ph">${esc(sP)}</b></p>
+<p class="sig">— ${esc(sN)}${sL?'<br>'+esc(sL):''}</p>`;
+  // TENANT-INTEL script — often whoever answers is a renter who doesn't know the owner is losing the place.
+  // Get the owner's number WITHOUT disclosing their business to a stranger; offer to keep the tenant posted.
+  const tenant = `<b>If a tenant / not the owner answers:</b>
+<p>"Hi — I'm trying to reach <b>${esc(owner)}</b>, the owner of this property, about something time-sensitive with the house. I'm not with the bank or the county. Do you happen to have a phone number or email for them?"</p>
+<p><i>Don't say why.</i> If they press: "It's about the property itself — there's a deadline coming up that affects it, and I'd hate for them to miss it. It could affect you too as a resident, which is exactly why I'd want to keep you in the loop."</p>
+<p>If they help: "I really appreciate it — I'll keep you posted on anything that affects your living situation." Then get <b>their</b> name + number too, and log it in the lead notes.</p>`;
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><title>Door hanger - ${esc(first)}</title>
+<style>
+body{font-family:Georgia,serif;color:#111;margin:0;padding:0}
+.bar{background:#eee;padding:10px 16px;display:flex;gap:8px;font-family:Arial;flex-wrap:wrap;align-items:center}
+.bar button{padding:8px 14px;cursor:pointer;border:1px solid #999;background:#fff;border-radius:5px}
+.bar button.on{background:#2563eb;color:#fff;border-color:#2563eb}
+.bar .note{font-size:12px;color:#555;margin-left:auto}
+.sheet{width:5.5in;margin:24px auto;border:1px solid #ccc}
+.fold{border-top:2px dashed #999;position:relative;height:0}
+.fold span{position:absolute;left:8px;top:-9px;background:#fff;padding:0 6px;font-family:Arial;font-size:10px;color:#999}
+.panel{padding:26px 30px;min-height:3.1in;box-sizing:border-box}
+.front{display:flex;align-items:center;justify-content:center;text-align:center}
+.front .fn{font-size:46px;font-weight:700;font-family:'Segoe Script','Bradley Hand',cursive}
+.front .sub{font-family:Arial;font-size:12px;color:#666;letter-spacing:.12em;text-transform:uppercase;margin-top:14px}
+.inside p{margin:0 0 12px;line-height:1.5;font-size:15px}
+.inside .hi{font-size:17px}
+.inside .call{text-align:center;margin-top:16px}
+.inside .ph{font-size:22px}
+.inside .sig{margin-top:16px;font-style:italic}
+.card{width:5.5in;margin:24px auto;border:1px dashed #bbb;padding:18px 22px;font-family:Arial;font-size:13px;line-height:1.45;background:#fafafa}
+.card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.08em;color:#444}
+.card p{margin:0 0 9px}
+.card .tip{background:#fff4d6;border-left:3px solid #e0a800;padding:8px 10px;margin:10px 0}
+@media print{.bar,.screen-only{display:none}.sheet,.card{margin:0 auto 0.3in;page-break-inside:avoid}}
+</style></head><body>
+<div class="bar">
+  <button id="en" class="on" onclick="show('en')">English</button>
+  <button id="es" onclick="show('es')">Espa&ntilde;ol</button>
+  <button onclick="window.print()">Print / Save PDF</button>
+  <span class="note">Print &rarr; fold on the dashed line (name faces out) &rarr; tape shut &amp; tuck in the door. Never the mailbox.</span>
+</div>
+<div class="sheet">
+  <div class="panel inside" id="msg">${inEN}</div>
+  <div class="fold"><span>FOLD HERE — name faces out</span></div>
+  <div class="panel front"><div><div class="fn">${esc(first)}</div><div class="sub">Personal &middot; please open</div></div></div>
+</div>
+<div class="card">
+  <h3>Field card — keep this, don't leave it</h3>
+  <div class="tip"><b>Placement:</b> door handle, jamb, or under the mat with a small piece of removable tape. <b>Not</b> the mailbox (federal violation) and <b>not</b> anywhere a neighbor can read it — folded name-out is the whole point.</div>
+  <div id="tcard">${tenant}</div>
+  <p style="color:#666"><b>Lead:</b> ${esc(owner)} &middot; ${addr} &middot; talk before ${dt}</p>
+</div>
+<script>function show(l){document.getElementById('msg').innerHTML=l==='en'?${JSON.stringify(inEN)}:${JSON.stringify(inES)};document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(w){ w.document.write(doc); w.document.close(); }
+}
+// ---- PURCHASE & SALE AGREEMENT (DRAFT) — with an assignment clause + FS 501.1377-style protections. ----
+// This is a starting draft, not a finished legal instrument. It is NOT bilingual (a legal contract in two
+// languages risks a translation-discrepancy dispute — use an interpreter for the homeowner instead, not a
+// second contract text). English only, on purpose.
+//
+// FS 501.1377 note: an outright cash sale where the seller keeps NO interest back (no lease-back, no
+// buy-back option) falls outside the statute's own definition of a "foreclosure-rescue transaction," so
+// the equity-purchaser regime technically doesn't attach — but the 12pt/mandatory-statement/3-day-cancel
+// protections are included anyway on every deal, on purpose: cheap insurance, and strong evidence of fair
+// dealing if a lopsided-consideration claim is ever raised (verified against the 2025 statute text).
+//
+// Assignment clause note: FS 475.011's "own real property" exemption is written for an OWNER selling
+// property they hold — its fit to someone assigning a mere CONTRACT RIGHT before ever taking title is a
+// genuinely unsettled question, not a clean exemption (checked directly against the statute text, not a
+// marketing blog). Unlicensed brokerage under FS 475.42 is a THIRD-DEGREE FELONY, and that exposure scales
+// with doing this repeatedly as a business pattern — exactly this use case. The assignment clause below is
+// standard boilerplate; whether/how it's safe to MARKET an assignment to a third-party buyer, repeatedly,
+// is a specific question for Florida real-estate counsel — flagged prominently in the printed draft itself.
+function genContract(r){
+  const sN = sender.name || '[BUYER NAME]', sL = (sender.llc||'').trim() || '[BUYER ENTITY]';
+  const sP = sender.phone || '[BUYER PHONE]', sA = (sender.addr||'').trim() || '[BUYER BUSINESS ADDRESS]';
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
+  const addr = esc(r.addr), folio = esc(r.folio||''), county = esc(ctyName(r.county)), caseNo = esc((r.case||'').trim());
+  const today = new Date().toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'});
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><title>DRAFT Purchase Agreement - ${esc(owner)}</title>
+<style>
+body{font-family:Georgia,serif;max-width:720px;margin:0 auto;padding:40px;color:#111;line-height:1.5;font-size:14px}
+.bar{background:#eee;padding:10px;margin:-40px -40px 0;display:flex;gap:8px;font-family:Arial;align-items:center;flex-wrap:wrap}
+.bar button{padding:8px 14px;cursor:pointer;border:1px solid #999;background:#fff;border-radius:5px}
+.bar .note{font-size:11px;color:#555}
+.draftband{background:#7a1f1f;color:#fff;font-family:Arial;font-weight:700;text-align:center;padding:10px;margin:0 -40px 24px;font-size:13px;letter-spacing:.04em}
+h1{font-size:18px;text-align:center;margin:0 0 4px;text-transform:uppercase;letter-spacing:.03em}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #999;padding-bottom:3px;margin:22px 0 8px}
+.sub{text-align:center;color:#555;font-size:12px;margin-bottom:20px}
+.fillrow{margin:6px 0}
+.fillrow input, .fillrow .fill{border:none;border-bottom:1px solid #333;font-family:Georgia,serif;font-size:14px;padding:2px 4px;min-width:160px;background:transparent}
+.upper{text-transform:uppercase;font-weight:700;letter-spacing:.01em}
+.cancelbox{border:3px double #000;padding:16px;margin-top:30px;page-break-before:always}
+.cancelbox h2{border:none;text-align:center;font-size:14px}
+.siggrid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:26px}
+.sigline{border-top:1px solid #333;margin-top:36px;padding-top:4px;font-size:12px}
+ol{padding-left:20px}
+ol li{margin:6px 0}
+@media print{.bar,.screen-only{display:none}.draftband{-webkit-print-color-adjust:exact;print-color-adjust:exact}body{padding:20px}}
+</style></head><body>
+<div class="bar screen-only">
+  <button onclick="window.print()">Print / Save PDF</button>
+  <span class="note">Fill every blank BEFORE printing. This is a DRAFT — see the red banner and the box at the bottom of this page.</span>
+</div>
+<div class="draftband">DRAFT — NOT FOR SIGNATURE UNTIL A FLORIDA REAL ESTATE ATTORNEY HAS REVIEWED THIS DOCUMENT AND YOUR SPECIFIC ASSIGNMENT/MARKETING PLAN</div>
+
+<h1>As-Is Purchase and Sale Agreement</h1>
+<div class="sub">${county} County, Florida &middot; drafted ${today}</div>
+
+<h2>1. Parties</h2>
+<p><b>Seller:</b> ${esc(owner)}<br>
+<b>Buyer:</b> ${esc(sL)} (${esc(sN)}), and/or assigns, of ${esc(sA)}, phone ${esc(sP)}</p>
+
+<h2>2. Property</h2>
+<p>The real property located at <b>${addr}</b>, ${county} County, Florida, Folio/Parcel No. ${folio||'[FOLIO]'},
+together with all improvements, fixtures, and appurtenances (the &ldquo;Property&rdquo;). Legal description:
+<span class="fill">[CONFIRM EXACT LEGAL DESCRIPTION FROM TITLE COMMITMENT / PROPERTY APPRAISER RECORD BEFORE USE — do not rely on this address alone]</span>.
+${caseNo?'The Property is presently subject to a pending court proceeding, '+county+' County Case No. <b>'+caseNo+'</b>, and this Agreement is expressly contingent on Buyer confirming the current status of that case and all amounts owed prior to Closing.':''}</p>
+
+<h2>3. Purchase Price &amp; Terms</h2>
+<div class="fillrow">Purchase Price: $<input type="text" placeholder="0.00" style="width:140px"> &nbsp; All cash, no financing contingency.</div>
+<div class="fillrow">Earnest Money Deposit: $<input type="text" placeholder="0.00" style="width:100px"> to be held in escrow by
+<input type="text" placeholder="title company / escrow agent name" style="width:260px">.</div>
+<div class="fillrow">Closing Date: on or before <input type="text" placeholder="MM/DD/YYYY" style="width:130px">
+(and in any event no later than 3 business days before any scheduled foreclosure or tax sale of the Property, if applicable).</div>
+<div class="fillrow">Possession: transfers to Buyer at Closing.</div>
+
+<h2>4. Condition of Property</h2>
+<p>Buyer is purchasing the Property &ldquo;AS-IS, WHERE-IS,&rdquo; with all faults, and Seller makes no warranty as to
+condition. Buyer has the right to inspect the Property prior to Closing at Buyer's own expense.</p>
+
+<h2>5. Title</h2>
+<p>Seller shall convey marketable title by <input type="text" placeholder="general warranty / special warranty" style="width:220px">
+deed, free of all liens and encumbrances except those Buyer agrees in writing to assume. Closing shall be conducted
+through a licensed Florida title company or real estate attorney chosen by Buyer. Seller shall cooperate in
+providing any payoff statements, HOA estoppel letters, or other documents reasonably required to close.</p>
+
+<h2>6. Assignment</h2>
+<p>Buyer's rights and obligations under this Agreement may be assigned, in whole or in part, to any person or
+entity (&ldquo;Assignee&rdquo;) without further consent from Seller, provided that Buyer shall remain responsible
+for performance of this Agreement unless and until an Assignee expressly assumes all of Buyer's obligations in
+writing. This Agreement shall inure to the benefit of and be binding upon the parties' respective heirs, personal
+representatives, successors, and permitted assigns.</p>
+
+<h2>7. No Upfront Fees; Consideration Disclosed</h2>
+<p>Buyer has not charged and will not charge Seller any fee of any kind in connection with this Agreement or the
+sale of the Property. The total consideration to be paid to Seller, and all terms of payment, are fully stated in
+Section 3 above and nowhere else.</p>
+
+<h2>8. Default</h2>
+<p>If Seller defaults, Buyer may seek specific performance or return of the earnest money deposit plus damages.
+If Buyer defaults, Seller's sole remedy is retention of the earnest money deposit as liquidated damages, not as
+a penalty.</p>
+
+<h2>9. Governing Law</h2>
+<p>This Agreement is governed by the laws of the State of Florida. Venue for any dispute shall lie in the county
+where the Property is located.</p>
+
+<h2>10. Entire Agreement</h2>
+<p>This Agreement, including any addenda attached and signed by both parties, constitutes the entire agreement
+between the parties and supersedes all prior discussions.</p>
+
+<p class="upper" style="margin-top:24px;border:2px solid #000;padding:12px;text-align:center">
+I understand that under this agreement I am selling my home to the other undersigned party.</p>
+
+<div class="siggrid">
+<div><div class="sigline">Seller signature &nbsp;&nbsp;&nbsp; Date/Time: ______________</div>
+<div class="sigline" style="margin-top:20px">Print name: ${esc(owner)}</div></div>
+<div><div class="sigline">Buyer signature &nbsp;&nbsp;&nbsp; Date/Time: ______________</div>
+<div class="sigline" style="margin-top:20px">Print name / entity: ${esc(sN)} / ${esc(sL)}</div></div>
+</div>
+
+<div class="cancelbox">
+<h2>Notice of Right to Cancel</h2>
+<p class="upper" style="text-align:center">You may cancel this contract for the sale of your house without any
+penalty or obligation at any time before 5:00 p.m. on the 3rd business day after the date on which you signed
+this contract.</p>
+<p class="upper" style="text-align:center">See the attached notice of cancellation form for an explanation of
+this right.</p>
+<p style="margin-top:16px;font-size:11px;color:#555">(Per Fla. Stat. &sect;501.1377(5)(b) practice — this notice
+must in a final version appear on its own page containing no other written or pictorial material, accompanied by
+a separate signed cancellation form the Seller can return to exercise the right. This draft combines the concept
+onto one page for review purposes only — a Florida attorney should finalize the actual formatting before use.)</p>
+</div>
+
+<div class="cancelbox" style="page-break-before:always">
+<h2 style="font-size:16px">Read Before You Sign — For ${esc(sN)} / ${esc(sL)}, Not the Seller</h2>
+<ol style="font-size:12.5px">
+<li>This entire document is a <b>starting draft</b>. Do not present it to a homeowner for signature until a
+Florida real estate attorney has reviewed it and the specific deal terms.</li>
+<li><b>Ask your attorney specifically about the assignment clause (Section 6) and how you plan to market this
+deal to an end buyer.</b> Florida does not have a clean, settled statutory exemption for assigning a real estate
+purchase contract for a fee — unlicensed brokerage under Fla. Stat. &sect;475.42 is a third-degree felony, and
+doing this repeatedly as a business (not a one-off) is exactly the pattern that draws the most scrutiny. The
+safe practice most sources agree on: market your CONTRACTUAL INTEREST, never the property itself (no property
+photos, no "for sale" language, no listing the address publicly) — but confirm this with counsel before relying
+on it.</li>
+<li>Do not record any deed or take any action to convey/encumber the Property until at least 5:00 p.m. on the
+3rd business day after signing (Section labeled &ldquo;Notice of Right to Cancel&rdquo; above).</li>
+<li>Keep the price fair. A lowball offer on a homestead with real equity is exactly what can trigger an
+unconscionability claim under Florida's deceptive-trade-practices law, separate from anything above.</li>
+<li>This tool (DEALFLOW) generated this draft from public record data. Verify the folio, legal description,
+and every dollar figure independently before using it.</li>
+</ol>
+</div>
+</body></html>`;
+  const w = window.open('', '_blank');
+  if(w){ w.document.write(doc); w.document.close(); }
+}
 // ---- per-lead PHONE SCRIPT: what to actually say when you call this owner (EN/ES, tailored) ----
 function genScript(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const partner = (sender.partner||'').trim() || '[PARTNER]';   // the closer/expert on the two-step callback
   const days = r.days >= 0 ? r.days : 0;
   const hi = (new Date().getHours() < 12) ? 'morning' : 'afternoon';
-  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
   const first = esc(owner.split(' ')[0] || owner);
   const addr = esc(r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
@@ -1141,6 +1804,11 @@ function genScript(r){
     ? '<ul class="ph">' + phones.map(p=>'<li><b>'+esc(fmtPhone(p.num))+'</b>'+(p.dnc?' <span class="dnc">'+(lang==='en'?'(DO NOT CALL, on the Do-Not-Call list)':'(NO LLAMAR, lista Do-Not-Call)')+'</span>':'')+'</li>').join('') + '</ul>'
     : '<p class="muted">'+(lang==='en'?'No phone pulled yet. Use the <b>People</b> link on the lead to find one, then dial by hand.':'Aún no hay teléfono. Use el enlace <b>People</b> del contacto para encontrarlo y marque a mano.')+'</p>';
   const badge = vb ? '<span class="vbadge vb-'+vb.toLowerCase()+'">'+vb+'</span> ' : '';
+  // A real case/certificate number to cite verbally — makes clear this is a specific, real court file
+  // you pulled, not a cold mass-market script. Optional to say; included wherever the tool has one.
+  const caseNo = esc((r.case||'').trim());
+  const caseTagEN = caseNo ? `, case number ${caseNo}` : '';
+  const caseTagES = caseNo ? `, número de caso ${caseNo}` : '';
 
   const goalEN = td
     ? 'Qualify fast, then book the callback. Find out what happened, whether they can pay the back taxes or want to sell, and what else is owed. Then set a SPECIFIC time with ' + esc(partner) + ' on the line.'
@@ -1152,11 +1820,11 @@ function genScript(r){
     : 'Califique rápido y agende la llamada. Averigüe qué pasó, conservar vs vender, y qué se debe. Luego fije una hora ESPECÍFICA con ' + esc(partner) + ' en la línea para repasar sus opciones.';
 
   const openEN = td
-    ? `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a tax-deed sale set for <b>${dt}</b>, that's ${days} days out. We may be able to help, but I need 60 seconds to see if we can, or if you're already working with someone. You got a minute?`
-    : `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a sale date set for <b>${dt}</b>, that's ${days} days out. We may be able to stop it, but I need 60 seconds to see if we can help, or if you're already working with someone. You got a minute?`;
+    ? `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a tax-deed sale set for <b>${dt}</b>${caseTagEN}, that's ${days} days out. We may be able to help, but I need 60 seconds to see if we can, or if you're already working with someone. You got a minute?`
+    : `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a sale date set for <b>${dt}</b>${caseTagEN}, that's ${days} days out. We may be able to stop it, but I need 60 seconds to see if we can help, or if you're already working with someone. You got a minute?`;
   const openES = td
-    ? `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una subasta de tax deed fijada para el <b>${dt}</b>, es decir en ${days} días. Quizá podamos ayudarle, pero necesito 60 segundos para ver si podemos, o si ya está trabajando con alguien. ¿Tiene un minuto?`
-    : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una fecha de subasta fijada para el <b>${dt}</b>, es decir en ${days} días. Quizá podamos detenerla, pero necesito 60 segundos para ver si podemos ayudarle, o si ya está trabajando con alguien. ¿Tiene un minuto?`;
+    ? `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una subasta de tax deed fijada para el <b>${dt}</b>${caseTagES}, es decir en ${days} días. Quizá podamos ayudarle, pero necesito 60 segundos para ver si podemos, o si ya está trabajando con alguien. ¿Tiene un minuto?`
+    : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una fecha de subasta fijada para el <b>${dt}</b>${caseTagES}, es decir en ${days} días. Quizá podamos detenerla, pero necesito 60 segundos para ver si podemos ayudarle, o si ya está trabajando con alguien. ¿Tiene un minuto?`;
 
   const offerEN = `Here's how this works. I'm not the guy who stops sales, my partner ${esc(partner)} is, he's been doing this 30 years. I'm going to pull your file right now, see exactly what we're dealing with on your lender, and brief him. Then I'll call you back at <b>[set a REAL clock time, e.g. 1:15 PM]</b> with ${esc(partner)} on the line. He'll lay out what we can actually do${verify?" once we confirm what's owed":''}, whether that's buying it before the sale so you walk away with cash, getting you more time, or pointing you to the right resource. No cost, no pressure, no commitment. You around then?`;
   const offerES = `Así funciona. Yo no soy quien detiene las ventas, mi socio ${esc(partner)} sí, lleva 30 años en esto. Voy a sacar su expediente ahora mismo, ver exactamente qué tenemos con su prestamista, y ponerlo al tanto. Luego le devuelvo la llamada a las <b>[fije una hora real, ej. 1:15 PM]</b> con ${esc(partner)} en la línea. Él le explicará qué podemos hacer${verify?' una vez que confirmemos lo que se debe':''}, ya sea comprarla antes de la subasta para que salga con dinero, conseguirle más tiempo, u orientarle al recurso correcto. Sin costo, sin presión, sin compromiso. ¿Estará disponible?`;
@@ -1268,11 +1936,16 @@ function genScript(r){
 function genEmail(r){
   const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
   const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
-  const owner = titleCase((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim());
   const first = owner.split(' ')[0] || owner;
   const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
   const street = (addr.split(',')[0]||addr).trim();
   const plaintiff = (r.plaintiff||'').trim();   // the bank / association foreclosing — personalizes it
+  // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
+  // site — a concrete credibility signal — included wherever the tool actually has one, never fabricated.
+  const caseNo = (r.case||'').trim();
+  const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
+  const caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
   const emails = (r.emails||[]).slice(0,3);
   const to = emails[0]||'';
   // professional signature block (blank fields skipped)
@@ -1280,11 +1953,11 @@ function genEmail(r){
   const subjEN = `Regarding your property at ${street}`;
   const subjES = `Referente a su propiedad en ${street}`;
   const bodyEN = td
-    ? `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}. County records show it is scheduled for a tax deed sale on ${dt} due to unpaid property taxes.\n\nI am a local real estate investor here in Miami, and I work with owners before these sales. You may still have options, including paying the back taxes to keep the property, or selling it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you as well.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`
-    : `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}. According to those records, the foreclosure sale is scheduled for ${dt}.\n\nI am a local real estate investor here in Miami, and I work with owners in this situation before the sale date. Depending on what is owed, you may have more options than it seems, including selling before the auction so you walk away with cash instead of losing the property. If it sells for more than the debt, any surplus may belong to you.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`;
+    ? `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}. County records show it is scheduled for a tax deed sale on ${dt}${caseTagEN} due to unpaid property taxes.\n\nI am a local real estate investor here in Miami, and I work with owners before these sales. You may still have options, including paying the back taxes to keep the property, or selling it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you as well.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`
+    : `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. According to those records, the foreclosure sale is scheduled for ${dt}.\n\nI am a local real estate investor here in Miami, and I work with owners in this situation before the sale date. Depending on what is owed, you may have more options than it seems, including selling before the auction so you walk away with cash instead of losing the property. If it sells for more than the debt, any surplus may belong to you.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`;
   const bodyES = td
-    ? `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}. Los registros del condado muestran que está programada para una subasta de tax deed el ${dt} por impuestos sin pagar.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios antes de estas ventas. Todavía puede tener opciones, incluyendo pagar los impuestos atrasados para conservar la propiedad, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente también podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`
-    : `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}, la cual según los registros públicos se encuentra actualmente en proceso de ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}. Según esos registros, la subasta está programada para el ${dt}.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios en esta situación antes de la fecha de la venta. Según lo que se deba, es posible que tenga más opciones de las que parece, incluyendo vender antes de la subasta para salir con dinero en lugar de perder la propiedad. Si se vende por más de lo adeudado, cualquier excedente podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`;
+    ? `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}. Los registros del condado muestran que está programada para una subasta de tax deed el ${dt}${caseTagES} por impuestos sin pagar.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios antes de estas ventas. Todavía puede tener opciones, incluyendo pagar los impuestos atrasados para conservar la propiedad, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente también podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`
+    : `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}, la cual según los registros públicos se encuentra actualmente en proceso de ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Según esos registros, la subasta está programada para el ${dt}.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios en esta situación antes de la fecha de la venta. Según lo que se deba, es posible que tenga más opciones de las que parece, incluyendo vender antes de la subasta para salir con dinero en lugar de perder la propiedad. Si se vende por más de lo adeudado, cualquier excedente podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`;
   const D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
   const recip = emails.length
@@ -1305,7 +1978,7 @@ function genEmail(r){
   .hint{font-size:12px;color:#5b6b8c;margin-top:14px;background:#f2f4f8;border-radius:7px;padding:9px 12px}
   @media print{.bar{display:none}}`;
   const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Email - ${esc(owner)}</title><style>${CSS}</style></head><body>
-<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button class="act" onclick="openMail()">Open in email app</button><button class="act" id="cpy" onclick="copyEmail()">Copy email</button></div>
+<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button class="act" onclick="openGmail()">Open in Gmail</button><button class="act" onclick="openMail()">Open in email app</button><button class="act" id="cpy" onclick="copyEmail()">Copy email</button></div>
 <h1>${esc(owner)}</h1><div class="sub">${esc(addr)} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${esc(dt)}</b></div>
 <div class="lbl">To</div><div class="to">${recip}</div>
 <div class="lbl">Subject</div><div class="subj" id="subjline"></div>
@@ -1314,14 +1987,311 @@ function genEmail(r){
 <script>var D=${Djson}, to=${JSON.stringify(to)}, cur='en';
 function show(l){cur=l;document.getElementById('subjline').textContent=D[l].subj;document.getElementById('bodybox').textContent=D[l].body;document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}
 function openMail(){location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body);}
-function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;navigator.clipboard.writeText(t).then(function(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);});}
+// Opens Gmail's own compose UI (web or the Gmail app, if it's the registered handler) with everything
+// pre-filled — vs. a plain mailto: link, which opens whatever the DEVICE'S default mail app is (Outlook,
+// nothing configured, etc.), not necessarily Gmail. Uses whichever Google account is already signed in.
+function openGmail(){window.open('https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)+'&su='+encodeURIComponent(D[cur].subj)+'&body='+encodeURIComponent(D[cur].body),'_blank');}
+function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;function ok(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);}function fb(){var a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();try{document.execCommand('copy');ok();}catch(e){}document.body.removeChild(a);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,fb);}else{fb();}}
 show('en');<\/script>
 </body></html>`;
   const w = window.open('', '_blank');
   if(w){ w.document.write(doc); w.document.close(); }
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
-function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
+function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); }
+
+// ================= CROSS-DEVICE SYNC (serverless, file-as-transport) =================
+// The whole app is a static file with per-device localStorage, so a teammate's opt-outs, calls and
+// verified-lien work never reach your device — an FTSA liability (you could dial a number Jose already
+// opted out) and a lost-pipeline risk. Fix: export a notes file / import a teammate's and MERGE, with
+// SAFETY-FIRST conflict rules. No server, works offline, can't silently fail.
+function exportNotes(){
+  const payload = { _dealflow_notes: 1, exported: _today(), device: (localStorage.getItem('fcDevice')||''), notes: notes };
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'dealflow-notes-'+_today()+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+// ---- Mail batch (Round C): select homeowner-rescue leads, review, download a queue for outreach_mail.py ----
+// The Lob key NEVER lives in this page (it gets emailed + pushed public). This only SELECTS + exports;
+// the local `outreach_mail.py --queue <file> --send` does the real send with the key from a gitignored lob.key.
+const _MAIL_CO_RE = /\b(LLC|L\.?L\.?C|INC|CORP|CORPORATION|TRUST|LP|LLP|COMPANY|CO\.|ASSOC|ASSOCIATION|BANK|HOLDINGS|PROPERTY|PROPERTIES|REALTY|REAL ESTATE|INVESTMENTS?|CAPITAL|FUND|ENTERPRISES|GROUP|VENTURES|PARTNERS|SERVICING|MORTGAGE|REO|MANAGEMENT)\b/i;
+const _MAIL_COST = 0.92;   // ~ all-in first-class 1-page B&W; outreach_mail.py prints the same estimate
+function _mailAddrOK(r){ return /\b[A-Za-z]{2}\s+\d{5}(-\d{4})?\b/.test((r.mail||r.addr||'')); }
+function mailableLeads(){
+  return DATA.filter(function(r){
+    const t=(r.tier||'').toUpperCase();
+    if(t!=='A' && t!=='B') return false;             // homeowner-rescue tiers only
+    if(r.vac) return false;                          // vacant land: no homeowner to help
+    if(_MAIL_CO_RE.test(r.owners||'')) return false; // LLC/company owner, not a distressed homeowner
+    if(!_mailAddrOK(r)) return false;                // needs a deliverable mailing address
+    if((+r.days||0) < 5) return false;               // a letter must still arrive before the auction
+    const n = notes[r.case]||{};
+    if(_isOptedOut(n)) return false;                 // FTSA: never mail an opted-out owner
+    if((n.status||'')==='Dead') return false;        // you already killed this lead
+    return true;
+  });
+}
+function _mailUpdateStat(){
+  const ck = document.querySelectorAll('.mailck:checked').length;
+  const el = document.getElementById('mailstat');
+  if(el) el.innerHTML = '<b>'+ck+'</b> selected &middot; est. <b>~$'+(ck*_MAIL_COST).toFixed(2)+'</b> at ~$'+_MAIL_COST.toFixed(2)+'/letter';
+}
+function downloadMailBatch(){
+  const set = new Set([...document.querySelectorAll('.mailck:checked')].map(x=>x.getAttribute('data-c')));
+  const leads = mailableLeads().filter(r=>set.has(r.case)).map(function(r){
+    return {case:r.case, owners:r.owners, addr:r.addr, mail:(r.mail||r.addr), auction:r.auction, st:r.st, plaintiff:(r.plaintiff||''), tier:r.tier, folio:(r.folio||''), days:r.days};
+  });
+  if(!leads.length){ alert('Nothing selected to mail.'); return; }
+  const payload = {_dealflow_mailqueue:1, exported:_today(), sender:sender, leads:leads};
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='dealflow-mailqueue-'+_today()+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+function closeMailModal(){ const m=document.getElementById('mailmodal'); if(m) m.classList.remove('show'); document.body.classList.remove('modal-open'); }
+function openMailModal(){
+  const rows = mailableLeads();
+  let h = '<div class="dm-title">&#9993; Mail batch &mdash; send letters as real mail via Lob</div>';
+  h += '<div style="font-size:12.5px;color:var(--muted);margin:6px 0 14px;line-height:1.5">These are the leads worth mailing right now: Tier A/B, a real owner (no LLC / vacant land), a deliverable address, an auction 5+ days out, and <b>not opted out</b>. Uncheck anyone to skip, then download the batch. Your Lob key stays on your machine &mdash; this page never sees it.</div>';
+  if(!rows.length){
+    h += '<div style="padding:22px;text-align:center;color:var(--muted)">No mailable leads right now (check your opt-outs and auction dates).</div>';
+    document.getElementById('mailbody').innerHTML = h;
+  } else {
+    h += '<div id="mailstat" style="font-size:13px;margin-bottom:8px"></div>';
+    h += '<div style="max-height:44vh;overflow:auto;border:1px solid var(--line);border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:12.5px">';
+    h += '<thead><tr style="position:sticky;top:0;background:var(--surface,#fff)"><th style="padding:6px 8px;text-align:left"><input type="checkbox" id="mailall" checked></th><th style="padding:6px 8px;text-align:left">Owner</th><th style="padding:6px 8px;text-align:left">Mailing address</th><th style="padding:6px 8px">Tier</th><th style="padding:6px 8px;text-align:left">Auction</th></tr></thead><tbody>';
+    rows.forEach(function(r){
+      h += '<tr style="border-top:1px solid var(--line)">'
+        + '<td style="padding:5px 8px"><input type="checkbox" class="mailck" data-c="'+esc(r.case)+'" checked></td>'
+        + '<td style="padding:5px 8px">'+esc(_ownerName((r.owners||'').split(';')[0]))+'</td>'
+        + '<td style="padding:5px 8px;color:var(--muted)">'+esc(r.mail||r.addr)+'</td>'
+        + '<td style="padding:5px 8px;text-align:center">'+esc(r.tier)+'</td>'
+        + '<td style="padding:5px 8px">'+esc(r.auction)+' <span style="color:var(--muted)">('+esc(String(r.days))+'d)</span></td></tr>';
+    });
+    h += '</tbody></table></div>';
+    h += '<div style="margin-top:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">'
+      + '<button class="syncbtn2" id="maildl" type="button">&#11015; Download batch (.json)</button>'
+      + '<span style="font-size:12px;color:var(--muted)">then run&nbsp; <code style="background:var(--surface-2,#eef);padding:2px 6px;border-radius:4px">python outreach_mail.py --queue &lt;file&gt; --send</code></span></div>';
+    h += '<div style="font-size:11.5px;color:var(--muted);margin-top:9px;line-height:1.5">The file excludes anyone you unchecked and bakes in your current opt-outs. The script still skips undeliverable addresses and anyone already mailed. See OUTREACH.md for Lob setup.</div>';
+    document.getElementById('mailbody').innerHTML = h;
+    _mailUpdateStat();
+    document.getElementById('mailall').addEventListener('change', function(){
+      const on=this.checked; document.querySelectorAll('.mailck').forEach(c=>{c.checked=on;}); _mailUpdateStat();
+    });
+    document.querySelectorAll('.mailck').forEach(c=>c.addEventListener('change', _mailUpdateStat));
+    document.getElementById('maildl').addEventListener('click', downloadMailBatch);
+  }
+  document.getElementById('mailmodal').classList.add('show'); document.body.classList.add('modal-open');
+}
+(function(){ const b=document.getElementById('mailbatch'); if(b) b.addEventListener('click', openMailModal); })();
+const _DNC = s => s === 'DO NOT CONTACT';
+const _DEAD = s => s === 'Dead' || s === 'DO NOT CONTACT';
+const _lastTouchD = n => (n && n.touches && n.touches.length) ? (n.touches[n.touches.length-1].d || '') : '';
+function _mergeLead(local, remote){
+  local = local || {}; remote = remote || {};
+  const out = Object.assign({}, local);
+  const ch = { optout:false, touches:0, status:false, deal:false, note:false };
+  // audit ledger: union every opt-out event from both devices (dedup by ts|act), so the ORIGINAL
+  // "set" timestamp on the teammate's device is preserved as evidence, not just the local one.
+  const _lseen = new Set(), _ol = [];
+  (local.optlog||[]).concat(remote.optlog||[]).forEach(ev => { const k=(ev.ts||'')+'|'+(ev.act||'')+'|'+(ev.src||''); if(!_lseen.has(k)){ _lseen.add(k); _ol.push(ev); } });
+  if(_ol.length){ _ol.sort((a,b)=>(a.ts||'').localeCompare(b.ts||'')); out.optlog = _ol; }
+  const _wasDNC = _DNC(local.status);
+  // opt-out is STICKY and never cleared by a merge; earliest date wins
+  if(remote.optout && (!out.optout || remote.optout < out.optout)){ ch.optout = !local.optout; out.optout = remote.optout; }
+  // status: DO NOT CONTACT wins over everything, then Dead, else the side with the more recent touch
+  if(_DNC(local.status) || _DNC(remote.status)){ if(out.status !== 'DO NOT CONTACT'){ out.status = 'DO NOT CONTACT'; ch.status = true; } if(!out.optout){ out.optout = remote.optout || local.optout || _today(); ch.optout = ch.optout || !local.optout; }
+    // teammate's opt-out just started suppressing on THIS device — stamp when, for the paper trail
+    if(!_wasDNC){ out.optlog = out.optlog || []; out.optlog.push({ts:_nowTS(), tsu:Date.now(), act:'suppressed-here', src:(localStorage.getItem('fcDevice')||'this device')}); } }
+  else if(_DEAD(local.status) || _DEAD(remote.status)){ if(!_DEAD(out.status)){ out.status = 'Dead'; ch.status = true; } }
+  else if(remote.status && remote.status !== (local.status||'') && _lastTouchD(remote) >= _lastTouchD(local)){ out.status = remote.status; ch.status = true; }
+  // contact log: union, dedupe by (date|channel|outcome)
+  const seen = new Set(), tt = [];
+  (local.touches||[]).concat(remote.touches||[]).forEach(t => { const k=(t.ts||t.d||'')+'|'+(t.ch||'')+'|'+(t.out||''); if(!seen.has(k)){ seen.add(k); tt.push(t); } });
+  tt.sort((a,b)=>(a.d||'').localeCompare(b.d||''));
+  ch.touches = Math.max(0, tt.length - (local.touches||[]).length);
+  if(tt.length) out.touches = tt;
+  // follow-up: the sooner defined date
+  if(remote.next && (!out.next || remote.next < out.next)) out.next = remote.next;
+  // manually-typed phone: fill if missing
+  if(!out.phone && remote.phone) out.phone = remote.phone;
+  // verified-lien / deal numbers: LATEST-WRITE-WINS by per-field timestamp (notes[c].dts). Falls back
+  // to prefer-larger only for pre-Round-B legacy data (which keeps the conservative default).
+  const ldts = local.dts||{}, rdts = remote.dts||{}, mdts = Object.assign({}, ldts);
+  ['slien','jlien','assess','btax','mlien'].forEach(k => {
+    const lv = local[k]==null||local[k]===''?null:+local[k]||0;
+    const rv = remote[k]==null||remote[k]===''?null:+remote[k]||0;
+    const lt = ldts[k]||0, rt = rdts[k]||0;
+    let winner;
+    if(lt && rt){ winner = rt > lt ? rv : lv; if(rt > lt) mdts[k] = rt; }
+    else if(rt && !lt){ winner = rv; mdts[k] = rt; }
+    else if(lt && !rt){ winner = lv; }
+    else { winner = Math.max(lv||0, rv||0) || null; }   // legacy: prefer-larger
+    if(winner != null && String(winner) !== String(local[k]||'')){ out[k] = String(winner); ch.deal = true; }
+  });
+  const locc = !!local.occ, rocc = !!remote.occ, ltocc = ldts.occ||0, rtocc = rdts.occ||0;
+  const occWin = (ltocc||rtocc) ? (rtocc > ltocc ? rocc : locc) : (locc || rocc);
+  if(occWin !== locc){ out.occ = occWin; ch.deal = true; if(rtocc > ltocc) mdts.occ = rtocc; }
+  if(Object.keys(mdts).length) out.dts = mdts;
+  // free-text note: keep both, distinct
+  if(remote.note && remote.note !== (local.note||'') && (local.note||'').indexOf(remote.note) === -1){
+    out.note = local.note ? (local.note + '\n— (merged) ' + remote.note) : remote.note; ch.note = true;
+  }
+  return [out, ch];
+}
+function mergeNotes(remoteNotes){
+  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, violations:0 };
+  Object.keys(remoteNotes||{}).forEach(caseId => {
+    const before = _dialedAfter(notes[caseId]).length;
+    const [merged, ch] = _mergeLead(notes[caseId], remoteNotes[caseId]);
+    notes[caseId] = merged;
+    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note) sum.leads++;
+    if(ch.optout) sum.optouts++;
+    sum.touches += ch.touches; if(ch.status) sum.statuses++; if(ch.deal) sum.deals++; if(ch.note) sum.notes++;
+    // a merged-in opt-out can retroactively turn a call you already logged into an after-opt-out contact
+    if(_dialedAfter(merged).length > before) sum.violations++;
+  });
+  try{ localStorage.setItem('fcLastMerge', _nowTS()); }catch(e){}
+  // only persist/re-render when the merge actually changed something — otherwise the 45s auto-sync poll
+  // triggers a needless save()->syncPushSoon()->push + full render on every empty pull (jank + churn).
+  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes;
+  if(changed){ save(); try{ recompute(); }catch(e){} render(); }
+  syncFreshness();
+  return sum;
+}
+// staleness nag: turn the Sync button amber when the last team merge is old, so a stale opt-out
+// window (the one FTSA risk left in a manual-merge model) is VISIBLE, not silent.
+// ============ TEAM AUTO-SYNC (Supabase encrypted-blob store) ============
+// Opt-in. Once a team key is set, every change auto-pushes an ENCRYPTED copy of this device's notes to
+// a shared table, and a background poll pulls teammates' blobs and merges them (reusing mergeNotes —
+// DO NOT CONTACT still wins). Rows are AES-GCM ciphertext keyed by hash(teamKey); the server never sees
+// plaintext. Fails silent offline / on file:// — the manual export/import and everything else still work.
+const SB_URL = 'https://dddcfwbydgtxxwdsvsvt.supabase.co';
+const SB_KEY = 'sb_publishable_BbzeDgUG0HJK2OBekCh8uw_267aVBhQ';
+const SB_TBL = SB_URL + '/rest/v1/dealflow_sync';
+let _syncTimer = null, _syncBusy = false, _pullTimer = null;
+function _teamKey(){ return localStorage.getItem('fcTeamKey') || ''; }
+function _deviceId(){ let d = localStorage.getItem('fcDevice'); if(!d){
+  // crypto.randomUUID gives 122 bits of entropy — collision-safe even for two devices sharing a UA and
+  // signing up in the same second (the old time+UA hash was ~30 bits and could collide in that case).
+  d = 'dev-' + ((crypto&&crypto.randomUUID) ? crypto.randomUUID().replace(/-/g,'').slice(0,12) :
+    Math.abs((''+_nowTS()+navigator.userAgent+Math.random()).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0)).toString(36));
+  localStorage.setItem('fcDevice', d); } return d; }
+// chunked so a large ciphertext can't blow the argument limit of String.fromCharCode.apply
+// (a heavy note-taker's blob is >65K bytes → RangeError → sync would silently die as "offline")
+const _b64 = u8 => { let s=''; for(let i=0;i<u8.length;i+=0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i+0x8000)); return btoa(s); };
+const _u8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function _teamId(key){ const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('dealflow-sync:'+key)); return _b64(new Uint8Array(h)).replace(/[^a-zA-Z0-9]/g,'').slice(0,32); }
+async function _deriveKey(key, salt){ const bk = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), 'PBKDF2', false, ['deriveKey']); return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:200000, hash:'SHA-256'}, bk, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']); }
+async function _encBlob(obj, key){ const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12)); const k = await _deriveKey(key, salt); const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, k, new TextEncoder().encode(JSON.stringify(obj))); return JSON.stringify({v:1, s:_b64(salt), i:_b64(iv), c:_b64(new Uint8Array(ct))}); }
+async function _decBlob(env, key){ const o = JSON.parse(env); const k = await _deriveKey(key, _u8(o.s)); const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:_u8(o.i)}, k, _u8(o.c)); return JSON.parse(new TextDecoder().decode(pt)); }
+async function syncPush(){
+  const key = _teamKey(); if(!key) return;
+  try{
+    _syncBusy = true; syncStatus('pushing…');
+    const tid = await _teamId(key), payload = await _encBlob(notes, key);
+    const r = await fetch(SB_TBL, {method:'POST', headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify([{team_id:tid, device_id:_deviceId(), payload}])});
+    if(!r.ok) throw new Error('push '+r.status);
+    localStorage.setItem('fcLastPush', _nowTS()); syncStatus('');
+  }catch(e){ syncStatus('offline — will retry', true); }
+  finally{ _syncBusy = false; }
+}
+// Actually GUARD with _syncBusy — previously set true/false but never read, so a syncPull's
+// mergeNotes -> save -> syncPushSoon could stack a push while another was in flight.
+function syncPushSoon(){ if(!_teamKey()) return; clearTimeout(_syncTimer); _syncTimer = setTimeout(() => { if(_syncBusy){ syncPushSoon(); return; } syncPush(); }, 1500); }
+async function syncPull(){
+  const key = _teamKey(); if(!key) return 0;
+  if(_syncBusy) return 0;   // don't pull-then-merge-then-push into a push that's already flying
+  try{
+    const tid = await _teamId(key), me = _deviceId();
+    const r = await fetch(SB_TBL+'?team_id=eq.'+encodeURIComponent(tid)+'&select=device_id,payload', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    if(!r.ok) throw new Error('pull '+r.status);
+    const rows = await r.json(); let merged = 0, optouts = 0;
+    for(const row of rows){ if(row.device_id === me) continue;
+      try{ const remote = await _decBlob(row.payload, key); const s = mergeNotes(remote); merged += s.leads; optouts += s.optouts; }catch(e){}
+    }
+    localStorage.setItem('fcLastPull', _nowTS()); syncStatus('');
+    return {merged, optouts};
+  }catch(e){ syncStatus('offline — will retry', true); return 0; }
+}
+function syncStatus(msg, warn){ const el = document.getElementById('syncstat'); if(!el) return; const on = !!_teamKey();
+  el.className = 'syncstat' + (warn?' warn':'') + (on?' on':'');
+  el.textContent = on ? ('Team sync ON'+(msg?' · '+msg : (localStorage.getItem('fcLastPull')?' · synced '+_ago(localStorage.getItem('fcLastPull')):''))) : 'Team sync off';
+}
+function _ago(ts){ if(!ts) return ''; const m = Math.max(0, Math.round((new Date(_nowTS().replace(' ','T')) - new Date(ts.replace(' ','T')))/60000)); return m<1?'just now':m<60?m+'m ago':Math.round(m/60)+'h ago'; }
+function startTeamSync(){ if(!_teamKey()) return; clearInterval(_pullTimer); syncPull(); _pullTimer = setInterval(syncPull, 45000); syncPush(); }
+function syncFreshness(){
+  const b = document.getElementById('syncbtn'); if(!b) return;
+  const last = localStorage.getItem('fcLastMerge') || '';
+  if(!last){ b.classList.remove('syncstale'); b.title = b.dataset.baseTitle || b.title; return; }
+  const hrs = Math.max(0, Math.round((new Date(_nowTS().replace(' ','T')) - new Date(last.replace(' ','T')))/3600000));
+  const label = hrs < 1 ? 'just now' : hrs < 24 ? hrs+'h ago' : Math.round(hrs/24)+'d ago';
+  const stale = hrs >= 12;
+  b.classList.toggle('syncstale', stale);
+  b.title = (b.dataset.baseTitle||'') + ' — last team merge: ' + label + (stale ? ' · OVERDUE, import teammate files' : '');
+  const tag = document.getElementById('syncfresh'); if(tag){ tag.textContent = (stale?'⚠ ':'')+'sync '+label; }
+}
+function openSyncModal(){
+  const on = !!_teamKey();
+  document.getElementById('syncbody').innerHTML =
+    '<div class="dm-sec" style="font-size:17px;margin-bottom:2px">Sync across devices &amp; team</div>'+
+    '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-bottom:6px">Your notes, calls, opt-outs and verified liens live on THIS device. Turn on team auto-sync so everyone stays current automatically, or hand off a file manually.</div>'+
+    // --- AUTO-SYNC (primary) ---
+    '<div class="syncrow syncauto"><span class="si">🔄</span><div style="flex:1"><div class="st">Team auto-sync '+(on?'<span class="syncstat on" id="syncstat">Team sync ON</span>':'<span class="synctag">recommended</span>')+'</div>'+
+      '<div class="sd">Everyone on the same <b>team key</b> stays in sync automatically — opt-outs, calls and verified liens flow between all devices within a minute, no exporting. Data is <b>encrypted with your team key before it leaves the device</b>; the server only stores ciphertext. <b>DO NOT CONTACT always wins.</b></div>'+
+      (on
+        ? '<div class="sd" style="margin-top:6px" id="syncstatline">'+(localStorage.getItem('fcLastPull')?'Last synced '+_ago(localStorage.getItem('fcLastPull')):'Connecting…')+'</div><button class="syncbtn2" id="sync-now" type="button">Sync now</button> <button class="syncbtn2 ghost" id="sync-off" type="button">Turn off on this device</button>'
+        : '<div class="synckeyrow"><input id="teamkeyin" type="password" placeholder="Team key (share this with Jose)" autocomplete="off"><button class="syncbtn2" id="sync-on" type="button">Connect</button></div><div class="sd" style="font-size:11px;margin-top:3px">Pick any phrase and share it with your team. Everyone who enters the same key syncs together. Keep it private — it’s the encryption password.</div>')+
+    '</div></div>'+
+    // --- MANUAL (fallback) ---
+    '<div class="syncrow"><span class="si">⬆️</span><div style="flex:1"><div class="st">Export my notes</div><div class="sd">One-file backup, or hand to a teammate to merge. Also your offline fallback when auto-sync can’t reach the network.</div><button class="syncbtn2 ghost" id="sync-exp" type="button">Download notes file</button></div></div>'+
+    '<div class="syncrow"><span class="si">⬇️</span><div style="flex:1"><div class="st">Import &amp; merge a file</div><div class="sd">Merge a teammate’s exported file. Same safety-first rules as auto-sync.</div><button class="syncbtn2 ghost" id="sync-imp" type="button">Choose file to merge…</button></div></div>'+
+    '<div id="syncresult"></div>';
+  const g = id => document.getElementById(id);
+  g('sync-exp').onclick = exportNotes;
+  g('sync-imp').onclick = () => g('syncfile').click();
+  if(on){
+    g('sync-now').onclick = async () => { g('sync-now').textContent='Syncing…'; const r = await syncPull(); await syncPush(); g('syncstatline').textContent = 'Last synced '+_ago(localStorage.getItem('fcLastPull'))+(r&&r.merged?' · pulled '+r.merged+' update(s)':''); g('sync-now').textContent='Sync now'; render(); };
+    g('sync-off').onclick = () => { localStorage.removeItem('fcTeamKey'); clearInterval(_pullTimer); openSyncModal(); syncFreshness(); };
+  } else {
+    g('sync-on').onclick = () => { const k=(g('teamkeyin').value||'').trim();
+      // team key = the sole encryption secret for all synced notes. Bump from 4 to 8 chars minimum
+      // so an easy brute-force can't decrypt a team's blobs (Supabase table is anon-readable).
+      if(k.length<8){ g('teamkeyin').style.borderColor='#d94b4b'; g('teamkeyin').setAttribute('placeholder','need at least 8 characters'); return; }
+      localStorage.setItem('fcTeamKey', k); if(!localStorage.getItem('fcDevice')) _deviceId(); startTeamSync(); openSyncModal(); syncFreshness(); };
+    g('teamkeyin').onkeydown = (ev) => { if(ev.key==='Enter') g('sync-on').click(); };
+  }
+  document.getElementById('syncmodal').classList.add('show'); document.body.classList.add('modal-open');
+}
+function closeSyncModal(){ document.getElementById('syncmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+document.getElementById('syncbtn').onclick = openSyncModal;
+document.getElementById('syncfile').onchange = (e) => {
+  const f = e.target.files && e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const res = document.getElementById('syncresult'); e.target.value = '';
+    let parsed; try{ parsed = JSON.parse(rd.result); }catch(err){ if(res){ res.className='syncres warn'; res.textContent='That file isn’t a valid notes export (couldn’t read it as JSON).'; } return; }
+    const remote = (parsed && parsed._dealflow_notes) ? parsed.notes : (parsed && typeof parsed==='object' && !Array.isArray(parsed) ? parsed : null);
+    if(!remote){ if(res){ res.className='syncres warn'; res.textContent='That doesn’t look like a DealFlow notes file. Use one exported from this app.'; } return; }
+    const s = mergeNotes(remote);
+    if(res){
+      res.className = 'syncres';
+      res.className = s.violations ? 'syncres warn' : 'syncres';
+      res.innerHTML = s.leads ?
+        ('Merged <b>'+s.leads+'</b> lead'+(s.leads===1?'':'s')+' from '+((parsed.device&&parsed.device!==(localStorage.getItem('fcDevice')||''))?'your teammate':'that file')+'.'+
+         (s.optouts? ' <b>'+s.optouts+'</b> new DO-NOT-CONTACT opt-out'+(s.optouts===1?'':'s')+' now suppressed on this device.':'')+
+         (s.touches? ' '+s.touches+' contact-log entr'+(s.touches===1?'y':'ies')+' added.':'')+
+         (s.statuses? ' '+s.statuses+' status update'+(s.statuses===1?'':'s')+'.':'')+
+         (s.deals? ' '+s.deals+' verified-lien field'+(s.deals===1?'':'s')+' updated.':'')+
+         (s.violations? ' <b>⚠ '+s.violations+' lead'+(s.violations===1?'':'s')+'</b> now show a call you logged BEFORE this opt-out synced in — review each (⚠ contacted after opt-out) and document the cure.':''))
+        : 'Nothing new to merge — this device already has everything in that file.';
+    }
+  };
+  rd.readAsText(f);
+};
+// ================= /CROSS-DEVICE SYNC =================
 function view(){
   let rows;
   if(q){
@@ -1340,7 +2310,12 @@ function view(){
     if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
     if(tdOnly) rows = rows.filter(r => r.st === 'TD');
     if(hideDead) rows = rows.filter(r => { const st=(notes[r.case]||{}).status; return st!=='Dead' && st!=='DO NOT CONTACT'; });
-    if(hideFlagged) rows = rows.filter(r => !isFlaggedDead(r));
+    if(hideFlagged) rows = rows.filter(r => !isFlaggedDead(r) && !notForModel(r));
+    // 30%+ equity, TRUSTED: excludes eqfake (gross/unverified — HOA junior lien or a hidden senior
+    // mortgage can show 90%+ equity that isn't real) and anything the records already flagged dead
+    // (deeded away / underwater once the surviving mortgage is counted) — a raw >=30% number alone
+    // would resurface exactly the fantasy-equity leads the deal-killer flags exist to catch.
+    if(eq30Only) rows = rows.filter(r => netEqPct(r) >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r));
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
   }
@@ -1368,7 +2343,10 @@ function render(){
     if(on) th.dataset.dir = sortD<0 ? 'desc' : 'asc'; else th.removeAttribute('data-dir');
   });
   const _sc = rows.filter(r=>r._verdict==='STRONG').length, _mc = rows.filter(r=>r._verdict==='MARGINAL').length;
-  document.getElementById('stats').textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
+  const _viol = DATA.filter(r=>_dialedAfter(notes[r.case]).length).length;
+  const st = document.getElementById('stats');
+  st.textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
+  if(_viol){ const w=document.createElement('span'); w.className='statviol'; w.title='Leads with outreach logged AFTER the owner opted out — open each to review and document the cure.'; w.textContent=' · ⚠ '+_viol+' contacted after opt-out'; st.appendChild(w); }
   // KPI band — live portfolio metrics for the current view
   const _kp = rows.filter(r=>r._profit>0), _tot = _kp.reduce((s,r)=>s+r._profit,0);
   const _avg = _kp.length ? Math.round(_kp.reduce((s,r)=>s+(r._roi||0),0)/_kp.length) : 0;
@@ -1388,44 +2366,83 @@ function render(){
   const ds = document.getElementById('dealsum');
   if(ds) ds.textContent = prof.length + ' profitable in view · ' + fmt(totp) + ' total est. profit';
   const trs = [], cards = [];
-  rows.forEach(r => {
+  rows.forEach((r, _ri) => {
+    const _eager = _ri < 14;   // eager-load the above-the-fold thumbnails so the first screen is instant
     const n = notes[r.case] || {status:'', note:''};
     // ---- links, grouped by purpose:  CALL (green) · INVESTIGATE (gold) · PROPERTY (slate) · DO ----
     const gCall = [], gDig = [], gProp = [], gDo = [];
-    // CALL — skip-traced + saved phones. Manual dial only; DNC-flagged in amber.
-    (r.phones||[]).slice(0,3).forEach((ph,i) => {
-      const dnc = (r.phdnc||[])[i];
-      gCall.push('<a class="phone'+(dnc?' dnc':'')+'" href="tel:'+esc(ph)+'" title="Skip-traced owner phone'+(dnc?' — DNC-flagged, do not call':' — manual dial only, scrub DNC')+'">'+esc(fmtPhone(ph))+(dnc?' (DNC)':'')+'</a>');
-    });
-    if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, scrub DNC">'+esc(fmtPhone(n.phone))+'</a>');
-    // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
-    (r.emails||[]).slice(0,2).forEach(em => {
-      gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
-    });
+    // CALL — skip-traced + saved phones. HARD DNC GATE: DNC-flagged numbers render as non-clickable
+    // text (no tel:) so a flagged number can't be tap-dialed by accident. Even manual calls to
+    // DNC-registered numbers are actionable — Duguid only killed the autodialer theory, not DNC.
+    const optedOut = n.status === 'DO NOT CONTACT';
+    if(optedOut){
+      gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
+    } else {
+      // Good numbers get their own tappable line (the whole point is to make them easy to spot).
+      // DNC numbers collapse into ONE line instead of repeating "(DNC — mail/door only)" per number —
+      // 3 struck-through lines read as clutter/broken, not as useful data. Nothing is lost: the full
+      // list is still in the title tooltip.
+      const dncPh = [];
+      (r.phones||[]).slice(0,3).forEach((ph,i) => {
+        if((r.phdnc||[])[i]) dncPh.push(ph);
+        else gCall.push('<a class="phone" href="tel:'+esc(ph)+'" title="Skip-traced owner phone — manual dial only, one number at a time, 8am-8pm">'+esc(fmtPhone(ph))+'</a>');
+      });
+      if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a>');
+      if(dncPh.length){
+        const list = dncPh.map(fmtPhone).join(', ');
+        const label = dncPh.length===1 ? fmtPhone(dncPh[0])+' — DNC, mail/door only'
+                                        : dncPh.length+' more on file — DNC, mail/door only';
+        gCall.push('<span class="phone dnc nodial" title="DO NOT DIAL — '+esc(list)+'. Manual dials to DNC-registered numbers are still actionable; reach this owner by mail or the door instead.">'+esc(label)+'</span>');
+      }
+      // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
+      (r.emails||[]).slice(0,2).forEach(em => {
+        gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
+      });
+    }
     // INVESTIGATE — the owner's people, their loans, their other cases, this docket.
     if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
     if(r.peopleaddr) gDig.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
-    if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+r.recqs+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
+    if(r.cyberbg) gDig.push('<a class="dig" href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks — a second source, often better than TruePeopleSearch: free detail page (one more click) shows every phone with carrier + last-reported date, up to 7 emails, RELATIVES (separate from associates — good for the tenant-intel play), and prior addresses. Cross-check against the People links above.">CyberBG</a>');
+    if(r.cyberbgaddr) gDig.push('<a class="dig" href="'+esc(r.cyberbgaddr)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by ADDRESS — pinpoints who actually lives there now, distinct from a name search. Often reveals if the owner has moved (absentee — mail/calls to the property may not reach them), surfaces phones the name search misses, and confirms family/relatives at the address.">CyberBG&nbsp;addr</a>');
+    if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+esc(r.recqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
     else if(r.records) gDig.push('<a class="dig recsearch" href="'+esc(r.records)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
-    if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+r.ocsqs+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
+    if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
     else if(r.cases) gDig.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' court case search — pick Party Name and PASTE the owner (copied last-first).')+'">Cases</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
     if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
     // PROPERTY — value + county pages.
     if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
-    if(r.zillow) gProp.push('<a href="'+esc(r.zillow)+'" target="_blank" rel="noopener">Zillow</a>');
-    if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
+    else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' property appraiser')+'" target="_blank" rel="noopener" title="No direct appraiser record link for this parcel — opens a Google search for the address on the county appraiser instead.">Appraiser&nbsp;⌕</a>');
+    // Zillow text link removed — the property PHOTO (left of the row / top of the card) is now the path to
+    // Zillow: click it -> swipe gallery -> "View on Zillow" (real listing when known, else address search).
+    // Broward's tax portal (county-taxes.net) is Cloudflare-walled and uses opaque per-parcel UUID tokens
+    // that CANNOT be built from a folio (verified 2026-07-18: the working link is base64 of an internal
+    // "broward:real_estate:parents:<uuid>" id, and the search that resolves it is bot-blocked). So there's
+    // no honest one-click deep-link. Best achievable: open the tax SEARCH page and copy the folio to the
+    // clipboard so it's one tap + paste + Enter. Other counties keep their working folio deep-links.
+    if(r.tax){
+      if(/county-taxes\.net\/broward/.test(r.tax) && r.folio)
+        gProp.push('<a class="taxsearch" href="https://county-taxes.net/broward/property-tax" target="_blank" rel="noopener" data-folio="'+esc(r.folio)+'" title="Broward tax search. This county portal has no working per-parcel link (Cloudflare-walled, internal IDs), so this opens the search box and COPIES the folio '+esc(r.folio)+' — paste it, press Enter, and you get the bill + any delinquent taxes / certificates.">Taxes</a>');
+      else
+        gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
+    }
+    else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No direct tax-bill link for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
     // Auction: the live RealForeclose sale page for this date (all parcels + bidding). RealForeclose
     // returns 200 to a real browser; a bare/no-UA request 403s at their AWS load balancer, so it can
     // LOOK dead from a script — it isn't. May need a free RealForeclose login for bid detail, and the
     // site can be geo-restricted outside the US (e.g. abroad), so we don't gate the button on a probe.
     if(r.auc) gProp.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
-    // DO — actions.
-    gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
-    gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
-    gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
-    gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter, set a follow-up date, and see the contact history for this lead">Log</a>');
+    // DO — actions. Outreach generators are suppressed once a lead opts out (only Log/Copy remain,
+    // so the opt-out itself stays auditable).
+    if(!optedOut){
+      gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
+      gDo.push('<a href="#" class="hangergen" data-c="'+esc(r.case)+'" title="Neighbor-safe door hanger to leave on the visit: folds so only the owner\'s first name shows, message + date inside. Includes a tenant-intel script. Print, fold, tape to the door (never the mailbox).">Door hanger</a>');
+      gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
+      gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
+      gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
+    }
+    gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
     gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
@@ -1446,7 +2463,7 @@ function render(){
         mrText(r)+
         dealTrigger(r);
     }
-    const _fc = flagChips(r); if(_fc) prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FORECLOSURE up top
+    const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
     // Auction cell: date, countdown, filed/bought sub-lines
     const auc = '<div>'+esc(r.auction)+'</div>'+
       '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
@@ -1472,7 +2489,7 @@ function render(){
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
-    const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Appointment','Dead','DO NOT CONTACT'];
+    const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
                 : (n.status==='Appointment'||n.status==='Called - talked') ? 'st-hot'
                 : (n.status ? 'st-active' : '');
@@ -1482,25 +2499,27 @@ function render(){
     // free manual phone: look it up via the People button, then type it here (saves on this device)
     const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="phone" value="'+esc(n.phone||'')+'">';
     trs.push('<tr class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+'">'+
+      '<td class="pcell">'+_photoThumb(r, _eager)+'</td>'+
       '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
       '<td class="num">'+prof+'</td>'+
       '<td class="num">'+r.score+'</td>'+
       '<td>'+auc+'</td>'+
       '<td>'+ctype+'</td>'+
-      '<td>'+owner+'</td>'+
-      '<td>'+prop+'</td>'+
-      '<td><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
+      '<td class="owncell">'+owner+'</td>'+
+      '<td class="propcell">'+prop+'</td>'+
+      '<td class="mailcell"><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
       '<td class="links">'+linksHtml+'</td>'+
       '<td><div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+statusSel+'</td>'+
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
     cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
+      ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)
                   : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
-      (flagChips(r)?'<div class="fchips">'+flagChips(r)+'</div>':'')+
+      '<div class="fchips">'+flagChips(r)+landChips(r)+verifyChip(r)+'</div>'+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
@@ -1532,7 +2551,7 @@ function render(){
       : '<div class="empty-s">Try a wider tier, date range, or a different search.</div>'+
         '<button class="empty-reset" type="button">Clear all filters</button>';
     const msg = '<div class="empty"><div class="empty-t">No leads match these filters</div>'+cta+'</div>';
-    document.getElementById('tb').innerHTML = '<tr><td colspan="11" class="emptycell">'+msg+'</td></tr>';
+    document.getElementById('tb').innerHTML = '<tr><td colspan="12" class="emptycell">'+msg+'</td></tr>';
     if(cc) cc.innerHTML = msg;
     return;
   }
@@ -1546,6 +2565,7 @@ function resetFilters(){
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
   ['wk','hd','hf','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
   document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
+  county=''; _resetCountyPills();
   render();
 }
 document.addEventListener('click', e => { if(e.target.closest && e.target.closest('.empty-reset')) resetFilters(); });
@@ -1575,19 +2595,24 @@ document.getElementById('sortby').onchange = e => {
 };
 // county filter — populated on first render (DATA only exists AFTER the gate decrypts it), hidden if 1 county
 let _ctyInit=false;
-function initCountyFilter(){ if(_ctyInit) return; const sel=document.getElementById('cty'); if(!sel||!DATA||!DATA.length) return;
+function initCountyFilter(){ if(_ctyInit) return; const box=document.getElementById('ctygroup'); if(!box||!DATA||!DATA.length) return;
   _ctyInit=true;
   const tc=c=>c.toLowerCase().replace(/\b\w/g,m=>m.toUpperCase());
-  const cs=[...new Set(DATA.map(r=>r.county||'MIAMI-DADE'))].sort();
-  if(cs.length<2){ sel.style.display='none'; return; }
-  cs.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=tc(c); sel.appendChild(o); });
-  sel.onchange=e=>{ county=e.target.value; render(); };
+  const counts={}; DATA.forEach(r=>{ const c=r.county||'MIAMI-DADE'; counts[c]=(counts[c]||0)+1; });
+  const cs=Object.keys(counts).sort();
+  if(cs.length<2){ box.style.display='none'; return; }
+  const pill=(val,label,n)=>'<button class="cf'+((county||'')===val?' active':'')+'" data-cty="'+esc(val)+'" type="button">'+esc(label)+'<span class="cfn">'+n+'</span></button>';
+  box.innerHTML='<span class="flbl">County</span>'+pill('','All',DATA.length)+cs.map(c=>pill(c,tc(c),counts[c])).join('');
+  box.querySelectorAll('.cf').forEach(b=>b.onclick=()=>{ county=b.dataset.cty; box.querySelectorAll('.cf').forEach(x=>x.classList.toggle('active', x.dataset.cty===(county||''))); render(); });
 }
+function _resetCountyPills(){ const box=document.getElementById('ctygroup'); if(box) box.querySelectorAll('.cf').forEach(x=>x.classList.toggle('active', (x.dataset.cty||'')==='')); }
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
 document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
+document.getElementById('eq30').onclick = e => { eq30Only = !eq30Only; e.target.classList.toggle('active', eq30Only); render(); };
 document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
 document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
+document.getElementById('plan').onclick = () => openPlanModal();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
 // collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
 (function(){
@@ -1634,6 +2659,22 @@ document.addEventListener('click', e => {
   e.preventDefault();
   const r = DATA.find(x => x.case === a.dataset.c);
   if(r) genLetter(r);
+});
+// door-hanger generation (delegated for both table + cards)
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.hangergen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) genHanger(r);
+});
+// purchase-agreement generation (delegated for both table + cards)
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.contractgen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) genContract(r);
 });
 // phone-script generation (delegated for both table + cards)
 document.addEventListener('click', e => {
@@ -1928,12 +2969,24 @@ function lkReport(a){
   if(people) L.push(['People (name)',people]); if(paddr) L.push(['People (address)',paddr]);
   if(recURL) L.push([ctyName(cty)+' Official Records', recURL]);
   if(casURL) L.push(['Court cases', casURL]);
+  // Propwire requires a login for any real search (confirmed 2026-07-17 — no address deep-link works
+  // unauthenticated, the app just hangs on "Loading..."). No point faking a per-property link that
+  // won't resolve; this is a plain reference to their free-signup home search, address in hand.
+  L.push(['Propwire (comps/valuation — free sign-in)', 'https://propwire.com/']);
+  // Auction.com only lists bank-owned/trustee-engaged sales on their own platform — confirmed live
+  // 2026-07-17 that a real lead's address just returns unrelated county listings, and their `?q=`
+  // param is silently ignored (no address filtering exists). NOT useful for finding THIS property —
+  // useful for checking later if a TAKEN/already-sold property resurfaced as bank-owned REO.
+  const AC_SLUG = {'BROWARD':'Broward-county','MIAMI-DADE':'Miami-Dade-county','PALM BEACH':'Palm-Beach-county'}[cty];
+  if(AC_SLUG) L.push(['Auction.com — '+ctyName(cty)+' (county browse, NOT this address — see note)', 'https://www.auction.com/residential/fl/'+AC_SLUG]);
   if(lead&&lead.docket) L.unshift(['Docket (this case)',lead.docket]);
   if(lead&&lead.auc) L.splice(1,0,['Auction page',lead.auc]);
   const links=L.map(x=>'<a href="'+esc(x[1])+'" target="_blank" rel="noopener">'+esc(x[0])+'</a>').join('');
   return head+alert+stats+grid+rec+calc
     +'<div class="lksec">Dig deeper</div><div class="lkcard lklinks">'+links+'</div>'
-    +'<div class="lkfoot">Live county data &mdash; verify anything load-bearing on the linked sources.</div>';
+    +'<div class="lkfoot">Live county data &mdash; verify anything load-bearing on the linked sources.'
+    +(AC_SLUG?' Auction.com note: it only carries bank-owned/trustee sales listed on their own platform, not county-courthouse foreclosure sales like this one — the link opens their live '+esc(ctyName(cty))+' inventory in case this property (or one you already lost to a taken/underwater flag) resurfaces there as REO, not as a lookup for it now.':'')
+    +'</div>';
 }
 async function runLookup(rawVal){
   const v=((typeof rawVal==='string'?rawVal:(document.getElementById('lk').value||''))).trim(); if(!v) return;
@@ -1980,7 +3033,15 @@ document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('a.recsearch'); if(!a) return;
   const o = (a.dataset.o || '').trim(); if(!o) return;
   const orig = a.textContent, flash = () => { a.textContent = '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
-  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, flash); else flash();
+  // navigator.clipboard silently rejects on file:// (non-secure context) — fall back to execCommand
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, () => fallbackCopy(o, flash)); else fallbackCopy(o, flash);
+});
+// Broward Taxes: copy the folio (the portal can't be deep-linked — see the render comment) + open the search.
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('a.taxsearch'); if(!a) return;
+  const f = (a.dataset.folio || '').trim(); if(!f) return;
+  const orig = a.textContent, flash = () => { a.textContent = '✓ folio copied — paste it'; setTimeout(() => { a.textContent = orig; }, 1600); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(f).then(flash, () => fallbackCopy(f, flash)); else fallbackCopy(f, flash);
 });
 // document-level so it works in BOTH the desktop table (#tb) and mobile cards (#cards)
 document.addEventListener('click', e => {
@@ -1998,7 +3059,7 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); }
 });
 document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); } });
 // "/" focuses search (unless already typing in a field)
@@ -2010,15 +3071,32 @@ document.addEventListener('keydown', e => {
 document.addEventListener('change', e => {
   const c = e.target.dataset && e.target.dataset.c; if(!c) return;
   notes[c] = notes[c] || {status:'', note:''};
-  if(e.target.classList.contains('status')) { notes[c].status = e.target.value; save(); render(); return; }
+  if(e.target.classList.contains('status')) {
+    notes[c].status = e.target.value;
+    // opt-out ledger: stamp the date a lead says stop (FTSA 15-day cure / provable-compliance evidence);
+    // clear the stamp only if the status is deliberately moved off DO NOT CONTACT.
+    if(e.target.value === 'DO NOT CONTACT'){ if(!notes[c].optout){ notes[c].optout = _today(); _optLog(notes[c], 'set-local'); } }
+    else if(_isOptedOut(notes[c])){
+      // Never SILENTLY clear an opt-out on a status change — that would turn off every FTSA guard
+      // (dial-time block, dialed-after flag) while the audit trail still says they opted out. Confirm,
+      // stamp the reversal in the ledger, and revert the control if the operator cancels.
+      if(typeof confirm==='function' && !confirm('⚠ This owner opted out ('+(notes[c].optout||(_optoutTS(notes[c])||'').slice(0,10))+').\n\nChanging the status will CLEAR the do-not-contact suppression and turn OFF all FTSA warnings for this lead. Only do this to correct a mistaken opt-out.\n\nClear the opt-out?')){
+        notes[c].status = 'DO NOT CONTACT'; e.target.value = 'DO NOT CONTACT';   // revert model + control
+        save(); render(); return;
+      }
+      _optLog(notes[c], 'cleared-local'); delete notes[c].optout;
+    }
+    save(); render(); return;
+  }
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
   else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
-  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('jlien')) { notes[c].jlien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('assess')){ notes[c].assess = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; save(); recompute(); render(); refreshDealModal(); return; }
+  // stamp each deal-field with when it happened so a teammate's DOWNWARD correction can win on merge
+  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; (notes[c].dts=notes[c].dts||{}).slien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('jlien')) { notes[c].jlien = e.target.value; (notes[c].dts=notes[c].dts||{}).jlien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('assess')){ notes[c].assess = e.target.value; (notes[c].dts=notes[c].dts||{}).assess=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; (notes[c].dts=notes[c].dts||{}).mlien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; (notes[c].dts=notes[c].dts||{}).btax=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; (notes[c].dts=notes[c].dts||{}).occ=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
   else return;
   save();
 });
@@ -2116,6 +3194,8 @@ async function boot(){
   syncDealUI();
   recompute();
   render();
+  syncFreshness();
+  if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
   if(manual && unlockName) showWelcome(unlockName);   // greet them only when they actually enter a code
 }
 boot();
