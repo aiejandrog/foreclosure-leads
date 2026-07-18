@@ -793,6 +793,32 @@ body.modal-open{overflow:hidden}
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
 <div id="planmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="planbody"></div></div></div>
+<div id="mailmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="mailbody"></div></div></div>
+<style>
+/* [Cursor cloud edit] Mail-batch modal styles (Cursor cloud agent) */
+#mailmodal{display:none;position:fixed;inset:0;z-index:122}
+#mailmodal.show{display:block}
+#mailmodal .dm-card{width:min(600px,94vw)}
+#mailmodal .mailsummary{margin:10px 0;font-size:14px;color:#e4ecfa}
+#mailmodal .mailtools{display:flex;gap:6px;margin:0 0 8px}
+#mailmodal .mailtools button{background:#16233f;color:#cdd8ef;border:1px solid #33436a;border-radius:6px;padding:5px 11px;font-size:12px;cursor:pointer}
+#mailmodal .maillist{max-height:46vh;overflow-y:auto;border:1px solid #2c3a5a;border-radius:8px}
+#mailmodal .mailrow{display:flex;align-items:flex-start;gap:9px;padding:9px 11px;border-bottom:1px solid #1c2740;cursor:pointer;font-size:13px;color:#dbe5f5}
+#mailmodal .mailrow:last-child{border-bottom:none}
+#mailmodal .mailrow input{margin-top:3px}
+#mailmodal .mailtier{font-weight:700;border-radius:4px;padding:1px 6px;font-size:11px;background:#33436a;color:#fff;height:fit-content}
+#mailmodal .mailtier.tA{background:#1f7a44}
+#mailmodal .mailtier.tB{background:#c69a3a;color:#1a1205}
+#mailmodal .mailinfo{display:flex;flex-direction:column;gap:1px}
+#mailmodal .mailsub{font-size:11px;color:#8ea0c2}
+#mailmodal .maildl{background:#1f7a44;color:#fff;border:1px solid #1f7a44;border-radius:7px;padding:9px 15px;font-weight:700;font-size:14px;cursor:pointer}
+#mailmodal .maildl:disabled{opacity:.5;cursor:not-allowed}
+#mailmodal .mailfoot{display:flex;gap:8px;margin-top:12px}
+#mailmodal .mailcompliance{margin-top:12px;font-size:11px;line-height:1.5;color:#8ea0c2;background:#0e1627;border:1px solid #2c3a5a;border-left:3px solid #c69a3a;border-radius:6px;padding:9px 11px}
+#mailmodal .mut{color:#8ea0c2}
+#mailmodal .warn{color:#f0a58e;font-size:12px}
+#mailmodal code{background:#0e1627;border:1px solid #2c3a5a;border-radius:4px;padding:1px 5px;font-size:12px}
+</style>
 <div id="gallerymodal"><div class="dm-backdrop"></div><div class="dm-card gcard"><button class="dm-close" type="button" title="Close">&times;</button><div id="gallerybody"></div></div></div>
 <div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
 <div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
@@ -823,6 +849,7 @@ body.modal-open{overflow:hidden}
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="plan" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script.">📋 Plan today</button>
+<button id="mailbatch" title="Select every lead worth mailing right now (Tier A/B, real homeowner, deliverable address, auction 5+ days out, not opted out), then download a queue file. The actual mailing is done locally by outreach_mail.py — the Lob key never touches the browser.">✉ Mail batch</button>
 <button id="due" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days">⚡ Due</button>
 <input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list.">
 <label style="font-size:12px">Sort <select id="sortby">
@@ -2978,9 +3005,79 @@ document.addEventListener('click', e => {
   if(!btn) return;
   openDealModal(btn.dataset.c);
 });
+// [Cursor cloud edit] ===================== MAIL BATCH (select + export; local script sends) =====================
+// A static site has no backend and must never hold the Lob key, so this button only SELECTS mailable leads
+// and exports a queue file; the local outreach_mail.py does the actual send. Mailable = Tier A/B, a real
+// homeowner (no LLC/company, no vacant land), a deliverable address, an auction 5+ days out (mail needs
+// runway), not opted out / dead / records-flagged. Opt-outs are read from the tracker's own notes.
+const MAIL_COST=0.92;   // ~Lob standard letter (1pg, b/w, #10 double-window) all-in
+let mailSel={};
+function _deliverable(addr){ const s=String(addr||''); return /,/.test(s) && /\b\d{5}\b/.test(s); }
+function mailableLeads(){
+  return DATA.filter(r=>{
+    const n=notes[r.case]||{};
+    if(!(r.tier==='A'||r.tier==='B')) return false;
+    if(r.co||r.vac) return false;                                            // no company-owned / vacant land
+    if(r.days==null||r.days<5) return false;                                 // auction 5+ days out
+    if(!_deliverable(r.mail||r.addr)) return false;                          // needs a mailable address
+    if(n.status==='DO NOT CONTACT'||n.status==='Dead') return false;
+    if(typeof _isOptedOut==='function' && _isOptedOut(n)) return false;      // honor the opt-out ledger
+    if(typeof isFlaggedDead==='function' && isFlaggedDead(r)) return false;  // deeded away / underwater
+    return true;
+  }).sort((a,b)=>{ const da=a.days<0?9999:a.days, db=b.days<0?9999:b.days; return da-db || (b._profit||0)-(a._profit||0); });
+}
+function _mailCost(n){ return '$'+Number(n).toFixed(2); }
+function _mailUpdateSummary(){
+  const el=document.getElementById('mailsummary'); if(!el) return;
+  const sel=Object.keys(mailSel).filter(c=>mailSel[c]!==false).length;
+  el.innerHTML='<b>'+sel+'</b> selected \u00b7 est. postage '+_mailCost(sel*MAIL_COST)+' <span class="mut">(@ '+_mailCost(MAIL_COST)+'/letter)</span>';
+  const dl=document.querySelector('#mailmodal .maildl'); if(dl){ dl.disabled=!sel; dl.textContent='\u2b07 Download batch'+(sel?' ('+sel+')':''); }
+}
+function renderMailModal(){
+  const leads=mailableLeads(), body=document.getElementById('mailbody');
+  if(!leads.length){ body.innerHTML='<div class="dm-head"><div class="dm-title">\u2709 Mail batch</div></div><div class="mut" style="padding:10px 2px">No leads are mailable right now — need Tier A/B, a real homeowner (no LLC/vacant land), a deliverable address, an auction 5+ days out, and not opted out.</div>'; return; }
+  const rows=leads.map(r=>{
+    const owner=_ownerName((r.owners||'').split(';')[0].trim());
+    const checked=mailSel[r.case]!==false;
+    return '<label class="mailrow"><input type="checkbox" class="mailck" data-c="'+esc(r.case)+'"'+(checked?' checked':'')+'>'
+      +'<span class="mailtier t'+esc(r.tier)+'">'+esc(r.tier)+'</span>'
+      +'<span class="mailinfo"><span><b>'+esc(owner)+'</b><span class="mut"> \u00b7 '+esc(r.addr||'')+'</span></span>'
+      +'<span class="mailsub">'+(r.st==='TD'?'Tax-deed':'Foreclosure')+' sale '+esc(r.auction||'')+(r.days>=0?' \u00b7 in '+r.days+'d':'')+'</span></span></label>';
+  }).join('');
+  const sub = (sender.name||'').trim() ? '' : '<div class="warn" style="margin:2px 0 8px">Set your sender identity under <b>Filters &amp; setup \u2192 Sender</b> — it is carried into the export so the letters are signed correctly.</div>';
+  body.innerHTML='<div class="dm-head"><div class="dm-title">\u2709 Mail batch</div>'
+    +'<div class="dm-sub">Every lead worth mailing right now. Uncheck anyone, then <b>Download batch</b> and run <code>python outreach_mail.py --queue &lt;file&gt;</code> locally (add <code>--send</code> to mail).</div></div>'
+    +sub
+    +'<div class="mailsummary" id="mailsummary"></div>'
+    +'<div class="mailtools"><button class="mailall" type="button">Select all</button><button class="mailnone" type="button">Select none</button></div>'
+    +'<div class="maillist">'+rows+'</div>'
+    +'<div class="mailfoot"><button class="maildl" type="button">\u2b07 Download batch</button></div>'
+    +'<div class="mailcompliance"><b>The Lob key never touches the browser.</b> This only selects &amp; exports a queue; the local <code>outreach_mail.py</code> does the send. Opt-outs/DNC are excluded automatically. Direct mail is not restricted like calls/texts, but keep letters honest and FS&nbsp;501.1377-compliant.</div>';
+  _mailUpdateSummary();
+}
+function openMailModal(){ mailSel={}; mailableLeads().forEach(r=>mailSel[r.case]=true); document.getElementById('mailmodal').classList.add('show'); document.body.classList.add('modal-open'); renderMailModal(); }
+function closeMailModal(){ document.getElementById('mailmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+function downloadMailBatch(){
+  const leads=mailableLeads().filter(r=>mailSel[r.case]!==false);
+  if(!leads.length) return;
+  const out={ generated:new Date().toISOString(), source:'DEALFLOW mail batch', cost_per_letter:MAIL_COST,
+    sender:{ name:sender.name||'', llc:sender.llc||'', phone:sender.phone||'', title:sender.title||'', email:sender.email||'', addr:sender.addr||'', web:sender.web||'' },
+    count:leads.length,
+    leads: leads.map(r=>({ case:r.case, tier:r.tier, owner:_ownerName((r.owners||'').split(';')[0].trim()), owners:r.owners||'', addr:r.addr||'', mail:r.mail||r.addr||'', value:r.value||0, judgment:r.judg||0, plaintiff:r.plaintiff||'', auction:r.auction||'', days:r.days, sale_type:r.st||'FC', folio:r.folio||'' })) };
+  const blob=new Blob([JSON.stringify(out,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='dealflow-mail-batch-'+_today()+'.json'; a.click();
+}
+document.getElementById('mailbatch').onclick=()=>openMailModal();
+document.addEventListener('change', e=>{ const ck=e.target.closest&&e.target.closest('.mailck'); if(ck){ mailSel[ck.dataset.c]=ck.checked; _mailUpdateSummary(); } });
+document.addEventListener('click', e=>{
+  const mm=document.getElementById('mailmodal'); if(!mm||!mm.classList.contains('show')) return;
+  if(e.target.closest&&e.target.closest('.mailall')){ document.querySelectorAll('#mailmodal .mailck').forEach(c=>{c.checked=true; mailSel[c.dataset.c]=true;}); _mailUpdateSummary(); return; }
+  if(e.target.closest&&e.target.closest('.mailnone')){ document.querySelectorAll('#mailmodal .mailck').forEach(c=>{c.checked=false; mailSel[c.dataset.c]=false;}); _mailUpdateSummary(); return; }
+  if(e.target.closest&&e.target.closest('.maildl')){ e.preventDefault(); downloadMailBatch(); return; }
+});
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); }
 });
 document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); } });
 // "/" focuses search (unless already typing in a field)
