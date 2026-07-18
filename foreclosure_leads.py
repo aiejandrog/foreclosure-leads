@@ -813,6 +813,13 @@ def make_tracker(leads):
                 _cft = (_h.get('ftype') if _h else '') or _d.get('ftype') or _fc_type(_d.get('case', ''))
                 if _cft == 'HOA':
                     _d['ftype'] = 'HOA'; _d['ctype'] = 'HOA'; _d['mr'] = True   # whole 1st mortgage survives an HOA sale
+                    # ...and the shown equity is fantasy (the 1st survives), so zero it for score/tier —
+                    # a chain-CONFIRMED HOA in the 20-60% judgment band would otherwise still headline
+                    # Tier A on the equity sort (mirrors county to_slim + the MD path).
+                    _d['eqfake'] = True
+                    _db = 10 if (isinstance(_d.get('days'), int) and 0 <= _d['days'] <= 30) else 0
+                    _d['score'] = (max(0, min(100, (10 if _d.get('hs') else 0) + _db)) if _d.get('value') else 0)
+                    _d['tier'] = 'C'
                 elif _cft == 'MORTGAGE':
                     _d['ftype'] = 'MORTGAGE'
                     # Clear mortgage-risk ONLY when the RECORDED CHAIN (_h) verified a bank foreclosure
@@ -855,7 +862,12 @@ def make_tracker(leads):
     desktop = os.path.join(DEALFLOW_DIR,'Foreclosure Lead Tracker.html')
 
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
-    open(desktop,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(slim)))
+    # Guarded: if OneDrive has the Desktop HTML open/locked, don't let a PermissionError abort the whole
+    # build (which would also skip the docs/index.html publish below). Warn and keep going.
+    try:
+        open(desktop,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(slim)))
+    except Exception as e:
+        print(f"WARN: could not write Desktop copy ({e}) - is it open? continuing to publish docs/index.html")
 
     # P0: the template references photos as relative 'img/<name>.jpg', which only resolves next to
     # docs/index.html (docs/img/). Ship the referenced files beside the Desktop copy too, or every

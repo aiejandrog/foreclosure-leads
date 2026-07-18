@@ -1168,7 +1168,7 @@ function _nowTS(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); ret
 // FTSA compliance audit trail: append a timestamped opt-out/suppression event to a lead's ledger.
 // 'set-local' = an operator marked DO NOT CONTACT here; 'suppressed-here' = a teammate's opt-out
 // arrived via merge and started suppressing on THIS device. This is the paper trail for a lawyer.
-function _optLog(n, act, src){ n.optlog = n.optlog || []; n.optlog.push({ts:_nowTS(), act:act, src:src||(localStorage.getItem('fcDevice')||'this device')}); }
+function _optLog(n, act, src){ n.optlog = n.optlog || []; n.optlog.push({ts:_nowTS(), tsu:Date.now(), act:act, src:src||(localStorage.getItem('fcDevice')||'this device')}); }
 // FTSA red flag: any outreach logged AFTER a lead's opt-out date is the exact violation a plaintiff
 // hunts for. The team merge makes this RETROACTIVE — a call you logged at 3pm, before a teammate's
 // 2pm opt-out synced onto your device at 9pm, becomes an after-opt-out contact the moment it merges.
@@ -1177,20 +1177,33 @@ const _OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};
 // the opt-out's EFFECTIVE moment: the second-resolution 'set-local' timestamp from the audit ledger
 // (authoritative — that's when the owner said stop). Falls back to null for legacy leads that opted
 // out before the ledger existed, where we only have a date.
-function _optoutTS(n){
-  let ts = null;
-  (n.optlog||[]).forEach(ev => { if(ev.act==='set-local' && ev.ts && (!ts || ev.ts < ts)) ts = ev.ts; });
-  return ts;
+// EFFECTIVE opt-out state, derived from the AUDIT LEDGER (authoritative), not the mutable n.optout
+// scalar — a status change can delete the scalar, but enforcement must survive it. A later
+// 'cleared-local' event reverses an earlier opt-out (deliberate correction of a mistaken opt-out).
+// Returns {out, ts, tsu}: ts (string, for display/same-device compare), tsu (epoch ms, skew-proof).
+function _effOptout(n){
+  if(!n) return {out:false, ts:null, tsu:null};
+  const evs = (n.optlog||[]).filter(e => e.act==='set-local' || e.act==='suppressed-here' || e.act==='cleared-local');
+  if(!evs.length) return {out: !!n.optout, ts:null, tsu:null};   // legacy leads: trust the scalar
+  const key = e => (typeof e.tsu==='number' ? e.tsu : (Date.parse((e.ts||'').replace(' ','T')) || 0));
+  let latest = evs[0]; evs.forEach(e => { if(key(e) >= key(latest)) latest = e; });
+  if(latest.act === 'cleared-local') return {out:false, ts:null, tsu:null};
+  let ts=null, tsu=null;
+  evs.forEach(e => { if(e.act!=='cleared-local'){ if(e.ts && (!ts || e.ts<ts)) ts=e.ts; if(typeof e.tsu==='number' && (tsu==null || e.tsu<tsu)) tsu=e.tsu; } });
+  return {out:true, ts, tsu};
 }
+function _optoutTS(n){ return _effOptout(n).ts; }
+function _optoutTSU(n){ return _effOptout(n).tsu; }
+function _isOptedOut(n){ return _effOptout(n).out; }
 function _dialedAfter(n){
-  if(!n || !n.optout || !n.touches) return [];
-  const ots = _optoutTS(n);   // full 'YYYY-MM-DD HH:MM:SS' or null
+  if(!n || !n.touches || !_isOptedOut(n)) return [];
+  const ots = _optoutTS(n), otsu = _optoutTSU(n);
+  const optoutDate = n.optout || (ots ? ots.slice(0,10) : null);
   return n.touches.filter(t => {
     if(!_OUTREACH_CH[t.ch]) return false;
-    // precise when BOTH sides carry a timestamp — catches a call placed hours AFTER a same-day opt-out
-    if(ots && t.ts) return t.ts > ots;
-    // legacy fallback: date-only, strict > (no false positives, but can't see same-day)
-    return t.d && t.d > n.optout;
+    if(otsu!=null && typeof t.tsu==='number') return t.tsu > otsu;   // skew-proof absolute compare
+    if(ots && t.ts) return t.ts > ots;                              // same-device second-resolution
+    return t.d && optoutDate && t.d > optoutDate;                   // legacy date-only fallback
   });
 }
 function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
@@ -1213,10 +1226,10 @@ function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=note
   // forensic ("here's the violation you committed") to preventive ("you're about to contact a DNC lead
   // — stop"). If they proceed anyway (to document a genuine mistake for the cure trail), it's allowed
   // and _dialedAfter still flags it.
-  if(n.optout && _OUTREACH_CH[ch] && opt.status !== 'DO NOT CONTACT'){
+  if(_isOptedOut(n) && _OUTREACH_CH[ch] && opt.status !== 'DO NOT CONTACT'){
     if(typeof confirm === 'function' && !confirm('⚠ STOP — this owner opted out on '+n.optout+'.\n\nLogging a '+ch+' is an FTSA violation (~$500+ per contact). Only proceed to DOCUMENT a contact that already happened by mistake — it will be flagged for your cure records.\n\nLog this '+ch+' anyway?')) return false;
   }
-  n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); return true; }
+  n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), tsu:Date.now(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); return true; }
 function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
 // ---- cadence engine: WHICH channel WHEN, keyed to days-until-auction + touch history. ----
 // Content-agnostic by design: Jose sends mail/email using HIS OWN script — this only schedules.
@@ -1369,7 +1382,7 @@ function logModalBody(r){
   const hist = ts.length ? '<ul class="lhist">'+ts.map(t=>'<li>'+esc(t.d)+' · '+(CH_ICON[t.ch]||'')+' '+esc(t.out)+'</li>').join('')+'</ul><button class="lundo" data-c="'+esc(r.case)+'" type="button">Undo last</button>' : '<div class="mut">No touches logged yet.</div>';
   // FTSA opt-out audit ledger — a timestamped, teammate-attributed suppression trail (the "wave at a
   // plaintiff's lawyer" evidence). Only shown once a lead has been opted out.
-  const _actLbl = {'set-local':'marked DO NOT CONTACT', 'suppressed-here':'opt-out synced in — suppressed on this device'};
+  const _actLbl = {'set-local':'marked DO NOT CONTACT', 'suppressed-here':'opt-out synced in — suppressed on this device', 'cleared-local':'do-not-contact CLEARED on this device'};
   const viol = _dialedAfter(n);
   const violBanner = viol.length ? '<div class="optviol"><div class="ovt">⚠ CONTACT AFTER OPT-OUT — FTSA RISK</div>'+
     '<div class="ovl">Owner opted out <b>'+esc(n.optout)+'</b>, but these outreach touches are logged after that:</div>'+
@@ -1986,12 +1999,12 @@ function _mergeLead(local, remote){
   // status: DO NOT CONTACT wins over everything, then Dead, else the side with the more recent touch
   if(_DNC(local.status) || _DNC(remote.status)){ if(out.status !== 'DO NOT CONTACT'){ out.status = 'DO NOT CONTACT'; ch.status = true; } if(!out.optout){ out.optout = remote.optout || local.optout || _today(); ch.optout = ch.optout || !local.optout; }
     // teammate's opt-out just started suppressing on THIS device — stamp when, for the paper trail
-    if(!_wasDNC){ out.optlog = out.optlog || []; out.optlog.push({ts:_nowTS(), act:'suppressed-here', src:(localStorage.getItem('fcDevice')||'this device')}); } }
+    if(!_wasDNC){ out.optlog = out.optlog || []; out.optlog.push({ts:_nowTS(), tsu:Date.now(), act:'suppressed-here', src:(localStorage.getItem('fcDevice')||'this device')}); } }
   else if(_DEAD(local.status) || _DEAD(remote.status)){ if(!_DEAD(out.status)){ out.status = 'Dead'; ch.status = true; } }
   else if(remote.status && remote.status !== (local.status||'') && _lastTouchD(remote) >= _lastTouchD(local)){ out.status = remote.status; ch.status = true; }
   // contact log: union, dedupe by (date|channel|outcome)
   const seen = new Set(), tt = [];
-  (local.touches||[]).concat(remote.touches||[]).forEach(t => { const k=(t.d||'')+'|'+(t.ch||'')+'|'+(t.out||''); if(!seen.has(k)){ seen.add(k); tt.push(t); } });
+  (local.touches||[]).concat(remote.touches||[]).forEach(t => { const k=(t.ts||t.d||'')+'|'+(t.ch||'')+'|'+(t.out||''); if(!seen.has(k)){ seen.add(k); tt.push(t); } });
   tt.sort((a,b)=>(a.d||'').localeCompare(b.d||''));
   ch.touches = Math.max(0, tt.length - (local.touches||[]).length);
   if(tt.length) out.touches = tt;
@@ -2025,7 +2038,11 @@ function mergeNotes(remoteNotes){
     if(_dialedAfter(merged).length > before) sum.violations++;
   });
   try{ localStorage.setItem('fcLastMerge', _nowTS()); }catch(e){}
-  save(); try{ recompute(); }catch(e){} render(); syncFreshness();
+  // only persist/re-render when the merge actually changed something — otherwise the 45s auto-sync poll
+  // triggers a needless save()->syncPushSoon()->push + full render on every empty pull (jank + churn).
+  const changed = sum.leads || sum.touches || sum.optouts || sum.statuses || sum.deals || sum.notes;
+  if(changed){ save(); try{ recompute(); }catch(e){} render(); }
+  syncFreshness();
   return sum;
 }
 // staleness nag: turn the Sync button amber when the last team merge is old, so a stale opt-out
@@ -2041,7 +2058,9 @@ const SB_TBL = SB_URL + '/rest/v1/dealflow_sync';
 let _syncTimer = null, _syncBusy = false, _pullTimer = null;
 function _teamKey(){ return localStorage.getItem('fcTeamKey') || ''; }
 function _deviceId(){ let d = localStorage.getItem('fcDevice'); if(!d){ d = 'dev-' + Math.abs((''+_nowTS()+navigator.userAgent).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0)).toString(36); localStorage.setItem('fcDevice', d); } return d; }
-const _b64 = u8 => btoa(String.fromCharCode.apply(null, u8));
+// chunked so a large ciphertext can't blow the argument limit of String.fromCharCode.apply
+// (a heavy note-taker's blob is >65K bytes → RangeError → sync would silently die as "offline")
+const _b64 = u8 => { let s=''; for(let i=0;i<u8.length;i+=0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i+0x8000)); return btoa(s); };
 const _u8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
 async function _teamId(key){ const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('dealflow-sync:'+key)); return _b64(new Uint8Array(h)).replace(/[^a-zA-Z0-9]/g,'').slice(0,32); }
 async function _deriveKey(key, salt){ const bk = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), 'PBKDF2', false, ['deriveKey']); return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:200000, hash:'SHA-256'}, bk, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']); }
@@ -2926,7 +2945,16 @@ document.addEventListener('change', e => {
     // opt-out ledger: stamp the date a lead says stop (FTSA 15-day cure / provable-compliance evidence);
     // clear the stamp only if the status is deliberately moved off DO NOT CONTACT.
     if(e.target.value === 'DO NOT CONTACT'){ if(!notes[c].optout){ notes[c].optout = _today(); _optLog(notes[c], 'set-local'); } }
-    else if(notes[c].optout) delete notes[c].optout;
+    else if(_isOptedOut(notes[c])){
+      // Never SILENTLY clear an opt-out on a status change — that would turn off every FTSA guard
+      // (dial-time block, dialed-after flag) while the audit trail still says they opted out. Confirm,
+      // stamp the reversal in the ledger, and revert the control if the operator cancels.
+      if(typeof confirm==='function' && !confirm('⚠ This owner opted out ('+(notes[c].optout||(_optoutTS(notes[c])||'').slice(0,10))+').\n\nChanging the status will CLEAR the do-not-contact suppression and turn OFF all FTSA warnings for this lead. Only do this to correct a mistaken opt-out.\n\nClear the opt-out?')){
+        notes[c].status = 'DO NOT CONTACT'; e.target.value = 'DO NOT CONTACT';   // revert model + control
+        save(); render(); return;
+      }
+      _optLog(notes[c], 'cleared-local'); delete notes[c].optout;
+    }
     save(); render(); return;
   }
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;

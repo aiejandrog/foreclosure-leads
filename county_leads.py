@@ -144,9 +144,15 @@ def to_slim(county, cfg, base, items):
         # Fake equity must NOT rank a junior-lien lead as a 98%-equity Tier-A deal. Zero it for score/tier
         # (mirrors MD, which awards equity points only when 'not is_hoa'); the gross % still shows in the
         # cell, muted, and the UI verdict engine forces VERIFY off mr=True.
-        eff_eq = 0 if eqfake else eqp
+        # A MISSING judgment ($0 from an unposted 'Final Judgment Amount') is NOT $0 owed — it makes
+        # eqp read a fantasy 100%. The suspect-equity guard needs judg>0, so it can't catch this; mirror
+        # Miami-Dade's judgment_unknown handling and never credit equity when the debt is unknown.
+        judg_unknown = (st != 'TD') and (judg <= 0)
+        eff_eq = 0 if (eqfake or judg_unknown) else eqp
         score = max(0, min(100, round(eff_eq) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
         tier = 'A' if (val and eff_eq >= 40 and 0 <= days <= 45) else ('B' if val and eff_eq >= 15 else 'C')
+        if judg_unknown:
+            tier = 'C'; score = min(score, 40)
         # city-only address — can't be mailed/driven/knocked; cap at C (mirrors the MD disqualifier)
         no_street = not re.match(r'^\s*(?:\d[\d-]*|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s+\S', addr or '', re.I)
         if no_street:
