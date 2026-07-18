@@ -1197,7 +1197,16 @@ function contactChip(r){
   return h;
 }
 function _setNext(n, days){ if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); }
+function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''};
+  // PREVENTIVE FTSA guard (dial-time): block logging an outreach touch on a lead ALREADY opted out —
+  // unless this very touch is the one recording the opt-out ("Said STOP"). Shifts the tool from
+  // forensic ("here's the violation you committed") to preventive ("you're about to contact a DNC lead
+  // — stop"). If they proceed anyway (to document a genuine mistake for the cure trail), it's allowed
+  // and _dialedAfter still flags it.
+  if(n.optout && _OUTREACH_CH[ch] && opt.status !== 'DO NOT CONTACT'){
+    if(typeof confirm === 'function' && !confirm('⚠ STOP — this owner opted out on '+n.optout+'.\n\nLogging a '+ch+' is an FTSA violation (~$500+ per contact). Only proceed to DOCUMENT a contact that already happened by mistake — it will be flagged for your cure records.\n\nLog this '+ch+' anyway?')) return false;
+  }
+  n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); return true; }
 function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
 // ---- cadence engine: WHICH channel WHEN, keyed to days-until-auction + touch history. ----
 // Content-agnostic by design: Jose sends mail/email using HIS OWN script — this only schedules.
