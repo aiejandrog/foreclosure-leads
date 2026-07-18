@@ -331,6 +331,10 @@ def load_suppress(path):
         data = json.load(open(path, encoding='utf-8'))
     except Exception:
         return out
+    # The tracker's exportNotes() wraps the map: {_dealflow_notes:1, exported, device, notes:{case:{...}}}.
+    # Unwrap to the inner notes map, or opt-outs would never be detected and we'd mail them.
+    if isinstance(data, dict) and isinstance(data.get('notes'), dict):
+        data = data['notes']
     if isinstance(data, dict):
         for case, v in data.items():
             if _is_suppressed_note(v):
