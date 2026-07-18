@@ -16,7 +16,27 @@ handling. Script: `outreach_mail.py`.
    entity** (this is who the letters come from). `addr` must be a full return address
    (`LINE1, CITY, FL 33172`) or `--send` is refused.
 
-## Every send (safe flow)
+## Recommended: the "✉ Mail batch" button (in the tracker)
+
+Easiest, safest flow — you review the exact list in the UI and the opt-outs come along automatically:
+
+1. In the tracker toolbar click **✉ Mail batch**. It lists every mailable lead (Tier A/B, real owner —
+   no LLC/vacant — deliverable address, auction 5+ days out, **not opted out**), with a live count + cost.
+2. **Uncheck anyone** you don't want to mail, then **⬇ Download batch** → `dealflow-mailqueue-YYYY-MM-DD.json`.
+   (The Lob key is never in the page — this only selects and exports.)
+3. **Dry run** it (no key, nothing sent) — review who gets mailed + the cost + `mail_preview.html`:
+   ```
+   python outreach_mail.py --queue dealflow-mailqueue-2026-07-18.json
+   ```
+4. **Send for real** (only after the dry run looks right):
+   ```
+   python outreach_mail.py --queue dealflow-mailqueue-2026-07-18.json --send
+   ```
+   The queue trusts your picks but still skips undeliverable addresses and anyone already mailed
+   (`mail_sent.json` ledger, so re-runs never double-mail). Sender identity comes from `sender.json`,
+   falling back to whatever you set in the tracker's Sender identity fields.
+
+## Alternative: filter from the whole book on the command line
 
 1. **Capture opt-outs first.** In the tracker (⇄ Sync / team → export a notes file) download
    `dealflow-notes-YYYY-MM-DD.json`. This carries every DO NOT CONTACT / opted-out lead.

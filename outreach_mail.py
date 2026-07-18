@@ -275,8 +275,13 @@ p{{margin:0 0 12px}}
 </div></body></html>"""
 
 
-def build_selection(leads, tiers, min_days, suppress, sent, remail, limit):
-    """Apply every filter and return (queue, skip_reasons_counter)."""
+def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust_selection=False):
+    """Apply every filter and return (queue, skip_reasons_counter).
+
+    trust_selection=True (queue mode): the human already picked these leads in the tracker, so skip the
+    JUDGMENT filters (tier / company / vacant / days-out) and keep only the HARD safety backstops that a
+    letter physically requires or that law requires: a real owner name + deliverable address, opt-out
+    suppression, and no double-mailing."""
     from collections import Counter
     skips = Counter()
     seen = set()
@@ -286,24 +291,26 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit):
         if not k or k in seen:
             skips['duplicate'] += 1
             continue
-        tier = str(_g(r, 'tier')).upper()
-        if tiers and tier not in tiers:
-            skips['tier'] += 1
-            continue
+        if not trust_selection:
+            tier = str(_g(r, 'tier')).upper()
+            if tiers and tier not in tiers:
+                skips['tier'] += 1
+                continue
         owner = _owner_name(r)
         if not owner:
             skips['no-owner'] += 1
             continue
-        if _COMPANY_RE.search(owner):
-            skips['company-owned'] += 1
-            continue
-        if _is_vacant(r):
-            skips['vacant-land'] += 1
-            continue
-        d = _days(r)
-        if d < min_days:
-            skips['too-late/passed' if d >= 0 else 'auction-passed'] += 1
-            continue
+        if not trust_selection:
+            if _COMPANY_RE.search(owner):
+                skips['company-owned'] += 1
+                continue
+            if _is_vacant(r):
+                skips['vacant-land'] += 1
+                continue
+            d = _days(r)
+            if d < min_days:
+                skips['too-late/passed' if d >= 0 else 'auction-passed'] += 1
+                continue
         if _case(r) in suppress:
             skips['suppressed(DNC/opt-out)'] += 1
             continue
@@ -357,6 +364,22 @@ def _is_suppressed_note(v):
     return any(s in st for s in _SUPPRESS_STATUS)
 
 
+def load_queue(path):
+    """Load a mail-queue file exported by the tracker's 'Mail batch' button.
+    Shape: {_dealflow_mailqueue:1, exported, sender:{...}, leads:[{case,owners,addr,mail,...}]}.
+    Also tolerates a bare list of leads. Returns (leads_list, sender_dict_or_empty)."""
+    if not path or not os.path.exists(path):
+        raise SystemExit(f"queue file not found: {path}")
+    data = json.load(open(path, encoding='utf-8'))
+    if isinstance(data, list):
+        return data, {}
+    if isinstance(data, dict):
+        leads = data.get('leads')
+        if isinstance(leads, list):
+            return leads, (data.get('sender') if isinstance(data.get('sender'), dict) else {})
+    raise SystemExit(f"unrecognized queue file shape: {path}")
+
+
 def send_via_lob(key, to_addr, from_addr, file_html, use_type='marketing', mail_type='usps_first_class'):
     import requests
     auth = base64.b64encode((key + ':').encode()).decode()
@@ -395,26 +418,36 @@ def main():
     ap.add_argument('--suppress', default='', help='exported tracker notes JSON: skip DNC/opted-out cases')
     ap.add_argument('--limit', type=int, default=0, help='cap the batch size (0 = no cap)')
     ap.add_argument('--remail', action='store_true', help='include cases already in mail_sent.json')
+    ap.add_argument('--queue', default='', help="a mail-queue JSON from the tracker's 'Mail batch' button (pre-selected, opt-out-filtered)")
     ap.add_argument('--send', action='store_true', help='ACTUALLY send via Lob (needs lob.key + funded account)')
     a = ap.parse_args()
 
     tiers = None if a.tier.lower() == 'all' else set(t.strip().upper() for t in a.tier.split(',') if t.strip())
     snd = _load_sender()
-    from_parsed = parse_address(snd.get('addr', '')) if snd.get('addr') else None
-    leads = _load_leads()
-    if not leads:
-        print('No leads found (run the scraper first). Nothing to do.')
-        return
-    suppress = load_suppress(a.suppress)
     try:
         sent = json.load(open(SENT_LEDGER, encoding='utf-8')) if os.path.exists(SENT_LEDGER) else {}
     except Exception:
         sent = {}
+    suppress = load_suppress(a.suppress)
 
-    queue, skips = build_selection(leads, tiers, a.min_days, suppress, sent, a.remail, a.limit)
+    if a.queue:
+        # human already selected + opt-out-filtered these in the tracker; trust the picks, keep safety backstops
+        leads, qsender = load_queue(a.queue)
+        if qsender and not snd:
+            snd = qsender  # fall back to the sender identity set in the tracker if no local sender.json
+        queue, skips = build_selection(leads, None, a.min_days, suppress, sent, a.remail, a.limit, trust_selection=True)
+    else:
+        leads = _load_leads()
+        if not leads:
+            print('No leads found (run the scraper first). Nothing to do.')
+            return
+        queue, skips = build_selection(leads, tiers, a.min_days, suppress, sent, a.remail, a.limit)
+
+    from_parsed = parse_address(snd.get('addr', '')) if snd.get('addr') else None
 
     print(f"\n=== DealFlow outreach mail — {'SEND' if a.send else 'DRY RUN'} ===")
-    print(f"loaded {len(leads)} leads | tiers={a.tier} | lang={a.lang} | min-days={a.min_days}"
+    src = f"queue file ({os.path.basename(a.queue)})" if a.queue else f"{len(leads)} leads | tiers={a.tier}"
+    print(f"loaded {src} | lang={a.lang} | min-days={a.min_days if not a.queue else 'n/a (trusted queue)'}"
           + (f" | suppress-file has {len(suppress)} DNC/opt-out cases" if a.suppress else ""))
     print(f"\nMAIL QUEUE: {len(queue)} letters")
     for r, addr in queue[:12]:
