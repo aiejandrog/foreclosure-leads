@@ -203,6 +203,18 @@ input::placeholder{color:var(--muted-2)}
 /* filter chips */
 .tf{border-radius:var(--pill);padding:7px 15px;font-weight:600;color:var(--ink-2)}
 .tf.active{background:var(--navy-grad);color:#fff;border-color:transparent;box-shadow:var(--sh-2)}
+/* grouped filter pills: a small label + a hairline divider keep the bar organized */
+.fgroup{display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap}
+.flbl{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-2);margin-right:1px}
+.fdiv{width:1px;align-self:stretch;min-height:24px;background:var(--line);margin:0 4px}
+/* COUNTY filter pills — blue accent so they read as a distinct axis from the navy Tier pills, each with a live count */
+.cf{border-radius:var(--pill);padding:7px 13px;font-weight:600;font-size:13px;color:var(--ink-2);display:inline-flex;align-items:center;gap:7px;line-height:1}
+.cf .cfn{font-size:11px;font-weight:800;color:var(--muted);background:var(--surface-2);border-radius:var(--pill);padding:1px 7px;min-width:16px;text-align:center;font-variant-numeric:tabular-nums}
+.cf:hover{transform:translateY(-1px);border-color:var(--blue);background:var(--blue-soft);color:var(--blue-ink)}
+.cf:active{transform:translateY(0) scale(.97)}
+.cf.active{background:var(--blue-soft);border-color:var(--blue);color:var(--blue-ink);box-shadow:0 2px 9px -3px rgba(37,99,235,.4)}
+.cf.active .cfn{background:#fff;color:var(--blue-ink)}
+@media(max-width:860px){ .flbl{display:none} .fdiv{display:none} }
 button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 #wk.active,#hd.active,#td.active{background:var(--gold);border-color:var(--gold);color:#3a2c05}
 #advtog{border-radius:var(--pill);background:var(--surface);color:var(--ink);border-color:var(--line);font-weight:600}
@@ -786,11 +798,14 @@ body.modal-open{overflow:hidden}
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
 <div class="controls">
-<button class="tf active" data-t="A">Tier A</button>
-<button class="tf" data-t="B">Tier B</button>
-<button class="tf" data-t="C">Tier C</button>
+<span class="fgroup" role="group" aria-label="Tier"><span class="flbl">Tier</span>
+<button class="tf active" data-t="A">A</button>
+<button class="tf" data-t="B">B</button>
+<button class="tf" data-t="C">C</button>
 <button class="tf" data-t="ALL">All</button>
-<select id="cty" title="Filter by county" style="padding:7px 10px;border:1px solid var(--line);border-radius:var(--pill);background:var(--surface);color:var(--ink);font-weight:600;font-size:13px;cursor:pointer"><option value="">All counties</option></select>
+</span>
+<span class="fgroup" id="ctygroup" role="group" aria-label="County"></span>
+<span class="fdiv"></span>
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
 <button id="hf" title="Hide leads that don't fit the homeowner-rescue model: already deeded to another investor, HOA case hiding a mortgage bigger than the equity (underwater), or VACANT LAND (no homeowner, speculative land value). Off by default so nothing disappears silently.">Hide flagged</button>
@@ -2438,6 +2453,7 @@ function resetFilters(){
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
   ['wk','hd','hf','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
   document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
+  county=''; _resetCountyPills();
   render();
 }
 document.addEventListener('click', e => { if(e.target.closest && e.target.closest('.empty-reset')) resetFilters(); });
@@ -2467,14 +2483,17 @@ document.getElementById('sortby').onchange = e => {
 };
 // county filter — populated on first render (DATA only exists AFTER the gate decrypts it), hidden if 1 county
 let _ctyInit=false;
-function initCountyFilter(){ if(_ctyInit) return; const sel=document.getElementById('cty'); if(!sel||!DATA||!DATA.length) return;
+function initCountyFilter(){ if(_ctyInit) return; const box=document.getElementById('ctygroup'); if(!box||!DATA||!DATA.length) return;
   _ctyInit=true;
   const tc=c=>c.toLowerCase().replace(/\b\w/g,m=>m.toUpperCase());
-  const cs=[...new Set(DATA.map(r=>r.county||'MIAMI-DADE'))].sort();
-  if(cs.length<2){ sel.style.display='none'; return; }
-  cs.forEach(c=>{ const o=document.createElement('option'); o.value=c; o.textContent=tc(c); sel.appendChild(o); });
-  sel.onchange=e=>{ county=e.target.value; render(); };
+  const counts={}; DATA.forEach(r=>{ const c=r.county||'MIAMI-DADE'; counts[c]=(counts[c]||0)+1; });
+  const cs=Object.keys(counts).sort();
+  if(cs.length<2){ box.style.display='none'; return; }
+  const pill=(val,label,n)=>'<button class="cf'+((county||'')===val?' active':'')+'" data-cty="'+esc(val)+'" type="button">'+esc(label)+'<span class="cfn">'+n+'</span></button>';
+  box.innerHTML='<span class="flbl">County</span>'+pill('','All',DATA.length)+cs.map(c=>pill(c,tc(c),counts[c])).join('');
+  box.querySelectorAll('.cf').forEach(b=>b.onclick=()=>{ county=b.dataset.cty; box.querySelectorAll('.cf').forEach(x=>x.classList.toggle('active', x.dataset.cty===(county||''))); render(); });
 }
+function _resetCountyPills(){ const box=document.getElementById('ctygroup'); if(box) box.querySelectorAll('.cf').forEach(x=>x.classList.toggle('active', (x.dataset.cty||'')==='')); }
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
 document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
