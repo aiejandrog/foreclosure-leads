@@ -545,7 +545,9 @@ header{animation:appIn .5s .05s both}
 .tblwrap,#cards{animation:appIn .55s .12s both}
 
 @media(max-width:860px){
-  header{padding:12px 13px 10px}
+  /* the sticky filter header is 350px+ tall — on a phone it would permanently eat half the
+     screen, so let it scroll away; the ↑ Top button brings the filters back in one tap */
+  header{padding:12px 13px 10px;position:static}
   .brand .wm{font-size:18px}
   .brand .upd{display:none}
   .brand .upd.stale{display:inline-block}
@@ -553,6 +555,15 @@ header{animation:appIn .5s .05s both}
   input#q{width:100%}
   .tblwrap{display:none}
   #cards{display:block}
+  /* mobile: link groups stack as bands (not a flex jumble) and chips grow to touch size.
+     #cards-scoped so these beat the base chip rules that appear later in the stylesheet. */
+  .clinks{display:block}
+  #cards .clinks .lgrp{gap:6px}
+  #cards .clinks a{font-size:12.5px;padding:8px 12px}
+  #cards .clinks span.phone{font-size:12.5px;padding:8px 12px}
+  #cards select.status,#cards input.ph{height:38px;font-size:13px}
+  #cards textarea.notes{min-height:52px;font-size:13px}
+  .phero{height:220px}
 }
 :root{--e-lux:cubic-bezier(.22,1,.36,1);--e-snap:cubic-bezier(.2,0,.4,1)}
 /* ===== smooth hover / press micro-interactions ===== */
