@@ -151,6 +151,50 @@ def _is_vacant(r):
         or bool(re.search(r'VACANT', str(r.get('dor_desc') or ''), re.I)) \
         or str(r.get('use_code') or '').strip() in ('0', '00', '000', '0000')
 
+def _download_appraiser_bcpa(folio, fname, sess):
+    """Broward Property Appraiser (BCPA) building photo — the ONLY county appraiser we found that
+    serves real front-of-house photos (MDCPA has aerials only, PBCPA has building sketches only).
+    Photo index: bcpa.net/Photographs.asp?Folio=<folio> lists all photos ever taken. We grab the
+    most recent by filename date. Returns 'img/<fname>_pa.jpg' or ''. Public records, no bot walls."""
+    if not folio or not folio.isdigit():
+        return ''
+    os.makedirs(IMGDIR, exist_ok=True)
+    path = os.path.join(IMGDIR, fname + '_pa.jpg')
+    rel = 'img/' + fname + '_pa.jpg'
+    if os.path.exists(path) and os.path.getsize(path) > 3000:
+        return rel
+    try:
+        r = sess.get(f'https://bcpa.net/Photographs.asp?Folio={folio}', timeout=20,
+                     headers={'Referer': f'https://bcpa.net/RecInfo.asp?URL_Folio={folio}'})
+        if r.status_code != 200:
+            return ''
+        urls = re.findall(r'/Photographs/[0-9]+/[0-9]+/[0-9]+/[^"\']+\.jpg', r.text)
+        if not urls:
+            return ''
+        # sort by embedded timestamp when present (YYYYMMDD_HHMMSS) — newest first
+        def _ts(u):
+            m = re.search(r'_(\d{8})_(\d{6})', u)
+            if m: return m.group(1) + m.group(2)
+            m = re.search(r'-(\d{14})', u)
+            if m: return m.group(1)
+            return '0'
+        best = sorted(urls, key=_ts, reverse=True)[0]
+        p = sess.get('https://bcpa.net' + best, timeout=20,
+                     headers={'Referer': f'https://bcpa.net/Photographs.asp?Folio={folio}'})
+        if p.status_code != 200 or 'image' not in (p.headers.get('content-type') or '') or len(p.content) < 3000:
+            return ''
+        tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
+        with open(tmp, 'wb') as f: f.write(p.content)
+        if Image:
+            try:
+                Image.open(tmp).save(tmp, 'JPEG', quality=75, optimize=True)
+            except Exception:
+                pass
+        os.replace(tmp, path)
+        return rel
+    except Exception:
+        return ''
+
 def _download_streetview(addr, fname, key, sess, target=None):
     """Front-of-house photo, AIM-LOCKED when we know the parcel's true location (FDOR centroid,
     else Census coords): find the nearest outdoor pano, compute the camera->parcel compass bearing,
@@ -402,7 +446,23 @@ def main():
                 if i % 80 == 0: print(f"  ...streetview {i}/{len(todo)}")
     else:
         print('  (no Street View key — set GOOGLE_STREET_VIEW_KEY or create streetview.key to enable house photos)')
-    # 3) Aerial fallback — PARALLEL download (Esri is a public tile service, safe to hit concurrently)
+    # 3) BCPA appraiser photo — Broward-only fallback for leads Zillow/StreetView didn't cover.
+    # MDCPA has no photos (aerial maps only) and PBCPA has sketches only, so Broward is the whole game.
+    n_bcpa = 0
+    todo = [(r, _folio(r)) for r in all_leads
+            if not r['photos']
+            and str(r.get('county','')).upper() == 'BROWARD'
+            and not _is_vacant(r)]
+    def _dpa(job):
+        r, folio = job
+        s = requests.Session(); s.headers.update({'User-Agent': UA})
+        return (r, _download_appraiser_bcpa(folio, folio, s))
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        for i, (r, rel) in enumerate(ex.map(_dpa, todo), 1):
+            if rel: r['photos'] = [rel]; r['photo_kind'] = 'appraiser'; n_bcpa += 1
+            if i % 40 == 0: print(f"  ...bcpa {i}/{len(todo)}")
+
+    # 4) Aerial fallback — PARALLEL download (Esri is a public tile service, safe to hit concurrently)
     todo = [(r, _folio(r), coords.get(_addr_of(r))) for r in all_leads if not r['photos']]
     def _do(job):
         r, folio, c = job
@@ -421,7 +481,7 @@ def main():
         json.dump(sorted(_blocked), open(SV_BLOCK, 'w', encoding='utf-8'))
     except Exception:
         pass
-    print(f"DONE: {n_zillow} zillow-photo, {n_sv} street-view, {n_aerial} aerial, {n_none} no-image"
+    print(f"DONE: {n_zillow} zillow-photo, {n_sv} street-view, {n_bcpa} bcpa-appraiser, {n_aerial} aerial, {n_none} no-image"
           + (f" ({len(_blocked)} hedge-blocked)" if _blocked else "") + f"  ->  {', '.join(files)}")
 
 
