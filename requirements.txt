@@ -1,0 +1,6 @@
+requests
+playwright
+beautifulsoup4
+curl_cffi
+cryptography
+Pillow
