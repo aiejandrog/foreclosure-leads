@@ -840,6 +840,22 @@ def make_tracker(leads):
                     if _h and _h.get('ftype') == 'MORTGAGE' and not _h.get('surv') and not _suspect_ratio:
                         _d['mr'] = False; _d['eqfake'] = False                  # verified real senior equity
                         if (_d.get('ctype') or '').upper().startswith('HOA'): _d['ctype'] = 'Bank/Mortgage'
+                        # Mirror the HOA-side downward re-tier — but UPWARD: the pipeline had ZEROED
+                        # this lead's equity points on the fantasy-equity flag, so a chain-verified
+                        # real-equity mortgage stays stuck at Tier C until we credit them back in.
+                        # Rebuild using the same formula as MD qualify() so cross-county tiers align.
+                        _v = _d.get('value') or 0
+                        _e = _d.get('eq') or 0     # true equity_pct (already computed for the county lead)
+                        if _v:
+                            _s = min(42.0, max(0.0, _e) * 0.42)                 # equity, 0-42
+                            _dd = _d.get('days', -1)
+                            _s += min(18.0, max(0, _dd) * 1.0) if isinstance(_dd, int) else 0
+                            _s += 12 if _d.get('hs') else 0
+                            _s += 14 if 200000 <= _v <= 1000000 else (9 if _v > 1000000 else (6 if _v >= 150000 else 0))
+                            # 'enriched'/'owners' equivalent: county leads always come pre-enriched
+                            _s += 8 if _d.get('oname') else 4
+                            _d['score'] = round(_s)
+                            _d['tier'] = 'A' if _d['score'] >= 70 else ('B' if _d['score'] >= 50 else 'C')
                 if _h and _h.get('liens'):
                     _d['orliens'] = _h.get('liens', [])
                     _d['orjunior'] = _h.get('junior', 0)

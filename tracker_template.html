@@ -2194,13 +2194,26 @@ function _mergeLead(local, remote){
   if(remote.next && (!out.next || remote.next < out.next)) out.next = remote.next;
   // manually-typed phone: fill if missing
   if(!out.phone && remote.phone) out.phone = remote.phone;
-  // verified-lien / deal numbers: prefer non-empty; if both set & differ, keep the LARGER debt
-  // (more conservative underwriting). occ checkbox = OR.
+  // verified-lien / deal numbers: LATEST-WRITE-WINS by per-field timestamp (notes[c].dts).
+  // Falls back to prefer-larger only when neither side has a timestamp (pre-Round-B legacy data),
+  // which keeps the conservative-underwriting default but lets a genuine downward CORRECTION win.
+  const ldts = local.dts||{}, rdts = remote.dts||{}, mdts = Object.assign({}, ldts);
   ['slien','jlien','assess','btax','mlien'].forEach(k => {
-    const lv = +local[k]||0, rv = +remote[k]||0, v = Math.max(lv, rv);
-    if(v && v !== lv){ out[k] = String(v); ch.deal = true; }
+    const lv = local[k]==null||local[k]===''?null:+local[k]||0;
+    const rv = remote[k]==null||remote[k]===''?null:+remote[k]||0;
+    const lt = ldts[k]||0, rt = rdts[k]||0;
+    let winner;
+    if(lt && rt){ winner = rt > lt ? rv : lv; if(rt > lt) mdts[k] = rt; }
+    else if(rt && !lt){ winner = rv; mdts[k] = rt; }
+    else if(lt && !rt){ winner = lv; }
+    else { winner = Math.max(lv||0, rv||0) || null; }   // legacy: no timestamps -> prefer-larger
+    if(winner != null && String(winner) !== String(local[k]||'')){ out[k] = String(winner); ch.deal = true; }
   });
-  if(remote.occ && !local.occ){ out.occ = true; }
+  // occ checkbox: latest-write-wins if stamped, else OR (backward-compat)
+  const locc = !!local.occ, rocc = !!remote.occ, ltocc = ldts.occ||0, rtocc = rdts.occ||0;
+  const occWin = (ltocc||rtocc) ? (rtocc > ltocc ? rocc : locc) : (locc || rocc);
+  if(occWin !== locc){ out.occ = occWin; ch.deal = true; if(rtocc > ltocc) mdts.occ = rtocc; }
+  if(Object.keys(mdts).length) out.dts = mdts;
   // free-text note: keep both, distinct
   if(remote.note && remote.note !== (local.note||'') && (local.note||'').indexOf(remote.note) === -1){
     out.note = local.note ? (local.note + '\n— (merged) ' + remote.note) : remote.note; ch.note = true;
@@ -3158,12 +3171,15 @@ document.addEventListener('change', e => {
   }
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
   else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
-  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('jlien')) { notes[c].jlien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('assess')){ notes[c].assess = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; save(); recompute(); render(); refreshDealModal(); return; }
+  // Stamp each deal-field edit with when it happened, so a teammate's DOWNWARD correction (e.g. a
+  // verified $180k lien replacing an earlier $250k guess) can win on merge instead of Math.max losing
+  // it. Timestamps live in notes[c].dts = {slien: 1721300000000, jlien: ..., ...}.
+  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; (notes[c].dts=notes[c].dts||{}).slien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('jlien')) { notes[c].jlien = e.target.value; (notes[c].dts=notes[c].dts||{}).jlien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('assess')){ notes[c].assess = e.target.value; (notes[c].dts=notes[c].dts||{}).assess=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; (notes[c].dts=notes[c].dts||{}).mlien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; (notes[c].dts=notes[c].dts||{}).btax=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; (notes[c].dts=notes[c].dts||{}).occ=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
   else return;
   save();
 });
