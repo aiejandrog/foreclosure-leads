@@ -465,6 +465,16 @@ td.owncell .meta,td.owncell .submeta,td.propcell .submeta,td.propcell .warn{font
 .optviol .ovul b{font-family:var(--f-num)}
 .optviol .ovnote{font-size:11.5px;color:#7a3b3b;margin-top:6px;line-height:1.45}
 .statviol{color:#a11212;font-weight:800}
+/* team auto-sync UI */
+.syncrow.syncauto{background:linear-gradient(180deg,#F7FBFF,#F0F7FF);border:1px solid #cfe0f5;border-radius:var(--r-md);padding:14px;margin-top:2px}
+.synctag{font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1b6fd6;background:#e4efff;border:1px solid #bcd8ff;border-radius:var(--pill);padding:2px 8px;vertical-align:middle;margin-left:6px}
+.synckeyrow{display:flex;gap:8px;margin-top:9px}
+.synckeyrow input{flex:1;font-size:13px;padding:8px 11px;border:1px solid var(--line);border-radius:var(--r-xs);font-family:var(--f-body)}
+.syncbtn2.ghost{background:transparent;color:var(--ink-2);border-color:var(--line)}
+.syncbtn2.ghost:hover{background:var(--surface-2);color:var(--ink);border-color:var(--gold)}
+.syncstat{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;padding:2px 9px;border-radius:var(--pill);vertical-align:middle;margin-left:6px;background:#E9F7EE;border:1px solid #BFE6CC;color:#0A7A42}
+.syncstat.warn{background:#FBF6E9;border-color:#EAD9B0;color:#8a6a12}
+#syncstatline{font-size:12px;color:var(--muted);margin-top:6px}
 #logmodal .dm-card{max-width:440px}
 .cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px;cursor:pointer}
 .cx{font-size:10px;padding:1px 6px;border-radius:9px;white-space:nowrap;line-height:1.7}
@@ -1944,7 +1954,7 @@ show('en');<\/script>
   if(w){ w.document.write(doc); w.document.close(); }
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
-function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
+function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); }
 
 // ================= CROSS-DEVICE SYNC (serverless, file-as-transport) =================
 // The whole app is a static file with per-device localStorage, so a teammate's opt-outs, calls and
@@ -2020,6 +2030,56 @@ function mergeNotes(remoteNotes){
 }
 // staleness nag: turn the Sync button amber when the last team merge is old, so a stale opt-out
 // window (the one FTSA risk left in a manual-merge model) is VISIBLE, not silent.
+// ============ TEAM AUTO-SYNC (Supabase encrypted-blob store) ============
+// Opt-in. Once a team key is set, every change auto-pushes an ENCRYPTED copy of this device's notes to
+// a shared table, and a background poll pulls teammates' blobs and merges them (reusing mergeNotes —
+// DO NOT CONTACT still wins). Rows are AES-GCM ciphertext keyed by hash(teamKey); the server never sees
+// plaintext. Fails silent offline / on file:// — the manual export/import and everything else still work.
+const SB_URL = 'https://dddcfwbydgtxxwdsvsvt.supabase.co';
+const SB_KEY = 'sb_publishable_BbzeDgUG0HJK2OBekCh8uw_267aVBhQ';
+const SB_TBL = SB_URL + '/rest/v1/dealflow_sync';
+let _syncTimer = null, _syncBusy = false, _pullTimer = null;
+function _teamKey(){ return localStorage.getItem('fcTeamKey') || ''; }
+function _deviceId(){ let d = localStorage.getItem('fcDevice'); if(!d){ d = 'dev-' + Math.abs((''+_nowTS()+navigator.userAgent).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0)).toString(36); localStorage.setItem('fcDevice', d); } return d; }
+const _b64 = u8 => btoa(String.fromCharCode.apply(null, u8));
+const _u8 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function _teamId(key){ const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('dealflow-sync:'+key)); return _b64(new Uint8Array(h)).replace(/[^a-zA-Z0-9]/g,'').slice(0,32); }
+async function _deriveKey(key, salt){ const bk = await crypto.subtle.importKey('raw', new TextEncoder().encode(key), 'PBKDF2', false, ['deriveKey']); return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:200000, hash:'SHA-256'}, bk, {name:'AES-GCM', length:256}, false, ['encrypt','decrypt']); }
+async function _encBlob(obj, key){ const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12)); const k = await _deriveKey(key, salt); const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, k, new TextEncoder().encode(JSON.stringify(obj))); return JSON.stringify({v:1, s:_b64(salt), i:_b64(iv), c:_b64(new Uint8Array(ct))}); }
+async function _decBlob(env, key){ const o = JSON.parse(env); const k = await _deriveKey(key, _u8(o.s)); const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:_u8(o.i)}, k, _u8(o.c)); return JSON.parse(new TextDecoder().decode(pt)); }
+async function syncPush(){
+  const key = _teamKey(); if(!key) return;
+  try{
+    _syncBusy = true; syncStatus('pushing…');
+    const tid = await _teamId(key), payload = await _encBlob(notes, key);
+    const r = await fetch(SB_TBL, {method:'POST', headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY,'Content-Type':'application/json','Prefer':'resolution=merge-duplicates,return=minimal'},
+      body: JSON.stringify([{team_id:tid, device_id:_deviceId(), payload}])});
+    if(!r.ok) throw new Error('push '+r.status);
+    localStorage.setItem('fcLastPush', _nowTS()); syncStatus('');
+  }catch(e){ syncStatus('offline — will retry', true); }
+  finally{ _syncBusy = false; }
+}
+function syncPushSoon(){ if(!_teamKey()) return; clearTimeout(_syncTimer); _syncTimer = setTimeout(syncPush, 1500); }
+async function syncPull(){
+  const key = _teamKey(); if(!key) return 0;
+  try{
+    const tid = await _teamId(key), me = _deviceId();
+    const r = await fetch(SB_TBL+'?team_id=eq.'+encodeURIComponent(tid)+'&select=device_id,payload', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
+    if(!r.ok) throw new Error('pull '+r.status);
+    const rows = await r.json(); let merged = 0, optouts = 0;
+    for(const row of rows){ if(row.device_id === me) continue;
+      try{ const remote = await _decBlob(row.payload, key); const s = mergeNotes(remote); merged += s.leads; optouts += s.optouts; }catch(e){}
+    }
+    localStorage.setItem('fcLastPull', _nowTS()); syncStatus('');
+    return {merged, optouts};
+  }catch(e){ syncStatus('offline — will retry', true); return 0; }
+}
+function syncStatus(msg, warn){ const el = document.getElementById('syncstat'); if(!el) return; const on = !!_teamKey();
+  el.className = 'syncstat' + (warn?' warn':'') + (on?' on':'');
+  el.textContent = on ? ('Team sync ON'+(msg?' · '+msg : (localStorage.getItem('fcLastPull')?' · synced '+_ago(localStorage.getItem('fcLastPull')):''))) : 'Team sync off';
+}
+function _ago(ts){ if(!ts) return ''; const m = Math.max(0, Math.round((new Date(_nowTS().replace(' ','T')) - new Date(ts.replace(' ','T')))/60000)); return m<1?'just now':m<60?m+'m ago':Math.round(m/60)+'h ago'; }
+function startTeamSync(){ if(!_teamKey()) return; clearInterval(_pullTimer); syncPull(); _pullTimer = setInterval(syncPull, 45000); syncPush(); }
 function syncFreshness(){
   const b = document.getElementById('syncbtn'); if(!b) return;
   const last = localStorage.getItem('fcLastMerge') || '';
@@ -2032,14 +2092,31 @@ function syncFreshness(){
   const tag = document.getElementById('syncfresh'); if(tag){ tag.textContent = (stale?'⚠ ':'')+'sync '+label; }
 }
 function openSyncModal(){
+  const on = !!_teamKey();
   document.getElementById('syncbody').innerHTML =
     '<div class="dm-sec" style="font-size:17px;margin-bottom:2px">Sync across devices &amp; team</div>'+
-    '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-bottom:6px">Your notes, calls, opt-outs and verified liens live on THIS device. Move them between your phone and laptop, or merge a teammate’s file into yours. No account, no server — the JSON file is the handoff.</div>'+
-    '<div class="syncrow"><span class="si">⬆️</span><div style="flex:1"><div class="st">Export my notes</div><div class="sd">Download everything you’ve logged as one file — a backup, or send it to your teammate to merge.</div><button class="syncbtn2" id="sync-exp" type="button">Download notes file</button></div></div>'+
-    '<div class="syncrow"><span class="si">⬇️</span><div style="flex:1"><div class="st">Import &amp; merge a teammate’s notes</div><div class="sd"><b>DO NOT CONTACT always wins</b> — an opt-out on either device suppresses the number everywhere. Calls &amp; follow-ups combine, verified liens keep the more conservative number, and nothing you already typed is lost.</div><button class="syncbtn2" id="sync-imp" type="button">Choose file to merge…</button></div></div>'+
+    '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-bottom:6px">Your notes, calls, opt-outs and verified liens live on THIS device. Turn on team auto-sync so everyone stays current automatically, or hand off a file manually.</div>'+
+    // --- AUTO-SYNC (primary) ---
+    '<div class="syncrow syncauto"><span class="si">🔄</span><div style="flex:1"><div class="st">Team auto-sync '+(on?'<span class="syncstat on" id="syncstat">Team sync ON</span>':'<span class="synctag">recommended</span>')+'</div>'+
+      '<div class="sd">Everyone on the same <b>team key</b> stays in sync automatically — opt-outs, calls and verified liens flow between all devices within a minute, no exporting. Data is <b>encrypted with your team key before it leaves the device</b>; the server only stores ciphertext. <b>DO NOT CONTACT always wins.</b></div>'+
+      (on
+        ? '<div class="sd" style="margin-top:6px" id="syncstatline">'+(localStorage.getItem('fcLastPull')?'Last synced '+_ago(localStorage.getItem('fcLastPull')):'Connecting…')+'</div><button class="syncbtn2" id="sync-now" type="button">Sync now</button> <button class="syncbtn2 ghost" id="sync-off" type="button">Turn off on this device</button>'
+        : '<div class="synckeyrow"><input id="teamkeyin" type="password" placeholder="Team key (share this with Jose)" autocomplete="off"><button class="syncbtn2" id="sync-on" type="button">Connect</button></div><div class="sd" style="font-size:11px;margin-top:3px">Pick any phrase and share it with your team. Everyone who enters the same key syncs together. Keep it private — it’s the encryption password.</div>')+
+    '</div></div>'+
+    // --- MANUAL (fallback) ---
+    '<div class="syncrow"><span class="si">⬆️</span><div style="flex:1"><div class="st">Export my notes</div><div class="sd">One-file backup, or hand to a teammate to merge. Also your offline fallback when auto-sync can’t reach the network.</div><button class="syncbtn2 ghost" id="sync-exp" type="button">Download notes file</button></div></div>'+
+    '<div class="syncrow"><span class="si">⬇️</span><div style="flex:1"><div class="st">Import &amp; merge a file</div><div class="sd">Merge a teammate’s exported file. Same safety-first rules as auto-sync.</div><button class="syncbtn2 ghost" id="sync-imp" type="button">Choose file to merge…</button></div></div>'+
     '<div id="syncresult"></div>';
-  document.getElementById('sync-exp').onclick = exportNotes;
-  document.getElementById('sync-imp').onclick = () => document.getElementById('syncfile').click();
+  const g = id => document.getElementById(id);
+  g('sync-exp').onclick = exportNotes;
+  g('sync-imp').onclick = () => g('syncfile').click();
+  if(on){
+    g('sync-now').onclick = async () => { g('sync-now').textContent='Syncing…'; const r = await syncPull(); await syncPush(); g('syncstatline').textContent = 'Last synced '+_ago(localStorage.getItem('fcLastPull'))+(r&&r.merged?' · pulled '+r.merged+' update(s)':''); g('sync-now').textContent='Sync now'; render(); };
+    g('sync-off').onclick = () => { localStorage.removeItem('fcTeamKey'); clearInterval(_pullTimer); openSyncModal(); syncFreshness(); };
+  } else {
+    g('sync-on').onclick = () => { const k=(g('teamkeyin').value||'').trim(); if(k.length<4){ g('teamkeyin').style.borderColor='#d94b4b'; return; } localStorage.setItem('fcTeamKey', k); if(!localStorage.getItem('fcDevice')) _deviceId(); startTeamSync(); openSyncModal(); syncFreshness(); };
+    g('teamkeyin').onkeydown = (ev) => { if(ev.key==='Enter') g('sync-on').click(); };
+  }
   document.getElementById('syncmodal').classList.add('show'); document.body.classList.add('modal-open');
 }
 function closeSyncModal(){ document.getElementById('syncmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
@@ -2958,6 +3035,7 @@ async function boot(){
   recompute();
   render();
   syncFreshness();
+  if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
   if(manual && unlockName) showWelcome(unlockName);   // greet them only when they actually enter a code
 }
 boot();
