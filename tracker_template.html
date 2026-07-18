@@ -453,6 +453,10 @@ td.owncell .meta,td.owncell .submeta,td.propcell .submeta,td.propcell .warn{font
 #syncmodal{display:none;position:fixed;inset:0;z-index:122}
 #syncmodal.show{display:block}
 #syncmodal .dm-card{width:min(560px,94vw)}
+/* [Cursor cloud edit] Mail-batch modal was missing its overlay rule, so it rendered inline (no fixed/backdrop) and the sticky header intercepted clicks. Mirror the other modals. */
+#mailmodal{display:none;position:fixed;inset:0;z-index:122}
+#mailmodal.show{display:block}
+#mailmodal .dm-card{width:min(680px,95vw);max-height:86vh}
 .syncrow{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line-2)}
 .syncrow:last-child{border-bottom:none}
 .syncrow .si{font-size:22px;line-height:1}
