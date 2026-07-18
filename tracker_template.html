@@ -305,6 +305,8 @@ textarea.notes:focus-visible{outline:none;border-color:var(--gold);box-shadow:0 
 /* profit cell — one structured right-aligned deal summary, not loose ornaments */
 td.num .fchips{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:3px;margin-bottom:5px}
 td.num .fchips:empty{display:none;margin:0}
+/* a long verify/flag chip (e.g. "Low-confidence check") must WRAP inside the narrow profit column, never overflow into the tier/score cells */
+td.num .fchips .chip{box-sizing:border-box;max-width:100%;white-space:normal;overflow-wrap:break-word;text-align:right}
 td.num .vb{margin-bottom:4px}
 td.num .submeta{margin-top:2px}
 td.num .warn,td.num .mrwarn{margin-top:3px}
