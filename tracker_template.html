@@ -666,7 +666,11 @@ span.phone.dncgate{color:#e05252;font-weight:700;cursor:not-allowed}
 @supports ((-webkit-background-clip:text) or (background-clip:text)){
   .brand .wm b{-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent}
 }
-@keyframes wmShine{0%{background-position:120% center}100%{background-position:-120% center}}
+/* FIX: was 120% -> -120%, which slid the 220%/no-repeat gradient ENTIRELY off the text at the
+   extremes — FLOW went transparent (invisible) for a chunk of every cycle. The safe range for a
+   no-repeat gradient wider than the box is 0% -> 100%: the gradient always fully covers the text,
+   and the highlight (at gradient-50%) still sweeps right-to-left across the word. */
+@keyframes wmShine{0%{background-position:0% center}100%{background-position:100% center}}
 .brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(201,168,76,.55)) drop-shadow(0 1px 2px rgba(160,126,40,.25)) brightness(1.07)}
 @media (prefers-reduced-motion: reduce){
   *{animation-duration:.001s!important;animation-delay:0s!important;transition-duration:.001s!important}
