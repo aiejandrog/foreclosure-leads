@@ -29,3 +29,10 @@ broward_leads.json
 *_liens.json
 streetview.key
 sv_blocked.json
+design-system/
+tracker_light_template.html
+lob.key
+sender.json
+mail_sent.json
+mail_suppress.txt
+mail_preview.html

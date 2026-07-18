@@ -1,0 +1,10 @@
+{
+  "_comment": "Copy this to sender.json (gitignored) and fill it with JOSE'S tax-deed entity — this is who the letters come from. 'addr' MUST be a full return address ('LINE1, CITY, FL 33172') or --send is refused.",
+  "name": "Jose [Last Name]",
+  "title": "",
+  "llc": "[Jose's LLC]",
+  "phone": "(786) 000-0000",
+  "email": "",
+  "addr": "231 NW 109TH AVE, MIAMI, FL 33172",
+  "web": ""
+}
