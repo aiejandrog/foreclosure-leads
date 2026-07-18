@@ -455,6 +455,16 @@ td.owncell .meta,td.owncell .submeta,td.propcell .submeta,td.propcell .warn{font
 .optledger .olt{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#a13636;margin-bottom:6px}
 .optledger .ole{font-size:12px;color:#5a2c2c;line-height:1.5;font-variant-numeric:tabular-nums}
 .optledger .ole b{font-family:var(--f-num)}
+/* dialed-after-opt-out red flag — the FTSA violation a plaintiff hunts for */
+.cx.cx-viol{background:#fdeaea;border:1px solid #e6a3a3;color:#a11212;font-weight:800}
+.optviol{margin:12px 0;padding:12px 14px;border-radius:var(--r-md);background:#fdeaea;border:1.5px solid #d94b4b}
+.optviol .ovt{font-size:13px;font-weight:800;letter-spacing:.03em;color:#8f0f0f;margin-bottom:6px}
+.optviol .ovl{font-size:12.5px;color:#6b1a1a;line-height:1.5}
+.optviol .ovl b{font-family:var(--f-num)}
+.optviol .ovul{margin:6px 0 6px 18px;padding:0;font-size:12.5px;color:#5a1414;line-height:1.6}
+.optviol .ovul b{font-family:var(--f-num)}
+.optviol .ovnote{font-size:11.5px;color:#7a3b3b;margin-top:6px;line-height:1.45}
+.statviol{color:#a11212;font-weight:800}
 #logmodal .dm-card{max-width:440px}
 .cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px;cursor:pointer}
 .cx{font-size:10px;padding:1px 6px;border-radius:9px;white-space:nowrap;line-height:1.7}
@@ -1149,11 +1159,22 @@ function _nowTS(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); ret
 // 'set-local' = an operator marked DO NOT CONTACT here; 'suppressed-here' = a teammate's opt-out
 // arrived via merge and started suppressing on THIS device. This is the paper trail for a lawyer.
 function _optLog(n, act, src){ n.optlog = n.optlog || []; n.optlog.push({ts:_nowTS(), act:act, src:src||(localStorage.getItem('fcDevice')||'this device')}); }
+// FTSA red flag: any outreach logged AFTER a lead's opt-out date is the exact violation a plaintiff
+// hunts for. The team merge makes this RETROACTIVE — a call you logged at 3pm, before a teammate's
+// 2pm opt-out synced onto your device at 9pm, becomes an after-opt-out contact the moment it merges.
+// Surfaced loudly (row + log modal + header) so it gets cured and documented, never buried.
+const _OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};
+function _dialedAfter(n){
+  if(!n || !n.optout || !n.touches) return [];
+  return n.touches.filter(t => t.d && t.d > n.optout && _OUTREACH_CH[t.ch]);
+}
 function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
 function _rel(iso){ const n=_dneg(iso); if(n===null) return ''; if(n===0) return 'today'; return n<0 ? (-n)+'d ago' : 'in '+n+'d'; }
 const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}', door:'\u{1f6aa}'};
 function contactChip(r){
   const n=notes[r.case]||{}, ts=n.touches||[]; let h='';
+  const viol=_dialedAfter(n);
+  if(viol.length){ const lv=viol[viol.length-1]; h+='<span class="cx cx-viol" title="'+esc(viol.length+' outreach touch(es) logged AFTER this owner opted out ('+n.optout+') — FTSA violation risk. Most recent: '+lv.ch+' on '+lv.d+'. Open the log to see the trail and document the cure.')+'">⚠ contacted after opt-out</span>'; }
   if(ts.length){ const last=ts[ts.length-1];
     h+='<span class="cx cx-done" title="'+esc(ts.length+' touch(es) — last: '+last.ch+' '+last.out+' on '+last.d)+'">'+(CH_ICON[last.ch]||'•')+' '+_rel(last.d)+(ts.length>1?' ·'+ts.length:'')+'</span>';
   } else h+='<span class="cx cx-new" title="Not contacted yet">not contacted</span>';
@@ -1315,9 +1336,15 @@ function logModalBody(r){
   // FTSA opt-out audit ledger — a timestamped, teammate-attributed suppression trail (the "wave at a
   // plaintiff's lawyer" evidence). Only shown once a lead has been opted out.
   const _actLbl = {'set-local':'marked DO NOT CONTACT', 'suppressed-here':'opt-out synced in — suppressed on this device'};
+  const viol = _dialedAfter(n);
+  const violBanner = viol.length ? '<div class="optviol"><div class="ovt">⚠ CONTACT AFTER OPT-OUT — FTSA RISK</div>'+
+    '<div class="ovl">Owner opted out <b>'+esc(n.optout)+'</b>, but these outreach touches are logged after that:</div>'+
+    '<ul class="ovul">'+viol.map(t=>'<li><b>'+esc(t.d)+'</b> · '+(CH_ICON[t.ch]||'')+' '+esc(t.out||t.ch)+'</li>').join('')+'</ul>'+
+    '<div class="ovnote">Do not contact again. If this surfaced after a team merge, the touch predates your knowledge of the opt-out — note the cure here for the record.</div></div>' : '';
   const ledger = (n.optlog && n.optlog.length) ? '<div class="optledger"><div class="olt">🚫 Do-not-contact audit trail</div>'+
     n.optlog.slice().reverse().map(ev=>'<div class="ole"><b>'+esc(ev.ts||'')+'</b> · '+esc(_actLbl[ev.act]||ev.act||'')+(ev.src?' · '+esc(ev.src):'')+'</div>').join('')+'</div>' : '';
   return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+(r.days>=0?'in '+r.days+'d':'passed')+'</div></div>'+
+    violBanner+
     '<div class="dm-sec">Log a touch — one tap</div><div class="qlogwrap">'+btns+'</div>'+
     '<div class="dm-sec">Follow-up date</div><div class="fuwrap">Next: '+fu+' &nbsp;'+fub+'</div>'+
     '<div class="dm-sec">History</div>'+hist+ledger;
@@ -1952,13 +1979,16 @@ function _mergeLead(local, remote){
   return [out, ch];
 }
 function mergeNotes(remoteNotes){
-  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0 };
+  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0, violations:0 };
   Object.keys(remoteNotes||{}).forEach(caseId => {
+    const before = _dialedAfter(notes[caseId]).length;
     const [merged, ch] = _mergeLead(notes[caseId], remoteNotes[caseId]);
     notes[caseId] = merged;
     if(ch.optout||ch.touches||ch.status||ch.deal||ch.note) sum.leads++;
     if(ch.optout) sum.optouts++;
     sum.touches += ch.touches; if(ch.status) sum.statuses++; if(ch.deal) sum.deals++; if(ch.note) sum.notes++;
+    // a merged-in opt-out can retroactively turn a call you already logged into an after-opt-out contact
+    if(_dialedAfter(merged).length > before) sum.violations++;
   });
   try{ localStorage.setItem('fcLastMerge', _nowTS()); }catch(e){}
   save(); try{ recompute(); }catch(e){} render(); syncFreshness();
@@ -2001,12 +2031,14 @@ document.getElementById('syncfile').onchange = (e) => {
     const s = mergeNotes(remote);
     if(res){
       res.className = 'syncres';
+      res.className = s.violations ? 'syncres warn' : 'syncres';
       res.innerHTML = s.leads ?
         ('Merged <b>'+s.leads+'</b> lead'+(s.leads===1?'':'s')+' from '+((parsed.device&&parsed.device!==(localStorage.getItem('fcDevice')||''))?'your teammate':'that file')+'.'+
          (s.optouts? ' <b>'+s.optouts+'</b> new DO-NOT-CONTACT opt-out'+(s.optouts===1?'':'s')+' now suppressed on this device.':'')+
          (s.touches? ' '+s.touches+' contact-log entr'+(s.touches===1?'y':'ies')+' added.':'')+
          (s.statuses? ' '+s.statuses+' status update'+(s.statuses===1?'':'s')+'.':'')+
-         (s.deals? ' '+s.deals+' verified-lien field'+(s.deals===1?'':'s')+' updated.':''))
+         (s.deals? ' '+s.deals+' verified-lien field'+(s.deals===1?'':'s')+' updated.':'')+
+         (s.violations? ' <b>⚠ '+s.violations+' lead'+(s.violations===1?'':'s')+'</b> now show a call you logged BEFORE this opt-out synced in — review each (⚠ contacted after opt-out) and document the cure.':''))
         : 'Nothing new to merge — this device already has everything in that file.';
     }
   };
@@ -2064,7 +2096,10 @@ function render(){
     if(on) th.dataset.dir = sortD<0 ? 'desc' : 'asc'; else th.removeAttribute('data-dir');
   });
   const _sc = rows.filter(r=>r._verdict==='STRONG').length, _mc = rows.filter(r=>r._verdict==='MARGINAL').length;
-  document.getElementById('stats').textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
+  const _viol = DATA.filter(r=>_dialedAfter(notes[r.case]).length).length;
+  const st = document.getElementById('stats');
+  st.textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
+  if(_viol){ const w=document.createElement('span'); w.className='statviol'; w.title='Leads with outreach logged AFTER the owner opted out — open each to review and document the cure.'; w.textContent=' · ⚠ '+_viol+' contacted after opt-out'; st.appendChild(w); }
   // KPI band — live portfolio metrics for the current view
   const _kp = rows.filter(r=>r._profit>0), _tot = _kp.reduce((s,r)=>s+r._profit,0);
   const _avg = _kp.length ? Math.round(_kp.reduce((s,r)=>s+(r._roi||0),0)/_kp.length) : 0;
