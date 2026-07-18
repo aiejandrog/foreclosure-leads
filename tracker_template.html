@@ -833,15 +833,10 @@ header{
 header::before{content:'';position:absolute;inset:0 0 auto;height:2px;background:linear-gradient(90deg,transparent 0%,var(--gold) 24%,var(--gold-l) 50%,var(--gold) 76%,transparent 100%);opacity:.85}
 header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.035) inset,0 18px 44px rgba(0,0,0,.48)}
 .brand{gap:12px;margin-bottom:14px;position:relative}
-/* refined ascending 'deal flow' emblem — rising bars (momentum/equity), navy tile, gold, with a slow shine sweep */
-.brand .mark{width:44px;height:44px;border-radius:12px;background:linear-gradient(152deg,#22395d 0%,#0d1a2c 100%);border:1px solid rgba(240,217,144,.38);box-shadow:0 0 0 3px rgba(201,168,76,.05),0 12px 26px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.07);position:relative;overflow:hidden;display:grid;place-items:center;flex:0 0 auto}
-.brand .mark svg{width:25px;height:25px;color:var(--gold-l);filter:drop-shadow(0 0 6px rgba(240,217,144,.4));position:relative;z-index:1}
-.brand .mark::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 32%,rgba(255,251,236,.16) 46%,rgba(255,251,236,.30) 50%,rgba(255,251,236,.16) 54%,transparent 68%);transform:translateX(-130%);animation:markShine 3.8s linear infinite}
-@keyframes markShine{0%{transform:translateX(-130%)}58%{transform:translateX(130%)}100%{transform:translateX(130%)}}
-.brand:hover .mark{border-color:rgba(240,217,144,.6);box-shadow:0 0 0 3px rgba(201,168,76,.09),0 14px 30px rgba(0,0,0,.5),0 0 22px rgba(240,217,144,.18),inset 0 1px 0 rgba(255,255,255,.08)}
-.brand .wm{font-family:'Space Grotesk',sans-serif;font-size:25px;font-weight:700;letter-spacing:.055em;color:#f4ede0;line-height:1}
-/* RESTORE the signature flow shine on FLOW (Terra had killed it with animation:none) */
-.brand .wm b{background-image:linear-gradient(100deg,#BE9633 0%,#BE9633 36%,#E8D48B 46%,#FFFBEC 50%,#E8D48B 54%,#BE9633 64%,#BE9633 100%);background-size:300% auto;background-repeat:no-repeat;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;filter:drop-shadow(0 0 9px rgba(232,212,139,.32));animation:wmShine 3.8s linear infinite}
+/* NO emblem — the wordmark stands alone (per request). */
+.brand .wm{font-family:'Space Grotesk',sans-serif;font-size:27px;font-weight:700;letter-spacing:.04em;color:#f4ede0;line-height:1}
+/* FLOW shine — identical to the light ('white') model: same gold specular gradient + 3.6s sweep */
+.brand .wm b{background-image:linear-gradient(100deg,#BE9633 0%,#BE9633 38%,#E8D48B 46%,#FFFBEC 50%,#E8D48B 54%,#BE9633 62%,#BE9633 100%);background-size:300% auto;background-repeat:no-repeat;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;filter:drop-shadow(0 0 7px rgba(201,168,76,.3));animation:wmShine 3.6s linear infinite}
 .brand .tag{font-family:var(--f-label);font-size:8.5px;letter-spacing:.17em;color:#a9b5c6;margin-top:6px}
 .terminal-eyebrow{font-family:var(--f-label);font-size:8px;letter-spacing:.15em;color:var(--gold);text-transform:uppercase;margin-top:5px}
 .market-state{align-self:center;display:inline-flex;align-items:center;gap:7px;font-family:var(--f-label);font-size:8px;letter-spacing:.12em;color:var(--verdigris-ink);border:1px solid rgba(99,196,181,.27);background:rgba(99,196,181,.06);border-radius:var(--pill);padding:6px 9px}
@@ -959,7 +954,6 @@ textarea.notes,input.ph,select.status{background:rgba(4,12,21,.50);border-color:
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <header>
 <div class="brand">
-<div class="mark" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none"><rect x="5" y="15.5" width="3.6" height="7.5" rx="1.8" fill="currentColor" opacity=".5"/><rect x="12.2" y="10.5" width="3.6" height="12.5" rx="1.8" fill="currentColor" opacity=".78"/><rect x="19.4" y="5" width="3.6" height="18" rx="1.8" fill="currentColor"/></svg></div>
 <div>
 <div class="wm">DEAL<b>FLOW</b></div>
 <div class="tag">South Florida · Foreclosure &amp; Tax-Deed Intelligence</div>
