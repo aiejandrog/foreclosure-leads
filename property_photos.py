@@ -367,15 +367,24 @@ def main():
         except Exception:
             zsess = sess
     for r in all_leads:
+        # preserve last run's Zillow hit — zillowstatic URLs are stable, no need to re-scrape and
+        # burn ~2s per lead re-verifying what we already have. Street View/aerial are always cheap
+        # to re-derive from the coords, so those reset freely.
+        prev_zillow = (r.get('photo_kind') == 'zillow' and (r.get('photos') or []) and r.get('zlisting'))
+        prev = list(r.get('photos') or []), r.get('zlisting', '')
         r['photos'], r['zlisting'], r['photo_kind'] = [], '', ''
         # every geocoded lead gets an absolute aerial URL — the tracker uses it as an onerror
         # fallback so a bare emailed HTML (no img/ folder) still shows photos when online.
         c = coords.get(_addr_of(r))
         r['aurl'] = _aerial_url(c[0], c[1]) if c else ''
         if a.zillow and _addr_of(r) and (not tiers or str(r.get('tier') or r.get('Tier') or '').upper() in tiers):
-            ph, zl = zillow_photos(_addr_of(r), zsess)
-            if ph: r['photos'], r['zlisting'], r['photo_kind'] = ph, zl, 'zillow'; n_zillow += 1
-            time.sleep(1.2)
+            if prev_zillow:
+                r['photos'], r['zlisting'], r['photo_kind'] = prev[0], prev[1], 'zillow'
+                n_zillow += 1
+            else:
+                ph, zl = zillow_photos(_addr_of(r), zsess)
+                if ph: r['photos'], r['zlisting'], r['photo_kind'] = ph, zl, 'zillow'; n_zillow += 1
+                time.sleep(1.2)
     # 2) Street View layer (tranchi.ai-style front-of-house) — PARALLEL, only when a key exists
     svkey = _sv_key()
     if svkey:
