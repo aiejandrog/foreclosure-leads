@@ -789,8 +789,20 @@ def make_tracker(leads):
                 if _cft == 'HOA':
                     _d['ftype'] = 'HOA'; _d['ctype'] = 'HOA'; _d['mr'] = True   # whole 1st mortgage survives an HOA sale
                 elif _cft == 'MORTGAGE':
-                    _d['ftype'] = 'MORTGAGE'; _d['mr'] = False                  # a real mortgage foreclosure — direct equity
-                    if (_d.get('ctype') or '').upper().startswith('HOA'): _d['ctype'] = 'Bank/Mortgage'
+                    _d['ftype'] = 'MORTGAGE'
+                    # Clear mortgage-risk ONLY when the RECORDED CHAIN (_h) verified a bank foreclosure
+                    # AND the judgment is a plausible SENIOR amount. Two guards, both required:
+                    #  1. a bare case-prefix 'MORTGAGE' guess (CACE) must not clear the flag — HOAs
+                    #     foreclose in circuit court constantly, so an untraced CACE stays flagged.
+                    #  2. even a chain-confirmed bank plaintiff foreclosing a TINY judgment (<20% of value
+                    #     with 40%+ apparent equity) is almost always a junior/partial position (HELOC/2nd)
+                    #     with the 1st surviving — keep it flagged until Official Records prove otherwise.
+                    #     ($29k judgment on a $1.2M house is fantasy equity even if a bank filed it.)
+                    _v, _j, _e = _d.get('value', 0) or 0, _d.get('judg', 0) or 0, _d.get('eq', 0) or 0
+                    _suspect_ratio = bool(_v) and _j > 0 and (_j / _v) < 0.20 and _e >= 40
+                    if _h and _h.get('ftype') == 'MORTGAGE' and not _h.get('surv') and not _suspect_ratio:
+                        _d['mr'] = False; _d['eqfake'] = False                  # verified real senior equity
+                        if (_d.get('ctype') or '').upper().startswith('HOA'): _d['ctype'] = 'Bank/Mortgage'
                 if _h and _h.get('liens'):
                     _d['orliens'] = _h.get('liens', [])
                     _d['orjunior'] = _h.get('junior', 0)

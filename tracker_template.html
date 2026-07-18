@@ -1056,12 +1056,21 @@ function dealAnalysisHTML(r){
     const costs = r.value*(Math.max(0,+deal.costpct||0)/100);
     const rows = [ mathLine('Market value', r.value) ];
     if(r.st==='TD'){ rows.push(mathLine('Est. winning bid', -r._purchase)); rows.push(mathLine('Quiet title', -(Math.max(0,+deal.quiettitle||3000)))); }
-    else if(r.mr){ rows.push(mathLine('Auction bid (est.)', -r.judg)); if(r._slien) rows.push(mathLine('Surviving 1st mortgage', -r._slien)); }
-    else { rows.push(mathLine('Your purchase', -r._purchase)); }
+    else if(r.mr){
+      // HOA/junior: you pay the small bid, then the surviving mortgages ride ON TOP — itemize each.
+      rows.push(mathLine('Auction bid (est.)', -r.judg));
+      if(r._slien) rows.push(mathLine('Surviving 1st mortgage', -r._slien));
+      if(r._jlien) rows.push(mathLine('2nd / junior mortgage', -r._jlien));
+      if(r._assess) rows.push(mathLine('HOA / special assessment', -r._assess));
+    }
+    else {
+      // 1st-mortgage foreclosure: the purchase price ALREADY clears every mortgage + assessment (they are
+      // paid FROM the price, not stacked on top — see recompute() 'debt'), so they must NOT be re-listed
+      // as separate deductions or the rows undershoot Est. profit by their sum. One line, labeled.
+      const _dbt = (r._slien||0)+(r._jlien||0)+(r._assess||0);
+      rows.push(mathLine('Your purchase'+(_dbt>0?' (clears all mortgages)':''), -r._purchase));
+    }
     rows.push(mathLine('Costs ('+(+deal.costpct||0)+'%)', -costs));
-    if(r._slien && !r.mr) rows.push(mathLine('Senior / 1st mortgage', -r._slien));
-    if(r.st!=='TD' && r._jlien) rows.push(mathLine('2nd / junior mortgage', -r._jlien));
-    if(r.st!=='TD' && r._assess) rows.push(mathLine('HOA / special assessment', -r._assess));
     if(r._btax) rows.push(mathLine('Back property taxes', -r._btax));
     if(r._mlien) rows.push(mathLine('Other surviving liens', -r._mlien));
     if(r._evict) rows.push(mathLine('Eviction / carry', -r._evict));

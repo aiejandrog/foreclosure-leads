@@ -131,8 +131,22 @@ def to_slim(county, cfg, base, items):
         eqp = round((val - judg) / val * 100) if val else 0
         is_co = bool(COMPANY_RE.search(owner))
         st = r.get('sale_type', 'FC')
-        score = max(0, min(100, round(eqp) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
-        tier = 'A' if (val and eqp >= 40 and 0 <= days <= 45) else ('B' if val and eqp >= 15 else 'C')
+        # FANTASY-EQUITY GUARD — plaintiff-free mirror of foreclosure_leads.py suspect_equity (line ~543).
+        # County scrapes rarely carry a plaintiff, so MD's plaintiff-gated guard can't fire here, which
+        # let $29k-judgment / $1.2M-value HOA cases render as "98% equity STRONG bank deals". A judgment
+        # that is a small fraction of value is the signature of a JUNIOR lien (HOA/COA/junior note) with a
+        # senior 1st mortgage surviving unshown -> the shown equity is gross/fake. Exempt a confirmed bank
+        # plaintiff (its judgment IS the senior debt) and tax deeds (no mortgage survives a tax sale).
+        _bank_pl = F._fc_type_plaintiff(r.get('Plaintiff', '')) == 'MORTGAGE'
+        suspect_equity = (st != 'TD') and (not _bank_pl) and bool(val) and judg > 0 and (judg / val) < 0.20 and eqp >= 40
+        mr = (ftype == 'HOA') or suspect_equity
+        eqfake = mr
+        # Fake equity must NOT rank a junior-lien lead as a 98%-equity Tier-A deal. Zero it for score/tier
+        # (mirrors MD, which awards equity points only when 'not is_hoa'); the gross % still shows in the
+        # cell, muted, and the UI verdict engine forces VERIFY off mr=True.
+        eff_eq = 0 if eqfake else eqp
+        score = max(0, min(100, round(eff_eq) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
+        tier = 'A' if (val and eff_eq >= 40 and 0 <= days <= 45) else ('B' if val and eff_eq >= 15 else 'C')
         z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio) + ' FL') + '_rb/'
         auc = base + '?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=' + r.get('AuctionDate', '') + ('#AITEM_' + r['AID'] if r.get('AID') else '')
         # People NAME search — TruePeopleSearch wants "First Last". FDOR owner names are "LAST FIRST[,] MIDDLE",
@@ -155,7 +169,7 @@ def to_slim(county, cfg, base, items):
         slim.append({
             'county': county, 'tier': tier, 'score': score, 'auction': r.get('AuctionDate', ''), 'days': days,
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
-            'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': False, 'hs': hs, 'condo': condo,
+            'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': eqfake, 'hs': hs, 'condo': condo,
             'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')),
             'st': st, 'obid': 0, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
             'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr, 'cyberbg': cyberbg, 'cyberbgaddr': cyberbgaddr,
@@ -163,7 +177,7 @@ def to_slim(county, cfg, base, items):
             # county leads have no per-case docket token (no clerk enrichment) -> no Docket button; the
             # Records/Cases buttons point to THIS county's official-records + court-case search portals.
             'docket': '', 'records': cfg['records'], 'cases': cfg['cases'],
-            'cstatus': '', 'mr': (ftype == 'HOA'), 'ip': False, 'ju': (judg <= 0),
+            'cstatus': '', 'mr': mr, 'ip': False, 'ju': (judg <= 0),
             'bought': bought, 'bprice': bprice, 'filed': 0, 'etax': 0,
             'warn': ('' if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': '',
         })
