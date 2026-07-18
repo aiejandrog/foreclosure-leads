@@ -791,6 +791,30 @@ body.modal-open{overflow:hidden}
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
 <div id="planmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="planbody"></div></div></div>
+<div id="textmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="textbody"></div></div></div>
+<style>
+#textmodal{display:none;position:fixed;inset:0;z-index:122}
+#textmodal.show{display:block}
+#textmodal .dm-card{width:min(560px,94vw)}
+#textmodal .txlangs{display:flex;gap:6px;margin:12px 0 10px}
+#textmodal .txlang{background:#16233f;color:#cdd8ef;border:1px solid #33436a;border-radius:6px;padding:6px 12px;font-size:13px;cursor:pointer}
+#textmodal .txlang.on{background:#c69a3a;color:#1a1205;border-color:#c69a3a;font-weight:700}
+#textmodal .txmsg{white-space:pre-wrap;background:#0e1627;border:1px solid #2c3a5a;border-radius:8px;padding:12px 14px;font-size:14px;line-height:1.5;color:#e4ecfa}
+#textmodal .txbtns{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 8px}
+#textmodal .txsend{background:#1f7a44;color:#fff;border:1px solid #1f7a44;border-radius:7px;padding:9px 14px;font-size:14px;font-weight:700;text-decoration:none;display:inline-block}
+#textmodal .txsend:hover{background:#248a4d}
+#textmodal .txcopy{background:#16233f;color:#cdd8ef;border:1px solid #33436a;border-radius:6px;padding:7px 12px;font-size:13px;cursor:pointer}
+#textmodal .txfoot{display:flex;gap:8px;margin-top:14px;flex-wrap:wrap}
+#textmodal .txmark{background:#c69a3a;color:#1a1205;border:1px solid #c69a3a;border-radius:7px;padding:9px 14px;font-weight:700;font-size:14px;cursor:pointer}
+#textmodal .txskip{background:transparent;color:#9fb0cc;border:1px solid #33436a;border-radius:7px;padding:9px 14px;font-size:14px;cursor:pointer}
+#textmodal .txcompliance{margin-top:14px;font-size:11px;line-height:1.5;color:#8ea0c2;background:#0e1627;border:1px solid #2c3a5a;border-left:3px solid #c69a3a;border-radius:6px;padding:9px 11px}
+#textmodal .warn{color:#f0a58e}
+#textmodal .txblock{margin:12px 0 4px;font-size:12.5px;line-height:1.5;color:#ffd7cc;background:#3a1512;border:1px solid #7a2f22;border-left:3px solid #d9553b;border-radius:7px;padding:10px 12px;font-weight:600}
+#textmodal .txrow{display:inline-flex;align-items:center;gap:4px}
+#textmodal .txsend.off{background:#20304d;border-color:#33436a;color:#7f8ba6;font-weight:700;cursor:not-allowed}
+#textmodal .txdnt{background:#16233f;color:#9fb0cc;border:1px solid #33436a;border-radius:6px;padding:9px 8px;font-size:11px;cursor:pointer}
+#textmodal .txdnt:hover{border-color:#d9553b;color:#f0a58e}
+</style>
 <div id="gallerymodal"><div class="dm-backdrop"></div><div class="dm-card gcard"><button class="dm-close" type="button" title="Close">&times;</button><div id="gallerybody"></div></div></div>
 <div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
 <div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
@@ -821,6 +845,7 @@ body.modal-open{overflow:hidden}
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="plan" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script.">📋 Plan today</button>
+<button id="bulktext" title="Batch text every owner who has a textable number — opens your phone's Messages app with a personalized EN/ES message pre-filled, one owner at a time, so you review + tap send. DNC numbers and opted-out owners are skipped automatically, and every message carries a STOP opt-out.">💬 Bulk text</button>
 <button id="due" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days">⚡ Due</button>
 <input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list.">
 <label style="font-size:12px">Sort <select id="sortby">
@@ -1989,6 +2014,112 @@ show('en');<\/script>
   const w = window.open('', '_blank');
   if(w){ w.document.write(doc); w.document.close(); }
 }
+// ===================== BATCH / PREFILLED SMS (assisted, DNC-safe) =====================
+// A static site has no backend, so it cannot SEND texts — and a blind mass-blast to scraped foreclosure
+// numbers is exactly the FTSA/TCPA exposure the rest of this tool is built to prevent. So this is an
+// ASSISTED sender: it prepares a personalized, bilingual message and opens the phone's Messages app
+// (an sms: deep link) with it pre-filled, ONE owner at a time, so a human reviews and taps send. It
+// HARD-skips every DNC-flagged number and any opted-out owner, and every message carries a STOP opt-out.
+function _smsNum(ph){ const d=String(ph||'').replace(/\D/g,''); if(d.length===10) return '+1'+d; if(d.length===11 && d[0]==='1') return '+'+d; return d; }
+// [Cursor cloud edit] FTSA hardening — FL quiet-hours (8am-8pm ET), 3-per-24h cap, internal Do-Not-Text list.
+// Florida FTSA restricts solicitation texts to 8:00 AM-8:00 PM LOCAL time and <=3 telephonic solicitations
+// per 24h per recipient. All leads are FL (Miami-Dade/Broward/Palm Beach = Eastern), so we gate on ET.
+const FTSA_TZ='America/New_York', FTSA_HR_START=8, FTSA_HR_END=20, FTSA_MAX_24H=3;
+function _flHour(){ try{ const h=parseInt(new Intl.DateTimeFormat('en-US',{timeZone:FTSA_TZ,hour:'2-digit',hour12:false}).format(new Date()),10); return h===24?0:h; }catch(e){ return new Date().getHours(); } }
+function _flClock(){ try{ return new Intl.DateTimeFormat('en-US',{timeZone:FTSA_TZ,hour:'numeric',minute:'2-digit',hour12:true}).format(new Date()); }catch(e){ return ''; } }
+function _withinTextHours(){ const h=_flHour(); return h>=FTSA_HR_START && h<FTSA_HR_END; }
+// count telephonic solicitations (call + text) logged for this lead in the last 24h — the FTSA cap. Also
+// catches touches merged in from teammates via cross-device sync, not just this device's sends.
+const _TELE_CH={call:1,text:1};
+function _recentTeleCount(r){ const ts=(notes[r.case]||{}).touches||[]; const cut=Date.now()-86400000; let n=0; ts.forEach(t=>{ if(_TELE_CH[t.ch]){ const when=t.tsu||(t.d?Date.parse(t.d+'T00:00:00'):0); if(when>=cut) n++; } }); return n; }
+// internal Do-Not-Text suppression list (your own STOP / never-text numbers), kept per-device in localStorage.
+// NOTE: this is NOT a National DNC Registry scrub — that requires a separate, subscribed scrub before sending.
+const DNT_LS='fcDNT';
+let dnt=(function(){ try{ return new Set(JSON.parse(localStorage.getItem(DNT_LS)||'[]')); }catch(e){ return new Set(); } })();
+function _saveDNT(){ try{ localStorage.setItem(DNT_LS, JSON.stringify([...dnt])); }catch(e){} }
+function _isDNT(d){ return dnt.has(String(d||'').replace(/\D/g,'')); }
+function _addDNT(d){ const x=String(d||'').replace(/\D/g,''); if(x){ dnt.add(x); _saveDNT(); } }
+// textablePhones = the numbers we are allowed to text: skip-traced numbers NOT on the DNC list, plus a
+// phone the user saved by hand. Returns [] for an opted-out owner so the queue skips them entirely.
+function textablePhones(r){
+  const n=notes[r.case]||{};
+  if(n.status==='DO NOT CONTACT') return [];
+  const out=[];
+  (r.phones||[]).slice(0,4).forEach((ph,i)=>{ if(!((r.phdnc||[])[i])){ const d=String(ph).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); } });
+  if(n.phone){ const d=String(n.phone).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); }
+  return out;
+}
+function smsMsg(r, lang){
+  const sN = (sender.name||'').trim() || '[YOUR NAME]';
+  const owner=_ownerName((r.owners||'').split(';')[0].trim());
+  const first=owner.split(' ')[0]||owner;
+  const street=((r.addr||'').split(',')[0]||r.addr||'').trim();
+  const dt=r.auction||'', td=(r.st==='TD');
+  if(lang==='es'){
+    return 'Hola '+first+', soy '+sN+', comprador de casas aqu\u00ed en Miami. Vi que la propiedad en '+street+' tiene una '+(td?'subasta de tax deed':'subasta de ejecuci\u00f3n hipotecaria')+(dt?' el '+dt:'')+'. Puede que todav\u00eda tenga opciones (incluso salir con efectivo antes de la venta). Sin costo ni compromiso \u2014 \u00bfle comparto un par? Responda STOP para no recibir m\u00e1s mensajes.';
+  }
+  return 'Hi '+first+', this is '+sN+' \u2014 a local Miami home buyer. I saw the property on '+street+' has a '+(td?'tax-deed sale':'foreclosure sale')+(dt?' set for '+dt:'')+'. You may still have options (even walking away with cash before the sale). No cost or obligation \u2014 can I share a couple? Reply STOP to opt out.';
+}
+let textQ=[], textIdx=0, textLang='en';
+function _copyFB(t,cb){ const a=document.createElement('textarea'); a.value=t; a.style.position='fixed'; a.style.opacity='0'; document.body.appendChild(a); a.select(); try{document.execCommand('copy'); cb&&cb();}catch(e){} document.body.removeChild(a); }
+function _copyText(t, btn){ const done=()=>{ if(btn){ const o=btn.textContent; btn.textContent='Copied!'; setTimeout(()=>{btn.textContent=o;},1500);} }; if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done,()=>_copyFB(t,done)); } else _copyFB(t,done); }
+function textCardHtml(r){
+  // [Cursor cloud edit] added FTSA quiet-hours + 3/24h gating and a per-number Do-Not-Text control
+  const phones=textablePhones(r);
+  const owner=_ownerName((r.owners||'').split(';')[0].trim());
+  const msg=smsMsg(r, textLang);
+  const hoursOK=_withinTextHours();
+  const recent=_recentTeleCount(r);
+  const capped=recent>=FTSA_MAX_24H;
+  const canSend=phones.length && hoursOK && !capped;
+  const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
+  const langBtns='<button class="txlang'+(textLang==='en'?' on':'')+'" data-l="en" type="button">English</button><button class="txlang'+(textLang==='es'?' on':'')+'" data-l="es" type="button">Espa\u00f1ol</button>';
+  let gate='';
+  if(!hoursOK) gate='<div class="txblock">\u26d4 Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM\u20138:00 PM ET (now '+esc(_flClock())+' ET). Sending is disabled until the window opens.</div>';
+  else if(capped) gate='<div class="txblock">\u26d4 FTSA cap reached: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
+  let phBtns;
+  if(!phones.length){
+    phBtns='<div class="warn" style="margin:6px 0">No textable number — every number on file is DNC, opted out, or on your Do-Not-Text list. Reach them by mail or the door instead.</div>';
+  } else {
+    phBtns=phones.map(d=>{ const href='sms:'+_smsNum(d)+'?&body='+encodeURIComponent(msg);
+      const send=canSend
+        ? '<a class="txsend" href="'+esc(href)+'" title="Opens your phone\'s Messages app to this number with the message pre-filled. Review, then tap send.">\u{1f4ac} Text '+esc(fmtPhone(d))+'</a>'
+        : '<span class="txsend off" title="Sending is disabled — see the notice above.">\u{1f4ac} '+esc(fmtPhone(d))+'</span>';
+      return '<span class="txrow">'+send+'<button class="txdnt" type="button" data-d="'+esc(d)+'" title="Add this number to your Do-Not-Text list (permanent suppression on this device)">\u{1f6ab} DNT</button></span>'; }).join('');
+  }
+  const dnc=(r.phones||[]).filter((p,i)=>(r.phdnc||[])[i]).map(fmtPhone);
+  const dncNote=dnc.length?'<div class="mut" style="font-size:11px;margin-top:6px">Skipped (DNC — do not text): '+esc(dnc.join(', '))+'</div>':'';
+  return '<div class="dm-head"><div class="dm-title">\u{1f4ac} Text '+esc(owner)+'</div>'
+    +'<div class="dm-sub">'+esc(r.addr||'')+' \u00b7 '+(r.st==='TD'?'Tax-deed':'Foreclosure')+' sale <b>'+esc(r.auction||'')+'</b>'+(r.days>=0?' \u00b7 in '+r.days+'d':'')+'</div>'+pos+'</div>'
+    +gate
+    +'<div class="txlangs">'+langBtns+'</div>'
+    +'<div class="txmsg">'+esc(msg)+'</div>'
+    +'<div class="txbtns">'+phBtns+'</div>'
+    +(phones.length?'<button class="txcopy" type="button" data-msg="'+esc(msg)+'">Copy message</button>':'')
+    +dncNote
+    +'<div class="txfoot">'
+      +(canSend?'<button class="txmark" data-c="'+esc(r.case)+'" type="button">\u2713 Mark texted'+(textQ.length>1?' \u2192 next':'')+'</button>':'')
+      +(textQ.length>1?'<button class="txskip" type="button">'+(canSend?'Skip \u2192':'Next \u2192')+'</button>':'')
+    +'</div>'
+    +'<div class="txcompliance"><b>Manual send only.</b> Honors DNC-flagged numbers, opted-out owners, your Do-Not-Text list, FTSA hours (8am\u20138pm ET) &amp; the 3-per-24h cap; every message includes a STOP opt-out. <b>This is not a National DNC Registry scrub</b> \u2014 run a registry scrub (about every 31 days) before texting cold numbers. Automated or mass texting without prior express written consent is an FTSA/TCPA risk \u2014 this tool sends one at a time, by hand, on purpose.</div>';
+}
+function renderTextModal(){
+  const body=document.getElementById('textbody');
+  if(!textQ.length){ body.innerHTML='<div class="dm-head"><div class="dm-title">\u{1f4ac} Bulk text</div></div><div class="mut" style="padding:10px 2px">No leads with a textable number right now — every owner is opted out, marked dead, or has only DNC numbers on file.</div>'; return; }
+  const r=DATA.find(x=>x.case===textQ[textIdx]); if(!r){ textAdvance(); return; }
+  body.innerHTML=textCardHtml(r);
+}
+function openTextModal(){ document.getElementById('textmodal').classList.add('show'); document.body.classList.add('modal-open'); renderTextModal(); }
+function closeTextModal(){ document.getElementById('textmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+function textAdvance(){ if(textIdx < textQ.length-1){ textIdx++; renderTextModal(); } else { closeTextModal(); } }
+function openTextSingle(r){ textLang='en'; textQ=[r.case]; textIdx=0; openTextModal(); }
+function openBulkText(){
+  textLang='en';
+  const elig=DATA.filter(r=>{ const n=notes[r.case]||{}; if(n.status==='DO NOT CONTACT'||n.status==='Dead') return false; if(typeof isFlaggedDead==='function' && isFlaggedDead(r)) return false; if(_recentTeleCount(r)>=FTSA_MAX_24H) return false; return textablePhones(r).length>0; });  // [Cursor cloud edit] also skip leads over the FTSA 3/24h cap
+  elig.sort((a,b)=>{ const da=a.days<0?9999:a.days, db=b.days<0?9999:b.days; return da-db || (b._profit||0)-(a._profit||0); });
+  textQ=elig.map(r=>r.case); textIdx=0;
+  openTextModal();
+}
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); }
 
@@ -2360,6 +2491,7 @@ function render(){
       gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
+      if(textablePhones(r).length) gDo.push('<a href="#" class="textgen" data-c="'+esc(r.case)+'" title="Prefilled TEXT (SMS) for this owner — opens your phone\'s Messages app with a personalized EN/ES message ready to review + send. DNC numbers are skipped automatically; the message includes a STOP opt-out.">Text</a>');
     }
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
@@ -2532,6 +2664,7 @@ document.getElementById('eq30').onclick = e => { eq30Only = !eq30Only; e.target.
 document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
 document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
 document.getElementById('plan').onclick = () => openPlanModal();
+document.getElementById('bulktext').onclick = () => openBulkText();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
 // collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
 (function(){
@@ -2610,6 +2743,20 @@ document.addEventListener('click', e => {
   e.preventDefault();
   const r = DATA.find(x => x.case === a.dataset.c);
   if(r) genEmail(r);
+});
+// prefilled SMS — per-lead "Text" button + the bulk-text queue (delegated for table, cards + modal)
+document.addEventListener('click', e => {
+  const tg = e.target.closest && e.target.closest('.textgen');
+  if(tg){ e.preventDefault(); const r = DATA.find(x => x.case === tg.dataset.c); if(r) openTextSingle(r); return; }
+  const tm = document.getElementById('textmodal');
+  if(!tm || !tm.classList.contains('show')) return;
+  const cur = () => DATA.find(x => x.case === textQ[textIdx]);
+  const ll = e.target.closest && e.target.closest('.txlang'); if(ll){ textLang = ll.dataset.l; renderTextModal(); return; }
+  const dn = e.target.closest && e.target.closest('.txdnt'); if(dn){ e.preventDefault(); _addDNT(dn.dataset.d); renderTextModal(); return; }  // [Cursor cloud edit] add number to internal Do-Not-Text list
+  const sd = e.target.closest && e.target.closest('.txsend'); if(sd && sd.tagName==='A'){ const r = cur(); if(r) autoLog(r, 'text', 'texted', {nextDays:3}); return; }  // do NOT preventDefault — let the sms: link open Messages (disabled sends render as <span>, ignored)
+  const cp = e.target.closest && e.target.closest('.txcopy'); if(cp){ e.preventDefault(); _copyText(cp.dataset.msg||'', cp); return; }
+  const mk = e.target.closest && e.target.closest('.txmark'); if(mk){ e.preventDefault(); const r = cur(); if(r) autoLog(r, 'text', 'texted', {nextDays:3}); textAdvance(); return; }
+  const sk = e.target.closest && e.target.closest('.txskip'); if(sk){ e.preventDefault(); textAdvance(); return; }
 });
 // copy buttons (address + copy-all), delegated for table + cards
 document.addEventListener('click', e => {
@@ -2978,7 +3125,7 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeTextModal(); }
 });
 document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); } });
 // "/" focuses search (unless already typing in a field)
