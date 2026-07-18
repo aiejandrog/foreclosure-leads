@@ -1206,12 +1206,16 @@ function imgFB(img){
   const el = img.closest('.pthumb') || img.closest('.phero') || img.closest('.gstage');
   if(el) el.classList.add('imgfail');
 }
+// photo click = straight to Zillow (real listing when known, else address search) in a new tab.
+// No data-c attribute -> the gallery-popup delegate ('.pthumb[data-c]') never intercepts.
+function _zurl(r){ return r.zlisting || r.zillow || (r.addr ? 'https://www.zillow.com/homes/'+encodeURIComponent(r.addr)+'_rb/' : ''); }
 function _photoThumb(r, eager){
   const ph = r.photos || [];
-  if(ph.length) return '<button class="pthumb" data-c="'+esc(r.case)+'" type="button" title="View property photos">'
+  if(!ph.length) return '<div class="pthumb noimg" title="No image available">\u{1f3e0}</div>';
+  const z = _zurl(r);
+  return '<a class="pthumb"'+(z?' href="'+esc(z)+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow">'
     + '<img src="'+esc(ph[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'
-    + (ph.length>1?'<span class="pcount">▣ '+ph.length+'</span>':'')+'</button>';
-  return '<div class="pthumb noimg" title="No image available">\u{1f3e0}</div>';
+    + (ph.length>1?'<span class="pcount">▣ '+ph.length+'</span>':'')+'</a>';
 }
 function galleryBody(r){
   const ph = r.photos || []; if(!ph.length) return '';
@@ -2053,7 +2057,7 @@ function render(){
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
     cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
-      ((r.photos||[]).length?'<div class="phero pthumb" data-c="'+esc(r.case)+'"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</div>':'')+
+      ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)

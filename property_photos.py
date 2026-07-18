@@ -122,6 +122,35 @@ def _aerial_url(lat, lon, d=0.0009):
     bbox = f"{lon-d},{lat-d},{lon+d},{lat+d}"
     return ESRI.format(bbox=bbox)
 
+SV_BLOCK = os.path.join(HERE, 'sv_blocked.json')   # folios whose street shot is a green wall — don't re-buy it
+_blk_lock = threading.Lock()
+try:
+    _blocked = set(json.load(open(SV_BLOCK, encoding='utf-8')))
+except Exception:
+    _blocked = set()
+
+def _too_green(path):
+    """True when the center band of the shot is mostly vegetation — a hedge/tree wall between the
+    camera and the house. Those shots are worse than the satellite, so we reject them."""
+    if not Image:
+        return False
+    try:
+        im = Image.open(path).convert('RGB').resize((64, 42))
+        px = list(im.getdata())
+        w, h = 64, 42
+        band = [px[y*w + x] for y in range(h//4, 3*h//4) for x in range(w)]
+        green = sum(1 for r, g, b in band if g > r + 12 and g > b + 12)
+        return green / len(band) > 0.55
+    except Exception:
+        return False
+
+def _is_vacant(r):
+    """Vacant land gets the AERIAL, always — a street-level shot of an empty lot is asphalt/grass.
+    Miami-Dade raw leads carry dor_desc; Broward/Palm Beach files are pre-slimmed with a 'vac' flag."""
+    return bool(r.get('vac')) \
+        or bool(re.search(r'VACANT', str(r.get('dor_desc') or ''), re.I)) \
+        or str(r.get('use_code') or '').strip() in ('0', '00', '000', '0000')
+
 def _download_streetview(addr, fname, key, sess, target=None):
     """Front-of-house photo, AIM-LOCKED when we know the parcel's true location (FDOR centroid,
     else Census coords): find the nearest outdoor pano, compute the camera->parcel compass bearing,
@@ -133,6 +162,8 @@ def _download_streetview(addr, fname, key, sess, target=None):
     os.makedirs(IMGDIR, exist_ok=True)
     path = os.path.join(IMGDIR, fname + '_sv.jpg')
     rel = 'img/' + fname + '_sv.jpg'
+    if fname in _blocked:
+        return ''
     if os.path.exists(path) and os.path.getsize(path) > 3000:
         return rel
     try:
@@ -155,6 +186,11 @@ def _download_streetview(addr, fname, key, sess, target=None):
             tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"
             with open(tmp, 'wb') as f:
                 f.write(r.content)
+            if _too_green(tmp):
+                os.remove(tmp)
+                with _blk_lock:
+                    _blocked.add(fname)
+                return ''
             os.replace(tmp, path)
             return rel
     except Exception:
@@ -310,7 +346,7 @@ def main():
     # 2) Street View layer (tranchi.ai-style front-of-house) — PARALLEL, only when a key exists
     svkey = _sv_key()
     if svkey:
-        todo = [(r, _folio(r), _addr_of(r)) for r in all_leads if not r['photos']]
+        todo = [(r, _folio(r), _addr_of(r)) for r in all_leads if not r['photos'] and not _is_vacant(r)]
         cents = _parcel_centroids([f for _, f, _ in todo], sess)
         print(f"  parcel centroids for camera aim: {len(cents)} (FDOR cadastral)")
         def _dsv(job):
@@ -339,7 +375,12 @@ def main():
 
     for f, rows in files.items():
         json.dump(rows, open(os.path.join(HERE, f), 'w', encoding='utf-8'), indent=1)
-    print(f"DONE: {n_zillow} zillow-photo, {n_sv} street-view, {n_aerial} aerial, {n_none} no-image  ->  {', '.join(files)}")
+    try:
+        json.dump(sorted(_blocked), open(SV_BLOCK, 'w', encoding='utf-8'))
+    except Exception:
+        pass
+    print(f"DONE: {n_zillow} zillow-photo, {n_sv} street-view, {n_aerial} aerial, {n_none} no-image"
+          + (f" ({len(_blocked)} hedge-blocked)" if _blocked else "") + f"  ->  {', '.join(files)}")
 
 
 if __name__ == '__main__':
