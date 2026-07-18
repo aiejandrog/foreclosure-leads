@@ -219,6 +219,11 @@ def main():
             except Exception: prev = 0
         print(f"ABORT: only {len(slim)} {key} leads scraped (< {MIN}). Keeping the existing {prev}-lead file.")
         raise SystemExit(1)
+    # Preserve photos across the refresh (see photo_carry): carry from the previous county snapshot
+    # BEFORE overwriting it, so returning leads keep their images even if the photo pass never runs.
+    from photo_carry import carry_photos
+    _carried = carry_photos(slim, out)
+    if _carried: print(f"carried photos forward for {_carried} returning {key} leads")
     json.dump(slim, open(out, 'w', encoding='utf-8'), indent=1)
     print(f"DONE: {len(slim)} {key} leads ({got} enriched, {aN} Tier A) -> {os.path.basename(out)}")
 

@@ -947,6 +947,12 @@ def main():
     leads = enrich_clerk(leads)
     leads = qualify(leads)
     leads.sort(key=lambda r: -r['score'])
+    # Preserve photos across the refresh: this fresh scrape has no photo fields, so without this
+    # every returning property would revert to a placeholder until the (slow, sometimes-killed)
+    # photo pass finishes. Carry them from the previous snapshot BEFORE we overwrite it.
+    from photo_carry import carry_photos
+    _carried = carry_photos(leads, os.path.join(HERE,'leads_final.json'))
+    if _carried: print(f"carried photos forward for {_carried} returning leads")
     json.dump(leads, open(os.path.join(HERE,'leads_final.json'),'w'), indent=1)
     make_tracker(leads)
     cols = ['tier','score','sale_type','AuctionDate','days_to_auction','Case #','opening_bid','filing_year','owners','Address','mailing_address',
