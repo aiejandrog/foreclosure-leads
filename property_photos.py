@@ -285,27 +285,52 @@ def geocode_all(addrs):
 
 
 # ---- Zillow listing photos (best-effort, fail-soft) ------------------------------------------------
+_ZHDRS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Sec-Ch-Ua': '"Chromium";v="128", "Not;A=Brand";v="24"',
+    'Sec-Ch-Ua-Mobile': '?0',
+    'Sec-Ch-Ua-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Site': 'none',
+    'Upgrade-Insecure-Requests': '1',
+}
+
 def zillow_photos(addr, sess):
-    """Return (photos[list], listing_url) or ([], '') — never raises. Only zillowstatic.com CDN urls."""
+    """Real MLS listing photos when the property is currently listed on Zillow.
+    Two-step: address search → resolve the specific zpid → open homedetails → extract THAT listing's
+    photos only (the search page mixes listings, so scraping it directly leaks neighbors' photos).
+    The default python-requests UA gets a 403 CAPTCHA; a realistic Chrome fingerprint + Referer chain
+    passes the same page. Return ([], '') when the property isn't MLS-listed (Zestimate-only page —
+    no listing photos exist to fetch, no scraper can fix that)."""
     try:
-        q = re.sub(r'\s+', '-', re.sub(r'[,]', '', addr)).strip('-')
+        sess.headers.update(_ZHDRS)
+        # 1) search — resolves the exact homedetails URL and its zpid
         url = 'https://www.zillow.com/homes/' + requests.utils.quote(addr) + '_rb/'
-        r = sess.get(url, timeout=15)
-        if r.status_code != 200 or 'zillowstatic.com' not in r.text:
+        r = sess.get(url, timeout=20)
+        if r.status_code != 200:
             return [], ''
-        html = r.text
-        # real listing url if the search resolved to one
-        lm = re.search(r'https://www\.zillow\.com/homedetails/[^"\']+_zpid/', html)
-        listing = lm.group(0) if lm else ''
-        # collect full-size zillowstatic photo urls, de-duped, upgraded to _f (full)
-        raw = re.findall(r'https://photos\.zillowstatic\.com/[^"\'\\ ]+\.(?:jpg|webp|png)', html)
+        lm = re.search(r'https://www\.zillow\.com/homedetails/[^"\'<>\s]+/(\d+)_zpid/', r.text)
+        if not lm:
+            return [], ''
+        listing = lm.group(0)
+        # 2) homedetails — every zillowstatic.com photo on this page belongs to this one listing
+        h2 = dict(_ZHDRS); h2['Referer'] = url; h2['Sec-Fetch-Site'] = 'same-origin'
+        r2 = sess.get(listing, headers=h2, timeout=20)
+        if r2.status_code != 200:
+            return [], listing
+        # 3) dedupe by hash prefix + upgrade every URL to cc_ft_1536 (Zillow's largest variant)
+        raw = re.findall(r'https://photos\.zillowstatic\.com/fp/[a-f0-9]+-[a-z_]+_ft_(?:\d+)\.jpg', r2.text)
         seen, photos = set(), []
         for u in raw:
-            u = re.sub(r'_[a-z]_[a-z]\.', '_p_f.', u)
-            k = re.sub(r'-\d+_[a-z]+\.', '.', u)
-            if k in seen: continue
-            seen.add(k); photos.append(u)
-            if len(photos) >= 12: break
+            m = re.match(r'(https://photos\.zillowstatic\.com/fp/[a-f0-9]+)-', u)
+            if not m: continue
+            base = m.group(1)
+            if base in seen: continue
+            seen.add(base)
+            photos.append(re.sub(r'-[a-z_]+_ft_\d+\.jpg', '-cc_ft_1536.jpg', u))
+            if len(photos) >= 8: break
         return photos, listing
     except Exception:
         return [], ''
@@ -332,7 +357,15 @@ def main():
     n_aerial = n_zillow = n_sv = n_none = 0
     tiers = {t.strip().upper() for t in a.tier.split(',') if t.strip()}
     def _folio(r): return re.sub(r'\D', '', str(r.get('folio') or r.get('Folio') or '')) or re.sub(r'[^a-z0-9]', '', (r.get('case') or r.get('Case #') or '').lower())
-    # 1) Zillow bonus layer (serial, anti-ban) — only when --zillow, optionally tier-gated
+    # 1) Zillow bonus layer (serial, anti-ban) — only when --zillow, optionally tier-gated.
+    # The new scraper does 2 requests per lead (search -> homedetails), so pace at 1.2s and warm up
+    # the session with a landing-page hit to seed the anti-bot cookies.
+    if a.zillow:
+        try:
+            zsess = requests.Session(); zsess.headers.update(_ZHDRS)
+            zsess.get('https://www.zillow.com/', timeout=20)
+        except Exception:
+            zsess = sess
     for r in all_leads:
         r['photos'], r['zlisting'], r['photo_kind'] = [], '', ''
         # every geocoded lead gets an absolute aerial URL — the tracker uses it as an onerror
@@ -340,9 +373,9 @@ def main():
         c = coords.get(_addr_of(r))
         r['aurl'] = _aerial_url(c[0], c[1]) if c else ''
         if a.zillow and _addr_of(r) and (not tiers or str(r.get('tier') or r.get('Tier') or '').upper() in tiers):
-            ph, zl = zillow_photos(_addr_of(r), sess)
+            ph, zl = zillow_photos(_addr_of(r), zsess)
             if ph: r['photos'], r['zlisting'], r['photo_kind'] = ph, zl, 'zillow'; n_zillow += 1
-            time.sleep(0.6)
+            time.sleep(1.2)
     # 2) Street View layer (tranchi.ai-style front-of-house) — PARALLEL, only when a key exists
     svkey = _sv_key()
     if svkey:
