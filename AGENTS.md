@@ -7,6 +7,27 @@ scrapes South Florida foreclosure/tax-deed auctions, enriches each parcel, score
 renders a self-contained static HTML tracker into `docs/index.html` (published via GitHub Pages).
 There is **no test suite and no linter config** in this repo.
 
+<!-- [Cursor cloud edit] section added by the Cursor cloud agent -->
+### Edit attribution — REQUIRED for the Cursor cloud agent
+
+The repo owner works in a local Cursor/Claude session AND uses this background **Cursor cloud
+agent**. To keep authorship clear, the Cursor cloud agent MUST tag every edit it makes so the
+local agent can tell which changes came from the cloud agent.
+
+Convention (applies to **future** edits only — do NOT retro-tag existing code):
+
+- Put a short marker comment at the top of each block the cloud agent adds or modifies, using the
+  file's own comment syntax:
+  - JS: `// [Cursor cloud edit] <short note>`   (or `/* [Cursor cloud edit] <short note> */`)
+  - CSS: `/* [Cursor cloud edit] <short note> */`
+  - Python: `# [Cursor cloud edit] <short note>`
+  - HTML / Markdown: `<!-- [Cursor cloud edit] <short note> -->`
+- Keep it to one line — it's an authorship marker, not a changelog.
+- The `cursor/…` branch prefix + commit author are the secondary authorship signal.
+
+The local Claude/Cursor agent should read any `[Cursor cloud edit]` marker as "the Cursor cloud
+agent authored this," and is free to keep, revise, or remove those markers as it edits.
+
 ### Services / how to run
 
 - **The "application" is the static tracker site.** Serve it locally with the standard
