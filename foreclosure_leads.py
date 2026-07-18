@@ -265,28 +265,31 @@ def enrich(leads):
         folio = _valid_folio(r.get('Folio',''))
         r['enriched'] = False
         if not folio: continue   # skip non-parcel / multi-parcel rows (no real folio to look up)
+        # ONE try/except that guards BOTH the fetch AND the parse — a single malformed PA response
+        # (e.g. Assessment/AssessmentInfos returned as a string, PropertyInfo shape change) used to
+        # AttributeError out here and kill the WHOLE enrich pass; now it just skips that one lead.
         try:
             d = s.get("https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx",
                 params={"Operation":"GetPropertySearchByFolio","clientAppName":"PropertySearch","folioNumber":folio},
                 timeout=20).json()
+            pi = d.get('PropertyInfo') or {}
+            owners = [o.get('Name','') for o in (d.get('OwnerInfos') or []) if o.get('Name')]
+            ma = d.get('MailingAddress') or {}
+            mkt = next((a['TotalValue'] for a in (d.get('Assessment') or {}).get('AssessmentInfos') or [] if a.get('TotalValue')), 0)
+            benefits = (d.get('Benefit') or {}).get('BenefitInfos') or []
+            sales = d.get('SalesInfos') or []
+            last_sale = sales[0] if sales else {}
+            r.update({
+                'enriched': True, 'owners': '; '.join(owners),
+                'mailing_address': ', '.join(x for x in [ma.get('Address1',''), ma.get('Address2',''), ma.get('City',''), ma.get('State',''), ma.get('ZipCode','')] if x),
+                'market_value': mkt, 'dor_desc': pi.get('DORDescription',''),
+                'beds': pi.get('BedroomCount',0), 'baths': pi.get('BathroomCount',0),
+                'living_area': pi.get('BuildingHeatedArea',0), 'year_folio': pi.get('FolioNumber',''),
+                'homestead': _has_homestead(benefits),
+                'last_sale_price': last_sale.get('SalePrice',0), 'last_sale_date': last_sale.get('DateOfSale',''),
+            })
         except Exception as e:
             print("PA fail", folio, e); time.sleep(1); continue
-        pi = d.get('PropertyInfo') or {}
-        owners = [o.get('Name','') for o in (d.get('OwnerInfos') or []) if o.get('Name')]
-        ma = d.get('MailingAddress') or {}
-        mkt = next((a['TotalValue'] for a in (d.get('Assessment') or {}).get('AssessmentInfos') or [] if a.get('TotalValue')), 0)
-        benefits = (d.get('Benefit') or {}).get('BenefitInfos') or []
-        sales = d.get('SalesInfos') or []
-        last_sale = sales[0] if sales else {}
-        r.update({
-            'enriched': True, 'owners': '; '.join(owners),
-            'mailing_address': ', '.join(x for x in [ma.get('Address1',''), ma.get('Address2',''), ma.get('City',''), ma.get('State',''), ma.get('ZipCode','')] if x),
-            'market_value': mkt, 'dor_desc': pi.get('DORDescription',''),
-            'beds': pi.get('BedroomCount',0), 'baths': pi.get('BathroomCount',0),
-            'living_area': pi.get('BuildingHeatedArea',0), 'year_folio': pi.get('FolioNumber',''),
-            'homestead': _has_homestead(benefits),
-            'last_sale_price': last_sale.get('SalePrice',0), 'last_sale_date': last_sale.get('DateOfSale',''),
-        })
         if (i+1) % 20 == 0: print(f"enriched {i+1}/{len(leads)}")
         time.sleep(0.35)
     return leads
@@ -353,7 +356,9 @@ def enrich_clerk(leads):
     return leads
 
 def qualify(leads):
-    today = datetime.now()
+    # date-only "today" so a SAME-day auction shows 'in 0d' instead of '-1d'
+    # (datetime.now() at 3pm minus AuctionDate parsed at 00:00 gives -0.6 days, .days floors to -1)
+    today = datetime.combine(date.today(), datetime.min.time())
     for r in leads:
         td = (r.get('sale_type') == 'TD')
         mkt = r.get('market_value',0) or 0

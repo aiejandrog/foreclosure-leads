@@ -2239,7 +2239,12 @@ const SB_KEY = 'sb_publishable_BbzeDgUG0HJK2OBekCh8uw_267aVBhQ';
 const SB_TBL = SB_URL + '/rest/v1/dealflow_sync';
 let _syncTimer = null, _syncBusy = false, _pullTimer = null;
 function _teamKey(){ return localStorage.getItem('fcTeamKey') || ''; }
-function _deviceId(){ let d = localStorage.getItem('fcDevice'); if(!d){ d = 'dev-' + Math.abs((''+_nowTS()+navigator.userAgent).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0)).toString(36); localStorage.setItem('fcDevice', d); } return d; }
+function _deviceId(){ let d = localStorage.getItem('fcDevice'); if(!d){
+  // crypto.randomUUID gives 122 bits of entropy — collision-safe even for two devices sharing a UA and
+  // signing up in the same second (the old time+UA hash was ~30 bits and could collide in that case).
+  d = 'dev-' + ((crypto&&crypto.randomUUID) ? crypto.randomUUID().replace(/-/g,'').slice(0,12) :
+    Math.abs((''+_nowTS()+navigator.userAgent+Math.random()).split('').reduce((a,c)=>((a<<5)-a+c.charCodeAt(0))|0,0)).toString(36));
+  localStorage.setItem('fcDevice', d); } return d; }
 // chunked so a large ciphertext can't blow the argument limit of String.fromCharCode.apply
 // (a heavy note-taker's blob is >65K bytes → RangeError → sync would silently die as "offline")
 const _b64 = u8 => { let s=''; for(let i=0;i<u8.length;i+=0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i+0x8000)); return btoa(s); };
@@ -2260,9 +2265,13 @@ async function syncPush(){
   }catch(e){ syncStatus('offline — will retry', true); }
   finally{ _syncBusy = false; }
 }
-function syncPushSoon(){ if(!_teamKey()) return; clearTimeout(_syncTimer); _syncTimer = setTimeout(syncPush, 1500); }
+// Actually GUARD with _syncBusy — previously set true/false but never read, so a syncPull's
+// mergeNotes -> save -> syncPushSoon could stack a push while another was in flight (race the
+// server's merge-duplicates path). Now we back off ~500ms if a push is already running.
+function syncPushSoon(){ if(!_teamKey()) return; clearTimeout(_syncTimer); _syncTimer = setTimeout(() => { if(_syncBusy){ syncPushSoon(); return; } syncPush(); }, 1500); }
 async function syncPull(){
   const key = _teamKey(); if(!key) return 0;
+  if(_syncBusy) return 0;   // don't pull-then-merge-then-push into a push that's already flying
   try{
     const tid = await _teamId(key), me = _deviceId();
     const r = await fetch(SB_TBL+'?team_id=eq.'+encodeURIComponent(tid)+'&select=device_id,payload', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
@@ -2315,7 +2324,11 @@ function openSyncModal(){
     g('sync-now').onclick = async () => { g('sync-now').textContent='Syncing…'; const r = await syncPull(); await syncPush(); g('syncstatline').textContent = 'Last synced '+_ago(localStorage.getItem('fcLastPull'))+(r&&r.merged?' · pulled '+r.merged+' update(s)':''); g('sync-now').textContent='Sync now'; render(); };
     g('sync-off').onclick = () => { localStorage.removeItem('fcTeamKey'); clearInterval(_pullTimer); openSyncModal(); syncFreshness(); };
   } else {
-    g('sync-on').onclick = () => { const k=(g('teamkeyin').value||'').trim(); if(k.length<4){ g('teamkeyin').style.borderColor='#d94b4b'; return; } localStorage.setItem('fcTeamKey', k); if(!localStorage.getItem('fcDevice')) _deviceId(); startTeamSync(); openSyncModal(); syncFreshness(); };
+    g('sync-on').onclick = () => { const k=(g('teamkeyin').value||'').trim();
+      // team key = the sole encryption secret for all synced notes. Bump from 4 to 8 chars minimum
+      // so an easy brute-force can't decrypt a team's blobs (Supabase table is anon-readable).
+      if(k.length<8){ g('teamkeyin').style.borderColor='#d94b4b'; g('teamkeyin').setAttribute('placeholder','need at least 8 characters'); return; }
+      localStorage.setItem('fcTeamKey', k); if(!localStorage.getItem('fcDevice')) _deviceId(); startTeamSync(); openSyncModal(); syncFreshness(); };
     g('teamkeyin').onkeydown = (ev) => { if(ev.key==='Enter') g('sync-on').click(); };
   }
   document.getElementById('syncmodal').classList.add('show'); document.body.classList.add('modal-open');
