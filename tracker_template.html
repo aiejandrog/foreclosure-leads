@@ -434,6 +434,19 @@ td.owncell .meta,td.owncell .submeta,td.propcell .submeta,td.propcell .warn{font
 /* contact / follow-up tracker */
 #logmodal{display:none;position:fixed;inset:0;z-index:120}
 #logmodal.show{display:block}
+#syncmodal{display:none;position:fixed;inset:0;z-index:122}
+#syncmodal.show{display:block}
+#syncmodal .dm-card{width:min(560px,94vw)}
+.syncrow{display:flex;gap:12px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line-2)}
+.syncrow:last-child{border-bottom:none}
+.syncrow .si{font-size:22px;line-height:1}
+.syncrow .st{font-family:var(--f-display);font-weight:700;font-size:15px;color:var(--ink)}
+.syncrow .sd{font-size:12.5px;color:var(--muted);margin-top:3px;line-height:1.45}
+.syncbtn2{margin-top:8px;background:var(--navy);color:#fff;border:1px solid var(--navy);border-radius:var(--pill);font-weight:700;font-size:12.5px;padding:7px 16px;cursor:pointer}
+.syncbtn2:hover{background:var(--gold-d);border-color:var(--gold-d)}
+.syncres{margin-top:14px;padding:13px 15px;border-radius:var(--r-md);background:#F0FAF3;border:1px solid #CFE9D6;font-size:13px;line-height:1.5;color:#0A5B33}
+.syncres.warn{background:#FBF6E9;border-color:#EAD9B0;color:#7a5a10}
+.syncres b{font-family:var(--f-num)}
 #logmodal .dm-card{max-width:440px}
 .cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px;cursor:pointer}
 .cx{font-size:10px;padding:1px 6px;border-radius:9px;white-space:nowrap;line-height:1.7}
@@ -732,6 +745,8 @@ body.modal-open{overflow:hidden}
 <div id="planmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="planbody"></div></div></div>
 <div id="gallerymodal"><div class="dm-backdrop"></div><div class="dm-card gcard"><button class="dm-close" type="button" title="Close">&times;</button><div id="gallerybody"></div></div></div>
 <div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
+<div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
+<input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <header>
 <div class="brand">
 <div>
@@ -763,6 +778,7 @@ body.modal-open{overflow:hidden}
 </select></label>
 <button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">Filters &amp; setup</button>
 <button id="exp">Export CSV (with my notes)</button>
+<button id="syncbtn" title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins.">⇄ Sync / team</button>
 <span class="stats" id="stats"></span>
 </div>
 </header>
@@ -1860,6 +1876,103 @@ show('en');<\/script>
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} }
+
+// ================= CROSS-DEVICE SYNC (serverless, file-as-transport) =================
+// The whole app is a static file with per-device localStorage, so a teammate's opt-outs, calls and
+// verified-lien work never reach your device — an FTSA liability (you could dial a number Jose already
+// opted out) and a lost-pipeline risk. Fix: export a notes file / import a teammate's and MERGE, with
+// SAFETY-FIRST conflict rules. No server, works offline, can't silently fail.
+function exportNotes(){
+  const payload = { _dealflow_notes: 1, exported: _today(), device: (localStorage.getItem('fcDevice')||''), notes: notes };
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'dealflow-notes-'+_today()+'.json'; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+const _DNC = s => s === 'DO NOT CONTACT';
+const _DEAD = s => s === 'Dead' || s === 'DO NOT CONTACT';
+const _lastTouchD = n => (n && n.touches && n.touches.length) ? (n.touches[n.touches.length-1].d || '') : '';
+function _mergeLead(local, remote){
+  local = local || {}; remote = remote || {};
+  const out = Object.assign({}, local);
+  const ch = { optout:false, touches:0, status:false, deal:false, note:false };
+  // opt-out is STICKY and never cleared by a merge; earliest date wins
+  if(remote.optout && (!out.optout || remote.optout < out.optout)){ ch.optout = !local.optout; out.optout = remote.optout; }
+  // status: DO NOT CONTACT wins over everything, then Dead, else the side with the more recent touch
+  if(_DNC(local.status) || _DNC(remote.status)){ if(out.status !== 'DO NOT CONTACT'){ out.status = 'DO NOT CONTACT'; ch.status = true; } if(!out.optout){ out.optout = remote.optout || local.optout || _today(); ch.optout = ch.optout || !local.optout; } }
+  else if(_DEAD(local.status) || _DEAD(remote.status)){ if(!_DEAD(out.status)){ out.status = 'Dead'; ch.status = true; } }
+  else if(remote.status && remote.status !== (local.status||'') && _lastTouchD(remote) >= _lastTouchD(local)){ out.status = remote.status; ch.status = true; }
+  // contact log: union, dedupe by (date|channel|outcome)
+  const seen = new Set(), tt = [];
+  (local.touches||[]).concat(remote.touches||[]).forEach(t => { const k=(t.d||'')+'|'+(t.ch||'')+'|'+(t.out||''); if(!seen.has(k)){ seen.add(k); tt.push(t); } });
+  tt.sort((a,b)=>(a.d||'').localeCompare(b.d||''));
+  ch.touches = Math.max(0, tt.length - (local.touches||[]).length);
+  if(tt.length) out.touches = tt;
+  // follow-up: the sooner defined date
+  if(remote.next && (!out.next || remote.next < out.next)) out.next = remote.next;
+  // manually-typed phone: fill if missing
+  if(!out.phone && remote.phone) out.phone = remote.phone;
+  // verified-lien / deal numbers: prefer non-empty; if both set & differ, keep the LARGER debt
+  // (more conservative underwriting). occ checkbox = OR.
+  ['slien','jlien','assess','btax','mlien'].forEach(k => {
+    const lv = +local[k]||0, rv = +remote[k]||0, v = Math.max(lv, rv);
+    if(v && v !== lv){ out[k] = String(v); ch.deal = true; }
+  });
+  if(remote.occ && !local.occ){ out.occ = true; }
+  // free-text note: keep both, distinct
+  if(remote.note && remote.note !== (local.note||'') && (local.note||'').indexOf(remote.note) === -1){
+    out.note = local.note ? (local.note + '\n— (merged) ' + remote.note) : remote.note; ch.note = true;
+  }
+  return [out, ch];
+}
+function mergeNotes(remoteNotes){
+  const sum = { leads:0, optouts:0, touches:0, statuses:0, deals:0, notes:0 };
+  Object.keys(remoteNotes||{}).forEach(caseId => {
+    const [merged, ch] = _mergeLead(notes[caseId], remoteNotes[caseId]);
+    notes[caseId] = merged;
+    if(ch.optout||ch.touches||ch.status||ch.deal||ch.note) sum.leads++;
+    if(ch.optout) sum.optouts++;
+    sum.touches += ch.touches; if(ch.status) sum.statuses++; if(ch.deal) sum.deals++; if(ch.note) sum.notes++;
+  });
+  save(); try{ recompute(); }catch(e){} render();
+  return sum;
+}
+function openSyncModal(){
+  document.getElementById('syncbody').innerHTML =
+    '<div class="dm-sec" style="font-size:17px;margin-bottom:2px">Sync across devices &amp; team</div>'+
+    '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-bottom:6px">Your notes, calls, opt-outs and verified liens live on THIS device. Move them between your phone and laptop, or merge a teammate’s file into yours. No account, no server — the JSON file is the handoff.</div>'+
+    '<div class="syncrow"><span class="si">⬆️</span><div style="flex:1"><div class="st">Export my notes</div><div class="sd">Download everything you’ve logged as one file — a backup, or send it to your teammate to merge.</div><button class="syncbtn2" id="sync-exp" type="button">Download notes file</button></div></div>'+
+    '<div class="syncrow"><span class="si">⬇️</span><div style="flex:1"><div class="st">Import &amp; merge a teammate’s notes</div><div class="sd"><b>DO NOT CONTACT always wins</b> — an opt-out on either device suppresses the number everywhere. Calls &amp; follow-ups combine, verified liens keep the more conservative number, and nothing you already typed is lost.</div><button class="syncbtn2" id="sync-imp" type="button">Choose file to merge…</button></div></div>'+
+    '<div id="syncresult"></div>';
+  document.getElementById('sync-exp').onclick = exportNotes;
+  document.getElementById('sync-imp').onclick = () => document.getElementById('syncfile').click();
+  document.getElementById('syncmodal').classList.add('show'); document.body.classList.add('modal-open');
+}
+function closeSyncModal(){ document.getElementById('syncmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+document.getElementById('syncbtn').onclick = openSyncModal;
+document.getElementById('syncfile').onchange = (e) => {
+  const f = e.target.files && e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = () => {
+    const res = document.getElementById('syncresult'); e.target.value = '';
+    let parsed; try{ parsed = JSON.parse(rd.result); }catch(err){ if(res){ res.className='syncres warn'; res.textContent='That file isn’t a valid notes export (couldn’t read it as JSON).'; } return; }
+    const remote = (parsed && parsed._dealflow_notes) ? parsed.notes : (parsed && typeof parsed==='object' && !Array.isArray(parsed) ? parsed : null);
+    if(!remote){ if(res){ res.className='syncres warn'; res.textContent='That doesn’t look like a DealFlow notes file. Use one exported from this app.'; } return; }
+    const s = mergeNotes(remote);
+    if(res){
+      res.className = 'syncres';
+      res.innerHTML = s.leads ?
+        ('Merged <b>'+s.leads+'</b> lead'+(s.leads===1?'':'s')+' from '+((parsed.device&&parsed.device!==(localStorage.getItem('fcDevice')||''))?'your teammate':'that file')+'.'+
+         (s.optouts? ' <b>'+s.optouts+'</b> new DO-NOT-CONTACT opt-out'+(s.optouts===1?'':'s')+' now suppressed on this device.':'')+
+         (s.touches? ' '+s.touches+' contact-log entr'+(s.touches===1?'y':'ies')+' added.':'')+
+         (s.statuses? ' '+s.statuses+' status update'+(s.statuses===1?'':'s')+'.':'')+
+         (s.deals? ' '+s.deals+' verified-lien field'+(s.deals===1?'':'s')+' updated.':''))
+        : 'Nothing new to merge — this device already has everything in that file.';
+    }
+  };
+  rd.readAsText(f);
+};
+// ================= /CROSS-DEVICE SYNC =================
 function view(){
   let rows;
   if(q){
@@ -2620,7 +2733,7 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); }
 });
 document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); } });
 // "/" focuses search (unless already typing in a field)
