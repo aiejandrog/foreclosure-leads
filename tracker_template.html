@@ -447,6 +447,14 @@ td.owncell .meta,td.owncell .submeta,td.propcell .submeta,td.propcell .warn{font
 .syncres{margin-top:14px;padding:13px 15px;border-radius:var(--r-md);background:#F0FAF3;border:1px solid #CFE9D6;font-size:13px;line-height:1.5;color:#0A5B33}
 .syncres.warn{background:#FBF6E9;border-color:#EAD9B0;color:#7a5a10}
 .syncres b{font-family:var(--f-num)}
+.syncfresh{font-size:10px;color:var(--muted-2);font-weight:600;margin-left:2px}
+#syncbtn.syncstale{border-color:#e0a020;background:#FBF6E9;color:#7a5a10}
+#syncbtn.syncstale .syncfresh{color:#b45309}
+/* opt-out audit ledger (FTSA paper trail) in the contact-log modal */
+.optledger{margin-top:12px;padding:11px 13px;border-radius:var(--r-md);background:#FBF3F3;border:1px solid #EAD0D0}
+.optledger .olt{font-size:11px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;color:#a13636;margin-bottom:6px}
+.optledger .ole{font-size:12px;color:#5a2c2c;line-height:1.5;font-variant-numeric:tabular-nums}
+.optledger .ole b{font-family:var(--f-num)}
 #logmodal .dm-card{max-width:440px}
 .cxwrap{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:7px;cursor:pointer}
 .cx{font-size:10px;padding:1px 6px;border-radius:9px;white-space:nowrap;line-height:1.7}
@@ -778,7 +786,7 @@ body.modal-open{overflow:hidden}
 </select></label>
 <button id="advtog" title="Show/hide date filters, deal model, letter sender and lookup">Filters &amp; setup</button>
 <button id="exp">Export CSV (with my notes)</button>
-<button id="syncbtn" title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins.">⇄ Sync / team</button>
+<button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins.">⇄ Sync / team <span id="syncfresh" class="syncfresh"></span></button>
 <span class="stats" id="stats"></span>
 </div>
 </header>
@@ -1136,6 +1144,11 @@ function refreshDealModal(){
 function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
 // ---- contact / follow-up tracker (mini-CRM; per-device, in the same notes[] localStorage) ----
 function _today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function _nowTS(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return _today()+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
+// FTSA compliance audit trail: append a timestamped opt-out/suppression event to a lead's ledger.
+// 'set-local' = an operator marked DO NOT CONTACT here; 'suppressed-here' = a teammate's opt-out
+// arrived via merge and started suppressing on THIS device. This is the paper trail for a lawyer.
+function _optLog(n, act, src){ n.optlog = n.optlog || []; n.optlog.push({ts:_nowTS(), act:act, src:src||(localStorage.getItem('fcDevice')||'this device')}); }
 function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
 function _rel(iso){ const n=_dneg(iso); if(n===null) return ''; if(n===0) return 'today'; return n<0 ? (-n)+'d ago' : 'in '+n+'d'; }
 const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}', door:'\u{1f6aa}'};
@@ -1148,7 +1161,7 @@ function contactChip(r){
   return h;
 }
 function _setNext(n, days){ if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.touches=n.touches||[]; n.touches.push({d:_today(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout) n.optout=_today(); } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); }
+function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.touches=n.touches||[]; n.touches.push({d:_today(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); }
 function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
 // ---- cadence engine: WHICH channel WHEN, keyed to days-until-auction + touch history. ----
 // Content-agnostic by design: Jose sends mail/email using HIS OWN script — this only schedules.
@@ -1299,10 +1312,15 @@ function logModalBody(r){
   const fu = n.next ? '<b>'+esc(n.next)+'</b> <span class="mut">('+_rel(n.next)+')</span>' : '<span class="mut">none set</span>';
   const fub='<button class="fuset" data-c="'+esc(r.case)+'" data-d="2" type="button">+2d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="5" type="button">+5d</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="14" type="button">+2w</button><button class="fuset" data-c="'+esc(r.case)+'" data-d="0" type="button">clear</button>';
   const hist = ts.length ? '<ul class="lhist">'+ts.map(t=>'<li>'+esc(t.d)+' · '+(CH_ICON[t.ch]||'')+' '+esc(t.out)+'</li>').join('')+'</ul><button class="lundo" data-c="'+esc(r.case)+'" type="button">Undo last</button>' : '<div class="mut">No touches logged yet.</div>';
+  // FTSA opt-out audit ledger — a timestamped, teammate-attributed suppression trail (the "wave at a
+  // plaintiff's lawyer" evidence). Only shown once a lead has been opted out.
+  const _actLbl = {'set-local':'marked DO NOT CONTACT', 'suppressed-here':'opt-out synced in — suppressed on this device'};
+  const ledger = (n.optlog && n.optlog.length) ? '<div class="optledger"><div class="olt">🚫 Do-not-contact audit trail</div>'+
+    n.optlog.slice().reverse().map(ev=>'<div class="ole"><b>'+esc(ev.ts||'')+'</b> · '+esc(_actLbl[ev.act]||ev.act||'')+(ev.src?' · '+esc(ev.src):'')+'</div>').join('')+'</div>' : '';
   return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+(r.days>=0?'in '+r.days+'d':'passed')+'</div></div>'+
     '<div class="dm-sec">Log a touch — one tap</div><div class="qlogwrap">'+btns+'</div>'+
     '<div class="dm-sec">Follow-up date</div><div class="fuwrap">Next: '+fu+' &nbsp;'+fub+'</div>'+
-    '<div class="dm-sec">History</div>'+hist;
+    '<div class="dm-sec">History</div>'+hist+ledger;
 }
 let logModalCase=null;
 function openLogModal(c){ const r=DATA.find(x=>x.case===c); if(!r) return; logModalCase=c; document.getElementById('logbody').innerHTML=logModalBody(r); document.getElementById('logmodal').classList.add('show'); document.body.classList.add('modal-open'); }
@@ -1896,10 +1914,18 @@ function _mergeLead(local, remote){
   local = local || {}; remote = remote || {};
   const out = Object.assign({}, local);
   const ch = { optout:false, touches:0, status:false, deal:false, note:false };
+  // audit ledger: union every opt-out event from both devices (dedup by ts|act), so the ORIGINAL
+  // "set" timestamp on the teammate's device is preserved as evidence, not just the local one.
+  const _lseen = new Set(), _ol = [];
+  (local.optlog||[]).concat(remote.optlog||[]).forEach(ev => { const k=(ev.ts||'')+'|'+(ev.act||'')+'|'+(ev.src||''); if(!_lseen.has(k)){ _lseen.add(k); _ol.push(ev); } });
+  if(_ol.length){ _ol.sort((a,b)=>(a.ts||'').localeCompare(b.ts||'')); out.optlog = _ol; }
+  const _wasDNC = _DNC(local.status);
   // opt-out is STICKY and never cleared by a merge; earliest date wins
   if(remote.optout && (!out.optout || remote.optout < out.optout)){ ch.optout = !local.optout; out.optout = remote.optout; }
   // status: DO NOT CONTACT wins over everything, then Dead, else the side with the more recent touch
-  if(_DNC(local.status) || _DNC(remote.status)){ if(out.status !== 'DO NOT CONTACT'){ out.status = 'DO NOT CONTACT'; ch.status = true; } if(!out.optout){ out.optout = remote.optout || local.optout || _today(); ch.optout = ch.optout || !local.optout; } }
+  if(_DNC(local.status) || _DNC(remote.status)){ if(out.status !== 'DO NOT CONTACT'){ out.status = 'DO NOT CONTACT'; ch.status = true; } if(!out.optout){ out.optout = remote.optout || local.optout || _today(); ch.optout = ch.optout || !local.optout; }
+    // teammate's opt-out just started suppressing on THIS device — stamp when, for the paper trail
+    if(!_wasDNC){ out.optlog = out.optlog || []; out.optlog.push({ts:_nowTS(), act:'suppressed-here', src:(localStorage.getItem('fcDevice')||'this device')}); } }
   else if(_DEAD(local.status) || _DEAD(remote.status)){ if(!_DEAD(out.status)){ out.status = 'Dead'; ch.status = true; } }
   else if(remote.status && remote.status !== (local.status||'') && _lastTouchD(remote) >= _lastTouchD(local)){ out.status = remote.status; ch.status = true; }
   // contact log: union, dedupe by (date|channel|outcome)
@@ -1934,8 +1960,22 @@ function mergeNotes(remoteNotes){
     if(ch.optout) sum.optouts++;
     sum.touches += ch.touches; if(ch.status) sum.statuses++; if(ch.deal) sum.deals++; if(ch.note) sum.notes++;
   });
-  save(); try{ recompute(); }catch(e){} render();
+  try{ localStorage.setItem('fcLastMerge', _nowTS()); }catch(e){}
+  save(); try{ recompute(); }catch(e){} render(); syncFreshness();
   return sum;
+}
+// staleness nag: turn the Sync button amber when the last team merge is old, so a stale opt-out
+// window (the one FTSA risk left in a manual-merge model) is VISIBLE, not silent.
+function syncFreshness(){
+  const b = document.getElementById('syncbtn'); if(!b) return;
+  const last = localStorage.getItem('fcLastMerge') || '';
+  if(!last){ b.classList.remove('syncstale'); b.title = b.dataset.baseTitle || b.title; return; }
+  const hrs = Math.max(0, Math.round((new Date(_nowTS().replace(' ','T')) - new Date(last.replace(' ','T')))/3600000));
+  const label = hrs < 1 ? 'just now' : hrs < 24 ? hrs+'h ago' : Math.round(hrs/24)+'d ago';
+  const stale = hrs >= 12;
+  b.classList.toggle('syncstale', stale);
+  b.title = (b.dataset.baseTitle||'') + ' — last team merge: ' + label + (stale ? ' · OVERDUE, import teammate files' : '');
+  const tag = document.getElementById('syncfresh'); if(tag){ tag.textContent = (stale?'⚠ ':'')+'sync '+label; }
 }
 function openSyncModal(){
   document.getElementById('syncbody').innerHTML =
@@ -2749,7 +2789,7 @@ document.addEventListener('change', e => {
     notes[c].status = e.target.value;
     // opt-out ledger: stamp the date a lead says stop (FTSA 15-day cure / provable-compliance evidence);
     // clear the stamp only if the status is deliberately moved off DO NOT CONTACT.
-    if(e.target.value === 'DO NOT CONTACT'){ if(!notes[c].optout) notes[c].optout = _today(); }
+    if(e.target.value === 'DO NOT CONTACT'){ if(!notes[c].optout){ notes[c].optout = _today(); _optLog(notes[c], 'set-local'); } }
     else if(notes[c].optout) delete notes[c].optout;
     save(); render(); return;
   }
@@ -2858,6 +2898,7 @@ async function boot(){
   syncDealUI();
   recompute();
   render();
+  syncFreshness();
   if(manual && unlockName) showWelcome(unlockName);   // greet them only when they actually enter a code
 }
 boot();
