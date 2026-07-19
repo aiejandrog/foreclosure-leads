@@ -78,8 +78,8 @@ header{padding:14px 22px 12px;background:rgba(244,246,250,.82);
   backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);
   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
   box-shadow:0 1px 0 rgba(255,255,255,.65) inset;
-  transition:transform .5s var(--e-lux),box-shadow .35s ease;will-change:transform}
-header.hdn{transform:translateY(-106%)}
+  transition:transform .3s var(--e-lux),opacity .22s var(--e-lux),box-shadow .35s ease;will-change:transform,opacity}
+header.hdn{transform:translateY(-106%);opacity:0}
 header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(11,23,48,.10)}
 .brand{display:flex;align-items:center;gap:12px;margin:0 0 12px}
 .brand .wm{font-family:var(--f-display);font-weight:600;font-size:23px;letter-spacing:.005em;
@@ -192,7 +192,8 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .dg-ic{width:30px;height:30px;flex:0 0 auto;border-radius:9px;display:grid;place-items:center;
   background:rgba(236,214,154,.12);border:1px solid rgba(236,214,154,.22);
   transition:width .18s cubic-bezier(.22,1,.36,1),height .18s cubic-bezier(.22,1,.36,1),border-radius .18s cubic-bezier(.22,1,.36,1)}
-.dg-ic svg{width:15px;height:15px;color:var(--gold-l);display:block}
+.dg-ic svg{width:15px;height:15px;color:var(--gold-l);display:block;
+  transition:width .18s cubic-bezier(.22,1,.36,1),height .18s cubic-bezier(.22,1,.36,1)}
 .dg.warn .dg-ic{background:rgba(255,180,84,.14);border-color:rgba(255,180,84,.3)}
 .dg.warn .dg-ic svg{color:#FBC97C}
 .dg.bad .dg-ic{background:rgba(255,120,120,.14);border-color:rgba(255,120,120,.3)}
@@ -207,7 +208,8 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
   transition:font-size .18s cubic-bezier(.22,1,.36,1)}
 .dg-v b{color:var(--gold-l);font-weight:700}
 .dg-s{font-size:10.5px;color:rgba(255,255,255,.62);margin-top:1px;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis}
+  overflow:hidden;text-overflow:ellipsis;max-height:18px;opacity:1;
+  transition:max-height .22s cubic-bezier(.22,1,.36,1),opacity .16s cubic-bezier(.22,1,.36,1),margin-top .22s cubic-bezier(.22,1,.36,1)}
 /* collapsed: thin chip strip pinned to the viewport top (JS toggles .collapsed past ~120px scroll,
    restores under ~100px). Same navy surface, hairlines, icon state colors and click-to-filter —
    only the SHAPE changes: no subtitle, label+value on one line, no margins/radius so it can pin
@@ -216,7 +218,7 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .digest.collapsed{margin:0;border-radius:0}
 .digest.collapsed .dg{padding:3px 14px;gap:7px}
 .digest.collapsed .dg-t{flex-direction:row;align-items:center;gap:6px}
-.digest.collapsed .dg-s{display:none}
+.digest.collapsed .dg-s{max-height:0;opacity:0;margin-top:0;pointer-events:none}
 .digest.collapsed .dg-k::after{content:':'}
 .digest.collapsed .dg-v{font-size:13px}
 .digest.collapsed .dg-ic{width:20px;height:20px;border-radius:6px}
