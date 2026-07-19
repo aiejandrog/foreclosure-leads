@@ -1176,7 +1176,11 @@ function netEqPct(r){
 // Prefilled outreach identity — Alejandro fronts Miami Solutions Group directly on the foreclosure side
 // (distinct from the cousin-Jose tax-deed entity). Every generated letter/email/script/contract fills
 // these in automatically so nothing has to be typed; a device can still override any field in Sender setup.
-const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Miami Solutions Group', phone:'(786) 631-1823', addr:'', title:'', email:'', web:'', partner:''};
+// Jose is the operator sending — Alejandro's rule: "his name/money/accounts on NOTHING". Only
+// the first name is hard-coded here; llc/phone/email/addr are blank ON PURPOSE so the tracker
+// bans a mailing until Jose fills them in via Filters & setup. See the incomplete-sender banner
+// wired below (looks for the same 4 required fields and warns if any are still missing).
+const SENDER_DEFAULTS = {name:'Jose', llc:'', phone:'', addr:'', title:'', email:'', web:'', partner:''};
 let sender = Object.assign({}, SENDER_DEFAULTS);
 // CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
 // Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
@@ -3009,7 +3013,34 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
   update();
 })();
 // letter sender persistence
-function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; }
+function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; _senderBanner(); }
+// Warns anytime a required sender field (llc / phone / email / addr) is blank — Jose's info was
+// only partially set (first name only), and the tool must not ship a letter or investor pack that
+// falls back to '[YOUR LLC]' / '[YOUR PHONE]'. Dismiss button hides it until the next reload so
+// Jose can still work in peace, but the check reruns on every save so it comes back the moment
+// he empties a field.
+function _senderBanner(){
+  var missing = ['llc','phone','email','addr'].filter(function(k){ return !(sender[k] && String(sender[k]).trim()); });
+  var host = document.getElementById('senderBanner');
+  if(!missing.length){ if(host){ host.remove(); } return; }
+  if(!host){
+    host = document.createElement('div'); host.id = 'senderBanner';
+    host.style.cssText = 'position:sticky;top:0;z-index:60;background:linear-gradient(90deg,#9B2C2C,#7A1D1D);'
+      + 'color:#fff;padding:8px 16px;font-size:12.5px;line-height:1.5;font-weight:600;'
+      + 'display:flex;align-items:center;gap:12px;box-shadow:0 4px 12px rgba(155,44,44,.3)';
+    var msg = document.createElement('div'); msg.style.cssText='flex:1';
+    msg.innerHTML = '&#9888; <b>Sender identity incomplete</b> &mdash; <span id="senderMissing"></span> '
+      + 'still blank. Set Jose\'s info in <b>Filters &amp; setup &rarr; Sender identity</b> before any letter or investor pack ships.';
+    var close = document.createElement('button');
+    close.textContent = '×'; close.title = 'Dismiss until next reload';
+    close.style.cssText = 'background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;'
+      + 'width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:16px;line-height:1;flex:0 0 auto';
+    close.onclick = function(){ host.remove(); };
+    host.appendChild(msg); host.appendChild(close);
+    document.body.insertBefore(host, document.body.firstChild);
+  }
+  document.getElementById('senderMissing').textContent = missing.join(' + ');
+}
 Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr', title:'sTitle', email:'sEmail', web:'sWeb', partner:'sPartner'}).forEach(([k,id]) => {
   const el = document.getElementById(id);
   if(!el) return;
