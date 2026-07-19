@@ -91,11 +91,11 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(198,161,75,.55)) brightness(1.07)}
 .brand .tag{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.14em;
   text-transform:uppercase;color:var(--muted-2);margin-top:3px;max-height:20px;overflow:hidden;
-  transition:opacity .18s var(--e-lux),max-height .25s var(--e-lux),margin-top .25s var(--e-lux)}
+  transition:opacity .25s var(--e-lux),max-height .25s var(--e-lux),margin-top .25s var(--e-lux)}
 .brand .spacer{flex:1}
 .brand .upd{font-size:11px;color:var(--muted-2);text-align:right;align-self:center;
   font-variant-numeric:tabular-nums;line-height:1.5;max-height:40px;overflow:hidden;
-  transition:opacity .18s var(--e-lux),max-height .25s var(--e-lux)}
+  transition:opacity .25s var(--e-lux),max-height .25s var(--e-lux)}
 .brand .upd.stale{color:#B45309 !important;font-weight:700}
 .brand .upd.stale #upddate{color:#B45309 !important}
 .lockbtn{display:none;align-self:center;margin-left:12px;background:var(--surface);
@@ -109,7 +109,7 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .flbl{font-family:var(--f-label);font-size:9.5px;font-weight:600;letter-spacing:.11em;
   text-transform:uppercase;color:var(--muted-2);margin-right:2px;
   opacity:1;max-width:80px;overflow:hidden;white-space:nowrap;
-  transition:opacity .18s var(--e-lux),max-width .25s var(--e-lux),margin-right .25s var(--e-lux)}
+  transition:opacity .25s var(--e-lux),max-width .25s var(--e-lux),margin-right .25s var(--e-lux)}
 .fdiv{width:1px;align-self:stretch;min-height:24px;background:var(--line);margin:0 4px}
 /* ============ SMART HEADER SHRINK (body.mini) ============
    Scroll DOWN past ~220px -> the command rows condense with a smooth animation (more room for
@@ -2980,20 +2980,18 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
 (function(){
   const btn = document.getElementById('toTop'), header = document.querySelector('header');
   header.classList.remove('hdn');                                 // clear any leftover state
-  let lastY = 0, mini = false, ticking = false;
+  let mini = false, ticking = false;
   const update = () => {
     const y = window.scrollY;
     btn.style.display = (y > 340) ? 'block' : 'none';
     header.classList.toggle('scrolled', y > 6);                  // subtle elevation once you leave the top
-    // smart shrink: scrolling DOWN past ~100 condenses the command rows (body.mini) so the
-    // DEALFLOW brand + digest strip move into a compact top strip and the deals table gets
-    // ~135px more room. Any upward scroll — or being back near the top (y<60) — restores full
-    // header. |dy|>4 deadband so tiny jitters don't flicker. Alejandro asked for the shrink
-    // to happen fast — lowered from 220 to 100 so a single wheel notch is enough to trigger it.
-    const dy = y - lastY;
-    const want = (y < 60 || dy < -4) ? false : (dy > 4 && y > 100) ? true : mini;
+    // Sticky mini: once we've committed to the compact header (scrollY passed 80), STAY compact
+    // until the user is basically back at the top (scrollY < 20). No velocity, no direction check —
+    // both are what made slow scrolls feel jittery. Big hysteresis window (60px) so a micro-reversal
+    // during a slow scroll can't flip the state. When entering/leaving, the CSS transitions on
+    // wordmark font-size, tag opacity, controls padding etc do the actual smoothing (unified 250ms).
+    const want = mini ? (y > 20) : (y > 80);
     if(want !== mini){ mini = want; document.body.classList.toggle('mini', mini); }
-    lastY = y;
     ticking = false;
   };
   window.addEventListener('scroll', () => { if(!ticking){ ticking = true; requestAnimationFrame(update); } }, {passive:true});
