@@ -881,50 +881,55 @@ def make_tracker(leads):
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')
-    os.makedirs(DEALFLOW_DIR, exist_ok=True)
-    desktop = os.path.join(DEALFLOW_DIR,'Foreclosure Lead Tracker.html')
 
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
-    # Guarded: if OneDrive has the Desktop HTML open/locked, don't let a PermissionError abort the whole
-    # build (which would also skip the docs/index.html publish below). Warn and keep going.
-    try:
-        open(desktop,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(slim)))
-    except Exception as e:
-        print(f"WARN: could not write Desktop copy ({e}) - is it open? continuing to publish docs/index.html")
+    # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would
+    # just pollute the checkout with a junk "C:\Users\..." directory + duplicate photo copies.
+    if os.environ.get('DEALFLOW_NO_DESKTOP') != '1':
+        os.makedirs(DEALFLOW_DIR, exist_ok=True)
+        desktop = os.path.join(DEALFLOW_DIR,'Foreclosure Lead Tracker.html')
 
-    # P0: the template references photos as relative 'img/<name>.jpg', which only resolves next to
-    # docs/index.html (docs/img/). Ship the referenced files beside the Desktop copy too, or every
-    # image in the investor-facing file is a broken grey box. Idempotent (size-compare) + fail-soft
-    # per file so a locked OneDrive handle can never kill the build.
-    try:
-        srcdir = os.path.join(HERE, 'docs', 'img')
-        dstdir = os.path.join(DEALFLOW_DIR, 'img')
-        os.makedirs(dstdir, exist_ok=True)
-        names = {p.split('/', 1)[1] for d in slim for p in (d.get('photos') or [])
-                 if isinstance(p, str) and p.startswith('img/')}
-        n_copied = 0
-        for name in names:
-            s, t = os.path.join(srcdir, name), os.path.join(dstdir, name)
-            try:
-                if os.path.exists(s) and (not os.path.exists(t) or os.path.getsize(t) != os.path.getsize(s)):
-                    shutil.copy2(s, t); n_copied += 1
-            except Exception:
-                pass
-        if n_copied: print(f"copied {n_copied} photos -> DEALFLOW\\img")
-    except Exception as e:
-        print('photo copy to DEALFLOW skipped:', e)
+        # Guarded: if OneDrive has the Desktop HTML open/locked, don't let a PermissionError abort the whole
+        # build (which would also skip the docs/index.html publish below). Warn and keep going.
+        try:
+            open(desktop,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(slim)))
+        except Exception as e:
+            print(f"WARN: could not write Desktop copy ({e}) - is it open? continuing to publish docs/index.html")
+
+        # P0: the template references photos as relative 'img/<name>.jpg', which only resolves next to
+        # docs/index.html (docs/img/). Ship the referenced files beside the Desktop copy too, or every
+        # image in the investor-facing file is a broken grey box. Idempotent (size-compare) + fail-soft
+        # per file so a locked OneDrive handle can never kill the build.
+        try:
+            srcdir = os.path.join(HERE, 'docs', 'img')
+            dstdir = os.path.join(DEALFLOW_DIR, 'img')
+            os.makedirs(dstdir, exist_ok=True)
+            names = {p.split('/', 1)[1] for d in slim for p in (d.get('photos') or [])
+                     if isinstance(p, str) and p.startswith('img/')}
+            n_copied = 0
+            for name in names:
+                s, t = os.path.join(srcdir, name), os.path.join(dstdir, name)
+                try:
+                    if os.path.exists(s) and (not os.path.exists(t) or os.path.getsize(t) != os.path.getsize(s)):
+                        shutil.copy2(s, t); n_copied += 1
+                except Exception:
+                    pass
+            if n_copied: print(f"copied {n_copied} photos -> DEALFLOW\\img")
+        except Exception as e:
+            print('photo copy to DEALFLOW skipped:', e)
 
     # Shared docs/index.html: ENCRYPTED (with phones) when a site.pass exists, else PLAINTEXT with
     # phones STRIPPED. This guarantees personal phone numbers never hit the public web unencrypted.
     codes = _load_codes()
+    _dst = '' if os.environ.get('DEALFLOW_NO_DESKTOP') == '1' else ' + Desktop (plaintext)'
     if codes:
         enc = _encrypt_multi(json.dumps(slim), codes)
         open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', json.dumps(enc)))
-        print(f'tracker written: docs/index.html (ENCRYPTED · {len(codes)} access code(s)) + Desktop (plaintext)')
+        print(f'tracker written: docs/index.html (ENCRYPTED · {len(codes)} access code(s)){_dst}')
     else:
         nophone = [{k: v for k, v in d.items() if k not in ('phones','phdnc','emails')} for d in slim]
         open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(nophone)))
-        print('tracker written: docs/index.html (public, phone-free) + Desktop')
+        print('tracker written: docs/index.html (public, phone-free)' + ('' if os.environ.get('DEALFLOW_NO_DESKTOP') == '1' else ' + Desktop'))
 
 def main():
     leads = scrape()
@@ -960,12 +965,18 @@ def main():
     cols = ['tier','score','sale_type','AuctionDate','days_to_auction','Case #','opening_bid','filing_year','owners','Address','mailing_address',
             'market_value','judgment','equity','equity_pct','homestead','case_type','warning','dor_desc','beds','baths',
             'living_area','last_sale_price','last_sale_date','year_folio','zillow_url','pa_url','disqualifiers']
-    os.makedirs(DEALFLOW_DIR, exist_ok=True)
-    out_csv = os.path.join(DEALFLOW_DIR, f"Miami-Dade Foreclosure Leads - {date.today():%Y-%m-%d}.csv")
-    with open(out_csv,'w',newline='',encoding='utf-8-sig') as f:
-        w = csv.DictWriter(f, fieldnames=cols, extrasaction='ignore')
-        w.writeheader()
-        for r in leads: w.writerow(r)
+    # Skip the daily CSV on GHA — same reason as the Desktop tracker copy above:
+    # DEALFLOW_DIR resolves to a Windows path that would create a literal 'C:\\Users\\...'
+    # directory in the runner workspace. Local runs still get the CSV as before.
+    if os.environ.get('DEALFLOW_NO_DESKTOP') != '1':
+        os.makedirs(DEALFLOW_DIR, exist_ok=True)
+        out_csv = os.path.join(DEALFLOW_DIR, f"Miami-Dade Foreclosure Leads - {date.today():%Y-%m-%d}.csv")
+        with open(out_csv,'w',newline='',encoding='utf-8-sig') as f:
+            w = csv.DictWriter(f, fieldnames=cols, extrasaction='ignore')
+            w.writeheader()
+            for r in leads: w.writerow(r)
+    else:
+        out_csv = '(skipped in CI)'
     a = sum(1 for r in leads if r['tier']=='A'); b = sum(1 for r in leads if r['tier']=='B')
     fc = sum(1 for r in leads if r.get('sale_type')!='TD'); td = sum(1 for r in leads if r.get('sale_type')=='TD')
     print(f"DONE: {len(leads)} leads ({fc} foreclosure, {td} tax deed) | Tier A: {a} | Tier B: {b}")
