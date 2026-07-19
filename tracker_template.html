@@ -179,14 +179,13 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
    of white space at rest (header bg is nearly transparent) which Alejandro perceived as an
    empty "gap before the banner". Now the header→digest transition looks like one continuous
    surface. Transitions raised to 300ms to match header's transform hide so the two coordinate
-   on the way in/out (was 180ms — noticeable desync). max-height needs an explicit rest value
-   so the collapse-to-zero transition has a start point (400px covers the <=1080px wrap case). */
+   on the way in/out (was 180ms — noticeable desync).
+   PINNED ALWAYS (Alejandro 2026-07-19, superseding the slide-away): the rail is a fixed
+   instrument panel — sticky top synced to the header height (syncDigestTop below), always
+   visible at full size, NEVER collapsed on scroll. The deals scroll underneath it. */
 .digest{display:flex;gap:0;margin:0 16px 0;background:var(--navy-grad);border-radius:var(--r-lg);
-  box-shadow:var(--sh-2);overflow:hidden;position:sticky;top:0;z-index:45;max-height:400px;
-  opacity:1;transform:none;
-  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux),
-    max-height .26s cubic-bezier(.22,1,.36,1),opacity .18s cubic-bezier(.22,1,.36,1),
-    transform .26s cubic-bezier(.22,1,.36,1)}
+  box-shadow:var(--sh-2);overflow:hidden;position:sticky;top:0;z-index:45;
+  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux)}
 .digest::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(236,214,154,.5),transparent)}
 .dg{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:11px 16px;
@@ -220,14 +219,7 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .dg-s{font-size:10.5px;color:rgba(255,255,255,.62);margin-top:1px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-height:18px;opacity:1;
   transition:max-height .22s cubic-bezier(.22,1,.36,1),opacity .16s cubic-bezier(.22,1,.36,1),margin-top .22s cubic-bezier(.22,1,.36,1)}
-/* collapsed (past ~120px scroll, restores under ~100px): the whole blue panel SLIDES UP AND AWAY.
-   Alejandro's call (2026-07-19): the deals own the screen below the always-visible header — no
-   pinned chip strip at all. The panel slides up, fades, and its in-flow height collapses to zero
-   so the table reclaims the space; everything transitions (~.26s) so the page glides instead of
-   popping. overflow-anchor:none (global) keeps the ~90px height change from yanking scrollY, and
-   the same JS hysteresis toggles .collapsed — no logic change. Tiles inside are clipped by the
-   parent's overflow:hidden as it folds, so no per-tile strip rules are needed anymore. */
-#digest.collapsed{max-height:0;opacity:0;transform:translateY(-12px);pointer-events:none}
+/* (No .collapsed state — the rail is pinned always. See the .digest comment above.) */
 @media(max-width:1080px){.digest{flex-wrap:wrap}.dg{flex:1 1 44%}}
 @media(max-width:860px){.digest{display:none}}
 
@@ -3664,21 +3656,10 @@ document.addEventListener('click', function(e){
 var __renderCore = render;
 render = function(){ __renderCore.apply(this, arguments); try{ updateDigest(); }catch(e){} };
 try{ updateDigest(); }catch(e){}
-// collapse the rail to a chip strip once the table scrolls under it; restore near the top.
-// Hysteresis (collapse past 120px, restore under 100px) so it can't oscillate at the boundary;
-// rAF-debounced passive listener, same pattern as the header auto-hide above.
-(function(){
-  var box = document.getElementById('digest'); if(!box) return;
-  var collapsed = false, ticking = false;
-  var apply = function(){
-    var y = window.scrollY || 0;
-    var want = collapsed ? y > 100 : y > 120;
-    if(want !== collapsed){ collapsed = want; box.classList.toggle('collapsed', collapsed); }
-    ticking = false;
-  };
-  window.addEventListener('scroll', function(){ if(!ticking){ ticking = true; requestAnimationFrame(apply); } }, {passive:true});
-  apply();
-})();
+// PINNED ALWAYS: the digest rail is a fixed instrument panel below the header (Alejandro,
+// 2026-07-19) — no collapse-on-scroll at all. The sticky top is synced to the header height
+// (syncDigestTop above), tiles stay full-size and clickable at every scroll depth, and the
+// table scrolls underneath. The former slide-away / chip-strip collapse listener was removed.
 // compact density toggle (persisted per device)
 (function(){
   var b=document.getElementById('denstog'); if(!b) return;
