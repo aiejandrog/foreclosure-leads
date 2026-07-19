@@ -25,7 +25,14 @@ FAKE = [
      "plaintiff":"Wells Fargo Bank, National Association","defs":"Robert A Johnson; Unknown Tenant #1",
      "pa":"#","zillow":"#","tax":"#","auc":"#","people":"#","docket":"#","recqs":"sample","ocsqs":"sample",
      "etax":6550,"phones":["3055550101","7865550102","3055550103"],"phdnc":[False,False,True],
-     "emails":["rjohnson@example.com","r.johnson@example.net"]},
+     "emails":["rjohnson@example.com","r.johnson@example.net"],
+     # real Zillow CDN photos so the preview exercises thumbnails / multi-photo badge / gallery
+     "photo_kind":"zillow","zlisting":"https://www.zillow.com/homedetails/525-W-79th-Pl-Hialeah-FL-33014_zpid/",
+     "photos":["https://photos.zillowstatic.com/fp/7d087b8613e1f4e9ffb3d0e5d0b73cbe-cc_ft_1536.jpg",
+               "https://photos.zillowstatic.com/fp/be6d9716af6e4624fc6c277602cd0812-cc_ft_1536.jpg",
+               "https://photos.zillowstatic.com/fp/b7ecf3eaa28e02be4a75d7c3c11f4312-cc_ft_1536.jpg",
+               "https://photos.zillowstatic.com/fp/a45b6c7cb46ae5f08d740408729a8de5-cc_ft_1536.jpg",
+               "https://photos.zillowstatic.com/fp/81cb77dc08a83445a33fc0c76476827a-cc_ft_1536.jpg"]},
 
     {"tier":"A","score":84,"st":"FC","case":"2023-000212-CA-01","auction":"08/03/2026","days":20,
      "filed":2023,"bought":1998,"bprice":92000,"owners":"MARIA C GONZALEZ","oname":"Maria Gonzalez",
@@ -33,7 +40,9 @@ FAKE = [
      "value":720000,"judg":41000,"eq":94,"eqfake":True,"hs":True,"ctype":"HOA/Condo","mr":True,
      "plaintiff":"Brickell Bay Condominium Association, Inc.","defs":"Maria C Gonzalez; Mortgage Electronic Registration Systems",
      "pa":"#","zillow":"#","tax":"#","auc":"#","people":"#","docket":"#","recqs":"sample","ocsqs":"sample",
-     "etax":7200,"phones":["3055550140"],"phdnc":[False],"emails":["mgonzalez@example.com"]},
+     "etax":7200,"phones":["3055550140"],"phdnc":[False],"emails":["mgonzalez@example.com"],
+     # single satellite aerial served from docs/img/ (relative path resolves beside design-preview.html)
+     "photo_kind":"aerial","photos":["docs/img/00404213000006120.jpg"]},
 
     {"tier":"A","score":80,"st":"FC","case":"2025-000318-CA-01","auction":"08/17/2026","days":34,
      "filed":2025,"bought":2016,"bprice":330000,"owners":"DAVID R WILLIAMS","oname":"David Williams",
@@ -48,7 +57,8 @@ FAKE = [
      "addr":"18320 SW 117TH AVE, MIAMI, FL 33177","mail":"18320 SW 117TH AVE, MIAMI, FL 33177",
      "value":312000,"obid":15899,"eq":95,"condo":True,"cert":"2023-04871","ctype":"","st":"TD",
      "pa":"#","zillow":"#","tax":"#","auc":"#","people":"#","recqs":"sample","ocsqs":"sample",
-     "etax":3900,"phones":["7865550188","3055550189"],"phdnc":[False,False],"emails":["gjackson@example.com"]},
+     "etax":3900,"phones":["7865550188","3055550189"],"phdnc":[False,False],"emails":["gjackson@example.com"],
+     "photo_kind":"street","photos":["docs/img/3049120530370_sv.jpg"]},
 
     {"tier":"B","score":63,"st":"TD","case":"2026A00244","auction":"08/06/2026","days":23,
      "filed":0,"bought":1991,"bprice":47000,"owners":"ELENA M RIVERA","oname":"Elena Rivera",
