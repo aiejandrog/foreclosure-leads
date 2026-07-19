@@ -109,9 +109,13 @@ button,select,input{font-family:var(--f-body);background:var(--surface);color:va
 button:hover{border-color:rgba(16,28,51,.26);box-shadow:var(--sh-1)}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
   outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
-button:not(.active):not(.cpy):not(:disabled):hover,.dealtog:hover,.lkb:hover{
+/* NOTE: digest tiles (.dg) are excluded from the universal button hover/active pattern
+   below (:not(.dg)) — they are dark-navy surfaces with their OWN subtle hover rules in
+   the .digest block. Without :not(.dg) the button:hover rule wins on specificity (0-4-1
+   vs 0-2-0) and paints the tile cream #FFFDF7, making white .dg-v text invisible. */
+button:not(.dg):not(.active):not(.cpy):not(:disabled):hover,.dealtog:hover,.lkb:hover{
   transform:translateY(-1px);border-color:rgba(198,161,75,.45);background-color:#FFFDF7;box-shadow:var(--sh-hover)}
-button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);
+button:not(.dg):not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);
   transition-duration:.09s;transition-timing-function:var(--e-snap)}
 input{cursor:text}
 input::placeholder{color:var(--muted-2)}
