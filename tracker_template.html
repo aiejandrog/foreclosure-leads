@@ -107,7 +107,9 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .controls+.controls{margin-top:8px}
 .fgroup{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
 .flbl{font-family:var(--f-label);font-size:9.5px;font-weight:600;letter-spacing:.11em;
-  text-transform:uppercase;color:var(--muted-2);margin-right:2px}
+  text-transform:uppercase;color:var(--muted-2);margin-right:2px;
+  opacity:1;max-width:80px;overflow:hidden;white-space:nowrap;
+  transition:opacity .18s var(--e-lux),max-width .25s var(--e-lux),margin-right .25s var(--e-lux)}
 .fdiv{width:1px;align-self:stretch;min-height:24px;background:var(--line);margin:0 4px}
 /* ============ SMART HEADER SHRINK (body.mini) ============
    Scroll DOWN past ~220px -> the command rows condense with a smooth animation (more room for
@@ -126,7 +128,7 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
   body.mini .controls+.controls{margin-top:5px}
   body.mini .controls button,body.mini .controls select,body.mini .controls input{padding:4px 9px;font-size:11.5px}
   body.mini .stats{font-size:10.5px}
-  body.mini .flbl{display:none}
+  body.mini .flbl{opacity:0;max-width:0;margin-right:0}
 }
 /* base controls */
 button,select,input{font-family:var(--f-body);background:var(--surface);color:var(--ink);
