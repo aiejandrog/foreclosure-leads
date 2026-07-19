@@ -2754,7 +2754,7 @@ function render(){
     else if(r.records) gDig.push('<a class="dig recsearch" href="'+esc(r.records)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
     if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
-    else if(r.cases) gDig.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' court case search — pick Party Name and PASTE the owner (copied last-first).')+'">Cases</a>');
+    else if(r.cases) gDig.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ case # copied" title="'+esc(ctyName(r.county)+' court case search — pick CASE NUMBER and PASTE (this click copied '+r.case+'). Exact match, no name-sifting.')+'">Cases</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
     if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
     // PROPERTY — value + county pages.
@@ -3392,7 +3392,7 @@ document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
 document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('a.recsearch'); if(!a) return;
   const o = (a.dataset.o || '').trim(); if(!o) return;
-  const orig = a.textContent, flash = () => { a.textContent = '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
+  const orig = a.textContent, flash = () => { a.textContent = a.dataset.flash || '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
   // navigator.clipboard silently rejects on file:// (non-secure context) — fall back to execCommand
   if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, () => fallbackCopy(o, flash)); else fallbackCopy(o, flash);
 });
