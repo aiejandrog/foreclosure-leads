@@ -127,6 +127,13 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
   body.mini .controls{gap:5px}
   body.mini .controls+.controls{margin-top:5px}
   body.mini .controls button,body.mini .controls select,body.mini .controls input{padding:4px 9px;font-size:11.5px}
+  /* KEEP the magnifying-glass gap in mini mode. Without this, the universal
+     `body.mini .controls input{padding:4px 9px}` rule (higher specificity than .qwrap input)
+     collapses the search input's padding-left to 9px, which drops typed characters directly
+     under the 13px-wide SVG icon anchored at left:11px. Restoring 30px padding-left keeps the
+     first letter of the query clear of the icon. Right-side kept generous so the "/" kbd hint
+     doesn't overlap either. */
+  body.mini .qwrap input{padding:4px 32px 4px 30px}
   body.mini .stats{font-size:10.5px}
   body.mini .flbl{opacity:0;max-width:0;margin-right:0}
 }
@@ -197,6 +204,35 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
   padding:1px 6px;pointer-events:none}
 .stats{font-size:12px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
 .statviol{color:var(--red-ink);font-weight:800}
+
+/* ============ SMART BROWARD LOOKUP CARD (Filters & setup panel) ============
+   The old markup was a bare `<div class="controls">` with the pill inline — read as a naked
+   utility row with no visual grouping ("that ugly square box" — Alejandro 2026-07-19). This
+   card frames the bookmarklet the way it deserves: it's a first-use setup ritual, not another
+   control. Gold-bordered navy gradient (matches DEALFLOW brand tokens), dedicated header line,
+   the pill sized up so it reads as the primary CTA on the page. The pill itself gets a subtle
+   gold gradient + drop shadow so it stands out against the card, plus grab-cursor and hover
+   lift to signal "you can drag me". */
+.bmkcard{background:linear-gradient(140deg,#0B1730 0%,#152540 100%);
+  border:1px solid rgba(198,161,75,.35);border-radius:12px;
+  padding:14px 18px;margin-top:8px;
+  box-shadow:0 2px 8px rgba(11,23,48,.25),inset 0 1px 0 rgba(255,255,255,.04)}
+.bmkhd{color:#C6A14B;font-size:11px;font-weight:800;letter-spacing:.14em;
+  text-transform:uppercase;margin-bottom:10px;font-family:var(--f-num,'Space Grotesk',sans-serif)}
+.bmkrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.bmkpill{display:inline-flex;align-items:center;gap:6px;
+  background:linear-gradient(135deg,#D4B45E 0%,#C6A14B 55%,#A88536 100%);
+  color:#0B1730;font-weight:800;font-size:12.5px;letter-spacing:.02em;
+  padding:8px 16px;border-radius:999px;text-decoration:none;
+  border:1px solid rgba(255,255,255,.15);cursor:grab;
+  box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.28);
+  transition:transform .15s var(--e-lux,ease),box-shadow .15s ease;
+  flex:0 0 auto}
+.bmkpill:hover{transform:translateY(-1px);
+  box-shadow:0 5px 14px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.32)}
+.bmkpill:active{cursor:grabbing;transform:translateY(0)}
+.bmkhint{color:rgba(255,255,255,.62);font-size:11.5px;line-height:1.55;flex:1 1 300px;min-width:220px}
+.bmkhint b{color:#C6A14B;font-weight:700}
 
 /* ============================== TODAY DIGEST ============================== */
 /* margin-top:0 — digest sits FLUSH against the header edge. The old 12px gap read as ~200px
@@ -1063,10 +1099,12 @@ body.compact .dg-v{font-size:14.5px}
      switch to the Broward tab and click the "DF Broward Case" bookmark — it auto-selects the Case
      Number tab, pastes the case#, and submits. One click on Broward instead of the 4-step manual
      dance. Kept short so it fits in a bookmark href (~500 chars). -->
-<div class="controls" style="margin-top:6px;align-items:center">
-<span style="color:var(--gold-d);font-size:12px;font-weight:700">Smart Broward lookup:</span>
-<a class="dig" style="cursor:grab;font-size:12px;background:linear-gradient(120deg,#0B1730,#152540);color:#C6A14B;border-color:#C6A14B;padding:6px 12px" href="javascript:(async()=&gt;{try{var c=(await navigator.clipboard.readText()||'').trim();if(!/^[A-Z0-9-]{6,}$/i.test(c)){alert('Copy a case # in DealFlow first, then click this bookmark.');return;}var q=function(s){return document.querySelector(s);};var tabs=[].slice.call(document.querySelectorAll('a,button,li,span')).filter(function(e){return /case%20number/i.test(e.textContent||'')&amp;&amp;e.offsetHeight&gt;0;});if(tabs[0])tabs[0].click();setTimeout(function(){var inp=q('input[name*=%22case%22]')||q('input[placeholder*=%22Case%22]')||q('input[id*=%22case%22]');if(inp){inp.focus();inp.value=c;['input','change','keyup'].forEach(function(t){inp.dispatchEvent(new Event(t,{bubbles:true}));});}var btn=[].slice.call(document.querySelectorAll('button,input[type=submit],a')).filter(function(e){return /search/i.test((e.value||e.textContent||''))&amp;&amp;e.offsetHeight&gt;0;})[0];if(btn)setTimeout(function(){btn.click();},250);},400);}catch(e){alert('Bookmarklet error: '+e.message);}})();" title="DRAG THIS to your bookmarks bar. On the Broward Cases page, click the bookmark — it reads the copied case# and submits.">&#128279; DF Broward Case &nbsp;<span style="opacity:.7;font-size:10px">(drag to bookmarks)</span></a>
-<span style="color:var(--muted);font-size:11px">One-time setup. After: click Cases in DEALFLOW &rarr; switch to the Broward tab &rarr; click this bookmark &rarr; the register of actions loads automatically.</span>
+<div class="bmkcard">
+<div class="bmkhd">&#9889; Smart Broward lookup</div>
+<div class="bmkrow">
+<a class="bmkpill" href="javascript:(async()=&gt;{try{var c=(await navigator.clipboard.readText()||'').trim();if(!/^[A-Z0-9-]{6,}$/i.test(c)){alert('Copy a case # in DealFlow first, then click this bookmark.');return;}var q=function(s){return document.querySelector(s);};var tabs=[].slice.call(document.querySelectorAll('a,button,li,span')).filter(function(e){return /case number/i.test(e.textContent||'')&amp;&amp;e.offsetHeight&gt;0;});if(tabs[0])tabs[0].click();setTimeout(function(){var inp=q('input[name*=case]')||q('input[placeholder*=Case]')||q('input[id*=case]');if(inp){inp.focus();inp.value=c;['input','change','keyup'].forEach(function(t){inp.dispatchEvent(new Event(t,{bubbles:true}));});}var btn=[].slice.call(document.querySelectorAll('button,input[type=submit],a')).filter(function(e){return /search/i.test((e.value||e.textContent||''))&amp;&amp;e.offsetHeight&gt;0;})[0];if(btn)setTimeout(function(){btn.click();},250);},400);}catch(e){alert('Bookmarklet error: '+e.message);}})();" title="Drag this pill to your Chrome bookmarks bar. Then on any Broward Cases page, click the bookmark and it auto-fills the copied case # and submits.">&#128279; DF Broward Case</a>
+<span class="bmkhint">One-time setup. Then in DEALFLOW: click <b>Cases</b> &rarr; switch to the Broward tab &rarr; click this bookmark. The register of actions loads automatically.</span>
+</div>
 </div>
 <div class="controls" style="margin-top:8px">
 <label>Filed <input id="fy1" type="number" placeholder="from" style="width:74px"> &ndash; <input id="fy2" type="number" placeholder="to" style="width:74px"></label>
@@ -3002,14 +3040,18 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
   const update = () => {
     const y = window.scrollY;
     btn.style.display = (y > 340) ? 'block' : 'none';
-    header.classList.toggle('scrolled', y > 6);                  // subtle elevation once you leave the top
-    // Sticky mini: once we've committed to the compact header (scrollY passed 80), STAY compact
-    // until the user is basically back at the top (scrollY < 20). No velocity, no direction check —
-    // both are what made slow scrolls feel jittery. Big hysteresis window (60px) so a micro-reversal
-    // during a slow scroll can't flip the state. When entering/leaving, the CSS transitions on
-    // wordmark font-size, tag opacity, controls padding etc do the actual smoothing (unified 250ms).
+    // Sticky mini + shadow, SYNCED. Before 2026-07-19 the .scrolled class fired at y>6 and the
+    // body.mini shrink fired at y>80 — two separate class changes during one scroll gesture,
+    // which read to the user as a "ping-pong two-phase" animation. Now both cross the same
+    // threshold (y > 80 enter / y < 20 exit) so the header transitions in a single unified motion.
+    // Hysteresis window is 60px so a micro-reversal during a slow scroll can't flip the state.
+    // Unified 250ms CSS transitions on wordmark size, tag opacity, controls padding, box-shadow.
     const want = mini ? (y > 20) : (y > 80);
-    if(want !== mini){ mini = want; document.body.classList.toggle('mini', mini); }
+    if(want !== mini){
+      mini = want;
+      document.body.classList.toggle('mini', mini);
+      header.classList.toggle('scrolled', mini);                 // same trigger = one visual motion
+    }
     ticking = false;
   };
   window.addEventListener('scroll', () => { if(!ticking){ ticking = true; requestAnimationFrame(update); } }, {passive:true});
@@ -3449,7 +3491,11 @@ function _rasToast(caseNum, isCase){
   if(isCase){
     // Bookmarklet lives right inside the toast so it's findable exactly when it's needed —
     // no digging into Filters & setup. Drag once, click once on every Broward page after that.
-    var _bmk = 'javascript:(async()=>{try{var c=(await navigator.clipboard.readText()||\'\').trim();if(!/^[A-Z0-9-]{6,}$/i.test(c)){alert(\'Copy a case # in DealFlow first, then click this bookmark.\');return;}var q=function(s){return document.querySelector(s);};var tabs=[].slice.call(document.querySelectorAll(\'a,button,li,span\')).filter(function(e){return /case number/i.test(e.textContent||\'\')&&e.offsetHeight>0;});if(tabs[0])tabs[0].click();setTimeout(function(){var inp=q(\'input[name*=\"case\"]\')||q(\'input[placeholder*=\"Case\"]\')||q(\'input[id*=\"case\"]\');if(inp){inp.focus();inp.value=c;[\'input\',\'change\',\'keyup\'].forEach(function(t){inp.dispatchEvent(new Event(t,{bubbles:true}));});}var btn=[].slice.call(document.querySelectorAll(\'button,input[type=submit],a\')).filter(function(e){return /search/i.test((e.value||e.textContent||\'\'))&&e.offsetHeight>0;})[0];if(btn)setTimeout(function(){btn.click();},250);},400);}catch(e){alert(\'Bookmarklet error: \'+e.message);}})();';
+    // CSS attribute selectors use unquoted identifiers (input[name*=case]) so no double quotes
+    // are needed inside the href attribute — bare " would prematurely close the HTML attribute
+    // and truncate the bookmarklet (the bug 2c022bf shipped). All strings inside the JS use single
+    // quotes now, matching the outer href="..." delimiter.
+    var _bmk = "javascript:(async()=>{try{var c=(await navigator.clipboard.readText()||'').trim();if(!/^[A-Z0-9-]{6,}$/i.test(c)){alert('Copy a case # in DealFlow first, then click this bookmark.');return;}var q=function(s){return document.querySelector(s);};var tabs=[].slice.call(document.querySelectorAll('a,button,li,span')).filter(function(e){return /case number/i.test(e.textContent||'')&&e.offsetHeight>0;});if(tabs[0])tabs[0].click();setTimeout(function(){var inp=q('input[name*=case]')||q('input[placeholder*=Case]')||q('input[id*=case]');if(inp){inp.focus();inp.value=c;['input','change','keyup'].forEach(function(t){inp.dispatchEvent(new Event(t,{bubbles:true}));});}var btn=[].slice.call(document.querySelectorAll('button,input[type=submit],a')).filter(function(e){return /search/i.test((e.value||e.textContent||''))&&e.offsetHeight>0;})[0];if(btn)setTimeout(function(){btn.click();},250);},400);}catch(e){alert('Bookmarklet error: '+e.message);}})();";
     host.innerHTML = '<div style="font-weight:800;letter-spacing:.03em;font-size:11.5px;color:#C6A14B;text-transform:uppercase;margin-bottom:2px">'
       + '&#128203; Case # copied &middot; ' + esc(caseNum) + '</div>'
       + '<div style="opacity:.92">On the Broward tab: <b>Case Number</b> tab &rarr; <b>Ctrl+V</b> &rarr; <b>Search</b> &rarr; click the case row for the register of actions (Notices of Sale &amp; cancellations).</div>'
