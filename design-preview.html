@@ -78,8 +78,8 @@ header{padding:14px 22px 12px;background:rgba(244,246,250,.82);
   backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);
   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
   box-shadow:0 1px 0 rgba(255,255,255,.65) inset;
-  transition:transform .5s var(--e-lux),box-shadow .35s ease;will-change:transform}
-header.hdn{transform:translateY(-106%)}
+  transition:transform .3s var(--e-lux),opacity .22s var(--e-lux),box-shadow .35s ease;will-change:transform,opacity}
+header.hdn{transform:translateY(-106%);opacity:0}
 header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(11,23,48,.10)}
 .brand{display:flex;align-items:center;gap:12px;margin:0 0 12px}
 .brand .wm{font-family:var(--f-display);font-weight:600;font-size:23px;letter-spacing:.005em;
@@ -192,7 +192,8 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .dg-ic{width:30px;height:30px;flex:0 0 auto;border-radius:9px;display:grid;place-items:center;
   background:rgba(236,214,154,.12);border:1px solid rgba(236,214,154,.22);
   transition:width .18s cubic-bezier(.22,1,.36,1),height .18s cubic-bezier(.22,1,.36,1),border-radius .18s cubic-bezier(.22,1,.36,1)}
-.dg-ic svg{width:15px;height:15px;color:var(--gold-l);display:block}
+.dg-ic svg{width:15px;height:15px;color:var(--gold-l);display:block;
+  transition:width .18s cubic-bezier(.22,1,.36,1),height .18s cubic-bezier(.22,1,.36,1)}
 .dg.warn .dg-ic{background:rgba(255,180,84,.14);border-color:rgba(255,180,84,.3)}
 .dg.warn .dg-ic svg{color:#FBC97C}
 .dg.bad .dg-ic{background:rgba(255,120,120,.14);border-color:rgba(255,120,120,.3)}
@@ -207,21 +208,40 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
   transition:font-size .18s cubic-bezier(.22,1,.36,1)}
 .dg-v b{color:var(--gold-l);font-weight:700}
 .dg-s{font-size:10.5px;color:rgba(255,255,255,.62);margin-top:1px;white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis}
+  overflow:hidden;text-overflow:ellipsis;max-height:18px;opacity:1;
+  transition:max-height .22s cubic-bezier(.22,1,.36,1),opacity .16s cubic-bezier(.22,1,.36,1),margin-top .22s cubic-bezier(.22,1,.36,1)}
 /* collapsed: thin chip strip pinned to the viewport top (JS toggles .collapsed past ~120px scroll,
    restores under ~100px). Same navy surface, hairlines, icon state colors and click-to-filter —
    only the SHAPE changes: no subtitle, label+value on one line, no margins/radius so it can pin
    flush at top:0 (getBoundingClientRect().top === 0). No hardcoded heights: padding drives the
    ~half-height strip, so body.compact composes by tightening it further. */
-.digest.collapsed{margin:0;border-radius:0}
-.digest.collapsed .dg{padding:3px 14px;gap:7px}
-.digest.collapsed .dg-t{flex-direction:row;align-items:center;gap:6px}
-.digest.collapsed .dg-s{display:none}
-.digest.collapsed .dg-k::after{content:':'}
-.digest.collapsed .dg-v{font-size:13px}
-.digest.collapsed .dg-ic{width:20px;height:20px;border-radius:6px}
-.digest.collapsed .dg-ic svg{width:11px;height:11px}
-body.compact .digest.collapsed .dg{padding:2px 11px;gap:6px}
+#digest.collapsed{margin:0;border-radius:0}
+#digest.collapsed .dg{padding:3px 12px!important;gap:6px!important}
+/* Row layout: [icon][label:][value]. LABEL is capped hard so the value always gets
+   what remains of the tile — "STRONG DEALS" at .13em letter-spacing eats 110px and
+   starves values into ellipsis; here we cap it at 62px with tight letter-spacing and
+   truncate the LABEL before the value. !important on the load-bearing declarations
+   because a mystery specificity conflict was letting base .dg values win. */
+#digest.collapsed .dg-t{flex-direction:row!important;align-items:baseline;gap:6px;
+  min-width:0!important;flex:1 1 auto!important}
+#digest.collapsed .dg-k{font-size:8px!important;letter-spacing:.03em!important;
+  flex:0 0 auto!important;max-width:62px!important;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#digest.collapsed .dg-k::after{content:':'}
+#digest.collapsed .dg-v{font-size:13px!important;flex:1 1 auto!important;min-width:0!important}
+#digest.collapsed .dg-s{max-height:0;opacity:0;margin-top:0;pointer-events:none}
+/* ...but a max-height:0 fade child is STILL a flex-row item horizontally: the invisible subtitle
+   kept its full text width (~120px) and squeezed .dg-v into ellipsis (bb07557 capped the label but
+   missed this). Take it out of the row's flow while it fades — position:absolute costs no width
+   and keeps the e181ebf opacity/max-height transition intact. */
+#digest.collapsed .dg-t{position:relative}
+#digest.collapsed .dg-s{position:absolute;left:0;top:100%;width:100%}
+#digest.collapsed .dg-ic{width:20px!important;height:20px!important;border-radius:6px}
+#digest.collapsed .dg-ic svg{width:11px!important;height:11px!important}
+/* compact+collapsed must tighten FURTHER (spec: compose, don't conflict) — needs its own
+   !important to beat the collapsed padding's !important above (1-3-1 beats 1-2-0 at equal
+   importance). */
+body.compact #digest.collapsed .dg{padding:2px 11px!important;gap:6px!important}
 @media(max-width:1080px){.digest{flex-wrap:wrap}.dg{flex:1 1 44%}}
 @media(max-width:860px){.digest{display:none}}
 
@@ -831,6 +851,80 @@ body.compact .dg-v{font-size:14.5px}
   .scrollnudge.on{animation:none}
   html{scroll-behavior:auto}
 }
+/* ============================== INVESTOR (DISPO) PACK ==============================
+   One-page print-ready PDF for sending a STRONG deal to a cash buyer. Populated by
+   exportDispoPack() from the deal-analysis modal footer button.  Uses only fields
+   the tracker actually carries (no ARV/rehab/comps invention) — reuses the same
+   dealFlags + math logic the modal already computes for internal underwriting. */
+@page{size:letter portrait;margin:0.5in}
+@media screen{#dispoPackView{display:none}}
+@media print{
+  body>*:not(#dispoPackView){display:none!important}
+  #dispoPackView{display:block!important}
+  html,body{background:#fff!important;margin:0;padding:0}
+}
+#dispoPackView,#dispoPackView *{
+  -webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;
+}
+#dispoPackView{font-family:var(--f-body,'DM Sans','Space Grotesk',system-ui,sans-serif);
+  color:#0B1730;width:7.5in;font-size:10pt;line-height:1.35}
+.pv-hd{background:#0B1730;color:#fff;padding:.18in .22in;border-bottom:2px solid #C6A14B;
+  display:flex;justify-content:space-between;align-items:center;gap:.2in}
+.pv-hd .pv-addr{font-family:var(--f-display,'Fraunces',Georgia,serif);font-weight:600;font-size:17pt;margin:0;letter-spacing:.01em;line-height:1.15}
+.pv-hd .pv-meta{font-size:9pt;opacity:.85;margin-top:3pt}
+.pv-hd-right{text-align:right;flex-shrink:0}
+.pv-hd .pv-case{font-family:'Space Grotesk',ui-monospace,monospace;font-size:9pt;opacity:.75}
+.pv-hd .pv-pill{background:#C6A14B;color:#0B1730;font-weight:700;padding:4pt 10pt;border-radius:3pt;margin-top:6pt;font-size:9.5pt;display:inline-block;letter-spacing:.03em}
+.pv-hd .pv-pill.urgent{background:#D94A3B;color:#fff}
+.pv-hero{display:grid;grid-template-columns:3.2in 1fr;gap:.2in;margin-top:.15in}
+.pv-hero-photo{position:relative;height:2.4in;overflow:hidden;background:#f3f4f6;border:1px solid #d1d5db}
+.pv-hero-photo img{width:100%;height:100%;object-fit:cover;display:block}
+.pv-hero-photo .pv-nophoto{height:100%;display:flex;align-items:center;justify-content:center;color:#6b7280;font-size:9.5pt;padding:0 12pt;text-align:center}
+.pv-hero-photo .pv-verified{position:absolute;top:8pt;left:8pt;background:rgba(198,161,75,.95);color:#0B1730;padding:3pt 8pt;font-size:7.5pt;font-weight:800;letter-spacing:.08em}
+.pv-hero-nums{padding-left:.05in;display:flex;flex-direction:column;justify-content:center}
+.pv-hero-nums .lbl{font-size:7.5pt;letter-spacing:.14em;color:#6b7280;margin-top:3pt}
+.pv-hero-nums .huge{font-family:var(--f-display,'Fraunces',Georgia,serif);font-size:26pt;font-weight:600;color:#C6A14B;font-variant-numeric:tabular-nums;line-height:1.05}
+.pv-hero-nums .huge.neg{color:#9B2C2C}
+.pv-hero-nums .mid{font-size:15pt;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.15}
+.pv-hero-nums .verdict{display:inline-block;padding:2pt 9pt;border-radius:10pt;font-size:8.5pt;font-weight:800;letter-spacing:.09em;margin:5pt 0 3pt;align-self:flex-start}
+.pv-hero-nums .verdict[data-v="STRONG"]{background:#2E7D5B;color:#fff}
+.pv-hero-nums .verdict[data-v="MARGINAL"]{background:#C08A2E;color:#fff}
+.pv-hero-nums .verdict[data-v="VERIFY"]{background:#4A6FB0;color:#fff}
+.pv-hero-nums .verdict[data-v="PASS"]{background:#9B2C2C;color:#fff}
+.pv-hero-nums table{width:100%;margin-top:5pt;font-variant-numeric:tabular-nums;border-collapse:collapse}
+.pv-hero-nums td:first-child{font-size:8pt;color:#6b7280;letter-spacing:.09em;padding:2pt 0}
+.pv-hero-nums td:last-child{text-align:right;font-weight:600;font-size:10.5pt}
+.pv-why{margin-top:.14in;padding:8pt 10pt;background:#FBF6E9;border-left:3px solid #C6A14B;font-size:9.5pt;line-height:1.4;font-style:italic}
+.pv-why b{font-style:normal;font-family:var(--f-display,'Fraunces',Georgia,serif);font-weight:700}
+.pv-math{margin-top:.14in}
+.pv-math h3,.pv-flags h3,.pv-photos h3,.pv-terms h3{font-family:'Space Grotesk',sans-serif;font-size:8pt;letter-spacing:.15em;color:#0B1730;border-bottom:1px solid #C6A14B;padding-bottom:3pt;margin:0 0 6pt;text-transform:uppercase;font-weight:700}
+.pv-math table{width:100%;border-collapse:collapse;font-size:10pt}
+.pv-math th{background:#0B1730;color:#fff;font-size:7.5pt;letter-spacing:.09em;padding:5pt 8pt;text-align:left;font-weight:600;text-transform:uppercase}
+.pv-math th:nth-child(2){text-align:right;width:1.4in}
+.pv-math td{padding:5pt 8pt;border-bottom:1px solid #e5e7eb}
+.pv-math td:nth-child(2){text-align:right;font-variant-numeric:tabular-nums;font-weight:600;width:1.4in}
+.pv-math tr.pv-tot td{background:#FBF6E9;font-weight:800;border-bottom:2px solid #C6A14B}
+.pv-flags{margin-top:.12in;display:grid;grid-template-columns:1fr 1fr;gap:5pt 12pt}
+.pv-flags .flag{font-size:9pt;padding:4pt 8pt;background:#f9fafb;border-left:2px solid #6b7280}
+.pv-flags .flag.warn{background:#FFF7E6;border-left-color:#C08A2E}
+.pv-flags .flag.bad{background:#FDECEA;border-left-color:#9B2C2C}
+.pv-photos{margin-top:.14in}
+.pv-photos-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5pt}
+.pv-photos-grid img{width:100%;height:1.05in;object-fit:cover;border:1px solid #e5e7eb}
+.pv-terms{margin-top:.14in;padding:8pt 10pt;border:1px solid #0B1730}
+.pv-terms .row{font-size:9.5pt;line-height:1.55}
+.pv-terms .row b{font-weight:700}
+.pv-terms .sig{margin-top:7pt;font-size:10pt;padding-top:6pt;border-top:1px solid #d1d5db}
+.pv-terms .sig b{font-family:var(--f-display,'Fraunces',Georgia,serif)}
+.pv-legal{margin-top:6pt;font-size:6.5pt;line-height:1.4;color:#6b7280;text-align:justify}
+/* Page-break protection so sections never break mid-row on print */
+.pv-hero,.pv-math,.pv-flags,.pv-photos,.pv-terms{break-inside:avoid}
+/* Screen preview mode when someone opens the pack live (for QA / preview button) */
+#dispoPackView.pv-preview{display:block;background:#fff;box-shadow:var(--sh-3);
+  margin:24px auto;padding:.5in;position:relative;z-index:400}
+#dispoPackView.pv-preview::before{content:'PREVIEW';position:absolute;top:8px;right:12px;
+  background:#0B1730;color:#C6A14B;padding:2px 8px;font-size:9px;letter-spacing:.12em;font-weight:800}
+
 </style></head><body>
 <div id="intro"><div class="lg"><div class="wm">DEAL<b>FLOW</b></div><div class="tg">South Florida Deal Engine</div><div class="bar"><i></i></div></div></div>
 <div id="welcome"></div>
@@ -852,6 +946,58 @@ body.compact .dg-v{font-size:14.5px}
 <div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
 <div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
 <div id="mailmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="mailbody"></div></div></div>
+<!-- Investor dispo pack — the print-only one-pager. Populated by exportDispoPack() from the deal-analysis modal. -->
+<div id="dispoPackView" aria-hidden="true">
+  <div class="pv-hd">
+    <div>
+      <h1 class="pv-addr" id="pvAddr"></h1>
+      <div class="pv-meta" id="pvMeta"></div>
+    </div>
+    <div class="pv-hd-right">
+      <div class="pv-case" id="pvCase"></div>
+      <div class="pv-pill" id="pvDeadline"></div>
+    </div>
+  </div>
+  <section class="pv-hero">
+    <div class="pv-hero-photo" id="pvHeroPhoto"></div>
+    <div class="pv-hero-nums">
+      <div class="lbl">EST. NET PROFIT</div>
+      <div class="huge" id="pvProfit"></div>
+      <div class="lbl">ROI</div>
+      <div class="mid" id="pvRoi"></div>
+      <div class="verdict" id="pvVerdict" data-v=""></div>
+      <table>
+        <tr><td>ALL-IN CASH</td><td id="pvCash"></td></tr>
+        <tr><td>PURCHASE</td><td id="pvPurchase"></td></tr>
+        <tr><td>COUNTY MKT VALUE</td><td id="pvValue"></td></tr>
+      </table>
+    </div>
+  </section>
+  <div class="pv-why" id="pvWhy"></div>
+  <section class="pv-math">
+    <h3>Deal math (per DealFlow underwriting)</h3>
+    <table>
+      <thead><tr><th>Line</th><th>$</th></tr></thead>
+      <tbody id="pvMathRows"></tbody>
+    </table>
+  </section>
+  <section class="pv-flags" id="pvFlagsSec">
+    <div style="grid-column:1/-1"><h3>Watch-outs from title / docket</h3></div>
+    <div id="pvFlags" style="grid-column:1/-1;display:grid;grid-template-columns:1fr 1fr;gap:5pt 12pt"></div>
+  </section>
+  <section class="pv-photos" id="pvPhotosSec">
+    <h3>Condition / property views</h3>
+    <div class="pv-photos-grid" id="pvPhotos"></div>
+  </section>
+  <section class="pv-terms">
+    <h3>Terms &amp; contact</h3>
+    <div class="row"><b>EMD</b> $5,000 &middot; <b>Close</b> 21 days cash &middot; <b>Inspection</b> 3-day walk &middot; <b>Assignable</b> &middot; <b>Proof of funds required</b> &middot; <b>Exclusive to this buyer through</b> <span id="pvExclusive"></span></div>
+    <div class="sig" id="pvSig"></div>
+  </section>
+  <footer class="pv-legal">
+    Information deemed reliable but not guaranteed. Buyer to conduct own due diligence including title, liens, condition, and value. Market value shown is county appraiser record, NOT a comp-based ARV. Rehab, ROI and profit figures are DealFlow model estimates and do not constitute representations or warranties. Assignment fee is included in the purchase price. Property is sold AS-IS, WHERE-IS. This is a principal-to-principal transaction; sender holds equitable interest via executed purchase contract unless stated otherwise. Not a solicitation to sellers currently listed.
+  </footer>
+</div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
 <header>
 <div class="brand">
@@ -945,7 +1091,7 @@ body.compact .dg-v{font-size:14.5px}
 <table id="tbl">
 <colgroup>
 <!-- 12 cols for 12 columns — the Photo col was missing, shifting every width one column left -->
-<col style="width:172px"><col style="width:44px"><col style="width:150px"><col style="width:50px"><col style="width:106px"><col style="width:78px"><col style="width:210px"><col style="width:230px"><col style="width:150px"><col style="width:330px"><col style="width:130px"><col style="width:150px">
+<col style="width:172px"><col style="width:44px"><col style="width:150px"><col style="width:50px"><col style="width:106px"><col style="width:78px"><col style="width:210px"><col style="width:230px"><col style="width:200px"><col style="width:280px"><col style="width:130px"><col style="width:150px">
 </colgroup>
 <thead><tr>
 <th>Photo</th>
@@ -1235,7 +1381,14 @@ function dealModalBody(r){
       '<div class="dm-sub">'+esc(r.addr)+' · '+(r.st==='TD'?'Tax deed':'Foreclosure')+' · auction '+esc(r.auction)+'</div>'+
       '<div class="dm-verdict">'+verdictBadge(r)+figure+'</div>'+
       (r._why?'<div class="dm-why">'+esc(r._why)+'</div>':'')+
-    '</div>'+ dealAnalysisHTML(r);
+    '</div>'+ dealAnalysisHTML(r) +
+    // Dispo pack button — only shown on live deals (not PASS/no-data), because there's no point
+    // exporting a buyer PDF for a dead lead. Uses the same gold-CTA look as the primary actions.
+    (r._verdict && r._verdict!=='PASS' && !r._nodata
+      ? '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Send to a buyer</div>'+
+        '<button type="button" class="dealtog" onclick="exportDispoPack(\''+esc(r.case)+'\')" style="width:100%;padding:11px 14px;background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;font-weight:800;font-family:var(--f-body);font-size:13px;letter-spacing:.03em;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(198,161,75,.35)">&#128196; Export investor pack (PDF)</button>'+
+        '<div style="font-size:11px;color:var(--muted,#6b7280);margin-top:6px;line-height:1.5">One-page underwriting summary sized for Save-as-PDF from the print dialog. Same math as this modal, plus the compliance boilerplate a cash buyer expects.</div>'
+      : '');
 }
 let dealModalCase = null;
 function openDealModal(caseId){
@@ -2069,6 +2222,124 @@ function exportNotes(){
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'dealflow-notes-'+_today()+'.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+// ---- Dispo pack (Round D): export the deal-analysis view as a one-page PDF a cash buyer can act on. -----------
+// Wired from the deal-analysis modal footer. Uses only fields already on `r` — no invented ARV / comps / rehab.
+// Print engine = window.print() → user's browser "Save as PDF" dialog. Works file:// and https://, zero deps.
+// Legal boilerplate ships with the pack (no representations, DD is buyer's job, market value is county not ARV).
+function _dpMoney(n){ if(n==null||isNaN(n))return '—'; var s=Math.round(Math.abs(n)).toLocaleString('en-US'); return (n<0?'-$':'$')+s; }
+function _dpPct(n){ return (n==null||isNaN(n))?'—':(Math.round(n)+'%'); }
+function _dpDealId(r){ var d=new Date(); var yr=String(d.getFullYear()).slice(2); var s=new Date(d.getFullYear(),0,1); var wk=String(Math.ceil(((d-s)/864e5+s.getDay()+1)/7)).padStart(2,'0'); var tail=(r.case||'').replace(/[^A-Z0-9]/gi,'').slice(-4).toUpperCase()||'0000'; return 'FL-'+yr+wk+'-'+tail; }
+function _dpDeadline(r){ if(!r.auction) return 'ROLLING · ASAP'; var d=r.days; if(d==null) return 'OFFERS '+r.auction; if(d<=3) return 'OFFERS BY '+r.auction+' · '+d+'d'; return 'OFFERS BY '+r.auction+' · ~'+Math.max(1,d-3)+'d window'; }
+function _dpFlagsFor(r){
+  var out=[];
+  var v=dealFlags(r)||[];
+  v.forEach(function(f){ out.push({t:f, cls:''}); });
+  if(r.mr) out.push({t:'HOA / junior foreclosure — 1st mortgage survives (itemized in math)', cls:'warn'});
+  if(r.condo) out.push({t:'Condominium — get association estoppel; 40-yr recert can be significant', cls:'warn'});
+  if(r.hs) out.push({t:'Homestead-flagged — owner-occupied signal; approach with rescue framing', cls:''});
+  if(r.st==='TD') out.push({t:'Tax deed sale — buyer may need quiet-title action to clear encumbrances', cls:'warn'});
+  if(r._evict) out.push({t:'Occupied — eviction / cash-for-keys carry priced into all-in', cls:''});
+  if(r._verdict==='VERIFY') out.push({t:'VERIFY status — pull records before wiring EMD', cls:'bad'});
+  return out;
+}
+function _dpMathRows(r){
+  // Mirror the exact rows dealAnalysisHTML(r) computes so buyer and operator see identical math.
+  var rows=[]; if(r._profit==null){ return [['Est. profit','unknown until verified']]; }
+  var costs = r.value*(Math.max(0,+deal.costpct||0)/100);
+  rows.push(['County market value', _dpMoney(r.value)]);
+  if(r.st==='TD'){
+    rows.push(['Est. winning bid', _dpMoney(-r._purchase)]);
+    rows.push(['Quiet title', _dpMoney(-(Math.max(0,+deal.quiettitle||3000)))]);
+  } else if(r.mr){
+    rows.push(['Auction bid (est.)', _dpMoney(-r.judg)]);
+    if(r._slien) rows.push(['Surviving 1st mortgage', _dpMoney(-r._slien)]);
+    if(r._jlien) rows.push(['2nd / junior mortgage', _dpMoney(-r._jlien)]);
+    if(r._assess) rows.push(['HOA / special assessment', _dpMoney(-r._assess)]);
+  } else {
+    var dbt=(r._slien||0)+(r._jlien||0)+(r._assess||0);
+    rows.push(['Your purchase'+(dbt>0?' (clears all mortgages)':''), _dpMoney(-r._purchase)]);
+  }
+  rows.push(['Costs ('+(+deal.costpct||0)+'%)', _dpMoney(-costs)]);
+  if(r._btax)  rows.push(['Back property taxes', _dpMoney(-r._btax)]);
+  if(r._mlien) rows.push(['Other surviving liens', _dpMoney(-r._mlien)]);
+  if(r._evict) rows.push(['Eviction / carry', _dpMoney(-r._evict)]);
+  rows.push(['Est. net profit', _dpMoney(r._profit), true]);
+  return rows;
+}
+function _dpSig(){
+  var n=sender.name||'[YOUR NAME]', L=sender.llc||'', p=sender.phone||'', e=sender.email||'', a=sender.addr||'';
+  return '<b>'+esc(n)+'</b>'+(L?' · '+esc(L):'')+(p?' · '+esc(p):'')+(e?' · '+esc(e):'')+(a?'<br><span style="font-size:9pt;color:#6b7280">'+esc(a)+'</span>':'');
+}
+function exportDispoPack(caseId){
+  var r = DATA.find(function(x){return x.case===caseId;});
+  if(!r){ alert('Lead not found: '+caseId); return; }
+  var $ = function(id){return document.getElementById(id);};
+  $('pvAddr').textContent = (r.addr||'ADDRESS TBD').toUpperCase();
+  var typ = r.st==='TD' ? 'Tax deed sale' : 'Foreclosure auction';
+  var cty = r.county || 'Miami-Dade';
+  $('pvMeta').textContent = cty + ' · ' + typ + (r.folio?(' · Folio '+r.folio):'');
+  $('pvCase').textContent = _dpDealId(r) + ' · Case ' + (r.case||'—');
+  var pill = $('pvDeadline'); pill.textContent = _dpDeadline(r);
+  pill.className = 'pv-pill' + ((r.days!=null && r.days<=5)?' urgent':'');
+  // Hero photo — first tracker photo, with graceful fallback if none
+  var hp = $('pvHeroPhoto');
+  var photoUrl = (r.photos||[])[0] || r.aurl || '';
+  if(photoUrl){
+    hp.innerHTML = '<img src="'+esc(photoUrl)+'" alt="property photo" onerror="this.parentNode.innerHTML=\'<div class=&quot;pv-nophoto&quot;>Photo pending — drive-by scheduled before showing</div>\'"><div class="pv-verified">RECORDS VERIFIED · '+new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'})+'</div>';
+  } else {
+    hp.innerHTML = '<div class="pv-nophoto">Photo pending — drive-by scheduled before showing</div>';
+  }
+  // Big numbers
+  var profitEl = $('pvProfit');
+  profitEl.textContent = r._profit!=null ? _dpMoney(r._profit) : '—';
+  profitEl.classList.toggle('neg', r._profit!=null && r._profit<0);
+  $('pvRoi').textContent = (r._cash>0 && r._roi!=null) ? _dpPct(r._roi) : '—';
+  var v = $('pvVerdict');
+  v.textContent = (r._verdict||'REVIEW');
+  v.setAttribute('data-v', r._verdict||'REVIEW');
+  $('pvCash').textContent     = _dpMoney(r._cash);
+  $('pvPurchase').textContent = _dpMoney(r._purchase);
+  $('pvValue').textContent    = _dpMoney(r.value);
+  // Why (verdict reasoning) — this is what makes the pack feel underwritten, not just numbers
+  var why = $('pvWhy');
+  if(r._why){ why.innerHTML = '<b>Why this deal:</b> ' + esc(r._why); why.style.display=''; }
+  else { why.style.display='none'; }
+  // Math rows (same as dealAnalysisHTML)
+  var mrs = _dpMathRows(r);
+  $('pvMathRows').innerHTML = mrs.map(function(row){
+    return '<tr'+(row[2]?' class="pv-tot"':'')+'><td>'+esc(row[0])+'</td><td>'+esc(row[1])+'</td></tr>';
+  }).join('');
+  // Flags — hide the whole section if nothing to say
+  var flags = _dpFlagsFor(r);
+  var flagsSec = $('pvFlagsSec');
+  if(flags.length){
+    $('pvFlags').innerHTML = flags.map(function(f){
+      return '<div class="flag'+(f.cls?' '+f.cls:'')+'">'+esc(f.t)+'</div>';
+    }).join('');
+    flagsSec.style.display='';
+  } else { flagsSec.style.display='none'; }
+  // Additional photos (skip the hero, show up to 3 more) — hide section if only hero
+  var extras = (r.photos||[]).slice(1,4);
+  var photosSec = $('pvPhotosSec');
+  if(extras.length){
+    $('pvPhotos').innerHTML = extras.map(function(u){
+      return '<img src="'+esc(u)+'" alt="" onerror="this.style.display=\'none\'">';
+    }).join('');
+    photosSec.style.display='';
+  } else { photosSec.style.display='none'; }
+  // Exclusivity window: default to 3d before auction, honor sender-set fields later
+  var exWin = 'auction date' + (r.auction?(' ('+r.auction+' minus 3 days)'):'');
+  $('pvExclusive').textContent = exWin;
+  // Signature block
+  $('pvSig').innerHTML = _dpSig();
+  // Fire the print dialog. Delay a tick so late-loading images have a shot.
+  $('dispoPackView').setAttribute('aria-hidden','false');
+  setTimeout(function(){
+    try{ window.print(); }catch(e){}
+    setTimeout(function(){ $('dispoPackView').setAttribute('aria-hidden','true'); }, 400);
+  }, 150);
 }
 
 // ---- Mail batch (Round C): select homeowner-rescue leads, review, download a queue for outreach_mail.py ----
