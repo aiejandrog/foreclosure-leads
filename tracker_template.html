@@ -215,15 +215,24 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
    only the SHAPE changes: no subtitle, label+value on one line, no margins/radius so it can pin
    flush at top:0 (getBoundingClientRect().top === 0). No hardcoded heights: padding drives the
    ~half-height strip, so body.compact composes by tightening it further. */
-.digest.collapsed{margin:0;border-radius:0}
-.digest.collapsed .dg{padding:3px 14px;gap:7px}
-.digest.collapsed .dg-t{flex-direction:row;align-items:center;gap:6px}
-.digest.collapsed .dg-s{max-height:0;opacity:0;margin-top:0;pointer-events:none}
-.digest.collapsed .dg-k::after{content:':'}
-.digest.collapsed .dg-v{font-size:13px}
-.digest.collapsed .dg-ic{width:20px;height:20px;border-radius:6px}
-.digest.collapsed .dg-ic svg{width:11px;height:11px}
-body.compact .digest.collapsed .dg{padding:2px 11px;gap:6px}
+#digest.collapsed{margin:0;border-radius:0}
+#digest.collapsed .dg{padding:3px 12px!important;gap:6px!important}
+/* Row layout: [icon][label:][value]. LABEL is capped hard so the value always gets
+   what remains of the tile — "STRONG DEALS" at .13em letter-spacing eats 110px and
+   starves values into ellipsis; here we cap it at 62px with tight letter-spacing and
+   truncate the LABEL before the value. !important on the load-bearing declarations
+   because a mystery specificity conflict was letting base .dg values win. */
+#digest.collapsed .dg-t{flex-direction:row!important;align-items:baseline;gap:6px;
+  min-width:0!important;flex:1 1 auto!important}
+#digest.collapsed .dg-k{font-size:8px!important;letter-spacing:.03em!important;
+  flex:0 0 auto!important;max-width:62px!important;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#digest.collapsed .dg-k::after{content:':'}
+#digest.collapsed .dg-v{font-size:13px!important;flex:1 1 auto!important;min-width:0!important}
+#digest.collapsed .dg-s{max-height:0;opacity:0;margin-top:0;pointer-events:none}
+#digest.collapsed .dg-ic{width:20px!important;height:20px!important;border-radius:6px}
+#digest.collapsed .dg-ic svg{width:11px!important;height:11px!important}
+body.compact #digest.collapsed .dg{padding:2px 11px;gap:6px}
 @media(max-width:1080px){.digest{flex-wrap:wrap}.dg{flex:1 1 44%}}
 @media(max-width:860px){.digest{display:none}}
 
@@ -947,7 +956,7 @@ body.compact .dg-v{font-size:14.5px}
 <table id="tbl">
 <colgroup>
 <!-- 12 cols for 12 columns — the Photo col was missing, shifting every width one column left -->
-<col style="width:172px"><col style="width:44px"><col style="width:150px"><col style="width:50px"><col style="width:106px"><col style="width:78px"><col style="width:210px"><col style="width:230px"><col style="width:150px"><col style="width:330px"><col style="width:130px"><col style="width:150px">
+<col style="width:172px"><col style="width:44px"><col style="width:150px"><col style="width:50px"><col style="width:106px"><col style="width:78px"><col style="width:210px"><col style="width:230px"><col style="width:200px"><col style="width:280px"><col style="width:130px"><col style="width:150px">
 </colgroup>
 <thead><tr>
 <th>Photo</th>
