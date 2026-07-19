@@ -78,22 +78,24 @@ header{padding:14px 22px 12px;background:rgba(244,246,250,.82);
   backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);
   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
   box-shadow:0 1px 0 rgba(255,255,255,.65) inset;
-  transition:transform .3s var(--e-lux),opacity .22s var(--e-lux),box-shadow .35s ease;will-change:transform,opacity}
+  transition:transform .3s var(--e-lux),opacity .22s var(--e-lux),box-shadow .35s ease,padding .25s var(--e-lux);will-change:transform,opacity}
 header.hdn{transform:translateY(-106%);opacity:0}
 header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(11,23,48,.10)}
-.brand{display:flex;align-items:center;gap:12px;margin:0 0 12px}
+.brand{display:flex;align-items:center;gap:12px;margin:0 0 12px;transition:margin .25s var(--e-lux)}
 .brand .wm{font-family:var(--f-display);font-weight:600;font-size:23px;letter-spacing:.005em;
-  color:var(--ink);line-height:1.04}
+  color:var(--ink);line-height:1.04;transition:font-size .25s var(--e-lux)}
 .brand .wm b{font-weight:600;color:var(--gold-d);
   background-image:var(--gold-shine);background-size:200% auto;background-repeat:repeat;
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
   filter:drop-shadow(0 0 7px rgba(198,161,75,.28));animation:wmShine 5s linear infinite;transition:filter .45s var(--e-lux)}
 .brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(198,161,75,.55)) brightness(1.07)}
 .brand .tag{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--muted-2);margin-top:3px}
+  text-transform:uppercase;color:var(--muted-2);margin-top:3px;max-height:20px;overflow:hidden;
+  transition:opacity .18s var(--e-lux),max-height .25s var(--e-lux),margin-top .25s var(--e-lux)}
 .brand .spacer{flex:1}
 .brand .upd{font-size:11px;color:var(--muted-2);text-align:right;align-self:center;
-  font-variant-numeric:tabular-nums;line-height:1.5}
+  font-variant-numeric:tabular-nums;line-height:1.5;max-height:40px;overflow:hidden;
+  transition:opacity .18s var(--e-lux),max-height .25s var(--e-lux)}
 .brand .upd.stale{color:#B45309 !important;font-weight:700}
 .brand .upd.stale #upddate{color:#B45309 !important}
 .lockbtn{display:none;align-self:center;margin-left:12px;background:var(--surface);
@@ -101,17 +103,37 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
   font-weight:600;color:var(--muted);cursor:pointer;transition:all .16s var(--e-lux)}
 .lockbtn:hover{border-color:var(--gold);color:var(--gold-d)}
 /* command rows */
-.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;transition:gap .25s var(--e-lux),margin .25s var(--e-lux)}
 .controls+.controls{margin-top:8px}
 .fgroup{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
 .flbl{font-family:var(--f-label);font-size:9.5px;font-weight:600;letter-spacing:.11em;
   text-transform:uppercase;color:var(--muted-2);margin-right:2px}
 .fdiv{width:1px;align-self:stretch;min-height:24px;background:var(--line);margin:0 4px}
+/* ============ SMART HEADER SHRINK (body.mini) ============
+   Scroll DOWN past ~220px -> the command rows condense with a smooth animation (more room for
+   deals); any upward scroll intent — or back near the top — pops them back out. The pinned
+   digest panel stays full-size and glides up with the shrinking header (ResizeObserver re-syncs
+   its sticky top; the top transition on .digest makes that a glide, not a jump). Desktop-only:
+   <=860px the header is static, so there is nothing to shrink against. The DEALFLOW wordmark
+   stays pure-type and visible throughout (Rule 1) — it only gets smaller. */
+@media(min-width:861px){
+  body.mini header{padding-top:8px;padding-bottom:7px}
+  body.mini .brand{margin-bottom:6px}
+  body.mini .brand .wm{font-size:17px}
+  body.mini .brand .tag{opacity:0;max-height:0;margin-top:0}
+  body.mini .brand .upd{opacity:0;max-height:0}
+  body.mini .controls{gap:5px}
+  body.mini .controls+.controls{margin-top:5px}
+  body.mini .controls button,body.mini .controls select,body.mini .controls input{padding:4px 9px;font-size:11.5px}
+  body.mini .stats{font-size:10.5px}
+  body.mini .flbl{display:none}
+}
 /* base controls */
 button,select,input{font-family:var(--f-body);background:var(--surface);color:var(--ink);
   border:1px solid var(--line);border-radius:var(--r-sm);padding:7px 13px;font-size:13px;
   cursor:pointer;transition:transform .26s var(--e-lux),box-shadow .26s var(--e-lux),
-  border-color .2s var(--e-lux),background-color .2s var(--e-lux),color .2s var(--e-lux),filter .2s var(--e-lux)}
+  border-color .2s var(--e-lux),background-color .2s var(--e-lux),color .2s var(--e-lux),filter .2s var(--e-lux),
+  padding .25s var(--e-lux),font-size .25s var(--e-lux)}
 button:hover{border-color:rgba(16,28,51,.26);box-shadow:var(--sh-1)}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
   outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
@@ -185,7 +207,7 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
    visible at full size, NEVER collapsed on scroll. The deals scroll underneath it. */
 .digest{display:flex;gap:0;margin:0 16px 0;background:var(--navy-grad);border-radius:var(--r-lg);
   box-shadow:var(--sh-2);overflow:hidden;position:sticky;top:0;z-index:45;
-  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux)}
+  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux),top .25s var(--e-lux)}
 .digest::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(236,214,154,.5),transparent)}
 .dg{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:11px 16px;
@@ -2967,11 +2989,18 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
   window.addEventListener('load', syncDigestTop, {once:true});
   window.addEventListener('resize', syncDigestTop, {passive:true});
   if(window.ResizeObserver){ new ResizeObserver(syncDigestTop).observe(header); }
-  let ticking = false;
+  let lastY = 0, mini = false, ticking = false;
   const update = () => {
     const y = window.scrollY;
     btn.style.display = (y > 340) ? 'block' : 'none';
     header.classList.toggle('scrolled', y > 6);                  // subtle elevation once you leave the top
+    // smart shrink: scrolling DOWN past ~220 condenses the command rows (body.mini); ANY upward
+    // scroll intent — or being back near the top — pops them back out. |dy|>4 deadband so tiny
+    // jitters and bounce-scrolls can't flicker the state.
+    const dy = y - lastY;
+    const want = (y < 90 || dy < -4) ? false : (dy > 4 && y > 220) ? true : mini;
+    if(want !== mini){ mini = want; document.body.classList.toggle('mini', mini); }
+    lastY = y;
     ticking = false;
   };
   window.addEventListener('scroll', () => { if(!ticking){ ticking = true; requestAnimationFrame(update); } }, {passive:true});
