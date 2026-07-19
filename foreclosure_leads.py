@@ -605,6 +605,16 @@ def _encrypt_payload(plaintext, password):
     b64 = lambda x: base64.b64encode(x).decode()
     return {'enc': 1, 'it': iters, 'salt': b64(salt), 'iv': b64(iv), 'ct': b64(ct)}
 
+def _decrypt_payload(env, password):
+    """Inverse of _encrypt_payload (single-code PBKDF2 + AES-GCM envelope)."""
+    import base64
+    from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    key = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=base64.b64decode(env['salt']),
+                     iterations=env['it']).derive(password.encode('utf-8'))
+    return AESGCM(key).decrypt(base64.b64decode(env['iv']), base64.b64decode(env['ct']), None).decode('utf-8')
+
 def _encrypt_multi(plaintext, codes):
     """Envelope encryption for PER-PERSON access codes, no backend needed. One random master key
     encrypts the payload once; that master key is then wrapped separately under EACH person's code
@@ -970,6 +980,23 @@ def main():
     from photo_carry import carry_photos
     _carried = carry_photos(leads, os.path.join(HERE,'leads_final.json'))
     if _carried: print(f"carried photos forward for {_carried} returning leads")
+    # Zillow seed (photo_seed.enc, committed ciphertext): listing photos harvested locally over a
+    # residential connection — Zillow blocks the GHA datacenter IP, so without this floor every CI
+    # build silently downgrades returning leads from listing photos to Street View/aerials (seen
+    # 2026-07-19: 120 leads lost their Zillow sets in one run). Decrypt with the first site code
+    # (present locally AND via the SITE_CODES secret in CI) and carry with PREFERENCE — a listing
+    # photo outranks a Street View / aerial fallback even when the lead already has one.
+    try:
+        _seed_f = os.path.join(HERE, 'photo_seed.enc')
+        if os.path.exists(_seed_f) and _load_codes():
+            _code = _load_codes()[0][1].split('\x1f')[0]
+            _tmp = os.path.join(HERE, '_photo_seed.json')          # gitignored working copy
+            json.dump(json.loads(_decrypt_payload(json.load(open(_seed_f, encoding='utf-8')), _code)),
+                      open(_tmp, 'w', encoding='utf-8'))
+            _zc = carry_photos(leads, _tmp, prefer=('zillow',))
+            if _zc: print(f"zillow seed: listing photos restored for {_zc} leads")
+    except Exception as _e:
+        print('zillow seed skipped:', _e)
     json.dump(leads, open(os.path.join(HERE,'leads_final.json'),'w'), indent=1)
     make_tracker(leads)
     cols = ['tier','score','sale_type','AuctionDate','days_to_auction','Case #','opening_bid','filing_year','owners','Address','mailing_address',

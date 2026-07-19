@@ -29,10 +29,13 @@ def _pkey(r):
             or re.sub(r'[^a-z0-9]', '', str(r.get('case') or r.get('Case #') or '').lower()))
 
 
-def carry_photos(new_leads, prev_path):
+def carry_photos(new_leads, prev_path, prefer=()):
     """Fill photo fields on ``new_leads`` from the previous JSON snapshot at ``prev_path``,
     matched by :func:`_pkey`. Only fills leads that lack photos, only from prev leads that have
     them. ``aurl`` (the location-derived aerial fallback) is carried whenever it is missing.
+    ``prefer``: optional tuple of photo_kind values (e.g. ('zillow',)) that WIN even when the
+    lead already has photos from a lesser source — the committed Zillow seed rides in this way,
+    because listing photos outrank a Street View / aerial fallback every time.
     Returns the number of leads that received a photo set. Never raises."""
     if not prev_path or not os.path.exists(prev_path):
         return 0
@@ -56,7 +59,8 @@ def carry_photos(new_leads, prev_path):
         src = idx.get(_pkey(r))
         if not src:
             continue
-        if not r.get('photos') and src.get('photos'):
+        preferred = src.get('photo_kind') in prefer and src.get('photos')
+        if (not r.get('photos') and src.get('photos')) or preferred:
             for f in _PHOTO_TRIPLET:
                 r[f] = src.get(f, '' if f != 'photos' else [])
             carried += 1
