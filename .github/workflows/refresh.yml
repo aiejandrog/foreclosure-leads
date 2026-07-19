@@ -1,0 +1,157 @@
+name: DEALFLOW Daily Refresh
+
+# Runs the same pipeline refresh-dealflow.bat does on Alejandro's Windows machine, but on
+# GitHub-hosted Ubuntu. Fires daily at 13:00 UTC (09:00 EDT / 08:00 EST — DST-drifts by 1h
+# in winter, still hits morning) and can be manually kicked from the Actions tab.
+#
+# This is the durable replacement for the "DEALFLOW Refresh" Windows Task Scheduler entry that
+# timed out and killed the pipeline on 2026-07-18. Every step's failure surfaces via GitHub's
+# built-in workflow-failure email — no more silent rot on the live site.
+#
+# Sequencing matches the bat exactly, including the "publish fresh leads NOW, then enrich, then
+# publish again" two-phase pattern that guarantees SOMETHING lands on docs/index.html even if a
+# later slow step (skiptrace, photos) hangs.
+
+on:
+  schedule:
+    - cron: '0 13 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  # Only one refresh at a time — never let a manual run collide with the daily cron and
+  # step on itself with two concurrent pushes.
+  group: dealflow-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # Every scraper checks env FIRST, then falls back to a gitignored *.key file. On GHA
+      # only env is available; on Alejandro's local machine only files are.
+      GOOGLE_STREET_VIEW_KEY: ${{ secrets.GOOGLE_STREET_VIEW_KEY }}
+      TRACERFY_API_KEY: ${{ secrets.TRACERFY_API_KEY }}
+      BATCHDATA_API_KEY: ${{ secrets.BATCHDATA_API_KEY }}
+      # Redirect the "Desktop tracker + daily CSV" write to a throwaway tmp dir on the runner
+      # (see the DEALFLOW_DIR override in foreclosure_leads.py). Ephemeral, never committed.
+      DEALFLOW_DIR: /tmp/dealflow-noop
+      # Same 8-min link-generator budget the local pipeline uses.
+      GEN_DEADLINE: '480'
+      # Keep pip/apt quiet.
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+
+    steps:
+      - name: Checkout (with push token)
+        uses: actions/checkout@v4
+        with:
+          # Needed so the later `git push` uses a token with contents:write on THIS repo.
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # ---- [1/5] Miami-Dade scrape + enrich + first tracker rebuild -------------------------
+      - name: '[1/5] Pull new auction leads (MD scrape + enrich)'
+        run: python foreclosure_leads.py
+
+      # ---- [1b/5] Publish fresh leads immediately (mirrors the bat) ------------------------
+      # Rationale: if a later enrichment step (skiptrace, photos, county merge) hangs, at
+      # least the newest MD leads already landed on docs/index.html. Same reasoning the local
+      # bat uses.
+      - name: '[1b/5] Publish fresh leads NOW'
+        run: |
+          git add docs/index.html
+          if git diff --staged --quiet; then
+            echo "no change — nothing to publish yet"
+          else
+            git commit -m "refresh: fresh leads (auto)"
+            git push origin HEAD:main
+          fi
+
+      # ---- [1c/5] Broward + Palm Beach scrape ---------------------------------------------
+      # Per-county try/except: a thin/blocked county keeps its last-good *_leads.json
+      # (make_tracker glob-merges every *_leads.json at rebuild time, so a broken county just
+      # falls back to yesterday's data instead of blanking the site).
+      - name: '[1c/5] Broward + Palm Beach scrape'
+        continue-on-error: true
+        run: |
+          set +e
+          python county_leads.py --county broward
+          bw=$?
+          python county_leads.py --county "palm beach"
+          pb=$?
+          echo "broward exit=$bw · palm beach exit=$pb"
+          # Never fail the whole workflow on one blocked county.
+          exit 0
+
+      # ---- [2/5] Link generators (bounded by GEN_DEADLINE) --------------------------------
+      - name: '[2/5] Generate court-case + records-search links'
+        continue-on-error: true
+        run: |
+          python gen_cases_qs.py --limit 40
+          python gen_records_qs.py --limit 40
+
+      # ---- [2b/5] Recorded mortgage chains -------------------------------------------------
+      - name: '[2b/5] Recorded mortgage chains (MD cached-only + BW live)'
+        continue-on-error: true
+        run: |
+          python records_liens.py --all --cached-only
+          if [ -f broward_leads.json ]; then
+            python broward_liens.py --all
+          fi
+
+      # ---- [3/5] Skip-trace phones (only if a key is present) -----------------------------
+      - name: '[3/5] Skip-trace owner phones'
+        if: env.TRACERFY_API_KEY != '' || env.BATCHDATA_API_KEY != ''
+        continue-on-error: true
+        run: python skiptrace.py
+
+      # ---- [3b/5] Property photos (Zillow + Street View + aerials) ------------------------
+      - name: '[3b/5] Property photos'
+        continue-on-error: true
+        run: python property_photos.py --zillow
+
+      # ---- [4/5] Final rebuild with everything baked in -----------------------------------
+      - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
+        run: |
+          python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))"
+
+      # ---- [5/5] Publish final ------------------------------------------------------------
+      - name: '[5/5] Publish final docs/index.html'
+        run: |
+          # docs/img/ also picks up new photos this run — stage them too.
+          git add docs/index.html docs/img
+          if git diff --staged --quiet; then
+            echo "nothing changed — site already current"
+          else
+            git commit -m "refresh: auto lead + phone + photo update"
+            git push origin HEAD:main
+          fi
+
+      # ---- Health ------------------------------------------------------------------------
+      # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
+      # workflow, which fires GitHub's built-in workflow-failure email to the repo owner.
+      # No Twilio / SMS wiring needed; the notification path is already there for free.
+      - name: 'Health'
+        run: python healthcheck.py
