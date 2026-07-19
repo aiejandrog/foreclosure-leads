@@ -175,9 +175,14 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .statviol{color:var(--red-ink);font-weight:800}
 
 /* ============================== TODAY DIGEST ============================== */
-.digest{display:flex;gap:0;margin:12px 16px 0;background:var(--navy-grad);border-radius:var(--r-lg);
+/* margin-top:0 — digest sits FLUSH against the header edge. The old 12px gap read as ~200px
+   of white space at rest (header bg is nearly transparent) which Alejandro perceived as an
+   empty "gap before the banner". Now the header→digest transition looks like one continuous
+   surface. Transitions raised to 300ms to match header's transform hide so the two coordinate
+   on the way in/out (was 180ms — noticeable desync). */
+.digest{display:flex;gap:0;margin:0 16px 0;background:var(--navy-grad);border-radius:var(--r-lg);
   box-shadow:var(--sh-2);overflow:hidden;position:sticky;top:0;z-index:45;
-  transition:margin .18s cubic-bezier(.22,1,.36,1),border-radius .18s cubic-bezier(.22,1,.36,1)}
+  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux)}
 .digest::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(236,214,154,.5),transparent)}
 .dg{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:11px 16px;
