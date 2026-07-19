@@ -2994,11 +2994,13 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
     const y = window.scrollY;
     btn.style.display = (y > 340) ? 'block' : 'none';
     header.classList.toggle('scrolled', y > 6);                  // subtle elevation once you leave the top
-    // smart shrink: scrolling DOWN past ~220 condenses the command rows (body.mini); ANY upward
-    // scroll intent — or being back near the top — pops them back out. |dy|>4 deadband so tiny
-    // jitters and bounce-scrolls can't flicker the state.
+    // smart shrink: scrolling DOWN past ~100 condenses the command rows (body.mini) so the
+    // DEALFLOW brand + digest strip move into a compact top strip and the deals table gets
+    // ~135px more room. Any upward scroll — or being back near the top (y<60) — restores full
+    // header. |dy|>4 deadband so tiny jitters don't flicker. Alejandro asked for the shrink
+    // to happen fast — lowered from 220 to 100 so a single wheel notch is enough to trigger it.
     const dy = y - lastY;
-    const want = (y < 90 || dy < -4) ? false : (dy > 4 && y > 220) ? true : mini;
+    const want = (y < 60 || dy < -4) ? false : (dy > 4 && y > 100) ? true : mini;
     if(want !== mini){ mini = want; document.body.classList.toggle('mini', mini); }
     lastY = y;
     ticking = false;
