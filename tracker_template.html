@@ -2970,24 +2970,37 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
   apply();
   tog.onclick = () => { open = !open; try { localStorage.setItem('fcAdvOpen', open?'1':'0'); } catch(e){} apply(); };
 })();
-// smooth header auto-hide (slide away on scroll-down, back on scroll-up) + scroll-to-top button
+// Header stays visible on scroll (tranchi.ai pattern — nav is a fixed bar that never hides).
+// The auto-hide + slide-up was the entire source of the "gap on scroll" complaints — nothing to
+// coordinate means nothing can feel janky. We keep the .scrolled class (subtle shadow after leaving
+// top) and the #toTop button, but never touch .hdn. The rule stays in CSS in case anyone re-enables.
+// Also: digest sticks directly BELOW the always-visible header — its sticky top is synced to the
+// header's height so the strip lands flush under the nav instead of hiding behind it.
 (function(){
-  const btn = document.getElementById('toTop'), header = document.querySelector('header');
-  let lastY = 0, ticking = false;
+  const btn = document.getElementById('toTop'), header = document.querySelector('header'), digest = document.getElementById('digest');
+  header.classList.remove('hdn');                                 // clear any leftover state
+  const syncDigestTop = () => {
+    if(!digest || !header) return;
+    const h = Math.round(header.getBoundingClientRect().height);
+    if(h > 0) digest.style.top = h + 'px';
+  };
+  syncDigestTop();
+  // The header can grow after initial render (fonts arriving, appIn animation, layout settling).
+  // Retry after DOM finishes + on window load + observe any size change so digest always lands
+  // flush under the header, never overlapping it or floating below with a gap.
+  requestAnimationFrame(() => requestAnimationFrame(syncDigestTop));
+  window.addEventListener('load', syncDigestTop, {once:true});
+  window.addEventListener('resize', syncDigestTop, {passive:true});
+  if(window.ResizeObserver){ new ResizeObserver(syncDigestTop).observe(header); }
+  let ticking = false;
   const update = () => {
     const y = window.scrollY;
     btn.style.display = (y > 340) ? 'block' : 'none';
-    const dy = y - lastY;
-    if(Math.abs(dy) > 5){                                        // ignore micro-jitter so it doesn't flicker
-      if(dy > 0 && y > 130) header.classList.add('hdn');        // scrolling down past the header -> glide up
-      else header.classList.remove('hdn');                       // any upward scroll -> smartly bring it back
-      lastY = y;
-    }
     header.classList.toggle('scrolled', y > 6);                  // subtle elevation once you leave the top
     ticking = false;
   };
   window.addEventListener('scroll', () => { if(!ticking){ ticking = true; requestAnimationFrame(update); } }, {passive:true});
-  btn.onclick = () => { window.scrollTo({top:0, behavior:'smooth'}); header.classList.remove('hdn'); };
+  btn.onclick = () => { window.scrollTo({top:0, behavior:'smooth'}); };
   update();
 })();
 // letter sender persistence
