@@ -179,10 +179,14 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
    of white space at rest (header bg is nearly transparent) which Alejandro perceived as an
    empty "gap before the banner". Now the header→digest transition looks like one continuous
    surface. Transitions raised to 300ms to match header's transform hide so the two coordinate
-   on the way in/out (was 180ms — noticeable desync). */
+   on the way in/out (was 180ms — noticeable desync). max-height needs an explicit rest value
+   so the collapse-to-zero transition has a start point (400px covers the <=1080px wrap case). */
 .digest{display:flex;gap:0;margin:0 16px 0;background:var(--navy-grad);border-radius:var(--r-lg);
-  box-shadow:var(--sh-2);overflow:hidden;position:sticky;top:0;z-index:45;
-  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux)}
+  box-shadow:var(--sh-2);overflow:hidden;position:sticky;top:0;z-index:45;max-height:400px;
+  opacity:1;transform:none;
+  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux),
+    max-height .26s cubic-bezier(.22,1,.36,1),opacity .18s cubic-bezier(.22,1,.36,1),
+    transform .26s cubic-bezier(.22,1,.36,1)}
 .digest::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(236,214,154,.5),transparent)}
 .dg{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:11px 16px;
@@ -216,38 +220,14 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .dg-s{font-size:10.5px;color:rgba(255,255,255,.62);margin-top:1px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-height:18px;opacity:1;
   transition:max-height .22s cubic-bezier(.22,1,.36,1),opacity .16s cubic-bezier(.22,1,.36,1),margin-top .22s cubic-bezier(.22,1,.36,1)}
-/* collapsed: thin chip strip pinned to the viewport top (JS toggles .collapsed past ~120px scroll,
-   restores under ~100px). Same navy surface, hairlines, icon state colors and click-to-filter —
-   only the SHAPE changes: no subtitle, label+value on one line, no margins/radius so it can pin
-   flush at top:0 (getBoundingClientRect().top === 0). No hardcoded heights: padding drives the
-   ~half-height strip, so body.compact composes by tightening it further. */
-#digest.collapsed{margin:0;border-radius:0}
-#digest.collapsed .dg{padding:3px 12px!important;gap:6px!important}
-/* Row layout: [icon][label:][value]. LABEL is capped hard so the value always gets
-   what remains of the tile — "STRONG DEALS" at .13em letter-spacing eats 110px and
-   starves values into ellipsis; here we cap it at 62px with tight letter-spacing and
-   truncate the LABEL before the value. !important on the load-bearing declarations
-   because a mystery specificity conflict was letting base .dg values win. */
-#digest.collapsed .dg-t{flex-direction:row!important;align-items:baseline;gap:6px;
-  min-width:0!important;flex:1 1 auto!important}
-#digest.collapsed .dg-k{font-size:8px!important;letter-spacing:.03em!important;
-  flex:0 0 auto!important;max-width:62px!important;min-width:0;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#digest.collapsed .dg-k::after{content:':'}
-#digest.collapsed .dg-v{font-size:13px!important;flex:1 1 auto!important;min-width:0!important}
-#digest.collapsed .dg-s{max-height:0;opacity:0;margin-top:0;pointer-events:none}
-/* ...but a max-height:0 fade child is STILL a flex-row item horizontally: the invisible subtitle
-   kept its full text width (~120px) and squeezed .dg-v into ellipsis (bb07557 capped the label but
-   missed this). Take it out of the row's flow while it fades — position:absolute costs no width
-   and keeps the e181ebf opacity/max-height transition intact. */
-#digest.collapsed .dg-t{position:relative}
-#digest.collapsed .dg-s{position:absolute;left:0;top:100%;width:100%}
-#digest.collapsed .dg-ic{width:20px!important;height:20px!important;border-radius:6px}
-#digest.collapsed .dg-ic svg{width:11px!important;height:11px!important}
-/* compact+collapsed must tighten FURTHER (spec: compose, don't conflict) — needs its own
-   !important to beat the collapsed padding's !important above (1-3-1 beats 1-2-0 at equal
-   importance). */
-body.compact #digest.collapsed .dg{padding:2px 11px!important;gap:6px!important}
+/* collapsed (past ~120px scroll, restores under ~100px): the whole blue panel SLIDES UP AND AWAY.
+   Alejandro's call (2026-07-19): the deals own the screen below the always-visible header — no
+   pinned chip strip at all. The panel slides up, fades, and its in-flow height collapses to zero
+   so the table reclaims the space; everything transitions (~.26s) so the page glides instead of
+   popping. overflow-anchor:none (global) keeps the ~90px height change from yanking scrollY, and
+   the same JS hysteresis toggles .collapsed — no logic change. Tiles inside are clipped by the
+   parent's overflow:hidden as it folds, so no per-tile strip rules are needed anymore. */
+#digest.collapsed{max-height:0;opacity:0;transform:translateY(-12px);pointer-events:none}
 @media(max-width:1080px){.digest{flex-wrap:wrap}.dg{flex:1 1 44%}}
 @media(max-width:860px){.digest{display:none}}
 
@@ -785,7 +765,10 @@ input.ph::placeholder{color:#8FBFA0}
    normal author rules regardless of specificity). 'backwards' still covers the entry delay,
    but releases the element once the entrance finishes so .hdn can move it. */
 header{animation:appIn .5s .05s backwards}
-.digest,.tblwrap,#cards{animation:appIn .55s .12s both}
+/* fill 'backwards' for the same reason as header: 'both' kept the end keyframe (opacity:1,
+   transform:none) overriding the cascade FOREVER — it silently killed the digest's collapsed
+   slide-up/fade-out (max-height still folded, but the panel never glided). Released after entry. */
+.digest,.tblwrap,#cards{animation:appIn .55s .12s backwards}
 #welcome{position:fixed;top:0;left:0;right:0;z-index:250;display:flex;justify-content:center;pointer-events:none}
 .wtoast{margin-top:30px;display:flex;align-items:center;gap:13px;background:var(--surface);
   border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh-3),0 0 0 1px rgba(198,161,75,.18);
