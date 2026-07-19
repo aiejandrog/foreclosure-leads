@@ -330,6 +330,17 @@ td.num .warn,td.num .mrwarn,td.num .submeta{white-space:normal;overflow-wrap:any
   font-variant-numeric:tabular-nums;letter-spacing:-.015em;white-space:nowrap}
 .profneg{color:var(--red);font-weight:700;font-size:20px;font-family:var(--f-num);
   font-variant-numeric:tabular-nums;letter-spacing:-.015em;white-space:nowrap}
+/* market value, legible at a glance (the squint complaint): a bold numeral line under the profit
+   in the numbers cell + an inline bump inside the property-cell numbers line. Neutral ink, NOT
+   gold/green — those two colors are reserved for profit/CTA so value never masquerades as money. */
+.mvline{font-family:var(--f-num);font-size:14px;font-weight:700;color:var(--ink);margin-top:2px;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.mvline .mvl{font-family:var(--f-label);font-size:8px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted-2);margin-left:5px;vertical-align:1px}
+td.propcell .submeta b.pv,#cards .submeta b.pv{font-family:var(--f-num);font-size:13.5px;
+  font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+body.compact .mvline{font-size:12.5px}
+body.compact td.propcell .submeta b.pv{font-size:12px}
 .mrwarn{color:var(--amber-ink);font-size:10px;font-weight:600}
 .mrwarn.under{color:var(--red-ink);font-weight:800}
 .tax{color:var(--red);font-size:11px;font-weight:600}
@@ -2794,6 +2805,7 @@ function render(){
     } else {
       prof = verdictBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
         (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
+        (r.value>0?'<div class="mvline">'+fmtK(r.value)+'<span class="mvl">market value</span></div>':'')+
         (r._tight?'<div class="warn" title="Costs/debt eat the margin. Negotiate lower or pass.">thin margin</div>':'')+
         mrText(r)+
         dealTrigger(r);
@@ -2822,7 +2834,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -2867,7 +2879,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+fmtK(r.value)+' val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
