@@ -204,12 +204,13 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
    empty "gap before the banner". Now the header→digest transition looks like one continuous
    surface. Transitions raised to 300ms to match header's transform hide so the two coordinate
    on the way in/out (was 180ms — noticeable desync).
-   PINNED ALWAYS (Alejandro 2026-07-19, superseding the slide-away): the rail is a fixed
-   instrument panel — sticky top synced to the header height (syncDigestTop below), always
-   visible at full size, NEVER collapsed on scroll. The deals scroll underneath it. */
+*/
+/* SCROLLS WITH CONTENT (Alejandro 2026-07-19, superseding pinned): normal in-flow rail —
+   reads at the top, scrolls away as the user moves to the table. position:relative (not static)
+   because .digest::before below anchors its gold hairline to this element. */
 .digest{display:flex;gap:0;margin:0 16px 0;background:var(--navy-grad);border-radius:var(--r-lg);
-  box-shadow:var(--sh-2);overflow:hidden;position:sticky;top:0;z-index:45;
-  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux),top .25s var(--e-lux)}
+  box-shadow:var(--sh-2);overflow:hidden;position:relative;
+  transition:margin .3s var(--e-lux),border-radius .3s var(--e-lux)}
 .digest::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(236,214,154,.5),transparent)}
 .dg{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:11px 16px;
@@ -243,7 +244,7 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .dg-s{font-size:10.5px;color:rgba(255,255,255,.62);margin-top:1px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-height:18px;opacity:1;
   transition:max-height .22s cubic-bezier(.22,1,.36,1),opacity .16s cubic-bezier(.22,1,.36,1),margin-top .22s cubic-bezier(.22,1,.36,1)}
-/* (No .collapsed state — the rail is pinned always. See the .digest comment above.) */
+/* (No .collapsed state — the rail is a normal in-flow element that scrolls with content.) */
 @media(max-width:1080px){.digest{flex-wrap:wrap}.dg{flex:1 1 44%}}
 @media(max-width:860px){.digest{display:none}}
 
@@ -2973,24 +2974,12 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
 // The auto-hide + slide-up was the entire source of the "gap on scroll" complaints — nothing to
 // coordinate means nothing can feel janky. We keep the .scrolled class (subtle shadow after leaving
 // top) and the #toTop button, but never touch .hdn. The rule stays in CSS in case anyone re-enables.
-// Also: digest sticks directly BELOW the always-visible header — its sticky top is synced to the
-// header's height so the strip lands flush under the nav instead of hiding behind it.
+// The digest scrolls with content (Alejandro 2026-07-19 — see .digest CSS), so no sync-to-header
+// dance is needed anymore. This IIFE only owns: header .scrolled shadow, body.mini shrink on scroll,
+// and the #toTop button.
 (function(){
-  const btn = document.getElementById('toTop'), header = document.querySelector('header'), digest = document.getElementById('digest');
+  const btn = document.getElementById('toTop'), header = document.querySelector('header');
   header.classList.remove('hdn');                                 // clear any leftover state
-  const syncDigestTop = () => {
-    if(!digest || !header) return;
-    const h = Math.round(header.getBoundingClientRect().height);
-    if(h > 0) digest.style.top = h + 'px';
-  };
-  syncDigestTop();
-  // The header can grow after initial render (fonts arriving, appIn animation, layout settling).
-  // Retry after DOM finishes + on window load + observe any size change so digest always lands
-  // flush under the header, never overlapping it or floating below with a gap.
-  requestAnimationFrame(() => requestAnimationFrame(syncDigestTop));
-  window.addEventListener('load', syncDigestTop, {once:true});
-  window.addEventListener('resize', syncDigestTop, {passive:true});
-  if(window.ResizeObserver){ new ResizeObserver(syncDigestTop).observe(header); }
   let lastY = 0, mini = false, ticking = false;
   const update = () => {
     const y = window.scrollY;
@@ -3689,10 +3678,8 @@ document.addEventListener('click', function(e){
 var __renderCore = render;
 render = function(){ __renderCore.apply(this, arguments); try{ updateDigest(); }catch(e){} };
 try{ updateDigest(); }catch(e){}
-// PINNED ALWAYS: the digest rail is a fixed instrument panel below the header (Alejandro,
-// 2026-07-19) — no collapse-on-scroll at all. The sticky top is synced to the header height
-// (syncDigestTop above), tiles stay full-size and clickable at every scroll depth, and the
-// table scrolls underneath. The former slide-away / chip-strip collapse listener was removed.
+// Digest scrolls with content — no sticky/pin, no collapse-on-scroll. Tiles are top-of-page
+// context only; click-to-filter delegation above still works whenever they're on-screen.
 // compact density toggle (persisted per device)
 (function(){
   var b=document.getElementById('denstog'); if(!b) return;
