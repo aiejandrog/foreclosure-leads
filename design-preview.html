@@ -58,6 +58,12 @@
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
+/* Scroll anchoring OFF page-wide: when the digest rail collapses/expands it changes height above the
+   viewport, and the browser's anchor compensation (±52px) both yanks the scroll position and — worse —
+   re-fires the collapse trigger past the hysteresis band, oscillating at the boundary. Safe to disable
+   here: every photo sits in a fixed-dimension box (.pthumb/.phero, object-fit:cover), so media loads
+   never shift layout and anchoring buys nothing on this page. */
+html,body{overflow-anchor:none}
 body{font-family:var(--f-body);margin:0;background:var(--bg-wash);color:var(--ink);
   -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:.001em}
 ::selection{background:var(--gold-soft);color:var(--ink)}
@@ -109,9 +115,13 @@ button,select,input{font-family:var(--f-body);background:var(--surface);color:va
 button:hover{border-color:rgba(16,28,51,.26);box-shadow:var(--sh-1)}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
   outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
-button:not(.active):not(.cpy):not(:disabled):hover,.dealtog:hover,.lkb:hover{
+/* NOTE: digest tiles (.dg) are excluded from the universal button hover/active pattern
+   below (:not(.dg)) — they are dark-navy surfaces with their OWN subtle hover rules in
+   the .digest block. Without :not(.dg) the button:hover rule wins on specificity (0-4-1
+   vs 0-2-0) and paints the tile cream #FFFDF7, making white .dg-v text invisible. */
+button:not(.dg):not(.active):not(.cpy):not(:disabled):hover,.dealtog:hover,.lkb:hover{
   transform:translateY(-1px);border-color:rgba(198,161,75,.45);background-color:#FFFDF7;box-shadow:var(--sh-hover)}
-button:not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);
+button:not(.dg):not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);
   transition-duration:.09s;transition-timing-function:var(--e-snap)}
 input{cursor:text}
 input::placeholder{color:var(--muted-2)}
@@ -166,20 +176,22 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 
 /* ============================== TODAY DIGEST ============================== */
 .digest{display:flex;gap:0;margin:12px 16px 0;background:var(--navy-grad);border-radius:var(--r-lg);
-  box-shadow:var(--sh-2);overflow:hidden;position:relative}
+  box-shadow:var(--sh-2);overflow:hidden;position:sticky;top:0;z-index:45;
+  transition:margin .18s cubic-bezier(.22,1,.36,1),border-radius .18s cubic-bezier(.22,1,.36,1)}
 .digest::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;
   background:linear-gradient(90deg,transparent,rgba(236,214,154,.5),transparent)}
 .dg{flex:1;min-width:0;display:flex;align-items:center;gap:11px;padding:11px 16px;
   border-left:1px solid rgba(255,255,255,.08);cursor:pointer;background:transparent;border-top:none;
   border-right:none;border-bottom:none;text-align:left;color:#fff;border-radius:0;
-  outline:none;position:relative;transition:background .18s var(--e-lux)}
+  outline:none;position:relative;transition:background .18s var(--e-lux),padding .18s cubic-bezier(.22,1,.36,1),gap .18s cubic-bezier(.22,1,.36,1)}
 .dg:first-child{border-left:none}
 .dg:hover{outline:none;background:rgba(255,255,255,.055);transform:none;box-shadow:none}
 .dg:active{outline:none;transform:none;background:rgba(255,255,255,.09)}
 .dg:focus{outline:none}
 .dg:focus-visible{outline:none;background:rgba(255,255,255,.055);box-shadow:inset 0 0 0 1px rgba(236,214,154,.55)}
 .dg-ic{width:30px;height:30px;flex:0 0 auto;border-radius:9px;display:grid;place-items:center;
-  background:rgba(236,214,154,.12);border:1px solid rgba(236,214,154,.22)}
+  background:rgba(236,214,154,.12);border:1px solid rgba(236,214,154,.22);
+  transition:width .18s cubic-bezier(.22,1,.36,1),height .18s cubic-bezier(.22,1,.36,1),border-radius .18s cubic-bezier(.22,1,.36,1)}
 .dg-ic svg{width:15px;height:15px;color:var(--gold-l);display:block}
 .dg.warn .dg-ic{background:rgba(255,180,84,.14);border-color:rgba(255,180,84,.3)}
 .dg.warn .dg-ic svg{color:#FBC97C}
@@ -191,10 +203,25 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .dg-k{font-family:var(--f-label);font-size:8.5px;font-weight:600;letter-spacing:.13em;
   text-transform:uppercase;color:rgba(255,255,255,.55);white-space:nowrap}
 .dg-v{font-family:var(--f-num);font-size:16.5px;font-weight:700;letter-spacing:-.01em;
-  color:#fff;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  color:#fff;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  transition:font-size .18s cubic-bezier(.22,1,.36,1)}
 .dg-v b{color:var(--gold-l);font-weight:700}
 .dg-s{font-size:10.5px;color:rgba(255,255,255,.62);margin-top:1px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
+/* collapsed: thin chip strip pinned to the viewport top (JS toggles .collapsed past ~120px scroll,
+   restores under ~100px). Same navy surface, hairlines, icon state colors and click-to-filter —
+   only the SHAPE changes: no subtitle, label+value on one line, no margins/radius so it can pin
+   flush at top:0 (getBoundingClientRect().top === 0). No hardcoded heights: padding drives the
+   ~half-height strip, so body.compact composes by tightening it further. */
+.digest.collapsed{margin:0;border-radius:0}
+.digest.collapsed .dg{padding:3px 14px;gap:7px}
+.digest.collapsed .dg-t{flex-direction:row;align-items:center;gap:6px}
+.digest.collapsed .dg-s{display:none}
+.digest.collapsed .dg-k::after{content:':'}
+.digest.collapsed .dg-v{font-size:13px}
+.digest.collapsed .dg-ic{width:20px;height:20px;border-radius:6px}
+.digest.collapsed .dg-ic svg{width:11px;height:11px}
+body.compact .digest.collapsed .dg{padding:2px 11px;gap:6px}
 @media(max-width:1080px){.digest{flex-wrap:wrap}.dg{flex:1 1 44%}}
 @media(max-width:860px){.digest{display:none}}
 
@@ -715,7 +742,12 @@ input.ph::placeholder{color:#8FBFA0}
 @keyframes dmPop{from{opacity:0;transform:translate(-50%,-46%) scale(.97)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
 @keyframes appIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes wmShine{from{background-position:0% center}to{background-position:-200% center}}
-header{animation:appIn .5s .05s both}
+/* appIn fill changed from 'both' to 'backwards': with fill 'both' the animation's end keyframe
+   (transform:translateY(0)) keeps overriding the cascade forever — including header.hdn's
+   translateY(-106%), which silently killed the scroll-down auto-hide (animation origin beats
+   normal author rules regardless of specificity). 'backwards' still covers the entry delay,
+   but releases the element once the entrance finishes so .hdn can move it. */
+header{animation:appIn .5s .05s backwards}
 .digest,.tblwrap,#cards{animation:appIn .55s .12s both}
 #welcome{position:fixed;top:0;left:0;right:0;z-index:250;display:flex;justify-content:center;pointer-events:none}
 .wtoast{margin-top:30px;display:flex;align-items:center;gap:13px;background:var(--surface);
@@ -3347,6 +3379,21 @@ document.addEventListener('click', function(e){
 var __renderCore = render;
 render = function(){ __renderCore.apply(this, arguments); try{ updateDigest(); }catch(e){} };
 try{ updateDigest(); }catch(e){}
+// collapse the rail to a chip strip once the table scrolls under it; restore near the top.
+// Hysteresis (collapse past 120px, restore under 100px) so it can't oscillate at the boundary;
+// rAF-debounced passive listener, same pattern as the header auto-hide above.
+(function(){
+  var box = document.getElementById('digest'); if(!box) return;
+  var collapsed = false, ticking = false;
+  var apply = function(){
+    var y = window.scrollY || 0;
+    var want = collapsed ? y > 100 : y > 120;
+    if(want !== collapsed){ collapsed = want; box.classList.toggle('collapsed', collapsed); }
+    ticking = false;
+  };
+  window.addEventListener('scroll', function(){ if(!ticking){ ticking = true; requestAnimationFrame(apply); } }, {passive:true});
+  apply();
+})();
 // compact density toggle (persisted per device)
 (function(){
   var b=document.getElementById('denstog'); if(!b) return;
