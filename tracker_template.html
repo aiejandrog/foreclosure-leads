@@ -1058,6 +1058,16 @@ body.compact .dg-v{font-size:14.5px}
 </header>
 <div id="digest" class="digest" role="region" aria-label="Today at a glance"></div>
 <div id="advpanel" class="collapsed">
+<!-- Broward register-of-actions bookmarklet — set it up ONCE by dragging the pill below to your
+     bookmarks bar. After that: click a Cases link in DEALFLOW (case# copies + Broward tab opens);
+     switch to the Broward tab and click the "DF Broward Case" bookmark — it auto-selects the Case
+     Number tab, pastes the case#, and submits. One click on Broward instead of the 4-step manual
+     dance. Kept short so it fits in a bookmark href (~500 chars). -->
+<div class="controls" style="margin-top:6px;align-items:center">
+<span style="color:var(--gold-d);font-size:12px;font-weight:700">Smart Broward lookup:</span>
+<a class="dig" style="cursor:grab;font-size:12px;background:linear-gradient(120deg,#0B1730,#152540);color:#C6A14B;border-color:#C6A14B;padding:6px 12px" href="javascript:(async()=&gt;{try{var c=(await navigator.clipboard.readText()||'').trim();if(!/^[A-Z0-9-]{6,}$/i.test(c)){alert('Copy a case # in DealFlow first, then click this bookmark.');return;}var q=function(s){return document.querySelector(s);};var tabs=[].slice.call(document.querySelectorAll('a,button,li,span')).filter(function(e){return /case%20number/i.test(e.textContent||'')&amp;&amp;e.offsetHeight&gt;0;});if(tabs[0])tabs[0].click();setTimeout(function(){var inp=q('input[name*=%22case%22]')||q('input[placeholder*=%22Case%22]')||q('input[id*=%22case%22]');if(inp){inp.focus();inp.value=c;['input','change','keyup'].forEach(function(t){inp.dispatchEvent(new Event(t,{bubbles:true}));});}var btn=[].slice.call(document.querySelectorAll('button,input[type=submit],a')).filter(function(e){return /search/i.test((e.value||e.textContent||''))&amp;&amp;e.offsetHeight&gt;0;})[0];if(btn)setTimeout(function(){btn.click();},250);},400);}catch(e){alert('Bookmarklet error: '+e.message);}})();" title="DRAG THIS to your bookmarks bar. On the Broward Cases page, click the bookmark — it reads the copied case# and submits.">&#128279; DF Broward Case &nbsp;<span style="opacity:.7;font-size:10px">(drag to bookmarks)</span></a>
+<span style="color:var(--muted);font-size:11px">One-time setup. After: click Cases in DEALFLOW &rarr; switch to the Broward tab &rarr; click this bookmark &rarr; the register of actions loads automatically.</span>
+</div>
 <div class="controls" style="margin-top:8px">
 <label>Filed <input id="fy1" type="number" placeholder="from" style="width:74px"> &ndash; <input id="fy2" type="number" placeholder="to" style="width:74px"></label>
 <label>Auction <input id="ad1" type="date" style="width:140px"> &ndash; <input id="ad2" type="date" style="width:140px"></label>
@@ -3382,12 +3392,46 @@ document.addEventListener('click', e=>{
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
   const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
 });
-// Records link: copy the owner name so it can be pasted into Official Records "Party Name" (the page
-// is an ASP form that can't be prefilled by URL). The anchor still opens the search in a new tab.
+// Records / Cases link: copy the owner name or case# so it can be pasted into the clerk's search
+// form (ASP forms that can't be deep-linked). The anchor still opens the search in a new tab.
+// Enhanced 2026-07-19: when a case number is copied for the docket/register-of-actions lookup,
+// show a persistent floating toast at the TOP of the tracker with the exact steps. The toast stays
+// visible when the user switches back to the DealFlow tab so they have a reference — the register
+// of actions is where cancellation history lives (SALAZAR: 20-month gap = at least one prior
+// scheduled sale that was postponed; the register spells out each one). Auto-dismisses after 12s
+// or on click; the copy still succeeds either way.
+function _rasToast(caseNum, isCase){
+  var host = document.getElementById('rasToast');
+  if(!host){ host = document.createElement('div'); host.id = 'rasToast';
+    host.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2000;'
+      + 'background:#0B1730;color:#fff;border:1px solid #C6A14B;border-radius:10px;'
+      + 'padding:10px 16px 12px;box-shadow:0 12px 32px rgba(11,23,48,.35);'
+      + 'font-family:var(--f-body,system-ui);font-size:13px;line-height:1.5;max-width:520px;'
+      + 'cursor:pointer;opacity:0;transition:opacity .22s var(--e-lux)';
+    host.onclick = () => { host.style.opacity = 0; setTimeout(() => host.remove(), 250); };
+    document.body.appendChild(host);
+  }
+  if(isCase){
+    host.innerHTML = '<div style="font-weight:800;letter-spacing:.03em;font-size:11.5px;color:#C6A14B;text-transform:uppercase;margin-bottom:2px">'
+      + '&#128203; Case # copied &middot; ' + esc(caseNum) + '</div>'
+      + '<div style="opacity:.92">On the Broward tab: <b>Case Number</b> tab &rarr; <b>Ctrl+V</b> &rarr; <b>Search</b> &rarr; click the case row for the register of actions (Notices of Sale &amp; cancellations).</div>'
+      + '<div style="font-size:11px;opacity:.6;margin-top:4px">Click this banner to dismiss.</div>';
+  } else {
+    host.innerHTML = '<div style="font-weight:800;letter-spacing:.03em;font-size:11.5px;color:#C6A14B;text-transform:uppercase;margin-bottom:2px">&#128203; Copied &middot; ' + esc(caseNum) + '</div>'
+      + '<div style="opacity:.92">Paste (Ctrl+V) on the search page that just opened.</div>';
+  }
+  requestAnimationFrame(() => { host.style.opacity = 1; });
+  clearTimeout(_rasToast._t);
+  _rasToast._t = setTimeout(() => { if(host && host.parentNode){ host.style.opacity = 0; setTimeout(() => host.remove(), 260); } }, 12000);
+}
 document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('a.recsearch'); if(!a) return;
   const o = (a.dataset.o || '').trim(); if(!o) return;
   const orig = a.textContent, flash = () => { a.textContent = a.dataset.flash || '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
+  // Big top-of-viewport toast when this is a case-number copy (has data-flash). Owner-name copies
+  // for Official Records use the small anchor flash — the workflow is simpler there.
+  const isCase = /case/i.test(a.dataset.flash || '');
+  if(isCase) _rasToast(o, true);
   // navigator.clipboard silently rejects on file:// (non-secure context) — fall back to execCommand
   if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, () => fallbackCopy(o, flash)); else fallbackCopy(o, flash);
 });
