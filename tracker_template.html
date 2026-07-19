@@ -174,8 +174,8 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
   border-right:none;border-bottom:none;text-align:left;color:#fff;border-radius:0;
   outline:none;position:relative;transition:background .18s var(--e-lux)}
 .dg:first-child{border-left:none}
-.dg:hover{background:rgba(255,255,255,.055);transform:none;box-shadow:none}
-.dg:active{transform:none;background:rgba(255,255,255,.09)}
+.dg:hover{outline:none;background:rgba(255,255,255,.055);transform:none;box-shadow:none}
+.dg:active{outline:none;transform:none;background:rgba(255,255,255,.09)}
 .dg:focus{outline:none}
 .dg:focus-visible{outline:none;background:rgba(255,255,255,.055);box-shadow:inset 0 0 0 1px rgba(236,214,154,.55)}
 .dg-ic{width:30px;height:30px;flex:0 0 auto;border-radius:9px;display:grid;place-items:center;
@@ -772,7 +772,6 @@ body.compact .dg-v{font-size:14.5px}
 /* ============================== RESPONSIVE ============================== */
 @media(max-width:860px){
   header{padding:12px 13px 10px;position:static}
-  .bmark{width:34px;height:34px;border-radius:10px}
   .brand .wm{font-size:19px}
   .brand .upd{display:none}
   .brand .upd.stale{display:inline-block}
