@@ -86,6 +86,7 @@ jobs:
             cases_qs.json
             records_qs.json
             records_liens.json
+            tax_links.json
             health.json
             full.json
           key: dealflow-state-${{ github.run_id }}
@@ -145,6 +146,11 @@ jobs:
         run: |
           python gen_cases_qs.py --limit 40
           python gen_records_qs.py --limit 40
+
+      # ---- [2c/5] Deep per-parcel tax links (Broward; Algolia-minted account URLs) --------
+      - name: '[2c/5] Deep tax links (Broward parcels)'
+        continue-on-error: true
+        run: python gen_tax_links.py --limit 60
 
       # ---- [2b/5] Recorded mortgage chains -------------------------------------------------
       - name: '[2b/5] Recorded mortgage chains (MD cached-only + BW live)'

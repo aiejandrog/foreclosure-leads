@@ -46,6 +46,9 @@ echo [2/5] Generating direct court-case + records links (new owners only; capped
 python gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
 python gen_records_qs.py --limit 40 >> "%LOG%" 2>&1
 
+echo [2c/5] Deep per-parcel tax links for Broward leads (county-taxes.net account URLs, new only)...
+python gen_tax_links.py --limit 60 >> "%LOG%" 2>&1
+
 echo [2b/5] Pulling recorded mortgage chains -> surviving 2nd mortgages (cached tokens; fast, no bot-wall)...
 python records_liens.py --all --cached-only >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.

@@ -738,6 +738,13 @@ def make_tracker(leads):
     if os.path.exists(_rlf):
         try: rl = json.load(open(_rlf, encoding='utf-8'))
         except Exception: rl = {}
+    # per-parcel deep tax-account links (produced by gen_tax_links.py, gitignored) — replaces the
+    # generic county-taxes landing page with the parcel's own account URL, keyed by case #.
+    taxlinks = {}
+    _tlf = os.path.join(HERE, 'tax_links.json')
+    if os.path.exists(_tlf):
+        try: taxlinks = json.load(open(_tlf, encoding='utf-8'))
+        except Exception: taxlinks = {}
     slim = []
     for r in leads:
         _ft = _fc_type(r.get('Case #', ''))          # HOA (whole 1st mortgage survives) vs MORTGAGE foreclosure
@@ -813,6 +820,9 @@ def make_tracker(leads):
                 except Exception: xrl = {}
             for _d in xl:
                 _h = xrl.get(_d.get('case', ''))
+                # Deep per-parcel tax link (gen_tax_links.py) beats the county portal landing URL.
+                _tx = taxlinks.get(_d.get('case', ''))
+                if _tx: _d['tax'] = _tx
                 # TRUE type: the recorded-chain plaintiff (broward_liens.analyze -> _h['ftype']) is
                 # authoritative and OVERRIDES the case-number prefix, which mislabels HOA-in-circuit-court
                 # cases (CACE) as MORTGAGE. The slim lead's own plaintiff-or-prefix guess is the next
