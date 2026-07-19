@@ -36,9 +36,9 @@ jobs:
       GOOGLE_STREET_VIEW_KEY: ${{ secrets.GOOGLE_STREET_VIEW_KEY }}
       TRACERFY_API_KEY: ${{ secrets.TRACERFY_API_KEY }}
       BATCHDATA_API_KEY: ${{ secrets.BATCHDATA_API_KEY }}
-      # Redirect the "Desktop tracker + daily CSV" write to a throwaway tmp dir on the runner
-      # (see the DEALFLOW_DIR override in foreclosure_leads.py). Ephemeral, never committed.
-      DEALFLOW_DIR: /tmp/dealflow-noop
+      # Skip the "Desktop tracker + daily CSV" write entirely on the runner (DEALFLOW_NO_DESKTOP
+      # guard in foreclosure_leads.py — the OneDrive path only exists on Alejandro's machine).
+      DEALFLOW_NO_DESKTOP: '1'
       # Same 8-min link-generator budget the local pipeline uses.
       GEN_DEADLINE: '480'
       # Keep pip/apt quiet.
@@ -65,6 +65,40 @@ jobs:
 
       - name: Install Playwright Chromium
         run: python -m playwright install --with-deps chromium
+
+      # State persistence — CRITICAL. Runners start from a bare checkout, but the pipeline's
+      # per-day state files are gitignored by design. Without this cache:
+      #  - skiptrace_results.json empty -> skiptrace.py would RE-PAY to re-trace ~640 leads
+      #    every single run (~$60-95/day of pure waste)
+      #  - broward/palmbeach_leads.json missing -> a bot-walled county day publishes the site
+      #    WITHOUT that county instead of keeping last-good data
+      #  - records_liens --cached-only has no cache -> Miami-Dade lien chains silently vanish
+      # Saved on green runs; a failed day just restores the previous day's state.
+      - name: Restore pipeline state (leads, phones, liens, link tokens)
+        uses: actions/cache@v4
+        with:
+          path: |
+            leads_final.json
+            leads_raw.json
+            broward_leads.json
+            palmbeach_leads.json
+            skiptrace_results.json
+            cases_qs.json
+            records_qs.json
+            records_liens.json
+            health.json
+            full.json
+          key: dealflow-state-${{ github.run_id }}
+          restore-keys: dealflow-state-
+
+      # Access codes — CRITICAL. make_tracker encrypts docs/index.html with the per-person codes
+      # from site.codes (gitignored, never committed). If this file is absent on the runner,
+      # _load_codes() returns [] and the build goes out PUBLIC + PHONE-FREE + GATELESS — silently
+      # downgrading the live site for all 6 code holders. Abort instead.
+      - name: Access codes for the encrypted build (site.codes from secret)
+        run: |
+          printf '%s\n' "${{ secrets.SITE_CODES }}" > site.codes
+          test -s site.codes || { echo "::error::SITE_CODES secret is missing — refusing to publish an UNENCRYPTED build. Add it in repo Settings -> Secrets."; exit 1; }
 
       - name: Configure git identity
         run: |
@@ -155,3 +189,11 @@ jobs:
       # No Twilio / SMS wiring needed; the notification path is already there for free.
       - name: 'Health'
         run: python healthcheck.py
+
+      # Always-on run summary (visible in the Actions UI without opening logs)
+      - name: Run summary
+        if: always()
+        run: |
+          echo "### DEALFLOW refresh summary" >> $GITHUB_STEP_SUMMARY
+          python -c "import json,os; load=lambda fn: (json.load(open(fn,encoding='utf-8')) if os.path.exists(fn) else []); md=load('leads_final.json'); bw=load('broward_leads.json'); pb=load('palmbeach_leads.json'); st=load('skiptrace_results.json'); st=st if isinstance(st,dict) else {}; ph=sum(1 for v in st.values() if isinstance(v,dict) and v.get('phones')); kb=os.path.getsize('docs/index.html')//1024 if os.path.exists('docs/index.html') else 0; print(f'- Miami-Dade **{len(md)}** - Broward **{len(bw)}** - Palm Beach **{len(pb)}**'); print(f'- Owners with phones **{ph}**'); print(f'- docs/index.html **{kb} KB**')" >> $GITHUB_STEP_SUMMARY
+          echo "- Red run = email alert (Actions notifications). Green runs need no attention." >> $GITHUB_STEP_SUMMARY
