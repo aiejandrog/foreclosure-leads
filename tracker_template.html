@@ -2840,9 +2840,13 @@ function render(){
             ? '<div><a class="kin" href="'+esc(k.url)+'" target="_blank" rel="noopener" title="Person named on this case (co-owner / spouse / relative). Opens TruePeopleSearch for their number and their own relatives.">'+esc(titleCase(k.name))+' ↗</a></div>'
             : '<div class="defco">'+esc(titleCase(k.name))+'</div>').join('')+'</div></div>'
       : '';
-    // Owner cell. FC: owner -> "vs plaintiff" -> defendants. TD: no plaintiff exists (it's a county
-    // tax sale, not a lawsuit) -> say so plainly + show the Certificate #.
+    // Owner cell. FC: owner -> case# + filed date -> "vs plaintiff" -> defendants. TD: no plaintiff
+    // exists (it's a county tax sale, not a lawsuit) -> say so plainly + show the Certificate #.
+    // Case# + filed date are load-bearing when reading a register of actions (Kimi's SALAZAR dive:
+    // 20-month judgment-to-sale gap means at least one prior scheduled sale that got canceled).
+    const caseFiled = (r.case||r.filed) ? '<div class="meta" style="font-family:var(--f-num);letter-spacing:.02em"><b style="color:var(--ink);font-weight:700">'+esc(r.case||'')+'</b>'+(r.filed?' &middot; filed '+esc(r.filed):(r.filing_year?' &middot; '+esc(r.filing_year):''))+(r.case?copyBtn(r.case,'case number'):'')+'</div>' : '';
     const owner = '<div class="addrline"><span class="clamp2" title="'+esc(r.owners)+'">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
+      caseFiled+
       (r.st==='TD'
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
@@ -3443,10 +3447,18 @@ function _rasToast(caseNum, isCase){
     document.body.appendChild(host);
   }
   if(isCase){
+    // Bookmarklet lives right inside the toast so it's findable exactly when it's needed —
+    // no digging into Filters & setup. Drag once, click once on every Broward page after that.
+    var _bmk = 'javascript:(async()=>{try{var c=(await navigator.clipboard.readText()||\'\').trim();if(!/^[A-Z0-9-]{6,}$/i.test(c)){alert(\'Copy a case # in DealFlow first, then click this bookmark.\');return;}var q=function(s){return document.querySelector(s);};var tabs=[].slice.call(document.querySelectorAll(\'a,button,li,span\')).filter(function(e){return /case number/i.test(e.textContent||\'\')&&e.offsetHeight>0;});if(tabs[0])tabs[0].click();setTimeout(function(){var inp=q(\'input[name*=\"case\"]\')||q(\'input[placeholder*=\"Case\"]\')||q(\'input[id*=\"case\"]\');if(inp){inp.focus();inp.value=c;[\'input\',\'change\',\'keyup\'].forEach(function(t){inp.dispatchEvent(new Event(t,{bubbles:true}));});}var btn=[].slice.call(document.querySelectorAll(\'button,input[type=submit],a\')).filter(function(e){return /search/i.test((e.value||e.textContent||\'\'))&&e.offsetHeight>0;})[0];if(btn)setTimeout(function(){btn.click();},250);},400);}catch(e){alert(\'Bookmarklet error: \'+e.message);}})();';
     host.innerHTML = '<div style="font-weight:800;letter-spacing:.03em;font-size:11.5px;color:#C6A14B;text-transform:uppercase;margin-bottom:2px">'
       + '&#128203; Case # copied &middot; ' + esc(caseNum) + '</div>'
       + '<div style="opacity:.92">On the Broward tab: <b>Case Number</b> tab &rarr; <b>Ctrl+V</b> &rarr; <b>Search</b> &rarr; click the case row for the register of actions (Notices of Sale &amp; cancellations).</div>'
-      + '<div style="font-size:11px;opacity:.6;margin-top:4px">Click this banner to dismiss.</div>';
+      + '<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(198,161,75,.3);font-size:11.5px;line-height:1.4">'
+      +   '<span style="opacity:.85">One-click auto-fill: </span>'
+      +   '<a href="' + _bmk + '" onclick="event.stopPropagation();return false;" style="cursor:grab;background:#C6A14B;color:#0B1730;font-weight:800;padding:3px 10px;border-radius:5px;text-decoration:none;font-size:11px;letter-spacing:.03em" title="DRAG THIS PILL to your Chrome bookmarks bar. After that: on the Broward Cases page, just click this bookmark and it auto-fills + submits.">&#128279; DF Broward Case</a>'
+      +   '<span style="opacity:.7;font-size:10.5px"> &larr; drag me to your bookmarks bar (one-time)</span>'
+      + '</div>'
+      + '<div style="font-size:10.5px;opacity:.55;margin-top:6px">Click the banner (not the pill) to dismiss.</div>';
   } else {
     host.innerHTML = '<div style="font-weight:800;letter-spacing:.03em;font-size:11.5px;color:#C6A14B;text-transform:uppercase;margin-bottom:2px">&#128203; Copied &middot; ' + esc(caseNum) + '</div>'
       + '<div style="opacity:.92">Paste (Ctrl+V) on the search page that just opened.</div>';
