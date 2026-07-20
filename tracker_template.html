@@ -368,6 +368,24 @@ td.num .fchips .chip{box-sizing:border-box;max-width:100%;white-space:normal;ove
 td.num .vb{margin-bottom:4px}
 td.num .submeta{margin-top:2px}
 td.num .warn,td.num .mrwarn{margin-top:3px}
+/* ============================== FIRE-LOCK (pinned lead) ==============================
+   Click any non-control area of a row/card to lock a lead in gold ember — a warm tint + a
+   flickering ember bar + a small flame badge over the photo corner. Single-selection: clicking
+   another lead moves the lock, clicking the locked lead again releases it. Persisted per device
+   (localStorage fcPinned). Lives entirely on its own classes so no button/link behavior changes. */
+@keyframes ember{0%,100%{box-shadow:inset 5px 0 0 0 rgba(198,161,75,.85),inset 8px 0 14px -5px rgba(198,161,75,.25)}
+  50%{box-shadow:inset 5px 0 0 0 rgba(236,214,154,1),inset 10px 0 20px -5px rgba(198,161,75,.55)}}
+@keyframes emberflame{0%,100%{transform:rotate(-5deg) scale(1)}50%{transform:rotate(5deg) scale(1.14)}}
+tr.pinfire td{background:rgba(198,161,75,.055)}
+tr.pinfire td:first-child{animation:ember 1.7s ease-in-out infinite}
+tr.pinfire .pcell{position:relative}
+tr.pinfire .pcell::after{content:'\1F525';position:absolute;top:5px;left:5px;font-size:15px;z-index:2;
+  filter:drop-shadow(0 1px 3px rgba(11,23,48,.5));animation:emberflame 1.1s ease-in-out infinite}
+#cards .card.pinfire{border-color:rgba(198,161,75,.65);background:rgba(198,161,75,.05)}
+#cards .card.pinfire::before{background:var(--gold);animation:ember 1.7s ease-in-out infinite}
+#cards .card.pinfire .phero{position:relative}
+#cards .card.pinfire .phero::after{content:'\1F525';position:absolute;top:6px;left:6px;font-size:16px;z-index:2;
+  filter:drop-shadow(0 1px 3px rgba(11,23,48,.5));animation:emberflame 1.1s ease-in-out infinite}
 td.num .dealtog{margin-top:7px;box-shadow:none;background:transparent;border-color:transparent;padding:3px 4px;color:var(--gold-d)}
 td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-shadow:none;transform:none}
 
@@ -496,6 +514,19 @@ input.ph::placeholder{color:#8FBFA0}
 .pthumb.noimg,.pthumb.imgfail{display:flex;align-items:center;justify-content:center;font-size:20px;
   color:var(--muted);cursor:default;opacity:.7;box-shadow:none}
 .pthumb.imgfail img{display:none}
+/* Listing-status corner badge — overlays the photo top-left (.pcount owns top-right). Solid
+   fills (not the translucent chip tints) because these sit ON imagery and must stay readable
+   over sky/roof/water pixels. */
+.zsbadge{position:absolute;top:7px;left:7px;border-radius:5px;padding:2px 7px;font-size:9.5px;
+  font-weight:800;letter-spacing:.05em;text-transform:uppercase;line-height:1.5;
+  font-family:var(--f-label,'Space Grotesk',sans-serif);pointer-events:none;
+  box-shadow:0 1px 4px rgba(8,14,26,.35)}
+.zsb-listed{background:#9B2C2C;color:#fff}
+.zsb-pending{background:#B45309;color:#fff}
+.zsb-sold{background:rgba(8,14,26,.68);color:#E8ECF4;backdrop-filter:blur(2px)}
+.zsb-rental{background:#1E5AA0;color:#fff}
+.zsb-off{background:#166534;color:#fff}
+.phero .zsbadge{font-size:10.5px;padding:3px 9px}
 .pcount{position:absolute;top:7px;right:7px;background:rgba(8,14,26,.62);backdrop-filter:blur(2px);
   color:#fff;font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:2px 8px;border-radius:var(--pill);pointer-events:none}
 .phero{position:relative;width:100%;height:240px;border-radius:12px;overflow:hidden;margin-bottom:10px;
@@ -1628,12 +1659,24 @@ function imgFB(img){
 // photo click = straight to Zillow (real listing when known, else address search) in a new tab.
 // No data-c attribute -> the gallery-popup delegate ('.pthumb[data-c]') never intercepts.
 function _zurl(r){ return r.zlisting || r.zillow || (r.addr ? 'https://www.zillow.com/homes/'+encodeURIComponent(r.addr)+'_rb/' : ''); }
+// Corner badge version of the listing-status chip, overlaid top-left on the photo (top-right
+// belongs to the photo-count pill). Photo real estate is what Jose's eye lands on first, so
+// LISTED/OFF-MKT reads without scanning the dense value line (Alejandro 2026-07-19).
+function _zstatusBadge(r){
+  var s = (r && r.zstatus || '').toUpperCase();
+  if(!s) return '';
+  var cls = s==='LISTED' ? 'zsb-listed' : s==='PENDING' ? 'zsb-pending'
+          : s==='SOLD' ? 'zsb-sold' : s==='RENTAL' ? 'zsb-rental' : 'zsb-off';
+  var txt = s==='LISTED' ? ('LISTED'+(r.zprice?' '+fmtK(r.zprice):'')) : (s==='OFF-MARKET'?'OFF-MKT':s);
+  return '<span class="zsbadge '+cls+'">'+esc(txt)+'</span>';
+}
 function _photoThumb(r, eager){
   const ph = r.photos || [];
   if(!ph.length) return '<div class="pthumb noimg" title="No image available">\u{1f3e0}</div>';
   const z = _zurl(r);
   return '<a class="pthumb"'+(z?' href="'+esc(z)+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow">'
     + '<img src="'+esc(ph[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'
+    + _zstatusBadge(r)
     + (ph.length>1?'<span class="pcount">▣ '+ph.length+'</span>':'')+'</a>';
 }
 function galleryBody(r){
@@ -2944,7 +2987,7 @@ function render(){
     const notesTa = '<textarea class="notes" data-c="'+esc(r.case)+'" placeholder="notes">'+esc(n.note)+'</textarea>';
     // free manual phone: look it up via the People button, then type it here (saves on this device)
     const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="phone" value="'+esc(n.phone||'')+'">';
-    trs.push('<tr class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+'">'+
+    trs.push('<tr data-case="'+esc(r.case)+'" class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+(pinnedCase===r.case?' pinfire':'')+'">'+
       '<td class="pcell">'+_photoThumb(r, _eager)+'</td>'+
       '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
       '<td class="num">'+prof+'</td>'+
@@ -2958,8 +3001,8 @@ function render(){
       '<td><div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+statusSel+'</td>'+
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
-    cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
-      ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
+    cards.push('<div data-case="'+esc(r.case)+'" class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+(pinnedCase===r.case?' pinfire':'')+'">'+
+      ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+_zstatusBadge(r)+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)
@@ -3004,6 +3047,24 @@ function render(){
   document.getElementById('tb').innerHTML = trs.join('');
   if(cc) cc.innerHTML = cards.join('');
 }
+// ---- fire-lock (pinned lead): click any NON-CONTROL area of a row/card to lock it in gold
+// ember. Single selection — clicking another lead moves the lock, clicking the locked lead
+// again releases it. Persisted per device (localStorage fcPinned). Controls keep their own
+// handlers: anything inside a link/button/input/select/textarea/label (or the contact-chip
+// .cxwrap, which opens the log modal) never triggers a pin.
+let pinnedCase = '';
+try{ pinnedCase = localStorage.getItem('fcPinned') || ''; }catch(e){}
+function togglePin(c){
+  pinnedCase = (pinnedCase === c) ? '' : c;
+  try{ localStorage.setItem('fcPinned', pinnedCase); }catch(e){}
+  render();
+}
+document.addEventListener('click', e => {
+  const row = e.target.closest && e.target.closest('#tb tr[data-case], #cards .card[data-case]');
+  if(!row) return;
+  if(e.target.closest('a,button,input,select,textarea,label,option,.cxwrap')) return;
+  togglePin(row.dataset.case);
+});
 function resetFilters(){
   tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=false;
   const g=id=>document.getElementById(id);
