@@ -138,6 +138,7 @@ def analyze(models, folio, judgment, ftype=''):
         if is_open:
             opens.append(row)
     junior = first_amt = surv = surv_first = 0
+    juniors_post = 0
     if opens:
         if ftype == 'HOA':                             # HOA sale: the WHOLE first mortgage survives
             surv = sum(o['amt'] for o in opens)
@@ -147,13 +148,52 @@ def analyze(models, folio, judgment, ftype=''):
             fore = min(opens, key=anchor)              # the foreclosing 1st (closest to judgment, else largest)
             first_amt = fore['amt']
             junior = surv = sum(o['amt'] for o in opens if o is not fore)
+            juniors_post = sum(o['amt'] for o in opens if o is not fore and o['d'] >= fore['d'])
+    # --- open non-mortgage liens (kimi: feeds the deal-modal HOA / code / IRS prefills) ------------
+    # Lien/Judgment/Notice records, bucketed by holder. code+HOA require the same parcel isolation the
+    # mortgages use (folio/subdivision); IRS + money judgments attach to the person and ride anyway.
+    _IRS_RE = re.compile(r'INTERNAL\s+REV|UNITED\s+STATES|\bIRS\b', re.I)
+    _CODE_RE = re.compile(r'\bCITY\s+OF\b|\bCOUNTY\b|CODE\s+ENFORCEMENT|MUNICIPAL|MIAMI-?DADE|STATE OF FLORIDA|PACE|CLEAN ENERGY', re.I)
+    _HOA_DOC_RE = re.compile(r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|\bVILLAS?\b|COMMUNITY|PROPERTY\s+OWNERS?|TOWNHO|MAINTENANCE', re.I)
+    _ASSN_DOC_RE = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
+    _LIEN_DOC_RE = re.compile(r'^(LIEN|JUDGMENT|NOTICE|CLAIM|CERT|FINANCING STATEMENT)', re.I)
+    def _norm_party(s):
+        s = (s or '').upper()
+        s = re.sub(r'\b(NA|N A|INC|CORP|CO|LLC|LP|USA|TRUST|COMPANY|OF|THE|AND|ASSN|ASSOC|ASSOCIATION)\b', '', s)
+        return re.sub(r'[^A-Z]', '', s)
+    sats_parties = {_norm_party(r.get('seconD_PARTY')) for r in models if 'SATISFACTION' in (r.get('doC_TYPE', '') or '').upper()
+                    or 'RELEASE' in (r.get('doC_TYPE', '') or '').upper()}
+    hoa_open = code_open = irs_open = 0
+    for r in models:
+        if not _LIEN_DOC_RE.match((r.get('doC_TYPE', '') or '').upper().strip()):
+            continue
+        amt = num(r.get('consideratioN_1'))
+        if amt <= 0:
+            continue
+        party = r.get('seconD_PARTY') or ''
+        rf = norm_folio(r.get('foliO_NUMBER', ''))
+        sd = (r.get('subdiV_NAME') or '').strip().upper()
+        on_parcel = bool((rf and rf == fol) or (subj_subdiv and sd == subj_subdiv))
+        holder = _norm_party(party)
+        if holder and holder in sats_parties:
+            continue                                          # released by a same-party satisfaction
+        if _IRS_RE.search(party):
+            irs_open += amt                                 # person-wide, attaches regardless
+        elif _HOA_DOC_RE.search(party) or _ASSN_DOC_RE.search(party):
+            if on_parcel: hoa_open += amt
+        elif _CODE_RE.search(party):
+            if on_parcel: code_open += amt
+        elif 'JUDGMENT' in (r.get('doC_TYPE', '') or '').upper():
+            code_open += amt                                # debt-buyer money judgments ride as surviving liens
     # confidence: we must have isolated by a real anchor, sane count, and not a common-name over-match
     conf = 'ok'
     if not subj_subdiv: conf = 'low'                   # couldn't anchor the property (no folio-carrying record)
     if len(opens) > 4: conf = 'low'                    # one parcel rarely has >4 live mortgages
     if len(models) > 45: conf = 'low'                  # busy/common name -> results unreliable
     return {'liens': liens, 'open_count': len(opens), 'junior': junior, 'first_est': first_amt,
-            'surv': surv, 'surv_first': surv_first, 'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv}
+            'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
+            'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open,
+            'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv}
 
 
 def main():

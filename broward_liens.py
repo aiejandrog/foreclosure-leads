@@ -242,6 +242,7 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
     # HOA sale: the WHOLE first mortgage survives, so DON'T anchor to the tiny HOA judgment. Otherwise
     # (a mortgage foreclosure) the foreclosing 1st is wiped and only a real 2nd survives.
     surv = surv_first = junior = first = 0
+    juniors_post = 0                                          # kimi: opens recorded AFTER the foreclosing one (payoff on owner purchase)
     if opens:
         if ftype == 'HOA':
             surv = sum(o['amt'] for o in opens)                     # total open loan stack that survives
@@ -251,6 +252,7 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
             fore = min(opens, key=anchor)                           # the foreclosing 1st (nearest judgment, else largest)
             first = fore['amt']
             junior = surv = sum(o['amt'] for o in opens if o is not fore)   # the surviving 2nd
+            juniors_post = sum(o['amt'] for o in opens if o is not fore and o['d'] >= fore['d'])  # juniors recorded after it
 
     # --- already deeded to another investor? (the McNulty / "you're too late" signal) -----------
     # "Recent" is anchored to THIS foreclosure's lis-pendens (a deed only counts if it post-dates the filing),
@@ -291,9 +293,40 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
                 second_fc = {'case': cn, 'party': (d.get('CrossPartyName') or '')[:40]}
                 break
 
+    # --- open non-mortgage liens (kimi: feeds the deal-modal HOA / code / IRS prefills) -------------
+    # Lien + Judgment-type records on the owner, bucketed by who holds them: HOA/association (estoppel
+    # estimate), IRS/federal, code/municipal. A lien dies when a Release/Satisfy record names the same
+    # institution (same _inst normalization the mortgage chain uses).
+    _IRS_RE = re.compile(r'INTERNAL\s+REV|UNITED\s+STATES|\bIRS\b', re.I)
+    _CODE_RE = re.compile(r'\bCITY\s+OF\b|\bCOUNTY\b|CODE\s+ENFORCEMENT|MUNICIPAL|\bBROWARD\b|STATE OF FLORIDA|\bPACE\b|CLEAN ENERGY', re.I)
+    _LIEN_DOC_RE = re.compile(r'^(LIEN|JUDGMENT|NOTICE|CLAIM|CERT)', re.I)
+    def _released(party_inst):
+        for s in sats:
+            if s.get('_dt') and _inst(s.get('CrossPartyName')) == party_inst:
+                return True
+        return False
+    hoa_open = code_open = irs_open = 0
+    for d in exact:
+        if not _LIEN_DOC_RE.match((d.get('DocTypeDescription') or '').upper().strip()):
+            continue
+        amt = _num(d.get('Consideration'))
+        if amt <= 0:
+            continue
+        party = d.get('CrossPartyName') or ''
+        inst = _inst(party)
+        if not inst or _released(inst):
+            continue
+        if _IRS_RE.search(party):
+            irs_open += amt
+        elif _HOA_RE.search(party) or _ASSN_RE.search(party):
+            hoa_open += amt
+        elif _CODE_RE.search(party):
+            code_open += amt
+
     return {'liens': [{k: v for k, v in r.items() if k != 'mers'} for r in liens],
             'open_count': len(opens), 'junior': junior, 'first_est': first,
-            'surv': surv, 'surv_first': surv_first, 'ftype': ftype,
+            'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
+            'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open, 'ftype': ftype,
             'deeded': deeded, 'deed_conf': deed_conf, 'second_fc': second_fc, 'conf': conf, 'nrec': len(exact)}
 
 
