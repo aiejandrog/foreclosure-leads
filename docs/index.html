@@ -2698,9 +2698,17 @@ function view(){
   rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
   return rows;
 }
+// ---- render perf: debounce typing, and only build the visible surface (table XOR cards) ----
+// Without these, every search keystroke rebuilt ~11MB of HTML for BOTH desktop+mobile (~300-400ms
+// main-thread freeze per keystroke at ~650 leads). Match the CSS breakpoint at 860px.
+function _debounce(fn, ms){ let t; return function(){ const a=arguments, c=this; clearTimeout(t); t=setTimeout(()=>fn.apply(c,a), ms); }; }
+function _isMobileView(){ return !!(window.matchMedia && matchMedia('(max-width:860px)').matches); }
+const _renderSoon = _debounce(function(){ render(); }, 150);
+const _dealSoon = _debounce(function(){ recompute(); saveDeal(); render(); }, 120);
 function render(){
   initCountyFilter();
   const rows = view();
+  const mobile = _isMobileView();
   // sort-direction indicator on the active column header
   document.querySelectorAll('th[data-k]').forEach(th=>{
     const on = th.dataset.k===sortK;
@@ -2708,7 +2716,8 @@ function render(){
     if(on) th.dataset.dir = sortD<0 ? 'desc' : 'asc'; else th.removeAttribute('data-dir');
   });
   const _sc = rows.filter(r=>r._verdict==='STRONG').length, _mc = rows.filter(r=>r._verdict==='MARGINAL').length;
-  const _viol = DATA.filter(r=>_dialedAfter(notes[r.case]).length).length;
+  // Only scan notes that exist (not every lead) — opt-out violations are sparse.
+  let _viol = 0; for(const _c in notes){ if(_dialedAfter(notes[_c]).length) _viol++; }
   const st = document.getElementById('stats');
   st.textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
   if(_viol){ const w=document.createElement('span'); w.className='statviol'; w.title='Leads with outreach logged AFTER the owner opted out — open each to review and document the cure.'; w.textContent=' · ⚠ '+_viol+' contacted after opt-out'; st.appendChild(w); }
@@ -2723,7 +2732,7 @@ function render(){
     + _kpi('Avg ROI', _avg+'%', 'on profitable deals')
     + _kpi('Tax-deed plays', _td, 'Jose&rsquo;s lane');
   // live count on the Hide-dead button so it's obvious what it tracks
-  const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
+  let deadN = 0; for(const _c in notes){ const s=notes[_c].status; if(s==='Dead'||s==='DO NOT CONTACT') deadN++; }
   const hd = document.getElementById('hd');
   if(hd) hd.textContent = 'Hide dead' + (deadN ? ' ('+deadN+')' : '');
   const prof = rows.filter(r => r._profit > 0);
@@ -2868,20 +2877,9 @@ function render(){
     const notesTa = '<textarea class="notes" data-c="'+esc(r.case)+'" placeholder="notes">'+esc(n.note)+'</textarea>';
     // free manual phone: look it up via the People button, then type it here (saves on this device)
     const phoneInp = '<input class="ph" data-c="'+esc(r.case)+'" placeholder="phone" value="'+esc(n.phone||'')+'">';
-    trs.push('<tr class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+'">'+
-      '<td class="pcell">'+_photoThumb(r, _eager)+'</td>'+
-      '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
-      '<td class="num">'+prof+'</td>'+
-      '<td class="num">'+r.score+'</td>'+
-      '<td>'+auc+'</td>'+
-      '<td>'+ctype+'</td>'+
-      '<td class="owncell">'+owner+'</td>'+
-      '<td class="propcell">'+prop+'</td>'+
-      '<td class="mailcell"><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
-      '<td class="links">'+linksHtml+'</td>'+
-      '<td><div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+statusSel+'</td>'+
-      '<td>'+phoneInp+notesTa+'</td></tr>');
-    // mobile card
+    // Build ONLY the surface the CSS will show (desktop table XOR mobile cards) — building both
+    // roughly doubled main-thread work and DOM size on every render.
+    if(mobile){
     cards.push('<div class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+'">'+
       ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
@@ -2910,6 +2908,21 @@ function render(){
       '<div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+
       '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
       '</div>');
+    } else {
+    trs.push('<tr class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+'">'+
+      '<td class="pcell">'+_photoThumb(r, _eager)+'</td>'+
+      '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
+      '<td class="num">'+prof+'</td>'+
+      '<td class="num">'+r.score+'</td>'+
+      '<td>'+auc+'</td>'+
+      '<td>'+ctype+'</td>'+
+      '<td class="owncell">'+owner+'</td>'+
+      '<td class="propcell">'+prop+'</td>'+
+      '<td class="mailcell"><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
+      '<td class="links">'+linksHtml+'</td>'+
+      '<td><div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+statusSel+'</td>'+
+      '<td>'+phoneInp+notesTa+'</td></tr>');
+    }
   });
   const cc = document.getElementById('cards');
   if(!rows.length){
@@ -2921,12 +2934,12 @@ function render(){
       : '<div class="empty-s">Try a wider tier, date range, or a different search.</div>'+
         '<button class="empty-reset" type="button">Clear all filters</button>';
     const msg = '<div class="empty"><div class="empty-t">No leads match these filters</div>'+cta+'</div>';
-    document.getElementById('tb').innerHTML = '<tr><td colspan="12" class="emptycell">'+msg+'</td></tr>';
-    if(cc) cc.innerHTML = msg;
+    if(mobile){ if(cc) cc.innerHTML = msg; document.getElementById('tb').innerHTML = ''; }
+    else { document.getElementById('tb').innerHTML = '<tr><td colspan="12" class="emptycell">'+msg+'</td></tr>'; if(cc) cc.innerHTML = ''; }
     return;
   }
-  document.getElementById('tb').innerHTML = trs.join('');
-  if(cc) cc.innerHTML = cards.join('');
+  if(mobile){ if(cc) cc.innerHTML = cards.join(''); document.getElementById('tb').innerHTML = ''; }
+  else { document.getElementById('tb').innerHTML = trs.join(''); if(cc) cc.innerHTML = ''; }
 }
 function resetFilters(){
   tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=false;
@@ -2951,7 +2964,7 @@ function syncDealUI(){
   document.getElementById('quiettitle').value = deal.quiettitle;
   document.getElementById('tdclear').value = deal.tdclear;
 }
-function dealChanged(){ recompute(); saveDeal(); render(); }
+function dealChanged(){ _dealSoon(); }
 document.getElementById('costpct').oninput = e => { deal.costpct = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value===''?75:+e.target.value; dealChanged(); };
 document.getElementById('bidover').oninput = e => { deal.bidover = e.target.value===''?0:+e.target.value; dealChanged(); };
@@ -3123,16 +3136,24 @@ function fallbackCopy(text, done){
   try { document.execCommand('copy'); done && done(); } catch(e) {}
   document.body.removeChild(ta);
 }
-document.getElementById('q').oninput = e => { q = e.target.value; render(); };
-document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
-document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
-document.getElementById('ad1').oninput = e => { ad1 = e.target.value; render(); };
-document.getElementById('ad2').oninput = e => { ad2 = e.target.value; render(); };
+document.getElementById('q').oninput = e => { q = e.target.value; _renderSoon(); };
+document.getElementById('fy1').oninput = e => { fy1 = e.target.value; _renderSoon(); };
+document.getElementById('fy2').oninput = e => { fy2 = e.target.value; _renderSoon(); };
+document.getElementById('ad1').oninput = e => { ad1 = e.target.value; _renderSoon(); };
+document.getElementById('ad2').oninput = e => { ad2 = e.target.value; _renderSoon(); };
 document.getElementById('clr').onclick = () => {
   fy1 = fy2 = ad1 = ad2 = '';
   ['fy1','fy2','ad1','ad2'].forEach(id => document.getElementById(id).value = '');
   render();
 };
+// Re-render when crossing the desktop/mobile breakpoint so the active surface stays correct.
+(function(){
+  let was = _isMobileView();
+  window.addEventListener('resize', _debounce(function(){
+    const now = _isMobileView();
+    if(now !== was){ was = now; render(); }
+  }, 150));
+})();
 document.querySelectorAll('.lkb[data-s]').forEach(b => b.onclick = () => {
   const v = document.getElementById('lk').value.trim();
   if(!v) return;
@@ -3547,6 +3568,9 @@ async function decryptPayload(enc, password){
         const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, mk, dec(enc.ct));
         return JSON.parse(new TextDecoder().decode(pt));
       }catch(e){ /* this code doesn't open this wrapped key — try the next */ }
+      // Yield so the gate UI can paint "Unlocking…" between 200k-iteration PBKDF2 attempts
+      // (wrong code / later keys used to freeze the tab for hundreds of ms with no feedback).
+      await new Promise(r => setTimeout(r, 0));
     }
     throw new Error('no matching code');
   }
@@ -3590,11 +3614,14 @@ async function boot(){
       await new Promise(resolve => {
         const attempt = async () => {
           err.textContent = '';
-          const s = await tryUnlock(inp.value.trim(), phraseEl ? phraseEl.value.trim() : '');
-          if(s){
-            try { localStorage.setItem('fcPw', s); } catch(e){}
-            manual = true; gate.style.display='none'; resolve();
-          } else { err.textContent = 'Wrong code or phrase — check with the person who shared this'; inp.select(); }
+          const prev = btn.textContent; btn.disabled = true; btn.textContent = 'Unlocking…';
+          try {
+            const s = await tryUnlock(inp.value.trim(), phraseEl ? phraseEl.value.trim() : '');
+            if(s){
+              try { localStorage.setItem('fcPw', s); } catch(e){}
+              manual = true; gate.style.display='none'; resolve();
+            } else { err.textContent = 'Wrong code or phrase — check with the person who shared this'; inp.select(); }
+          } finally { btn.disabled = false; btn.textContent = prev; }
         };
         btn.onclick = attempt;
         inp.onkeydown = e => { if(e.key==='Enter') attempt(); };
