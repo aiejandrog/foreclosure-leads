@@ -173,6 +173,7 @@ def main():
         else:
             fail += 1
         if (ok + fail) % 20 == 0:
+            json.dump(cache, open(OUT, 'w', encoding='utf-8'), indent=0)   # checkpoint — a timeout can't lose a finished batch
             print(f'  {ok} comped / {fail} without comps...')
         time.sleep(0.25)      # polite — public ArcGIS host throttles bursts
 
