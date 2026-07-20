@@ -37,3 +37,7 @@ mail_sent.json
 mail_suppress.txt
 mail_preview.html
 tax_links.json
+cadence_state.json
+cadence_queue.json
+optouts.json
+gmail.key

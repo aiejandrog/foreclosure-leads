@@ -599,8 +599,8 @@ input.ph::placeholder{color:#8FBFA0}
 .cctl textarea{flex:1}
 
 /* ============================== MODALS (shared shell) ============================== */
-#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal{display:none;position:fixed;inset:0;z-index:120}
-#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show{display:block}
+#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show{display:block}
 #syncmodal{z-index:122}#planmodal{z-index:121}#lookupmodal{z-index:121}#gallerymodal{z-index:130}
 .dm-backdrop{position:absolute;inset:0;background:rgba(9,16,31,.5);backdrop-filter:blur(5px);
   -webkit-backdrop-filter:blur(5px);animation:dmFade .2s ease}
@@ -1073,6 +1073,7 @@ body.compact .dg-v{font-size:14.5px}
 <div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
 <div id="mailmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="mailbody"></div></div></div>
 <div id="refreshmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="refreshbody"></div></div></div>
+<div id="cadencemodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="cadencebody"></div></div></div>
 <!-- Investor dispo pack — the print-only one-pager. Populated by exportDispoPack() from the deal-analysis modal. -->
 <div id="dispoPackView" aria-hidden="true">
   <div class="pv-hd">
@@ -1164,6 +1165,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="exp">Export CSV (with my notes)</button>
 <button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M17 3.5 18.6 6 21 6.7M7 20.5 5.4 18 3 17.3"/></svg> Sync / team <span id="syncfresh" class="syncfresh"></span></button>
 <button id="mailbatch" title="Prepare a batch of homeowner-rescue letters to send as real mail via Lob. Picks Tier A/B leads with a real owner, a deliverable mailing address, and an auction 5+ days out, minus anyone opted out. You review and download the batch here; your Lob key never touches this page."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Mail batch</button>
+<button id="cadencebtn" title="Email cadence queue — enrolled owners get a 4-touch sequence (day 0/2/4/7) that sends itself and auto-cancels the moment they reply. Export the queue, run cadence.py on your machine; replies and opt-outs sync back. Kimi-built."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg> Cadence</button>
 <span class="stats" id="stats"></span>
 </div>
 </header>
@@ -2946,6 +2948,53 @@ async function _fireRefresh(){
   }
 }
 function closeRefresh(){ document.getElementById('refreshmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+// ================= kimi: EMAIL CADENCE (4-touch sequence, auto-cancel on reply) =================
+// Enroll an owner from the row's Links -> Cadence. The queue exports to cadence_queue.json and
+// cadence.py does the work on your machine: sends each due step (day 0/2/4/7), watches the inbox
+// for replies, and cancels the sequence the moment an owner writes back. Opt-outs flow into the
+// do-not-contact ledger on the next notes import. State lives on this device (fcCadence).
+let cadence = {};
+try{ cadence = JSON.parse(localStorage.getItem('fcCadence')||'{}'); }catch(e){ cadence = {}; }
+function saveCadence(){ try{ localStorage.setItem('fcCadence', JSON.stringify(cadence)); }catch(e){} }
+const CAD_STEPS = 4, CAD_GAPS = [0,2,2,3];   // send days 0, 2, 4, 7
+function enrollCadence(caseId){
+  const r = DATA.find(x=>x.case===caseId); if(!r) return;
+  const n = notes[r.case]||{};
+  if(n.status==='DO NOT CONTACT') return;              // the opt-out ledger always wins
+  if(cadence[caseId] && cadence[caseId].status==='active'){ openCadence(); return; }
+  cadence[caseId] = {case:caseId, owner:r.owners, addr:r.addr, email:(r.emails||[])[0]||'',
+    auction:r.auction, step:0, next:_today(), status:'active', enrolled:_today()};
+  saveCadence(); openCadence();
+}
+function cadencePanelBody(){
+  const ids = Object.keys(cadence);
+  if(!ids.length) return '<div class="dm-sec">No one enrolled</div><div class="sd" style="color:var(--muted)">Enroll from any lead row: Links &rarr; <b>Cadence</b>. The 4-touch sequence (day 0/2/4/7) sends itself until they reply &mdash; then it auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.</div>';
+  const rows = ids.sort((a,b)=>(cadence[a].next||'').localeCompare(cadence[b].next||'')).map(c=>{
+    const e = cadence[c];
+    const stTxt = e.status==='active' ? ('step '+Math.min(e.step+1,CAD_STEPS)+'/'+CAD_STEPS+' &middot; next '+e.next) : esc(e.status);
+    return '<div class="mathline"><span><b>'+esc(e.owner)+'</b><br><span class="mut">'+esc(e.addr)+'</span></span><span>'+stTxt+(e.status==='active'?' &nbsp;<a href="#" class="cadcancel" data-c="'+esc(c)+'">cancel</a>':'')+'</span></div>';
+  }).join('');
+  return '<div class="dm-sec">Email cadence &mdash; '+ids.filter(c=>cadence[c].status==='active').length+' active</div>'+rows+
+    '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-top:10px">Run <b>python cadence.py</b> on your machine &mdash; it sends every due step, watches for replies, and cancels sequences the moment an owner writes back. Opt-outs sync into the do-not-contact ledger on the next notes import.</div>'+
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="syncbtn2" id="cadexport" type="button" style="background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;border:none;font-weight:700">Export queue (cadence_queue.json)</button></div>';
+}
+function openCadence(){ document.getElementById('cadencebody').innerHTML=cadencePanelBody(); document.getElementById('cadencemodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function closeCadence(){ document.getElementById('cadencemodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+function exportCadence(){
+  const q = Object.keys(cadence).filter(c=>cadence[c].status==='active').map(c=>cadence[c]);
+  const payload = {tool:'dealflow-cadence', version:1, exported:_nowTS(), sender: sender, gaps: CAD_GAPS, queue: q};
+  const blob = new Blob([JSON.stringify(payload,null,1)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cadence_queue.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+}
+document.getElementById('cadencebtn').onclick = () => openCadence();
+document.addEventListener('click', e => {
+  const g = e.target.closest && e.target.closest('.cadencegen');
+  if(g){ e.preventDefault(); enrollCadence(g.dataset.c); return; }
+  const x = e.target.closest && e.target.closest('.cadcancel');
+  if(x){ e.preventDefault(); cadence[x.dataset.c].status='cancelled'; saveCadence(); openCadence(); return; }
+  if(e.target.closest && e.target.closest('#cadexport')){ e.preventDefault(); exportCadence(); return; }
+});
 document.getElementById('refreshbtn').onclick = () => openRefresh();
 function openSyncModal(){  const on = !!_teamKey();
   document.getElementById('syncbody').innerHTML =
@@ -3822,9 +3871,9 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); closeRefresh(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); closeRefresh(); closeCadence(); }
 });
-document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); closeRefresh(); } });
+document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); closeRefresh(); closeCadence(); } });
 // "/" focuses search (unless already typing in a field)
 document.addEventListener('keydown', e => {
   if(e.key==='/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'')){

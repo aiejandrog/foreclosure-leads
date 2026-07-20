@@ -440,6 +440,31 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .zst-rental{background:rgba(30,90,160,.10);color:#1E5AA0;border:1px solid rgba(30,90,160,.3)}
 .zst-off{background:rgba(22,101,52,.09);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.28)}
 .zst-noaddr{background:rgba(90,90,90,.08);color:var(--muted-2);border:1px solid rgba(90,90,90,.22)}
+/* Jose playbook chips + panel (call 2026-07-20). FRESH = call-priority green; STALLER? = amber
+   caution on 2019-2023 filings (serial-bankruptcy delay artists). .ppath rows render the
+   auto-matched revenue layers inside the deal modal. */
+.frchip{display:inline-block;border-radius:4px;padding:0 6px;font-size:10px;font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);
+  vertical-align:middle;margin-right:4px;line-height:1.7}
+.fr-fresh{background:rgba(22,101,52,.12);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.32)}
+.fr-stale{background:rgba(180,83,9,.10);color:#B45309;border:1px solid rgba(180,83,9,.3)}
+.ppaths{display:flex;flex-direction:column;gap:8px;margin:4px 0 2px}
+.ppath{background:var(--surface-2,#F3F5F9);border:1px solid var(--line,#E2E6EE);border-radius:8px;
+  padding:9px 12px;font-size:12px;line-height:1.5}
+.ppath b{display:block;color:var(--gold-d,#8B6A2C);font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);margin-bottom:2px}
+.ppath span{color:var(--muted,#5B6472)}
+.ppath.ppmatch{border-color:var(--gold,#C6A14B);background:var(--gold-soft,rgba(198,161,75,.1));
+  box-shadow:0 1px 6px rgba(198,161,75,.18)}
+.ppgo{color:var(--gold-d,#8B6A2C);font-size:9.5px;font-weight:700;letter-spacing:.04em}
+.intwrap{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:2px 0 8px}
+.intlbl{font-size:11px;font-weight:700;color:var(--muted,#5B6472);margin-right:3px;
+  text-transform:uppercase;letter-spacing:.06em;font-family:var(--f-label,'Space Grotesk',sans-serif)}
+.intbtn{font-size:11px;padding:4px 10px;border-radius:999px;border:1px solid var(--line,#E2E6EE);
+  background:var(--surface,#fff);color:var(--muted,#5B6472);cursor:pointer;font-weight:600;
+  transition:all .15s var(--e-lux,ease)}
+.intbtn:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
+.intbtn.on{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730)}
 .ctychip{display:inline-block;background:var(--navy);color:#fff;border-radius:4px;padding:0 6px;
   font-size:10px;font-weight:800;letter-spacing:.04em;vertical-align:1px}
 .dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);
@@ -574,8 +599,8 @@ input.ph::placeholder{color:#8FBFA0}
 .cctl textarea{flex:1}
 
 /* ============================== MODALS (shared shell) ============================== */
-#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal{display:none;position:fixed;inset:0;z-index:120}
-#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show{display:block}
+#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show{display:block}
 #syncmodal{z-index:122}#planmodal{z-index:121}#lookupmodal{z-index:121}#gallerymodal{z-index:130}
 .dm-backdrop{position:absolute;inset:0;background:rgba(9,16,31,.5);backdrop-filter:blur(5px);
   -webkit-backdrop-filter:blur(5px);animation:dmFade .2s ease}
@@ -611,6 +636,11 @@ input.ph::placeholder{color:#8FBFA0}
 .mathline.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:700;
   font-size:15px;color:var(--ink)}
 .mathline.tot span:first-child{color:var(--ink);font-weight:700}
+.compsline{margin:2px 0 6px;padding:7px 10px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm)}
+.compsline .comp{display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:10.5px}
+.compsline .comp+.comp{border-top:1px dashed var(--line)}
+.compsline .compa{color:var(--ink-2);font-weight:600}
+.compsline .compn{color:var(--muted-2);font-variant-numeric:tabular-nums;font-family:var(--f-num);white-space:nowrap}
 .dealadj{display:flex;flex-wrap:wrap;gap:12px 15px;align-items:flex-end}
 .dealadj label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px;font-weight:500}
 .dealadj input[type=number]{width:135px;font-size:13px;padding:7px 9px;font-family:var(--f-num)}
@@ -1043,6 +1073,7 @@ body.compact .dg-v{font-size:14.5px}
 <div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
 <div id="mailmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="mailbody"></div></div></div>
 <div id="refreshmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="refreshbody"></div></div></div>
+<div id="cadencemodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="cadencebody"></div></div></div>
 <!-- Investor dispo pack — the print-only one-pager. Populated by exportDispoPack() from the deal-analysis modal. -->
 <div id="dispoPackView" aria-hidden="true">
   <div class="pv-hd">
@@ -1092,7 +1123,7 @@ body.compact .dg-v{font-size:14.5px}
     <div class="sig" id="pvSig"></div>
   </section>
   <footer class="pv-legal">
-    Information deemed reliable but not guaranteed. Buyer to conduct own due diligence including title, liens, condition, and value. Market value shown is county appraiser record, NOT a comp-based ARV. Rehab, ROI and profit figures are DealFlow model estimates and do not constitute representations or warranties. Assignment fee is included in the purchase price. Property is sold AS-IS, WHERE-IS. This is a principal-to-principal transaction; sender holds equitable interest via executed purchase contract unless stated otherwise. Not a solicitation to sellers currently listed.
+    Information deemed reliable but not guaranteed. Buyer to conduct own due diligence including title, liens, condition, and value. Market value shown is county appraiser record; where an ARV line is present it is the median of recent nearby residential sales (Florida DOR roll) × subject living area, NOT a formal appraisal. Rehab, ROI and profit figures are DealFlow model estimates and do not constitute representations or warranties. Assignment fee is included in the purchase price. Property is sold AS-IS, WHERE-IS. This is a principal-to-principal transaction; sender holds equitable interest via executed purchase contract unless stated otherwise. Not a solicitation to sellers currently listed.
   </footer>
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
@@ -1134,6 +1165,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="exp">Export CSV (with my notes)</button>
 <button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M17 3.5 18.6 6 21 6.7M7 20.5 5.4 18 3 17.3"/></svg> Sync / team <span id="syncfresh" class="syncfresh"></span></button>
 <button id="mailbatch" title="Prepare a batch of homeowner-rescue letters to send as real mail via Lob. Picks Tier A/B leads with a real owner, a deliverable mailing address, and an auction 5+ days out, minus anyone opted out. You review and download the batch here; your Lob key never touches this page."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Mail batch</button>
+<button id="cadencebtn" title="Email cadence queue — enrolled owners get a 4-touch sequence (day 0/2/4/7) that sends itself and auto-cancels the moment they reply. Export the queue, run cadence.py on your machine; replies and opt-outs sync back. Kimi-built."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg> Cadence</button>
 <span class="stats" id="stats"></span>
 </div>
 </header>
@@ -1287,7 +1319,13 @@ function recompute(){
     const judg = r.judg||0, val = r.value||0;
     // per-lead adjustments the user researches on the docket/title (saved with this case's notes)
     const nn = notes[r.case] || {};
-    const slien = Math.max(0, +nn.slien || 0);   // surviving senior / 1st mortgage (HOA/junior cases)
+    // TRACED CHAIN AUTO-FILL (the Echeverri rule, made automatic): the recorded lien chain's
+    // surviving-mortgage estimate pre-fills the senior payoff — value − surviving senior −
+    // judgment − costs, computed BEFORE anyone asks. Only records-verified chains feed it
+    // (conf 'ok' or 'low'); the deal-modal input always wins over the chain's number.
+    const chainSurv = (r.orconf==='ok' || r.orconf==='low') ? (r.orjunior || r.orsurv || r.orsurvfirst || 0) : 0;
+    r._chainSurv = chainSurv;
+    const slien = Math.max(0, +nn.slien || 0) || chainSurv;   // surviving senior / 1st mortgage (HOA/junior cases)
     const jlien = Math.max(0, +nn.jlien || 0);   // 2nd / junior mortgage or HELOC — a payoff to take clean title on an owner purchase (Hondroulis had one the judgment never showed)
     const assess = Math.max(0, +nn.assess || 0); // condo HOA arrears + special assessment (post-Surfside 40-yr recertification) — not in public data, sized by the association estoppel
     const mlien = Math.max(0, +nn.mlien || 0);   // surviving municipal / code / IRS liens
@@ -1365,6 +1403,9 @@ function setVerdict(r, x){
   if(r.st==='TD' && val>0 && (r._equity/val)>0.55 && rank>2){ rank=2; v='MARGINAL'; why='Equity parcel — competitive tax-deed auctions bid these near market, erasing most of the paper margin. Consider the surplus play instead.'; }
   if(r._occ && rank>2){ rank=2; v='MARGINAL'; why='Occupied — eviction cost/time is baked in and you get no interior inspection at auction.'; }
   if(r.st!=='TD' && r.condo && !r._assessSet && rank>2){ rank=2; v='MARGINAL'; why='Condo — a special assessment (post-Surfside 40-yr recertification) can be large and is NOT in public data. Get the association estoppel and enter it below (enter 0 if confirmed none) before trusting this equity.'; }
+  // chain-fed survivor math never graduates to STRONG on a LOW-confidence chain: the number came
+  // from records, but a common-name owner means it might be a stranger's mortgage. Verify, then it can.
+  if(r._chainSurv && r.orconf==='low' && rank>2){ rank=2; v='MARGINAL'; why='Surviving-mortgage math comes from a LOW-confidence lien chain (common owner name — could include a stranger\'s records). The equity is accounted for; verify the chain in Official Records before trusting it as STRONG.'; }
   r._verdict=v; r._vrank=rank; r._why=why;
 }
 const fmtMoney = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
@@ -1384,10 +1425,12 @@ function verifyChip(r){
   if(r.orconf==='low') return '<span class="chip vlow" title="A lien chain was pulled, but the owner\'s name was too common to isolate with confidence &mdash; these records may include a stranger\'s mortgages. Verify manually in Official Records before relying on the equity or flags shown.">~&nbsp;Low-confidence check</span>';
   return '<span class="chip vnone" title="No recorded mortgage/lien chain has been pulled for this property yet. The equity % shown is a RAW estimate (value minus the foreclosure judgment only) and has NOT been checked for a hidden surviving mortgage, an already-recorded sale, or a second foreclosure. Verify in Official Records before contacting or making an offer.">&#9711;&nbsp;Not yet verified</span>';
 }
-// surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk")
-function mrText(r){ const s=+r.orsurvfirst||0;
+// surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk").
+// Shows the chain's number when we have one (records-verified vs low-confidence estimate).
+function mrText(r){ const s=r._chainSurv || (+r.orsurvfirst||0);
   if(s>0){ const under=(r.value && s > (r.value-(r.judg||0)));
-    return '<div class="mrwarn'+(under?' under':'')+'" title="A first mortgage of about $'+Math.round(s).toLocaleString()+' survives this HOA/junior sale &mdash; it is NOT wiped by the auction. '+(r.orconf==='ok'?'':'Recorded original size on a common-name record &mdash; verify the payoff.')+(under?' It exceeds the equity &mdash; likely underwater.':'')+'">surviving 1st mtg &asymp; $'+Math.round(s/1000)+'k'+(under?' &mdash; underwater':'')+'</div>'; }
+    const conf = r.orconf==='ok' ? 'records-verified' : 'LOW-confidence chain — verify the payoff';
+    return '<div class="mrwarn'+(under?' under':'')+'" title="A surviving mortgage of about $'+Math.round(s).toLocaleString()+' rides through this sale &mdash; it is NOT wiped by the auction ('+conf+').'+(under?' It exceeds the equity &mdash; likely underwater.':'')+'">surviving 1st mtg &asymp; $'+Math.round(s/1000)+'k'+(under?' &mdash; underwater':'')+'</div>'; }
   return r.mr?'<div class="mrwarn" title="HOA/junior foreclosure &mdash; the first mortgage survives the sale; verify the payoff before valuing the equity.">first mtg survives &mdash; verify</div>':''; }
 function mathLine(label,val,tot){ return '<div class="mathline'+(tot?' tot':'')+'"><span>'+esc(label)+'</span><span>'+fmtMoney(val)+'</span></div>'; }
 function dealFlags(r){
@@ -1437,6 +1480,13 @@ function dealAnalysisHTML(r){
   } else {
     const costs = r.value*(Math.max(0,+deal.costpct||0)/100);
     const rows = [ mathLine('County market value', r.value) ];
+    // radius comps (comps.py): the market-checked value next to the county roll, with the 3
+    // nearest sales so the number is auditable instead of asserted.
+    if(r.arv){
+      rows.push(mathLine('ARV · '+r.arvn+' comps ('+(r.arvconf==='ok'?'verified':'low conf')+')', r.arv));
+      rows.push('<div class="compsline">'+r.comps.map(c =>
+        '<div class="comp"><span class="compa">'+esc(c.addr)+'</span><span class="compn">'+fmtK(c.price)+' · '+c.yr+' · '+c.sqft.toLocaleString()+'sf · $'+c.psf+'/sf</span></div>').join('')+'</div>');
+    }
     if(r.st==='TD'){ rows.push(mathLine('Est. winning bid', -r._purchase)); rows.push(mathLine('Quiet title', -(Math.max(0,+deal.quiettitle||3000)))); }
     else if(r.mr){
       // HOA/junior: you pay the small bid, then the surviving mortgages ride ON TOP — itemize each.
@@ -1461,7 +1511,7 @@ function dealAnalysisHTML(r){
       '<div class="mathline"><span>ROI</span><span>'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</span></div></div>';
   }
   const adj = '<div class="dealadj">'+
-    (r.st!=='TD' ? '<label>Senior / 1st mortgage $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||'')+'" placeholder="0">'+(r.mr?'':'<span class="esthint">only if Records shows one senior to this case</span>')+'</label>' : '')+
+    (r.st!=='TD' ? '<label>Senior / 1st mortgage $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||(r._chainSurv||''))+'" placeholder="0">'+(nn.slien?'<span class="esthint">you entered this</span>':(r._chainSurv?'<span class="esthint">'+(r.orconf==='ok'?'records chain — verified':'~records chain — LOW confidence, verify')+'</span>':(r.mr?'':'<span class="esthint">only if Records shows one senior to this case</span>')))+'</label>' : '')+
     (r.st!=='TD' ? '<label>2nd / junior mortgage $<input class="jlien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.jlien||'')+'" placeholder="0"><span class="esthint">a recorded 2nd / HELOC — payoff to take clean title on a purchase</span></label>' : '')+
     (r.st!=='TD' ? '<label>HOA / special assessment $<input class="assess" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.assess||'')+'" placeholder="0">'+(r.condo?'<span class="esthint">condo — get the association estoppel (40-yr recert can be $$$)</span>':'')+'</label>' : '')+
     '<label>Back property taxes $<input class="btax" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.btax||'')+'" placeholder="0">'+(r.etax?'<span class="esthint">~'+fmt0(r.etax)+'/yr est · verify on Taxes</span>':'')+'</label>'+
@@ -1484,6 +1534,11 @@ function dealModalBody(r){
       '<div class="dm-verdict">'+verdictBadge(r)+figure+'</div>'+
       (r._why?'<div class="dm-why">'+esc(r._why)+'</div>':'')+
     '</div>'+ dealAnalysisHTML(r) +
+    // Jose playbook (2026-07-20): the revenue layers auto-matched to this lead. Rendered after
+    // the math so the underwriting number stays the headline and the paths read as "how we
+    // monetize what the math just said".
+    '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Profit paths — Jose playbook</div>'+
+    _profitPaths(r) +
     // Dispo pack button — only shown on live deals (not PASS/no-data), because there's no point
     // exporting a buyer PDF for a dead lead. Uses the same gold-CTA look as the primary actions.
     (r._verdict && r._verdict!=='PASS' && !r._nodata
@@ -1863,6 +1918,87 @@ function _zstatusChip(r){
   if(s === 'RENTAL') return '<span class="zstchip zst-rental" title="Listed FOR RENT — the owner is landlording it. Tired-landlord pitch beats the foreclosure-rescue letter here.">RENTAL</span> ';
   if(s === 'NO-ADDR') return '<span class="zstchip zst-noaddr" title="The auction record has no street address and the county appraiser has none for the folio either (raw land / MULTIPLE PARCELS bundle). Listing status cannot be checked without an address.">NO ADDR</span> ';
   return '<span class="zstchip zst-off" title="Not listed anywhere on the retail market (Zillow). Nobody else is marketing this property — clean field for direct contact.">OFF-MKT</span> ';
+}
+// ============ JOSE PLAYBOOK (call of 2026-07-20 — "LETS GET TO WORK") ============
+// Case-age rule: late-2024+ filings are FRESH (9/10 never stopped a sale — they'll take a real
+// rescue); 2019-2023 filers are SERIAL-STALLER territory (multiple bankruptcies, they know the
+// delay game better than we do). The chip encodes the call-priority rule on every row.
+// Filing year: the `filed` field when the scraper carried it (MD), else derived from the case
+// number itself — MD `2025-021847-CA-01`, PB `502024CA012300…`, BW `CACE-24-009886` all encode it.
+function _filedYear(r){
+  var y = +((r && r.filed) || 0);
+  if(y > 1990) return y;
+  var c = String((r && r.case) || '');
+  var m = c.match(/^(\d{4})-/) || c.match(/^\d{2}(\d{4})[A-Z]/) || c.match(/^[A-Z]{4}-?(\d{2})-/);
+  if(m){ y = +m[1]; if(y < 100) y += 2000; if(y > 1990 && y < 2100) return y; }
+  return 0;
+}
+function _freshChip(r){
+  var y = _filedYear(r);
+  if(!y) return '';
+  if(y >= 2024) return '<span class="frchip fr-fresh" title="Filed '+y+' — FRESH case. 9 out of 10 of these have never stopped a sale and have no bankruptcy playbook. Top of the call list.">FRESH</span> ';
+  return '<span class="frchip fr-stale" title="Filed '+y+' — a '+(2026-y)+'-year-old case. Owners this deep in usually know the stalling game (serial bankruptcies, prior cancellations). Deprioritize — call the fresh ones first.">STALLER?</span> ';
+}
+// Profit Paths: the ten revenue layers from the Jose playbook, auto-matched to THIS lead from
+// data already on the row (net equity after the traced chain, ARV, listing status, freshness,
+// tax-deed vs FC). Every contactable lead has a floor — the stop-the-sale fee — so no lead
+// renders an empty list. Estimates are labeled estimates; the modal's math stays authoritative.
+// Owner intent — the one-stop-shop moral made operational. Jose: "no matter what the homeowner
+// wants — keep, sell, or walk — we already have our hands in his pocket." Carlos's intake asks
+// the one question; the operator records it here and the paths re-rank so the layer that matches
+// what the owner actually said leads. Persisted per-device in notes[case].intent.
+function _setIntent(caseId, v){
+  var n = notes[caseId] || (notes[caseId] = {});
+  n.intent = (n.intent === v ? '' : v);   // click the active one again to clear
+  if(typeof save === 'function') save();
+  var r = DATA.find(function(x){ return x.case === caseId; });
+  if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r);
+}
+function _intentBar(r){
+  var cur = (notes[r.case]||{}).intent || '';
+  var opt = [['keep','Keep it'],['sell','Sell / walk with cash'],['walk','Just leave']];
+  var btns = '<button type="button" class="intbtn'+(cur===''?' on':'')+'" onclick="_setIntent(\''+esc(r.case)+'\',\'\')">Unknown</button>' +
+    opt.map(function(o){ return '<button type="button" class="intbtn'+(cur===o[0]?' on':'')+'" onclick="_setIntent(\''+esc(r.case)+'\',\''+o[0]+'\')">'+o[1]+'</button>'; }).join('');
+  return '<div class="intwrap"><span class="intlbl">Owner wants:</span>'+btns+'</div>';
+}
+function _profitPaths(r){
+  var out = [];
+  var val = (+r.arv || +r.value || 0);
+  var debt = (+r.judg||0) + (r._chainSurv||0);
+  var netEq = val ? Math.max(0, val - debt) : 0;
+  var fresh = _filedYear(r) >= 2024;
+  var fc = r.st !== 'TD';
+  var intent = (notes[r.case]||{}).intent || '';
+  // each path tagged with the owner-intent(s) it serves — used to float the matching plays up
+  var add = function(t, d, tags){ out.push({t:t, d:d, tags:tags||['any']}); };
+  if(fc && (+r.days||0) > 0){
+    add('Stop the sale — the floor', '$2,500 fee + $330 court costs, through the attorney (FS 501.1377). Buys 60–90 days to run every other play below.'+(fresh?'':' Case is old — expect a seasoned staller; qualify hard before spending effort.'), ['keep','sell','walk']);
+  }
+  if(netEq >= 100000){
+    var loan = Math.round(val * 0.65);
+    add('Hard-equity loan referral', '~'+fmtK(netEq)+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Owner keeps the house, we make the referral. Closes in ~5 business days via the lending side.', ['keep']);
+    add('Cash-for-keys + assignable contract', 'Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.', ['sell','walk']);
+  } else if(netEq >= 25000){
+    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.', ['sell','walk']);
+  } else {
+    add('No-equity rescue — dignity play', 'Still money here: $1,800–$3,000 stop fee, or arrears-reinstatement (bank rolls the past-due back in → rent it at market). And the human lever: we buy them 60–90 days to move out with dignity + $500–800 movers, instead of the sheriff putting grandma’s things on the street. Practice reps live on exactly these.', ['sell','walk','keep']);
+  }
+  if((r.zstatus||'') === 'LISTED'){
+    add('Realtor referral kickback', 'Already MLS-listed'+(r.zprice?' at '+fmtK(r.zprice):'')+' — if it retails, a referred listing kicks back 1/3 of the commission (≈ '+fmtK(Math.round(val*0.01))+' on a full-commission sale).', ['sell']);
+  }
+  if(fc && netEq >= 25000 && val >= 150000 && val <= 550000 && !r.co){
+    add('DSCR keep (portfolio layer)', 'Right size band for a rental keep — if market rent clears the note, this is a 5-business-day DSCR close and door #'+ (val<300000?'1':'next') +' of the 25-door plan. Needs the real FICO pulled first.', ['keep']);
+  }
+  // stable re-rank: intent-matched paths float up, order otherwise preserved
+  if(intent){
+    out.forEach(function(p, i){ p._i = i; p._m = p.tags.indexOf(intent) >= 0 ? 0 : 1; });
+    out.sort(function(a,b){ return (a._m - b._m) || (a._i - b._i); });
+  }
+  var rows = out.map(function(p){
+    var matched = intent && p.tags.indexOf(intent) >= 0;
+    return '<div class="ppath'+(matched?' ppmatch':'')+'"><b>'+p.t+(matched?' <span class="ppgo">← their move</span>':'')+'</b><span>'+p.d+'</span></div>';
+  }).join('');
+  return _intentBar(r) + '<div class="ppaths">'+rows+'</div>';
 }
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
@@ -2419,6 +2555,8 @@ function _dpMathRows(r){
   var rows=[]; if(r._profit==null){ return [['Est. profit','unknown until verified']]; }
   var costs = r.value*(Math.max(0,+deal.costpct||0)/100);
   rows.push(['County market value', _dpMoney(r.value)]);
+  // radius comps (comps.py): the market-checked number goes on the pack when it exists
+  if(r.arv) rows.push(['ARV · '+r.arvn+' nearby sales ('+(r.arvconf==='ok'?'verified':'low confidence')+')', _dpMoney(r.arv)]);
   if(r.st==='TD'){
     rows.push(['Est. winning bid', _dpMoney(-r._purchase)]);
     rows.push(['Quiet title', _dpMoney(-(Math.max(0,+deal.quiettitle||3000)))]);
@@ -2810,6 +2948,53 @@ async function _fireRefresh(){
   }
 }
 function closeRefresh(){ document.getElementById('refreshmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+// ================= kimi: EMAIL CADENCE (4-touch sequence, auto-cancel on reply) =================
+// Enroll an owner from the row's Links -> Cadence. The queue exports to cadence_queue.json and
+// cadence.py does the work on your machine: sends each due step (day 0/2/4/7), watches the inbox
+// for replies, and cancels the sequence the moment an owner writes back. Opt-outs flow into the
+// do-not-contact ledger on the next notes import. State lives on this device (fcCadence).
+let cadence = {};
+try{ cadence = JSON.parse(localStorage.getItem('fcCadence')||'{}'); }catch(e){ cadence = {}; }
+function saveCadence(){ try{ localStorage.setItem('fcCadence', JSON.stringify(cadence)); }catch(e){} }
+const CAD_STEPS = 4, CAD_GAPS = [0,2,2,3];   // send days 0, 2, 4, 7
+function enrollCadence(caseId){
+  const r = DATA.find(x=>x.case===caseId); if(!r) return;
+  const n = notes[r.case]||{};
+  if(n.status==='DO NOT CONTACT') return;              // the opt-out ledger always wins
+  if(cadence[caseId] && cadence[caseId].status==='active'){ openCadence(); return; }
+  cadence[caseId] = {case:caseId, owner:r.owners, addr:r.addr, email:(r.emails||[])[0]||'',
+    auction:r.auction, step:0, next:_today(), status:'active', enrolled:_today()};
+  saveCadence(); openCadence();
+}
+function cadencePanelBody(){
+  const ids = Object.keys(cadence);
+  if(!ids.length) return '<div class="dm-sec">No one enrolled</div><div class="sd" style="color:var(--muted)">Enroll from any lead row: Links &rarr; <b>Cadence</b>. The 4-touch sequence (day 0/2/4/7) sends itself until they reply &mdash; then it auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.</div>';
+  const rows = ids.sort((a,b)=>(cadence[a].next||'').localeCompare(cadence[b].next||'')).map(c=>{
+    const e = cadence[c];
+    const stTxt = e.status==='active' ? ('step '+Math.min(e.step+1,CAD_STEPS)+'/'+CAD_STEPS+' &middot; next '+e.next) : esc(e.status);
+    return '<div class="mathline"><span><b>'+esc(e.owner)+'</b><br><span class="mut">'+esc(e.addr)+'</span></span><span>'+stTxt+(e.status==='active'?' &nbsp;<a href="#" class="cadcancel" data-c="'+esc(c)+'">cancel</a>':'')+'</span></div>';
+  }).join('');
+  return '<div class="dm-sec">Email cadence &mdash; '+ids.filter(c=>cadence[c].status==='active').length+' active</div>'+rows+
+    '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-top:10px">Run <b>python cadence.py</b> on your machine &mdash; it sends every due step, watches for replies, and cancels sequences the moment an owner writes back. Opt-outs sync into the do-not-contact ledger on the next notes import.</div>'+
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="syncbtn2" id="cadexport" type="button" style="background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;border:none;font-weight:700">Export queue (cadence_queue.json)</button></div>';
+}
+function openCadence(){ document.getElementById('cadencebody').innerHTML=cadencePanelBody(); document.getElementById('cadencemodal').classList.add('show'); document.body.classList.add('modal-open'); }
+function closeCadence(){ document.getElementById('cadencemodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+function exportCadence(){
+  const q = Object.keys(cadence).filter(c=>cadence[c].status==='active').map(c=>cadence[c]);
+  const payload = {tool:'dealflow-cadence', version:1, exported:_nowTS(), sender: sender, gaps: CAD_GAPS, queue: q};
+  const blob = new Blob([JSON.stringify(payload,null,1)], {type:'application/json'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'cadence_queue.json';
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
+}
+document.getElementById('cadencebtn').onclick = () => openCadence();
+document.addEventListener('click', e => {
+  const g = e.target.closest && e.target.closest('.cadencegen');
+  if(g){ e.preventDefault(); enrollCadence(g.dataset.c); return; }
+  const x = e.target.closest && e.target.closest('.cadcancel');
+  if(x){ e.preventDefault(); cadence[x.dataset.c].status='cancelled'; saveCadence(); openCadence(); return; }
+  if(e.target.closest && e.target.closest('#cadexport')){ e.preventDefault(); exportCadence(); return; }
+});
 document.getElementById('refreshbtn').onclick = () => openRefresh();
 function openSyncModal(){  const on = !!_teamKey();
   document.getElementById('syncbody').innerHTML =
@@ -3018,6 +3203,8 @@ function render(){
       gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
+      // kimi: cadence enrollment — the multi-touch email sequence that auto-cancels on reply
+      if((r.emails||[]).length) gDo.push('<a href="#" class="cadencegen" data-c="'+esc(r.case)+'" title="Enroll this owner in the 4-touch email cadence (day 0/2/4/7) — sends itself until they reply, then auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.">Cadence</a>');
     }
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
@@ -3069,7 +3256,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -3114,7 +3301,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
@@ -3684,9 +3871,9 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); closeRefresh(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); closeRefresh(); closeCadence(); }
 });
-document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); closeRefresh(); } });
+document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); closeRefresh(); closeCadence(); } });
 // "/" focuses search (unless already typing in a field)
 document.addEventListener('keydown', e => {
   if(e.key==='/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'')){
