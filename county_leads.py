@@ -24,18 +24,24 @@ COUNTIES = {
         'sub': 'broward', 'co_no': 16,
         # BCPA's Angular SPA can't deep-link; the legacy RecInfo.asp endpoint opens the parcel directly (12-digit folio, no dashes).
         'pa': lambda f: 'https://bcpa.net/RecInfo.asp?URL_Folio=' + f,
-        # The county-taxes.com/.../parcels/{folio} deep-link is Cloudflare-walled on its redirect and never
-        # resolves for a normal click (verified) — link the tax portal LANDING, which loads + lets you search.
-        'tax': lambda f: 'https://county-taxes.net/broward/property-tax',
+        # DIRECT tax bill — the exact URL BCPA's own "Tax Collector" link opens (2026-07-20, Alejandro's
+        # find). broward.county-taxes.com 403s header-less bots (Cloudflare), but resolves to HTTP 200 with
+        # the live bill in a REAL browser (verified in headless Chromium — CF passes when JS runs). Account =
+        # 12-digit folio formatted 6-2-4 (514214012810 -> 514214-01-2810).
+        'tax': lambda f: ('https://broward.county-taxes.com/public/real_estate/parcels/'
+                          + f[0:6] + '-' + f[6:8] + '-' + f[8:12] + '/bills') if len(f) >= 12 else 'https://broward.county-taxes.com/public/real_estate/search',
         'records': 'https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName',   # lands on the NAME search form (via disclaimer), not the generic portal
         'cases': 'https://www.browardclerk.org/Web2/CaseSearchECA/',    # court case search
     },
     'PALM BEACH': {
         'sub': 'palmbeach', 'co_no': 60,
         'pa': lambda f: 'https://pbcpao.gov/Property/Details?parcelId=' + f,   # direct parcel (17-digit PCN, no dashes)
-        # manatron.com is retired; the PublicAccessNow portal's true deep-link needs a non-derivable Aumentum
-        # account id, so link the portal (user searches by PCN/address there).
-        'tax': lambda f: 'https://pbctax.publicaccessnow.com/',
+        # DIRECT tax bill — the exact URL PBCPAO's "Tax Collector" button opens (2026-07-20, Alejandro's
+        # find): onClickTaxCollector() -> PropertyTax.aspx?s=ParcelID:{PCN}. PCN = 17-digit folio formatted
+        # 2-2-2-2-2-3-4 (38434415060062990 -> 38-43-44-15-06-006-2990). Verified HTTP 200 with the PCN echoed.
+        'tax': lambda f: ('https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A'
+                          + f[0:2]+'-'+f[2:4]+'-'+f[4:6]+'-'+f[6:8]+'-'+f[8:10]+'-'+f[10:13]+'-'+f[13:17]
+                          + '&pg=1&g=-1&moduleId=449') if len(f) >= 17 else 'https://pbctax.publicaccessnow.com/',
         'records': 'https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection=',   # Landmark NAME search
         'cases': 'https://appsgp.mypalmbeachclerk.com/eCaseView/',       # court case search
     },

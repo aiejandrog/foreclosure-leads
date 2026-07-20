@@ -1887,9 +1887,9 @@ function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
 const CTY_LINKS = {
   'MIAMI-DADE': { pa:f=>'https://apps.miamidadepa.gov/PropertySearch/#/?folio='+f, tax:f=>'https://miamidade.county-taxes.com/public/real_estate/parcels/'+f,
     records:'https://onlineservices.miamidadeclerk.gov/officialrecords/', cases:'https://www2.miamidadeclerk.gov/ocs/', place:'MIAMI FL' },
-  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>'https://county-taxes.net/broward/property-tax',
+  'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>(f&&f.length>=12?'https://broward.county-taxes.com/public/real_estate/parcels/'+f.slice(0,6)+'-'+f.slice(6,8)+'-'+f.slice(8,12)+'/bills':'https://broward.county-taxes.com/public/real_estate/search'),
     records:'https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName', cases:'https://www.browardclerk.org/Web2/CaseSearchECA/', place:'BROWARD COUNTY FL' },
-  'PALM BEACH': { pa:f=>'https://pbcpao.gov/Property/Details?parcelId='+f, tax:f=>'https://pbctax.publicaccessnow.com/',
+  'PALM BEACH': { pa:f=>'https://pbcpao.gov/Property/Details?parcelId='+f, tax:f=>(f&&f.length>=17?'https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A'+f.slice(0,2)+'-'+f.slice(2,4)+'-'+f.slice(4,6)+'-'+f.slice(6,8)+'-'+f.slice(8,10)+'-'+f.slice(10,13)+'-'+f.slice(13,17)+'&pg=1&g=-1&moduleId=449':'https://pbctax.publicaccessnow.com/'),
     records:'https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection=', cases:'https://appsgp.mypalmbeachclerk.com/eCaseView/', place:'PALM BEACH COUNTY FL' },
 };
 const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
@@ -3205,18 +3205,14 @@ function render(){
     else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' property appraiser')+'" target="_blank" rel="noopener" title="No direct appraiser record link for this parcel — opens a Google search for the address on the county appraiser instead.">Appraiser&nbsp;⌕</a>');
     // Zillow text link removed — the property PHOTO (left of the row / top of the card) is now the path to
     // Zillow: click it -> swipe gallery -> "View on Zillow" (real listing when known, else address search).
-    // Broward's tax portal (county-taxes.net) is Cloudflare-walled and uses opaque per-parcel UUID tokens
-    // that CANNOT be built from a folio (verified 2026-07-18: the working link is base64 of an internal
-    // "broward:real_estate:parents:<uuid>" id, and the search that resolves it is bot-blocked). So there's
-    // no honest one-click deep-link. Best achievable: open the tax SEARCH page and copy the folio to the
-    // clipboard so it's one tap + paste + Enter. Other counties keep their working folio deep-links.
-    if(r.tax){
-      if(/county-taxes\.net\/broward/.test(r.tax) && r.folio)
-        gProp.push('<a class="taxsearch" href="https://county-taxes.net/broward/property-tax" target="_blank" rel="noopener" data-folio="'+esc(r.folio)+'" title="Broward tax search. This county portal has no working per-parcel link (Cloudflare-walled, internal IDs), so this opens the search box and COPIES the folio '+esc(r.folio)+' — paste it, press Enter, and you get the bill + any delinquent taxes / certificates.">Taxes</a>');
-      else
-        gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="County tax bill / delinquent taxes">Taxes</a>');
-    }
-    else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No direct tax-bill link for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
+    // DIRECT per-parcel tax bill for all three counties (Alejandro's find, 2026-07-20): the tax link is the
+    // exact URL each county appraiser's own "Tax Collector" button opens, built from the folio —
+    //   Miami-Dade: miamidade.county-taxes.com/.../parcels/{folio}
+    //   Broward:    broward.county-taxes.com/.../parcels/{6-2-4}/bills  (CF-walls bots, 200 in a real browser)
+    //   Palm Beach: pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID:{PCN 2-2-2-2-2-3-4}
+    // No more copy-the-folio dance. Falls back to a tax-collector Google search only when the parcel has no folio.
+    if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="Opens this parcel\'s live tax bill + any delinquent taxes / certificates — the same page the county appraiser\'s Tax Collector link goes to.">Taxes</a>');
+    else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No folio for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
     // Auction: the live RealForeclose sale page for this date (all parcels + bidding). RealForeclose
     // returns 200 to a real browser; a bare/no-UA request 403s at their AWS load balancer, so it can
     // LOOK dead from a script — it isn't. May need a free RealForeclose login for bid detail, and the

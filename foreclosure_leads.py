@@ -861,9 +861,16 @@ def make_tracker(leads):
                 except Exception: xrl = {}
             for _d in xl:
                 _h = xrl.get(_d.get('case', ''))
-                # Deep per-parcel tax link (gen_tax_links.py) beats the county portal landing URL.
+                # Tax link priority (2026-07-20): a real per-parcel /parcels/.../bills deep-link the
+                # county appraiser's own Tax Collector button opens (now set in county_leads.py from the
+                # folio) is the BEST link — it lands on the actual bill. The old gen_tax_links.py Algolia
+                # token (county-taxes.net/.../{base64 :parents: uuid}) only reaches a disambiguation page
+                # (verified: HTTP 200 but no bill), so it must NOT override the appraiser deep-link. Only
+                # use the token link when the lead has no proper per-parcel URL yet.
                 _tx = taxlinks.get(_d.get('case', ''))
-                if _tx: _d['tax'] = _tx
+                _cur = _d.get('tax', '') or ''
+                if _tx and '/parcels/' not in _cur:
+                    _d['tax'] = _tx
                 # Radius comps (comps.py): ARV + nearest sales for the modal/pack.
                 _cp = comps.get(_d.get('case', ''))
                 if _cp:
