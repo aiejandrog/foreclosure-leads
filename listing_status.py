@@ -154,6 +154,9 @@ def enrich_file(path, cache, ttl_s, limit_state):
         time.sleep(1.2)  # same pacing the photo pass uses; Zillow tolerates it
         if fetched % 25 == 0:
             json.dump(cache, open(CACHE_PATH, 'w', encoding='utf-8'))
+            # Flush the lead file too — a killed/timed-out run keeps everything fetched so far,
+            # and a rebuild mid-backfill publishes partial statuses instead of none.
+            json.dump(leads, open(path, 'w', encoding='utf-8'), indent=1)
             print(f'  ... {fetched} fetched in {os.path.basename(path)}')
     if changed:
         json.dump(leads, open(path, 'w', encoding='utf-8'), indent=1)
