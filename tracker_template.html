@@ -369,22 +369,28 @@ td.num .vb{margin-bottom:4px}
 td.num .submeta{margin-top:2px}
 td.num .warn,td.num .mrwarn{margin-top:3px}
 /* ============================== FIRE-LOCK (pinned lead) ==============================
-   Click any non-control area of a row/card to lock a lead in gold ember — a warm tint + a
-   flickering ember bar + a small flame badge over the photo corner. Single-selection: clicking
-   another lead moves the lock, clicking the locked lead again releases it. Persisted per device
-   (localStorage fcPinned). Lives entirely on its own classes so no button/link behavior changes. */
-@keyframes ember{0%,100%{box-shadow:inset 5px 0 0 0 rgba(198,161,75,.85),inset 8px 0 14px -5px rgba(198,161,75,.25)}
-  50%{box-shadow:inset 5px 0 0 0 rgba(236,214,154,1),inset 10px 0 20px -5px rgba(198,161,75,.55)}}
+   Click any non-control area of a row/card to lock a lead in gold ember. Single-selection:
+   clicking another lead moves the lock, clicking the locked lead again releases it. Persisted
+   per device (localStorage fcPinned).
+   GLITCH FIX (Alejandro, 2026-07-20): the original ember animated box-shadow on td:first-child —
+   the exact property+element the verdict bars (tr.rv3 green / rv2 amber / rvv blue) already own,
+   so the bar strobe-fought the verdict color AND forced main-thread repaints every frame. Now the
+   ember is a pseudo-element gradient bar with an OPACITY-only pulse (compositor-smooth, zero
+   repaint strobing) that simply covers the verdict bar on pinned rows. The flame badge moves to
+   the photo's BOTTOM-left because the listing-status chip owns the top-left corner. */
+@keyframes emberGlow{0%,100%{opacity:.55}50%{opacity:1}}
 @keyframes emberflame{0%,100%{transform:rotate(-5deg) scale(1)}50%{transform:rotate(5deg) scale(1.14)}}
 tr.pinfire td{background:rgba(198,161,75,.055)}
-tr.pinfire td:first-child{animation:ember 1.7s ease-in-out infinite}
+tr.pinfire td:first-child{position:relative}
+tr.pinfire td:first-child::before{content:'';position:absolute;left:0;top:0;bottom:0;width:5px;z-index:3;
+  background:linear-gradient(180deg,#ECD69A,#C6A14B);animation:emberGlow 1.7s ease-in-out infinite}
 tr.pinfire .pcell{position:relative}
-tr.pinfire .pcell::after{content:'\1F525';position:absolute;top:5px;left:5px;font-size:15px;z-index:2;
+tr.pinfire .pcell::after{content:'\1F525';position:absolute;bottom:5px;left:5px;font-size:15px;z-index:3;
   filter:drop-shadow(0 1px 3px rgba(11,23,48,.5));animation:emberflame 1.1s ease-in-out infinite}
 #cards .card.pinfire{border-color:rgba(198,161,75,.65);background:rgba(198,161,75,.05)}
-#cards .card.pinfire::before{background:var(--gold);animation:ember 1.7s ease-in-out infinite}
+#cards .card.pinfire::before{background:linear-gradient(180deg,#ECD69A,#C6A14B);animation:emberGlow 1.7s ease-in-out infinite}
 #cards .card.pinfire .phero{position:relative}
-#cards .card.pinfire .phero::after{content:'\1F525';position:absolute;top:6px;left:6px;font-size:16px;z-index:2;
+#cards .card.pinfire .phero::after{content:'\1F525';position:absolute;bottom:6px;left:6px;font-size:16px;z-index:3;
   filter:drop-shadow(0 1px 3px rgba(11,23,48,.5));animation:emberflame 1.1s ease-in-out infinite}
 td.num .dealtog{margin-top:7px;box-shadow:none;background:transparent;border-color:transparent;padding:3px 4px;color:var(--gold-d)}
 td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-shadow:none;transform:none}
