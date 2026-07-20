@@ -45,8 +45,13 @@ BOOKTYPES_FALLBACK = '2,11,20,27,32,28,33'
 
 
 # ---- curl transport (only fingerprint Cloudflare lets through here) ---------------------------
+# kimi: pin the NATIVE Windows curl (Schannel). Bare 'curl' resolves through PATH, and when this
+# script is launched from Git Bash the mingw64 curl shadows System32's — Cloudflare blocks that
+# fingerprint, which is why sessions aborted even while System32 curl sailed through (2026-07-20).
+CURL = r'C:\Windows\System32\curl.exe' if os.name == 'nt' and os.path.exists(r'C:\Windows\System32\curl.exe') else 'curl'
+
 def _curl(url, post=None, timeout=45):
-    cmd = ['curl', '-s', '-m', str(timeout), '-A', UA, '-c', JAR, '-b', JAR,
+    cmd = [CURL, '-s', '-m', str(timeout), '-A', UA, '-c', JAR, '-b', JAR,
            '-H', 'Accept: text/html,application/json,*/*;q=0.8', '-H', 'Accept-Language: en-US,en;q=0.9']
     if post is not None:
         cmd += ['-X', 'POST', '-H', 'Content-Type: application/x-www-form-urlencoded',
@@ -54,15 +59,26 @@ def _curl(url, post=None, timeout=45):
         for k, v in post:
             cmd += ['--data-urlencode', f'{k}={v}']
     cmd += [url]
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout + 10)
-        return r.stdout or ''
-    except Exception:
-        return ''
+    out = ''
+    # kimi: when Cloudflare trips, it challenges per-request at a coin-flip rate (verified 2026-07-20:
+    # the SAME request flips 403<->200 within seconds, headers/jar irrelevant). A challenge page says
+    # "Just a moment" — retry the identical request a few times and it rides through.
+    for _ in range(5):
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', errors='replace', timeout=timeout + 10)
+            out = r.stdout or ''
+        except Exception:
+            out = ''
+        if 'Just a moment' not in out and 'cf-chl' not in out:
+            break
+        time.sleep(3)
+    return out
 
 
 def start_session():
     """Accept the disclaimer and read the all-types code lists off the search form."""
+    try: os.remove(JAR)          # kimi: never reuse a jar — a blocked run leaves poisoned cookies
+    except OSError: pass
     _curl(BASE + '/Search/Disclaimer')
     _curl(BASE + '/Search/Disclaimer', post=[('disclaimer', 'true')])
     form = _curl(BASE + '/Search/SearchTypeName')
@@ -209,7 +225,14 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
             'ftype': ftype, 'deeded': None, 'deed_conf': '', 'second_fc': None, 'conf': 'none', 'nrec': 0}
     if not key[0]:
         return base
-    exact = [d for d in docs if _lf(d.get('Name')) == key]           # exact (last, first) — excludes namesakes
+    # kimi: companies — _lf collapses 'OCEAN BREEZE 777 LLC' and sister 'OCEAN BREEZE 888 LLC' to the
+    # same ('OCEAN','BREEZE') key, which would blend two entities' chains into one fantasy. Match the
+    # FULL alpha-digit name instead (punctuation/comma variants normalize away).
+    if COMPANY_RE.search(owner or ''):
+        _ck = re.sub(r'[^A-Z0-9]', '', (owner or '').upper())
+        exact = [d for d in docs if re.sub(r'[^A-Z0-9]', '', (d.get('Name') or '').upper()) == _ck]
+    else:
+        exact = [d for d in docs if _lf(d.get('Name')) == key]       # exact (last, first) — excludes namesakes
     def is_m(d): return (d.get('DocTypeDescription') or '').upper().startswith('MORTGAGE')
     def is_s(d): return bool(re.search(r'SATISF|RELEASE|REVOKE|TERMINAT', (d.get('DocTypeDescription') or '').upper()))
     def borrower(d): return (d.get('Party') or '').strip().upper() == 'FROM'   # owner is mortgagor/grantor, not the lender
@@ -390,6 +413,10 @@ def _search_name(lead):
         first = (rest.strip().split() or [''])[0]
         return f"{last.strip()}, {first}" if first else last.strip()
     toks = raw.split()
+    # kimi: companies have no LAST,FIRST structure — querying 'OCEAN, BREEZE' finds nothing (verified
+    # 2026-07-20: OCEAN BREEZE 777 LLC returned 0 recs). The full name IS the indexed name.
+    if COMPANY_RE.search(raw):
+        return raw
     return f"{toks[0]}, {toks[1]}" if len(toks) >= 2 else raw
 
 
@@ -411,7 +438,11 @@ def main():
         if a.case and case != a.case: continue
         if a.tier and (r.get('tier', '') or '') != a.tier: continue
         owner = r.get('owners', '') or ''
-        if not owner or COMPANY_RE.search(owner): continue          # companies: no personal chain to isolate
+        if not owner: continue
+        # kimi: companies ARE traced now (Alejandro 2026-07-20 — OCEAN BREEZE 777 LLC showed
+        # manual-only fields because the old COMPANY_RE skip left every LLC/Corp lead with no
+        # chain at all). Exact-name isolation works BETTER on companies than on people, and the
+        # conf guards (common-name over-match, open-count sanity) catch multi-property blenders.
         if case in out and not (a.refresh or a.case): continue
         picked.append(r)
     if a.limit: picked = picked[:a.limit]
@@ -419,7 +450,16 @@ def main():
     print(f"{len(picked)} Broward lead(s) to trace via AcclaimWeb (no captcha, curl session)")
     if not picked:
         return
-    sess = start_session()
+    # kimi: Cloudflare's block here is probabilistic and sticky for minutes once tripped — a single
+    # attempt aborts the whole run (and the daily chain) for no reason. Retry with backoff ~6 min.
+    sess = None
+    for attempt in range(6):
+        sess = start_session()
+        if sess:
+            break
+        wait = 20 + attempt * 20
+        print(f"  session attempt {attempt + 1}/6 blocked; retrying in {wait}s...")
+        time.sleep(wait)
     if not sess:
         print("ABORT: could not establish an AcclaimWeb session (Cloudflare block / site down). Try again later.")
         return
