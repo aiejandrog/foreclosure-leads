@@ -961,6 +961,17 @@ header{animation:appIn .5s .05s backwards}
 .empty-reset{margin-top:16px;background:var(--surface);border:1px solid var(--line);border-radius:var(--pill);
   padding:9px 18px;color:var(--ink);cursor:pointer;font-weight:600;box-shadow:var(--sh-1)}
 .empty-reset:hover{border-color:var(--gold);color:var(--gold-d)}
+/* Active-filter bar (Zillow-style removable pills) */
+.afbar{display:none}
+.afbar.on{display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 2px 2px}
+.af-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted-2);margin-right:2px}
+.afchip{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:4px 10px;border-radius:999px;
+  background:var(--navy,#0B1730);color:#EAF0FB;border:1px solid var(--navy,#0B1730);cursor:pointer;transition:background .14s var(--e-lux,ease)}
+.afchip:hover{background:#17284c}
+.afchip .afx{font-size:15px;line-height:1;opacity:.85;font-weight:700}
+.afclear{font-size:12px;font-weight:700;padding:4px 12px;border-radius:999px;background:transparent;
+  border:1px solid var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C);cursor:pointer;transition:background .14s var(--e-lux,ease)}
+.afclear:hover{background:var(--gold-soft,rgba(198,161,75,.12))}
 .empty-lookup{display:block;margin:14px auto 0;background:var(--gold-d);color:#FFF8E7;border:1px solid var(--gold-d);
   border-radius:var(--pill);padding:11px 22px;cursor:pointer;font-weight:800;font-size:14px;box-shadow:var(--sh-1)}
 .empty-lookup:hover{filter:brightness(1.05);transform:translateY(-1px)}
@@ -1256,6 +1267,7 @@ body.compact .dg-v{font-size:14.5px}
 <div class="sh-r"><span>Full county report</span><kbd>Enter</kbd></div>
 <div class="sh-r"><span>Close dialog</span><kbd>Esc</kbd></div>
 <div class="sh-r"><span>Toggle this panel</span><kbd>?</kbd></div></div>
+<div id="activefilters" class="afbar"></div>
 <div class="tblscroll">
 <div class="tblwrap">
 <table id="tbl">
@@ -2107,7 +2119,7 @@ function openSaved(){
   document.getElementById('savedmodal').classList.add('show'); document.body.classList.add('modal-open');
 }
 function closeSaved(){ document.getElementById('savedmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
-function _showFavOnBoard(){ favOnly = true; closeSaved(); tier='ALL'; q=''; var qi=document.getElementById('q'); if(qi) qi.value=''; render(); }
+function _showFavOnBoard(){ favOnly = true; q=''; var qi=document.getElementById('q'); if(qi) qi.value=''; closeSaved(); render(); }
 function _copyBatch(who){
   var list = _favLeads(); if(!list.length) return;
   var sep = '\n\n----------------------------------------\n\n';
@@ -3304,6 +3316,11 @@ document.getElementById('syncfile').onchange = (e) => {
 };
 // ================= /CROSS-DEVICE SYNC =================
 function view(){
+  // Smart auto-recovery (2026-07-20): a filter that depends on a set which is now empty drops
+  // itself instead of stranding you on a blank board. Remove your last saved lead while the
+  // "Saved only" view is on -> it snaps back to the full listing, the way Zillow does when you
+  // clear your last saved home. The active-filters bar (below) is the general escape hatch.
+  if(favOnly && !favs.size) favOnly = false;
   let rows;
   if(q){
     // Smart search: it does NOT matter which tier or filter you're on — a search spans the ENTIRE
@@ -3311,6 +3328,11 @@ function view(){
     // case #, mailing address, plaintiff and co-defendants.
     const s = q.toLowerCase();
     rows = DATA.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail+' '+(r.plaintiff||'')+' '+(r.defs||'')+' '+(r.oname||'')).toLowerCase().includes(s));
+  } else if(favOnly){
+    // Saved view is its own MODE (like search): shows every saved deal regardless of tier or any
+    // other filter, and leaves those filters untouched. Turn it off (or remove the last saved deal)
+    // and you drop straight back to exactly the view you were on before — never a forced "All tiers".
+    rows = DATA.filter(r => favs.has(r.case));
   } else {
     rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
     if(county) rows = rows.filter(r => (r.county||'MIAMI-DADE')===county);
@@ -3329,7 +3351,6 @@ function view(){
     if(eq30Only) rows = rows.filter(r => netEqPct(r) >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r));
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
-    if(favOnly) rows = rows.filter(r => favs.has(r.case));
   }
   rows = rows.slice();
   const sortVal = r => {
@@ -3348,6 +3369,7 @@ function view(){
 function render(){
   initCountyFilter();
   const rows = view();
+  renderActiveFilters();          // show removable pills for whatever is filtering the board
   // sort-direction indicator on the active column header
   document.querySelectorAll('th[data-k]').forEach(th=>{
     const on = th.dataset.k===sortK;
@@ -3600,6 +3622,56 @@ function resetFilters(){
   render();
 }
 document.addEventListener('click', e => { if(e.target.closest && e.target.closest('.empty-reset')) resetFilters(); });
+// ===== ACTIVE-FILTER BAR (Zillow-style) — every active filter shown as a removable pill so you
+// can never get stranded in a filtered view. Renders above the results on every render(); each
+// pill's × clears just that filter (and un-highlights its button), plus a "Clear all". =====
+function _activeFilters(){
+  var out = [];
+  // Search and Saved are exclusive MODES that ignore the other filters — show just their own pill.
+  if(q) return [{k:'q', lbl:'Search: “'+q+'”'}];
+  if(favOnly) return [{k:'fav', lbl:'★ Saved only'}];
+  if(tier!=='A') out.push({k:'tier', lbl:'Tier '+tier});
+  if(county) out.push({k:'county', lbl:ctyName(county)});
+  if(favOnly) out.push({k:'fav', lbl:'★ Saved only'});
+  if(weekOnly) out.push({k:'wk', lbl:'This week'});
+  if(dueOnly) out.push({k:'due', lbl:'Due now'});
+  if(ncOnly) out.push({k:'nc', lbl:'Not contacted'});
+  if(hideDead) out.push({k:'hd', lbl:'Hiding dead'});
+  if(hideFlagged) out.push({k:'hf', lbl:'Hiding flagged'});
+  if(eq30Only) out.push({k:'eq30', lbl:'30%+ equity'});
+  if(tdOnly) out.push({k:'td', lbl:'Tax deeds'});
+  if(fy1||fy2) out.push({k:'fy', lbl:'Filed '+(fy1||'…')+'–'+(fy2||'…')});
+  if(ad1||ad2) out.push({k:'ad', lbl:'Auction '+(ad1||'…')+'–'+(ad2||'…')});
+  return out;
+}
+function renderActiveFilters(){
+  var host = document.getElementById('activefilters'); if(!host) return;
+  var af = _activeFilters();
+  if(!af.length){ host.innerHTML=''; host.classList.remove('on'); return; }
+  host.classList.add('on');
+  host.innerHTML = '<span class="af-lbl">Filtered by</span>'
+    + af.map(function(f){ return '<button type="button" class="afchip" data-clr="'+esc(f.k)+'" title="Remove this filter">'+esc(f.lbl)+' <span class="afx">×</span></button>'; }).join('')
+    + '<button type="button" class="afclear" data-clr="all">Clear all</button>';
+}
+function _clearFilter(k){
+  var g=function(id){return document.getElementById(id);};
+  if(k==='all'){ resetFilters(); return; }
+  if(k==='q'){ q=''; if(g('q')) g('q').value=''; }
+  else if(k==='tier'){ tier='A'; document.querySelectorAll('.tf').forEach(function(x){x.classList.toggle('active', x.dataset.t==='A');}); }
+  else if(k==='county'){ county=''; if(typeof _resetCountyPills==='function') _resetCountyPills(); }
+  else if(k==='fav'){ favOnly=false; }
+  else if(k==='wk'){ weekOnly=false; if(g('wk'))g('wk').classList.remove('active'); }
+  else if(k==='due'){ dueOnly=false; if(g('due'))g('due').classList.remove('active'); }
+  else if(k==='nc'){ ncOnly=false; if(g('nc'))g('nc').classList.remove('active'); }
+  else if(k==='hd'){ hideDead=false; if(g('hd'))g('hd').classList.remove('active'); }
+  else if(k==='hf'){ hideFlagged=false; if(g('hf'))g('hf').classList.remove('active'); }
+  else if(k==='eq30'){ eq30Only=false; if(g('eq30'))g('eq30').classList.remove('active'); }
+  else if(k==='td'){ tdOnly=false; if(g('td'))g('td').classList.remove('active'); }
+  else if(k==='fy'){ fy1=fy2=''; if(g('fy1'))g('fy1').value=''; if(g('fy2'))g('fy2').value=''; }
+  else if(k==='ad'){ ad1=ad2=''; if(g('ad1'))g('ad1').value=''; if(g('ad2'))g('ad2').value=''; }
+  render();
+}
+document.addEventListener('click', function(e){ var c=e.target.closest && e.target.closest('#activefilters [data-clr]'); if(c){ e.preventDefault(); _clearFilter(c.dataset.clr); } });
 document.querySelectorAll('.tf').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tf').forEach(x=>x.classList.remove('active'));
   b.classList.add('active'); tier = b.dataset.t; render();
