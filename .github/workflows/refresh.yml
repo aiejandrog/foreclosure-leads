@@ -73,6 +73,8 @@ jobs:
       #  - broward/palmbeach_leads.json missing -> a bot-walled county day publishes the site
       #    WITHOUT that county instead of keeping last-good data
       #  - records_liens --cached-only has no cache -> Miami-Dade lien chains silently vanish
+      #  - broward/palmbeach_liens.json missing -> every run re-traces the WHOLE county book
+      #    (and the rebuilt site ships with zero Broward/PB chains until it finishes)
       # Saved on green runs; a failed day just restores the previous day's state.
       - name: Restore pipeline state (leads, phones, liens, link tokens)
         uses: actions/cache@v4
@@ -86,6 +88,8 @@ jobs:
             cases_qs.json
             records_qs.json
             records_liens.json
+            broward_liens.json
+            palmbeach_liens.json
             tax_links.json
             comps.json
             property_types_cache.json
@@ -155,10 +159,15 @@ jobs:
         continue-on-error: true
         run: python gen_tax_links.py --limit 60
 
-      # ---- [2d/5] Radius comps (BW + PB; cadastral recent sales -> ARV) -------------------
-      - name: '[2d/5] Radius comps (BW + PB)'
+      # ---- [2d/5] Radius comps -> ARV (ALL 3 counties) ------------------------------------
+      # comps.py enriches every county: Broward + Palm Beach off the FL statewide cadastral, and
+      # Miami-Dade off the county's OWN MD_ComparableSales layer (gisweb.miamidade.gov). New-only
+      # + cached in comps.json, so future scrapes keep every new lead in ARV coverage automatically.
+      # Do NOT scope this back to BW+PB — MD leads would silently lose their ARV. The healthcheck
+      # RULE: ARV-comp coverage assertion goes RED (emails the owner) if this ever regresses.
+      - name: '[2d/5] Radius comps -> ARV (Miami-Dade + Broward + Palm Beach)'
         continue-on-error: true
-        run: python comps.py --limit 80
+        run: python comps.py --limit 120
 
       # ---- [2b/5] Recorded mortgage chains -------------------------------------------------
       - name: '[2b/5] Recorded mortgage chains (MD cached-only + BW live)'

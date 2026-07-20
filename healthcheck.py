@@ -60,6 +60,46 @@ else:
 phones = load('skiptrace_results.json') or {}
 add('PASS' if phones else 'WARN', 'skip-trace coverage', f'{len(phones)} leads with phones')
 
+# ---- 2b. RETROACTIVITY WATCHDOG (2026-07-20) --------------------------------------------------
+# Every enrichment "rule" must keep applying to future scrapes, not just today's. If a pipeline
+# step silently breaks, its coverage on the merged board crashes toward 0 — this catches that and
+# turns the daily workflow RED (which emails the owner) BEFORE the site quietly loses the feature.
+# Floors sit well under the achievable rate so normal day-to-day variance never false-alarms; a
+# real break (a step that stopped running / a source that changed shape) trips them. Uses the same
+# merged board make_tracker publishes, so it measures what actually reaches the site.
+def _all_leads():
+    out = list(leads or [])
+    for fn in ('broward_leads.json', 'palmbeach_leads.json'):
+        d = load(fn)
+        if isinstance(d, list):
+            out += d
+    return out
+
+def _pct(hits, tot):
+    return round(hits / tot * 100) if tot else 0
+
+_ALL = _all_leads()
+if _ALL:
+    N = len(_ALL)
+    # property type (dor_desc) — MD via PA, BW/PB via property_types.py
+    dor = _pct(sum(1 for r in _ALL if (r.get('dor_desc') or '').strip()), N)
+    add('WARN' if dor < 40 else 'PASS', 'RULE: property-type coverage', f'{dor}% carry dor_desc (floor 40%)')
+    # listing status (zstatus) — listing_status.py; should be near-total since NO-ADDR counts
+    zst = _pct(sum(1 for r in _ALL if (r.get('zstatus') or '').strip()), N)
+    add('WARN' if zst < 70 else 'PASS', 'RULE: listing-status coverage', f'{zst}% carry zstatus (floor 70%)')
+    # ARV comps — comps.py (all 3 counties); comps.json is the source of truth
+    comps = load('comps.json') or {}
+    arv = _pct(sum(1 for r in _ALL if comps.get(r.get('case') or r.get('Case #'))), N)
+    add('WARN' if arv < 30 else 'PASS', 'RULE: ARV-comp coverage', f'{arv}% have comps (floor 30%)')
+    # per-parcel tax deep-link — county_leads.py / foreclosure_leads.py from the folio.
+    # MD raw leads carry it as tax_url, county files as tax — check both so the measure is honest.
+    def _deep(r):
+        t = r.get('tax') or r.get('tax_url') or ''
+        return '/parcels/' in t or 'ParcelID' in t
+    withfolio = [r for r in _ALL if (r.get('folio') or r.get('Folio'))]
+    tax = _pct(sum(1 for r in withfolio if _deep(r)), len(withfolio))
+    add('WARN' if tax < 55 else 'PASS', 'RULE: tax deep-link coverage', f'{tax}% of folio leads (floor 55%)')
+
 # ---- 3. upstream sources still alive ----------------------------------------------------------
 def chk_gis():
     r = requests.get('https://gisweb.miamidade.gov/arcgis/rest/services/MD_ComparableSales/MapServer/5/query',
