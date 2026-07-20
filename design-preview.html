@@ -105,6 +105,8 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
   border:1px solid var(--line);border-radius:var(--pill);padding:6px 14px;font-size:11px;
   font-weight:600;color:var(--muted);cursor:pointer;transition:all .16s var(--e-lux)}
 .lockbtn:hover{border-color:var(--gold);color:var(--gold-d)}
+#refreshbtn{border-color:rgba(198,161,75,.55);color:var(--gold-d);font-weight:700}
+#refreshbtn:hover{border-color:var(--gold);box-shadow:0 0 12px rgba(198,161,75,.25)}
 /* command rows */
 .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;transition:gap .25s var(--e-lux),margin .25s var(--e-lux)}
 .controls+.controls{margin-top:8px}
@@ -572,8 +574,8 @@ input.ph::placeholder{color:#8FBFA0}
 .cctl textarea{flex:1}
 
 /* ============================== MODALS (shared shell) ============================== */
-#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal{display:none;position:fixed;inset:0;z-index:120}
-#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show{display:block}
+#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show{display:block}
 #syncmodal{z-index:122}#planmodal{z-index:121}#lookupmodal{z-index:121}#gallerymodal{z-index:130}
 .dm-backdrop{position:absolute;inset:0;background:rgba(9,16,31,.5);backdrop-filter:blur(5px);
   -webkit-backdrop-filter:blur(5px);animation:dmFade .2s ease}
@@ -1040,6 +1042,7 @@ body.compact .dg-v{font-size:14.5px}
 <div id="lookupmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="lookupbody"></div></div></div>
 <div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
 <div id="mailmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="mailbody"></div></div></div>
+<div id="refreshmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="refreshbody"></div></div></div>
 <!-- Investor dispo pack — the print-only one-pager. Populated by exportDispoPack() from the deal-analysis modal. -->
 <div id="dispoPackView" aria-hidden="true">
   <div class="pv-hd">
@@ -1101,6 +1104,7 @@ body.compact .dg-v{font-size:14.5px}
 </div>
 <span class="spacer"></span>
 <span class="upd" id="upd">Updated <b id="upddate">2026-07-14 12:00</b><span id="stalemark"></span> · auto-refreshes daily 9am · notes saved on this device</span>
+<button id="refreshbtn" class="lockbtn" style="display:inline-block" title="Refresh the deal data now — fires the cloud pipeline (GitHub Actions). Checks freshness first; 60-min cooldown per device.">&#8635; Refresh</button>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
 <div class="controls">
@@ -2728,8 +2732,86 @@ function syncFreshness(){
   b.title = (b.dataset.baseTitle||'') + ' — last team merge: ' + label + (stale ? ' · OVERDUE, import teammate files' : '');
   const tag = document.getElementById('syncfresh'); if(tag){ tag.textContent = (stale?'⚠ ':'')+'sync '+label; }
 }
-function openSyncModal(){
-  const on = !!_teamKey();
+// ================= MANUAL DATA REFRESH (fires the GitHub Actions pipeline) =================
+// Top-corner "↻ Refresh" button. Guardrails, in order: (1) freshness check — if the data was
+// already built recently, say so instead of re-running; (2) 60-minute per-device cooldown;
+// (3) a confirm step that shows what the run costs (~40-70 min of cloud build time). The GitHub
+// fine-grained token (Actions: read+write on this one repo) lives ONLY in this device's
+// localStorage — never in the file, never synced. Without it the button degrades to a notice.
+const _ghTok = {
+  get(){ try{ return localStorage.getItem('fcGhTok') || ''; }catch(e){ return ''; } },
+  set(v){ try{ localStorage.setItem('fcGhTok', v); }catch(e){} },
+  clear(){ try{ localStorage.removeItem('fcGhTok'); }catch(e){} }
+};
+function _dataAgeH(){
+  const stamp = ((document.getElementById('upddate')||{}).textContent||'').trim();
+  try{ const d = new Date(stamp.replace(' ','T')); if(isNaN(d)) return null;
+    return Math.max(0, (Date.now() - d.getTime()) / 3600000); }catch(e){ return null; }
+}
+function _refreshCooldownLeft(){
+  try{ const t = +(localStorage.getItem('fcRefreshAt') || 0);
+    return Math.max(0, Math.ceil((t + 60*3600000 - Date.now()) / 60000)); }catch(e){ return 0; }
+}
+function _refreshModal(html){ document.getElementById('refreshbody').innerHTML = html; }
+function openRefresh(){
+  const age = _dataAgeH(), left = _refreshCooldownLeft(), tok = _ghTok.get();
+  const ageTxt = age == null ? 'unknown' : age < 1 ? 'just now' : age < 24 ? Math.round(age)+'h ago' : (age/24).toFixed(1)+'d ago';
+  let body = '<div class="dm-sec" style="font-size:17px;margin-bottom:2px">Refresh deal data</div>';
+  if(!tok){
+    body += '<div class="sd" style="color:var(--muted);font-size:12.5px">One-time setup on this device: the refresh fires the cloud pipeline (GitHub Actions), and GitHub asks for a token to prove it&rsquo;s you. Create a <b>fine-grained personal access token</b> — GitHub &rarr; Settings &rarr; Developer settings &rarr; Fine-grained tokens &rarr; repo <b>foreclosure-leads</b> only &rarr; Permissions: <b>Actions = Read and write</b> &rarr; Generate. It stays on this device only.</div>'+
+      '<div class="synckeyrow" style="margin-top:10px"><input id="ghtokin" type="password" placeholder="github_pat_…" autocomplete="off" style="flex:1"><button class="syncbtn2" id="gh-tok-save" type="button">Save token</button></div>'+
+      '<div class="sd" style="color:var(--muted-2);font-size:11px;margin-top:4px">Anyone else who uses this dashboard sets up their own token on their own device — nothing is shared.</div>';
+  } else if(left > 0){
+    body += '<div class="sd" style="font-size:12.5px">A refresh was fired <b>'+ (60-left) +' min ago</b> — the pipeline is still building (runs take ~40-70 min). Guardrail: one fire per hour per device, so the queue can&rsquo;t get hammered by accident.</div>'+
+      '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-top:6px">Cooldown clears in <b>'+left+' min</b>. Data was built: <b>'+ageTxt+'</b>.</div>';
+  } else if(age != null && age < 3){
+    body += '<div class="sd" style="font-size:12.5px">The data was built <b>'+ageTxt+'</b> — it&rsquo;s fresh. Re-running now mostly burns cloud time for the same numbers.</div>'+
+      '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-top:6px">Fire anyway if you know a source just changed (new auction posted, sale cancelled):</div>'+
+      '<div style="margin-top:10px;display:flex;gap:8px"><button class="syncbtn2 ghost" id="gh-fire" type="button">Fire anyway</button></div>';
+  } else {
+    body += '<div class="sd" style="font-size:12.5px">Data was built <b>'+ageTxt+'</b>. This fires the full pipeline now — all three counties, liens, phones, photos, rebuild + publish. It takes ~40-70 minutes in the cloud; the site updates itself when done.</div>'+
+      '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-top:6px">Guardrail: one fire per hour per device.</div>'+
+      '<div style="margin-top:10px;display:flex;gap:8px"><button class="syncbtn2" id="gh-fire" type="button" style="background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;border:none;font-weight:700">&#8635; Fire refresh</button></div>';
+  }
+  body += '<div class="sd" style="color:var(--muted-2);font-size:11px;margin-top:12px">Token on this device: '+(tok?'saved · <a href="#" id="gh-tok-clear" style="color:var(--muted)">forget it</a>':'none')+'</div>';
+  _refreshModal(body);
+  const clr = document.getElementById('gh-tok-clear');
+  if(clr) clr.onclick = e => { e.preventDefault(); _ghTok.clear(); openRefresh(); };
+  const sv = document.getElementById('gh-tok-save');
+  if(sv) sv.onclick = () => { const v = (document.getElementById('ghtokin').value||'').trim();
+    if(!v.startsWith('github_pat_') && v.length < 40){ sv.textContent = 'That doesn&rsquo;t look like a token'; setTimeout(()=>sv.textContent='Save token',1800); return; }
+    _ghTok.set(v); openRefresh(); };
+  const fire = document.getElementById('gh-fire');
+  if(fire) fire.onclick = () => _fireRefresh();
+  document.getElementById('refreshmodal').classList.add('show'); document.body.classList.add('modal-open');
+}
+async function _fireRefresh(){
+  _refreshModal('<div class="dm-sec" style="font-size:17px">Firing…</div><div class="sd" style="color:var(--muted);font-size:12.5px">Asking GitHub to start the pipeline.</div>');
+  try{
+    const r = await fetch('https://api.github.com/repos/aiejandrog/foreclosure-leads/actions/workflows/refresh.yml/dispatches', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + _ghTok.get(), 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+      body: JSON.stringify({ ref: 'main' })
+    });
+    if(r.status === 204){
+      try{ localStorage.setItem('fcRefreshAt', String(Date.now())); }catch(e){}
+      _refreshModal('<div class="dm-sec" style="font-size:17px">&#10003; Refresh queued</div>'+
+        '<div class="sd" style="font-size:12.5px">The pipeline is building now — all counties, liens, phones, photos. The site updates itself in ~40-70 min; just come back and reload. Watch it live: <a href="https://github.com/aiejandrog/foreclosure-leads/actions/workflows/refresh.yml" target="_blank" rel="noopener" style="color:var(--gold-d)">Actions &rarr; refresh-dealflow</a>.</div>');
+    } else if(r.status === 401){
+      _ghTok.clear();
+      _refreshModal('<div class="dm-sec" style="font-size:17px">Token rejected</div><div class="sd" style="font-size:12.5px">GitHub said 401 — the token is wrong or expired. Cleared it from this device; open Refresh again and paste a fresh one.</div>');
+    } else if(r.status === 403 || r.status === 404){
+      _refreshModal('<div class="dm-sec" style="font-size:17px">No access</div><div class="sd" style="font-size:12.5px">GitHub said '+r.status+' — this token can&rsquo;t run Actions on foreclosure-leads. Only the repo owner&rsquo;s token works here.</div>');
+    } else {
+      _refreshModal('<div class="dm-sec" style="font-size:17px">GitHub said '+r.status+'</div><div class="sd" style="font-size:12.5px">Unexpected answer. Nothing fired — check the token and try again.</div>');
+    }
+  }catch(e){
+    _refreshModal('<div class="dm-sec" style="font-size:17px">Offline?</div><div class="sd" style="font-size:12.5px">Couldn&rsquo;t reach GitHub. Nothing fired.</div>');
+  }
+}
+function closeRefresh(){ document.getElementById('refreshmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+document.getElementById('refreshbtn').onclick = () => openRefresh();
+function openSyncModal(){  const on = !!_teamKey();
   document.getElementById('syncbody').innerHTML =
     '<div class="dm-sec" style="font-size:17px;margin-bottom:2px">Sync across devices &amp; team</div>'+
     '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-bottom:6px">Your notes, calls, opt-outs and verified liens live on THIS device. Turn on team auto-sync so everyone stays current automatically, or hand off a file manually.</div>'+
@@ -3602,9 +3684,9 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); closeRefresh(); }
 });
-document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); } });
+document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); closeRefresh(); } });
 // "/" focuses search (unless already typing in a field)
 document.addEventListener('keydown', e => {
   if(e.key==='/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'')){
