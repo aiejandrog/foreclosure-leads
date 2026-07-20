@@ -205,35 +205,6 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .stats{font-size:12px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
 .statviol{color:var(--red-ink);font-weight:800}
 
-/* ============ SMART BROWARD LOOKUP CARD (Filters & setup panel) ============
-   The old markup was a bare `<div class="controls">` with the pill inline — read as a naked
-   utility row with no visual grouping ("that ugly square box" — Alejandro 2026-07-19). This
-   card frames the bookmarklet the way it deserves: it's a first-use setup ritual, not another
-   control. Gold-bordered navy gradient (matches DEALFLOW brand tokens), dedicated header line,
-   the pill sized up so it reads as the primary CTA on the page. The pill itself gets a subtle
-   gold gradient + drop shadow so it stands out against the card, plus grab-cursor and hover
-   lift to signal "you can drag me". */
-.bmkcard{background:linear-gradient(140deg,#0B1730 0%,#152540 100%);
-  border:1px solid rgba(198,161,75,.35);border-radius:12px;
-  padding:14px 18px;margin-top:8px;
-  box-shadow:0 2px 8px rgba(11,23,48,.25),inset 0 1px 0 rgba(255,255,255,.04)}
-.bmkhd{color:#C6A14B;font-size:11px;font-weight:800;letter-spacing:.14em;
-  text-transform:uppercase;margin-bottom:10px;font-family:var(--f-num,'Space Grotesk',sans-serif)}
-.bmkrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.bmkpill{display:inline-flex;align-items:center;gap:6px;
-  background:linear-gradient(135deg,#D4B45E 0%,#C6A14B 55%,#A88536 100%);
-  color:#0B1730;font-weight:800;font-size:12.5px;letter-spacing:.02em;
-  padding:8px 16px;border-radius:999px;text-decoration:none;
-  border:1px solid rgba(255,255,255,.15);cursor:grab;
-  box-shadow:0 3px 8px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.28);
-  transition:transform .15s var(--e-lux,ease),box-shadow .15s ease;
-  flex:0 0 auto}
-.bmkpill:hover{transform:translateY(-1px);
-  box-shadow:0 5px 14px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.32)}
-.bmkpill:active{cursor:grabbing;transform:translateY(0)}
-.bmkhint{color:rgba(255,255,255,.62);font-size:11.5px;line-height:1.55;flex:1 1 300px;min-width:220px}
-.bmkhint b{color:#C6A14B;font-weight:700}
-
 /* ============================== TODAY DIGEST ============================== */
 /* margin-top:0 — digest sits FLUSH against the header edge. The old 12px gap read as ~200px
    of white space at rest (header bg is nearly transparent) which Alejandro perceived as an
@@ -1094,18 +1065,6 @@ body.compact .dg-v{font-size:14.5px}
 </header>
 <div id="digest" class="digest" role="region" aria-label="Today at a glance"></div>
 <div id="advpanel" class="collapsed">
-<!-- Broward register-of-actions bookmarklet — set it up ONCE by dragging the pill below to your
-     bookmarks bar. After that: click a Cases link in DEALFLOW (case# copies + Broward tab opens);
-     switch to the Broward tab and click the "DF Broward Case" bookmark — it auto-selects the Case
-     Number tab, pastes the case#, and submits. One click on Broward instead of the 4-step manual
-     dance. Kept short so it fits in a bookmark href (~500 chars). -->
-<div class="bmkcard">
-<div class="bmkhd">&#9889; Smart Broward lookup</div>
-<div class="bmkrow">
-<a class="bmkpill" href="javascript:(async()=&gt;{try{var c=(await navigator.clipboard.readText()||'').trim();if(!/^[A-Z0-9-]{6,}$/i.test(c)){alert('Copy a case # in DealFlow first, then click this bookmark.');return;}var BW=/browardclerk\.org/i;if(!BW.test(location.hostname)){window.open('https://www.browardclerk.org/Web2/CaseSearchECA/Index/?AccessLevel=ANONYMOUS','_blank');alert('Case #'+c+' still in clipboard. Broward opened in a new tab. Switch to it and click this bookmark again to auto-fill &amp; submit.');return;}var q=function(s){return document.querySelector(s);},tab=q('a[href*=caseNumberSearch]');if(tab)tab.click();setTimeout(function(){var inp=q('#CaseNumber');if(!inp){alert('Case Number input not found. Click the Case Number tab manually — case # '+c+' is in your clipboard.');return;}inp.focus();inp.value=c;['input','change','keyup'].forEach(function(t){inp.dispatchEvent(new Event(t,{bubbles:true}));});var btn=q('#CaseNumberSearchResults');if(btn)setTimeout(function(){btn.click();},250);else alert('Filled case # '+c+'. Click Search manually.');},400);}catch(e){alert('Bookmarklet error: '+e.message);}})();" title="Drag me to your Chrome bookmarks bar. Then anywhere: copy a case # from DEALFLOW and click me. I'll open Broward if you're not there, and auto-fill + submit once you are.">&#128279; DF Broward Case</a>
-<span class="bmkhint">One-time setup. Then in DEALFLOW: click <b>Cases</b> &rarr; switch to the Broward tab &rarr; click this bookmark. The register of actions loads automatically.</span>
-</div>
-</div>
 <div class="controls" style="margin-top:8px">
 <label>Filed <input id="fy1" type="number" placeholder="from" style="width:74px"> &ndash; <input id="fy2" type="number" placeholder="to" style="width:74px"></label>
 <label>Auction <input id="ad1" type="date" style="width:140px"> &ndash; <input id="ad2" type="date" style="width:140px"></label>
@@ -2806,7 +2765,7 @@ function render(){
     else if(r.records) gDig.push('<a class="dig recsearch" href="'+esc(r.records)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
     if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
-    else if(r.cases) gDig.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ case # copied" title="'+esc(ctyName(r.county)+' court case search — pick CASE NUMBER and PASTE (this click copied '+r.case+'). Exact match, no name-sifting.')+'">Cases</a>');
+    else if(r.cases) gDig.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' court case search — case # '+r.case+' copied to clipboard. On the search page: Case Number tab → Ctrl+V → Enter. (Their site requires a CAPTCHA-tokened session so we cannot deep-link past the search form.)')+'">Cases</a>');
     else if(r.oname) gDig.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
     if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
     // PROPERTY — value + county pages.
@@ -3469,58 +3428,17 @@ document.addEventListener('click', e=>{
 document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
   const k = th.dataset.k; sortD = (sortK===k) ? -sortD : -1; sortK = k; render();
 });
-// Records / Cases link: copy the owner name or case# so it can be pasted into the clerk's search
-// form (ASP forms that can't be deep-linked). The anchor still opens the search in a new tab.
-// Enhanced 2026-07-19: when a case number is copied for the docket/register-of-actions lookup,
-// show a persistent floating toast at the TOP of the tracker with the exact steps. The toast stays
-// visible when the user switches back to the DealFlow tab so they have a reference — the register
-// of actions is where cancellation history lives (SALAZAR: 20-month gap = at least one prior
-// scheduled sale that was postponed; the register spells out each one). Auto-dismisses after 12s
-// or on click; the copy still succeeds either way.
-function _rasToast(caseNum, isCase){
-  var host = document.getElementById('rasToast');
-  if(!host){ host = document.createElement('div'); host.id = 'rasToast';
-    host.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:2000;'
-      + 'background:#0B1730;color:#fff;border:1px solid #C6A14B;border-radius:10px;'
-      + 'padding:10px 16px 12px;box-shadow:0 12px 32px rgba(11,23,48,.35);'
-      + 'font-family:var(--f-body,system-ui);font-size:13px;line-height:1.5;max-width:520px;'
-      + 'cursor:pointer;opacity:0;transition:opacity .22s var(--e-lux)';
-    host.onclick = () => { host.style.opacity = 0; setTimeout(() => host.remove(), 250); };
-    document.body.appendChild(host);
-  }
-  if(isCase){
-    // Bookmarklet lives right inside the toast so it's findable exactly when it's needed —
-    // no digging into Filters & setup. Drag once, click once on every Broward page after that.
-    // CSS attribute selectors use unquoted identifiers (input[name*=case]) so no double quotes
-    // are needed inside the href attribute — bare " would prematurely close the HTML attribute
-    // and truncate the bookmarklet (the bug 2c022bf shipped). All strings inside the JS use single
-    // quotes now, matching the outer href="..." delimiter.
-    var _bmk = "javascript:(async()=>{try{var c=(await navigator.clipboard.readText()||'').trim();if(!/^[A-Z0-9-]{6,}$/i.test(c)){alert('Copy a case # in DealFlow first, then click this bookmark.');return;}var BW=/browardclerk\\.org/i;if(!BW.test(location.hostname)){window.open('https://www.browardclerk.org/Web2/CaseSearchECA/Index/?AccessLevel=ANONYMOUS','_blank');alert('Case #'+c+' still in clipboard. Broward opened in a new tab. Switch to it and click this bookmark again to auto-fill & submit.');return;}var q=function(s){return document.querySelector(s);},tab=q('a[href*=caseNumberSearch]');if(tab)tab.click();setTimeout(function(){var inp=q('#CaseNumber');if(!inp){alert('Case Number input not found. Click the Case Number tab manually — case # '+c+' is in your clipboard.');return;}inp.focus();inp.value=c;['input','change','keyup'].forEach(function(t){inp.dispatchEvent(new Event(t,{bubbles:true}));});var btn=q('#CaseNumberSearchResults');if(btn)setTimeout(function(){btn.click();},250);else alert('Filled case # '+c+'. Click Search manually.');},400);}catch(e){alert('Bookmarklet error: '+e.message);}})();";
-    host.innerHTML = '<div style="font-weight:800;letter-spacing:.03em;font-size:11.5px;color:#C6A14B;text-transform:uppercase;margin-bottom:2px">'
-      + '&#128203; Case # copied &middot; ' + esc(caseNum) + '</div>'
-      + '<div style="opacity:.92">On the Broward tab: <b>Case Number</b> tab &rarr; <b>Ctrl+V</b> &rarr; <b>Search</b> &rarr; click the case row for the register of actions (Notices of Sale &amp; cancellations).</div>'
-      + '<div style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(198,161,75,.3);font-size:11.5px;line-height:1.4">'
-      +   '<span style="opacity:.85">One-click auto-fill: </span>'
-      +   '<a href="' + _bmk + '" onclick="event.stopPropagation();return false;" style="cursor:grab;background:#C6A14B;color:#0B1730;font-weight:800;padding:3px 10px;border-radius:5px;text-decoration:none;font-size:11px;letter-spacing:.03em" title="DRAG THIS PILL to your Chrome bookmarks bar. After that: on the Broward Cases page, just click this bookmark and it auto-fills + submits.">&#128279; DF Broward Case</a>'
-      +   '<span style="opacity:.7;font-size:10.5px"> &larr; drag me to your bookmarks bar (one-time)</span>'
-      + '</div>'
-      + '<div style="font-size:10.5px;opacity:.55;margin-top:6px">Click the banner (not the pill) to dismiss.</div>';
-  } else {
-    host.innerHTML = '<div style="font-weight:800;letter-spacing:.03em;font-size:11.5px;color:#C6A14B;text-transform:uppercase;margin-bottom:2px">&#128203; Copied &middot; ' + esc(caseNum) + '</div>'
-      + '<div style="opacity:.92">Paste (Ctrl+V) on the search page that just opened.</div>';
-  }
-  requestAnimationFrame(() => { host.style.opacity = 1; });
-  clearTimeout(_rasToast._t);
-  _rasToast._t = setTimeout(() => { if(host && host.parentNode){ host.style.opacity = 0; setTimeout(() => host.remove(), 260); } }, 12000);
-}
+// Records / Cases link: copies the owner name or case# to the clipboard so it can be pasted into
+// the clerk's search form. The anchor still opens the search page in a new tab via its native
+// href. No floating toast, no bookmarklet, no side panel — Broward/Palm Beach clerk sites require
+// a CSRF-token + session cookie established on their own domain (verified 2026-07-19: form action
+// is /Web2/CaseSearchECA/CaseNumberSearchResultsCAPTCHA with __RequestVerificationToken), so we
+// cannot cross-origin deep-link into a specific case. Ctrl+V + Enter after the tab opens is the
+// tightest UX their platform allows. The anchor briefly flashes so Alejandro sees the copy fired.
 document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('a.recsearch'); if(!a) return;
   const o = (a.dataset.o || '').trim(); if(!o) return;
-  const orig = a.textContent, flash = () => { a.textContent = a.dataset.flash || '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1400); };
-  // Big top-of-viewport toast when this is a case-number copy (has data-flash). Owner-name copies
-  // for Official Records use the small anchor flash — the workflow is simpler there.
-  const isCase = /case/i.test(a.dataset.flash || '');
-  if(isCase) _rasToast(o, true);
+  const orig = a.textContent, flash = () => { a.textContent = a.dataset.flash || '✓ name copied'; setTimeout(() => { a.textContent = orig; }, 1600); };
   // navigator.clipboard silently rejects on file:// (non-secure context) — fall back to execCommand
   if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(o).then(flash, () => fallbackCopy(o, flash)); else fallbackCopy(o, flash);
 });
