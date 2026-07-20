@@ -512,6 +512,13 @@ a:hover{text-decoration:underline}
 span.phone.nodial{color:var(--amber-ink);text-decoration:line-through;cursor:not-allowed;opacity:.85}
 span.phone.dncgate{color:#D64545;font-weight:700;cursor:not-allowed}
 .links a.email,.clinks a.email{color:#5273AD;font-weight:600;word-break:break-all}
+/* kimi: WhatsApp glyph beside owner phone links — 1:1 prefilled message */
+.links a.wabtn,.clinks a.wabtn{display:inline-flex;align-items:center;justify-content:center;
+  width:22px;height:22px;margin-left:2px;border-radius:50%;color:#1FA855;
+  border:1px solid rgba(31,168,85,.4);background:rgba(31,168,85,.08);vertical-align:-5px;
+  transition:background .16s var(--e-lux),color .16s var(--e-lux),box-shadow .16s var(--e-lux)}
+.links a.wabtn:hover,.clinks a.wabtn:hover{background:#1FA855;color:#fff;box-shadow:0 0 10px rgba(31,168,85,.45)}
+.links a.wabtn svg,.clinks a.wabtn svg{width:12px;height:12px;display:block}
 
 /* status / notes / phones */
 select.status{padding:5px 6px;height:30px;font-size:11px;width:100%;box-sizing:border-box;border-radius:var(--r-xs)}
@@ -1726,6 +1733,25 @@ function imgFB(img){
 // photo click = straight to Zillow (real listing when known, else address search) in a new tab.
 // No data-c attribute -> the gallery-popup delegate ('.pthumb[data-c]') never intercepts.
 function _zurl(r){ return r.zlisting || r.zillow || (r.addr ? 'https://www.zillow.com/homes/'+encodeURIComponent(r.addr)+'_rb/' : ''); }
+// ---- kimi: WhatsApp 1:1 deep link ---------------------------------------------------------
+// wa.me/<intl number>?text=<prefilled> — opens WhatsApp with a message the OPERATOR reviews and
+// sends (manual outreach, same posture as the manual-dial rules: one owner at a time, honor
+// DNC/STOP). The text is bilingual EN+ES and carries the opt-out line, matching every other
+// channel this tool emits. Numbers with a DNC flag never get a button (suppressed upstream).
+function _waSvg(){ return '<svg viewBox="0 0 24 24" fill="currentColor" width="13" height="13" style="vertical-align:-2px"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5.1-1.3A10 10 0 1 0 12 2zm0 18.2c-1.6 0-3.1-.4-4.4-1.2l-.3-.2-3 .8.8-2.9-.2-.3a8.2 8.2 0 1 1 7.1 3.8zm4.5-6.1c-.2-.1-1.5-.7-1.7-.8-.2-.1-.4-.1-.5.1-.2.2-.6.8-.7.9-.1.2-.3.2-.5.1a6.7 6.7 0 0 1-3.3-2.9c-.2-.4.2-.4.6-1.2.1-.2 0-.3 0-.4l-.8-1.8c-.2-.5-.4-.4-.5-.4h-.5c-.2 0-.4.1-.6.3-.2.2-.8.8-.8 1.9s.8 2.2.9 2.4c.1.2 1.6 2.5 3.9 3.4 1.4.6 2 .7 2.6.6.4-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.4-.3z"/></svg>'; }
+function _waNum(ph){ let d = String(ph||'').replace(/\D/g,''); if(d.length===10) d = '1'+d; return d; }
+function _waLink(r, ph){
+  const first = String((r.oname || (r.owners||'').split(',')[0] || '').trim().split(' ')[0] || 'there').replace(/[<>&"']/g,'');
+  const who = sender.name ? ('this is '+sender.name) : 'my name is [your name]';
+  const co = sender.llc ? (' with '+sender.llc) : ' — I work with a small local team';
+  const msg = 'Hi '+first+', '+who+co+'. I came across '+(r.addr||'your property')
+    +' with an auction on '+(r.auction||'the scheduled date')
+    +'. I help owners in foreclosure, and before that date there are real options worth a 10-minute look — no charge, no pressure.'
+    +(sender.phone ? ' You can reach me right here or at '+sender.phone+'.' : '')
+    +' (If you would rather not chat, just say so and I will not message again.)'
+    +'\n\n(ES) Hablo español con gusto — respóndame en español si prefiere.';
+  return 'https://wa.me/'+_waNum(ph)+'?text='+encodeURIComponent(msg);
+}
 // Corner badge version of the listing-status chip, overlaid top-left on the photo (top-right
 // belongs to the photo-count pill). Photo real estate is what Jose's eye lands on first, so
 // LISTED/OFF-MKT reads without scanning the dense value line (Alejandro 2026-07-19).
@@ -3140,16 +3166,14 @@ function render(){
     if(optedOut){
       gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
     } else {
-      // Good numbers get their own tappable line (the whole point is to make them easy to spot).
-      // DNC numbers collapse into ONE line instead of repeating "(DNC — mail/door only)" per number —
-      // 3 struck-through lines read as clutter/broken, not as useful data. Nothing is lost: the full
-      // list is still in the title tooltip.
+      // skip-traced owner phone(s) — tel: links for manual dial + wa.me links for a prefilled 1:1
+      // WhatsApp message (operator-reviewed before send, same posture as a manual dial). kimi.
       const dncPh = [];
       (r.phones||[]).slice(0,3).forEach((ph,i) => {
         if((r.phdnc||[])[i]) dncPh.push(ph);
-        else gCall.push('<a class="phone" href="tel:'+esc(ph)+'" title="Skip-traced owner phone — manual dial only, one number at a time, 8am-8pm">'+esc(fmtPhone(ph))+'</a>');
+        else gCall.push('<a class="phone" href="tel:'+esc(ph)+'" title="Skip-traced owner phone — manual dial only, one number at a time, 8am-8pm">'+esc(fmtPhone(ph))+'</a><a class="wabtn" href="'+esc(_waLink(r,ph))+'" target="_blank" rel="noopener" title="WhatsApp the owner — opens a prefilled 1:1 message in WhatsApp that YOU review and send (manual outreach, same rules as a manual dial). People answer WhatsApp where they ignore SMS.">'+_waSvg()+'</a>');
       });
-      if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a>');
+      if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a><a class="wabtn" href="'+esc(_waLink(r,n.phone))+'" target="_blank" rel="noopener" title="WhatsApp the owner — prefilled 1:1 message you review and send.">'+_waSvg()+'</a>');
       if(dncPh.length){
         const list = dncPh.map(fmtPhone).join(', ');
         const label = dncPh.length===1 ? fmtPhone(dncPh[0])+' — DNC, mail/door only'
