@@ -768,6 +768,11 @@ def make_tracker(leads):
             # condo -> the displayed equity is a GROSS upper bound: a special assessment (40-yr recert) or a
             # 2nd mortgage can erase it and neither is in public data. Drives the "verify equity" caveat + a
             # MARGINAL cap until the association estoppel is entered. (Lesson from the Hondroulis condo deal.)
+            # Full dor_desc string carried through so the row's property-type chip (_ptype in the
+            # template) can render "Single Family" / "Townhouse" / etc. on Miami-Dade rows. Without
+            # this pass-through the JS side sees no dor_desc and renders no chip for MD leads
+            # (BW/PB rows already come through the slim.extend path with dor_desc intact).
+            'dor_desc': r.get('dor_desc',''),
             'condo': bool(re.search(r'CONDO', str(r.get('dor_desc','') or ''), re.I)),
             # VACANT LAND (no homeowner + speculative land value) and COMPANY-OWNED — systematic
             # false-positives for the homeowner-rescue model; badged in the UI so a big-equity vacant

@@ -390,6 +390,15 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#EDDCAF;box-shadow:0 1px 7px rgba(185,127,14,.18)}
 .vb1{background:#ECEFF4;color:#5E6B84;border-color:var(--line)}
 .vbv{background:var(--blue-soft);color:var(--blue-ink);border-color:#C9DBFA;box-shadow:0 1px 7px rgba(35,88,214,.16)}
+/* Property-type chip: sits beside the county chip on every row (both desktop table + mobile card).
+   Gold-tinted background differentiates it from the navy .ctychip so the type reads at a glance
+   without eating the busy value/equity line. Fed by _ptype() which normalizes dor_desc from the
+   county appraiser (Miami-Dade DOR text, Broward/PB use codes once property_types.py enriches). */
+.ptypechip{display:inline-block;background:var(--gold-soft,rgba(198,161,75,.18));
+  color:var(--gold-d,#8B6A2C);border:1px solid rgba(198,161,75,.35);
+  border-radius:4px;padding:0 6px;font-size:10px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);
+  vertical-align:middle;margin-right:4px;line-height:1.7}
 .ctychip{display:inline-block;background:var(--navy);color:#fff;border-radius:4px;padding:0 6px;
   font-size:10px;font-weight:800;letter-spacing:.04em;vertical-align:1px}
 .dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);
@@ -1730,6 +1739,40 @@ const CTY_LINKS = {
 };
 const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">'+COPY_SVG+'</button>';
+// Normalize whatever property-type signal we have into a short human label for the row chip.
+// Priority: (1) dor_desc from the county appraiser (Miami-Dade native; Broward/PB populated by
+// property_types.py enrichment). (2) fall through to boolean flags condo/vac which the county
+// scrapers already tag. (3) blank — no chip renders. Kept short (1-3 words) so it fits inline
+// with the county chip on both desktop and mobile rows without wrapping the value line.
+function _ptype(r){
+  var d = String(r && (r.dor_desc||r.use_desc)||'').toUpperCase();
+  if(d){
+    if(/VACANT/.test(d)) return 'Vacant Land';
+    if(/CLUSTER/.test(d)) return 'Cluster Home';
+    if(/TOWNH(?:OUSE|SE|OME)|ROW\s*HOUSE/.test(d)) return 'Townhouse';
+    if(/CONDO/.test(d)) return 'Condo';
+    if(/DUPLEX/.test(d)) return 'Duplex';
+    if(/TRIPLEX/.test(d)) return 'Triplex';
+    if(/QUADPLEX|QUAD/.test(d)) return 'Quadplex';
+    if(/MULTI/.test(d)) return 'Multi-Family';
+    if(/APARTMENT|APT\b/.test(d)) return 'Apartment';
+    if(/MOBILE|MANUFACTURED/.test(d)) return 'Mobile Home';
+    if(/SINGLE\s*FAMILY|SFR\b|SFH\b/.test(d)) return 'Single Family';
+    if(/COMMERCIAL/.test(d)) return 'Commercial';
+    if(/INDUSTRIAL/.test(d)) return 'Industrial';
+    if(/AGRICULTURAL|FARM/.test(d)) return 'Agricultural';
+    // Fallback: take the first colon-segment, cap 22 chars
+    return d.split(':')[0].trim().slice(0,22).toLowerCase()
+      .replace(/\b\w/g, function(c){return c.toUpperCase();});
+  }
+  if(r && r.vac) return 'Vacant Land';
+  if(r && r.condo) return 'Condo';
+  return '';
+}
+function _ptypeChip(r){
+  var t = _ptype(r);
+  return t ? '<span class="ptypechip" title="Property type from '+(r.county||'MIAMI-DADE')+' county appraiser">'+esc(t)+'</span> ' : '';
+}
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
@@ -2857,7 +2900,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -2902,7 +2945,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
@@ -3027,32 +3070,13 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
 })();
 // letter sender persistence
 function saveSender(){ try { localStorage.setItem('fcSender', JSON.stringify(sender)); } catch(e){} document.getElementById('sendersaved').textContent = sender.name ? 'saved' : ''; _senderBanner(); }
-// Warns anytime a required sender field (llc / phone / email / addr) is blank — Jose's info was
-// only partially set (first name only), and the tool must not ship a letter or investor pack that
-// falls back to '[YOUR LLC]' / '[YOUR PHONE]'. Dismiss button hides it until the next reload so
-// Jose can still work in peace, but the check reruns on every save so it comes back the moment
-// he empties a field.
+// Removed 2026-07-19 per Alejandro: the red "Sender identity incomplete" banner was too loud —
+// blanks in llc/phone/email/addr are visible enough in the Sender identity form and the letter
+// templates gracefully fall back to '[YOUR LLC]' etc. Keep the function as a no-op that just
+// cleans up any leftover banner element from a prior page load.
 function _senderBanner(){
-  var missing = ['llc','phone','email','addr'].filter(function(k){ return !(sender[k] && String(sender[k]).trim()); });
   var host = document.getElementById('senderBanner');
-  if(!missing.length){ if(host){ host.remove(); } return; }
-  if(!host){
-    host = document.createElement('div'); host.id = 'senderBanner';
-    host.style.cssText = 'position:sticky;top:0;z-index:60;background:linear-gradient(90deg,#9B2C2C,#7A1D1D);'
-      + 'color:#fff;padding:8px 16px;font-size:12.5px;line-height:1.5;font-weight:600;'
-      + 'display:flex;align-items:center;gap:12px;box-shadow:0 4px 12px rgba(155,44,44,.3)';
-    var msg = document.createElement('div'); msg.style.cssText='flex:1';
-    msg.innerHTML = '&#9888; <b>Sender identity incomplete</b> &mdash; <span id="senderMissing"></span> '
-      + 'still blank. Set Jose\'s info in <b>Filters &amp; setup &rarr; Sender identity</b> before any letter or investor pack ships.';
-    var close = document.createElement('button');
-    close.textContent = '×'; close.title = 'Dismiss until next reload';
-    close.style.cssText = 'background:transparent;border:1px solid rgba(255,255,255,.4);color:#fff;'
-      + 'width:26px;height:26px;border-radius:5px;cursor:pointer;font-size:16px;line-height:1;flex:0 0 auto';
-    close.onclick = function(){ host.remove(); };
-    host.appendChild(msg); host.appendChild(close);
-    document.body.insertBefore(host, document.body.firstChild);
-  }
-  document.getElementById('senderMissing').textContent = missing.join(' + ');
+  if(host) host.remove();
 }
 Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr', title:'sTitle', email:'sEmail', web:'sWeb', partner:'sPartner'}).forEach(([k,id]) => {
   const el = document.getElementById(id);

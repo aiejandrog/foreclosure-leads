@@ -87,6 +87,7 @@ jobs:
             records_qs.json
             records_liens.json
             tax_links.json
+            property_types_cache.json
             health.json
             full.json
           key: dealflow-state-${{ github.run_id }}
@@ -171,6 +172,16 @@ jobs:
       - name: '[3b/5] Property photos'
         continue-on-error: true
         run: python property_photos.py --zillow
+
+      # ---- [3c/5] Property types (BCPA + PBCPAO -> dor_desc for BW/PB) --------------------
+      # Miami-Dade already gets dor_desc from apps.miamidadepa.gov via county_leads.py. BW/PB
+      # need a separate fetch — the county scrapes don't include use codes. Cached per folio in
+      # property_types_cache.json (via the actions/cache step above) so we only pay for BRAND-NEW
+      # leads each day. Fail-soft: any parse/HTTP error leaves dor_desc blank on that lead and
+      # the tracker renders no ptype chip; never blocks the workflow.
+      - name: '[3c/5] Property types (Broward + Palm Beach)'
+        continue-on-error: true
+        run: python property_types.py
 
       # ---- [4/5] Final rebuild with everything baked in -----------------------------------
       - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
