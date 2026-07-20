@@ -87,6 +87,7 @@ jobs:
             records_qs.json
             records_liens.json
             tax_links.json
+            comps.json
             property_types_cache.json
             listing_status_cache.json
             health.json
@@ -153,6 +154,11 @@ jobs:
       - name: '[2c/5] Deep tax links (Broward parcels)'
         continue-on-error: true
         run: python gen_tax_links.py --limit 60
+
+      # ---- [2d/5] Radius comps (BW + PB; cadastral recent sales -> ARV) -------------------
+      - name: '[2d/5] Radius comps (BW + PB)'
+        continue-on-error: true
+        run: python comps.py --limit 80
 
       # ---- [2b/5] Recorded mortgage chains -------------------------------------------------
       - name: '[2b/5] Recorded mortgage chains (MD cached-only + BW live)'

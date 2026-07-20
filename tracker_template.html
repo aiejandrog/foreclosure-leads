@@ -611,6 +611,11 @@ input.ph::placeholder{color:#8FBFA0}
 .mathline.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:700;
   font-size:15px;color:var(--ink)}
 .mathline.tot span:first-child{color:var(--ink);font-weight:700}
+.compsline{margin:2px 0 6px;padding:7px 10px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm)}
+.compsline .comp{display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:10.5px}
+.compsline .comp+.comp{border-top:1px dashed var(--line)}
+.compsline .compa{color:var(--ink-2);font-weight:600}
+.compsline .compn{color:var(--muted-2);font-variant-numeric:tabular-nums;font-family:var(--f-num);white-space:nowrap}
 .dealadj{display:flex;flex-wrap:wrap;gap:12px 15px;align-items:flex-end}
 .dealadj label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px;font-weight:500}
 .dealadj input[type=number]{width:135px;font-size:13px;padding:7px 9px;font-family:var(--f-num)}
@@ -1092,7 +1097,7 @@ body.compact .dg-v{font-size:14.5px}
     <div class="sig" id="pvSig"></div>
   </section>
   <footer class="pv-legal">
-    Information deemed reliable but not guaranteed. Buyer to conduct own due diligence including title, liens, condition, and value. Market value shown is county appraiser record, NOT a comp-based ARV. Rehab, ROI and profit figures are DealFlow model estimates and do not constitute representations or warranties. Assignment fee is included in the purchase price. Property is sold AS-IS, WHERE-IS. This is a principal-to-principal transaction; sender holds equitable interest via executed purchase contract unless stated otherwise. Not a solicitation to sellers currently listed.
+    Information deemed reliable but not guaranteed. Buyer to conduct own due diligence including title, liens, condition, and value. Market value shown is county appraiser record; where an ARV line is present it is the median of recent nearby residential sales (Florida DOR roll) × subject living area, NOT a formal appraisal. Rehab, ROI and profit figures are DealFlow model estimates and do not constitute representations or warranties. Assignment fee is included in the purchase price. Property is sold AS-IS, WHERE-IS. This is a principal-to-principal transaction; sender holds equitable interest via executed purchase contract unless stated otherwise. Not a solicitation to sellers currently listed.
   </footer>
 </div>
 <input id="syncfile" type="file" accept=".json,application/json" style="display:none">
@@ -1448,6 +1453,13 @@ function dealAnalysisHTML(r){
   } else {
     const costs = r.value*(Math.max(0,+deal.costpct||0)/100);
     const rows = [ mathLine('County market value', r.value) ];
+    // radius comps (comps.py): the market-checked value next to the county roll, with the 3
+    // nearest sales so the number is auditable instead of asserted.
+    if(r.arv){
+      rows.push(mathLine('ARV · '+r.arvn+' comps ('+(r.arvconf==='ok'?'verified':'low conf')+')', r.arv));
+      rows.push('<div class="compsline">'+r.comps.map(c =>
+        '<div class="comp"><span class="compa">'+esc(c.addr)+'</span><span class="compn">'+fmtK(c.price)+' · '+c.yr+' · '+c.sqft.toLocaleString()+'sf · $'+c.psf+'/sf</span></div>').join('')+'</div>');
+    }
     if(r.st==='TD'){ rows.push(mathLine('Est. winning bid', -r._purchase)); rows.push(mathLine('Quiet title', -(Math.max(0,+deal.quiettitle||3000)))); }
     else if(r.mr){
       // HOA/junior: you pay the small bid, then the surviving mortgages ride ON TOP — itemize each.
@@ -2430,6 +2442,8 @@ function _dpMathRows(r){
   var rows=[]; if(r._profit==null){ return [['Est. profit','unknown until verified']]; }
   var costs = r.value*(Math.max(0,+deal.costpct||0)/100);
   rows.push(['County market value', _dpMoney(r.value)]);
+  // radius comps (comps.py): the market-checked number goes on the pack when it exists
+  if(r.arv) rows.push(['ARV · '+r.arvn+' nearby sales ('+(r.arvconf==='ok'?'verified':'low confidence')+')', _dpMoney(r.arv)]);
   if(r.st==='TD'){
     rows.push(['Est. winning bid', _dpMoney(-r._purchase)]);
     rows.push(['Quiet title', _dpMoney(-(Math.max(0,+deal.quiettitle||3000)))]);

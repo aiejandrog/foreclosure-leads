@@ -755,6 +755,13 @@ def make_tracker(leads):
     if os.path.exists(_tlf):
         try: taxlinks = json.load(open(_tlf, encoding='utf-8'))
         except Exception: taxlinks = {}
+    # radius comparable-sales per lead (produced by comps.py, gitignored) — ARV from median comp
+    # $/sqft x subject sqft with the 3 nearest sales for the deal modal + dispo pack.
+    comps = {}
+    _cf = os.path.join(HERE, 'comps.json')
+    if os.path.exists(_cf):
+        try: comps = json.load(open(_cf, encoding='utf-8'))
+        except Exception: comps = {}
     slim = []
     for r in leads:
         _ft = _fc_type(r.get('Case #', ''))          # HOA (whole 1st mortgage survives) vs MORTGAGE foreclosure
@@ -812,6 +819,14 @@ def make_tracker(leads):
             d['orconf'] = rlh.get('conf', '')            # 'ok' = isolated + sane; 'low' = common name / verify
         if rlh:
             _fwd_flags(d, rlh, _ft)                       # surviving-1st / TAKEN / 2nd-foreclosure flags
+            # JUNIOR-FORECLOSURE GUARD (the Echeverri lesson, MD side): the traced chain shows an
+            # OPEN mortgage beyond the foreclosing one -> the headline equity_pct is GROSS (that
+            # other note survives the sale or must be paid off at purchase). Flag it so the row
+            # renders "~88% eq" with the verify tooltip instead of stating fantasy as fact. The
+            # county merge path has had this guard since the Hondroulis condo; MD never did —
+            # which is how an 88%-equity headline sat on a $142.5k-senior junior foreclosure.
+            if (rlh.get('junior') or rlh.get('surv')) and not d.get('eqfake'):
+                d['eqfake'] = True
         hit = st.get(r.get('Case #',''))
         if hit and hit.get('phones'):
             d['phones'] = [p.get('number') for p in hit['phones'] if p.get('number')][:4]
@@ -842,6 +857,12 @@ def make_tracker(leads):
                 # Deep per-parcel tax link (gen_tax_links.py) beats the county portal landing URL.
                 _tx = taxlinks.get(_d.get('case', ''))
                 if _tx: _d['tax'] = _tx
+                # Radius comps (comps.py): ARV + nearest sales for the modal/pack.
+                _cp = comps.get(_d.get('case', ''))
+                if _cp:
+                    _d['arv'] = _cp.get('arv', 0); _d['arvconf'] = _cp.get('conf', '')
+                    _d['arvpsf'] = _cp.get('psf', 0); _d['arvn'] = _cp.get('n', 0)
+                    _d['comps'] = _cp.get('comps', [])
                 # TRUE type: the recorded-chain plaintiff (broward_liens.analyze -> _h['ftype']) is
                 # authoritative and OVERRIDES the case-number prefix, which mislabels HOA-in-circuit-court
                 # cases (CACE) as MORTGAGE. The slim lead's own plaintiff-or-prefix guess is the next
