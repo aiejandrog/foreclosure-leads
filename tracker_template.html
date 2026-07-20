@@ -1287,7 +1287,13 @@ function recompute(){
     const judg = r.judg||0, val = r.value||0;
     // per-lead adjustments the user researches on the docket/title (saved with this case's notes)
     const nn = notes[r.case] || {};
-    const slien = Math.max(0, +nn.slien || 0);   // surviving senior / 1st mortgage (HOA/junior cases)
+    // TRACED CHAIN AUTO-FILL (the Echeverri rule, made automatic): the recorded lien chain's
+    // surviving-mortgage estimate pre-fills the senior payoff — value − surviving senior −
+    // judgment − costs, computed BEFORE anyone asks. Only records-verified chains feed it
+    // (conf 'ok' or 'low'); the deal-modal input always wins over the chain's number.
+    const chainSurv = (r.orconf==='ok' || r.orconf==='low') ? (r.orjunior || r.orsurv || r.orsurvfirst || 0) : 0;
+    r._chainSurv = chainSurv;
+    const slien = Math.max(0, +nn.slien || 0) || chainSurv;   // surviving senior / 1st mortgage (HOA/junior cases)
     const jlien = Math.max(0, +nn.jlien || 0);   // 2nd / junior mortgage or HELOC — a payoff to take clean title on an owner purchase (Hondroulis had one the judgment never showed)
     const assess = Math.max(0, +nn.assess || 0); // condo HOA arrears + special assessment (post-Surfside 40-yr recertification) — not in public data, sized by the association estoppel
     const mlien = Math.max(0, +nn.mlien || 0);   // surviving municipal / code / IRS liens
@@ -1365,6 +1371,9 @@ function setVerdict(r, x){
   if(r.st==='TD' && val>0 && (r._equity/val)>0.55 && rank>2){ rank=2; v='MARGINAL'; why='Equity parcel — competitive tax-deed auctions bid these near market, erasing most of the paper margin. Consider the surplus play instead.'; }
   if(r._occ && rank>2){ rank=2; v='MARGINAL'; why='Occupied — eviction cost/time is baked in and you get no interior inspection at auction.'; }
   if(r.st!=='TD' && r.condo && !r._assessSet && rank>2){ rank=2; v='MARGINAL'; why='Condo — a special assessment (post-Surfside 40-yr recertification) can be large and is NOT in public data. Get the association estoppel and enter it below (enter 0 if confirmed none) before trusting this equity.'; }
+  // chain-fed survivor math never graduates to STRONG on a LOW-confidence chain: the number came
+  // from records, but a common-name owner means it might be a stranger's mortgage. Verify, then it can.
+  if(r._chainSurv && r.orconf==='low' && rank>2){ rank=2; v='MARGINAL'; why='Surviving-mortgage math comes from a LOW-confidence lien chain (common owner name — could include a stranger\'s records). The equity is accounted for; verify the chain in Official Records before trusting it as STRONG.'; }
   r._verdict=v; r._vrank=rank; r._why=why;
 }
 const fmtMoney = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
@@ -1384,10 +1393,12 @@ function verifyChip(r){
   if(r.orconf==='low') return '<span class="chip vlow" title="A lien chain was pulled, but the owner\'s name was too common to isolate with confidence &mdash; these records may include a stranger\'s mortgages. Verify manually in Official Records before relying on the equity or flags shown.">~&nbsp;Low-confidence check</span>';
   return '<span class="chip vnone" title="No recorded mortgage/lien chain has been pulled for this property yet. The equity % shown is a RAW estimate (value minus the foreclosure judgment only) and has NOT been checked for a hidden surviving mortgage, an already-recorded sale, or a second foreclosure. Verify in Official Records before contacting or making an offer.">&#9711;&nbsp;Not yet verified</span>';
 }
-// surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk")
-function mrText(r){ const s=+r.orsurvfirst||0;
+// surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk").
+// Shows the chain's number when we have one (records-verified vs low-confidence estimate).
+function mrText(r){ const s=r._chainSurv || (+r.orsurvfirst||0);
   if(s>0){ const under=(r.value && s > (r.value-(r.judg||0)));
-    return '<div class="mrwarn'+(under?' under':'')+'" title="A first mortgage of about $'+Math.round(s).toLocaleString()+' survives this HOA/junior sale &mdash; it is NOT wiped by the auction. '+(r.orconf==='ok'?'':'Recorded original size on a common-name record &mdash; verify the payoff.')+(under?' It exceeds the equity &mdash; likely underwater.':'')+'">surviving 1st mtg &asymp; $'+Math.round(s/1000)+'k'+(under?' &mdash; underwater':'')+'</div>'; }
+    const conf = r.orconf==='ok' ? 'records-verified' : 'LOW-confidence chain — verify the payoff';
+    return '<div class="mrwarn'+(under?' under':'')+'" title="A surviving mortgage of about $'+Math.round(s).toLocaleString()+' rides through this sale &mdash; it is NOT wiped by the auction ('+conf+').'+(under?' It exceeds the equity &mdash; likely underwater.':'')+'">surviving 1st mtg &asymp; $'+Math.round(s/1000)+'k'+(under?' &mdash; underwater':'')+'</div>'; }
   return r.mr?'<div class="mrwarn" title="HOA/junior foreclosure &mdash; the first mortgage survives the sale; verify the payoff before valuing the equity.">first mtg survives &mdash; verify</div>':''; }
 function mathLine(label,val,tot){ return '<div class="mathline'+(tot?' tot':'')+'"><span>'+esc(label)+'</span><span>'+fmtMoney(val)+'</span></div>'; }
 function dealFlags(r){
@@ -1461,7 +1472,7 @@ function dealAnalysisHTML(r){
       '<div class="mathline"><span>ROI</span><span>'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</span></div></div>';
   }
   const adj = '<div class="dealadj">'+
-    (r.st!=='TD' ? '<label>Senior / 1st mortgage $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||'')+'" placeholder="0">'+(r.mr?'':'<span class="esthint">only if Records shows one senior to this case</span>')+'</label>' : '')+
+    (r.st!=='TD' ? '<label>Senior / 1st mortgage $<input class="slien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||(r._chainSurv||''))+'" placeholder="0">'+(nn.slien?'<span class="esthint">you entered this</span>':(r._chainSurv?'<span class="esthint">'+(r.orconf==='ok'?'records chain — verified':'~records chain — LOW confidence, verify')+'</span>':(r.mr?'':'<span class="esthint">only if Records shows one senior to this case</span>')))+'</label>' : '')+
     (r.st!=='TD' ? '<label>2nd / junior mortgage $<input class="jlien" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.jlien||'')+'" placeholder="0"><span class="esthint">a recorded 2nd / HELOC — payoff to take clean title on a purchase</span></label>' : '')+
     (r.st!=='TD' ? '<label>HOA / special assessment $<input class="assess" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.assess||'')+'" placeholder="0">'+(r.condo?'<span class="esthint">condo — get the association estoppel (40-yr recert can be $$$)</span>':'')+'</label>' : '')+
     '<label>Back property taxes $<input class="btax" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.btax||'')+'" placeholder="0">'+(r.etax?'<span class="esthint">~'+fmt0(r.etax)+'/yr est · verify on Taxes</span>':'')+'</label>'+
