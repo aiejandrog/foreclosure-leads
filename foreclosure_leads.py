@@ -773,6 +773,10 @@ def make_tracker(leads):
             # this pass-through the JS side sees no dor_desc and renders no chip for MD leads
             # (BW/PB rows already come through the slim.extend path with dor_desc intact).
             'dor_desc': r.get('dor_desc',''),
+            # Zillow listing status (listing_status.py): LISTED/PENDING/SOLD/RENTAL/OFF-MARKET +
+            # asking price + days-on-Zillow. County rows pass through via slim.extend; MD needs
+            # the explicit copy just like dor_desc/photos.
+            'zstatus': r.get('zstatus',''), 'zprice': r.get('zprice',0) or 0, 'zdoz': r.get('zdoz',0) or 0,
             'condo': bool(re.search(r'CONDO', str(r.get('dor_desc','') or ''), re.I)),
             # VACANT LAND (no homeowner + speculative land value) and COMPANY-OWNED — systematic
             # false-positives for the homeowner-rescue model; badged in the UI so a big-equity vacant

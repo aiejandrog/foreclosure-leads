@@ -51,7 +51,7 @@ def carry_photos(new_leads, prev_path, prefer=()):
         if not isinstance(r, dict):
             continue
         k = _pkey(r)
-        if k and (r.get('photos') or r.get('aurl')):
+        if k and (r.get('photos') or r.get('aurl') or r.get('zstatus')):
             idx.setdefault(k, r)  # first (highest-score) wins on the off-chance of a key collision
 
     carried = 0
@@ -66,4 +66,11 @@ def carry_photos(new_leads, prev_path, prefer=()):
             carried += 1
         if not r.get('aurl') and src.get('aurl'):
             r['aurl'] = src['aurl']
+        # Listing status rides along too: a fresh scrape wipes zstatus/zprice/zdoz just like
+        # photos, and listing_status.py's 7-day TTL means most leads aren't re-fetched on any
+        # given day. Carrying last-known keeps the chip on the site between re-checks.
+        if not r.get('zstatus') and src.get('zstatus'):
+            r['zstatus'] = src['zstatus']
+            r['zprice'] = src.get('zprice', 0)
+            r['zdoz'] = src.get('zdoz', 0)
     return carried

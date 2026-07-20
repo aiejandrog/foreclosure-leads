@@ -88,6 +88,7 @@ jobs:
             records_liens.json
             tax_links.json
             property_types_cache.json
+            listing_status_cache.json
             health.json
             full.json
           key: dealflow-state-${{ github.run_id }}
@@ -182,6 +183,13 @@ jobs:
       - name: '[3c/5] Property types (Broward + Palm Beach)'
         continue-on-error: true
         run: python property_types.py
+
+      # ---- [3d/5] Zillow listing status (LISTED / PENDING / SOLD / RENTAL / OFF-MARKET) ----
+      # 7-day TTL cache (listing_status_cache.json) so only ~1/7th of leads re-check daily.
+      # --limit 120 caps a cold-cache day at ~5 min so this step can never eat the job window.
+      - name: '[3d/5] Zillow listing status'
+        continue-on-error: true
+        run: python listing_status.py --limit 120
 
       # ---- [4/5] Final rebuild with everything baked in -----------------------------------
       - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
