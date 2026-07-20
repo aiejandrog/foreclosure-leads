@@ -832,6 +832,13 @@ def make_tracker(leads):
             d['phones'] = [p.get('number') for p in hit['phones'] if p.get('number')][:4]
             d['phdnc'] = [bool(p.get('dnc')) for p in hit['phones']][:4]
             d['emails'] = (hit.get('emails') or [])[:3]
+        # Radius comps (comps.py MD path via the county's own MD_ComparableSales layer) — same
+        # merge the BW/PB loop below does; without this, MD rows never showed an ARV.
+        _cp = comps.get(r.get('Case #',''))
+        if _cp:
+            d['arv'] = _cp.get('arv', 0); d['arvconf'] = _cp.get('conf', '')
+            d['arvpsf'] = _cp.get('psf', 0); d['arvn'] = _cp.get('n', 0)
+            d['comps'] = _cp.get('comps', [])
         d['county'] = 'MIAMI-DADE'
         slim.append(d)
 

@@ -1,13 +1,19 @@
-"""comps.py — radius comparable-sales engine for Broward + Palm Beach leads.
+"""comps.py — radius comparable-sales engine for all three counties.
 
-Sources the FL DOR statewide cadastral (the same public ArcGIS layer fl_cadastral already uses):
-per lead it takes the parcel centroid, then pulls nearby residential parcels with a recent sale
-(same county, sqft ±45%, sale year >= 2024, price > $50k), drops non-arm's-length outliers by
-$/sqft, and prices the subject at median comp $/sqft x subject sqft. Writes comps.json
-{case: {arv, psf, n, comps[3]}} (gitignored). make_tracker merges it as r.arv / r.arvconf /
-r.comps. Miami-Dade is intentionally skipped for now — the statewide roll has no usable recent
-sale years there (verified 2026-07-20: Hialeah returns 0 at any radius/year), so MD gets an
-honest 'comps pending' instead of a fake number.
+Broward + Palm Beach: the FL DOR statewide cadastral (public ArcGIS). Per lead: parcel centroid,
+then nearby residential parcels with a recent sale (same county, sqft ±45%, sale year >= 2024,
+price > $50k), non-arm's-length outliers dropped by $/sqft, subject priced at trimmed-median
+comp $/sqft x subject sqft.
+
+Miami-Dade: the county's OWN MD_ComparableSales service (gisweb.miamidade.gov, MDC.PaGis layer)
+— found 2026-07-20 after the statewide roll proved to carry no usable MD sale years. Strictly
+better data than the statewide layer: per-parcel sale slots carry a QUALIFIED-sale flag
+(QU_FLG_1='Q' = arm's length as classified by the PA itself), so the MD comp pool is pre-filtered
+to genuine market sales. Coordinates are FL State Plane East feet (X_COORD/Y_COORD), distances
+queried in feet. Sqft = BUILDING_HEATED_AREA; use-code match = subject's own 2-digit DOR prefix.
+
+Writes comps.json {case: {arv, psf, n, comps[3]}} (committed as seed). make_tracker merges it as
+r.arv / r.arvconf / r.comps on every county's rows.
 
 New-only by default (cached cases kept); --all re-computes; --limit N caps new lookups per run.
 """
@@ -61,6 +67,58 @@ def _folio_of(r):
 CENT = ('https://services9.arcgis.com/Gh9awoU677aKree0/arcgis/rest/services/'
         'Florida_Statewide_Parcel_Centroid_Version/FeatureServer/0/query')
 
+# Miami-Dade's own comparable-sales layer (county ArcGIS, not the statewide roll).
+MD_LAYER = ('https://gisweb.miamidade.gov/arcgis/rest/services/'
+            'MD_ComparableSales/MapServer/5/query')
+MD_FT = {0.75: 3960, 1.5: 7920}        # state-plane distances are in FEET
+
+
+def _subjects_md(folios):
+    """Batch-enrich MD folios on the PaGis layer: state-plane point + heated sqft + DOR prefix.
+    Same 40-per-call batching as the statewide path."""
+    out = {}
+    for i in range(0, len(folios), 40):
+        chunk = folios[i:i + 40]
+        j = _q({'where': 'FOLIO IN (' + ','.join(f"'{f}'" for f in chunk) + ')',
+                'outFields': 'FOLIO,X_COORD,Y_COORD,BUILDING_HEATED_AREA,DOR_CODE_CUR',
+                'returnGeometry': 'false', 'resultRecordCount': 40}, url=MD_LAYER)
+        for f in j.get('features', []):
+            a = f['attributes']
+            out[a.get('FOLIO')] = {'sqft': a.get('BUILDING_HEATED_AREA') or 0,
+                                   'dor2': (a.get('DOR_CODE_CUR') or '01')[:2],
+                                   'c': (a.get('X_COORD'), a.get('Y_COORD'))
+                                        if a.get('X_COORD') else None}
+        time.sleep(0.3)
+    return out
+
+
+def _comps_md(c, sqft, dor2, dist_mi):
+    """Qualified (QU_FLG_1='Q') recent sales near a state-plane point. The PA's own arm's-length
+    classification replaces the $/sqft-only noise filter the statewide path needs."""
+    lo, hi = (sqft * 0.55 or 0, sqft * 1.45 or 999999)
+    where = (f"DOS_1>='20240101' AND PRICE_1>50000 AND QU_FLG_1='Q' "
+             f"AND DOR_CODE_CUR LIKE '{dor2}%' "
+             f"AND BUILDING_HEATED_AREA>={lo:.0f} AND BUILDING_HEATED_AREA<={hi:.0f}")
+    j = _q({'where': where,
+            'outFields': 'TRUE_SITE_ADDR,TRUE_SITE_CITY,DOS_1,PRICE_1,BUILDING_HEATED_AREA',
+            'geometry': f'{c[0]},{c[1]}', 'geometryType': 'esriGeometryPoint',
+            'distance': MD_FT[dist_mi], 'units': 'esriSRUnit_Foot',
+            'spatialRel': 'esriSpatialRelIntersects',
+            'orderByFields': 'DOS_1 DESC', 'resultRecordCount': 14,
+            'returnGeometry': 'false'}, url=MD_LAYER)
+    out = []
+    for x in j.get('features', []):
+        a = x['attributes']
+        if not a.get('BUILDING_HEATED_AREA'):
+            continue
+        psf = a['PRICE_1'] / a['BUILDING_HEATED_AREA']
+        if not (PSF_FLOOR <= psf <= PSF_CAP):
+            continue
+        out.append({'addr': (a.get('TRUE_SITE_ADDR') or '').strip(),
+                    'price': round(a['PRICE_1']), 'yr': int(str(a.get('DOS_1') or '0')[:4] or 0),
+                    'sqft': a.get('BUILDING_HEATED_AREA'), 'psf': round(psf)})
+    return out
+
 
 def _subjects(folios):
     """Batch-enrich up to 40 folios in ONE centroid-layer query (sqft + point geometry) — replaces
@@ -105,12 +163,17 @@ def _comps(co_no, c, sqft, dist):
 
 
 def compute(sub, co_no):
+    """co_no: statewide county number for BW/PB, or the string 'MD' for the Miami-Dade layer."""
     if not sub or not sub['c'] or not sub['sqft']:
         return None
-    comps = _comps(co_no, sub['c'], sub['sqft'], 0.75)
+    if co_no == 'MD':
+        fetch = lambda dist: _comps_md(sub['c'], sub['sqft'], sub.get('dor2', '01'), dist)
+    else:
+        fetch = lambda dist: _comps(co_no, sub['c'], sub['sqft'], dist)
+    comps = fetch(0.75)
     dist_used = 0.75
     if len(comps) < 3:
-        comps = _comps(co_no, sub['c'], sub['sqft'], 1.5)
+        comps = fetch(1.5)
         dist_used = 1.5
     if not comps:
         return None
@@ -150,6 +213,17 @@ def main():
             f = _folio_of(r)
             if f:
                 todo.append((case, f, COUNTY_NO[co_key]))
+    # Miami-Dade rides its own county layer. Folio digits keep leading zeros — PaGis FOLIO is a
+    # fixed 13-char string ('0420250580080'); stripping zeros would miss every Hialeah parcel.
+    _mdp = os.path.join(HERE, 'leads_final.json')
+    if os.path.exists(_mdp):
+        for r in json.load(open(_mdp, encoding='utf-8')):
+            case = r.get('Case #', '')
+            if not case or (not args.all and cache.get(case)):
+                continue
+            f = re.sub(r'\D', '', str(r.get('Folio') or ''))
+            if len(f) == 13:
+                todo.append((case, f, 'MD'))
     if args.limit:
         todo = todo[:args.limit]
     print(f'{len(todo)} leads to comp ({len(cache)} cached)')
@@ -157,7 +231,11 @@ def main():
         json.dump(cache, open(OUT, 'w', encoding='utf-8'), indent=0)
         return
 
-    subs = _subjects([f for _, f, _ in todo])          # ONE batch for all subjects (~40/call)
+    sw_folios = [f for _, f, c in todo if c != 'MD']
+    md_folios = [f for _, f, c in todo if c == 'MD']
+    subs = _subjects(sw_folios) if sw_folios else {}   # ONE batch for all subjects (~40/call)
+    if md_folios:
+        subs.update(_subjects_md(md_folios))
     print(f'subjects enriched: {len(subs)}/{len(todo)}')
 
     ok = fail = 0
