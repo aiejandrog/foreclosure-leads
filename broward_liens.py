@@ -217,16 +217,62 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
     sats = [d for d in exact if is_s(d)]
     for d in morts + sats: d['_dt'] = _jsdate(d.get('RecordDate'))
     used = set(); liens = []; opens = []
+    # --- kimi: layered satisfaction matching (the Salazar fix) -------------------------------------
+    # AcclaimWeb's raw OPEN flag lies: old mortgages whose satisfactions were recorded under an ASSIGNEE
+    # (Chase->WaMu->HSBC) or a successor servicer stay 'open' forever, and phantom stacks like Salazar's
+    # $358,950 'surviving senior' get prefilled as fact. Kill rules, applied in order per mortgage:
+    #  1) a release by the lender or ANY assignee downstream in the assignment chain
+    #  2) a LENDER-party release within 24 months after the mortgage (successor servicer, unrecorded assignment)
+    #  3) refi-kill: a newer different-lender mortgage >=70% of the balance within 36 months
+    #  4) sale-kill: an arm's-length deed transfer (consideration >=70% of the balance) after the mortgage
+    assigns = {}
+    for d in exact:
+        if 'ASSIGNMENT' in (d.get('DocTypeDescription') or '').upper():
+            fr = _inst(d.get('Name')); to = _inst(d.get('CrossPartyName'))
+            if fr and to and fr != to:
+                assigns.setdefault(fr, set()).add(to)
+    def chain_of(lend):
+        out, frontier, seen = {lend}, [lend], set()
+        while frontier:
+            cur = frontier.pop()
+            if cur in seen: continue
+            seen.add(cur)
+            for nxt in assigns.get(cur, ()):
+                if nxt not in out:
+                    out.add(nxt); frontier.append(nxt)
+        return out
+    _LENDER_RE = re.compile(r'BANK|MORTGAGE|MTGE|LOAN|FINANC|SAVING|CREDIT|FUNDING|SERVICING|FEDERAL|NATIONAL', re.I)
+    def _months(a, b):                                   # months from date a to date b ('YYYY-MM-DD')
+        try: return (int(b[:4]) - int(a[:4])) * 12 + (int(b[5:7]) - int(a[5:7]))
+        except Exception: return 99
     for m in sorted(morts, key=lambda x: x['_dt']):
         lend = _inst(m.get('CrossPartyName'))
         mers = bool(MERS_RE.search(m.get('CrossPartyName') or ''))
+        chain = chain_of(lend) if lend else {lend}
+        amt = _num(m.get('Consideration'))
         is_open = True
-        if lend and not mers:                                        # match a later same-institution release
+        for i, s in enumerate(sats):                                        # rule 1: release in the chain
+            if i in used or not s['_dt'] or s['_dt'] < m['_dt']: continue
+            if _inst(s.get('CrossPartyName')) in chain:
+                used.add(i); is_open = False; break
+        if is_open:                                                          # rule 2: lender release, 24-month window
             for i, s in enumerate(sats):
-                if i in used: continue
-                if s['_dt'] >= m['_dt'] and _inst(s.get('CrossPartyName')) == lend:
+                if i in used or not s['_dt']: continue
+                if 0 < _months(m['_dt'], s['_dt']) <= 24 and _LENDER_RE.search(s.get('CrossPartyName') or ''):
                     used.add(i); is_open = False; break
-        row = {'d': m['_dt'], 'amt': round(_num(m.get('Consideration'))),
+        if is_open:                                                          # rule 3: refi-kill
+            for m2 in morts:
+                if m2 is m: continue
+                if (0 < _months(m['_dt'], m2['_dt']) <= 36 and _num(m2.get('Consideration')) >= amt * 0.7
+                        and _inst(m2.get('CrossPartyName')) != lend and _inst(m2.get('CrossPartyName')) not in chain):
+                    is_open = False; break
+        if is_open:                                                          # rule 4: sale-kill
+            for d in exact:
+                if not (d.get('DocTypeDescription') or '').upper().startswith('DEED'): continue
+                dd = _jsdate(d.get('RecordDate'))
+                if dd and dd >= m['_dt'] and _num(d.get('Consideration')) >= amt * 0.7:
+                    is_open = False; break
+        row = {'d': m['_dt'], 'amt': round(amt),
                'party': (m.get('CrossPartyName') or '')[:40], 'bp': m.get('BookPage', ''),
                'st': 'OPEN' if is_open else 'SATISFIED', 'mers': mers}
         liens.append(row)
