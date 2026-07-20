@@ -40,6 +40,10 @@ def num(x):
     except Exception: return 0
 
 def split_owner(clean):
+    # kimi: companies have no LAST/FIRST — pass the full name as one partyName token string
+    # (the clerk search tokenizes it). analyze() isolates by folio+subdivision, never by name.
+    if COMPANY_RE.search(clean or ''):
+        return (clean.strip(), '')
     toks = [t for t in (clean or '').split() if len(t.strip('.')) > 1]
     return (' '.join(toks[1:]), toks[0]) if len(toks) >= 2 else None   # (LAST..., FIRST)
 
@@ -277,7 +281,7 @@ def main():
         if a.case and case != a.case: continue
         if a.tier and (r.get('tier', '') or '') != a.tier: continue
         oc = (r.get('owner_clean', '') or '').strip()
-        if not oc or COMPANY_RE.search(oc): continue
+        if not oc: continue                                        # kimi: companies traced too (folio-isolated)
         if a.cached_only and oc not in qs_cache: continue
         if case in out and not a.case: continue                      # already traced (unless targeting it)
         picked.append(r)

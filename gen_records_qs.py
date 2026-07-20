@@ -45,6 +45,9 @@ async (lf) => {
 
 
 def split_name(clean):
+    # kimi: companies — full name as the partyName string (clerk tokenizes); matches records_liens.split_owner
+    if COMPANY_RE.search(clean or ''):
+        return ((clean or '').strip(), '')
     toks = [t for t in (clean or '').split() if len(t) > 1]
     if len(toks) < 2:
         return None
@@ -64,7 +67,7 @@ def main():
         if args.tier and (r.get('tier', '') or '') != args.tier:
             continue
         oc = (r.get('owner_clean') or '').strip()
-        if not oc or COMPANY_RE.search(oc) or oc in cache:
+        if not oc or oc in cache:                                  # kimi: companies too (folio-isolated downstream)
             continue
         sp = split_name(oc)
         if sp:
