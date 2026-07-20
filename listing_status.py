@@ -76,23 +76,33 @@ def classify(home_status, listing_type, price, doz):
     return ''
 
 
+def _blocked(text):
+    """True when Zillow served a bot-wall instead of a real page (HTTP 200 CAPTCHA). A blocked
+    response must NOT be classified — it says nothing about the property."""
+    t = text[:4000].lower()
+    return 'captcha' in t or 'px-captcha' in t or 'denied' in t or len(text) < 15000
+
+
 def fetch_status(addr):
-    """(zstatus, zprice, zdoz) for one address, or ('', 0, 0) on any failure."""
+    """(zstatus, zprice, zdoz) for one address. '' status = TRANSIENT failure (blocked/timeout),
+    retried next run. A clean search with no property match is NOT transient — Zillow indexes
+    essentially every parcel, so no-match means no listing exists: classified OFF-MARKET so
+    every reachable property ends up with a badge instead of a permanent hole."""
     try:
         sess = requests.Session()
         sess.headers.update(pp._ZHDRS)
         url = 'https://www.zillow.com/homes/' + requests.utils.quote(addr) + '_rb/'
         r = sess.get(url, timeout=20)
-        if r.status_code != 200:
+        if r.status_code != 200 or _blocked(r.text):
             return '', 0, 0
         lm = re.search(r'https://www\.zillow\.com/homedetails/[^"\'<>\s]+/(\d+)_zpid/', r.text)
         if not lm:
-            return '', 0, 0
+            return 'OFF-MARKET', 0, 0
         h2 = dict(pp._ZHDRS)
         h2['Referer'] = url
         h2['Sec-Fetch-Site'] = 'same-origin'
         r2 = sess.get(lm.group(0), headers=h2, timeout=20)
-        if r2.status_code != 200:
+        if r2.status_code != 200 or _blocked(r2.text):
             return '', 0, 0
         hs = PAT_HS.search(r2.text)
         ltd = PAT_LTD.search(r2.text)
@@ -100,6 +110,10 @@ def fetch_status(addr):
         doz = PAT_DOZ.search(r2.text)
         status = classify(hs.group(1) if hs else '', ltd.group(1) if ltd else '',
                           int(prc.group(1)) if prc else 0, int(doz.group(1)) if doz else 0)
+        # Page fetched cleanly but no recognizable homeStatus: that's Zillow's bare Zestimate
+        # page shape for never-listed parcels — off-market, not unknown.
+        if not status:
+            status = 'OFF-MARKET'
         price = int(prc.group(1)) if prc else 0
         days = max(0, int(doz.group(1))) if doz else 0
         # Price/days only meaningful for live retail states
