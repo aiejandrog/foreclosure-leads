@@ -440,6 +440,20 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .zst-rental{background:rgba(30,90,160,.10);color:#1E5AA0;border:1px solid rgba(30,90,160,.3)}
 .zst-off{background:rgba(22,101,52,.09);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.28)}
 .zst-noaddr{background:rgba(90,90,90,.08);color:var(--muted-2);border:1px solid rgba(90,90,90,.22)}
+/* Jose playbook chips + panel (call 2026-07-20). FRESH = call-priority green; STALLER? = amber
+   caution on 2019-2023 filings (serial-bankruptcy delay artists). .ppath rows render the
+   auto-matched revenue layers inside the deal modal. */
+.frchip{display:inline-block;border-radius:4px;padding:0 6px;font-size:10px;font-weight:700;
+  letter-spacing:.04em;text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);
+  vertical-align:middle;margin-right:4px;line-height:1.7}
+.fr-fresh{background:rgba(22,101,52,.12);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.32)}
+.fr-stale{background:rgba(180,83,9,.10);color:#B45309;border:1px solid rgba(180,83,9,.3)}
+.ppaths{display:flex;flex-direction:column;gap:8px;margin:4px 0 2px}
+.ppath{background:var(--surface-2,#F3F5F9);border:1px solid var(--line,#E2E6EE);border-radius:8px;
+  padding:9px 12px;font-size:12px;line-height:1.5}
+.ppath b{display:block;color:var(--gold-d,#8B6A2C);font-size:11px;letter-spacing:.06em;
+  text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);margin-bottom:2px}
+.ppath span{color:var(--muted,#5B6472)}
 .ctychip{display:inline-block;background:var(--navy);color:#fff;border-radius:4px;padding:0 6px;
   font-size:10px;font-weight:800;letter-spacing:.04em;vertical-align:1px}
 .dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);
@@ -1507,6 +1521,11 @@ function dealModalBody(r){
       '<div class="dm-verdict">'+verdictBadge(r)+figure+'</div>'+
       (r._why?'<div class="dm-why">'+esc(r._why)+'</div>':'')+
     '</div>'+ dealAnalysisHTML(r) +
+    // Jose playbook (2026-07-20): the revenue layers auto-matched to this lead. Rendered after
+    // the math so the underwriting number stays the headline and the paths read as "how we
+    // monetize what the math just said".
+    '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Profit paths — Jose playbook</div>'+
+    _profitPaths(r) +
     // Dispo pack button — only shown on live deals (not PASS/no-data), because there's no point
     // exporting a buyer PDF for a dead lead. Uses the same gold-CTA look as the primary actions.
     (r._verdict && r._verdict!=='PASS' && !r._nodata
@@ -1886,6 +1905,58 @@ function _zstatusChip(r){
   if(s === 'RENTAL') return '<span class="zstchip zst-rental" title="Listed FOR RENT — the owner is landlording it. Tired-landlord pitch beats the foreclosure-rescue letter here.">RENTAL</span> ';
   if(s === 'NO-ADDR') return '<span class="zstchip zst-noaddr" title="The auction record has no street address and the county appraiser has none for the folio either (raw land / MULTIPLE PARCELS bundle). Listing status cannot be checked without an address.">NO ADDR</span> ';
   return '<span class="zstchip zst-off" title="Not listed anywhere on the retail market (Zillow). Nobody else is marketing this property — clean field for direct contact.">OFF-MKT</span> ';
+}
+// ============ JOSE PLAYBOOK (call of 2026-07-20 — "LETS GET TO WORK") ============
+// Case-age rule: late-2024+ filings are FRESH (9/10 never stopped a sale — they'll take a real
+// rescue); 2019-2023 filers are SERIAL-STALLER territory (multiple bankruptcies, they know the
+// delay game better than we do). The chip encodes the call-priority rule on every row.
+// Filing year: the `filed` field when the scraper carried it (MD), else derived from the case
+// number itself — MD `2025-021847-CA-01`, PB `502024CA012300…`, BW `CACE-24-009886` all encode it.
+function _filedYear(r){
+  var y = +((r && r.filed) || 0);
+  if(y > 1990) return y;
+  var c = String((r && r.case) || '');
+  var m = c.match(/^(\d{4})-/) || c.match(/^\d{2}(\d{4})[A-Z]/) || c.match(/^[A-Z]{4}-?(\d{2})-/);
+  if(m){ y = +m[1]; if(y < 100) y += 2000; if(y > 1990 && y < 2100) return y; }
+  return 0;
+}
+function _freshChip(r){
+  var y = _filedYear(r);
+  if(!y) return '';
+  if(y >= 2024) return '<span class="frchip fr-fresh" title="Filed '+y+' — FRESH case. 9 out of 10 of these have never stopped a sale and have no bankruptcy playbook. Top of the call list.">FRESH</span> ';
+  return '<span class="frchip fr-stale" title="Filed '+y+' — a '+(2026-y)+'-year-old case. Owners this deep in usually know the stalling game (serial bankruptcies, prior cancellations). Deprioritize — call the fresh ones first.">STALLER?</span> ';
+}
+// Profit Paths: the ten revenue layers from the Jose playbook, auto-matched to THIS lead from
+// data already on the row (net equity after the traced chain, ARV, listing status, freshness,
+// tax-deed vs FC). Every contactable lead has a floor — the stop-the-sale fee — so no lead
+// renders an empty list. Estimates are labeled estimates; the modal's math stays authoritative.
+function _profitPaths(r){
+  var out = [];
+  var val = (+r.arv || +r.value || 0);
+  var debt = (+r.judg||0) + (r._chainSurv||0);
+  var netEq = val ? Math.max(0, val - debt) : 0;
+  var fresh = _filedYear(r) >= 2024;
+  var fc = r.st !== 'TD';
+  var add = function(t, d){ out.push('<div class="ppath"><b>'+t+'</b><span>'+d+'</span></div>'); };
+  if(fc && (+r.days||0) > 0){
+    add('Stop the sale — the floor', '$2,500 fee + $330 court costs, through the attorney (FS 501.1377). Buys 60–90 days to run every other play below.'+(fresh?'':' Case is old — expect a seasoned staller; qualify hard before spending effort.'));
+  }
+  if(netEq >= 100000){
+    var loan = Math.round(val * 0.65);
+    add('Hard-equity loan referral', 'Owner wants to KEEP it: ~'+fmtK(netEq)+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Closes in ~5 business days via the lending side.');
+    add('Cash-for-keys + assignable contract', 'Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.');
+  } else if(netEq >= 25000){
+    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.');
+  } else {
+    add('No-equity rescue', 'Still money here: $1,800–$3,000 stop fee, arrears-reinstatement play (bank rolls the past-due back in → rent it at market), or dignified cash-for-keys vs the sheriff. Practice reps live on exactly these.');
+  }
+  if((r.zstatus||'') === 'LISTED'){
+    add('Realtor referral kickback', 'Already MLS-listed'+(r.zprice?' at '+fmtK(r.zprice):'')+' — if it retails, a referred listing kicks back 1/3 of the commission (≈ '+fmtK(Math.round(val*0.01))+' on a full-commission sale).');
+  }
+  if(fc && netEq >= 25000 && val >= 150000 && val <= 550000 && !r.co){
+    add('DSCR keep (portfolio layer)', 'Right size band for a rental keep — if market rent clears the note, this is a 5-business-day DSCR close and door #'+ (val<300000?'1':'next') +' of the 25-door plan. Needs the real FICO pulled first.');
+  }
+  return '<div class="ppaths">'+out.join('')+'</div>';
 }
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
@@ -3094,7 +3165,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -3139,7 +3210,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
