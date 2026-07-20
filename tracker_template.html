@@ -454,6 +454,17 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .ppath b{display:block;color:var(--gold-d,#8B6A2C);font-size:11px;letter-spacing:.06em;
   text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);margin-bottom:2px}
 .ppath span{color:var(--muted,#5B6472)}
+.ppath.ppmatch{border-color:var(--gold,#C6A14B);background:var(--gold-soft,rgba(198,161,75,.1));
+  box-shadow:0 1px 6px rgba(198,161,75,.18)}
+.ppgo{color:var(--gold-d,#8B6A2C);font-size:9.5px;font-weight:700;letter-spacing:.04em}
+.intwrap{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:2px 0 8px}
+.intlbl{font-size:11px;font-weight:700;color:var(--muted,#5B6472);margin-right:3px;
+  text-transform:uppercase;letter-spacing:.06em;font-family:var(--f-label,'Space Grotesk',sans-serif)}
+.intbtn{font-size:11px;padding:4px 10px;border-radius:999px;border:1px solid var(--line,#E2E6EE);
+  background:var(--surface,#fff);color:var(--muted,#5B6472);cursor:pointer;font-weight:600;
+  transition:all .15s var(--e-lux,ease)}
+.intbtn:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
+.intbtn.on{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730)}
 .ctychip{display:inline-block;background:var(--navy);color:#fff;border-radius:4px;padding:0 6px;
   font-size:10px;font-weight:800;letter-spacing:.04em;vertical-align:1px}
 .dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);
@@ -1930,6 +1941,24 @@ function _freshChip(r){
 // data already on the row (net equity after the traced chain, ARV, listing status, freshness,
 // tax-deed vs FC). Every contactable lead has a floor — the stop-the-sale fee — so no lead
 // renders an empty list. Estimates are labeled estimates; the modal's math stays authoritative.
+// Owner intent — the one-stop-shop moral made operational. Jose: "no matter what the homeowner
+// wants — keep, sell, or walk — we already have our hands in his pocket." Carlos's intake asks
+// the one question; the operator records it here and the paths re-rank so the layer that matches
+// what the owner actually said leads. Persisted per-device in notes[case].intent.
+function _setIntent(caseId, v){
+  var n = notes[caseId] || (notes[caseId] = {});
+  n.intent = (n.intent === v ? '' : v);   // click the active one again to clear
+  if(typeof save === 'function') save();
+  var r = DATA.find(function(x){ return x.case === caseId; });
+  if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r);
+}
+function _intentBar(r){
+  var cur = (notes[r.case]||{}).intent || '';
+  var opt = [['keep','Keep it'],['sell','Sell / walk with cash'],['walk','Just leave']];
+  var btns = '<button type="button" class="intbtn'+(cur===''?' on':'')+'" onclick="_setIntent(\''+esc(r.case)+'\',\'\')">Unknown</button>' +
+    opt.map(function(o){ return '<button type="button" class="intbtn'+(cur===o[0]?' on':'')+'" onclick="_setIntent(\''+esc(r.case)+'\',\''+o[0]+'\')">'+o[1]+'</button>'; }).join('');
+  return '<div class="intwrap"><span class="intlbl">Owner wants:</span>'+btns+'</div>';
+}
 function _profitPaths(r){
   var out = [];
   var val = (+r.arv || +r.value || 0);
@@ -1937,26 +1966,37 @@ function _profitPaths(r){
   var netEq = val ? Math.max(0, val - debt) : 0;
   var fresh = _filedYear(r) >= 2024;
   var fc = r.st !== 'TD';
-  var add = function(t, d){ out.push('<div class="ppath"><b>'+t+'</b><span>'+d+'</span></div>'); };
+  var intent = (notes[r.case]||{}).intent || '';
+  // each path tagged with the owner-intent(s) it serves — used to float the matching plays up
+  var add = function(t, d, tags){ out.push({t:t, d:d, tags:tags||['any']}); };
   if(fc && (+r.days||0) > 0){
-    add('Stop the sale — the floor', '$2,500 fee + $330 court costs, through the attorney (FS 501.1377). Buys 60–90 days to run every other play below.'+(fresh?'':' Case is old — expect a seasoned staller; qualify hard before spending effort.'));
+    add('Stop the sale — the floor', '$2,500 fee + $330 court costs, through the attorney (FS 501.1377). Buys 60–90 days to run every other play below.'+(fresh?'':' Case is old — expect a seasoned staller; qualify hard before spending effort.'), ['keep','sell','walk']);
   }
   if(netEq >= 100000){
     var loan = Math.round(val * 0.65);
-    add('Hard-equity loan referral', 'Owner wants to KEEP it: ~'+fmtK(netEq)+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Closes in ~5 business days via the lending side.');
-    add('Cash-for-keys + assignable contract', 'Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.');
+    add('Hard-equity loan referral', '~'+fmtK(netEq)+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Owner keeps the house, we make the referral. Closes in ~5 business days via the lending side.', ['keep']);
+    add('Cash-for-keys + assignable contract', 'Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.', ['sell','walk']);
   } else if(netEq >= 25000){
-    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.');
+    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.', ['sell','walk']);
   } else {
-    add('No-equity rescue', 'Still money here: $1,800–$3,000 stop fee, arrears-reinstatement play (bank rolls the past-due back in → rent it at market), or dignified cash-for-keys vs the sheriff. Practice reps live on exactly these.');
+    add('No-equity rescue — dignity play', 'Still money here: $1,800–$3,000 stop fee, or arrears-reinstatement (bank rolls the past-due back in → rent it at market). And the human lever: we buy them 60–90 days to move out with dignity + $500–800 movers, instead of the sheriff putting grandma’s things on the street. Practice reps live on exactly these.', ['sell','walk','keep']);
   }
   if((r.zstatus||'') === 'LISTED'){
-    add('Realtor referral kickback', 'Already MLS-listed'+(r.zprice?' at '+fmtK(r.zprice):'')+' — if it retails, a referred listing kicks back 1/3 of the commission (≈ '+fmtK(Math.round(val*0.01))+' on a full-commission sale).');
+    add('Realtor referral kickback', 'Already MLS-listed'+(r.zprice?' at '+fmtK(r.zprice):'')+' — if it retails, a referred listing kicks back 1/3 of the commission (≈ '+fmtK(Math.round(val*0.01))+' on a full-commission sale).', ['sell']);
   }
   if(fc && netEq >= 25000 && val >= 150000 && val <= 550000 && !r.co){
-    add('DSCR keep (portfolio layer)', 'Right size band for a rental keep — if market rent clears the note, this is a 5-business-day DSCR close and door #'+ (val<300000?'1':'next') +' of the 25-door plan. Needs the real FICO pulled first.');
+    add('DSCR keep (portfolio layer)', 'Right size band for a rental keep — if market rent clears the note, this is a 5-business-day DSCR close and door #'+ (val<300000?'1':'next') +' of the 25-door plan. Needs the real FICO pulled first.', ['keep']);
   }
-  return '<div class="ppaths">'+out.join('')+'</div>';
+  // stable re-rank: intent-matched paths float up, order otherwise preserved
+  if(intent){
+    out.forEach(function(p, i){ p._i = i; p._m = p.tags.indexOf(intent) >= 0 ? 0 : 1; });
+    out.sort(function(a,b){ return (a._m - b._m) || (a._i - b._i); });
+  }
+  var rows = out.map(function(p){
+    var matched = intent && p.tags.indexOf(intent) >= 0;
+    return '<div class="ppath'+(matched?' ppmatch':'')+'"><b>'+p.t+(matched?' <span class="ppgo">← their move</span>':'')+'</b><span>'+p.d+'</span></div>';
+  }).join('');
+  return _intentBar(r) + '<div class="ppaths">'+rows+'</div>';
 }
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
@@ -3114,6 +3154,8 @@ function render(){
       gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
+      // kimi: cadence enrollment — the multi-touch email sequence that auto-cancels on reply
+      if((r.emails||[]).length) gDo.push('<a href="#" class="cadencegen" data-c="'+esc(r.case)+'" title="Enroll this owner in the 4-touch email cadence (day 0/2/4/7) — sends itself until they reply, then auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.">Cadence</a>');
     }
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
