@@ -2128,9 +2128,15 @@ function _carlosPacket(){
       + '<td class="ck">&#9744; letter</td><td class="ck">&#9744; hanger</td><td class="ck">&#9744; knocked</td><td class="ck">&#9744; spoke</td></tr>';
   }).join('');
   var hangers = list.map(function(r){
-    var first = ((r.owners||'').split(';')[0].split('&')[0].trim().split(/\s+/)[0]||'Neighbor');
+    // Company/LLC-owned parcels have no human first name to greet — say "To the owner" instead of
+    // "For OCEAN" (from OCEAN BREEZE 777 LLC). r.co is the server-side company flag; a conservative
+    // regex is the fallback if it's ever unset.
+    var raw = (r.owners||'').split(';')[0].trim();
+    var isCo = r.co || /\b(LLC|L\.?L\.?C|INC|CORP|COMPANY|TRUST|LP|LTD|ASSOC|ASSN|BANK|HOLDINGS|PROPERT|REALTY|CAPITAL|GROUP|INVEST|ENTERPRISE|MANAGEMENT|PARTNERS|FUND)\b/i.test(raw);
+    var first = raw.split('&')[0].trim().split(/\s+/)[0] || 'Neighbor';
+    var greet = isCo ? 'To the owner' : ('For ' + first);
     var area = (function(){ var m=(r.addr||'').match(/,\s*([^,]+),\s*\d{5}/); return m?m[1].trim():'the area'; })();
-    return '<div class="hang"><div class="hh">For '+esc(first)+'</div>'
+    return '<div class="hang"><div class="hh">'+esc(greet)+'</div>'
       + '<p>I&rsquo;m a local buyer working in '+esc(area)+'. I&rsquo;m reaching out about your property at <b>'+esc(r.addr)+'</b> — there&rsquo;s an important county date coming up on <b>'+esc(r.auction)+'</b>, and you may have more options than you think, including walking away with cash in hand.</p>'
       + '<p>There is no cost and no obligation to talk. If it helps to know your options before that date, call me:</p>'
       + '<div class="cta">Call '+esc(sP)+' — '+esc(sN||'your local buyer')+(sL?', '+esc(sL):'')+'</div>'
