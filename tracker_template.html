@@ -465,6 +465,37 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
   transition:all .15s var(--e-lux,ease)}
 .intbtn:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
 .intbtn.on{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730)}
+/* Favorites / Saved batch + share (2026-07-20) */
+.favstar{position:absolute;bottom:6px;right:6px;z-index:4;width:24px;height:24px;padding:0;line-height:1;
+  border:none;border-radius:50%;background:rgba(8,14,26,.55);backdrop-filter:blur(2px);
+  color:#F1D98B;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 1px 4px rgba(8,14,26,.4);transition:transform .12s var(--e-lux,ease),background .12s ease}
+.favstar:hover{transform:scale(1.14);background:rgba(8,14,26,.78)}
+.favstar.on{color:#F5C542;background:rgba(198,161,75,.28)}
+#savedbtn.hasfav{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C);font-weight:700}
+#savedbtn .favn{font-family:var(--f-num,'Space Grotesk',sans-serif);font-weight:800}
+.sharerow{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+.shbtn{font-size:12px;font-weight:600;padding:7px 12px;border-radius:8px;border:1px solid var(--line,#E2E6EE);
+  background:var(--surface,#fff);color:var(--ink,#101C33);cursor:pointer;transition:all .15s var(--e-lux,ease)}
+.shbtn:hover{border-color:var(--gold,#C6A14B);box-shadow:var(--sh-1)}
+.shbtn.shsave{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
+.shbtn.shsave.on{background:var(--navy,#0B1730);color:#F5C542;border-color:var(--navy,#0B1730)}
+.savebtns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.savelist{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto}
+.saveitem{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line,#E2E6EE);
+  border-radius:9px;background:var(--surface-2,#F3F5F9)}
+.saveitem .si-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+.saveitem .si-main b{font-size:13px}
+.saveitem .si-main span{font-size:11.5px;color:var(--muted,#5B6472);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.saveitem .si-meta{font-size:10.5px !important;color:var(--muted-2,#8791A0) !important}
+.saveitem .si-open{font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--line,#E2E6EE);background:#fff;color:var(--gold-d,#8B6A2C);cursor:pointer;font-weight:700;flex:0 0 auto}
+.saveitem .si-rm{width:26px;height:26px;border-radius:6px;border:1px solid var(--line,#E2E6EE);background:#fff;color:var(--muted,#5B6472);cursor:pointer;font-size:16px;line-height:1;flex:0 0 auto}
+.saveitem .si-rm:hover{border-color:#9B2C2C;color:#9B2C2C}
+#sharetoast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(16px);z-index:120;
+  background:linear-gradient(120deg,#0B1730,#152747);color:#EAF0FB;padding:11px 18px;border-radius:10px;
+  font-size:13px;font-weight:600;box-shadow:0 8px 28px rgba(8,14,26,.4);border:1px solid rgba(198,161,75,.4);
+  opacity:0;pointer-events:none;transition:opacity .2s ease,transform .2s var(--e-lux,ease);max-width:90vw;text-align:center}
+#sharetoast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 .ctychip{display:inline-block;background:var(--navy);color:#fff;border-radius:4px;padding:0 6px;
   font-size:10px;font-weight:800;letter-spacing:.04em;vertical-align:1px}
 .dealtog{margin-top:8px;background:var(--surface);border:1px solid var(--line);color:var(--ink);
@@ -607,7 +638,7 @@ input.ph::placeholder{color:#8FBFA0}
 
 /* ============================== MODALS (shared shell) ============================== */
 #dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal{display:none;position:fixed;inset:0;z-index:120}
-#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show{display:block}
+#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show,#savedmodal.show{display:block}
 #syncmodal{z-index:122}#planmodal{z-index:121}#lookupmodal{z-index:121}#gallerymodal{z-index:130}
 .dm-backdrop{position:absolute;inset:0;background:rgba(9,16,31,.5);backdrop-filter:blur(5px);
   -webkit-backdrop-filter:blur(5px);animation:dmFade .2s ease}
@@ -1080,6 +1111,7 @@ body.compact .dg-v{font-size:14.5px}
 <div id="syncmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="syncbody"></div></div></div>
 <div id="mailmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="mailbody"></div></div></div>
 <div id="refreshmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="refreshbody"></div></div></div>
+<div id="savedmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="savedbody"></div></div></div>
 <div id="cadencemodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="cadencebody"></div></div></div>
 <!-- Investor dispo pack — the print-only one-pager. Populated by exportDispoPack() from the deal-analysis modal. -->
 <div id="dispoPackView" aria-hidden="true">
@@ -1173,6 +1205,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M17 3.5 18.6 6 21 6.7M7 20.5 5.4 18 3 17.3"/></svg> Sync / team <span id="syncfresh" class="syncfresh"></span></button>
 <button id="mailbatch" title="Prepare a batch of homeowner-rescue letters to send as real mail via Lob. Picks Tier A/B leads with a real owner, a deliverable mailing address, and an auction 5+ days out, minus anyone opted out. You review and download the batch here; your Lob key never touches this page."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Mail batch</button>
 <button id="cadencebtn" title="Email cadence queue — enrolled owners get a 4-touch sequence (day 0/2/4/7) that sends itself and auto-cancels the moment they reply. Export the queue, run cadence.py on your machine; replies and opt-outs sync back. Kimi-built."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg> Cadence</button>
+<button id="savedbtn" title="Your saved batch — star deals to save them here (kept on this device). Print a field packet for Carlos, copy a list to send, or share any deal."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 21.4l1.4-6.8L2.2 9.9l6.9-.8z"/></svg> Saved<span class="favn"></span></button>
 <span class="stats" id="stats"></span>
 </div>
 </header>
@@ -1332,12 +1365,17 @@ function recompute(){
     // (conf 'ok' or 'low'); the deal-modal input always wins over the chain's number.
     const chainSurv = (r.orconf==='ok' || r.orconf==='low') ? (r.orjunior || r.orsurv || r.orsurvfirst || 0) : 0;
     r._chainSurv = chainSurv;
+    const chainConf = (r.orconf==='ok' || r.orconf==='low');
     const slien = Math.max(0, +nn.slien || 0) || chainSurv;   // surviving senior / 1st mortgage (HOA/junior cases)
-    const jlien = Math.max(0, +nn.jlien || 0);   // 2nd / junior mortgage or HELOC — a payoff to take clean title on an owner purchase (Hondroulis had one the judgment never showed)
-    const assess = Math.max(0, +nn.assess || 0); // condo HOA arrears + special assessment (post-Surfside 40-yr recertification) — not in public data, sized by the association estoppel
-    const mlien = Math.max(0, +nn.mlien || 0);   // surviving municipal / code / IRS liens
+    // kimi: the rest of the deal-modal prefills, all from the recorded chain (user entry still wins).
+    const jlien = Math.max(0, +nn.jlien || 0) || (chainConf ? (r.orjuniors||0) : 0);   // mortgages recorded AFTER the foreclosing one — payoff for clean title on a purchase
+    const assess = Math.max(0, +nn.assess || 0) || (chainConf ? (r.orhoa||0) : 0);     // recorded HOA/association open liens (estoppel still confirms at contract)
+    const mlien = Math.max(0, +nn.mlien || 0) || (chainConf ? ((r.orcode||0)+(r.orirs||0)) : 0);   // code/muni/IRS + money judgments
+    // btax stays manual ON PURPOSE: foreclosure ≠ tax-delinquent (the default is the MORTGAGE), and the
+    // only honest delinquency figure lives on the tax bill — one click via the deep 'Taxes' link.
     const btax = Math.max(0, +nn.btax || 0);     // delinquent property taxes — first-priority lien, survives FC (FS 197.122)
-    const occ = !!nn.occ;                         // occupied -> eviction cost + no interior look
+    const occ = (nn.occ != null) ? !!nn.occ      // occupied: user-set wins; else homestead + owner mails to the site address = living there
+      : !!(r.hs && r.mail && r.addr && String(r.mail).trim().toUpperCase() === String(r.addr).trim().toUpperCase());
     const evict = occ ? Math.max(4000, val*0.02) : 0;
     r._slien=slien; r._jlien=jlien; r._assess=assess; r._mlien=mlien; r._btax=btax; r._occ=occ; r._evict=evict;
     r._assessSet = (nn.assess!=null && nn.assess!=='');   // an explicitly researched assessment (incl. a confirmed $0) lifts the condo MARGINAL cap
@@ -1552,7 +1590,16 @@ function dealModalBody(r){
       ? '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Send to a buyer</div>'+
         '<button type="button" class="dealtog" onclick="exportDispoPack(\''+esc(r.case)+'\')" style="width:100%;padding:11px 14px;background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;font-weight:800;font-family:var(--f-body);font-size:13px;letter-spacing:.03em;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(198,161,75,.35)">&#128196; Export investor pack (PDF)</button>'+
         '<div style="font-size:11px;color:var(--muted,#6b7280);margin-top:6px;line-height:1.5">One-page underwriting summary sized for Save-as-PDF from the print dialog. Same math as this modal, plus the compliance boilerplate a cash buyer expects.</div>'
-      : '');
+      : '') +
+    // Save & share — star it into the batch, or one-tap copy a shareable brief for Carlos (his door
+    // mission) / Jose (go-no-go) / anyone (a deep link that opens straight to this property).
+    '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Save &amp; share</div>'+
+    '<div class="sharerow">'+
+      '<button type="button" class="shbtn shsave'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+esc(r.case)+'\',event)">'+(_isFav(r.case)?'★ Saved':'☆ Save to batch')+'</button>'+
+      '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'link\')" title="Copy a link that opens straight to this property">🔗 Copy link</button>'+
+      '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'carlos\')" title="Copy a ready-to-send door mission for Carlos">👷 For Carlos</button>'+
+      '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
+    '</div>';
 }
 let dealModalCase = null;
 function openDealModal(caseId){
@@ -1774,7 +1821,7 @@ function _photoThumb(r, eager){
   const z = _zurl(r);
   return '<a class="pthumb"'+(z?' href="'+esc(z)+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow">'
     + '<img src="'+esc(ph[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'
-    + _zstatusBadge(r)
+    + _zstatusBadge(r) + _favStar(r)
     + (ph.length>1?'<span class="pcount">▣ '+ph.length+'</span>':'')+'</a>';
 }
 function galleryBody(r){
@@ -1952,6 +1999,170 @@ function _zstatusChip(r){
 // Case-age rule: late-2024+ filings are FRESH (9/10 never stopped a sale — they'll take a real
 // rescue); 2019-2023 filers are SERIAL-STALLER territory (multiple bankruptcies, they know the
 // delay game better than we do). The chip encodes the call-priority rule on every row.
+// ===================== FAVORITES / SAVED BATCH + SHARE (2026-07-20) =====================
+// Star any deal -> it drops into your Saved batch, kept on THIS device (localStorage fcFavs) so it's
+// still there when you come back. From the batch: print a Carlos field packet (route sheet + door
+// hangers) as one PDF, copy a plain list, or copy the Jose briefs. Per deal: copy a deep link that
+// opens straight to that property, a ready-to-send Carlos mission, or a Jose go/no-go brief.
+let favs = new Set();
+try { favs = new Set(JSON.parse(localStorage.getItem('fcFavs') || '[]')); } catch(e){}
+let favOnly = false;
+function _favSave(){ try { localStorage.setItem('fcFavs', JSON.stringify([...favs])); } catch(e){} }
+function _isFav(c){ return favs.has(c); }
+function _favCountEls(){
+  var n = favs.size, b = document.getElementById('savedbtn');
+  if(b){ b.classList.toggle('hasfav', n>0); var c = b.querySelector('.favn'); if(c) c.textContent = n ? (' '+n) : ''; }
+}
+function _toggleFav(c, ev){
+  if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+  if(favs.has(c)) favs.delete(c); else favs.add(c);
+  _favSave(); _favCountEls();
+  render();                                                       // repaints every row star
+  if(dealModalCase===c){ var r = DATA.find(function(x){return x.case===c;}); if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r); }
+  var sm = document.getElementById('savedmodal'); if(sm && sm.classList.contains('show')) openSaved();
+}
+function _favStar(r){
+  var on = favs.has(r.case);
+  return '<button type="button" class="favstar'+(on?' on':'')+'" data-fav="'+esc(r.case)+'" title="'+(on?'Saved to your batch — click to remove':'Save to your batch')+'" onclick="_toggleFav(\''+esc(r.case)+'\',event)">'+(on?'★':'☆')+'</button>';
+}
+// ---- share message builders (safe fields only) ----
+function _bestPhones(r){
+  var out = [];
+  var manual = (notes[r.case]||{}).phone; if(manual) out.push(manual);
+  (r.phones||[]).forEach(function(p,i){ if(p && !((r.phdnc||[])[i])) out.push(fmtPhone ? fmtPhone(p) : p); });
+  return out.slice(0,3);
+}
+function _netEqOf(r){ var v=(+r.arv||+r.value||0); return v ? Math.max(0, v - (+r.judg||0) - (r._chainSurv||0)) : 0; }
+function _deepLink(r){ return location.origin + location.pathname + '#case=' + encodeURIComponent(r.case); }
+function _carlosMsg(r){
+  var owner = (r.owners||'').split(';')[0].split('&')[0].trim();
+  var ph = _bestPhones(r), days = (r.days>=0? r.days+' days out' : 'sale passed');
+  return 'DOOR MISSION — '+owner+'\n'
+    + r.addr + '\n'
+    + 'Case '+r.case+'  ·  Auction '+r.auction+' ('+days+')\n'
+    + 'Phone: '+(ph.length? ph.join(', ') : 'none yet — door only')+'\n\n'
+    + 'What to do: print + hand-deliver the rescue letter and the door hanger. Knock, keep it warm, '
+    + 'ask if they want to KEEP / SELL / WALK, leave your number. No answer -> hang the door hanger.\n'
+    + _deepLink(r);
+}
+function _joseMsg(r){
+  var owner = (r.owners||'').split(';')[0].trim();
+  var v = (+r.arv? '$'+(+r.arv).toLocaleString()+' (comp ARV)' : (r.value?'$'+(+r.value).toLocaleString()+' (county val)':'value unknown'));
+  var senior = r._chainSurv ? '$'+Math.round(r._chainSurv).toLocaleString()+(r.orconf==='ok'?' (verified)':' (~est, verify)') : 'none traced';
+  var fy = _filedYear(r), fresh = fy>=2024 ? 'FRESH ('+fy+')' : (fy? 'staller? ('+fy+')' : '');
+  return 'BLESS THIS? — '+r.addr+'\n'
+    + 'Owner: '+owner+'  ·  Case '+r.case+'\n'
+    + 'Auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+(fresh?'  ·  '+fresh:'')+'\n'
+    + 'Value/ARV: '+v+'\n'
+    + 'Foreclosing judgment: '+(r.judg?'$'+(+r.judg).toLocaleString():'not posted')+'\n'
+    + 'Surviving senior mortgage: '+senior+'\n'
+    + 'Net equity after the stack: ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
+    + 'Tracker verdict: '+(r._verdict||'—')+(r.zstatus?'  ·  '+r.zstatus:'')+'\n\n'
+    + 'Go / no-go? What do you want the first move to be?\n'
+    + _deepLink(r);
+}
+function _shareToast(msg){
+  var t = document.getElementById('sharetoast');
+  if(!t){ t = document.createElement('div'); t.id='sharetoast'; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(_shareToast._t); _shareToast._t = setTimeout(function(){ t.classList.remove('show'); }, 2400);
+}
+function _copyShare(text, label){
+  var done = function(){ _shareToast(label + ' copied — paste it into WhatsApp / text / email'); };
+  if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function(){ fallbackCopy(text, done); });
+  else fallbackCopy(text, done);
+}
+function _shareTo(c, who){
+  var r = DATA.find(function(x){return x.case===c;}); if(!r) return;
+  if(who==='carlos') _copyShare(_carlosMsg(r), 'Carlos mission');
+  else if(who==='jose') _copyShare(_joseMsg(r), 'Jose brief');
+  else _copyShare(_deepLink(r), 'Property link');
+}
+// ---- Saved batch modal ----
+function _favLeads(){ return DATA.filter(function(r){ return favs.has(r.case); }); }
+function openSaved(){
+  var list = _favLeads();
+  var body = '<div class="dm-sec" style="font-size:17px;margin-bottom:2px">Saved batch &mdash; '+list.length+' deal'+(list.length===1?'':'s')+'</div>';
+  if(!list.length){
+    body += '<div class="sd" style="color:var(--muted);font-size:12.5px">No saved deals yet. Click the &#9734; star on any property (on its photo, or in the deal panel) to build a batch you can print for Carlos or send to Jose. Your batch stays on this device between visits.</div>';
+    document.getElementById('savedbody').innerHTML = body;
+    document.getElementById('savedmodal').classList.add('show'); document.body.classList.add('modal-open'); return;
+  }
+  body += '<div class="sd" style="color:var(--muted);font-size:12px;margin-bottom:8px">Print the field packet for Carlos, or copy a list to send. Stays saved on this device.</div>';
+  body += '<div class="savebtns">'
+    + '<button type="button" class="syncbtn2" onclick="_carlosPacket()" style="background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;border:none;font-weight:800">&#128196; Carlos field packet (PDF)</button>'
+    + '<button type="button" class="syncbtn2 ghost" onclick="_copyBatch(\'carlos\')">Copy list for Carlos</button>'
+    + '<button type="button" class="syncbtn2 ghost" onclick="_copyBatch(\'jose\')">Copy briefs for Jose</button>'
+    + '</div>';
+  body += '<div class="savelist">' + list.map(function(r){
+    var owner = (r.owners||'').split(';')[0].trim();
+    return '<div class="saveitem"><div class="si-main"><b>'+esc(owner)+'</b><span>'+esc(r.addr)+'</span>'
+      + '<span class="si-meta">'+(r.county&&r.county!=='MIAMI-DADE'?esc(r.county)+' · ':'')+'auction '+esc(r.auction)+(r.days>=0?' · '+r.days+'d':'')+'</span></div>'
+      + '<button type="button" class="si-open" onclick="closeSaved();openDealModal(\''+esc(r.case)+'\')" title="Open this deal">Open</button>'
+      + '<button type="button" class="si-rm" onclick="_toggleFav(\''+esc(r.case)+'\')" title="Remove from batch">&times;</button></div>';
+  }).join('') + '</div>';
+  body += '<div style="margin-top:10px"><button type="button" class="syncbtn2 ghost" onclick="_showFavOnBoard()">Show these on the board</button> '
+    + '<a href="#" onclick="event.preventDefault();if(confirm(\'Clear all '+list.length+' saved deals?\')){favs.clear();_favSave();_favCountEls();render();openSaved();}" style="color:var(--muted);font-size:12px;margin-left:6px">Clear all</a></div>';
+  document.getElementById('savedbody').innerHTML = body;
+  document.getElementById('savedmodal').classList.add('show'); document.body.classList.add('modal-open');
+}
+function closeSaved(){ document.getElementById('savedmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+function _showFavOnBoard(){ favOnly = true; closeSaved(); tier='ALL'; q=''; var qi=document.getElementById('q'); if(qi) qi.value=''; render(); }
+function _copyBatch(who){
+  var list = _favLeads(); if(!list.length) return;
+  var sep = '\n\n----------------------------------------\n\n';
+  var txt = list.map(function(r){ return who==='jose' ? _joseMsg(r) : _carlosMsg(r); }).join(sep);
+  _copyShare(txt, (who==='jose'?'All Jose briefs':'All Carlos missions')+' ('+list.length+')');
+}
+// One printable PDF for Carlos: a route sheet (the whole list + names + checkboxes) then a
+// privacy-safe door hanger per property (owner first name + the auction date + call-to-action with
+// the sender's number; the word "foreclosure" never appears on the hanger, per the door-safe rule).
+function _carlosPacket(){
+  var list = _favLeads(); if(!list.length){ _shareToast('Save some deals first'); return; }
+  var sN = (sender&&sender.name)||'', sL=(sender&&sender.llc)||'', sP=(sender&&sender.phone)||'[SET YOUR PHONE IN SENDER SETUP]';
+  var today = new Date().toLocaleDateString();
+  var rowsHtml = list.map(function(r,i){
+    var owner = (r.owners||'').split(';')[0].trim();
+    var ph = _bestPhones(r);
+    return '<tr><td>'+(i+1)+'</td><td><b>'+esc(owner)+'</b></td><td>'+esc(r.addr)+'</td><td>'+(ph.length?esc(ph.join(' / ')):'&mdash;')+'</td><td>'+esc(r.auction)+(r.days>=0?'<br><span class="d">'+r.days+'d</span>':'')+'</td>'
+      + '<td class="ck">&#9744; letter</td><td class="ck">&#9744; hanger</td><td class="ck">&#9744; knocked</td><td class="ck">&#9744; spoke</td></tr>';
+  }).join('');
+  var hangers = list.map(function(r){
+    var first = ((r.owners||'').split(';')[0].split('&')[0].trim().split(/\s+/)[0]||'Neighbor');
+    var area = (function(){ var m=(r.addr||'').match(/,\s*([^,]+),\s*\d{5}/); return m?m[1].trim():'the area'; })();
+    return '<div class="hang"><div class="hh">For '+esc(first)+'</div>'
+      + '<p>I&rsquo;m a local buyer working in '+esc(area)+'. I&rsquo;m reaching out about your property at <b>'+esc(r.addr)+'</b> — there&rsquo;s an important county date coming up on <b>'+esc(r.auction)+'</b>, and you may have more options than you think, including walking away with cash in hand.</p>'
+      + '<p>There is no cost and no obligation to talk. If it helps to know your options before that date, call me:</p>'
+      + '<div class="cta">Call '+esc(sP)+' — '+esc(sN||'your local buyer')+(sL?', '+esc(sL):'')+'</div>'
+      + '<div class="fold">— — — — — — — — — fold / cut here — — — — — — — — —</div></div>';
+  }).join('');
+  var doc = '<!doctype html><html><head><meta charset="utf-8"><title>Carlos Field Packet — '+today+'</title><style>'
+    + 'body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:28px}'
+    + 'h1{font-size:20px;margin:0 0 2px}.sub{color:#555;font-size:13px;margin-bottom:14px}'
+    + 'table{width:100%;border-collapse:collapse;font-size:12px}th,td{border:1px solid #bbb;padding:6px 7px;text-align:left;vertical-align:top}'
+    + 'th{background:#0B1730;color:#fff;font-size:11px}td .d{color:#B45309;font-weight:700}.ck{white-space:nowrap;color:#444}'
+    + '.hang{border:2px dashed #999;border-radius:10px;padding:18px 20px;margin:0 0 16px;page-break-inside:avoid}'
+    + '.hh{font-size:19px;font-weight:800;margin-bottom:8px}.hang p{font-size:14px;line-height:1.5;margin:8px 0}'
+    + '.cta{margin-top:10px;font-size:15px;font-weight:800;background:#0B1730;color:#fff;padding:9px 12px;border-radius:8px;display:inline-block}'
+    + '.fold{color:#aaa;font-size:11px;text-align:center;margin-top:12px}'
+    + '.pgb{page-break-before:always}@media print{.noprint{display:none}}'
+    + '.bar{background:#0B1730;color:#fff;padding:10px 14px;margin:-28px -28px 20px;display:flex;gap:10px}'
+    + '.bar button{padding:8px 14px;border:1px solid #33436A;background:#152747;color:#CDD8EF;border-radius:6px;cursor:pointer;font-size:14px}'
+    + '</style></head><body>'
+    + '<div class="bar noprint"><button onclick="window.print()">Print / Save as PDF</button><span style="align-self:center;color:#9fb0d6">'+list.length+' stops · hand to Carlos</span></div>'
+    + '<h1>Field Route — '+list.length+' propert'+(list.length===1?'y':'ies')+'</h1>'
+    + '<div class="sub">'+today+(sN?' · '+esc(sN):'')+(sL?' · '+esc(sL):'')+' · callback '+esc(sP)+'</div>'
+    + '<table><thead><tr><th>#</th><th>Owner</th><th>Address</th><th>Phone</th><th>Auction</th><th>&nbsp;</th><th>&nbsp;</th><th>&nbsp;</th><th>&nbsp;</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'
+    + '<div class="pgb"></div><h1>Door hangers</h1><div class="sub">One per property — fold on the line, hang on the door if no answer.</div>'+hangers
+    + '</body></html>';
+  var w = window.open('', '_blank'); if(w){ w.document.write(doc); w.document.close(); } else _shareToast('Allow pop-ups to open the packet');
+}
+// Deep link on load: after the gate opens, ?/#case=CASE opens that deal straight away (shared links).
+function _openHashDeal(){
+  var m = (location.hash||'').match(/case=([^&]+)/); if(!m) return;
+  var c = decodeURIComponent(m[1]);
+  if(DATA.some(function(x){return x.case===c;})) setTimeout(function(){ openDealModal(c); }, 300);
+}
 // Filing year: the `filed` field when the scraper carried it (MD), else derived from the case
 // number itself — MD `2025-021847-CA-01`, PB `502024CA012300…`, BW `CACE-24-009886` all encode it.
 function _filedYear(r){
@@ -3017,6 +3228,9 @@ function exportCadence(){
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href), 3000);
 }
 document.getElementById('cadencebtn').onclick = () => openCadence();
+{ const _sb = document.getElementById('savedbtn'); if(_sb) _sb.onclick = () => openSaved(); }
+// a shared #case= link pasted while the page is already open (hash change, no reload) still opens it
+window.addEventListener('hashchange', _openHashDeal);
 document.addEventListener('click', e => {
   const g = e.target.closest && e.target.closest('.cadencegen');
   if(g){ e.preventDefault(); enrollCadence(g.dataset.c); return; }
@@ -3109,6 +3323,7 @@ function view(){
     if(eq30Only) rows = rows.filter(r => netEqPct(r) >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r));
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
+    if(favOnly) rows = rows.filter(r => favs.has(r.case));
   }
   rows = rows.slice();
   const sortVal = r => {
@@ -3305,7 +3520,7 @@ function render(){
       '<td>'+phoneInp+notesTa+'</td></tr>');
     // mobile card
     cards.push('<div data-case="'+esc(r.case)+'" class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+(pinnedCase===r.case?' pinfire':'')+'">'+
-      ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+_zstatusBadge(r)+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
+      ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+_zstatusBadge(r)+_favStar(r)+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)
@@ -3369,7 +3584,7 @@ document.addEventListener('click', e => {
   togglePin(row.dataset.case);
 });
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=false;
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=false;
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
@@ -3894,9 +4109,9 @@ document.addEventListener('click', e => {
 });
 // close the modal: X button, backdrop click, or Escape
 document.addEventListener('click', e => {
-  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); closeRefresh(); closeCadence(); }
+  if(e.target.closest && (e.target.closest('.dm-close') || e.target.classList.contains('dm-backdrop'))){ closeDealModal(); closeLogModal(); closeLookupModal(); closePlanModal(); closeGallery(); closeSyncModal(); closeMailModal(); closeRefresh(); closeCadence(); closeSaved(); }
 });
-document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); closeRefresh(); closeCadence(); } });
+document.addEventListener('keydown', e => { if(e.key==='Escape'){ if(dealModalCase) closeDealModal(); if(logModalCase) closeLogModal(); closeLookupModal(); closeRefresh(); closeCadence(); closeSaved(); } });
 // "/" focuses search (unless already typing in a field)
 document.addEventListener('keydown', e => {
   if(e.key==='/' && !/^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement||{}).tagName||'')){
@@ -4030,6 +4245,8 @@ async function boot(){
   recompute();
   render();
   syncFreshness();
+  _favCountEls();                    // show the saved-count on the Saved button
+  _openHashDeal();                   // shared #case= link opens straight to that property
   if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
   if(manual && unlockName) showWelcome(unlockName);   // greet them only when they actually enter a code
 }
