@@ -175,16 +175,28 @@ def analyze(models, folio, judgment, ftype=''):
             si = _inst(s.get('seconD_PARTY'))
             if si and si in chain:
                 o['st'] = 'SATISFIED'; break
-        if o['st'] == 'OPEN':
-            for s in sats2:
-                if s['_dt'] and 0 < _months(o['_dt'], s['_dt'][:10]) <= 24 and _LENDER_RE.search(s.get('seconD_PARTY') or ''):
-                    o['st'] = 'SATISFIED'; break
-        if o['st'] == 'OPEN':
-            for m2 in liens:
-                if m2 is o or m2['_dt'] <= o['_dt']: continue
-                if (_months(o['_dt'], m2['_dt']) <= 36 and m2['amt'] >= o['amt'] * 0.7
-                        and m2['_lend'] != o['_lend'] and m2['_lend'] not in chain):
-                    o['st'] = 'SATISFIED'; break
+    opens = [o for o in liens if o['st'] == 'OPEN']
+    # rule 2: a LENDER-party release kills the NEWEST still-open mortgage recorded 3-24 months
+    # before it. The 3-month floor is the Echeverri guard: a release dated weeks after a loan was
+    # written belongs to an OLDER loan in the chain, never to the new one — so same-year misfires
+    # (Echeverri's real New Century senior) can't be killed by a different loan's satisfaction.
+    for s in sorted(sats2, key=lambda x: x['_dt']):
+        if not (s['_dt'] and _LENDER_RE.search(s.get('seconD_PARTY') or '')): continue
+        prior = [o for o in opens if o['_dt'] < s['_dt'] and 3 <= _months(o['_dt'], s['_dt'][:10]) <= 24]
+        if prior:
+            newest = max(prior, key=lambda o: o['_dt'])
+            newest['st'] = 'SATISFIED'
+            opens = [o for o in opens if o is not newest]
+    # rule 3: refi-kill ONLY in true-refi shape — newer different-lender mortgage >=90% of the
+    # older balance within 24 months (a junior second is usually far smaller, so it can't pose as one)
+    for o in liens:
+        if o['st'] != 'OPEN': continue
+        chain3 = {o['_lend']} | _assignees(o['_lend'], o['_dt'])
+        for m2 in liens:
+            if m2 is o or m2['_dt'] <= o['_dt']: continue
+            if (_months(o['_dt'], m2['_dt']) <= 24 and m2['amt'] >= o['amt'] * 0.9
+                    and m2['_lend'] != o['_lend'] and m2['_lend'] not in chain3):
+                o['st'] = 'SATISFIED'; break
     opens = [o for o in liens if o['st'] == 'OPEN']
     junior = first_amt = surv = surv_first = 0
     juniors_post = 0

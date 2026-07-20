@@ -255,15 +255,17 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
             if i in used or not s['_dt'] or s['_dt'] < m['_dt']: continue
             if _inst(s.get('CrossPartyName')) in chain:
                 used.add(i); is_open = False; break
-        if is_open:                                                          # rule 2: lender release, 24-month window
+        if is_open:                                                          # rule 2: lender release kills the NEWEST PRIOR within 3-24mo
             for i, s in enumerate(sats):
                 if i in used or not s['_dt']: continue
-                if 0 < _months(m['_dt'], s['_dt']) <= 24 and _LENDER_RE.search(s.get('CrossPartyName') or ''):
-                    used.add(i); is_open = False; break
-        if is_open:                                                          # rule 3: refi-kill
+                if 3 <= _months(m['_dt'], s['_dt']) <= 24 and _LENDER_RE.search(s.get('CrossPartyName') or ''):
+                    newer = [x for x in opens if x['d'] > m['_dt'] and _months(m['_dt'], x['d']) <= 24]
+                    if not newer:
+                        used.add(i); is_open = False; break
+        if is_open:                                                          # rule 3: refi-kill ONLY in true-refi shape (>=90%, 24mo)
             for m2 in morts:
                 if m2 is m: continue
-                if (0 < _months(m['_dt'], m2['_dt']) <= 36 and _num(m2.get('Consideration')) >= amt * 0.7
+                if (0 < _months(m['_dt'], m2['_dt']) <= 24 and _num(m2.get('Consideration')) >= amt * 0.9
                         and _inst(m2.get('CrossPartyName')) != lend and _inst(m2.get('CrossPartyName')) not in chain):
                     is_open = False; break
         if is_open:                                                          # rule 4: sale-kill
