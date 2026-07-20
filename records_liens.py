@@ -94,6 +94,14 @@ def _fc_type(case):
     return ''
 
 
+def _inst(s):
+    """Normalize a lender/institution name for satisfaction<->mortgage matching."""
+    s = (s or '').upper()
+    s = re.sub(r'\b(NA|N A|NATIONAL ASSN|NATIONAL ASSOCIATION|FSB|FA|INC|CORP|CO|LLC|LP|USA|'
+               r'TRUST COMPANY|MTGE|MORTGAGE|GROUP|GRP|SVGS|SAVINGS|HOME LOANS?|FINANCIAL|SERVICES?|BANK)\b', '', s)
+    return re.sub(r'[^A-Z]', '', s)
+
+
 def analyze(models, folio, judgment, ftype=''):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
@@ -133,10 +141,51 @@ def analyze(models, folio, judgment, ftype=''):
         bp = (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip())
         is_open = bp not in satisfied
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'amt': amt, 'party': (r.get('seconD_PARTY', '') or '')[:40],
-               'bp': r.get('reC_BOOKPAGE', ''), 'st': 'OPEN' if is_open else 'SATISFIED'}
+               'bp': r.get('reC_BOOKPAGE', ''), 'st': 'OPEN' if is_open else 'SATISFIED',
+               '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY'))}
         liens.append(row)
         if is_open:
             opens.append(row)
+    # --- kimi: layered fallback for still-open mortgages (MD) -------------------------------------
+    # The book/page match is direct but blind when a satisfaction leaves oriG_* empty (common on
+    # assignee-recorded releases). Layered: release by lender OR its recorded assignee; then any
+    # LENDER-party release within 24 months; then refi-kill (newer different-lender mortgage
+    # >=70% of balance within 36 months).
+    _LENDER_RE = re.compile(r'BANK|MORTGAGE|MTGE|LOAN|FINANC|SAVING|CREDIT|FUNDING|SERVICING|FEDERAL|NATIONAL', re.I)
+    def _months(a, b):
+        try: return (int(b[:4]) - int(a[:4])) * 12 + (int(b[5:7]) - int(a[5:7]))
+        except Exception: return 99
+    sats2 = [r for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())]
+    for r in sats2: r['_dt'] = '-'.join(sortkey(r))
+    assigns = [r for r in models if 'ASSIGNMENT' in (r.get('doC_TYPE', '') or '').upper()]
+    for r in assigns: r['_dt'] = '-'.join(sortkey(r))
+    def _assignees(lend, after):
+        out = set()
+        for a in assigns:
+            if a['_dt'] >= after:
+                ai = _inst(a.get('seconD_PARTY'))
+                if ai: out.add(ai)
+        return out
+    for o in liens:
+        if o['st'] == 'SATISFIED':
+            continue
+        chain = {o['_lend']} | _assignees(o['_lend'], o['_dt'])
+        for s in sats2:
+            if not s['_dt'] or s['_dt'] < o['_dt']: continue
+            si = _inst(s.get('seconD_PARTY'))
+            if si and si in chain:
+                o['st'] = 'SATISFIED'; break
+        if o['st'] == 'OPEN':
+            for s in sats2:
+                if s['_dt'] and 0 < _months(o['_dt'], s['_dt'][:10]) <= 24 and _LENDER_RE.search(s.get('seconD_PARTY') or ''):
+                    o['st'] = 'SATISFIED'; break
+        if o['st'] == 'OPEN':
+            for m2 in liens:
+                if m2 is o or m2['_dt'] <= o['_dt']: continue
+                if (_months(o['_dt'], m2['_dt']) <= 36 and m2['amt'] >= o['amt'] * 0.7
+                        and m2['_lend'] != o['_lend'] and m2['_lend'] not in chain):
+                    o['st'] = 'SATISFIED'; break
+    opens = [o for o in liens if o['st'] == 'OPEN']
     junior = first_amt = surv = surv_first = 0
     juniors_post = 0
     if opens:
