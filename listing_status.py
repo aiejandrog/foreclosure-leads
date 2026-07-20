@@ -57,6 +57,33 @@ def _folio(r):
             or re.sub(r'[^a-z0-9]', '', str(r.get('case') or r.get('Case #') or '').lower()))
 
 
+def _addr_from_folio_md(folio):
+    """Resolve a property address from a Miami-Dade folio via the PA JSON API. Some auction rows
+    ship with an empty Address ('MULTIPLE PARCELS' etc.) but a real folio — the PA knows the situs
+    address for every folio, which unlocks the Zillow check for those leads. Returns '' on any
+    failure. Same endpoint foreclosure_leads.py already uses for enrichment."""
+    digits = re.sub(r'\D', '', str(folio or ''))
+    if len(digits) < 10:
+        return ''
+    try:
+        d = requests.get(
+            'https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx',
+            params={'Operation': 'GetPropertySearchByFolio', 'clientAppName': 'PropertySearch',
+                    'folioNumber': digits},
+            timeout=20).json()
+        pi = d.get('PropertyInfo') or {}
+        site = (d.get('SiteAddress') or [{}])
+        site = site[0] if isinstance(site, list) and site else {}
+        street = (site.get('Address') or pi.get('SiteAddress') or '').strip()
+        city = (site.get('City') or '').strip()
+        zipc = str(site.get('Zip') or '').strip()
+        if not street:
+            return ''
+        return ', '.join(x for x in [street, city, 'FL'] if x) + (' ' + zipc if zipc else '')
+    except Exception:
+        return ''
+
+
 def classify(home_status, listing_type, price, doz):
     """Map raw Zillow fields to our zstatus label. Empty string = signal too thin to trust."""
     lt = (listing_type or '').strip().lower()
@@ -156,7 +183,20 @@ def enrich_file(path, cache, ttl_s, limit_state):
             continue
         addr = pp._addr_of(r)
         if not addr:
-            continue
+            # Address missing on the auction row but a real folio exists -> ask the Miami-Dade
+            # PA for the situs address (only meaningful for MD leads; BW/PB scrapers always
+            # carry an address).
+            addr = _addr_from_folio_md(r.get('Folio') or r.get('folio'))
+            if not addr:
+                # Verified unresolvable: no address on the auction row AND the county PA has no
+                # situs address for the folio (raw land / MULTIPLE PARCELS bundles). Zillow can't
+                # be checked without an address — mark honestly instead of leaving a hole that
+                # reads as a glitch. Cached so the row doesn't re-probe the PA daily; the 7-day
+                # TTL re-checks in case a later scrape run starts carrying the address.
+                r['zstatus'], r['zprice'], r['zdoz'] = 'NO-ADDR', 0, 0
+                cache[k] = {'s': 'NO-ADDR', 'p': 0, 'd': 0, 't': now}
+                changed += 1
+                continue
         status, price, days = fetch_status(addr)
         fetched += 1
         limit_state['n'] -= 1
