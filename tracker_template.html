@@ -78,7 +78,10 @@ header{padding:14px 22px 12px;background:rgba(244,246,250,.82);
   backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);
   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
   box-shadow:0 1px 0 rgba(255,255,255,.65) inset;
-  transition:transform .3s var(--e-lux),opacity .22s var(--e-lux),box-shadow .35s ease,padding .25s var(--e-lux);will-change:transform,opacity}
+  /* ALL properties that shift when body.mini toggles use the SAME .25s var(--e-lux) so the header
+     morphs as one motion, not a staged wave. The old .35s box-shadow was landing 100ms after the
+     shrink finished — that lag was Alejandro's "two stages / ping pong" complaint. */
+  transition:transform .25s var(--e-lux),opacity .25s var(--e-lux),box-shadow .25s var(--e-lux),padding .25s var(--e-lux);will-change:transform,opacity}
 header.hdn{transform:translateY(-106%);opacity:0}
 header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(11,23,48,.10)}
 .brand{display:flex;align-items:center;gap:12px;margin:0 0 12px;transition:margin .25s var(--e-lux)}
@@ -140,8 +143,12 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 /* base controls */
 button,select,input{font-family:var(--f-body);background:var(--surface);color:var(--ink);
   border:1px solid var(--line);border-radius:var(--r-sm);padding:7px 13px;font-size:13px;
-  cursor:pointer;transition:transform .26s var(--e-lux),box-shadow .26s var(--e-lux),
-  border-color .2s var(--e-lux),background-color .2s var(--e-lux),color .2s var(--e-lux),filter .2s var(--e-lux),
+  /* ALL properties unified to .25s so mini-shrink animates as one motion. Hover-only visuals
+     (transform, box-shadow, border, bg, color, filter) still animate at the same duration; hover
+     doesn't overlap with a scroll gesture so no cost, and micro-desyncs from 200/250/260ms mix
+     read as jitter during scroll. */
+  cursor:pointer;transition:transform .25s var(--e-lux),box-shadow .25s var(--e-lux),
+  border-color .25s var(--e-lux),background-color .25s var(--e-lux),color .25s var(--e-lux),filter .25s var(--e-lux),
   padding .25s var(--e-lux),font-size .25s var(--e-lux)}
 button:hover{border-color:rgba(16,28,51,.26);box-shadow:var(--sh-1)}
 button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
@@ -202,7 +209,8 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .qwrap kbd{position:absolute;right:9px;font-family:var(--f-num);font-size:10px;font-weight:700;
   color:var(--muted-2);background:var(--surface-2);border:1px solid var(--line);border-radius:5px;
   padding:1px 6px;pointer-events:none}
-.stats{font-size:12px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums}
+.stats{font-size:12px;color:var(--muted);margin-left:auto;font-variant-numeric:tabular-nums;
+  transition:font-size .25s var(--e-lux)}
 .statviol{color:var(--red-ink);font-weight:800}
 
 /* ============================== TODAY DIGEST ============================== */
