@@ -2243,7 +2243,7 @@ function _carlosPacket(){
     + '<table><thead><tr><th>#</th><th>Owner</th><th>Address</th><th>Phone</th><th>Auction</th><th>&nbsp;</th><th>&nbsp;</th><th>&nbsp;</th><th>&nbsp;</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'
     + '<div class="pgb"></div><h1>Door hangers</h1><div class="sub">One per property — fold on the line, hang on the door if no answer.</div>'+hangers
     + '</body></html>';
-  var w = window.open('', '_blank'); if(w){ w.document.write(doc); w.document.close(); } else _shareToast('Allow pop-ups to open the packet');
+  _openDoc(doc);   // mobile-safe (Blob URL) — window.open was popup-blocked on phones
 }
 // Deep link on load: after the gate opens, ?/#case=CASE opens that deal straight away (shared links).
 function _openHashDeal(){
@@ -2336,6 +2336,25 @@ function _profitPaths(r){
   }).join('');
   return _intentBar(r) + '<div class="ppaths">'+rows+'</div>';
 }
+// Open a generated HTML document reliably on BOTH desktop and mobile. The old pattern —
+// window.open('','_blank') then document.write — is popup-BLOCKED on phones (Alejandro 2026-07-20:
+// Letter/Door hanger/packet never opened on mobile). A Blob URL opened via a real anchor click,
+// synchronously inside the tap gesture, is not blocked. Falls back to same-tab navigation if even
+// the anchor is refused, and to a tap-link toast as a last resort.
+function _openDoc(html){
+  var url;
+  try { url = URL.createObjectURL(new Blob([html], {type:'text/html'})); }
+  catch(e){ return false; }
+  try {
+    var a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  } catch(e){
+    try { window.location.href = url; } catch(e2){}
+  }
+  setTimeout(function(){ try { URL.revokeObjectURL(url); } catch(e){} }, 60000);
+  return true;
+}
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
@@ -2405,8 +2424,7 @@ ul{margin:10px 0}
 <div id="body-es" style="display:none">${ES}</div>
 <script>function show(l){document.getElementById('body-en').style.display=l==='en'?'block':'none';document.getElementById('body-es').style.display=l==='es'?'block':'none';document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
 </body></html>`;
-  const w = window.open('', '_blank');
-  if(w){ w.document.write(doc); w.document.close(); }
+  _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
 }
 // ---- NEIGHBOR-SAFE DOOR HANGER: a fold-and-tape leave-behind for the door visit. ----
 // Privacy is the whole point: folded + taped, the OUTSIDE shows ONLY the owner's first name.
@@ -2480,8 +2498,7 @@ body{font-family:Georgia,serif;color:#111;margin:0;padding:0}
 </div>
 <script>function show(l){document.getElementById('msg').innerHTML=l==='en'?${JSON.stringify(inEN)}:${JSON.stringify(inES)};document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
 </body></html>`;
-  const w = window.open('', '_blank');
-  if(w){ w.document.write(doc); w.document.close(); }
+  _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
 }
 // ---- PURCHASE & SALE AGREEMENT (DRAFT) — with an assignment clause + FS 501.1377-style protections. ----
 // This is a starting draft, not a finished legal instrument. It is NOT bilingual (a legal contract in two
@@ -2634,8 +2651,7 @@ and every dollar figure independently before using it.</li>
 </ol>
 </div>
 </body></html>`;
-  const w = window.open('', '_blank');
-  if(w){ w.document.write(doc); w.document.close(); }
+  _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
 }
 // ---- per-lead PHONE SCRIPT: what to actually say when you call this owner (EN/ES, tailored) ----
 function genScript(r){
@@ -2781,8 +2797,7 @@ function genScript(r){
 <div id="body-es" style="display:none">${render('es')}</div>
 <script>function show(l){document.getElementById('body-en').style.display=l==='en'?'block':'none';document.getElementById('body-es').style.display=l==='es'?'block':'none';document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
 </body></html>`;
-  const w = window.open('', '_blank');
-  if(w){ w.document.write(doc); w.document.close(); }
+  _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
 }
 // ---- per-lead OUTREACH EMAIL: one generic foreclosure email, auto-filled per prospect so each reads
 //      personal. Opens pre-addressed to the owner's skip-traced email (EN/ES), or Copy to paste. ----
@@ -2847,8 +2862,7 @@ function openGmail(){window.open('https://mail.google.com/mail/?view=cm&fs=1&to=
 function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;function ok(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);}function fb(){var a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();try{document.execCommand('copy');ok();}catch(e){}document.body.removeChild(a);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,fb);}else{fb();}}
 show('en');<\/script>
 </body></html>`;
-  const w = window.open('', '_blank');
-  if(w){ w.document.write(doc); w.document.close(); }
+  _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); }
