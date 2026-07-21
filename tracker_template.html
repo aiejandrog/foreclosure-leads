@@ -3400,21 +3400,27 @@ function view(){
   // clear your last saved home. The active-filters bar (below) is the general escape hatch.
   if(favOnly && !favs.size) favOnly = false;
   let rows;
+  // kimi: the county pill is a HARD SCOPE, not a default-view filter (Alejandro 2026-07-20: PB
+  // rows showed while Miami-Dade was selected — search/saved/closers modes silently ignored the
+  // pill). When a county is picked it constrains EVERY mode; 'All' (county==='') changes nothing.
+  const _cscope = rs => county ? rs.filter(r => (r.county||'MIAMI-DADE')===county) : rs;
   if(q){
-    // Smart search: it does NOT matter which tier or filter you're on — a search spans the ENTIRE
-    // list and ignores every other filter, so you always find the lead. Matches owner, address,
+    // Smart search: spans the whole list and ignores tier/freshness filters so you always find
+    // the lead — but stays inside an actively-selected county scope. Matches owner, address,
     // case #, mailing address, plaintiff and co-defendants.
     const s = q.toLowerCase();
-    rows = DATA.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail+' '+(r.plaintiff||'')+' '+(r.defs||'')+' '+(r.oname||'')).toLowerCase().includes(s));
+    rows = _cscope(DATA.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail+' '+(r.plaintiff||'')+' '+(r.defs||'')+' '+(r.oname||'')).toLowerCase().includes(s)));
   } else if(favOnly){
     // Saved view is its own MODE (like search): shows every saved deal regardless of tier or any
-    // other filter, and leaves those filters untouched. Turn it off (or remove the last saved deal)
-    // and you drop straight back to exactly the view you were on before — never a forced "All tiers".
-    rows = DATA.filter(r => favs.has(r.case));
+    // other filter (county scope excepted), and leaves those filters untouched. Turn it off (or
+    // remove the last saved deal) and you drop straight back to exactly the view you were on
+    // before — never a forced "All tiers".
+    rows = _cscope(DATA.filter(r => favs.has(r.case)));
   } else if(closersOnly){
     // Closers mode: the shortlist worth working THIS week, across every tier, ranked by closeability
-    // (handled in the sort below). Its own mode so it ignores tier/other filters and restores cleanly.
-    rows = DATA.filter(r => _isCloser(r));
+    // (handled in the sort below). Its own mode so it ignores tier/other filters (not county
+    // scope) and restores cleanly.
+    rows = _cscope(DATA.filter(r => _isCloser(r)));
   } else {
     rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
     if(county) rows = rows.filter(r => (r.county||'MIAMI-DADE')===county);
