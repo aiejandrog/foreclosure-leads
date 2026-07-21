@@ -1371,7 +1371,9 @@ function landChips(r){ let o='';
     var _lp = (r.llcppl||[]).length;
     o += _lp
       ? '<span class="chip vnone" title="COMPANY-OWNED — but Sunbiz gave up '+_lp+' human'+(_lp>1?'s':'')+' behind it (manager/officers'+(r.llcstat==='INACTIVE'?'; entity DISSOLVED':'')+'). Open Deal analysis — names, addresses and people-search links are inside.">LLC-OWNED · '+_lp+' 🧑</span>'
-      : '<span class="chip vnone" title="COMPANY-OWNED (LLC/Corp/Trust). Not a distressed homeowner — likely a sophisticated investor who knows the value; different negotiation, no FS 501.1377 homeowner protections. Context only, not a red flag.">LLC-OWNED</span>';
+      : r.llcnf
+        ? '<span class="chip vnone" title="COMPANY-OWNED and NOT registered in Florida under this name — no Sunbiz managers or agent. Open Deal analysis: the deed names whoever signed for the entity, and the search links are there.">LLC-OWNED · via deed</span>'
+        : '<span class="chip vnone" title="COMPANY-OWNED (LLC/Corp/Trust). Not a distressed homeowner — likely a sophisticated investor who knows the value; different negotiation, no FS 501.1377 homeowner protections. Context only, not a red flag.">LLC-OWNED</span>';
   }
   return o; }
 // Real equity — nets out a CHAIN-VERIFIED surviving mortgage (orsurv) when we have one. The raw `eq`
@@ -1734,12 +1736,28 @@ function dealAnalysisHTML(r){
   // THE HUMANS BEHIND THE LLC (llc_officers.py / Sunbiz): a company-owned deal is still a person —
   // the manager who signs, skip-traceable like any owner. RA = formal/service-of-process channel.
   let llcHtml = '';
+  if(r.llcnf && r.co){
+    // Sunbiz has NO entity under this name (out-of-state LLC that never registered in FL, or a
+    // tax-roll misspelling). Showing nothing here is what made these leads feel un-findable — so
+    // route to the DEED, which always names a human: whoever signed for the LLC, plus their
+    // address and the notary. That document exists for every property the entity owns.
+    const ent = esc((r.owners||'').split(';')[0].trim());
+    const recs = r.records || '';
+    llcHtml = '<div class="dm-sec">The humans behind the LLC <span class="llcsrc">not on Sunbiz</span></div>'+
+      '<div class="llcbox"><div class="llcrow"><b>'+ent+'</b> is <b class="llcdead">not registered in Florida</b> under this name — no managers, no agent, no filings. That is normal for an out-of-state LLC (or a tax-roll typo), and it is not a dead end.</div>'+
+      '<div class="llcrow llcralow"><b>Find them via the DEED (always works):</b> the deed that put this property in the LLC\'s name is public, and it names the human who <i>signed</i> for the entity — usually with their address and a notary. Search Official Records by the entity name.</div>'+
+      (recs?'<div class="llcrow"><a href="'+esc(recs)+'" target="_blank" rel="noopener">Official Records &rarr; search the deed</a> · <a href="https://search.sunbiz.org/Inquiry/CorporationSearch/ByName" target="_blank" rel="noopener">Sunbiz name search (check spellings)</a> · <a href="https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?inquiryType=OfficerRegisteredAgentName&searchTerm='+encodeURIComponent(ent.replace(/\b(LLC|INC|CORP|LTD|LP)\b/gi,'').trim())+'" target="_blank" rel="noopener">Sunbiz officer search</a></div>':'')+
+      '<div class="llcrow llcralow">Then run the signer\'s name through <b>People</b> / <b>CyberBG</b> on this row for phones. Mailing address on file: <b>'+esc(r.mail||r.addr||'—')+'</b>'+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <i>(same as the property — mail here reaches whoever occupies it)</i>':'')+'</div></div>';
+  }
   if((r.llcppl||[]).length || r.llcra){
     const rows = (r.llcppl||[]).map(o =>
       '<div class="llcrow"><b>'+esc(o.n)+'</b> <span class="llct">'+esc(o.t||'')+'</span>'+
       (o.a?' · '+esc(o.a):'')+
       (o.p?' · <a href="'+esc(o.p)+'" target="_blank" rel="noopener">People search</a>':'')+'</div>').join('');
-    llcHtml = '<div class="dm-sec">The humans behind the LLC <span class="llcsrc">Sunbiz'+(r.llcstat==='INACTIVE'?' · <b class="llcdead">DISSOLVED ENTITY</b>':'')+'</span></div>'+
+    // Always show WHICH Sunbiz entity these people came from: a name that doesn't look like the
+    // owner on the row is the tell that the match is wrong (the BEETA BRIDGES -> BEETAILS trap).
+    const _mn = r.llcmatch && _norm2(r.llcmatch) !== _norm2((r.owners||'').split(';')[0]) ? ' · matched <b>'+esc(r.llcmatch)+'</b>' : '';
+    llcHtml = '<div class="dm-sec">The humans behind the LLC <span class="llcsrc">Sunbiz'+_mn+(r.llcstat==='INACTIVE'?' · <b class="llcdead">DISSOLVED ENTITY</b>':'')+'</span></div>'+
       '<div class="llcbox">'+rows+
       (r.llcra?'<div class="llcrow llcralow">Registered agent: '+esc(r.llcra)+(r.llcraaddr?' · '+esc(r.llcraaddr):'')+' <span class="llct">formal / service contact</span></div>':'')+
       (r.llcstat==='INACTIVE'?'<div class="llcrow llcralow">⚠ The LLC is dissolved on Sunbiz — the entity can\'t normally convey title until reinstated, but the MANAGER above is exactly who to call: dissolved LLC + foreclosure = an owner who has already checked out.</div>':'')+
@@ -2404,6 +2422,7 @@ function _filedYear(r){
   if(m){ y = +m[1]; if(y < 100) y += 2000; if(y > 1990 && y < 2100) return y; }
   return 0;
 }
+function _norm2(s){ return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
 function _stayLiftedDays(r){
   // days since the last stay CLOSED (court dismissal/discharge/relief date), or -1
   if(r.saleBkAct || !r.saleLift) return -1;

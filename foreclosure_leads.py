@@ -827,6 +827,11 @@ def make_tracker(leads):
             'llcra': (llcs.get(r.get('Case #', '')) or {}).get('ra', ''),
             'llcraaddr': (llcs.get(r.get('Case #', '')) or {}).get('ra_addr', ''),
             'llcstat': (llcs.get(r.get('Case #', '')) or {}).get('status', ''),
+            # Sunbiz has NO entity under this name (foreign LLC / tax-roll misspelling): the site
+            # routes to the DEED instead of showing an empty block or a fuzzy stranger's name.
+            'llcnf': bool((llcs.get(r.get('Case #', '')) or {}).get('nf')),
+            # the entity Sunbiz actually matched — shown in the UI so a wrong pairing is obvious
+            'llcmatch': (llcs.get(r.get('Case #', '')) or {}).get('matched', ''),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
             'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
@@ -914,6 +919,9 @@ def make_tracker(leads):
                 if _lo and (_lo.get('officers') or _lo.get('ra')):
                     _d['llcppl'] = _lo.get('officers', []); _d['llcra'] = _lo.get('ra', '')
                     _d['llcraaddr'] = _lo.get('ra_addr', ''); _d['llcstat'] = _lo.get('status', '')
+                    _d['llcmatch'] = _lo.get('matched', '')
+                elif _lo and _lo.get('nf'):
+                    _d['llcnf'] = True
                 # TRUE type: the recorded-chain plaintiff (broward_liens.analyze -> _h['ftype']) is
                 # authoritative and OVERRIDES the case-number prefix, which mislabels HOA-in-circuit-court
                 # cases (CACE) as MORTGAGE. The slim lead's own plaintiff-or-prefix guess is the next
