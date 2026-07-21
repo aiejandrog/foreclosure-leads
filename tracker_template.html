@@ -501,6 +501,14 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 /* the LIVE-call alert: the one button that must be findable mid-call, heart pounding */
 .shbtn.shlive{background:#B42318;border-color:#B42318;color:#fff;font-weight:700;animation:livePulse 2s ease-in-out infinite}
 .shbtn.shlive:hover{background:#8E1A12;border-color:#8E1A12;box-shadow:0 4px 14px rgba(180,35,24,.4)}
+/* Post-call next step: no answer → queue Carlos to LOOK at the property */
+.carlosnext{margin:12px 0 4px;padding:12px 14px;border:1px solid #C6A14B;border-radius:10px;background:linear-gradient(180deg,#FFF9EB,#FFF)}
+.carlosnext .cnt{font-size:13px;font-weight:700;color:#0B1730;margin:0 0 4px}
+.carlosnext .cns{font-size:12px;color:#6b7280;line-height:1.45;margin:0 0 10px}
+.carlosnext .cnrow{display:flex;flex-wrap:wrap;gap:8px}
+.carlosnext .shbtn{background:#0B1730;color:#F5C542;border-color:#0B1730}
+.carlosnext .shbtn:hover{background:#152747;border-color:#152747;color:#fff}
+.carlosnext .shbtn.ghost{background:#fff;color:#0B1730;border-color:#C6A14B}
 @keyframes livePulse{0%,100%{box-shadow:0 0 0 0 rgba(180,35,24,.35)}50%{box-shadow:0 0 0 6px rgba(180,35,24,0)}}
 .savebtns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .savelist{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto}
@@ -1780,7 +1788,8 @@ function dealModalBody(r){
       '<button type="button" class="shbtn shsave'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+esc(r.case)+'\',event)">'+(_isFav(r.case)?'★ Saved':'☆ Save to batch')+'</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the &quot;I got them on the phone RIGHT NOW&quot; alert for Jose. He researches while you hold them; he says PATCH when ready.">📞 LIVE — alert Jose</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'link\')" title="Copy a link that opens straight to this property">🔗 Copy link</button>'+
-      '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'carlos\')" title="Copy a ready-to-send door mission for Carlos">👷 For Carlos</button>'+
+      '<button type="button" class="shbtn" onclick="_queueCarlosLook(\''+esc(r.case)+'\')" title="No luck on the phone? Save to your batch AND copy a PROPERTY LOOK brief for Carlos (Maps + what to note).">👷 Carlos LOOK</button>'+
+      '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'carlos-door\')" title="Copy a door-knock mission (letter + hanger) for Carlos">🚪 Carlos door</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
     '</div>';
 }
@@ -1884,6 +1893,11 @@ function nextAction(r){
   if(r.saleBkAct) return null;                           // kimi: active §362 stay — nothing is due while frozen
   const days=r.days;
   if(days<0) return {ch:'surplus', lbl:'Auction passed — surplus check', why:'if it sold above the debt the owner is owed the surplus (Fla. Stat. 45.032)'};
+  // Explicit follow-up date wins over cadence quiet-window — otherwise "No answer → +2d" never
+  // shows in Plan Today until age>=4 (the cadence return-null gap).
+  if(n.next && _dneg(n.next) <= 0){
+    return {ch:'call', lbl:'Follow-up due — call again', why:'you set '+n.next+' after the last touch'};
+  }
   const mailOK = days>=7;                        // ~5 business days of USPS runway
   const cnt = c => ts.filter(t=>t.ch===c).length;
   const doorN=cnt('door'), mailN=cnt('letter');
@@ -2070,9 +2084,19 @@ function logModalBody(r){
     '<div class="ovnote">Do not contact again. If this surfaced after a team merge, the touch predates your knowledge of the opt-out — note the cure here for the record.</div></div>' : '';
   const ledger = (n.optlog && n.optlog.length) ? '<div class="optledger"><div class="olt">🚫 Do-not-contact audit trail</div>'+
     n.optlog.slice().reverse().map(ev=>'<div class="ole"><b>'+esc(ev.ts||'')+'</b> · '+esc(_actLbl[ev.act]||ev.act||'')+(ev.src?' · '+esc(ev.src):'')+'</div>').join('')+'</div>' : '';
+  const carlosStrip = _needsCarlosLook(n)
+    ? '<div class="carlosnext"><div class="cnt">No luck on the phone — send Carlos to LOOK</div>'
+      + '<div class="cns">One tap saves this to your batch and copies a property-look brief (Maps + what to note). Paste it to Carlos, then keep calling the next lead.</div>'
+      + '<div class="cnrow">'
+      + '<button type="button" class="shbtn" onclick="_queueCarlosLook(\''+esc(r.case)+'\')">👷 Save + Carlos LOOK</button>'
+      + '<button type="button" class="shbtn ghost" onclick="_shareTo(\''+esc(r.case)+'\',\'carlos-look\')">Copy LOOK only</button>'
+      + '<button type="button" class="shbtn ghost" onclick="closeLogModal();openSaved()">Open Saved batch</button>'
+      + '</div></div>'
+    : '';
   return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+(r.days>=0?'in '+r.days+'d':'passed')+'</div></div>'+
     violBanner+
     '<div class="dm-sec">Log a touch — one tap</div><div class="qlogwrap">'+btns+'</div>'+
+    carlosStrip+
     '<div class="dm-sec">Follow-up date</div><div class="fuwrap">Next: '+fu+' &nbsp;'+fub+'</div>'+
     '<div class="dm-sec">History</div>'+hist+ledger;
 }
@@ -2083,6 +2107,8 @@ function closeLogModal(){ logModalCase=null; document.getElementById('logmodal')
 document.addEventListener('click', e => {
   const open=e.target.closest && e.target.closest('.logbtn, .cxwrap');
   if(open){ e.preventDefault(); if(open.dataset.c) openLogModal(open.dataset.c); return; }
+  const cl=e.target.closest && e.target.closest('.carloslook');
+  if(cl){ e.preventDefault(); if(cl.dataset.c) _queueCarlosLook(cl.dataset.c); return; }
   const q=e.target.closest && e.target.closest('.qlog');
   if(q){ e.preventDefault(); const spec=QUICKLOG[+q.dataset.i]; if(spec){ logTouch(q.dataset.c, spec.ch, spec.out, spec); refreshLogModal(); render(); } return; }
   const fs=e.target.closest && e.target.closest('.fuset');
@@ -2234,6 +2260,31 @@ function _netEqOf(r){
   return Math.max(0, v - stack);
 }
 function _deepLink(r){ return location.origin + location.pathname + '#case=' + encodeURIComponent(r.case); }
+function _mapsUrl(r){ return r.addr ? ('https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(r.addr)) : ''; }
+// Primary Carlos handoff after failed calls: GO LOOK at the house (drive-by / eyes on), not a door-knock script.
+function _carlosLookMsg(r){
+  var owner = (r.owners||'').split(';')[0].split('&')[0].trim();
+  var n = notes[r.case]||{};
+  var last = (n.touches||[]).length ? n.touches[n.touches.length-1] : null;
+  var lastLine = last ? ('Last call: '+last.out+' on '+last.d) : (n.status ? ('Status: '+n.status) : 'No call logged yet');
+  var why = (r._verdict||'—')
+    + (r._profit ? (' · est. profit ~$'+Math.round(r._profit).toLocaleString()) : '')
+    + (' · net equity ~$'+Math.round(_netEqOf(r)).toLocaleString());
+  var maps = _mapsUrl(r);
+  return 'PROPERTY LOOK — eyes on this one\n'
+    + (owner ? owner+'\n' : '')
+    + r.addr + '\n'
+    + (maps ? ('Maps: '+maps+'\n') : '')
+    + 'Case '+r.case+'  ·  Auction '+r.auction+(r.days>=0?' ('+r.days+'d out)':'')+'\n'
+    + 'Why it matters: '+why+'\n'
+    + lastLine+'\n\n'
+    + 'Please look and tell me:\n'
+    + '• Occupied or vacant? Lights / cars / mail piled up?\n'
+    + '• For-sale or for-rent sign?\n'
+    + '• Condition: roof, boarded windows, yard, obvious damage?\n'
+    + '• Worth a second pass / door hang, or pass?\n\n'
+    + 'Tracker: '+_deepLink(r);
+}
 function _carlosMsg(r){
   var owner = (r.owners||'').split(';')[0].split('&')[0].trim();
   var ph = _bestPhones(r), days = (r.days>=0? r.days+' days out' : 'sale passed');
@@ -2244,6 +2295,22 @@ function _carlosMsg(r){
     + 'What to do: print + hand-deliver the rescue letter and the door hanger. Knock, keep it warm, '
     + 'ask if they want to KEEP / SELL / WALK, leave your number. No answer -> hang the door hanger.\n'
     + _deepLink(r);
+}
+function _needsCarlosLook(n){
+  if(!n) return false;
+  if(n.status==='Called - no answer' || n.status==='Door - no answer') return true;
+  var ts=n.touches||[]; if(!ts.length) return false;
+  var last=ts[ts.length-1];
+  return !!(last && /no answer|left message/i.test(last.out||''));
+}
+// Save to batch + copy the LOOK brief — the one-tap after a failed call.
+function _queueCarlosLook(c){
+  var r = DATA.find(function(x){return x.case===c;}); if(!r) return;
+  if(!favs.has(c)){ favs.add(c); _favSave(); _favCountEls(); }
+  _copyShare(_carlosLookMsg(r), 'Carlos LOOK + saved to batch');
+  render();
+  if(logModalCase===c) refreshLogModal();
+  if(dealModalCase===c) refreshDealModal();
 }
 function _joseMsg(r){
   var owner = (r.owners||'').split(';')[0].trim();
@@ -2298,7 +2365,8 @@ function _liveMsg(r){
 }
 function _shareTo(c, who){
   var r = DATA.find(function(x){return x.case===c;}); if(!r) return;
-  if(who==='carlos') _copyShare(_carlosMsg(r), 'Carlos mission');
+  if(who==='carlos' || who==='carlos-look') _copyShare(_carlosLookMsg(r), 'Carlos LOOK');
+  else if(who==='carlos-door') _copyShare(_carlosMsg(r), 'Carlos door mission');
   else if(who==='jose') _copyShare(_joseMsg(r), 'Jose brief');
   else if(who==='live') _copyShare(_liveMsg(r), 'LIVE alert');
   else _copyShare(_deepLink(r), 'Property link');
@@ -2316,7 +2384,8 @@ function openSaved(){
   body += '<div class="sd" style="color:var(--muted);font-size:12px;margin-bottom:8px">Print the field packet for Carlos, or copy a list to send. Stays saved on this device.</div>';
   body += '<div class="savebtns">'
     + '<button type="button" class="syncbtn2" onclick="_carlosPacket()" style="background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;border:none;font-weight:800">&#128196; Carlos field packet (PDF)</button>'
-    + '<button type="button" class="syncbtn2 ghost" onclick="_copyBatch(\'carlos\')">Copy list for Carlos</button>'
+    + '<button type="button" class="syncbtn2 ghost" onclick="_copyBatch(\'carlos\')">Copy LOOK list for Carlos</button>'
+    + '<button type="button" class="syncbtn2 ghost" onclick="_copyBatch(\'carlos-door\')">Copy door missions</button>'
     + '<button type="button" class="syncbtn2 ghost" onclick="_copyBatch(\'jose\')">Copy briefs for Jose</button>'
     + '</div>';
   body += '<div class="savelist">' + list.map(function(r){
@@ -2336,8 +2405,15 @@ function _showFavOnBoard(){ favOnly = true; q=''; var qi=document.getElementById
 function _copyBatch(who){
   var list = _favLeads(); if(!list.length) return;
   var sep = '\n\n----------------------------------------\n\n';
-  var txt = list.map(function(r){ return who==='jose' ? _joseMsg(r) : _carlosMsg(r); }).join(sep);
-  _copyShare(txt, (who==='jose'?'All Jose briefs':'All Carlos missions')+' ('+list.length+')');
+  var txt = list.map(function(r){
+    if(who==='jose') return _joseMsg(r);
+    if(who==='carlos-door') return _carlosMsg(r);
+    return _carlosLookMsg(r);   // default Carlos handoff = LOOK briefs
+  }).join(sep);
+  var label = who==='jose' ? 'All Jose briefs'
+            : who==='carlos-door' ? 'All Carlos door missions'
+            : 'All Carlos LOOK briefs';
+  _copyShare(txt, label+' ('+list.length+')');
 }
 // One printable PDF for Carlos: a route sheet (the whole list + names + checkboxes) then a
 // privacy-safe door hanger per property (owner first name + the auction date + call-to-action with
@@ -3653,6 +3729,10 @@ function view(){
   rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
   return rows;
 }
+// Typing used to call full render() on every keystroke (~300-400ms freezes at ~650 leads). Debounce it.
+function _debounce(fn, ms){ let t; return function(){ const a=arguments, c=this; clearTimeout(t); t=setTimeout(()=>fn.apply(c,a), ms); }; }
+const _renderSoon = _debounce(function(){ render(); }, 150);
+const _dealSoon = _debounce(function(){ recompute(); saveDeal(); render(); }, 120);
 function render(){
   initCountyFilter();
   const rows = view();
@@ -3758,6 +3838,10 @@ function render(){
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
       // kimi: cadence enrollment — the multi-touch email sequence that auto-cancels on reply
       if((r.emails||[]).length) gDo.push('<a href="#" class="cadencegen" data-c="'+esc(r.case)+'" title="Enroll this owner in the 4-touch email cadence (day 0/2/4/7) — sends itself until they reply, then auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.">Cadence</a>');
+    }
+    // After a failed call, surface Carlos LOOK next to Log — don't bury it in the deal modal.
+    if(!optedOut && _needsCarlosLook(n)){
+      gDo.push('<a href="#" class="carloslook" data-c="'+esc(r.case)+'" title="No luck calling — save to batch and copy a property LOOK brief for Carlos (Maps + what to note)">Carlos LOOK</a>');
     }
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
@@ -3899,12 +3983,12 @@ document.addEventListener('click', e => {
   togglePin(row.dataset.case);
 });
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=false;
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=eq30Only=false;
   { const _cb=document.getElementById('closers'); if(_cb) _cb.classList.remove('active'); }
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
-  ['wk','hd','hf','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
+  ['wk','hd','hf','eq30','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
   document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
   county=''; _resetCountyPills();
   render();
@@ -3977,7 +4061,7 @@ function syncDealUI(){
   document.getElementById('quiettitle').value = deal.quiettitle;
   document.getElementById('tdclear').value = deal.tdclear;
 }
-function dealChanged(){ recompute(); saveDeal(); render(); }
+function dealChanged(){ _dealSoon(); }
 document.getElementById('costpct').oninput = e => { deal.costpct = e.target.value===''?0:+e.target.value; dealChanged(); };
 document.getElementById('buypct').oninput = e => { deal.buypct = e.target.value===''?75:+e.target.value; dealChanged(); };
 document.getElementById('bidover').oninput = e => { deal.bidover = e.target.value===''?0:+e.target.value; dealChanged(); };
@@ -4131,11 +4215,11 @@ function fallbackCopy(text, done){
   try { document.execCommand('copy'); done && done(); } catch(e) {}
   document.body.removeChild(ta);
 }
-document.getElementById('q').oninput = e => { q = e.target.value; render(); };
-document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
-document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
-document.getElementById('ad1').oninput = e => { ad1 = e.target.value; render(); };
-document.getElementById('ad2').oninput = e => { ad2 = e.target.value; render(); };
+document.getElementById('q').oninput = e => { q = e.target.value; _renderSoon(); };
+document.getElementById('fy1').oninput = e => { fy1 = e.target.value; _renderSoon(); };
+document.getElementById('fy2').oninput = e => { fy2 = e.target.value; _renderSoon(); };
+document.getElementById('ad1').oninput = e => { ad1 = e.target.value; _renderSoon(); };
+document.getElementById('ad2').oninput = e => { ad2 = e.target.value; _renderSoon(); };
 document.getElementById('clr').onclick = () => {
   fy1 = fy2 = ad1 = ad2 = '';
   ['fy1','fy2','ad1','ad2'].forEach(id => document.getElementById(id).value = '');
