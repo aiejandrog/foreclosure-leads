@@ -1,0 +1,7 @@
+# Hard-money / private lenders to hunt for maturing balloons (balloon_refi.py).
+# One lender name per line, as it appears on recorded mortgages (UPPER or any case).
+# The son's / Jose's LOCAL private lenders are the real edge — the national ones are already seeded
+# in balloon_refi.py. Add the local names you know here, e.g.:
+#   MIAMI BRIDGE CAPITAL
+#   SOUTH FLORIDA PRIVATE LENDING
+#   (add real ones below)
