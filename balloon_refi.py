@@ -35,18 +35,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'balloon_refi.json')
 LENDER_FILE = os.path.join(HERE, 'hm_lenders.txt')
 
-# Known national hard-money / DSCR / bridge / fix-&-flip lenders that actively record in South FL.
+# Known national hard-money / BRIDGE / fix-&-flip lenders that actively record in South FL.
 # The son's LOCAL private lenders (added to hm_lenders.txt) are the real edge — these seed it.
+# DELIBERATELY EXCLUDED: Visio and CoreVest — they write 30-year DSCR term loans with NO balloon,
+# so every mortgage of theirs in the window produced a FALSE "balloon due" entry. If the son wants
+# their borrowers as general refi leads, that's a different list with different timing math.
 HM_LENDERS = [
     'LIMA ONE CAPITAL', 'KIAVI', 'LENDINGHOME', 'RCN CAPITAL', 'ROC CAPITAL', 'ANCHOR LOANS',
-    'COREVEST', 'TEMPLE VIEW CAPITAL', 'CONSTRUCTIVE LOANS', 'TOORAK CAPITAL', 'GENESIS CAPITAL',
-    'CIVIC FINANCIAL', 'VISIO', 'RENOVO FINANCIAL', 'LENDINGONE', 'FINANCE OF AMERICA COMMERCIAL',
+    'TEMPLE VIEW CAPITAL', 'CONSTRUCTIVE LOANS', 'TOORAK CAPITAL', 'GENESIS CAPITAL',
+    'CIVIC FINANCIAL', 'RENOVO FINANCIAL', 'LENDINGONE', 'FINANCE OF AMERICA COMMERCIAL',
     'SHARESTATES', 'LONGHORN INVESTMENTS', 'BOOMERANG CAPITAL', 'CENTER STREET LENDING',
     'EXPRESS CAPITAL', 'ZEUS', 'BRIDGE LOAN', 'PRIVATE MONEY', 'HARD MONEY', 'CAPITAL FUND',
 ]
 
-# balloon terms we assume when the doc doesn't state one (most bridge loans): 12 and 24 months.
-ASSUMED_TERMS_MO = (12, 24)
+# balloon terms we assume when the doc doesn't state one: 12/18/24 months — 18-month bridges are a
+# standard fix-&-flip product; skipping them dropped every such balloon from the hit list.
+ASSUMED_TERMS_MO = (12, 18, 24)
 
 
 def _load_lenders():
@@ -70,11 +74,19 @@ def _search_lender(sess, name, date_from):
     ])
     if 'ShowError' in (resp or ''):
         return None
-    grid = B._curl(B.BASE + '/Search/GridResults', post=[('page', '1'), ('size', '400'), ('sort', ''), ('group', ''), ('filter', '')])
-    try:
-        return json.loads(grid).get('data', [])
-    except Exception:
-        return None
+    # Paginate: a busy lender (KIAVI records hundreds of FL mortgages) overflows one 400-row page,
+    # and the tail silently vanished. Walk pages until a short page or the 3-page (1200-doc) cap.
+    out = []
+    for page in (1, 2, 3):
+        grid = B._curl(B.BASE + '/Search/GridResults', post=[('page', str(page)), ('size', '400'), ('sort', ''), ('group', ''), ('filter', '')])
+        try:
+            rows = json.loads(grid).get('data', [])
+        except Exception:
+            return out if out else None
+        out += rows
+        if len(rows) < 400:
+            break
+    return out
 
 
 def _is_investor(name):
