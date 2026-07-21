@@ -81,9 +81,23 @@ def _people_name(owner):
 def _clean_owner(name):
     s = re.sub(r'\s*&\s*[WH]\b.*$', '', name or '', flags=re.I)
     s = re.sub(r'\b(ET\s?UX|ET\s?VIR|H/W|TRS|JR|SR|II|III|IV|ETAL|ET AL|LE|REM)\b', '', s, flags=re.I)
+    # DANGLING '&' = the state cadastral (FDOR OWN_NAME, single line) dropped the co-owner line the
+    # county roll actually holds — 'HERNANDEZ NELSON &' is really Nelson + Florencia Hernandez.
+    # Strip it BEFORE the comma flip: afterwards the flip welds it mid-string ('RAINES,JAMES A &'
+    # -> 'JAMES A & RAINES'), which reads like a complete two-party name and is how a half-name
+    # ends up in a skip-trace. Mirrors foreclosure_leads.py's Miami-Dade path, which already did this.
+    s = re.sub(r'\s*&\s*$', '', s)
     if ',' in s:
         a, _, b = s.partition(','); s = (b + ' ' + a).strip()
     return re.sub(r'\s{2,}', ' ', s).strip()
+
+
+def _owner_partial(raw):
+    """Is this owner name KNOWN-incomplete? Two shapes: a dangling '&' (co-owner line dropped), or a
+    value sitting at the roll's 30-char ceiling ('FLORES MARTINEZ MARIA DEL CARM') which carries no
+    marker at all. Either way the operator must not skip-trace it as if it were a full name."""
+    o = (raw or '').strip()
+    return bool(re.search(r'&\s*$', o)) or len(o) >= 30
 
 
 def scrape_county(cfg, max_dates=0):
@@ -128,7 +142,7 @@ def to_slim(county, cfg, base, items):
         # this in make_tracker() for any lead we actually trace (broward_liens).
         ftype = F._fc_type_plaintiff(r.get('Plaintiff', '')) or F._fc_type(r.get('Case #', ''))
         addr = F._clean_addr(r.get('Address', ''))
-        val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''; vac = False
+        val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''; vac = False; opart = False
         if folio:
             try: info = fl_cadastral.enrich(parcel_id=folio)
             except Exception: info = None
@@ -142,6 +156,7 @@ def to_slim(county, cfg, base, items):
                 _uc = str(info.get('use_code', '') or '').strip()
                 vac = (_uc.lstrip('0') == '') and _uc != '' or _uc in ('10', '1000', '40', '4000', '70', '7000')
                 oname = _clean_owner(owner)
+                opart = _owner_partial(owner)   # co-owner dropped / 30-char roll clip -> never treat as a full name
         try:
             days = (datetime.strptime(r.get('AuctionDate', ''), '%m/%d/%Y').date() - today).days
         except Exception:
@@ -207,7 +222,7 @@ def to_slim(county, cfg, base, items):
             'county': county, 'tier': tier, 'score': score, 'auction': r.get('AuctionDate', ''), 'days': days,
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
             'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': eqfake, 'hs': hs, 'condo': condo,
-            'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')),
+            'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')), 'opart': opart,
             # TAX DEED: the opening bid (certs + fees) and certificate number are the deal inputs —
             # map them so the TD branch of the deal model (winbid off obid) and the row's Certificate #
             # both work for BW/PB just like Miami-Dade. FC leads have neither and stay 0/''.

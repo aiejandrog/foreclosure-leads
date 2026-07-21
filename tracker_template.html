@@ -1942,6 +1942,9 @@ function _nameBroken(r){
   const o = String((r&&r.owners)||'').trim();
   if(!o || /^\(owner/i.test(o)) return 'no owner name on record';
   if(/[&,]\s*$/.test(o)) return 'co-owner cut off by the county roll';
+  // pipeline-set: dangling '&' already stripped upstream, or the roll clipped at 30 chars with no
+  // marker at all ('FLORES MARTINEZ MARIA DEL CARM') — the name is short a piece either way.
+  if(r && r.opart) return 'county roll truncated this name (a co-owner or the tail is missing)';
   return '';
 }
 function _optoutTS(n){ return _effOptout(n).ts; }
@@ -2411,13 +2414,34 @@ function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, 
 // `titleCase(raw).split(' ')[0]` broke on that: with no space anywhere in "Salazar,Gladys", split(' ')
 // returned the WHOLE string as the "first name" — a real sent email opened "Hi Salazar,Gladys,". Reorders
 // to "First Last" so the greeting AND the first-name extraction both work correctly everywhere.
-function _ownerName(raw){
-  const s = (raw||'').trim();
+// Owner-name normalisation. THREE source formats reach this function and they are NOT the same:
+//   Miami-Dade (county appraiser OwnerInfos) -> "EDUARDO ECHEVERRI"  = FIRST LAST, already right
+//   Broward    (state cadastral, comma)      -> "GEDEUS,PATRICK"     = LAST, FIRST
+//   Palm Beach (state cadastral, NO comma)   -> "KALIEVA RUMIYA"     = LAST FIRST   <-- the trap
+// All 185 PB leads are the third kind, so the old "no comma -> leave it alone" branch made every
+// PB letter, door hanger and email open with the SURNAME ("Kalieva," instead of "Rumiya,"). Flipping
+// every comma-less name would have broken Miami-Dade in the opposite direction, so the flip is
+// county-gated. Also strips the dangling "&" the state roll leaves when it drops a co-owner line.
+const _NAME_SUFFIX = /^(EST|ESTATE|TR|TRS|TRUST|LE|JR|SR|II|III|IV|MD|DDS|ETAL|ET|AL)$/i;
+function _ownerName(raw, r){
+  let s = String(raw||'').trim().replace(/\s*&\s*$/,'').replace(/,\s*$/,'');
   if(!s) return '';
   const ci = s.indexOf(',');
-  if(ci === -1) return titleCase(s);
-  const last = s.slice(0, ci).trim(), first = s.slice(ci+1).trim();
-  return titleCase((first+' '+last).replace(/\s{2,}/g,' ').trim());
+  if(ci >= 0){
+    const last = s.slice(0, ci).trim(), first = s.slice(ci+1).trim();
+    return titleCase((first+' '+last).replace(/\s{2,}/g,' ').trim());
+  }
+  // comma-less: only the cadastral counties store LAST-first. Miami-Dade is already FIRST LAST.
+  if(r && r.county === 'PALM BEACH'){
+    const toks = s.split(/\s+/);
+    if(toks.length >= 2){
+      const suf = [];
+      while(toks.length > 2 && _NAME_SUFFIX.test(toks[toks.length-1])) suf.unshift(toks.pop());
+      const last = toks.shift();                       // "DRISCOLL ROBERT J EST" -> Robert J Driscoll (Est)
+      return titleCase((toks.join(' ')+' '+last+(suf.length?' '+suf.join(' '):'')).replace(/\s{2,}/g,' ').trim());
+    }
+  }
+  return titleCase(s);
 }
 function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
 // Per-county DIRECT deep-links, verified against real parcels (2026-07-16). Drives the lookup report's
@@ -2672,7 +2696,7 @@ function _carlosPacket(){
     var raw = (r.owners||'').split(';')[0].trim();
     var isCo = r.co || /\b(LLC|L\.?L\.?C|INC|CORP|COMPANY|TRUST|LP|LTD|ASSOC|ASSN|BANK|HOLDINGS|PROPERT|REALTY|CAPITAL|GROUP|INVEST|ENTERPRISE|MANAGEMENT|PARTNERS|FUND)\b/i.test(raw);
     // title-case it: a handwritten-feel note reads "Eduardo," not "EDUARDO," (county rolls are all-caps)
-    var first = (typeof _ownerName==='function' ? _ownerName(raw) : raw).split(/\s+/)[0] || 'Neighbor';
+    var first = (typeof _ownerName==='function' ? _ownerName(raw, r) : raw).split(/\s+/)[0] || 'Neighbor';
     var greet = isCo ? 'To the owner' : first;
     // Jose's spec (2026-07-21): the batch hangers match the single-lead one — a blank HANDWRITE
     // panel on the outside ("[name], I CAME BY BUT NOBODY ANSWERED." + an initial), his exact
@@ -2891,7 +2915,7 @@ function _openDoc(html){
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
-  const owner = _ownerName((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   const first = owner.split(' ')[0] || owner;
   const addr = esc(r.addr), mail = esc(r.mail||r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
@@ -2974,7 +2998,7 @@ function genHanger(r){
   //    foreclosure/auction/bank — a neighbor or passer-by can read that panel. The letter inside
   //    DOES name the foreclosure plainly (Jose's copy), because the fold hides it.
   const sN = sender.name || '[YOUR NAME]', sP = sender.phone || '[YOUR PHONE]', sL=(sender.llc||'').trim();
-  const owner = _ownerName((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   const first = owner.split(' ')[0] || owner;
   const initial = (sN.trim()[0] || 'C').toUpperCase();
   const addr = esc(r.addr), dt = esc(r.auction);
@@ -3097,7 +3121,7 @@ body{font-family:Georgia,serif;color:#111;margin:0;padding:0;background:#f4f5f7}
 function genContract(r){
   const sN = sender.name || '[BUYER NAME]', sL = (sender.llc||'').trim() || '[BUYER ENTITY]';
   const sP = sender.phone || '[BUYER PHONE]', sA = (sender.addr||'').trim() || '[BUYER BUSINESS ADDRESS]';
-  const owner = _ownerName((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   const addr = esc(r.addr), folio = esc(r.folio||''), county = esc(ctyName(r.county)), caseNo = esc((r.case||'').trim());
   const today = new Date().toLocaleDateString('en-US', {year:'numeric', month:'long', day:'numeric'});
   const doc = `<!doctype html><html><head><meta charset="utf-8"><title>DRAFT Purchase Agreement - ${esc(owner)}</title>
@@ -3235,7 +3259,7 @@ function genScript(r){
   const partner = (sender.partner||'').trim() || '[PARTNER]';   // the closer/expert on the two-step callback
   const days = r.days >= 0 ? r.days : 0;
   const hi = (new Date().getHours() < 12) ? 'morning' : 'afternoon';
-  const owner = _ownerName((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   const first = esc(owner.split(' ')[0] || owner);
   const addr = esc(r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
@@ -3382,7 +3406,7 @@ function genScript(r){
 function genEmail(r){
   const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
   const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
-  const owner = _ownerName((r.owners||'').split(';')[0].trim());
+  const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   const first = owner.split(' ')[0] || owner;
   const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
   const street = (addr.split(',')[0]||addr).trim();
@@ -3630,7 +3654,7 @@ function openMailModal(){
     rows.forEach(function(r){
       h += '<tr style="border-top:1px solid var(--line)">'
         + '<td style="padding:5px 8px"><input type="checkbox" class="mailck" data-c="'+esc(r.case)+'" checked></td>'
-        + '<td style="padding:5px 8px">'+esc(_ownerName((r.owners||'').split(';')[0]))+'</td>'
+        + '<td style="padding:5px 8px">'+esc(_ownerName((r.owners||'').split(';')[0], r))+'</td>'
         + '<td style="padding:5px 8px;color:var(--muted)">'+esc(r.mail||r.addr)+'</td>'
         + '<td style="padding:5px 8px;text-align:center">'+esc(r.tier)+'</td>'
         + '<td style="padding:5px 8px">'+esc(r.auction)+' <span style="color:var(--muted)">('+esc(String(r.days))+'d)</span></td></tr>';
