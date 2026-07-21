@@ -98,19 +98,25 @@ back taxes, often with a tiny opening bid. For those, the "Est. Profit" already 
 pay at auction, a **quiet-title cost (~$3,000)** to clean up the title so you can resell, and costs.
 ⚠️ Tax deeds are "buyer beware" — always read the red warning and check for surviving liens before you bid.
 
-### 2. Send a letter to the owner
+### 2. Call first — if no luck, send Carlos to LOOK
+1. Click **Log** on a lead → tap **☎ No answer** or **☎ Left message**.
+2. A yellow **Send Carlos to LOOK** box appears — tap **👷 Save + Carlos LOOK**.
+3. That saves the deal into your **Saved** batch and copies a text brief (Maps link + what to note). Paste it to Carlos.
+4. Keep calling the next lead. When you have a few saved, open **Saved** → **Carlos field packet (PDF)** for a drive-route sheet, or **Copy LOOK list for Carlos** for one WhatsApp dump.
+
+If someone **answers**, use **📞 LIVE — alert Jose** in the deal panel (not Carlos) so Jose can research while you hold them.
+
+### 3. Send a letter to the owner
 1. **One time only:** at the top, fill in the **"Letter sender"** boxes with Jose's name, LLC, and phone.
    (These letters go out under Jose's name — never yours.)
 2. Click **✉ Letter** on any house.
 3. A letter pops up already written and filled in. Pick **English or Español**.
 4. Click **🖨 Print / Save PDF**. Mail it to the address shown.
 
-### 3. Keep track of who you called
+### 4. Keep track of who you called
 Each house has a **Status** dropdown (Letter sent, Called, Appointment, Dead, etc.) and a **Notes** box.
-Use them! They save automatically on your own device. Click **Hide dead** to clean up your list.
-
-> ⚠️ Your Status and Notes are saved **in your own browser only** — they don't share between your
-> phone and computer, or between you and Jose. To hand off progress, click **Export CSV** and send that file.
+Use them! They save on this device. With **team sync** on, opt-outs/calls/notes also flow to Jose's devices.
+Click **Hide dead** to clean up your list.
 
 ---
 
@@ -138,6 +144,10 @@ sold/canceled ones drop off. Want it updated right now? Double-click **`run-lead
 | See the best deals | Just open the site — top of the list |
 | See urgent ones | Click **⚡ This week** |
 | Find the owner's phone | Click **People** |
+| Log a no-answer call | **Log** → **☎ No answer** |
+| Send Carlos to look | After no-answer: **👷 Save + Carlos LOOK** (or row **Carlos LOOK**) |
+| Batch for Carlos | Star deals → **Saved** → field packet PDF / LOOK list |
+| Owner answered live | Deal panel → **📞 LIVE — alert Jose** |
 | Read the court case | Click **Case ▸** |
 | Send a letter | Fill in sender once → click **✉ Letter** → Print |
 | Mark a lead worked | Use the **Status** dropdown |
