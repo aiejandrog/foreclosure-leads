@@ -68,7 +68,7 @@ _BANKR = re.compile(r'bankrupt', re.I)
 _BKDOC = re.compile(r'suggestion of bankruptcy|notice of bankruptcy|bankruptcy stay', re.I)
 _BKNUM = re.compile(r'\b(\d{2}-\d{4,6})\b')
 
-CACHE_VER = 4   # v4 = v3 counting + first-class distinct-bankruptcy count (sale_bk).
+CACHE_VER = 5   # v5 = v4 + active automatic-stay detection (sale_bk_active/date) — compliance gate.
                 # v3 = event-level counting: granted orders + clerk-entered 'Sale Cancelled' event
                 # lines (dedup'd by date), motions and DENIED orders excluded. v2 was orders-only —
                 # blind to clerk cancellations (incl. 'CANCELLED PER BANKRUPTCY' lines).
@@ -90,6 +90,43 @@ def _bk_count(dockets):
         else:
             dates.add((e.get('eventDate') or '')[:10])
     return len(nums) if nums else min(len(dates), 9)
+
+
+# --- ACTIVE automatic stay (kimi) ---------------------------------------------------------------
+# Counting bankruptcies is a RANKING signal; whether one is OPEN right now is a COMPLIANCE signal.
+# 11 U.S.C. §362 halts all collection activity the moment a petition lands — calls, letters,
+# door-knocks, WhatsApp — until the case is dismissed/discharged or the stay is lifted. The
+# flagship's 7th BK (26-19302-RAM) was filed 2026-07-16 with no closing line after it: the stay
+# is LIVE today, and every outreach button on that lead is a federal violation waiting to happen.
+_BKFILE = re.compile(r'suggestion of bankruptcy|notice of bankruptcy|order case pending bankruptcy stay', re.I)
+_BKCLOSE = re.compile(r'dismiss|discharg|relief from (?:the )?(?:automatic )?stay|'
+                      r'lift\w* (?:the )?(?:automatic )?stay|stay (?:is |was )?(?:lifted|terminated|annulled|vacated)|'
+                      r'annul\w* (?:the )?stay', re.I)
+
+def _iso_date(us):
+    m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (us or '').strip())
+    return f'{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}' if m else ''
+
+def _bk_active(dks):
+    """(active, latest_filing_iso). A bankruptcy filing line (or a sale cancelled PER the stay)
+    opens; a dismissal / discharge / stay-relief line closes. Active = the newest opening has no
+    closing on/after it. Closing lines are checked FIRST ('Notice of Filing: ...ORDER OF
+    DISMISSAL' contains 'filing' but closes)."""
+    opens, closes = [], []
+    for e in dks or []:
+        t = (e.get('docketDescrition') or e.get('docketDescription') or '')
+        tx = t + ' ' + (e.get('comments') or '')
+        iso = _iso_date(e.get('eventDate'))
+        if not iso:
+            continue
+        if _BKCLOSE.search(tx):
+            closes.append(iso)
+        elif _BKFILE.search(t) or _BANKR.search(tx):
+            opens.append(iso)                          # 'CANCELLED PER BANKRUPTCY' = the stay acting
+    if not opens:
+        return False, ''
+    latest = max(opens)
+    return (not closes or max(closes) < latest), latest
 
 
 def _count(dockets):
@@ -180,6 +217,7 @@ def main():
             r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
             if ent.get('w'): r['sale_who'] = ent['w']
             if ent.get('b'): r['sale_bk'] = ent['b']
+            if ent.get('a'): r['sale_bk_active'] = True; r['sale_bk_date'] = ent.get('bd', '')
             continue
         if budget <= 0:
             break
@@ -188,17 +226,21 @@ def main():
         if dks is not None:
             surv, sched, done, who = _count(dks)
             bk = _bk_count(dks)
+            bkact, bkd = _bk_active(dks)
             # a standalone bankruptcy filing IS the owner's move — attribute when cancels didn't
             if bk and not who:
                 who = 'owner'
             r['sale_survived'] = surv; r['sale_scheduled'] = sched
             if who: r['sale_who'] = who
             if bk: r['sale_bk'] = bk
-            cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 'b': bk, 't': now, 'v': CACHE_VER}
+            if bkact: r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+            cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 'b': bk,
+                           'a': bkact, 'bd': bkd, 't': now, 'v': CACHE_VER}
             changed += 1
             if a.case:
                 print(f'{case}: survived {surv} sale(s), {sched} scheduled, {done} completed'
-                      + (f', mostly {who}-moved' if who else '') + (f', {bk} distinct bankruptcies' if bk else ''))
+                      + (f', mostly {who}-moved' if who else '') + (f', {bk} distinct bankruptcies' if bk else '')
+                      + (f', STAY ACTIVE since {bkd}' if bkact else ''))
         time.sleep(0.25)
         if fetched % 25 == 0:
             json.dump(cache, open(CACHE, 'w', encoding='utf-8'))
