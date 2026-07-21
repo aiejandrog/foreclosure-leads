@@ -129,7 +129,15 @@ jobs:
             echo "no change — nothing to publish yet"
           else
             git commit -m "refresh: fresh leads (auto)"
-            git push origin HEAD:main
+            # Three writers hit main (Claude, Kimi, this pipeline) — a bare push loses the race the
+            # moment anyone lands a commit mid-run (2026-07-21: run died here, all enrichment
+            # skipped). Rebase-with-retry; on a docs/index.html conflict the freshly built file
+            # wins (-X theirs during rebase = OUR replayed commit — generated artifact, newest is truth).
+            for i in 1 2 3; do
+              git pull --rebase -X theirs origin main && git push origin HEAD:main && break
+              [ "$i" = 3 ] && exit 1
+              sleep 10
+            done
           fi
 
       # ---- [1c/5] Broward + Palm Beach scrape ---------------------------------------------
@@ -230,7 +238,12 @@ jobs:
             echo "nothing changed — site already current"
           else
             git commit -m "refresh: auto lead + phone + photo update"
-            git push origin HEAD:main
+            # same race-proofing as [1b/5]: rebase-with-retry, fresh build wins conflicts
+            for i in 1 2 3; do
+              git pull --rebase -X theirs origin main && git push origin HEAD:main && break
+              [ "$i" = 3 ] && exit 1
+              sleep 10
+            done
           fi
 
       # ---- Health ------------------------------------------------------------------------
