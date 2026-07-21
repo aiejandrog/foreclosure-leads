@@ -454,6 +454,9 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .fr-stale{background:rgba(180,83,9,.10);color:#B45309;border:1px solid rgba(180,83,9,.3)}
 .fr-warn{background:rgba(202,138,4,.10);color:#A16207;border:1px solid rgba(202,138,4,.28)}
 .fr-stay{background:rgba(153,27,27,.12);color:#B91C1C;border:1px solid rgba(153,27,27,.4);font-weight:700}
+/* identity warnings — loudest chips on the row: a great number on the wrong human is worse than none */
+.fr-wrong{background:#B42318;color:#fff;border:1px solid #8E1A12;font-weight:800}
+.fr-idwarn{background:rgba(180,83,9,.13);color:#B45309;border:1px solid rgba(180,83,9,.42);font-weight:700}
 .arvtag{font-size:9px;font-weight:800;letter-spacing:.4px;color:#8a6d1d;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.45);border-radius:3px;padding:0 3px;vertical-align:1px}
 /* the stay-lifted DOOR: gold — shield just dropped, hottest legal call on the board */
 .fr-lift{background:linear-gradient(120deg,rgba(198,161,75,.18),rgba(239,223,158,.25));color:#8B6A2C;
@@ -1441,6 +1444,7 @@ function _isCloser(r){
   if(r._verdict !== 'STRONG' && r._verdict !== 'MARGINAL') return false;   // must pencil out
   if(r.eqfake) return false;                                               // TRUST: no fantasy equity in the closers
   var n = notes[r.case] || {}; if(n.status === 'Dead' || n.status === 'DO NOT CONTACT') return false;
+  if(_isWrongOwner(n)) return false;              // identity disproven — re-verify before it can rank
   var d = r.days; if(!(d > 2 && d <= 45)) return false;                    // runway to actually close, not passed / too tight
   if(r.saleBkAct) return false;                                            // kimi: ACTIVE §362 stay — outreach is a federal violation, deal is frozen
   // FC freshness — prefer the REAL docket survival count over the filing-year proxy.
@@ -1913,6 +1917,33 @@ function _effOptout(n){
   evs.forEach(e => { if(e.act!=='cleared-local'){ if(e.ts && (!ts || e.ts<ts)) ts=e.ts; if(typeof e.tsu==='number' && (tsu==null || e.tsu<tsu)) tsu=e.tsu; } });
   return {out:true, ts, tsu};
 }
+// ---- WRONG-PERSON state (identity, not consent) --------------------------------------------------
+// Distinct from an opt-out on purpose. An opt-out kills the LEAD (the owner said stop). This kills
+// the CONTACT INFO while the deal stays alive: 1328 NW 7TH ST is still $535k against a $257k
+// judgment — we just had the wrong Nelson Hernandez. Derived from the audit ledger so it survives a
+// status change and rides the team sync; 'wrong-cleared' reverses it once the owner is re-verified.
+function _isWrongOwner(n){
+  if(!n) return false;
+  const evs = (n.optlog||[]).filter(e => e.act==='wrong-owner' || e.act==='wrong-cleared');
+  if(!evs.length) return !!n.wrongown;
+  const key = e => (typeof e.tsu==='number' ? e.tsu : (Date.parse((e.ts||'').replace(' ','T')) || 0));
+  let latest = evs[0]; evs.forEach(e => { if(key(e) >= key(latest)) latest = e; });
+  return latest.act === 'wrong-owner';
+}
+function _clearWrongOwner(c){
+  const n = notes[c]; if(!n) return;
+  _optLog(n, 'wrong-cleared'); n.wrongown = '';
+  save(); render(); if(typeof refreshDealModal==='function') refreshDealModal();
+}
+// The owner name itself is unusable: the county roll truncated a co-owner ("HERNANDEZ NELSON &")
+// or gave us nothing. Searching a half-name is exactly how you reach a stranger — 45 leads on this
+// board are in that state, so say so instead of letting someone dial a guess.
+function _nameBroken(r){
+  const o = String((r&&r.owners)||'').trim();
+  if(!o || /^\(owner/i.test(o)) return 'no owner name on record';
+  if(/[&,]\s*$/.test(o)) return 'co-owner cut off by the county roll';
+  return '';
+}
 function _optoutTS(n){ return _effOptout(n).ts; }
 function _optoutTSU(n){ return _effOptout(n).tsu; }
 function _isOptedOut(n){ return _effOptout(n).out; }
@@ -1957,7 +1988,17 @@ function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=note
   if(_st && _st.saleBkAct && _OUTREACH_CH[ch]){
     if(typeof confirm === 'function' && !confirm('⛔ ACTIVE BANKRUPTCY STAY'+(_st.saleBkD?' (filed '+_st.saleBkD+')':'')+'.\n\nThe automatic stay (11 U.S.C. §362) prohibits ALL collection contact right now — calls, letters, door-knocks, WhatsApp. A violation carries federal sanctions. Only proceed to DOCUMENT a contact that already happened — it will be logged for the record.\n\nLog this '+ch+' anyway?')) return false;
   }
-  n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), tsu:Date.now(), ch:ch, out:out}); if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); return true; }
+  // WRONG-PERSON guard: once someone has told us "that isn't my property", every number we hold for
+  // this lead is suspect. Block further outreach the same preventive way — the identity has to be
+  // re-established first, or we are just another one of the ten people calling a stranger daily.
+  if(_isWrongOwner(n) && _OUTREACH_CH[ch] && !opt.wrongOwner){
+    if(typeof confirm === 'function' && !confirm('🚫 WRONG PERSON was reported on this lead ('+(n.wrongown||'')+').\n\nThe numbers/name on file do NOT belong to the owner. Contacting them again is harassment of an uninvolved person — and it is how an innocent party ends up with ten investors calling daily.\n\nRe-verify the owner (appraiser + deed) before contacting anyone. Log this '+ch+' anyway?')) return false;
+  }
+  n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), tsu:Date.now(), ch:ch, out:out});
+  // record the identity failure in the same audit ledger the opt-out uses, so it survives a status
+  // change and syncs to every teammate's device (nobody re-dials what someone else disproved).
+  if(opt.wrongOwner && !n.wrongown){ n.wrongown = _today(); _optLog(n, 'wrong-owner'); }
+  if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); return true; }
 function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
 // ---- cadence engine: WHICH channel WHEN, keyed to days-until-auction + touch history. ----
 // Content-agnostic by design: Jose sends mail/email using HIS OWN script — this only schedules.
@@ -2044,6 +2085,10 @@ function _playbook(r){
       'Federal law (11 U.S.C. §362) bars every channel: no call, text, letter, door, or email until the case is dismissed or the stay is lifted.',
       'Watch this lead. The moment the stay closes it becomes one of the hottest calls on the board — the shield drops and the sale gets reset.', 'now');
     return { steps, g }; }
+  if(_isWrongOwner(n)){ S('STOP — wrong person. Re-verify who owns this.',
+      'Someone on the numbers we hold answered and said the property is not theirs'+(n.wrongown?' (reported '+n.wrongown+')':'')+'. Do not dial them again — a common name plus a name-only skip-trace is exactly how an uninvolved person ends up fielding ten investor calls a day.',
+      'Re-establish the owner from records, not from a name search: (1) open the county APPRAISER for this folio and read the owner + mailing address exactly; (2) pull the recorded DEED — it names who took title and when; (3) then use the BY-ADDRESS people searches on this row, never the name-only one. Clear the flag from the contact log once you have the real owner. The deal itself is untouched.', 'now');
+    return { steps, g }; }
   if(n.status==='DO NOT CONTACT'){ S('STOP — owner opted out',
       'They said stop. Every channel is closed and the ledger records it.',
       'Do not re-open. If a teammate has notes, they sync automatically.', 'now'); return { steps, g }; }
@@ -2122,6 +2167,7 @@ function _playbook(r){
 function nextAction(r){
   const n=notes[r.case]||{}, ts=n.touches||[];
   if(n.status==='DO NOT CONTACT' || n.status==='Dead') return null;
+  if(_isWrongOwner(n)) return null;                // wrong human on file — no channel is due
   if(r.saleBkAct) return null;                           // kimi: active §362 stay — nothing is due while frozen
   const days=r.days;
   if(days<0) return {ch:'surplus', lbl:'Auction passed — surplus check', why:'if it sold above the debt the owner is owed the surplus (Fla. Stat. 45.032)'};
@@ -2292,7 +2338,13 @@ const QUICKLOG=[
   {lbl:'\u{1f6aa} Door — no answer', ch:'door', out:'knocked, no answer (hanger left)', status:'Door - no answer', nextDays:3},
   {lbl:'\u{1f6aa} Door — spoke', ch:'door', out:'knocked, spoke with owner', status:'Door - spoke', nextDays:1},
   {lbl:'⛔ Said STOP', ch:'call', out:'asked to stop all contact', status:'DO NOT CONTACT', next:''},
-  {lbl:'✕ Not interested', ch:'call', out:'not interested', status:'Dead', next:''}
+  {lbl:'✕ Not interested', ch:'call', out:'not interested', status:'Dead', next:''},
+  // 2026-07-21 (Nelson Hernandez, 1328 NW 7TH ST Boca): he answered and said he does NOT own the
+  // property — and that ten people call him every day about it. Name-only skip-trace on a common
+  // name puts a stranger's number on a lead, and every investor buying the same list dials it.
+  // This flags the IDENTITY as wrong WITHOUT killing the deal: the property is still real (that
+  // one is $535k value / $257k owed), we simply do not know who the owner is yet.
+  {lbl:'🚫 Not the owner (wrong person)', ch:'call', out:'reached the WRONG person — not the owner', wrongOwner:true, next:''}
 ];
 function logModalBody(r){
   const n=notes[r.case]||{}, ts=(n.touches||[]).slice().reverse();
@@ -2303,7 +2355,14 @@ function logModalBody(r){
   const hist = ts.length ? '<ul class="lhist">'+ts.map(t=>'<li>'+esc(t.d)+' · '+(CH_ICON[t.ch]||'')+' '+esc(t.out)+'</li>').join('')+'</ul><button class="lundo" data-c="'+esc(r.case)+'" type="button">Undo last</button>' : '<div class="mut">No touches logged yet.</div>';
   // FTSA opt-out audit ledger — a timestamped, teammate-attributed suppression trail (the "wave at a
   // plaintiff's lawyer" evidence). Only shown once a lead has been opted out.
-  const _actLbl = {'set-local':'marked DO NOT CONTACT', 'suppressed-here':'opt-out synced in — suppressed on this device', 'cleared-local':'do-not-contact CLEARED on this device'};
+  const _actLbl = {'set-local':'marked DO NOT CONTACT', 'suppressed-here':'opt-out synced in — suppressed on this device', 'cleared-local':'do-not-contact CLEARED on this device',
+                   'wrong-owner':'reported WRONG PERSON — not the owner', 'wrong-cleared':'owner re-verified — wrong-person flag cleared'};
+  // wrong-person banner + the one control that lifts it, once the real owner is established
+  const wrongBanner = _isWrongOwner(n) ? '<div class="optviol" style="border-color:#B42318;background:#fdf2f1">'+
+    '<div class="ovt" style="color:#B42318">🚫 WRONG PERSON REPORTED'+(n.wrongown?' · '+esc(n.wrongown):'')+'</div>'+
+    '<div class="ovl">Someone reachable on this lead said the property is <b>not theirs</b>. Their numbers are withheld from the row and this lead is out of Closers, the daily plan and every cadence — so nobody here becomes one more daily call to an uninvolved person.</div>'+
+    '<div class="ovl" style="margin-top:6px"><b>To bring it back:</b> confirm the owner on the county appraiser and the recorded deed, then clear this. The deal itself was never in question.</div>'+
+    '<button class="qlog" style="margin-top:8px" type="button" onclick="_clearWrongOwner(\''+esc(r.case)+'\')">✓ Owner re-verified — clear this flag</button></div>' : '';
   const viol = _dialedAfter(n);
   const violBanner = viol.length ? '<div class="optviol"><div class="ovt">⚠ CONTACT AFTER OPT-OUT — FTSA RISK</div>'+
     '<div class="ovl">Owner opted out <b>'+esc(n.optout)+'</b>, but these outreach touches are logged after that:</div>'+
@@ -2312,7 +2371,7 @@ function logModalBody(r){
   const ledger = (n.optlog && n.optlog.length) ? '<div class="optledger"><div class="olt">🚫 Do-not-contact audit trail</div>'+
     n.optlog.slice().reverse().map(ev=>'<div class="ole"><b>'+esc(ev.ts||'')+'</b> · '+esc(_actLbl[ev.act]||ev.act||'')+(ev.src?' · '+esc(ev.src):'')+'</div>').join('')+'</div>' : '';
   return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+(r.days>=0?'in '+r.days+'d':'passed')+'</div></div>'+
-    violBanner+
+    wrongBanner+violBanner+
     '<div class="dm-sec">Log a touch — one tap</div><div class="qlogwrap">'+btns+'</div>'+
     '<div class="dm-sec">Follow-up date</div><div class="fuwrap">Next: '+fu+' &nbsp;'+fub+'</div>'+
     '<div class="dm-sec">History</div>'+hist+ledger;
@@ -2700,6 +2759,17 @@ function _valChip(r){
   return '<b class="pv">'+fmtK(r.value)+'</b> val';
 }
 function _eqPct(r){ if(r._valsrc==='arv' && r.arv && r._equity!=null) return Math.round(100*r._equity/r.arv); return r.eq; }
+// Identity warnings — these outrank every deal signal on the row, because a beautiful number on the
+// wrong human is worse than no lead at all.
+function _idChip(r){
+  const n = notes[r.case]||{};
+  if(_isWrongOwner(n))
+    return '<span class="frchip fr-wrong" title="Someone answered and told us this is NOT their property. Every number and name we hold for this lead is suspect — do not dial them again. The DEAL is still real; the IDENTITY is not. Re-verify the owner on the appraiser + the recorded deed, then clear this flag in the contact log.">🚫 WRONG PERSON — re-verify owner</span> ';
+  const nb = _nameBroken(r);
+  if(nb)
+    return '<span class="frchip fr-idwarn" title="'+esc(nb)+'. Searching a partial name (or no name) is how you end up calling a stranger who shares it — that is exactly how an innocent person collects ten investor calls a day. Use the BY-ADDRESS searches on this row, or pull the deed, before you dial anyone.">⚠ owner name incomplete</span> ';
+  return '';
+}
 function _stayChip(r){
   // kimi: ACTIVE bankruptcy automatic stay (sale_history._bk_active). 11 U.S.C. §362 bars ALL
   // collection contact while live — this chip outranks every other signal on the row.
@@ -3821,6 +3891,7 @@ function enrollCadence(caseId){
   const n = notes[r.case]||{};
   if(n.status==='DO NOT CONTACT') return;              // the opt-out ledger always wins
   if(r.saleBkAct) return;                              // kimi: active §362 stay — automated emails are stay violations
+  if(_isWrongOwner(n)) return;                         // wrong person reported — never auto-email them
   if(cadence[caseId] && cadence[caseId].status==='active'){ openCadence(); return; }
   cadence[caseId] = {case:caseId, owner:r.owners, addr:r.addr, email:(r.emails||[])[0]||'',
     auction:r.auction, step:0, next:_today(), status:'active', enrolled:_today()};
@@ -4024,6 +4095,10 @@ function render(){
     const optedOut = n.status === 'DO NOT CONTACT';
     if(optedOut){
       gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
+    } else if(_isWrongOwner(n)){
+      // The numbers are real — they just belong to somebody else. Pull them off the row entirely so
+      // no teammate taps one, and point at the only thing that actually resolves this: the deed.
+      gCall.push('<span class="phone dncgate" title="Someone on these numbers told us they do NOT own this property. Re-verify the owner on the county appraiser and the recorded deed before contacting anyone. The deal is still live — the contact info is not.">🚫 WRONG PERSON'+(n.wrongown?' · '+esc(n.wrongown):'')+' — numbers withheld</span>');
     } else {
       // skip-traced owner phone(s) — tel: links for manual dial + wa.me links for a prefilled 1:1
       // WhatsApp message (operator-reviewed before send, same posture as a manual dial). kimi.
@@ -4148,7 +4223,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -4193,7 +4268,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
