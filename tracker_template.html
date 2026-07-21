@@ -465,6 +465,35 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .llct{font-family:var(--f-label,inherit);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2,#8a93a6);margin-left:2px}
 .llcralow{font-size:12px;color:var(--muted,#6b7280)}
 .llcsrc{font-size:10px;color:var(--muted-2,#8a93a6);font-weight:500;margin-left:6px}
+/* ===== step-by-step playbook (deal modal) ===== */
+.pblist{list-style:none;counter-reset:pb;margin:4px 0 12px;padding:0}
+.pbstep{counter-increment:pb;position:relative;padding:9px 12px 9px 40px;margin-bottom:6px;
+  border:1px solid var(--line,#E2E6EE);border-radius:10px;background:var(--surface,#fff)}
+.pbstep::before{content:counter(pb);position:absolute;left:11px;top:10px;width:20px;height:20px;
+  border-radius:50%;background:var(--navy,#0B1730);color:#fff;font-size:11px;font-weight:700;
+  display:grid;place-items:center}
+.pbstep.pb-now{border-color:rgba(198,161,75,.65);background:rgba(198,161,75,.07);box-shadow:0 2px 10px rgba(198,161,75,.16)}
+.pbstep.pb-now::before{background:var(--gold-grad,#C6A14B);color:var(--gold-ink,#0B1730)}
+.pbstep.pb-done{opacity:.62}
+.pbstep.pb-done::before{background:var(--green-ink,#166534)}
+.pbstep.pb-skip{opacity:.5}
+.pbstep.pb-skip::before{background:var(--muted-2,#8a93a6)}
+.pbt{font-weight:700;font-size:13.5px;color:var(--ink,#101C33);line-height:1.35}
+.pbd{font-size:12.5px;color:var(--muted,#6b7280);margin-top:3px;line-height:1.55}
+.pbf{font-size:12px;color:var(--muted-2,#8a93a6);margin-top:5px;line-height:1.5;
+  border-left:2px solid var(--line,#E2E6EE);padding-left:8px}
+.pbf b{color:var(--ink,#101C33)}
+.pbnow{font-family:var(--f-label,inherit);font-size:8.5px;font-weight:800;letter-spacing:.12em;
+  background:var(--gold-grad,#C6A14B);color:var(--gold-ink,#0B1730);border-radius:3px;padding:2px 6px;vertical-align:2px}
+.pbdone{font-size:9px;font-weight:700;color:var(--green-ink,#166534);letter-spacing:.08em;vertical-align:2px}
+.pbgeo{font-family:var(--f-label,inherit);font-size:9.5px;font-weight:700;letter-spacing:.06em;
+  border-radius:4px;padding:2px 7px;margin-left:7px;vertical-align:2px}
+.pbg-local,.pbg-close{background:rgba(22,101,52,.12);color:var(--green-ink,#166534)}
+.pbg-far{background:rgba(180,83,9,.12);color:#B45309}
+.pbg-remote{background:rgba(153,27,27,.12);color:#B91C1C}
+.pbcopy{float:right;font-size:11px;font-weight:600;padding:3px 10px;border-radius:var(--pill,999px);
+  border:1px solid var(--line,#E2E6EE);background:var(--surface,#fff);color:var(--muted,#6b7280);cursor:pointer}
+.pbcopy:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
 /* people-search links built from a Sunbiz OFFICER (not the company) — tinted so it's obvious
    at a glance that these search a human we identified, not the LLC on the row. */
 a.dig.digllc{border-color:rgba(198,161,75,.5);color:var(--gold-d,#8B6A2C);background:rgba(198,161,75,.07)}
@@ -1786,7 +1815,22 @@ function dealAnalysisHTML(r){
       (r.llcstat==='INACTIVE'?'<div class="llcrow llcralow">⚠ The LLC is dissolved on Sunbiz — the entity can\'t normally convey title until reinstated, but the MANAGER above is exactly who to call: dissolved LLC + foreclosure = an owner who has already checked out.</div>':'')+
       '<div class="llcrow llcralow">The county MAILING address on this lead is usually the manager\'s own house — letters and door-knocks go there.</div></div>';
   }
-  return '<div class="dm-sec">The math</div>'+mathHtml+
+  // STEP-BY-STEP PLAYBOOK — what to do, in order, for THIS property, adjusted for how far it is
+  // from base and what has already been tried. The "if that fails" line under each step is the
+  // point: nobody has to guess what comes after a no-answer.
+  const _pb = _playbook(r);
+  const _pbHtml = '<div class="dm-sec">Step-by-step — this property'+
+      (_pb.g.mi!=null ? ' <span class="pbgeo pbg-'+_pb.g.tier.toLowerCase()+'">'+_pb.g.mi+' mi · '+esc(_pb.g.lbl)+'</span>' : '')+
+      '<button type="button" class="pbcopy" onclick="_copyPlaybook(\''+esc(r.case)+'\')" title="Copy this whole ladder to send to Carlos or Jose">Copy</button></div>'+
+    '<ol class="pblist">'+(function(){ var badged=false; return _pb.steps.map(function(s){
+      // only the FIRST actionable step wears the badge — two "DO THIS NOW"s is not a next action
+      var isNow = (s.state==='now' && !badged); if(isNow) badged = true;
+      return '<li class="pbstep pb-'+(s.state==='now'&&!isNow?'next':s.state)+'">'+
+        '<div class="pbt">'+s.t+(isNow?' <span class="pbnow">DO THIS NOW</span>':s.state==='done'?' <span class="pbdone">done</span>':'')+'</div>'+
+        '<div class="pbd">'+s.d+'</div>'+
+        (s.f?'<div class="pbf"><b>If that fails →</b> '+s.f+'</div>':'')+'</li>';
+    }).join(''); })()+'</ol>';
+  return '<div class="dm-sec">The math</div>'+mathHtml+_pbHtml+
     '<div class="dm-sec">Debts &amp; liens — auto-pulled from records, adjust what you find</div>'+_recb+adj+
     llcHtml+
     (flagsHtml?'<div class="dm-sec">Watch out for</div>'+flagsHtml:'')+
@@ -1919,6 +1963,162 @@ function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches;
 // Content-agnostic by design: Jose sends mail/email using HIS OWN script — this only schedules.
 // Rules from the verified research: mail needs >=~5 business days to land (else door replaces it);
 // mail-then-door beats either alone; warm responders get the phone; never go quiet inside the window.
+/* ====================== PER-PROPERTY PLAYBOOK (geography-aware) ======================
+   Jose works out of Fountainebleau. A Hialeah lead is a 15-minute drive; a Boynton Beach lead is
+   an hour each way. The same "knock the door" advice is right for one and a waste of a morning for
+   the other — so every step ladder below is built from the ACTUAL distance to the property, what
+   has already been logged on it, whether we even have a legal channel (BK stay / DNC), and how
+   much auction runway is left. Change the base in Filters & setup if someone else is driving. */
+const BASE_LL = { lat: 25.7726, lon: -80.3453, name: 'Fountainebleau' };
+function _baseLL(){
+  try { const s = JSON.parse(localStorage.getItem('fcBase')||'null'); if(s && s.lat && s.lon) return s; } catch(e){}
+  return BASE_LL;
+}
+// fallback centroids for leads the geocoder never resolved (76% carry exact coords in aurl)
+const CITY_LL = {
+  'MIAMI':[25.7743,-80.1937],'HIALEAH':[25.8576,-80.2781],'MIAMI GARDENS':[25.9420,-80.2456],
+  'HOMESTEAD':[25.4687,-80.4776],'NORTH MIAMI':[25.8901,-80.1867],'NORTH MIAMI BEACH':[25.9331,-80.1625],
+  'MIAMI BEACH':[25.7907,-80.1300],'AVENTURA':[25.9565,-80.1392],'CORAL GABLES':[25.7215,-80.2684],
+  'DORAL':[25.8195,-80.3553],'KENDALL':[25.6793,-80.3173],'CUTLER BAY':[25.5808,-80.3468],
+  'OPA LOCKA':[25.9023,-80.2503],'FLORIDA CITY':[25.4479,-80.4792],'MIAMI LAKES':[25.9087,-80.3087],
+  'FORT LAUDERDALE':[26.1224,-80.1373],'HOLLYWOOD':[26.0112,-80.1495],'PEMBROKE PINES':[26.0078,-80.2963],
+  'MIRAMAR':[25.9873,-80.2323],'DAVIE':[26.0765,-80.2521],'PLANTATION':[26.1276,-80.2331],
+  'CORAL SPRINGS':[26.2712,-80.2706],'POMPANO BEACH':[26.2379,-80.1248],'SUNRISE':[26.1669,-80.2564],
+  'DEERFIELD BEACH':[26.3184,-80.0998],'MARGATE':[26.2445,-80.2064],'TAMARAC':[26.2129,-80.2497],
+  'LAUDERHILL':[26.1403,-80.2134],'HALLANDALE BEACH':[25.9812,-80.1484],'WESTON':[26.1004,-80.3998],
+  'WEST PALM BEACH':[26.7153,-80.0534],'BOCA RATON':[26.3683,-80.1289],'DELRAY BEACH':[26.4615,-80.0728],
+  'BOYNTON BEACH':[26.5254,-80.0664],'LAKE WORTH':[26.6168,-80.0684],'JUPITER':[26.9342,-80.0942],
+  'PALM BEACH GARDENS':[26.8234,-80.1387],'WELLINGTON':[26.6618,-80.2683],'LOXAHATCHEE':[26.6829,-80.2681],
+  'RIVIERA BEACH':[26.7753,-80.0581],'BELLE GLADE':[26.6845,-80.6676],'ROYAL PALM BEACH':[26.7031,-80.2306]
+};
+function _ll(r){
+  if(r._llc2 !== undefined) return r._llc2;
+  const m = String(r.aurl||'').match(/bbox=(-?[\d.]+),(-?[\d.]+),(-?[\d.]+),(-?[\d.]+)/);
+  if(m){ r._llc2 = { lat:(+m[2] + +m[4])/2, lon:(+m[1] + +m[3])/2 }; return r._llc2; }
+  const c = (String(r.addr||'').match(/,\s*([A-Za-z .]+?),?\s*FL/i)||[])[1];
+  const k = c ? CITY_LL[c.trim().toUpperCase()] : null;
+  r._llc2 = k ? { lat:k[0], lon:k[1], approx:true } : null;
+  return r._llc2;
+}
+function _miles(r){
+  const a = _baseLL(), b = _ll(r); if(!b) return null;
+  const R = 3958.8, t = Math.PI/180;
+  const dLa = (b.lat-a.lat)*t, dLo = (b.lon-a.lon)*t;
+  const h = Math.sin(dLa/2)**2 + Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLo/2)**2;
+  return Math.round(R * 2 * Math.asin(Math.sqrt(h)) * 1.25);   // 1.25 = road factor vs straight line
+}
+function _geoTier(r){
+  const mi = _miles(r);
+  if(mi == null) return { mi:null, tier:'?', lbl:'distance unknown', mins:null, doorOK:true };
+  const mins = Math.round(mi/0.62);                          // ~37 mph door-to-door with lights
+  if(mi <= 10) return { mi, mins, tier:'LOCAL', lbl:'~'+mins+' min — local', doorOK:true, sameDay:true };
+  if(mi <= 20) return { mi, mins, tier:'CLOSE', lbl:'~'+mins+' min', doorOK:true, sameDay:true };
+  if(mi <= 35) return { mi, mins, tier:'FAR', lbl:'~'+mins+' min each way', doorOK:true, batch:true };
+  return { mi, mins, tier:'REMOTE', lbl:'~'+mins+' min each way', doorOK:false, batch:true };
+}
+// other live deals near THIS one — the answer to "it's too far to drive for one door"
+function _nearby(r, within){
+  const b = _ll(r); if(!b) return [];
+  const R = 3958.8, t = Math.PI/180;
+  return DATA.filter(x => {
+    if(x.case === r.case || x.days < 0 || x.saleBkAct) return false;
+    const n = (notes[x.case]||{}).status; if(n==='Dead'||n==='DO NOT CONTACT') return false;
+    const c = _ll(x); if(!c) return false;
+    const dLa=(c.lat-b.lat)*t, dLo=(c.lon-b.lon)*t;
+    const h = Math.sin(dLa/2)**2 + Math.cos(b.lat*t)*Math.cos(c.lat*t)*Math.sin(dLo/2)**2;
+    return R*2*Math.asin(Math.sqrt(h)) <= (within||6);
+  });
+}
+function _playbook(r){
+  const n = notes[r.case]||{}, ts = n.touches||[], g = _geoTier(r), steps = [];
+  const has = re => ts.some(t => re.test((t.ch||'')+' '+(t.out||'')));
+  const called = has(/call/i), spoke = has(/spoke|talked|callback/i);
+  const doored = has(/door/i), mailed = has(/letter|mail/i);
+  const phones = (r.phones||[]).filter((p,i) => !((r.phdnc||[])[i]));
+  const dncOnly = !phones.length && (r.phones||[]).length;
+  const offs = (r.llcppl||[]);
+  const days = r.days, mailOK = days >= 7;
+  const S = (t,d,f,state) => steps.push({ t, d, f, state });
+
+  if(r.saleBkAct) { S('STOP — active bankruptcy stay',
+      'Federal law (11 U.S.C. §362) bars every channel: no call, text, letter, door, or email until the case is dismissed or the stay is lifted.',
+      'Watch this lead. The moment the stay closes it becomes one of the hottest calls on the board — the shield drops and the sale gets reset.', 'now');
+    return { steps, g }; }
+  if(n.status==='DO NOT CONTACT'){ S('STOP — owner opted out',
+      'They said stop. Every channel is closed and the ledger records it.',
+      'Do not re-open. If a teammate has notes, they sync automatically.', 'now'); return { steps, g }; }
+
+  // 1 — the phone
+  if(phones.length){
+    S(spoke ? '✓ You reached them' : called ? 'Call again — different time of day' : 'Call first',
+      spoke ? 'They engaged. Work your script, set a real clock time for the next call, and log what you learned.'
+            : 'Dial by hand 8am–8pm as the LLC, best number first: '+phones.slice(0,2).map(p=>fmtPhone?fmtPhone(p):p).join(' then ')+'. Open the Call script on this row.',
+      spoke ? 'If they go quiet after engaging → text, then '+(g.doorOK?'a door visit':'mail — this one is too far to drive')+'.'
+            : 'No answer → leave a 15-second voicemail with the case number, then step 2.',
+      spoke ? 'done' : called ? 'now' : 'now');
+  } else if(dncOnly){
+    S('No callable number — every one is DNC-flagged',
+      'Federal Do-Not-Call blocks the phones we have. Mail and door are still legal and are your channels here.',
+      'Skip to the mail/door step below. Do not dial the flagged numbers.', 'now');
+  } else if(offs.length){
+    S('Company-owned — find the human first',
+      'No owner phone: this is an LLC. Sunbiz names '+offs.map(o=>_offShort(o.n)).filter(Boolean).slice(0,2).join(' and ')+'. Run the People / CyberBG links on this row (name AND their filed address) to get a number.',
+      'Got a number → call it as step 2. Nothing → mail the LLC at its filed address and door the property.', 'now');
+  } else {
+    S('No phone yet — skip-trace',
+      'Run People and CyberBG on this row (name + address). Then check relatives: a son or daughter answers when the owner will not.',
+      'Still nothing → mail + door are your only channels; go to the next step.', 'now');
+  }
+
+  // 2 — text / whatsapp (only if a mobile survived DNC)
+  if(phones.length && !spoke){
+    S('Text / WhatsApp after the 2nd no-answer',
+      'Use the WhatsApp button next to the number — the message is pre-written in English and Spanish with an opt-out line. People who dodge calls read texts.',
+      'No reply in 24h → mail and/or door below.', called ? 'now' : 'next');
+  }
+
+  // 3 — THE GEOGRAPHY STEP: door vs mail is decided by the drive, not by preference
+  const near = _nearby(r, 6);
+  if(g.doorOK){
+    const drive = g.mi==null ? 'Distance unknown — check the map before you commit the trip.'
+      : 'It is '+g.mi+' mi from '+_baseLL().name+' ('+g.lbl+').';
+    S(doored ? 'Door knock #2' : 'Door visit'+(g.tier==='FAR'?' — batch the trip':''),
+      drive+' '+(g.sameDay ? 'Close enough to swing by the same day — weekday 4–6pm or Saturday 10–2 is when people are home.'
+                           : 'Too far for a single door. Only drive it batched with other stops.')+
+      ' Print the Door hanger on this row (it never says the word “foreclosure” — neighbor-safe) and take the Letter with you.'+
+      (near.length ? ' <b>'+near.length+' other live deal'+(near.length>1?'s are':' is')+' within ~6 miles of this one</b> — run them on the same trip: '+near.slice(0,3).map(x=>esc((x.addr||'').split(',')[0])).join(' · ')+'.' : ''),
+      'Nobody answers → hang the door hanger, and if a tenant answers use the tenant-intel script on the printout to get the owner’s number without mentioning the foreclosure.',
+      doored ? 'next' : (called || !phones.length) ? 'now' : 'next');
+  } else {
+    S('Do NOT drive this one — mail + phone only',
+      'It is '+g.mi+' mi from '+_baseLL().name+' ('+g.lbl+'). A door knock here burns half a day for one conversation.'+
+      (near.length>=2 ? ' Only worth a trip if you batch it: <b>'+near.length+' other live deals sit within ~6 miles</b> ('+near.slice(0,3).map(x=>esc((x.addr||'').split(',')[0])).join(' · ')+').' : ' Send mail and work the phone instead.'),
+      'If it is a real deal and they will not answer → hire a local door-knocker or a notary signing agent for one visit, or drive it only when 3+ deals stack up in that area.',
+      (called || !phones.length) ? 'now' : 'next');
+  }
+
+  // 4 — mail, timed against the auction clock
+  S(mailed ? 'Mail #2 — different envelope' : 'Mail'+(mailOK?'':' — TOO SLOW, skip it'),
+    mailOK ? 'Hand-addressed, real stamp, no logo — it gets opened. Generate it from the Letter button (bilingual). Lands in 2–5 days.'
+           : 'Only '+days+' days to auction — a letter cannot arrive in time to matter. Put that energy into the phone and the door instead.',
+    mailOK ? 'No response in 5 days → follow with the door step or another call.' : 'Go straight to phone/door.',
+    mailOK ? (mailed?'next':'next') : 'skip');
+
+  // 5 — widen the net
+  S('Still nothing? Widen it',
+    'Relatives and neighbors via CyberBG (it separates relatives from associates). '+
+    (offs.length ? 'For this LLC, also chase the registered agent and the deed signer. ' : '')+
+    'Check the Cases link for probate or divorce — a different person may control the property now.',
+    'Confirmed unreachable → log it Dead so it stops eating your list, and set a reminder for the surplus check after the sale.', 'next');
+
+  // 6 — the clock
+  S(days>=0 ? 'Before the hammer ('+days+'d)' : 'After the sale',
+    days>=0 ? 'Deadline for any deal is roughly the auction date minus 3 days — the attorney needs time to file. If they engage late, the stop-the-sale fee ($2,500 + $330 costs) buys 60–90 days.'
+            : 'The auction has passed. If it sold for more than the debt, the former owner is owed the surplus (Fla. Stat. 45.032) — that is still a paid conversation.',
+    days>=0 ? 'No contact by minus-3 days → let it go to sale and watch for the surplus.' : 'File the surplus claim path with the attorney.',
+    'next');
+  return { steps, g };
+}
 function nextAction(r){
   const n=notes[r.case]||{}, ts=n.touches||[];
   if(n.status==='DO NOT CONTACT' || n.status==='Dead') return null;
@@ -2336,6 +2536,18 @@ function _liveMsg(r){
     + ' · net ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
     + 'Drop what you\'re doing — research this while I hold them. Say PATCH when you\'re ready.\n'
     + _deepLink(r);
+}
+function _copyPlaybook(c){
+  const r = DATA.find(x => x.case === c); if(!r) return;
+  const p = _playbook(r), owner = (r.owners||'').split(';')[0].trim();
+  const strip = h => String(h).replace(/<[^>]+>/g,'').replace(/&middot;/g,'·').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim();
+  const txt = 'PLAYBOOK — '+r.addr+'\n'+owner+'  ·  Case '+r.case+'\n'+
+    'Auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+
+    (p.g.mi!=null?'  ·  '+p.g.mi+' mi from '+_baseLL().name+' ('+p.g.lbl+')':'')+'\n\n'+
+    p.steps.map((s,i) => (i+1)+'. '+strip(s.t)+(s.state==='now'?'   <-- DO THIS NOW':'')+'\n   '+strip(s.d)+
+                         (s.f?'\n   IF THAT FAILS: '+strip(s.f):'')).join('\n\n')+
+    '\n\n'+_deepLink(r);
+  _copyShare(txt, 'Playbook');
 }
 function _shareTo(c, who){
   var r = DATA.find(function(x){return x.case===c;}); if(!r) return;
