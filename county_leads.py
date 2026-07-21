@@ -21,7 +21,7 @@ COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS
 # parcel by folio; tax/records/cases are the correct county portals (some are search-only — see notes).
 COUNTIES = {
     'BROWARD': {
-        'sub': 'broward', 'co_no': 16,
+        'sub': 'broward', 'td_sub': 'broward', 'co_no': 16,
         # BCPA's Angular SPA can't deep-link; the legacy RecInfo.asp endpoint opens the parcel directly (12-digit folio, no dashes).
         'pa': lambda f: 'https://bcpa.net/RecInfo.asp?URL_Folio=' + f,
         # DIRECT tax bill — the exact URL BCPA's own "Tax Collector" link opens (2026-07-20, Alejandro's
@@ -34,7 +34,7 @@ COUNTIES = {
         'cases': 'https://www.browardclerk.org/Web2/CaseSearchECA/',    # court case search
     },
     'PALM BEACH': {
-        'sub': 'palmbeach', 'co_no': 60,
+        'sub': 'palmbeach', 'td_sub': 'palmbeach', 'co_no': 60,
         'pa': lambda f: 'https://pbcpao.gov/Property/Details?parcelId=' + f,   # direct parcel (17-digit PCN, no dashes)
         # DIRECT tax bill — the exact URL PBCPAO's "Tax Collector" button opens (2026-07-20, Alejandro's
         # find): onClickTaxCollector() -> PropertyTax.aspx?s=ParcelID:{PCN}. PCN = 17-digit folio formatted
@@ -87,22 +87,34 @@ def _clean_owner(name):
 
 
 def scrape_county(cfg, max_dates=0):
-    base = f"https://{cfg['sub']}.realforeclose.com/index.cfm"
+    """Scrape BOTH RealAuction platforms this county runs on: <sub>.realforeclose.com (mortgage
+    foreclosures) AND <sub>.realtaxdeed.com (tax-deed sales — Jose's lane). Same DOM, same scraper;
+    each item is tagged with its origin base so the auction deep-link points to the right site."""
+    fc_base = f"https://{cfg['sub']}.realforeclose.com/index.cfm"
+    td_base = f"https://{cfg['td_sub']}.realtaxdeed.com/index.cfm" if cfg.get('td_sub') else None
+    leads = []
     with sync_playwright() as p:
         b = p.chromium.launch(headless=True)
         page = b.new_context(user_agent=F.UA, viewport={"width": 1400, "height": 1000}).new_page()
-        dates = F.discover_dates(page, base=base)
-        if max_dates: dates = dates[:max_dates]
-        leads = []
-        for d, st in dates:
-            leads += F.scrape_date(page, d, st, base=base)
+        for base in [fc_base] + ([td_base] if td_base else []):
+            try:
+                dates = F.discover_dates(page, base=base)
+            except Exception as e:
+                print(f"  {base}: calendar failed ({str(e)[:70]}) — skipping this platform")
+                continue
+            if max_dates:
+                dates = dates[:max_dates]
+            for d, st in dates:
+                for r in F.scrape_date(page, d, st, base=base):
+                    r['_base'] = base
+                    leads += [r]
         b.close()
     seen, out = set(), []
     for r in leads:
         k = (r.get('Case #') or r.get('Address', '')) + r.get('AuctionDate', '')
         if k and k not in seen:
             seen.add(k); out.append(r)
-    return out, base
+    return out, fc_base
 
 
 def to_slim(county, cfg, base, items):
@@ -134,9 +146,16 @@ def to_slim(county, cfg, base, items):
             days = (datetime.strptime(r.get('AuctionDate', ''), '%m/%d/%Y').date() - today).days
         except Exception:
             days = -1
+        st = r.get('sale_type', 'FC')
+        # TAX DEED: there is no court judgment — the OPENING BID (delinquent certs + fees) is the deal
+        # basis. Mirror Miami-Dade (foreclosure_leads.py sets judg=opening_bid for TD) so the equity
+        # spread, the 'owed' cell and the deal model all read the bid, not a fake $0-judgment -> 100%
+        # -equity / VERIFY. Without this, every county tax deed rendered VERIFY with no profit.
+        obid_val = F.money(r.get('Opening Bid', '')) if st == 'TD' else 0
+        if st == 'TD' and obid_val:
+            judg = obid_val
         eqp = round((val - judg) / val * 100) if val else 0
         is_co = bool(COMPANY_RE.search(owner))
-        st = r.get('sale_type', 'FC')
         # FANTASY-EQUITY GUARD — plaintiff-free mirror of foreclosure_leads.py suspect_equity (line ~543).
         # County scrapes rarely carry a plaintiff, so MD's plaintiff-gated guard can't fire here, which
         # let $29k-judgment / $1.2M-value HOA cases render as "98% equity STRONG bank deals". A judgment
@@ -164,7 +183,9 @@ def to_slim(county, cfg, base, items):
         if no_street:
             tier = 'C'; score = min(score, 40)
         z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio) + ' FL') + '_rb/'
-        auc = base + '?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=' + r.get('AuctionDate', '') + ('#AITEM_' + r['AID'] if r.get('AID') else '')
+        # deep-link to the platform this item actually came from (realforeclose vs realtaxdeed)
+        _ab = r.get('_base', base)
+        auc = _ab + '?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=' + r.get('AuctionDate', '') + ('#AITEM_' + r['AID'] if r.get('AID') else '')
         # People NAME search — TruePeopleSearch wants "First Last". FDOR owner names are "LAST FIRST[,] MIDDLE",
         # so build the query with _people_name() (handles both comma + space forms). zip is at the END of the
         # address (not the street number). Skip companies/trusts and address-named entities ("...LAND TR").
@@ -187,15 +208,18 @@ def to_slim(county, cfg, base, items):
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
             'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': eqfake, 'hs': hs, 'condo': condo,
             'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')),
-            'st': st, 'obid': 0, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
+            # TAX DEED: the opening bid (certs + fees) and certificate number are the deal inputs —
+            # map them so the TD branch of the deal model (winbid off obid) and the row's Certificate #
+            # both work for BW/PB just like Miami-Dade. FC leads have neither and stay 0/''.
+            'st': st, 'obid': obid_val, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
             'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr, 'cyberbg': cyberbg, 'cyberbgaddr': cyberbgaddr,
             'ctype': ('HOA' if ftype == 'HOA' else 'Bank/Mortgage'), 'ftype': ftype, 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
             # county leads have no per-case docket token (no clerk enrichment) -> no Docket button; the
             # Records/Cases buttons point to THIS county's official-records + court-case search portals.
             'docket': '', 'records': cfg['records'], 'cases': cfg['cases'],
-            'cstatus': '', 'mr': mr, 'ip': False, 'ju': (judg <= 0),
+            'cstatus': '', 'mr': mr, 'ip': False, 'ju': judg_unknown,
             'bought': bought, 'bprice': bprice, 'filed': 0, 'etax': 0,
-            'warn': (('no street address - verify parcel first' if no_street else '') if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': '',
+            'warn': (('no street address - verify parcel first' if no_street else '') if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': r.get('Certificate #', ''),
         })
     return slim
 
@@ -209,7 +233,7 @@ def main():
     if key not in COUNTIES:
         raise SystemExit(f"unknown county '{a.county}'. Have: {', '.join(COUNTIES)}")
     cfg = COUNTIES[key]
-    print(f"scraping {key} auctions ({cfg['sub']}.realforeclose.com)...")
+    print(f"scraping {key} auctions ({cfg['sub']}.realforeclose.com + {cfg.get('td_sub', cfg['sub'])}.realtaxdeed.com)...")
     items, base = scrape_county(cfg, a.dates)
     print(f"scraped {len(items)}; enriching via statewide cadastral (CO_NO={cfg['co_no']})...")
     slim = to_slim(key, cfg, base, items)

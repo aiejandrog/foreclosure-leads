@@ -4006,7 +4006,15 @@ document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.cl
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
 document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
 document.getElementById('eq30').onclick = e => { eq30Only = !eq30Only; e.target.classList.toggle('active', eq30Only); render(); };
-document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly); render(); };
+document.getElementById('td').onclick = e => {
+  tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly);
+  // Tax deeds is Jose's dedicated LANE, not a tier sub-filter. Tax-deed leads are almost all
+  // Tier C (small opening bids, no homeowner-rescue score), so filtering them inside the default
+  // Tier A showed 6 of 22 and read as "broken". Turning the lane ON snaps to All tiers so the
+  // whole lane is visible; the tier pills still work to narrow it back down afterward.
+  if(tdOnly && tier!=='ALL'){ tier='ALL'; document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL')); }
+  render();
+};
 document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
 document.getElementById('plan').onclick = () => openPlanModal();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
