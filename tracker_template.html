@@ -465,6 +465,22 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .llct{font-family:var(--f-label,inherit);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2,#8a93a6);margin-left:2px}
 .llcralow{font-size:12px;color:var(--muted,#6b7280)}
 .llcsrc{font-size:10px;color:var(--muted-2,#8a93a6);font-weight:500;margin-left:6px}
+/* people-search links built from a Sunbiz OFFICER (not the company) — tinted so it's obvious
+   at a glance that these search a human we identified, not the LLC on the row. */
+a.dig.digllc{border-color:rgba(198,161,75,.5);color:var(--gold-d,#8B6A2C);background:rgba(198,161,75,.07)}
+a.dig.digllc:hover{border-color:var(--gold,#C6A14B);background:rgba(198,161,75,.14)}
+/* one grouped unit per Sunbiz officer: the human's name once, then their searches. Keeps a
+   company lead's link row scannable instead of eight look-alike chips. */
+.digppl{display:inline-flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:12px;
+  border:1px solid rgba(198,161,75,.5);background:rgba(198,161,75,.07);border-radius:var(--pill,999px);
+  padding:5px 11px;color:var(--muted,#6b7280);line-height:1.5}
+.digppl b{color:var(--ink,#101C33);font-weight:700}
+.digppl a{color:var(--gold-d,#8B6A2C);font-weight:600;text-decoration:none}
+.digppl a:hover{text-decoration:underline}
+.digppl i{color:var(--muted-2,#8a93a6);font-style:normal;opacity:.7}
+/* phones: the links inside inherit the board's standard #cards .clinks a tap size (35px) — only
+   the wrapper needs breathing room so the group doesn't crowd the row. */
+@media(max-width:860px){ .digppl{font-size:12.5px;padding:4px 10px;gap:2px} }
 .llcdead{color:#B91C1C}
 .ppaths{display:flex;flex-direction:column;gap:8px;margin:4px 0 2px}
 .ppath{background:var(--surface-2,#F3F5F9);border:1px solid var(--line,#E2E6EE);border-radius:8px;
@@ -1750,10 +1766,17 @@ function dealAnalysisHTML(r){
       '<div class="llcrow llcralow">Then run the signer\'s name through <b>People</b> / <b>CyberBG</b> on this row for phones. Mailing address on file: <b>'+esc(r.mail||r.addr||'—')+'</b>'+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <i>(same as the property — mail here reaches whoever occupies it)</i>':'')+'</div></div>';
   }
   if((r.llcppl||[]).length || r.llcra){
-    const rows = (r.llcppl||[]).map(o =>
-      '<div class="llcrow"><b>'+esc(o.n)+'</b> <span class="llct">'+esc(o.t||'')+'</span>'+
-      (o.a?' · '+esc(o.a):'')+
-      (o.p?' · <a href="'+esc(o.p)+'" target="_blank" rel="noopener">People search</a>':'')+'</div>').join('');
+    const rows = (r.llcppl||[]).map(o => {
+      // every search we can run on this human, from their name AND their filed address
+      const ls = [];
+      if(o.p)   ls.push('<a href="'+esc(o.p)+'" target="_blank" rel="noopener">People</a>');
+      if(o.pa)  ls.push('<a href="'+esc(o.pa)+'" target="_blank" rel="noopener">People by address</a>');
+      if(o.cb)  ls.push('<a href="'+esc(o.cb)+'" target="_blank" rel="noopener">CyberBG</a>');
+      if(o.cba) ls.push('<a href="'+esc(o.cba)+'" target="_blank" rel="noopener">CyberBG by address</a>');
+      return '<div class="llcrow"><b>'+esc(o.n)+'</b> <span class="llct">'+esc(o.t||'')+'</span>'+
+        (o.a?'<div class="llcrow llcralow" style="padding-top:1px">📍 '+esc(o.a)+'</div>':'')+
+        (ls.length?'<div class="llcrow" style="padding-top:2px">'+ls.join(' · ')+'</div>':'')+'</div>';
+    }).join('');
     // Always show WHICH Sunbiz entity these people came from: a name that doesn't look like the
     // owner on the row is the tell that the match is wrong (the BEETA BRIDGES -> BEETAILS trap).
     const _mn = r.llcmatch && _norm2(r.llcmatch) !== _norm2((r.owners||'').split(';')[0]) ? ' · matched <b>'+esc(r.llcmatch)+'</b>' : '';
@@ -2423,6 +2446,15 @@ function _filedYear(r){
   return 0;
 }
 function _norm2(s){ return String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,''); }
+// 'GONZALEZ, LAZARA L' -> 'Lazara Gonzalez' — a short human label for the row's link chips.
+function _offShort(n){
+  var s = String(n||'').trim(); if(!s) return '';
+  var m = s.match(/^([^,]+),\s*(.+)$/);
+  var first = m ? m[2].trim().split(/\s+/)[0] : s.split(/\s+/)[0];
+  var last  = m ? m[1].trim().split(/\s+/)[0] : (s.split(/\s+/).slice(-1)[0] || '');
+  var cap = w => w ? w.charAt(0).toUpperCase()+w.slice(1).toLowerCase() : '';
+  return (cap(first)+' '+cap(last)).trim();
+}
 function _stayLiftedDays(r){
   // days since the last stay CLOSED (court dismissal/discharge/relief date), or -1
   if(r.saleBkAct || !r.saleLift) return -1;
@@ -3738,6 +3770,19 @@ function render(){
       });
     }
     // INVESTIGATE — the owner's people, their loans, their other cases, this docket.
+    // LLC-OWNED leads have NO owner people-search (the owner is a company), which is exactly why
+    // they felt un-findable. Sunbiz gave us the humans — wire THEIR name + filed-address searches
+    // into these same slots so a company lead gets the identical investigate arsenal.
+    (r.llcppl||[]).slice(0,2).forEach(function(o){
+      var nm = _offShort(o.n); if(!nm) return;
+      var who = esc(nm)+' is a filed '+esc(o.t||'officer')+' of '+esc((r.owners||'').split(';')[0].trim())+(o.a?' — filed address '+esc(o.a):'');
+      var L = [];
+      if(o.p)   L.push('<a href="'+esc(o.p)+'" target="_blank" rel="noopener" title="TruePeopleSearch by NAME. '+who+'. Phones, relatives, address history.">People</a>');
+      if(o.pa)  L.push('<a href="'+esc(o.pa)+'" target="_blank" rel="noopener" title="TruePeopleSearch by their FILED ADDRESS. '+who+'. Returns only who actually lives there — the way to tell which same-name person is your officer.">addr</a>');
+      if(o.cb)  L.push('<a href="'+esc(o.cb)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by NAME. '+who+'. Free detail page: every phone with carrier + last-reported date, up to 7 emails, relatives.">CyberBG</a>');
+      if(o.cba) L.push('<a href="'+esc(o.cba)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by their FILED ADDRESS. '+who+'. Confirms they still live there and surfaces phones the name search misses.">addr</a>');
+      if(L.length) gDig.push('<span class="digppl" title="'+who+'">🧑&nbsp;<b>'+esc(nm)+'</b> '+L.join('<i>·</i>')+'</span>');
+    });
     if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
     if(r.peopleaddr) gDig.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
     if(r.cyberbg) gDig.push('<a class="dig" href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks — a second source, often better than TruePeopleSearch: free detail page (one more click) shows every phone with carrier + last-reported date, up to 7 emails, RELATIVES (separate from associates — good for the tenant-intel play), and prior addresses. Cross-check against the People links above.">CyberBG</a>');

@@ -166,13 +166,39 @@ def _lookup(entity):
     return d
 
 
+def _person(name):
+    """Sunbiz files people as 'LAST, FIRST M' — flip to the 'First Last' the search sites want."""
+    m = re.match(r'([^,]+),\s*(.+)', str(name or ''))
+    return ((m.group(2) + ' ' + m.group(1)).strip() if m else str(name or '')).strip()
+
+
 def _tps(name):
     """TruePeopleSearch link for a Sunbiz 'LAST, FIRST M' name."""
-    m = re.match(r'([^,]+),\s*(.+)', name)
-    person = (m.group(2) + ' ' + m.group(1)).strip() if m else name
-    if CO.search(person):
+    person = _person(name)
+    if not person or CO.search(person):
         return ''
     return 'https://www.truepeoplesearch.com/results?name=' + urllib.parse.quote(person)
+
+
+def _links_for(name, addr):
+    """Every people-search link for ONE officer, built from their Sunbiz name AND the address they
+    filed. Reuses the exact URL builders the owner rows use, so an LLC lead gets the same
+    investigate arsenal an individually-owned lead gets — name search, address search (pinpoints
+    which same-name person it is), and both CyberBG variants."""
+    person = _person(name)
+    if not person or CO.search(person):
+        return {}
+    out = {'p': _tps(name)}
+    try:
+        import foreclosure_leads as _F
+        if addr:
+            # the officer's OWN filed address — usually their home, which is the strongest pinpoint
+            out['pa'] = _F.people_addr_url(addr, '', False) or ''
+            out['cba'] = _F.cyberbg_addr_url(addr, '', False) or ''
+        out['cb'] = _F.cyberbg_url(person, addr or '') or ''
+    except Exception:
+        pass
+    return {k: v for k, v in out.items() if v}
 
 
 def main():
@@ -217,7 +243,7 @@ def main():
             time.sleep(1.2)
         if d and d.get('exact') and (d['officers'] or d['ra']):
             for o in d['officers']:
-                o['p'] = _tps(o['n'])
+                o.update(_links_for(o.get('n'), o.get('a')))
             cache[case] = {'ent': ent, 'status': d['status'], 'exact': True,
                            'matched': d.get('matched', ''), 'typo': bool(d.get('typo')),
                            'ra': d['ra'], 'ra_addr': d['ra_addr'], 'officers': d['officers'][:5],
