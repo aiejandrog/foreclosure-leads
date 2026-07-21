@@ -80,6 +80,9 @@ python listing_status.py --limit 120 >> "%LOG%" 2>&1
 echo [3e/5] Sale-history survival counts (MD docket, 7-day cache - the STALLER signal)...
 python sale_history.py --limit 150 >> "%LOG%" 2>&1
 
+echo [3f/5] Humans behind LLC-owned leads (Sunbiz officers + registered agent)...
+python llc_officers.py --limit 40 >> "%LOG%" 2>&1
+
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 

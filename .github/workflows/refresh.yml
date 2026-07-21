@@ -233,6 +233,13 @@ jobs:
         continue-on-error: true
         run: python sale_history.py --limit 150
 
+      # ---- [3f/5] Humans behind LLC-owned leads (Sunbiz officers/RA) -----------------------
+      # llc_officers.json is COMMITTED (same single-source rule as the stay cache); only new
+      # cases hit Sunbiz. Fail-soft: a blocked day keeps yesterday's humans.
+      - name: '[3f/5] LLC officers (Sunbiz)'
+        continue-on-error: true
+        run: python llc_officers.py --limit 40
+
       # ---- [4/5] Final rebuild with everything baked in -----------------------------------
       - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
         run: |
@@ -244,7 +251,7 @@ jobs:
           # docs/img/ also picks up new photos this run — stage them too. sale_history_cache.json
           # is committed as well: it is the SINGLE SOURCE for stay-compliance (no actions/cache
           # copy anymore), so the daily [3e] refresh must flow back into the repo.
-          git add docs/index.html docs/img sale_history_cache.json
+          git add docs/index.html docs/img sale_history_cache.json llc_officers.json
           if git diff --staged --quiet; then
             echo "nothing changed — site already current"
           else

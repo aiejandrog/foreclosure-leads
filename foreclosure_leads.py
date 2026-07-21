@@ -762,6 +762,13 @@ def make_tracker(leads):
     if os.path.exists(_cf):
         try: comps = json.load(open(_cf, encoding='utf-8'))
         except Exception: comps = {}
+    # the HUMANS behind LLC-owned leads (llc_officers.py, Sunbiz; committed like the stay cache) —
+    # managers/officers + registered agent so a company-owned deal is still a person you can call.
+    llcs = {}
+    _lof = os.path.join(HERE, 'llc_officers.json')
+    if os.path.exists(_lof):
+        try: llcs = json.load(open(_lof, encoding='utf-8'))
+        except Exception: llcs = {}
     slim = []
     for r in leads:
         _ft = _fc_type(r.get('Case #', ''))          # HOA (whole 1st mortgage survives) vs MORTGAGE foreclosure
@@ -814,6 +821,12 @@ def make_tracker(leads):
             # the DOOR: when the last stay CLOSED (dismissal/discharge/relief court date). A
             # fresh-dismissed owner just lost the shield — sale resets, contact legal, max urgency.
             'saleLift': r.get('sale_stay_lifted', ''),
+            # Sunbiz humans behind a company owner (llc_officers.py): managers/officers with
+            # people-search links + the registered agent — a company deal is still a person.
+            'llcppl': (llcs.get(r.get('Case #', '')) or {}).get('officers', []),
+            'llcra': (llcs.get(r.get('Case #', '')) or {}).get('ra', ''),
+            'llcraaddr': (llcs.get(r.get('Case #', '')) or {}).get('ra_addr', ''),
+            'llcstat': (llcs.get(r.get('Case #', '')) or {}).get('status', ''),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
             'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
@@ -896,6 +909,11 @@ def make_tracker(leads):
                     _d['arv'] = _cp.get('arv', 0); _d['arvconf'] = _cp.get('conf', '')
                     _d['arvpsf'] = _cp.get('psf', 0); _d['arvn'] = _cp.get('n', 0)
                     _d['comps'] = _cp.get('comps', [])
+                # Sunbiz humans behind a company owner (llc_officers.py)
+                _lo = llcs.get(_d.get('case', ''))
+                if _lo and (_lo.get('officers') or _lo.get('ra')):
+                    _d['llcppl'] = _lo.get('officers', []); _d['llcra'] = _lo.get('ra', '')
+                    _d['llcraaddr'] = _lo.get('ra_addr', ''); _d['llcstat'] = _lo.get('status', '')
                 # TRUE type: the recorded-chain plaintiff (broward_liens.analyze -> _h['ftype']) is
                 # authoritative and OVERRIDES the case-number prefix, which mislabels HOA-in-circuit-court
                 # cases (CACE) as MORTGAGE. The slim lead's own plaintiff-or-prefix guess is the next

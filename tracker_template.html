@@ -458,6 +458,14 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 /* the stay-lifted DOOR: gold — shield just dropped, hottest legal call on the board */
 .fr-lift{background:linear-gradient(120deg,rgba(198,161,75,.18),rgba(239,223,158,.25));color:#8B6A2C;
   border:1px solid rgba(198,161,75,.55);font-weight:700}
+/* the humans behind an LLC (Sunbiz block in the deal modal) */
+.llcbox{background:var(--surface,#fff);border:1px solid var(--line,#E2E6EE);border-radius:10px;padding:10px 13px;margin:4px 0 10px}
+.llcrow{font-size:13px;padding:3px 0;line-height:1.5}
+.llcrow a{color:var(--gold-d,#8B6A2C);font-weight:600}
+.llct{font-family:var(--f-label,inherit);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2,#8a93a6);margin-left:2px}
+.llcralow{font-size:12px;color:var(--muted,#6b7280)}
+.llcsrc{font-size:10px;color:var(--muted-2,#8a93a6);font-weight:500;margin-left:6px}
+.llcdead{color:#B91C1C}
 .ppaths{display:flex;flex-direction:column;gap:8px;margin:4px 0 2px}
 .ppath{background:var(--surface-2,#F3F5F9);border:1px solid var(--line,#E2E6EE);border-radius:8px;
   padding:9px 12px;font-size:12px;line-height:1.5}
@@ -1359,7 +1367,12 @@ function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
 function notForModel(r){ return !!r.vac; }
 function landChips(r){ let o='';
   if(r.vac) o+='<span class="chip vlow" title="VACANT LAND — no homeowner to help, and the equity shown rides on a speculative raw-land value. A systematic false-positive for this list; verify a real market value + a developer buyer before spending time.">&#127957; VACANT LAND</span>';
-  if(r.co)  o+='<span class="chip vnone" title="COMPANY-OWNED (LLC/Corp/Trust). Not a distressed homeowner — likely a sophisticated investor who knows the value; different negotiation, no FS 501.1377 homeowner protections. Context only, not a red flag.">LLC-OWNED</span>';
+  if(r.co){
+    var _lp = (r.llcppl||[]).length;
+    o += _lp
+      ? '<span class="chip vnone" title="COMPANY-OWNED — but Sunbiz gave up '+_lp+' human'+(_lp>1?'s':'')+' behind it (manager/officers'+(r.llcstat==='INACTIVE'?'; entity DISSOLVED':'')+'). Open Deal analysis — names, addresses and people-search links are inside.">LLC-OWNED · '+_lp+' 🧑</span>'
+      : '<span class="chip vnone" title="COMPANY-OWNED (LLC/Corp/Trust). Not a distressed homeowner — likely a sophisticated investor who knows the value; different negotiation, no FS 501.1377 homeowner protections. Context only, not a red flag.">LLC-OWNED</span>';
+  }
   return o; }
 // Real equity — nets out a CHAIN-VERIFIED surviving mortgage (orsurv) when we have one. The raw `eq`
 // field ignores it everywhere else in the app (it's shown separately as the mrwarn callout), which is
@@ -1718,8 +1731,23 @@ function dealAnalysisHTML(r){
           ? '<div class="recbanner">✓ <b>Records checked</b> — no surviving mortgage or lien found beyond the foreclosing judgment'+(r.orconf==='low'?' <i>(low-confidence pass — common name; spot-verify in Records)</i>':'')+'. The fields below are yours if title shows something.</div>'
           : '<div class="recbanner warn">⚠ <b>No recorded chain pulled for this property yet.</b> Open <b>Records</b> / <b>Cases</b> and fill the debts below — the profit above assumes none survive.</div>');
   const flagsHtml = flags.length ? '<div class="dealflags">'+flags.map(f=>'<div class="flag">'+esc(f)+'</div>').join('')+'</div>' : '';
+  // THE HUMANS BEHIND THE LLC (llc_officers.py / Sunbiz): a company-owned deal is still a person —
+  // the manager who signs, skip-traceable like any owner. RA = formal/service-of-process channel.
+  let llcHtml = '';
+  if((r.llcppl||[]).length || r.llcra){
+    const rows = (r.llcppl||[]).map(o =>
+      '<div class="llcrow"><b>'+esc(o.n)+'</b> <span class="llct">'+esc(o.t||'')+'</span>'+
+      (o.a?' · '+esc(o.a):'')+
+      (o.p?' · <a href="'+esc(o.p)+'" target="_blank" rel="noopener">People search</a>':'')+'</div>').join('');
+    llcHtml = '<div class="dm-sec">The humans behind the LLC <span class="llcsrc">Sunbiz'+(r.llcstat==='INACTIVE'?' · <b class="llcdead">DISSOLVED ENTITY</b>':'')+'</span></div>'+
+      '<div class="llcbox">'+rows+
+      (r.llcra?'<div class="llcrow llcralow">Registered agent: '+esc(r.llcra)+(r.llcraaddr?' · '+esc(r.llcraaddr):'')+' <span class="llct">formal / service contact</span></div>':'')+
+      (r.llcstat==='INACTIVE'?'<div class="llcrow llcralow">⚠ The LLC is dissolved on Sunbiz — the entity can\'t normally convey title until reinstated, but the MANAGER above is exactly who to call: dissolved LLC + foreclosure = an owner who has already checked out.</div>':'')+
+      '<div class="llcrow llcralow">The county MAILING address on this lead is usually the manager\'s own house — letters and door-knocks go there.</div></div>';
+  }
   return '<div class="dm-sec">The math</div>'+mathHtml+
     '<div class="dm-sec">Debts &amp; liens — auto-pulled from records, adjust what you find</div>'+_recb+adj+
+    llcHtml+
     (flagsHtml?'<div class="dm-sec">Watch out for</div>'+flagsHtml:'')+
     '<div class="dm-sec">Recommended move</div><div class="dealstrat">'+esc(dealStrategy(r))+'</div>';
 }
