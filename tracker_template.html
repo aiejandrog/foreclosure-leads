@@ -1027,6 +1027,11 @@ body.compact .dg-v{font-size:14.5px}
   #cards .clinks .lgrp{gap:6px}
   #cards .clinks a{font-size:12.5px;padding:8px 12px}
   #cards .clinks span.phone{font-size:12.5px;padding:8px 12px}
+  /* phones: enlarge the small icon buttons so they're actually tappable (2026-07-21 audit —
+     WhatsApp was 22px, copy ~19px; a mis-tap on a tiny target reads as "the link didn't work"). */
+  #cards a.wabtn{width:32px;height:32px}
+  #cards a.wabtn svg{width:15px;height:15px}
+  #cards .cpy{padding:5px 9px}
   #cards select.status,#cards input.ph{height:38px;font-size:13px}
   #cards textarea.notes{min-height:52px;font-size:13px}
   .phero{height:220px}
