@@ -91,6 +91,11 @@ if _ALL:
     comps = load('comps.json') or {}
     arv = _pct(sum(1 for r in _ALL if comps.get(r.get('case') or r.get('Case #'))), N)
     add('WARN' if arv < 30 else 'PASS', 'RULE: ARV-comp coverage', f'{arv}% have comps (floor 30%)')
+    # sale-history survival count — sale_history.py (Miami-Dade docket). Measured against MD leads only
+    # (BW/PB use the filing-year proxy), so a drop toward 0 means the OCS docket enrich stopped running.
+    md = [r for r in _ALL if re.match(r'\d{4}-\d+-\w+-\d+', str(r.get('Case #') or r.get('case') or '')) and (r.get('sale_type') or r.get('st')) != 'TD']
+    surv = _pct(sum(1 for r in md if r.get('saleSurv') is not None or r.get('sale_survived') is not None), len(md))
+    add('WARN' if surv < 60 else 'PASS', 'RULE: sale-history coverage (MD)', f'{surv}% of MD FC leads scored (floor 60%)')
     # per-parcel tax deep-link — county_leads.py / foreclosure_leads.py from the folio.
     # MD raw leads carry it as tax_url, county files as tax — check both so the measure is honest.
     def _deep(r):
