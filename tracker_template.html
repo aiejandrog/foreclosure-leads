@@ -1385,12 +1385,19 @@ function recompute(){
     // surviving-mortgage estimate pre-fills the senior payoff — value − surviving senior −
     // judgment − costs, computed BEFORE anyone asks. Only records-verified chains feed it
     // (conf 'ok' or 'low'); the deal-modal input always wins over the chain's number.
-    const chainSurv = (r.orconf==='ok' || r.orconf==='low') ? (r.orjunior || r.orsurv || r.orsurvfirst || 0) : 0;
-    r._chainSurv = chainSurv;
     const chainConf = (r.orconf==='ok' || r.orconf==='low');
-    const slien = Math.max(0, +nn.slien || 0) || chainSurv;   // surviving senior / 1st mortgage (HOA/junior cases)
+    // Split the surviving stack cleanly so NO mortgage counts twice (the double-count bug: `orsurv`
+    // lumps in the juniors-recorded-after, which also feed orjuniors -> the same loan filled BOTH
+    // the senior AND junior field). Senior = what SURVIVES the sale (recorded before the foreclosing
+    // one) = total survivors − juniors-after. Junior (orjuniors) is a payoff only on an owner purchase.
+    const _jp = chainConf ? (+r.orjuniors || 0) : 0;
+    const _survTotal = chainConf ? (+r.orsurv || +r.orjunior || +r.orsurvfirst || 0) : 0;
+    const chainSurv = (r.orftype === 'HOA') ? (chainConf ? (+r.orsurvfirst || _survTotal) : 0)
+                                            : Math.max(0, _survTotal - _jp);
+    r._chainSurv = chainSurv;
+    const slien = Math.max(0, +nn.slien || 0) || chainSurv;   // surviving senior / 1st mortgage
     // kimi: the rest of the deal-modal prefills, all from the recorded chain (user entry still wins).
-    const jlien = Math.max(0, +nn.jlien || 0) || (chainConf ? (r.orjuniors||0) : 0);   // mortgages recorded AFTER the foreclosing one — payoff for clean title on a purchase
+    const jlien = Math.max(0, +nn.jlien || 0) || _jp;   // juniors recorded AFTER the foreclosing one — payoff for clean title on a purchase
     const assess = Math.max(0, +nn.assess || 0) || (chainConf ? (r.orhoa||0) : 0);     // recorded HOA/association open liens (estoppel still confirms at contract)
     const mlien = Math.max(0, +nn.mlien || 0) || (chainConf ? ((r.orcode||0)+(r.orirs||0)) : 0);   // code/muni/IRS + money judgments
     // btax stays manual ON PURPOSE: foreclosure ≠ tax-delinquent (the default is the MORTGAGE), and the
