@@ -801,6 +801,9 @@ def make_tracker(leads):
             # sale-history survival count (sale_history.py) — the REAL staller signal from the docket:
             # how many scheduled foreclosure sales this owner has already dodged (cancelled/reset).
             'saleSurv': r.get('sale_survived', None), 'saleSched': r.get('sale_scheduled', 0),
+            # who keeps postponing, when the docket names the movant (usually it doesn't):
+            # 'bank' = plaintiff loss-mit churn (owner may still be rescuable), 'owner' = fights.
+            'saleWho': r.get('sale_who', ''),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
             'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),

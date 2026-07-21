@@ -41,11 +41,24 @@ _SALE = re.compile(r'sale|certificate of title', re.I)
 _CANCEL = re.compile(r'cancel|reset|reschedul|vacat|continu', re.I)
 _SCHED = re.compile(r'notice of\s+.*sale|foreclosure sale|judicial sale', re.I)
 _DONE = re.compile(r'certificate of (?:sale|title)', re.I)
+# Only a granted ORDER is a real survival. Live-docket evidence (2006-019959-CA-01): every actual
+# cancellation writes BOTH a "Motion to Cancel Sale" AND an "Order Cancelling Foreclosure Sale"
+# line — and denied/duplicate motions add more. Counting motions inflated the staller score ~2×,
+# branding one-dodge owners "STALLER" and hiding closable leads from the Closers list.
+_ORDER = re.compile(r'\border\b', re.I)
+# Who moved to postpone (Jose's "bank stalling or owner fighting?" question). MD docket text is
+# usually generic ("Motion to Cancel Sale"), so this only fills in when a line actually names the
+# party — captured opportunistically, never guessed.
+_PLTF = re.compile(r'plaintiff|mortgagee|\bbank\b', re.I)
+_DEFT = re.compile(r'defendant|mortgagor|\bowner\b', re.I)
+
+CACHE_VER = 2   # v2 = orders-only survival counting; v1 entries (motion-inflated) are refetched
 
 
 def _count(dockets):
-    """(survived, scheduled, completed) from a docket array."""
-    surv = sched = done = 0
+    """(survived, scheduled, completed, who) from a docket array. `who` = 'bank'/'owner'/'' —
+    which side's postponements dominate, when the docket text names the movant at all."""
+    surv = sched = done = pl = df = 0
     for e in dockets or []:
         d = (e.get('docketDescrition') or e.get('docketDescription') or '')
         if not _SALE.search(d):
@@ -53,10 +66,16 @@ def _count(dockets):
         if _DONE.search(d):
             done += 1
         elif _CANCEL.search(d):
-            surv += 1
+            if _ORDER.search(d):
+                surv += 1
+                if _PLTF.search(d):
+                    pl += 1
+                elif _DEFT.search(d):
+                    df += 1
         elif _SCHED.search(d):
             sched += 1
-    return surv, sched, done
+    who = 'bank' if pl > df else ('owner' if df > pl else '')
+    return surv, sched, done, who
 
 
 def _fetch(session, case):
@@ -110,20 +129,23 @@ def main():
         if r.get('sale_type') == 'TD' or not re.match(r'\d{4}-\d+-\w+-\d+', case):
             continue
         ent = cache.get(case)
-        if ent and (now - ent.get('t', 0)) < ttl and not a.case:
+        if ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < ttl and not a.case:
             r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
+            if ent.get('w'): r['sale_who'] = ent['w']
             continue
         if budget <= 0:
             break
         dks = _fetch(session, case)
         fetched += 1; budget -= 1
         if dks is not None:
-            surv, sched, done = _count(dks)
+            surv, sched, done, who = _count(dks)
             r['sale_survived'] = surv; r['sale_scheduled'] = sched
-            cache[case] = {'s': surv, 'n': sched, 'd': done, 't': now}
+            if who: r['sale_who'] = who
+            cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 't': now, 'v': CACHE_VER}
             changed += 1
             if a.case:
-                print(f'{case}: survived {surv} sale(s), {sched} scheduled, {done} completed')
+                print(f'{case}: survived {surv} sale(s), {sched} scheduled, {done} completed'
+                      + (f', mostly {who}-moved' if who else ''))
         time.sleep(0.25)
         if fetched % 25 == 0:
             json.dump(cache, open(CACHE, 'w', encoding='utf-8'))
