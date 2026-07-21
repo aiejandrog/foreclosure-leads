@@ -78,24 +78,32 @@ def _all_leads():
 def _pct(hits, tot):
     return round(hits / tot * 100) if tot else 0
 
+def _rule(name, pct, floor, detail):
+    # TWO-TIER teeth (the watchdog used to WARN only — the workflow stayed green and NOBODY got
+    # emailed, i.e. exactly the silent failure this section exists to catch). Below HALF the floor
+    # = the enrichment step died = FAIL -> non-zero exit -> red workflow -> GitHub's failure email.
+    # Between half-floor and floor = a dip worth seeing in the log, not worth a 2am page.
+    lvl = 'FAIL' if pct < floor / 2 else ('WARN' if pct < floor else 'PASS')
+    add(lvl, name, f'{detail} (floor {floor}%, page under {floor // 2}%)')
+
 _ALL = _all_leads()
 if _ALL:
     N = len(_ALL)
     # property type (dor_desc) — MD via PA, BW/PB via property_types.py
     dor = _pct(sum(1 for r in _ALL if (r.get('dor_desc') or '').strip()), N)
-    add('WARN' if dor < 40 else 'PASS', 'RULE: property-type coverage', f'{dor}% carry dor_desc (floor 40%)')
+    _rule('RULE: property-type coverage', dor, 40, f'{dor}% carry dor_desc')
     # listing status (zstatus) — listing_status.py; should be near-total since NO-ADDR counts
     zst = _pct(sum(1 for r in _ALL if (r.get('zstatus') or '').strip()), N)
-    add('WARN' if zst < 70 else 'PASS', 'RULE: listing-status coverage', f'{zst}% carry zstatus (floor 70%)')
+    _rule('RULE: listing-status coverage', zst, 70, f'{zst}% carry zstatus')
     # ARV comps — comps.py (all 3 counties); comps.json is the source of truth
     comps = load('comps.json') or {}
     arv = _pct(sum(1 for r in _ALL if comps.get(r.get('case') or r.get('Case #'))), N)
-    add('WARN' if arv < 30 else 'PASS', 'RULE: ARV-comp coverage', f'{arv}% have comps (floor 30%)')
+    _rule('RULE: ARV-comp coverage', arv, 30, f'{arv}% have comps')
     # sale-history survival count — sale_history.py (Miami-Dade docket). Measured against MD leads only
     # (BW/PB use the filing-year proxy), so a drop toward 0 means the OCS docket enrich stopped running.
     md = [r for r in _ALL if re.match(r'\d{4}-\d+-\w+-\d+', str(r.get('Case #') or r.get('case') or '')) and (r.get('sale_type') or r.get('st')) != 'TD']
     surv = _pct(sum(1 for r in md if r.get('saleSurv') is not None or r.get('sale_survived') is not None), len(md))
-    add('WARN' if surv < 60 else 'PASS', 'RULE: sale-history coverage (MD)', f'{surv}% of MD FC leads scored (floor 60%)')
+    _rule('RULE: sale-history coverage (MD)', surv, 60, f'{surv}% of MD FC leads scored')
     # per-parcel tax deep-link — county_leads.py / foreclosure_leads.py from the folio.
     # MD raw leads carry it as tax_url, county files as tax — check both so the measure is honest.
     def _deep(r):
@@ -103,7 +111,7 @@ if _ALL:
         return '/parcels/' in t or 'ParcelID' in t
     withfolio = [r for r in _ALL if (r.get('folio') or r.get('Folio'))]
     tax = _pct(sum(1 for r in withfolio if _deep(r)), len(withfolio))
-    add('WARN' if tax < 55 else 'PASS', 'RULE: tax deep-link coverage', f'{tax}% of folio leads (floor 55%)')
+    _rule('RULE: tax deep-link coverage', tax, 55, f'{tax}% of folio leads')
 
 # ---- 3. upstream sources still alive ----------------------------------------------------------
 def chk_gis():
