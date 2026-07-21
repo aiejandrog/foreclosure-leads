@@ -486,6 +486,10 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .shbtn:hover{border-color:var(--gold,#C6A14B);box-shadow:var(--sh-1)}
 .shbtn.shsave{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
 .shbtn.shsave.on{background:var(--navy,#0B1730);color:#F5C542;border-color:var(--navy,#0B1730)}
+/* the LIVE-call alert: the one button that must be findable mid-call, heart pounding */
+.shbtn.shlive{background:#B42318;border-color:#B42318;color:#fff;font-weight:700;animation:livePulse 2s ease-in-out infinite}
+.shbtn.shlive:hover{background:#8E1A12;border-color:#8E1A12;box-shadow:0 4px 14px rgba(180,35,24,.4)}
+@keyframes livePulse{0%,100%{box-shadow:0 0 0 0 rgba(180,35,24,.35)}50%{box-shadow:0 0 0 6px rgba(180,35,24,0)}}
 .savebtns{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
 .savelist{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto}
 .saveitem{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--line,#E2E6EE);
@@ -1715,6 +1719,7 @@ function dealModalBody(r){
     '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Save &amp; share</div>'+
     '<div class="sharerow">'+
       '<button type="button" class="shbtn shsave'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+esc(r.case)+'\',event)">'+(_isFav(r.case)?'★ Saved':'☆ Save to batch')+'</button>'+
+      '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the &quot;I got them on the phone RIGHT NOW&quot; alert for Jose. He researches while you hold them; he says PATCH when ready.">📞 LIVE — alert Jose</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'link\')" title="Copy a link that opens straight to this property">🔗 Copy link</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'carlos\')" title="Copy a ready-to-send door mission for Carlos">👷 For Carlos</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
@@ -2213,10 +2218,28 @@ function _copyShare(text, label){
   if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, function(){ fallbackCopy(text, done); });
   else fallbackCopy(text, done);
 }
+// LIVE-CALL alert (the Jose funnel, 2026-07-21 call): the moment an owner answers, ONE tap sends
+// Jose the pre-drafted "I got them on the phone" message — he drops everything, researches while
+// the owner is still on the line, and says PATCH when ready. Contact first, engineering second.
+function _liveMsg(r){
+  var owner = (r.owners||'').split(';')[0].split('&')[0].trim();
+  var v = (+r.arv? '$'+(+r.arv).toLocaleString()+' ARV' : (r.value?'$'+(+r.value).toLocaleString()+' county':'value ?'));
+  var fresh = r.saleSurv!=null ? (r.saleSurv>=2?'STALLER '+r.saleSurv+'×':'FRESH') : '';
+  if(+r.saleBK) fresh += ' · '+r.saleBK+'× BK';
+  return '🔥 LIVE — I have '+owner+' ON THE PHONE RIGHT NOW\n'
+    + r.addr+'\n'
+    + 'Case '+r.case+' · auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+(fresh?' · '+fresh:'')+'\n'
+    + v+' · judgment '+(r.judg?'$'+(+r.judg).toLocaleString():'?')
+    + ' · senior '+(r._chainSurv?'$'+Math.round(r._chainSurv).toLocaleString()+(r.orconf==='ok'?' (verified)':' (~est)'):'not traced')
+    + ' · net ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
+    + 'Drop what you\'re doing — research this while I hold them. Say PATCH when you\'re ready.\n'
+    + _deepLink(r);
+}
 function _shareTo(c, who){
   var r = DATA.find(function(x){return x.case===c;}); if(!r) return;
   if(who==='carlos') _copyShare(_carlosMsg(r), 'Carlos mission');
   else if(who==='jose') _copyShare(_joseMsg(r), 'Jose brief');
+  else if(who==='live') _copyShare(_liveMsg(r), 'LIVE alert');
   else _copyShare(_deepLink(r), 'Property link');
 }
 // ---- Saved batch modal ----
