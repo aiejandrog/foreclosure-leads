@@ -94,6 +94,7 @@ jobs:
             comps.json
             property_types_cache.json
             listing_status_cache.json
+            sale_history_cache.json
             health.json
             full.json
           key: dealflow-state-${{ github.run_id }}
@@ -205,6 +206,15 @@ jobs:
       - name: '[3d/5] Zillow listing status'
         continue-on-error: true
         run: python listing_status.py --limit 120
+
+      # ---- [3e/5] Sale-history survival count (the REAL staller signal, Miami-Dade docket) --------
+      # Counts how many scheduled foreclosure sales each owner has already dodged (cancelled/reset),
+      # straight from the MD Clerk OCS docket — free, same endpoint the clerk-enrich already hits.
+      # 7-day TTL (the count changes when a new sale is set/cancelled). Feeds the FRESH/STALLER chip
+      # and keeps serial stallers OUT of the Closers list. Broward/PB fall back to the filing-year proxy.
+      - name: '[3e/5] Sale-history survival count (Miami-Dade)'
+        continue-on-error: true
+        run: python sale_history.py --limit 150
 
       # ---- [4/5] Final rebuild with everything baked in -----------------------------------
       - name: '[4/5] Rebuild site (cases + phones + photos + liens)'

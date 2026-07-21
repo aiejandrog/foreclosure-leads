@@ -452,6 +452,7 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
   vertical-align:middle;margin-right:4px;line-height:1.7}
 .fr-fresh{background:rgba(22,101,52,.12);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.32)}
 .fr-stale{background:rgba(180,83,9,.10);color:#B45309;border:1px solid rgba(180,83,9,.3)}
+.fr-warn{background:rgba(202,138,4,.10);color:#A16207;border:1px solid rgba(202,138,4,.28)}
 .ppaths{display:flex;flex-direction:column;gap:8px;margin:4px 0 2px}
 .ppath{background:var(--surface-2,#F3F5F9);border:1px solid var(--line,#E2E6EE);border-radius:8px;
   padding:9px 12px;font-size:12px;line-height:1.5}
@@ -1354,7 +1355,11 @@ function _isCloser(r){
   if(r.eqfake) return false;                                               // TRUST: no fantasy equity in the closers
   var n = notes[r.case] || {}; if(n.status === 'Dead' || n.status === 'DO NOT CONTACT') return false;
   var d = r.days; if(!(d > 2 && d <= 45)) return false;                    // runway to actually close, not passed / too tight
-  if(r.st !== 'TD' && _filedYear(r) < 2024) return false;                  // FC: fresh only — stallers don't convert
+  // FC freshness — prefer the REAL docket survival count over the filing-year proxy.
+  if(r.st !== 'TD'){
+    if(r.saleSurv != null){ if(r.saleSurv >= 2) return false; }            // verified serial staller — out
+    else if(_filedYear(r) < 2024) return false;                           // no docket data — year proxy
+  }
   return true;
 }
 function _closeScore(r){
@@ -1365,7 +1370,8 @@ function _closeScore(r){
   var trust = (r.orconf === 'ok') ? 1.0 : (r.orconf === 'low') ? 0.85 : 0.72;  // verified equity wins
   var verdict = (r._verdict === 'STRONG') ? 1.0 : 0.7;
   var d = r.days, urg = d < 7 ? 0.82 : (d <= 30 ? 1.0 : 0.78);             // ~7-30d is the sweet spot to work a rescue
-  return base * fresh * reach * trust * verdict * urg;
+  var surv = (r.saleSurv === 0) ? 1.0 : (r.saleSurv === 1 ? 0.8 : 0.92);   // a verified first-timer converts best
+  return base * fresh * reach * trust * verdict * urg * surv;
 }
 // Prefilled outreach identity — Alejandro fronts Miami Solutions Group directly on the foreclosure side
 // (distinct from the cousin-Jose tax-deed entity). Every generated letter/email/script/contract fills
@@ -2256,10 +2262,18 @@ function _filedYear(r){
   return 0;
 }
 function _freshChip(r){
+  // REAL staller signal (sale_history.py): saleSurv = times this owner already dodged a scheduled
+  // foreclosure sale, straight from the court docket. Verified beats the filing-year proxy.
+  var sv = r.saleSurv;
+  if(sv != null){
+    if(sv >= 2) return '<span class="frchip fr-stale" title="VERIFIED on the court docket — this owner has already dodged '+sv+' scheduled foreclosure sales (cancelled/reset). A serial staller who knows the delay game and will very likely stall this one too. Deprioritize.">STALLER · '+sv+'× survived</span> ';
+    if(sv === 0) return '<span class="frchip fr-fresh" title="VERIFIED on the court docket — this is the FIRST scheduled sale; this owner has never dodged one. First-timers bow to a real rescue. Top of the call list.">FRESH · 1st sale</span> ';
+    return '<span class="frchip fr-warn" title="Court docket shows 1 prior sale cancelled/reset — slightly seasoned but not a hardened staller. Still workable.">1× survived</span> ';
+  }
   var y = _filedYear(r);
   if(!y) return '';
-  if(y >= 2024) return '<span class="frchip fr-fresh" title="Filed '+y+' — FRESH case. 9 out of 10 of these have never stopped a sale and have no bankruptcy playbook. Top of the call list.">FRESH</span> ';
-  return '<span class="frchip fr-stale" title="Filed '+y+' — a '+(2026-y)+'-year-old case. Owners this deep in usually know the stalling game (serial bankruptcies, prior cancellations). Deprioritize — call the fresh ones first.">STALLER?</span> ';
+  if(y >= 2024) return '<span class="frchip fr-fresh" title="Filed '+y+' — likely fresh (no docket sale-history for this county yet). 9/10 fresh cases have never stopped a sale.">FRESH?</span> ';
+  return '<span class="frchip fr-stale" title="Filed '+y+' — a '+(2026-y)+'-year-old case (no docket sale-history for this county). Owners this deep usually know the stalling game.">STALLER?</span> ';
 }
 // Profit Paths: the ten revenue layers from the Jose playbook, auto-matched to THIS lead from
 // data already on the row (net equity after the traced chain, ARV, listing status, freshness,

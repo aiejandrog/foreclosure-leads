@@ -798,6 +798,9 @@ def make_tracker(leads):
             'aurl': r.get('aurl',''),   # absolute Esri fallback so a bare emailed HTML still shows photos
             'auc': r.get('auction_url',''), 'warn': r.get('warning',''),
             'filed': r.get('filing_year',0),
+            # sale-history survival count (sale_history.py) — the REAL staller signal from the docket:
+            # how many scheduled foreclosure sales this owner has already dodged (cancelled/reset).
+            'saleSurv': r.get('sale_survived', None), 'saleSched': r.get('sale_scheduled', 0),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
             'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
