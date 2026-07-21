@@ -193,6 +193,10 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 #plan.abtn:hover{filter:brightness(1.12);box-shadow:var(--sh-3)}
 #due.abtn{background:var(--gold-grad);color:var(--gold-ink);border-color:transparent;font-weight:700}
 #due.abtn:hover{filter:brightness(1.06);box-shadow:var(--sh-gold)}
+/* Closers — the "money" button: gold outline at rest, solid navy+gold when active (you're in the cockpit). */
+#closers.abtn{border:1.5px solid var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C);font-weight:700;background:var(--surface,#fff)}
+#closers.abtn:hover{background:var(--gold-soft,rgba(198,161,75,.12))}
+#closers.abtn.active{background:var(--navy,#0B1730);color:#F5C542;border-color:var(--navy,#0B1730);box-shadow:var(--sh-2)}
 #mailbatch,#exp{border-radius:var(--pill);font-weight:600}
 #advtog{border-radius:var(--pill);background:var(--surface);color:var(--ink);border-color:var(--line);font-weight:600}
 #advtog:hover{border-color:var(--gold);color:var(--gold-d)}
@@ -1215,6 +1219,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="plan" class="abtn" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5h.01M4 11.5h.01M4 17.5h.01"/></svg>Plan today</button>
 <button id="due" class="abtn" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Due</button>
+<button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
 <span class="qwrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list."><kbd>/</kbd></span>
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
@@ -1313,7 +1318,7 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false;
+let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false;
 // a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
@@ -1337,6 +1342,30 @@ function landChips(r){ let o='';
 function netEqPct(r){
   if(r.orconf==='ok' && r.orsurv && r.value) return Math.round((r.value - (r.judg||0) - r.orsurv) / r.value * 100);
   return r.eq||0;
+}
+// ===================== CLOSERS COCKPIT (2026-07-20) =====================
+// The leads most worth POURING energy into this week — ranked by expected value × how closeable ×
+// how trustworthy the number is. Trust is a HARD gate: fantasy/unverified equity (eqfake) never
+// enters, and a verified chain outranks an unverified one. This is the "which 5-10 do Jose and I
+// work" screen that turns the machine toward a CLOSE, not just a list.
+function _isCloser(r){
+  if(r._nodata || (typeof isFlaggedDead==='function' && isFlaggedDead(r)) || (typeof notForModel==='function' && notForModel(r))) return false;
+  if(r._verdict !== 'STRONG' && r._verdict !== 'MARGINAL') return false;   // must pencil out
+  if(r.eqfake) return false;                                               // TRUST: no fantasy equity in the closers
+  var n = notes[r.case] || {}; if(n.status === 'Dead' || n.status === 'DO NOT CONTACT') return false;
+  var d = r.days; if(!(d > 2 && d <= 45)) return false;                    // runway to actually close, not passed / too tight
+  if(r.st !== 'TD' && _filedYear(r) < 2024) return false;                  // FC: fresh only — stallers don't convert
+  return true;
+}
+function _closeScore(r){
+  var base = Math.max((+r._profit || 0), (+r._equity || 0) * 0.5, 5000);   // expected upside
+  var n = notes[r.case] || {};
+  var fresh = (_filedYear(r) >= 2025) ? 1.0 : 0.85;
+  var reach = ((r.phones && r.phones.length) || n.phone) ? 1.0 : ((r.emails && r.emails.length) ? 0.8 : 0.55);
+  var trust = (r.orconf === 'ok') ? 1.0 : (r.orconf === 'low') ? 0.85 : 0.72;  // verified equity wins
+  var verdict = (r._verdict === 'STRONG') ? 1.0 : 0.7;
+  var d = r.days, urg = d < 7 ? 0.82 : (d <= 30 ? 1.0 : 0.78);             // ~7-30d is the sweet spot to work a rescue
+  return base * fresh * reach * trust * verdict * urg;
 }
 // Prefilled outreach identity — Alejandro fronts Miami Solutions Group directly on the foreclosure side
 // (distinct from the cousin-Jose tax-deed entity). Every generated letter/email/script/contract fills
@@ -3368,6 +3397,10 @@ function view(){
     // other filter, and leaves those filters untouched. Turn it off (or remove the last saved deal)
     // and you drop straight back to exactly the view you were on before — never a forced "All tiers".
     rows = DATA.filter(r => favs.has(r.case));
+  } else if(closersOnly){
+    // Closers mode: the shortlist worth working THIS week, across every tier, ranked by closeability
+    // (handled in the sort below). Its own mode so it ignores tier/other filters and restores cleanly.
+    rows = DATA.filter(r => _isCloser(r));
   } else {
     rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
     if(county) rows = rows.filter(r => (r.county||'MIAMI-DADE')===county);
@@ -3388,6 +3421,7 @@ function view(){
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
   }
   rows = rows.slice();
+  if(closersOnly){ rows.sort((a,b) => _closeScore(b) - _closeScore(a)); return rows.slice(0, 25); }   // top 25 — a focused, workable shortlist ranked by closeability
   const sortVal = r => {
     // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
     // (else "12/01/2025" would sort after "07/01/2026"). Use the ISO yyyymmdd number.
@@ -3647,7 +3681,8 @@ document.addEventListener('click', e => {
   togglePin(row.dataset.case);
 });
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=false;
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=false;
+  { const _cb=document.getElementById('closers'); if(_cb) _cb.classList.remove('active'); }
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
@@ -3665,6 +3700,7 @@ function _activeFilters(){
   // Search and Saved are exclusive MODES that ignore the other filters — show just their own pill.
   if(q) return [{k:'q', lbl:'Search: “'+q+'”'}];
   if(favOnly) return [{k:'fav', lbl:'★ Saved only'}];
+  if(closersOnly) return [{k:'closers', lbl:'🎯 Closers — this week'}];
   if(tier!=='A') out.push({k:'tier', lbl:'Tier '+tier});
   if(county) out.push({k:'county', lbl:ctyName(county)});
   if(favOnly) out.push({k:'fav', lbl:'★ Saved only'});
@@ -3695,6 +3731,7 @@ function _clearFilter(k){
   else if(k==='tier'){ tier='A'; document.querySelectorAll('.tf').forEach(function(x){x.classList.toggle('active', x.dataset.t==='A');}); }
   else if(k==='county'){ county=''; if(typeof _resetCountyPills==='function') _resetCountyPills(); }
   else if(k==='fav'){ favOnly=false; }
+  else if(k==='closers'){ closersOnly=false; if(g('closers'))g('closers').classList.remove('active'); }
   else if(k==='wk'){ weekOnly=false; if(g('wk'))g('wk').classList.remove('active'); }
   else if(k==='due'){ dueOnly=false; if(g('due'))g('due').classList.remove('active'); }
   else if(k==='nc'){ ncOnly=false; if(g('nc'))g('nc').classList.remove('active'); }
@@ -3752,6 +3789,7 @@ document.getElementById('td').onclick = e => { tdOnly = !tdOnly; e.target.classL
 document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
 document.getElementById('plan').onclick = () => openPlanModal();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
+{ const _cb = document.getElementById('closers'); if(_cb) _cb.onclick = () => { closersOnly = !closersOnly; _cb.classList.toggle('active', closersOnly); render(); }; }
 // collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
 (function(){
   const panel = document.getElementById('advpanel'), tog = document.getElementById('advtog');
