@@ -1024,6 +1024,10 @@ body.compact .dg-v{font-size:14.5px}
 @media(max-width:860px){
   header{padding:12px 13px 10px;position:static}
   .brand .wm{font-size:19px}
+  /* tagline: the desktop shrink-animation cap (max-height:20px) was CLIPPING the second line on
+     phones ("South Florida · Foreclosure & Tax-Deed Intelligence" wraps at 375px). The shrink
+     animation is desktop-only, so release the cap here and let it wrap as two balanced lines. */
+  .brand .tag{max-height:none;line-height:1.65;letter-spacing:.11em;text-wrap:balance;padding-right:8px}
   .brand .upd{display:none}
   .brand .upd.stale{display:inline-block}
   .controls{gap:6px}
