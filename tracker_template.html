@@ -1423,6 +1423,10 @@ const fmt0 = n => (n<0?'-$':'$') + Math.abs(Math.round(n)).toLocaleString();
 const fmtPhone = d => { d=String(d||'').replace(/\D/g,''); return d.length===10 ? '('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6) : d; };
 const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); const k=Math.round(n/1e3);
   return (n>=1e6 || k>=1000) ? s+'$'+(n/1e6).toFixed(2)+'M' : n>=1e3 ? s+'$'+k+'k' : s+'$'+Math.round(n); };
+// Has the user EXPLICITLY entered this deal-modal field? Distinguishes a researched value —
+// including a deliberate 0 — from "never touched" (null/''). Shared by recompute() and the modal
+// so the math and the UI can never disagree about whose number is in play.
+function _dTyped(v){ return v != null && v !== ''; }
 function recompute(){
   const bpRaw = (deal.buypct===''||deal.buypct==null||isNaN(+deal.buypct)) ? 75 : +deal.buypct;
   const buyPct = Math.max(0, bpRaw) / 100;                       // honor an explicit 0
@@ -1448,11 +1452,14 @@ function recompute(){
     const chainSurv = (r.orftype === 'HOA') ? (chainConf ? (+r.orsurvfirst || _survTotal) : 0)
                                             : Math.max(0, _survTotal - _jp);
     r._chainSurv = chainSurv;
-    const slien = Math.max(0, +nn.slien || 0) || chainSurv;   // surviving senior / 1st mortgage
+    // An explicit entry — INCLUDING a researched 0 ("I verified there is no senior") — always wins
+    // over the chain autofill. The old `||` fallback silently resurrected the chain's number when
+    // the user typed 0, so a verified-clean lien could never be recorded.
+    const slien = _dTyped(nn.slien) ? Math.max(0, +nn.slien||0) : chainSurv;   // surviving senior / 1st mortgage
     // kimi: the rest of the deal-modal prefills, all from the recorded chain (user entry still wins).
-    const jlien = Math.max(0, +nn.jlien || 0) || _jp;   // juniors recorded AFTER the foreclosing one — payoff for clean title on a purchase
-    const assess = Math.max(0, +nn.assess || 0) || (chainConf ? (r.orhoa||0) : 0);     // recorded HOA/association open liens (estoppel still confirms at contract)
-    const mlien = Math.max(0, +nn.mlien || 0) || (chainConf ? ((r.orcode||0)+(r.orirs||0)) : 0);   // code/muni/IRS + money judgments
+    const jlien = _dTyped(nn.jlien) ? Math.max(0, +nn.jlien||0) : _jp;   // juniors recorded AFTER the foreclosing one — payoff for clean title on a purchase
+    const assess = _dTyped(nn.assess) ? Math.max(0, +nn.assess||0) : (chainConf ? (r.orhoa||0) : 0);     // recorded HOA/association open liens (estoppel still confirms at contract)
+    const mlien = _dTyped(nn.mlien) ? Math.max(0, +nn.mlien||0) : (chainConf ? ((r.orcode||0)+(r.orirs||0)) : 0);   // code/muni/IRS + money judgments
     // btax stays manual ON PURPOSE: foreclosure ≠ tax-delinquent (the default is the MORTGAGE), and the
     // only honest delinquency figure lives on the tax bill — one click via the deep 'Taxes' link.
     const btax = Math.max(0, +nn.btax || 0);     // delinquent property taxes — first-priority lien, survives FC (FS 197.122)
@@ -1460,7 +1467,7 @@ function recompute(){
       : !!(r.hs && r.mail && r.addr && String(r.mail).split(',')[0].trim().toUpperCase() === String(r.addr).split(',')[0].trim().toUpperCase());
     const evict = occ ? Math.max(4000, val*0.02) : 0;
     r._slien=slien; r._jlien=jlien; r._assess=assess; r._mlien=mlien; r._btax=btax; r._occ=occ; r._evict=evict;
-    r._assessSet = (nn.assess!=null && nn.assess!=='');   // an explicitly researched assessment (incl. a confirmed $0) lifts the condo MARGINAL cap
+    r._assessSet = _dTyped(nn.assess);   // an explicitly researched assessment (incl. a confirmed $0) lifts the condo MARGINAL cap
     // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
     if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; return; }
     r._nodata = false;
@@ -1505,7 +1512,7 @@ function recompute(){
       r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
       r._tight = (debt > offer);
     }
-    setVerdict(r, {slien, val});
+    setVerdict(r, {slien, val, slienTyped: _dTyped(nn.slien)});
   });
 }
 // ---- worth-it verdict + per-lead deal analysis ----
@@ -1514,7 +1521,10 @@ function setVerdict(r, x){
   // never show a profit we can't stand behind
   if(r.ju){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2; r._whyShort='Judgment not posted — verify on docket';
     r._why='Final judgment not posted — the debt is unknown. Confirm it on the docket before trusting any profit.'; return; }
-  if(r.st!=='TD' && r.mr && !x.slien){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2;
+  // "senior unknown" VERIFY gate — but a KNOWN zero is not unknown: skip it when the user explicitly
+  // typed 0 (researched-clean) or a confident records trace ran and found no open mortgage at all.
+  // A low-confidence trace still gates: its zero might just be a mortgage it couldn't see.
+  if(r.st!=='TD' && r.mr && !x.slien && !x.slienTyped && r.orconf!=='ok'){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2;
     r._whyShort = r.ip ? 'Private plaintiff — senior mortgage likely; verify' : '1st mortgage unknown — look it up';
     r._why = r.ip
       ? 'The plaintiff is an individual, not a bank — almost always a private or 2nd-position note, so a senior 1st mortgage very likely survives this sale and is NOT in the judgment shown. That "equity" can be fiction. Open Records, search the owner for every recorded mortgage/lien, then enter the senior balance below before trusting this.'
@@ -1640,14 +1650,14 @@ function dealAnalysisHTML(r){
   // Which fields did the recorded-chain scrape auto-fill (no user override yet)? Drives both the
   // "af" highlight on the input AND the records banner, so the automation is VISIBLE — not a number
   // that looks like you typed it.
-  const _afS = (r.st!=='TD' && !nn.slien && r._chainSurv), _afJ = (r.st!=='TD' && !nn.jlien && r.orjuniors),
-        _afH = (r.st!=='TD' && !nn.assess && r.orhoa), _afM = (!nn.mlien && ((r.orcode||0)+(r.orirs||0)));
+  const _afS = (r.st!=='TD' && !_dTyped(nn.slien) && r._chainSurv), _afJ = (r.st!=='TD' && !_dTyped(nn.jlien) && r.orjuniors),
+        _afH = (r.st!=='TD' && !_dTyped(nn.assess) && r.orhoa), _afM = (!_dTyped(nn.mlien) && ((r.orcode||0)+(r.orirs||0)));
   const adj = '<div class="dealadj">'+
-    (r.st!=='TD' ? '<label>Senior / 1st mortgage $<input class="slien'+(_afS?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.slien||(r._chainSurv||''))+'" placeholder="0">'+(nn.slien?'<span class="esthint">you entered this</span>':(r._chainSurv?'<span class="esthint">🔗 '+(r.orconf==='ok'?'from records — verified':'from records — LOW confidence, verify')+'</span>':(r.mr?'':'<span class="esthint">only if Records shows one senior to this case</span>')))+'</label>' : '')+
-    (r.st!=='TD' ? '<label>2nd / junior mortgage $<input class="jlien'+(_afJ?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.jlien||(r.orjuniors||''))+'" placeholder="0">'+(nn.jlien?'<span class="esthint">you entered this</span>':(r.orjuniors?'<span class="esthint">🔗 from records — opens recorded after the foreclosing one</span>':'<span class="esthint">a recorded 2nd / HELOC — payoff to take clean title on a purchase</span>'))+'</label>' : '')+
-    (r.st!=='TD' ? '<label>HOA / special assessment $<input class="assess'+(_afH?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.assess||(r.orhoa||''))+'" placeholder="0">'+(nn.assess?'<span class="esthint">you entered this</span>':(r.orhoa?'<span class="esthint">🔗 from records — open HOA/association liens (estoppel confirms at contract)</span>':(r.condo?'<span class="esthint">condo — get the association estoppel (40-yr recert can be $$$)</span>':'')))+'</label>' : '')+
-    '<label>Back property taxes $<input class="btax" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.btax||'')+'" placeholder="0">'+(r.etax?'<span class="esthint">~'+fmt0(r.etax)+'/yr est · exact figure one click away on Taxes</span>':'')+'</label>'+
-    '<label>Surviving liens (code/muni/IRS) $<input class="mlien'+(_afM?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(nn.mlien||((r.orcode||0)+(r.orirs||0)||''))+'" placeholder="0">'+(nn.mlien?'<span class="esthint">you entered this</span>':(((r.orcode||0)+(r.orirs||0))?'<span class="esthint">🔗 from records — open code/muni/IRS/judgment liens</span>':''))+'</label>'+
+    (r.st!=='TD' ? '<label>Senior / 1st mortgage $<input class="slien'+(_afS?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.slien)?nn.slien:(r._chainSurv||''))+'" placeholder="0">'+(_dTyped(nn.slien)?'<span class="esthint">you entered this'+(+nn.slien===0?' — verified none survives':'')+'</span>':(r._chainSurv?'<span class="esthint">🔗 '+(r.orconf==='ok'?'from records — verified':'from records — LOW confidence, verify')+'</span>':(r.mr?'':'<span class="esthint">only if Records shows one senior to this case</span>')))+'</label>' : '')+
+    (r.st!=='TD' ? '<label>2nd / junior mortgage $<input class="jlien'+(_afJ?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.jlien)?nn.jlien:(r.orjuniors||''))+'" placeholder="0">'+(_dTyped(nn.jlien)?'<span class="esthint">you entered this</span>':(r.orjuniors?'<span class="esthint">🔗 from records — opens recorded after the foreclosing one</span>':'<span class="esthint">a recorded 2nd / HELOC — payoff to take clean title on a purchase</span>'))+'</label>' : '')+
+    (r.st!=='TD' ? '<label>HOA / special assessment $<input class="assess'+(_afH?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.assess)?nn.assess:(r.orhoa||''))+'" placeholder="0">'+(_dTyped(nn.assess)?'<span class="esthint">you entered this</span>':(r.orhoa?'<span class="esthint">🔗 from records — open HOA/association liens (estoppel confirms at contract)</span>':(r.condo?'<span class="esthint">condo — get the association estoppel (40-yr recert can be $$$)</span>':'')))+'</label>' : '')+
+    '<label>Back property taxes $<input class="btax" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.btax)?nn.btax:'')+'" placeholder="0">'+(r.etax?'<span class="esthint">~'+fmt0(r.etax)+'/yr est · exact figure one click away on Taxes</span>':'')+'</label>'+
+    '<label>Surviving liens (code/muni/IRS) $<input class="mlien'+(_afM?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.mlien)?nn.mlien:((r.orcode||0)+(r.orirs||0)||''))+'" placeholder="0">'+(_dTyped(nn.mlien)?'<span class="esthint">you entered this</span>':(((r.orcode||0)+(r.orirs||0))?'<span class="esthint">🔗 from records — open code/muni/IRS/judgment liens</span>':''))+'</label>'+
     '<label class="occlbl"><input class="occ" data-c="'+esc(r.case)+'" type="checkbox"'+(r._occ?' checked':'')+'> occupied'+(r._occ&&!nn.occ&&r.hs?' <span class="esthint">records — homestead, owner mails here</span>':'')+'</label>'+
   '</div>';
   // Records banner — makes the scrape VISIBLE: what got auto-pulled into the math, or that the
@@ -1660,8 +1670,12 @@ function dealAnalysisHTML(r){
   var _recb = (r.st==='TD') ? ''
     : _pulled.length
       ? '<div class="recbanner on">🔗 <b>Auto-pulled from county records:</b> '+_pulled.join(' · ')+'. Counted in the deal math above — adjust only if title turns up more.</div>'
-      : (r.orconf
-          ? '<div class="recbanner">✓ <b>Records checked</b> — no surviving mortgage or lien found beyond the foreclosing judgment. The fields below are yours if title shows something.</div>'
+      : ((r.orconf==='ok'||r.orconf==='low')
+          // ONLY a trace that actually ran earns the green check. orconf can also be 'none'
+          // (trace attempted, couldn't isolate this owner/parcel) — that used to slip through the
+          // old truthy test and claim "Records checked" on exactly the leads nobody checked,
+          // contradicting the row's own "◯ Not yet verified" chip.
+          ? '<div class="recbanner">✓ <b>Records checked</b> — no surviving mortgage or lien found beyond the foreclosing judgment'+(r.orconf==='low'?' <i>(low-confidence pass — common name; spot-verify in Records)</i>':'')+'. The fields below are yours if title shows something.</div>'
           : '<div class="recbanner warn">⚠ <b>No recorded chain pulled for this property yet.</b> Open <b>Records</b> / <b>Cases</b> and fill the debts below — the profit above assumes none survive.</div>');
   const flagsHtml = flags.length ? '<div class="dealflags">'+flags.map(f=>'<div class="flag">'+esc(f)+'</div>').join('')+'</div>' : '';
   return '<div class="dm-sec">The math</div>'+mathHtml+
@@ -2132,7 +2146,16 @@ function _bestPhones(r){
   (r.phones||[]).forEach(function(p,i){ if(p && !((r.phdnc||[])[i])) out.push(fmtPhone ? fmtPhone(p) : p); });
   return out.slice(0,3);
 }
-function _netEqOf(r){ var v=(+r.arv||+r.value||0); return v ? Math.max(0, v - (+r.judg||0) - (r._chainSurv||0)) : 0; }
+// Net equity for briefs / profit paths / ranking — subtracts the SAME stack the deal modal does.
+// recompute()'s _slien/_jlien/_assess/_mlien/_btax carry both the chain autofill AND any user-typed
+// override, so the go/no-go number sent to Jose can never be rosier than the modal's own math.
+// (The old version subtracted only judgment + survivor and overstated equity on every lead with a
+// junior/HOA/code lien.)
+function _netEqOf(r){
+  var v = (+r.arv||+r.value||0); if(!v) return 0;
+  var stack = (+r.judg||0)+(r._slien||0)+(r._jlien||0)+(r._assess||0)+(r._mlien||0)+(r._btax||0);
+  return Math.max(0, v - stack);
+}
 function _deepLink(r){ return location.origin + location.pathname + '#case=' + encodeURIComponent(r.case); }
 function _carlosMsg(r){
   var owner = (r.owners||'').split(';')[0].split('&')[0].trim();
@@ -2284,7 +2307,10 @@ function _freshChip(r){
   // foreclosure sale, straight from the court docket. Verified beats the filing-year proxy.
   var sv = r.saleSurv;
   if(sv != null){
-    if(sv >= 2) return '<span class="frchip fr-stale" title="VERIFIED on the court docket — this owner has already dodged '+sv+' scheduled foreclosure sales (cancelled/reset). A serial staller who knows the delay game and will very likely stall this one too. Deprioritize.">STALLER · '+sv+'× survived</span> ';
+    // Jose's follow-up ("bank stalling, or owner fighting?") — shown only when the docket actually
+    // named the movant; MD docket text is usually generic, so most stallers carry no attribution.
+    var who = r.saleWho==='bank' ? ' · bank-moved' : r.saleWho==='owner' ? ' · owner-moved' : '';
+    if(sv >= 2) return '<span class="frchip fr-stale" title="VERIFIED on the court docket — '+sv+' granted cancel/reset ORDERS (motions alone are not counted). A serial staller who knows the delay game and will very likely stall this one too.'+(r.saleWho==='bank'?' Mostly the BANK cancelled (loss-mit churn) — the owner may still be rescuable.':r.saleWho==='owner'?' Mostly the OWNER moved — a practiced fighter.':'')+' Deprioritize.">STALLER · '+sv+'× survived'+who+'</span> ';
     if(sv === 0) return '<span class="frchip fr-fresh" title="VERIFIED on the court docket — this is the FIRST scheduled sale; this owner has never dodged one. First-timers bow to a real rescue. Top of the call list.">FRESH · 1st sale</span> ';
     return '<span class="frchip fr-warn" title="Court docket shows 1 prior sale cancelled/reset — slightly seasoned but not a hardened staller. Still workable.">1× survived</span> ';
   }
@@ -3750,9 +3776,12 @@ document.addEventListener('click', e => { if(e.target.closest && e.target.closes
 function _activeFilters(){
   var out = [];
   // Search and Saved are exclusive MODES that ignore the other filters — show just their own pill.
-  if(q) return [{k:'q', lbl:'Search: “'+q+'”'}];
-  if(favOnly) return [{k:'fav', lbl:'★ Saved only'}];
-  if(closersOnly) return [{k:'closers', lbl:'🎯 Closers — this week'}];
+  // EXCEPT county: it is a HARD scope in every mode (_cscope), so its pill must stay visible here
+  // too — otherwise "pick Palm Beach, open Closers" hides MD deals with no visible reason why.
+  var scoped = county ? [{k:'county', lbl:ctyName(county)}] : [];
+  if(q) return scoped.concat([{k:'q', lbl:'Search: “'+q+'”'}]);
+  if(favOnly) return scoped.concat([{k:'fav', lbl:'★ Saved only'}]);
+  if(closersOnly) return scoped.concat([{k:'closers', lbl:'🎯 Closers — this week'}]);
   if(tier!=='A') out.push({k:'tier', lbl:'Tier '+tier});
   if(county) out.push({k:'county', lbl:ctyName(county)});
   if(favOnly) out.push({k:'fav', lbl:'★ Saved only'});
