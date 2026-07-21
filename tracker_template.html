@@ -1526,7 +1526,12 @@ function recompute(){
       r._tight = (r._cash >= val);
     } else {
       // 1ST-MORTGAGE FORECLOSURE: buy BELOW market, but never below the TOTAL mortgage debt you must clear.
-      const offer = val * buyPct;
+      // NEGOTIATED OFFER (the LIVE-call dial): the 75%-of-value model is an ASSUMPTION — Jose's
+      // real play is payoff + walking money, often far under MAO. When the operator types the
+      // actual number the owner said yes to, THAT is the offer; the model steps aside. Floored
+      // at the debt: you cannot buy below the payoff stack outside a short sale.
+      const offer = _dTyped(nn.offer) ? Math.max(0, +nn.offer||0) : val * buyPct;
+      r._offerTyped = _dTyped(nn.offer);
       const debt = judg + slien + jlien + assess;                  // every mortgage + assessment is paid FROM the purchase price, not stacked on top of it
       const purchase = Math.max(offer, debt);
       r._equity = val - debt;                                      // owner's TRUE equity clears every mortgage + assessment, not just the foreclosing judgment
@@ -1536,7 +1541,7 @@ function recompute(){
       r._roi = r._cash > 0 ? (r._profit / r._cash * 100) : 0;
       r._tight = (debt > offer);
     }
-    setVerdict(r, {slien, val, slienTyped: _dTyped(nn.slien)});
+    setVerdict(r, {slien, val, slienTyped: _dTyped(nn.slien), offerTyped: !!r._offerTyped});
   });
 }
 // ---- worth-it verdict + per-lead deal analysis ----
@@ -1562,7 +1567,10 @@ function setVerdict(r, x){
   else { v='PASS'; rank=1; why = p<=0 ? 'No profit once the price, costs and liens are covered.' : 'Margin too thin ('+Math.round(roi)+'% ROI) for the risk.'; }
   if(r.st==='TD' && r.hs && rank>2){ rank=2; v='MARGINAL'; why='Homestead: the opening bid already includes ½ the assessed value, so the entry floor is high.'; }
   if(r.st==='TD' && val>0 && (r._equity/val)>0.55 && rank>2){ rank=2; v='MARGINAL'; why='Equity parcel — competitive tax-deed auctions bid these near market, erasing most of the paper margin. Consider the surplus play instead.'; }
-  if(r._occ && rank>2){ rank=2; v='MARGINAL'; why='Occupied — eviction cost/time is baked in and you get no interior inspection at auction.'; }
+  // Occupied caps at MARGINAL because an AUCTION buyer gets no interior inspection. A typed
+  // NEGOTIATED offer means you are talking to the occupant — inspection is yours to ask for,
+  // and the eviction/carry cost is already in the cash. The cap steps aside; the math decides.
+  if(r._occ && !x.offerTyped && rank>2){ rank=2; v='MARGINAL'; why='Occupied — eviction cost/time is baked in and you get no interior inspection at auction.'; }
   if(r.st!=='TD' && r.condo && !r._assessSet && rank>2){ rank=2; v='MARGINAL'; why='Condo — a special assessment (post-Surfside 40-yr recertification) can be large and is NOT in public data. Get the association estoppel and enter it below (enter 0 if confirmed none) before trusting this equity.'; }
   // chain-fed survivor math never graduates to STRONG on a LOW-confidence chain: the number came
   // from records, but a common-name owner means it might be a stranger's mortgage. Verify, then it can.
@@ -1666,7 +1674,9 @@ function dealAnalysisHTML(r){
       // paid FROM the price, not stacked on top — see recompute() 'debt'), so they must NOT be re-listed
       // as separate deductions or the rows undershoot Est. profit by their sum. One line, labeled.
       const _dbt = (r._slien||0)+(r._jlien||0)+(r._assess||0);
-      rows.push(mathLine('Your purchase'+(_dbt>0?' (clears all mortgages)':''), -r._purchase));
+      rows.push(mathLine(
+        (r._offerTyped ? 'Your NEGOTIATED offer' : 'Your purchase ('+(+deal.buypct||75)+'% model)')
+        + (_dbt>0?' — clears all mortgages':''), -r._purchase));
     }
     rows.push(mathLine('Costs ('+(+deal.costpct||0)+'%)', -costs));
     if(r._btax) rows.push(mathLine('Back property taxes', -r._btax));
@@ -1687,6 +1697,7 @@ function dealAnalysisHTML(r){
     (r.st!=='TD' ? '<label>HOA / special assessment $<input class="assess'+(_afH?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.assess)?nn.assess:(r.orhoa||''))+'" placeholder="0">'+(_dTyped(nn.assess)?'<span class="esthint">you entered this</span>':(r.orhoa?'<span class="esthint">🔗 from records — open HOA/association liens (estoppel confirms at contract)</span>':(r.condo?'<span class="esthint">condo — get the association estoppel (40-yr recert can be $$$)</span>':'')))+'</label>' : '')+
     '<label>Back property taxes $<input class="btax" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.btax)?nn.btax:'')+'" placeholder="0">'+(r.etax?'<span class="esthint">~'+fmt0(r.etax)+'/yr est · exact figure one click away on Taxes</span>':'')+'</label>'+
     '<label>Surviving liens (code/muni/IRS) $<input class="mlien'+(_afM?' af':'')+'" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.mlien)?nn.mlien:((r.orcode||0)+(r.orirs||0)||''))+'" placeholder="0">'+(_dTyped(nn.mlien)?'<span class="esthint">you entered this</span>':(((r.orcode||0)+(r.orirs||0))?'<span class="esthint">🔗 from records — open code/muni/IRS/judgment liens</span>':''))+'</label>'+
+    (r.st!=='TD' && !r.mr ? '<label>Your offer $ <input class="doffer" data-c="'+esc(r.case)+'" type="number" value="'+esc(_dTyped(nn.offer)?nn.offer:'')+'" placeholder="'+Math.round(((r._valsrc==='arv'&&r.arv)?r.arv:r.value)*(+deal.buypct||75)/100)+'">'+(_dTyped(nn.offer)?'<span class="esthint">your negotiated price drives the math — clear to go back to the '+(+deal.buypct||75)+'% model</span>':'<span class="esthint">the price the owner says YES to — type it mid-call and watch the real profit. Blank = the '+(+deal.buypct||75)+'% model</span>')+'</label>' : '')+
     '<label class="occlbl"><input class="occ" data-c="'+esc(r.case)+'" type="checkbox"'+(r._occ?' checked':'')+'> occupied'+(r._occ&&!nn.occ&&r.hs?' <span class="esthint">records — homestead, owner mails here</span>':'')+'</label>'+
   '</div>';
   // Records banner — makes the scrape VISIBLE: what got auto-pulled into the math, or that the
@@ -3061,7 +3072,7 @@ function _dpMathRows(r){
     if(r._assess) rows.push(['HOA / special assessment', _dpMoney(-r._assess)]);
   } else {
     var dbt=(r._slien||0)+(r._jlien||0)+(r._assess||0);
-    rows.push(['Your purchase'+(dbt>0?' (clears all mortgages)':''), _dpMoney(-r._purchase)]);
+    rows.push([(r._offerTyped?'Negotiated purchase price':'Your purchase')+(dbt>0?' (clears all mortgages)':''), _dpMoney(-r._purchase)]);
   }
   rows.push(['Costs ('+(+deal.costpct||0)+'%)', _dpMoney(-costs)]);
   if(r._btax)  rows.push(['Back property taxes', _dpMoney(-r._btax)]);
@@ -4480,6 +4491,7 @@ document.addEventListener('change', e => {
   else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; (notes[c].dts=notes[c].dts||{}).mlien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
   else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; (notes[c].dts=notes[c].dts||{}).btax=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
   else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; (notes[c].dts=notes[c].dts||{}).occ=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('doffer')){ notes[c].offer = e.target.value; (notes[c].dts=notes[c].dts||{}).offer=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
   else return;
   save();
 });
