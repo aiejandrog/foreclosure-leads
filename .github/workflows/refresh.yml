@@ -94,11 +94,14 @@ jobs:
             comps.json
             property_types_cache.json
             listing_status_cache.json
-            sale_history_cache.json
             health.json
             full.json
           key: dealflow-state-${{ github.run_id }}
           restore-keys: dealflow-state-
+      # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
+      # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
+      # fresh committed copy with a stale runner copy — which could ship the site with partial
+      # stay-compliance coverage. One source of truth: the checked-out file.
 
       # Access codes — CRITICAL. make_tracker encrypts docs/index.html with the per-person codes
       # from site.codes (gitignored, never committed). If this file is absent on the runner,
@@ -124,6 +127,12 @@ jobs:
       # bat uses.
       - name: '[1b/5] Publish fresh leads NOW'
         run: |
+          # COMPLIANCE FIRST: the fresh scrape has no sale-history fields yet, so the build [1/5]
+          # just produced would ship every stay-active lead (67 on 2026-07-21) with LIVE outreach
+          # buttons — §362 landmines — until the final publish ~40 min later. Apply the committed
+          # cache fetch-free and rebuild, THEN publish: yesterday's stay flags beat a naked board.
+          python sale_history.py --cache-only
+          python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))"
           git add docs/index.html
           if git diff --staged --quiet; then
             echo "no change — nothing to publish yet"

@@ -811,6 +811,9 @@ def make_tracker(leads):
             # discharge / stay-relief after it. Collection contact right now is a federal
             # violation: the site hard-gates outreach on this (sale_history.py _bk_active).
             'saleBkAct': bool(r.get('sale_bk_active')), 'saleBkD': r.get('sale_bk_date', ''),
+            # the DOOR: when the last stay CLOSED (dismissal/discharge/relief court date). A
+            # fresh-dismissed owner just lost the shield — sale resets, contact legal, max urgency.
+            'saleLift': r.get('sale_stay_lifted', ''),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
             'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),

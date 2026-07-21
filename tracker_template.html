@@ -454,6 +454,9 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .fr-stale{background:rgba(180,83,9,.10);color:#B45309;border:1px solid rgba(180,83,9,.3)}
 .fr-warn{background:rgba(202,138,4,.10);color:#A16207;border:1px solid rgba(202,138,4,.28)}
 .fr-stay{background:rgba(153,27,27,.12);color:#B91C1C;border:1px solid rgba(153,27,27,.4);font-weight:700}
+/* the stay-lifted DOOR: gold — shield just dropped, hottest legal call on the board */
+.fr-lift{background:linear-gradient(120deg,rgba(198,161,75,.18),rgba(239,223,158,.25));color:#8B6A2C;
+  border:1px solid rgba(198,161,75,.55);font-weight:700}
 .ppaths{display:flex;flex-direction:column;gap:8px;margin:4px 0 2px}
 .ppath{background:var(--surface-2,#F3F5F9);border:1px solid var(--line,#E2E6EE);border-radius:8px;
   padding:9px 12px;font-size:12px;line-height:1.5}
@@ -1396,7 +1399,10 @@ function _closeScore(r){
   var verdict = (r._verdict === 'STRONG') ? 1.0 : 0.7;
   var d = r.days, urg = d < 7 ? 0.82 : (d <= 30 ? 1.0 : 0.78);             // ~7-30d is the sweet spot to work a rescue
   var surv = (r.saleSurv === 0) ? 1.0 : (r.saleSurv === 1 ? 0.8 : 0.92);   // a verified first-timer converts best
-  return base * fresh * reach * trust * verdict * urg * surv;
+  // stay just LIFTED: shield gone, sale resetting, owner at peak motivation and nobody else
+  // watches dismissals — the freshest door on the board outranks an ordinary fresh lead.
+  var lift = (_stayLiftedDays(r) >= 0 && _stayLiftedDays(r) <= 45) ? 1.2 : 1.0;
+  return base * fresh * reach * trust * verdict * urg * surv * lift;
 }
 // Prefilled outreach identity — Alejandro fronts Miami Solutions Group directly on the foreclosure side
 // (distinct from the cousin-Jose tax-deed entity). Every generated letter/email/script/contract fills
@@ -1590,6 +1596,8 @@ function dealFlags(r){
   if(r.days>=0 && r.days<=3) f.push('Redemption stays open until the deed issues / full payment to the clerk — not final at the hammer.');
   if((+r.saleBK||0)>=2) f.push('SERIAL BANKRUPTCY FILER — '+r.saleBK+' distinct BK cases on this docket. The automatic stay stops any sale the moment they re-file, so timelines here are unreliable and a rescue deal can be frozen mid-flight. Jose screens these out.');
   if(r.saleBkAct) f.push('⛔ ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' (filed '+r.saleBkD+')':'')+' — 11 U.S.C. §362 prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. A stay violation carries real sanctions and can unwind work already done. Track it; move when it closes.');
+  var _ld = _stayLiftedDays(r);
+  if(_ld >= 0 && _ld <= 45) f.push('🔔 STAY LIFTED '+_ld+' days ago ('+r.saleLift+') — the bankruptcy closed, contact is legal again, and the bank will reset the sale shortly. This owner just lost their last shield: peak motivation, minimal competition. Move first.');
   return f;
 }
 function dealStrategy(r){
@@ -2195,6 +2203,8 @@ function _joseMsg(r){
   if(r.saleSurv != null){
     fresh = r.saleSurv>=2 ? 'STALLER ('+r.saleSurv+'× survived)' : r.saleSurv===1 ? '1× survived' : 'FRESH (1st sale)';
     if(+r.saleBK) fresh += ' · '+r.saleBK+'× BK' + ((+r.saleBK>=2)?' ⚠ serial filer':'');
+    if(r.saleBkAct) fresh += ' · ⛔ STAY ACTIVE — NO CONTACT';
+    else { var _jld = _stayLiftedDays(r); if(_jld>=0 && _jld<=45) fresh += ' · 🔔 stay lifted '+_jld+'d ago — GO'; }
   } else { var fy = _filedYear(r); fresh = fy>=2024 ? 'FRESH ('+fy+')' : (fy? 'staller? ('+fy+')' : ''); }
   return 'BLESS THIS? — '+r.addr+'\n'
     + 'Owner: '+owner+'  ·  Case '+r.case+'\n'
@@ -2343,11 +2353,23 @@ function _filedYear(r){
   if(m){ y = +m[1]; if(y < 100) y += 2000; if(y > 1990 && y < 2100) return y; }
   return 0;
 }
+function _stayLiftedDays(r){
+  // days since the last stay CLOSED (court dismissal/discharge/relief date), or -1
+  if(r.saleBkAct || !r.saleLift) return -1;
+  try{ var d = Math.floor((Date.now() - new Date(r.saleLift+'T12:00:00').getTime())/86400000); return d>=0?d:-1; }catch(e){ return -1; }
+}
 function _stayChip(r){
   // kimi: ACTIVE bankruptcy automatic stay (sale_history._bk_active). 11 U.S.C. §362 bars ALL
   // collection contact while live — this chip outranks every other signal on the row.
-  if(!r.saleBkAct) return '';
-  return '<span class="frchip fr-stay" title="ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' — filed '+r.saleBkD:'')+'. Federal law (11 U.S.C. §362) prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. Outreach here is a federal violation — track the lead, move when the stay closes.">⛔ BK STAY ACTIVE</span> ';
+  if(r.saleBkAct)
+    return '<span class="frchip fr-stay" title="ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' — filed '+r.saleBkD:'')+'. Federal law (11 U.S.C. §362) prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. Outreach here is a federal violation — track the lead, move when the stay closes.">⛔ BK STAY ACTIVE</span> ';
+  // the DOOR: the stay CLOSED recently — the owner just lost the shield, the bank is about to
+  // reset the sale, and contact is legal again. Freshest dismissals are the hottest calls on the
+  // board: maximum motivation, minimum competition (nobody else watches dismissals).
+  var ld = _stayLiftedDays(r);
+  if(ld >= 0 && ld <= 45)
+    return '<span class="frchip fr-lift" title="BANKRUPTCY STAY LIFTED '+esc(r.saleLift)+' ('+ld+'d ago) — the court dismissed/closed the bankruptcy, the §362 shield is GONE and contact is legal again. The sale gets reset next, so this owner just went from untouchable to maximally motivated. Call before the next Notice of Sale lands.">🔔 STAY LIFTED · '+ld+'d ago</span> ';
+  return '';
 }
 function _freshChip(r){
   // REAL staller signal (sale_history.py): saleSurv = times this owner already dodged a scheduled
@@ -2366,7 +2388,7 @@ function _freshChip(r){
     // cancelling, so the survival count stays low while the dodging is chronic. 2+ distinct BK
     // cases = staller-grade regardless of survivals.
     if(bk >= 2) return '<span class="frchip fr-stale" title="Only '+sv+' cancelled sale(s), BUT the docket carries '+bk+' DISTINCT bankruptcy filings — the automatic stay stops a sale before it ever needs a cancellation, so this owner stalls without showing up in the survival count. Jose screens serial BK filers out: they know the game.">SERIAL BK · '+bk+'× bankruptcies</span> ';
-    if(sv === 0) return '<span class="frchip fr-fresh" title="VERIFIED on the court docket — this is the FIRST scheduled sale; this owner has never dodged one'+(bk?' (note: 1 bankruptcy on file)':'')+'. First-timers bow to a real rescue. Top of the call list.">FRESH · 1st sale'+bkTag+'</span> ';
+    if(sv === 0) return '<span class="frchip fr-fresh" title="VERIFIED on the court docket — this is the FIRST scheduled sale; this owner has never dodged one'+(bk?' (note: 1 bankruptcy on file)':'')+(r.saleBkAct?'. ⛔ BUT an active bankruptcy stay bars all contact — fresh or not, this lead is untouchable until the stay closes.':'. First-timers bow to a real rescue. Top of the call list.')+'">FRESH · 1st sale'+bkTag+'</span> ';
     return '<span class="frchip fr-warn" title="Court docket shows 1 prior sale cancelled/reset — slightly seasoned but not a hardened staller. Still workable.'+(bk?' Note: 1 bankruptcy filing on the docket.':'')+'">1× survived'+bkTag+'</span> ';
   }
   var y = _filedYear(r);
@@ -2838,7 +2860,8 @@ function genScript(r){
     `You are <b>not an attorney and not their lender</b>, say so. This is not legal advice.`,
     `Do NOT promise you <b>will</b> stop the sale, say you <b>may be able to help</b>. Never name a price before the debt is confirmed.`,
     `Set a <b>real clock time</b> for the callback and keep it. "30 minutes" with no time is a trust-killer.`,
-    `If they'd keep any stake (rent-back / buy-back) or sign anything, it needs a <b>written contract with a 3-day right to cancel</b> (FL 501.1377).`
+    `If they'd keep any stake (rent-back / buy-back) or sign anything, it needs a <b>written contract with a 3-day right to cancel</b> (FL 501.1377).`,
+    `<b>Broward / Palm Beach leads only:</b> our bankruptcy-stay check covers Miami-Dade dockets — for other counties ask EARLY: <i>"have you filed for bankruptcy?"</i> If yes, end the call politely and log it — contact during an active stay is a federal violation (11 U.S.C. §362).`
   ];
   const compES = [
     `Marque a mano. Usted llama como <b>${esc(sL)}</b>, no de forma personal.`,
@@ -2846,7 +2869,8 @@ function genScript(r){
     `Usted <b>no es abogado ni es su prestamista</b>, dígalo. Esto no es asesoría legal.`,
     `NO prometa que <b>detendrá</b> la venta, diga que <b>quizá pueda ayudar</b>. Nunca dé un precio antes de confirmar la deuda.`,
     `Fije una <b>hora real</b> para la devolución de llamada y cúmplala. "30 minutos" sin hora destruye la confianza.`,
-    `Si conservan alguna parte (renta de vuelta / recompra) o firman algo, debe ser un <b>contrato por escrito con 3 días para cancelar</b> (FL 501.1377).`
+    `Si conservan alguna parte (renta de vuelta / recompra) o firman algo, debe ser un <b>contrato por escrito con 3 días para cancelar</b> (FL 501.1377).`,
+    `<b>Solo Broward / Palm Beach:</b> nuestro chequeo de bancarrota cubre Miami-Dade — en otros condados pregunte TEMPRANO: <i>"¿ha declarado bancarrota?"</i> Si dice sí, termine la llamada con cortesía y anótelo — contactar durante una suspensión activa es una violación federal (11 U.S.C. §362).`
   ];
   if(!td && r.hs){ compEN.push(`This looks like a long-held homestead, likely a family home. Go slow, be respectful, and listen more than you talk.`);
                    compES.push(`Parece una vivienda familiar de muchos años. Vaya despacio, con respeto, y escuche más de lo que habla.`); }

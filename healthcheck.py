@@ -112,6 +112,16 @@ if _ALL:
     withfolio = [r for r in _ALL if (r.get('folio') or r.get('Folio'))]
     tax = _pct(sum(1 for r in withfolio if _deep(r)), len(withfolio))
     _rule('RULE: tax deep-link coverage', tax, 55, f'{tax}% of folio leads')
+    # COMPLIANCE INTEGRITY (2026-07-21 hole): the cache knew 67 active §362 stays while a published
+    # build carried ZERO — every one an outreach-enabled federal landmine. If the cache says stays
+    # exist but the merged board carries none, the compliance layer got stripped somewhere between
+    # cache and build. That is never a WARN.
+    _shc = load('sale_history_cache.json') or {}
+    cache_act = sum(1 for e in _shc.values() if isinstance(e, dict) and e.get('a'))
+    lead_act = sum(1 for r in _ALL if r.get('sale_bk_active') or r.get('saleBkAct'))
+    if cache_act:
+        add('FAIL' if lead_act == 0 else 'PASS', 'RULE: §362 stay flags reach the build',
+            f'cache {cache_act} active stays -> board {lead_act}')
 
 # ---- 3. upstream sources still alive ----------------------------------------------------------
 def chk_gis():
