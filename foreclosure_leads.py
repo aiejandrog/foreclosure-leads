@@ -804,6 +804,9 @@ def make_tracker(leads):
             # who keeps postponing, when the docket names the movant (usually it doesn't):
             # 'bank' = plaintiff loss-mit churn (owner may still be rescuable), 'owner' = fights.
             'saleWho': r.get('sale_who', ''),
+            # DISTINCT bankruptcy filings on the docket — Jose's heaviest staller screen ("3-4
+            # bankruptcies = they know the game"); the automatic stay halts sales with no order.
+            'saleBK': r.get('sale_bk', 0),
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
             'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),

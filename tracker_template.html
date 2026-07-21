@@ -1375,6 +1375,7 @@ function _isCloser(r){
   var d = r.days; if(!(d > 2 && d <= 45)) return false;                    // runway to actually close, not passed / too tight
   // FC freshness — prefer the REAL docket survival count over the filing-year proxy.
   if(r.st !== 'TD'){
+    if((+r.saleBK||0) >= 2) return false;                                  // serial bankruptcy filer — the stay dodges sales the survival count never sees
     if(r.saleSurv != null){ if(r.saleSurv >= 2) return false; }            // verified serial staller — out
     else if(_filedYear(r) < 2024) return false;                           // no docket data — year proxy
   }
@@ -1581,6 +1582,7 @@ function dealFlags(r){
   if(r.st!=='TD' && r.condo) f.push('Condo: pull the association ESTOPPEL for unpaid dues + any special assessment. A post-Surfside 40-yr recertification can be a large surviving cost that is not in public records.');
   if(r.st!=='TD' && !r.mr && r._equity!=null && r.value && (r._equity/r.value)>0.5 && !nn.jlien && !nn.assess) f.push('Big equity on a bank 1st — pull Official Records for a 2nd mortgage / HELOC. To buy from the owner you clear EVERY mortgage, not just the one foreclosing.');
   if(r.days>=0 && r.days<=3) f.push('Redemption stays open until the deed issues / full payment to the clerk — not final at the hammer.');
+  if((+r.saleBK||0)>=2) f.push('SERIAL BANKRUPTCY FILER — '+r.saleBK+' distinct BK cases on this docket. The automatic stay stops any sale the moment they re-file, so timelines here are unreliable and a rescue deal can be frozen mid-flight. Jose screens these out.');
   return f;
 }
 function dealStrategy(r){
@@ -2172,7 +2174,12 @@ function _joseMsg(r){
   var owner = (r.owners||'').split(';')[0].trim();
   var v = (+r.arv? '$'+(+r.arv).toLocaleString()+' (comp ARV)' : (r.value?'$'+(+r.value).toLocaleString()+' (county val)':'value unknown'));
   var senior = r._chainSurv ? '$'+Math.round(r._chainSurv).toLocaleString()+(r.orconf==='ok'?' (verified)':' (~est, verify)') : 'none traced';
-  var fy = _filedYear(r), fresh = fy>=2024 ? 'FRESH ('+fy+')' : (fy? 'staller? ('+fy+')' : '');
+  // prefer the VERIFIED docket signal (survival count + distinct bankruptcies) over the year proxy
+  var fresh;
+  if(r.saleSurv != null){
+    fresh = r.saleSurv>=2 ? 'STALLER ('+r.saleSurv+'× survived)' : r.saleSurv===1 ? '1× survived' : 'FRESH (1st sale)';
+    if(+r.saleBK) fresh += ' · '+r.saleBK+'× BK' + ((+r.saleBK>=2)?' ⚠ serial filer':'');
+  } else { var fy = _filedYear(r); fresh = fy>=2024 ? 'FRESH ('+fy+')' : (fy? 'staller? ('+fy+')' : ''); }
   return 'BLESS THIS? — '+r.addr+'\n'
     + 'Owner: '+owner+'  ·  Case '+r.case+'\n'
     + 'Auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+(fresh?'  ·  '+fresh:'')+'\n'
@@ -2310,9 +2317,17 @@ function _freshChip(r){
     // Jose's follow-up ("bank stalling, or owner fighting?") — shown only when the docket actually
     // named the movant; MD docket text is usually generic, so most stallers carry no attribution.
     var who = r.saleWho==='bank' ? ' · bank-moved' : r.saleWho==='owner' ? ' · owner-moved' : '';
-    if(sv >= 2) return '<span class="frchip fr-stale" title="VERIFIED on the court docket — '+sv+' foreclosure-sale cancellations (granted orders + clerk-entered cancellations, date-dedup’d; motions/denials not counted). A serial staller who knows the delay game and will very likely stall this one too.'+(r.saleWho==='bank'?' Mostly the BANK cancelled (loss-mit churn) — the owner may still be rescuable.':r.saleWho==='owner'?' Mostly the OWNER moved (incl. bankruptcy stays) — a practiced fighter.':'')+' Deprioritize.">STALLER · '+sv+'× survived'+who+'</span> ';
-    if(sv === 0) return '<span class="frchip fr-fresh" title="VERIFIED on the court docket — this is the FIRST scheduled sale; this owner has never dodged one. First-timers bow to a real rescue. Top of the call list.">FRESH · 1st sale</span> ';
-    return '<span class="frchip fr-warn" title="Court docket shows 1 prior sale cancelled/reset — slightly seasoned but not a hardened staller. Still workable.">1× survived</span> ';
+    // Jose's heaviest screen: DISTINCT bankruptcy filings (saleBK). The automatic stay halts a sale
+    // with NO cancel order and no 'sale' docket line, so BK is structurally invisible to the
+    // survival count — it gets its own first-class number here.
+    var bk = (+r.saleBK||0), bkTag = bk ? ' · '+bk+'× BK' : '';
+    if(sv >= 2) return '<span class="frchip fr-stale" title="VERIFIED on the court docket — '+sv+' foreclosure-sale cancellations (granted orders + clerk-entered cancellations, date-dedup’d; motions/denials not counted).'+(bk?' PLUS '+bk+' DISTINCT bankruptcy filings — the automatic-stay dodge. Serial BK filers know the game cold.':'')+' A serial staller who knows the delay game and will very likely stall this one too.'+(r.saleWho==='bank'?' Mostly the BANK cancelled (loss-mit churn) — the owner may still be rescuable.':r.saleWho==='owner'?' Mostly the OWNER moved (incl. bankruptcy stays) — a practiced fighter.':'')+' Deprioritize.">STALLER · '+sv+'× survived'+bkTag+who+'</span> ';
+    // A fresh-LOOKING case can hide a serial bankruptcy filer: the stay lands BEFORE a sale needs
+    // cancelling, so the survival count stays low while the dodging is chronic. 2+ distinct BK
+    // cases = staller-grade regardless of survivals.
+    if(bk >= 2) return '<span class="frchip fr-stale" title="Only '+sv+' cancelled sale(s), BUT the docket carries '+bk+' DISTINCT bankruptcy filings — the automatic stay stops a sale before it ever needs a cancellation, so this owner stalls without showing up in the survival count. Jose screens serial BK filers out: they know the game.">SERIAL BK · '+bk+'× bankruptcies</span> ';
+    if(sv === 0) return '<span class="frchip fr-fresh" title="VERIFIED on the court docket — this is the FIRST scheduled sale; this owner has never dodged one'+(bk?' (note: 1 bankruptcy on file)':'')+'. First-timers bow to a real rescue. Top of the call list.">FRESH · 1st sale'+bkTag+'</span> ';
+    return '<span class="frchip fr-warn" title="Court docket shows 1 prior sale cancelled/reset — slightly seasoned but not a hardened staller. Still workable.'+(bk?' Note: 1 bankruptcy filing on the docket.':'')+'">1× survived'+bkTag+'</span> ';
   }
   var y = _filedYear(r);
   if(!y) return '';

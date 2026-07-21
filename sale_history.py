@@ -59,10 +59,37 @@ _DEFT = re.compile(r'defendant|mortgagor|\bowner\b', re.I)
 _MOTION = re.compile(r'\bmotion\b', re.I)
 _DENY = re.compile(r'deny|denied|denial', re.I)
 _BANKR = re.compile(r'bankrupt', re.I)
+# DISTINCT bankruptcy filings — Jose's strongest staller screen ("they've already done 3-4
+# bankruptcies, they know the game"), and a signal the sale-cancel scan is structurally blind to:
+# a Suggestion/Notice of Bankruptcy line never contains the word 'sale', and the automatic stay
+# halts the sale WITHOUT any cancel order (live-verified: the flagship carries 18 BK docket lines
+# across 4 distinct BK case numbers; only 2 leaked into cancel-line comments). Filings are deduped
+# by their federal case number (e.g. 24-23467); numberless notices fall back to distinct dates.
+_BKDOC = re.compile(r'suggestion of bankruptcy|notice of bankruptcy|bankruptcy stay', re.I)
+_BKNUM = re.compile(r'\b(\d{2}-\d{4,6})\b')
 
-CACHE_VER = 3   # v3 = event-level counting: granted orders + clerk-entered 'Sale Cancelled' event
+CACHE_VER = 4   # v4 = v3 counting + first-class distinct-bankruptcy count (sale_bk).
+                # v3 = event-level counting: granted orders + clerk-entered 'Sale Cancelled' event
                 # lines (dedup'd by date), motions and DENIED orders excluded. v2 was orders-only —
                 # blind to clerk cancellations (incl. 'CANCELLED PER BANKRUPTCY' lines).
+
+
+def _bk_count(dockets):
+    """Distinct bankruptcy filings on this docket. Case numbers win (one filing spawns many lines —
+    notice + stay order + dismissal all cite the same 24-23467); numberless notices add dates.
+    Undercounts when the clerk typed no number — never overcounts."""
+    nums, dates = set(), set()
+    for e in dockets or []:
+        t = (e.get('docketDescrition') or e.get('docketDescription') or '')
+        c = (e.get('comments') or '')
+        if not (_BKDOC.search(t) or (_BANKR.search(c) and _BKDOC.search(t + ' ' + c))):
+            continue
+        found = _BKNUM.findall(t + ' ' + c)
+        if found:
+            nums.update(found)
+        else:
+            dates.add((e.get('eventDate') or '')[:10])
+    return len(nums) if nums else min(len(dates), 9)
 
 
 def _count(dockets):
@@ -152,6 +179,7 @@ def main():
         if ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < ttl and not a.case:
             r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
             if ent.get('w'): r['sale_who'] = ent['w']
+            if ent.get('b'): r['sale_bk'] = ent['b']
             continue
         if budget <= 0:
             break
@@ -159,13 +187,18 @@ def main():
         fetched += 1; budget -= 1
         if dks is not None:
             surv, sched, done, who = _count(dks)
+            bk = _bk_count(dks)
+            # a standalone bankruptcy filing IS the owner's move — attribute when cancels didn't
+            if bk and not who:
+                who = 'owner'
             r['sale_survived'] = surv; r['sale_scheduled'] = sched
             if who: r['sale_who'] = who
-            cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 't': now, 'v': CACHE_VER}
+            if bk: r['sale_bk'] = bk
+            cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 'b': bk, 't': now, 'v': CACHE_VER}
             changed += 1
             if a.case:
                 print(f'{case}: survived {surv} sale(s), {sched} scheduled, {done} completed'
-                      + (f', mostly {who}-moved' if who else ''))
+                      + (f', mostly {who}-moved' if who else '') + (f', {bk} distinct bankruptcies' if bk else ''))
         time.sleep(0.25)
         if fetched % 25 == 0:
             json.dump(cache, open(CACHE, 'w', encoding='utf-8'))
