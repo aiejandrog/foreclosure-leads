@@ -11836,5 +11836,1115 @@
 "psf": 214
 }
 ]
+},
+"CACE-23-000165": {
+"arv": 464000,
+"psf": 232,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "5120 NW 78 TER",
+"price": 655000,
+"yr": 2025,
+"sqft": 2829,
+"psf": 232
+},
+{
+"addr": "7497 NW 49 ST",
+"price": 620000,
+"yr": 2025,
+"sqft": 2671,
+"psf": 232
+},
+{
+"addr": "7921 NW 51 ST",
+"price": 560000,
+"yr": 2025,
+"sqft": 2511,
+"psf": 223
+}
+]
+},
+"CACE-25-016054": {
+"arv": 650496,
+"psf": 256,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "321 NW 17 AVE",
+"price": 495000,
+"yr": 2025,
+"sqft": 1937,
+"psf": 256
+},
+{
+"addr": "300 NW 16 AVE",
+"price": 660000,
+"yr": 2025,
+"sqft": 2580,
+"psf": 256
+},
+{
+"addr": "621 NW 23 TER",
+"price": 370000,
+"yr": 2025,
+"sqft": 1404,
+"psf": 264
+}
+]
+},
+"CACE-22-002894": {
+"arv": 530688,
+"psf": 256,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "5711 NW 84 TER",
+"price": 315000,
+"yr": 2025,
+"sqft": 1232,
+"psf": 256
+},
+{
+"addr": "8310 NW 54 CT",
+"price": 574500,
+"yr": 2025,
+"sqft": 2241,
+"psf": 256
+},
+{
+"addr": "8500 NW 52 CT",
+"price": 540000,
+"yr": 2025,
+"sqft": 2090,
+"psf": 258
+}
+]
+},
+"CACE-25-017007": {
+"arv": 735672,
+"psf": 302,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1317 NE 1 AVE",
+"price": 445000,
+"yr": 2025,
+"sqft": 1475,
+"psf": 302
+},
+{
+"addr": "1509 NW 3 AVE",
+"price": 607500,
+"yr": 2025,
+"sqft": 1929,
+"psf": 315
+},
+{
+"addr": "1125-1127 N ANDREWS AVE",
+"price": 685000,
+"yr": 2025,
+"sqft": 2393,
+"psf": 286
+}
+]
+},
+"CACE-23-020878": {
+"arv": 337568,
+"psf": 274,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "6183 LIVE OAK CT",
+"price": 355000,
+"yr": 2025,
+"sqft": 1294,
+"psf": 274
+},
+{
+"addr": "6183 LIVE OAK CT",
+"price": 355000,
+"yr": 2025,
+"sqft": 1294,
+"psf": 274
+},
+{
+"addr": "7007 NW 63 CT",
+"price": 450000,
+"yr": 2025,
+"sqft": 1679,
+"psf": 268
+}
+]
+},
+"CACE-25-010119": {
+"arv": 2083995,
+"psf": 359,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "14875 SW 27 ST",
+"price": 2666500,
+"yr": 2024,
+"sqft": 7437,
+"psf": 359
+},
+{
+"addr": "15500 SW 34 CT",
+"price": 1750000,
+"yr": 2025,
+"sqft": 4895,
+"psf": 358
+},
+{
+"addr": "2981 SW 156 AVE",
+"price": 1165000,
+"yr": 2024,
+"sqft": 3260,
+"psf": 357
+}
+]
+},
+"CACE-25-014823": {
+"arv": 402992,
+"psf": 356,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "4300 SW 28 ST",
+"price": 525000,
+"yr": 2025,
+"sqft": 1474,
+"psf": 356
+},
+{
+"addr": "3865 SW 33 CT",
+"price": 480000,
+"yr": 2025,
+"sqft": 1333,
+"psf": 360
+},
+{
+"addr": "3140 SW 39 AVE",
+"price": 560000,
+"yr": 2025,
+"sqft": 1600,
+"psf": 350
+}
+]
+},
+"CACE-22-012251": {
+"arv": 702368,
+"psf": 376,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "78 WHITEHEAD CIR",
+"price": 391500,
+"yr": 2025,
+"sqft": 1042,
+"psf": 376
+},
+{
+"addr": "803 GARNET CIR",
+"price": 700000,
+"yr": 2025,
+"sqft": 1856,
+"psf": 377
+},
+{
+"addr": "16 KEY WEST CT",
+"price": 395000,
+"yr": 2025,
+"sqft": 1042,
+"psf": 379
+}
+]
+},
+"CACE-23-013997": {
+"arv": 2743766,
+"psf": 578,
+"n": 13,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "4420 NE 25 AVE",
+"price": 1825000,
+"yr": 2025,
+"sqft": 3158,
+"psf": 578
+},
+{
+"addr": "2600 NE 40 ST",
+"price": 2550000,
+"yr": 2025,
+"sqft": 4413,
+"psf": 578
+},
+{
+"addr": "2611 NE 40 ST",
+"price": 2155000,
+"yr": 2025,
+"sqft": 3581,
+"psf": 602
+}
+]
+},
+"CACE-24-004741": {
+"arv": 534072,
+"psf": 289,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1385 NW 126 WAY",
+"price": 430000,
+"yr": 2025,
+"sqft": 1486,
+"psf": 289
+},
+{
+"addr": "13182 NW 11 CT",
+"price": 740000,
+"yr": 2025,
+"sqft": 2529,
+"psf": 293
+},
+{
+"addr": "12644 NW 14 ST",
+"price": 420000,
+"yr": 2025,
+"sqft": 1486,
+"psf": 283
+}
+]
+},
+"CACE-24-018041": {
+"arv": 366538,
+"psf": 262,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1270 NW 54 TER",
+"price": 415000,
+"yr": 2025,
+"sqft": 1584,
+"psf": 262
+},
+{
+"addr": "4800 NW 11 ST",
+"price": 420000,
+"yr": 2025,
+"sqft": 1599,
+"psf": 263
+},
+{
+"addr": "1940 NW 47 AVE",
+"price": 435000,
+"yr": 2025,
+"sqft": 1674,
+"psf": 260
+}
+]
+},
+"CACE-25-002663": {
+"arv": 536922,
+"psf": 326,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "441 NW 37 ST",
+"price": 664000,
+"yr": 2025,
+"sqft": 2034,
+"psf": 326
+},
+{
+"addr": "311 NE 43 ST",
+"price": 460000,
+"yr": 2025,
+"sqft": 1538,
+"psf": 299
+},
+{
+"addr": "791 NW 38 ST",
+"price": 480000,
+"yr": 2025,
+"sqft": 1631,
+"psf": 294
+}
+]
+},
+"CACE-25-006419": {
+"arv": 445416,
+"psf": 277,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "6324 NW 43 TER",
+"price": 575000,
+"yr": 2025,
+"sqft": 2073,
+"psf": 277
+},
+{
+"addr": "7093 CRESCENT CREEK LN",
+"price": 595000,
+"yr": 2025,
+"sqft": 2165,
+"psf": 275
+},
+{
+"addr": "6986 JULIA GARDENS DR",
+"price": 475000,
+"yr": 2025,
+"sqft": 1738,
+"psf": 273
+}
+]
+},
+"CACE-25-019053": {
+"arv": 341172,
+"psf": 351,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "130 SW 5 CT",
+"price": 330000,
+"yr": 2025,
+"sqft": 941,
+"psf": 351
+},
+{
+"addr": "118 NE 1 CT",
+"price": 410000,
+"yr": 2025,
+"sqft": 1255,
+"psf": 327
+},
+{
+"addr": "229 NW 7 AVE",
+"price": 420000,
+"yr": 2024,
+"sqft": 1048,
+"psf": 401
+}
+]
+},
+"CACE-26-000247": {
+"arv": 536922,
+"psf": 326,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "441 NW 37 ST",
+"price": 664000,
+"yr": 2025,
+"sqft": 2034,
+"psf": 326
+},
+{
+"addr": "311 NE 43 ST",
+"price": 460000,
+"yr": 2025,
+"sqft": 1538,
+"psf": 299
+},
+{
+"addr": "791 NW 38 ST",
+"price": 480000,
+"yr": 2025,
+"sqft": 1631,
+"psf": 294
+}
+]
+},
+"CACE-25-007824": {
+"arv": 519827,
+"psf": 301,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "2307 N 37 AVE",
+"price": 390000,
+"yr": 2025,
+"sqft": 1297,
+"psf": 301
+},
+{
+"addr": "3123 LIBERTY ST",
+"price": 600000,
+"yr": 2025,
+"sqft": 1969,
+"psf": 305
+},
+{
+"addr": "3130 N 36 AVE",
+"price": 475000,
+"yr": 2025,
+"sqft": 1530,
+"psf": 310
+}
+]
+},
+"CACE-25-017735": {
+"arv": 527990,
+"psf": 370,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "520 GREEN RIVER LN",
+"price": 495000,
+"yr": 2024,
+"sqft": 1337,
+"psf": 370
+},
+{
+"addr": "691 SHILOH TER",
+"price": 525000,
+"yr": 2025,
+"sqft": 1376,
+"psf": 382
+},
+{
+"addr": "13856 LANGLEY PL",
+"price": 520000,
+"yr": 2024,
+"sqft": 1488,
+"psf": 349
+}
+]
+},
+"502025CA006059XXXAMB": {
+"arv": 312243,
+"psf": 291,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "15542 FIORENZA CIR",
+"price": 450000,
+"yr": 2025,
+"sqft": 1548,
+"psf": 291
+},
+{
+"addr": "14533 WILEY RANGE RD",
+"price": 400000,
+"yr": 2025,
+"sqft": 1319,
+"psf": 303
+},
+{
+"addr": "6187 FLORAL LAKES DR",
+"price": 405000,
+"yr": 2025,
+"sqft": 1463,
+"psf": 277
+}
+]
+},
+"502025CA004213XXXAMB": {
+"arv": 311918,
+"psf": 263,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "14247 W LA SEDONA CIR",
+"price": 420000,
+"yr": 2025,
+"sqft": 1594,
+"psf": 263
+},
+{
+"addr": "158 COCONUT KEY LN",
+"price": 370000,
+"yr": 2025,
+"sqft": 1369,
+"psf": 270
+},
+{
+"addr": "5926 LOS ALAMOS LN",
+"price": 350000,
+"yr": 2025,
+"sqft": 1287,
+"psf": 272
+}
+]
+},
+"502025CA008658XXXAMB": {
+"arv": 602436,
+"psf": 366,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "2001 SHARON ST",
+"price": 780000,
+"yr": 2025,
+"sqft": 2131,
+"psf": 366
+},
+{
+"addr": "1641 NW 9TH ST",
+"price": 675000,
+"yr": 2025,
+"sqft": 1850,
+"psf": 365
+},
+{
+"addr": "1313 NW 7TH ST",
+"price": 765000,
+"yr": 2025,
+"sqft": 2100,
+"psf": 364
+}
+]
+},
+"502025CA010516XXXAMB": {
+"arv": 1157778,
+"psf": 786,
+"n": 5,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "701 E CAMINO REAL 9G",
+"price": 715000,
+"yr": 2025,
+"sqft": 910,
+"psf": 786
+},
+{
+"addr": "550 S OCEAN BLVD 407",
+"price": 1380000,
+"yr": 2025,
+"sqft": 1614,
+"psf": 855
+},
+{
+"addr": "123 NE WAVECREST WAY",
+"price": 1550000,
+"yr": 2025,
+"sqft": 1768,
+"psf": 877
+}
+]
+},
+"502025CA011068XXXAMB": {
+"arv": 320650,
+"psf": 265,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "4005 VILLAGE DR B",
+"price": 350000,
+"yr": 2025,
+"sqft": 1320,
+"psf": 265
+},
+{
+"addr": "1422 E WICKHAM CIR",
+"price": 420000,
+"yr": 2025,
+"sqft": 1585,
+"psf": 265
+},
+{
+"addr": "14247 W LA SEDONA CIR",
+"price": 420000,
+"yr": 2025,
+"sqft": 1594,
+"psf": 263
+}
+]
+},
+"502025CA011619XXXAMB": {
+"arv": 250675,
+"psf": 925,
+"n": 3,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "235 SUNRISE AVE 1024",
+"price": 360000,
+"yr": 2025,
+"sqft": 389,
+"psf": 925
+},
+{
+"addr": "235 SUNRISE AVE 3012",
+"price": 270000,
+"yr": 2024,
+"sqft": 271,
+"psf": 996
+},
+{
+"addr": "235 SUNRISE AVE 3249",
+"price": 190000,
+"yr": 2024,
+"sqft": 271,
+"psf": 701
+}
+]
+},
+"502025CA011714XXXAMB": {
+"arv": 393210,
+"psf": 306,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "4644 MEDITERRANEAN CIR",
+"price": 525000,
+"yr": 2025,
+"sqft": 1718,
+"psf": 306
+},
+{
+"addr": "4558 MEDITERRANEAN CIR",
+"price": 495000,
+"yr": 2025,
+"sqft": 1626,
+"psf": 304
+},
+{
+"addr": "12807 WOODMILL DR",
+"price": 445000,
+"yr": 2025,
+"sqft": 1478,
+"psf": 301
+}
+]
+},
+"502026CA000373XXXAMB": {
+"arv": 1293204,
+"psf": 303,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "4034 BAHIA ISLE CIR",
+"price": 790000,
+"yr": 2025,
+"sqft": 2608,
+"psf": 303
+},
+{
+"addr": "4030 BAHIA ISLE CIR",
+"price": 800000,
+"yr": 2024,
+"sqft": 2595,
+"psf": 308
+},
+{
+"addr": "11319 EDGEWATER CIR",
+"price": 925000,
+"yr": 2024,
+"sqft": 2973,
+"psf": 311
+}
+]
+},
+"502026CA001556XXXAMB": {
+"arv": 269352,
+"psf": 258,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "19000 STEWART CIR 5",
+"price": 288000,
+"yr": 2025,
+"sqft": 1115,
+"psf": 258
+},
+{
+"addr": "9185 FLYNN CIR 6",
+"price": 315000,
+"yr": 2025,
+"sqft": 1227,
+"psf": 257
+},
+{
+"addr": "9305 FLYNN CIR 1",
+"price": 315000,
+"yr": 2025,
+"sqft": 1227,
+"psf": 257
+}
+]
+},
+"CACE-25-014450": {
+"arv": 514485,
+"psf": 309,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "220 SW 96 TER",
+"price": 405000,
+"yr": 2025,
+"sqft": 1309,
+"psf": 309
+},
+{
+"addr": "9951 SW 9 CT",
+"price": 629900,
+"yr": 2025,
+"sqft": 2056,
+"psf": 306
+},
+{
+"addr": "731 SW 99 AVE",
+"price": 665000,
+"yr": 2025,
+"sqft": 2250,
+"psf": 296
+}
+]
+},
+"CACE-24-013472": {
+"arv": 289826,
+"psf": 263,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "2841 NW 21 CT",
+"price": 356800,
+"yr": 2025,
+"sqft": 1357,
+"psf": 263
+},
+{
+"addr": "1810 NW 33 AVE",
+"price": 305000,
+"yr": 2025,
+"sqft": 1169,
+"psf": 261
+},
+{
+"addr": "3040 NW 20 ST",
+"price": 287500,
+"yr": 2025,
+"sqft": 1210,
+"psf": 238
+}
+]
+},
+"502026CA003997XXXAMB": {
+"arv": 292530,
+"psf": 245,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "5283 ASHLEY RIVER RD",
+"price": 367000,
+"yr": 2025,
+"sqft": 1499,
+"psf": 245
+},
+{
+"addr": "4724 PALMBROOKE CIR",
+"price": 340000,
+"yr": 2025,
+"sqft": 1386,
+"psf": 245
+},
+{
+"addr": "2427 24TH WAY",
+"price": 315000,
+"yr": 2025,
+"sqft": 1236,
+"psf": 255
+}
+]
+},
+"502022CA002491XXXXMB": {
+"arv": 498760,
+"psf": 296,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "8400 TRENT CT D",
+"price": 385000,
+"yr": 2025,
+"sqft": 1302,
+"psf": 296
+},
+{
+"addr": "8814 SW 22ND ST G",
+"price": 410000,
+"yr": 2025,
+"sqft": 1412,
+"psf": 290
+},
+{
+"addr": "9193 SW 20TH ST B",
+"price": 469000,
+"yr": 2025,
+"sqft": 1620,
+"psf": 290
+}
+]
+},
+"2026-003028-CA-01": {
+"arv": 853632,
+"psf": 384,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "3252 NW 203 LN",
+"price": 547900,
+"yr": 2026,
+"sqft": 1425.0,
+"psf": 384
+},
+{
+"addr": "3620 NW 210 TER",
+"price": 525000,
+"yr": 2026,
+"sqft": 1360.0,
+"psf": 386
+},
+{
+"addr": "3510 NW 211 ST",
+"price": 615000,
+"yr": 2026,
+"sqft": 1564.0,
+"psf": 393
+}
+]
+},
+"2024-017015-CA-01": {
+"arv": 511407,
+"psf": 351,
+"n": 12,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1245 NW 130 ST",
+"price": 490000,
+"yr": 2026,
+"sqft": 1395.0,
+"psf": 351
+},
+{
+"addr": "13040 NW 13 AVE",
+"price": 456000,
+"yr": 2026,
+"sqft": 1359.0,
+"psf": 336
+},
+{
+"addr": "1525 NW 126 ST",
+"price": 385000,
+"yr": 2026,
+"sqft": 1150.0,
+"psf": 335
+}
+]
+},
+"2025-009775-CA-01": {
+"arv": 894348,
+"psf": 338,
+"n": 12,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "12455 SW 185 TER",
+"price": 650000,
+"yr": 2026,
+"sqft": 1923.0,
+"psf": 338
+},
+{
+"addr": "13163 SW 191 TER",
+"price": 1150000,
+"yr": 2026,
+"sqft": 3363.0,
+"psf": 342
+},
+{
+"addr": "12371 SW 190 TER",
+"price": 515000,
+"yr": 2026,
+"sqft": 1569.0,
+"psf": 328
+}
+]
+},
+"2025-004896-CA-01": {
+"arv": 497952,
+"psf": 312,
+"n": 10,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1264 NE 156 ST",
+"price": 450000,
+"yr": 2026,
+"sqft": 1442.0,
+"psf": 312
+},
+{
+"addr": "1870 NE 154 TER",
+"price": 350000,
+"yr": 2026,
+"sqft": 1125.0,
+"psf": 311
+},
+{
+"addr": "15775 NE 13 AVE",
+"price": 455000,
+"yr": 2026,
+"sqft": 1440.0,
+"psf": 316
+}
+]
+},
+"2024-008781-CA-01": {
+"arv": 581256,
+"psf": 351,
+"n": 12,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1910 NW 191 ST",
+"price": 559900,
+"yr": 2026,
+"sqft": 1594.0,
+"psf": 351
+},
+{
+"addr": "18981 NW 7 AVE",
+"price": 420000,
+"yr": 2026,
+"sqft": 1192.0,
+"psf": 352
+},
+{
+"addr": "20130 NW 15 AVE",
+"price": 430000,
+"yr": 2026,
+"sqft": 1222.0,
+"psf": 352
+}
+]
+},
+"2019-003300-CA-01": {
+"arv": 821916,
+"psf": 316,
+"n": 12,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "10635 SW 158 PL",
+"price": 690000,
+"yr": 2026,
+"sqft": 2185.0,
+"psf": 316
+},
+{
+"addr": "9465 SW 155 AVE",
+"price": 720000,
+"yr": 2026,
+"sqft": 2353.0,
+"psf": 306
+},
+{
+"addr": "9777 SW 161 PL",
+"price": 850000,
+"yr": 2026,
+"sqft": 2830.0,
+"psf": 300
+}
+]
+},
+"2023-004203-CA-01": {
+"arv": 361434,
+"psf": 354,
+"n": 9,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "201 178 DR 218",
+"price": 320000,
+"yr": 2026,
+"sqft": 905.0,
+"psf": 354
+},
+{
+"addr": "17125 N BAY RD 3104",
+"price": 480000,
+"yr": 2026,
+"sqft": 1264.0,
+"psf": 380
+},
+{
+"addr": "210 174 ST 305",
+"price": 400000,
+"yr": 2026,
+"sqft": 1251.0,
+"psf": 320
+}
+]
 }
 }

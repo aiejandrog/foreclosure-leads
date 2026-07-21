@@ -41,10 +41,14 @@ _SALE = re.compile(r'sale|certificate of title', re.I)
 _CANCEL = re.compile(r'cancel|reset|reschedul|vacat|continu', re.I)
 _SCHED = re.compile(r'notice of\s+.*sale|foreclosure sale|judicial sale', re.I)
 _DONE = re.compile(r'certificate of (?:sale|title)', re.I)
-# Only a granted ORDER is a real survival. Live-docket evidence (2006-019959-CA-01): every actual
-# cancellation writes BOTH a "Motion to Cancel Sale" AND an "Order Cancelling Foreclosure Sale"
-# line — and denied/duplicate motions add more. Counting motions inflated the staller score ~2×,
-# branding one-dodge owners "STALLER" and hiding closable leads from the Closers list.
+# A survival is a cancelled-sale EVENT, not a paper count. Live-docket evidence (2006-019959-CA-01):
+#  - every real cancellation writes BOTH a "Motion to Cancel Sale" AND an "Order Cancelling..." line;
+#    counting motions inflated ~2x (the v1 bug: 62 'survivals' of 29 scheduled sales);
+#  - but orders-only (v2) went blind to clerk-entered "Mortgage Foreclosure Sale Cancelled" EVENT
+#    lines - on the flagship, 3 of 4 carry 'CANCELLED PER BANKRUPTCY / COURT ORDER' comments on
+#    dates with NO order line. Those are real dodges (bankruptcy = the heaviest staller signal).
+# Rule: skip requests (motions) and denials; count granted orders AND clerk event lines, dedup'd
+# by date so an order + clerk line for the SAME event counts once (flagship: 27 orders + 3 = 30).
 _ORDER = re.compile(r'\border\b', re.I)
 # Who moved to postpone (Jose's "bank stalling or owner fighting?" question). MD docket text is
 # usually generic ("Motion to Cancel Sale"), so this only fills in when a line actually names the
@@ -52,13 +56,20 @@ _ORDER = re.compile(r'\border\b', re.I)
 _PLTF = re.compile(r'plaintiff|mortgagee|\bbank\b', re.I)
 _DEFT = re.compile(r'defendant|mortgagor|\bowner\b', re.I)
 
-CACHE_VER = 2   # v2 = orders-only survival counting; v1 entries (motion-inflated) are refetched
+_MOTION = re.compile(r'\bmotion\b', re.I)
+_DENY = re.compile(r'deny|denied|denial', re.I)
+_BANKR = re.compile(r'bankrupt', re.I)
+
+CACHE_VER = 3   # v3 = event-level counting: granted orders + clerk-entered 'Sale Cancelled' event
+                # lines (dedup'd by date), motions and DENIED orders excluded. v2 was orders-only —
+                # blind to clerk cancellations (incl. 'CANCELLED PER BANKRUPTCY' lines).
 
 
 def _count(dockets):
     """(survived, scheduled, completed, who) from a docket array. `who` = 'bank'/'owner'/'' —
     which side's postponements dominate, when the docket text names the movant at all."""
-    surv = sched = done = pl = df = 0
+    sched = done = pl = df = 0
+    cancels = []                                     # (date, is_order, party text) survival candidates
     for e in dockets or []:
         d = (e.get('docketDescrition') or e.get('docketDescription') or '')
         if not _SALE.search(d):
@@ -66,14 +77,23 @@ def _count(dockets):
         if _DONE.search(d):
             done += 1
         elif _CANCEL.search(d):
-            if _ORDER.search(d):
-                surv += 1
-                if _PLTF.search(d):
-                    pl += 1
-                elif _DEFT.search(d):
-                    df += 1
+            if _MOTION.search(d) or _DENY.search(d):
+                continue                             # a request or a denial is not a cancelled sale
+            ptxt = d + ' ' + (e.get('comments') or '')
+            cancels.append((e.get('eventDate', ''), bool(_ORDER.search(d)), ptxt))
         elif _SCHED.search(d):
             sched += 1
+    order_dates = {dt for dt, iso, _ in cancels if iso}
+    surv = 0
+    for dt, iso, ptxt in cancels:
+        if iso or dt not in order_dates:             # orders always count; a clerk line counts only
+            surv += 1                                # when no same-date order already covers it
+            if _BANKR.search(ptxt):
+                df += 1                              # bankruptcy is filed BY the owner, always
+            elif _PLTF.search(ptxt):
+                pl += 1
+            elif _DEFT.search(ptxt):
+                df += 1
     who = 'bank' if pl > df else ('owner' if df > pl else '')
     return surv, sched, done, who
 
