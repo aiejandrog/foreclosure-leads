@@ -454,6 +454,7 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .fr-stale{background:rgba(180,83,9,.10);color:#B45309;border:1px solid rgba(180,83,9,.3)}
 .fr-warn{background:rgba(202,138,4,.10);color:#A16207;border:1px solid rgba(202,138,4,.28)}
 .fr-stay{background:rgba(153,27,27,.12);color:#B91C1C;border:1px solid rgba(153,27,27,.4);font-weight:700}
+.arvtag{font-size:9px;font-weight:800;letter-spacing:.4px;color:#8a6d1d;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.45);border-radius:3px;padding:0 3px;vertical-align:1px}
 /* the stay-lifted DOOR: gold — shield just dropped, hottest legal call on the board */
 .fr-lift{background:linear-gradient(120deg,rgba(198,161,75,.18),rgba(239,223,158,.25));color:#8B6A2C;
   border:1px solid rgba(198,161,75,.55);font-weight:700}
@@ -1448,7 +1449,17 @@ function recompute(){
   const bidOver = Math.max(0, +deal.bidover || 0) / 100;        // tax-deed only
   const clearPct = Math.max(0, +deal.tdclear || 70) / 100;     // tax-deed: max you'd pay at auction as % of market (disciplined ceiling)
   DATA.forEach(r => {
-    const judg = r.judg||0, val = r.value||0;
+    const judg = r.judg||0;
+    // kimi: the value that drives the math. Florida's Save Our Homes cap suppresses the county
+    // just/market value on long-held homesteads — 102 leads on this board have a comps-VERIFIED
+    // ARV >=1.3x the capped county number (this one: capped $380k vs verified $579k), and every
+    // one of them was being under-priced into a fake MARGINAL. When the comps engine's ARV is
+    // trustworthy (conf ok) and sane (0.7x-2.5x the county value — a bad comp pull can never
+    // inflate a verdict beyond that), the ARV IS the exit value; else the county number drives.
+    const cv = r.value||0;
+    const arvOK = cv>0 && (r.arv||0)>0 && r.arvconf==='ok' && r.arv >= 0.7*cv && r.arv <= 2.5*cv;
+    const val = arvOK ? r.arv : cv;
+    r._valsrc = arvOK ? 'arv' : 'county';
     // per-lead adjustments the user researches on the docket/title (saved with this case's notes)
     const nn = notes[r.case] || {};
     // TRACED CHAIN AUTO-FILL (the Echeverri rule, made automatic): the recorded lien chain's
@@ -1632,12 +1643,13 @@ function dealAnalysisHTML(r){
   if(r._profit==null){
     mathHtml = '<div class="dealmath"><div class="mathline"><span>Est. profit</span><span>unknown until verified</span></div></div>';
   } else {
-    const costs = r.value*(Math.max(0,+deal.costpct||0)/100);
-    const rows = [ mathLine('County market value', r.value) ];
+    const drv = (r._valsrc==='arv' && r.arv) ? r.arv : r.value;      // the value that drives the math (recompute)
+    const costs = drv*(Math.max(0,+deal.costpct||0)/100);
+    const rows = [ mathLine(r._valsrc==='arv' ? 'ARV · '+r.arvn+' comps (verified) — drives the math' : 'County market value', drv) ];
     // radius comps (comps.py): the market-checked value next to the county roll, with the 3
     // nearest sales so the number is auditable instead of asserted.
     if(r.arv){
-      rows.push(mathLine('ARV · '+r.arvn+' comps ('+(r.arvconf==='ok'?'verified':'low conf')+')', r.arv));
+      if(r._valsrc!=='arv') rows.push(mathLine('ARV · '+r.arvn+' comps ('+(r.arvconf==='ok'?'verified':'low conf')+')', r.arv));
       rows.push('<div class="compsline">'+r.comps.map(c =>
         '<div class="comp"><span class="compa">'+esc(c.addr)+'</span><span class="compn">'+fmtK(c.price)+' · '+c.yr+' · '+c.sqft.toLocaleString()+'sf · $'+c.psf+'/sf</span></div>').join('')+'</div>');
     }
@@ -2358,6 +2370,14 @@ function _stayLiftedDays(r){
   if(r.saleBkAct || !r.saleLift) return -1;
   try{ var d = Math.floor((Date.now() - new Date(r.saleLift+'T12:00:00').getTime())/86400000); return d>=0?d:-1; }catch(e){ return -1; }
 }
+function _drvVal(r){ return (r._valsrc==='arv' && r.arv) ? r.arv : r.value; }
+function _valChip(r){
+  // kimi: the row shows the SAME value that drives the deal math. ARV-driving leads carry the tag
+  // so the operator sees WHY this number is above the county roll (Save Our Homes cap).
+  if(r._valsrc==='arv' && r.arv) return '<b class="pv">'+fmtK(r.arv)+'</b> <span class="arvtag" title="Comps-verified ARV ('+r.arvn+' nearby sales) drives the math — the county roll is Save-Our-Homes capped on long-held homesteads">ARV</span>';
+  return '<b class="pv">'+fmtK(r.value)+'</b> val';
+}
+function _eqPct(r){ if(r._valsrc==='arv' && r.arv && r._equity!=null) return Math.round(100*r._equity/r.arv); return r.eq; }
 function _stayChip(r){
   // kimi: ACTIVE bankruptcy automatic stay (sale_history._bk_active). 11 U.S.C. §362 bars ALL
   // collection contact while live — this chip outranks every other signal on the row.
@@ -3026,10 +3046,11 @@ function _dpFlagsFor(r){
 function _dpMathRows(r){
   // Mirror the exact rows dealAnalysisHTML(r) computes so buyer and operator see identical math.
   var rows=[]; if(r._profit==null){ return [['Est. profit','unknown until verified']]; }
-  var costs = r.value*(Math.max(0,+deal.costpct||0)/100);
-  rows.push(['County market value', _dpMoney(r.value)]);
+  var drv = (r._valsrc==='arv' && r.arv) ? r.arv : r.value;
+  var costs = drv*(Math.max(0,+deal.costpct||0)/100);
+  rows.push([r._valsrc==='arv' ? 'ARV · '+r.arvn+' nearby sales (verified) — drives the math' : 'County market value', _dpMoney(drv)]);
   // radius comps (comps.py): the market-checked number goes on the pack when it exists
-  if(r.arv) rows.push(['ARV · '+r.arvn+' nearby sales ('+(r.arvconf==='ok'?'verified':'low confidence')+')', _dpMoney(r.arv)]);
+  if(r.arv && r._valsrc!=='arv') rows.push(['ARV · '+r.arvn+' nearby sales ('+(r.arvconf==='ok'?'verified':'low confidence')+')', _dpMoney(r.arv)]);
   if(r.st==='TD'){
     rows.push(['Est. winning bid', _dpMoney(-r._purchase)]);
     rows.push(['Quiet title', _dpMoney(-(Math.max(0,+deal.quiettitle||3000)))]);
@@ -3749,7 +3770,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -3794,7 +3815,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+'<b class="pv">'+fmtK(r.value)+'</b> val · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+r.eq+'% eq</span>':' · '+r.eq+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
