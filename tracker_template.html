@@ -2636,12 +2636,15 @@ function _waLink(r, ph){
   const first = (rawFirst || 'there').replace(/[<>&"']/g,'');
   const who = sender.name ? ('this is '+sender.name) : 'my name is [your name]';
   const co = sender.llc ? (' with '+sender.llc) : ' — I work with a small local team';
-  const msg = 'Hi '+first+', '+who+co+'. I came across '+(r.addr||'your property')
-    +' with an auction on '+(r.auction||'the scheduled date')
-    +'. I help owners in foreclosure, and before that date there are real options worth a 10-minute look — no charge, no pressure.'
-    +(sender.phone ? ' You can reach me right here or at '+sender.phone+'.' : '')
-    +' (If you would rather not chat, just say so and I will not message again.)'
-    +'\n\n(ES) Hablo español con gusto — respóndame en español si prefiere.';
+  const addr = r.addr || 'your property';
+  const when = r.auction || 'soon';
+  // BRIEF + bilingual (many owners are Spanish-dominant), with the STOP opt-out. Send-ready: fills the
+  // owner's first name, the address + auction date, and the sender (defaults to Jose; override in Sender setup).
+  const msg = 'Hi '+first+', '+who+co+'. I saw '+addr+' has a court auction coming up '+when
+    +'. I help owners look at their real options before that date — no cost, no pressure. Worth a quick chat?'
+    +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+'. ':'')+'vi que '+addr+' tiene una subasta el '+when
+    +'. Ayudo a dueños a ver sus opciones antes de esa fecha, sin costo ni compromiso. ¿Podemos hablar?'
+    +'\n\n(Not interested / No le interesa? Reply STOP · responda STOP.)';
   return 'https://wa.me/'+_waNum(ph)+'?text='+encodeURIComponent(msg);
 }
 // Corner badge version of the listing-status chip, overlaid top-left on the photo (top-right
