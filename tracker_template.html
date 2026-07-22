@@ -527,6 +527,14 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csbtn{font-size:13px;font-weight:700;padding:9px 16px;border-radius:var(--pill,999px);border:1px solid var(--line,#E2E6EE);
   background:var(--surface,#fff);color:var(--ink,#101C33);cursor:pointer}
 .csbtn:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
+/* the actionable NOT-CHECKED survivor box: pull the chain + capture what you find */
+.cssurv-act{border-color:#B45309!important;background:rgba(180,83,9,.07)!important}
+.cssurvbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
+.csbtn2{font-size:12.5px;font-weight:700;padding:8px 13px;border-radius:8px;background:var(--navy,#0B1730);color:#fff;
+  text-decoration:none;white-space:nowrap}
+.csbtn2:hover{background:#C6A14B;color:#0B1730}
+.cssurvin{flex:1;min-width:120px;font-size:14px;padding:7px 10px;border:1px solid var(--line,#E2E6EE);border-radius:8px}
+.cssurvin:focus{outline:none;border-color:var(--gold,#C6A14B)}
 /* the row button — deliberately the loudest control, because this is what you hit mid-call */
 a.dig.digcall{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730);font-weight:800}
 a.dig.digcall:hover{background:#C6A14B;color:#0B1730;border-color:#C6A14B}
@@ -2158,8 +2166,18 @@ function _callSheet(r){
   const tt = _talkTo(r);
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   const arv = +r.arv||0, val = +r.value||0, basis = arv||val, judg = +r.judg||0;
-  const surv = r._chainSurv||0, jr = (r.orconf==='ok'||r.orconf==='low') ? (+r.orjuniors||0) : 0;
-  const trust = r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify' : 'NOT CHECKED';
+  // WHAT SURVIVES = the effective senior used in the deal math (r._slien): the user's RESEARCHED
+  // number wins, else the auto-traced chain, else nothing. So the second Jose pulls the chain and
+  // types it into Deal analysis, this fills in — the site can't scrape it live (the county captcha
+  // blocks automation), but it captures what you found and never loses it.
+  const nnS = notes[r.case]||{};
+  const survTyped = _dTyped(nnS.slien);
+  const surv = survTyped ? (+nnS.slien||0) : (r._chainSurv||0);
+  const jr = (r.orconf==='ok'||r.orconf==='low') ? (+r.orjuniors||0) : 0;
+  const survChecked = survTyped || r.orconf==='ok' || r.orconf==='low';
+  const trust = survTyped ? (surv>0?'YOU ENTERED THIS':'YOU VERIFIED: none survives')
+              : r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify'
+              : '⚠ NOT CHECKED — pull it';
   const netEq = Math.max(0, basis - judg - surv - jr);
   const clean = _cleanPhones(r), dnc = _dncPhones(r);
   const g = _geoTier(r);
@@ -2179,12 +2197,30 @@ function _callSheet(r){
     '<button type="button" class="csedit" onclick="_editTalkTo(\''+esc(r.case)+'\')">edit</button></div>';
   else who += '<div class="cstalkadd"><button type="button" class="csedit" onclick="_editTalkTo(\''+esc(r.case)+'\')">+ Someone else is handling this (daughter, POA, attorney…)</button></div>';
 
+  // the survivor box: when it's KNOWN (traced or you typed it) show the number; when it's NOT,
+  // it becomes an ACTION — one tap opens the county records with the owner loaded so you can pull
+  // the chain in your own browser (which the captcha doesn't block), plus a field to enter what you
+  // find so it locks into the math. Never a dead "$0 NOT CHECKED" you can't do anything with.
+  const recLink = r.recqs ? 'https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+encodeURIComponent(r.recqs)
+                          : (r.records || 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch');
+  const survBox = survChecked
+    ? '<div class="csbox '+(surv?'warn':'good')+'"><div class="csl">WHAT SURVIVES THE SALE</div>'+
+      '<div class="csv">'+(surv?fm(surv):'$0')+'</div><div class="css">'+trust+'</div></div>'
+    : '<div class="csbox warn cssurv-act"><div class="csl">WHAT SURVIVES THE SALE</div>'+
+      '<div class="csv" style="font-size:22px">NOT CHECKED</div>'+
+      '<div class="css">A senior 2nd/HELOC recorded before the foreclosing loan survives the sale and eats the equity. <b>You must pull it.</b></div>'+
+      '<div class="cssurvbtns">'+
+        '<a class="csbtn2" href="'+esc(recLink)+'" target="_blank" rel="noopener">📜 Open the records →</a>'+
+        '<input class="cssurvin slien" data-c="'+esc(r.case)+'" type="number" inputmode="numeric" placeholder="$ enter what you find" title="Type the surviving senior mortgage balance you find in the records. Enter 0 if none survive. It locks straight into the deal math and this sheet.">'+
+      '</div>'+
+      '<div class="css" style="margin-top:5px">In the records: find the OLDEST open mortgage recorded BEFORE '+esc(r.plaintiff||'the foreclosing lender')+'\'s loan. That balance is what survives. If the only open mortgage IS the one foreclosing, enter <b>0</b>.</div>'+
+    '</div>';
   // THE FOUR NUMBERS HE ALWAYS ASKS FOR
   const four = '<div class="csgrid">'+
     big('FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn')+
     big('WORTH TODAY', fm(basis), arv?('ARV from '+r.arvn+' comps'+(r.arvconf==='ok'?' (verified)':' (low conf)')):'county roll — no comps', 'good')+
-    big('WHAT SURVIVES THE SALE', surv?fm(surv):'$0', trust, surv?'warn':'ok')+
-    big('NET EQUITY', fm(netEq), 'worth − judgment − survivors', 'good')+
+    survBox+
+    big('NET EQUITY', fm(netEq), survChecked?'worth − judgment − survivors':'⚠ assumes nothing survives — pull the chain', 'good')+
   '</div>';
 
   // THE CLOCK
@@ -5200,13 +5236,13 @@ document.addEventListener('change', e => {
   else if(e.target.classList.contains('notes')) notes[c].note = e.target.value;
   else if(e.target.classList.contains('ph')) { notes[c].phone = e.target.value; save(); render(); return; }
   // stamp each deal-field with when it happened so a teammate's DOWNWARD correction can win on merge
-  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; (notes[c].dts=notes[c].dts||{}).slien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('jlien')) { notes[c].jlien = e.target.value; (notes[c].dts=notes[c].dts||{}).jlien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('assess')){ notes[c].assess = e.target.value; (notes[c].dts=notes[c].dts||{}).assess=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; (notes[c].dts=notes[c].dts||{}).mlien=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; (notes[c].dts=notes[c].dts||{}).btax=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; (notes[c].dts=notes[c].dts||{}).occ=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
-  else if(e.target.classList.contains('doffer')){ notes[c].offer = e.target.value; (notes[c].dts=notes[c].dts||{}).offer=Date.now(); save(); recompute(); render(); refreshDealModal(); return; }
+  else if(e.target.classList.contains('slien')) { notes[c].slien = e.target.value; (notes[c].dts=notes[c].dts||{}).slien=Date.now(); save(); recompute(); render(); refreshDealModal(); _reopenCallSheet(c); return; }
+  else if(e.target.classList.contains('jlien')) { notes[c].jlien = e.target.value; (notes[c].dts=notes[c].dts||{}).jlien=Date.now(); save(); recompute(); render(); refreshDealModal(); _reopenCallSheet(c); return; }
+  else if(e.target.classList.contains('assess')){ notes[c].assess = e.target.value; (notes[c].dts=notes[c].dts||{}).assess=Date.now(); save(); recompute(); render(); refreshDealModal(); _reopenCallSheet(c); return; }
+  else if(e.target.classList.contains('mlien')) { notes[c].mlien = e.target.value; (notes[c].dts=notes[c].dts||{}).mlien=Date.now(); save(); recompute(); render(); refreshDealModal(); _reopenCallSheet(c); return; }
+  else if(e.target.classList.contains('btax'))  { notes[c].btax = e.target.value; (notes[c].dts=notes[c].dts||{}).btax=Date.now(); save(); recompute(); render(); refreshDealModal(); _reopenCallSheet(c); return; }
+  else if(e.target.classList.contains('occ'))   { notes[c].occ = e.target.checked; (notes[c].dts=notes[c].dts||{}).occ=Date.now(); save(); recompute(); render(); refreshDealModal(); _reopenCallSheet(c); return; }
+  else if(e.target.classList.contains('doffer')){ notes[c].offer = e.target.value; (notes[c].dts=notes[c].dts||{}).offer=Date.now(); save(); recompute(); render(); refreshDealModal(); _reopenCallSheet(c); return; }
   else return;
   save();
 });
