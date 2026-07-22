@@ -64,15 +64,23 @@ rem  BatchData property API = the second lien feed + the ONLY automated path for
 rem  Fails fast + skips itself when the balance is exhausted, so it's safe to leave wired.
 if exist batchdata.key python batchdata_liens.py --all --limit 80 >> "%LOG%" 2>&1
 
-echo [3/5] Skip-tracing owner phones...
+echo [3/5] Humans behind LLC owners (Sunbiz officers + agent; FREE) - MUST run before skip-trace...
+rem  Resolve the person behind every LLC FIRST, so the skip-trace step below can trace that officer
+rem  (skiptrace.py reads llc_officers.json). Free Sunbiz curl - always runs, even with no phone key,
+rem  so a company-owned lead still ships with a human name + People/CyberBG links.
+python llc_officers.py --limit 60 >> "%LOG%" 2>&1
+
+echo [3b/5] Skip-tracing owner + LLC-officer phones (ALL tiers, capped so a run can't overspend)...
 if exist tracerfy.key goto :phones
 if exist batchdata.key goto :phones
-echo     no phone key present - skipping phones ^(leads still publish^).>> "%LOG%"
-echo     (no phone key - leads only)
+echo     no phone key present - skipping phones ^(names + People links still publish^).>> "%LOG%"
+echo     (no phone key - names/People links only)
 goto :rebuild
 
 :phones
-python skiptrace.py >> "%LOG%" 2>&1
+rem  --all = every human owner + (via the code) every resolved LLC officer, not just Tier A.
+rem  --limit 120 caps a single run's spend; already-cached leads are skipped so it stays incremental.
+python skiptrace.py --all --limit 120 >> "%LOG%" 2>&1
 
 :rebuild
 echo [3b/5] Property photos (Zillow listings all tiers + Street View when keyed + satellite aerials -^> docs/img)...
@@ -87,8 +95,7 @@ python listing_status.py --limit 120 >> "%LOG%" 2>&1
 echo [3e/5] Sale-history survival counts (MD docket, 7-day cache - the STALLER signal)...
 python sale_history.py --limit 150 >> "%LOG%" 2>&1
 
-echo [3f/5] Humans behind LLC-owned leads (Sunbiz officers + registered agent)...
-python llc_officers.py --limit 40 >> "%LOG%" 2>&1
+rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phones can be pulled.
 
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1

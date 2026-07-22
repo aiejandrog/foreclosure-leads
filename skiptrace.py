@@ -152,7 +152,28 @@ def address_for(lead):
     # prefer the mailing address (where the owner actually is, incl. absentee owners), fall back to the property
     return parse_addr(_mailaddr(lead)) or parse_addr(_propaddr(lead))
 
-def select(leads, args):
+def _officer_target(case, llcs):
+    """For a company-owned lead, the human to actually skip-trace: the first Sunbiz officer with a
+    usable address, else the registered agent (llc_officers.py output). Returns (name, addr) or
+    (None, None) when no human is resolved yet — in which case the row still carries its free
+    People/CyberBG links, so nothing is lost, we just don't spend a lookup on a company shell."""
+    lo = (llcs or {}).get(case) or {}
+    for p in (lo.get('officers') or []):
+        if p and p.get('n'):
+            a = parse_addr(p.get('a') or '')
+            if a:
+                return p['n'], a
+    if lo.get('ra') and lo.get('ra_addr'):
+        a = parse_addr(lo.get('ra_addr'))
+        if a:
+            return lo['ra'], a
+    return None, None
+
+
+def select(leads, args, llcs=None):
+    """Attach a trace target to every eligible lead. Human owners trace their own mailing address;
+    company owners trace the Sunbiz officer/agent behind the LLC (r['_trace_*']), so a company-owned
+    deal is a callable person, not a dead end."""
     out = []
     for r in leads:
         if args.case:
@@ -162,16 +183,38 @@ def select(leads, args):
             if (r.get('tier', '') or '') != args.tier:
                 continue
         owner = (r.get('owners', '') or '')
-        if not owner or is_company(owner.split(';')[0]):
+        if not owner:
             continue
-        if not address_for(r):
-            continue
+        if is_company(owner.split(';')[0]):
+            oname, oaddr = _officer_target(_case(r), llcs)
+            if oaddr:
+                r['_trace_addr'] = oaddr                   # LLC with a resolved Sunbiz officer — best target
+                r['_trace_name'] = oname
+                r['_trace_entity'] = owner.split(';')[0].strip()
+            else:
+                # No Sunbiz officer: a TRUST/ESTATE (the trustee is named in the owner string and gets
+                # mail at the property address) or an LLC whose Sunbiz pull missed. The mailing address
+                # is almost always the trustee's / manager's own home — trace it rather than skip.
+                a = address_for(r)
+                if not a:
+                    continue
+                r['_trace_addr'] = a
+                r['_trace_name'] = owner.split(';')[0].strip()
+                r['_trace_entity'] = owner.split(';')[0].strip()
+        else:
+            a = address_for(r)
+            if not a:
+                continue
+            r['_trace_addr'] = a
+            r['_trace_name'] = owner.split(';')[0].strip()
+            r['_trace_entity'] = ''
         out.append(r)
     return out
 
 def trace_one(session, prov, key, lead, raw=False):
     p = PROVIDERS[prov]
-    r = session.post(p['url'], json=p['body'](address_for(lead)), timeout=30,
+    addr = lead.get('_trace_addr') or address_for(lead)   # officer address for a company, else the owner's
+    r = session.post(p['url'], json=p['body'](addr), timeout=30,
                      headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'User-Agent': UA})
     if raw:
         print('--- RAW', lead.get('Case #', ''), r.status_code, '---')
@@ -196,18 +239,25 @@ def main():
 
     leads = load_all_leads()                                    # Miami-Dade + Broward + Palm Beach
     results = json.load(open(RESULTS, encoding='utf-8')) if os.path.exists(RESULTS) else {}
+    _lof = os.path.join(HERE, 'llc_officers.json')              # the Sunbiz humans behind LLC owners
+    llcs = json.load(open(_lof, encoding='utf-8')) if os.path.exists(_lof) else {}
 
-    picked = select(leads, args)
+    picked = select(leads, args, llcs)
     todo = [r for r in picked if args.refresh or (_case(r) not in results)]
     if args.limit:
         todo = todo[:args.limit]
 
     print(f"provider: {provider}  |  {len(picked)} eligible lead(s); {len(todo)} to trace "
           f"({len(picked)-len(todo)} already cached). Est. cost: ${len(todo)*cost_per:.2f}")
+    _comp = sum(1 for r in todo if r.get('_trace_entity'))
+    if _comp:
+        print(f"  (of those, {_comp} are LLC-owned -> tracing the Sunbiz officer/agent behind the company)")
     if args.dry_run:
         for r in todo[:20]:
-            a = address_for(r)
-            print(f"  would trace: {(r.get('owners','') or '')[:28]:28} {a['street']}, {a['city']} {a['zip']}")
+            a = r.get('_trace_addr') or address_for(r)
+            who = (r.get('_trace_name') or r.get('owners', '') or '')[:28]
+            via = f"  [officer of {r['_trace_entity'][:22]}]" if r.get('_trace_entity') else ''
+            print(f"  would trace: {who:28} {a['street']}, {a['city']} {a['zip']}{via}")
         print("(dry run — no API calls made)")
         return
 
@@ -226,9 +276,13 @@ def main():
         case = _case(r) or (r.get('Folio', '') or r.get('folio', '') or f'row{i}')
         try:
             phones, emails = trace_one(s, provider, key, r, raw=args.raw)
+            _ta = r.get('_trace_addr') or {}
             results[case] = {
-                'name': (r.get('owners', '') or '').split(';')[0].strip(),
-                'address': _mailaddr(r) or _propaddr(r), 'county': r.get('county', 'MIAMI-DADE'),
+                'name': r.get('_trace_name') or (r.get('owners', '') or '').split(';')[0].strip(),
+                'entity': r.get('_trace_entity', ''),          # the LLC, when the number belongs to its officer
+                'address': (', '.join(v for v in (_ta.get('street'), _ta.get('city'), _ta.get('zip')) if v)
+                            if _ta else (_mailaddr(r) or _propaddr(r))),
+                'county': r.get('county', 'MIAMI-DADE'),
                 'phones': phones, 'emails': emails, 'traced': f"{date.today():%Y-%m-%d}", 'source': provider,
             }
             if phones: ok += 1

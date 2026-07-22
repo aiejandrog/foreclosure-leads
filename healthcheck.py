@@ -81,8 +81,32 @@ if _cty_tot:
     add('PASS', 'surviving-2nd flags', f'{len(_chk)} leads checked total, {_surv2} with a possible surviving 2nd')
 else:
     add('WARN', 'recorded-lien coverage', 'none yet — run records_liens.py / broward_liens.py')
+# ---- callable-contact coverage: is there a PERSON + a number on every property? -----------------
+# Two metrics: an auto-filled PHONE (the ideal), and at minimum a named PERSON to call (a human owner
+# always is one; an LLC counts only once llc_officers.py resolves its Sunbiz officer — otherwise the
+# row is a company shell with just the free People links). The gap the deal desk feels = shell LLCs.
+import re as _re
 phones = load('skiptrace_results.json') or {}
-add('PASS' if phones else 'WARN', 'skip-trace coverage', f'{len(phones)} leads with phones')
+_ph_cases = {c for c, v in phones.items() if v.get('phones')}
+_off = load('llc_officers.json') or {}
+_off_named = {c for c, v in _off.items() if [p for p in (v.get('officers') or []) if p and p.get('n')]}
+# strict corporate — a nameless shell. TRUST/ESTATE are excluded on purpose: they name a trustee in
+# the owner string (e.g. "WILLIAMS, VIRGINIA TRS"), so they ARE a person to call, not a shell.
+_CO = _re.compile(r'\b(LLC|CORP|INC|COMPANY|HOLDINGS|LP|LTD|GROUP|PROPERT|INVEST|REALTY|CAPITAL|VENTURES)\b', _re.I)
+_cl = []
+for _fn, _ck in (('leads_final.json', 'Case #'), ('broward_leads.json', 'case'), ('palmbeach_leads.json', 'case')):
+    for _r in (load(_fn) or []):
+        _c = str(_r.get(_ck) or '')
+        if _c:
+            _cl.append((_c, (_r.get('owners') or _r.get('owner') or '')))
+_tot = len(_cl) or 1
+_hasphone = sum(1 for _c, _o in _cl if _c in _ph_cases)
+_shell = [_c for _c, _o in _cl if _CO.search(_o.split(';')[0]) and _c not in _off_named and _c not in _ph_cases]
+_human = len(_cl) - len(_shell)
+_pph, _phum = round(100 * _hasphone / _tot), round(100 * _human / _tot)
+add('PASS' if _pph >= 60 else 'WARN', 'auto-phone coverage', f'{_hasphone}/{len(_cl)} have a dialable number ({_pph}%)')
+add('PASS' if _phum >= 90 else 'WARN', 'human-contact coverage',
+    f'{_human}/{len(_cl)} name a person to call ({_phum}%)' + (f'; {len(_shell)} shell LLCs left — run llc_officers.py' if _shell else ''))
 
 # ---- 2b. RETROACTIVITY WATCHDOG (2026-07-20) --------------------------------------------------
 # Every enrichment "rule" must keep applying to future scrapes, not just today's. If a pipeline
