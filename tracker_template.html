@@ -606,6 +606,12 @@ a.dig.digllc:hover{border-color:var(--gold,#C6A14B);background:rgba(198,161,75,.
 .digppl a{color:var(--gold-d,#8B6A2C);font-weight:600;text-decoration:none}
 .digppl a:hover{text-decoration:underline}
 .digppl i{color:var(--muted-2,#8a93a6);font-style:normal;opacity:.7}
+/* Loud banner when the build baked ZERO phones — not a UI bug: skiptrace never ran, or the
+   public site stripped them (no site.pass / access codes → make_tracker publishes phone-free). */
+.phban{margin:0 0 10px;padding:11px 14px;border-radius:10px;background:rgba(180,35,24,.1);
+  border:1px solid rgba(180,35,24,.35);color:#8E1A12;font-size:13.5px;line-height:1.45}
+.phban b{font-weight:800}.phban code{font-size:12px;background:rgba(0,0,0,.06);padding:1px 5px;border-radius:4px}
+.phban a{color:#8B6A2C;font-weight:700}
 /* phones: the links inside inherit the board's standard #cards .clinks a tap size (35px) — only
    the wrapper needs breathing room so the group doesn't crowd the row. */
 @media(max-width:860px){ .digppl{font-size:12.5px;padding:4px 10px;gap:2px} }
@@ -1383,6 +1389,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="refreshbtn" class="lockbtn" style="display:inline-block" title="Refresh the deal data now — fires the cloud pipeline (GitHub Actions). Checks freshness first; 60-min cooldown per device.">&#8635; Refresh</button>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
+<div id="phban" class="phban" style="display:none" role="status"></div>
 <div class="controls">
 <span class="fgroup" role="group" aria-label="Tier"><span class="flbl">Tier</span>
 <button class="tf active" data-t="A">A</button>
@@ -4529,9 +4536,27 @@ function view(){
   rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
   return rows;
 }
+function _phoneCoverageBan(){
+  // Why 0 numbers show: (1) skiptrace never ran / no key, or (2) public docs build stripped phones
+  // because site.pass / site.codes was missing at make_tracker time. Not a render bug.
+  const el = document.getElementById('phban'); if(!el) return;
+  const n = (DATA||[]).length, withPh = (DATA||[]).filter(r => (r.phones&&r.phones.length) || (notes[r.case]||{}).phone).length;
+  if(n && withPh === 0){
+    el.style.display = 'block';
+    el.innerHTML = '<b>⚠ 0 phone numbers on this board.</b> '
+      + 'This is not a display bug — the build has no skip-traced phones baked in. '
+      + 'On your PC: put <code>batchdata.key</code> or <code>tracerfy.key</code> in the folder → '
+      + '<code>python skiptrace.py</code> → put a password in <code>site.pass</code> (or run <code>python access_codes.py</code>) → '
+      + 'rebuild/publish so the <b>encrypted</b> site can carry phones. '
+      + 'Until then use <b>People</b> on each row (free) and type the number into the phone box — that saves on this device.';
+  } else if(n){
+    el.style.display = 'none';
+  }
+}
 function render(){
   initCountyFilter();
   const rows = view();
+  _phoneCoverageBan();
   renderActiveFilters();          // show removable pills for whatever is filtering the board
   // sort-direction indicator on the active column header
   document.querySelectorAll('th[data-k]').forEach(th=>{

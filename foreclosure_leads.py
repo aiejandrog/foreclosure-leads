@@ -1045,6 +1045,13 @@ def make_tracker(leads):
         nophone = [{k: v for k, v in d.items() if k not in ('phones','phdnc','emails')} for d in slim]
         open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(nophone)))
         print('tracker written: docs/index.html (public, phone-free)' + ('' if os.environ.get('DEALFLOW_NO_DESKTOP') == '1' else ' + Desktop'))
+        _nph = sum(1 for d in slim if d.get('phones'))
+        if _nph:
+            print(f'  !! {_nph} lead(s) HAD phones locally but they were STRIPPED from the public site.')
+            print('  !! Create site.pass (or site.codes via access_codes.py) then rebuild — phones only ship encrypted.')
+        elif not os.path.exists(RESULTS_FILE):
+            print('  !! 0 phones on the board: skiptrace_results.json missing. Run: python skiptrace.py')
+            print('  !! Needs batchdata.key or tracerfy.key (or BATCHDATA_API_KEY / TRACERFY_API_KEY).')
 
 def main():
     leads = scrape()

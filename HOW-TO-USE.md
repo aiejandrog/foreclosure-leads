@@ -4,6 +4,17 @@
 
 ---
 
+## Why the site shows **0 phone numbers**
+
+Phones are **never** scraped from the auction page. They only appear when:
+
+1. You ran **`python skiptrace.py`** (needs `batchdata.key` or `tracerfy.key`), **and**
+2. You published an **encrypted** site (`site.pass` or `python access_codes.py`) — the public GitHub site **strips every phone** on purpose if there’s no password gate.
+
+If you see a red banner “0 phone numbers on this board,” that’s the reason — not a broken UI. Until skiptrace + encrypt, use **People** (free) and type numbers into the phone box (saved on this device only).
+
+---
+
 ## ☎️ Getting phone numbers — the FREE way (do this first)
 
 Every lead has a **☎ phone box** and a **People** button. To get a number for free:
