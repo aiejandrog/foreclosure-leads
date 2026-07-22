@@ -197,6 +197,10 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 #closers.abtn{border:1.5px solid var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C);font-weight:700;background:var(--surface,#fff)}
 #closers.abtn:hover{background:var(--gold-soft,rgba(198,161,75,.12))}
 #closers.abtn.active{background:var(--navy,#0B1730);color:#F5C542;border-color:var(--navy,#0B1730);box-shadow:var(--sh-2)}
+/* Fresh filings — green (the front of the funnel, the seedling stage) */
+#freshlp.abtn{border:1.5px solid rgba(22,101,52,.5);color:var(--green-ink,#166534);font-weight:700;background:var(--surface,#fff)}
+#freshlp.abtn:hover{background:rgba(22,101,52,.08)}
+#freshlp.abtn.active{background:var(--green-ink,#166534);color:#fff;border-color:var(--green-ink,#166534);box-shadow:var(--sh-2)}
 #mailbatch,#exp{border-radius:var(--pill);font-weight:600}
 #advtog{border-radius:var(--pill);background:var(--surface);color:var(--ink);border-color:var(--line);font-weight:600}
 #advtog:hover{border-color:var(--gold);color:var(--gold-d)}
@@ -1364,6 +1368,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="plan" class="abtn" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5h.01M4 11.5h.01M4 17.5h.01"/></svg>Plan today</button>
 <button id="due" class="abtn" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Due</button>
 <button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
+<button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
 <span class="qwrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list."><kbd>/</kbd></span>
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
@@ -1462,7 +1467,10 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false;
+let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false;
+// A lead is in the LIS PENDENS (freshly-filed) stage — no auction date yet, worked as a nurture
+// over months. Set by lis_pendens.py (stage:'LP'). This is the front-of-funnel lane.
+function _isLP(r){ return r && (r.stage === 'LP' || r.st === 'LP'); }
 // a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
@@ -4237,13 +4245,21 @@ function view(){
     // remove the last saved deal) and you drop straight back to exactly the view you were on
     // before — never a forced "All tiers".
     rows = _cscope(DATA.filter(r => favs.has(r.case)));
+  } else if(lpOnly){
+    // FRESH FILINGS mode: only the lis-pendens (just-filed) leads, its own lane because they have no
+    // auction date and are worked as a months-long nurture, not a countdown. Newest filing first.
+    rows = _cscope(DATA.filter(r => _isLP(r)));
+    rows = rows.slice().sort((a,b) => (toISO(b.filedDate||'') > toISO(a.filedDate||'') ? 1 : -1));
+    return rows;
   } else if(closersOnly){
     // Closers mode: the shortlist worth working THIS week, across every tier, ranked by closeability
     // (handled in the sort below). Its own mode so it ignores tier/other filters (not county
-    // scope) and restores cleanly.
-    rows = _cscope(DATA.filter(r => _isCloser(r)));
+    // scope) and restores cleanly. LP leads never enter (they have no sale-date runway).
+    rows = _cscope(DATA.filter(r => _isCloser(r) && !_isLP(r)));
   } else {
-    rows = DATA.filter(r => tier==='ALL' || r.tier===tier);
+    // the default board is the AUCTION funnel — properties with a sale date. LP (freshly-filed) leads
+    // live in their own Fresh-filings lane, so they never clutter the countdown board.
+    rows = DATA.filter(r => !_isLP(r) && (tier==='ALL' || r.tier===tier));
     if(county) rows = rows.filter(r => (r.county||'MIAMI-DADE')===county);
     if(fy1) rows = rows.filter(r => r.filed && r.filed >= +fy1);
     if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
@@ -4509,6 +4525,15 @@ function render(){
   const cc = document.getElementById('cards');
   if(!rows.length){
     const qv = (document.getElementById('q').value||'').trim();
+    if(lpOnly){
+      // the Fresh-filings lane before the LP sweep has run — explain what it IS, not just "empty"
+      const msg = '<div class="empty"><div class="empty-t">🌱 Fresh filings — the front of the funnel</div>'+
+        '<div class="empty-s" style="max-width:520px;margin:8px auto 0">These are foreclosures the day they\'re <b>filed</b> (Lis Pendens) — 8-14 months before the auction, when nobody else is calling yet. The daily refresh pulls them from county records. If it\'s empty, the Lis-Pendens sweep hasn\'t run yet or found nothing new this window.</div>'+
+        '<button class="empty-reset" type="button" style="margin-top:14px">Back to the board</button></div>';
+      document.getElementById('tb').innerHTML = '<tr><td colspan="12" class="emptycell">'+msg+'</td></tr>';
+      if(cc) cc.innerHTML = msg;
+      return;
+    }
     const cta = qv
       ? '<div class="empty-s">“'+esc(qv)+'” isn\'t one of your auction leads. Pull it straight from county records:</div>'+
         '<button class="empty-lookup" type="button">Full county report on “'+esc(qv)+'” &rarr;</button>'+
@@ -4542,12 +4567,12 @@ document.addEventListener('click', e => {
   togglePin(row.dataset.case);
 });
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=false;
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=false;
   { const _cb=document.getElementById('closers'); if(_cb) _cb.classList.remove('active'); }
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
-  ['wk','hd','hf','td','nc','due'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
+  ['wk','hd','hf','td','nc','due','freshlp'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
   document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
   county=''; _resetCountyPills();
   render();
@@ -4565,6 +4590,7 @@ function _activeFilters(){
   if(q) return scoped.concat([{k:'q', lbl:'Search: “'+q+'”'}]);
   if(favOnly) return scoped.concat([{k:'fav', lbl:'★ Saved only'}]);
   if(closersOnly) return scoped.concat([{k:'closers', lbl:'🎯 Closers — this week'}]);
+  if(lpOnly) return scoped.concat([{k:'freshlp', lbl:'🌱 Fresh filings (just filed)'}]);
   if(tier!=='A') out.push({k:'tier', lbl:'Tier '+tier});
   if(county) out.push({k:'county', lbl:ctyName(county)});
   if(favOnly) out.push({k:'fav', lbl:'★ Saved only'});
@@ -4596,6 +4622,7 @@ function _clearFilter(k){
   else if(k==='county'){ county=''; if(typeof _resetCountyPills==='function') _resetCountyPills(); }
   else if(k==='fav'){ favOnly=false; }
   else if(k==='closers'){ closersOnly=false; if(g('closers'))g('closers').classList.remove('active'); }
+  else if(k==='freshlp'){ lpOnly=false; if(g('freshlp'))g('freshlp').classList.remove('active'); }
   else if(k==='wk'){ weekOnly=false; if(g('wk'))g('wk').classList.remove('active'); }
   else if(k==='due'){ dueOnly=false; if(g('due'))g('due').classList.remove('active'); }
   else if(k==='nc'){ ncOnly=false; if(g('nc'))g('nc').classList.remove('active'); }
@@ -4662,6 +4689,7 @@ document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classL
 document.getElementById('plan').onclick = () => openPlanModal();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
 { const _cb = document.getElementById('closers'); if(_cb) _cb.onclick = () => { closersOnly = !closersOnly; _cb.classList.toggle('active', closersOnly); render(); }; }
+{ const _lp = document.getElementById('freshlp'); if(_lp) _lp.onclick = () => { lpOnly = !lpOnly; if(lpOnly){ closersOnly=false; const c=document.getElementById('closers'); if(c)c.classList.remove('active'); } _lp.classList.toggle('active', lpOnly); render(); }; }
 // collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
 (function(){
   const panel = document.getElementById('advpanel'), tog = document.getElementById('advtog');

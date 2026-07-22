@@ -58,14 +58,45 @@ def records_by_qs(qs):
     except Exception:
         return None
 
-def mint_and_fetch(owner_lf, budget=70):
-    """Fallback: mint a fresh reCAPTCHA token in a browser, then fetch. Best-effort."""
+def mint_and_fetch(owner_lf, budget=70, persist=False):
+    """Mint a fresh reCAPTCHA token in a browser, then fetch. Defaults to a bounded 3-try attempt.
+
+    persist=True mode: 'never give up' — keeps trying with widening back-off (10s -> 20s -> 40s ->
+    60s cap, capped at 25 attempts, ~15-20 min max). Each attempt spins up a fresh browser context
+    so the site's per-context rate-limits reset. For a specific lead the operator has flagged as
+    important enough to burn time on (Furs, Echeverri) — worth it. Do NOT use inside a batch loop.
+    """
     try:
         from playwright.sync_api import sync_playwright
     except Exception:
         return None
     src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()
     js = re.search(r'JS = r"""(.*?)"""', src, re.S).group(1).replace('SITEKEY', SITE_KEY)
+    if persist:
+        # keep hammering until the captcha yields or the retry cap is hit
+        attempt = 0
+        while attempt < 25:
+            attempt += 1
+            try:
+                with sync_playwright() as p:
+                    b = p.chromium.launch(headless=True)
+                    pg = b.new_context(user_agent=UA, viewport={'width': 1400, 'height': 1000}).new_page()
+                    pg.goto(OR_BASE, timeout=40000, wait_until='domcontentloaded')
+                    pg.wait_for_timeout(4000 + attempt * 500)   # give the site more settle each try
+                    res = pg.evaluate(js, list(owner_lf))
+                    b.close()
+                    if res and res.get('success') and res.get('qs'):
+                        print(f'  mint OK on attempt {attempt}')
+                        return records_by_qs(res['qs'])
+                    print(f'  mint attempt {attempt} failed — {res.get("error") if res else "no response"}')
+            except Exception as e:
+                print(f'  mint attempt {attempt} threw: {str(e)[:80]}')
+            back = min(60, 10 * (1.4 ** min(attempt, 10)))
+            print(f'  backing off {int(back)}s before attempt {attempt + 1}...')
+            time.sleep(back)
+        print(f'  gave up after {attempt} attempts (captcha remained hostile)')
+        return None
+    # legacy bounded behaviour (unchanged)
     t0 = time.time()
     try:
         with sync_playwright() as p:
