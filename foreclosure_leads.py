@@ -787,6 +787,9 @@ def make_tracker(leads):
             # this pass-through the JS side sees no dor_desc and renders no chip for MD leads
             # (BW/PB rows already come through the slim.extend path with dor_desc intact).
             'dor_desc': r.get('dor_desc',''),
+            # the physical facts Jose asks for on a live call ("how big is it? how many beds?") —
+            # they were sitting in leads_final.json and never reaching the site.
+            'beds': r.get('beds',0) or 0, 'baths': r.get('baths',0) or 0, 'sqft': r.get('living_area',0) or 0,
             # Zillow listing status (listing_status.py): LISTED/PENDING/SOLD/RENTAL/OFF-MARKET +
             # asking price + days-on-Zillow. County rows pass through via slim.extend; MD needs
             # the explicit copy just like dor_desc/photos.

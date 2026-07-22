@@ -468,6 +468,65 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .llct{font-family:var(--f-label,inherit);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2,#8a93a6);margin-left:2px}
 .llcralow{font-size:12px;color:var(--muted,#6b7280)}
 .llcsrc{font-size:10px;color:var(--muted-2,#8a93a6);font-weight:500;margin-left:6px}
+/* ===== THE CALL SHEET — the screen you put up when the phone rings ===== */
+.cscard{width:min(860px,96vw);max-height:92vh;overflow:auto}
+.callsheet{font-family:var(--f-body,inherit)}
+.cshead{border-bottom:2px solid var(--line,#E2E6EE);padding-bottom:12px;margin-bottom:14px}
+.csaddr{font-family:var(--f-display,inherit);font-size:26px;font-weight:700;color:var(--ink,#101C33);line-height:1.15}
+.csown{font-size:16px;color:var(--ink,#101C33);margin-top:5px;font-weight:600}
+.cscase{font-size:12px;color:var(--muted,#6b7280);margin-top:4px}
+.cstag{font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.1em;padding:2px 6px;
+  border-radius:3px;background:var(--surface-2,#eef1f6);color:var(--muted,#6b7280);vertical-align:2px}
+.cstag.ok{background:rgba(22,101,52,.13);color:var(--green-ink,#166534)}
+.cstag.warn{background:rgba(180,83,9,.14);color:#B45309}
+.cstalk{background:linear-gradient(120deg,rgba(198,161,75,.16),rgba(239,223,158,.2));border:1px solid rgba(198,161,75,.55);
+  border-radius:10px;padding:11px 14px;margin-bottom:14px;font-size:15px;color:var(--ink,#101C33);position:relative}
+.cstalk a{color:var(--gold-d,#8B6A2C);font-weight:800}
+.cstn{font-size:12.5px;color:var(--muted,#6b7280);margin-top:5px;line-height:1.5}
+.cstalkadd{margin-bottom:14px}
+.csedit{font-size:11px;background:none;border:1px dashed var(--line,#E2E6EE);border-radius:6px;padding:4px 9px;
+  color:var(--muted,#6b7280);cursor:pointer}
+.csedit:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
+.cstalk .csedit{position:absolute;right:10px;top:9px}
+.csgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin-bottom:16px}
+.csbox{border:1px solid var(--line,#E2E6EE);border-radius:12px;padding:12px 14px;background:var(--surface,#fff)}
+.csbox.hot{border-color:rgba(180,35,24,.5);background:rgba(180,35,24,.05)}
+.csbox.good{border-color:rgba(22,101,52,.4);background:rgba(22,101,52,.05)}
+.csbox.warn{border-color:rgba(180,83,9,.45);background:rgba(180,83,9,.05)}
+.csl{font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted-2,#8a93a6)}
+.csv{font-family:var(--f-display,inherit);font-size:30px;font-weight:800;color:var(--ink,#101C33);line-height:1.1;margin-top:4px;font-variant-numeric:tabular-nums}
+.css{font-size:11.5px;color:var(--muted,#6b7280);margin-top:3px;line-height:1.4}
+.cssec{font-family:var(--f-label,inherit);font-size:10px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--gold-d,#8B6A2C);border-top:1px solid var(--line,#E2E6EE);padding-top:12px;margin-top:6px}
+.csbody{margin:8px 0 14px}
+.csrow{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px dotted var(--line,#E2E6EE);font-size:14px;line-height:1.5}
+.csrow:last-child{border-bottom:none}
+.csk{color:var(--muted,#6b7280);flex:0 0 auto}
+.csvv{color:var(--ink,#101C33);text-align:right}
+.csmut{color:var(--muted-2,#8a93a6);font-size:12.5px}
+.csdays{font-family:var(--f-label,inherit);font-size:10px;font-weight:800;letter-spacing:.06em;background:var(--navy,#0B1730);
+  color:#fff;border-radius:4px;padding:2px 7px;margin-left:6px}
+.csdays.urg{background:#B42318}
+.bad{color:#B42318}
+.csbad{background:#B42318;color:#fff;border-radius:8px;padding:10px 13px;font-weight:700;font-size:14px}
+.csphones{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}
+.csph{font-family:var(--f-display,inherit);font-size:22px;font-weight:800;letter-spacing:.01em;background:var(--navy,#0B1730);
+  color:#fff;border-radius:10px;padding:9px 16px;text-decoration:none;display:inline-block}
+.csph:hover{background:var(--ink,#101C33)}
+.cschain{margin-top:8px;border:1px solid var(--line,#E2E6EE);border-radius:8px;overflow:hidden}
+.cscl{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:6px 10px;background:var(--surface,#fff);
+  border-bottom:1px solid var(--line,#E2E6EE);color:var(--muted,#6b7280)}
+.cscl:last-child{border-bottom:none}
+.cscl.open{background:rgba(180,35,24,.06);color:var(--ink,#101C33);font-weight:600}
+.csdefs{font-size:12.5px}
+.csfoot{display:flex;gap:9px;flex-wrap:wrap;border-top:1px solid var(--line,#E2E6EE);padding-top:13px;margin-top:6px}
+.csbtn{font-size:13px;font-weight:700;padding:9px 16px;border-radius:var(--pill,999px);border:1px solid var(--line,#E2E6EE);
+  background:var(--surface,#fff);color:var(--ink,#101C33);cursor:pointer}
+.csbtn:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
+/* the row button — deliberately the loudest control, because this is what you hit mid-call */
+a.dig.digcall{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730);font-weight:800}
+a.dig.digcall:hover{background:#C6A14B;color:#0B1730;border-color:#C6A14B}
+@media(max-width:860px){ .csaddr{font-size:21px} .csv{font-size:26px} .csph{font-size:20px;width:100%;text-align:center} }
 /* ===== step-by-step playbook (deal modal) ===== */
 .pblist{list-style:none;counter-reset:pb;margin:4px 0 12px;padding:0}
 .pbstep{counter-increment:pb;position:relative;padding:9px 12px 9px 40px;margin-bottom:6px;
@@ -707,7 +766,7 @@ input.ph::placeholder{color:#8FBFA0}
 .cctl textarea{flex:1}
 
 /* ============================== MODALS (shared shell) ============================== */
-#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal,#savedmodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal,#savedmodal,#csmodal{display:none;position:fixed;inset:0;z-index:120}
 #dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show,#savedmodal.show{display:block}
 #syncmodal{z-index:122}#planmodal{z-index:121}#lookupmodal{z-index:121}#gallerymodal{z-index:130}
 .dm-backdrop{position:absolute;inset:0;background:rgba(9,16,31,.5);backdrop-filter:blur(5px);
@@ -1212,6 +1271,7 @@ body.compact .dg-v{font-size:14.5px}
 <div id="gateerr"></div>
 <div class="gate-foot">End-to-end encrypted &middot; South Florida Deal Engine</div>
 </div></div>
+<div id="csmodal"><div class="dm-backdrop" onclick="closeCallSheet()"></div><div class="dm-card cscard"><button class="dm-close" type="button" onclick="closeCallSheet()" title="Close">&times;</button><div id="csbody"></div></div></div>
 <div id="dealmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="dmbody"></div></div></div>
 <div id="logmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="logbody"></div></div></div>
 <div id="planmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="planbody"></div></div></div>
@@ -2073,6 +2133,148 @@ function _nearby(r, within){
     return R*2*Math.asin(Math.sqrt(h)) <= (within||6);
   });
 }
+// ============================ THE CALL SHEET ============================
+// Built 2026-07-21 from a live failure: Carlos found Eduardo (87, on his porch, house in bad
+// shape) and put Jose on the line. Jose started firing the questions he ALWAYS fires — what's the
+// final judgment? who owns the loan? what survives? what's it worth? — and the answers were
+// scattered across a modal, a math table and three chips. Hunting for them mid-call makes the
+// operator look unprepared and stalls the deal.
+// This is one screen, biggest-type-first, in the exact order those questions come. It is not
+// analysis; it is an ANSWER SHEET you put on the screen when the phone rings.
+function _talkTo(r){ const n = notes[r.case]||{}; return n.talkTo && n.talkTo.name ? n.talkTo : null; }
+function _cleanPhones(r){ return (r.phones||[]).filter((p,i) => !((r.phdnc||[])[i])); }
+function _dncPhones(r){ return (r.phones||[]).filter((p,i) => !!((r.phdnc||[])[i])); }
+function _callSheet(r){
+  const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
+  const nn = notes[r.case]||{};
+  const tt = _talkTo(r);
+  const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
+  const arv = +r.arv||0, val = +r.value||0, basis = arv||val, judg = +r.judg||0;
+  const surv = r._chainSurv||0, jr = (r.orconf==='ok'||r.orconf==='low') ? (+r.orjuniors||0) : 0;
+  const trust = r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify' : 'NOT CHECKED';
+  const netEq = Math.max(0, basis - judg - surv - jr);
+  const clean = _cleanPhones(r), dnc = _dncPhones(r);
+  const g = _geoTier(r);
+  const big = (lbl, v, sub, cls) => '<div class="csbox '+(cls||'')+'"><div class="csl">'+lbl+'</div>'+
+    '<div class="csv">'+v+'</div>'+(sub?'<div class="css">'+sub+'</div>':'')+'</div>';
+  const row = (k, v) => '<div class="csrow"><span class="csk">'+k+'</span><span class="csvv">'+v+'</span></div>';
+
+  // WHO — and the person actually in control, which is often NOT the owner on the deed
+  let who = '<div class="cshead"><div class="csaddr">'+esc(r.addr)+'</div>'+
+    '<div class="csown">'+esc(owner)+(r.co?' <span class="cstag">COMPANY</span>':'')+
+    (r.hs?' <span class="cstag ok">HOMESTEAD</span>':'')+
+    (_nameBroken(r)?' <span class="cstag warn">name incomplete</span>':'')+'</div>'+
+    '<div class="cscase">Case '+esc(r.case)+' · '+esc(r.county||'MIAMI-DADE')+' · folio '+esc(r.folio||'—')+'</div></div>';
+  if(tt) who += '<div class="cstalk">🗣 <b>TALK TO '+esc(tt.name.toUpperCase())+'</b>'+(tt.rel?' — '+esc(tt.rel):'')+
+    (tt.phone?' · <a href="tel:'+esc(tt.phone.replace(/\D/g,''))+'">'+esc(tt.phone)+'</a>':'')+
+    (tt.note?'<div class="cstn">'+esc(tt.note)+'</div>':'')+
+    '<button type="button" class="csedit" onclick="_editTalkTo(\''+esc(r.case)+'\')">edit</button></div>';
+  else who += '<div class="cstalkadd"><button type="button" class="csedit" onclick="_editTalkTo(\''+esc(r.case)+'\')">+ Someone else is handling this (daughter, POA, attorney…)</button></div>';
+
+  // THE FOUR NUMBERS HE ALWAYS ASKS FOR
+  const four = '<div class="csgrid">'+
+    big('FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn')+
+    big('WORTH TODAY', fm(basis), arv?('ARV from '+r.arvn+' comps'+(r.arvconf==='ok'?' (verified)':' (low conf)')):'county roll — no comps', 'good')+
+    big('WHAT SURVIVES THE SALE', surv?fm(surv):'$0', trust, surv?'warn':'ok')+
+    big('NET EQUITY', fm(netEq), 'worth − judgment − survivors', 'good')+
+  '</div>';
+
+  // THE CLOCK
+  const clock = '<div class="cssec">THE CLOCK</div><div class="csbody">'+
+    row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')) +
+    row('Deal deadline', r.days>=0 ? '<b>'+Math.max(0,r.days-3)+' days</b> — the attorney needs ~3 days to file' : 'auction passed — surplus play') +
+    row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')') +
+    (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):'')) +
+  '</div>';
+
+  // THE DEBT STACK — itemised, because "what else is on it?" is question #3
+  let stack = '<div class="cssec">THE DEBT — who is owed what</div><div class="csbody">'+
+    row('Foreclosing lender', '<b>'+esc(r.plaintiff||'—')+'</b>') +
+    row('Final judgment', '<b>'+fm(judg)+'</b>');
+  if(surv) stack += row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
+  if(jr) stack += row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
+  if(+r.orhoa) stack += row('HOA / association', fm(+r.orhoa));
+  if((+r.orcode||0)+(+r.orirs||0)) stack += row('Code / muni / IRS', fm((+r.orcode||0)+(+r.orirs||0)));
+  stack += row('Back taxes', nn.btax?fm(+nn.btax):'<span class="csmut">not checked — one click on Taxes</span>');
+  if((r.orliens||[]).length){
+    stack += '<div class="cschain">'+(r.orliens||[]).map(l =>
+      '<div class="cscl'+(l.st==='OPEN'?' open':'')+'"><span>'+esc(l.d||'')+' · '+esc(l.party||'')+'</span>'+
+      '<span>'+fm(l.amt)+' · <b>'+esc(l.st||'')+'</b></span></div>').join('')+'</div>';
+  }
+  // everyone else named on the lawsuit — where solar leases and code liens hide
+  if(r.defs) stack += row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>');
+  stack += '</div>';
+
+  // THE PROPERTY
+  const prop = '<div class="cssec">THE PROPERTY</div><div class="csbody">'+
+    row('Type', esc(r.dor_desc||'—')+(r.beds?' · '+r.beds+' bed / '+r.baths+' bath':'')+(r.sqft?' · '+(+r.sqft).toLocaleString()+' sqft':'')) +
+    row('Owned since', (r.bought?'<b>'+r.bought+'</b>'+(r.bprice?' — paid '+fm(r.bprice):''):'—')+(r.bought?' <span class="csmut">('+(new Date().getFullYear()-r.bought)+' years)</span>':'')) +
+    row('County value', fm(val)+(arv?' <span class="csmut">(tax-capped — ARV above is the real number)</span>':'')) +
+    row('On the market?', esc(r.zstatus||'not checked')) +
+    row('Distance', g.mi!=null ? g.mi+' mi from '+_baseLL().name+' · '+esc(g.lbl) : 'unknown') +
+  '</div>';
+
+  // CONTACT
+  let cont = '<div class="cssec">CONTACT</div><div class="csbody">';
+  if(_isWrongOwner(nn)) cont += '<div class="csbad">🚫 WRONG PERSON reported — these numbers are not the owner. Re-verify before dialing.</div>';
+  else if(nn.status==='DO NOT CONTACT') cont += '<div class="csbad">⛔ OPTED OUT — all contact suppressed.</div>';
+  else if(r.saleBkAct) cont += '<div class="csbad">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal right now.</div>';
+  else {
+    cont += clean.length
+      ? '<div class="csphones">'+clean.map(p=>'<a class="csph" href="tel:'+esc(String(p).replace(/\D/g,''))+'">'+esc(fmtPhone?fmtPhone(p):p)+'</a>').join('')+'</div>'
+      : '<div class="csmut">No callable number — use the People / CyberBG links on the row.</div>';
+    if(dnc.length) cont += row('⛔ DNC — mail/door only', dnc.map(p=>esc(fmtPhone?fmtPhone(p):p)).join(' · '));
+    if((r.emails||[]).length) cont += row('Email', (r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · '));
+  }
+  cont += row('Mailing address', esc(r.mail||r.addr||'—')+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <span class="csmut">(same as the property — they live there)</span>':' <span class="csmut">(different — absentee owner)</span>'));
+  cont += '</div>';
+
+  return '<div class="callsheet">'+who+four+clock+stack+prop+cont+
+    '<div class="csfoot"><button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
+    '<button type="button" class="csbtn" onclick="openDealModal(\''+esc(r.case)+'\')">Full deal analysis →</button></div></div>';
+}
+function _copyCallSheet(c){
+  const r = DATA.find(x=>x.case===c); if(!r) return;
+  const fm = n => (n||n===0)?'$'+Math.round(n).toLocaleString():'—';
+  const arv=+r.arv||0, val=+r.value||0, basis=arv||val, judg=+r.judg||0, surv=r._chainSurv||0;
+  const tt=_talkTo(r), clean=_cleanPhones(r);
+  const txt = [
+    r.addr, _ownerName((r.owners||'').split(';')[0].trim(), r)+'  ·  Case '+r.case,
+    tt ? 'TALK TO: '+tt.name+(tt.rel?' ('+tt.rel+')':'')+(tt.phone?' '+tt.phone:'') : '',
+    '',
+    'FINAL JUDGMENT:  '+fm(judg)+(r.plaintiff?'   ('+r.plaintiff+')':''),
+    'WORTH:           '+fm(basis)+(arv?'  ARV from '+r.arvn+' comps':'  (county roll)'),
+    'SURVIVES SALE:   '+(surv?fm(surv)+'  ['+(r.orconf==='ok'?'verified':'LOW CONF — verify')+']':'$0'),
+    'NET EQUITY:      '+fm(Math.max(0,basis-judg-surv)),
+    '',
+    'AUCTION:  '+r.auction+' 9am'+(r.days>=0?'  ('+r.days+' days, deal deadline in '+Math.max(0,r.days-3)+')':''),
+    'PROPERTY: '+(r.dor_desc||'')+(r.beds?', '+r.beds+'bd/'+r.baths+'ba':'')+(r.sqft?', '+(+r.sqft).toLocaleString()+'sf':'')+(r.bought?', owned since '+r.bought:''),
+    clean.length?'PHONE:    '+clean.map(p=>fmtPhone?fmtPhone(p):p).join(' / '):'PHONE:    none callable',
+    r.defs?'ALSO SUED: '+r.defs:'',
+    '', _deepLink(r)
+  ].filter(x=>x!=='').join('\n');
+  _copyShare(txt, 'Call sheet');
+}
+function _editTalkTo(c){
+  const n = notes[c] = notes[c] || {}; const cur = n.talkTo || {};
+  const name = prompt('Who is actually handling this property?\n(the owner\'s daughter, a POA, an attorney, the estate…)\n\nName:', cur.name||'');
+  if(name === null) return;
+  if(!name.trim()){ delete n.talkTo; save(); render(); refreshDealModal&&refreshDealModal(); _reopenCallSheet(c); return; }
+  const rel   = prompt('Their relationship to the owner? (daughter, son, POA, attorney, executor…)', cur.rel||'') || '';
+  const phone = prompt('Their phone (leave blank if unknown):', cur.phone||'') || '';
+  const note  = prompt('Anything the team must know? (e.g. "owner is 87 and not making decisions — she has the signed contract")', cur.note||'') || '';
+  n.talkTo = {name:name.trim(), rel:rel.trim(), phone:phone.trim(), note:note.trim()};
+  save(); render(); if(typeof refreshDealModal==='function') refreshDealModal();
+  _reopenCallSheet(c);
+}
+function _reopenCallSheet(c){ if(document.getElementById('csmodal') && getComputedStyle(document.getElementById('csmodal')).display!=='none') openCallSheet(c); }
+function openCallSheet(c){
+  const r = DATA.find(x=>x.case===c); if(!r) return;
+  const m = document.getElementById('csmodal'); if(!m) return;
+  document.getElementById('csbody').innerHTML = _callSheet(r);
+  m.style.display='block'; document.body.style.overflow='hidden';
+}
+function closeCallSheet(){ const m=document.getElementById('csmodal'); if(m){ m.style.display='none'; document.body.style.overflow=''; } }
 function _playbook(r){
   const n = notes[r.case]||{}, ts = n.touches||[], g = _geoTier(r), steps = [];
   const has = re => ts.some(t => re.test((t.ch||'')+' '+(t.out||'')));
@@ -4189,6 +4391,9 @@ function render(){
     // DO — actions. Outreach generators are suppressed once a lead opts out (only Log/Copy remain,
     // so the opt-out itself stays auditable).
     if(!optedOut){
+      // FIRST and loudest: the answer sheet. Hitting this the moment someone picks up is the
+      // difference between reading Jose the numbers and hunting for them while he waits.
+      gDo.push('<a href="#" class="dig digcall callsheetgen" data-c="'+esc(r.case)+'" title="CALL SHEET — every number Jose asks for on one screen: final judgment, who owns the loan, what survives, what it is worth, the clock, the property, the phones. Open this when the phone rings.">📞 CALL SHEET</a>');
       gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
       gDo.push('<a href="#" class="hangergen" data-c="'+esc(r.case)+'" title="Neighbor-safe door hanger to leave on the visit: folds so only the owner\'s first name shows, message + date inside. Includes a tenant-intel script. Print, fold, tape to the door (never the mailbox).">Door hanger</a>');
       gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
@@ -4515,6 +4720,14 @@ Object.entries({name:'sName', llc:'sLLC', phone:'sPhone', addr:'sAddr', title:'s
   el.oninput = e => { sender[k] = e.target.value; saveSender(); };
 });
 saveSender();
+// CALL SHEET (delegated for both table + cards) — the mid-call answer screen
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.callsheetgen');
+  if(!a) return;
+  e.preventDefault();
+  openCallSheet(a.dataset.c);
+});
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeCallSheet(); });
 // letter generation (delegated for both table + cards)
 document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('.lettergen');
