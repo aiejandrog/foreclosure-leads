@@ -22,8 +22,16 @@ FAKE = [
      "filed":2024,"bought":2008,"bprice":205000,"owners":"ROBERT A JOHNSON","oname":"Robert Johnson",
      "addr":"842 NW 9TH ST, MIAMI, FL 33136","mail":"842 NW 9TH ST, MIAMI, FL 33136",
      "value":655000,"judg":286000,"eq":56,"hs":True,"condo":True,"ctype":"Bank/Mortgage",
-     "plaintiff":"Wells Fargo Bank, National Association","defs":"Robert A Johnson; Unknown Tenant #1",
+     "plaintiff":"BANK OF NEW YORK MELLON (THE)","defs":"Robert A Johnson; Unknown Tenant #1; Solarcity Corporation",
      "pa":"#","zillow":"#","tax":"#","auc":"#","people":"#","docket":"#","recqs":"sample","ocsqs":"sample",
+     "orurl":"https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch",
+     "orconf":"ok","orftype":"MTG","orsurv":225000,"orjuniors":45000,"orjunior":225000,
+     "orliens":[
+       {"d":"01/15/2005","amt":180000,"party":"JP MORGAN CHASE BANK NA","bp":"MORTGAGE","st":"OPEN","_dt":"2005-01-15","role":"senior"},
+       {"d":"06/01/2018","amt":295000,"party":"BANK OF NEW YORK MELLON (THE)","bp":"MORTGAGE","st":"OPEN","_dt":"2018-06-01","role":"fore"},
+       {"d":"09/12/2019","amt":45000,"party":"SOLARCITY CORPORATION","bp":"MORTGAGE","st":"OPEN","_dt":"2019-09-12","role":"junior"},
+       {"d":"03/01/2005","amt":50000,"party":"OLD HELOC LLC","bp":"MORTGAGE","st":"SATISFIED","_dt":"2005-03-01"}
+     ],
      "etax":6550,"phones":["3055550101","7865550102","3055550103"],"phdnc":[False,False,True],
      "emails":["rjohnson@example.com","r.johnson@example.net"],
      # real Zillow CDN photos so the preview exercises thumbnails / multi-photo badge / gallery

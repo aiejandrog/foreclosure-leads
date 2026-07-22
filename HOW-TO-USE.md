@@ -98,6 +98,16 @@ back taxes, often with a tiny opening bid. For those, the "Est. Profit" already 
 pay at auction, a **quiet-title cost (~$3,000)** to clean up the title so you can resell, and costs.
 ⚠️ Tax deeds are "buyer beware" — always read the red warning and check for surviving liens before you bid.
 
+### Debt stack on the Call sheet / Deal analysis
+
+When a lead has Official Records chain data (or you open Records yourself), the sheet now splits liens into:
+
+1. **SENIOR** — open mortgages recorded **before** the plaintiff's loan. These **survive** the sale and eat equity. Enter that total as Surviving Senior (or `0` if the only open mortgage is the one foreclosing).
+2. **FORECLOSING** — the plaintiff's loan. Wiped if you buy at auction.
+3. **JUNIOR** — open liens recorded **after** the plaintiff's loan, with the **lender/entity name**. If that junior was **named as a defendant**, it dies with the foreclosure; if **not named**, it can cloud title (title defect you inherit).
+
+**How to find it on Miami-Dade Official Records:** open the Records link → scan for MORTGAGE / HELOC / DOT → find the plaintiff's mortgage → any older **open** mortgage above it is senior. That balance is what survives.
+
 ### 2. Send a letter to the owner
 1. **One time only:** at the top, fill in the **"Letter sender"** boxes with Jose's name, LLC, and phone.
    (These letters go out under Jose's name — never yours.)
