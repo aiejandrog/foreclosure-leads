@@ -222,6 +222,7 @@ def main():
 
     s = requests.Session()
     ok = 0
+    auth_fails = 0
     for i, r in enumerate(todo, 1):
         case = _case(r) or (r.get('Folio', '') or r.get('folio', '') or f'row{i}')
         try:
@@ -232,14 +233,29 @@ def main():
                 'phones': phones, 'emails': emails, 'traced': f"{date.today():%Y-%m-%d}", 'source': provider,
             }
             if phones: ok += 1
+            auth_fails = 0
             print(f"  [{i}/{len(todo)}] {case}: {len(phones)} phone(s), {len(emails)} email(s)")
         except Exception as e:
-            print(f"  [{i}/{len(todo)}] {case}: ERROR {str(e)[:140]}")
+            msg = str(e)[:160]
+            print(f"  [{i}/{len(todo)}] {case}: ERROR {msg}")
+            # 401/403 = dead key / no credits / account locked. Do NOT burn the whole Tier-A list
+            # (2026-07-22: BatchData 403 × 59 wiped the day's phone pass and the final publish
+            # shipped an encrypted site with 0 numbers). Abort so CI can fail the publish guard.
+            if re.search(r'\b(401|403)\b', msg) or 'Forbidden' in msg or 'Unauthorized' in msg:
+                auth_fails += 1
+                if auth_fails >= 2:
+                    json.dump(results, open(RESULTS, 'w', encoding='utf-8'), indent=1)
+                    print(f"\nABORT: {provider} auth/forbidden after {auth_fails} hits ({msg}).")
+                    print("Check the API key in GitHub Secrets / dashboard balance. Not rewriting the phone cache.")
+                    sys.exit(2)
         time.sleep(0.3)
         json.dump(results, open(RESULTS, 'w', encoding='utf-8'), indent=1)  # save as we go
 
     print(f"\nDONE: {ok}/{len(todo)} leads got a phone. Results -> skiptrace_results.json (local, gitignored).")
     print("Reminder: MANUAL dial only, scrub the federal DNC list, no autodial/SMS (FL FTSA + TCPA).")
+    if todo and ok == 0:
+        print("FAIL: traced 0 phones with a live key — refusing success so CI won't publish a phone-free board.")
+        sys.exit(2)
 
 if __name__ == '__main__':
     main()

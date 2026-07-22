@@ -6,12 +6,15 @@
 
 ## Why the site shows **0 phone numbers**
 
-Phones are **never** scraped from the auction page. They only appear when:
+Phones are **never** scraped from the auction page. On the live GitHub site they come from **Actions secrets**:
 
-1. You ran **`python skiptrace.py`** (needs `batchdata.key` or `tracerfy.key`), **and**
-2. You published an **encrypted** site (`site.pass` or `python access_codes.py`) — the public GitHub site **strips every phone** on purpose if there’s no password gate.
+1. `BATCHDATA_API_KEY` and/or `TRACERFY_API_KEY` in **repo Settings → Secrets**
+2. `SITE_CODES` (encrypts the site so phones are allowed to ship)
+3. Workflow step `[3/5] Skip-trace owner phones` → baked into the encrypted `docs/index.html`
 
-If you see a red banner “0 phone numbers on this board,” that’s the reason — not a broken UI. Until skiptrace + encrypt, use **People** (free) and type numbers into the phone box (saved on this device only).
+**2026-07-22 incident:** the secret *was* present, but BatchData returned **HTTP 403 Forbidden** on every lookup (`0/59` phones). The final publish still ran and overwrote the board with zero numbers. Fix the BatchData key/balance (or add Tracerfy), then re-run **DEALFLOW Daily Refresh**. The pipeline now **refuses** a final publish when the phone cache is empty.
+
+Until phones are back: use **People** (free) and type numbers into the phone box (saved on this device only).
 
 ---
 

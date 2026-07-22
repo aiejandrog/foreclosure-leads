@@ -197,7 +197,12 @@ jobs:
           fi
 
       # ---- [3/5] Skip-trace phones (only if a key is present) -----------------------------
+      # Do NOT continue-on-error: a BatchData 403 (2026-07-22) used to soft-fail, then [5/5]
+      # published an encrypted board with 0 phones and wiped yesterday's numbers. skiptrace.py
+      # now exits 2 on auth failure / zero hits — that must fail this step so the publish guard
+      # below can refuse to ship a phone-free build.
       - name: '[3/5] Skip-trace owner phones'
+        id: skiptrace
         if: env.TRACERFY_API_KEY != '' || env.BATCHDATA_API_KEY != ''
         continue-on-error: true
         run: python skiptrace.py
@@ -240,13 +245,42 @@ jobs:
         continue-on-error: true
         run: python llc_officers.py --limit 40
 
+      # ---- Phone floor: never publish a 0-phone board when a skiptrace key is configured ----
+      # [1b] already pushed a pre-phone encrypted build for freshness. [5/5] is what puts phones
+      # on the live site. If BatchData/Tracerfy failed (or the state cache missed), refuse the
+      # final push so we don't overwrite a good yesterday with a phone-free today.
+      - name: Guard — refuse final publish if phones are empty
+        id: phoneguard
+        if: env.TRACERFY_API_KEY != '' || env.BATCHDATA_API_KEY != ''
+        run: |
+          python - <<'PY'
+          import json, os, sys
+          st = {}
+          if os.path.exists('skiptrace_results.json'):
+              try: st = json.load(open('skiptrace_results.json', encoding='utf-8')) or {}
+              except Exception: st = {}
+          ph = sum(1 for v in (st.values() if isinstance(st, dict) else [])
+                   if isinstance(v, dict) and v.get('phones'))
+          print(f"phone cache: {ph} owner(s) with numbers")
+          if ph < 1:
+              print("::error::0 phones in skiptrace_results.json with API key present.")
+              print("::error::BatchData/Tracerfy failed or state cache missed — NOT publishing final board.")
+              print("::error::Fix: check BATCHDATA_API_KEY (today's failure was HTTP 403 Forbidden),")
+              print("::error::add TRACERFY_API_KEY as backup, and re-run the workflow.")
+              sys.exit(1)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'phones={ph}\n')
+          PY
+
       # ---- [4/5] Final rebuild with everything baked in -----------------------------------
       - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
+        if: steps.phoneguard.outcome == 'success' || (env.TRACERFY_API_KEY == '' && env.BATCHDATA_API_KEY == '')
         run: |
           python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))"
 
       # ---- [5/5] Publish final ------------------------------------------------------------
       - name: '[5/5] Publish final docs/index.html'
+        if: steps.phoneguard.outcome == 'success' || (env.TRACERFY_API_KEY == '' && env.BATCHDATA_API_KEY == '')
         run: |
           # docs/img/ also picks up new photos this run — stage them too. sale_history_cache.json
           # is committed as well: it is the SINGLE SOURCE for stay-compliance (no actions/cache
@@ -278,3 +312,20 @@ jobs:
           echo "### DEALFLOW refresh summary" >> $GITHUB_STEP_SUMMARY
           python -c "import json,os; load=lambda fn: (json.load(open(fn,encoding='utf-8')) if os.path.exists(fn) else []); md=load('leads_final.json'); bw=load('broward_leads.json'); pb=load('palmbeach_leads.json'); st=load('skiptrace_results.json'); st=st if isinstance(st,dict) else {}; ph=sum(1 for v in st.values() if isinstance(v,dict) and v.get('phones')); kb=os.path.getsize('docs/index.html')//1024 if os.path.exists('docs/index.html') else 0; print(f'- Miami-Dade **{len(md)}** - Broward **{len(bw)}** - Palm Beach **{len(pb)}**'); print(f'- Owners with phones **{ph}**'); print(f'- docs/index.html **{kb} KB**')" >> $GITHUB_STEP_SUMMARY
           echo "- Red run = email alert (Actions notifications). Green runs need no attention." >> $GITHUB_STEP_SUMMARY
+
+      # Save phone/lien state EVEN when Health fails. The default actions/cache post-step is
+      # skipped on job failure — which is how a BatchData outage + health FAIL wiped the phone
+      # restore key for the next morning (2026-07-22: "Cache not found … dealflow-state-").
+      - name: Persist phone/lien state (always)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            skiptrace_results.json
+            records_liens.json
+            broward_liens.json
+            palmbeach_liens.json
+            cases_qs.json
+            records_qs.json
+            comps.json
+          key: dealflow-state-${{ github.run_id }}

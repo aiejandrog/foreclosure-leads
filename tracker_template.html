@@ -4544,11 +4544,9 @@ function _phoneCoverageBan(){
   if(n && withPh === 0){
     el.style.display = 'block';
     el.innerHTML = '<b>⚠ 0 phone numbers on this board.</b> '
-      + 'This is not a display bug — the build has no skip-traced phones baked in. '
-      + 'On your PC: put <code>batchdata.key</code> or <code>tracerfy.key</code> in the folder → '
-      + '<code>python skiptrace.py</code> → put a password in <code>site.pass</code> (or run <code>python access_codes.py</code>) → '
-      + 'rebuild/publish so the <b>encrypted</b> site can carry phones. '
-      + 'Until then use <b>People</b> on each row (free) and type the number into the phone box — that saves on this device.';
+      + 'Not a UI bug. Phones come from GitHub Actions skiptrace (<code>BATCHDATA_API_KEY</code> / <code>TRACERFY_API_KEY</code>). '
+      + 'If CI logs show <b>HTTP 403 Forbidden</b> from BatchData, the key is rejected (expired, no credits, or revoked) — fix it in the BatchData dashboard, or add a Tracerfy key as backup, then re-run <b>DEALFLOW Daily Refresh</b>. '
+      + 'Until phones are back: use <b>People</b> on each row and type the number into the phone box (saves on this device).';
   } else if(n){
     el.style.display = 'none';
   }
