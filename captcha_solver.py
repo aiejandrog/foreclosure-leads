@@ -69,6 +69,42 @@ def solve_recaptcha_v3(site_key, action, page_url, min_score=0.3, timeout=140, p
     return None
 
 
+def solve_recaptcha_v2(site_key, page_url, timeout=180, poll=5):
+    """Return a solved reCAPTCHA v2 (checkbox) token ('g-recaptcha-response'), or None. Used by the
+    Broward Clerk court case search (browardclerk.org/Web2/CaseSearchECA), which renders a v2 widget
+    (grecaptcha.render with a callback) rather than the score-based v3 the official-records sites use."""
+    key = _key()
+    if not key:
+        print('  [2captcha] no key — cannot solve recaptcha v2')
+        return None
+    try:
+        r = requests.post(IN_URL, data={
+            'key': key, 'method': 'userrecaptcha',
+            'googlekey': site_key, 'pageurl': page_url, 'json': 1,
+        }, timeout=30).json()
+    except Exception as e:
+        print(f'  [2captcha] v2 in.php error: {str(e)[:80]}')
+        return None
+    if r.get('status') != 1:
+        print(f'  [2captcha] v2 submit rejected: {r.get("request")}')
+        return None
+    cid = r['request']
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        time.sleep(poll)
+        try:
+            g = requests.get(RES_URL, params={'key': key, 'action': 'get', 'id': cid, 'json': 1}, timeout=30).json()
+        except Exception:
+            continue
+        if g.get('status') == 1:
+            return g['request']
+        if g.get('request') != 'CAPCHA_NOT_READY':
+            print(f'  [2captcha] v2 solve failed: {g.get("request")}')
+            return None
+    print('  [2captcha] v2 timed out waiting for token')
+    return None
+
+
 def solve_turnstile(site_key, page_url, action=None, timeout=140, poll=5):
     """Return a solved Cloudflare Turnstile token, or None. Miami-Dade Official Records migrated from
     reCAPTCHA v3 to Turnstile (running in reCAPTCHA-compatibility mode), so the OLD reCAPTCHA site key
