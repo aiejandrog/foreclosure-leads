@@ -4497,8 +4497,12 @@ function render(){
       // WhatsApp message (operator-reviewed before send, same posture as a manual dial). kimi.
       const dncPh = [];
       (r.phones||[]).slice(0,3).forEach((ph,i) => {
-        if((r.phdnc||[])[i]) dncPh.push(ph);
-        else gCall.push('<a class="phone" href="tel:'+esc(ph)+'" title="Skip-traced owner phone — manual dial only, one number at a time, 8am-8pm">'+esc(fmtPhone(ph))+'</a><a class="wabtn" href="'+esc(_waLink(r,ph))+'" target="_blank" rel="noopener" title="WhatsApp the owner — opens a prefilled 1:1 message in WhatsApp that YOU review and send (manual outreach, same rules as a manual dial). People answer WhatsApp where they ignore SMS.">'+_waSvg()+'</a>');
+        if((r.phdnc||[])[i]) { dncPh.push(ph); return; }
+        // TEXT-FIRST: cold calls to distressed owners get ignored; texts get read. Lead every MOBILE
+        // with the WhatsApp button, tel second. Landlines are muted + carry no WhatsApp (rarely answered).
+        const isMob = (((r.phtype||[])[i])||'mobile')==='mobile';
+        const wa = isMob ? '<a class="wabtn" href="'+esc(_waLink(r,ph))+'" target="_blank" rel="noopener" title="TEXT the owner on WhatsApp — a prefilled 1:1 message you review and send. Distressed owners read texts and ignore unknown calls. START HERE.">'+_waSvg()+'</a>' : '';
+        gCall.push(wa+'<a class="phone" style="'+(isMob?'':'opacity:.5')+'" href="tel:'+esc(ph)+'" title="'+(isMob?'Mobile — text first (the WhatsApp button), then manual dial 8am-8pm':'Landline — distressed owners rarely answer these; text a mobile or door-knock instead')+'">'+esc(fmtPhone(ph))+(isMob?'':' <span style="font-size:10px;color:var(--muted,#8892a6)">☎ landline</span>')+'</a>');
       });
       if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a><a class="wabtn" href="'+esc(_waLink(r,n.phone))+'" target="_blank" rel="noopener" title="WhatsApp the owner — prefilled 1:1 message you review and send.">'+_waSvg()+'</a>');
       if(dncPh.length){

@@ -117,7 +117,9 @@ def main():
     ap.add_argument('--case', default='')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--refresh', action='store_true')
-    ap.add_argument('--headed-pb', action='store_true', default=True)
+    ap.add_argument('--pb', action='store_true',
+                    help="ALSO resolve Palm Beach (opens a HEADED browser + is anti-bot-flaky, ~1/45; OFF by default). "
+                         "Broward runs silently via 2Captcha and is the reliable path.")
     a = ap.parse_args()
     near = a.near or (not a.all and not a.case)
 
@@ -130,6 +132,8 @@ def main():
     pick = {'BROWARD': [], 'PALM BEACH': []}
     for cty, (fn, leads) in leadsets.items():
         if a.county and cty != a.county.upper():
+            continue
+        if cty == 'PALM BEACH' and not a.pb and not a.case:   # PB opens a headed browser + is flaky -> opt-in only
             continue
         for r in leads:
             c = str(r.get('case') or '')
@@ -157,7 +161,8 @@ def main():
 
     got = {}
     got.update(resolve_broward(pick['BROWARD']))
-    got.update(resolve_pb(pick['PALM BEACH'], headless=not a.headed_pb))
+    if pick['PALM BEACH']:
+        got.update(resolve_pb(pick['PALM BEACH']))
     cache.update(got)
     json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=1)
 

@@ -884,8 +884,16 @@ def make_tracker(leads):
                 d['eqfake'] = True
         hit = st.get(r.get('Case #',''))
         if hit and hit.get('phones'):
-            d['phones'] = [p.get('number') for p in hit['phones'] if p.get('number')][:4]
-            d['phdnc'] = [bool(p.get('dnc')) for p in hit['phones']][:4]
+            # MOBILE-FIRST + non-DNC-first ordering so the row leads with a number that actually gets
+            # answered/texted. Landlines to distressed owners are near-dead; the UI mutes them + drops
+            # WhatsApp on them. phtype rides along so the call sheet can label/style each line.
+            def _pk(p):
+                mob = (p.get('type') or '').lower().startswith('mob')
+                return (1 if p.get('dnc') else 0, 0 if mob else 1)
+            _phs = sorted([p for p in hit['phones'] if p.get('number')], key=_pk)[:4]
+            d['phones'] = [p.get('number') for p in _phs]
+            d['phdnc'] = [bool(p.get('dnc')) for p in _phs]
+            d['phtype'] = ['mobile' if (p.get('type') or '').lower().startswith('mob') else 'landline' for p in _phs]
             d['emails'] = (hit.get('emails') or [])[:3]
         # Radius comps (comps.py MD path via the county's own MD_ComparableSales layer) — same
         # merge the BW/PB loop below does; without this, MD rows never showed an ARV.
