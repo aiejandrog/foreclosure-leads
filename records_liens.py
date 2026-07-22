@@ -16,7 +16,7 @@ Usage:
   python records_liens.py --all --cached-only           # everyone we already have a token for (fast, no browser)
   python records_liens.py --all                         # everyone; mint tokens for the rest (slow, flaky)
 """
-import argparse, json, os, re, time
+import argparse, json, os, re, time, urllib.parse
 import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -26,7 +26,11 @@ OUT = os.path.join(HERE, 'records_liens.json')         # Case # -> lien result  
 OR_BASE = 'https://onlineservices.miamidadeclerk.gov/officialrecords/'
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|USA|UNITED STATES|COUNTY|CITY OF)\b', re.I)
-SITE_KEY = '6LfI8ikaAAAAAH0qlQMApskMGd1U6EqDyniH5t0x'
+SITE_KEY = '6LfI8ikaAAAAAH0qlQMApskMGd1U6EqDyniH5t0x'   # legacy reCAPTCHA (DEAD — site migrated)
+# Miami-Dade Official Records migrated from reCAPTCHA v3 to Cloudflare TURNSTILE (running in
+# reCAPTCHA-compat mode, so the token still rides the x-recaptcha-token header). This is the live
+# Turnstile sitekey; 2Captcha solves it in ~6s and the search accepts it. Verified 2026-07-21.
+TS_SITE_KEY = '0x4AAAAAAD1vWBs-1bsZ5Z5M'
 
 S = requests.Session()
 S.headers.update({'User-Agent': UA, 'Accept': 'application/json', 'Referer': OR_BASE})
@@ -45,7 +49,14 @@ def split_owner(clean):
     if COMPANY_RE.search(clean or ''):
         return (clean.strip(), '')
     toks = [t for t in (clean or '').split() if len(t.strip('.')) > 1]
-    return (' '.join(toks[1:]), toks[0]) if len(toks) >= 2 else None   # (LAST..., FIRST)
+    if len(toks) < 2:
+        return None
+    # MD owner_clean is FIRST [MIDDLE] LAST. The clerk indexes SURNAME-FIRST, and its name search is
+    # order-sensitive: for "MARIE FLORETTE FLEURIMOND" the old ' '.join(toks[1:]) made the surname
+    # "FLORETTE FLEURIMOND" and returned ZERO — searching the true surname (last token) first
+    # returned 120 docs. So: surname = LAST token, given = everything before it. (2-token names are
+    # unchanged: "EDUARDO ECHEVERRI" -> surname ECHEVERRI, given EDUARDO.)
+    return (toks[-1], ' '.join(toks[:-1]))   # (SURNAME, GIVEN)
 
 
 # ---- fetch the owner's recorded documents -----------------------------------------------------
@@ -57,6 +68,38 @@ def records_by_qs(qs):
         return (r.json() or {}).get('recordingModels') or []
     except Exception:
         return None
+
+
+def fetch_via_turnstile(owner_lf, tries=3):
+    """THE UNLOCK — pull an owner's recorded docs by solving Cloudflare Turnstile (2Captcha), no
+    browser. Solves the token, POSTs the same standardsearch the app uses with it in the
+    x-recaptcha-token header, then the (ungated) getStandardRecords GET. Returns models or None.
+    owner_lf = (LAST..., FIRST) or (COMPANY, '')."""
+    try:
+        from captcha_solver import solve_turnstile
+    except Exception:
+        return None
+    party = (owner_lf[0] + ' ' + (owner_lf[1] or '')).strip()
+    url = (OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(party)
+           + '&dateRangeFrom=&dateRangeTo=&documentType=&searchT=&firstQuery=y&searchtype='
+           + urllib.parse.quote('Name/Document'))
+    for _ in range(max(1, tries)):
+        tok = solve_turnstile(TS_SITE_KEY, OR_BASE)
+        if not tok:
+            continue
+        try:
+            r = S.post(url, headers={'x-recaptcha-token': tok,
+                                     'content-type': 'application/json; charset=utf-8'},
+                       data='', timeout=30)
+            j = r.json()
+        except Exception:
+            continue
+        qs = j.get('qs') if isinstance(j, dict) else None
+        if qs:
+            return records_by_qs(qs)
+        # isValidSearch:false with a fresh token = a bad solve; loop and re-solve
+        time.sleep(1)
+    return None
 
 def mint_and_fetch(owner_lf, budget=70, persist=False):
     """Mint a fresh reCAPTCHA token in a browser, then fetch. Defaults to a bounded 3-try attempt.
@@ -334,13 +377,15 @@ def main():
         judg = num(r.get('judgment'))
         models = None
         if oc in qs_cache:
-            models = records_by_qs(qs_cache[oc])
+            models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
         if models is None and not a.cached_only:
             sp = split_owner(oc)
-            if sp: models = mint_and_fetch(sp, persist=a.persist)
-            # cache the freshly-minted result so we never pay the captcha for this owner twice
-            if models is not None and sp:
-                pass
+            if sp:
+                # PRIMARY path (2026-07-21): solve Turnstile via 2Captcha, no browser. This is what
+                # took the wall from ~15% coverage to near-total. Browser mint is the last resort.
+                models = fetch_via_turnstile(sp)
+                if models is None:
+                    models = mint_and_fetch(sp, persist=a.persist)
         if models is None:
             print(f"  --  {case:22} {oc:26} (no records / blocked)")
             continue

@@ -748,6 +748,21 @@ def make_tracker(leads):
     if os.path.exists(_rlf):
         try: rl = json.load(open(_rlf, encoding='utf-8'))
         except Exception: rl = {}
+    # BatchData property source (produced by batchdata_liens.py) — the SECOND lien feed, covering the
+    # counties/leads the captcha-walled Official Records scrape can't (Palm Beach especially) and
+    # carrying a current-estimated balance + AVM value. Used as a FALLBACK: only where the recorded
+    # chain is missing or empty, so the richer Official Records data always wins when we have it.
+    _bdf = os.path.join(HERE, 'batchdata_liens.json')
+    if os.path.exists(_bdf):
+        try: _bdl = json.load(open(_bdf, encoding='utf-8'))
+        except Exception: _bdl = {}
+        _bd_used = 0
+        for _c, _v in (_bdl or {}).items():
+            _cur = rl.get(_c)
+            if (not _cur or not _cur.get('liens')) and _v and _v.get('liens'):
+                rl[_c] = _v; _bd_used += 1
+        if _bd_used:
+            print(f"filled {_bd_used} lien chains from BatchData (fallback where Official Records had none)")
     # per-parcel deep tax-account links (produced by gen_tax_links.py, gitignored) — replaces the
     # generic county-taxes landing page with the parcel's own account URL, keyed by case #.
     taxlinks = {}
@@ -901,6 +916,13 @@ def make_tracker(leads):
                 except Exception: xrl = {}
             for _d in xl:
                 _h = xrl.get(_d.get('case', ''))
+                # BatchData fallback for the counties whose Official Records we can't scrape (Palm
+                # Beach has no *_liens.json at all): use the property-API chain where the county
+                # scrape gave us nothing. rl already has BatchData merged in above, so reuse it.
+                if (not _h or not _h.get('liens')) and rl.get(_d.get('case', '')):
+                    _bh = rl[_d.get('case', '')]
+                    if _bh.get('liens'):
+                        _h = _bh
                 # Tax link priority (2026-07-20): a real per-parcel /parcels/.../bills deep-link the
                 # county appraiser's own Tax Collector button opens (now set in county_leads.py from the
                 # folio) is the BEST link — it lands on the actual bill. The old gen_tax_links.py Algolia

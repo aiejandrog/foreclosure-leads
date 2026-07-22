@@ -52,10 +52,17 @@ python gen_tax_links.py --limit 60 >> "%LOG%" 2>&1
 echo [2d/5] Radius comps for Broward + Palm Beach leads (cadastral recent sales, new only)...
 python comps.py --limit 80 >> "%LOG%" 2>&1
 
-echo [2b/5] Pulling recorded mortgage chains -> surviving 2nd mortgages (cached tokens; fast, no bot-wall)...
-python records_liens.py --all --cached-only >> "%LOG%" 2>&1
+echo [2b/5] Pulling recorded mortgage chains -> surviving 2nd mortgages (2Captcha solves the Turnstile wall)...
+rem  Miami-Dade Official Records sits behind Cloudflare Turnstile. captcha_solver.py -> 2Captcha mints a
+rem  valid token (~$0.003/solve) so records_liens.py reads the chain with plain requests, no browser.
+rem  --all SKIPS already-traced cases (line 361), so each run only spends on genuinely NEW leads; --limit
+rem  60 caps a single run at ~$0.18 so a bad day can never run the 2Captcha balance away.
+python records_liens.py --all --limit 60 >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
 if exist broward_leads.json python broward_liens.py --all >> "%LOG%" 2>&1
+rem  BatchData property API = the second lien feed + the ONLY automated path for Palm Beach (no captcha).
+rem  Fails fast + skips itself when the balance is exhausted, so it's safe to leave wired.
+if exist batchdata.key python batchdata_liens.py --all --limit 80 >> "%LOG%" 2>&1
 
 echo [3/5] Skip-tracing owner phones...
 if exist tracerfy.key goto :phones

@@ -90,6 +90,7 @@ jobs:
             records_liens.json
             broward_liens.json
             palmbeach_liens.json
+            batchdata_liens.json
             tax_links.json
             comps.json
             property_types_cache.json

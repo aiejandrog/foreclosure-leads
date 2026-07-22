@@ -48,15 +48,39 @@ else:
     soon = sum(1 for r in leads if 0 <= (r.get('days_to_auction') or -1) <= 45)
     add('PASS', 'auctions within 45d', f'{soon} leads')
 
-# ---- 2. enrichment coverage (the value-adds) --------------------------------------------------
-liens = load('records_liens.json') or {}
-if liens:
-    ok = [v for v in liens.values() if v.get('conf') == 'ok']
-    hits = [v for v in ok if v.get('open_count', 0) >= 2]
-    cov = round(len(liens) / len(leads) * 100) if leads else 0
-    add('PASS', 'recorded-lien coverage', f'{len(liens)} traced ({cov}%), {len(ok)} confident, {len(hits)} surviving-2nd')
+# ---- 2. lien-chain coverage (the ONE gap the deal desk still hunts by hand) --------------------
+# A lead is CHECKED when a source actually read its records (conf ok/low/bd) — NOT when it merely has
+# a row (a conf='none' entry means the search failed/was blocked, so it's an UNCHECKED lead the caller
+# would still have to pull by hand). Coverage is measured per county across all three feeds:
+#   Miami-Dade -> records_liens.py (2Captcha/Turnstile)   Broward -> broward_liens.py (AcclaimWeb)
+#   Palm Beach -> batchdata_liens.py ONLY (no captcha path; blocked when the BatchData balance runs out)
+_md   = load('records_liens.json') or {}
+_bro  = load('broward_liens.json') or {}
+_bd   = load('batchdata_liens.json') or {}
+def _checked(d): return {c for c, v in d.items() if v.get('conf') in ('ok', 'low', 'bd')}
+_chk = _checked(_md) | _checked(_bro) | _checked(_bd)
+_cty_tot, _cty_cov = {}, {}
+for _fn, _ck in (('leads_final.json', 'Case #'), ('broward_leads.json', 'case'), ('palmbeach_leads.json', 'case')):
+    for _r in (load(_fn) or []):
+        _case = str(_r.get(_ck) or '')
+        if not _case:
+            continue
+        _cy = (_r.get('county') or 'MIAMI-DADE').upper().split()[0]   # MIAMI / BROWARD / PALM
+        _cty_tot[_cy] = _cty_tot.get(_cy, 0) + 1
+        if _case in _chk:
+            _cty_cov[_cy] = _cty_cov.get(_cy, 0) + 1
+if _cty_tot:
+    for _cy in sorted(_cty_tot):
+        _t, _c = _cty_tot[_cy], _cty_cov.get(_cy, 0)
+        _pct = round(100 * _c / _t) if _t else 0
+        # Palm Beach has no free path — a low % there is a funding/scope call, not a broken scraper.
+        _lvl = 'PASS' if _pct >= 60 else ('WARN' if _pct >= 25 or _cy == 'PALM' else 'FAIL')
+        _tail = ' — BatchData-only (top up balance to lift)' if _cy == 'PALM' and _pct < 60 else ''
+        add(_lvl, f'lien coverage · {_cy}', f'{_c}/{_t} checked ({_pct}%){_tail}')
+    _surv2 = sum(1 for v in list(_md.values()) + list(_bro.values()) if v.get('open_count', 0) >= 2)
+    add('PASS', 'surviving-2nd flags', f'{len(_chk)} leads checked total, {_surv2} with a possible surviving 2nd')
 else:
-    add('WARN', 'recorded-lien coverage', 'none yet — run records_liens.py')
+    add('WARN', 'recorded-lien coverage', 'none yet — run records_liens.py / broward_liens.py')
 phones = load('skiptrace_results.json') or {}
 add('PASS' if phones else 'WARN', 'skip-trace coverage', f'{len(phones)} leads with phones')
 

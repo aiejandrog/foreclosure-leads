@@ -1626,7 +1626,7 @@ function recompute(){
     // surviving-mortgage estimate pre-fills the senior payoff — value − surviving senior −
     // judgment − costs, computed BEFORE anyone asks. Only records-verified chains feed it
     // (conf 'ok' or 'low'); the deal-modal input always wins over the chain's number.
-    const chainConf = (r.orconf==='ok' || r.orconf==='low');
+    const chainConf = (r.orconf==='ok' || r.orconf==='low' || r.orconf==='bd');   // 'bd' = BatchData property source
     // Split the surviving stack cleanly so NO mortgage counts twice (the double-count bug: `orsurv`
     // lumps in the juniors-recorded-after, which also feed orjuniors -> the same loan filled BOTH
     // the senior AND junior field). Senior = what SURVIVES the sale (recorded before the foreclosing
@@ -1752,6 +1752,7 @@ function flagChips(r){ let o='';
 function verifyChip(r){
   if(r.orconf==='ok') return '<span class="chip vok" title="A recorded mortgage/lien chain was pulled and isolated with confidence for this property. The surviving-mortgage and TAKEN/2ND-FORECLOSURE flags above (if any) are records-verified, not a guess.">&#10003;&nbsp;Records verified</span>';
   if(r.orconf==='low') return '<span class="chip vlow" title="A lien chain was pulled, but the owner\'s name was too common to isolate with confidence &mdash; these records may include a stranger\'s mortgages. Verify manually in Official Records before relying on the equity or flags shown.">~&nbsp;Low-confidence check</span>';
+  if(r.orconf==='bd') return '<span class="chip vlow" title="Lien stack from the BatchData property database (public-record aggregate) &mdash; used where the county Official Records could not be pulled. Open-lien positions and a current ESTIMATED balance; confirm the exact payoff before wiring.">≈&nbsp;BatchData estimate</span>';
   return '<span class="chip vnone" title="No recorded mortgage/lien chain has been pulled for this property yet. The equity % shown is a RAW estimate (value minus the foreclosure judgment only) and has NOT been checked for a hidden surviving mortgage, an already-recorded sale, or a second foreclosure. Verify in Official Records before contacting or making an offer.">&#9711;&nbsp;Not yet verified</span>';
 }
 // surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk").
@@ -1870,7 +1871,7 @@ function dealAnalysisHTML(r){
   var _recb = (r.st==='TD') ? ''
     : _pulled.length
       ? '<div class="recbanner on">🔗 <b>Auto-pulled from county records:</b> '+_pulled.join(' · ')+'. Counted in the deal math above — adjust only if title turns up more.</div>'
-      : ((r.orconf==='ok'||r.orconf==='low')
+      : ((r.orconf==='ok'||r.orconf==='low'||r.orconf==='bd')
           // ONLY a trace that actually ran earns the green check. orconf can also be 'none'
           // (trace attempted, couldn't isolate this owner/parcel) — that used to slip through the
           // old truthy test and claim "Records checked" on exactly the leads nobody checked,
@@ -2272,7 +2273,7 @@ function _debtStack(r){
       '<i>(Real example: on 525 W 79 Pl the 2005 loan was assigned to Chase in 2015 — the $142,500 "survivor" was the foreclosure itself.)</i></div>';
   }
   h += '<div class="dscav">⚠ These are the <b>original recorded amounts</b> (doc-stamp/consideration), not today\'s payoff — a 2005 loan may be half paid down or bigger with arrears. Confirm every figure with a payoff letter before you wire anything. Chain confidence: <b>'+
-    (r.orconf==='ok'?'records-verified':r.orconf==='low'?'LOW — a common name may pull a stranger\'s loans':'not checked')+'</b>.</div>';
+    (r.orconf==='ok'?'records-verified':r.orconf==='low'?'LOW — a common name may pull a stranger\'s loans':r.orconf==='bd'?'BatchData estimate — balances are modeled, confirm with a payoff letter':'not checked')+'</b>.</div>';
   return h + '</div>';
 }
 function _talkTo(r){ const n = notes[r.case]||{}; return n.talkTo && n.talkTo.name ? n.talkTo : null; }
@@ -2291,10 +2292,11 @@ function _callSheet(r){
   const nnS = notes[r.case]||{};
   const survTyped = _dTyped(nnS.slien);
   const surv = survTyped ? (+nnS.slien||0) : (r._chainSurv||0);
-  const jr = (r.orconf==='ok'||r.orconf==='low') ? (+r.orjuniors||0) : 0;
-  const survChecked = survTyped || r.orconf==='ok' || r.orconf==='low';
+  const jr = (r.orconf==='ok'||r.orconf==='low'||r.orconf==='bd') ? (+r.orjuniors||0) : 0;
+  const survChecked = survTyped || r.orconf==='ok' || r.orconf==='low' || r.orconf==='bd';
   const trust = survTyped ? (surv>0?'YOU ENTERED THIS':'YOU VERIFIED: none survives')
               : r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify'
+              : r.orconf==='bd' ? 'BATCHDATA ESTIMATE — confirm payoff'
               : '⚠ NOT CHECKED — pull it';
   const netEq = Math.max(0, basis - judg - surv - jr);
   const clean = _cleanPhones(r), dnc = _dncPhones(r);
