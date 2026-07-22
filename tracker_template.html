@@ -517,6 +517,26 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csph{font-family:var(--f-display,inherit);font-size:22px;font-weight:800;letter-spacing:.01em;background:var(--navy,#0B1730);
   color:#fff;border-radius:10px;padding:9px 16px;text-decoration:none;display:inline-block}
 .csph:hover{background:var(--ink,#101C33)}
+/* the debt stack — one card per open lien, position + who holds it + is it wiped */
+.dsbox{margin:8px 0 14px}
+.dsrow{border:1px solid var(--line,#E2E6EE);border-left-width:4px;border-radius:9px;padding:9px 12px;margin-bottom:7px;background:var(--surface,#fff)}
+.dsrow.ds-senior{border-left-color:#B42318;background:rgba(180,35,24,.05)}
+.dsrow.ds-fore{border-left-color:var(--navy,#0B1730);background:rgba(11,23,48,.04)}
+.dsrow.ds-junior{border-left-color:var(--green-ink,#166534);background:rgba(22,101,52,.04)}
+.dstop{display:flex;justify-content:space-between;gap:12px;align-items:baseline}
+.dsparty{font-weight:800;font-size:14.5px;color:var(--ink,#101C33);line-height:1.3}
+.dsamt{font-family:var(--f-display,inherit);font-size:17px;font-weight:800;color:var(--ink,#101C33);white-space:nowrap;font-variant-numeric:tabular-nums}
+.dsmeta{font-size:11.5px;color:var(--muted,#6b7280);margin-top:3px}
+.dsnote{font-size:12px;color:var(--muted,#6b7280);margin-top:4px;line-height:1.5}
+.dsb{font-family:var(--f-label,inherit);font-size:8.5px;font-weight:800;letter-spacing:.09em;border-radius:3px;
+  padding:2px 6px;margin-left:6px;background:var(--surface-2,#eef1f6);color:var(--muted,#6b7280);white-space:nowrap}
+.dsb-sen{background:#B42318;color:#fff}
+.dsb-fore{background:var(--navy,#0B1730);color:#fff}
+.dsb-jr{background:rgba(22,101,52,.15);color:var(--green-ink,#166534)}
+.dsb-risk{background:#B45309;color:#fff}
+.dsclosed{font-size:11.5px;color:var(--muted-2,#8a93a6);padding:6px 2px;line-height:1.5}
+.dscav{font-size:11.5px;color:var(--muted,#6b7280);background:rgba(180,83,9,.07);border:1px solid rgba(180,83,9,.28);
+  border-radius:8px;padding:8px 11px;margin-top:8px;line-height:1.55}
 .cschain{margin-top:8px;border:1px solid var(--line,#E2E6EE);border-radius:8px;overflow:hidden}
 .cscl{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:6px 10px;background:var(--surface,#fff);
   border-bottom:1px solid var(--line,#E2E6EE);color:var(--muted,#6b7280)}
@@ -2157,6 +2177,104 @@ function _nearby(r, within){
 // operator look unprepared and stalls the deal.
 // This is one screen, biggest-type-first, in the exact order those questions come. It is not
 // analysis; it is an ANSWER SHEET you put on the screen when the phone rings.
+// ===================== THE DEBT STACK — position by position =====================
+// "Surviving senior: $142,500" as one lump is not enough to work a deal. You need to see WHO holds
+// each open lien, WHERE it sits (before or after the loan being foreclosed), and — the piece that
+// decides whether it dies at the sale — WHETHER THAT LIENHOLDER WAS NAMED IN THE LAWSUIT.
+// Florida rule: a foreclosure only wipes junior liens whose holders were joined as defendants.
+// A junior that was NOT named survives the sale as a title defect the buyer inherits.
+function _lienPos(l, foreDate){
+  // date of this lien vs the loan being foreclosed: earlier = SENIOR (survives no matter what)
+  const d = _lienISO(l);
+  if(!d || !foreDate) return '';
+  return d < foreDate ? 'senior' : (d > foreDate ? 'junior' : 'fore');
+}
+function _lienISO(l){
+  const s = String((l && (l._dt || l.d)) || '').trim();
+  let m = s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[0];
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  return m ? m[3]+'-'+String(+m[1]).padStart(2,'0')+'-'+String(+m[2]).padStart(2,'0') : '';
+}
+// Was this lienholder joined in the foreclosure? Compare against the plaintiff AND the defendant
+// list. Matching is deliberately loose on the first distinctive token (lender names are written a
+// dozen ways across documents) and returns null when we simply cannot tell.
+function _namedInSuit(party, r){
+  const norm = s => String(s||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const p = norm(party); if(p.length < 5) return null;
+  const hay = norm(r.plaintiff) + '|' + norm(r.defs) + '|' + norm((r.named||[]).map(n=>n.name||'').join(' '));
+  if(!hay.replace(/\|/g,'')) return null;                    // no party list on this lead — unknown
+  for(let len = Math.min(12, p.length); len >= 6; len--){
+    if(hay.includes(p.slice(0, len))) return true;
+  }
+  return false;
+}
+function _debtStack(r){
+  const liens = (r.orliens||[]);
+  if(!liens.length) return '';
+  const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
+  const open = liens.filter(l => String(l.st||'').toUpperCase()==='OPEN');
+  const closed = liens.filter(l => String(l.st||'').toUpperCase()!=='OPEN');
+  if(!open.length && !closed.length) return '';
+  // which open loan is the one being foreclosed? the analyzer's best guess is the face closest to
+  // the judgment — surfaced as a GUESS, never as fact (an assignment can move the note silently).
+  const judg = +r.judg||0;
+  let fore = null;
+  if(open.length && judg > 0){
+    fore = open.slice().sort((a,b) => Math.abs((+a.amt||0)-judg) - Math.abs((+b.amt||0)-judg))[0];
+  }
+  const foreDate = fore ? _lienISO(fore) : '';
+  const rowFor = (l) => {
+    const pos = fore ? (l === fore ? 'fore' : _lienPos(l, foreDate)) : '';
+    const named = _namedInSuit(l.party, r);
+    let badge = '', note = '';
+    if(pos === 'fore'){
+      badge = '<span class="dsb dsb-fore">BEING FORECLOSED</span>';
+      note = 'this is the loan the lawsuit is on (best guess: face closest to the judgment)';
+    } else if(pos === 'senior'){
+      badge = '<span class="dsb dsb-sen">SENIOR — SURVIVES</span>';
+      note = 'recorded BEFORE the foreclosing loan → the buyer takes title subject to it. This eats the equity.';
+    } else if(pos === 'junior'){
+      if(named === true){ badge = '<span class="dsb dsb-jr">JUNIOR — WIPED</span>';
+        note = 'recorded after, and this holder WAS named in the suit → extinguished at the sale (a payoff only if you buy direct from the owner).'; }
+      else if(named === false){ badge = '<span class="dsb dsb-risk">JUNIOR — NOT NAMED ⚠ TITLE RISK</span>';
+        note = 'recorded after, but this holder does NOT appear in the plaintiff/defendant list → it may SURVIVE the sale as a title defect. Verify against the complaint; failed/merged lenders are often held by the plaintiff under another name.'; }
+      else { badge = '<span class="dsb dsb-jr">JUNIOR</span>'; note = 'recorded after the foreclosing loan; whether it is wiped depends on being named in the suit (no party list on this lead).'; }
+    } else {
+      badge = '<span class="dsb">OPEN</span>';
+      note = 'position unknown — no judgment amount to anchor which loan is being foreclosed.';
+    }
+    return '<div class="dsrow'+(pos?' ds-'+pos:'')+'">'+
+      '<div class="dstop"><span class="dsparty">'+esc(l.party||'(lender not indexed)')+'</span>'+
+      '<span class="dsamt">'+fm(l.amt)+'</span></div>'+
+      '<div class="dsmeta">'+esc(l.d||'')+(l.bp?' · '+esc(l.bp):'')+' '+badge+'</div>'+
+      '<div class="dsnote">'+note+'</div></div>';
+  };
+  let h = '<div class="cssec">THE DEBT STACK — who holds what, and what survives</div><div class="dsbox">';
+  h += open.length ? open.slice().sort((a,b)=> (_lienISO(a)<_lienISO(b)?-1:1)).map(rowFor).join('')
+                   : '<div class="dsnote" style="padding:8px 2px">No OPEN mortgages found in the recorded chain — everything on record is satisfied.</div>';
+  if(closed.length){
+    h += '<div class="dsclosed">Satisfied / released ('+closed.length+'): '+
+      closed.map(l=>esc(l.party||'?')+' '+fm(l.amt)).join(' · ')+'</div>';
+  }
+  // ASSIGNMENT WARNING — the position guess above anchors on "face amount closest to the judgment".
+  // That silently breaks when the note was SOLD: on 525 W 79 Pl the 2005 New Century loan was
+  // assigned to JPMorgan Chase in 2015, so Chase forecloses THAT loan — but the guess picked the
+  // 2007 WaMu loan and mislabelled a $142,500 wiped loan as a surviving senior. The tell is cheap:
+  // if the plaintiff's name matches NONE of the open lienholders, the note moved and the ordering
+  // cannot be trusted until you pull the assignments.
+  const plMatches = open.some(l => _namedInSuit(l.party, {plaintiff: r.plaintiff, defs:'', named:[]}) === true);
+  if(open.length && r.plaintiff && !plMatches){
+    h += '<div class="dscav" style="background:rgba(180,35,24,.08);border-color:rgba(180,35,24,.4)">'+
+      '🔴 <b>The foreclosing lender (' + esc(r.plaintiff) + ') does not match ANY lender above.</b> '+
+      'That means the note was <b>assigned</b> — sold to them — so which loan is actually being foreclosed '+
+      'is NOT what the amounts suggest, and a "surviving senior" here may really be the loan being wiped. '+
+      'Pull the <b>ASSIGNMENT OF MORTGAGE</b> records for this owner and follow the note before you trust the order. '+
+      '<i>(Real example: on 525 W 79 Pl the 2005 loan was assigned to Chase in 2015 — the $142,500 "survivor" was the foreclosure itself.)</i></div>';
+  }
+  h += '<div class="dscav">⚠ These are the <b>original recorded amounts</b> (doc-stamp/consideration), not today\'s payoff — a 2005 loan may be half paid down or bigger with arrears. Confirm every figure with a payoff letter before you wire anything. Chain confidence: <b>'+
+    (r.orconf==='ok'?'records-verified':r.orconf==='low'?'LOW — a common name may pull a stranger\'s loans':'not checked')+'</b>.</div>';
+  return h + '</div>';
+}
 function _talkTo(r){ const n = notes[r.case]||{}; return n.talkTo && n.talkTo.name ? n.talkTo : null; }
 function _cleanPhones(r){ return (r.phones||[]).filter((p,i) => !((r.phdnc||[])[i])); }
 function _dncPhones(r){ return (r.phones||[]).filter((p,i) => !!((r.phdnc||[])[i])); }
@@ -2240,14 +2358,9 @@ function _callSheet(r){
   if(+r.orhoa) stack += row('HOA / association', fm(+r.orhoa));
   if((+r.orcode||0)+(+r.orirs||0)) stack += row('Code / muni / IRS', fm((+r.orcode||0)+(+r.orirs||0)));
   stack += row('Back taxes', nn.btax?fm(+nn.btax):'<span class="csmut">not checked — one click on Taxes</span>');
-  if((r.orliens||[]).length){
-    stack += '<div class="cschain">'+(r.orliens||[]).map(l =>
-      '<div class="cscl'+(l.st==='OPEN'?' open':'')+'"><span>'+esc(l.d||'')+' · '+esc(l.party||'')+'</span>'+
-      '<span>'+fm(l.amt)+' · <b>'+esc(l.st||'')+'</b></span></div>').join('')+'</div>';
-  }
+  stack += '</div>' + _debtStack(r);
   // everyone else named on the lawsuit — where solar leases and code liens hide
-  if(r.defs) stack += row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>');
-  stack += '</div>';
+  if(r.defs) stack += '<div class="csbody">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
 
   // THE PROPERTY
   const prop = '<div class="cssec">THE PROPERTY</div><div class="csbody">'+
