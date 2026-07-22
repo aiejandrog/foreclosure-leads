@@ -36,6 +36,8 @@ jobs:
       GOOGLE_STREET_VIEW_KEY: ${{ secrets.GOOGLE_STREET_VIEW_KEY }}
       TRACERFY_API_KEY: ${{ secrets.TRACERFY_API_KEY }}
       BATCHDATA_API_KEY: ${{ secrets.BATCHDATA_API_KEY }}
+      CAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY }}
+      TWOCAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY }}
       # Skip the "Desktop tracker + daily CSV" write entirely on the runner (DEALFLOW_NO_DESKTOP
       # guard in foreclosure_leads.py — the OneDrive path only exists on Alejandro's machine).
       DEALFLOW_NO_DESKTOP: '1'
@@ -91,6 +93,7 @@ jobs:
             broward_liens.json
             palmbeach_liens.json
             batchdata_liens.json
+            county_plaintiffs.json
             tax_links.json
             comps.json
             property_types_cache.json
@@ -112,6 +115,16 @@ jobs:
         run: |
           printf '%s\n' "${{ secrets.SITE_CODES }}" > site.codes
           test -s site.codes || { echo "::error::SITE_CODES secret is missing — refusing to publish an UNENCRYPTED build. Add it in repo Settings -> Secrets."; exit 1; }
+
+      # Scrapers read a gitignored *.key file first (or the env var). Materialize the key files from the
+      # repo secrets so the CLOUD run has the SAME capability as the local machine: 2Captcha (Turnstile +
+      # Broward reCAPTCHA), BatchData (phones + Palm Beach liens), Tracerfy (cheaper phones).
+      - name: API keys for the scrapers (secrets -> gitignored *.key)
+        run: |
+          [ -n "${{ secrets.BATCHDATA_API_KEY }}" ] && printf '%s' "${{ secrets.BATCHDATA_API_KEY }}" > batchdata.key || true
+          [ -n "${{ secrets.TRACERFY_API_KEY }}"  ] && printf '%s' "${{ secrets.TRACERFY_API_KEY }}"  > tracerfy.key  || true
+          [ -n "${{ secrets.CAPTCHA_KEY }}"       ] && printf '%s' "${{ secrets.CAPTCHA_KEY }}"       > captcha.key   || true
+          echo "keys -> batchdata=$([ -s batchdata.key ] && echo Y || echo N) tracerfy=$([ -s tracerfy.key ] && echo Y || echo N) captcha=$([ -s captcha.key ] && echo Y || echo N)"
 
       - name: Configure git identity
         run: |
@@ -189,19 +202,23 @@ jobs:
         run: python comps.py --limit 120
 
       # ---- [2b/5] Recorded mortgage chains -------------------------------------------------
-      - name: '[2b/5] Recorded mortgage chains (MD cached-only + BW live)'
+      - name: '[2b/5] Recorded mortgage chains + senior-survives classification'
         continue-on-error: true
         run: |
-          python records_liens.py --all --cached-only
-          if [ -f broward_leads.json ]; then
-            python broward_liens.py --all
-          fi
+          # With the 2Captcha key present, MD mints NEW Turnstile chains (not just cached); caps bound spend.
+          if [ -s captcha.key ]; then python records_liens.py --all --limit 60; else python records_liens.py --all --cached-only; fi
+          if [ -f broward_leads.json ]; then python broward_liens.py --all; fi
+          if [ -s batchdata.key ]; then python batchdata_liens.py --all --limit 80; fi
+          # Broward plaintiff -> bank-1st(clean) vs junior/HOA(senior survives). PB is headed-browser (--pb) = local only.
+          if [ -s captcha.key ] && [ -f broward_leads.json ]; then python county_plaintiffs.py --county broward --near --limit 60; fi
 
       # ---- [3/5] Skip-trace phones (only if a key is present) -----------------------------
-      - name: '[3/5] Skip-trace owner phones'
+      - name: '[3/5] Humans behind LLCs (Sunbiz) + skip-trace phones (all tiers, capped)'
         if: env.TRACERFY_API_KEY != '' || env.BATCHDATA_API_KEY != ''
         continue-on-error: true
-        run: python skiptrace.py
+        run: |
+          python llc_officers.py --limit 60
+          python skiptrace.py --all --limit 120
 
       # ---- [3b/5] Property photos (Zillow + Street View + aerials) ------------------------
       - name: '[3b/5] Property photos'
