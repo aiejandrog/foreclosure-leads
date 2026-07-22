@@ -299,7 +299,8 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
                     is_open = False; break
         row = {'d': m['_dt'], 'amt': round(amt),
                'party': (m.get('CrossPartyName') or '')[:40], 'bp': m.get('BookPage', ''),
-               'st': 'OPEN' if is_open else 'SATISFIED', 'mers': mers}
+               'st': 'OPEN' if is_open else 'SATISFIED', 'mers': mers, '_dt': m['_dt'],
+               '_lend': _inst(m.get('CrossPartyName'))}
         liens.append(row)
         if is_open: opens.append(row)
     conf = 'ok'
@@ -318,12 +319,25 @@ def analyze(docs, owner, judgment, ftype='', lead_case=''):
         if ftype == 'HOA':
             surv = sum(o['amt'] for o in opens)                     # total open loan stack that survives
             surv_first = max(o['amt'] for o in opens)               # the first mortgage (headline number)
+            for o in opens:
+                o['role'] = 'senior'
         else:
             anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
             fore = min(opens, key=anchor)                           # the foreclosing 1st (nearest judgment, else largest)
             first = fore['amt']
             junior = surv = sum(o['amt'] for o in opens if o is not fore)   # the surviving 2nd
-            juniors_post = sum(o['amt'] for o in opens if o is not fore and o['d'] >= fore['d'])  # juniors recorded after it
+            # date-order juniors MUST use _dt — comparing d (MM/DD/YYYY) as strings is wrong
+            juniors_post = sum(o['amt'] for o in opens if o is not fore and o.get('_dt', '') >= fore.get('_dt', ''))
+            fdt = fore.get('_dt', '')
+            for o in opens:
+                if o is fore:
+                    o['role'] = 'fore'
+                elif o.get('_dt', '') < fdt:
+                    o['role'] = 'senior'
+                elif o.get('_dt', '') > fdt:
+                    o['role'] = 'junior'
+                else:
+                    o['role'] = 'other'
 
     # --- already deeded to another investor? (the McNulty / "you're too late" signal) -----------
     # "Recent" is anchored to THIS foreclosure's lis-pendens (a deed only counts if it post-dates the filing),

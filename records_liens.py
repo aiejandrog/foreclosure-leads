@@ -239,12 +239,26 @@ def analyze(models, folio, judgment, ftype=''):
         if ftype == 'HOA':                             # HOA sale: the WHOLE first mortgage survives
             surv = sum(o['amt'] for o in opens)
             surv_first = max(o['amt'] for o in opens)
+            for o in opens:
+                o['role'] = 'senior'                   # every open mtg sits ahead of the association claim
         else:
             anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
             fore = min(opens, key=anchor)              # the foreclosing 1st (closest to judgment, else largest)
             first_amt = fore['amt']
             junior = surv = sum(o['amt'] for o in opens if o is not fore)
-            juniors_post = sum(o['amt'] for o in opens if o is not fore and o['d'] >= fore['d'])
+            # date-order juniors MUST use _dt (YYYY-MM-DD) — comparing d (MM/DD/YYYY) as strings is wrong
+            juniors_post = sum(o['amt'] for o in opens if o is not fore and o.get('_dt', '') >= fore.get('_dt', ''))
+            # stamp role on every open so the UI can split senior / fore / junior with lender names
+            fdt = fore.get('_dt', '')
+            for o in opens:
+                if o is fore:
+                    o['role'] = 'fore'
+                elif o.get('_dt', '') < fdt:
+                    o['role'] = 'senior'
+                elif o.get('_dt', '') > fdt:
+                    o['role'] = 'junior'
+                else:
+                    o['role'] = 'other'
     # --- open non-mortgage liens (kimi: feeds the deal-modal HOA / code / IRS prefills) ------------
     # Lien/Judgment/Notice records, bucketed by holder. code+HOA require the same parcel isolation the
     # mortgages use (folio/subdivision); IRS + money judgments attach to the person and ride anyway.

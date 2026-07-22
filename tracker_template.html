@@ -522,6 +522,31 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
   border-bottom:1px solid var(--line,#E2E6EE);color:var(--muted,#6b7280)}
 .cscl:last-child{border-bottom:none}
 .cscl.open{background:rgba(180,35,24,.06);color:var(--ink,#101C33);font-weight:600}
+/* Mortgage chain board — senior / foreclosing / junior with lender names + named-in-suit */
+.chainboard{margin:8px 0 12px;border:1px solid var(--line,#E2E6EE);border-radius:10px;overflow:hidden;background:var(--surface,#fff)}
+.chsec{border-bottom:1px solid var(--line,#E2E6EE)}
+.chsec:last-child{border-bottom:none}
+.chlab{font-family:var(--f-label,inherit);font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  padding:8px 12px;background:var(--surface-2,#F4F6FA);color:var(--muted,#6b7280)}
+.chsec.senior .chlab{background:rgba(180,35,24,.1);color:#8E1A12}
+.chsec.fore .chlab{background:rgba(11,23,48,.08);color:var(--navy,#0B1730)}
+.chsec.junior .chlab{background:rgba(180,83,9,.1);color:#7A4510}
+.chhead{font-family:var(--f-label,inherit);font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  padding:10px 12px;background:var(--navy,#0B1730);color:#fff}
+.chlien{display:flex;gap:12px;align-items:flex-start;padding:10px 12px;border-top:1px solid var(--line,#E2E6EE)}
+.chamt{flex:0 0 88px;font-size:15px;font-weight:800;color:var(--ink,#101C33);font-variant-numeric:tabular-nums}
+.chbody{flex:1;min-width:0}
+.chparty{font-size:13.5px;font-weight:700;color:var(--ink,#101C33);display:block;margin-bottom:2px}
+.chmeta{font-size:12px;color:var(--muted,#6b7280);display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.chnote{font-size:11.5px;color:var(--muted-2,#8a93a6);margin-top:3px;line-height:1.4}
+.chtotal{padding:8px 12px;font-size:12.5px;color:var(--ink,#101C33);background:var(--surface-2,#F4F6FA);border-top:1px solid var(--line,#E2E6EE)}
+.chempty{padding:10px 12px;font-size:12.5px;color:var(--muted,#6b7280);line-height:1.45}
+.chb{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:4px;background:var(--surface-2,#F4F6FA);color:var(--ink,#101C33)}
+.chb.ok{background:rgba(22,101,52,.12);color:#166534}
+.chb.bad{background:rgba(180,35,24,.1);color:#B42318}
+.chb.wipe{background:rgba(11,23,48,.1);color:var(--navy,#0B1730)}
+.chb.unk{background:rgba(180,83,9,.12);color:#7A4510}
+.chtip{font-size:11.5px;line-height:1.45;padding:9px 12px;color:var(--muted,#6b7280);background:var(--surface-2,#F4F6FA);border-top:1px solid var(--line,#E2E6EE)}
 .csdefs{font-size:12.5px}
 .csfoot{display:flex;gap:9px;flex-wrap:wrap;border-top:1px solid var(--line,#E2E6EE);padding-top:13px;margin-top:6px}
 .csbtn{font-size:13px;font-weight:700;padding:9px 16px;border-radius:var(--pill,999px);border:1px solid var(--line,#E2E6EE);
@@ -1911,7 +1936,8 @@ function dealAnalysisHTML(r){
         (s.f?'<div class="pbf"><b>If that fails →</b> '+s.f+'</div>':'')+'</li>';
     }).join(''); })()+'</ol>';
   return '<div class="dm-sec">The math</div>'+mathHtml+_pbHtml+
-    '<div class="dm-sec">Debts &amp; liens — auto-pulled from records, adjust what you find</div>'+_recb+adj+
+    '<div class="dm-sec">Debts &amp; liens — auto-pulled from records, adjust what you find</div>'+_recb+
+    _chainBoardHtml(r)+adj+
     llcHtml+
     (flagsHtml?'<div class="dm-sec">Watch out for</div>'+flagsHtml:'')+
     '<div class="dm-sec">Recommended move</div><div class="dealstrat">'+esc(dealStrategy(r))+'</div>';
@@ -2149,6 +2175,185 @@ function _nearby(r, within){
     return R*2*Math.asin(Math.sqrt(h)) <= (within||6);
   });
 }
+// ============================ LIEN CHAIN (senior / foreclosing / junior) ============================
+// Official Records rule: oldest OPEN mortgage recorded BEFORE the plaintiff's loan survives the
+// sale and eats equity. Juniors after that loan: wiped if named as defendants, title risk if not.
+function _fmtMoney(n){
+  const v = Math.round(Number(n)||0);
+  return v ? ('$'+v.toLocaleString()) : '—';
+}
+function _lienAmt(L){
+  if(!L) return 0;
+  const a = L.amt;
+  if(a==null || a==='') return 0;
+  if(typeof a==='number') return a;
+  return Number(String(a).replace(/[^0-9.]/g,''))||0;
+}
+function _lienSortKey(L){
+  if(L && L._dt) return String(L._dt);
+  const d = String((L&&L.d)||'');
+  const m = d.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if(m){
+    let y = Number(m[3]); if(y<100) y+=2000;
+    return y+'-'+String(m[1]).padStart(2,'0')+'-'+String(m[2]).padStart(2,'0');
+  }
+  return d;
+}
+function _normParty(s){
+  return String(s||'').toUpperCase().replace(/[^A-Z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+}
+function _partyHit(a,b){
+  const A=_normParty(a), B=_normParty(b);
+  if(!A||!B) return false;
+  if(A===B) return true;
+  if(A.length>=6 && B.includes(A)) return true;
+  if(B.length>=6 && A.includes(B)) return true;
+  const aw=A.split(' ').filter(w=>w.length>3);
+  const bw=new Set(B.split(' ').filter(w=>w.length>3));
+  if(aw.length<2) return false;
+  let hit=0; for(const w of aw){ if(bw.has(w)) hit++; }
+  return hit>=2 && hit>=Math.ceil(aw.length*0.5);
+}
+function _suitNames(r){
+  const out=[];
+  const push=(s)=>{ String(s||'').split(/[;|,]/g).forEach(p=>{ const t=p.trim(); if(t.length>2) out.push(t); }); };
+  push(r.plaintiff); push(r.defs); push(r.named);
+  (r.parties||[]).forEach(p=>push(typeof p==='string'?p:(p&&(p.name||p.party||''))));
+  return out;
+}
+function _namedInSuit(party, r){
+  const names=_suitNames(r);
+  if(!party || !names.length) return null;
+  return names.some(n=>_partyHit(party,n));
+}
+function _chainGroups(r){
+  const raw = Array.isArray(r.orliens) ? r.orliens.slice() : [];
+  const open = raw.filter(L => String(L.st||'').toUpperCase()!=='SATISFIED');
+  const ftype = String(r.orftype||'').toUpperCase();
+  const sorted = open.slice().sort((a,b)=>_lienSortKey(a).localeCompare(_lienSortKey(b)));
+  const senior=[], fore=[], junior=[], other=[];
+  if(!sorted.length) return { senior, fore, junior, other, ftype, open:sorted };
+
+  const stamped = sorted.some(L => L.role||L._role);
+  if(stamped){
+    sorted.forEach(L=>{
+      const role = L.role||L._role;
+      if(role==='fore') fore.push(L);
+      else if(role==='senior') senior.push(L);
+      else if(role==='junior') junior.push(L);
+      else other.push(L);
+    });
+    return { senior, fore, junior, other, ftype, open:sorted };
+  }
+
+  if(ftype==='HOA' || ftype==='CONDO'){
+    sorted.forEach(L=>senior.push(L));
+    return { senior, fore, junior, other, ftype, open:sorted };
+  }
+
+  const mtgs = sorted.filter(L => /MORTGAGE|MTG|HELOC|DEED OF TRUST|DOT|AGREEMENT/i.test(String(L.bp||'')));
+  const pl = r.plaintiff||'';
+  let foreL = null;
+  if(pl){
+    const hits = mtgs.filter(L => _partyHit(L.party||L._lend||'', pl));
+    if(hits.length) foreL = hits[hits.length-1];
+  }
+  if(!foreL && mtgs.length===1) foreL = mtgs[0];
+
+  const fKey = foreL ? _lienSortKey(foreL) : null;
+  sorted.forEach(L=>{
+    if(foreL && L===foreL){ fore.push(L); return; }
+    if(foreL && fKey && _lienSortKey(L) < fKey){ senior.push(L); return; }
+    if(foreL && fKey && _lienSortKey(L) > fKey){ junior.push(L); return; }
+    other.push(L);
+  });
+  return { senior, fore, junior, other, ftype, open:sorted, foreL };
+}
+function _chainRowHtml(L, r, kind){
+  const party = esc(L.party||L._lend||'Unknown lender');
+  const amt = _fmtMoney(_lienAmt(L));
+  const rec = esc(L.d||'—');
+  const bp = esc(L.bp||'');
+  const named = _namedInSuit(L.party||L._lend||'', r);
+  let badge='';
+  if(kind==='senior') badge = `<span class="chb ok">SURVIVES</span>`;
+  else if(kind==='fore') badge = `<span class="chb wipe">WIPED AT SALE</span>`;
+  else if(kind==='junior'){
+    if(named===true) badge = `<span class="chb wipe">NAMED → WIPED</span>`;
+    else if(named===false) badge = `<span class="chb bad">NOT NAMED → TITLE RISK</span>`;
+    else badge = `<span class="chb unk">CHECK IF NAMED</span>`;
+  }
+  const namedLine = kind==='junior'
+    ? (named===true
+        ? `<div class="chnote">Named as defendant — junior dies with the foreclosure.</div>`
+        : named===false
+          ? `<div class="chnote">Not found in plaintiff/defendant list — may survive or cloud title. Pull the complaint.</div>`
+          : `<div class="chnote">Could not match to suit parties — verify on the complaint caption.</div>`)
+    : (kind==='senior'
+        ? `<div class="chnote">Recorded before the foreclosing loan — balance survives and eats equity.</div>`
+        : kind==='fore'
+          ? `<div class="chnote">This is the loan being foreclosed — goes away if you buy at auction.</div>`
+          : '');
+  return `<div class="chlien">
+    <div class="chamt">${amt}</div>
+    <div class="chbody">
+      <div class="chparty">${party}</div>
+      <div class="chmeta">${rec}${bp?(' · '+bp):''}${badge}</div>
+      ${namedLine}
+    </div>
+  </div>`;
+}
+function _chainBoardHtml(r){
+  const g = _chainGroups(r);
+  if(!g.open.length){
+    return `<div class="chainboard"><div class="chhead">DEBT STACK — Official Records</div>
+      <div class="chempty">No open liens on this folio yet. Open Official Records and pull the mortgage chain yourself.</div></div>`;
+  }
+  const sum = (arr)=>arr.reduce((s,L)=>s+_lienAmt(L),0);
+  const senTot = sum(g.senior), junTot = sum(g.junior), foreTot = sum(g.fore);
+  let body='';
+  body += `<div class="chsec senior"><div class="chlab">SENIOR — recorded before the foreclosing loan · SURVIVES THE SALE</div>`;
+  if(g.senior.length){
+    body += g.senior.map(L=>_chainRowHtml(L,r,'senior')).join('');
+    body += `<div class="chtotal">Senior total that eats equity: <b>${_fmtMoney(senTot)}</b></div>`;
+  } else {
+    body += `<div class="chempty">None found — if the only open mortgage is the one foreclosing, surviving senior = $0.</div>`;
+  }
+  body += `</div>`;
+
+  body += `<div class="chsec fore"><div class="chlab">FORECLOSING LOAN — wiped if you buy at auction</div>`;
+  if(g.fore.length){
+    body += g.fore.map(L=>_chainRowHtml(L,r,'fore')).join('');
+    body += `<div class="chtotal">Foreclosing balance (reference): <b>${_fmtMoney(foreTot)}</b></div>`;
+  } else if(g.ftype==='HOA'||g.ftype==='CONDO'){
+    body += `<div class="chempty">HOA/Condo foreclosure — association claim is junior to open mortgages above.</div>`;
+  } else {
+    body += `<div class="chempty">Could not match plaintiff to an open mortgage. Compare lender names on Official Records to <b>${esc(r.plaintiff||'plaintiff')}</b>.</div>`;
+  }
+  body += `</div>`;
+
+  body += `<div class="chsec junior"><div class="chlab">JUNIOR — recorded after the foreclosing loan</div>`;
+  if(g.junior.length){
+    body += g.junior.map(L=>_chainRowHtml(L,r,'junior')).join('');
+    body += `<div class="chtotal">Junior face total: <b>${_fmtMoney(junTot)}</b> · only NOT-NAMED juniors can cloud title</div>`;
+  } else {
+    body += `<div class="chempty">No junior liens after the foreclosing loan.</div>`;
+  }
+  body += `</div>`;
+
+  if(g.other.length){
+    body += `<div class="chsec"><div class="chlab">UNCLASSIFIED OPEN LIENS — sort these on Official Records</div>`;
+    body += g.other.map(L=>_chainRowHtml(L,r,'other')).join('');
+    body += `</div>`;
+  }
+
+  const tip = r.orurl
+    ? `<div class="chtip"><b>How to verify on Official Records:</b> open the link → scan for MORTGAGE / HELOC / DOT → find <b>${esc(r.plaintiff||'the plaintiff')}</b>'s mortgage → any <b>older open</b> mortgage/HELOC above it is senior and survives. Enter that balance as Surviving Senior. Named juniors wipe; unnamed juniors = title defect you inherit.</div>
+       <div style="margin-top:8px"><a class="cssurv-act" href="${esc(r.orurl)}" target="_blank" rel="noopener">📜 Open Official Records →</a></div>`
+    : `<div class="chtip"><b>How to verify:</b> Official Records → search folio → find plaintiff's mortgage → oldest open mortgage recorded <b>before</b> that loan survives. If the only open mortgage is the one foreclosing, surviving senior = $0.</div>`;
+
+  return `<div class="chainboard"><div class="chhead">DEBT STACK — who survives, who dies</div>${body}${tip}</div>`;
+}
 // ============================ THE CALL SHEET ============================
 // Built 2026-07-21 from a live failure: Carlos found Eduardo (87, on his porch, house in bad
 // shape) and put Jose on the line. Jose started firing the questions he ALWAYS fires — what's the
@@ -2213,7 +2418,7 @@ function _callSheet(r){
         '<a class="csbtn2" href="'+esc(recLink)+'" target="_blank" rel="noopener">📜 Open the records →</a>'+
         '<input class="cssurvin slien" data-c="'+esc(r.case)+'" type="number" inputmode="numeric" placeholder="$ enter what you find" title="Type the surviving senior mortgage balance you find in the records. Enter 0 if none survive. It locks straight into the deal math and this sheet.">'+
       '</div>'+
-      '<div class="css" style="margin-top:5px">In the records: find the OLDEST open mortgage recorded BEFORE '+esc(r.plaintiff||'the foreclosing lender')+'\'s loan. That balance is what survives. If the only open mortgage IS the one foreclosing, enter <b>0</b>.</div>'+
+      '<div class="css" style="margin-top:5px"><b>How to find it:</b> scan for MORTGAGE / HELOC / DOT → locate <b>'+esc(r.plaintiff||'the plaintiff')+'</b>\'s mortgage → any <b>older OPEN</b> mortgage above it is senior and survives (that $ goes in the box). If the only open mortgage IS the one foreclosing, enter <b>0</b>. Juniors after that loan: wiped if named as defendants, title risk if not.</div>'+
     '</div>';
   // THE FOUR NUMBERS HE ALWAYS ASKS FOR
   const four = '<div class="csgrid">'+
@@ -2236,18 +2441,14 @@ function _callSheet(r){
     row('Foreclosing lender', '<b>'+esc(r.plaintiff||'—')+'</b>') +
     row('Final judgment', '<b>'+fm(judg)+'</b>');
   if(surv) stack += row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
-  if(jr) stack += row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
+  if(jr) stack += row('Junior / 2nd (named → wipe; not named → title risk)', fm(jr)+' — payoff only if you buy direct');
   if(+r.orhoa) stack += row('HOA / association', fm(+r.orhoa));
   if((+r.orcode||0)+(+r.orirs||0)) stack += row('Code / muni / IRS', fm((+r.orcode||0)+(+r.orirs||0)));
   stack += row('Back taxes', nn.btax?fm(+nn.btax):'<span class="csmut">not checked — one click on Taxes</span>');
-  if((r.orliens||[]).length){
-    stack += '<div class="cschain">'+(r.orliens||[]).map(l =>
-      '<div class="cscl'+(l.st==='OPEN'?' open':'')+'"><span>'+esc(l.d||'')+' · '+esc(l.party||'')+'</span>'+
-      '<span>'+fm(l.amt)+' · <b>'+esc(l.st||'')+'</b></span></div>').join('')+'</div>';
-  }
-  // everyone else named on the lawsuit — where solar leases and code liens hide
-  if(r.defs) stack += row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>');
   stack += '</div>';
+  // Separated senior / foreclosing / junior board with lender names + named-in-suit flags
+  stack += _chainBoardHtml(r);
+  if(r.defs) stack += '<div class="csbody" style="margin-top:6px">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
 
   // THE PROPERTY
   const prop = '<div class="cssec">THE PROPERTY</div><div class="csbody">'+
@@ -5049,8 +5250,6 @@ function lkReport(a){
   const orName = pt.length>=2 ? esc(pt.slice(1).join(' ')+' '+pt[0]) : esc(owner);
   let rec='<div class="lksec">Recorded mortgages &amp; liens</div>';
   if(lead && lead.orliens && lead.orliens.length){
-    const rows=lead.orliens.map(l=>'<tr><td>'+esc(l.d)+'</td><td>'+esc(l.party)+'</td><td style="text-align:right">'+lkM(l.amt)+'</td>'
-      +'<td class="'+(l.st==='OPEN'?'lkbad':'lkok')+'">'+esc(l.st)+'</td></tr>').join('');
     const hoa=(lead.orftype==='HOA'), low=(lead.orconf!=='ok');
     const sv = hoa ? (+lead.orsurvfirst||0) : (+lead.orjunior||0);
     let call='';
@@ -5061,7 +5260,7 @@ function lkReport(a){
     call += sv>0
       ? '<div class="lkcallout '+(low?'':'hot')+'"><b>Surviving '+(hoa?'FIRST':'2nd')+' mortgage &asymp; '+lkM(sv)+'</b> &mdash; '+(hoa?'this whole loan SURVIVES the sale (only the ~'+lkM(lead.judg||0)+' HOA lien is being foreclosed), so it is NOT wiped.':'an OPEN loan beyond the one being foreclosed, so it does NOT get wiped at the sale.')+' '+(low?'Original recorded size on a common-name record &mdash; verify the payoff.':'Pulled from Official Records.')+' This is the number that makes the raw equity a lie.</div>'
       : '<div class="lknote" style="margin-bottom:8px">'+(hoa?'No open mortgage found on record &mdash; but confirm, since an HOA sale leaves any mortgage in place.':'Only the foreclosing loan is open on record &mdash; no surviving 2nd found.')+'</div>';
-    rec+='<div class="lkcard">'+call+'<table class="lktbl lkliens"><tr><th>Recorded</th><th>Lender</th><th>Amount</th><th>Status</th></tr>'+rows+'</table>'
+    rec+='<div class="lkcard">'+call+_chainBoardHtml(lead)
       +'<div class="lknote">Amounts are original loan size (from doc tax) &mdash; a real payoff shrinks with principal paid, grows with arrears. '+(condo?'Condo: still get the association estoppel for the special assessment. ':'')+'Confirm with a payoff letter.</div></div>';
   } else {
     rec+='<div class="lkcallout"><b>Manual step &mdash; the county blocks websites from pulling this.</b> Open '
