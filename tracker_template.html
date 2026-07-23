@@ -4666,7 +4666,10 @@ function render(){
     }
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
-      'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:'')].join('\n');
+      'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:''),
+      r.auc?'Verify sale: '+r.auc:'',
+      r.addr?'Map: https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')):''
+    ].filter(Boolean).join('\n');
     gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
     const linksHtml = [gCall, gDig, gProp, gDo].filter(g => g.length).map(g => '<div class="lgrp">'+g.join('')+'</div>').join('');
     const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
