@@ -428,6 +428,16 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csscout a:hover{text-decoration:underline}
 .csverify{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;color:var(--blue,#1F6FEB);text-decoration:none;white-space:nowrap}
 .csverify:hover{text-decoration:underline}
+/* PLAY banner on the call sheet — the money-angle for THIS deal (Jose: no deal is dead), first thing under the address */
+.csplay{display:flex;align-items:flex-start;gap:9px;margin:11px 0 3px;padding:9px 11px;background:var(--surface-2,#f6f8fa);border-radius:9px;border-left:3px solid var(--muted,#6b7280)}
+.csplay .playbadge{margin-left:0;font-size:9px;padding:3px 8px;flex:none;margin-top:1px}
+.csplayw{font-size:12.5px;line-height:1.45;color:var(--fg,#2a3140)}
+/* People/CyberBG lookup line inside the call sheet — find a number without leaving the sheet */
+.cspeople{margin-top:7px;font-size:12px;color:var(--muted,#8892a6)}
+.cspeople a{color:var(--blue,#1F6FEB);text-decoration:none;font-weight:600}
+.cspeople a:hover{text-decoration:underline}
+.csreclink{color:var(--blue,#1F6FEB);text-decoration:none;font-weight:700;white-space:nowrap}
+.csreclink:hover{text-decoration:underline}
 .vb3{background:var(--green-soft);color:var(--green-ink);border-color:#BEE5CC;box-shadow:0 1px 7px rgba(14,138,78,.2)}
 .vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#EDDCAF;box-shadow:0 1px 7px rgba(185,127,14,.18)}
 .vb1{background:#ECEFF4;color:#5E6B84;border-color:var(--line)}
@@ -2326,6 +2336,25 @@ function _csScout(r){ if(!r || !r.addr) return '';
     +'<a href="https://www.google.com/maps?q='+q+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener" title="Street View — the house from the road: condition, occupancy, cars in the drive, before you burn a trip">Street View</a> · '
     +'<a href="https://www.google.com/maps/dir/?api=1&destination='+q+'&travelmode=driving" target="_blank" rel="noopener" title="Directions from where you are now — opens the Maps app">Directions</a></div>';
 }
+// The money-angle banner: shows THIS deal's play (BUY / WHOLESALE / SHORT SALE / RESEARCH / AUCTION /
+// LP-EARLY) + the one-line why, right under the address. It's the first thing Jose reads before he calls —
+// so "no deal is dead" (his rule) is on the sheet, not buried on the row he clicked away from.
+function _csPlay(r){ const p=r&&r._play; if(!p) return '';
+  const c = PLAY_COLOR[p.t]||'#6b7280';
+  return '<div class="csplay" style="border-left-color:'+c+'"><span class="playbadge" style="background:'+c+'">'+esc(p.t)+'</span>'
+    +'<span class="csplayw"><b>PLAY:</b> '+esc(p.w)+'</span></div>';
+}
+// Find-a-number links, right on the sheet (was: "use the links on the row" — dead-end friction). Reuses the
+// per-lead TruePeopleSearch / CyberBackgroundChecks URLs already baked on every lead, incl. LP fresh filings
+// where People-search IS the play, and no-phone leads where it's the only path to a contact.
+function _csPeople(r){
+  var L=[];
+  if(r.people)      L.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener" title="TruePeopleSearch by NAME — phones, relatives, address history">People</a>');
+  if(r.peopleaddr)  L.push('<a href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the property ADDRESS — returns only who actually lives there">by address</a>');
+  if(r.cyberbg)     L.push('<a href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by NAME — every phone with carrier + last-reported date, emails, relatives">CyberBG</a>');
+  if(r.cyberbgaddr) L.push('<a href="'+esc(r.cyberbgaddr)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by ADDRESS — who lives there now, phones the name search misses">CyberBG addr</a>');
+  return L.length ? '<div class="cspeople">🔎 Find a number: '+L.join(' · ')+'</div>' : '';
+}
 function _callSheet(r){
   const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
   const nn = notes[r.case]||{};
@@ -2368,11 +2397,17 @@ function _callSheet(r){
   // it becomes an ACTION — one tap opens the county records with the owner loaded so you can pull
   // the chain in your own browser (which the captcha doesn't block), plus a field to enter what you
   // find so it locks into the math. Never a dead "$0 NOT CHECKED" you can't do anything with.
-  const recLink = r.recqs ? 'https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+encodeURIComponent(r.recqs)
-                          : (r.records || 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch');
+  // County-aware: the recqs deep-link is a Miami-Dade standardsearch token (MD only). For Broward/PB fall
+  // back to that lead's own county records URL (r.records), never the MD clerk. CTY_LINKS is a top-level
+  // const, defined before any call sheet can open.
+  const _csCty = r.county || 'MIAMI-DADE';
+  const recLink = (r.recqs && _csCty === 'MIAMI-DADE')
+      ? 'https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+encodeURIComponent(r.recqs)
+      : (r.records || ((typeof CTY_LINKS!=='undefined' && CTY_LINKS[_csCty] && CTY_LINKS[_csCty].records) || 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch'));
   const survBox = survChecked
     ? '<div class="csbox '+(surv?'warn':'good')+'"><div class="csl">WHAT SURVIVES THE SALE</div>'+
-      '<div class="csv">'+(surv?fm(surv):'$0')+'</div><div class="css">'+trust+'</div></div>'
+      '<div class="csv">'+(surv?fm(surv):'$0')+'</div><div class="css">'+trust+
+      ' · <a class="csreclink" href="'+esc(recLink)+'" target="_blank" rel="noopener" title="Open the county records to re-pull / double-check the chain — the owner is loaded so you can eyeball the mortgages yourself">verify in records →</a></div></div>'
     : '<div class="csbox warn cssurv-act"><div class="csl">WHAT SURVIVES THE SALE</div>'+
       '<div class="csv" style="font-size:22px">NOT CHECKED</div>'+
       '<div class="css">A senior 2nd/HELOC recorded before the foreclosing loan survives the sale and eats the equity. <b>You must pull it.</b></div>'+
@@ -2388,7 +2423,7 @@ function _callSheet(r){
     ? '<div class="csgrid"><div class="csbox good" style="grid-column:1/-1;text-align:left"><div class="csl">🌱 FRESH LIS PENDENS — the front of the funnel</div>'
       + '<div class="css" style="font-size:13.5px;line-height:1.55;margin-top:6px">The foreclosure was just <b>filed</b> — no judgment, sale date, or verified value yet (those come as the case moves). Your job now is to be the <b>FIRST</b> to reach the owner, months before the auction crowd.'
       + '<div style="margin-top:8px"><b>Owner:</b> '+esc(owner)+' &nbsp;·&nbsp; <b>Foreclosing lender:</b> '+esc(r.plaintiff||'—')+(r.legal?'<br><b>Legal:</b> '+esc(r.legal):'')+'</div>'
-      + '<div style="margin-top:8px">Next: People-search the owner for a phone, then pull the folio/appraiser for value and the docket for what is owed.</div></div></div>'
+      + '<div style="margin-top:8px">Next: People-search the owner for a phone, then pull the folio/appraiser for value and the docket for what is owed.</div>'+_csPeople(r)+'</div></div>'
     : '<div class="csgrid">'+
     big('FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn')+
     big('WORTH TODAY', fm(basis), arv?('ARV from '+r.arvn+' comps'+(r.arvconf==='ok'?' (verified)':' (low conf)')):'county roll — no comps', 'good')+
@@ -2442,14 +2477,15 @@ function _callSheet(r){
   else {
     cont += clean.length
       ? '<div class="csphones">'+clean.map(p=>'<a class="csph" href="tel:'+esc(String(p).replace(/\D/g,''))+'">'+esc(fmtPhone?fmtPhone(p):p)+'</a>').join('')+'</div>'
-      : '<div class="csmut">No callable number — use the People / CyberBG links on the row.</div>';
+      : '<div class="csmut">No callable number yet — pull one below.</div>';
     if(dnc.length) cont += row('⛔ DNC — mail/door only', dnc.map(p=>esc(fmtPhone?fmtPhone(p):p)).join(' · '));
     if((r.emails||[]).length) cont += row('Email', (r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · '));
+    cont += _csPeople(r);   // find/verify a number without leaving the sheet — the fix for the no-phone dead-end
   }
   cont += row('Mailing address', esc(r.mail||r.addr||'—')+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <span class="csmut">(same as the property — they live there)</span>':' <span class="csmut">(different — absentee owner)</span>'));
   cont += '</div>';
 
-  return '<div class="callsheet">'+who+four+clock+(r.st==='LP'?'':stack)+prop+cont+   /* LP: no judgment/chain yet — the fresh-filing block already names the lender, so skip the $0 debt section */
+  return '<div class="callsheet">'+who+_csPlay(r)+four+clock+(r.st==='LP'?'':stack)+prop+cont+   /* LP: no judgment/chain yet — the fresh-filing block already names the lender, so skip the $0 debt section */
     '<div class="csfoot"><button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
     '<button type="button" class="csbtn" onclick="openDealModal(\''+esc(r.case)+'\')">Full deal analysis →</button></div></div>';
 }
