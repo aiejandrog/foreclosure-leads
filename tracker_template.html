@@ -426,6 +426,8 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csscout{margin-top:6px;font-size:12px;color:var(--muted,#8892a6)}
 .csscout a{color:var(--blue,#1F6FEB);text-decoration:none;font-weight:600}
 .csscout a:hover{text-decoration:underline}
+.csverify{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;color:var(--blue,#1F6FEB);text-decoration:none;white-space:nowrap}
+.csverify:hover{text-decoration:underline}
 .vb3{background:var(--green-soft);color:var(--green-ink);border-color:#BEE5CC;box-shadow:0 1px 7px rgba(14,138,78,.2)}
 .vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#EDDCAF;box-shadow:0 1px 7px rgba(185,127,14,.18)}
 .vb1{background:#ECEFF4;color:#5E6B84;border-color:var(--line)}
@@ -2385,7 +2387,8 @@ function _callSheet(r){
 
   // THE CLOCK
   const clock = '<div class="cssec">THE CLOCK</div><div class="csbody">'+
-    row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')) +
+    row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')
+      +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':'')) +
     row('Deal deadline', r.days>=0 ? '<b>'+Math.max(0,r.days-3)+' days</b> — the attorney needs ~3 days to file' : 'auction passed — surplus play') +
     row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')') +
     (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):'')) +
