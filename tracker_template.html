@@ -4933,7 +4933,7 @@ document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.cla
 { const _cb = document.getElementById('closers'); if(_cb) _cb.onclick = () => { closersOnly = !closersOnly; _cb.classList.toggle('active', closersOnly); render(); }; }
 { const _lp = document.getElementById('freshlp'); if(_lp) _lp.onclick = () => { lpOnly = !lpOnly; if(lpOnly){ closersOnly=false; const c=document.getElementById('closers'); if(c)c.classList.remove('active'); } _lp.classList.toggle('active', lpOnly); render(); }; }
 { const _nh = document.getElementById('nearhome'), _nr = document.getElementById('nearrad');
-  if(_nh) _nh.onclick = () => { nearOnly = !nearOnly; if(nearOnly){ closersOnly=lpOnly=false; ['closers','freshlp'].forEach(id=>{const b=document.getElementById(id); if(b)b.classList.remove('active');}); } _nh.classList.toggle('active', nearOnly); if(_nr) _nr.style.display = nearOnly?'':'none'; render(); };
+  if(_nh) _nh.onclick = () => { nearOnly = !nearOnly; if(nearOnly){ closersOnly=lpOnly=false; tier='ALL'; document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL')); ['closers','freshlp'].forEach(id=>{const b=document.getElementById(id); if(b)b.classList.remove('active');}); } _nh.classList.toggle('active', nearOnly); if(_nr) _nr.style.display = nearOnly?'':'none'; render(); };
   if(_nr) _nr.onchange = () => { nearRadius = +_nr.value || 5; if(nearOnly) render(); }; }
 // collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
 (function(){
