@@ -36,8 +36,9 @@ jobs:
       GOOGLE_STREET_VIEW_KEY: ${{ secrets.GOOGLE_STREET_VIEW_KEY }}
       TRACERFY_API_KEY: ${{ secrets.TRACERFY_API_KEY }}
       BATCHDATA_API_KEY: ${{ secrets.BATCHDATA_API_KEY }}
-      CAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY }}
-      TWOCAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY }}
+      # accept whatever you named the 2Captcha secret — no need to match one exact name
+      CAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY || secrets.TWOCAPTCHA_KEY || secrets.CAPTCHA || secrets.TWO_CAPTCHA_KEY || secrets.TWOCAPTCHA }}
+      TWOCAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY || secrets.TWOCAPTCHA_KEY || secrets.CAPTCHA || secrets.TWO_CAPTCHA_KEY || secrets.TWOCAPTCHA }}
       # Skip the "Desktop tracker + daily CSV" write entirely on the runner (DEALFLOW_NO_DESKTOP
       # guard in foreclosure_leads.py — the OneDrive path only exists on Alejandro's machine).
       DEALFLOW_NO_DESKTOP: '1'
@@ -121,9 +122,9 @@ jobs:
       # Broward reCAPTCHA), BatchData (phones + Palm Beach liens), Tracerfy (cheaper phones).
       - name: API keys for the scrapers (secrets -> gitignored *.key)
         run: |
-          [ -n "${{ secrets.BATCHDATA_API_KEY }}" ] && printf '%s' "${{ secrets.BATCHDATA_API_KEY }}" > batchdata.key || true
-          [ -n "${{ secrets.TRACERFY_API_KEY }}"  ] && printf '%s' "${{ secrets.TRACERFY_API_KEY }}"  > tracerfy.key  || true
-          [ -n "${{ secrets.CAPTCHA_KEY }}"       ] && printf '%s' "${{ secrets.CAPTCHA_KEY }}"       > captcha.key   || true
+          [ -n "$BATCHDATA_API_KEY" ] && printf '%s' "$BATCHDATA_API_KEY" > batchdata.key || true
+          [ -n "$TRACERFY_API_KEY"  ] && printf '%s' "$TRACERFY_API_KEY"  > tracerfy.key  || true
+          [ -n "$CAPTCHA_KEY"       ] && printf '%s' "$CAPTCHA_KEY"       > captcha.key   || true
           echo "keys -> batchdata=$([ -s batchdata.key ] && echo Y || echo N) tracerfy=$([ -s tracerfy.key ] && echo Y || echo N) captcha=$([ -s captcha.key ] && echo Y || echo N)"
 
       - name: Configure git identity
