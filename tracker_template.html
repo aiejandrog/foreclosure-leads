@@ -2286,7 +2286,12 @@ function _debtStack(r){
   };
   let h = '<div class="cssec">THE DEBT STACK — who holds what, and what survives</div><div class="dsbox">';
   h += open.length ? open.slice().sort((a,b)=> (_lienISO(a)<_lienISO(b)?-1:1)).map(rowFor).join('')
-                   : '<div class="dsnote" style="padding:8px 2px">No OPEN mortgages found in the recorded chain — everything on record is satisfied.</div>';
+                   : ((+r.judg>0 && r.st!=='TD' && r.st!=='LP')
+                      // 0 OPEN + a live judgment: the recorded prior loans are satisfied, but the loan being
+                      // FORECLOSED is still owed — it just may not be indexed as "open" if it was assigned/
+                      // securitized. Don't let "everything satisfied" read as "no debt".
+                      ? '<div class="dsnote" style="padding:8px 2px">The recorded chain shows the prior mortgages <b>satisfied</b> — but this is a <b>live foreclosure</b>, so the loan being foreclosed is still owed. Its payoff ≈ the <b>'+fm(+r.judg)+'</b> final judgment (it may not show as "open" if it was assigned/securitized and only earlier versions are indexed). No <i>senior</i> mortgage survives above it. Confirm the exact payoff with an estoppel.</div>'
+                      : '<div class="dsnote" style="padding:8px 2px">No OPEN mortgages found in the recorded chain — everything on record is satisfied.</div>');
   if(closed.length){
     h += '<div class="dsclosed">Satisfied / released ('+closed.length+'): '+
       closed.map(l=>esc(l.party||'?')+' '+fm(l.amt)).join(' · ')+'</div>';
