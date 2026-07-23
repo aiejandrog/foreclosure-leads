@@ -555,11 +555,46 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .dsclosed{font-size:11.5px;color:var(--muted-2,#8a93a6);padding:6px 2px;line-height:1.5}
 .dscav{font-size:11.5px;color:var(--muted,#6b7280);background:rgba(180,83,9,.07);border:1px solid rgba(180,83,9,.28);
   border-radius:8px;padding:8px 11px;margin-top:8px;line-height:1.55}
-.cschain{margin-top:8px;border:1px solid var(--line,#E2E6EE);border-radius:8px;overflow:hidden}
-.cscl{display:flex;justify-content:space-between;gap:10px;font-size:12.5px;padding:6px 10px;background:var(--surface,#fff);
-  border-bottom:1px solid var(--line,#E2E6EE);color:var(--muted,#6b7280)}
+/* Chain story — chronological narrative from orliens (pure UI; does not change math) */
+.cschain{margin-top:10px;border:1px solid var(--line,#E2E6EE);border-radius:10px;overflow:hidden;background:var(--surface,#fff)}
+.cschain>summary{cursor:pointer;list-style:none;padding:9px 12px;font-size:12.5px;font-weight:700;color:var(--ink,#101C33);
+  background:var(--surface-2,#eef1f6);display:flex;justify-content:space-between;gap:10px;align-items:center}
+.cschain>summary::-webkit-details-marker{display:none}
+.cschain>summary::after{content:'▸';color:var(--muted-2,#8a93a6);font-size:11px}
+.cschain[open]>summary::after{content:'▾'}
+.cschain .csstory{padding:4px 0 2px}
+.cscl{display:flex;gap:10px;align-items:flex-start;font-size:12.5px;padding:8px 12px 8px 14px;
+  border-bottom:1px solid var(--line,#E2E6EE);color:var(--muted,#6b7280);position:relative}
 .cscl:last-child{border-bottom:none}
-.cscl.open{background:rgba(180,35,24,.06);color:var(--ink,#101C33);font-weight:600}
+.cscl.open{background:rgba(180,35,24,.05);color:var(--ink,#101C33)}
+.cscl.sat{color:var(--muted,#6b7280)}
+.cscl-rail{flex:0 0 14px;display:flex;flex-direction:column;align-items:center;padding-top:3px}
+.cscl-dot{width:9px;height:9px;border-radius:50%;background:var(--muted-2,#8a93a6);flex:0 0 auto}
+.cscl.open .cscl-dot{background:#B42318}
+.cscl.sat .cscl-dot{background:var(--green-ink,#166534)}
+.cscl-arrow{width:2px;flex:1;min-height:14px;background:linear-gradient(180deg,var(--line,#E2E6EE),var(--muted-2,#8a93a6));margin-top:3px}
+.cscl:last-child .cscl-arrow{display:none}
+.cscl-body{flex:1;min-width:0;line-height:1.45}
+.cscl-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.cscl-party{font-weight:700;color:inherit}
+.cscl-amt{font-variant-numeric:tabular-nums;white-space:nowrap;font-weight:700}
+.cscl-meta{font-size:11px;margin-top:2px}
+.cscl-tag{font-family:var(--f-label,inherit);font-size:8.5px;font-weight:800;letter-spacing:.08em;border-radius:3px;
+  padding:1px 5px;margin-left:6px;background:var(--surface-2,#eef1f6);color:var(--muted,#6b7280);vertical-align:1px}
+.cscl-tag.open{background:rgba(180,35,24,.12);color:#B42318}
+.cscl-tag.sat{background:rgba(22,101,52,.12);color:var(--green-ink,#166534)}
+.cscl-tag.refi{background:rgba(31,111,235,.12);color:#1F6FEB}
+.cscl-note{font-size:11.5px;margin-top:3px;color:var(--muted,#6b7280);line-height:1.4}
+/* Tax status chip — honest "not checked" until the operator confirms on the Tax Collector */
+.taxchip{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px}
+.taxchip .tc{font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.08em;border-radius:4px;
+  padding:3px 7px;text-transform:uppercase}
+.taxchip .tc-miss{background:rgba(180,83,9,.14);color:#B45309;border:1px solid rgba(180,83,9,.4)}
+.taxchip .tc-ok{background:rgba(22,101,52,.13);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.35)}
+.taxchip .tc-delinq{background:rgba(180,35,24,.12);color:#B42318;border:1px solid rgba(180,35,24,.4)}
+.taxchip a{font-size:11.5px;font-weight:700;color:var(--blue,#1F6FEB);text-decoration:none}
+.taxchip a:hover{text-decoration:underline}
+.taxchip .cssurvin{max-width:140px;margin:0}
 .csdefs{font-size:12.5px}
 .csfoot{display:flex;gap:9px;flex-wrap:wrap;border-top:1px solid var(--line,#E2E6EE);padding-top:13px;margin-top:6px}
 .csbtn{font-size:13px;font-weight:700;padding:9px 16px;border-radius:var(--pill,999px);border:1px solid var(--line,#E2E6EE);
@@ -2253,6 +2288,87 @@ function _namedInSuit(party, r){
   }
   return false;
 }
+// CHAIN STORY — pure UI narrative from orliens[]. Does NOT change equity math or satisfaction matching.
+// Sorts by date, draws a vertical timeline, and flags clustered sat→new-mtg windows (the Chrome
+// "refi / HELOC same week" story) when the dates sit within ~90 days. QCD itself is not in orliens
+// (deeds aren't stored there); when r.bought falls in the same window we note it as context only.
+function _monthsBetweenISO(a, b){
+  if(!a || !b) return 99;
+  const [ay,am] = a.split('-').map(Number), [by,bm] = b.split('-').map(Number);
+  if(!ay || !by) return 99;
+  return (by - ay) * 12 + ((bm||1) - (am||1));
+}
+function _chainStory(r){
+  const liens = (r.orliens||[]).slice();
+  if(liens.length < 2) return '';
+  const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
+  const sorted = liens.slice().sort((a,b) => {
+    const da = _lienISO(a) || '0000-00-00', db = _lienISO(b) || '0000-00-00';
+    return da < db ? -1 : (da > db ? 1 : 0);
+  });
+  // Detect refi/HELOC windows: a SATISFIED loan followed within 90 days by a later OPEN (or any
+  // newer mortgage). Annotation only — never flips st.
+  const refiIdx = new Set();
+  for(let i = 0; i < sorted.length; i++){
+    const cur = sorted[i];
+    if(String(cur.st||'').toUpperCase() !== 'SATISFIED') continue;
+    const di = _lienISO(cur);
+    for(let j = i + 1; j < sorted.length; j++){
+      const nxt = sorted[j], dj = _lienISO(nxt);
+      const m = _monthsBetweenISO(di, dj);
+      if(m < 0) continue;
+      if(m <= 3){ refiIdx.add(i); refiIdx.add(j); break; }
+      if(m > 3) break;
+    }
+  }
+  const boughtY = +r.bought || 0;
+  let refiHit = refiIdx.size > 0;
+  const rows = sorted.map((l, i) => {
+    const open = String(l.st||'').toUpperCase() === 'OPEN';
+    const iso = _lienISO(l);
+    const isRefi = refiIdx.has(i);
+    let note = '';
+    if(isRefi && open) note = 'recorded in the same ~90-day window as a satisfaction above — typical refi / HELOC pattern.';
+    if(isRefi && !open) note = 'satisfied here; a newer mortgage lands in the same window below.';
+    if(boughtY && iso && iso.startsWith(String(boughtY)) && i === 0)
+      note = (note ? note+' ' : '') + 'Owner deed year on file is '+boughtY+' (QCD/sale may sit in this window — confirm on the PA).';
+    return '<div class="cscl '+(open?'open':'sat')+'">'+
+      '<div class="cscl-rail"><span class="cscl-dot"></span><span class="cscl-arrow"></span></div>'+
+      '<div class="cscl-body"><div class="cscl-top"><span class="cscl-party">'+esc(l.party||'(lender not indexed)')+
+        '<span class="cscl-tag '+(open?'open':'sat')+'">'+(open?'OPEN':'SATISFIED')+'</span>'+
+        (isRefi?'<span class="cscl-tag refi">REFI WINDOW</span>':'')+
+      '</span><span class="cscl-amt">'+fm(l.amt)+'</span></div>'+
+      '<div class="cscl-meta">'+esc(l.d||'')+(l.bp?' · '+esc(l.bp):'')+'</div>'+
+      (note?'<div class="cscl-note">'+note+'</div>':'')+
+      '</div></div>';
+  }).join('');
+  const summary = refiHit
+    ? 'Chain story — refi / same-window pattern detected ▸'
+    : 'Chain story — '+sorted.length+' recorded mortgages by date ▸';
+  // details open by default when a pattern is worth seeing mid-call; otherwise collapsed.
+  return '<details class="cschain"'+(refiHit?' open':'')+'><summary>'+summary.replace(' ▸','')+'</summary>'+
+    '<div class="csstory">'+rows+
+    '<div class="cscl-note" style="padding:8px 12px 10px">Presentational only — does not change the surviving-senior math. Satisfactions are already netted by the records parser; this just tells the date story Chrome would read aloud.</div>'+
+    '</div></details>';
+}
+function _taxStatusHtml(r, nn){
+  // Honest tax chip: Cloudflare walls delinquency scrape, so the only truthful states are
+  // "you confirmed a number (incl. $0)" vs "not checked". Never invent paid/delinquent.
+  const typed = _dTyped(nn.btax);
+  const taxURL = r.tax || '';
+  const openTax = taxURL
+    ? '<a href="'+esc(taxURL)+'" target="_blank" rel="noopener" title="Opens this parcel on the county Tax Collector — the only live paid/delinquent source.">Open tax bill →</a>'
+    : '';
+  if(typed){
+    const amt = +nn.btax || 0;
+    const cls = amt > 0 ? 'tc-delinq' : 'tc-ok';
+    const lbl = amt > 0 ? 'BACK TAXES $'+Math.round(amt).toLocaleString() : 'TAXES CURRENT (you confirmed)';
+    return '<span class="taxchip"><span class="tc '+cls+'" title="You entered this from the Tax Collector bill. It feeds the deal math.">'+lbl+'</span> '+openTax+
+      ' <input class="cssurvin btax" data-c="'+esc(r.case)+'" type="number" inputmode="numeric" value="'+esc(nn.btax)+'" title="Edit the confirmed back-tax amount. Clear the field to return to not-checked."></span>';
+  }
+  return '<span class="taxchip"><span class="tc tc-miss" title="Delinquency is Cloudflare-walled — we do not scrape it. Confirm on the Tax Collector, then enter $0 if current or the amount due.">TAXES — not checked</span> '+openTax+
+    ' <input class="cssurvin btax" data-c="'+esc(r.case)+'" type="number" inputmode="numeric" placeholder="$ or 0 if current" title="After you open the tax bill: type the delinquent amount, or 0 if current. That locks the chip to CONFIRMED."></span>';
+}
 function _debtStack(r){
   const liens = (r.orliens||[]);
   if(!liens.length) return '';
@@ -2306,6 +2422,7 @@ function _debtStack(r){
     h += '<div class="dsclosed">Satisfied / released ('+closed.length+'): '+
       closed.map(l=>esc(l.party||'?')+' '+fm(l.amt)).join(' · ')+'</div>';
   }
+  h += _chainStory(r);
   // ASSIGNMENT WARNING — the position guess above anchors on "face amount closest to the judgment".
   // That silently breaks when the note was SOLD: on 525 W 79 Pl the 2005 New Century loan was
   // assigned to JPMorgan Chase in 2015, so Chase forecloses THAT loan — but the guess picked the
@@ -2455,7 +2572,7 @@ function _callSheet(r){
   if(jr) stack += row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
   if(+r.orhoa) stack += row('HOA / association', fm(+r.orhoa));
   if((+r.orcode||0)+(+r.orirs||0)) stack += row('Code / muni / IRS', fm((+r.orcode||0)+(+r.orirs||0)));
-  stack += row('Back taxes', nn.btax?fm(+nn.btax):'<span class="csmut">not checked — one click on Taxes</span>');
+  stack += row('Back taxes', _taxStatusHtml(r, nn));
   stack += '</div>' + _debtStack(r);
   // everyone else named on the lawsuit — where solar leases and code liens hide
   if(r.defs) stack += '<div class="csbody">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
