@@ -4483,20 +4483,33 @@ function view(){
   rows.sort((a,b) => { const x=sortVal(a), y=sortVal(b); return (x>y?1:x<y?-1:0)*sortD; });
   return rows;
 }
-// 🚗 DOOR-KNOCK ROUTE — build a keyless Google Maps driving route through the properties in the CURRENT
-// view. ZIP-clustered so nearby stops fall adjacent (a proximity heuristic without lat/lng), capped at 10
-// (Maps' waypoint limit). On a phone it opens the Maps APP; hit "optimize route" there to tighten it.
-// This is the smart bit: filter to Homestead + this-week + North Miami, hit Route, hand Carlos the day.
-function _doorRoute(){
-  var rows = (window._curRows||[]).filter(function(r){ return r.addr && r.st!=='LP'; });
-  if(!rows.length){ alert('No street addresses in this view to route.\nLP filings have no address yet, and some views are address-free. Filter to a county/tier with properties first.'); return; }
-  var zof = function(r){ var m=String(r.addr||'').match(/(\d{5})(?:-\d{4})?\s*$/); return m?m[1]:'99999'; };
-  rows = rows.slice().sort(function(a,b){ return zof(a).localeCompare(zof(b)) || String(a.addr).localeCompare(String(b.addr)); }).slice(0,10);
-  var clean = function(r){ return encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')); };
-  var dest = clean(rows[rows.length-1]);
-  var wp = rows.slice(0,-1).map(clean).join('|');
-  window.open('https://www.google.com/maps/dir/?api=1&destination='+dest+(wp?'&waypoints='+wp:'')+'&travelmode=driving','_blank','noopener');
+// 🚗 DOOR-KNOCK ROUTE — a keyless Google Maps driving route ANCHORED AT AN ORIGIN (default: Alejandro's
+// home base). ALGORITHM: measure every geocoded property's distance from the origin, take the nearest N,
+// then walk them nearest-neighbour from home so the drive spirals OUTWARD (near deals first, expanding
+// broader) instead of criss-crossing. Capped at 10 stops (Maps' waypoint limit) — broaden the board
+// filter for a wider net. On a phone it opens the Maps APP.
+var ROUTE_ORIGIN = {addr:'10839 NW 7th St, Miami, FL 33172', lat:25.77557, lng:-80.373158};   // home base
+function _haversine(la1,lo1,la2,lo2){ var R=3958.8, tr=Math.PI/180, dLa=(la2-la1)*tr, dLo=(lo2-lo1)*tr;
+  var s=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*tr)*Math.cos(la2*tr)*Math.sin(dLo/2)*Math.sin(dLo/2);
+  return 2*R*Math.asin(Math.sqrt(s)); }                                       // miles
+function _buildRoute(o){
+  var cand=(window._curRows||[]).filter(function(r){ return r.addr && r.lat && r.lng && r.st!=='LP'; });
+  if(!cand.length){ alert('No geocoded properties in this view to route.\nLP filings have no address yet; some views are address-free. Broaden the filter or pick a county with properties.'); return; }
+  cand.forEach(function(r){ r._dist=_haversine(o.lat,o.lng,r.lat,r.lng); });
+  cand.sort(function(a,b){ return a._dist-b._dist; });                        // nearest to origin = EXPAND OUTWARD
+  var pool=cand.slice(0,10), route=[], cur={lat:o.lat,lng:o.lng}, left=pool.slice();
+  while(left.length){ var bi=0,bd=1e9; for(var i=0;i<left.length;i++){ var d=_haversine(cur.lat,cur.lng,left[i].lat,left[i].lng); if(d<bd){bd=d;bi=i;} } cur=left[bi]; route.push(left.splice(bi,1)[0]); }
+  var clean=function(r){ return encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')); };
+  var wp=route.slice(0,-1).map(clean).join('|');
+  var url='https://www.google.com/maps/dir/?api=1&origin='+encodeURIComponent(o.addr||(o.lat+','+o.lng))
+    +'&destination='+clean(route[route.length-1])+(wp?'&waypoints='+wp:'')+'&travelmode=driving';
+  window.open(url,'_blank','noopener');
 }
+function _doorRoute(){ _buildRoute(ROUTE_ORIGIN); }
+function _doorRouteGPS(){ if(!navigator.geolocation){ _doorRoute(); return; }
+  navigator.geolocation.getCurrentPosition(
+    function(p){ _buildRoute({lat:p.coords.latitude, lng:p.coords.longitude}); },
+    function(){ alert('Could not read your location — routing from home base instead.'); _doorRoute(); }); }
 function render(){
   initCountyFilter();
   const rows = view();
@@ -4513,9 +4526,10 @@ function render(){
   const st = document.getElementById('stats');
   st.textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
   if(_viol){ const w=document.createElement('span'); w.className='statviol'; w.title='Leads with outreach logged AFTER the owner opted out — open each to review and document the cure.'; w.textContent=' · ⚠ '+_viol+' contacted after opt-out'; st.appendChild(w); }
-  // 🚗 door-knock route from THIS view (addressed, non-LP leads), ZIP-clustered, up to 10 stops
-  const _addr = rows.filter(r=>r.addr && r.st!=='LP').length;
-  if(_addr){ const rb=document.createElement('button'); rb.type='button'; rb.className='routebtn'; rb.title='Build a Google Maps driving route through the addressed properties in THIS view (ZIP-clustered, up to 10 stops). Filter first (county / this-week / homestead), then hand Carlos the day; hit “optimize” in the Maps app to tighten it.'; rb.textContent='🚗 Route '+Math.min(_addr,10)+(_addr>10?' of '+_addr:''); rb.onclick=_doorRoute; st.appendChild(rb); }
+  // 🚗 origin-anchored door-knock route: nearest geocoded properties to HOME, spiralling outward, up to 10
+  const _geo = rows.filter(r=>r.addr && r.lat && r.lng && r.st!=='LP').length;
+  if(_geo){ const rb=document.createElement('button'); rb.type='button'; rb.className='routebtn'; rb.title='Driving route from your HOME BASE (10839 NW 7th St) through the NEAREST properties in this view — nearest first, spiralling outward (up to 10 stops, Maps’ limit). Broaden the board filter for a wider net; the 📍 button starts from your current GPS location instead.'; rb.textContent='🚗 Route from home'; rb.onclick=_doorRoute; st.appendChild(rb);
+    const gb=document.createElement('button'); gb.type='button'; gb.className='routebtn'; gb.style.marginLeft='4px'; gb.style.padding='3px 8px'; gb.title='Same nearest-first route, but starting from YOUR CURRENT location (GPS).'; gb.textContent='📍'; gb.onclick=_doorRouteGPS; st.appendChild(gb); }
   // KPI band — live portfolio metrics for the current view
   const _kp = rows.filter(r=>r._profit>0), _tot = _kp.reduce((s,r)=>s+r._profit,0);
   const _avg = _kp.length ? Math.round(_kp.reduce((s,r)=>s+(r._roi||0),0)/_kp.length) : 0;

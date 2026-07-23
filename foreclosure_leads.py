@@ -1023,6 +1023,21 @@ def make_tracker(leads):
         except Exception as e:
             print(f"skip {_xf}: {e}")
 
+    # bake lat/lng from geocode_cache.json (geo_enrich.py, keyless US Census) so the board's origin-
+    # anchored door route can sort deals by REAL distance and expand outward from home.
+    _gcf = os.path.join(HERE, 'geocode_cache.json')
+    if os.path.exists(_gcf):
+        try:
+            _gc = json.load(open(_gcf, encoding='utf-8')); _gn = 0
+            for _r in slim:
+                _g = _gc.get(_r.get('case', ''))
+                if _g and _g.get('lat'):
+                    _r['lat'] = _g['lat']; _r['lng'] = _g['lng']; _gn += 1
+            if _gn:
+                print(f"baked lat/lng into {_gn} leads (origin-anchored route)")
+        except Exception:
+            pass
+
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')

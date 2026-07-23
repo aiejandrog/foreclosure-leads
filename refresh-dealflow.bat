@@ -71,6 +71,9 @@ rem  their case is filed. lp_leads.py shapes them into st='LP' board leads (the 
 if exist captcha.key python lis_pendens.py --days 30 >> "%LOG%" 2>&1
 if exist lis_pendens.json python lp_leads.py >> "%LOG%" 2>&1
 
+echo [2d/5] Geocoding new leads (keyless US Census) -> lat/lng for the origin-anchored door route...
+python geo_enrich.py >> "%LOG%" 2>&1
+
 echo [3/5] Humans behind LLC owners (Sunbiz officers + agent; FREE) - MUST run before skip-trace...
 rem  Resolve the person behind every LLC FIRST, so the skip-trace step below can trace that officer
 rem  (skiptrace.py reads llc_officers.json). Free Sunbiz curl - always runs, even with no phone key,

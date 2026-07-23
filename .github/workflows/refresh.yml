@@ -97,6 +97,7 @@ jobs:
             county_plaintiffs.json
             lis_pendens.json
             lp_leads.json
+            geocode_cache.json
             tax_links.json
             comps.json
             property_types_cache.json
@@ -224,6 +225,11 @@ jobs:
         run: |
           if [ -s captcha.key ]; then python lis_pendens.py --days 30; fi
           if [ -f lis_pendens.json ]; then python lp_leads.py; fi
+
+      # ---- [2d/5] Geocode leads (keyless US Census) -> lat/lng for the origin-anchored door route -----
+      - name: '[2d/5] Geocode leads (US Census) -> lat/lng'
+        continue-on-error: true
+        run: python geo_enrich.py
 
       # ---- [3/5] Skip-trace phones (only if a key is present) -----------------------------
       - name: '[3/5] Humans behind LLCs (Sunbiz) + skip-trace phones (all tiers, capped)'
