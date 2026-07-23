@@ -1809,5 +1809,16 @@
   "nf": true,
   "near": [],
   "t": "2026-07-22"
+ },
+ "2025-013585-CA-01": {
+  "ent": "THE VENETIAN TRUST",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [],
+  "t": "2026-07-23"
  }
 }
