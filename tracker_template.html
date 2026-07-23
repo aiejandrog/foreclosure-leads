@@ -2344,11 +2344,29 @@ function _csPlay(r){ const p=r&&r._play; if(!p) return '';
   return '<div class="csplay" style="border-left-color:'+c+'"><span class="playbadge" style="background:'+c+'">'+esc(p.t)+'</span>'
     +'<span class="csplayw"><b>PLAY:</b> '+esc(p.w)+'</span></div>';
 }
+// Whitepages links, built client-side from fields every lead already carries (owners + addr) — no
+// re-bake needed, covers all counties + LP filings. The reverse-ADDRESS page is the money shot: its
+// FREE tier prints the household's shared LANDLINE unmasked plus every resident/relative by name+age
+// (verified live on the Velima lead 2026-07-23: owner's landline in plain text when TPS/CyberBG had
+// nothing that connected). WP canonicalizes sloppy slugs ("NE-13-Ave" -> "NE 13th Ave"), so a naive
+// county-format slug resolves fine.
+function _wpSlug(s){ return String(s||'').replace(/[^A-Za-z0-9 ]/g,' ').trim().replace(/\s+/g,'-'); }
+function _wpCity(r){ const p=String(r.addr||'').split(','); return p.length>=2 ? _wpSlug(p[1]) : ''; }
+function _wpNameUrl(r){ if(r.co) return '';
+  const n=_ownerName((r.owners||'').split(';')[0].trim(), r); if(!n) return '';
+  const c=_wpCity(r);
+  return 'https://www.whitepages.com/name/'+_wpSlug(n)+'/'+(c?c+'-FL':'FL');
+}
+function _wpAddrUrl(r){ const p=String(r.addr||'').split(','); if(!p[0]||p.length<2) return '';
+  return 'https://www.whitepages.com/address/'+_wpSlug(p[0])+'/'+_wpCity(r)+'-FL';
+}
 // Find-a-number links, right on the sheet (was: "use the links on the row" — dead-end friction). Reuses the
 // per-lead TruePeopleSearch / CyberBackgroundChecks URLs already baked on every lead, incl. LP fresh filings
 // where People-search IS the play, and no-phone leads where it's the only path to a contact.
 function _csPeople(r){
-  var L=[];
+  var L=[], wn=_wpNameUrl(r), wa=_wpAddrUrl(r);
+  if(wa)            L.push('<a href="'+esc(wa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS — the best free hit: prints the household landline UNMASKED + every resident/relative with ages, plus owner-occupied/rented/vacant status. Start here.">⭐ Whitepages addr</a>');
+  if(wn)            L.push('<a href="'+esc(wn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — address history + aliases (may go by), cell/landline behind their paywall but the free layer cross-checks who is who">Whitepages</a>');
   if(r.people)      L.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener" title="TruePeopleSearch by NAME — phones, relatives, address history">People</a>');
   if(r.peopleaddr)  L.push('<a href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the property ADDRESS — returns only who actually lives there">by address</a>');
   if(r.cyberbg)     L.push('<a href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by NAME — every phone with carrier + last-reported date, emails, relatives">CyberBG</a>');
@@ -4662,6 +4680,9 @@ function render(){
       if(o.cba) L.push('<a href="'+esc(o.cba)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by their FILED ADDRESS. '+who+'. Confirms they still live there and surfaces phones the name search misses.">addr</a>');
       if(L.length) gDig.push('<span class="digppl" title="'+who+'">🧑&nbsp;<b>'+esc(nm)+'</b> '+L.join('<i>·</i>')+'</span>');
     });
+    var _wpa = _wpAddrUrl(r), _wpn = _wpNameUrl(r);
+    if(_wpa) gDig.push('<a class="dig" href="'+esc(_wpa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS — best free hit rate: the household landline prints UNMASKED plus every resident/relative with ages and owner-occupied/rented/vacant status. When People/CyberBG numbers don\'t connect, START HERE.">⭐&nbsp;WP&nbsp;addr</a>');
+    if(_wpn) gDig.push('<a class="dig" href="'+esc(_wpn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — aliases (may go by) + address history to confirm which same-name person is the owner; full phones behind their paywall but the free layer cross-checks the other sources.">Whitepages</a>');
     if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
     if(r.peopleaddr) gDig.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
     if(r.cyberbg) gDig.push('<a class="dig" href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks — a second source, often better than TruePeopleSearch: free detail page (one more click) shows every phone with carrier + last-reported date, up to 7 emails, RELATIVES (separate from associates — good for the tenant-intel play), and prior addresses. Cross-check against the People links above.">CyberBG</a>');
