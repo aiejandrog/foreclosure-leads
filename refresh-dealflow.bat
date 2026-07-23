@@ -64,6 +64,13 @@ rem  BatchData property API = the second lien feed + the ONLY automated path for
 rem  Fails fast + skips itself when the balance is exhausted, so it's safe to leave wired.
 if exist batchdata.key python batchdata_liens.py --all --limit 80 >> "%LOG%" 2>&1
 
+echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
+rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
+rem  file most foreclosures over a rolling window, keep the LIS PENDENS, dedupe -> the owner the DAY
+rem  their case is filed. lp_leads.py shapes them into st='LP' board leads (the Fresh-filings lane).
+if exist captcha.key python lis_pendens.py --days 30 >> "%LOG%" 2>&1
+if exist lis_pendens.json python lp_leads.py >> "%LOG%" 2>&1
+
 echo [3/5] Humans behind LLC owners (Sunbiz officers + agent; FREE) - MUST run before skip-trace...
 rem  Resolve the person behind every LLC FIRST, so the skip-trace step below can trace that officer
 rem  (skiptrace.py reads llc_officers.json). Free Sunbiz curl - always runs, even with no phone key,

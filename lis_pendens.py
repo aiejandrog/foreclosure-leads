@@ -92,7 +92,7 @@ def _mint_search(doc_type, d_from, d_to, stype='Name/Document', attempts=25):
 def _win(days):
     to = datetime.date.today()
     fr = to - datetime.timedelta(days=days)
-    return fr.strftime('%m/%d/%Y'), to.strftime('%m/%d/%Y')
+    return fr.strftime('%Y-%m-%d'), to.strftime('%Y-%m-%d')   # ISO — the ONLY date format the API accepts
 
 
 def probe():
@@ -120,9 +120,8 @@ def probe():
 
 
 def _kind(parties):
-    """KEEP EVERY fresh filing (Jose: no deal is dead — there's a play on all of them). Just TAG it:
-    bank-1st (buy/wholesale), HOA/junior (a senior mortgage survives -> short-sale/negotiate), or
-    other/private (verify). We no longer DROP non-bank filings the way the old RPMF lane did."""
+    """Tag the filing so the play falls out: bank/lender plaintiff = mortgage FC (buy/wholesale),
+    HOA/association = a senior mortgage survives (short-sale/negotiate), other = verify."""
     pu = (parties or '').upper()
     if HOA_RE.search(pu) and not LENDER_RE.search(pu):
         return 'HOA/JUNIOR'
@@ -131,88 +130,106 @@ def _kind(parties):
     return 'OTHER/PRIVATE'
 
 
-def normalize(rec):
-    parties = str(rec.get('parties') or rec.get('partieS') or '')
+# The handful of plaintiffs that file the bulk of Miami-Dade MORTGAGE foreclosures. The blank-name
+# docket sweep returns nothing through getStandardRecords, but a NAME search + ISO date window DOES
+# (name searches aren't walled) — so we reconstruct the LP feed by sweeping these and unioning. HOA
+# foreclosures are filed by thousands of individual associations and aren't reachable this way; this
+# lane is the mortgage foreclosures (the deals with equity), which is what matters.
+PLAINTIFFS = [
+    'US BANK', 'BANK OF NEW YORK MELLON', 'WELLS FARGO', 'JPMORGAN CHASE', 'DEUTSCHE BANK NATIONAL',
+    'WILMINGTON', 'NATIONSTAR', 'LAKEVIEW LOAN', 'PENNYMAC', 'FREEDOM MORTGAGE', 'CARRINGTON MORTGAGE',
+    'SELENE FINANCE', 'NEWREZ', 'PHH MORTGAGE', 'RUSHMORE', 'SPECIALIZED LOAN', 'TOWD POINT', 'MTGLQ',
+    'FEDERAL NATIONAL MORTGAGE', 'FEDERAL HOME LOAN MORTGAGE', 'SECRETARY OF HOUSING', 'LOANCARE',
+    'SHELLPOINT', 'CITIBANK', 'CITIMORTGAGE', 'TRUIST', 'FLAGSTAR', 'MIDFIRST', 'PLANET HOME',
+    'REVERSE MORTGAGE', 'ROCKET MORTGAGE', 'AJAX MORTGAGE', 'REGIONS BANK', 'BANK OF AMERICA',
+]
+
+
+def normalize(rec, lender=''):
+    """The LP record carries the real court CASE NUMBER (casE_NUM) + the legal description; foliO_NUMBER
+    is 0 on LP filings, so the case number is the key. Homeowner = the party that is NOT a lender (we
+    searched by lender, so the lender is one party; the other is the defendant = who to contact)."""
+    fp = str(rec.get('firsT_PARTY') or '').strip()
+    sp = str(rec.get('seconD_PARTY') or '').strip()
+    parties = str(rec.get('parties') or (fp + ' / ' + sp)).strip(' /')
+    case = re.sub(r'\s+LISP\w*\s*$', '', str(rec.get('casE_NUM') or rec.get('misC_REF') or '').strip())
+    cands = [p for p in (fp, sp) if p]
+    owner = next((p for p in cands if not LENDER_RE.search(p.upper())), '')
+    plaintiff = next((p for p in cands if LENDER_RE.search(p.upper())), (cands[0] if cands else ''))
+    legal = ' '.join(x for x in [
+        str(rec.get('subdiV_NAME') or '').strip(),
+        str(rec.get('legaL_DESCRIPTION') or '').strip(),
+        ('BLK ' + str(rec.get('blocK_NO'))) if rec.get('blocK_NO') else '',
+        ('PB ' + str(rec.get('plaT_BOOKPAGE'))) if rec.get('plaT_BOOKPAGE') else ''] if x)
     return {
-        'date': rec.get('reC_DATE') or rec.get('rec_date') or '',
-        'docType': (rec.get('doC_TYPE') or 'LIS PENDENS').strip(),
-        'bookpage': rec.get('reC_BOOKPAGE') or rec.get('bookpage') or '',
-        'folio': str(rec.get('foliO_NUMBER') or rec.get('folio_number') or '').strip(),
-        'parties': parties.strip(),
+        'date': str(rec.get('reC_DATE') or '').split(' ')[0],           # '6/8/2026 12:00:00 AM' -> '6/8/2026'
+        'case': case, 'docType': (rec.get('doC_TYPE') or 'LIS PENDENS - LIS').strip(),
+        'bookpage': rec.get('reC_BOOKPAGE') or '', 'legal': legal,
+        'parties': parties, 'plaintiff': plaintiff, 'owner': owner,
         'kind': _kind(parties),
     }
 
 
-def lp_sweep(days=30, tries=6):
-    """Fresh LIS PENDENS from Miami-Dade Official Records via the WORKING Turnstile path (records_liens),
-    blank partyName + documentType=LIS PENDENS + a rolling recorded-date window. This is the front of the
-    funnel: the owner the DAY their foreclosure is filed, months before the auction crowd."""
+def lp_sweep(days=30, tries=3):
+    """Fresh LIS PENDENS from Miami-Dade Official Records WITHOUT the walled docket sweep: name-search
+    each major foreclosure plaintiff over an ISO date window and keep the LIS PENDENS docs, unioned +
+    deduped. The front of the funnel — the owner the day their case is filed, months before the crowd."""
     import urllib.parse
     from captcha_solver import solve_turnstile
     import records_liens as R
     d_from, d_to = _win(days)
-    print(f'LIS PENDENS sweep: {d_from} .. {d_to} (blank name, all plaintiffs)')
-    for doctype in ('LIS PENDENS', 'LIS PENDENS - LIS', 'LIS'):
-        for stype in ('Document', 'Name/Document'):
-            url = (R.OR_BASE + 'api/home/standardsearch?partyName='
-                   + '&dateRangeFrom=' + urllib.parse.quote(d_from)
-                   + '&dateRangeTo=' + urllib.parse.quote(d_to)
-                   + '&documentType=' + urllib.parse.quote(doctype)
-                   + '&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote(stype))
-            for attempt in range(1, tries + 1):
-                tok = solve_turnstile(R.TS_SITE_KEY, R.OR_BASE)
-                if not tok:
-                    continue
-                try:
-                    r = R.S.post(url, headers={'x-recaptcha-token': tok,
-                                               'content-type': 'application/json; charset=utf-8'},
-                                 data='', timeout=35)
-                    j = r.json()
-                except Exception:
-                    continue
-                qs = j.get('qs') if isinstance(j, dict) else None
-                if qs:
-                    recs = R.records_by_qs(qs) or []
-                    if recs:
-                        print(f'  [{doctype!r}/{stype}] -> {len(recs)} filings')
-                        return recs
-                    break                       # valid search, 0 records -> try the next doctype variant
-                time.sleep(1)                    # bad solve -> re-solve
-    return []
+    print(f'LIS PENDENS lender-sweep: {d_from} .. {d_to} across {len(PLAINTIFFS)} plaintiffs')
+    out = {}
+    for i, name in enumerate(PLAINTIFFS, 1):
+        url = (R.OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(name)
+               + '&dateRangeFrom=' + urllib.parse.quote(d_from) + '&dateRangeTo=' + urllib.parse.quote(d_to)
+               + '&documentType=&searchT=&firstQuery=y&searchtype=' + urllib.parse.quote('Name/Document'))
+        recs = None
+        for _ in range(tries):
+            tok = solve_turnstile(R.TS_SITE_KEY, R.OR_BASE)
+            if not tok:
+                continue
+            try:
+                j = R.S.post(url, headers={'x-recaptcha-token': tok,
+                                           'content-type': 'application/json; charset=utf-8'},
+                             data='', timeout=35).json()
+            except Exception:
+                continue
+            if j.get('qs'):
+                recs = R.records_by_qs(j['qs']) or []
+                break
+            time.sleep(1)
+        if recs is None:
+            print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} (blocked)'); continue
+        lp = [r for r in recs if 'LIS' in (r.get('doC_TYPE') or '').upper()
+              and 'CANCEL' not in (r.get('doC_TYPE') or '').upper()]
+        kept = 0
+        for r in lp:
+            n = normalize(r, name)
+            if not n['owner']:                     # both parties lenders = assignment/subrogation noise
+                continue
+            out.setdefault(n['case'] or n['bookpage'] or n['parties'][:50], n)
+            kept += 1
+        print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} {len(recs)} recs -> {kept} homeowner LP')
+    return list(out.values())
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--probe', action='store_true', help='(legacy reCAPTCHA-v3 browser probe — the site moved to Turnstile; use the sweep)')
+    ap.add_argument('--probe', action='store_true', help='(legacy reCAPTCHA-v3 browser probe)')
     ap.add_argument('--days', type=int, default=30)
     a = ap.parse_args()
     if a.probe:
         probe(); return
-    recs = lp_sweep(days=a.days)
-    if not recs:
-        print('\nNO FILINGS. FINDING (2026-07-22): the cracked params are correct — documentType='
-              '"LIS PENDENS - LIS", searchT=same, searchtype="Document Type", partyName blank — and the URL is '
-              'byte-identical to the site\'s own postStandardSearch(). But Miami-Dade returns isValidSearch=false '
-              'for a NAMELESS doc-type/date search, while accepting the SAME token mechanism for NAME searches. '
-              'The docket-wide LP sweep is WALLED server-side (this is exactly why "only attorneys get to them"). '
-              'A free requests+2Captcha sweep cannot beat it. Real paths: county subscriber/attorney tier '
-              '(authenticated), or a licensed bulk-recording feed (PropStream/DataTree/TitlePro). See MEMORY.')
-        return
-    out, seen = [], set()
+    out = lp_sweep(days=a.days)
+    if not out:
+        print('\nno LP filings — every plaintiff search blocked (captcha) or empty window. Retry.'); return
     from collections import Counter
-    kinds = Counter()
-    for rec in recs:
-        n = normalize(rec)
-        key = (n['bookpage'] or '') + '|' + (n['folio'] or '') + '|' + n['parties'][:40]
-        if key in seen:
-            continue
-        seen.add(key)
-        kinds[n['kind']] += 1
-        out.append(n)
-    out.sort(key=lambda x: x['date'], reverse=True)
+    kinds = Counter(x['kind'] for x in out)
+    out.sort(key=lambda x: str(x.get('date') or ''), reverse=True)
     json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
     print(f"\nDONE: {len(out)} fresh LIS PENDENS ({dict(kinds)}) -> lis_pendens.json")
-    print("ALL kinds kept — bank-1st = buy/wholesale, HOA/junior = short-sale/negotiate the survivor, other = verify.")
+    print("Front of the funnel — the owner the day their foreclosure was filed. Board play = LP-EARLY (be first).")
 
 
 if __name__ == '__main__':

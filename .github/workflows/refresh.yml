@@ -95,6 +95,8 @@ jobs:
             palmbeach_liens.json
             batchdata_liens.json
             county_plaintiffs.json
+            lis_pendens.json
+            lp_leads.json
             tax_links.json
             comps.json
             property_types_cache.json
@@ -212,6 +214,16 @@ jobs:
           if [ -s batchdata.key ]; then python batchdata_liens.py --all --limit 80; fi
           # Broward plaintiff -> bank-1st(clean) vs junior/HOA(senior survives). PB is headed-browser (--pb) = local only.
           if [ -s captcha.key ] && [ -f broward_leads.json ]; then python county_plaintiffs.py --county broward --near --limit 60; fi
+
+      # ---- [2c/5] Fresh LIS PENDENS front-of-funnel -------------------------------------------
+      # The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
+      # file most foreclosures over a rolling ISO window, keep the LIS PENDENS, dedupe -> the owner the
+      # DAY their case is filed. lp_leads.py shapes them into st='LP' board leads (Fresh-filings lane).
+      - name: '[2c/5] Fresh Lis Pendens (lender-sweep -> lp_leads.json)'
+        continue-on-error: true
+        run: |
+          if [ -s captcha.key ]; then python lis_pendens.py --days 30; fi
+          if [ -f lis_pendens.json ]; then python lp_leads.py; fi
 
       # ---- [3/5] Skip-trace phones (only if a key is present) -----------------------------
       - name: '[3/5] Humans behind LLCs (Sunbiz) + skip-trace phones (all tiers, capped)'

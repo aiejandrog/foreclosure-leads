@@ -1654,7 +1654,7 @@ function recompute(){
     r._slien=slien; r._jlien=jlien; r._assess=assess; r._mlien=mlien; r._btax=btax; r._occ=occ; r._evict=evict;
     r._assessSet = _dTyped(nn.assess);   // an explicitly researched assessment (incl. a confirmed $0) lifts the condo MARGINAL cap
     // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
-    if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; return; }
+    if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; r._play=_playFor(r); return; }
     r._nodata = false;
     const costs = val * costPct;
     if(r.st === 'TD'){
@@ -1745,6 +1745,7 @@ function setVerdict(r, x){
 // upfront rescue fee (FL 501.1377), never surplus-recovery outside FL 45.033, never equity-strip an
 // impaired owner — those are the felony bucket; every play below stays on the legal side.
 function _playFor(r){
+  if(r.st==='LP') return {t:'LP-EARLY', w:'FRESH LIS PENDENS — the foreclosure was just filed; no auction date yet, months of runway. You are the FIRST contact, before the auction crowd. Reach the owner now: reinstatement, sale, or a pre-foreclosure buy. This is the front of the funnel.'};
   if(r.st==='TD') return {t:'AUCTION', w:'Tax deed — win at the public sale (opening bid + markup), then quiet title before resale. Own model on the row.'};
   if(r.ju) return {t:'RESEARCH', w:'Final judgment not posted yet — pull the docket before you value or offer.'};
   const nn = notes[r.case]||{}, val = +r.value||0;
