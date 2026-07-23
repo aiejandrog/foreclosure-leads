@@ -2449,7 +2449,7 @@ function _callSheet(r){
   cont += row('Mailing address', esc(r.mail||r.addr||'—')+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <span class="csmut">(same as the property — they live there)</span>':' <span class="csmut">(different — absentee owner)</span>'));
   cont += '</div>';
 
-  return '<div class="callsheet">'+who+four+clock+stack+prop+cont+
+  return '<div class="callsheet">'+who+four+clock+(r.st==='LP'?'':stack)+prop+cont+   /* LP: no judgment/chain yet — the fresh-filing block already names the lender, so skip the $0 debt section */
     '<div class="csfoot"><button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
     '<button type="button" class="csbtn" onclick="openDealModal(\''+esc(r.case)+'\')">Full deal analysis →</button></div></div>';
 }
