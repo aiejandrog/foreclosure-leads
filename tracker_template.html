@@ -2383,7 +2383,13 @@ function _callSheet(r){
       '<div class="css" style="margin-top:5px">In the records: find the OLDEST open mortgage recorded BEFORE '+esc(r.plaintiff||'the foreclosing lender')+'\'s loan. That balance is what survives. If the only open mortgage IS the one foreclosing, enter <b>0</b>.</div>'+
     '</div>';
   // THE FOUR NUMBERS HE ALWAYS ASKS FOR
-  const four = '<div class="csgrid">'+
+  const four = (r.st==='LP')
+    // LP fresh filing: no judgment/value/sale yet — don't show a wall of $0 deal-math. Frame the edge.
+    ? '<div class="csgrid"><div class="csbox good" style="grid-column:1/-1;text-align:left"><div class="csl">🌱 FRESH LIS PENDENS — the front of the funnel</div>'
+      + '<div class="css" style="font-size:13.5px;line-height:1.55;margin-top:6px">The foreclosure was just <b>filed</b> — no judgment, sale date, or verified value yet (those come as the case moves). Your job now is to be the <b>FIRST</b> to reach the owner, months before the auction crowd.'
+      + '<div style="margin-top:8px"><b>Owner:</b> '+esc(owner)+' &nbsp;·&nbsp; <b>Foreclosing lender:</b> '+esc(r.plaintiff||'—')+(r.legal?'<br><b>Legal:</b> '+esc(r.legal):'')+'</div>'
+      + '<div style="margin-top:8px">Next: People-search the owner for a phone, then pull the folio/appraiser for value and the docket for what is owed.</div></div></div>'
+    : '<div class="csgrid">'+
     big('FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn')+
     big('WORTH TODAY', fm(basis), arv?('ARV from '+r.arvn+' comps'+(r.arvconf==='ok'?' (verified)':' (low conf)')):'county roll — no comps', 'good')+
     survBox+
