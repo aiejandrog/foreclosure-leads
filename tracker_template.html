@@ -553,6 +553,14 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .dsb-jr{background:rgba(22,101,52,.15);color:var(--green-ink,#166534)}
 .dsb-risk{background:#B45309;color:#fff}
 .dsclosed{font-size:11.5px;color:var(--muted-2,#8a93a6);padding:6px 2px;line-height:1.5}
+.dsclosed-d{font-size:10.5px;color:var(--muted-2,#8a93a6);opacity:.85}
+/* Gov/code/tax defendant survival-risk block on the call sheet — Chrome caught this on Velima */
+.csgovwarn{background:rgba(184,122,14,.08);border-left:3px solid #B87A0E;border-radius:6px;padding:9px 11px;margin-top:7px}
+/* Rule / limits / next-step teacher block — the plain-English survival test, at the foot of every sheet */
+.cslaw{margin-top:13px;padding:12px 14px;background:var(--surface-2,#f6f8fa);border-radius:9px;border-left:3px solid var(--navy,#0B1730);font-size:12.5px;line-height:1.55}
+.cslaw-t{font-family:var(--f-label);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy,#0B1730);margin-bottom:4px}
+.cslaw-l{margin:0;padding-left:18px}
+.cslaw-l li{margin:2px 0}
 .dscav{font-size:11.5px;color:var(--muted,#6b7280);background:rgba(180,83,9,.07);border:1px solid rgba(180,83,9,.28);
   border-radius:8px;padding:8px 11px;margin-top:8px;line-height:1.55}
 .cschain{margin-top:8px;border:1px solid var(--line,#E2E6EE);border-radius:8px;overflow:hidden}
@@ -1648,6 +1656,11 @@ function recompute(){
     // judgment − costs, computed BEFORE anyone asks. Only records-verified chains feed it
     // (conf 'ok' or 'low'); the deal-modal input always wins over the chain's number.
     const chainConf = (r.orconf==='ok' || r.orconf==='low' || r.orconf==='bd');   // 'bd' = BatchData property source
+    // BatchData's aggregate does mortgages only — HOA / code-enforcement / IRS liens are hardcoded to
+    // $0 in the parser (batchdata_liens.py:124), NOT actually checked. Confidence for those buckets
+    // must exclude 'bd' so a $0 there is treated as "not checked" (surfaces the manual-check nudge)
+    // instead of "verified none" (which fakes an estoppel/code surprise away at closing).
+    const nonMortConf = (r.orconf==='ok' || r.orconf==='low');
     // Split the surviving stack cleanly so NO mortgage counts twice (the double-count bug: `orsurv`
     // lumps in the juniors-recorded-after, which also feed orjuniors -> the same loan filled BOTH
     // the senior AND junior field). Senior = what SURVIVES the sale (recorded before the foreclosing
@@ -1663,8 +1676,8 @@ function recompute(){
     const slien = _dTyped(nn.slien) ? Math.max(0, +nn.slien||0) : chainSurv;   // surviving senior / 1st mortgage
     // kimi: the rest of the deal-modal prefills, all from the recorded chain (user entry still wins).
     const jlien = _dTyped(nn.jlien) ? Math.max(0, +nn.jlien||0) : _jp;   // juniors recorded AFTER the foreclosing one — payoff for clean title on a purchase
-    const assess = _dTyped(nn.assess) ? Math.max(0, +nn.assess||0) : (chainConf ? (r.orhoa||0) : 0);     // recorded HOA/association open liens (estoppel still confirms at contract)
-    const mlien = _dTyped(nn.mlien) ? Math.max(0, +nn.mlien||0) : (chainConf ? ((r.orcode||0)+(r.orirs||0)) : 0);   // code/muni/IRS + money judgments
+    const assess = _dTyped(nn.assess) ? Math.max(0, +nn.assess||0) : (nonMortConf ? (r.orhoa||0) : 0);     // recorded HOA/association open liens (estoppel still confirms at contract); BD path never checks these
+    const mlien = _dTyped(nn.mlien) ? Math.max(0, +nn.mlien||0) : (nonMortConf ? ((r.orcode||0)+(r.orirs||0)) : 0);   // code/muni/IRS + money judgments — BD path never checks these
     // btax stays manual ON PURPOSE: foreclosure ≠ tax-delinquent (the default is the MORTGAGE), and the
     // only honest delinquency figure lives on the tax bill — one click via the deep 'Taxes' link.
     const btax = Math.max(0, +nn.btax || 0);     // delinquent property taxes — first-priority lien, survives FC (FS 197.122)
@@ -1916,11 +1929,14 @@ function dealAnalysisHTML(r){
     : _pulled.length
       ? '<div class="recbanner on">🔗 <b>Auto-pulled from county records:</b> '+_pulled.join(' · ')+'. Counted in the deal math above — adjust only if title turns up more.</div>'
       : ((r.orconf==='ok'||r.orconf==='low'||r.orconf==='bd')
-          // ONLY a trace that actually ran earns the green check. orconf can also be 'none'
-          // (trace attempted, couldn't isolate this owner/parcel) — that used to slip through the
-          // old truthy test and claim "Records checked" on exactly the leads nobody checked,
-          // contradicting the row's own "◯ Not yet verified" chip.
-          ? '<div class="recbanner">✓ <b>Records checked</b> — no surviving mortgage or lien found beyond the foreclosing judgment'+(r.orconf==='low'?' <i>(low-confidence pass — common name; spot-verify in Records)</i>':'')+'. The fields below are yours if title shows something.</div>'
+          // ONLY a trace that actually ran earns the check. orconf can also be 'none' (trace attempted,
+          // couldn't isolate this owner/parcel) — used to slip through the old truthy test and claim
+          // "Records checked" on leads nobody checked. AND 'bd' (BatchData property source) only checks
+          // MORTGAGES — HOA / code-enforcement / IRS are hardcoded $0 in the parser and never confirmed,
+          // so a BD lead gets a scoped-honest banner instead of the blanket clean-lien claim.
+          ? (r.orconf==='bd'
+              ? '<div class="recbanner">✓ <b>Mortgage chain checked</b> (BatchData estimate) — <i>HOA / code-enforcement / IRS liens NOT checked; pull the county estoppel + code-lien search before you sign.</i></div>'
+              : '<div class="recbanner">✓ <b>Records checked</b> — no surviving mortgage or lien found beyond the foreclosing judgment'+(r.orconf==='low'?' <i>(low-confidence pass — common name; spot-verify in Records)</i>':'')+'. The fields below are yours if title shows something.</div>')
           : '<div class="recbanner warn">⚠ <b>No recorded chain pulled for this property yet.</b> Open <b>Records</b> / <b>Cases</b> and fill the debts below — the profit above assumes none survive.</div>');
   const flagsHtml = flags.length ? '<div class="dealflags">'+flags.map(f=>'<div class="flag">'+esc(f)+'</div>').join('')+'</div>' : '';
   // THE HUMANS BEHIND THE LLC (llc_officers.py / Sunbiz): a company-owned deal is still a person —
@@ -2303,8 +2319,12 @@ function _debtStack(r){
                       ? '<div class="dsnote" style="padding:8px 2px">The recorded chain shows the prior mortgages <b>satisfied</b> — but this is a <b>live foreclosure</b>, so the loan being foreclosed is still owed. Its payoff ≈ the <b>'+fm(+r.judg)+'</b> final judgment (it may not show as "open" if it was assigned/securitized and only earlier versions are indexed). No <i>senior</i> mortgage survives above it. Confirm the exact payoff with an estoppel.</div>'
                       : '<div class="dsnote" style="padding:8px 2px">No OPEN mortgages found in the recorded chain — everything on record is satisfied.</div>');
   if(closed.length){
+    // Show the mortgage vintage next to each satisfied entry — the vintage is what tells you a story
+    // ("1998 loan long gone" vs "2024 loan satisfied 1/2/2025 = refi pattern; borrower just requalified").
+    // That story shows up on the sheet without the closer having to open the county records.
     h += '<div class="dsclosed">Satisfied / released ('+closed.length+'): '+
-      closed.map(l=>esc(l.party||'?')+' '+fm(l.amt)).join(' · ')+'</div>';
+      closed.slice().sort((a,b)=>(_lienISO(a)<_lienISO(b)?-1:1))
+        .map(l=>esc(l.party||'?')+' '+fm(l.amt)+(l.d?' <span class="dsclosed-d">('+esc(String(l.d).slice(0,10))+')</span>':'')).join(' · ')+'</div>';
   }
   // ASSIGNMENT WARNING — the position guess above anchors on "face amount closest to the judgment".
   // That silently breaks when the note was SOLD: on 525 W 79 Pl the 2005 New Century loan was
@@ -2335,6 +2355,18 @@ function _csScout(r){ if(!r || !r.addr) return '';
   return '<div class="csscout">🗺 <a href="https://www.google.com/maps/search/?api=1&query='+q+'" target="_blank" rel="noopener" title="Open in Google Maps — flip to satellite for the lot/roof/pool">Aerial</a> · '
     +'<a href="https://www.google.com/maps?q='+q+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener" title="Street View — the house from the road: condition, occupancy, cars in the drive, before you burn a trip">Street View</a> · '
     +'<a href="https://www.google.com/maps/dir/?api=1&destination='+q+'&travelmode=driving" target="_blank" rel="noopener" title="Directions from where you are now — opens the Maps app">Directions</a></div>';
+}
+// GOVERNMENT / CODE-ENFORCEMENT defendants: when the county, a city, code enforcement, or the IRS/US is
+// named as a defendant on THIS case, its lien (if any exists) is only foreclosed OUT if that party stays
+// in the suit through judgment. If it gets voluntarily DROPPED, the lien survives the sale and hits the
+// buyer's title. On the Velima case, Miami-Dade County was named then dropped 11/4/2025 — Chrome caught
+// that as the single biggest deal risk. We surface every gov/code/tax defendant so the closer knows to
+// check the docket for a "DROPPING PARTY: <gov>" entry BEFORE assuming the lien got wiped.
+const _GOV_RE = /(MIAMI-?DADE COUNTY|BROWARD COUNTY|PALM BEACH COUNTY|CITY OF |VILLAGE OF |TOWN OF |CODE ENF|CODE ENFORCE|COUNTY CODE|MUNICIPAL|UNITED STATES|IRS\b|INTERNAL REVENUE|DEPARTMENT OF REVENUE|STATE OF FLORIDA|SBA\b|SMALL BUS)/i;
+function _govDefs(r){
+  const raw = String(r.defs||'');
+  if(!raw) return [];
+  return raw.split(/;+\s*/).map(s=>s.trim()).filter(s=>_GOV_RE.test(s));
 }
 // The money-angle banner: shows THIS deal's play (BUY / WHOLESALE / SHORT SALE / RESEARCH / AUCTION /
 // LP-EARLY) + the one-line why, right under the address. It's the first thing Jose reads before he calls —
@@ -2477,6 +2509,19 @@ function _callSheet(r){
   stack += '</div>' + _debtStack(r);
   // everyone else named on the lawsuit — where solar leases and code liens hide
   if(r.defs) stack += '<div class="csbody">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
+  // ⚠ Gov/code/tax defendant risk (the Velima trap: county named -> then dropped 11/4/2025 -> code lien survives).
+  // We can't cheaply detect the DROP from the docket without pulling the OCS case, but we CAN surface the
+  // "named-as-defendant" signal so the closer knows to check the docket for a DROPPING PARTY entry BEFORE
+  // trusting any code/muni lien got wiped by the sale. This is one of the few risks that reads as "clean"
+  // in the deal math and lands as a real dollar surprise at title. Skip on LP (no case-level judgment yet).
+  if(r.st!=='LP'){
+    const _gv = _govDefs(r);
+    if(_gv.length) stack += '<div class="csbody csgovwarn">'+
+      '<div class="cssurvbtns" style="margin:2px 0 6px"><span class="csl" style="color:#B87A0E">⚠ GOV / CODE / TAX PARTY NAMED — CODE-LIEN SURVIVAL RISK</span></div>'+
+      '<div class="css">These parties are named as defendants: <b>'+esc(_gv.join(', '))+'</b>. If any is <b>voluntarily dropped</b> before judgment, their lien (if any) is <b>NOT foreclosed out</b> and survives the sale — it hits your title.</div>'+
+      '<div class="css" style="margin-top:5px">On the docket, look for a <b>DROPPING PARTY: {name}</b> entry. Confirm with the county code-enforcement office (a $0-consideration recorded order that our records scan skips) and the appraiser\'s tax status <b>before</b> you bid.</div>'+
+      '</div>';
+  }
 
   // THE PROPERTY
   const prop = '<div class="cssec">THE PROPERTY</div><div class="csbody">'+
@@ -2503,7 +2548,30 @@ function _callSheet(r){
   cont += row('Mailing address', esc(r.mail||r.addr||'—')+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <span class="csmut">(same as the property — they live there)</span>':' <span class="csmut">(different — absentee owner)</span>'));
   cont += '</div>';
 
-  return '<div class="callsheet">'+who+_csPlay(r)+four+clock+(r.st==='LP'?'':stack)+prop+cont+   /* LP: no judgment/chain yet — the fresh-filing block already names the lender, so skip the $0 debt section */
+  // Sale-survival RULE + honest LIMITS + one actionable NEXT STEP — the closer's litmus test in plain English,
+  // borrowed straight from Chrome's Velima writeup. It teaches while they call so a bad "clean lien" call
+  // never survives their own read. Skipped on LP (no case-level judgment or debt stack yet) and TD (tax
+  // deed — the whole recorded mortgage stack is wiped by the tax sale, different rule entirely).
+  const _cflaw = (r.st==='LP' || r.st==='TD') ? '' :
+    '<div class="cslaw"><div class="cslaw-t">📘 THE RULE — WHAT SURVIVES A FLORIDA MORTGAGE FORECLOSURE SALE</div>'+
+    '<ul class="cslaw-l">'+
+      '<li><b>Wiped:</b> mortgages/liens recorded <b>AFTER</b> the foreclosing loan, when the holder was named as a defendant.</li>'+
+      '<li><b>Survives:</b> mortgages/liens recorded <b>BEFORE</b> the foreclosing loan (senior); plus <b>ad valorem property tax</b>, <b>code-enforcement</b>, and <b>federal tax (IRS)</b> liens regardless of date; plus recorded <b>easements/plat restrictions</b>.</li>'+
+      '<li><b>Trap:</b> a government defendant that was <b>voluntarily dropped</b> before judgment — its lien was NOT foreclosed and it survives. Docket entry: "DROPPING PARTY: {name}".</li>'+
+    '</ul>'+
+    '<div class="cslaw-t" style="margin-top:9px">🔎 THE LIMITS — WHAT THIS SHEET CANNOT PROVE</div>'+
+    '<ul class="cslaw-l">'+
+      '<li>The <b>Final Judgment</b> document text is behind the clerk paywall — we count the amount, not the surviving-lien language inside.</li>'+
+      '<li>Code-enforcement liens can be $0-consideration orders that our records scan skips; the county code office is authoritative.</li>'+
+      '<li>Chain kills tagged HEURISTIC (rules 2-3 in the parser) are inference from timing, not a matched satisfaction — verify the OLDEST open before you bid.</li>'+
+    '</ul>'+
+    '<div class="cslaw-t" style="margin-top:9px">✅ NEXT STEP BEFORE YOU BID</div>'+
+    '<ul class="cslaw-l">'+
+      '<li>Pull the <b>Final Judgment</b> from the case docket — it names what survives explicitly.</li>'+
+      '<li>Run a <b>county code-enforcement lien search</b> on the folio (search is free — landing surprise is not).</li>'+
+      '<li>Confirm the <b>Tax Collector</b> shows the folio paid current (<a href="'+esc(r.tax||'#')+'" target="_blank" rel="noopener">tax page</a>).</li>'+
+    '</ul></div>';
+  return '<div class="callsheet">'+who+_csPlay(r)+four+clock+(r.st==='LP'?'':stack)+prop+cont+_cflaw+   /* LP: no judgment/chain yet — the fresh-filing block already names the lender, so skip the $0 debt section */
     '<div class="csfoot"><button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
     '<button type="button" class="csbtn" onclick="openDealModal(\''+esc(r.case)+'\')">Full deal analysis →</button></div></div>';
 }

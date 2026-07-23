@@ -237,17 +237,33 @@ def analyze(models, folio, judgment, ftype=''):
     for r in sats2: r['_dt'] = '-'.join(sortkey(r))
     assigns = [r for r in models if 'ASSIGNMENT' in (r.get('doC_TYPE', '') or '').upper()]
     for r in assigns: r['_dt'] = '-'.join(sortkey(r))
-    def _assignees(lend, after):
-        out = set()
-        for a in assigns:
-            if a['_dt'] >= after:
-                ai = _inst(a.get('seconD_PARTY'))
-                if ai: out.add(ai)
+    # CORRECTNESS: build a per-lender assignment GRAPH (from -> set(to)) and BFS the chain that starts
+    # at the mortgage's own lender. Was: _assignees pooled EVERY assignee of every assignment together
+    # and returned them regardless of the input `lend`, so a release by an unrelated bank's assignee
+    # (chain B) could silently mark chain A's mortgage SATISFIED — the exact "phantom survivor -> false
+    # equity" failure the tool exists to catch. Mirrors broward_liens.chain_of. Uses firsT_PARTY as the
+    # assignor (which the MD Records API records as the current holder BEFORE the assignment) and
+    # seconD_PARTY as the new holder.
+    assigngraph = {}
+    for a in assigns:
+        fr = _inst(a.get('firsT_PARTY')); to = _inst(a.get('seconD_PARTY'))
+        if fr and to and fr != to:
+            assigngraph.setdefault(fr, set()).add(to)
+    def chain_of(lend, after):
+        if not lend: return {lend}
+        out, frontier, seen = {lend}, [lend], set()
+        while frontier:
+            cur = frontier.pop()
+            if cur in seen: continue
+            seen.add(cur)
+            for nxt in assigngraph.get(cur, ()):
+                if nxt not in out:
+                    out.add(nxt); frontier.append(nxt)
         return out
     for o in liens:
         if o['st'] == 'SATISFIED':
             continue
-        chain = {o['_lend']} | _assignees(o['_lend'], o['_dt'])
+        chain = chain_of(o['_lend'], o['_dt'])
         for s in sats2:
             if not s['_dt'] or s['_dt'] < o['_dt']: continue
             si = _inst(s.get('seconD_PARTY'))
@@ -269,7 +285,7 @@ def analyze(models, folio, judgment, ftype=''):
     # older balance within 24 months (a junior second is usually far smaller, so it can't pose as one)
     for o in liens:
         if o['st'] != 'OPEN': continue
-        chain3 = {o['_lend']} | _assignees(o['_lend'], o['_dt'])
+        chain3 = chain_of(o['_lend'], o['_dt'])
         for m2 in liens:
             if m2 is o or m2['_dt'] <= o['_dt']: continue
             if (_months(o['_dt'], m2['_dt']) <= 24 and m2['amt'] >= o['amt'] * 0.9
