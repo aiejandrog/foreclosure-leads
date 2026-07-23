@@ -1403,6 +1403,8 @@ body.compact .dg-v{font-size:14.5px}
 <button id="due" class="abtn" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Due</button>
 <button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
+<button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
+<select id="nearrad" class="tf" title="Radius from your home base — expand to broaden the net" style="display:none;padding:5px 8px"><option value="1">1&nbsp;mi</option><option value="2">2&nbsp;mi</option><option value="3">3&nbsp;mi</option><option value="5" selected>5&nbsp;mi</option><option value="10">10&nbsp;mi</option><option value="15">15&nbsp;mi</option><option value="25">25&nbsp;mi</option><option value="50">50&nbsp;mi</option></select>
 <span class="qwrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list."><kbd>/</kbd></span>
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
@@ -1502,6 +1504,7 @@ const expanded = new Set();   // case #s whose Deal-analysis panel is open (surv
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false;
+let nearOnly = false, nearRadius = 5;   // 📍 within N miles of home base (ROUTE_ORIGIN); radius is user-adjustable
 // A lead is in the LIS PENDENS (freshly-filed) stage — no auction date yet, worked as a nurture
 // over months. Set by lis_pendens.py (stage:'LP'). This is the front-of-funnel lane.
 function _isLP(r){ return r && (r.stage === 'LP' || r.st === 'LP'); }
@@ -4467,8 +4470,12 @@ function view(){
     if(eq30Only) rows = rows.filter(r => netEqPct(r) >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r));
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
+    // 📍 NEAR HOME: only properties within nearRadius miles of the home base (ROUTE_ORIGIN). Composes
+    // with tier/county/every other filter above; sorted nearest-first below so the closest deal is on top.
+    if(nearOnly) rows = rows.filter(r => r.lat && r.lng && _haversine(ROUTE_ORIGIN.lat, ROUTE_ORIGIN.lng, r.lat, r.lng) <= nearRadius);
   }
   rows = rows.slice();
+  if(nearOnly){ rows.sort((a,b) => _haversine(ROUTE_ORIGIN.lat,ROUTE_ORIGIN.lng,a.lat,a.lng) - _haversine(ROUTE_ORIGIN.lat,ROUTE_ORIGIN.lng,b.lat,b.lng)); return rows; }   // nearest to home first
   if(closersOnly){ rows.sort((a,b) => _closeScore(b) - _closeScore(a)); return rows.slice(0, 25); }   // top 25 — a focused, workable shortlist ranked by closeability
   const sortVal = r => {
     // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
@@ -4799,7 +4806,8 @@ document.addEventListener('click', e => {
   togglePin(row.dataset.case);
 });
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=false;
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=nearOnly=false;
+  { const _nh=document.getElementById('nearhome'), _nr=document.getElementById('nearrad'); if(_nh)_nh.classList.remove('active'); if(_nr)_nr.style.display='none'; }
   { const _cb=document.getElementById('closers'); if(_cb) _cb.classList.remove('active'); }
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
@@ -4832,6 +4840,7 @@ function _activeFilters(){
   if(hideDead) out.push({k:'hd', lbl:'Hiding dead'});
   if(hideFlagged) out.push({k:'hf', lbl:'Hiding flagged'});
   if(eq30Only) out.push({k:'eq30', lbl:'30%+ equity'});
+  if(nearOnly) out.push({k:'near', lbl:'📍 Within '+nearRadius+' mi of home'});
   if(tdOnly) out.push({k:'td', lbl:'Tax deeds'});
   if(fy1||fy2) out.push({k:'fy', lbl:'Filed '+(fy1||'…')+'–'+(fy2||'…')});
   if(ad1||ad2) out.push({k:'ad', lbl:'Auction '+(ad1||'…')+'–'+(ad2||'…')});
@@ -4855,6 +4864,7 @@ function _clearFilter(k){
   else if(k==='fav'){ favOnly=false; }
   else if(k==='closers'){ closersOnly=false; if(g('closers'))g('closers').classList.remove('active'); }
   else if(k==='freshlp'){ lpOnly=false; if(g('freshlp'))g('freshlp').classList.remove('active'); }
+  else if(k==='near'){ nearOnly=false; if(g('nearhome'))g('nearhome').classList.remove('active'); if(g('nearrad'))g('nearrad').style.display='none'; }
   else if(k==='wk'){ weekOnly=false; if(g('wk'))g('wk').classList.remove('active'); }
   else if(k==='due'){ dueOnly=false; if(g('due'))g('due').classList.remove('active'); }
   else if(k==='nc'){ ncOnly=false; if(g('nc'))g('nc').classList.remove('active'); }
@@ -4922,6 +4932,9 @@ document.getElementById('plan').onclick = () => openPlanModal();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
 { const _cb = document.getElementById('closers'); if(_cb) _cb.onclick = () => { closersOnly = !closersOnly; _cb.classList.toggle('active', closersOnly); render(); }; }
 { const _lp = document.getElementById('freshlp'); if(_lp) _lp.onclick = () => { lpOnly = !lpOnly; if(lpOnly){ closersOnly=false; const c=document.getElementById('closers'); if(c)c.classList.remove('active'); } _lp.classList.toggle('active', lpOnly); render(); }; }
+{ const _nh = document.getElementById('nearhome'), _nr = document.getElementById('nearrad');
+  if(_nh) _nh.onclick = () => { nearOnly = !nearOnly; if(nearOnly){ closersOnly=lpOnly=false; ['closers','freshlp'].forEach(id=>{const b=document.getElementById(id); if(b)b.classList.remove('active');}); } _nh.classList.toggle('active', nearOnly); if(_nr) _nr.style.display = nearOnly?'':'none'; render(); };
+  if(_nr) _nr.onchange = () => { nearRadius = +_nr.value || 5; if(nearOnly) render(); }; }
 // collapsible advanced panel (date filters / deal model / sender / lookup) — keeps the sticky header short
 (function(){
   const panel = document.getElementById('advpanel'), tog = document.getElementById('advtog');
