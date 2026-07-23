@@ -107,6 +107,12 @@ _pph, _phum = round(100 * _hasphone / _tot), round(100 * _human / _tot)
 add('PASS' if _pph >= 60 else 'WARN', 'auto-phone coverage', f'{_hasphone}/{len(_cl)} have a dialable number ({_pph}%)')
 add('PASS' if _phum >= 90 else 'WARN', 'human-contact coverage',
     f'{_human}/{len(_cl)} name a person to call ({_phum}%)' + (f'; {len(_shell)} shell LLCs left — run llc_officers.py' if _shell else ''))
+# geocode coverage — lat/lng per lead is what the origin-anchored door route + Near-home filter need;
+# a lead with no coordinates silently drops out of both, so watch it like the other coverages.
+_geo = load('geocode_cache.json') or {}
+_geoc = sum(1 for _c, _o in _cl if (_geo.get(_c) or {}).get('lat'))
+_gpct = round(100 * _geoc / _tot)
+add('PASS' if _gpct >= 70 else 'WARN', 'geocode coverage', f'{_geoc}/{len(_cl)} have lat/lng for map+route ({_gpct}%); run geo_enrich.py' if _gpct < 100 else f'{_geoc}/{len(_cl)} geocoded')
 
 # ---- 2b. RETROACTIVITY WATCHDOG (2026-07-20) --------------------------------------------------
 # Every enrichment "rule" must keep applying to future scrapes, not just today's. If a pipeline
