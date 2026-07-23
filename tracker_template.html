@@ -4935,7 +4935,12 @@ function initCountyFilter(){ if(_ctyInit) return; const box=document.getElementB
   if(cs.length<2){ box.style.display='none'; return; }
   const pill=(val,label,n)=>'<button class="cf'+((county||'')===val?' active':'')+'" data-cty="'+esc(val)+'" type="button">'+esc(label)+'<span class="cfn">'+n+'</span></button>';
   box.innerHTML='<span class="flbl">County</span>'+pill('','All',DATA.length)+cs.map(c=>pill(c,tc(c),counts[c])).join('');
-  box.querySelectorAll('.cf').forEach(b=>b.onclick=()=>{ county=b.dataset.cty; box.querySelectorAll('.cf').forEach(x=>x.classList.toggle('active', x.dataset.cty===(county||''))); render(); });
+  box.querySelectorAll('.cf').forEach(b=>b.onclick=()=>{ county=b.dataset.cty; box.querySelectorAll('.cf').forEach(x=>x.classList.toggle('active', x.dataset.cty===(county||'')));
+    // SMART: picking a specific county shows the WHOLE county (all tiers) — you're never stuck on Tier A.
+    // The tier buttons still narrow within it, and switching tier keeps the county. County + tier are
+    // independent: County=Miami-Dade + Tier=All = every MD property (~266), County + Tier=A = just the A's.
+    if(county){ tier='ALL'; document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL')); closersOnly=lpOnly=false; ['closers','freshlp'].forEach(id=>{const g=document.getElementById(id); if(g)g.classList.remove('active');}); }
+    render(); });
 }
 function _resetCountyPills(){ const box=document.getElementById('ctygroup'); if(box) box.querySelectorAll('.cf').forEach(x=>x.classList.toggle('active', (x.dataset.cty||'')==='')); }
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
