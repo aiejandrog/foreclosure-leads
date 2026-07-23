@@ -723,6 +723,66 @@ def _fwd_flags(d, h, ftype):
     if h.get('second_fc'): d['orsecond'] = h['second_fc']           # a separate CACE mortgage foreclosure
 
 
+def _merge_lis_pendens(slim):
+    """Prepend Fresh-filings (stage=LP) from lis_pendens.py into board DATA.
+
+    UI filters: _isLP(r) → Fresh filings lane; default auction board excludes them.
+    Dedupes against existing auction leads by case # and folio so an LP that already matured
+    onto the sale list doesn't double-appear.
+    """
+    path = os.path.join(HERE, 'lis_pendens.json')
+    if not os.path.exists(path):
+        return slim
+    try:
+        payload = json.load(open(path, encoding='utf-8'))
+    except Exception as e:
+        print(f"skip lis_pendens.json: {e}")
+        return slim
+    leads = []
+    if isinstance(payload, dict):
+        leads = payload.get('leads') or []
+        if not leads and payload.get('filings'):
+            try:
+                import lis_pendens as _LP
+                leads = _LP._to_leads(payload['filings'])
+            except Exception as e:
+                print(f"lis_pendens filings->leads failed: {e}")
+                leads = []
+    if not leads:
+        return slim
+    existing_cases = {str(d.get('case') or '') for d in slim if d.get('case')}
+    existing_folios = {str(d.get('folio') or '') for d in slim if d.get('folio')}
+    added = []
+    for raw in leads:
+        L = dict(raw)
+        L['stage'] = 'LP'
+        L['st'] = 'LP'
+        L.setdefault('tier', 'B')
+        L.setdefault('county', 'MIAMI-DADE')
+        L.setdefault('score', 50)
+        L.setdefault('days', None)
+        L.setdefault('auction', '')
+        c = str(L.get('case') or '')
+        f = str(L.get('folio') or '')
+        if c and c in existing_cases:
+            continue
+        if f and f in existing_folios:
+            continue
+        # company chip when the "owner" string looks corporate (rare — defendants are usually people)
+        L['co'] = bool(re.search(
+            r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|PROPERT|REALTY)\b',
+            str(L.get('owners') or ''), re.I))
+        added.append(L)
+        if c:
+            existing_cases.add(c)
+        if f:
+            existing_folios.add(f)
+    if added:
+        print(f"merged {len(added)} Fresh filings (Lis Pendens) from lis_pendens.json")
+        return added + list(slim)
+    return slim
+
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -1022,6 +1082,10 @@ def make_tracker(leads):
                   (f" ({_nl} with lien chains)" if _nl else "") + (f" ({_np} with phones)" if _np else ""))
         except Exception as e:
             print(f"skip {_xf}: {e}")
+
+    # Fresh filings (Lis Pendens) — front-of-funnel lane (stage=LP). Produced by lis_pendens.py
+    # lender-name sweep. Prepended so they show in Fresh filings; auction board filters them out via _isLP.
+    slim = _merge_lis_pendens(slim)
 
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)

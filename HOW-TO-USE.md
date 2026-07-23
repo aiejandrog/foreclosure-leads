@@ -143,3 +143,14 @@ sold/canceled ones drop off. Want it updated right now? Double-click **`run-lead
 | Mark a lead worked | Use the **Status** dropdown |
 | Give the list to someone | Click **Export CSV** |
 | Refresh right now | Double-click **run-leads.bat** |
+
+---
+
+## 🌱 Fresh filings (Lis Pendens) — front of the funnel
+
+The **Fresh filings** button shows foreclosures the day they're **filed** (Lis Pendens) — months before
+the auction list. Daily refresh sweeps major lender/HOA names on Miami-Dade Official Records (the
+county walls a blank "every filing" search unless you buy their Commercial Data Services Official
+Records folder ≈ $110/mo: https://www.miamidadeclerk.gov/clerk/commercial-data-services.page).
+
+Local: `python lis_pendens.py --days 14` (needs `captcha.key`). Then rebuild the tracker.

@@ -1654,7 +1654,7 @@ function recompute(){
     r._slien=slien; r._jlien=jlien; r._assess=assess; r._mlien=mlien; r._btax=btax; r._occ=occ; r._evict=evict;
     r._assessSet = _dTyped(nn.assess);   // an explicitly researched assessment (incl. a confirmed $0) lifts the condo MARGINAL cap
     // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
-    if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; return; }
+    if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; r._play=_playFor(r); return; }
     r._nodata = false;
     const costs = val * costPct;
     if(r.st === 'TD'){
@@ -1745,6 +1745,8 @@ function setVerdict(r, x){
 // upfront rescue fee (FL 501.1377), never surplus-recovery outside FL 45.033, never equity-strip an
 // impaired owner — those are the felony bucket; every play below stays on the legal side.
 function _playFor(r){
+  // Front-of-funnel: just filed, no auction crowd — nurture play beats any equity guess.
+  if(r && (r.stage === 'LP' || r.st === 'LP')) return {t:'LP-EARLY', w:'Just filed (Lis Pendens) — 8–14 months before the auction crowd. Be the FIRST contact: letter + call, nurture for months. Confirm folio/parcel, then equity falls out. No upfront rescue fee (FL 501.1377).'};
   if(r.st==='TD') return {t:'AUCTION', w:'Tax deed — win at the public sale (opening bid + markup), then quiet title before resale. Own model on the row.'};
   if(r.ju) return {t:'RESEARCH', w:'Final judgment not posted yet — pull the docket before you value or offer.'};
   const nn = notes[r.case]||{}, val = +r.value||0;
@@ -4606,7 +4608,8 @@ function render(){
     // Profit cell: big profit, then ROI + cash sub-line, then flags. "no value data" when un-enriched.
     let prof;
     if(r._nodata){
-      prof = '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
+      // Still show PLAY (esp. LP-EARLY) — no market value ≠ no money-making angle.
+      prof = _playBadge(r)+'<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
     } else if(r._verdict==='VERIFY'){
       prof = verdictBadge(r)+_playBadge(r)+'<div class="warn" style="margin-top:4px;white-space:normal">'+esc(r._whyShort||r._why)+'</div>'+dealTrigger(r);
     } else {
@@ -4618,10 +4621,15 @@ function render(){
         dealTrigger(r);
     }
     const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
-    // Auction cell: date, countdown, filed/bought sub-lines
-    const auc = '<div>'+esc(r.auction)+'</div>'+
-      '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
-      (r.filed||r.bought?'<div class="meta">'+(r.filed?'filed '+r.filed:'')+(r.bought?' · bought '+r.bought:'')+'</div>':'');
+    // Auction cell: date, countdown, filed/bought sub-lines.
+    // LP (fresh filings): no sale date — show recorded date + kind instead of "passed".
+    const auc = _isLP(r)
+      ? '<div title="Lis Pendens recorded — no auction date yet">'+esc(r.filedDate||'just filed')+'</div>'+
+        '<div class="submeta">🌱 filed</div>'+
+        (r.lpkind?'<div class="meta">'+esc(r.lpkind)+'</div>':'')
+      : '<div>'+esc(r.auction)+'</div>'+
+        '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
+        (r.filed||r.bought?'<div class="meta">'+(r.filed?'filed '+r.filed:'')+(r.bought?' · bought '+r.bought:'')+'</div>':'');
     // Owner cell: owner names, plaintiff (clamped), count of other defendants
     // Co-parties named on the case. Each human (co-owner / spouse / relative) is a clickable People
     // search so you can reach them; companies (bank/HOA/county/tenant) render muted for context.
@@ -4673,10 +4681,9 @@ function render(){
     cards.push('<div data-case="'+esc(r.case)+'" class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+(pinnedCase===r.case?' pinfire':'')+'">'+
       ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+_zstatusBadge(r)+_favStar(r)+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
-        (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
-                  : r._verdict==='VERIFY' ? verdictBadge(r)
-                  : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
-        _playBadge(r)+
+        (r._nodata?_playBadge(r)+'<span class="meta cprofit" style="font-size:14px">no value data</span>'
+                  : r._verdict==='VERIFY' ? verdictBadge(r)+_playBadge(r)
+                  : verdictBadge(r)+_playBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
         '<span class="cscore">Score '+r.score+'</span></div>'+
       '<div class="fchips">'+flagChips(r)+landChips(r)+verifyChip(r)+'</div>'+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
@@ -4692,7 +4699,9 @@ function render(){
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
-      '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
+      '<div class="submeta">'+(_isLP(r)
+        ? ('🌱 '+(r.filedDate?esc(r.filedDate)+' · ':'')+'just filed'+(r.lpkind?' · '+esc(r.lpkind):'')+' · '+ctype)
+        : (esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype))+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
       dealTrigger(r)+

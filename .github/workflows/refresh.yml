@@ -97,6 +97,7 @@ jobs:
             county_plaintiffs.json
             tax_links.json
             comps.json
+            lis_pendens.json
             property_types_cache.json
             listing_status_cache.json
             health.json
@@ -212,6 +213,17 @@ jobs:
           if [ -s batchdata.key ]; then python batchdata_liens.py --all --limit 80; fi
           # Broward plaintiff -> bank-1st(clean) vs junior/HOA(senior survives). PB is headed-browser (--pb) = local only.
           if [ -s captcha.key ] && [ -f broward_leads.json ]; then python county_plaintiffs.py --county broward --near --limit 60; fi
+
+      # ---- [2c/5] Lis Pendens fresh filings (front of funnel) -------------------------------
+      # WORKING free path: lender/HOA NAME + documentType=LIS PENDENS - LIS + date window.
+      # Nameless docket-wide search is WALLED by Miami-Dade (isValidSearch:false). Full coverage
+      # needs Clerk Commercial Data Services Official Records ≈ $110/mo.
+      # Cap parties (--limit 24) to bound Turnstile spend (~1 solve each). Fail-soft: empty
+      # Fresh filings lane if captcha missing or sweep returns nothing.
+      - name: '[2c/5] Lis Pendens fresh filings (lender-name sweep)'
+        continue-on-error: true
+        run: |
+          if [ -s captcha.key ]; then python lis_pendens.py --days 14 --limit 24; else echo "no captcha.key — skip LP sweep (Fresh filings stays empty)"; fi
 
       # ---- [3/5] Skip-trace phones (only if a key is present) -----------------------------
       - name: '[3/5] Humans behind LLCs (Sunbiz) + skip-trace phones (all tiers, capped)'
