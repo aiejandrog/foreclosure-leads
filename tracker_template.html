@@ -420,6 +420,7 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
   padding:3px 9px 3px 8px;border-radius:var(--pill);letter-spacing:.09em;text-transform:uppercase;
   line-height:1;border:1px solid transparent;vertical-align:middle}
 .vb::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
+.playbadge{display:inline-flex;align-items:center;font-family:var(--f-label);font-size:8px;font-weight:700;letter-spacing:.5px;color:#fff;padding:2px 6px;border-radius:5px;margin-left:5px;vertical-align:middle;text-transform:uppercase;cursor:help;white-space:nowrap}
 .vb3{background:var(--green-soft);color:var(--green-ink);border-color:#BEE5CC;box-shadow:0 1px 7px rgba(14,138,78,.2)}
 .vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#EDDCAF;box-shadow:0 1px 7px rgba(185,127,14,.18)}
 .vb1{background:#ECEFF4;color:#5E6B84;border-color:var(--line)}
@@ -1702,6 +1703,7 @@ function recompute(){
       r._tight = (debt > offer);
     }
     setVerdict(r, {slien, val, slienTyped: _dTyped(nn.slien), offerTyped: !!r._offerTyped});
+    r._play = _playFor(r);   // the money-making play that fits THIS deal (Jose: no deal is dead)
   });
 }
 // ---- worth-it verdict + per-lead deal analysis ----
@@ -1737,6 +1739,27 @@ function setVerdict(r, x){
   if(r._chainSurv && r.orconf==='low' && rank>2){ rank=2; v='MARGINAL'; why='Surviving-mortgage math comes from a LOW-confidence lien chain (common owner name — could include a stranger\'s records). The equity is accounted for; verify the chain in Official Records before trusting it as STRONG.'; }
   r._verdict=v; r._vrank=rank; r._why=why;
 }
+// PLAY — the money-making angle that fits THIS deal, INDEPENDENT of buy-equity. Jose's rule: no deal is
+// dead; even bad/negative equity has a play (short-sale, wholesale/assign, LP-early). A "PASS" verdict
+// (no equity to BUY) still surfaces its play instead of dying. Legal line baked into the copy: never an
+// upfront rescue fee (FL 501.1377), never surplus-recovery outside FL 45.033, never equity-strip an
+// impaired owner — those are the felony bucket; every play below stays on the legal side.
+function _playFor(r){
+  if(r.st==='TD') return {t:'AUCTION', w:'Tax deed — win at the public sale (opening bid + markup), then quiet title before resale. Own model on the row.'};
+  if(r.ju) return {t:'RESEARCH', w:'Final judgment not posted yet — pull the docket before you value or offer.'};
+  const nn = notes[r.case]||{}, val = +r.value||0;
+  const seniorUnknown = (r.st!=='TD') && r.mr && r.orconf!=='ok' && !_dTyped(nn.slien);
+  if(seniorUnknown) return {t:'SHORT SALE', w:'A senior mortgage likely survives this sale — no clean buy. Play: negotiate the foreclosing/senior lender DOWN (short sale), or wholesale the contract at a steep discount. Confirm the survivor first.'};
+  const eq = r._equity;
+  if(eq==null || val<=0) return {t:'RESEARCH', w:'No appraiser value yet — pull the parcel, then the play falls out of the equity.'};
+  const eqp = eq/val;
+  if(eqp>=0.30) return {t:'BUY', w:'Real equity after the whole debt — buy at a discount to keep/flip, or lock it and wholesale (assign) to a cash buyer.'};
+  if(eqp>0)     return {t:'WHOLESALE', w:'Thin equity — lock it LOW and ASSIGN the contract to a cash buyer; do not plan to hold or rehab on this margin.'};
+  return {t:'SHORT SALE', w:'Underwater — no equity to buy outright. Play: short-sale the lender (get them to take less), or walk. NEVER take an upfront fee to "save" the home (FL 501.1377).'};
+}
+const PLAY_COLOR={BUY:'#2E7D5B','WHOLESALE':'#1F6FEB','SHORT SALE':'#C08A2E','RESEARCH':'#6b7280','AUCTION':'#7c3aed','LP-EARLY':'#0B7285'};
+function _playBadge(r){ const p=r._play; if(!p) return '';
+  return '<span class="playbadge" title="'+esc(p.w)+'" style="background:'+(PLAY_COLOR[p.t]||'#6b7280')+'">'+esc(p.t)+'</span>'; }
 const fmtMoney = n => (n<0?'-$':'$')+Math.abs(Math.round(n)).toLocaleString();
 function verdictBadge(r){ return r._verdict==='VERIFY' ? '<span class="vb vbv">VERIFY</span>' : '<span class="vb vb'+r._vrank+'">'+r._verdict+'</span>'; }
 // deal-killer chips: 🔴 TAKEN (already deeded to an investor) · 🟠 2ND FORECLOSURE (a separate mortgage case).
@@ -4585,9 +4608,9 @@ function render(){
     if(r._nodata){
       prof = '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
     } else if(r._verdict==='VERIFY'){
-      prof = verdictBadge(r)+'<div class="warn" style="margin-top:4px;white-space:normal">'+esc(r._whyShort||r._why)+'</div>'+dealTrigger(r);
+      prof = verdictBadge(r)+_playBadge(r)+'<div class="warn" style="margin-top:4px;white-space:normal">'+esc(r._whyShort||r._why)+'</div>'+dealTrigger(r);
     } else {
-      prof = verdictBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
+      prof = verdictBadge(r)+_playBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
         (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
         (r.value>0?'<div class="mvline">'+fmtK(r.value)+'<span class="mvl">market value</span></div>':'')+
         (r._tight?'<div class="warn" title="Costs/debt eat the margin. Negotiate lower or pass.">thin margin</div>':'')+
@@ -4653,6 +4676,7 @@ function render(){
         (r._nodata?'<span class="meta cprofit" style="font-size:14px">no value data</span>'
                   : r._verdict==='VERIFY' ? verdictBadge(r)
                   : verdictBadge(r)+'<span class="'+pcls+' cprofit" style="margin-left:6px">'+fmt0(r._profit)+'</span>')+
+        _playBadge(r)+
         '<span class="cscore">Score '+r.score+'</span></div>'+
       '<div class="fchips">'+flagChips(r)+landChips(r)+verifyChip(r)+'</div>'+
       (!r._nodata&&r._verdict==='VERIFY'?'<div class="warn">'+esc(r._whyShort||r._why)+'</div>':'')+
