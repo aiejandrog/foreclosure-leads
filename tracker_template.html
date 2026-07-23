@@ -2391,7 +2391,14 @@ function _callSheet(r){
   '</div>';
 
   // THE CLOCK
-  const clock = '<div class="cssec">THE CLOCK</div><div class="csbody">'+
+  const clock = (r.st==='LP')
+    // LP (fresh filing): no auction is scheduled yet — don't render the 9999-day countdown; frame the edge.
+    ? '<div class="cssec">THE CLOCK</div><div class="csbody">'
+      + row('Filed', '<b>'+esc(r.filed||r.filedDate||'recently')+'</b> — Lis Pendens just recorded')
+      + row('Auction', '<b>none scheduled yet</b> — typically months of runway before a sale date is set')
+      + row('Your edge', 'Be the <b>FIRST</b> contact — reach the owner now, before the auction crowd. People-search the name for a number.')
+      + '</div>'
+    : '<div class="cssec">THE CLOCK</div><div class="csbody">'+
     row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')
       +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':'')) +
     row('Deal deadline', r.days>=0 ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play') +
