@@ -438,6 +438,8 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .cspeople a:hover{text-decoration:underline}
 .csreclink{color:var(--blue,#1F6FEB);text-decoration:none;font-weight:700;white-space:nowrap}
 .csreclink:hover{text-decoration:underline}
+/* WP Pro API verified badge — replaces the misleading free-consumer-page link on covered leads */
+.wpverified{display:inline-block;background:var(--green-soft,#DDF2E4);color:var(--green-ink,#0E5F31);font-weight:700;font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid #BEE5CC;cursor:help;letter-spacing:.02em}
 .vb3{background:var(--green-soft);color:var(--green-ink);border-color:#BEE5CC;box-shadow:0 1px 7px rgba(14,138,78,.2)}
 .vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#EDDCAF;box-shadow:0 1px 7px rgba(185,127,14,.18)}
 .vb1{background:#ECEFF4;color:#5E6B84;border-color:var(--line)}
@@ -2498,8 +2500,16 @@ function _wpAddrUrl(r){ const p=String(r.addr||'').split(','); if(!p[0]||p.lengt
 // where People-search IS the play, and no-phone leads where it's the only path to a contact.
 function _csPeople(r){
   var L=[], wn=_wpNameUrl(r), wa=_wpAddrUrl(r);
-  if(wa)            L.push('<a href="'+esc(wa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS — the best free hit: prints the household landline UNMASKED + every resident/relative with ages, plus owner-occupied/rented/vacant status. Start here.">⭐ Whitepages addr</a>');
-  if(wn)            L.push('<a href="'+esc(wn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — address history + aliases (may go by), cell/landline behind their paywall but the free layer cross-checks who is who">Whitepages</a>');
+  // If WP Pro already ran on this lead, don't send the closer back to the free consumer page — it
+  // shows LESS data (masked phones, WP.com upsell nag) than the WP HOUSEHOLD section right above.
+  // Show a static "verified" badge instead so they know the API already covered it.
+  var wpDone = r.wpKey === 'ok' || (r.wpAllPhones && r.wpAllPhones.length);
+  if(wpDone) {
+    L.push('<span class="wpverified" title="Whitepages Pro API already ran on this lead — every unmasked phone and email is in the WHITEPAGES-VERIFIED HOUSEHOLD section above. No need to hit the free consumer page.">🔒 WP Pro verified above</span>');
+  } else {
+    if(wa)          L.push('<a href="'+esc(wa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS — the best free hit: prints the household landline UNMASKED + every resident/relative with ages, plus owner-occupied/rented/vacant status. Start here. (WP Pro API hasn\'t run on this lead yet — refresh to enrich.)">⭐ Whitepages addr</a>');
+    if(wn)          L.push('<a href="'+esc(wn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — address history + aliases (may go by), cell/landline behind their paywall but the free layer cross-checks who is who">Whitepages</a>');
+  }
   if(r.people)      L.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener" title="TruePeopleSearch by NAME — phones, relatives, address history">People</a>');
   if(r.peopleaddr)  L.push('<a href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the property ADDRESS — returns only who actually lives there">by address</a>');
   if(r.cyberbg)     L.push('<a href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by NAME — every phone with carrier + last-reported date, emails, relatives">CyberBG</a>');

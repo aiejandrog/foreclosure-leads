@@ -92,6 +92,12 @@ rem  --all = every human owner + (via the code) every resolved LLC officer, not 
 rem  --limit 120 caps a single run's spend; already-cached leads are skipped so it stays incremental.
 python skiptrace.py --all --limit 120 >> "%LOG%" 2>&1
 
+rem [3a-2] Whitepages Pro API - one paid /v2/property call returns EVERY owner + resident + all
+rem typed phones (mobile/landline unmasked) + emails per lead. ~$0.10/call est.; --limit 30 caps
+rem a single run so a trial key can't blow up. Cached in whitepages_lookup.json (gitignored); skips
+rem already-cached leads. Also flags absentee-owner scenarios (Velima's Jacob = Lewisville TX).
+if exist whitepages.key python whitepages_lookup.py --all --limit 30 >> "%LOG%" 2>&1
+
 :rebuild
 echo [3b/5] Property photos (Zillow listings all tiers + Street View when keyed + satellite aerials -^> docs/img)...
 python property_photos.py --zillow >> "%LOG%" 2>&1

@@ -36,6 +36,8 @@ jobs:
       GOOGLE_STREET_VIEW_KEY: ${{ secrets.GOOGLE_STREET_VIEW_KEY }}
       TRACERFY_API_KEY: ${{ secrets.TRACERFY_API_KEY }}
       BATCHDATA_API_KEY: ${{ secrets.BATCHDATA_API_KEY }}
+      # accept whatever the WP Pro secret is named in the repo settings
+      WHITEPAGES_KEY: ${{ secrets.WHITEPAGES_KEY || secrets.WHITEPAGES_API_KEY || secrets.WP_PRO_KEY }}
       # accept whatever you named the 2Captcha secret — no need to match one exact name
       CAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY || secrets.TWOCAPTCHA_KEY || secrets.CAPTCHA || secrets.TWO_CAPTCHA_KEY || secrets.TWOCAPTCHA }}
       TWOCAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY || secrets.TWOCAPTCHA_KEY || secrets.CAPTCHA || secrets.TWO_CAPTCHA_KEY || secrets.TWOCAPTCHA }}
@@ -97,6 +99,7 @@ jobs:
             county_plaintiffs.json
             lis_pendens.json
             lp_leads.json
+            whitepages_lookup.json
             geocode_cache.json
             tax_links.json
             comps.json
@@ -238,6 +241,18 @@ jobs:
         run: |
           python llc_officers.py --limit 60
           python skiptrace.py --all --limit 120
+
+      # ---- [3a2/5] Whitepages Pro API — one paid /v2/property call returns EVERY owner + resident
+      # with typed phones (mobile/landline UNMASKED) + emails + current mailing city. Absentee-owner
+      # detection is the killer feature (Velima: her co-owner Jacob is in Lewisville TX → call, don't
+      # knock). --limit 30 caps a single run; already-cached leads are skipped so it stays incremental.
+      # Est ~$0.10/call. Only runs when the WHITEPAGES_KEY secret is set.
+      - name: '[3a2/5] Whitepages Pro household lookups'
+        if: env.WHITEPAGES_KEY != ''
+        continue-on-error: true
+        run: |
+          echo -n "${WHITEPAGES_KEY}" > whitepages.key
+          python whitepages_lookup.py --all --limit 30
 
       # ---- [3b/5] Property photos (Zillow + Street View + aerials) ------------------------
       - name: '[3b/5] Property photos'
