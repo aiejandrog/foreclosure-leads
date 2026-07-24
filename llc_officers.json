@@ -1820,5 +1820,38 @@
   "nf": true,
   "near": [],
   "t": "2026-07-23"
+ },
+ "502025CA001974XXXAMB": {
+  "ent": "JIM FREEBODY LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [],
+  "t": "2026-07-24"
+ },
+ "502026CC009651XXXASB": {
+  "ent": "CORY CAROL A TRUST",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [],
+  "t": "2026-07-24"
+ },
+ "502022CA006893XXXXMB": {
+  "ent": "EKREM & ONUR GROUP LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [],
+  "t": "2026-07-24"
  }
 }
