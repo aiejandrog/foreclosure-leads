@@ -1099,9 +1099,35 @@ def make_tracker(leads):
                     for _e in _o['emails']:
                         if _e.lower() in _seen_em: continue
                         _seen_em.add(_e.lower()); _all_em.append(_e)
+                # Person Search layer (whitepages_lookup.py --deep / auto-fallback when Property was thin):
+                # extra phones + emails sourced from the owner NAME rather than the property address.
+                # Includes aliases + address history + relatives-tagged numbers Property doesn't touch.
+                # Merged into wpAllPhones with source='person' so the UI can tag them.
+                _person_recs = _hit.get('_person') or []
+                _person_phones = []
+                _person_emails = []
+                for _pr in _person_recs:
+                    for _rec in (_pr.get('response') or []):
+                        for _p in (_rec.get('phones') or []):
+                            _n = ''.join(c for c in (_p.get('number') or '') if c.isdigit())
+                            if len(_n) == 11 and _n.startswith('1'): _n = _n[1:]
+                            if len(_n) != 10: continue
+                            if _n in _seen_ph: continue
+                            _seen_ph.add(_n)
+                            _pt = (_p.get('type') or '').lower()
+                            _person_phones.append({'n': _n, 'type': _pt, 'owner': _pr.get('name',''), 'absentee': False, 'source': 'person'})
+                        for _e in (_rec.get('emails') or []):
+                            _ea = _e.get('address') or ''
+                            if _ea and _ea.lower() not in _seen_em:
+                                _seen_em.add(_ea.lower()); _person_emails.append(_ea)
+                # tag property-sourced numbers explicitly and merge person after them
+                for _p in _all_ph: _p.setdefault('source', 'property')
+                _all_ph.extend(sorted(_person_phones, key=_rank))
+                _all_em.extend(_person_emails)
                 _r['wpOwners'] = _owns
                 _r['wpAllPhones'] = _all_ph
                 _r['wpAllEmails'] = _all_em
+                _r['wpPersonRecs'] = len(_person_recs)
                 _r['wpKey'] = 'ok'
                 # merge WP phones into the lead's existing `phones` array — dedupe against skiptrace
                 # numbers so we don't double-list, cap at 8 total to keep the row readable
