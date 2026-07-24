@@ -1038,6 +1038,96 @@ def make_tracker(leads):
         except Exception:
             pass
 
+    # bake Whitepages Pro property-endpoint results (whitepages_lookup.py, gitignored). One paid call
+    # per property returned every deed-holder + resident with full unmasked phones (typed mobile/
+    # landline) + emails + current mailing address. What Chrome-Claude found on Velima the hard way,
+    # now available on every cached lead. Key surfaces:
+    #   wpOwners   -> [{name, phones:[{n,type,rank}], emails:[str], city, state, absentee: bool}]
+    #                 absentee=true when the owner's current mailing address is NOT in the property
+    #                 city (e.g. Velima's co-owner Jacob lives in Lewisville TX -> call, don't knock)
+    #   wpAllPhones-> deduped ordered union of every owner's phones (mobile-first, non-DNC first)
+    #                 injected into the lead's `phones` array so the existing UI + copy paths pick them
+    #   wpAllEmails-> deduped union of emails, injected into `emails`
+    #   wpKey      -> 'ok' when we got a real record, 'none' when we tried and got 404, missing if we
+    #                 haven't looked yet (the call sheet uses this to distinguish gaps from misses)
+    _wpf = os.path.join(HERE, 'whitepages_lookup.json')
+    if os.path.exists(_wpf):
+        try:
+            _wp = json.load(open(_wpf, encoding='utf-8')); _wn = _wpn = _wpe = 0
+            def _prop_city_state(r):
+                a = r.get('addr') or r.get('Address') or ''
+                p = [s.strip() for s in a.split(',')]
+                return (p[1] if len(p) > 1 else '').upper(), 'FL'
+            def _wp_own(o, prop_city):
+                addrs = o.get('current_addresses') or []
+                city = state = ''
+                if addrs:
+                    city = (addrs[0].get('city') or '').upper()
+                    state = (addrs[0].get('state') or '').upper()
+                absentee = bool(state and state != 'FL') or bool(city and prop_city and city != prop_city)
+                phs = []
+                for p in (o.get('phones') or []):
+                    n = ''.join(c for c in (p.get('number') or '') if c.isdigit())
+                    if len(n) == 11 and n.startswith('1'): n = n[1:]
+                    if len(n) != 10: continue
+                    phs.append({'n': n, 'type': (p.get('type') or '').lower()})
+                emails = [e.get('email') for e in (o.get('emails') or []) if e.get('email')]
+                return {'name': o.get('name',''), 'phones': phs, 'emails': emails,
+                        'city': city, 'state': state, 'absentee': absentee}
+            def _rank(p):                          # mobile-first, then landline, then unknown/other
+                t = p['type']
+                return 0 if 'mob' in t else (1 if 'land' in t else 2)
+            for _r in slim:
+                _hit = _wp.get(_r.get('case', ''))
+                if not _hit: continue
+                _res = (_hit.get('result') or {})
+                _oi = (_res.get('ownership_info') or {})
+                _po = _oi.get('person_owners') or []
+                _pc, _ = _prop_city_state(_r)
+                _owns = [_wp_own(o, _pc) for o in _po]
+                if not _owns:
+                    _r['wpKey'] = 'none'; continue
+                # dedup phones + emails across owners; mobile first, absentee-owner phones tagged
+                _seen_ph, _all_ph = set(), []
+                for _o in _owns:
+                    for _p in sorted(_o['phones'], key=_rank):
+                        if _p['n'] in _seen_ph: continue
+                        _seen_ph.add(_p['n'])
+                        _all_ph.append({'n': _p['n'], 'type': _p['type'], 'owner': _o['name'], 'absentee': _o['absentee']})
+                _seen_em, _all_em = set(), []
+                for _o in _owns:
+                    for _e in _o['emails']:
+                        if _e.lower() in _seen_em: continue
+                        _seen_em.add(_e.lower()); _all_em.append(_e)
+                _r['wpOwners'] = _owns
+                _r['wpAllPhones'] = _all_ph
+                _r['wpAllEmails'] = _all_em
+                _r['wpKey'] = 'ok'
+                # merge WP phones into the lead's existing `phones` array — dedupe against skiptrace
+                # numbers so we don't double-list, cap at 8 total to keep the row readable
+                _cur = set()
+                for _p in (_r.get('phones') or []):
+                    _pn = _p.get('number') if isinstance(_p, dict) else str(_p)
+                    _cur.add(''.join(c for c in _pn if c.isdigit())[-10:])
+                _add = [{'number': p['n'], 'type': ('Mobile' if 'mob' in p['type'] else ('Land Line' if 'land' in p['type'] else 'Unknown')),
+                         'dnc': False, '_src': 'wp'} for p in _all_ph if p['n'] not in _cur]
+                if _add:
+                    _r['phones'] = (_r.get('phones') or []) + _add
+                    _r['phones'] = _r['phones'][:8]
+                    _wpn += len(_add)
+                if _all_em:
+                    _cur_em = set((e or '').lower() for e in (_r.get('emails') or []))
+                    _add_em = [e for e in _all_em if e.lower() not in _cur_em]
+                    if _add_em:
+                        _r['emails'] = (_r.get('emails') or []) + _add_em
+                        _r['emails'] = _r['emails'][:6]
+                        _wpe += len(_add_em)
+                _wn += 1
+            if _wn:
+                print(f"WhitepagesPro: enriched {_wn} leads (+{_wpn} phones, +{_wpe} emails, absentee-owner flags set)")
+        except Exception as _e:
+            print('WhitepagesPro merge skipped:', _e)
+
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')

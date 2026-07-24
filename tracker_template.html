@@ -556,6 +556,20 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .dsclosed-d{font-size:10.5px;color:var(--muted-2,#8a93a6);opacity:.85}
 /* Gov/code/tax defendant survival-risk block on the call sheet — Chrome caught this on Velima */
 .csgovwarn{background:rgba(184,122,14,.08);border-left:3px solid #B87A0E;border-radius:6px;padding:9px 11px;margin-top:7px}
+/* Whitepages Pro household breakdown - per-owner contact block with absentee flags */
+.wpabs{background:rgba(184,122,14,.10);border-left:3px solid #B87A0E;border-radius:6px;padding:9px 11px;margin-bottom:9px;font-size:12.5px;line-height:1.5}
+.wpown{margin:8px 0 12px;padding:9px 11px;background:var(--surface-2,#f6f8fa);border-radius:8px;border-left:3px solid var(--muted,#6b7280)}
+.wpownh{font-size:13px;margin-bottom:5px;line-height:1.5}
+.wptag{display:inline-block;font-family:var(--f-label);font-size:8.5px;font-weight:700;letter-spacing:.06em;padding:2px 7px;border-radius:5px;margin-left:6px;text-transform:uppercase;white-space:nowrap;vertical-align:middle}
+.wpon{background:var(--green-soft,#DDF2E4);color:var(--green-ink,#0E5F31)}
+.wpoff{background:var(--amber-soft,#F7EBC7);color:var(--amber-ink,#8A5A00)}
+.wpphs{display:flex;flex-wrap:wrap;gap:7px 12px;align-items:center;margin-top:5px}
+.wpph{color:var(--blue,#1F6FEB);font-weight:700;font-size:13px;text-decoration:none;font-variant-numeric:tabular-nums}
+.wpph.wpmob{color:var(--navy,#0B1730)}
+.wpt{font-size:9px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted,#8892a6);margin-left:3px;font-weight:600}
+.wpems{margin-top:5px;font-size:11.5px;line-height:1.5}
+.wpem{color:var(--muted,#5d6470);text-decoration:none}
+.wpem:hover{color:var(--blue,#1F6FEB);text-decoration:underline}
 /* Rule / limits / next-step teacher block — the plain-English survival test, at the foot of every sheet */
 .cslaw{margin-top:13px;padding:12px 14px;background:var(--surface-2,#f6f8fa);border-radius:9px;border-left:3px solid var(--navy,#0B1730);font-size:12.5px;line-height:1.55}
 .cslaw-t{font-family:var(--f-label);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy,#0B1730);margin-bottom:4px}
@@ -2356,6 +2370,38 @@ function _csScout(r){ if(!r || !r.addr) return '';
     +'<a href="https://www.google.com/maps?q='+q+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener" title="Street View — the house from the road: condition, occupancy, cars in the drive, before you burn a trip">Street View</a> · '
     +'<a href="https://www.google.com/maps/dir/?api=1&destination='+q+'&travelmode=driving" target="_blank" rel="noopener" title="Directions from where you are now — opens the Maps app">Directions</a></div>';
 }
+// WHITEPAGES PRO HOUSEHOLD BREAKDOWN — per-owner phones + emails + current location, sourced from the
+// paid /v2/property endpoint (whitepages_lookup.py, cached in whitepages_lookup.json). This is what
+// Chrome-Claude found on Velima the hard way: Velima lives at the property; her co-owner Jacob is in
+// Lewisville TX = ABSENTEE. Different plays for each owner. Absent leads show nothing so LP + LLC +
+// unlooked-up cases don't render an empty block.
+function _wpHousehold(r){
+  var owners = r && r.wpOwners; if(!owners || !owners.length) return '';
+  var fmtPh = function(n){ n = String(n||'').replace(/\D/g,''); if(n.length===11 && n[0]==='1') n = n.slice(1); return n.length===10 ? n.slice(0,3)+'-'+n.slice(3,6)+'-'+n.slice(6) : n; };
+  var anyAbs = owners.some(function(o){ return o.absentee; });
+  var head = '<div class="cssec">🔎 WHITEPAGES-VERIFIED HOUSEHOLD</div><div class="csbody">'
+    + (anyAbs ? '<div class="wpabs">⚠ <b>CO-OWNER LIVES OUT OF AREA</b> — the deed has more than one owner and at least one is absentee. Pick the right channel per owner: <b>call</b> the absentee, <b>knock</b> the on-property one. Same door won\'t reach both.</div>' : '');
+  var rows = owners.map(function(o){
+    var locTxt = (o.city ? (o.city + (o.state ? ', ' + o.state : '')) : '');
+    var atProp = !o.absentee;
+    var phList = (o.phones||[]).map(function(p){
+      var digits = String(p.n||'').replace(/\D/g,'');
+      return '<a class="wpph'+(p.type && p.type.indexOf('mob')>-1 ? ' wpmob' : '')+'" href="tel:'+esc(digits)+'">'+esc(fmtPh(p.n))+'</a>'
+        + '<span class="wpt">'+esc(p.type||'?')+'</span>';
+    }).join(' ');
+    var emList = (o.emails||[]).slice(0,4).map(function(e){
+      return '<a class="wpem" href="mailto:'+esc(e)+'">'+esc(e)+'</a>';
+    }).join(' · ');
+    return '<div class="wpown">'
+      + '<div class="wpownh"><b>'+esc(o.name||'?')+'</b>'
+      + (atProp ? ' <span class="wptag wpon">AT THE PROPERTY — knock</span>' : ' <span class="wptag wpoff">ABSENTEE '+esc(locTxt)+' — call, don\'t knock</span>')
+      + '</div>'
+      + (phList ? '<div class="wpphs">'+phList+'</div>' : '<div class="csmut">no phones on WP for this owner</div>')
+      + (emList ? '<div class="wpems">'+emList+'</div>' : '')
+      + '</div>';
+  }).join('');
+  return head + rows + '</div>';
+}
 // GOVERNMENT / CODE-ENFORCEMENT defendants: when the county, a city, code enforcement, or the IRS/US is
 // named as a defendant on THIS case, its lien (if any exists) is only foreclosed OUT if that party stays
 // in the suit through judgment. If it gets voluntarily DROPPED, the lien survives the sale and hits the
@@ -2571,7 +2617,7 @@ function _callSheet(r){
       '<li>Run a <b>county code-enforcement lien search</b> on the folio (search is free — landing surprise is not).</li>'+
       '<li>Confirm the <b>Tax Collector</b> shows the folio paid current (<a href="'+esc(r.tax||'#')+'" target="_blank" rel="noopener">tax page</a>).</li>'+
     '</ul></div>';
-  return '<div class="callsheet">'+who+_csPlay(r)+four+clock+(r.st==='LP'?'':stack)+prop+cont+_cflaw+   /* LP: no judgment/chain yet — the fresh-filing block already names the lender, so skip the $0 debt section */
+  return '<div class="callsheet">'+who+_csPlay(r)+four+clock+(r.st==='LP'?'':stack)+prop+cont+_wpHousehold(r)+_cflaw+   /* LP: no judgment/chain yet — the fresh-filing block already names the lender, so skip the $0 debt section */
     '<div class="csfoot"><button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
     '<button type="button" class="csbtn" onclick="openDealModal(\''+esc(r.case)+'\')">Full deal analysis →</button></div></div>';
 }

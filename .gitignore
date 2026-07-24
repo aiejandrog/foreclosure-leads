@@ -41,4 +41,6 @@ cadence_state.json
 cadence_queue.json
 optouts.json
 gmail.key
+whitepages.key
+whitepages_lookup.json
 balloon_refi.json
