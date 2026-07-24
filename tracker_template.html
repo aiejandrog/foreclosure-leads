@@ -2063,7 +2063,11 @@ function dealAnalysisHTML(r){
     '<div class="dm-sec">Recommended move</div><div class="dealstrat">'+esc(dealStrategy(r))+'</div>';
 }
 function dealModalBody(r){
-  const owner = esc((r.owners||'').split(';')[0].trim());
+  // Route through _ownerName so DA header + CS header + Jose SMS all show the same normalized name
+  // ('Deborah C Davis Slade', not raw 'DEBORAH C DAVIS SLADE'). Palm Beach cadastral 'DRISCOLL ROBERT J EST'
+  // becomes 'Robert J Driscoll Est' consistently. Formatting drift used to make DA read like a
+  // different data source than CS — same numbers, different presentation, closer eye-drift.
+  const owner = esc(_ownerName((r.owners||'').split(';')[0].trim(), r));
   const pcls = r._profit>=0 ? 'profpos' : 'profneg';
   const figure = r._profit!=null ? ' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>' : '';
   return '<div class="dm-head">'+
@@ -2507,21 +2511,25 @@ function _callSheet(r){
   const nn = notes[r.case]||{};
   const tt = _talkTo(r);
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
-  const arv = +r.arv||0, val = +r.value||0, basis = arv||val, judg = +r.judg||0;
+  // SOURCE-OF-TRUTH: basis + net equity now flow through _basisOf() + _netEqOf() so this box, the
+  // deal analyzer, the copy-CS clipboard, the Jose SMS, the live-call brief, and the profit-paths
+  // panel can never disagree on the number for the same lead. Was: 5 different formulas across
+  // surfaces (max divergence $43K/lead, $6.3M misstated across the current board in Copy CS alone).
+  const arv = +r.arv||0, val = +r.value||0, basis = _basisOf(r), judg = +r.judg||0;
   // WHAT SURVIVES = the effective senior used in the deal math (r._slien): the user's RESEARCHED
   // number wins, else the auto-traced chain, else nothing. So the second Jose pulls the chain and
   // types it into Deal analysis, this fills in — the site can't scrape it live (the county captcha
   // blocks automation), but it captures what you found and never loses it.
   const nnS = notes[r.case]||{};
   const survTyped = _dTyped(nnS.slien);
-  const surv = survTyped ? (+nnS.slien||0) : (r._chainSurv||0);
-  const jr = (r.orconf==='ok'||r.orconf==='low'||r.orconf==='bd') ? (+r.orjuniors||0) : 0;
+  const surv = +r._slien||0;                          // exact same value the DA modal + Jose SMS use
+  const jr = +r._jlien||0;                            // respects nn.jlien override (was: raw orjuniors, ignored user research)
   const survChecked = survTyped || r.orconf==='ok' || r.orconf==='low' || r.orconf==='bd';
   const trust = survTyped ? (surv>0?'YOU ENTERED THIS':'YOU VERIFIED: none survives')
               : r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify'
               : r.orconf==='bd' ? 'BATCHDATA ESTIMATE — confirm payoff'
               : '⚠ NOT CHECKED — pull it';
-  const netEq = Math.max(0, basis - judg - surv - jr);
+  const netEq = _netEqOf(r);                          // includes btax + assess + mlien, matches DA + Jose SMS
   const clean = _cleanPhones(r), dnc = _dncPhones(r);
   const g = _geoTier(r);
   const big = (lbl, v, sub, cls) => '<div class="csbox '+(cls||'')+'"><div class="csl">'+lbl+'</div>'+
@@ -2677,16 +2685,29 @@ function _callSheet(r){
 function _copyCallSheet(c){
   const r = DATA.find(x=>x.case===c); if(!r) return;
   const fm = n => (n||n===0)?'$'+Math.round(n).toLocaleString():'—';
-  const arv=+r.arv||0, val=+r.value||0, basis=arv||val, judg=+r.judg||0, surv=r._chainSurv||0;
+  // SOURCE-OF-TRUTH: same helpers the on-screen call sheet uses. Was: basis = ungated arv||val,
+  // surv = raw r._chainSurv (ignored user override), NET EQUITY dropped junior lien + btax entirely.
+  // Latest audit found this drift caused $6.3M misstated equity across the live board on Copy CS
+  // alone (worst single-lead case: CACE-26-002995 pasted $944,918 when actual net was $0).
+  const basis = _basisOf(r), judg = +r.judg||0, surv = +r._slien||0, jr = +r._jlien||0;
+  const arv = +r.arv||0, val = +r.value||0;
+  const arvUsed = (r._valsrc==='arv' && arv > 0);
+  const nnS = notes[r.case]||{}, survTyped = _dTyped(nnS.slien);
+  const survLabel = survTyped ? (surv>0?'you entered this':'you verified: none survives')
+                    : r.orconf==='ok' ? 'records-verified'
+                    : r.orconf==='low' ? 'LOW CONF — verify'
+                    : r.orconf==='bd' ? 'BATCHDATA estimate — confirm payoff'
+                    : 'NOT CHECKED — pull it';
   const tt=_talkTo(r), clean=_cleanPhones(r);
   const txt = [
     r.addr, _ownerName((r.owners||'').split(';')[0].trim(), r)+'  ·  Case '+r.case,
     tt ? 'TALK TO: '+tt.name+(tt.rel?' ('+tt.rel+')':'')+(tt.phone?' '+tt.phone:'') : '',
     '',
     'FINAL JUDGMENT:  '+fm(judg)+(r.plaintiff?'   ('+r.plaintiff+')':''),
-    'WORTH:           '+fm(basis)+(arv?'  ARV from '+r.arvn+' comps':'  (county roll)'),
-    'SURVIVES SALE:   '+(surv?fm(surv)+'  ['+(r.orconf==='ok'?'verified':'LOW CONF — verify')+']':'$0'),
-    'NET EQUITY:      '+fm(Math.max(0,basis-judg-surv)),
+    'WORTH:           '+fm(basis)+(arvUsed?'  ARV from '+r.arvn+' comps':(arv?'  (county roll — ARV rejected)':'  (county roll)')),
+    'SURVIVES SALE:   '+(surv?fm(surv)+'  ['+survLabel+']':'$0  ['+survLabel+']'),
+    jr>0 ? 'JUNIOR / 2ND:   '+fm(jr)+'  (payoff only on direct purchase; wiped at auction if named)' : '',
+    'NET EQUITY:      '+fm(_netEqOf(r)),
     '',
     'AUCTION:  '+r.auction+' 9am'+(r.days>=0?'  ('+r.days+' days, deal deadline in '+Math.max(0,r.days-3)+')':''),
     'PROPERTY: '+(r.dor_desc||'')+(r.beds?', '+r.beds+'bd/'+r.baths+'ba':'')+(r.sqft?', '+(+r.sqft).toLocaleString()+'sf':'')+(r.bought?', owned since '+r.bought:''),
@@ -3391,9 +3412,23 @@ function _bestPhones(r){
 // override, so the go/no-go number sent to Jose can never be rosier than the modal's own math.
 // (The old version subtracted only judgment + survivor and overstated equity on every lead with a
 // junior/HOA/code lien.)
+// SOURCE-OF-TRUTH resolvers used by EVERY dollar-rendering surface (call sheet, copy CS, Jose SMS,
+// live-call brief, deal analyzer, profit-paths). Previously each surface computed basis + net equity
+// its own way -> the same lead showed 5 different NET EQUITY values across CS box / Copy CS / DA /
+// Jose SMS / profit-paths (max divergence $43K on the audited test case, $6.3M across the live board
+// on Copy CS alone). If you add a new surface that quotes value or equity, CALL THESE. Do not roll
+// your own. If you need a different presentation (e.g. show equity BEFORE btax), read the raw pieces
+// off r._slien / r._jlien / r._assess / r._mlien / r._btax and name the variant explicitly.
+function _basisOf(r){
+  // The "worth today" driver. Uses ARV only when it survived the confidence + range gate at load
+  // time (recompute() line ~1714: conf='ok' AND 0.7*cv <= arv <= 2.5*cv). Otherwise falls back to
+  // county assessed value. Prevents the Hialeah phantom-ARV bug (arv $3.77M, county $1.47M, conf
+  // low -> CS was showing $3M net equity while DA correctly showed $789k).
+  return (r && r._valsrc==='arv' && +r.arv) ? +r.arv : ((r && +r.value) || 0);
+}
 function _netEqOf(r){
-  var v = (+r.arv||+r.value||0); if(!v) return 0;
-  var stack = (+r.judg||0)+(r._slien||0)+(r._jlien||0)+(r._assess||0)+(r._mlien||0)+(r._btax||0);
+  var v = _basisOf(r); if(!v) return 0;
+  var stack = (+r.judg||0)+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
   return Math.max(0, v - stack);
 }
 function _deepLink(r){ return location.origin + location.pathname + '#case=' + encodeURIComponent(r.case); }
@@ -3695,9 +3730,14 @@ function _intentBar(r){
 }
 function _profitPaths(r){
   var out = [];
-  var val = (+r.arv || +r.value || 0);
-  var debt = (+r.judg||0) + (r._chainSurv||0);
-  var netEq = val ? Math.max(0, val - debt) : 0;
+  // SOURCE-OF-TRUTH: same basis + net-equity resolvers the CS + DA use. Was: ungated arv||value
+  // + debt = judg+_chainSurv, so this panel could render a "$100k hard-equity referral" tier
+  // inside the SAME DA modal whose math rows above it said PASS. 22 leads on the current board
+  // had that contradiction visible (worst: 549 MONACO L Delray, cv=$79.5k / arv=$228k conf=ok
+  // but 2.87x county -> DA rejected the ARV, profit-paths still quoted $100k referral).
+  var val = _basisOf(r);
+  var netEq = _netEqOf(r);
+  var debt = val ? Math.max(0, val - netEq) : 0;
   var fresh = _filedYear(r) >= 2024;
   var fc = r.st !== 'TD';
   var intent = (notes[r.case]||{}).intent || '';
