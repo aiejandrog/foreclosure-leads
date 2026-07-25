@@ -891,8 +891,8 @@ input.ph::placeholder{color:#8FBFA0}
 .cctl textarea{flex:1}
 
 /* ============================== MODALS (shared shell) ============================== */
-#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal,#savedmodal,#csmodal,#playbookmodal{display:none;position:fixed;inset:0;z-index:120}
-#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show,#savedmodal.show{display:block}
+#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal,#savedmodal,#csmodal,#playbookmodal,#textmodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show,#savedmodal.show,#textmodal.show{display:block}
 #syncmodal{z-index:122}#planmodal{z-index:121}#lookupmodal{z-index:121}#gallerymodal{z-index:130}
 .dm-backdrop{position:absolute;inset:0;background:rgba(9,16,31,.5);backdrop-filter:blur(5px);
   -webkit-backdrop-filter:blur(5px);animation:dmFade .2s ease}
@@ -1408,6 +1408,44 @@ body.compact .dg-v{font-size:14.5px}
 <div id="savedmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="savedbody"></div></div></div>
 <div id="cadencemodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="cadencebody"></div></div></div>
 <div id="playbookmodal"><div class="dm-backdrop" onclick="closePlaybook()"></div><div class="dm-card pbcard"><button class="dm-close" type="button" onclick="closePlaybook()" title="Close">&times;</button><div id="playbookbody"></div></div></div>
+<div id="textmodal"><div class="dm-backdrop" onclick="closeTextModal()"></div><div class="dm-card txcard"><button class="dm-close" type="button" onclick="closeTextModal()" title="Close">&times;</button><div id="textbody"></div></div></div>
+<style>
+/* TEXT / Phone Link SMS modal — light UI; opens sms: deep links Windows Phone Link understands */
+#textmodal .dm-card.txcard{width:min(580px,94vw);max-height:90vh;overflow:auto}
+#textmodal .txtones,#textmodal .txlangs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 8px}
+#textmodal .txtone,#textmodal .txlang{background:var(--surface-2,#eef1f6);color:var(--ink,#101C33);border:1px solid var(--line,#E2E6EE);
+  border-radius:7px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+#textmodal .txtone.on,#textmodal .txlang.on{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730)}
+#textmodal .txmsg{white-space:pre-wrap;background:var(--surface-2,#eef1f6);border:1px solid var(--line,#E2E6EE);border-radius:10px;
+  padding:12px 14px;font-size:14px;line-height:1.55;color:var(--ink,#101C33);margin:4px 0 10px}
+#textmodal .txbtns{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 8px}
+#textmodal .txsend{background:var(--green-ink,#166534);color:#fff;border:1px solid var(--green-ink,#166534);border-radius:8px;
+  padding:9px 14px;font-size:13.5px;font-weight:700;text-decoration:none;display:inline-block}
+#textmodal .txsend:hover{filter:brightness(1.08)}
+#textmodal .txsend.off{background:var(--surface-2,#eef1f6);border-color:var(--line,#E2E6EE);color:var(--muted-2,#8a93a6);cursor:not-allowed;font-weight:700}
+#textmodal .txcopy{background:var(--navy,#0B1730);color:#fff;border:1px solid var(--navy,#0B1730);border-radius:8px;
+  padding:9px 14px;font-size:13.5px;font-weight:700;cursor:pointer}
+#textmodal .txcopy:hover{background:#C6A14B;border-color:#C6A14B;color:#0B1730}
+#textmodal .txcopy.ok{background:var(--green-ink,#166534);border-color:var(--green-ink,#166534)}
+#textmodal .txfoot{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+#textmodal .txmark{background:#C6A14B;color:#0B1730;border:1px solid #C6A14B;border-radius:8px;padding:9px 14px;font-weight:700;font-size:13.5px;cursor:pointer}
+#textmodal .txskip{background:transparent;color:var(--muted,#6b7280);border:1px solid var(--line,#E2E6EE);border-radius:8px;padding:9px 14px;font-size:13.5px;cursor:pointer}
+#textmodal .txcompliance{margin-top:14px;font-size:11.5px;line-height:1.55;color:var(--muted,#6b7280);background:rgba(198,161,75,.08);
+  border:1px solid rgba(198,161,75,.35);border-left:3px solid #C6A14B;border-radius:8px;padding:10px 12px}
+#textmodal .txblock{margin:10px 0 6px;font-size:12.5px;line-height:1.5;color:#8E1A12;background:rgba(180,35,24,.07);
+  border:1px solid rgba(180,35,24,.35);border-left:3px solid #B42318;border-radius:8px;padding:10px 12px;font-weight:600}
+#textmodal .txrow{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+#textmodal .txdnt{background:var(--surface,#fff);color:var(--muted,#6b7280);border:1px solid var(--line,#E2E6EE);border-radius:7px;
+  padding:8px 10px;font-size:11px;cursor:pointer;font-weight:600}
+#textmodal .txdnt:hover{border-color:#B42318;color:#B42318}
+#textmodal .txhint{font-size:12px;color:var(--muted,#6b7280);margin:2px 0 8px;line-height:1.45}
+#textmodal .txwa{background:#128C7E;color:#fff;border:1px solid #128C7E;border-radius:8px;padding:9px 12px;font-size:13px;
+  font-weight:700;text-decoration:none;display:inline-block}
+.cstextbtn{font-size:13px;font-weight:700;padding:8px 14px;border-radius:8px;border:1px solid var(--navy,#0B1730);
+  background:var(--navy,#0B1730);color:#fff;cursor:pointer;margin:6px 0 8px}
+.cstextbtn:hover{background:#C6A14B;border-color:#C6A14B;color:#0B1730}
+.cstextbtn:disabled{opacity:.45;cursor:not-allowed}
+</style>
 <!-- Investor dispo pack — the print-only one-pager. Populated by exportDispoPack() from the deal-analysis modal. -->
 <div id="dispoPackView" aria-hidden="true">
   <div class="pv-hd">
@@ -1504,6 +1542,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="exp">Export CSV (with my notes)</button>
 <button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M17 3.5 18.6 6 21 6.7M7 20.5 5.4 18 3 17.3"/></svg> Sync / team <span id="syncfresh" class="syncfresh"></span></button>
 <button id="mailbatch" title="Prepare a batch of homeowner-rescue letters to send as real mail via Lob. Picks Tier A/B leads with a real owner, a deliverable mailing address, and an auction 5+ days out, minus anyone opted out. You review and download the batch here; your Lob key never touches this page."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Mail batch</button>
+<button id="bulktext" title="Batch TEXT owners who have a textable number — opens Phone Link / Messages with a personalized bilingual SMS pre-filled (cold / urgent / follow-up tones). One owner at a time so you review + send. DNC, opted-out, and Do-Not-Text numbers are skipped; every message carries STOP."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Bulk text</button>
 <button id="cadencebtn" title="Email cadence queue — enrolled owners get a 4-touch sequence (day 0/2/4/7) that sends itself and auto-cancels the moment they reply. Export the queue, run cadence.py on your machine; replies and opt-outs sync back. Kimi-built."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg> Cadence</button>
 <button id="savedbtn" title="Your saved batch — star deals to save them here (kept on this device). Print a field packet for Carlos, copy a list to send, or share any deal."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 21.4l1.4-6.8L2.2 9.9l6.9-.8z"/></svg> Saved<span class="favn"></span></button>
 <span class="stats" id="stats"></span>
@@ -2661,6 +2700,11 @@ function _callSheet(r){
     cont += clean.length
       ? '<div class="csphones">'+clean.map(p=>'<a class="csph" href="tel:'+esc(String(p).replace(/\D/g,''))+'">'+esc(fmtPhone?fmtPhone(p):p)+'</a>').join('')+'</div>'
       : '<div class="csmut">No callable number yet — pull one below.</div>';
+    // Phone Link / Messages: open the SMS composer with a smart bilingual template (or copy it).
+    { const _tp = textablePhones(r);
+      if(_tp.length) cont += '<button type="button" class="cstextbtn" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">💬 Text / Phone Link — copy or send</button>';
+      else if(clean.length) cont += '<div class="csmut" style="margin:6px 0 8px">Numbers on file are DNC / Do-Not-Text — call or door only, no SMS.</div>';
+    }
     if(dnc.length) cont += row('⛔ DNC — mail/door only', dnc.map(p=>esc(fmtPhone?fmtPhone(p):p)).join(' · '));
     if((r.emails||[]).length) cont += row('Email', (r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · '));
     cont += _csPeople(r);   // find/verify a number without leaving the sheet — the fix for the no-phone dead-end
@@ -2992,8 +3036,8 @@ function _playbook(r){
 
   // 2 — text / whatsapp (only if a mobile survived DNC)
   if(phones.length && !spoke){
-    S('Text / WhatsApp after the 2nd no-answer',
-      'Use the WhatsApp button next to the number — the message is pre-written in English and Spanish with an opt-out line. People who dodge calls read texts.',
+    S('Text / Phone Link after the 2nd no-answer',
+      'Open Text on the row or call sheet — bilingual SMS with cold / urgent / follow-up tones. Copy the body or tap Text to open Phone Link / Messages with it pre-filled. WhatsApp still sits next to mobiles. DNC numbers never get a text button.',
       'No reply in 24h → mail and/or door below.', called ? 'now' : 'next');
   }
 
@@ -3157,6 +3201,156 @@ function _waLink(r, ph){
     +'. Ayudo a dueños a ver sus opciones antes de esa fecha, sin costo ni compromiso. ¿Podemos hablar?'
     +'\n\n(Not interested / No le interesa? Reply STOP · responda STOP.)';
   return 'https://wa.me/'+_waNum(ph)+'?text='+encodeURIComponent(msg);
+}
+// ===================== TEXT / Phone Link SMS (assisted, DNC-safe) =====================
+// Static site cannot SEND texts. This prepares a personalized message and opens Windows Phone Link
+// (or the phone Messages app) via sms:+1XXXXXXXXXX?body=… with the text pre-filled — ONE owner at a
+// time, human reviews + taps send. Also a one-tap Copy for paste-anywhere. Hard-skips DNC / opt-out /
+// Do-Not-Text; FTSA 8am–8pm ET + 3/24h gate; every body carries STOP.
+function _smsNum(ph){ const d=String(ph||'').replace(/\D/g,''); if(d.length===10) return '+1'+d; if(d.length===11 && d[0]==='1') return '+'+d; return d?('+'+d.replace(/^\+/,'')): ''; }
+const FTSA_TZ='America/New_York', FTSA_HR_START=8, FTSA_HR_END=20, FTSA_MAX_24H=3;
+function _flHour(){ try{ const h=parseInt(new Intl.DateTimeFormat('en-US',{timeZone:FTSA_TZ,hour:'2-digit',hour12:false}).format(new Date()),10); return h===24?0:h; }catch(e){ return new Date().getHours(); } }
+function _flClock(){ try{ return new Intl.DateTimeFormat('en-US',{timeZone:FTSA_TZ,hour:'numeric',minute:'2-digit',hour12:true}).format(new Date()); }catch(e){ return ''; } }
+function _withinTextHours(){ const h=_flHour(); return h>=FTSA_HR_START && h<FTSA_HR_END; }
+const _TELE_CH={call:1,text:1};
+function _recentTeleCount(r){ const ts=(notes[r.case]||{}).touches||[]; const cut=Date.now()-86400000; let n=0; ts.forEach(t=>{ if(_TELE_CH[t.ch]){ const when=t.tsu||(t.d?Date.parse(t.d+'T12:00:00'):0); if(when>=cut) n++; } }); return n; }
+const DNT_LS='fcDNT';
+let dnt=(function(){ try{ return new Set(JSON.parse(localStorage.getItem(DNT_LS)||'[]')); }catch(e){ return new Set(); } })();
+function _saveDNT(){ try{ localStorage.setItem(DNT_LS, JSON.stringify([...dnt])); }catch(e){} }
+function _isDNT(d){ return dnt.has(String(d||'').replace(/\D/g,'')); }
+function _addDNT(d){ const x=String(d||'').replace(/\D/g,''); if(x){ dnt.add(x); _saveDNT(); } }
+function textablePhones(r){
+  const n=notes[r.case]||{};
+  if(n.status==='DO NOT CONTACT' || _isWrongOwner(n) || r.saleBkAct) return [];
+  const out=[];
+  (r.phones||[]).slice(0,4).forEach((ph,i)=>{ if(!((r.phdnc||[])[i])){ const d=String(ph).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); } });
+  if(n.phone){ const d=String(n.phone).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); }
+  return out;
+}
+function _smsFirst(r){
+  const rawFirst = r.oname ? String(r.oname).trim().split(/\s+/)[0]
+    : _ownerName((r.owners||'').split(';')[0].trim(), r).split(/\s+/)[0];
+  return (rawFirst || 'there').replace(/[<>&"']/g,'');
+}
+function _smsStreet(r){ return ((r.addr||'').split(',')[0]||r.addr||'your property').trim(); }
+function _defaultTextTone(r){
+  const n=notes[r.case]||{}, ts=n.touches||[];
+  if(ts.some(t => /text|call|spoke|talked/i.test((t.ch||'')+' '+(t.out||'')))) return 'followup';
+  if(typeof r.days==='number' && r.days>=0 && r.days<=14 && r.st!=='LP') return 'urgent';
+  return 'cold';
+}
+function smsMsg(r, lang, tone){
+  // tone: cold | urgent | followup — bilingual "both" matches WhatsApp posture (EN then ES + STOP).
+  const sN = (sender.name||'').trim() || 'Jose';
+  const first=_smsFirst(r), street=_smsStreet(r), dt=r.auction||'';
+  const td=(r.st==='TD'), lp=(r.st==='LP');
+  const saleEN = lp ? 'a foreclosure that was just filed' : (td?'a tax-deed sale':'a foreclosure sale');
+  const saleES = lp ? 'una ejecución hipotecaria recién presentada' : (td?'una subasta de tax deed':'una subasta de ejecución hipotecaria');
+  const whenEN = (!lp && dt) ? (' set for '+dt) : '';
+  const whenES = (!lp && dt) ? (' el '+dt) : '';
+  let en, es;
+  if(tone==='urgent'){
+    en = 'Hi '+first+', this is '+sN+' — local Miami buyer. Quick heads-up: '+street+' still has '+saleEN+whenEN+'. The date is close — you may still have options before it. No cost. Can I share two? Reply STOP to opt out.';
+    es = 'Hola '+first+', soy '+sN+', comprador local. Aviso rápido: '+street+' aún tiene '+saleES+whenES+'. La fecha está cerca — tal vez aún tenga opciones. Sin costo. ¿Le comparto dos? Responda STOP para no recibir más.';
+  } else if(tone==='followup'){
+    en = 'Hi '+first+', '+sN+' again — just following up on '+street+' ('+saleEN+whenEN+'). Happy to walk through options if useful. No pressure. Reply STOP to opt out.';
+    es = 'Hola '+first+', de nuevo '+sN+' — solo dándole seguimiento a '+street+' ('+saleES+whenES+'). Con gusto le explico opciones si le sirve. Sin presión. Responda STOP para no recibir más.';
+  } else {
+    en = 'Hi '+first+', this is '+sN+' — a local Miami home buyer. I saw '+street+' has '+saleEN+whenEN+'. You may still have options (even walking away with cash before a sale). No cost or obligation — can I share a couple? Reply STOP to opt out.';
+    es = 'Hola '+first+', soy '+sN+', comprador de casas aquí en Miami. Vi que '+street+' tiene '+saleES+whenES+'. Puede que todavía tenga opciones (incluso salir con efectivo). Sin costo ni compromiso — ¿le comparto un par? Responda STOP para no recibir más mensajes.';
+  }
+  if(lang==='en') return en;
+  if(lang==='es') return es;
+  return en+'\n\n'+es;
+}
+function _smsHref(ph, msg){
+  // Phone Link (Windows) + iOS/Android Messages: sms:+1…?body=
+  return 'sms:'+_smsNum(ph)+'?body='+encodeURIComponent(msg);
+}
+let textQ=[], textIdx=0, textLang='both', textTone='cold';
+function _copyTextMsg(t, btn){
+  const done=()=>{ if(btn){ const o=btn.textContent; btn.textContent='Copied!'; btn.classList.add('ok'); setTimeout(()=>{btn.textContent=o; btn.classList.remove('ok');},1600);}
+    if(typeof _shareToast==='function') _shareToast('Message copied — paste into Phone Link / Messages'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done,()=>fallbackCopy(t,done)); }
+  else fallbackCopy(t,done);
+}
+function textCardHtml(r){
+  const phones=textablePhones(r);
+  const owner=_ownerName((r.owners||'').split(';')[0].trim(), r);
+  const msg=smsMsg(r, textLang, textTone);
+  const hoursOK=_withinTextHours();
+  const recent=_recentTeleCount(r);
+  const capped=recent>=FTSA_MAX_24H;
+  const canSend=phones.length && hoursOK && !capped;
+  const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
+  const toneBtns=['cold','urgent','followup'].map(t=>{
+    const lbl=t==='cold'?'Cold open':t==='urgent'?'Urgent (sale soon)':'Follow-up';
+    return '<button class="txtone'+(textTone===t?' on':'')+'" data-t="'+t+'" type="button">'+lbl+'</button>';
+  }).join('');
+  const langBtns=[['both','EN + ES'],['en','English'],['es','Español']].map(([l,lbl])=>
+    '<button class="txlang'+(textLang===l?' on':'')+'" data-l="'+l+'" type="button">'+lbl+'</button>').join('');
+  let gate='';
+  if(r.saleBkAct) gate='<div class="txblock">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal. Do not text.</div>';
+  else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link send stays disabled until the window opens.</div>';
+  else if(capped) gate='<div class="txblock">⛔ FTSA cap: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
+  let phBtns;
+  if(!phones.length){
+    phBtns='<div class="warn" style="margin:6px 0">No textable number — every number is DNC, opted out, on your Do-Not-Text list, or missing. Use mail / door / People-search.</div>';
+  } else {
+    phBtns=phones.map(d=>{
+      const href=_smsHref(d, msg);
+      const send=canSend
+        ? '<a class="txsend" href="'+esc(href)+'" title="Opens Phone Link / Messages with this number + message pre-filled. Review, then send.">💬 Text '+esc(fmtPhone(d))+'</a>'
+        : '<span class="txsend off" title="Sending disabled — see the notice above (hours / cap). Use Copy instead.">💬 '+esc(fmtPhone(d))+'</span>';
+      const wa = '<a class="txwa" href="'+esc(_waLink(r,d))+'" target="_blank" rel="noopener" title="Same message path on WhatsApp (wa.me) — review then send.">'+_waSvg()+' WA</a>';
+      return '<span class="txrow">'+send+wa+'<button class="txdnt" type="button" data-d="'+esc(d)+'" title="Add to Do-Not-Text on this device">🚫 DNT</button></span>';
+    }).join('');
+  }
+  const dnc=(r.phones||[]).filter((p,i)=>(r.phdnc||[])[i]).map(fmtPhone);
+  const dncNote=dnc.length?'<div class="mut" style="font-size:11.5px;margin-top:6px">Skipped (DNC — do not text): '+esc(dnc.join(', '))+'</div>':'';
+  const saleLine = r.st==='LP'
+    ? 'Lis Pendens · just filed'
+    : ((r.st==='TD'?'Tax-deed':'Foreclosure')+' sale <b>'+esc(r.auction||'—')+'</b>'+(r.days>=0?' · in '+r.days+'d':''));
+  return '<div class="dm-head"><div class="dm-title">💬 Text '+esc(owner)+'</div>'
+    +'<div class="dm-sub">'+esc(r.addr||'')+' · '+saleLine+'</div>'+pos+'</div>'
+    +gate
+    +'<div class="txhint">Tone + language update the preview. <b>Text</b> opens Phone Link / Messages with the SMS ready; <b>Copy</b> puts the same body on your clipboard.</div>'
+    +'<div class="txtones">'+toneBtns+'</div>'
+    +'<div class="txlangs">'+langBtns+'</div>'
+    +'<div class="txmsg">'+esc(msg)+'</div>'
+    +'<div class="txbtns">'+phBtns+'</div>'
+    +(msg?'<button class="txcopy" type="button">📋 Copy message</button>':'')
+    +dncNote
+    +'<div class="txfoot">'
+      +(phones.length?'<button class="txmark" data-c="'+esc(r.case)+'" type="button">✓ Mark texted'+(textQ.length>1?' → next':'')+'</button>':'')
+      +(textQ.length>1?'<button class="txskip" type="button">'+(canSend?'Skip →':'Next →')+'</button>':'')
+    +'</div>'
+    +'<div class="txcompliance"><b>Manual send only.</b> Honors DNC-flagged numbers, opted-out owners, your Do-Not-Text list, FTSA hours (8am–8pm ET) &amp; the 3-per-24h cap; every message includes STOP. <b>Not a National DNC Registry scrub</b> — scrub cold numbers separately. Phone Link on Windows opens from the <code>sms:</code> link when your phone is linked.</div>';
+}
+function renderTextModal(){
+  const body=document.getElementById('textbody'); if(!body) return;
+  if(!textQ.length){ body.innerHTML='<div class="dm-head"><div class="dm-title">💬 Bulk text</div></div><div class="mut" style="padding:10px 2px">No leads with a textable number right now.</div>'; return; }
+  const r=DATA.find(x=>x.case===textQ[textIdx]); if(!r){ textAdvance(); return; }
+  body.innerHTML=textCardHtml(r);
+}
+function openTextModal(){ const m=document.getElementById('textmodal'); if(!m) return; m.classList.add('show'); document.body.classList.add('modal-open'); renderTextModal(); }
+function closeTextModal(){ const m=document.getElementById('textmodal'); if(m) m.classList.remove('show'); document.body.classList.remove('modal-open'); }
+function textAdvance(){ if(textIdx < textQ.length-1){ textIdx++; const r=DATA.find(x=>x.case===textQ[textIdx]); if(r) textTone=_defaultTextTone(r); renderTextModal(); } else closeTextModal(); }
+function openTextSingle(r){ if(!r) return; textLang='both'; textTone=_defaultTextTone(r); textQ=[r.case]; textIdx=0; openTextModal(); }
+function openBulkText(){
+  textLang='both';
+  const elig=DATA.filter(r=>{
+    const n=notes[r.case]||{};
+    if(n.status==='DO NOT CONTACT'||n.status==='Dead') return false;
+    if(typeof isFlaggedDead==='function' && isFlaggedDead(r)) return false;
+    if(r.saleBkAct || _isWrongOwner(n)) return false;
+    if(_recentTeleCount(r)>=FTSA_MAX_24H) return false;
+    return textablePhones(r).length>0;
+  });
+  elig.sort((a,b)=>(a.days??9999)-(b.days??9999));
+  textQ=elig.map(r=>r.case); textIdx=0;
+  if(elig[0]) textTone=_defaultTextTone(elig[0]);
+  openTextModal();
 }
 // Corner badge version of the listing-status chip, overlaid top-left on the photo (top-right
 // belongs to the photo-count pill). Photo real estate is what Jose's eye lands on first, so
@@ -5155,6 +5349,7 @@ function render(){
       gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
+      if(textablePhones(r).length) gDo.push('<a href="#" class="textgen" data-c="'+esc(r.case)+'" title="TEXT via Phone Link / Messages — bilingual SMS (cold / urgent / follow-up), Copy or open sms: with the body pre-filled. DNC skipped; STOP opt-out included.">Text</a>');
       // kimi: cadence enrollment — the multi-touch email sequence that auto-cancels on reply
       if((r.emails||[]).length) gDo.push('<a href="#" class="cadencegen" data-c="'+esc(r.case)+'" title="Enroll this owner in the 4-touch email cadence (day 0/2/4/7) — sends itself until they reply, then auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.">Cadence</a>');
     }
@@ -5519,6 +5714,35 @@ document.addEventListener('click', e => {
   const r = DATA.find(x => x.case === a.dataset.c);
   if(r) genLetter(r);
 });
+// TEXT / Phone Link SMS modal
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.textgen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) openTextSingle(r);
+});
+(function(){ const b=document.getElementById('bulktext'); if(b) b.addEventListener('click', openBulkText); })();
+document.addEventListener('click', e => {
+  const m = document.getElementById('textmodal');
+  if(!m || !m.classList.contains('show')) return;
+  const cur = () => DATA.find(x => x.case === textQ[textIdx]);
+  const tn = e.target.closest && e.target.closest('.txtone');
+  if(tn){ e.preventDefault(); textTone = tn.dataset.t || 'cold'; renderTextModal(); return; }
+  const lg = e.target.closest && e.target.closest('.txlang');
+  if(lg){ e.preventDefault(); textLang = lg.dataset.l || 'both'; renderTextModal(); return; }
+  const cp = e.target.closest && e.target.closest('.txcopy');
+  if(cp){ e.preventDefault(); const r=cur(); if(r) _copyTextMsg(smsMsg(r, textLang, textTone), cp); return; }
+  const dn = e.target.closest && e.target.closest('.txdnt');
+  if(dn){ e.preventDefault(); _addDNT(dn.dataset.d); renderTextModal(); return; }
+  const sd = e.target.closest && e.target.closest('.txsend');
+  if(sd && sd.tagName==='A'){ const r=cur(); if(r) autoLog(r, 'text', 'texted', {nextDays:3}); return; }
+  const mk = e.target.closest && e.target.closest('.txmark');
+  if(mk){ e.preventDefault(); const r=cur(); if(r) autoLog(r, 'text', 'texted', {nextDays:3}); textAdvance(); return; }
+  const sk = e.target.closest && e.target.closest('.txskip');
+  if(sk){ e.preventDefault(); textAdvance(); return; }
+});
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeTextModal(); });
 // door-hanger generation (delegated for both table + cards)
 document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('.hangergen');
