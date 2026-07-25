@@ -3449,15 +3449,16 @@ function smsMsg(r, lang, tone){
   const whenEN = (!lp && dt) ? (' set for '+dt) : '';
   const whenES = (!lp && dt) ? (' el '+dt) : '';
   let en, es;
+  // Field Manual: buyer posture; hint at exits without rescue/"stop sale" promises.
   if(tone==='urgent'){
-    en = 'Hi '+first+', this is '+sN+' — local Miami buyer. Quick heads-up: '+street+' still has '+saleEN+whenEN+'. The date is close — you may still have options before it. No cost. Can I share two? Reply STOP to opt out.';
-    es = 'Hola '+first+', soy '+sN+', comprador local. Aviso rápido: '+street+' aún tiene '+saleES+whenES+'. La fecha está cerca — tal vez aún tenga opciones. Sin costo. ¿Le comparto dos? Responda STOP para no recibir más.';
+    en = 'Hi '+first+', '+sN+' — local Miami buyer (I buy houses). '+street+' still has '+saleEN+whenEN+'. Date is close — five exits still exist (reinstate / mod / short / private sale / BK). No cost. Want the rundown? Reply STOP to opt out.';
+    es = 'Hola '+first+', '+sN+' — comprador en Miami (compro casas). '+street+' aún tiene '+saleES+whenES+'. Fecha cerca — aún hay cinco salidas. Sin costo. ¿Se las repaso? Responda STOP para no recibir más.';
   } else if(tone==='followup'){
-    en = 'Hi '+first+', '+sN+' again — just following up on '+street+' ('+saleEN+whenEN+'). Happy to walk through options if useful. No pressure. Reply STOP to opt out.';
-    es = 'Hola '+first+', de nuevo '+sN+' — solo dándole seguimiento a '+street+' ('+saleES+whenES+'). Con gusto le explico opciones si le sirve. Sin presión. Responda STOP para no recibir más.';
+    en = 'Hi '+first+', '+sN+' again on '+street+' ('+saleEN+whenEN+'). Still glad to walk the five exits if useful — no pressure. Reply STOP to opt out.';
+    es = 'Hola '+first+', de nuevo '+sN+' por '+street+' ('+saleES+whenES+'). Con gusto repasamos las cinco salidas si le sirve — sin presión. Responda STOP para no recibir más.';
   } else {
-    en = 'Hi '+first+', this is '+sN+' — a local Miami home buyer. I saw '+street+' has '+saleEN+whenEN+'. You may still have options (even walking away with cash before a sale). No cost or obligation — can I share a couple? Reply STOP to opt out.';
-    es = 'Hola '+first+', soy '+sN+', comprador de casas aquí en Miami. Vi que '+street+' tiene '+saleES+whenES+'. Puede que todavía tenga opciones (incluso salir con efectivo). Sin costo ni compromiso — ¿le comparto un par? Responda STOP para no recibir más mensajes.';
+    en = 'Hi '+first+', '+sN+' — local Miami home buyer. I saw '+street+' on the county calendar ('+saleEN+whenEN+'). Not selling anything — just checking if you have a plan / know your options. No cost. Reply STOP to opt out.';
+    es = 'Hola '+first+', '+sN+' — comprador de casas en Miami. Vi '+street+' en el calendario del condado ('+saleES+whenES+'). No le vengo a vender nada — ¿tiene plan / conoce sus opciones? Sin costo. Responda STOP para no recibir más.';
   }
   if(lang==='en') return en;
   if(lang==='es') return es;
@@ -3852,12 +3853,16 @@ function _deepLink(r){ return location.origin + location.pathname + '#case=' + e
 function _carlosMsg(r){
   var owner = (r.owners||'').split(';')[0].split('&')[0].trim();
   var ph = _bestPhones(r), days = (r.days>=0? r.days+' days out' : 'sale passed');
+  // PLAYBOOK.md §5 Carlos intake + Field Manual door opener / 5 exits.
   return 'DOOR MISSION — '+owner+'\n'
     + r.addr + '\n'
     + 'Case '+r.case+'  ·  Auction '+r.auction+' ('+days+')\n'
     + 'Phone: '+(ph.length? ph.join(', ') : 'none yet — door only')+'\n\n'
-    + 'What to do: print + hand-deliver the rescue letter and the door hanger. Knock, keep it warm, '
-    + 'ask if they want to KEEP / SELL / WALK, leave your number. No answer -> hang the door hanger.\n'
+    + 'INTAKE (not close): "I take information, not your time. I bring it to the people who put every option on the table. '
+    + 'If you want that at no charge, answer when we call. If not interested, tell me — nobody\'s feelings get hurt."\n\n'
+    + 'OPENER: county calendar / sale date — not selling anything — plan for the date?\n'
+    + 'If they ask options, name all FIVE: reinstate · loan mod · short sale · private cash sale · bankruptcy.\n'
+    + 'Print letter + door hanger. Knock warm. No answer → Z-fold hanger on jamb (NEVER mailbox).\n'
     + _deepLink(r);
 }
 function _joseMsg(r){
@@ -3998,13 +4003,11 @@ function _carlosPacket(){
       +   '<div class="hwc">&#9986; HANDWRITE, then Z-fold so only this panel shows: &ldquo;'+esc(greet)+', / I CAME BY BUT NOBODY ANSWERED. / '+esc(initial)+'&rdquo;</div>'
       + '</div>'
       + '<div class="hh">'+esc(greet)+',</div>'
-      + '<p>I came by to talk to you about the upcoming auction of your property.</p>'
+      + '<p>I came by — your property came up on the county calendar.</p>'
       + '<p>The auction is scheduled for <b>'+esc(r.auction)+'</b> at <b>9am</b>.</p>'
-      + '<p>There is still time to stop the foreclosure and solve this problem.</p>'
-      + '<p>I would like to have just <b>5 minutes</b> of your time to discuss options and find a solution.</p>'
-      + '<p>Please call me as soon as possible at <b>'+esc(sP)+'</b>.</p>'
-      + '<p>There is <b>no charge, no pressure and no obligation</b>. But there is no time to waste either.</p>'
-      + '<p>Call me and I will do my best to help you.</p>'
+      + '<p>I buy houses. Not selling anything, not a rescue company. Five exits: reinstate, loan mod, short sale, private cash sale, or bankruptcy. Five minutes, no charge.</p>'
+      + '<p>Please call or text me at <b>'+esc(sP)+'</b> before the sale date.</p>'
+      + '<p>If a private sale fits, we talk. If another exit is better, I will say so.</p>'
       + '<div class="cta">'+esc(sN||'your local buyer')+(sL?' — '+esc(sL):'')+'</div>'
       + '<div class="pers">Personal</div>'
       + '<div class="fold">— — — — — — — — — fold / cut here — — — — — — — — —</div></div>';
@@ -4211,6 +4214,33 @@ function _openDoc(html){
   setTimeout(function(){ try { URL.revokeObjectURL(url); } catch(e){} }, 60000);
   return true;
 }
+
+/* ============================================================================================
+   OUTREACH COPY — sourced from the DealFlow Field Manual (📖 Playbook) + PLAYBOOK.md.
+   One source of truth: 5 exits, buyer posture ("I buy houses"), Carlos intake, no rescue/"stop
+   the sale" promises (FL 501.1377). Keep genLetter ↔ outreach_mail.build_letter_html in sync.
+   ============================================================================================ */
+function _pbFiveExitsHtml(lang){
+  if(lang==='es') return '<ol>'
+    +'<li><b>REINSTALAR</b> — pagar atrasos + cargos y poner el pr&eacute;stamo al d&iacute;a. Detiene la subasta.</li>'
+    +'<li><b>MODIFICACI&Oacute;N DE PR&Eacute;STAMO</b> — el banco cambia los t&eacute;rminos (suele tomar 60–120 d&iacute;as).</li>'
+    +'<li><b>SHORT SALE</b> — el banco acepta menos del saldo. Usted vende a un tercero (o a un comprador en efectivo).</li>'
+    +'<li><b>VENTA PRIVADA antes de la subasta</b> — vende a un comprador en efectivo; si el precio cubre lo adeudado, se cancela la ejecuci&oacute;n. <b>Aqu&iacute; es donde entro yo como comprador.</b></li>'
+    +'<li><b>BANCARROTA (Cap. 13 o 7)</b> — la suspensi&oacute;n autom&aacute;tica pausa la subasta. Tiene consecuencias serias de cr&eacute;dito.</li>'
+    +'</ol>';
+  return '<ol>'
+    +'<li><b>REINSTATE</b> — pay arrears + fees to bring the loan current. Stops the sale.</li>'
+    +'<li><b>LOAN MODIFICATION</b> — the bank changes payment terms (often 60–120 days).</li>'
+    +'<li><b>SHORT SALE</b> — the bank accepts less than the balance. You sell to a third party (or a cash buyer).</li>'
+    +'<li><b>PRIVATE SALE before auction</b> — sell to a cash buyer; if the price covers what is owed, the foreclosure is dropped. <b>This is where I come in as a buyer.</b></li>'
+    +'<li><b>BANKRUPTCY (Ch. 13 or 7)</b> — an automatic stay pauses the sale. Serious credit consequences.</li>'
+    +'</ol>';
+}
+function _pbIntakeLine(lang){
+  // PLAYBOOK.md §5 — Carlos intake (not closer)
+  if(lang==='es') return 'Yo tomo informaci&oacute;n, no su tiempo. Se la llevo a las personas que arman las opciones. Si quiere que pongamos todas las salidas sobre la mesa sin costo, la &uacute;nica cortes&iacute;a que pido es que conteste cuando llamemos. Si no le interesa, d&iacute;gamelo — nadie se ofende.';
+  return 'I take information, not your time. I bring it to the people who put every option on the table. If you want that conversation at no charge, the only courtesy I ask is that you answer when we call. If you are not interested, tell me — nobody\'s feelings get hurt.';
+}
 function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
@@ -4226,43 +4256,36 @@ function genLetter(r){
   const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
   const caseTagES = caseNo ? (td ? ` (N&uacute;m. de certificado/caso ${caseNo})` : ` (Caso N&uacute;m. ${caseNo})`) : '';
   const sigHtml = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).map(esc).join('<br>');
+  const exitsEN = _pbFiveExitsHtml('en'), exitsES = _pbFiveExitsHtml('es');
+  const intakeEN = _pbIntakeLine('en'), intakeES = _pbIntakeLine('es');
+  // Field Manual + PLAYBOOK: buyer posture, name all five exits, Carlos intake, no rescue promises.
   const EN = td ? `<p>Dear ${esc(owner)},</p>
-<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which county records show is scheduled for a <b>tax deed sale on ${dt}</b>${caseTagEN} due to unpaid property taxes.</p>
-<p>I wanted to reach out in case it helps to know your options before that date:</p>
-<ul><li>You can still keep the property by paying the back taxes any time before the sale.</li>
-<li>If keeping it is not realistic, selling before the sale can put cash in your pocket rather than losing it to the county.</li>
-<li>If it sells for more than the taxes owed, any surplus may belong to you, though it has to be claimed.</li></ul>
-<p>I am not an attorney, and nothing here is legal advice. I purchase properties directly, with cash, and can close before the deadline. If selling is not your best move, I will tell you honestly.</p>
-<p>There is no cost and no obligation to talk. You can reach me at <b>${esc(sP)}</b>. Even if the sale is close, there may still be time.</p>
-<p>Thank you for your time.</p>
+<p>My name is ${esc(sN)}. I am a local real estate investor here in Miami — <b>I buy houses</b>. I am not a lender, not a foreclosure-rescue company, and not an attorney. County records show your property at <b>${addr}</b> is scheduled for a <b>tax deed sale on ${dt}</b>${caseTagEN} due to unpaid property taxes.</p>
+<p>Before that date, owners usually look at three paths: pay the back taxes and keep it; sell privately for cash before the sale; or, if it sells for more than the taxes owed, claim any surplus the law allows. I am glad to walk through which of those still fits — at no cost and no obligation.</p>
+<p>I purchase properties as-is, with cash, and can close before the deadline when a private sale is the right move. If it is not, I will tell you honestly.</p>
+<p>${intakeEN}</p>
+<p>You can reach me at <b>${esc(sP)}</b>. Even if the sale is close, there may still be time to talk.</p>
 <p>Respectfully,<br><br>${sigHtml}</p>` : `<p>Dear ${esc(owner)},</p>
-<p>I hope this letter finds you well. My name is ${esc(sN)}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>${addr}</b>, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale scheduled for <b>${dt}</b>.</p>
-<p>I understand this can be a stressful situation, and I wanted to reach out in case it helps to know your options before that date:</p>
-<ul><li>If the property sells for more than you owe, any surplus belongs to you, not the lender.</li>
-<li>Selling before the auction is often better for you than losing it at the courthouse, and it can put cash in your pocket.</li>
-<li>The amount on file is not always current, and it is worth confirming before the sale.</li></ul>
-<p>I am not an attorney, and nothing here is legal advice. I purchase properties directly, with cash, and can close before the deadline. If buying is not the right fit for you, I am glad to point you in a better direction, even if it does not involve me.</p>
-<p>There is no cost and no obligation to talk. You can reach me at <b>${esc(sP)}</b>. Even if the sale is close, there may still be time.</p>
-<p>Thank you for your time.</p>
+<p>My name is ${esc(sN)}. I am a local real estate investor here in Miami — <b>I buy houses</b>. I am not a lender, not a foreclosure-rescue company, and not an attorney. Public records show your property at <b>${addr}</b> is in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale scheduled for <b>${dt}</b>.</p>
+<p>I am not writing to talk you into anything. When owners ask what their options are, these are the <b>five exits</b> every Florida foreclosure homeowner has (from our field manual):</p>
+${exitsEN}
+<p>My job is to make sure you know all five are on the table so the sale date does not sneak up. If a private cash sale is the path that fits, I can buy as-is and close before the deadline. If another exit is better for you, I will say so — even when it does not involve me.</p>
+<p>${intakeEN}</p>
+<p>There is no cost and no obligation to talk. Call or text me at <b>${esc(sP)}</b>.</p>
 <p>Respectfully,<br><br>${sigHtml}</p>`;
   const ES = td ? `<p>Estimado/a ${esc(first)},</p>
-<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros del condado tiene una <b>subasta de tax deed programada para el ${dt}</b>${caseTagES} por impuestos sin pagar.</p>
-<p>Quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
-<ul><li>Todav&iacute;a puede conservar la propiedad pagando los impuestos atrasados en cualquier momento antes de la subasta.</li>
-<li>Si conservarla no es realista, vender antes de la subasta puede dejarle dinero en el bolsillo en lugar de perderla ante el condado.</li>
-<li>Si se vende por m&aacute;s de lo que se debe en impuestos, cualquier excedente podr&iacute;a corresponderle a usted, aunque hay que reclamarlo.</li></ul>
-<p>No soy abogado y nada de esto es asesor&iacute;a legal. Compro propiedades directamente, en efectivo, y puedo cerrar antes de la fecha l&iacute;mite. Si vender no es lo mejor para usted, se lo dir&eacute; con honestidad.</p>
-<p>No hay costo ni compromiso por conversar. Puede comunicarse conmigo al <b>${esc(sP)}</b>. Aunque la subasta est&eacute; cerca, todav&iacute;a puede haber tiempo.</p>
-<p>Gracias por su tiempo.</p>
+<p>Mi nombre es ${esc(sN)}. Soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami — <b>compro casas</b>. No soy prestamista, no soy una compa&ntilde;&iacute;a de &ldquo;rescate&rdquo; de ejecuciones, y no soy abogado. Los registros del condado muestran que su propiedad en <b>${addr}</b> tiene una <b>subasta de tax deed el ${dt}</b>${caseTagES} por impuestos sin pagar.</p>
+<p>Antes de esa fecha, los due&ntilde;os suelen mirar tres caminos: pagar los impuestos atrasados y conservarla; vender en privado en efectivo antes de la subasta; o, si se vende por m&aacute;s de lo adeudado, reclamar el excedente que la ley permita. Con gusto repasamos cu&aacute;l a&uacute;n le sirve — sin costo ni compromiso.</p>
+<p>Compro propiedades tal cual, en efectivo, y puedo cerrar antes de la fecha l&iacute;mite cuando una venta privada es lo correcto. Si no lo es, se lo dir&eacute; con honestidad.</p>
+<p>${intakeES}</p>
+<p>Puede comunicarse conmigo al <b>${esc(sP)}</b>. Aunque la subasta est&eacute; cerca, todav&iacute;a puede haber tiempo para hablar.</p>
 <p>Respetuosamente,<br><br>${sigHtml}</p>` : `<p>Estimado/a ${esc(first)},</p>
-<p>Espero que esta carta le encuentre bien. Mi nombre es ${esc(sN)} y soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami. Le escribo respecto a su propiedad en <b>${addr}</b>, la cual seg&uacute;n los registros p&uacute;blicos se encuentra actualmente en proceso de ejecuci&oacute;n hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con una subasta programada para el <b>${dt}</b>.</p>
-<p>Entiendo que puede ser una situaci&oacute;n estresante, y quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
-<ul><li>Si la propiedad se vende por m&aacute;s de lo que usted debe, cualquier excedente le pertenece a usted, no al prestamista.</li>
-<li>Vender antes de la subasta suele ser mejor para usted que perderla en el juzgado, y puede dejarle dinero en el bolsillo.</li>
-<li>El monto que consta en el expediente no siempre est&aacute; actualizado, y conviene confirmarlo antes de la venta.</li></ul>
-<p>No soy abogado y nada de esto es asesor&iacute;a legal. Compro propiedades directamente, en efectivo, y puedo cerrar antes de la fecha l&iacute;mite. Si comprar no es lo adecuado para usted, con gusto le oriento hacia una mejor opci&oacute;n, aunque no me incluya.</p>
-<p>No hay costo ni compromiso por conversar. Puede comunicarse conmigo al <b>${esc(sP)}</b>. Aunque la subasta est&eacute; cerca, todav&iacute;a puede haber tiempo.</p>
-<p>Gracias por su tiempo.</p>
+<p>Mi nombre es ${esc(sN)}. Soy inversionista de bienes ra&iacute;ces aqu&iacute; en Miami — <b>compro casas</b>. No soy prestamista, no soy una compa&ntilde;&iacute;a de &ldquo;rescate&rdquo; de ejecuciones, y no soy abogado. Los registros p&uacute;blicos muestran que su propiedad en <b>${addr}</b> est&aacute; en ejecuci&oacute;n hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con subasta el <b>${dt}</b>.</p>
+<p>No le escribo para convencerlo de nada. Cuando un due&ntilde;o pregunta qu&eacute; opciones tiene, estas son las <b>cinco salidas</b> de todo propietario en ejecuci&oacute;n en Florida (de nuestro manual de campo):</p>
+${exitsES}
+<p>Mi trabajo es asegurarme de que sepa que las cinco est&aacute;n sobre la mesa para que la fecha de subasta no lo tome por sorpresa. Si una venta privada en efectivo es el camino, puedo comprar tal cual y cerrar antes de la fecha. Si otra salida le conviene m&aacute;s, se lo dir&eacute; — aunque no me incluya.</p>
+<p>${intakeES}</p>
+<p>No hay costo ni compromiso por conversar. Ll&aacute;meme o escr&iacute;bame al <b>${esc(sP)}</b>.</p>
 <p>Respetuosamente,<br><br>${sigHtml}</p>`;
   const doc = `<!doctype html><html><head><meta charset="utf-8"><title>Letter - ${esc(owner)}</title>
 <style>
@@ -4303,23 +4326,20 @@ function genHanger(r){
   const addr = esc(r.addr), dt = esc(r.auction);
   // INSIDE letter — Jose's exact script, EN + ES. Auction date and phone pre-filled (the blanks in
   // his handwritten original are exactly the fields the tracker already knows).
+  // Field Manual door leave-behind + buyer posture (no "stop the foreclosure" rescue pitch).
   const inEN = `<p class="hi">${esc(first)},</p>
-<p>I came by to talk to you about the upcoming auction of your property.</p>
+<p>I came by — your property came up on the county calendar.</p>
 <p>The auction is scheduled for <b>${dt}</b> at <b>9am</b>.</p>
-<p>There is still time to stop the foreclosure and solve this problem.</p>
-<p>I would like to have just <b>5 minutes</b> of your time to discuss options and find a solution.</p>
-<p>Please call me as soon as possible at <b class="ph">${esc(sP)}</b>.</p>
-<p>There is <b>no charge, no pressure and no obligation</b>.<br>But there is no time to waste either.</p>
-<p>Call me and I will do my best to help you.</p>
+<p>I buy houses. I am not selling anything and I am not a rescue company. Owners in your spot usually look at five exits: reinstate, loan mod, short sale, private cash sale, or bankruptcy. I can walk you through those in <b>5 minutes</b> — no charge, no pressure.</p>
+<p>Please call or text me at <b class="ph">${esc(sP)}</b> before the sale date.</p>
+<p>If a private sale fits, we can talk. If another exit is better, I will say so.</p>
 <p class="sig">${esc(sN)}${sL?'<br>'+esc(sL):''}</p>`;
   const inES = `<p class="hi">${esc(first)},</p>
-<p>Vine a hablar con usted sobre la pr&oacute;xima subasta de su propiedad.</p>
+<p>Pas&eacute; por aqu&iacute; — su propiedad sali&oacute; en el calendario del condado.</p>
 <p>La subasta est&aacute; programada para el <b>${dt}</b> a las <b>9am</b>.</p>
-<p>Todav&iacute;a hay tiempo para detener la ejecuci&oacute;n hipotecaria y resolver este problema.</p>
-<p>Quisiera solamente <b>5 minutos</b> de su tiempo para hablar de opciones y encontrar una soluci&oacute;n.</p>
-<p>Por favor ll&aacute;meme lo antes posible al <b class="ph">${esc(sP)}</b>.</p>
-<p>No hay <b>ning&uacute;n costo, ninguna presi&oacute;n y ninguna obligaci&oacute;n</b>.<br>Pero tampoco hay tiempo que perder.</p>
-<p>Ll&aacute;meme y har&eacute; todo lo posible por ayudarle.</p>
+<p>Yo compro casas. No le vengo a vender nada y no soy una empresa de &ldquo;rescate.&rdquo; Los due&ntilde;os en su situaci&oacute;n suelen mirar cinco salidas: reinstalar, modificaci&oacute;n, short sale, venta privada en efectivo, o bancarrota. Puedo repas&aacute;rselas en <b>5 minutos</b> — sin costo ni presi&oacute;n.</p>
+<p>Por favor ll&aacute;meme o escr&iacute;bame al <b class="ph">${esc(sP)}</b> antes de la fecha de subasta.</p>
+<p>Si una venta privada le sirve, hablamos. Si otra salida es mejor, se lo digo.</p>
 <p class="sig">${esc(sN)}${sL?'<br>'+esc(sL):''}</p>`;
   // TENANT-INTEL script — often whoever answers is a renter who doesn't know the owner is losing the place.
   const tenant = `<b>If a tenant / not the owner answers:</b>
@@ -4578,53 +4598,61 @@ function genScript(r){
   const caseTagEN = caseNo ? `, case number ${caseNo}` : '';
   const caseTagES = caseNo ? `, número de caso ${caseNo}` : '';
 
+  // Field Manual: qualify → name the 5 exits → book callback. Buyer posture, never "we stop sales."
   const goalEN = td
-    ? 'Qualify fast, then book the callback. Find out what happened, whether they can pay the back taxes or want to sell, and what else is owed. Then set a SPECIFIC time with ' + esc(partner) + ' on the line.'
-    : verify ? 'Qualify and book the callback with ' + esc(partner) + '. The real debt here is unknown and a senior mortgage may erase the equity, so your #1 job is the mortgage balance. Do NOT promise a price or promise you will stop the sale.'
-    : 'Qualify fast, then book the callback. Find out what happened, keep vs sell, and what is owed. Then set a SPECIFIC time with ' + esc(partner) + ' on the line to lay out their options.';
+    ? 'Qualify fast, then book the callback with ' + esc(partner) + '. Find out what happened, whether they can pay the back taxes or want a private sale, and what else is owed. Set a SPECIFIC clock time.'
+    : verify ? 'Qualify and book the callback with ' + esc(partner) + '. Debt is unknown / senior may wipe equity — #1 job is the mortgage balance. Name the five exits. Do NOT promise a price or that anyone will stop the sale.'
+    : 'Qualify fast using the Field Manual five exits, then book a SPECIFIC callback with ' + esc(partner) + ' to walk every option (buyer path only if it fits).';
   const goalES = td
-    ? 'Califique rápido y agende la llamada. Averigüe qué pasó, si pueden pagar los impuestos atrasados o quieren vender, y qué más se debe. Luego fije una hora ESPECÍFICA con ' + esc(partner) + ' en la línea.'
-    : verify ? 'Califique y agende la llamada con ' + esc(partner) + '. La deuda real es desconocida y una primera hipoteca podría borrar la plusvalía, así que su prioridad #1 es el saldo de la hipoteca. NO prometa un precio ni prometa que detendrá la venta.'
-    : 'Califique rápido y agende la llamada. Averigüe qué pasó, conservar vs vender, y qué se debe. Luego fije una hora ESPECÍFICA con ' + esc(partner) + ' en la línea para repasar sus opciones.';
+    ? 'Califique rápido y agende la llamada con ' + esc(partner) + '. Averigüe qué pasó, si pueden pagar impuestos o quieren venta privada, y qué más se debe. Fije una hora de reloj ESPECÍFICA.'
+    : verify ? 'Califique y agende con ' + esc(partner) + '. Deuda desconocida / primera hipoteca puede borrar equity — prioridad #1 el saldo. Nombre las cinco salidas. NO prometa precio ni que alguien detendrá la venta.'
+    : 'Califique rápido con las cinco salidas del Manual, luego fije una devolución ESPECÍFICA con ' + esc(partner) + ' para repasar cada opción (comprador solo si encaja).';
 
+  // Field Manual door opener adapted for phone — no pitch, no "stop it."
   const openEN = td
-    ? `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a tax-deed sale set for <b>${dt}</b>${caseTagEN}, that's ${days} days out. We may be able to help, but I need 60 seconds to see if we can, or if you're already working with someone. You got a minute?`
-    : `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm calling because your property at <b>${addr}</b> has a sale date set for <b>${dt}</b>${caseTagEN}, that's ${days} days out. We may be able to stop it, but I need 60 seconds to see if we can help, or if you're already working with someone. You got a minute?`;
+    ? `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm a local home buyer — not selling anything. Your property at <b>${addr}</b> is on the county tax-deed calendar for <b>${dt}</b>${caseTagEN}, about ${days} days out. I just wanted to check whether you have a plan for that date — some people do, some don't know their options. Got 60 seconds?`
+    : `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm a local home buyer — not selling anything. Your property at <b>${addr}</b> came up on the county foreclosure calendar for <b>${dt}</b>${caseTagEN}, about ${days} days out. I just wanted to check whether you have a plan for the sale date — some people do, some don't know they have options. Got 60 seconds?`;
   const openES = td
-    ? `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una subasta de tax deed fijada para el <b>${dt}</b>${caseTagES}, es decir en ${days} días. Quizá podamos ayudarle, pero necesito 60 segundos para ver si podemos, o si ya está trabajando con alguien. ¿Tiene un minuto?`
-    : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Le llamo porque su propiedad en <b>${addr}</b> tiene una fecha de subasta fijada para el <b>${dt}</b>${caseTagES}, es decir en ${days} días. Quizá podamos detenerla, pero necesito 60 segundos para ver si podemos ayudarle, o si ya está trabajando con alguien. ¿Tiene un minuto?`;
+    ? `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Soy comprador de casas local — no le vengo a vender nada. Su propiedad en <b>${addr}</b> está en el calendario de tax deed del condado para el <b>${dt}</b>${caseTagES}, unos ${days} días. Solo quería ver si tiene un plan para esa fecha — hay quienes sí, otros no saben qué opciones tienen. ¿60 segundos?`
+    : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Soy comprador de casas local — no le vengo a vender nada. Su propiedad en <b>${addr}</b> salió en el calendario de subastas del condado para el <b>${dt}</b>${caseTagES}, unos ${days} días. Solo quería ver si tiene un plan para la fecha de subasta — hay quienes sí, otros no saben qué opciones tienen. ¿60 segundos?`;
 
-  const offerEN = `Here's how this works. I'm not the guy who stops sales, my partner ${esc(partner)} is, he's been doing this 30 years. I'm going to pull your file right now, see exactly what we're dealing with on your lender, and brief him. Then I'll call you back at <b>[set a REAL clock time, e.g. 1:15 PM]</b> with ${esc(partner)} on the line. He'll lay out what we can actually do${verify?" once we confirm what's owed":''}, whether that's buying it before the sale so you walk away with cash, getting you more time, or pointing you to the right resource. No cost, no pressure, no commitment. You around then?`;
-  const offerES = `Así funciona. Yo no soy quien detiene las ventas, mi socio ${esc(partner)} sí, lleva 30 años en esto. Voy a sacar su expediente ahora mismo, ver exactamente qué tenemos con su prestamista, y ponerlo al tanto. Luego le devuelvo la llamada a las <b>[fije una hora real, ej. 1:15 PM]</b> con ${esc(partner)} en la línea. Él le explicará qué podemos hacer${verify?' una vez que confirmemos lo que se debe':''}, ya sea comprarla antes de la subasta para que salga con dinero, conseguirle más tiempo, u orientarle al recurso correcto. Sin costo, sin presión, sin compromiso. ¿Estará disponible?`;
+  // PLAYBOOK roles: intake books the closer — closer lays out options (not "stops sales").
+  const offerEN = `Here's how this works. I take information and bring it to my partner ${esc(partner)} — he's the one who puts every option on the table. I'm going to pull your file now${verify?', confirm what is really owed,':','} and brief him. Then I'll call you back at <b>[set a REAL clock time, e.g. 1:15 PM]</b> with ${esc(partner)} on the line. He'll walk the five exits — reinstate, loan mod, short sale, private cash sale, bankruptcy — and which one still fits${verify?' once the debt is confirmed':''}. No cost, no pressure, no commitment. You around then?`;
+  const offerES = `Así funciona. Yo tomo información y se la llevo a mi socio ${esc(partner)} — él es quien pone todas las opciones sobre la mesa. Voy a sacar su expediente ahora${verify?', confirmar lo que realmente se debe,':','} y ponerlo al tanto. Luego le devuelvo la llamada a las <b>[fije una hora real, ej. 1:15 PM]</b> con ${esc(partner)} en la línea. Él repasará las cinco salidas — reinstalar, modificación, short sale, venta privada en efectivo, bancarrota — y cuál aún le sirve${verify?' una vez confirmada la deuda':''}. Sin costo, sin presión, sin compromiso. ¿Estará disponible?`;
 
   const discEN = [
-    `Before I go further, are you already working with someone on this, a law firm or another company? &nbsp;<span class="key">(real law firm → tell them to stick with it; nobody / something sketchy → keep going)</span>`,
-    `What happened? How'd you end up in foreclosure? &nbsp;<span class="key">(let them talk, then: "Man, I'm sorry, that's a lot.")</span>`,
-    `Where's your head at, are you trying to save the house, or is it time to get out with some cash and start clean, no eviction on your record?`,
-    `<b>If keeping it:</b> are you back on your feet income-wise, or still underwater month to month? &nbsp; <b>If selling:</b> do you have equity, or are you upside down?`,
-    `<b>Is there still a mortgage on it, and roughly what's the balance? Any other liens, HOA, or back taxes?</b> &nbsp;<span class="key">← the numbers ${esc(partner)} needs</span>`
+    `Before I go further, are you already working with someone — a law firm or another company? &nbsp;<span class="key">(real law firm → stick with them; nobody / sketchy → keep going)</span>`,
+    `What happened? How'd you end up here? &nbsp;<span class="key">(let them talk, then: "I'm sorry — that's a lot.")</span>`,
+    `<b>Field Manual — name all five without pausing:</b> reinstate the loan, modify it, short sale, private cash sale before auction, or bankruptcy. Which of those have you looked at?`,
+    `Where's your head at — trying to keep it, or open to a private sale so you walk with cash and no eviction on your record?`,
+    `<b>Is there still a mortgage, and roughly what's the balance? Any other liens, HOA, or back taxes?</b> &nbsp;<span class="key">← numbers ${esc(partner)} needs — never quote a price until this is confirmed</span>`
   ];
   const discES = [
-    `Antes de seguir, ¿ya está trabajando con alguien en esto, un bufete u otra compañía? &nbsp;<span class="key">(bufete real → dígale que siga con ellos; nadie / algo dudoso → continúe)</span>`,
-    `¿Qué pasó? ¿Cómo llegó a la ejecución hipotecaria? &nbsp;<span class="key">(déjelo hablar, luego: "Cuánto lo siento, es mucho.")</span>`,
-    `¿Qué está pensando, quiere salvar la casa, o ya es momento de salir con algo de dinero y empezar de nuevo, sin una eviction en su historial?`,
-    `<b>Si la conserva:</b> ¿ya está estable de ingresos, o sigue ahogado mes a mes? &nbsp; <b>Si vende:</b> ¿tiene plusvalía, o está por debajo de lo que debe?`,
-    `<b>¿Todavía hay una hipoteca, y más o menos cuál es el saldo? ¿Otros gravámenes, HOA o impuestos atrasados?</b> &nbsp;<span class="key">← los números que ${esc(partner)} necesita</span>`
+    `Antes de seguir, ¿ya está trabajando con alguien — un bufete u otra compañía? &nbsp;<span class="key">(bufete real → siga con ellos; nadie / dudoso → continúe)</span>`,
+    `¿Qué pasó? ¿Cómo llegó aquí? &nbsp;<span class="key">(déjelo hablar, luego: "Cuánto lo siento — es mucho.")</span>`,
+    `<b>Manual de campo — nombre las cinco sin pausa:</b> reinstalar el préstamo, modificarlo, short sale, venta privada en efectivo antes de la subasta, o bancarrota. ¿Cuáles ha mirado?`,
+    `¿Qué está pensando — conservar la casa, o abierto a una venta privada para salir con dinero y sin eviction en el historial?`,
+    `<b>¿Todavía hay hipoteca, y más o menos el saldo? ¿Otros gravámenes, HOA o impuestos atrasados?</b> &nbsp;<span class="key">← números que ${esc(partner)} necesita — nunca dé precio hasta confirmar</span>`
   ];
   if(td){ discEN.splice(3,0,`Can you pay the back taxes to keep it, or is that just not realistic right now?`);
           discES.splice(3,0,`¿Puede pagar los impuestos atrasados para conservarla, o eso no es realista ahora mismo?`); }
 
+  // Field Manual objection scripts (lawyer / how address / don't want to sell / price).
   const objEN = [
-    [`"I'm already working with someone."`, `Good, who with? If it's a real law firm or a legit company, honestly, stick with them. If you're not sure who they are, just be careful, a lot of bad actors circle people in your spot. Either way I'll be straight with you.`],
-    [`"Can you just help me right now?" / hesitates on the callback`, `I hear you, but your sale is in ${days} days and this is the window ${esc(partner)} has today. If it's not a priority right now, tell me, so I don't waste his time or yours.`],
-    [`"Is this a scam?"`, `Fair, you should be careful. We're local, there's no cost, you never pay us anything up front, and nothing happens without it in writing for you to review. You're welcome to look us up.`],
-    [`"How much will you give me?"`, `Fair question, but I'd be guessing until we confirm what's owed, that's exactly what ${esc(partner)} and I pin down before anyone throws out a number.`]
+    [`"I already have a lawyer."`, `Good — that puts you ahead of most people I talk to. What I've seen is a lawyer handling the case doesn't always walk you through options OUTSIDE the courtroom — private sale or short sale. Want a quick rundown on those, no cost?`],
+    [`"How did you get my address?"`, `Everything is public. When a foreclosure is filed the county puts the case on a public calendar with the address, sale date, and case number. Title companies use the same list. If you don't want to hear from me again, say so — I'll take you off.`],
+    [`"I don't want to sell."`, `Totally fair. Selling is one of five things you can do — reinstate, modify, short sale, private sale, or bankruptcy. My job isn't to talk you into anything; it's to make sure you know all five so the sale date doesn't sneak up. Which have you looked at?`],
+    [`"How much would you pay?"`, `<b>NEVER quote a number on this call.</b> "I'd want to walk the property and pull the numbers on your loan before I disrespect you with a lowball. That's what ${esc(partner)} and I pin down on the callback."`],
+    [`"I'm already working with someone."`, `Good, who with? Real law firm or legit company — stick with them. If you're not sure who they are, be careful; a lot of bad actors circle this spot.`],
+    [`"Is this a scam?"`, `Fair. We're local buyers — no upfront fee, nothing happens without it in writing, and you can look us up.`]
   ];
   const objES = [
-    [`"Ya estoy trabajando con alguien."`, `Bien, ¿con quién? Si es un bufete real o una compañía seria, sinceramente, siga con ellos. Si no está seguro de quiénes son, tenga cuidado, hay muchos aprovechados rondando a la gente en su situación. De cualquier forma le hablaré con franqueza.`],
-    [`"¿Puede ayudarme ahora mismo?" / duda con la hora`, `Le entiendo, pero su subasta es en ${days} días y esta es la ventana que ${esc(partner)} tiene hoy. Si no es prioridad ahora, dígame, para no hacerle perder su tiempo ni el suyo.`],
-    [`"¿Esto es una estafa?"`, `Justo, debe tener cuidado. Somos locales, no hay costo, usted nunca paga nada por adelantado, y nada pasa sin que esté por escrito para que lo revise. Con gusto puede verificarnos.`],
-    [`"¿Cuánto me daría?"`, `Buena pregunta, pero estaría adivinando hasta confirmar lo que se debe, eso es justo lo que ${esc(partner)} y yo definimos antes de dar una cifra.`]
+    [`"Ya tengo abogado."`, `Bien — eso lo pone adelante de la mayoría. A veces el abogado del caso no le explica opciones FUERA del juzgado — venta privada o short sale. ¿Le sirve un resumen rápido, sin costo?`],
+    [`"¿Cómo consiguió mi dirección?"`, `Todo es público. Cuando se presenta una ejecución, el condado pone el caso en un calendario público con dirección, fecha y número de caso. Las compañías de título usan la misma lista. Si no quiere que lo contacte, dígamelo — lo saco de la lista.`],
+    [`"No quiero vender."`, `Totalmente justo. Vender es una de cinco cosas — reinstalar, modificar, short sale, venta privada o bancarrota. No estoy para convencerlo; estoy para que sepa las cinco y la fecha no lo tome por sorpresa. ¿Cuáles ha mirado?`],
+    [`"¿Cuánto me daría?"`, `<b>NUNCA dé un número en esta llamada.</b> "Quiero ver la propiedad y los números del préstamo antes de faltarle el respeto con una oferta baja. Eso lo definimos ${esc(partner)} y yo en la devolución."`],
+    [`"Ya estoy trabajando con alguien."`, `Bien, ¿con quién? Bufete o compañía seria — siga con ellos. Si no está seguro, tenga cuidado; hay muchos aprovechados.`],
+    [`"¿Esto es una estafa?"`, `Justo. Somos compradores locales — sin cuota por adelantado, nada sin escrito, y puede verificarnos.`]
   ];
 
   const closeEN = `Good. Pick up when you see the call, I'll be bringing ${esc(partner)} in. And ${first}, be careful who you talk to between now and then, a lot of bad actors circle people in this spot. Wait for our call. Deal?`;
@@ -4633,22 +4661,22 @@ function genScript(r){
   const leaveES = `Si no fijan hora: le dejo mi línea directa, <b>${esc(sP)}</b>, soy ${esc(sN)} de ${esc(sL)}. Llámeme apenas algo cambie antes del ${dt}.`;
 
   const compEN = [
-    `Dial by hand. You're calling as <b>${esc(sL)}</b>, not personally.`,
-    `Skip any number marked <span class="dnc">DO NOT CALL</span> below.`,
-    `You are <b>not an attorney and not their lender</b>, say so. This is not legal advice.`,
-    `Do NOT promise you <b>will</b> stop the sale, say you <b>may be able to help</b>. Never name a price before the debt is confirmed.`,
-    `Set a <b>real clock time</b> for the callback and keep it. "30 minutes" with no time is a trust-killer.`,
-    `If they'd keep any stake (rent-back / buy-back) or sign anything, it needs a <b>written contract with a 3-day right to cancel</b> (FL 501.1377).`,
-    `<b>Broward / Palm Beach leads only:</b> our bankruptcy-stay check covers Miami-Dade dockets — for other counties ask EARLY: <i>"have you filed for bankruptcy?"</i> If yes, end the call politely and log it — contact during an active stay is a federal violation (11 U.S.C. §362).`
+    `Dial by hand as <b>${esc(sL)}</b>. Safe posture from the <b>📖 Playbook</b>: <b>"I buy houses"</b> — not a rescue consultant.`,
+    `Skip any number marked <span class="dnc">DO NOT CALL</span>.`,
+    `You are <b>not an attorney and not their lender</b>. This is not legal advice.`,
+    `<b>Never</b> promise to stop / delay / reverse the sale, collect an upfront fee, or quote a price before the debt is confirmed (FL 501.1377 + Field Manual).`,
+    `Name the <b>five exits</b> when they ask about options. Set a <b>real clock time</b> for the callback — "30 minutes" with no time kills trust.`,
+    `Homestead equity purchase / any stake kept back → <b>written contract + 3-day cancel</b> (FL 501.1377). Attorney paper.`,
+    `<b>Broward / Palm Beach:</b> ask EARLY <i>"have you filed for bankruptcy?"</i> — active stay = federal violation to keep contacting (11 U.S.C. §362).`
   ];
   const compES = [
-    `Marque a mano. Usted llama como <b>${esc(sL)}</b>, no de forma personal.`,
-    `Omita cualquier número marcado <span class="dnc">NO LLAMAR</span> abajo.`,
-    `Usted <b>no es abogado ni es su prestamista</b>, dígalo. Esto no es asesoría legal.`,
-    `NO prometa que <b>detendrá</b> la venta, diga que <b>quizá pueda ayudar</b>. Nunca dé un precio antes de confirmar la deuda.`,
-    `Fije una <b>hora real</b> para la devolución de llamada y cúmplala. "30 minutos" sin hora destruye la confianza.`,
-    `Si conservan alguna parte (renta de vuelta / recompra) o firman algo, debe ser un <b>contrato por escrito con 3 días para cancelar</b> (FL 501.1377).`,
-    `<b>Solo Broward / Palm Beach:</b> nuestro chequeo de bancarrota cubre Miami-Dade — en otros condados pregunte TEMPRANO: <i>"¿ha declarado bancarrota?"</i> Si dice sí, termine la llamada con cortesía y anótelo — contactar durante una suspensión activa es una violación federal (11 U.S.C. §362).`
+    `Marque a mano como <b>${esc(sL)}</b>. Postura del <b>📖 Playbook</b>: <b>"compro casas"</b> — no consultor de rescate.`,
+    `Omita números <span class="dnc">NO LLAMAR</span>.`,
+    `Usted <b>no es abogado ni prestamista</b>. Esto no es asesoría legal.`,
+    `<b>Nunca</b> prometa detener / retrasar / revertir la venta, cobre por adelantado, ni dé precio sin confirmar la deuda (FL 501.1377 + Manual).`,
+    `Nombre las <b>cinco salidas</b> si preguntan opciones. Fije <b>hora real</b> para la devolución.`,
+    `Compra de equity en homestead / si conservan interés → <b>contrato escrito + 3 días para cancelar</b> (FL 501.1377).`,
+    `<b>Broward / Palm Beach:</b> pregunte TEMPRANO <i>"¿ha declarado bancarrota?"</i> — stay activo = violación federal seguir contactando (11 U.S.C. §362).`
   ];
   if(!td && r.hs){ compEN.push(`This looks like a long-held homestead, likely a family home. Go slow, be respectful, and listen more than you talk.`);
                    compES.push(`Parece una vivienda familiar de muchos años. Vaya despacio, con respeto, y escuche más de lo que habla.`); }
@@ -4693,7 +4721,7 @@ function genScript(r){
   const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Call script - ${esc(owner)}</title><style>${CSS}</style></head><body>
 <div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">Print</button></div>
 <h1>${esc(owner)}</h1>
-<div class="subh">${addr} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${dt}</b> &middot; ${esc(r.case)}</div>
+<div class="subh">${addr} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${dt}</b> &middot; ${esc(r.case)} &middot; <b>📖 Field Manual</b> (5 exits · buyer posture · FL 501.1377)</div>
 <div id="body-en">${render('en')}</div>
 <div id="body-es" style="display:none">${render('es')}</div>
 <script>function show(l){document.getElementById('body-en').style.display=l==='en'?'block':'none';document.getElementById('body-es').style.display=l==='es'?'block':'none';document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
@@ -4721,12 +4749,13 @@ function genEmail(r){
   const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
   const subjEN = `Regarding your property at ${street}`;
   const subjES = `Referente a su propiedad en ${street}`;
+  // Mirror Field Manual letter: buyer posture + five exits (FC) / tax paths (TD).
   const bodyEN = td
-    ? `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}. County records show it is scheduled for a tax deed sale on ${dt}${caseTagEN} due to unpaid property taxes.\n\nI am a local real estate investor here in Miami, and I work with owners before these sales. You may still have options, including paying the back taxes to keep the property, or selling it before the sale so you walk away with cash instead of losing it to the county. If it sells for more than the taxes owed, any surplus may belong to you as well.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`
-    : `Hi ${first},\n\nI hope you are doing well.\n\nI am reaching out regarding your property at ${addr}, which public records show is currently in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. According to those records, the foreclosure sale is scheduled for ${dt}.\n\nI am a local real estate investor here in Miami, and I work with owners in this situation before the sale date. Depending on what is owed, you may have more options than it seems, including selling before the auction so you walk away with cash instead of losing the property. If it sells for more than the debt, any surplus may belong to you.\n\nThere is no cost and no obligation to talk, and I am not an attorney, so nothing here is legal advice. If it would help to go over your options, I am glad to answer your questions and explain how it works.\n\nThank you for your time, and I look forward to speaking with you.\n\nBest regards,\n\n${sig}\n\nIf you would prefer that I not reach out again, just reply and let me know.`;
+    ? `Hi ${first},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nCounty records show your property at ${addr} is scheduled for a tax deed sale on ${dt}${caseTagEN}. Before that date, owners usually look at paying the back taxes, selling privately for cash, or claiming any surplus the law allows if it sells for more than is owed.\n\nNo cost and no obligation to talk. If a private sale fits, I can buy as-is and close before the deadline; if another path is better, I will say so.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`
+    : `Hi ${first},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nPublic records show ${addr} is in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale scheduled for ${dt}.\n\nI am not writing to talk you into anything. The five exits every Florida foreclosure homeowner has are: (1) reinstate the loan, (2) loan modification, (3) short sale, (4) private cash sale before auction — that is where a buyer like me comes in — and (5) bankruptcy. My job is to make sure you know all five are on the table.\n\nNo cost, no obligation. If you want to put every option on the table, answer when we call; if you are not interested, tell me — nobody's feelings get hurt.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
   const bodyES = td
-    ? `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}. Los registros del condado muestran que está programada para una subasta de tax deed el ${dt}${caseTagES} por impuestos sin pagar.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios antes de estas ventas. Todavía puede tener opciones, incluyendo pagar los impuestos atrasados para conservar la propiedad, o venderla antes de la subasta para salir con dinero en lugar de perderla ante el condado. Si se vende por más de los impuestos adeudados, cualquier excedente también podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`
-    : `Hola ${first},\n\nEspero que se encuentre bien.\n\nMe comunico con usted respecto a su propiedad en ${addr}, la cual según los registros públicos se encuentra actualmente en proceso de ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Según esos registros, la subasta está programada para el ${dt}.\n\nSoy inversionista de bienes raíces aquí en Miami y trabajo con propietarios en esta situación antes de la fecha de la venta. Según lo que se deba, es posible que tenga más opciones de las que parece, incluyendo vender antes de la subasta para salir con dinero en lugar de perder la propiedad. Si se vende por más de lo adeudado, cualquier excedente podría corresponderle a usted.\n\nNo hay costo ni compromiso por conversar, y no soy abogado, así que nada de esto es asesoría legal. Si le sirve repasar sus opciones, con gusto respondo sus preguntas y le explico cómo funciona.\n\nGracias por su tiempo, y quedo atento para conversar con usted.\n\nSaludos cordiales,\n\n${sig}\n\nSi prefiere que no le contacte de nuevo, solo respóndame y con gusto lo respeto.`;
+    ? `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Antes de esa fecha, los dueños suelen mirar pagar impuestos atrasados, vender en privado en efectivo, o reclamar el excedente si la ley lo permite.\n\nSin costo ni compromiso. Si una venta privada encaja, puedo comprar tal cual y cerrar antes de la fecha; si otro camino es mejor, se lo digo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`
+    : `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con subasta el ${dt}.\n\nNo escribo para convencerlo. Las cinco salidas de todo propietario en ejecución en Florida son: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo antes de la subasta — ahí entra un comprador como yo — y (5) bancarrota. Mi trabajo es que sepa que las cinco están sobre la mesa.\n\nSin costo ni compromiso. Si quiere poner todas las opciones sobre la mesa, conteste cuando llamemos; si no le interesa, dígamelo — nadie se ofende.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
   const D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
   const recip = emails.length
