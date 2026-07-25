@@ -2833,6 +2833,11 @@ function _wpAddrUrl(r){ const p=String(r.addr||'').split(','); if(!p[0]||p.lengt
   return 'https://www.whitepages.com/address/'+_wpSlug(p[0])+'/'+_wpCity(r)+'-FL';
 }
 function _wpPropUrl(r){
+  // Prefer opaque /property/{id}#owner when we have it (Property Intel detail page with phones/relatives).
+  // Fallback: ?address= — Whitepages' own checkout deep-link when the id is unknown.
+  if(r && r.wpPropId){
+    return 'https://property.whitepages.com/property/' + encodeURIComponent(String(r.wpPropId).replace(/[^A-Za-z0-9_-]/g,'')) + '#owner';
+  }
   var a = _wpCleanAddr(r); if(!a || a.indexOf(',') < 0) return '';
   return 'https://property.whitepages.com/?address=' + encodeURIComponent(a);
 }
@@ -2843,7 +2848,7 @@ function _csPeople(r){
   var L=[], wn=_wpNameUrl(r), wa=_wpAddrUrl(r), wp=_wpPropUrl(r);
   // Property Intel deep-link first — owner/occupant intel, phones, relatives when the session has access.
   // class=wpprop + chip layout: ≥44px tap target on phones (inline " · " links were untappable).
-  if(wp) L.push('<a class="wpprop" href="'+esc(wp)+'" target="_blank" rel="noopener noreferrer" title="Whitepages Property Intel — opens this address on property.whitepages.com (owners, occupancy, phones/relatives when logged in). Stable ?address= deep-link; no cookies baked into Dealflow.">⭐ WP property</a>');
+  if(wp) L.push('<a class="wpprop" href="'+esc(wp)+'" target="_blank" rel="noopener noreferrer" title="Whitepages Property Intel — '+(r.wpPropId?'direct /property/{id}#owner page (phones, relatives, occupancy when logged in).':'?address= search deep-link; paste the opaque /property/{id} into wp_prop_ids.json after you resolve it.')+' No cookies baked into Dealflow.">⭐ WP property</a>');
   // If WP Pro already ran on this lead, don't send the closer back to the free consumer page — it
   // shows LESS data (masked phones, WP.com upsell nag) than the WP HOUSEHOLD section right above.
   // Show a static "verified" badge instead so they know the API already covered it.
@@ -3226,6 +3231,16 @@ function _pbRender(){
     +     '<li><b>Tax status</b> — pull the Tax Collector page. Confirm current-year taxes paid. Any delinquent = survives.</li>'
     +     '<li><b>Dropped-party check</b> — search the docket for "DROPPING PARTY:" entries. If a code / tax authority was named and dropped, its lien survives — factor it in or pass.</li>'
     +   '</ol>'
+    +   '<h4>When skip-trace is thin (no phones on the row)</h4>'
+    +   '<p class="pblede">Honest limit: free aggregators (TruePeopleSearch, Whitepages consumer name/address pages) are often <b>6–18 months stale</b> on distressed owners — numbers recycle, VoIP burners appear, landlines get dumped, and people use relatives\' addresses. BatchData empty + no Whitepages Pro cache is a <b>known gap</b>, not a dead lead.</p>'
+    +   '<ol>'
+    +     '<li><b>⭐ WP property</b> on the row / Call Sheet — opens Property Intel. If we stored a <code>wpPropId</code>, it goes straight to <code>/property/{id}#owner</code> (live phones/relatives when you\'re logged in). Otherwise it uses <code>?address=</code>; once you land on the real page, save that id into <code>wp_prop_ids.json</code> and re-bake.</li>'
+    +     '<li><b>Whitepages Pro API</b> — <code>python whitepages_lookup.py --gap</code> (or <code>--case …</code>) when the key isn\'t rate-limited. That fills the WHITEPAGES-VERIFIED HOUSEHOLD block on the Call Sheet.</li>'
+    +     '<li><b>People / by address / CyberBG</b> — cross-check residents and relatives at the property (not name-only on common names).</li>'
+    +     '<li><b>Return-service mail + door / neighbor canvass</b> — letter with your script; knock; ask who lives there now. Lawful field work beats a stale scrape.</li>'
+    +     '<li><b>LLC owners</b> — Sunbiz officers, then people-search those humans (Dealflow already surfaces officer links).</li>'
+    +   '</ol>'
+    +   '<div class="pbcallout warn"><b>Do not:</b> illegal phone-network tricks, device tracking, or watching someone\'s PO box. Stick to public records, paid data you\'re licensed for, mail, and conversations.</div>'
     + '</section>'
     // ---- 8) FELONY BUCKET ----
     + '<section id="pb-felony" class="pbsec">'

@@ -28,6 +28,7 @@ CLI:
   python whitepages_lookup.py --all --limit 100                  # batch, Property + auto Person for thin
   python whitepages_lookup.py --all --limit 100 --deep           # Person Search on EVERY lead (2x cost)
   python whitepages_lookup.py --upgrade --limit 50               # re-scan cached leads with <5 phones, add Person layer
+  python whitepages_lookup.py --gap --limit 50                   # person-owned leads with ZERO phones (BatchData miss)
   python whitepages_lookup.py --stats                            # cache size + phone-lift snapshot
 
 Env:
@@ -239,6 +240,17 @@ def enrich_one(lead, key, deep, cache):
         _stats['miss'] += 1
 
 
+def _lead_phone_count(r):
+    """How many dialable phones the lead already carries (skiptrace / prior bake)."""
+    n = 0
+    for p in (r.get('phones') or []):
+        raw = p.get('number') if isinstance(p, dict) else str(p)
+        d = ''.join(c for c in str(raw or '') if c.isdigit())
+        if len(d) == 11 and d.startswith('1'): d = d[1:]
+        if len(d) == 10: n += 1
+    return n
+
+
 def build_todo(leads, cache, args):
     """Return the (deduped, skip-LLC when applicable) work list, respecting --tier / --refresh / --upgrade."""
     todo = []
@@ -246,6 +258,25 @@ def build_todo(leads, cache, args):
         by = {_lead_key(r): r for r in leads}
         if args.case not in by: sys.exit(f'case {args.case} not on the board')
         return [by[args.case]]
+    if getattr(args, 'gap', False):
+        # Systemic gap-fill: BatchData (or prior bake) returned ZERO phones on a person-owned lead.
+        # These are the ones that look "dead" on Dealflow while Property Intel still has household data.
+        skipped_co = skipped_has = 0
+        for r in leads:
+            k = _lead_key(r)
+            if not k: continue
+            if args.tier and (r.get('tier') or '') != args.tier: continue
+            if k in cache and not args.refresh: continue
+            owner = (r.get('owners') or '').upper()
+            if any(t in owner for t in [' LLC', ' INC', ' CORP', ' CO.', ' LTD', ' LLP',
+                                        ' ASSN', ' ASSOCIATION', ' CONDOMINIUM', ' CHURCH']):
+                skipped_co += 1; continue
+            if _lead_phone_count(r) > 0:
+                skipped_has += 1; continue
+            todo.append(r)
+        _log(f'  --gap: {len(todo)} zero-phone person leads'
+             + (f' (skipped {skipped_co} companies, {skipped_has} already have phones)' if (skipped_co or skipped_has) else ''))
+        return todo
     if args.upgrade:
         # re-scan cached leads with thin Property AND no Person layer yet
         by = {_lead_key(r): r for r in leads}
@@ -278,6 +309,7 @@ def main():
     ap.add_argument('--case', help='single lead by ID')
     ap.add_argument('--all', action='store_true', help='every uncached lead (respects --limit)')
     ap.add_argument('--upgrade', action='store_true', help='re-scan cached leads with <5 phones + no Person layer yet')
+    ap.add_argument('--gap', action='store_true', help='only person-owned leads with ZERO phones (BatchData miss gap-fill)')
     ap.add_argument('--deep', action='store_true', help='force Person Search on every lead (2x cost)')
     ap.add_argument('--limit', type=int, default=50, help='per-run cap (default 50, env WP_MAX_CALLS_PER_RUN overrides)')
     ap.add_argument('--refresh', action='store_true', help='re-fetch even cached leads')

@@ -1050,10 +1050,21 @@ def make_tracker(leads):
     #   wpAllEmails-> deduped union of emails, injected into `emails`
     #   wpKey      -> 'ok' when we got a real record, 'none' when we tried and got 404, missing if we
     #                 haven't looked yet (the call sheet uses this to distinguish gaps from misses)
-    _wpf = os.path.join(HERE, 'whitepages_lookup.json')
-    if os.path.exists(_wpf):
+    # Opaque property.whitepages.com /property/{id} deep-links (manual or cookie-resolved).
+    # Safe to commit the id map — no phones/PII, just public property page slugs.
+    _wp_ids = {}
+    _wp_id_path = os.path.join(HERE, 'wp_prop_ids.json')
+    if os.path.exists(_wp_id_path):
         try:
-            _wp = json.load(open(_wpf, encoding='utf-8')); _wn = _wpn = _wpe = 0
+            _wp_ids = json.load(open(_wp_id_path, encoding='utf-8')) or {}
+        except Exception:
+            _wp_ids = {}
+
+    _wpf = os.path.join(HERE, 'whitepages_lookup.json')
+    if os.path.exists(_wpf) or _wp_ids:
+        try:
+            _wp = json.load(open(_wpf, encoding='utf-8')) if os.path.exists(_wpf) else {}
+            _wn = _wpn = _wpe = _wid = 0
             def _prop_city_state(r):
                 a = r.get('addr') or r.get('Address') or ''
                 p = [s.strip() for s in a.split(',')]
@@ -1063,7 +1074,7 @@ def make_tracker(leads):
                 city = state = ''
                 if addrs:
                     city = (addrs[0].get('city') or '').upper()
-                    state = (addrs[0].get('state') or '').upper()
+                    state = (addrs[0].get('state') or addrs[0].get('state_code') or '').upper()
                 absentee = bool(state and state != 'FL') or bool(city and prop_city and city != prop_city)
                 phs = []
                 for p in (o.get('phones') or []):
@@ -1078,7 +1089,13 @@ def make_tracker(leads):
                 t = p['type']
                 return 0 if 'mob' in t else (1 if 'land' in t else 2)
             for _r in slim:
-                _hit = _wp.get(_r.get('case', ''))
+                _case = _r.get('case', '')
+                # Deep-link id: cache _prop_id wins, then committed wp_prop_ids.json
+                _pid = ((_wp.get(_case) or {}).get('_prop_id') or _wp_ids.get(_case) or '').strip()
+                if _pid:
+                    _r['wpPropId'] = _pid
+                    _wid += 1
+                _hit = _wp.get(_case)
                 if not _hit: continue
                 _res = (_hit.get('result') or {})
                 _oi = (_res.get('ownership_info') or {})
@@ -1151,6 +1168,8 @@ def make_tracker(leads):
                 _wn += 1
             if _wn:
                 print(f"WhitepagesPro: enriched {_wn} leads (+{_wpn} phones, +{_wpe} emails, absentee-owner flags set)")
+            if _wid:
+                print(f"Whitepages property deep-links: {_wid} leads with wpPropId")
         except Exception as _e:
             print('WhitepagesPro merge skipped:', _e)
 
