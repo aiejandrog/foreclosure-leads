@@ -567,6 +567,14 @@ a.ctact:hover{text-decoration:none;filter:brightness(1.05)}
 .links .lgrp.lgrp-contact,.clinks .lgrp.lgrp-contact{padding:6px 8px;background:rgba(11,23,48,.04);
   border:1px solid var(--line,#E2E6EE);border-radius:8px;gap:6px 10px}
 .links .lgrp.lgrp-contact .lgrp-lab,.clinks .lgrp.lgrp-contact .lgrp-lab{color:var(--navy,#0B1730)}
+/* Court & sale — Records / Cases / Docket / Auction / Appraiser / Taxes: ONE navy ink, not gold-vs-slate soup */
+.links .lgrp.lgrp-eval,.clinks .lgrp.lgrp-eval{padding:7px 9px;background:rgba(11,23,48,.045);
+  border:1px solid var(--line,#E2E6EE);border-radius:8px;gap:4px 12px}
+.links .lgrp.lgrp-eval .lgrp-lab,.clinks .lgrp.lgrp-eval .lgrp-lab{color:var(--navy,#0B1730);margin-bottom:4px}
+.links .lgrp.lgrp-eval a,.clinks .lgrp.lgrp-eval a,
+.links .lgrp.lgrp-eval a.dig,.clinks .lgrp.lgrp-eval a.dig{color:var(--navy,#152747)!important;font-weight:700}
+.links .lgrp.lgrp-eval a:hover,.clinks .lgrp.lgrp-eval a:hover,
+.links .lgrp.lgrp-eval a.dig:hover,.clinks .lgrp.lgrp-eval a.dig:hover{color:var(--gold-d,#6F5514)!important}
 .links a.ctact,.clinks a.ctact{font-size:11.5px;padding:5px 9px}
 .links a.ctact::after,.clinks a.ctact::after{display:none}
 .links .ctline,.clinks .ctline{padding:5px 7px;gap:6px;width:100%}
@@ -5455,8 +5463,8 @@ function render(){
   rows.forEach((r, _ri) => {
     const _eager = _ri < 14;   // eager-load the above-the-fold thumbnails so the first screen is instant
     const n = notes[r.case] || {status:'', note:''};
-    // ---- links, labeled groups: CONTACT · LOOK UP · PROPERTY · DO ----
-    const gCall = [], gDig = [], gProp = [], gDo = [];
+    // ---- links: CONTACT · PEOPLE · COURT & SALE (one ink) · PROPERTY · DO ----
+    const gCall = [], gPeople = [], gEval = [], gProp = [], gDo = [];
     // CONTACT — every number is a structured line: Call · Text · WA (same verbs as call sheet).
     // Ledger opt-out must suppress the same as status DO NOT CONTACT.
     const optedOut = _isOptedOut(n) || n.status === 'DO NOT CONTACT';
@@ -5498,48 +5506,38 @@ function render(){
       if(o.pa)  L.push('<a href="'+esc(o.pa)+'" target="_blank" rel="noopener" title="TruePeopleSearch by their FILED ADDRESS. '+who+'. Returns only who actually lives there — the way to tell which same-name person is your officer.">addr</a>');
       if(o.cb)  L.push('<a href="'+esc(o.cb)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by NAME. '+who+'. Free detail page: every phone with carrier + last-reported date, up to 7 emails, relatives.">CyberBG</a>');
       if(o.cba) L.push('<a href="'+esc(o.cba)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by their FILED ADDRESS. '+who+'. Confirms they still live there and surfaces phones the name search misses.">addr</a>');
-      if(L.length) gDig.push('<span class="digppl" title="'+who+'">🧑&nbsp;<b>'+esc(nm)+'</b> '+L.join('<i>·</i>')+'</span>');
+      if(L.length) gPeople.push('<span class="digppl" title="'+who+'">🧑&nbsp;<b>'+esc(nm)+'</b> '+L.join('<i>·</i>')+'</span>');
     });
     var _wpa = _wpAddrUrl(r), _wpn = _wpNameUrl(r);
-    if(_wpa) gDig.push('<a class="dig" href="'+esc(_wpa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS — best free hit rate: the household landline prints UNMASKED plus every resident/relative with ages and owner-occupied/rented/vacant status. When People/CyberBG numbers don\'t connect, START HERE.">⭐&nbsp;WP&nbsp;addr</a>');
-    if(_wpn) gDig.push('<a class="dig" href="'+esc(_wpn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — aliases (may go by) + address history to confirm which same-name person is the owner; full phones behind their paywall but the free layer cross-checks the other sources.">Whitepages</a>');
-    if(r.people) gDig.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
-    if(r.peopleaddr) gDig.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
-    if(r.cyberbg) gDig.push('<a class="dig" href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks — a second source, often better than TruePeopleSearch: free detail page (one more click) shows every phone with carrier + last-reported date, up to 7 emails, RELATIVES (separate from associates — good for the tenant-intel play), and prior addresses. Cross-check against the People links above.">CyberBG</a>');
-    if(r.cyberbgaddr) gDig.push('<a class="dig" href="'+esc(r.cyberbgaddr)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by ADDRESS — pinpoints who actually lives there now, distinct from a name search. Often reveals if the owner has moved (absentee — mail/calls to the property may not reach them), surfaces phones the name search misses, and confirms family/relatives at the address.">CyberBG&nbsp;addr</a>');
-    if(r.recqs) gDig.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+esc(r.recqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
-    else if(r.records) gDig.push('<a class="dig recsearch" href="'+esc(r.records)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
-    else if(r.oname) gDig.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
-    if(r.ocsqs) gDig.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
-    else if(r.cases) gDig.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' court case search — case # '+r.case+' copied to clipboard. On the search page: Case Number tab → Ctrl+V → Enter. (Their site requires a CAPTCHA-tokened session so we cannot deep-link past the search form.)')+'">Cases</a>');
-    else if(r.oname) gDig.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
-    if(r.docket) gDig.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
-    // PROPERTY — value + county pages.
-    if(r.pa) gProp.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
-    else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' property appraiser')+'" target="_blank" rel="noopener" title="No direct appraiser record link for this parcel — opens a Google search for the address on the county appraiser instead.">Appraiser&nbsp;⌕</a>');
-    // MAP — keyless Google Maps (no API key; on a phone these open the Maps APP). Scout the property
-    // from your desk (aerial + Street View = condition/occupancy before you burn a trip) and navigate.
+    if(_wpa) gPeople.push('<a class="dig" href="'+esc(_wpa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS — best free hit rate: the household landline prints UNMASKED plus every resident/relative with ages and owner-occupied/rented/vacant status. When People/CyberBG numbers don\'t connect, START HERE.">⭐&nbsp;WP&nbsp;addr</a>');
+    if(_wpn) gPeople.push('<a class="dig" href="'+esc(_wpn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — aliases (may go by) + address history to confirm which same-name person is the owner; full phones behind their paywall but the free layer cross-checks the other sources.">Whitepages</a>');
+    if(r.people) gPeople.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
+    if(r.peopleaddr) gPeople.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
+    if(r.cyberbg) gPeople.push('<a class="dig" href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks — a second source, often better than TruePeopleSearch: free detail page (one more click) shows every phone with carrier + last-reported date, up to 7 emails, RELATIVES (separate from associates — good for the tenant-intel play), and prior addresses. Cross-check against the People links above.">CyberBG</a>');
+    if(r.cyberbgaddr) gPeople.push('<a class="dig" href="'+esc(r.cyberbgaddr)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by ADDRESS — pinpoints who actually lives there now, distinct from a name search. Often reveals if the owner has moved (absentee — mail/calls to the property may not reach them), surfaces phones the name search misses, and confirms family/relatives at the address.">CyberBG&nbsp;addr</a>');
+    // COURT & SALE — evaluate the deal in one navy cluster (same color, same row). Never bury Docket
+    // inside People-search gold links. Broward/PB have no per-case deep link → clerk Case search is Docket.
+    if(r.recqs) gEval.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+esc(r.recqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
+    else if(r.records) gEval.push('<a class="dig recsearch" href="'+esc(r.records)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
+    else if(r.oname) gEval.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
+    if(r.ocsqs) gEval.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
+    else if(r.cases) gEval.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' court case search — case # '+r.case+' copied to clipboard. On the search page: Case Number tab → Ctrl+V → Enter. (Their site requires a CAPTCHA-tokened session so we cannot deep-link past the search form.)')+'">Cases</a>');
+    else if(r.oname) gEval.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
+    if(r.docket) gEval.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
+    else if(r.cases && r.case) gEval.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ case # copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' clerk — no deep-link docket for this county. Case # '+r.case+' copied: open Case Number search → paste → Enter to pull THIS foreclosure\'s filings / final judgment.')+'">Docket</a>');
+    if(r.pa) gEval.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
+    else if(r.addr) gEval.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' property appraiser')+'" target="_blank" rel="noopener" title="No direct appraiser record link for this parcel — opens a Google search for the address on the county appraiser instead.">Appraiser&nbsp;⌕</a>');
+    if(r.tax) gEval.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="Opens this parcel\'s live tax bill + any delinquent taxes / certificates — the same page the county appraiser\'s Tax Collector link goes to.">Taxes</a>');
+    else if(r.addr) gEval.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No folio for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
+    // Auction: live RealForeclose sale page for this date (all parcels + bidding).
+    if(r.auc) gEval.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
+    // PROPERTY scout — maps only (value/tax/auction live in Court & sale above).
     if(r.addr){
       var _mq = encodeURIComponent(String(r.addr).replace(/FL-\s*/i, 'FL '));
       gProp.push('<a href="https://www.google.com/maps/search/?api=1&query='+_mq+'" target="_blank" rel="noopener" title="Open the property in Google Maps — flip to satellite to eyeball the lot, roof, pool, additions, and the neighborhood.">🛰 Map</a>');
       gProp.push('<a href="https://www.google.com/maps?q='+_mq+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener" title="Street View — see the house from the road BEFORE you drive out: condition, boarded windows, cars in the drive, occupied or vacant. Your best free scouting tool.">👁 Street View</a>');
       gProp.push('<a href="https://www.google.com/maps/dir/?api=1&destination='+_mq+'&travelmode=driving" target="_blank" rel="noopener" title="Turn-by-turn directions from where you are now — opens the Google Maps app on your phone.">🧭 Directions</a>');
     }
-    // Zillow text link removed — the property PHOTO (left of the row / top of the card) is now the path to
-    // Zillow: click it -> swipe gallery -> "View on Zillow" (real listing when known, else address search).
-    // DIRECT per-parcel tax bill for all three counties (Alejandro's find, 2026-07-20): the tax link is the
-    // exact URL each county appraiser's own "Tax Collector" button opens, built from the folio —
-    //   Miami-Dade: miamidade.county-taxes.com/.../parcels/{folio}
-    //   Broward:    broward.county-taxes.com/.../parcels/{6-2-4}/bills  (CF-walls bots, 200 in a real browser)
-    //   Palm Beach: pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID:{PCN 2-2-2-2-2-3-4}
-    // No more copy-the-folio dance. Falls back to a tax-collector Google search only when the parcel has no folio.
-    if(r.tax) gProp.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="Opens this parcel\'s live tax bill + any delinquent taxes / certificates — the same page the county appraiser\'s Tax Collector link goes to.">Taxes</a>');
-    else if(r.addr) gProp.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No folio for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
-    // Auction: the live RealForeclose sale page for this date (all parcels + bidding). RealForeclose
-    // returns 200 to a real browser; a bare/no-UA request 403s at their AWS load balancer, so it can
-    // LOOK dead from a script — it isn't. May need a free RealForeclose login for bid detail, and the
-    // site can be geo-restricted outside the US (e.g. abroad), so we don't gate the button on a probe.
-    if(r.auc) gProp.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
     // DO — actions. Outreach generators are suppressed once a lead opts out (only Log/Copy remain,
     // so the opt-out itself stays auditable).
     if(!optedOut){
@@ -5567,8 +5565,9 @@ function render(){
       : '';
     const linksHtml = [
       _lg('Contact — Call · Text · WA', 'lgrp-contact', gCall),
-      _lg('Look up', '', gDig),
-      _lg('Property', '', gProp),
+      _lg('Find people', '', gPeople),
+      _lg('Court & sale', 'lgrp-eval', gEval),
+      _lg('Scout', '', gProp),
       _lg('Do', '', gDo)
     ].filter(Boolean).join('');
     const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
