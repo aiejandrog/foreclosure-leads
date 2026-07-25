@@ -660,6 +660,18 @@ a.ctact:hover{text-decoration:none;filter:brightness(1.05)}
 .cslaw-t{font-family:var(--f-label);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy,#0B1730);margin-bottom:4px}
 .cslaw-l{margin:0;padding-left:18px}
 .cslaw-l li{margin:2px 0}
+/* Collapsible Math + rule reference on the Call Sheet hub (Deal Analyzer demoted here) */
+details.csmath, details.cslaw-wrap{margin-top:10px;border:1px solid var(--line,#E2E6EE);border-radius:10px;background:var(--surface,#fff);overflow:hidden}
+details.csmath>summary, details.cslaw-wrap>summary{cursor:pointer;list-style:none;padding:12px 14px;font-family:var(--f-label,inherit);
+  font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-d,#8B6A2C);
+  background:var(--surface-2,#f6f8fa);border-bottom:1px solid transparent;user-select:none}
+details.csmath>summary::-webkit-details-marker, details.cslaw-wrap>summary::-webkit-details-marker{display:none}
+details.csmath[open]>summary, details.cslaw-wrap[open]>summary{border-bottom-color:var(--line,#E2E6EE)}
+details.csmath>summary::before, details.cslaw-wrap>summary::before{content:'▸ ';color:var(--muted,#6b7280)}
+details.csmath[open]>summary::before, details.cslaw-wrap[open]>summary::before{content:'▾ '}
+.csmath-body{padding:10px 12px 14px}
+.csmath-body .dm-sec{margin-top:12px}
+.csfoot .shbtn{flex:1 1 auto;text-align:center;justify-content:center}
 .dscav{font-size:11.5px;color:var(--muted,#6b7280);background:rgba(180,83,9,.07);border:1px solid rgba(180,83,9,.28);
   border-radius:8px;padding:8px 11px;margin-top:8px;line-height:1.55}
 .cschain{margin-top:8px;border:1px solid var(--line,#E2E6EE);border-radius:8px;overflow:hidden}
@@ -2012,7 +2024,8 @@ function dealStrategy(r){
 }
 function dealTrigger(r){
   if(r._nodata) return '';
-  return '<button class="dealtog" data-c="'+esc(r.case)+'" type="button">Deal analysis</button>';
+  // Opens the Call Sheet hub scrolled to Math (Deal Analyzer demoted — one property screen).
+  return '<button class="dealtog" data-c="'+esc(r.case)+'" type="button" title="Open this property hub and expand Math / underwrite">Math</button>';
 }
 function dealAnalysisHTML(r){
   const nn = notes[r.case]||{};
@@ -2282,62 +2295,61 @@ function _daStackHtml(r){
   if(!body) return '';
   return '<div class="dm-sec">Debt stack — same as call sheet</div>'+body;
 }
-function dealModalBody(r){
-  // Route through _ownerName so DA header + CS header + Jose SMS all show the same normalized name
-  // ('Deborah C Davis Slade', not raw 'DEBORAH C DAVIS SLADE'). Palm Beach cadastral 'DRISCOLL ROBERT J EST'
-  // becomes 'Robert J Driscoll Est' consistently. Formatting drift used to make DA read like a
-  // different data source than CS — same numbers, different presentation, closer eye-drift.
-  const owner = esc(_ownerName((r.owners||'').split(';')[0].trim(), r));
+// Underwrite block for the Call Sheet hub — former Deal Analyzer unique value (no duplicate clock/contact/debt).
+function _csMathInner(r){
   const pcls = r._profit>=0 ? 'profpos' : 'profneg';
   const figure = r._profit!=null ? ' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>' : '';
-  return '<div class="dm-head">'+
-      '<div class="dm-title">'+owner+' '+copyBtn((r.owners||'').split(';')[0].trim(),'owner name')+'</div>'+
-      '<div class="dm-sub">'+_daSubline(r)+'</div>'+
-      '<div class="dm-verdict">'+verdictBadge(r)+_playBadge(r)+figure+'</div>'+
-      _csPlay(r)+
-      (r._why?'<div class="dm-why">'+esc(r._why)+'</div>':'')+
-    '</div>'+
-    _daClockHtml(r)+
-    _daContactHtml(r)+
-    _daStackHtml(r)+
-    dealAnalysisHTML(r) +
-    // Jose playbook (2026-07-20): the revenue layers auto-matched to this lead. Rendered after
-    // the math so the underwriting number stays the headline and the paths read as "how we
-    // monetize what the math just said".
+  return '<div class="dm-verdict" style="margin:0 0 10px">'+verdictBadge(r)+_playBadge(r)+figure+'</div>'+
+    (r._why?'<div class="dm-why" style="margin-bottom:10px">'+esc(r._why)+'</div>':'')+
+    dealAnalysisHTML(r)+
     '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Profit paths — Jose playbook</div>'+
-    _profitPaths(r) +
-    // Dispo pack button — only shown on live deals (not PASS/no-data), because there's no point
-    // exporting a buyer PDF for a dead lead. Uses the same gold-CTA look as the primary actions.
+    _profitPaths(r)+
     (r._verdict && r._verdict!=='PASS' && !r._nodata
       ? '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Send to a buyer</div>'+
-        '<button type="button" class="dealtog" onclick="exportDispoPack(\''+esc(r.case)+'\')" style="width:100%;padding:11px 14px;background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;font-weight:800;font-family:var(--f-body);font-size:13px;letter-spacing:.03em;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(198,161,75,.35)">&#128196; Export investor pack (PDF)</button>'+
-        '<div style="font-size:11px;color:var(--muted,#6b7280);margin-top:6px;line-height:1.5">One-page underwriting summary sized for Save-as-PDF from the print dialog. Same math as this modal, plus the compliance boilerplate a cash buyer expects.</div>'
-      : '') +
-    // Save & share — star it into the batch, or one-tap copy a shareable brief for Carlos (his door
-    // mission) / Jose (go-no-go) / anyone (a deep link that opens straight to this property).
+        '<button type="button" class="dispoexport" onclick="exportDispoPack(\''+esc(r.case)+'\')" style="width:100%;padding:11px 14px;background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;font-weight:800;font-family:var(--f-body);font-size:13px;letter-spacing:.03em;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(198,161,75,.35)">&#128196; Export investor pack (PDF)</button>'+
+        '<div style="font-size:11px;color:var(--muted,#6b7280);margin-top:6px;line-height:1.5">One-page underwriting summary sized for Save-as-PDF from the print dialog.</div>'
+      : '')+
     '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Save &amp; share</div>'+
     '<div class="sharerow">'+
       '<button type="button" class="shbtn shsave'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+esc(r.case)+'\',event)">'+(_isFav(r.case)?'★ Saved':'☆ Save to batch')+'</button>'+
-      '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the &quot;I got them on the phone RIGHT NOW&quot; alert for Jose. He researches while you hold them; he says PATCH when ready.">📞 LIVE — alert Jose</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'link\')" title="Copy a link that opens straight to this property">🔗 Copy link</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'carlos\')" title="Copy a ready-to-send door mission for Carlos">👷 For Carlos</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
+      '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the &quot;I got them on the phone RIGHT NOW&quot; alert for Jose.">📞 LIVE — alert Jose</button>'+
     '</div>';
 }
-let dealModalCase = null;
+function _csMathHtml(r, open){
+  if(r._nodata) return '';
+  return '<details class="csmath" id="csmath"'+(open?' open':'')+'>'+
+    '<summary>Math — underwrite · Ask Jose</summary>'+
+    '<div class="csmath-body">'+_csMathInner(r)+'</div></details>';
+}
+// Legacy name kept so old call sites compile; body is unused — openDealModal routes to Call Sheet Math.
+function dealModalBody(r){ return _csMathInner(r); }
+let dealModalCase = null;   // deprecated — Call Sheet is the hub; kept so Escape/close paths stay safe
+let callSheetCase = null;
+let callSheetMathOpen = false;
 function openDealModal(caseId){
-  const r = DATA.find(x=>x.case===caseId); if(!r) return;
-  dealModalCase = caseId;
-  document.getElementById('dmbody').innerHTML = dealModalBody(r);
-  document.getElementById('dealmodal').classList.add('show');
-  document.body.classList.add('modal-open');   // lock background scroll -> the popup holds focus
+  // Demoted: one property hub. Math opens on the Call Sheet — no second overlapping modal.
+  closeDealModal();
+  openCallSheet(caseId, {math:true});
 }
 function refreshDealModal(){
-  if(!dealModalCase) return;
-  const r = DATA.find(x=>x.case===dealModalCase);
-  if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r);
+  // Refresh the open Call Sheet (and keep Math expanded if it was).
+  if(!callSheetCase) return;
+  const m = document.getElementById('csmodal');
+  if(!m || getComputedStyle(m).display==='none') return;
+  const mathEl = document.getElementById('csmath');
+  openCallSheet(callSheetCase, {math: !!(callSheetMathOpen || (mathEl && mathEl.open))});
 }
-function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+function closeDealModal(){
+  dealModalCase=null;
+  const dm=document.getElementById('dealmodal');
+  if(dm) dm.classList.remove('show');
+  // Don't clear modal-open if Call Sheet is still up.
+  const cs=document.getElementById('csmodal');
+  if(!cs || getComputedStyle(cs).display==='none') document.body.classList.remove('modal-open');
+}
 // ---- contact / follow-up tracker (mini-CRM; per-device, in the same notes[] localStorage) ----
 function _today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function _nowTS(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return _today()+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
@@ -2884,10 +2896,18 @@ function _callSheet(r){
     '</ul>'+
     '<div style="margin-top:10px;font-size:12px;text-align:right"><a href="#" onclick="event.preventDefault(); closeCallSheet(); openPlaybook(\'rule\'); return false;" style="color:var(--blue,#1F6FEB);text-decoration:none;font-weight:700">📖 Read the full Playbook →</a></div>'+
     '</div>';
-  // CONTACT sits right under the four numbers — mid-call you need Call/Text/WA before debt essays.
-  return '<div class="callsheet">'+who+_csPlay(r)+four+cont+clock+(r.st==='LP'?'':stack)+prop+_wpHousehold(r)+_cflaw+
-    '<div class="csfoot"><button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
-    '<button type="button" class="csbtn" onclick="openDealModal(\''+esc(r.case)+'\')">Full deal analysis →</button></div></div>';
+  // Order: Who → Play → Four numbers → Contact → Clock → Debt → Math → Property/WP → Rule (collapsed).
+  // Ask Jose / LIVE live in the footer (mid-call), not buried inside Math Save & share.
+  const math = _csMathHtml(r, !!callSheetMathOpen);
+  const law = _cflaw
+    ? '<details class="cslaw-wrap"><summary>The Rule — what survives (reference)</summary>'+_cflaw+'</details>'
+    : '';
+  return '<div class="callsheet">'+who+_csPlay(r)+four+cont+clock+(r.st==='LP'?'':stack)+math+prop+_wpHousehold(r)+law+
+    '<div class="csfoot">'+
+      '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
+      '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
+      '<button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
+    '</div></div>';
 }
 function _copyCallSheet(c){
   const r = DATA.find(x=>x.case===c); if(!r) return;
@@ -2936,14 +2956,39 @@ function _editTalkTo(c){
   save(); render(); if(typeof refreshDealModal==='function') refreshDealModal();
   _reopenCallSheet(c);
 }
-function _reopenCallSheet(c){ if(document.getElementById('csmodal') && getComputedStyle(document.getElementById('csmodal')).display!=='none') openCallSheet(c); }
-function openCallSheet(c){
+function _reopenCallSheet(c){
+  const m=document.getElementById('csmodal');
+  if(m && getComputedStyle(m).display!=='none'){
+    const el=document.getElementById('csmath');
+    openCallSheet(c, {math: !!(callSheetMathOpen || (el && el.open))});
+  }
+}
+function openCallSheet(c, opts){
+  opts = opts || {};
   const r = DATA.find(x=>x.case===c); if(!r) return;
   const m = document.getElementById('csmodal'); if(!m) return;
+  callSheetCase = c;
+  callSheetMathOpen = !!opts.math;
+  closeDealModal();
   document.getElementById('csbody').innerHTML = _callSheet(r);
-  m.style.display='block'; document.body.style.overflow='hidden';
+  m.style.display='block';
+  document.body.style.overflow='hidden';
+  document.body.classList.add('modal-open');
+  if(opts.math){
+    const el = document.getElementById('csmath');
+    if(el){
+      el.open = true;
+      setTimeout(function(){ try{ el.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){} }, 40);
+    }
+  }
 }
-function closeCallSheet(){ const m=document.getElementById('csmodal'); if(m){ m.style.display='none'; document.body.style.overflow=''; } }
+function closeCallSheet(){
+  callSheetCase = null;
+  callSheetMathOpen = false;
+  const m=document.getElementById('csmodal');
+  if(m){ m.style.display='none'; document.body.style.overflow=''; }
+  document.body.classList.remove('modal-open');
+}
 // ============================================================================================
 // PLAYBOOK — the field manual as an on-device reference. Tap 📖 in header, or press ?/P.
 // Content pulled from the DealFlow Field Manual (also in the NotebookLM foreclosure playbook).
@@ -3897,7 +3942,7 @@ function openSaved(){
     var owner = (r.owners||'').split(';')[0].trim();
     return '<div class="saveitem"><div class="si-main"><b>'+esc(owner)+'</b><span>'+esc(r.addr)+'</span>'
       + '<span class="si-meta">'+(r.county&&r.county!=='MIAMI-DADE'?esc(r.county)+' · ':'')+'auction '+esc(r.auction)+(r.days>=0?' · '+r.days+'d':'')+'</span></div>'
-      + '<button type="button" class="si-open" onclick="closeSaved();openDealModal(\''+esc(r.case)+'\')" title="Open this deal">Open</button>'
+      + '<button type="button" class="si-open" onclick="closeSaved();openCallSheet(\''+esc(r.case)+'\')" title="Open this property hub">Open</button>'
       + '<button type="button" class="si-rm" onclick="_toggleFav(\''+esc(r.case)+'\')" title="Remove from batch">&times;</button></div>';
   }).join('') + '</div>';
   body += '<div style="margin-top:10px"><button type="button" class="syncbtn2 ghost" onclick="_showFavOnBoard()">Show these on the board</button> '
@@ -3982,11 +4027,14 @@ function _carlosPacket(){
     + '</body></html>';
   _openDoc(doc);   // mobile-safe (Blob URL) — window.open was popup-blocked on phones
 }
-// Deep link on load: after the gate opens, ?/#case=CASE opens that deal straight away (shared links).
+// Deep link on load: after the gate opens, #case=CASE opens the Call Sheet hub (shared links).
+// Optional #math=1 / #underwrite=1 (or same query params) expands Math on open.
 function _openHashDeal(){
   var m = (location.hash||'').match(/case=([^&]+)/); if(!m) return;
   var c = decodeURIComponent(m[1]);
-  if(DATA.some(function(x){return x.case===c;})) setTimeout(function(){ openDealModal(c); }, 300);
+  var blob = (location.hash||'') + '&' + (location.search||'');
+  var wantMath = /(?:^|[&#?])(?:math|underwrite)=1\b/.test(blob);
+  if(DATA.some(function(x){return x.case===c;})) setTimeout(function(){ openCallSheet(c, {math: wantMath}); }, 300);
 }
 // Filing year: the `filed` field when the scraper carried it (MD), else derived from the case
 // number itself — MD `2025-021847-CA-01`, PB `502024CA012300…`, BW `CACE-24-009886` all encode it.
@@ -5568,7 +5616,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -5614,7 +5662,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
@@ -6171,7 +6219,7 @@ function lkReport(a){
   } else {
     rec+='<div class="lkcallout"><b>Manual step &mdash; the county blocks websites from pulling this.</b> Open '
       +'<a href="'+esc(recURL||'https://onlineservices.miamidadeclerk.gov/officialrecords/')+'" target="_blank" rel="noopener">'+esc(ctyName(cty))+' Official Records</a>, search Name/Document for '
-      +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find in Deal analysis.</div>';
+      +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find on the Call Sheet (What Survives / Math).</div>';
   }
   // ---- seller-net calculator ----
   // auto-add the surviving loan to the payoff ONLY when confident: HOA sale -> the whole first mortgage
@@ -6301,10 +6349,10 @@ document.addEventListener('click', e => {
   const list = btn.parentElement.querySelector('.deflist');
   if(list) list.classList.toggle('open');
 });
-// deal-analysis: open the modal for this lead (works in table + cards)
+// Math (board): open the Call Sheet hub scrolled to Math — not a second overlapping modal
 document.addEventListener('click', e => {
   const btn = e.target.closest && e.target.closest('.dealtog');
-  if(!btn) return;
+  if(!btn || !btn.dataset.c) return;
   openDealModal(btn.dataset.c);
 });
 // close the modal: X button, backdrop click, or Escape

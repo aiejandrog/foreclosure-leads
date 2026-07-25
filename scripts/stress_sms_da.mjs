@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * Adversarial stress test: Text/Phone Link + Deal Analyzer ↔ Call Sheet coherence.
+ * Adversarial stress test: Text/Phone Link + Call Sheet property hub
+ * (Deal Analyzer demoted — Math lives on Call Sheet; no duplicate CONTACT/CLOCK).
  */
 import fs from 'fs';
 import path from 'path';
@@ -51,6 +52,15 @@ const fixtures = [
     case: 'FC-NOPHONE-1', st: 'FC', tier: 'A', owners: 'NO PHONE', addr: '600 Quiet St, Miami, FL',
     auction: '10/01/2026', days: 70, judg: 110000, value: 300000, plaintiff: 'NATIONSTAR',
     phones: [], phdnc: []
+  },
+  // Jose insight scenario (plan): HOA foreclosure, tiny judgment vs big value → fantasy equity until senior checked.
+  {
+    case: '2023-000212-CA-01', st: 'FC', tier: 'A', owners: 'MARIA C GONZALEZ', addr: '1450 SW 27TH AVE, MIAMI, FL 33145',
+    auction: '08/03/2026', days: 20, filed: 2023, judg: 41000, value: 720000, eq: 94, eqfake: true, hs: true,
+    ctype: 'HOA/Condo', plaintiff: 'Brickell Bay Condominium Association, Inc.',
+    defs: 'Maria C Gonzalez; Mortgage Electronic Registration Systems',
+    phones: ['3055550140'], phdnc: [false], phtype: ['mobile'], tax: 'https://example.com/tax/maria',
+    _play: { t: 'RESEARCH', w: 'HOA judgment tiny vs value — senior not checked.' }
   }
 ];
 
@@ -72,7 +82,6 @@ const browser = await puppeteer.launch({
 const page = await browser.newPage();
 page.on('pageerror', e => console.error('PAGEERROR', e.message));
 await page.goto('file://' + pagePath, { waitUntil: 'domcontentloaded', timeout: 60000 });
-// Let boot() settle (array RAW — no gate)
 await page.waitForFunction(() => typeof dealModalBody === 'function' && typeof _callSheet === 'function' && typeof textablePhones === 'function', { timeout: 15000 });
 
 const result = await page.evaluate(() => {
@@ -80,6 +89,16 @@ const result = await page.evaluate(() => {
   const ok = [];
   function assert(name, cond, detail){
     (cond ? ok : fails).push(detail ? name + ' — ' + detail : name);
+  }
+  function sectionOrder(html, labels){
+    let last = -1;
+    for(const lab of labels){
+      const i = html.indexOf(lab);
+      if(i < 0) return {ok:false, missing: lab};
+      if(i < last) return {ok:false, missing: lab + ' (out of order)'};
+      last = i;
+    }
+    return {ok:true};
   }
   try {
     notes['OPT-LEDGER'] = { optout: '2026-07-01', optlog: [{act:'set-local', ts:'2026-07-01 10:00:00', tsu: Date.parse('2026-07-01T14:00:00Z')}] };
@@ -103,38 +122,80 @@ const result = await page.evaluate(() => {
     _addDNT('3055553333');
     if(typeof recompute === 'function') recompute();
 
+    // ---- Property hub: CS has clock/debt/play; Math (dealModalBody) does NOT duplicate them ----
     ['FC-CLEAN-1','TD-TAX-1','LP-FRESH-1','FC-BK-1'].forEach(c => {
       const r = DATA.find(x => x.case === c);
       const clock = _clockBodyHtml(r);
-      const da = dealModalBody(r);
+      const math = dealModalBody(r);
       const cs = _callSheet(r);
-      assert(c+': clock in DA', da.indexOf(clock) >= 0);
       assert(c+': clock in CS', cs.indexOf(clock) >= 0);
+      assert(c+': Math has NO clock body', math.indexOf(clock) < 0);
+      assert(c+': Math has NO THE CLOCK sec', math.indexOf('THE CLOCK') < 0);
+      assert(c+': Math has NO Contact — Call', math.indexOf('Contact — Call · Text · WA') < 0);
+      assert(c+': Math has NO Open full call sheet', math.indexOf('Open full call sheet') < 0);
+      assert(c+': Math has NO Debt stack sec', math.indexOf('Debt stack — same as call sheet') < 0);
       const debt = _debtSheetBody(r);
       if(r.st === 'LP'){
         assert(c+': LP debt empty', debt === '');
-        assert(c+': LP DA no debt sec', da.indexOf('Debt stack — same as call sheet') < 0);
         assert(c+': LP CS no THE DEBT', cs.indexOf('THE DEBT — who is owed what') < 0);
       } else {
         assert(c+': debt non-empty', !!debt);
-        assert(c+': debt in DA', da.indexOf(debt) >= 0);
         assert(c+': debt in CS', cs.indexOf(debt) >= 0);
-        assert(c+': DA has debt sec', da.indexOf('Debt stack — same as call sheet') >= 0);
         assert(c+': CS has THE DEBT', cs.indexOf('THE DEBT — who is owed what') >= 0);
+        assert(c+': Math has no debt body', math.indexOf(debt) < 0);
       }
       const play = _csPlay(r);
       if(play){
-        assert(c+': PLAY html in DA', da.indexOf(play) >= 0);
         assert(c+': PLAY html in CS', cs.indexOf(play) >= 0);
+        // Math may show play badge in verdict line, but not the full _csPlay block
+        assert(c+': full PLAY block not duplicated in Math', math.indexOf(play) < 0);
+      }
+      assert(c+': CS has Math details', cs.indexOf('id="csmath"') >= 0 || r._nodata);
+      assert(c+': CS Math collapsed by default', cs.indexOf('id="csmath" open') < 0);
+      assert(c+': CS has Ask Jose footer', cs.indexOf('Ask Jose') >= 0);
+      assert(c+': CS has LIVE footer', cs.indexOf('LIVE — alert Jose') >= 0);
+      if(r.st !== 'LP' && r.st !== 'TD'){
+        assert(c+': CS rule essay collapsed', cs.indexOf('cslaw-wrap') >= 0 && cs.indexOf('cslaw-wrap" open') < 0);
       }
     });
 
     const td = DATA.find(x => x.case === 'TD-TAX-1');
-    const tdDa = dealModalBody(td);
-    assert('TD DA has Back taxes', tdDa.indexOf('Back taxes') >= 0);
-    assert('TD DA has debt stack sec', tdDa.indexOf('Debt stack — same as call sheet') >= 0);
+    assert('TD CS has Back taxes', _callSheet(td).indexOf('Back taxes') >= 0);
+    assert('TD Math has underwrite', dealModalBody(td).indexOf('Profit paths') >= 0 || dealModalBody(td).length > 40);
 
+    // Section order on Call Sheet hub
     const clean = DATA.find(x => x.case === 'FC-CLEAN-1');
+    const cleanCs = _callSheet(clean);
+    const ord = sectionOrder(cleanCs, [
+      'CONTACT — Call · Text · WA',
+      'THE CLOCK',
+      'THE DEBT — who is owed what',
+      'id="csmath"',
+      'THE PROPERTY',
+      'csfoot'
+    ]);
+    assert('CS section order', ord.ok, ord.missing || '');
+
+    // openDealModal → Call Sheet + Math expanded; no dealmodal.show
+    openDealModal('FC-CLEAN-1');
+    const csModal = document.getElementById('csmodal');
+    const dealModal = document.getElementById('dealmodal');
+    assert('openDealModal shows CS', csModal && getComputedStyle(csModal).display !== 'none');
+    assert('openDealModal no DA modal', !dealModal || !dealModal.classList.contains('show'));
+    const mathEl = document.getElementById('csmath');
+    assert('Math expanded via openDealModal', mathEl && mathEl.open);
+    const hubHtml = document.getElementById('csbody').innerHTML;
+    assert('hub has CONTACT once', (hubHtml.match(/CONTACT — Call · Text · WA/g) || []).length === 1);
+    assert('hub has THE CLOCK once', (hubHtml.match(/THE CLOCK/g) || []).length === 1);
+    assert('hub Math has no Contact dup', (document.querySelector('#csmath') || {innerHTML:''}).innerHTML.indexOf('Contact — Call · Text · WA') < 0);
+    closeCallSheet();
+
+    // Board Math label
+    tier = 'ALL';
+    if(typeof render === 'function') render();
+    assert('board Math button', (document.body.innerHTML || '').indexOf('>Math</button>') >= 0);
+    assert('board no Deal analysis label', (document.body.innerHTML || '').indexOf('>Deal analysis</button>') < 0);
+
     assert('clean textable', textablePhones(clean).length === 1);
     const href = _smsHref(textablePhones(clean)[0], smsMsg(clean, 'both', 'urgent'));
     assert('sms: href', /^sms:\+13055551212\?body=/.test(href), href.slice(0,100));
@@ -157,7 +218,6 @@ const result = await page.evaluate(() => {
     assert('nophone textable empty', textablePhones(np).length === 0);
     assert('nophone not blocked', !_textContactBlocked(np));
     assert('nophone CS Text btn', _callSheet(np).indexOf('cstextbtn') >= 0);
-    assert('nophone DA Text btn', dealModalBody(np).indexOf('cstextbtn') >= 0);
 
     const dnc = DATA.find(x => x.case === 'FC-DNC-1');
     assert('dnc textable empty', textablePhones(dnc).length === 0);
@@ -170,7 +230,6 @@ const result = await page.evaluate(() => {
     assert('bk blocked', _textContactBlocked(bk) === 'bk');
     assert('bk textable empty', textablePhones(bk).length === 0);
     assert('bk CS no Text btn', _callSheet(bk).indexOf('cstextbtn') < 0);
-    assert('bk DA no Text btn', dealModalBody(bk).indexOf('cstextbtn') < 0);
     openTextSingle(bk);
     tb = document.getElementById('textbody').innerHTML;
     assert('bk no copy', tb.indexOf('txcopy') < 0);
@@ -197,18 +256,12 @@ const result = await page.evaluate(() => {
     assert('bulk includes clean', textQ.indexOf('FC-CLEAN-1') >= 0);
     closeTextModal();
 
-    // Structured CONTACT: Call · Text · WA on every number (board + call sheet + deal analyzer).
-    const cleanCs = _callSheet(clean);
+    // Structured CONTACT: Call · Text · WA on CS + board
     assert('CS has Call button', cleanCs.indexOf('ctact-call') >= 0);
     assert('CS has Text button', cleanCs.indexOf('ctact-text') >= 0 || cleanCs.indexOf('Messages') >= 0);
     assert('CS has WA button', cleanCs.indexOf('ctact-wa') >= 0);
     assert('CS CONTACT label', cleanCs.indexOf('Call · Text · WA') >= 0);
-    const cleanDa = dealModalBody(clean);
-    assert('DA CONTACT label', cleanDa.indexOf('Call · Text · WA') >= 0);
-    assert('DA has Call button', cleanDa.indexOf('ctact-call') >= 0);
 
-    tier = 'ALL';
-    if(typeof render === 'function') render();
     const msgBtn = document.getElementById('bulktext');
     assert('toolbar Messages', !!msgBtn && /Messages/i.test(msgBtn.textContent||''));
     assert('board Contact label', (document.body.innerHTML||'').indexOf('Contact — Call · Text · WA') >= 0);
@@ -221,6 +274,33 @@ const result = await page.evaluate(() => {
     assert('bk row no Text', bkSms.length === 0, 'count='+bkSms.length);
     const optSms = document.querySelectorAll('a.textgen[data-c="OPT-LEDGER"]');
     assert('opt row no Text', optSms.length === 0, 'count='+optSms.length);
+
+    // ---- Jose insight on Maria (one Call Sheet, no DA) ----
+    const maria = DATA.find(x => x.case === '2023-000212-CA-01');
+    assert('maria present', !!maria);
+    if(typeof recompute === 'function') recompute();
+    const mCs = _callSheet(maria);
+    assert('maria judgment $41,000', mCs.indexOf('$41,000') >= 0 || mCs.indexOf('$41,000') >= 0 || /\$41,?000/.test(mCs));
+    assert('maria worth ~$720k', /\$720,?000/.test(mCs));
+    assert('maria survivors not checked', mCs.indexOf('NOT CHECKED') >= 0);
+    assert('maria net equity warning', mCs.indexOf('assumes nothing survives') >= 0 || mCs.indexOf('NOT CHECKED') >= 0);
+    assert('maria Call·Text·WA', mCs.indexOf('ctact-call') >= 0 && mCs.indexOf('ctact-wa') >= 0);
+    assert('maria Math section', mCs.indexOf('id="csmath"') >= 0);
+    const mMath = dealModalBody(maria);
+    assert('maria Math underwrite present', mMath.length > 80);
+    // Expand Math via hub
+    openCallSheet(maria.case, {math:true});
+    assert('maria hub open', getComputedStyle(document.getElementById('csmodal')).display !== 'none');
+    assert('maria Math open', document.getElementById('csmath') && document.getElementById('csmath').open);
+    const jose = _joseMsg(maria);
+    assert('jose brief addr', jose.indexOf('1450 SW 27TH AVE') >= 0);
+    assert('jose brief case', jose.indexOf('2023-000212-CA-01') >= 0);
+    assert('jose brief judgment', jose.indexOf('41,000') >= 0 || jose.indexOf('41000') >= 0);
+    assert('jose brief senior', /Surviving senior mortgage:/i.test(jose));
+    assert('jose brief net', /Net equity after the stack:/i.test(jose));
+    assert('jose brief verdict', /Tracker verdict:/i.test(jose));
+    assert('jose brief deep link', jose.indexOf('#case=') >= 0);
+    closeCallSheet();
 
   } catch (e) {
     fails.push('EXCEPTION: ' + (e && e.stack ? e.stack : String(e)));
