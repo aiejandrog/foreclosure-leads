@@ -229,9 +229,9 @@ def to_slim(county, cfg, base, items):
             'st': st, 'obid': obid_val, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
             'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr, 'cyberbg': cyberbg, 'cyberbgaddr': cyberbgaddr,
             'ctype': ('HOA' if ftype == 'HOA' else 'Bank/Mortgage'), 'ftype': ftype, 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
-            # county leads have no per-case docket token (no clerk enrichment) -> no Docket button; the
-            # Records/Cases buttons point to THIS county's official-records + court-case search portals.
-            'docket': '', 'records': cfg['records'], 'cases': cfg['cases'],
+            # No per-case deep-link token (clerk CAPTCHA), but Docket MUST still show: same clerk Case
+            # search as Cases — UI copies the case # so the operator lands on THIS foreclosure's filings.
+            'docket': cfg['cases'], 'records': cfg['records'], 'cases': cfg['cases'],
             'cstatus': '', 'mr': mr, 'ip': False, 'ju': judg_unknown,
             'bought': bought, 'bprice': bprice, 'filed': 0, 'etax': 0,
             'warn': (('no street address - verify parcel first' if no_street else '') if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': r.get('Certificate #', ''),
