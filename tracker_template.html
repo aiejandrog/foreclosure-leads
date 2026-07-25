@@ -20,23 +20,23 @@
    ============================================================================ */
 :root{
   color-scheme:light;
-  /* ink + surfaces */
+  /* ink + surfaces — muted/muted-2 tuned for ≥4.5:1 on white (Jose desk glare / porch sun) */
   --bg:#EBEFF5; --bg-2:#F4F6FA; --surface:#FFFFFF; --surface-2:#F3F6FA;
-  --ink:#101C33; --ink-2:#33415C; --muted:#5E6B84; --muted-2:#8C97AC;
-  --line:rgba(16,28,51,.12); --line-2:rgba(16,28,51,.055);
+  --ink:#0E182C; --ink-2:#2A3750; --muted:#4A5670; --muted-2:#5F6B82;
+  --line:rgba(16,28,51,.14); --line-2:rgba(16,28,51,.07);
   /* navy family */
   --navy:#152747; --navy-deep:#0B1730; --navy-lift:#1F3A68;
   --navy-grad:linear-gradient(140deg,#0B1730 0%,#152747 52%,#203B6E 118%);
-  /* gold family */
-  --gold:#C6A14B; --gold-d:#977422; --gold-l:#ECD69A; --gold-ink:#2E2406;
-  --gold-soft:rgba(198,161,75,.13);
+  /* gold family — gold-d/ink carry text on light; gold/gold-l stay accents on navy */
+  --gold:#C6A14B; --gold-d:#6F5514; --gold-l:#E8D08A; --gold-ink:#241C05;
+  --gold-soft:rgba(198,161,75,.16);
   --gold-grad:linear-gradient(115deg,#C6A14B,#E7CE8E);
   --gold-shine:linear-gradient(115deg,#C6A14B 0%,#C6A14B 43%,#F2E2AC 48%,#FFFDF4 50%,#F2E2AC 52%,#C6A14B 57%,#C6A14B 100%);
-  /* semantics */
-  --green:#0E8A4E; --green-ink:#0A6B3C; --green-soft:#E3F4EA;
-  --amber:#B97F0E; --amber-ink:#7E5709; --amber-soft:#FAF0D6;
-  --red:#C92A2A; --red-ink:#A01F1F; --red-soft:#FBE9E9;
-  --blue:#2358D6; --blue-ink:#1B47B4; --blue-soft:#E8EFFC;
+  /* semantics — soft bg + matching ink (never pale text on pale tint) */
+  --green:#0B7A45; --green-ink:#085C34; --green-soft:#D9F0E3;
+  --amber:#A8720C; --amber-ink:#6B4A08; --amber-soft:#F6E9C8;
+  --red:#C92A2A; --red-ink:#8F1B1B; --red-soft:#FBE9E9;
+  --blue:#1E4FBF; --blue-ink:#163F99; --blue-soft:#E8EFFC;
   --bg-wash:
     radial-gradient(1100px 520px at 100% -8%,rgba(198,161,75,.055),transparent 62%),
     radial-gradient(900px 460px at -8% 0%,rgba(21,39,71,.05),transparent 58%),
@@ -93,7 +93,7 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
   filter:drop-shadow(0 0 7px rgba(198,161,75,.28));animation:wmShine 5s linear infinite;transition:filter .45s var(--e-lux)}
 .brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(198,161,75,.55)) brightness(1.07)}
 .brand .tag{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--muted-2);margin-top:3px;max-height:20px;overflow:hidden;
+  text-transform:uppercase;color:var(--muted);margin-top:3px;max-height:20px;overflow:hidden;
   transition:opacity .25s var(--e-lux),max-height .25s var(--e-lux),margin-top .25s var(--e-lux)}
 .brand .spacer{flex:1}
 .brand .upd{font-size:11px;color:var(--muted-2);text-align:right;align-self:center;
@@ -111,8 +111,8 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;transition:gap .25s var(--e-lux),margin .25s var(--e-lux)}
 .controls+.controls{margin-top:8px}
 .fgroup{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
-.flbl{font-family:var(--f-label);font-size:9.5px;font-weight:600;letter-spacing:.11em;
-  text-transform:uppercase;color:var(--muted-2);margin-right:2px;
+.flbl{font-family:var(--f-label);font-size:9.5px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted);margin-right:2px;
   opacity:1;max-width:80px;overflow:hidden;white-space:nowrap;
   transition:opacity .25s var(--e-lux),max-width .25s var(--e-lux),margin-right .25s var(--e-lux)}
 .fdiv{width:1px;align-self:stretch;min-height:24px;background:var(--line);margin:0 4px}
@@ -260,13 +260,13 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .dg.ok .dg-ic svg{color:#7FE7AE}
 .dg-t{display:flex;flex-direction:column;min-width:0}
 .dg-k{font-family:var(--f-label);font-size:8.5px;font-weight:600;letter-spacing:.13em;
-  text-transform:uppercase;color:rgba(255,255,255,.55);white-space:nowrap;
+  text-transform:uppercase;color:rgba(255,255,255,.78);white-space:nowrap;
   transition:font-size .3s var(--e-lux),letter-spacing .3s var(--e-lux),max-width .3s var(--e-lux)}
 .dg-v{font-family:var(--f-num);font-size:16.5px;font-weight:700;letter-spacing:-.01em;
   color:#fff;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   transition:font-size .18s cubic-bezier(.22,1,.36,1)}
 .dg-v b{color:var(--gold-l);font-weight:700}
-.dg-s{font-size:10.5px;color:rgba(255,255,255,.62);margin-top:1px;white-space:nowrap;
+.dg-s{font-size:10.5px;color:rgba(255,255,255,.78);margin-top:1px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-height:18px;opacity:1;
   transition:max-height .22s cubic-bezier(.22,1,.36,1),opacity .16s cubic-bezier(.22,1,.36,1),margin-top .22s cubic-bezier(.22,1,.36,1)}
 /* (No .collapsed state — the rail is a normal in-flow element that scrolls with content.) */
@@ -280,17 +280,17 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
   overflow:hidden;transition:transform .28s var(--e-lux),box-shadow .28s var(--e-lux)}
 .kpi:hover{transform:translateY(-2px);box-shadow:var(--sh-3)}
 .kpi.gold::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold-grad)}
-.kpi .kl{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.11em;
-  text-transform:uppercase;color:var(--muted-2)}
+.kpi .kl{font-family:var(--f-label);font-size:9px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--muted)}
 .kpi .kv{font-family:var(--f-num);font-size:30px;font-weight:700;color:var(--ink);margin-top:6px;
   line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .kpi .kv.g{color:var(--green-ink)}
 .kpi .ks{font-size:11px;color:var(--muted);margin-top:6px}
 .kpi.gold{background:var(--navy-grad);border-color:transparent;box-shadow:var(--sh-3)}
-.kpi.gold .kl{color:rgba(236,214,154,.9)}
+.kpi.gold .kl{color:#F0E0A8}
 .kpi.gold .kv,.kpi.gold .kv.g{background:var(--gold-grad);-webkit-background-clip:text;
   background-clip:text;color:transparent}
-.kpi.gold .ks{color:rgba(255,255,255,.6)}
+.kpi.gold .ks{color:rgba(255,255,255,.82)}
 @media(max-width:860px){.kpis{padding:12px 12px 2px;gap:9px}.kpi{min-width:calc(50% - 5px);padding:12px 13px}.kpi .kv{font-size:22px}}
 
 /* ============================== ADVANCED PANEL ============================== */
@@ -357,8 +357,8 @@ td.num .warn,td.num .mrwarn,td.num .submeta{white-space:normal;overflow-wrap:any
    gold/green — those two colors are reserved for profit/CTA so value never masquerades as money. */
 .mvline{font-family:var(--f-num);font-size:14px;font-weight:700;color:var(--ink);margin-top:2px;
   font-variant-numeric:tabular-nums;white-space:nowrap}
-.mvline .mvl{font-family:var(--f-label);font-size:8px;font-weight:600;letter-spacing:.1em;
-  text-transform:uppercase;color:var(--muted-2);margin-left:5px;vertical-align:1px}
+.mvline .mvl{font-family:var(--f-label);font-size:8px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--muted);margin-left:5px;vertical-align:1px}
 td.propcell .submeta b.pv,#cards .submeta b.pv{font-family:var(--f-num);font-size:13.5px;
   font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
 body.compact .mvline{font-size:12.5px}
@@ -402,21 +402,21 @@ tr.pinfire .pcell::after{content:'\1F525';position:absolute;bottom:5px;left:5px;
 #cards .card.pinfire .phero{position:relative}
 #cards .card.pinfire .phero::after{content:'\1F525';position:absolute;bottom:6px;left:6px;font-size:16px;z-index:3;
   filter:drop-shadow(0 1px 3px rgba(11,23,48,.5));animation:emberflame 1.1s ease-in-out infinite}
-td.num .dealtog{margin-top:7px;box-shadow:none;background:transparent;border-color:transparent;padding:3px 4px;color:var(--gold-d)}
-td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-shadow:none;transform:none}
+td.num .dealtog{margin-top:7px;box-shadow:none;background:transparent;border-color:transparent;padding:3px 4px;color:var(--gold-d);font-weight:700}
+td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-shadow:none;transform:none;color:var(--gold-ink)}
 
 /* chips + verdict badges */
 .chip{display:inline-block;font-family:var(--f-label);font-size:8.5px;font-weight:600;letter-spacing:.08em;
   text-transform:uppercase;padding:3px 9px;border-radius:var(--pill);border:1px solid var(--line);
   white-space:nowrap;line-height:1.5}
-.chip.mtg{background:#EDF1F7;color:#45536E}
-.chip.hoa{background:var(--amber-soft);color:var(--amber-ink);border-color:#EDDCAF}
-.chip.tdt{background:var(--gold-soft);color:var(--gold-d);border-color:rgba(198,161,75,.35)}
+.chip.mtg{background:#E4EAF3;color:#2F3D56}
+.chip.hoa{background:var(--amber-soft);color:var(--amber-ink);border-color:#E0C894}
+.chip.tdt{background:var(--gold-soft);color:var(--gold-ink);border-color:rgba(111,85,20,.4)}
 .chip.tax{background:var(--red-soft);color:var(--red-ink)}
-.chip.vok{background:var(--green-soft);color:var(--green-ink);border-color:#BEE5CC}
-.chip.vlow{background:var(--amber-soft);color:var(--amber-ink);border-color:#EDDCAF}
-.chip.vnone{background:var(--surface-2);color:var(--muted);border-color:var(--line)}
-.vb{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-label);font-size:8.5px;font-weight:600;
+.chip.vok{background:var(--green-soft);color:var(--green-ink);border-color:#9ED4B4}
+.chip.vlow{background:var(--amber-soft);color:var(--amber-ink);border-color:#E0C894}
+.chip.vnone{background:var(--surface-2);color:var(--ink-2);border-color:var(--line)}
+.vb{display:inline-flex;align-items:center;gap:5px;font-family:var(--f-label);font-size:8.5px;font-weight:700;
   padding:3px 9px 3px 8px;border-radius:var(--pill);letter-spacing:.09em;text-transform:uppercase;
   line-height:1;border:1px solid transparent;vertical-align:middle}
 .vb::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;box-shadow:0 0 6px currentColor}
@@ -442,16 +442,16 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .wpverified{display:inline-block;background:var(--green-soft,#DDF2E4);color:var(--green-ink,#0E5F31);font-weight:700;font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid #BEE5CC;cursor:help;letter-spacing:.02em}
 /* Person Search layer badge on the WP HOUSEHOLD section header */
 .wppersonbadge{display:inline-block;background:var(--blue-soft,#DEEBFB);color:var(--blue-ink,#1F4E97);font-family:var(--f-label);font-size:9px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:5px;margin-left:8px;text-transform:uppercase;vertical-align:middle;cursor:help}
-.vb3{background:var(--green-soft);color:var(--green-ink);border-color:#BEE5CC;box-shadow:0 1px 7px rgba(14,138,78,.2)}
-.vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#EDDCAF;box-shadow:0 1px 7px rgba(185,127,14,.18)}
-.vb1{background:#ECEFF4;color:#5E6B84;border-color:var(--line)}
-.vbv{background:var(--blue-soft);color:var(--blue-ink);border-color:#C9DBFA;box-shadow:0 1px 7px rgba(35,88,214,.16)}
+.vb3{background:var(--green-soft);color:var(--green-ink);border-color:#8FCBAA;box-shadow:0 1px 7px rgba(8,92,52,.18)}
+.vb2{background:var(--amber-soft);color:var(--amber-ink);border-color:#D4B46A;box-shadow:0 1px 7px rgba(107,74,8,.16)}
+.vb1{background:#E4EAF3;color:#2F3D56;border-color:#C5CEDD}
+.vbv{background:var(--blue-soft);color:var(--blue-ink);border-color:#AEC4F0;box-shadow:0 1px 7px rgba(22,63,153,.14)}
 /* Property-type chip: sits beside the county chip on every row (both desktop table + mobile card).
    Gold-tinted background differentiates it from the navy .ctychip so the type reads at a glance
    without eating the busy value/equity line. Fed by _ptype() which normalizes dor_desc from the
    county appraiser (Miami-Dade DOR text, Broward/PB use codes once property_types.py enriches). */
 .ptypechip{display:inline-block;background:var(--gold-soft,rgba(198,161,75,.18));
-  color:var(--gold-d,#8B6A2C);border:1px solid rgba(198,161,75,.35);
+  color:var(--gold-ink,#241C05);border:1px solid rgba(111,85,20,.4);
   border-radius:4px;padding:0 6px;font-size:10px;font-weight:700;letter-spacing:.04em;
   text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);
   vertical-align:middle;margin-right:4px;line-height:1.7}
@@ -464,36 +464,36 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .zstchip{display:inline-block;border-radius:4px;padding:0 6px;font-size:10px;font-weight:700;
   letter-spacing:.04em;text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);
   vertical-align:middle;margin-right:4px;line-height:1.7}
-.zst-listed{background:rgba(155,44,44,.12);color:#9B2C2C;border:1px solid rgba(155,44,44,.35)}
-.zst-pending{background:rgba(180,83,9,.12);color:#B45309;border:1px solid rgba(180,83,9,.35)}
-.zst-sold{background:rgba(90,90,90,.10);color:var(--muted);border:1px solid rgba(90,90,90,.3)}
-.zst-rental{background:rgba(30,90,160,.10);color:#1E5AA0;border:1px solid rgba(30,90,160,.3)}
-.zst-off{background:rgba(22,101,52,.09);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.28)}
-.zst-noaddr{background:rgba(90,90,90,.08);color:var(--muted-2);border:1px solid rgba(90,90,90,.22)}
+.zst-listed{background:rgba(143,27,27,.12);color:#8F1B1B;border:1px solid rgba(143,27,27,.4)}
+.zst-pending{background:rgba(107,74,8,.12);color:#6B4A08;border:1px solid rgba(107,74,8,.4)}
+.zst-sold{background:rgba(47,61,86,.10);color:#2F3D56;border:1px solid rgba(47,61,86,.28)}
+.zst-rental{background:rgba(22,63,153,.10);color:#163F99;border:1px solid rgba(22,63,153,.35)}
+.zst-off{background:rgba(8,92,52,.12);color:var(--green-ink,#085C34);border:1px solid rgba(8,92,52,.35)}
+.zst-noaddr{background:rgba(47,61,86,.08);color:var(--muted);border:1px solid rgba(47,61,86,.22)}
 /* Jose playbook chips + panel (call 2026-07-20). FRESH = call-priority green; STALLER? = amber
    caution on 2019-2023 filings (serial-bankruptcy delay artists). .ppath rows render the
    auto-matched revenue layers inside the deal modal. */
 .frchip{display:inline-block;border-radius:4px;padding:0 6px;font-size:10px;font-weight:700;
   letter-spacing:.04em;text-transform:uppercase;font-family:var(--f-label,'Space Grotesk',sans-serif);
   vertical-align:middle;margin-right:4px;line-height:1.7}
-.fr-fresh{background:rgba(22,101,52,.12);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.32)}
-.fr-stale{background:rgba(180,83,9,.10);color:#B45309;border:1px solid rgba(180,83,9,.3)}
-.fr-warn{background:rgba(202,138,4,.10);color:#A16207;border:1px solid rgba(202,138,4,.28)}
-.fr-stay{background:rgba(153,27,27,.12);color:#B91C1C;border:1px solid rgba(153,27,27,.4);font-weight:700}
+.fr-fresh{background:rgba(8,92,52,.13);color:var(--green-ink,#085C34);border:1px solid rgba(8,92,52,.38)}
+.fr-stale{background:rgba(107,74,8,.12);color:#6B4A08;border:1px solid rgba(107,74,8,.38)}
+.fr-warn{background:rgba(107,74,8,.12);color:#6B4A08;border:1px solid rgba(107,74,8,.35)}
+.fr-stay{background:rgba(143,27,27,.13);color:#8F1B1B;border:1px solid rgba(143,27,27,.42);font-weight:700}
 /* identity warnings — loudest chips on the row: a great number on the wrong human is worse than none */
 .fr-wrong{background:#B42318;color:#fff;border:1px solid #8E1A12;font-weight:800}
-.fr-idwarn{background:rgba(180,83,9,.13);color:#B45309;border:1px solid rgba(180,83,9,.42);font-weight:700}
-.arvtag{font-size:9px;font-weight:800;letter-spacing:.4px;color:#8a6d1d;background:rgba(212,175,55,.14);border:1px solid rgba(212,175,55,.45);border-radius:3px;padding:0 3px;vertical-align:1px}
+.fr-idwarn{background:rgba(107,74,8,.14);color:#6B4A08;border:1px solid rgba(107,74,8,.45);font-weight:700}
+.arvtag{font-size:9px;font-weight:800;letter-spacing:.4px;color:var(--gold-ink,#241C05);background:rgba(198,161,75,.2);border:1px solid rgba(111,85,20,.45);border-radius:3px;padding:0 3px;vertical-align:1px}
 /* the stay-lifted DOOR: gold — shield just dropped, hottest legal call on the board */
-.fr-lift{background:linear-gradient(120deg,rgba(198,161,75,.18),rgba(239,223,158,.25));color:#8B6A2C;
-  border:1px solid rgba(198,161,75,.55);font-weight:700}
+.fr-lift{background:linear-gradient(120deg,rgba(198,161,75,.22),rgba(239,223,158,.3));color:var(--gold-ink,#241C05);
+  border:1px solid rgba(111,85,20,.55);font-weight:700}
 /* the humans behind an LLC (Sunbiz block in the deal modal) */
 .llcbox{background:var(--surface,#fff);border:1px solid var(--line,#E2E6EE);border-radius:10px;padding:10px 13px;margin:4px 0 10px}
 .llcrow{font-size:13px;padding:3px 0;line-height:1.5}
-.llcrow a{color:var(--gold-d,#8B6A2C);font-weight:600}
-.llct{font-family:var(--f-label,inherit);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-2,#8a93a6);margin-left:2px}
-.llcralow{font-size:12px;color:var(--muted,#6b7280)}
-.llcsrc{font-size:10px;color:var(--muted-2,#8a93a6);font-weight:500;margin-left:6px}
+.llcrow a{color:var(--gold-d,#6F5514);font-weight:700}
+.llct{font-family:var(--f-label,inherit);font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted,#4A5670);margin-left:2px}
+.llcralow{font-size:12px;color:var(--muted,#4A5670)}
+.llcsrc{font-size:10px;color:var(--muted,#4A5670);font-weight:600;margin-left:6px}
 /* ===== THE CALL SHEET — the screen you put up when the phone rings ===== */
 .cscard{width:min(860px,96vw);max-height:92vh;overflow:auto}
 .callsheet{font-family:var(--f-body,inherit)}
@@ -519,17 +519,17 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csbox.hot{border-color:rgba(180,35,24,.5);background:rgba(180,35,24,.05)}
 .csbox.good{border-color:rgba(22,101,52,.4);background:rgba(22,101,52,.05)}
 .csbox.warn{border-color:rgba(180,83,9,.45);background:rgba(180,83,9,.05)}
-.csl{font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted-2,#8a93a6)}
-.csv{font-family:var(--f-display,inherit);font-size:30px;font-weight:800;color:var(--ink,#101C33);line-height:1.1;margin-top:4px;font-variant-numeric:tabular-nums}
-.css{font-size:11.5px;color:var(--muted,#6b7280);margin-top:3px;line-height:1.4}
+.csl{font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.11em;text-transform:uppercase;color:var(--muted,#4A5670)}
+.csv{font-family:var(--f-display,inherit);font-size:30px;font-weight:800;color:var(--ink,#0E182C);line-height:1.1;margin-top:4px;font-variant-numeric:tabular-nums}
+.css{font-size:11.5px;color:var(--muted,#4A5670);margin-top:3px;line-height:1.4}
 .cssec{font-family:var(--f-label,inherit);font-size:10px;font-weight:800;letter-spacing:.15em;text-transform:uppercase;
-  color:var(--gold-d,#8B6A2C);border-top:1px solid var(--line,#E2E6EE);padding-top:12px;margin-top:6px}
+  color:var(--gold-d,#6F5514);border-top:1px solid var(--line,#E2E6EE);padding-top:12px;margin-top:6px}
 .csbody{margin:8px 0 14px}
 .csrow{display:flex;justify-content:space-between;gap:14px;padding:6px 0;border-bottom:1px dotted var(--line,#E2E6EE);font-size:14px;line-height:1.5}
 .csrow:last-child{border-bottom:none}
 .csk{color:var(--muted,#6b7280);flex:0 0 auto}
 .csvv{color:var(--ink,#101C33);text-align:right}
-.csmut{color:var(--muted-2,#8a93a6);font-size:12.5px}
+.csmut{color:var(--muted,#4A5670);font-size:12.5px}
 .csdays{font-family:var(--f-label,inherit);font-size:10px;font-weight:800;letter-spacing:.06em;background:var(--navy,#0B1730);
   color:#fff;border-radius:4px;padding:2px 7px;margin-left:6px}
 .csdays.urg{background:#B42318}
@@ -563,7 +563,7 @@ a.ctact:hover{text-decoration:none;filter:brightness(1.05)}
 /* Board link groups — labeled so Call / Text / WA are not a soup of chips */
 .links .lgrp,.clinks .lgrp{position:relative}
 .lgrp-lab{display:block;font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--muted-2,#8a93a6);margin:0 0 3px}
+  text-transform:uppercase;color:var(--muted,#4A5670);margin:0 0 3px}
 .links .lgrp.lgrp-contact,.clinks .lgrp.lgrp-contact{padding:6px 8px;background:rgba(11,23,48,.04);
   border:1px solid var(--line,#E2E6EE);border-radius:8px;gap:6px 10px}
 .links .lgrp.lgrp-contact .lgrp-lab,.clinks .lgrp.lgrp-contact .lgrp-lab{color:var(--navy,#0B1730)}
@@ -588,10 +588,10 @@ a.ctact:hover{text-decoration:none;filter:brightness(1.05)}
 .dsb-fore{background:var(--navy,#0B1730);color:#fff}
 .dsb-jr{background:rgba(22,101,52,.15);color:var(--green-ink,#166534)}
 .dsb-risk{background:#B45309;color:#fff}
-.dsclosed{font-size:11.5px;color:var(--muted-2,#8a93a6);padding:6px 2px;line-height:1.5}
-.dsclosed-d{font-size:10.5px;color:var(--muted-2,#8a93a6);opacity:.85}
+.dsclosed{font-size:11.5px;color:var(--muted,#4A5670);padding:6px 2px;line-height:1.5}
+.dsclosed-d{font-size:10.5px;color:var(--muted,#4A5670)}
 /* Gov/code/tax defendant survival-risk block on the call sheet — Chrome caught this on Velima */
-.csgovwarn{background:rgba(184,122,14,.08);border-left:3px solid #B87A0E;border-radius:6px;padding:9px 11px;margin-top:7px}
+.csgovwarn{background:rgba(107,74,8,.1);border-left:3px solid #6B4A08;border-radius:6px;padding:9px 11px;margin-top:7px;color:#5A3E07}
 /* PLAYBOOK modal — the on-device field manual for door work. Tap the 📖 button in the header
    or press ? / P to open. Sticky tab nav so on a phone he can jump to any section fast. */
 /* On narrow viewports drop the "Playbook" text on the header button and keep just the emoji
@@ -839,13 +839,13 @@ a:hover{text-decoration:underline}
 .links{line-height:1.4}
 .links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;line-height:1.5}
 .links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:5px}
-.links a,.clinks a{position:relative;text-decoration:none;color:var(--muted);font-weight:500;
+.links a,.clinks a{position:relative;text-decoration:none;color:var(--ink-2);font-weight:600;
   font-size:12.5px;transition:color .2s var(--e-lux)}
 .links a::after,.clinks a::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
   background:var(--gold-grad);transform:scaleX(0);transform-origin:100% 50%;transition:transform .3s var(--e-lux)}
 .links a:hover,.clinks a:hover{color:var(--gold-d);text-decoration:none}
 .links a:hover::after,.clinks a:hover::after{transform:scaleX(1);transform-origin:0 50%}
-.links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:600}
+.links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:700}
 .links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
 .links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
 .links span.phone,.clinks span.phone{display:inline-flex;align-items:center;font-size:11px;line-height:1.3;
@@ -972,39 +972,39 @@ input.ph::placeholder{color:#8FBFA0}
 .dm-verdict{margin-top:11px;display:flex;align-items:center;gap:10px;font-family:var(--f-num);
   font-size:22px;font-weight:700}
 .dm-why{font-size:12.5px;color:var(--ink-2);margin-top:7px;line-height:1.55}
-.dm-sec{font-family:var(--f-label);font-size:10px;font-weight:600;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--muted-2);margin:18px 0 7px}
+.dm-sec{font-family:var(--f-label);font-size:10px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted);margin:18px 0 7px}
 .mut{color:var(--muted)}
 /* deal analysis */
 .dealmath{background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);
   padding:13px 15px;font-size:13px}
-.mathline{display:flex;justify-content:space-between;gap:12px;padding:3px 0;color:var(--ink-2);
+.mathline{display:flex;justify-content:space-between;gap:12px;padding:3px 0;color:var(--ink);
   font-variant-numeric:tabular-nums;font-family:var(--f-num)}
-.mathline span:first-child{font-family:var(--f-body);color:var(--muted)}
+.mathline span:first-child{font-family:var(--f-body);color:var(--ink-2)}
 .mathline.tot{border-top:1px solid var(--line);margin-top:6px;padding-top:8px;font-weight:700;
   font-size:15px;color:var(--ink)}
 .mathline.tot span:first-child{color:var(--ink);font-weight:700}
 .compsline{margin:2px 0 6px;padding:7px 10px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm)}
 .compsline .comp{display:flex;justify-content:space-between;gap:10px;padding:2px 0;font-size:10.5px}
 .compsline .comp+.comp{border-top:1px dashed var(--line)}
-.compsline .compa{color:var(--ink-2);font-weight:600}
-.compsline .compn{color:var(--muted-2);font-variant-numeric:tabular-nums;font-family:var(--f-num);white-space:nowrap}
+.compsline .compa{color:var(--ink);font-weight:600}
+.compsline .compn{color:var(--muted);font-variant-numeric:tabular-nums;font-family:var(--f-num);white-space:nowrap}
 .dealadj{display:flex;flex-wrap:wrap;gap:12px 15px;align-items:flex-end}
-.dealadj label{font-size:11px;color:var(--muted);display:flex;flex-direction:column;gap:4px;font-weight:500}
+.dealadj label{font-size:11px;color:var(--ink-2);display:flex;flex-direction:column;gap:4px;font-weight:600}
 .dealadj input[type=number]{width:135px;font-size:13px;padding:7px 9px;font-family:var(--f-num)}
 .dealadj .occlbl{flex-direction:row;align-items:center;gap:7px;padding-bottom:7px}
 .dealadj input[type=checkbox]{width:auto;cursor:pointer;transform:scale(1.25);accent-color:var(--gold)}
-.dealadj .esthint{font-size:10px;color:var(--muted-2);font-weight:400;margin-top:2px;font-style:italic}
+.dealadj .esthint{font-size:10px;color:var(--muted);font-weight:500;margin-top:2px;font-style:italic}
 /* Auto-filled-from-records fields stand out from empty user-input fields so the automation is
    obvious at a glance (gold-tinted, gold left rail). */
-.dealadj input.af{background:var(--gold-soft,rgba(198,161,75,.12));border-color:var(--gold,#C6A14B);
-  box-shadow:inset 3px 0 0 var(--gold,#C6A14B);font-weight:700;color:var(--gold-d,#8B6A2C)}
+.dealadj input.af{background:var(--gold-soft,rgba(198,161,75,.16));border-color:var(--gold-d,#6F5514);
+  box-shadow:inset 3px 0 0 var(--gold-d,#6F5514);font-weight:700;color:var(--gold-ink,#241C05)}
 /* Records banner above the fields — the "here's what the scrape pulled" headline. */
 .recbanner{font-size:12px;line-height:1.5;padding:9px 12px;border-radius:8px;margin:2px 0 10px}
-.recbanner.on{background:var(--gold-soft,rgba(198,161,75,.13));border:1px solid rgba(198,161,75,.4);color:var(--ink,#101C33)}
-.recbanner.on b{color:var(--gold-d,#8B6A2C)}
-.recbanner{background:rgba(22,101,52,.08);border:1px solid rgba(22,101,52,.22);color:var(--ink,#101C33)}
-.recbanner.warn{background:rgba(180,83,9,.09);border:1px solid rgba(180,83,9,.3);color:#7A4510}
+.recbanner.on{background:var(--gold-soft,rgba(198,161,75,.16));border:1px solid rgba(111,85,20,.4);color:var(--ink,#0E182C)}
+.recbanner.on b{color:var(--gold-ink,#241C05)}
+.recbanner{background:rgba(8,92,52,.1);border:1px solid rgba(8,92,52,.28);color:var(--ink,#0E182C)}
+.recbanner.warn{background:rgba(107,74,8,.12);border:1px solid rgba(107,74,8,.38);color:#5A3E07;font-weight:600}
 .dealflags{font-size:12px;color:var(--amber-ink);line-height:1.6}
 .dealflags>div{padding:2px 0}
 .dealflags .flag{position:relative;padding-left:15px}
@@ -1484,10 +1484,10 @@ body.compact .dg-v{font-size:14.5px}
 #textmodal .txcopy:hover{background:#C6A14B;border-color:#C6A14B;color:#0B1730}
 #textmodal .txcopy.ok{background:var(--green-ink,#166534);border-color:var(--green-ink,#166534)}
 #textmodal .txfoot{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-#textmodal .txmark{background:#C6A14B;color:#0B1730;border:1px solid #C6A14B;border-radius:8px;padding:9px 14px;font-weight:700;font-size:13.5px;cursor:pointer}
+#textmodal .txmark{background:var(--gold-grad,#C6A14B);color:var(--gold-ink,#241C05);border:1px solid var(--gold-d,#6F5514);border-radius:8px;padding:9px 14px;font-weight:800;font-size:13.5px;cursor:pointer}
 #textmodal .txskip{background:transparent;color:var(--muted,#6b7280);border:1px solid var(--line,#E2E6EE);border-radius:8px;padding:9px 14px;font-size:13.5px;cursor:pointer}
-#textmodal .txcompliance{margin-top:14px;font-size:11.5px;line-height:1.55;color:var(--muted,#6b7280);background:rgba(198,161,75,.08);
-  border:1px solid rgba(198,161,75,.35);border-left:3px solid #C6A14B;border-radius:8px;padding:10px 12px}
+#textmodal .txcompliance{margin-top:14px;font-size:11.5px;line-height:1.55;color:var(--ink-2,#2A3750);background:rgba(198,161,75,.12);
+  border:1px solid rgba(111,85,20,.35);border-left:3px solid var(--gold-d,#6F5514);border-radius:8px;padding:10px 12px}
 #textmodal .txblock{margin:10px 0 6px;font-size:12.5px;line-height:1.5;color:#8E1A12;background:rgba(180,35,24,.07);
   border:1px solid rgba(180,35,24,.35);border-left:3px solid #B42318;border-radius:8px;padding:10px 12px;font-weight:600}
 #textmodal .txrow{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
