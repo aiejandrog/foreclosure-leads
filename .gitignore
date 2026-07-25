@@ -43,4 +43,6 @@ optouts.json
 gmail.key
 whitepages.key
 whitepages_lookup.json
+*whitepages*cookies*
+*_cookies.txt
 balloon_refi.json

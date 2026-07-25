@@ -2779,8 +2779,15 @@ function _csPlay(r){ const p=r&&r._play; if(!p) return '';
 // (verified live on the Velima lead 2026-07-23: owner's landline in plain text when TPS/CyberBG had
 // nothing that connected). WP canonicalizes sloppy slugs ("NE-13-Ave" -> "NE 13th Ave"), so a naive
 // county-format slug resolves fine.
+// Property Intel (property.whitepages.com) detail pages use opaque /property/{id} slugs we cannot
+// mint client-side. Whitepages' own checkout/login flows use ?address= as the stable propertyUrl —
+// that is the deep-link we ship (strips GA junk; no cookies in the public UI).
 function _wpSlug(s){ return String(s||'').replace(/[^A-Za-z0-9 ]/g,' ').trim().replace(/\s+/g,'-'); }
 function _wpCity(r){ const p=String(r.addr||'').split(','); return p.length>=2 ? _wpSlug(p[1]) : ''; }
+function _wpCleanAddr(r){
+  var a = String(r.addr||'').replace(/FL-\s*/i, 'FL ').replace(/\s+/g, ' ').trim();
+  return a;
+}
 function _wpNameUrl(r){ if(r.co) return '';
   const n=_ownerName((r.owners||'').split(';')[0].trim(), r); if(!n) return '';
   const c=_wpCity(r);
@@ -2789,11 +2796,17 @@ function _wpNameUrl(r){ if(r.co) return '';
 function _wpAddrUrl(r){ const p=String(r.addr||'').split(','); if(!p[0]||p.length<2) return '';
   return 'https://www.whitepages.com/address/'+_wpSlug(p[0])+'/'+_wpCity(r)+'-FL';
 }
+function _wpPropUrl(r){
+  var a = _wpCleanAddr(r); if(!a || a.indexOf(',') < 0) return '';
+  return 'https://property.whitepages.com/?address=' + encodeURIComponent(a);
+}
 // Find-a-number links, right on the sheet (was: "use the links on the row" — dead-end friction). Reuses the
 // per-lead TruePeopleSearch / CyberBackgroundChecks URLs already baked on every lead, incl. LP fresh filings
 // where People-search IS the play, and no-phone leads where it's the only path to a contact.
 function _csPeople(r){
-  var L=[], wn=_wpNameUrl(r), wa=_wpAddrUrl(r);
+  var L=[], wn=_wpNameUrl(r), wa=_wpAddrUrl(r), wp=_wpPropUrl(r);
+  // Property Intel deep-link first — owner/occupant intel, phones, relatives when the session has access.
+  if(wp) L.push('<a href="'+esc(wp)+'" target="_blank" rel="noopener" title="Whitepages Property Intel — opens this address on property.whitepages.com (owners, occupancy, phones/relatives when logged in). Stable ?address= deep-link; no cookies baked into Dealflow.">⭐ WP property</a>');
   // If WP Pro already ran on this lead, don't send the closer back to the free consumer page — it
   // shows LESS data (masked phones, WP.com upsell nag) than the WP HOUSEHOLD section right above.
   // Show a static "verified" badge instead so they know the API already covered it.
@@ -2801,7 +2814,7 @@ function _csPeople(r){
   if(wpDone) {
     L.push('<span class="wpverified" title="Whitepages Pro API already ran on this lead — every unmasked phone and email is in the WHITEPAGES-VERIFIED HOUSEHOLD section above. No need to hit the free consumer page.">🔒 WP Pro verified above</span>');
   } else {
-    if(wa)          L.push('<a href="'+esc(wa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS — the best free hit: prints the household landline UNMASKED + every resident/relative with ages, plus owner-occupied/rented/vacant status. Start here. (WP Pro API hasn\'t run on this lead yet — refresh to enrich.)">⭐ Whitepages addr</a>');
+    if(wa)          L.push('<a href="'+esc(wa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS (people search) — free tier often prints the household landline UNMASKED + residents/relatives with ages. Start here if Property Intel is paywalled. (WP Pro API hasn\'t run on this lead yet — refresh to enrich.)">Whitepages addr</a>');
     if(wn)          L.push('<a href="'+esc(wn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — address history + aliases (may go by), cell/landline behind their paywall but the free layer cross-checks who is who">Whitepages</a>');
   }
   if(r.people)      L.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener" title="TruePeopleSearch by NAME — phones, relatives, address history">People</a>');
@@ -5568,8 +5581,9 @@ function render(){
       if(o.cba) L.push('<a href="'+esc(o.cba)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by their FILED ADDRESS. '+who+'. Confirms they still live there and surfaces phones the name search misses.">addr</a>');
       if(L.length) gPeople.push('<span class="digppl" title="'+who+'">🧑&nbsp;<b>'+esc(nm)+'</b> '+L.join('<i>·</i>')+'</span>');
     });
-    var _wpa = _wpAddrUrl(r), _wpn = _wpNameUrl(r);
-    if(_wpa) gPeople.push('<a class="dig" href="'+esc(_wpa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS — best free hit rate: the household landline prints UNMASKED plus every resident/relative with ages and owner-occupied/rented/vacant status. When People/CyberBG numbers don\'t connect, START HERE.">⭐&nbsp;WP&nbsp;addr</a>');
+    var _wpa = _wpAddrUrl(r), _wpn = _wpNameUrl(r), _wpp = _wpPropUrl(r);
+    if(_wpp) gPeople.push('<a class="dig" href="'+esc(_wpp)+'" target="_blank" rel="noopener" title="Whitepages Property Intel — property.whitepages.com deep-link for THIS address (owners, occupancy, phones/relatives when your WP session is logged in). Opens with ?address=; no secrets in Dealflow.">⭐&nbsp;WP&nbsp;property</a>');
+    if(_wpa) gPeople.push('<a class="dig" href="'+esc(_wpa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS (people search) — free tier often prints the household landline UNMASKED plus residents/relatives with ages. Use when Property Intel is paywalled or you just need a quick landline.">WP&nbsp;addr</a>');
     if(_wpn) gPeople.push('<a class="dig" href="'+esc(_wpn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — aliases (may go by) + address history to confirm which same-name person is the owner; full phones behind their paywall but the free layer cross-checks the other sources.">Whitepages</a>');
     if(r.people) gPeople.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
     if(r.peopleaddr) gPeople.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
@@ -5591,9 +5605,10 @@ function render(){
     else if(r.addr) gEval.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No folio for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
     // Auction: live RealForeclose sale page for this date (all parcels + bidding).
     if(r.auc) gEval.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
-    // PROPERTY scout — maps only (value/tax/auction live in Court & sale above).
+    // PROPERTY scout — maps + Whitepages Property Intel (value/tax/auction live in Court & sale above).
     if(r.addr){
       var _mq = encodeURIComponent(String(r.addr).replace(/FL-\s*/i, 'FL '));
+      if(_wpp) gProp.push('<a href="'+esc(_wpp)+'" target="_blank" rel="noopener" title="Whitepages Property Intel for this address — owners, occupancy, equity signals, phones/relatives when logged in.">WP&nbsp;property</a>');
       gProp.push('<a href="https://www.google.com/maps/search/?api=1&query='+_mq+'" target="_blank" rel="noopener" title="Open the property in Google Maps — flip to satellite to eyeball the lot, roof, pool, additions, and the neighborhood.">🛰 Map</a>');
       gProp.push('<a href="https://www.google.com/maps?q='+_mq+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener" title="Street View — see the house from the road BEFORE you drive out: condition, boarded windows, cars in the drive, occupied or vacant. Your best free scouting tool.">👁 Street View</a>');
       gProp.push('<a href="https://www.google.com/maps/dir/?api=1&destination='+_mq+'&travelmode=driving" target="_blank" rel="noopener" title="Turn-by-turn directions from where you are now — opens the Google Maps app on your phone.">🧭 Directions</a>');
