@@ -1102,8 +1102,14 @@ def make_tracker(leads):
                 _po = _oi.get('person_owners') or []
                 _pc, _ = _prop_city_state(_r)
                 _owns = [_wp_own(o, _pc) for o in _po]
-                if not _owns:
-                    _r['wpKey'] = 'none'; continue
+                _person_recs = _hit.get('_person') or []
+                # Person-only cache rows (LP/upcoming with no address) have no property owners —
+                # still bake phones from the Person layer. Bare _prop_id stamps without a lookup
+                # are not a miss; skip quietly so we don't mark Marisela-style id-only rows 'none'.
+                if not _owns and not any((p.get('response') or []) for p in _person_recs):
+                    if _hit.get('result') is not None or _hit.get('_http') == 404:
+                        _r['wpKey'] = 'none'
+                    continue
                 # dedup phones + emails across owners; mobile first, absentee-owner phones tagged
                 _seen_ph, _all_ph = set(), []
                 for _o in _owns:
@@ -1120,7 +1126,6 @@ def make_tracker(leads):
                 # extra phones + emails sourced from the owner NAME rather than the property address.
                 # Includes aliases + address history + relatives-tagged numbers Property doesn't touch.
                 # Merged into wpAllPhones with source='person' so the UI can tag them.
-                _person_recs = _hit.get('_person') or []
                 _person_phones = []
                 _person_emails = []
                 for _pr in _person_recs:
@@ -1134,7 +1139,7 @@ def make_tracker(leads):
                             _pt = (_p.get('type') or '').lower()
                             _person_phones.append({'n': _n, 'type': _pt, 'owner': _pr.get('name',''), 'absentee': False, 'source': 'person'})
                         for _e in (_rec.get('emails') or []):
-                            _ea = _e.get('address') or ''
+                            _ea = _e.get('address') or _e.get('email') or ''
                             if _ea and _ea.lower() not in _seen_em:
                                 _seen_em.add(_ea.lower()); _person_emails.append(_ea)
                 # tag property-sourced numbers explicitly and merge person after them
@@ -1145,7 +1150,7 @@ def make_tracker(leads):
                 _r['wpAllPhones'] = _all_ph
                 _r['wpAllEmails'] = _all_em
                 _r['wpPersonRecs'] = len(_person_recs)
-                _r['wpKey'] = 'ok'
+                _r['wpKey'] = 'ok' if (_owns or _all_ph) else 'none'
                 # merge WP phones into the lead's existing `phones` array — dedupe against skiptrace
                 # numbers so we don't double-list, cap at 8 total to keep the row readable
                 _cur = set()
