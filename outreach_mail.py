@@ -207,53 +207,64 @@ def build_letter_html(r, snd, lang='en'):
     case_es = (f" (Núm. de certificado/caso {case_no})" if td else f" (Caso Núm. {case_no})") if case_no else ''
     sig = '<br>'.join(e(x) for x in _sig_lines(snd)) or sN
 
+    # Keep in sync with tracker_template.html genLetter() — Field Manual 5 exits + buyer posture + Carlos intake.
+    intake_en = ('I take information, not your time. I bring it to the people who put every option on the table. '
+                 'If you want that conversation at no charge, the only courtesy I ask is that you answer when we call. '
+                 'If you are not interested, tell me — nobody\'s feelings get hurt.')
+    intake_es = ('Yo tomo información, no su tiempo. Se la llevo a las personas que arman las opciones. '
+                 'Si quiere que pongamos todas las salidas sobre la mesa sin costo, la única cortesía que pido '
+                 'es que conteste cuando llamemos. Si no le interesa, dígamelo — nadie se ofende.')
+    exits_en = """<ol>
+<li><b>REINSTATE</b> — pay arrears + fees to bring the loan current. Stops the sale.</li>
+<li><b>LOAN MODIFICATION</b> — the bank changes payment terms (often 60–120 days).</li>
+<li><b>SHORT SALE</b> — the bank accepts less than the balance. You sell to a third party (or a cash buyer).</li>
+<li><b>PRIVATE SALE before auction</b> — sell to a cash buyer; if the price covers what is owed, the foreclosure is dropped. <b>This is where I come in as a buyer.</b></li>
+<li><b>BANKRUPTCY (Ch. 13 or 7)</b> — an automatic stay pauses the sale. Serious credit consequences.</li>
+</ol>"""
+    exits_es = """<ol>
+<li><b>REINSTALAR</b> — pagar atrasos + cargos y poner el préstamo al día. Detiene la subasta.</li>
+<li><b>MODIFICACIÓN DE PRÉSTAMO</b> — el banco cambia los términos (suele tomar 60–120 días).</li>
+<li><b>SHORT SALE</b> — el banco acepta menos del saldo. Usted vende a un tercero (o a un comprador en efectivo).</li>
+<li><b>VENTA PRIVADA antes de la subasta</b> — vende a un comprador en efectivo; si el precio cubre lo adeudado, se cancela la ejecución. <b>Aquí es donde entro yo como comprador.</b></li>
+<li><b>BANCARROTA (Cap. 13 o 7)</b> — la suspensión automática pausa la subasta. Tiene consecuencias serias de crédito.</li>
+</ol>"""
     if lang == 'es':
         if td:
             body = f"""<p>Estimado/a {e(first)},</p>
-<p>Espero que esta carta le encuentre bien. Mi nombre es {sN} y soy inversionista de bienes raíces aquí en Miami. Le escribo respecto a su propiedad en <b>{addr}</b>, la cual según los registros del condado tiene una <b>subasta de tax deed programada para el {dt}</b>{case_es} por impuestos sin pagar.</p>
-<p>Quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
-<ul><li>Todavía puede conservar la propiedad pagando los impuestos atrasados en cualquier momento antes de la subasta.</li>
-<li>Si conservarla no es realista, vender antes de la subasta puede dejarle dinero en el bolsillo en lugar de perderla ante el condado.</li>
-<li>Si se vende por más de lo que se debe en impuestos, cualquier excedente podría corresponderle a usted, aunque hay que reclamarlo.</li></ul>
-<p>No soy abogado y nada de esto es asesoría legal. Compro propiedades directamente, en efectivo, y puedo cerrar antes de la fecha límite. Si vender no es lo mejor para usted, se lo diré con honestidad.</p>
-<p>No hay costo ni compromiso por conversar. Puede comunicarse conmigo al <b>{sP}</b>. Aunque la subasta esté cerca, todavía puede haber tiempo.</p>
-<p>Gracias por su tiempo.</p>
+<p>Mi nombre es {sN}. Soy inversionista de bienes raíces aquí en Miami — <b>compro casas</b>. No soy prestamista, no soy una compañía de “rescate” de ejecuciones, y no soy abogado. Los registros del condado muestran que su propiedad en <b>{addr}</b> tiene una <b>subasta de tax deed el {dt}</b>{case_es} por impuestos sin pagar.</p>
+<p>Antes de esa fecha, los dueños suelen mirar tres caminos: pagar los impuestos atrasados y conservarla; vender en privado en efectivo antes de la subasta; o, si se vende por más de lo adeudado, reclamar el excedente que la ley permita. Con gusto repasamos cuál aún le sirve — sin costo ni compromiso.</p>
+<p>Compro propiedades tal cual, en efectivo, y puedo cerrar antes de la fecha límite cuando una venta privada es lo correcto. Si no lo es, se lo diré con honestidad.</p>
+<p>{intake_es}</p>
+<p>Puede comunicarse conmigo al <b>{sP}</b>. Aunque la subasta esté cerca, todavía puede haber tiempo para hablar.</p>
 <p>Respetuosamente,<br><br>{sig}</p>"""
         else:
             byp = f" por parte de {plaintiff}" if plaintiff else ''
             body = f"""<p>Estimado/a {e(first)},</p>
-<p>Espero que esta carta le encuentre bien. Mi nombre es {sN} y soy inversionista de bienes raíces aquí en Miami. Le escribo respecto a su propiedad en <b>{addr}</b>, la cual según los registros públicos se encuentra actualmente en proceso de ejecución hipotecaria{byp}{case_es}, con una subasta programada para el <b>{dt}</b>.</p>
-<p>Entiendo que puede ser una situación estresante, y quise comunicarme por si le sirve conocer sus opciones antes de esa fecha:</p>
-<ul><li>Si la propiedad se vende por más de lo que usted debe, cualquier excedente le pertenece a usted, no al prestamista.</li>
-<li>Vender antes de la subasta suele ser mejor para usted que perderla en el juzgado, y puede dejarle dinero en el bolsillo.</li>
-<li>El monto que consta en el expediente no siempre está actualizado, y conviene confirmarlo antes de la venta.</li></ul>
-<p>No soy abogado y nada de esto es asesoría legal. Compro propiedades directamente, en efectivo, y puedo cerrar antes de la fecha límite. Si comprar no es lo adecuado para usted, con gusto le oriento hacia una mejor opción, aunque no me incluya.</p>
-<p>No hay costo ni compromiso por conversar. Puede comunicarse conmigo al <b>{sP}</b>. Aunque la subasta esté cerca, todavía puede haber tiempo.</p>
-<p>Gracias por su tiempo.</p>
+<p>Mi nombre es {sN}. Soy inversionista de bienes raíces aquí en Miami — <b>compro casas</b>. No soy prestamista, no soy una compañía de “rescate” de ejecuciones, y no soy abogado. Los registros públicos muestran que su propiedad en <b>{addr}</b> está en ejecución hipotecaria{byp}{case_es}, con subasta el <b>{dt}</b>.</p>
+<p>No le escribo para convencerlo de nada. Cuando un dueño pregunta qué opciones tiene, estas son las <b>cinco salidas</b> de todo propietario en ejecución en Florida (de nuestro manual de campo):</p>
+{exits_es}
+<p>Mi trabajo es asegurarme de que sepa que las cinco están sobre la mesa para que la fecha de subasta no lo tome por sorpresa. Si una venta privada en efectivo es el camino, puedo comprar tal cual y cerrar antes de la fecha. Si otra salida le conviene más, se lo diré — aunque no me incluya.</p>
+<p>{intake_es}</p>
+<p>No hay costo ni compromiso por conversar. Llámeme o escríbame al <b>{sP}</b>.</p>
 <p>Respetuosamente,<br><br>{sig}</p>"""
     else:
         if td:
             body = f"""<p>Dear {e(owner)},</p>
-<p>I hope this letter finds you well. My name is {sN}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>{addr}</b>, which county records show is scheduled for a <b>tax deed sale on {dt}</b>{case_en} due to unpaid property taxes.</p>
-<p>I wanted to reach out in case it helps to know your options before that date:</p>
-<ul><li>You can still keep the property by paying the back taxes any time before the sale.</li>
-<li>If keeping it is not realistic, selling before the sale can put cash in your pocket rather than losing it to the county.</li>
-<li>If it sells for more than the taxes owed, any surplus may belong to you, though it has to be claimed.</li></ul>
-<p>I am not an attorney, and nothing here is legal advice. I purchase properties directly, with cash, and can close before the deadline. If selling is not your best move, I will tell you honestly.</p>
-<p>There is no cost and no obligation to talk. You can reach me at <b>{sP}</b>. Even if the sale is close, there may still be time.</p>
-<p>Thank you for your time.</p>
+<p>My name is {sN}. I am a local real estate investor here in Miami — <b>I buy houses</b>. I am not a lender, not a foreclosure-rescue company, and not an attorney. County records show your property at <b>{addr}</b> is scheduled for a <b>tax deed sale on {dt}</b>{case_en} due to unpaid property taxes.</p>
+<p>Before that date, owners usually look at three paths: pay the back taxes and keep it; sell privately for cash before the sale; or, if it sells for more than the taxes owed, claim any surplus the law allows. I am glad to walk through which of those still fits — at no cost and no obligation.</p>
+<p>I purchase properties as-is, with cash, and can close before the deadline when a private sale is the right move. If it is not, I will tell you honestly.</p>
+<p>{intake_en}</p>
+<p>You can reach me at <b>{sP}</b>. Even if the sale is close, there may still be time to talk.</p>
 <p>Respectfully,<br><br>{sig}</p>"""
         else:
             byp = f" by {plaintiff}" if plaintiff else ''
             body = f"""<p>Dear {e(owner)},</p>
-<p>I hope this letter finds you well. My name is {sN}, and I am a local real estate investor here in Miami. I am writing regarding your property at <b>{addr}</b>, which public records show is currently in foreclosure{byp}{case_en}, with a sale scheduled for <b>{dt}</b>.</p>
-<p>I understand this can be a stressful situation, and I wanted to reach out in case it helps to know your options before that date:</p>
-<ul><li>If the property sells for more than you owe, any surplus belongs to you, not the lender.</li>
-<li>Selling before the auction is often better for you than losing it at the courthouse, and it can put cash in your pocket.</li>
-<li>The amount on file is not always current, and it is worth confirming before the sale.</li></ul>
-<p>I am not an attorney, and nothing here is legal advice. I purchase properties directly, with cash, and can close before the deadline. If buying is not the right fit for you, I am glad to point you in a better direction, even if it does not involve me.</p>
-<p>There is no cost and no obligation to talk. You can reach me at <b>{sP}</b>. Even if the sale is close, there may still be time.</p>
-<p>Thank you for your time.</p>
+<p>My name is {sN}. I am a local real estate investor here in Miami — <b>I buy houses</b>. I am not a lender, not a foreclosure-rescue company, and not an attorney. Public records show your property at <b>{addr}</b> is in foreclosure{byp}{case_en}, with a sale scheduled for <b>{dt}</b>.</p>
+<p>I am not writing to talk you into anything. When owners ask what their options are, these are the <b>five exits</b> every Florida foreclosure homeowner has (from our field manual):</p>
+{exits_en}
+<p>My job is to make sure you know all five are on the table so the sale date does not sneak up. If a private cash sale is the path that fits, I can buy as-is and close before the deadline. If another exit is better for you, I will say so — even when it does not involve me.</p>
+<p>{intake_en}</p>
+<p>There is no cost and no obligation to talk. Call or text me at <b>{sP}</b>.</p>
 <p>Respectfully,<br><br>{sig}</p>"""
 
     today = datetime.date.today().strftime('%B %d, %Y')
