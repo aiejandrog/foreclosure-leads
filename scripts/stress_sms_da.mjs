@@ -197,18 +197,30 @@ const result = await page.evaluate(() => {
     assert('bulk includes clean', textQ.indexOf('FC-CLEAN-1') >= 0);
     closeTextModal();
 
-    // Row discoverability: default board filters tier=A + hides LP — force ALL so fixtures render.
+    // Structured CONTACT: Call · Text · WA on every number (board + call sheet + deal analyzer).
+    const cleanCs = _callSheet(clean);
+    assert('CS has Call button', cleanCs.indexOf('ctact-call') >= 0);
+    assert('CS has Text button', cleanCs.indexOf('ctact-text') >= 0 || cleanCs.indexOf('Messages') >= 0);
+    assert('CS has WA button', cleanCs.indexOf('ctact-wa') >= 0);
+    assert('CS CONTACT label', cleanCs.indexOf('Call · Text · WA') >= 0);
+    const cleanDa = dealModalBody(clean);
+    assert('DA CONTACT label', cleanDa.indexOf('Call · Text · WA') >= 0);
+    assert('DA has Call button', cleanDa.indexOf('ctact-call') >= 0);
+
     tier = 'ALL';
     if(typeof render === 'function') render();
-    assert('toolbar Bulk text', !!document.getElementById('bulktext'));
+    const msgBtn = document.getElementById('bulktext');
+    assert('toolbar Messages', !!msgBtn && /Messages/i.test(msgBtn.textContent||''));
+    assert('board Contact label', (document.body.innerHTML||'').indexOf('Contact — Call · Text · WA') >= 0);
     const smsLinks = document.querySelectorAll('a.textgen[data-c="FC-CLEAN-1"]');
-    assert('clean row has textgen', smsLinks.length >= 1, 'count='+smsLinks.length);
+    assert('clean row has Text', smsLinks.length >= 1, 'count='+smsLinks.length);
+    assert('clean row has Call', document.querySelectorAll('a.ctact-call[href^="tel:"]').length >= 1);
     const npSms = document.querySelectorAll('a.textgen[data-c="FC-NOPHONE-1"]');
-    assert('nophone row has textgen', npSms.length >= 1, 'count='+npSms.length);
+    assert('nophone row has Text', npSms.length >= 1, 'count='+npSms.length);
     const bkSms = document.querySelectorAll('a.textgen[data-c="FC-BK-1"]');
-    assert('bk row no textgen', bkSms.length === 0, 'count='+bkSms.length);
+    assert('bk row no Text', bkSms.length === 0, 'count='+bkSms.length);
     const optSms = document.querySelectorAll('a.textgen[data-c="OPT-LEDGER"]');
-    assert('opt row no textgen', optSms.length === 0, 'count='+optSms.length);
+    assert('opt row no Text', optSms.length === 0, 'count='+optSms.length);
 
   } catch (e) {
     fails.push('EXCEPTION: ' + (e && e.stack ? e.stack : String(e)));

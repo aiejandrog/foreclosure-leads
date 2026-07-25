@@ -535,10 +535,42 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csdays.urg{background:#B42318}
 .bad{color:#B42318}
 .csbad{background:#B42318;color:#fff;border-radius:8px;padding:10px 13px;font-weight:700;font-size:14px}
-.csphones{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}
+.csphones{display:flex;flex-direction:column;gap:8px;margin:4px 0 10px}
 .csph{font-family:var(--f-display,inherit);font-size:22px;font-weight:800;letter-spacing:.01em;background:var(--navy,#0B1730);
   color:#fff;border-radius:10px;padding:9px 16px;text-decoration:none;display:inline-block}
 .csph:hover{background:var(--ink,#101C33)}
+/* Structured contact line — number + Call / Text / WA in one row (call sheet + deal modal + board) */
+.ctline{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;background:var(--surface-2,#f6f8fa);
+  border:1px solid var(--line,#E2E6EE);border-radius:10px}
+.ctnum{font-family:var(--f-display,inherit);font-size:18px;font-weight:800;color:var(--ink,#101C33);letter-spacing:.01em;
+  font-variant-numeric:tabular-nums;min-width:7.5em}
+.ctacts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ctact{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;letter-spacing:.02em;
+  padding:7px 11px;border-radius:8px;text-decoration:none;border:1px solid transparent;cursor:pointer;line-height:1}
+a.ctact:hover{text-decoration:none;filter:brightness(1.05)}
+.ctact-call{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730)}
+.ctact-call:hover{background:#C6A14B;color:#0B1730;border-color:#C6A14B}
+.ctact-text{background:#0B1730;color:#fff;border-color:#0B1730}
+.ctact-text:hover{background:#1F6FEB;border-color:#1F6FEB}
+.ctact-wa{background:#128C7E;color:#fff;border-color:#128C7E}
+.ctact-wa:hover{background:#0E7A6E}
+.ctact-wa svg{width:13px;height:13px;display:block}
+.cttag{font-size:10px;font-weight:700;color:var(--muted,#6b7280);margin-left:2px}
+.cttag.dnc{color:#c0392b}
+.csmsgbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px}
+.csmsglbl{font-family:var(--f-label,inherit);font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted,#6b7280)}
+/* Board link groups — labeled so Call / Text / WA are not a soup of chips */
+.links .lgrp,.clinks .lgrp{position:relative}
+.lgrp-lab{display:block;font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted-2,#8a93a6);margin:0 0 3px}
+.links .lgrp.lgrp-contact,.clinks .lgrp.lgrp-contact{padding:6px 8px;background:rgba(11,23,48,.04);
+  border:1px solid var(--line,#E2E6EE);border-radius:8px;gap:6px 10px}
+.links .lgrp.lgrp-contact .lgrp-lab,.clinks .lgrp.lgrp-contact .lgrp-lab{color:var(--navy,#0B1730)}
+.links a.ctact,.clinks a.ctact{font-size:11.5px;padding:5px 9px}
+.links a.ctact::after,.clinks a.ctact::after{display:none}
+.links .ctline,.clinks .ctline{padding:5px 7px;gap:6px;width:100%}
+.links .ctnum,.clinks .ctnum{font-size:13.5px;min-width:0}
 /* the debt stack — one card per open lien, position + who holds it + is it wiped */
 .dsbox{margin:8px 0 14px}
 .dsrow{border:1px solid var(--line,#E2E6EE);border-left-width:4px;border-radius:9px;padding:9px 12px;margin-bottom:7px;background:var(--surface,#fff)}
@@ -1554,7 +1586,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="exp">Export CSV (with my notes)</button>
 <button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M17 3.5 18.6 6 21 6.7M7 20.5 5.4 18 3 17.3"/></svg> Sync / team <span id="syncfresh" class="syncfresh"></span></button>
 <button id="mailbatch" title="Prepare a batch of homeowner-rescue letters to send as real mail via Lob. Picks Tier A/B leads with a real owner, a deliverable mailing address, and an auction 5+ days out, minus anyone opted out. You review and download the batch here; your Lob key never touches this page."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Mail batch</button>
-<button id="bulktext" title="Batch TEXT owners who have a textable number — opens Phone Link / Messages with a personalized bilingual SMS pre-filled (cold / urgent / follow-up tones). One owner at a time so you review + send. DNC, opted-out, and Do-Not-Text numbers are skipped; every message carries STOP."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Bulk text</button>
+<button id="bulktext" title="MESSAGES batch — Text owners who have a textable number via Phone Link / Messages. Personalized bilingual SMS (cold / urgent / follow-up). One owner at a time so you review + send. DNC, opted-out, and Do-Not-Text skipped; every message carries STOP."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Messages</button>
 <button id="cadencebtn" title="Email cadence queue — enrolled owners get a 4-touch sequence (day 0/2/4/7) that sends itself and auto-cancels the moment they reply. Export the queue, run cadence.py on your machine; replies and opt-outs sync back. Kimi-built."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg> Cadence</button>
 <button id="savedbtn" title="Your saved batch — star deals to save them here (kept on this device). Print a field packet for Carlos, copy a list to send, or share any deal."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 21.4l1.4-6.8L2.2 9.9l6.9-.8z"/></svg> Saved<span class="favn"></span></button>
 <span class="stats" id="stats"></span>
@@ -2149,20 +2181,63 @@ function _textContactBlocked(r){
   if(r.saleBkAct) return 'bk';
   return '';
 }
+// One structured contact line: number + Call + Text (Phone Link / Messages) + WA.
+// size: 'board' | 'sheet' — same verbs everywhere so the board and call sheet read as one system.
+function _contactLineHtml(r, ph, opts){
+  opts = opts || {};
+  const digits = String(ph||'').replace(/\D/g,'');
+  if(!digits) return '';
+  const isDnc = !!opts.dnc;
+  const isMob = opts.mobile !== false; // default mobile unless told landline
+  const canTxt = !r.saleBkAct && !isDnc && !_isDNT(digits) && !_textContactBlocked(r);
+  const tag = isDnc
+    ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
+    : (isMob ? '' : ' <span class="cttag">landline</span>');
+  // DNC numbers stay dialable (manual single dial about their own foreclosure); Text/WA stay off.
+  const call = '<a class="ctact ctact-call" href="tel:'+esc(digits)+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':'Call this number (8am–8pm ET)')+'">Call</a>';
+  const text = canTxt
+    ? '<a href="#" class="ctact ctact-text textgen" data-c="'+esc(r.case)+'" data-ph="'+esc(digits)+'" title="Text via Phone Link / Messages — bilingual SMS you copy or open with sms: pre-filled">Text</a>'
+    : '';
+  const wa = (canTxt && isMob)
+    ? '<a class="ctact ctact-wa" href="'+esc(_waLink(r, digits))+'" target="_blank" rel="noopener" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
+    : '';
+  return '<div class="ctline"><span class="ctnum">'+esc(fmtPhone(digits))+tag+'</span><span class="ctacts">'+call+text+wa+'</span></div>';
+}
+function _messagesBarHtml(r){
+  if(_textContactBlocked(r)) return '';
+  const tp = textablePhones(r);
+  const lbl = tp.length ? '💬 Messages — Text / Phone Link' : '💬 Messages — Text / Phone Link (add a # first)';
+  return '<div class="csmsgbar"><span class="csmsglbl">Messages</span>'+
+    '<button type="button" class="cstextbtn" style="margin:0" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">'+lbl+'</button></div>';
+}
+// Shared CONTACT body for call sheet + deal analyzer (phones structured the same way).
+function _contactBlockHtml(r){
+  const nn = notes[r.case]||{}, block = _textContactBlocked(r);
+  const dnc = _dncPhones(r);
+  let h = '';
+  if(block==='wrong') return '<div class="csbad">🚫 WRONG PERSON — numbers withheld</div>';
+  if(block==='optout') return '<div class="csbad">⛔ OPTED OUT — all contact suppressed</div>';
+  if(block==='bk') return '<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
+  const lines = [];
+  (r.phones||[]).slice(0,4).forEach((ph,i)=>{
+    lines.push(_contactLineHtml(r, ph, {
+      dnc: !!((r.phdnc||[])[i]),
+      mobile: (((r.phtype||[])[i])||'mobile')==='mobile'
+    }));
+  });
+  if(nn.phone) lines.push(_contactLineHtml(r, nn.phone, { dnc:false, mobile:true }));
+  if(lines.length) h += '<div class="csphones">'+lines.join('')+'</div>';
+  else h += '<div class="csmut">No phone yet — use Find a number below, then Text.</div>';
+  h += _messagesBarHtml(r);
+  if(dnc.length) h += '<div class="csmut" style="margin:4px 0 8px">⛔ DNC (call only, no text): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
+  if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
+  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
+  h += _csPeople(r);
+  return h;
+}
 function _daContactHtml(r){
-  const nn=notes[r.case]||{}, clean=_cleanPhones(r), dnc=_dncPhones(r), tp=textablePhones(r);
-  const block=_textContactBlocked(r);
-  let h='<div class="dm-sec">Contact — same as call sheet</div><div class="csbody" style="margin:0 0 12px">';
-  if(block==='wrong') h+='<div class="csbad">🚫 WRONG PERSON — numbers withheld</div>';
-  else if(block==='optout') h+='<div class="csbad">⛔ OPTED OUT</div>';
-  else if(block==='bk') h+='<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
-  else {
-    if(clean.length) h+='<div class="csphones">'+clean.map(p=>'<a class="csph" href="tel:'+esc(String(p).replace(/\D/g,''))+'">'+esc(fmtPhone(p))+'</a>').join('')+'</div>';
-    else h+='<div class="csmut">No callable number yet — use People on the call sheet.</div>';
-    // Discoverable even with no textable # yet; modal explains DNC / missing phones.
-    h+='<button type="button" class="cstextbtn" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">'+(tp.length?'💬 Text / Phone Link — copy or send':'💬 Text / Phone Link — open (no textable # yet)')+'</button>';
-    if(dnc.length) h+='<div class="csmut" style="margin:4px 0">⛔ DNC (call only): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
-  }
+  let h='<div class="dm-sec">Contact — Call · Text · WA</div><div class="csbody" style="margin:0 0 12px">';
+  h+=_contactBlockHtml(r);
   h+='<div style="margin-top:8px"><button type="button" class="csbtn" onclick="closeDealModal(); openCallSheet(\''+esc(r.case)+'\')">📞 Open full call sheet</button></div>';
   return h+'</div>';
 }
@@ -2778,27 +2853,9 @@ function _callSheet(r){
     row('Distance', g.mi!=null ? g.mi+' mi from '+_baseLL().name+' · '+esc(g.lbl) : 'unknown') +
   '</div>';
 
-  // CONTACT
-  let cont = '<div class="cssec">CONTACT</div><div class="csbody">';
-  { const _tblock = _textContactBlocked(r);
-  if(_tblock==='wrong') cont += '<div class="csbad">🚫 WRONG PERSON reported — these numbers are not the owner. Re-verify before dialing.</div>';
-  else if(_tblock==='optout') cont += '<div class="csbad">⛔ OPTED OUT — all contact suppressed.</div>';
-  else if(_tblock==='bk') cont += '<div class="csbad">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal right now.</div>';
-  else {
-    cont += clean.length
-      ? '<div class="csphones">'+clean.map(p=>'<a class="csph" href="tel:'+esc(String(p).replace(/\D/g,''))+'">'+esc(fmtPhone?fmtPhone(p):p)+'</a>').join('')+'</div>'
-      : '<div class="csmut">No callable number yet — pull one below.</div>';
-    // Phone Link / Messages — visible in CONTACT whenever contact is legal; modal handles DNC / no-#.
-    { const _tp = textablePhones(r);
-      cont += '<button type="button" class="cstextbtn" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">'
-        +(_tp.length?'💬 Text / Phone Link — copy or send':'💬 Text / Phone Link')+'</button>';
-      if(!_tp.length && clean.length) cont += '<div class="csmut" style="margin:0 0 8px">Numbers on file are DNC / Do-Not-Text — call or door only (modal still opens for Copy once you have a good #).</div>';
-      else if(!_tp.length) cont += '<div class="csmut" style="margin:0 0 8px">No textable number yet — People-search first, or use <b>Bulk text</b> in the top toolbar when you have one.</div>';
-    }
-    if(dnc.length) cont += row('⛔ DNC — mail/door only', dnc.map(p=>esc(fmtPhone?fmtPhone(p):p)).join(' · '));
-    if((r.emails||[]).length) cont += row('Email', (r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · '));
-    cont += _csPeople(r);   // find/verify a number without leaving the sheet — the fix for the no-phone dead-end
-  } }
+  // CONTACT — Call · Text · WA on every number (same structure as the board + deal analyzer)
+  let cont = '<div class="cssec">CONTACT — Call · Text · WA</div><div class="csbody">';
+  cont += _contactBlockHtml(r);
   cont += row('Mailing address', esc(r.mail||r.addr||'—')+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <span class="csmut">(same as the property — they live there)</span>':' <span class="csmut">(different — absentee owner)</span>'));
   cont += '</div>';
 
@@ -5349,49 +5406,33 @@ function render(){
   rows.forEach((r, _ri) => {
     const _eager = _ri < 14;   // eager-load the above-the-fold thumbnails so the first screen is instant
     const n = notes[r.case] || {status:'', note:''};
-    // ---- links, grouped by purpose:  CALL (green) · INVESTIGATE (gold) · PROPERTY (slate) · DO ----
+    // ---- links, labeled groups: CONTACT · LOOK UP · PROPERTY · DO ----
     const gCall = [], gDig = [], gProp = [], gDo = [];
-    // CALL — skip-traced + saved phones. HARD DNC GATE: DNC-flagged numbers render as non-clickable
-    // text (no tel:) so a flagged number can't be tap-dialed by accident. Even manual calls to
-    // DNC-registered numbers are actionable — Duguid only killed the autodialer theory, not DNC.
-    // Ledger opt-out (optlog / optout scalar) must suppress the same as status DO NOT CONTACT —
-    // status-only checks left SMS/WA on the row after a teammate sync.
+    // CONTACT — every number is a structured line: Call · Text · WA (same verbs as call sheet).
+    // Ledger opt-out must suppress the same as status DO NOT CONTACT.
     const optedOut = _isOptedOut(n) || n.status === 'DO NOT CONTACT';
     if(optedOut){
       gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
     } else if(_isWrongOwner(n)){
-      // The numbers are real — they just belong to somebody else. Pull them off the row entirely so
-      // no teammate taps one, and point at the only thing that actually resolves this: the deed.
       gCall.push('<span class="phone dncgate" title="Someone on these numbers told us they do NOT own this property. Re-verify the owner on the county appraiser and the recorded deed before contacting anyone. The deal is still live — the contact info is not.">🚫 WRONG PERSON'+(n.wrongown?' · '+esc(n.wrongown):'')+' — numbers withheld</span>');
+    } else if(r.saleBkAct){
+      gCall.push('<span class="phone dncgate" title="Active bankruptcy stay — no call, text, or WhatsApp.">⛔ BK STAY — no contact</span>');
     } else {
-      // skip-traced owner phone(s) — tel: links for manual dial + wa.me links for a prefilled 1:1
-      // WhatsApp message (operator-reviewed before send, same posture as a manual dial). kimi.
-      // Show EVERY number, visible + tap-to-dial — nothing hidden or collapsed. Mobiles (non-DNC) lead
-      // with the WhatsApp text button; landlines show plainly (no WhatsApp); DNC numbers stay VISIBLE and
-      // dialable (a MANUAL single dial about the owner's OWN foreclosure is actionable) with a no-text flag.
       (r.phones||[]).slice(0,4).forEach((ph,i) => {
-        const isMob = (((r.phtype||[])[i])||'mobile')==='mobile';
-        const isDnc = !!((r.phdnc||[])[i]);
-        // No SMS/WA on DNC, local DNT, or active BK stay (manual dial of DNC may still be ok — text is not).
-        const canTxt = !r.saleBkAct && !isDnc && !_isDNT(String(ph).replace(/\D/g,''));
-        const wa = (isMob && canTxt) ? '<a class="wabtn" href="'+esc(_waLink(r,ph))+'" target="_blank" rel="noopener" title="TEXT on WhatsApp — a prefilled 1:1 message you review and send. Distressed owners read texts, ignore unknown calls. START HERE.">'+_waSvg()+'</a>' : '';
-        const sms = canTxt
-          ? '<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link / Messages — bilingual SMS you copy or open with sms: pre-filled. START HERE if WhatsApp is not installed.">SMS</a>' : '';
-        const tag = isDnc ? ' <span style="font-size:10px;color:#c0392b;font-weight:700" title="On the Do-Not-Call registry: a MANUAL single dial about their own foreclosure is still actionable; do NOT text or autodial.">DNC&middot;call only</span>'
-                          : (isMob ? '' : ' <span style="font-size:10px;color:var(--muted,#8892a6)">landline</span>');
-        gCall.push(sms+wa+'<a class="phone" href="tel:'+esc(ph)+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':(isMob?'Mobile — SMS/WhatsApp first, then dial 8am-8pm':'Landline — 8am-8pm; text a mobile if one exists'))+'">'+esc(fmtPhone(ph))+tag+'</a>');
+        const line = _contactLineHtml(r, ph, {
+          dnc: !!((r.phdnc||[])[i]),
+          mobile: (((r.phtype||[])[i])||'mobile')==='mobile'
+        });
+        if(line) gCall.push(line);
       });
       if(n.phone){
-        const _spd=String(n.phone).replace(/\D/g,''), _canSaved=!r.saleBkAct && !_isDNT(_spd);
-        const _smsSaved=_canSaved?'<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link">SMS</a>':'';
-        const _waSaved=_canSaved?'<a class="wabtn" href="'+esc(_waLink(r,n.phone))+'" target="_blank" rel="noopener" title="WhatsApp the owner — prefilled 1:1 message you review and send.">'+_waSvg()+'</a>':'';
-        gCall.push(_smsSaved+'<a class="phone" href="tel:'+esc(_spd)+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a>'+_waSaved);
+        const line = _contactLineHtml(r, n.phone, { dnc:false, mobile:true });
+        if(line) gCall.push(line);
       }
-      // No phone yet — still surface Text in CALL so Phone Link is findable without hunting DO.
-      if(!r.saleBkAct && !(r.phones||[]).length && !n.phone){
-        gCall.push('<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link — opens the composer even before a number lands (People-search first).">SMS</a>');
+      // No phone yet — one Messages entry so Text/Phone Link is still findable.
+      if(!(r.phones||[]).length && !n.phone){
+        gCall.push('<a href="#" class="ctact ctact-text textgen" data-c="'+esc(r.case)+'" title="Messages — Text / Phone Link composer (People-search a number first)">Text</a>');
       }
-      // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
       (r.emails||[]).slice(0,2).forEach(em => {
         gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
       });
@@ -5461,10 +5502,7 @@ function render(){
       gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
-      // Text next to Letter/Email when contact is legal — findable even before a number lands.
-      // Hidden for opt-out / wrong-person / BK (same gates as call sheet + deal analyzer).
-      if(!_textContactBlocked(r)) gDo.push('<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link / Messages — bilingual SMS (cold / urgent / follow-up), Copy or open sms: with the body pre-filled. DNC skipped; STOP opt-out included. Opens even with no textable # yet so you can see the composer.">Text</a>');
-      // kimi: cadence enrollment — the multi-touch email sequence that auto-cancels on reply
+      // Text lives under CONTACT (Call · Text · WA) — not duplicated here in DO.
       if((r.emails||[]).length) gDo.push('<a href="#" class="cadencegen" data-c="'+esc(r.case)+'" title="Enroll this owner in the 4-touch email cadence (day 0/2/4/7) — sends itself until they reply, then auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.">Cadence</a>');
     }
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
@@ -5474,7 +5512,16 @@ function render(){
       r.addr?'Map: https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')):''
     ].filter(Boolean).join('\n');
     gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
-    const linksHtml = [gCall, gDig, gProp, gDo].filter(g => g.length).map(g => '<div class="lgrp">'+g.join('')+'</div>').join('');
+    // Labeled groups so Call / Text / WA are not a soup of chips.
+    const _lg = (lab, cls, items) => items.length
+      ? '<div class="lgrp '+(cls||'')+'"><span class="lgrp-lab">'+lab+'</span>'+items.join('')+'</div>'
+      : '';
+    const linksHtml = [
+      _lg('Contact — Call · Text · WA', 'lgrp-contact', gCall),
+      _lg('Look up', '', gDig),
+      _lg('Property', '', gProp),
+      _lg('Do', '', gDo)
+    ].filter(Boolean).join('');
     const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
     const ctype = r.ctype ? '<span class="chip '+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'" title="'+esc(r.ctype)+'">'+ctypeTxt+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
