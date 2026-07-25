@@ -535,10 +535,42 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csdays.urg{background:#B42318}
 .bad{color:#B42318}
 .csbad{background:#B42318;color:#fff;border-radius:8px;padding:10px 13px;font-weight:700;font-size:14px}
-.csphones{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}
+.csphones{display:flex;flex-direction:column;gap:8px;margin:4px 0 10px}
 .csph{font-family:var(--f-display,inherit);font-size:22px;font-weight:800;letter-spacing:.01em;background:var(--navy,#0B1730);
   color:#fff;border-radius:10px;padding:9px 16px;text-decoration:none;display:inline-block}
 .csph:hover{background:var(--ink,#101C33)}
+/* Structured contact line — number + Call / Text / WA in one row (call sheet + deal modal + board) */
+.ctline{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 10px;background:var(--surface-2,#f6f8fa);
+  border:1px solid var(--line,#E2E6EE);border-radius:10px}
+.ctnum{font-family:var(--f-display,inherit);font-size:18px;font-weight:800;color:var(--ink,#101C33);letter-spacing:.01em;
+  font-variant-numeric:tabular-nums;min-width:7.5em}
+.ctacts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
+.ctact{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;letter-spacing:.02em;
+  padding:7px 11px;border-radius:8px;text-decoration:none;border:1px solid transparent;cursor:pointer;line-height:1}
+a.ctact:hover{text-decoration:none;filter:brightness(1.05)}
+.ctact-call{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730)}
+.ctact-call:hover{background:#C6A14B;color:#0B1730;border-color:#C6A14B}
+.ctact-text{background:#0B1730;color:#fff;border-color:#0B1730}
+.ctact-text:hover{background:#1F6FEB;border-color:#1F6FEB}
+.ctact-wa{background:#128C7E;color:#fff;border-color:#128C7E}
+.ctact-wa:hover{background:#0E7A6E}
+.ctact-wa svg{width:13px;height:13px;display:block}
+.cttag{font-size:10px;font-weight:700;color:var(--muted,#6b7280);margin-left:2px}
+.cttag.dnc{color:#c0392b}
+.csmsgbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px}
+.csmsglbl{font-family:var(--f-label,inherit);font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--muted,#6b7280)}
+/* Board link groups — labeled so Call / Text / WA are not a soup of chips */
+.links .lgrp,.clinks .lgrp{position:relative}
+.lgrp-lab{display:block;font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--muted-2,#8a93a6);margin:0 0 3px}
+.links .lgrp.lgrp-contact,.clinks .lgrp.lgrp-contact{padding:6px 8px;background:rgba(11,23,48,.04);
+  border:1px solid var(--line,#E2E6EE);border-radius:8px;gap:6px 10px}
+.links .lgrp.lgrp-contact .lgrp-lab,.clinks .lgrp.lgrp-contact .lgrp-lab{color:var(--navy,#0B1730)}
+.links a.ctact,.clinks a.ctact{font-size:11.5px;padding:5px 9px}
+.links a.ctact::after,.clinks a.ctact::after{display:none}
+.links .ctline,.clinks .ctline{padding:5px 7px;gap:6px;width:100%}
+.links .ctnum,.clinks .ctnum{font-size:13.5px;min-width:0}
 /* the debt stack — one card per open lien, position + who holds it + is it wiped */
 .dsbox{margin:8px 0 14px}
 .dsrow{border:1px solid var(--line,#E2E6EE);border-left-width:4px;border-radius:9px;padding:9px 12px;margin-bottom:7px;background:var(--surface,#fff)}
@@ -628,6 +660,18 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .cslaw-t{font-family:var(--f-label);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--navy,#0B1730);margin-bottom:4px}
 .cslaw-l{margin:0;padding-left:18px}
 .cslaw-l li{margin:2px 0}
+/* Collapsible Math + rule reference on the Call Sheet hub (Deal Analyzer demoted here) */
+details.csmath, details.cslaw-wrap{margin-top:10px;border:1px solid var(--line,#E2E6EE);border-radius:10px;background:var(--surface,#fff);overflow:hidden}
+details.csmath>summary, details.cslaw-wrap>summary{cursor:pointer;list-style:none;padding:12px 14px;font-family:var(--f-label,inherit);
+  font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:var(--gold-d,#8B6A2C);
+  background:var(--surface-2,#f6f8fa);border-bottom:1px solid transparent;user-select:none}
+details.csmath>summary::-webkit-details-marker, details.cslaw-wrap>summary::-webkit-details-marker{display:none}
+details.csmath[open]>summary, details.cslaw-wrap[open]>summary{border-bottom-color:var(--line,#E2E6EE)}
+details.csmath>summary::before, details.cslaw-wrap>summary::before{content:'▸ ';color:var(--muted,#6b7280)}
+details.csmath[open]>summary::before, details.cslaw-wrap[open]>summary::before{content:'▾ '}
+.csmath-body{padding:10px 12px 14px}
+.csmath-body .dm-sec{margin-top:12px}
+.csfoot .shbtn{flex:1 1 auto;text-align:center;justify-content:center}
 .dscav{font-size:11.5px;color:var(--muted,#6b7280);background:rgba(180,83,9,.07);border:1px solid rgba(180,83,9,.28);
   border-radius:8px;padding:8px 11px;margin-top:8px;line-height:1.55}
 .cschain{margin-top:8px;border:1px solid var(--line,#E2E6EE);border-radius:8px;overflow:hidden}
@@ -648,6 +692,18 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csbtn2:hover{background:#C6A14B;color:#0B1730}
 .cssurvin{flex:1;min-width:120px;font-size:14px;padding:7px 10px;border:1px solid var(--line,#E2E6EE);border-radius:8px}
 .cssurvin:focus{outline:none;border-color:var(--gold,#C6A14B)}
+/* Honest tax chip (call sheet + deal analyzer) — confirmed $ / $0 vs not-checked; never invents paid/delinquent */
+.taxchip{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px}
+.taxchip .tc{font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.08em;border-radius:4px;
+  padding:3px 7px;text-transform:uppercase}
+.taxchip .tc-miss{background:rgba(180,83,9,.14);color:#B45309;border:1px solid rgba(180,83,9,.4)}
+.taxchip .tc-ok{background:rgba(22,101,52,.13);color:var(--green-ink,#166534);border:1px solid rgba(22,101,52,.35)}
+.taxchip .tc-delinq{background:rgba(180,35,24,.12);color:#B42318;border:1px solid rgba(180,35,24,.4)}
+.taxchip a{font-size:11.5px;font-weight:700;color:var(--blue,#1F6FEB);text-decoration:none}
+.taxchip a:hover{text-decoration:underline}
+.taxchip .cssurvin{max-width:140px;margin:0}
+/* SMS next to phone — same weight as dig links so Phone Link is obvious without WhatsApp */
+a.textgen.dig{font-weight:800;letter-spacing:.02em}
 /* the row button — deliberately the loudest control, because this is what you hit mid-call */
 a.dig.digcall{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730);font-weight:800}
 a.dig.digcall:hover{background:#C6A14B;color:#0B1730;border-color:#C6A14B}
@@ -891,8 +947,8 @@ input.ph::placeholder{color:#8FBFA0}
 .cctl textarea{flex:1}
 
 /* ============================== MODALS (shared shell) ============================== */
-#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal,#savedmodal,#csmodal,#playbookmodal{display:none;position:fixed;inset:0;z-index:120}
-#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show,#savedmodal.show{display:block}
+#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal,#savedmodal,#csmodal,#playbookmodal,#textmodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show,#savedmodal.show,#textmodal.show{display:block}
 #syncmodal{z-index:122}#planmodal{z-index:121}#lookupmodal{z-index:121}#gallerymodal{z-index:130}
 .dm-backdrop{position:absolute;inset:0;background:rgba(9,16,31,.5);backdrop-filter:blur(5px);
   -webkit-backdrop-filter:blur(5px);animation:dmFade .2s ease}
@@ -1408,6 +1464,44 @@ body.compact .dg-v{font-size:14.5px}
 <div id="savedmodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="savedbody"></div></div></div>
 <div id="cadencemodal"><div class="dm-backdrop"></div><div class="dm-card"><button class="dm-close" type="button" title="Close">&times;</button><div id="cadencebody"></div></div></div>
 <div id="playbookmodal"><div class="dm-backdrop" onclick="closePlaybook()"></div><div class="dm-card pbcard"><button class="dm-close" type="button" onclick="closePlaybook()" title="Close">&times;</button><div id="playbookbody"></div></div></div>
+<div id="textmodal"><div class="dm-backdrop" onclick="closeTextModal()"></div><div class="dm-card txcard"><button class="dm-close" type="button" onclick="closeTextModal()" title="Close">&times;</button><div id="textbody"></div></div></div>
+<style>
+/* TEXT / Phone Link SMS modal — light UI; opens sms: deep links Windows Phone Link understands */
+#textmodal .dm-card.txcard{width:min(580px,94vw);max-height:90vh;overflow:auto}
+#textmodal .txtones,#textmodal .txlangs{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 8px}
+#textmodal .txtone,#textmodal .txlang{background:var(--surface-2,#eef1f6);color:var(--ink,#101C33);border:1px solid var(--line,#E2E6EE);
+  border-radius:7px;padding:6px 12px;font-size:12.5px;font-weight:600;cursor:pointer}
+#textmodal .txtone.on,#textmodal .txlang.on{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730)}
+#textmodal .txmsg{white-space:pre-wrap;background:var(--surface-2,#eef1f6);border:1px solid var(--line,#E2E6EE);border-radius:10px;
+  padding:12px 14px;font-size:14px;line-height:1.55;color:var(--ink,#101C33);margin:4px 0 10px}
+#textmodal .txbtns{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 8px}
+#textmodal .txsend{background:var(--green-ink,#166534);color:#fff;border:1px solid var(--green-ink,#166534);border-radius:8px;
+  padding:9px 14px;font-size:13.5px;font-weight:700;text-decoration:none;display:inline-block}
+#textmodal .txsend:hover{filter:brightness(1.08)}
+#textmodal .txsend.off{background:var(--surface-2,#eef1f6);border-color:var(--line,#E2E6EE);color:var(--muted-2,#8a93a6);cursor:not-allowed;font-weight:700}
+#textmodal .txcopy{background:var(--navy,#0B1730);color:#fff;border:1px solid var(--navy,#0B1730);border-radius:8px;
+  padding:9px 14px;font-size:13.5px;font-weight:700;cursor:pointer}
+#textmodal .txcopy:hover{background:#C6A14B;border-color:#C6A14B;color:#0B1730}
+#textmodal .txcopy.ok{background:var(--green-ink,#166534);border-color:var(--green-ink,#166534)}
+#textmodal .txfoot{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+#textmodal .txmark{background:#C6A14B;color:#0B1730;border:1px solid #C6A14B;border-radius:8px;padding:9px 14px;font-weight:700;font-size:13.5px;cursor:pointer}
+#textmodal .txskip{background:transparent;color:var(--muted,#6b7280);border:1px solid var(--line,#E2E6EE);border-radius:8px;padding:9px 14px;font-size:13.5px;cursor:pointer}
+#textmodal .txcompliance{margin-top:14px;font-size:11.5px;line-height:1.55;color:var(--muted,#6b7280);background:rgba(198,161,75,.08);
+  border:1px solid rgba(198,161,75,.35);border-left:3px solid #C6A14B;border-radius:8px;padding:10px 12px}
+#textmodal .txblock{margin:10px 0 6px;font-size:12.5px;line-height:1.5;color:#8E1A12;background:rgba(180,35,24,.07);
+  border:1px solid rgba(180,35,24,.35);border-left:3px solid #B42318;border-radius:8px;padding:10px 12px;font-weight:600}
+#textmodal .txrow{display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap}
+#textmodal .txdnt{background:var(--surface,#fff);color:var(--muted,#6b7280);border:1px solid var(--line,#E2E6EE);border-radius:7px;
+  padding:8px 10px;font-size:11px;cursor:pointer;font-weight:600}
+#textmodal .txdnt:hover{border-color:#B42318;color:#B42318}
+#textmodal .txhint{font-size:12px;color:var(--muted,#6b7280);margin:2px 0 8px;line-height:1.45}
+#textmodal .txwa{background:#128C7E;color:#fff;border:1px solid #128C7E;border-radius:8px;padding:9px 12px;font-size:13px;
+  font-weight:700;text-decoration:none;display:inline-block}
+.cstextbtn{font-size:13px;font-weight:700;padding:8px 14px;border-radius:8px;border:1px solid var(--navy,#0B1730);
+  background:var(--navy,#0B1730);color:#fff;cursor:pointer;margin:6px 0 8px}
+.cstextbtn:hover{background:#C6A14B;border-color:#C6A14B;color:#0B1730}
+.cstextbtn:disabled{opacity:.45;cursor:not-allowed}
+</style>
 <!-- Investor dispo pack — the print-only one-pager. Populated by exportDispoPack() from the deal-analysis modal. -->
 <div id="dispoPackView" aria-hidden="true">
   <div class="pv-hd">
@@ -1504,6 +1598,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="exp">Export CSV (with my notes)</button>
 <button id="syncbtn" data-base-title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins." title="Share your work across devices &amp; with your team: export a notes file, or import a teammate's to MERGE their opt-outs, calls, and verified liens into yours. DO NOT CONTACT always wins."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 1-15.5 6.2M3 12a9 9 0 0 1 15.5-6.2"/><path d="M17 3.5 18.6 6 21 6.7M7 20.5 5.4 18 3 17.3"/></svg> Sync / team <span id="syncfresh" class="syncfresh"></span></button>
 <button id="mailbatch" title="Prepare a batch of homeowner-rescue letters to send as real mail via Lob. Picks Tier A/B leads with a real owner, a deliverable mailing address, and an auction 5+ days out, minus anyone opted out. You review and download the batch here; your Lob key never touches this page."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg> Mail batch</button>
+<button id="bulktext" title="MESSAGES batch — Text owners who have a textable number via Phone Link / Messages. Personalized bilingual SMS (cold / urgent / follow-up). One owner at a time so you review + send. DNC, opted-out, and Do-Not-Text skipped; every message carries STOP."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> Messages</button>
 <button id="cadencebtn" title="Email cadence queue — enrolled owners get a 4-touch sequence (day 0/2/4/7) that sends itself and auto-cancels the moment they reply. Export the queue, run cadence.py on your machine; replies and opt-outs sync back. Kimi-built."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg> Cadence</button>
 <button id="savedbtn" title="Your saved batch — star deals to save them here (kept on this device). Print a field packet for Carlos, copy a list to send, or share any deal."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 21.4l1.4-6.8L2.2 9.9l6.9-.8z"/></svg> Saved<span class="favn"></span></button>
 <span class="stats" id="stats"></span>
@@ -1929,7 +2024,8 @@ function dealStrategy(r){
 }
 function dealTrigger(r){
   if(r._nodata) return '';
-  return '<button class="dealtog" data-c="'+esc(r.case)+'" type="button">Deal analysis</button>';
+  // Opens the Call Sheet hub scrolled to Math (Deal Analyzer demoted — one property screen).
+  return '<button class="dealtog" data-c="'+esc(r.case)+'" type="button" title="Open this property hub and expand Math / underwrite">Math</button>';
 }
 function dealAnalysisHTML(r){
   const nn = notes[r.case]||{};
@@ -2066,57 +2162,194 @@ function dealAnalysisHTML(r){
     (flagsHtml?'<div class="dm-sec">Watch out for</div>'+flagsHtml:'')+
     '<div class="dm-sec">Recommended move</div><div class="dealstrat">'+esc(dealStrategy(r))+'</div>';
 }
-function dealModalBody(r){
-  // Route through _ownerName so DA header + CS header + Jose SMS all show the same normalized name
-  // ('Deborah C Davis Slade', not raw 'DEBORAH C DAVIS SLADE'). Palm Beach cadastral 'DRISCOLL ROBERT J EST'
-  // becomes 'Robert J Driscoll Est' consistently. Formatting drift used to make DA read like a
-  // different data source than CS — same numbers, different presentation, closer eye-drift.
-  const owner = esc(_ownerName((r.owners||'').split(';')[0].trim(), r));
+// Shared blocks so Deal Analyzer and Call Sheet stay one story (same PLAY, clock, stack, contact/text).
+function _daSubline(r){
+  if(r.st==='LP') return esc(r.addr)+' · <b>🌱 Fresh Lis Pendens</b> · filed '+(esc(r.filed||r.filedDate||'recently'))+' · no auction yet';
+  if(r.st==='TD') return esc(r.addr)+' · Tax deed · auction '+esc(r.auction||'—')+(r.days>=0?' · '+r.days+'d':'');
+  return esc(r.addr)+' · Foreclosure · auction '+esc(r.auction||'—')+(r.days>=0?' · '+r.days+'d':'')
+    +(r.auc?' · <a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener">✓ verify on RealForeclose →</a>':'');
+}
+// One clock body for CS + DA — copy drift here used to make Deal analysis look like a different source.
+function _clockBodyHtml(r){
+  const row = (k, v) => '<div class="csrow"><span class="csk">'+k+'</span><span class="csvv">'+v+'</span></div>';
+  if(r.st==='LP'){
+    return row('Filed', '<b>'+esc(r.filed||r.filedDate||'recently')+'</b> — Lis Pendens just recorded')
+      + row('Auction', '<b>none scheduled yet</b> — typically months of runway before a sale date is set')
+      + row('Your edge', 'Be the <b>FIRST</b> contact — reach the owner now, before the auction crowd. People-search the name for a number.');
+  }
+  return row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')
+      +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':''))
+    + row('Deal deadline', r.days>=0 ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play')
+    + row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')')
+    + (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):''));
+}
+function _daClockHtml(r){
+  return '<div class="dm-sec">The clock — same as call sheet</div><div class="csbody" style="margin:0 0 12px">'+_clockBodyHtml(r)+'</div>';
+}
+// Hard blocks for Text/Phone Link entry points (row DO, CS, DA). Modal still refuses send/copy if reached.
+function _textContactBlocked(r){
+  const n=notes[r.case]||{};
+  if(_isOptedOut(n) || n.status==='DO NOT CONTACT') return 'optout';
+  if(_isWrongOwner(n)) return 'wrong';
+  if(r.saleBkAct) return 'bk';
+  return '';
+}
+// One structured contact line: number + Call + Text (Phone Link / Messages) + WA.
+// size: 'board' | 'sheet' — same verbs everywhere so the board and call sheet read as one system.
+function _contactLineHtml(r, ph, opts){
+  opts = opts || {};
+  const digits = String(ph||'').replace(/\D/g,'');
+  if(!digits) return '';
+  const isDnc = !!opts.dnc;
+  const isMob = opts.mobile !== false; // default mobile unless told landline
+  const canTxt = !r.saleBkAct && !isDnc && !_isDNT(digits) && !_textContactBlocked(r);
+  const tag = isDnc
+    ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
+    : (isMob ? '' : ' <span class="cttag">landline</span>');
+  // DNC numbers stay dialable (manual single dial about their own foreclosure); Text/WA stay off.
+  const call = '<a class="ctact ctact-call" href="tel:'+esc(digits)+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':'Call this number (8am–8pm ET)')+'">Call</a>';
+  const text = canTxt
+    ? '<a href="#" class="ctact ctact-text textgen" data-c="'+esc(r.case)+'" data-ph="'+esc(digits)+'" title="Text via Phone Link / Messages — bilingual SMS you copy or open with sms: pre-filled">Text</a>'
+    : '';
+  const wa = (canTxt && isMob)
+    ? '<a class="ctact ctact-wa" href="'+esc(_waLink(r, digits))+'" target="_blank" rel="noopener" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
+    : '';
+  return '<div class="ctline"><span class="ctnum">'+esc(fmtPhone(digits))+tag+'</span><span class="ctacts">'+call+text+wa+'</span></div>';
+}
+function _messagesBarHtml(r){
+  if(_textContactBlocked(r)) return '';
+  const tp = textablePhones(r);
+  const lbl = tp.length ? '💬 Messages — Text / Phone Link' : '💬 Messages — Text / Phone Link (add a # first)';
+  return '<div class="csmsgbar"><span class="csmsglbl">Messages</span>'+
+    '<button type="button" class="cstextbtn" style="margin:0" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">'+lbl+'</button></div>';
+}
+// Shared CONTACT body for call sheet + deal analyzer (phones structured the same way).
+function _contactBlockHtml(r){
+  const nn = notes[r.case]||{}, block = _textContactBlocked(r);
+  const dnc = _dncPhones(r);
+  let h = '';
+  if(block==='wrong') return '<div class="csbad">🚫 WRONG PERSON — numbers withheld</div>';
+  if(block==='optout') return '<div class="csbad">⛔ OPTED OUT — all contact suppressed</div>';
+  if(block==='bk') return '<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
+  const lines = [];
+  (r.phones||[]).slice(0,4).forEach((ph,i)=>{
+    lines.push(_contactLineHtml(r, ph, {
+      dnc: !!((r.phdnc||[])[i]),
+      mobile: (((r.phtype||[])[i])||'mobile')==='mobile'
+    }));
+  });
+  if(nn.phone) lines.push(_contactLineHtml(r, nn.phone, { dnc:false, mobile:true }));
+  if(lines.length) h += '<div class="csphones">'+lines.join('')+'</div>';
+  else h += '<div class="csmut">No phone yet — use Find a number below, then Text.</div>';
+  h += _messagesBarHtml(r);
+  if(dnc.length) h += '<div class="csmut" style="margin:4px 0 8px">⛔ DNC (call only, no text): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
+  if(!textablePhones(r).length && (r.phones||[]).length) h += '<div class="csmut" style="margin:0 0 8px">No textable number — DNC / Do-Not-Text. Call or door only.</div>';
+  if((r.emails||[]).length) h += '<div class="csrow"><span class="csk">Email</span><span class="csvv">'+(r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · ')+'</span></div>';
+  h += _csPeople(r);
+  return h;
+}
+function _daContactHtml(r){
+  let h='<div class="dm-sec">Contact — Call · Text · WA</div><div class="csbody" style="margin:0 0 12px">';
+  h+=_contactBlockHtml(r);
+  h+='<div style="margin-top:8px"><button type="button" class="csbtn" onclick="closeDealModal(); openCallSheet(\''+esc(r.case)+'\')">📞 Open full call sheet</button></div>';
+  return h+'</div>';
+}
+// Shared debt body for CS + DA (LP skipped on both; TD kept — tax deed still has taxes / named parties).
+function _debtSheetBody(r){
+  if(r.st==='LP') return '';
+  const nn=notes[r.case]||{};
+  const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
+  const judg = +r.judg||0, surv = +r._slien||0, jr = +r._jlien||0;
+  const hoa = (+r._assess||0) || (+r.orhoa||0);
+  const code = (+r._mlien||0) || ((+r.orcode||0)+(+r.orirs||0));
+  const survTyped = _dTyped(nn.slien);
+  const trust = survTyped ? (surv>0?'YOU ENTERED THIS':'YOU VERIFIED: none survives')
+              : r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify'
+              : r.orconf==='bd' ? 'BATCHDATA ESTIMATE — confirm payoff'
+              : '⚠ NOT CHECKED — pull it';
+  const row = (k, v) => '<div class="csrow"><span class="csk">'+k+'</span><span class="csvv">'+v+'</span></div>';
+  let h='<div class="csbody">';
+  h+=row(r.st==='TD'?'Tax collector / certificate':'Foreclosing lender', '<b>'+esc(r.plaintiff||'—')+'</b>');
+  h+=row(r.st==='TD'?'Amount due / opening':'Final judgment', '<b>'+fm(judg)+'</b>');
+  if(r.st!=='TD' && surv) h+=row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
+  if(r.st!=='TD' && jr) h+=row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
+  if(hoa) h+=row('HOA / association', fm(hoa));
+  if(code) h+=row('Code / muni / IRS', fm(code));
+  h+=row('Back taxes', _taxStatusHtml(r, nn));
+  h+='</div>';
+  const chain=_debtStack(r);
+  h+= chain || (r.st==='TD'?'':'<div class="csmut" style="margin:0 0 10px">No recorded chain on file yet — pull Records on the call sheet.</div>');
+  if(r.defs) h+='<div class="csbody">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
+  const gv=_govDefs(r);
+  if(gv.length){
+    h+='<div class="csbody csgovwarn">'+
+      '<div class="cssurvbtns" style="margin:2px 0 6px"><span class="csl" style="color:#B87A0E">⚠ GOV / CODE / TAX PARTY NAMED — CODE-LIEN SURVIVAL RISK</span></div>'+
+      '<div class="css">These parties are named as defendants: <b>'+esc(gv.join(', '))+'</b>. If any is <b>voluntarily dropped</b> before judgment, their lien (if any) is <b>NOT foreclosed out</b> and survives the sale — it hits your title.</div>'+
+      '<div class="css" style="margin-top:5px">On the docket, look for a <b>DROPPING PARTY: {name}</b> entry. Confirm with the county code-enforcement office (a $0-consideration recorded order that our records scan skips) and the appraiser\'s tax status <b>before</b> you bid.</div>'+
+      '</div>';
+  }
+  return h;
+}
+function _daStackHtml(r){
+  const body=_debtSheetBody(r);
+  if(!body) return '';
+  return '<div class="dm-sec">Debt stack — same as call sheet</div>'+body;
+}
+// Underwrite block for the Call Sheet hub — former Deal Analyzer unique value (no duplicate clock/contact/debt).
+function _csMathInner(r){
   const pcls = r._profit>=0 ? 'profpos' : 'profneg';
   const figure = r._profit!=null ? ' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>' : '';
-  return '<div class="dm-head">'+
-      '<div class="dm-title">'+owner+' '+copyBtn((r.owners||'').split(';')[0].trim(),'owner name')+'</div>'+
-      '<div class="dm-sub">'+esc(r.addr)+' · '+(r.st==='TD'?'Tax deed':'Foreclosure')+' · auction '+esc(r.auction)+'</div>'+
-      '<div class="dm-verdict">'+verdictBadge(r)+figure+'</div>'+
-      (r._why?'<div class="dm-why">'+esc(r._why)+'</div>':'')+
-    '</div>'+ dealAnalysisHTML(r) +
-    // Jose playbook (2026-07-20): the revenue layers auto-matched to this lead. Rendered after
-    // the math so the underwriting number stays the headline and the paths read as "how we
-    // monetize what the math just said".
+  return '<div class="dm-verdict" style="margin:0 0 10px">'+verdictBadge(r)+_playBadge(r)+figure+'</div>'+
+    (r._why?'<div class="dm-why" style="margin-bottom:10px">'+esc(r._why)+'</div>':'')+
+    dealAnalysisHTML(r)+
     '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Profit paths — Jose playbook</div>'+
-    _profitPaths(r) +
-    // Dispo pack button — only shown on live deals (not PASS/no-data), because there's no point
-    // exporting a buyer PDF for a dead lead. Uses the same gold-CTA look as the primary actions.
+    _profitPaths(r)+
     (r._verdict && r._verdict!=='PASS' && !r._nodata
       ? '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Send to a buyer</div>'+
-        '<button type="button" class="dealtog" onclick="exportDispoPack(\''+esc(r.case)+'\')" style="width:100%;padding:11px 14px;background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;font-weight:800;font-family:var(--f-body);font-size:13px;letter-spacing:.03em;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(198,161,75,.35)">&#128196; Export investor pack (PDF)</button>'+
-        '<div style="font-size:11px;color:var(--muted,#6b7280);margin-top:6px;line-height:1.5">One-page underwriting summary sized for Save-as-PDF from the print dialog. Same math as this modal, plus the compliance boilerplate a cash buyer expects.</div>'
-      : '') +
-    // Save & share — star it into the batch, or one-tap copy a shareable brief for Carlos (his door
-    // mission) / Jose (go-no-go) / anyone (a deep link that opens straight to this property).
+        '<button type="button" class="dispoexport" onclick="exportDispoPack(\''+esc(r.case)+'\')" style="width:100%;padding:11px 14px;background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;font-weight:800;font-family:var(--f-body);font-size:13px;letter-spacing:.03em;border:none;border-radius:8px;cursor:pointer;box-shadow:0 2px 8px rgba(198,161,75,.35)">&#128196; Export investor pack (PDF)</button>'+
+        '<div style="font-size:11px;color:var(--muted,#6b7280);margin-top:6px;line-height:1.5">One-page underwriting summary sized for Save-as-PDF from the print dialog.</div>'
+      : '')+
     '<div class="dm-sec" style="border-top:1px solid var(--line,#e5e7eb);padding-top:12px;margin-top:16px">Save &amp; share</div>'+
     '<div class="sharerow">'+
       '<button type="button" class="shbtn shsave'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+esc(r.case)+'\',event)">'+(_isFav(r.case)?'★ Saved':'☆ Save to batch')+'</button>'+
-      '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the &quot;I got them on the phone RIGHT NOW&quot; alert for Jose. He researches while you hold them; he says PATCH when ready.">📞 LIVE — alert Jose</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'link\')" title="Copy a link that opens straight to this property">🔗 Copy link</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'carlos\')" title="Copy a ready-to-send door mission for Carlos">👷 For Carlos</button>'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
+      '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the &quot;I got them on the phone RIGHT NOW&quot; alert for Jose.">📞 LIVE — alert Jose</button>'+
     '</div>';
 }
-let dealModalCase = null;
+function _csMathHtml(r, open){
+  if(r._nodata) return '';
+  return '<details class="csmath" id="csmath"'+(open?' open':'')+'>'+
+    '<summary>Math — underwrite · Ask Jose</summary>'+
+    '<div class="csmath-body">'+_csMathInner(r)+'</div></details>';
+}
+// Legacy name kept so old call sites compile; body is unused — openDealModal routes to Call Sheet Math.
+function dealModalBody(r){ return _csMathInner(r); }
+let dealModalCase = null;   // deprecated — Call Sheet is the hub; kept so Escape/close paths stay safe
+let callSheetCase = null;
+let callSheetMathOpen = false;
 function openDealModal(caseId){
-  const r = DATA.find(x=>x.case===caseId); if(!r) return;
-  dealModalCase = caseId;
-  document.getElementById('dmbody').innerHTML = dealModalBody(r);
-  document.getElementById('dealmodal').classList.add('show');
-  document.body.classList.add('modal-open');   // lock background scroll -> the popup holds focus
+  // Demoted: one property hub. Math opens on the Call Sheet — no second overlapping modal.
+  closeDealModal();
+  openCallSheet(caseId, {math:true});
 }
 function refreshDealModal(){
-  if(!dealModalCase) return;
-  const r = DATA.find(x=>x.case===dealModalCase);
-  if(r) document.getElementById('dmbody').innerHTML = dealModalBody(r);
+  // Refresh the open Call Sheet (and keep Math expanded if it was).
+  if(!callSheetCase) return;
+  const m = document.getElementById('csmodal');
+  if(!m || getComputedStyle(m).display==='none') return;
+  const mathEl = document.getElementById('csmath');
+  openCallSheet(callSheetCase, {math: !!(callSheetMathOpen || (mathEl && mathEl.open))});
 }
-function closeDealModal(){ dealModalCase=null; document.getElementById('dealmodal').classList.remove('show'); document.body.classList.remove('modal-open'); }
+function closeDealModal(){
+  dealModalCase=null;
+  const dm=document.getElementById('dealmodal');
+  if(dm) dm.classList.remove('show');
+  // Don't clear modal-open if Call Sheet is still up.
+  const cs=document.getElementById('csmodal');
+  if(!cs || getComputedStyle(cs).display==='none') document.body.classList.remove('modal-open');
+}
 // ---- contact / follow-up tracker (mini-CRM; per-device, in the same notes[] localStorage) ----
 function _today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function _nowTS(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return _today()+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
@@ -2341,6 +2574,23 @@ function _namedInSuit(party, r){
     if(hay.includes(p.slice(0, len))) return true;
   }
   return false;
+}
+function _taxStatusHtml(r, nn){
+  // Honest tax chip shared by call sheet + deal analyzer (delinquency not scraped — Cloudflare).
+  const typed = _dTyped(nn && nn.btax);
+  const taxURL = (r && r.tax) || '';
+  const openTax = taxURL
+    ? '<a href="'+esc(taxURL)+'" target="_blank" rel="noopener" title="County Tax Collector — live paid/delinquent source.">Open tax bill →</a>'
+    : '';
+  if(typed){
+    const amt = +nn.btax || 0;
+    const cls = amt > 0 ? 'tc-delinq' : 'tc-ok';
+    const lbl = amt > 0 ? 'BACK TAXES $'+Math.round(amt).toLocaleString() : 'TAXES CURRENT (you confirmed)';
+    return '<span class="taxchip"><span class="tc '+cls+'">'+lbl+'</span> '+openTax+
+      ' <input class="cssurvin btax" data-c="'+esc(r.case)+'" type="number" inputmode="numeric" value="'+esc(nn.btax)+'" title="Edit confirmed back taxes. Clear to return to not-checked."></span>';
+  }
+  return '<span class="taxchip"><span class="tc tc-miss">TAXES — not checked</span> '+openTax+
+    ' <input class="cssurvin btax" data-c="'+esc(r.case)+'" type="number" inputmode="numeric" placeholder="$ or 0 if current" title="Confirm on the tax bill, then type the amount (0 if current)."></span>';
 }
 function _debtStack(r){
   const liens = (r.orliens||[]);
@@ -2601,47 +2851,10 @@ function _callSheet(r){
     big('NET EQUITY', fm(netEq), survChecked?'worth − judgment − survivors':'⚠ assumes nothing survives — pull the chain', 'good')+
   '</div>';
 
-  // THE CLOCK
-  const clock = (r.st==='LP')
-    // LP (fresh filing): no auction is scheduled yet — don't render the 9999-day countdown; frame the edge.
-    ? '<div class="cssec">THE CLOCK</div><div class="csbody">'
-      + row('Filed', '<b>'+esc(r.filed||r.filedDate||'recently')+'</b> — Lis Pendens just recorded')
-      + row('Auction', '<b>none scheduled yet</b> — typically months of runway before a sale date is set')
-      + row('Your edge', 'Be the <b>FIRST</b> contact — reach the owner now, before the auction crowd. People-search the name for a number.')
-      + '</div>'
-    : '<div class="cssec">THE CLOCK</div><div class="csbody">'+
-    row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')
-      +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':'')) +
-    row('Deal deadline', r.days>=0 ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play') +
-    row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')') +
-    (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):'')) +
-  '</div>';
-
-  // THE DEBT STACK — itemised, because "what else is on it?" is question #3
-  let stack = '<div class="cssec">THE DEBT — who is owed what</div><div class="csbody">'+
-    row('Foreclosing lender', '<b>'+esc(r.plaintiff||'—')+'</b>') +
-    row('Final judgment', '<b>'+fm(judg)+'</b>');
-  if(surv) stack += row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
-  if(jr) stack += row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
-  if(+r.orhoa) stack += row('HOA / association', fm(+r.orhoa));
-  if((+r.orcode||0)+(+r.orirs||0)) stack += row('Code / muni / IRS', fm((+r.orcode||0)+(+r.orirs||0)));
-  stack += row('Back taxes', nn.btax?fm(+nn.btax):'<span class="csmut">not checked — one click on Taxes</span>');
-  stack += '</div>' + _debtStack(r);
-  // everyone else named on the lawsuit — where solar leases and code liens hide
-  if(r.defs) stack += '<div class="csbody">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
-  // ⚠ Gov/code/tax defendant risk (the Velima trap: county named -> then dropped 11/4/2025 -> code lien survives).
-  // We can't cheaply detect the DROP from the docket without pulling the OCS case, but we CAN surface the
-  // "named-as-defendant" signal so the closer knows to check the docket for a DROPPING PARTY entry BEFORE
-  // trusting any code/muni lien got wiped by the sale. This is one of the few risks that reads as "clean"
-  // in the deal math and lands as a real dollar surprise at title. Skip on LP (no case-level judgment yet).
-  if(r.st!=='LP'){
-    const _gv = _govDefs(r);
-    if(_gv.length) stack += '<div class="csbody csgovwarn">'+
-      '<div class="cssurvbtns" style="margin:2px 0 6px"><span class="csl" style="color:#B87A0E">⚠ GOV / CODE / TAX PARTY NAMED — CODE-LIEN SURVIVAL RISK</span></div>'+
-      '<div class="css">These parties are named as defendants: <b>'+esc(_gv.join(', '))+'</b>. If any is <b>voluntarily dropped</b> before judgment, their lien (if any) is <b>NOT foreclosed out</b> and survives the sale — it hits your title.</div>'+
-      '<div class="css" style="margin-top:5px">On the docket, look for a <b>DROPPING PARTY: {name}</b> entry. Confirm with the county code-enforcement office (a $0-consideration recorded order that our records scan skips) and the appraiser\'s tax status <b>before</b> you bid.</div>'+
-      '</div>';
-  }
+  // THE CLOCK + DEBT — shared bodies with Deal analysis so the two screens cannot drift.
+  const clock = '<div class="cssec">THE CLOCK</div><div class="csbody">'+_clockBodyHtml(r)+'</div>';
+  const _debtBody = _debtSheetBody(r);
+  const stack = _debtBody ? ('<div class="cssec">THE DEBT — who is owed what</div>'+_debtBody) : '';
 
   // THE PROPERTY
   const prop = '<div class="cssec">THE PROPERTY</div><div class="csbody">'+
@@ -2652,19 +2865,9 @@ function _callSheet(r){
     row('Distance', g.mi!=null ? g.mi+' mi from '+_baseLL().name+' · '+esc(g.lbl) : 'unknown') +
   '</div>';
 
-  // CONTACT
-  let cont = '<div class="cssec">CONTACT</div><div class="csbody">';
-  if(_isWrongOwner(nn)) cont += '<div class="csbad">🚫 WRONG PERSON reported — these numbers are not the owner. Re-verify before dialing.</div>';
-  else if(nn.status==='DO NOT CONTACT') cont += '<div class="csbad">⛔ OPTED OUT — all contact suppressed.</div>';
-  else if(r.saleBkAct) cont += '<div class="csbad">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal right now.</div>';
-  else {
-    cont += clean.length
-      ? '<div class="csphones">'+clean.map(p=>'<a class="csph" href="tel:'+esc(String(p).replace(/\D/g,''))+'">'+esc(fmtPhone?fmtPhone(p):p)+'</a>').join('')+'</div>'
-      : '<div class="csmut">No callable number yet — pull one below.</div>';
-    if(dnc.length) cont += row('⛔ DNC — mail/door only', dnc.map(p=>esc(fmtPhone?fmtPhone(p):p)).join(' · '));
-    if((r.emails||[]).length) cont += row('Email', (r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · '));
-    cont += _csPeople(r);   // find/verify a number without leaving the sheet — the fix for the no-phone dead-end
-  }
+  // CONTACT — Call · Text · WA on every number (same structure as the board + deal analyzer)
+  let cont = '<div class="cssec">CONTACT — Call · Text · WA</div><div class="csbody">';
+  cont += _contactBlockHtml(r);
   cont += row('Mailing address', esc(r.mail||r.addr||'—')+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <span class="csmut">(same as the property — they live there)</span>':' <span class="csmut">(different — absentee owner)</span>'));
   cont += '</div>';
 
@@ -2693,9 +2896,18 @@ function _callSheet(r){
     '</ul>'+
     '<div style="margin-top:10px;font-size:12px;text-align:right"><a href="#" onclick="event.preventDefault(); closeCallSheet(); openPlaybook(\'rule\'); return false;" style="color:var(--blue,#1F6FEB);text-decoration:none;font-weight:700">📖 Read the full Playbook →</a></div>'+
     '</div>';
-  return '<div class="callsheet">'+who+_csPlay(r)+four+clock+(r.st==='LP'?'':stack)+prop+cont+_wpHousehold(r)+_cflaw+   /* LP: no judgment/chain yet — the fresh-filing block already names the lender, so skip the $0 debt section */
-    '<div class="csfoot"><button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
-    '<button type="button" class="csbtn" onclick="openDealModal(\''+esc(r.case)+'\')">Full deal analysis →</button></div></div>';
+  // Order: Who → Play → Four numbers → Contact → Clock → Debt → Math → Property/WP → Rule (collapsed).
+  // Ask Jose / LIVE live in the footer (mid-call), not buried inside Math Save & share.
+  const math = _csMathHtml(r, !!callSheetMathOpen);
+  const law = _cflaw
+    ? '<details class="cslaw-wrap"><summary>The Rule — what survives (reference)</summary>'+_cflaw+'</details>'
+    : '';
+  return '<div class="callsheet">'+who+_csPlay(r)+four+cont+clock+(r.st==='LP'?'':stack)+math+prop+_wpHousehold(r)+law+
+    '<div class="csfoot">'+
+      '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
+      '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
+      '<button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
+    '</div></div>';
 }
 function _copyCallSheet(c){
   const r = DATA.find(x=>x.case===c); if(!r) return;
@@ -2744,14 +2956,39 @@ function _editTalkTo(c){
   save(); render(); if(typeof refreshDealModal==='function') refreshDealModal();
   _reopenCallSheet(c);
 }
-function _reopenCallSheet(c){ if(document.getElementById('csmodal') && getComputedStyle(document.getElementById('csmodal')).display!=='none') openCallSheet(c); }
-function openCallSheet(c){
+function _reopenCallSheet(c){
+  const m=document.getElementById('csmodal');
+  if(m && getComputedStyle(m).display!=='none'){
+    const el=document.getElementById('csmath');
+    openCallSheet(c, {math: !!(callSheetMathOpen || (el && el.open))});
+  }
+}
+function openCallSheet(c, opts){
+  opts = opts || {};
   const r = DATA.find(x=>x.case===c); if(!r) return;
   const m = document.getElementById('csmodal'); if(!m) return;
+  callSheetCase = c;
+  callSheetMathOpen = !!opts.math;
+  closeDealModal();
   document.getElementById('csbody').innerHTML = _callSheet(r);
-  m.style.display='block'; document.body.style.overflow='hidden';
+  m.style.display='block';
+  document.body.style.overflow='hidden';
+  document.body.classList.add('modal-open');
+  if(opts.math){
+    const el = document.getElementById('csmath');
+    if(el){
+      el.open = true;
+      setTimeout(function(){ try{ el.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){} }, 40);
+    }
+  }
 }
-function closeCallSheet(){ const m=document.getElementById('csmodal'); if(m){ m.style.display='none'; document.body.style.overflow=''; } }
+function closeCallSheet(){
+  callSheetCase = null;
+  callSheetMathOpen = false;
+  const m=document.getElementById('csmodal');
+  if(m){ m.style.display='none'; document.body.style.overflow=''; }
+  document.body.classList.remove('modal-open');
+}
 // ============================================================================================
 // PLAYBOOK — the field manual as an on-device reference. Tap 📖 in header, or press ?/P.
 // Content pulled from the DealFlow Field Manual (also in the NotebookLM foreclosure playbook).
@@ -2992,8 +3229,8 @@ function _playbook(r){
 
   // 2 — text / whatsapp (only if a mobile survived DNC)
   if(phones.length && !spoke){
-    S('Text / WhatsApp after the 2nd no-answer',
-      'Use the WhatsApp button next to the number — the message is pre-written in English and Spanish with an opt-out line. People who dodge calls read texts.',
+    S('Text / Phone Link after the 2nd no-answer',
+      'Open Text on the row or call sheet — bilingual SMS with cold / urgent / follow-up tones. Copy the body or tap Text to open Phone Link / Messages with it pre-filled. WhatsApp still sits next to mobiles. DNC numbers never get a text button.',
       'No reply in 24h → mail and/or door below.', called ? 'now' : 'next');
   }
 
@@ -3157,6 +3394,163 @@ function _waLink(r, ph){
     +'. Ayudo a dueños a ver sus opciones antes de esa fecha, sin costo ni compromiso. ¿Podemos hablar?'
     +'\n\n(Not interested / No le interesa? Reply STOP · responda STOP.)';
   return 'https://wa.me/'+_waNum(ph)+'?text='+encodeURIComponent(msg);
+}
+// ===================== TEXT / Phone Link SMS (assisted, DNC-safe) =====================
+// Static site cannot SEND texts. This prepares a personalized message and opens Windows Phone Link
+// (or the phone Messages app) via sms:+1XXXXXXXXXX?body=… with the text pre-filled — ONE owner at a
+// time, human reviews + taps send. Also a one-tap Copy for paste-anywhere. Hard-skips DNC / opt-out /
+// Do-Not-Text; FTSA 8am–8pm ET + 3/24h gate; every body carries STOP.
+function _smsNum(ph){ const d=String(ph||'').replace(/\D/g,''); if(d.length===10) return '+1'+d; if(d.length===11 && d[0]==='1') return '+'+d; return d?('+'+d.replace(/^\+/,'')): ''; }
+const FTSA_TZ='America/New_York', FTSA_HR_START=8, FTSA_HR_END=20, FTSA_MAX_24H=3;
+function _flHour(){ try{ const h=parseInt(new Intl.DateTimeFormat('en-US',{timeZone:FTSA_TZ,hour:'2-digit',hour12:false}).format(new Date()),10); return h===24?0:h; }catch(e){ return new Date().getHours(); } }
+function _flClock(){ try{ return new Intl.DateTimeFormat('en-US',{timeZone:FTSA_TZ,hour:'numeric',minute:'2-digit',hour12:true}).format(new Date()); }catch(e){ return ''; } }
+function _withinTextHours(){ const h=_flHour(); return h>=FTSA_HR_START && h<FTSA_HR_END; }
+const _TELE_CH={call:1,text:1};
+function _recentTeleCount(r){ const ts=(notes[r.case]||{}).touches||[]; const cut=Date.now()-86400000; let n=0; ts.forEach(t=>{ if(_TELE_CH[t.ch]){ const when=t.tsu||(t.d?Date.parse(t.d+'T12:00:00'):0); if(when>=cut) n++; } }); return n; }
+const DNT_LS='fcDNT';
+let dnt=(function(){ try{ return new Set(JSON.parse(localStorage.getItem(DNT_LS)||'[]')); }catch(e){ return new Set(); } })();
+function _saveDNT(){ try{ localStorage.setItem(DNT_LS, JSON.stringify([...dnt])); }catch(e){} }
+function _isDNT(d){ return dnt.has(String(d||'').replace(/\D/g,'')); }
+function _addDNT(d){ const x=String(d||'').replace(/\D/g,''); if(x){ dnt.add(x); _saveDNT(); } }
+function textablePhones(r){
+  if(_textContactBlocked(r)) return [];
+  const n=notes[r.case]||{}, out=[];
+  (r.phones||[]).slice(0,4).forEach((ph,i)=>{ if(!((r.phdnc||[])[i])){ const d=String(ph).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); } });
+  if(n.phone){ const d=String(n.phone).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); }
+  return out;
+}
+function _smsFirst(r){
+  const rawFirst = r.oname ? String(r.oname).trim().split(/\s+/)[0]
+    : _ownerName((r.owners||'').split(';')[0].trim(), r).split(/\s+/)[0];
+  return (rawFirst || 'there').replace(/[<>&"']/g,'');
+}
+function _smsStreet(r){ return ((r.addr||'').split(',')[0]||r.addr||'your property').trim(); }
+function _defaultTextTone(r){
+  const n=notes[r.case]||{}, ts=n.touches||[];
+  if(ts.some(t => /text|call|spoke|talked/i.test((t.ch||'')+' '+(t.out||'')))) return 'followup';
+  if(typeof r.days==='number' && r.days>=0 && r.days<=14 && r.st!=='LP') return 'urgent';
+  return 'cold';
+}
+function smsMsg(r, lang, tone){
+  // tone: cold | urgent | followup — bilingual "both" matches WhatsApp posture (EN then ES + STOP).
+  const sN = (sender.name||'').trim() || 'Jose';
+  const first=_smsFirst(r), street=_smsStreet(r), dt=r.auction||'';
+  const td=(r.st==='TD'), lp=(r.st==='LP');
+  const saleEN = lp ? 'a foreclosure that was just filed' : (td?'a tax-deed sale':'a foreclosure sale');
+  const saleES = lp ? 'una ejecución hipotecaria recién presentada' : (td?'una subasta de tax deed':'una subasta de ejecución hipotecaria');
+  const whenEN = (!lp && dt) ? (' set for '+dt) : '';
+  const whenES = (!lp && dt) ? (' el '+dt) : '';
+  let en, es;
+  if(tone==='urgent'){
+    en = 'Hi '+first+', this is '+sN+' — local Miami buyer. Quick heads-up: '+street+' still has '+saleEN+whenEN+'. The date is close — you may still have options before it. No cost. Can I share two? Reply STOP to opt out.';
+    es = 'Hola '+first+', soy '+sN+', comprador local. Aviso rápido: '+street+' aún tiene '+saleES+whenES+'. La fecha está cerca — tal vez aún tenga opciones. Sin costo. ¿Le comparto dos? Responda STOP para no recibir más.';
+  } else if(tone==='followup'){
+    en = 'Hi '+first+', '+sN+' again — just following up on '+street+' ('+saleEN+whenEN+'). Happy to walk through options if useful. No pressure. Reply STOP to opt out.';
+    es = 'Hola '+first+', de nuevo '+sN+' — solo dándole seguimiento a '+street+' ('+saleES+whenES+'). Con gusto le explico opciones si le sirve. Sin presión. Responda STOP para no recibir más.';
+  } else {
+    en = 'Hi '+first+', this is '+sN+' — a local Miami home buyer. I saw '+street+' has '+saleEN+whenEN+'. You may still have options (even walking away with cash before a sale). No cost or obligation — can I share a couple? Reply STOP to opt out.';
+    es = 'Hola '+first+', soy '+sN+', comprador de casas aquí en Miami. Vi que '+street+' tiene '+saleES+whenES+'. Puede que todavía tenga opciones (incluso salir con efectivo). Sin costo ni compromiso — ¿le comparto un par? Responda STOP para no recibir más mensajes.';
+  }
+  if(lang==='en') return en;
+  if(lang==='es') return es;
+  return en+'\n\n'+es;
+}
+function _smsHref(ph, msg){
+  // Phone Link (Windows) + iOS/Android Messages: sms:+1…?body=
+  return 'sms:'+_smsNum(ph)+'?body='+encodeURIComponent(msg);
+}
+let textQ=[], textIdx=0, textLang='both', textTone='cold';
+function _copyTextMsg(t, btn){
+  const done=()=>{ if(btn){ const o=btn.textContent; btn.textContent='Copied!'; btn.classList.add('ok'); setTimeout(()=>{btn.textContent=o; btn.classList.remove('ok');},1600);}
+    if(typeof _shareToast==='function') _shareToast('Message copied — paste into Phone Link / Messages'); };
+  if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done,()=>fallbackCopy(t,done)); }
+  else fallbackCopy(t,done);
+}
+function textCardHtml(r){
+  const hardBlock=_textContactBlocked(r);
+  const phones=hardBlock?[]:textablePhones(r);
+  const owner=_ownerName((r.owners||'').split(';')[0].trim(), r);
+  const msg=smsMsg(r, textLang, textTone);
+  const hoursOK=_withinTextHours();
+  const recent=_recentTeleCount(r);
+  const capped=recent>=FTSA_MAX_24H;
+  const canSend=!hardBlock && phones.length && hoursOK && !capped;
+  const canCopy=!hardBlock; // Copy is for hours/cap only — never for BK / opt-out / wrong-owner
+  const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
+  const toneBtns=['cold','urgent','followup'].map(t=>{
+    const lbl=t==='cold'?'Cold open':t==='urgent'?'Urgent (sale soon)':'Follow-up';
+    return '<button class="txtone'+(textTone===t?' on':'')+'" data-t="'+t+'" type="button">'+lbl+'</button>';
+  }).join('');
+  const langBtns=[['both','EN + ES'],['en','English'],['es','Español']].map(([l,lbl])=>
+    '<button class="txlang'+(textLang===l?' on':'')+'" data-l="'+l+'" type="button">'+lbl+'</button>').join('');
+  let gate='';
+  if(hardBlock==='bk') gate='<div class="txblock">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal. Do not text, copy, or WhatsApp.</div>';
+  else if(hardBlock==='optout') gate='<div class="txblock">⛔ OPTED OUT — all outreach suppressed. Do not text or copy a solicitation.</div>';
+  else if(hardBlock==='wrong') gate='<div class="txblock">🚫 WRONG PERSON — these numbers are not the owner. Re-verify before any outreach.</div>';
+  else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
+  else if(capped) gate='<div class="txblock">⛔ FTSA cap: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
+  let phBtns;
+  if(hardBlock){
+    phBtns='<div class="warn" style="margin:6px 0">Send / Copy / WhatsApp locked for this lead.</div>';
+  } else if(!phones.length){
+    phBtns='<div class="warn" style="margin:6px 0">No textable number — every number is DNC, on your Do-Not-Text list, or missing. Use mail / door / People-search.</div>';
+  } else {
+    phBtns=phones.map(d=>{
+      const href=_smsHref(d, msg);
+      const send=canSend
+        ? '<a class="txsend" href="'+esc(href)+'" title="Opens Phone Link / Messages with this number + message pre-filled. Review, then send.">💬 Text '+esc(fmtPhone(d))+'</a>'
+        : '<span class="txsend off" title="Sending disabled — see the notice above (hours / cap). Use Copy instead.">💬 '+esc(fmtPhone(d))+'</span>';
+      // WA rides the same FTSA send gate as sms: — do not leave an ungated side door.
+      const wa = canSend
+        ? '<a class="txwa" href="'+esc(_waLink(r,d))+'" target="_blank" rel="noopener" title="Same message path on WhatsApp (wa.me) — review then send.">'+_waSvg()+' WA</a>'
+        : '<span class="txsend off" title="WhatsApp send disabled with FTSA hours / cap — same rules as SMS.">'+_waSvg()+' WA</span>';
+      return '<span class="txrow">'+send+wa+'<button class="txdnt" type="button" data-d="'+esc(d)+'" title="Add to Do-Not-Text on this device">🚫 DNT</button></span>';
+    }).join('');
+  }
+  const dnc=(r.phones||[]).filter((p,i)=>(r.phdnc||[])[i]).map(fmtPhone);
+  const dncNote=dnc.length?'<div class="mut" style="font-size:11.5px;margin-top:6px">Skipped (DNC — do not text): '+esc(dnc.join(', '))+'</div>':'';
+  const saleLine = r.st==='LP'
+    ? 'Lis Pendens · just filed'
+    : ((r.st==='TD'?'Tax-deed':'Foreclosure')+' sale <b>'+esc(r.auction||'—')+'</b>'+(r.days>=0?' · in '+r.days+'d':''));
+  return '<div class="dm-head"><div class="dm-title">💬 Text '+esc(owner)+'</div>'
+    +'<div class="dm-sub">'+esc(r.addr||'')+' · '+saleLine+'</div>'+pos+'</div>'
+    +gate
+    +'<div class="txhint">Tone + language update the preview. <b>Text</b> opens Phone Link / Messages with the SMS ready; <b>Copy</b> puts the same body on your clipboard.</div>'
+    +(hardBlock?'':('<div class="txtones">'+toneBtns+'</div>'
+    +'<div class="txlangs">'+langBtns+'</div>'
+    +'<div class="txmsg">'+esc(msg)+'</div>'))
+    +'<div class="txbtns">'+phBtns+'</div>'
+    +(canCopy && msg?'<button class="txcopy" type="button">📋 Copy message</button>':'')
+    +dncNote
+    +'<div class="txfoot">'
+      +(phones.length && !hardBlock?'<button class="txmark" data-c="'+esc(r.case)+'" type="button">✓ Mark texted'+(textQ.length>1?' → next':'')+'</button>':'')
+      +(textQ.length>1?'<button class="txskip" type="button">'+(canSend?'Skip →':'Next →')+'</button>':'')
+    +'</div>'
+    +'<div class="txcompliance"><b>Manual send only.</b> Honors DNC-flagged numbers, opted-out owners (ledger + status), wrong-person, BK stay, your Do-Not-Text list, FTSA hours (8am–8pm ET) &amp; the 3-per-24h cap; every message includes STOP. WhatsApp uses the same send gate. <b>Not a National DNC Registry scrub</b> — scrub cold numbers separately. Phone Link on Windows opens from the <code>sms:</code> link when your phone is linked.</div>';
+}
+function renderTextModal(){
+  const body=document.getElementById('textbody'); if(!body) return;
+  if(!textQ.length){ body.innerHTML='<div class="dm-head"><div class="dm-title">💬 Bulk text</div></div><div class="mut" style="padding:10px 2px">No leads with a textable number right now.</div>'; return; }
+  const r=DATA.find(x=>x.case===textQ[textIdx]); if(!r){ textAdvance(); return; }
+  body.innerHTML=textCardHtml(r);
+}
+function openTextModal(){ const m=document.getElementById('textmodal'); if(!m) return; m.classList.add('show'); document.body.classList.add('modal-open'); renderTextModal(); }
+function closeTextModal(){ const m=document.getElementById('textmodal'); if(m) m.classList.remove('show'); document.body.classList.remove('modal-open'); }
+function textAdvance(){ if(textIdx < textQ.length-1){ textIdx++; const r=DATA.find(x=>x.case===textQ[textIdx]); if(r) textTone=_defaultTextTone(r); renderTextModal(); } else closeTextModal(); }
+function openTextSingle(r){ if(!r) return; textLang='both'; textTone=_defaultTextTone(r); textQ=[r.case]; textIdx=0; openTextModal(); }
+function openBulkText(){
+  textLang='both';
+  const elig=DATA.filter(r=>{
+    const n=notes[r.case]||{};
+    if(_textContactBlocked(r) || n.status==='Dead') return false;
+    if(typeof isFlaggedDead==='function' && isFlaggedDead(r)) return false;
+    if(_recentTeleCount(r)>=FTSA_MAX_24H) return false;
+    return textablePhones(r).length>0;
+  });
+  elig.sort((a,b)=>(a.days??9999)-(b.days??9999));
+  textQ=elig.map(r=>r.case); textIdx=0;
+  if(elig[0]) textTone=_defaultTextTone(elig[0]);
+  openTextModal();
 }
 // Corner badge version of the listing-status chip, overlaid top-left on the photo (top-right
 // belongs to the photo-count pill). Photo real estate is what Jose's eye lands on first, so
@@ -3548,7 +3942,7 @@ function openSaved(){
     var owner = (r.owners||'').split(';')[0].trim();
     return '<div class="saveitem"><div class="si-main"><b>'+esc(owner)+'</b><span>'+esc(r.addr)+'</span>'
       + '<span class="si-meta">'+(r.county&&r.county!=='MIAMI-DADE'?esc(r.county)+' · ':'')+'auction '+esc(r.auction)+(r.days>=0?' · '+r.days+'d':'')+'</span></div>'
-      + '<button type="button" class="si-open" onclick="closeSaved();openDealModal(\''+esc(r.case)+'\')" title="Open this deal">Open</button>'
+      + '<button type="button" class="si-open" onclick="closeSaved();openCallSheet(\''+esc(r.case)+'\')" title="Open this property hub">Open</button>'
       + '<button type="button" class="si-rm" onclick="_toggleFav(\''+esc(r.case)+'\')" title="Remove from batch">&times;</button></div>';
   }).join('') + '</div>';
   body += '<div style="margin-top:10px"><button type="button" class="syncbtn2 ghost" onclick="_showFavOnBoard()">Show these on the board</button> '
@@ -3633,11 +4027,14 @@ function _carlosPacket(){
     + '</body></html>';
   _openDoc(doc);   // mobile-safe (Blob URL) — window.open was popup-blocked on phones
 }
-// Deep link on load: after the gate opens, ?/#case=CASE opens that deal straight away (shared links).
+// Deep link on load: after the gate opens, #case=CASE opens the Call Sheet hub (shared links).
+// Optional #math=1 / #underwrite=1 (or same query params) expands Math on open.
 function _openHashDeal(){
   var m = (location.hash||'').match(/case=([^&]+)/); if(!m) return;
   var c = decodeURIComponent(m[1]);
-  if(DATA.some(function(x){return x.case===c;})) setTimeout(function(){ openDealModal(c); }, 300);
+  var blob = (location.hash||'') + '&' + (location.search||'');
+  var wantMath = /(?:^|[&#?])(?:math|underwrite)=1\b/.test(blob);
+  if(DATA.some(function(x){return x.case===c;})) setTimeout(function(){ openCallSheet(c, {math: wantMath}); }, 300);
 }
 // Filing year: the `filed` field when the scraper carried it (MD), else derived from the case
 // number itself — MD `2025-021847-CA-01`, PB `502024CA012300…`, BW `CACE-24-009886` all encode it.
@@ -5058,34 +5455,33 @@ function render(){
   rows.forEach((r, _ri) => {
     const _eager = _ri < 14;   // eager-load the above-the-fold thumbnails so the first screen is instant
     const n = notes[r.case] || {status:'', note:''};
-    // ---- links, grouped by purpose:  CALL (green) · INVESTIGATE (gold) · PROPERTY (slate) · DO ----
+    // ---- links, labeled groups: CONTACT · LOOK UP · PROPERTY · DO ----
     const gCall = [], gDig = [], gProp = [], gDo = [];
-    // CALL — skip-traced + saved phones. HARD DNC GATE: DNC-flagged numbers render as non-clickable
-    // text (no tel:) so a flagged number can't be tap-dialed by accident. Even manual calls to
-    // DNC-registered numbers are actionable — Duguid only killed the autodialer theory, not DNC.
-    const optedOut = n.status === 'DO NOT CONTACT';
+    // CONTACT — every number is a structured line: Call · Text · WA (same verbs as call sheet).
+    // Ledger opt-out must suppress the same as status DO NOT CONTACT.
+    const optedOut = _isOptedOut(n) || n.status === 'DO NOT CONTACT';
     if(optedOut){
       gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
     } else if(_isWrongOwner(n)){
-      // The numbers are real — they just belong to somebody else. Pull them off the row entirely so
-      // no teammate taps one, and point at the only thing that actually resolves this: the deed.
       gCall.push('<span class="phone dncgate" title="Someone on these numbers told us they do NOT own this property. Re-verify the owner on the county appraiser and the recorded deed before contacting anyone. The deal is still live — the contact info is not.">🚫 WRONG PERSON'+(n.wrongown?' · '+esc(n.wrongown):'')+' — numbers withheld</span>');
+    } else if(r.saleBkAct){
+      gCall.push('<span class="phone dncgate" title="Active bankruptcy stay — no call, text, or WhatsApp.">⛔ BK STAY — no contact</span>');
     } else {
-      // skip-traced owner phone(s) — tel: links for manual dial + wa.me links for a prefilled 1:1
-      // WhatsApp message (operator-reviewed before send, same posture as a manual dial). kimi.
-      // Show EVERY number, visible + tap-to-dial — nothing hidden or collapsed. Mobiles (non-DNC) lead
-      // with the WhatsApp text button; landlines show plainly (no WhatsApp); DNC numbers stay VISIBLE and
-      // dialable (a MANUAL single dial about the owner's OWN foreclosure is actionable) with a no-text flag.
       (r.phones||[]).slice(0,4).forEach((ph,i) => {
-        const isMob = (((r.phtype||[])[i])||'mobile')==='mobile';
-        const isDnc = !!((r.phdnc||[])[i]);
-        const wa = (isMob && !isDnc) ? '<a class="wabtn" href="'+esc(_waLink(r,ph))+'" target="_blank" rel="noopener" title="TEXT on WhatsApp — a prefilled 1:1 message you review and send. Distressed owners read texts, ignore unknown calls. START HERE.">'+_waSvg()+'</a>' : '';
-        const tag = isDnc ? ' <span style="font-size:10px;color:#c0392b;font-weight:700" title="On the Do-Not-Call registry: a MANUAL single dial about their own foreclosure is still actionable; do NOT text or autodial.">DNC&middot;call only</span>'
-                          : (isMob ? '' : ' <span style="font-size:10px;color:var(--muted,#8892a6)">landline</span>');
-        gCall.push(wa+'<a class="phone" href="tel:'+esc(ph)+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':(isMob?'Mobile — text first (WhatsApp), then dial 8am-8pm':'Landline — 8am-8pm; text a mobile if one exists'))+'">'+esc(fmtPhone(ph))+tag+'</a>');
+        const line = _contactLineHtml(r, ph, {
+          dnc: !!((r.phdnc||[])[i]),
+          mobile: (((r.phtype||[])[i])||'mobile')==='mobile'
+        });
+        if(line) gCall.push(line);
       });
-      if(n.phone) gCall.push('<a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a><a class="wabtn" href="'+esc(_waLink(r,n.phone))+'" target="_blank" rel="noopener" title="WhatsApp the owner — prefilled 1:1 message you review and send.">'+_waSvg()+'</a>');
-      // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
+      if(n.phone){
+        const line = _contactLineHtml(r, n.phone, { dnc:false, mobile:true });
+        if(line) gCall.push(line);
+      }
+      // No phone yet — one Messages entry so Text/Phone Link is still findable.
+      if(!(r.phones||[]).length && !n.phone){
+        gCall.push('<a href="#" class="ctact ctact-text textgen" data-c="'+esc(r.case)+'" title="Messages — Text / Phone Link composer (People-search a number first)">Text</a>');
+      }
       (r.emails||[]).slice(0,2).forEach(em => {
         gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
       });
@@ -5155,7 +5551,7 @@ function render(){
       gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
-      // kimi: cadence enrollment — the multi-touch email sequence that auto-cancels on reply
+      // Text lives under CONTACT (Call · Text · WA) — not duplicated here in DO.
       if((r.emails||[]).length) gDo.push('<a href="#" class="cadencegen" data-c="'+esc(r.case)+'" title="Enroll this owner in the 4-touch email cadence (day 0/2/4/7) — sends itself until they reply, then auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.">Cadence</a>');
     }
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
@@ -5165,7 +5561,16 @@ function render(){
       r.addr?'Map: https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')):''
     ].filter(Boolean).join('\n');
     gDo.push('<a href="#" class="cpy2" data-copy="'+esc(summary)+'" title="Copy owner, address, case & numbers">Copy all</a>');
-    const linksHtml = [gCall, gDig, gProp, gDo].filter(g => g.length).map(g => '<div class="lgrp">'+g.join('')+'</div>').join('');
+    // Labeled groups so Call / Text / WA are not a soup of chips.
+    const _lg = (lab, cls, items) => items.length
+      ? '<div class="lgrp '+(cls||'')+'"><span class="lgrp-lab">'+lab+'</span>'+items.join('')+'</div>'
+      : '';
+    const linksHtml = [
+      _lg('Contact — Call · Text · WA', 'lgrp-contact', gCall),
+      _lg('Look up', '', gDig),
+      _lg('Property', '', gProp),
+      _lg('Do', '', gDo)
+    ].filter(Boolean).join('');
     const ctypeTxt = r.st==='TD'?'TAX DEED':(r.ctype && r.ctype.indexOf('HOA')>-1?'HOA':(r.ctype?'BANK':''));
     const ctype = r.ctype ? '<span class="chip '+(r.st==='TD'?'tdt':(r.ctype.indexOf('HOA')>-1?'hoa':'mtg'))+'" title="'+esc(r.ctype)+'">'+ctypeTxt+'</span>' : '';
     const pcls = r._profit >= 0 ? 'profpos' : 'profneg';
@@ -5211,7 +5616,7 @@ function render(){
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
     const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
@@ -5257,7 +5662,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt in Deal analysis.">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
@@ -5519,6 +5924,35 @@ document.addEventListener('click', e => {
   const r = DATA.find(x => x.case === a.dataset.c);
   if(r) genLetter(r);
 });
+// TEXT / Phone Link SMS modal
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('.textgen');
+  if(!a) return;
+  e.preventDefault();
+  const r = DATA.find(x => x.case === a.dataset.c);
+  if(r) openTextSingle(r);
+});
+(function(){ const b=document.getElementById('bulktext'); if(b) b.addEventListener('click', openBulkText); })();
+document.addEventListener('click', e => {
+  const m = document.getElementById('textmodal');
+  if(!m || !m.classList.contains('show')) return;
+  const cur = () => DATA.find(x => x.case === textQ[textIdx]);
+  const tn = e.target.closest && e.target.closest('.txtone');
+  if(tn){ e.preventDefault(); textTone = tn.dataset.t || 'cold'; renderTextModal(); return; }
+  const lg = e.target.closest && e.target.closest('.txlang');
+  if(lg){ e.preventDefault(); textLang = lg.dataset.l || 'both'; renderTextModal(); return; }
+  const cp = e.target.closest && e.target.closest('.txcopy');
+  if(cp){ e.preventDefault(); const r=cur(); if(r) _copyTextMsg(smsMsg(r, textLang, textTone), cp); return; }
+  const dn = e.target.closest && e.target.closest('.txdnt');
+  if(dn){ e.preventDefault(); _addDNT(dn.dataset.d); renderTextModal(); return; }
+  const sd = e.target.closest && e.target.closest('.txsend');
+  if(sd && sd.tagName==='A'){ const r=cur(); if(r) autoLog(r, 'text', 'texted', {nextDays:3}); return; }
+  const mk = e.target.closest && e.target.closest('.txmark');
+  if(mk){ e.preventDefault(); const r=cur(); if(r) autoLog(r, 'text', 'texted', {nextDays:3}); textAdvance(); return; }
+  const sk = e.target.closest && e.target.closest('.txskip');
+  if(sk){ e.preventDefault(); textAdvance(); return; }
+});
+document.addEventListener('keydown', e => { if(e.key==='Escape') closeTextModal(); });
 // door-hanger generation (delegated for both table + cards)
 document.addEventListener('click', e => {
   const a = e.target.closest && e.target.closest('.hangergen');
@@ -5785,7 +6219,7 @@ function lkReport(a){
   } else {
     rec+='<div class="lkcallout"><b>Manual step &mdash; the county blocks websites from pulling this.</b> Open '
       +'<a href="'+esc(recURL||'https://onlineservices.miamidadeclerk.gov/officialrecords/')+'" target="_blank" rel="noopener">'+esc(ctyName(cty))+' Official Records</a>, search Name/Document for '
-      +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find in Deal analysis.</div>';
+      +'<b>'+orName+'</b>, and look for any MORTGAGE (MOR) with no matching SATISFACTION (SMO) &mdash; that\'s an open loan'+(condo?'; for a condo, also get the association estoppel (special assessment)':'')+'. Enter what you find on the Call Sheet (What Survives / Math).</div>';
   }
   // ---- seller-net calculator ----
   // auto-add the surviving loan to the payoff ONLY when confident: HOA sale -> the whole first mortgage
@@ -5915,10 +6349,10 @@ document.addEventListener('click', e => {
   const list = btn.parentElement.querySelector('.deflist');
   if(list) list.classList.toggle('open');
 });
-// deal-analysis: open the modal for this lead (works in table + cards)
+// Math (board): open the Call Sheet hub scrolled to Math — not a second overlapping modal
 document.addEventListener('click', e => {
   const btn = e.target.closest && e.target.closest('.dealtog');
-  if(!btn) return;
+  if(!btn || !btn.dataset.c) return;
   openDealModal(btn.dataset.c);
 });
 // close the modal: X button, backdrop click, or Escape
