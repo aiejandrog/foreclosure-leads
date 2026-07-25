@@ -2124,65 +2124,88 @@ function _daSubline(r){
   return esc(r.addr)+' · Foreclosure · auction '+esc(r.auction||'—')+(r.days>=0?' · '+r.days+'d':'')
     +(r.auc?' · <a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener">✓ verify on RealForeclose →</a>':'');
 }
-function _daClockHtml(r){
+// One clock body for CS + DA — copy drift here used to make Deal analysis look like a different source.
+function _clockBodyHtml(r){
+  const row = (k, v) => '<div class="csrow"><span class="csk">'+k+'</span><span class="csvv">'+v+'</span></div>';
   if(r.st==='LP'){
-    return '<div class="dm-sec">The clock — same as call sheet</div><div class="csbody" style="margin:0 0 12px">'+
-      '<div class="csrow"><span class="csk">Filed</span><span class="csvv"><b>'+esc(r.filed||r.filedDate||'recently')+'</b></span></div>'+
-      '<div class="csrow"><span class="csk">Auction</span><span class="csvv"><b>none yet</b> — months of runway</span></div>'+
-      '<div class="csrow"><span class="csk">Edge</span><span class="csvv">Be <b>FIRST</b> contact</span></div></div>';
+    return row('Filed', '<b>'+esc(r.filed||r.filedDate||'recently')+'</b> — Lis Pendens just recorded')
+      + row('Auction', '<b>none scheduled yet</b> — typically months of runway before a sale date is set')
+      + row('Your edge', 'Be the <b>FIRST</b> contact — reach the owner now, before the auction crowd. People-search the name for a number.');
   }
-  return '<div class="dm-sec">The clock — same as call sheet</div><div class="csbody" style="margin:0 0 12px">'+
-    '<div class="csrow"><span class="csk">Auction</span><span class="csvv"><b>'+esc(r.auction||'—')+'</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+'d</span>':'')+
-      (r.auc?' <a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener">✓ RealForeclose</a>':'')+'</span></div>'+
-    '<div class="csrow"><span class="csk">Deal deadline</span><span class="csvv">'+(r.days>=0?'<b>'+Math.max(0,r.days-3)+'d</b> (attorney needs ~3d)':'auction passed')+'</span></div>'+
-    '<div class="csrow"><span class="csk">Sale history</span><span class="csvv">'+(r.saleSurv!=null?(r.saleSurv===0?'<b>FIRST sale</b>':r.saleSurv+'× dodged'):'no docket data')+'</span></div>'+
-    (r.saleBkAct?'<div class="csrow"><span class="csk">⛔ BK</span><span class="csvv"><b class="bad">ACTIVE STAY — NO CONTACT</b></span></div>':'')+
-    '</div>';
+  return row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')
+      +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':''))
+    + row('Deal deadline', r.days>=0 ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play')
+    + row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')')
+    + (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):''));
+}
+function _daClockHtml(r){
+  return '<div class="dm-sec">The clock — same as call sheet</div><div class="csbody" style="margin:0 0 12px">'+_clockBodyHtml(r)+'</div>';
+}
+// Hard blocks for Text/Phone Link entry points (row DO, CS, DA). Modal still refuses send/copy if reached.
+function _textContactBlocked(r){
+  const n=notes[r.case]||{};
+  if(_isOptedOut(n) || n.status==='DO NOT CONTACT') return 'optout';
+  if(_isWrongOwner(n)) return 'wrong';
+  if(r.saleBkAct) return 'bk';
+  return '';
 }
 function _daContactHtml(r){
   const nn=notes[r.case]||{}, clean=_cleanPhones(r), dnc=_dncPhones(r), tp=textablePhones(r);
+  const block=_textContactBlocked(r);
   let h='<div class="dm-sec">Contact — same as call sheet</div><div class="csbody" style="margin:0 0 12px">';
-  if(_isWrongOwner(nn)) h+='<div class="csbad">🚫 WRONG PERSON — numbers withheld</div>';
-  else if(nn.status==='DO NOT CONTACT') h+='<div class="csbad">⛔ OPTED OUT</div>';
-  else if(r.saleBkAct) h+='<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
+  if(block==='wrong') h+='<div class="csbad">🚫 WRONG PERSON — numbers withheld</div>';
+  else if(block==='optout') h+='<div class="csbad">⛔ OPTED OUT</div>';
+  else if(block==='bk') h+='<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
   else {
     if(clean.length) h+='<div class="csphones">'+clean.map(p=>'<a class="csph" href="tel:'+esc(String(p).replace(/\D/g,''))+'">'+esc(fmtPhone(p))+'</a>').join('')+'</div>';
     else h+='<div class="csmut">No callable number yet — use People on the call sheet.</div>';
-    // Always show Text entry so it is discoverable; modal explains DNC / missing phones.
+    // Discoverable even with no textable # yet; modal explains DNC / missing phones.
     h+='<button type="button" class="cstextbtn" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">'+(tp.length?'💬 Text / Phone Link — copy or send':'💬 Text / Phone Link — open (no textable # yet)')+'</button>';
     if(dnc.length) h+='<div class="csmut" style="margin:4px 0">⛔ DNC (call only): '+esc(dnc.map(fmtPhone).join(', '))+'</div>';
   }
   h+='<div style="margin-top:8px"><button type="button" class="csbtn" onclick="closeDealModal(); openCallSheet(\''+esc(r.case)+'\')">📞 Open full call sheet</button></div>';
   return h+'</div>';
 }
-function _daStackHtml(r){
-  if(r.st==='LP' || r.st==='TD') return '';
+// Shared debt body for CS + DA (LP skipped on both; TD kept — tax deed still has taxes / named parties).
+function _debtSheetBody(r){
+  if(r.st==='LP') return '';
   const nn=notes[r.case]||{};
   const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
   const judg = +r.judg||0, surv = +r._slien||0, jr = +r._jlien||0;
+  const hoa = (+r._assess||0) || (+r.orhoa||0);
+  const code = (+r._mlien||0) || ((+r.orcode||0)+(+r.orirs||0));
   const survTyped = _dTyped(nn.slien);
   const trust = survTyped ? (surv>0?'YOU ENTERED THIS':'YOU VERIFIED: none survives')
               : r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify'
               : r.orconf==='bd' ? 'BATCHDATA ESTIMATE — confirm payoff'
               : '⚠ NOT CHECKED — pull it';
   const row = (k, v) => '<div class="csrow"><span class="csk">'+k+'</span><span class="csvv">'+v+'</span></div>';
-  let h='<div class="dm-sec">Debt stack — same as call sheet</div><div class="csbody" style="margin:0 0 10px">';
-  h+=row('Foreclosing lender', '<b>'+esc(r.plaintiff||'—')+'</b>');
-  h+=row('Final judgment', '<b>'+fm(judg)+'</b>');
-  if(surv) h+=row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
-  if(jr) h+=row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
-  if(+r.orhoa) h+=row('HOA / association', fm(+r.orhoa));
-  if((+r.orcode||0)+(+r.orirs||0)) h+=row('Code / muni / IRS', fm((+r.orcode||0)+(+r.orirs||0)));
+  let h='<div class="csbody">';
+  h+=row(r.st==='TD'?'Tax collector / certificate':'Foreclosing lender', '<b>'+esc(r.plaintiff||'—')+'</b>');
+  h+=row(r.st==='TD'?'Amount due / opening':'Final judgment', '<b>'+fm(judg)+'</b>');
+  if(r.st!=='TD' && surv) h+=row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
+  if(r.st!=='TD' && jr) h+=row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
+  if(hoa) h+=row('HOA / association', fm(hoa));
+  if(code) h+=row('Code / muni / IRS', fm(code));
   h+=row('Back taxes', _taxStatusHtml(r, nn));
   h+='</div>';
-  h+=_debtStack(r)||'<div class="csmut" style="margin:0 0 10px">No recorded chain on file yet — pull Records on the call sheet.</div>';
-  if(r.defs) h+='<div class="csbody" style="margin:0 0 10px">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
+  const chain=_debtStack(r);
+  h+= chain || (r.st==='TD'?'':'<div class="csmut" style="margin:0 0 10px">No recorded chain on file yet — pull Records on the call sheet.</div>');
+  if(r.defs) h+='<div class="csbody">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
   const gv=_govDefs(r);
   if(gv.length){
-    h+='<div class="csbody csgovwarn" style="margin:0 0 12px"><div class="csl" style="color:#B87A0E">⚠ GOV / CODE / TAX PARTY NAMED</div>'+
-      '<div class="css">Named: <b>'+esc(gv.join(', '))+'</b>. If voluntarily dropped before judgment, their lien may survive. Check docket for DROPPING PARTY.</div></div>';
+    h+='<div class="csbody csgovwarn">'+
+      '<div class="cssurvbtns" style="margin:2px 0 6px"><span class="csl" style="color:#B87A0E">⚠ GOV / CODE / TAX PARTY NAMED — CODE-LIEN SURVIVAL RISK</span></div>'+
+      '<div class="css">These parties are named as defendants: <b>'+esc(gv.join(', '))+'</b>. If any is <b>voluntarily dropped</b> before judgment, their lien (if any) is <b>NOT foreclosed out</b> and survives the sale — it hits your title.</div>'+
+      '<div class="css" style="margin-top:5px">On the docket, look for a <b>DROPPING PARTY: {name}</b> entry. Confirm with the county code-enforcement office (a $0-consideration recorded order that our records scan skips) and the appraiser\'s tax status <b>before</b> you bid.</div>'+
+      '</div>';
   }
   return h;
+}
+function _daStackHtml(r){
+  const body=_debtSheetBody(r);
+  if(!body) return '';
+  return '<div class="dm-sec">Debt stack — same as call sheet</div>'+body;
 }
 function dealModalBody(r){
   // Route through _ownerName so DA header + CS header + Jose SMS all show the same normalized name
@@ -2741,47 +2764,10 @@ function _callSheet(r){
     big('NET EQUITY', fm(netEq), survChecked?'worth − judgment − survivors':'⚠ assumes nothing survives — pull the chain', 'good')+
   '</div>';
 
-  // THE CLOCK
-  const clock = (r.st==='LP')
-    // LP (fresh filing): no auction is scheduled yet — don't render the 9999-day countdown; frame the edge.
-    ? '<div class="cssec">THE CLOCK</div><div class="csbody">'
-      + row('Filed', '<b>'+esc(r.filed||r.filedDate||'recently')+'</b> — Lis Pendens just recorded')
-      + row('Auction', '<b>none scheduled yet</b> — typically months of runway before a sale date is set')
-      + row('Your edge', 'Be the <b>FIRST</b> contact — reach the owner now, before the auction crowd. People-search the name for a number.')
-      + '</div>'
-    : '<div class="cssec">THE CLOCK</div><div class="csbody">'+
-    row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')
-      +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':'')) +
-    row('Deal deadline', r.days>=0 ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play') +
-    row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')') +
-    (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):'')) +
-  '</div>';
-
-  // THE DEBT STACK — itemised, because "what else is on it?" is question #3
-  let stack = '<div class="cssec">THE DEBT — who is owed what</div><div class="csbody">'+
-    row('Foreclosing lender', '<b>'+esc(r.plaintiff||'—')+'</b>') +
-    row('Final judgment', '<b>'+fm(judg)+'</b>');
-  if(surv) stack += row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
-  if(jr) stack += row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
-  if(+r.orhoa) stack += row('HOA / association', fm(+r.orhoa));
-  if((+r.orcode||0)+(+r.orirs||0)) stack += row('Code / muni / IRS', fm((+r.orcode||0)+(+r.orirs||0)));
-  stack += row('Back taxes', _taxStatusHtml(r, nn));
-  stack += '</div>' + _debtStack(r);
-  // everyone else named on the lawsuit — where solar leases and code liens hide
-  if(r.defs) stack += '<div class="csbody">'+row('Also sued', '<span class="csdefs">'+esc(r.defs)+'</span>')+'</div>';
-  // ⚠ Gov/code/tax defendant risk (the Velima trap: county named -> then dropped 11/4/2025 -> code lien survives).
-  // We can't cheaply detect the DROP from the docket without pulling the OCS case, but we CAN surface the
-  // "named-as-defendant" signal so the closer knows to check the docket for a DROPPING PARTY entry BEFORE
-  // trusting any code/muni lien got wiped by the sale. This is one of the few risks that reads as "clean"
-  // in the deal math and lands as a real dollar surprise at title. Skip on LP (no case-level judgment yet).
-  if(r.st!=='LP'){
-    const _gv = _govDefs(r);
-    if(_gv.length) stack += '<div class="csbody csgovwarn">'+
-      '<div class="cssurvbtns" style="margin:2px 0 6px"><span class="csl" style="color:#B87A0E">⚠ GOV / CODE / TAX PARTY NAMED — CODE-LIEN SURVIVAL RISK</span></div>'+
-      '<div class="css">These parties are named as defendants: <b>'+esc(_gv.join(', '))+'</b>. If any is <b>voluntarily dropped</b> before judgment, their lien (if any) is <b>NOT foreclosed out</b> and survives the sale — it hits your title.</div>'+
-      '<div class="css" style="margin-top:5px">On the docket, look for a <b>DROPPING PARTY: {name}</b> entry. Confirm with the county code-enforcement office (a $0-consideration recorded order that our records scan skips) and the appraiser\'s tax status <b>before</b> you bid.</div>'+
-      '</div>';
-  }
+  // THE CLOCK + DEBT — shared bodies with Deal analysis so the two screens cannot drift.
+  const clock = '<div class="cssec">THE CLOCK</div><div class="csbody">'+_clockBodyHtml(r)+'</div>';
+  const _debtBody = _debtSheetBody(r);
+  const stack = _debtBody ? ('<div class="cssec">THE DEBT — who is owed what</div>'+_debtBody) : '';
 
   // THE PROPERTY
   const prop = '<div class="cssec">THE PROPERTY</div><div class="csbody">'+
@@ -2794,14 +2780,15 @@ function _callSheet(r){
 
   // CONTACT
   let cont = '<div class="cssec">CONTACT</div><div class="csbody">';
-  if(_isWrongOwner(nn)) cont += '<div class="csbad">🚫 WRONG PERSON reported — these numbers are not the owner. Re-verify before dialing.</div>';
-  else if(nn.status==='DO NOT CONTACT') cont += '<div class="csbad">⛔ OPTED OUT — all contact suppressed.</div>';
-  else if(r.saleBkAct) cont += '<div class="csbad">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal right now.</div>';
+  { const _tblock = _textContactBlocked(r);
+  if(_tblock==='wrong') cont += '<div class="csbad">🚫 WRONG PERSON reported — these numbers are not the owner. Re-verify before dialing.</div>';
+  else if(_tblock==='optout') cont += '<div class="csbad">⛔ OPTED OUT — all contact suppressed.</div>';
+  else if(_tblock==='bk') cont += '<div class="csbad">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal right now.</div>';
   else {
     cont += clean.length
       ? '<div class="csphones">'+clean.map(p=>'<a class="csph" href="tel:'+esc(String(p).replace(/\D/g,''))+'">'+esc(fmtPhone?fmtPhone(p):p)+'</a>').join('')+'</div>'
       : '<div class="csmut">No callable number yet — pull one below.</div>';
-    // Phone Link / Messages — always visible in CONTACT so it is not buried; modal handles DNC / no-#.
+    // Phone Link / Messages — visible in CONTACT whenever contact is legal; modal handles DNC / no-#.
     { const _tp = textablePhones(r);
       cont += '<button type="button" class="cstextbtn" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">'
         +(_tp.length?'💬 Text / Phone Link — copy or send':'💬 Text / Phone Link')+'</button>';
@@ -2811,7 +2798,7 @@ function _callSheet(r){
     if(dnc.length) cont += row('⛔ DNC — mail/door only', dnc.map(p=>esc(fmtPhone?fmtPhone(p):p)).join(' · '));
     if((r.emails||[]).length) cont += row('Email', (r.emails||[]).map(e=>'<a href="mailto:'+esc(e)+'">'+esc(e)+'</a>').join(' · '));
     cont += _csPeople(r);   // find/verify a number without leaving the sheet — the fix for the no-phone dead-end
-  }
+  } }
   cont += row('Mailing address', esc(r.mail||r.addr||'—')+((r.mail&&r.addr&&String(r.mail).split(',')[0].trim().toUpperCase()===String(r.addr).split(',')[0].trim().toUpperCase())?' <span class="csmut">(same as the property — they live there)</span>':' <span class="csmut">(different — absentee owner)</span>'));
   cont += '</div>';
 
@@ -3323,9 +3310,8 @@ function _saveDNT(){ try{ localStorage.setItem(DNT_LS, JSON.stringify([...dnt]))
 function _isDNT(d){ return dnt.has(String(d||'').replace(/\D/g,'')); }
 function _addDNT(d){ const x=String(d||'').replace(/\D/g,''); if(x){ dnt.add(x); _saveDNT(); } }
 function textablePhones(r){
-  const n=notes[r.case]||{};
-  if(n.status==='DO NOT CONTACT' || _isWrongOwner(n) || r.saleBkAct) return [];
-  const out=[];
+  if(_textContactBlocked(r)) return [];
+  const n=notes[r.case]||{}, out=[];
   (r.phones||[]).slice(0,4).forEach((ph,i)=>{ if(!((r.phdnc||[])[i])){ const d=String(ph).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); } });
   if(n.phone){ const d=String(n.phone).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); }
   return out;
@@ -3378,13 +3364,15 @@ function _copyTextMsg(t, btn){
   else fallbackCopy(t,done);
 }
 function textCardHtml(r){
-  const phones=textablePhones(r);
+  const hardBlock=_textContactBlocked(r);
+  const phones=hardBlock?[]:textablePhones(r);
   const owner=_ownerName((r.owners||'').split(';')[0].trim(), r);
   const msg=smsMsg(r, textLang, textTone);
   const hoursOK=_withinTextHours();
   const recent=_recentTeleCount(r);
   const capped=recent>=FTSA_MAX_24H;
-  const canSend=phones.length && hoursOK && !capped;
+  const canSend=!hardBlock && phones.length && hoursOK && !capped;
+  const canCopy=!hardBlock; // Copy is for hours/cap only — never for BK / opt-out / wrong-owner
   const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
   const toneBtns=['cold','urgent','followup'].map(t=>{
     const lbl=t==='cold'?'Cold open':t==='urgent'?'Urgent (sale soon)':'Follow-up';
@@ -3393,19 +3381,26 @@ function textCardHtml(r){
   const langBtns=[['both','EN + ES'],['en','English'],['es','Español']].map(([l,lbl])=>
     '<button class="txlang'+(textLang===l?' on':'')+'" data-l="'+l+'" type="button">'+lbl+'</button>').join('');
   let gate='';
-  if(r.saleBkAct) gate='<div class="txblock">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal. Do not text.</div>';
-  else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link send stays disabled until the window opens.</div>';
+  if(hardBlock==='bk') gate='<div class="txblock">⛔ ACTIVE BANKRUPTCY STAY — every channel is illegal. Do not text, copy, or WhatsApp.</div>';
+  else if(hardBlock==='optout') gate='<div class="txblock">⛔ OPTED OUT — all outreach suppressed. Do not text or copy a solicitation.</div>';
+  else if(hardBlock==='wrong') gate='<div class="txblock">🚫 WRONG PERSON — these numbers are not the owner. Re-verify before any outreach.</div>';
+  else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
   else if(capped) gate='<div class="txblock">⛔ FTSA cap: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
   let phBtns;
-  if(!phones.length){
-    phBtns='<div class="warn" style="margin:6px 0">No textable number — every number is DNC, opted out, on your Do-Not-Text list, or missing. Use mail / door / People-search.</div>';
+  if(hardBlock){
+    phBtns='<div class="warn" style="margin:6px 0">Send / Copy / WhatsApp locked for this lead.</div>';
+  } else if(!phones.length){
+    phBtns='<div class="warn" style="margin:6px 0">No textable number — every number is DNC, on your Do-Not-Text list, or missing. Use mail / door / People-search.</div>';
   } else {
     phBtns=phones.map(d=>{
       const href=_smsHref(d, msg);
       const send=canSend
         ? '<a class="txsend" href="'+esc(href)+'" title="Opens Phone Link / Messages with this number + message pre-filled. Review, then send.">💬 Text '+esc(fmtPhone(d))+'</a>'
         : '<span class="txsend off" title="Sending disabled — see the notice above (hours / cap). Use Copy instead.">💬 '+esc(fmtPhone(d))+'</span>';
-      const wa = '<a class="txwa" href="'+esc(_waLink(r,d))+'" target="_blank" rel="noopener" title="Same message path on WhatsApp (wa.me) — review then send.">'+_waSvg()+' WA</a>';
+      // WA rides the same FTSA send gate as sms: — do not leave an ungated side door.
+      const wa = canSend
+        ? '<a class="txwa" href="'+esc(_waLink(r,d))+'" target="_blank" rel="noopener" title="Same message path on WhatsApp (wa.me) — review then send.">'+_waSvg()+' WA</a>'
+        : '<span class="txsend off" title="WhatsApp send disabled with FTSA hours / cap — same rules as SMS.">'+_waSvg()+' WA</span>';
       return '<span class="txrow">'+send+wa+'<button class="txdnt" type="button" data-d="'+esc(d)+'" title="Add to Do-Not-Text on this device">🚫 DNT</button></span>';
     }).join('');
   }
@@ -3418,17 +3413,17 @@ function textCardHtml(r){
     +'<div class="dm-sub">'+esc(r.addr||'')+' · '+saleLine+'</div>'+pos+'</div>'
     +gate
     +'<div class="txhint">Tone + language update the preview. <b>Text</b> opens Phone Link / Messages with the SMS ready; <b>Copy</b> puts the same body on your clipboard.</div>'
-    +'<div class="txtones">'+toneBtns+'</div>'
+    +(hardBlock?'':('<div class="txtones">'+toneBtns+'</div>'
     +'<div class="txlangs">'+langBtns+'</div>'
-    +'<div class="txmsg">'+esc(msg)+'</div>'
+    +'<div class="txmsg">'+esc(msg)+'</div>'))
     +'<div class="txbtns">'+phBtns+'</div>'
-    +(msg?'<button class="txcopy" type="button">📋 Copy message</button>':'')
+    +(canCopy && msg?'<button class="txcopy" type="button">📋 Copy message</button>':'')
     +dncNote
     +'<div class="txfoot">'
-      +(phones.length?'<button class="txmark" data-c="'+esc(r.case)+'" type="button">✓ Mark texted'+(textQ.length>1?' → next':'')+'</button>':'')
+      +(phones.length && !hardBlock?'<button class="txmark" data-c="'+esc(r.case)+'" type="button">✓ Mark texted'+(textQ.length>1?' → next':'')+'</button>':'')
       +(textQ.length>1?'<button class="txskip" type="button">'+(canSend?'Skip →':'Next →')+'</button>':'')
     +'</div>'
-    +'<div class="txcompliance"><b>Manual send only.</b> Honors DNC-flagged numbers, opted-out owners, your Do-Not-Text list, FTSA hours (8am–8pm ET) &amp; the 3-per-24h cap; every message includes STOP. <b>Not a National DNC Registry scrub</b> — scrub cold numbers separately. Phone Link on Windows opens from the <code>sms:</code> link when your phone is linked.</div>';
+    +'<div class="txcompliance"><b>Manual send only.</b> Honors DNC-flagged numbers, opted-out owners (ledger + status), wrong-person, BK stay, your Do-Not-Text list, FTSA hours (8am–8pm ET) &amp; the 3-per-24h cap; every message includes STOP. WhatsApp uses the same send gate. <b>Not a National DNC Registry scrub</b> — scrub cold numbers separately. Phone Link on Windows opens from the <code>sms:</code> link when your phone is linked.</div>';
 }
 function renderTextModal(){
   const body=document.getElementById('textbody'); if(!body) return;
@@ -3444,9 +3439,8 @@ function openBulkText(){
   textLang='both';
   const elig=DATA.filter(r=>{
     const n=notes[r.case]||{};
-    if(n.status==='DO NOT CONTACT'||n.status==='Dead') return false;
+    if(_textContactBlocked(r) || n.status==='Dead') return false;
     if(typeof isFlaggedDead==='function' && isFlaggedDead(r)) return false;
-    if(r.saleBkAct || _isWrongOwner(n)) return false;
     if(_recentTeleCount(r)>=FTSA_MAX_24H) return false;
     return textablePhones(r).length>0;
   });
@@ -5360,7 +5354,9 @@ function render(){
     // CALL — skip-traced + saved phones. HARD DNC GATE: DNC-flagged numbers render as non-clickable
     // text (no tel:) so a flagged number can't be tap-dialed by accident. Even manual calls to
     // DNC-registered numbers are actionable — Duguid only killed the autodialer theory, not DNC.
-    const optedOut = n.status === 'DO NOT CONTACT';
+    // Ledger opt-out (optlog / optout scalar) must suppress the same as status DO NOT CONTACT —
+    // status-only checks left SMS/WA on the row after a teammate sync.
+    const optedOut = _isOptedOut(n) || n.status === 'DO NOT CONTACT';
     if(optedOut){
       gCall.push('<span class="phone dncgate" title="Owner opted out'+(n.optout?' on '+esc(n.optout):'')+' — all contact suppressed. FTSA/TCPA: honor STOP; keep this logged.">⛔ DO NOT CONTACT'+(n.optout?' · '+esc(n.optout):'')+'</span>');
     } else if(_isWrongOwner(n)){
@@ -5376,15 +5372,25 @@ function render(){
       (r.phones||[]).slice(0,4).forEach((ph,i) => {
         const isMob = (((r.phtype||[])[i])||'mobile')==='mobile';
         const isDnc = !!((r.phdnc||[])[i]);
-        const wa = (isMob && !isDnc) ? '<a class="wabtn" href="'+esc(_waLink(r,ph))+'" target="_blank" rel="noopener" title="TEXT on WhatsApp — a prefilled 1:1 message you review and send. Distressed owners read texts, ignore unknown calls. START HERE.">'+_waSvg()+'</a>' : '';
-        // Phone Link SMS — same posture as WA; sits next to the number so it is obvious.
-        const sms = (!isDnc && !_isDNT(String(ph).replace(/\D/g,'')))
+        // No SMS/WA on DNC, local DNT, or active BK stay (manual dial of DNC may still be ok — text is not).
+        const canTxt = !r.saleBkAct && !isDnc && !_isDNT(String(ph).replace(/\D/g,''));
+        const wa = (isMob && canTxt) ? '<a class="wabtn" href="'+esc(_waLink(r,ph))+'" target="_blank" rel="noopener" title="TEXT on WhatsApp — a prefilled 1:1 message you review and send. Distressed owners read texts, ignore unknown calls. START HERE.">'+_waSvg()+'</a>' : '';
+        const sms = canTxt
           ? '<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link / Messages — bilingual SMS you copy or open with sms: pre-filled. START HERE if WhatsApp is not installed.">SMS</a>' : '';
         const tag = isDnc ? ' <span style="font-size:10px;color:#c0392b;font-weight:700" title="On the Do-Not-Call registry: a MANUAL single dial about their own foreclosure is still actionable; do NOT text or autodial.">DNC&middot;call only</span>'
                           : (isMob ? '' : ' <span style="font-size:10px;color:var(--muted,#8892a6)">landline</span>');
         gCall.push(sms+wa+'<a class="phone" href="tel:'+esc(ph)+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':(isMob?'Mobile — SMS/WhatsApp first, then dial 8am-8pm':'Landline — 8am-8pm; text a mobile if one exists'))+'">'+esc(fmtPhone(ph))+tag+'</a>');
       });
-      if(n.phone) gCall.push('<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link">SMS</a><a class="phone" href="tel:'+esc(String(n.phone).replace(/\D/g,''))+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a><a class="wabtn" href="'+esc(_waLink(r,n.phone))+'" target="_blank" rel="noopener" title="WhatsApp the owner — prefilled 1:1 message you review and send.">'+_waSvg()+'</a>');
+      if(n.phone){
+        const _spd=String(n.phone).replace(/\D/g,''), _canSaved=!r.saleBkAct && !_isDNT(_spd);
+        const _smsSaved=_canSaved?'<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link">SMS</a>':'';
+        const _waSaved=_canSaved?'<a class="wabtn" href="'+esc(_waLink(r,n.phone))+'" target="_blank" rel="noopener" title="WhatsApp the owner — prefilled 1:1 message you review and send.">'+_waSvg()+'</a>':'';
+        gCall.push(_smsSaved+'<a class="phone" href="tel:'+esc(_spd)+'" title="Phone you saved — manual dial only, 8am-8pm">'+esc(fmtPhone(n.phone))+'</a>'+_waSaved);
+      }
+      // No phone yet — still surface Text in CALL so Phone Link is findable without hunting DO.
+      if(!r.saleBkAct && !(r.phones||[]).length && !n.phone){
+        gCall.push('<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link — opens the composer even before a number lands (People-search first).">SMS</a>');
+      }
       // skip-traced owner email(s) — mailto; the Email button auto-fills a personalized message to these
       (r.emails||[]).slice(0,2).forEach(em => {
         gCall.push('<a class="email" href="mailto:'+esc(em)+'" title="Skip-traced owner email — the Email button auto-fills a personalized foreclosure message to this address">'+esc(em)+'</a>');
@@ -5455,8 +5461,9 @@ function render(){
       gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
-      // Always list Text next to Letter/Email so Phone Link is findable even before a number lands.
-      gDo.push('<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link / Messages — bilingual SMS (cold / urgent / follow-up), Copy or open sms: with the body pre-filled. DNC skipped; STOP opt-out included. Opens even with no textable # yet so you can see the composer.">Text</a>');
+      // Text next to Letter/Email when contact is legal — findable even before a number lands.
+      // Hidden for opt-out / wrong-person / BK (same gates as call sheet + deal analyzer).
+      if(!_textContactBlocked(r)) gDo.push('<a href="#" class="textgen dig" data-c="'+esc(r.case)+'" title="TEXT via Phone Link / Messages — bilingual SMS (cold / urgent / follow-up), Copy or open sms: with the body pre-filled. DNC skipped; STOP opt-out included. Opens even with no textable # yet so you can see the composer.">Text</a>');
       // kimi: cadence enrollment — the multi-touch email sequence that auto-cancels on reply
       if((r.emails||[]).length) gDo.push('<a href="#" class="cadencegen" data-c="'+esc(r.case)+'" title="Enroll this owner in the 4-touch email cadence (day 0/2/4/7) — sends itself until they reply, then auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.">Cadence</a>');
     }
