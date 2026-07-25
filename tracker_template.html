@@ -3142,10 +3142,13 @@ function _pbRender(){
     +   '<div class="pbscript"><span class="pbtag">ES</span>Hola, me llamo Alejandro. Perdone la molestia. Su propiedad salió en el calendario de subastas del condado para el [fecha]. No le vengo a vender nada. Solo quería ver si tiene un plan para la fecha de la subasta — hay personas que sí, otras no saben qué opciones tienen. ¿Un par de minutos?</div>'
     +   '<h4>Opener — you\'re neighbors (the Irene scenario)</h4>'
     +   '<div class="pbscript"><span class="pbtag">EN</span>Hey [name], I\'m Alejandro from apartment [X] down the hall. Sorry to knock cold. I saw your case is on the county foreclosure calendar for [date] and wanted to catch you before the sale date. Not selling anything. Do you have a couple minutes, or would tomorrow work better?</div>'
+    +   '<div class="pbscript"><span class="pbtag">ES</span>Hola [nombre], soy Alejandro del apartamento [X] en el pasillo. Perdone que toque sin avisar. Vi que su caso está en el calendario de subastas del condado para el [fecha] y quería hablarle antes de esa fecha. No le vengo a vender nada. ¿Tiene un par de minutos, o le sirve mañana mejor?</div>'
     +   '<h4>Close — asking for the follow-up</h4>'
-    +   '<div class="pbscript">I\'m going to leave my number. If you want to talk seriously we should meet before [sale date minus 5 days] because the paperwork takes about that long. Text me "yes" and I\'ll set aside time.</div>'
+    +   '<div class="pbscript"><span class="pbtag">EN</span>I\'m going to leave my number. If you want to talk seriously we should meet before [sale date minus 5 days] because the paperwork takes about that long. Text me "yes" and I\'ll set aside time.</div>'
+    +   '<div class="pbscript"><span class="pbtag">ES</span>Le dejo mi número. Si quiere hablar en serio, conviene vernos antes del [fecha de subasta menos 5 días] porque el papeleo toma más o menos eso. Mándeme un "sí" por texto y le aparto tiempo.</div>'
     +   '<h4>Leave-behind (no-answer doors) — write on a business card / index card</h4>'
-    +   '<div class="pbscript">Sorry I missed you.\nYour foreclosure sale is [date].\nCall or text before then — I\'m local, I can help.\n[phone] — Alejandro</div>'
+    +   '<div class="pbscript"><span class="pbtag">EN</span>Sorry I missed you.\nYour foreclosure sale is [date].\nCall or text before then — I\'m local, I can help.\n[phone] — Alejandro</div>'
+    +   '<div class="pbscript"><span class="pbtag">ES</span>Lamento no haberlo encontrado.\nSu subasta de ejecución es el [fecha].\nLlame o escriba antes — soy local, puedo ayudar.\n[teléfono] — Alejandro</div>'
     +   '<div class="pbcallout warn"><b>Federal law:</b> tuck it in the door jamb, NEVER the mailbox. Mailbox is USPS-only — dropping a note there is a misdemeanor.</div>'
     + '</section>'
     // ---- 4) OBJECTIONS ----
@@ -4768,6 +4771,7 @@ function genScript(r){
   };
   const S = { en:{goal:goalEN,comp:compEN,open:openEN,disc:discEN,offer:offerEN,obj:objEN,close:closeEN,leave:leaveEN},
               es:{goal:goalES,comp:compES,open:openES,disc:discES,offer:offerES,obj:objES,close:closeES,leave:leaveES} };
+  const dualSay = (en, es) => `<div class="dual"><div class="say"><span class="ltag">EN — You say</span>${en}</div><div class="say es"><span class="ltag">ES — Usted dice</span>${es}</div></div>`;
   const render = lang => `
     <div class="goal"><span class="lbl">${T[lang].goal}</span>${badge}${S[lang].goal}</div>
     <div class="sec">${T[lang].before}</div><div class="comp"><ul>${S[lang].comp.map(c=>`<li>${c}</li>`).join('')}</ul></div>
@@ -4778,34 +4782,62 @@ function genScript(r){
     <div class="sec">${T[lang].push}</div><div class="obj">${S[lang].obj.map(o=>`<div class="qa"><div class="q">${o[0]}</div><div class="a">${o[1]}</div></div>`).join('')}</div>
     <div class="sec">${T[lang].close}</div><div class="say">${S[lang].close}<br><br>${S[lang].leave}</div>
     <div class="after">${T[lang].after}</div>`;
+  // Default mid-call view: EN + ES dialogue stacked so Spanish is visible without hunting a tab.
+  const renderBoth = () => `
+    <div class="tip">South Florida default — English and Spanish dialogue side-by-side. Switch language mid-call without flipping tabs.</div>
+    <div class="goal"><span class="lbl">Your goal / Su objetivo</span>${badge}${goalEN}<div class="goal-es">${goalES}</div></div>
+    <div class="sec">Before you dial / Antes de llamar</div><div class="comp"><ul>${compEN.map(c=>`<li>${c}</li>`).join('')}</ul>
+      <div class="comp-es"><ul>${compES.map(c=>`<li>${c}</li>`).join('')}</ul></div></div>
+    <div class="sec">Numbers to try / Números</div>${phBlock('en')}
+    <div class="sec">Opener — dialogue</div>${dualSay(openEN, openES)}
+    <div class="sec">Qualify — ask, then listen / Califique</div>
+    <ol class="disc dual-disc">${discEN.map((d,i)=>`<li><div class="d-en"><span class="ltag">EN</span>${d}</div><div class="d-es"><span class="ltag">ES</span>${discES[i]||''}</div></li>`).join('')}</ol>
+    <div class="sec">Handoff — book the callback / El pase</div>${dualSay(offerEN, offerES)}
+    <div class="sec">If they push back / Objeciones</div>
+    <div class="obj">${objEN.map((o,i)=>`<div class="qa dual-qa">
+      <div class="q"><span class="ltag">EN</span>${o[0]}</div><div class="a">${o[1]}</div>
+      <div class="q esq"><span class="ltag">ES</span>${objES[i][0]}</div><div class="a esa">${objES[i][1]}</div>
+    </div>`).join('')}</div>
+    <div class="sec">Lock it in / Ciérrelo</div>${dualSay(closeEN+'<br><br>'+leaveEN, closeES+'<br><br>'+leaveES)}
+    <div class="after">${T.en.after}<br><br>${T.es.after}</div>`;
 
   const CSS = `body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:0 auto;padding:30px 22px 60px;color:#12203a;line-height:1.5;font-size:16px}
-  .bar{background:#0e1b33;padding:10px 14px;margin:-30px -22px 22px;display:flex;gap:8px;position:sticky;top:0;z-index:5}
+  .bar{background:#0e1b33;padding:10px 14px;margin:-30px -22px 22px;display:flex;flex-wrap:wrap;gap:8px;position:sticky;top:0;z-index:5}
   .bar button{padding:8px 14px;cursor:pointer;border:1px solid #33436a;background:#16233f;color:#cdd8ef;border-radius:6px;font-size:14px}
   .bar button.on{background:#c69a3a;color:#1a1205;border-color:#c69a3a;font-weight:700}
   h1{font-size:20px;margin:0 0 2px}.subh{color:#5b6b8c;font-size:13px;margin-bottom:8px}.subh b{color:#b4402e}
+  .tip{background:#eef8f0;border:1px solid #c5e3cc;border-radius:8px;padding:9px 12px;font-size:13px;color:#0e5f31;margin:0 0 14px;font-weight:600}
   .sec{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#8a97b5;font-weight:700;margin:22px 0 7px;border-top:1px solid #e7ebf3;padding-top:13px}
   .goal{background:#eef3ff;border:1px solid #d5e0f5;border-left:4px solid #3f6bd0;border-radius:8px;padding:12px 14px;font-weight:600}
   .goal .lbl{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#3f6bd0;margin-bottom:4px;font-weight:700}
+  .goal-es{margin-top:8px;padding-top:8px;border-top:1px dashed #c5d4ef;font-weight:500;color:#2a4068;font-size:15px}
   .vbadge{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:5px;vertical-align:1px}
   .vb-strong{background:#1f7a44;color:#fff}.vb-marginal{background:#b7791f;color:#fff}.vb-pass{background:#6b7280;color:#fff}.vb-verify{background:#b4402e;color:#fff}
   .comp{background:#fdf6ec;border:1px solid #f0dcbf;border-radius:8px;padding:4px 16px}.comp ul{margin:8px 0;padding-left:18px}.comp li{margin:7px 0}
+  .comp-es{margin-top:8px;padding-top:6px;border-top:1px dashed #e8c99a;color:#5a4a28;font-size:14.5px}
   .dnc{color:#b4402e;font-weight:700}
   .say{background:#f7f9fc;border:1px solid #e7ebf3;border-radius:8px;padding:13px 15px;font-size:17px}
+  .say.es{background:#f3faf5;border-color:#c5e3cc;margin-top:8px}
+  .ltag{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#5b6b8c;background:#eef1f6;padding:2px 7px;border-radius:4px;margin:0 0 7px}
+  .say.es .ltag{color:#0e5f31;background:#e0f0e6}
+  .dual{display:flex;flex-direction:column;gap:0}
   .disc{padding-left:22px;margin:0}.disc li{margin:9px 0}.key{color:#b4402e;font-weight:700;font-size:13px}
+  .dual-disc li{margin:14px 0}.d-en{margin-bottom:5px}.d-es{background:#f3faf5;border:1px solid #c5e3cc;border-radius:7px;padding:8px 11px;font-size:15.5px}
   .ph{padding-left:20px;margin:0}.ph li{margin:5px 0;font-size:18px}
-  .obj .qa{margin:11px 0}.obj .q{font-weight:700;color:#0e1b33}.obj .a{color:#33425f;margin-top:2px}
+  .obj .qa{margin:11px 0;padding-bottom:11px;border-bottom:1px solid #eef1f6}.obj .q{font-weight:700;color:#0e1b33}.obj .a{color:#33425f;margin-top:2px}
+  .dual-qa .esq{margin-top:8px;color:#0e5f31}.dual-qa .esa{color:#2a4a35;background:#f3faf5;border-radius:6px;padding:7px 10px;margin-top:3px}
   .after{margin-top:22px;font-size:13px;color:#5b6b8c;background:#f2f4f8;border-radius:8px;padding:10px 13px}
   .muted{color:#8a97b5}
   @media print{.bar{display:none}body{padding:0;max-width:none;font-size:12pt}.sec{page-break-after:avoid}.say,.goal,.comp{break-inside:avoid}}`;
 
   const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Call script - ${esc(owner)}</title><style>${CSS}</style></head><body>
-<div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">Print</button></div>
+<div class="bar"><button id="both" class="on" onclick="show('both')">EN + ES</button><button id="en" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">Print</button></div>
 <h1>${esc(owner)}</h1>
-<div class="subh">${addr} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${dt}</b> &middot; ${esc(r.case)} &middot; <b>📖 Field Manual</b> (5 exits · buyer posture · FL 501.1377)</div>
-<div id="body-en">${render('en')}</div>
+<div class="subh">${addr} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${dt}</b> &middot; ${esc(r.case)} &middot; <b>📖 Field Manual</b> (5 exits · buyer posture · FL 501.1377) &middot; bilingual dialogue</div>
+<div id="body-both">${renderBoth()}</div>
+<div id="body-en" style="display:none">${render('en')}</div>
 <div id="body-es" style="display:none">${render('es')}</div>
-<script>function show(l){document.getElementById('body-en').style.display=l==='en'?'block':'none';document.getElementById('body-es').style.display=l==='es'?'block':'none';document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
+<script>function show(l){['both','en','es'].forEach(function(x){document.getElementById('body-'+x).style.display=x===l?'block':'none';document.getElementById(x).className=x===l?'on':'';});}<\/script>
 </body></html>`;
   _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
 }
