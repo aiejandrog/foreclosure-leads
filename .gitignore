@@ -45,4 +45,9 @@ whitepages.key
 whitepages_lookup.json
 *whitepages*cookies*
 *_cookies.txt
+_wp_*.py
+_wp_*.html
+_wp_*.json
+_chunk.html
+_cstest.py
 balloon_refi.json
