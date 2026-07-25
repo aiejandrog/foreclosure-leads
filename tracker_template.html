@@ -92,11 +92,11 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
   -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
   filter:drop-shadow(0 0 7px rgba(198,161,75,.28));animation:wmShine 5s linear infinite;transition:filter .45s var(--e-lux)}
 .brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(198,161,75,.55)) brightness(1.07)}
-.brand .tag{font-family:var(--f-label);font-size:9px;font-weight:600;letter-spacing:.14em;
-  text-transform:uppercase;color:var(--muted);margin-top:3px;max-height:20px;overflow:hidden;
+.brand .tag{font-family:var(--f-label);font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-2);margin-top:4px;max-height:24px;overflow:hidden;
   transition:opacity .25s var(--e-lux),max-height .25s var(--e-lux),margin-top .25s var(--e-lux)}
 .brand .spacer{flex:1}
-.brand .upd{font-size:11px;color:var(--muted-2);text-align:right;align-self:center;
+.brand .upd{font-size:12px;color:var(--muted);text-align:right;align-self:center;
   font-variant-numeric:tabular-nums;line-height:1.5;max-height:40px;overflow:hidden;
   transition:opacity .25s var(--e-lux),max-height .25s var(--e-lux)}
 .brand .upd.stale{color:#B45309 !important;font-weight:700}
@@ -111,8 +111,8 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;transition:gap .25s var(--e-lux),margin .25s var(--e-lux)}
 .controls+.controls{margin-top:8px}
 .fgroup{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
-.flbl{font-family:var(--f-label);font-size:9.5px;font-weight:700;letter-spacing:.11em;
-  text-transform:uppercase;color:var(--muted);margin-right:2px;
+.flbl{font-family:var(--f-label);font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-2);margin-right:2px;
   opacity:1;max-width:80px;overflow:hidden;white-space:nowrap;
   transition:opacity .25s var(--e-lux),max-width .25s var(--e-lux),margin-right .25s var(--e-lux)}
 .fdiv{width:1px;align-self:stretch;min-height:24px;background:var(--line);margin:0 4px}
@@ -164,7 +164,9 @@ button:not(.dg):not(.active):not(.cpy):not(:disabled):hover,.dealtog:hover,.lkb:
 button:not(.dg):not(.cpy):active,.dealtog:active{transform:translateY(0) scale(.985);
   transition-duration:.09s;transition-timing-function:var(--e-snap)}
 input{cursor:text}
-input::placeholder{color:var(--muted-2)}
+input::placeholder{color:var(--muted);opacity:1}
+input::-webkit-input-placeholder{color:var(--muted);opacity:1}
+input::-moz-placeholder{color:var(--muted);opacity:1}
 /* segmented tier pills */
 .tf{border-radius:var(--pill);padding:7px 15px;font-weight:600;color:var(--ink-2)}
 .tf:hover{transform:translateY(-1px);border-color:rgba(198,161,75,.4);background-color:rgba(198,161,75,.06)}
@@ -202,6 +204,11 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 #freshlp.abtn:hover{background:rgba(22,101,52,.08)}
 #freshlp.abtn.active{background:var(--green-ink,#166534);color:#fff;border-color:var(--green-ink,#166534);box-shadow:var(--sh-2)}
 #mailbatch,#exp{border-radius:var(--pill);font-weight:600}
+/* Outreach cluster — readable at a glance (was drowning at 13px muted among denser chrome) */
+#bulktext,#mailbatch,#cadencebtn,#savedbtn{display:inline-flex;align-items:center;gap:7px;
+  font-size:13.5px;font-weight:700;color:var(--ink);border-radius:var(--pill)}
+#bulktext{border-color:rgba(21,39,71,.28);color:var(--ink)}
+#bulktext:hover{border-color:var(--blue);color:var(--blue-ink);background:var(--blue-soft)}
 #advtog{border-radius:var(--pill);background:var(--surface);color:var(--ink);border-color:var(--line);font-weight:600}
 #advtog:hover{border-color:var(--gold);color:var(--gold-d)}
 #advtog.active{background:var(--gold-soft);border-color:var(--gold);color:var(--gold-d)}
@@ -259,14 +266,14 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .dg.ok .dg-ic{background:rgba(110,231,168,.12);border-color:rgba(110,231,168,.26)}
 .dg.ok .dg-ic svg{color:#7FE7AE}
 .dg-t{display:flex;flex-direction:column;min-width:0}
-.dg-k{font-family:var(--f-label);font-size:8.5px;font-weight:600;letter-spacing:.13em;
-  text-transform:uppercase;color:rgba(255,255,255,.78);white-space:nowrap;
+.dg-k{font-family:var(--f-label);font-size:10px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:rgba(255,255,255,.88);white-space:nowrap;
   transition:font-size .3s var(--e-lux),letter-spacing .3s var(--e-lux),max-width .3s var(--e-lux)}
-.dg-v{font-family:var(--f-num);font-size:16.5px;font-weight:700;letter-spacing:-.01em;
+.dg-v{font-family:var(--f-num);font-size:17px;font-weight:700;letter-spacing:-.01em;
   color:#fff;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   transition:font-size .18s cubic-bezier(.22,1,.36,1)}
 .dg-v b{color:var(--gold-l);font-weight:700}
-.dg-s{font-size:10.5px;color:rgba(255,255,255,.78);margin-top:1px;white-space:nowrap;
+.dg-s{font-size:12px;color:rgba(255,255,255,.88);margin-top:1px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis;max-height:18px;opacity:1;
   transition:max-height .22s cubic-bezier(.22,1,.36,1),opacity .16s cubic-bezier(.22,1,.36,1),margin-top .22s cubic-bezier(.22,1,.36,1)}
 /* (No .collapsed state — the rail is a normal in-flow element that scrolls with content.) */
@@ -545,25 +552,28 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .ctnum{font-family:var(--f-display,inherit);font-size:18px;font-weight:800;color:var(--ink,#101C33);letter-spacing:.01em;
   font-variant-numeric:tabular-nums;min-width:7.5em}
 .ctacts{display:inline-flex;flex-wrap:wrap;align-items:center;gap:6px}
-.ctact{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;letter-spacing:.02em;
-  padding:7px 11px;border-radius:8px;text-decoration:none;border:1px solid transparent;cursor:pointer;line-height:1}
-a.ctact:hover{text-decoration:none;filter:brightness(1.05)}
-.ctact-call{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730)}
-.ctact-call:hover{background:#C6A14B;color:#0B1730;border-color:#C6A14B}
-.ctact-text{background:#0B1730;color:#fff;border-color:#0B1730}
-.ctact-text:hover{background:#1F6FEB;border-color:#1F6FEB}
-.ctact-wa{background:#128C7E;color:#fff;border-color:#128C7E}
-.ctact-wa:hover{background:#0E7A6E}
-.ctact-wa svg{width:13px;height:13px;display:block}
+.ctact{display:inline-flex;align-items:center;gap:5px;font-size:12.5px;font-weight:800;letter-spacing:.02em;
+  padding:7px 12px;border-radius:8px;text-decoration:none;border:1px solid transparent;cursor:pointer;line-height:1;
+  -webkit-text-fill-color:currentColor}
+a.ctact:hover{text-decoration:none;filter:none}
+/* WHITE labels on solid buttons — .links a { color:ink-2 } was painting Call/Text navy-on-navy */
+.ctact-call,.ctact-text,.ctact-wa{color:#fff!important;border-color:transparent}
+.ctact-call{background:var(--navy,#0B1730);border-color:var(--navy,#0B1730)}
+.ctact-call:hover{background:#C6A14B!important;color:var(--gold-ink,#241C05)!important;border-color:#C6A14B}
+.ctact-text{background:#0B1730;border-color:#0B1730}
+.ctact-text:hover{background:#1F6FEB!important;color:#fff!important;border-color:#1F6FEB}
+.ctact-wa{background:#128C7E;border-color:#128C7E}
+.ctact-wa:hover{background:#0E7A6E!important;color:#fff!important}
+.ctact-wa svg{width:13px;height:13px;display:block;stroke:#fff;color:#fff}
 .cttag{font-size:10px;font-weight:700;color:var(--muted,#6b7280);margin-left:2px}
 .cttag.dnc{color:#c0392b}
 .csmsgbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px}
-.csmsglbl{font-family:var(--f-label,inherit);font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--muted,#6b7280)}
+.csmsglbl{font-family:var(--f-label,inherit);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-2)}
 /* Board link groups — labeled so Call / Text / WA are not a soup of chips */
 .links .lgrp,.clinks .lgrp{position:relative}
-.lgrp-lab{display:block;font-family:var(--f-label,inherit);font-size:9px;font-weight:800;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--muted,#4A5670);margin:0 0 3px}
+.lgrp-lab{display:block;font-family:var(--f-label,inherit);font-size:10.5px;font-weight:800;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-2,#2A3750);margin:0 0 4px}
 .links .lgrp.lgrp-contact,.clinks .lgrp.lgrp-contact{padding:6px 8px;background:rgba(11,23,48,.04);
   border:1px solid var(--line,#E2E6EE);border-radius:8px;gap:6px 10px}
 .links .lgrp.lgrp-contact .lgrp-lab,.clinks .lgrp.lgrp-contact .lgrp-lab{color:var(--navy,#0B1730)}
@@ -575,8 +585,14 @@ a.ctact:hover{text-decoration:none;filter:brightness(1.05)}
 .links .lgrp.lgrp-eval a.dig,.clinks .lgrp.lgrp-eval a.dig{color:var(--navy,#152747)!important;font-weight:700}
 .links .lgrp.lgrp-eval a:hover,.clinks .lgrp.lgrp-eval a:hover,
 .links .lgrp.lgrp-eval a.dig:hover,.clinks .lgrp.lgrp-eval a.dig:hover{color:var(--gold-d,#6F5514)!important}
-.links a.ctact,.clinks a.ctact{font-size:11.5px;padding:5px 9px}
-.links a.ctact::after,.clinks a.ctact::after{display:none}
+.links a.ctact,.clinks a.ctact{font-size:12.5px;padding:7px 12px;font-weight:800}
+.links a.ctact::after,.clinks a.ctact::after{display:none!important}
+.links a.ctact-call,.clinks a.ctact-call,
+.links a.ctact-text,.clinks a.ctact-text,
+.links a.ctact-wa,.clinks a.ctact-wa{color:#fff!important}
+.links a.ctact-call:hover,.clinks a.ctact-call:hover{color:var(--gold-ink,#241C05)!important}
+.links a.ctact-text:hover,.clinks a.ctact-text:hover,
+.links a.ctact-wa:hover,.clinks a.ctact-wa:hover{color:#fff!important}
 .links .ctline,.clinks .ctline{padding:5px 7px;gap:6px;width:100%}
 .links .ctnum,.clinks .ctnum{font-size:13.5px;min-width:0}
 /* the debt stack — one card per open lien, position + who holds it + is it wiped */
@@ -848,11 +864,11 @@ a:hover{text-decoration:underline}
 .links .lgrp,.clinks .lgrp{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 14px;line-height:1.5}
 .links .lgrp+.lgrp,.clinks .lgrp+.lgrp{margin-top:5px}
 .links a,.clinks a{position:relative;text-decoration:none;color:var(--ink-2);font-weight:600;
-  font-size:12.5px;transition:color .2s var(--e-lux)}
-.links a::after,.clinks a::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
+  font-size:13px;transition:color .2s var(--e-lux)}
+.links a:not(.ctact)::after,.clinks a:not(.ctact)::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;
   background:var(--gold-grad);transform:scaleX(0);transform-origin:100% 50%;transition:transform .3s var(--e-lux)}
-.links a:hover,.clinks a:hover{color:var(--gold-d);text-decoration:none}
-.links a:hover::after,.clinks a:hover::after{transform:scaleX(1);transform-origin:0 50%}
+.links a:not(.ctact):hover,.clinks a:not(.ctact):hover{color:var(--gold-d);text-decoration:none}
+.links a:not(.ctact):hover::after,.clinks a:not(.ctact):hover::after{transform:scaleX(1);transform-origin:0 50%}
 .links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:700}
 .links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
 .links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
@@ -1635,13 +1651,13 @@ body.compact .dg-v{font-size:14.5px}
 <button id="clr">Clear dates</button>
 </div>
 <div class="controls dealpanel">
-<span style="color:var(--gold-d);font-size:12px;font-weight:700">Deal model &rarr; Est. Profit:</span>
-<label style="font-size:12px" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="75" min="40" max="100" style="width:60px">% of market value</label>
-<label style="font-size:12px" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:56px">%</label>
-<span style="color:var(--gold-d);font-size:11px;font-weight:600" title="These two apply to Tax Deed leads only">| Tax deed:</span>
-<label style="font-size:12px" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:56px">%</label>
-<label style="font-size:12px" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:82px"></label>
-<label style="font-size:12px" title="Tax deed only: the MOST you'd pay at auction, as % of market value (your disciplined ceiling that still leaves room for quiet title + costs + profit). Equity parcels bid up — if live bidding passes this, walk. Raise it if you're willing to pay closer to market.">win bid <input id="tdclear" type="number" value="70" min="0" max="100" style="width:60px">% of market</label>
+<span style="color:var(--gold-d);font-size:13px;font-weight:700">Deal model &rarr; Est. Profit:</span>
+<label style="font-size:13px;color:var(--ink)" title="What you pay to acquire the property, as a % of its market value. Distressed sellers facing auction often take 70-85% for a fast, certain close.">You buy at <input id="buypct" type="number" value="75" min="40" max="100" style="width:60px">% of market value</label>
+<label style="font-size:13px;color:var(--ink)" title="Closing, title, quiet-title, light rehab and resale costs, as a % of value.">+ Costs <input id="costpct" type="number" value="10" min="0" max="40" style="width:56px">%</label>
+<span style="color:var(--gold-d);font-size:12px;font-weight:700" title="These two apply to Tax Deed leads only">| Tax deed:</span>
+<label style="font-size:13px;color:var(--ink)" title="Tax deed only: how far above the opening bid you assume you win the auction.">bid +<input id="bidover" type="number" value="20" min="0" style="width:56px">%</label>
+<label style="font-size:13px;color:var(--ink)" title="Tax deed only: quiet-title cost to make the title marketable so you can resell / insure it.">quiet title $<input id="quiettitle" type="number" value="3000" step="500" style="width:82px"></label>
+<label style="font-size:13px;color:var(--ink)" title="Tax deed only: the MOST you'd pay at auction, as % of market value (your disciplined ceiling that still leaves room for quiet title + costs + profit). Equity parcels bid up — if live bidding passes this, walk. Raise it if you're willing to pay closer to market.">win bid <input id="tdclear" type="number" value="70" min="0" max="100" style="width:60px">% of market</label>
 <button id="dealreset" style="font-size:11px;padding:3px 9px" title="Reset the deal model (buy %, costs, tax-deed win-bid) back to the recommended defaults. Use this if every lead is showing PASS.">&#8635; Reset defaults</button>
 <span class="stats" id="dealsum" style="margin-left:0"></span>
 </div>
