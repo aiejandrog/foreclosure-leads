@@ -430,9 +430,7 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .playbadge{display:inline-flex;align-items:center;font-family:var(--f-label);font-size:8px;font-weight:700;letter-spacing:.5px;color:#fff;padding:2px 6px;border-radius:5px;margin-left:5px;vertical-align:middle;text-transform:uppercase;cursor:help;white-space:nowrap}
 .routebtn{margin-left:10px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:7px;background:var(--navy,#0B1730);color:#fff;border:none;cursor:pointer;vertical-align:middle;transition:background .15s}
 .routebtn:hover{background:#C6A14B;color:#0B1730}
-.csscout{margin-top:6px;font-size:12px;color:var(--muted,#8892a6)}
-.csscout a{color:var(--blue,#1F6FEB);text-decoration:none;font-weight:600}
-.csscout a:hover{text-decoration:underline}
+/* .csscout link chip styles live with .cspeople (mobile-first tap targets) */
 .csverify{display:inline-block;margin-left:8px;font-size:11px;font-weight:700;color:var(--blue,#1F6FEB);text-decoration:none;white-space:nowrap}
 .csverify:hover{text-decoration:underline}
 /* PLAY banner on the call sheet — the money-angle for THIS deal (Jose: no deal is dead), first thing under the address */
@@ -440,9 +438,24 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csplay .playbadge{margin-left:0;font-size:9px;padding:3px 8px;flex:none;margin-top:1px}
 .csplayw{font-size:12.5px;line-height:1.45;color:var(--fg,#2a3140)}
 /* People/CyberBG lookup line inside the call sheet — find a number without leaving the sheet */
-.cspeople{margin-top:7px;font-size:12px;color:var(--muted,#8892a6)}
-.cspeople a{color:var(--blue,#1F6FEB);text-decoration:none;font-weight:600}
-.cspeople a:hover{text-decoration:underline}
+.cspeople{margin-top:9px;font-size:12px;color:var(--muted,#8892a6)}
+.cspeolbl{display:block;font-family:var(--f-label,inherit);font-size:10.5px;font-weight:800;
+  letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2,#2A3750);margin:0 0 6px}
+.cspeochips{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
+.cspeople a{display:inline-flex;align-items:center;justify-content:center;min-height:40px;
+  padding:8px 14px;border-radius:999px;border:1px solid rgba(31,111,235,.35);
+  background:var(--blue-soft,#E8EFFC);color:var(--blue-ink,#163F99);text-decoration:none;
+  font-weight:700;font-size:13px;line-height:1.2;touch-action:manipulation;-webkit-tap-highlight-color:rgba(31,111,235,.18)}
+.cspeople a:hover{text-decoration:none;border-color:var(--blue,#1E4FBF);filter:brightness(1.02)}
+.cspeople a.wpprop,.csscout a.wpprop{background:var(--gold-soft,rgba(198,161,75,.16));
+  border-color:rgba(198,161,75,.55);color:var(--gold-d,#6F5514);font-weight:800}
+.cspeople a.wpprop:hover,.csscout a.wpprop:hover{border-color:var(--gold,#C6A14B);background:rgba(198,161,75,.22)}
+.csscout{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;font-size:12px;color:var(--muted,#8892a6)}
+.csscout a{display:inline-flex;align-items:center;justify-content:center;min-height:40px;
+  padding:8px 14px;border-radius:999px;border:1px solid var(--line,#E2E6EE);
+  background:var(--surface,#fff);color:var(--blue-ink,#163F99);text-decoration:none;
+  font-weight:700;font-size:13px;touch-action:manipulation}
+.csscout a:hover{border-color:var(--blue,#1E4FBF);text-decoration:none}
 .csreclink{color:var(--blue,#1F6FEB);text-decoration:none;font-weight:700;white-space:nowrap}
 .csreclink:hover{text-decoration:underline}
 /* WP Pro API verified badge — replaces the misleading free-consumer-page link on covered leads */
@@ -870,6 +883,16 @@ a:hover{text-decoration:underline}
 .links a:not(.ctact):hover,.clinks a:not(.ctact):hover{color:var(--gold-d);text-decoration:none}
 .links a:not(.ctact):hover::after,.clinks a:not(.ctact):hover::after{transform:scaleX(1);transform-origin:0 50%}
 .links a.dig,.clinks a.dig{color:var(--gold-d);font-weight:700}
+/* Whitepages Property Intel — fat chip so phones can hit it (Jose porch test) */
+.links a.wpprop,.clinks a.wpprop,.cspeople a.wpprop,.csscout a.wpprop{
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  min-height:36px;padding:7px 12px;border-radius:999px;font-weight:800;font-size:13px;
+  background:var(--gold-soft,rgba(198,161,75,.16));border:1px solid rgba(198,161,75,.55);
+  color:var(--gold-d,#6F5514)!important;text-decoration:none;touch-action:manipulation;
+  -webkit-tap-highlight-color:rgba(198,161,75,.25);line-height:1.2}
+.links a.wpprop::after,.clinks a.wpprop::after{display:none!important}
+.links a.wpprop:hover,.clinks a.wpprop:hover{color:var(--gold-ink,#241C05)!important;
+  background:rgba(198,161,75,.28);border-color:var(--gold,#C6A14B);text-decoration:none}
 .links a.phone,.clinks a.phone{color:var(--green-ink);font-weight:700}
 .links a.phone.dnc,.clinks a.phone.dnc{color:var(--amber-ink)}
 .links span.phone,.clinks span.phone{display:inline-flex;align-items:center;font-size:11px;line-height:1.3;
@@ -1381,14 +1404,23 @@ body.compact .dg-v{font-size:14.5px}
   .tblwrap{display:none}
   #cards{display:block}
   .clinks{display:block}
-  #cards .clinks .lgrp{gap:6px}
-  #cards .clinks a{font-size:12.5px;padding:8px 12px}
-  #cards .clinks span.phone{font-size:12.5px;padding:8px 12px}
+  #cards .clinks .lgrp{gap:8px}
+  #cards .clinks a{display:inline-flex;align-items:center;justify-content:center;
+    font-size:13.5px;padding:10px 14px;min-height:44px;border-radius:999px;
+    border:1px solid var(--line,#E2E6EE);background:var(--surface,#fff);
+    touch-action:manipulation;-webkit-tap-highlight-color:rgba(198,161,75,.2)}
+  #cards .clinks a.dig{background:var(--gold-soft,rgba(198,161,75,.1));border-color:rgba(198,161,75,.4)}
+  #cards .clinks a.wpprop{min-height:48px;font-size:14.5px;padding:12px 16px;
+    background:var(--gold-soft,rgba(198,161,75,.22));border-color:var(--gold,#C6A14B)}
+  #cards .clinks a.ctact{border-color:transparent}
+  #cards .clinks span.phone{font-size:13px;padding:10px 14px;min-height:44px}
+  .cspeople a,.csscout a{min-height:48px;font-size:14.5px;padding:12px 16px}
+  .cspeople a.wpprop,.csscout a.wpprop{min-height:52px;font-size:15px;padding:13px 18px}
   /* phones: enlarge the small icon buttons so they're actually tappable (2026-07-21 audit —
      WhatsApp was 22px, copy ~19px; a mis-tap on a tiny target reads as "the link didn't work"). */
-  #cards a.wabtn{width:32px;height:32px}
-  #cards a.wabtn svg{width:15px;height:15px}
-  #cards .cpy{padding:5px 9px}
+  #cards a.wabtn{width:44px;height:44px}
+  #cards a.wabtn svg{width:18px;height:18px}
+  #cards .cpy{padding:10px 12px;min-height:44px}
   #cards select.status,#cards input.ph{height:38px;font-size:13px}
   #cards textarea.notes{min-height:52px;font-size:13px}
   .phero{height:220px}
@@ -2714,9 +2746,13 @@ function _dncPhones(r){ return (r.phones||[]).filter((p,i) => !!((r.phdnc||[])[i
 // navigate, without an API key. On a phone these open the Maps app.
 function _csScout(r){ if(!r || !r.addr) return '';
   var q = encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL '));
-  return '<div class="csscout">🗺 <a href="https://www.google.com/maps/search/?api=1&query='+q+'" target="_blank" rel="noopener" title="Open in Google Maps — flip to satellite for the lot/roof/pool">Aerial</a> · '
-    +'<a href="https://www.google.com/maps?q='+q+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener" title="Street View — the house from the road: condition, occupancy, cars in the drive, before you burn a trip">Street View</a> · '
-    +'<a href="https://www.google.com/maps/dir/?api=1&destination='+q+'&travelmode=driving" target="_blank" rel="noopener" title="Directions from where you are now — opens the Maps app">Directions</a></div>';
+  var wp = _wpPropUrl(r);
+  var chips = [];
+  if(wp) chips.push('<a class="wpprop" href="'+esc(wp)+'" target="_blank" rel="noopener noreferrer" title="Whitepages Property Intel — owners, occupancy, phones/relatives when logged in">⭐ WP property</a>');
+  chips.push('<a href="https://www.google.com/maps/search/?api=1&query='+q+'" target="_blank" rel="noopener noreferrer" title="Open in Google Maps — flip to satellite for the lot/roof/pool">🛰 Aerial</a>');
+  chips.push('<a href="https://www.google.com/maps?q='+q+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener noreferrer" title="Street View — the house from the road: condition, occupancy, cars in the drive, before you burn a trip">👁 Street View</a>');
+  chips.push('<a href="https://www.google.com/maps/dir/?api=1&destination='+q+'&travelmode=driving" target="_blank" rel="noopener noreferrer" title="Directions from where you are now — opens the Maps app">🧭 Directions</a>');
+  return '<div class="csscout">'+chips.join('')+'</div>';
 }
 // WHITEPAGES PRO HOUSEHOLD BREAKDOWN — per-owner phones + emails + current location, sourced from the
 // paid /v2/property endpoint (whitepages_lookup.py, cached in whitepages_lookup.json). This is what
@@ -2806,7 +2842,8 @@ function _wpPropUrl(r){
 function _csPeople(r){
   var L=[], wn=_wpNameUrl(r), wa=_wpAddrUrl(r), wp=_wpPropUrl(r);
   // Property Intel deep-link first — owner/occupant intel, phones, relatives when the session has access.
-  if(wp) L.push('<a href="'+esc(wp)+'" target="_blank" rel="noopener" title="Whitepages Property Intel — opens this address on property.whitepages.com (owners, occupancy, phones/relatives when logged in). Stable ?address= deep-link; no cookies baked into Dealflow.">⭐ WP property</a>');
+  // class=wpprop + chip layout: ≥44px tap target on phones (inline " · " links were untappable).
+  if(wp) L.push('<a class="wpprop" href="'+esc(wp)+'" target="_blank" rel="noopener noreferrer" title="Whitepages Property Intel — opens this address on property.whitepages.com (owners, occupancy, phones/relatives when logged in). Stable ?address= deep-link; no cookies baked into Dealflow.">⭐ WP property</a>');
   // If WP Pro already ran on this lead, don't send the closer back to the free consumer page — it
   // shows LESS data (masked phones, WP.com upsell nag) than the WP HOUSEHOLD section right above.
   // Show a static "verified" badge instead so they know the API already covered it.
@@ -2814,14 +2851,14 @@ function _csPeople(r){
   if(wpDone) {
     L.push('<span class="wpverified" title="Whitepages Pro API already ran on this lead — every unmasked phone and email is in the WHITEPAGES-VERIFIED HOUSEHOLD section above. No need to hit the free consumer page.">🔒 WP Pro verified above</span>');
   } else {
-    if(wa)          L.push('<a href="'+esc(wa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS (people search) — free tier often prints the household landline UNMASKED + residents/relatives with ages. Start here if Property Intel is paywalled. (WP Pro API hasn\'t run on this lead yet — refresh to enrich.)">Whitepages addr</a>');
-    if(wn)          L.push('<a href="'+esc(wn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — address history + aliases (may go by), cell/landline behind their paywall but the free layer cross-checks who is who">Whitepages</a>');
+    if(wa)          L.push('<a href="'+esc(wa)+'" target="_blank" rel="noopener noreferrer" title="Whitepages REVERSE ADDRESS (people search) — free tier often prints the household landline UNMASKED + residents/relatives with ages. Start here if Property Intel is paywalled. (WP Pro API hasn\'t run on this lead yet — refresh to enrich.)">Whitepages addr</a>');
+    if(wn)          L.push('<a href="'+esc(wn)+'" target="_blank" rel="noopener noreferrer" title="Whitepages by NAME — address history + aliases (may go by), cell/landline behind their paywall but the free layer cross-checks who is who">Whitepages</a>');
   }
-  if(r.people)      L.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener" title="TruePeopleSearch by NAME — phones, relatives, address history">People</a>');
-  if(r.peopleaddr)  L.push('<a href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the property ADDRESS — returns only who actually lives there">by address</a>');
-  if(r.cyberbg)     L.push('<a href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by NAME — every phone with carrier + last-reported date, emails, relatives">CyberBG</a>');
-  if(r.cyberbgaddr) L.push('<a href="'+esc(r.cyberbgaddr)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by ADDRESS — who lives there now, phones the name search misses">CyberBG addr</a>');
-  return L.length ? '<div class="cspeople">🔎 Find a number: '+L.join(' · ')+'</div>' : '';
+  if(r.people)      L.push('<a href="'+esc(r.people)+'" target="_blank" rel="noopener noreferrer" title="TruePeopleSearch by NAME — phones, relatives, address history">People</a>');
+  if(r.peopleaddr)  L.push('<a href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener noreferrer" title="TruePeopleSearch by the property ADDRESS — returns only who actually lives there">by address</a>');
+  if(r.cyberbg)     L.push('<a href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener noreferrer" title="CyberBackgroundChecks by NAME — every phone with carrier + last-reported date, emails, relatives">CyberBG</a>');
+  if(r.cyberbgaddr) L.push('<a href="'+esc(r.cyberbgaddr)+'" target="_blank" rel="noopener noreferrer" title="CyberBackgroundChecks by ADDRESS — who lives there now, phones the name search misses">CyberBG addr</a>');
+  return L.length ? '<div class="cspeople"><span class="cspeolbl">🔎 Find a number</span><div class="cspeochips">'+L.join('')+'</div></div>' : '';
 }
 function _callSheet(r){
   const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
@@ -5582,9 +5619,9 @@ function render(){
       if(L.length) gPeople.push('<span class="digppl" title="'+who+'">🧑&nbsp;<b>'+esc(nm)+'</b> '+L.join('<i>·</i>')+'</span>');
     });
     var _wpa = _wpAddrUrl(r), _wpn = _wpNameUrl(r), _wpp = _wpPropUrl(r);
-    if(_wpp) gPeople.push('<a class="dig" href="'+esc(_wpp)+'" target="_blank" rel="noopener" title="Whitepages Property Intel — property.whitepages.com deep-link for THIS address (owners, occupancy, phones/relatives when your WP session is logged in). Opens with ?address=; no secrets in Dealflow.">⭐&nbsp;WP&nbsp;property</a>');
-    if(_wpa) gPeople.push('<a class="dig" href="'+esc(_wpa)+'" target="_blank" rel="noopener" title="Whitepages REVERSE ADDRESS (people search) — free tier often prints the household landline UNMASKED plus residents/relatives with ages. Use when Property Intel is paywalled or you just need a quick landline.">WP&nbsp;addr</a>');
-    if(_wpn) gPeople.push('<a class="dig" href="'+esc(_wpn)+'" target="_blank" rel="noopener" title="Whitepages by NAME — aliases (may go by) + address history to confirm which same-name person is the owner; full phones behind their paywall but the free layer cross-checks the other sources.">Whitepages</a>');
+    if(_wpp) gPeople.push('<a class="dig wpprop" href="'+esc(_wpp)+'" target="_blank" rel="noopener noreferrer" title="Whitepages Property Intel — property.whitepages.com deep-link for THIS address (owners, occupancy, phones/relatives when your WP session is logged in). Opens with ?address=; no secrets in Dealflow.">⭐ WP property</a>');
+    if(_wpa) gPeople.push('<a class="dig" href="'+esc(_wpa)+'" target="_blank" rel="noopener noreferrer" title="Whitepages REVERSE ADDRESS (people search) — free tier often prints the household landline UNMASKED plus residents/relatives with ages. Use when Property Intel is paywalled or you just need a quick landline.">WP addr</a>');
+    if(_wpn) gPeople.push('<a class="dig" href="'+esc(_wpn)+'" target="_blank" rel="noopener noreferrer" title="Whitepages by NAME — aliases (may go by) + address history to confirm which same-name person is the owner; full phones behind their paywall but the free layer cross-checks the other sources.">Whitepages</a>');
     if(r.people) gPeople.push('<a class="dig" href="'+esc(r.people)+'" target="_blank" rel="noopener" title="Dig deeper on this owner — TruePeopleSearch by NAME for relatives, extra numbers, address history. TPS may ask you to verify you are human.">People</a>');
     if(r.peopleaddr) gPeople.push('<a class="dig" href="'+esc(r.peopleaddr)+'" target="_blank" rel="noopener" title="TruePeopleSearch by the ADDRESS — returns only the 1-3 people who actually live there, so you can tell which same-name person is the owner (no need to guess by age). Best pinpoint when the name search returns a crowd.">By&nbsp;address</a>');
     if(r.cyberbg) gPeople.push('<a class="dig" href="'+esc(r.cyberbg)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks — a second source, often better than TruePeopleSearch: free detail page (one more click) shows every phone with carrier + last-reported date, up to 7 emails, RELATIVES (separate from associates — good for the tenant-intel play), and prior addresses. Cross-check against the People links above.">CyberBG</a>');
@@ -5608,10 +5645,10 @@ function render(){
     // PROPERTY scout — maps + Whitepages Property Intel (value/tax/auction live in Court & sale above).
     if(r.addr){
       var _mq = encodeURIComponent(String(r.addr).replace(/FL-\s*/i, 'FL '));
-      if(_wpp) gProp.push('<a href="'+esc(_wpp)+'" target="_blank" rel="noopener" title="Whitepages Property Intel for this address — owners, occupancy, equity signals, phones/relatives when logged in.">WP&nbsp;property</a>');
-      gProp.push('<a href="https://www.google.com/maps/search/?api=1&query='+_mq+'" target="_blank" rel="noopener" title="Open the property in Google Maps — flip to satellite to eyeball the lot, roof, pool, additions, and the neighborhood.">🛰 Map</a>');
-      gProp.push('<a href="https://www.google.com/maps?q='+_mq+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener" title="Street View — see the house from the road BEFORE you drive out: condition, boarded windows, cars in the drive, occupied or vacant. Your best free scouting tool.">👁 Street View</a>');
-      gProp.push('<a href="https://www.google.com/maps/dir/?api=1&destination='+_mq+'&travelmode=driving" target="_blank" rel="noopener" title="Turn-by-turn directions from where you are now — opens the Google Maps app on your phone.">🧭 Directions</a>');
+      if(_wpp) gProp.push('<a class="wpprop" href="'+esc(_wpp)+'" target="_blank" rel="noopener noreferrer" title="Whitepages Property Intel for this address — owners, occupancy, equity signals, phones/relatives when logged in.">⭐ WP property</a>');
+      gProp.push('<a href="https://www.google.com/maps/search/?api=1&query='+_mq+'" target="_blank" rel="noopener noreferrer" title="Open the property in Google Maps — flip to satellite to eyeball the lot, roof, pool, additions, and the neighborhood.">🛰 Map</a>');
+      gProp.push('<a href="https://www.google.com/maps?q='+_mq+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener noreferrer" title="Street View — see the house from the road BEFORE you drive out: condition, boarded windows, cars in the drive, occupied or vacant. Your best free scouting tool.">👁 Street View</a>');
+      gProp.push('<a href="https://www.google.com/maps/dir/?api=1&destination='+_mq+'&travelmode=driving" target="_blank" rel="noopener noreferrer" title="Turn-by-turn directions from where you are now — opens the Google Maps app on your phone.">🧭 Directions</a>');
     }
     // DO — actions. Outreach generators are suppressed once a lead opts out (only Log/Copy remain,
     // so the opt-out itself stays auditable).
