@@ -468,6 +468,13 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csreclink:hover{text-decoration:underline}
 /* WP Pro API verified badge — replaces the misleading free-consumer-page link on covered leads */
 .wpverified{display:inline-block;background:var(--green-soft,#DDF2E4);color:var(--green-ink,#0E5F31);font-weight:700;font-size:11px;padding:3px 9px;border-radius:5px;border:1px solid #BEE5CC;cursor:help;letter-spacing:.02em}
+/* "Also at this address" — household members who are NOT the deed owner. Visually subordinate to
+   the owner blocks above so the closer never confuses a relative for the decision-maker. */
+.wpresid{margin-top:10px;padding:10px 12px;border-radius:9px;background:var(--surface-2,#f6f8fa);border:1px dashed var(--line,#E2E6EE)}
+.wpresidh{font-family:var(--f-label,inherit);font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#6b7280);margin-bottom:7px}
+.wpresidsub{font-weight:600;letter-spacing:0;text-transform:none;font-size:11px;opacity:.9}
+.wpresidrow{margin:7px 0 9px;font-size:12.5px;line-height:1.45}
+.wpresidrow:last-child{margin-bottom:0}
 /* Person Search layer badge on the WP HOUSEHOLD section header */
 .wppersonbadge{display:inline-block;background:var(--blue-soft,#DEEBFB);color:var(--blue-ink,#1F4E97);font-family:var(--f-label);font-size:9px;font-weight:700;letter-spacing:.05em;padding:2px 7px;border-radius:5px;margin-left:8px;text-transform:uppercase;vertical-align:middle;cursor:help}
 .vb3{background:var(--green-soft);color:var(--green-ink);border-color:#8FCBAA;box-shadow:0 1px 7px rgba(8,92,52,.18)}
@@ -2809,6 +2816,22 @@ function _csScout(r){ if(!r || !r.addr) return '';
 // unlooked-up cases don't render an empty block.
 function _wpHousehold(r){
   var owners = r && r.wpOwners; if(!owners || !owners.length) return '';
+  // SUPPRESSION GATE — same gate the row and the contact block already honor. Without it this
+  // section rendered a full list of live tel: links UNDERNEATH the "⛔ ALL CONTACT SUPPRESSED"
+  // banner: 9 leads on the live board, including ACTIVE BANKRUPTCY STAY leads where contacting the
+  // owner is illegal. Keep the household INTEL (who lives there, who is absentee) but redact the
+  // numbers, so the research value survives without handing over a tappable dialer.
+  var _blk = _textContactBlocked(r);
+  if(_blk){
+    var _why = _blk==='optout' ? 'This owner opted out — all contact is suppressed.'
+             : _blk==='wrong'  ? 'Marked WRONG PERSON — these numbers are not the owner.'
+             : 'ACTIVE BANKRUPTCY STAY — contacting the owner is illegal right now.';
+    return '<div class="cssec">🔎 WHITEPAGES-VERIFIED HOUSEHOLD</div><div class="csbody">'
+      + '<div class="csbad">⛔ Numbers withheld — '+esc(_why)+'</div>'
+      + '<div class="csmut" style="margin-top:6px">Household on record: '
+      + owners.map(function(o){ return esc(o.name||'?') + (o.absentee ? ' <i>(absentee'+(o.city?' — '+esc(o.city)+(o.state?', '+esc(o.state):''):'')+')</i>' : ''); }).join(' · ')
+      + '</div></div>';
+  }
   var fmtPh = function(n){ n = String(n||'').replace(/\D/g,''); if(n.length===11 && n[0]==='1') n = n.slice(1); return n.length===10 ? n.slice(0,3)+'-'+n.slice(3,6)+'-'+n.slice(6) : n; };
   var anyAbs = owners.some(function(o){ return o.absentee; });
   var personCt = (r.wpAllPhones||[]).filter(function(p){return p.source==='person';}).length;
@@ -2835,7 +2858,30 @@ function _wpHousehold(r){
       + (emList ? '<div class="wpems">'+emList+'</div>' : '')
       + '</div>';
   }).join('');
-  return head + rows + '</div>';
+  // OTHER PEOPLE AT THIS ADDRESS — spouse, adult kids, relatives. Whitepages returns these on the
+  // same property call the owner data came from, so they cost nothing extra. They are NOT the deed
+  // owner: the play is "is <owner> home?" / "are you related to <owner>?", which is often how you
+  // actually reach a distressed owner who is screening unknown numbers.
+  var resid = (r.wpResidents||[]).filter(function(x){ return (x.phones||[]).length || (x.emails||[]).length; });
+  var residHtml = '';
+  if(resid.length){
+    residHtml = '<div class="wpresid"><div class="wpresidh">👥 ALSO AT THIS ADDRESS — <span class="wpresidsub">household, not the deed owner. Ask for '+esc((owners[0]||{}).name||'the owner')+'.</span></div>'
+      + resid.map(function(o){
+          var ph = (o.phones||[]).map(function(p){
+            var digits = String(p.n||'').replace(/\D/g,'');
+            return '<a class="wpph'+(p.type && p.type.indexOf('mob')>-1 ? ' wpmob' : '')+'" href="tel:'+esc(digits)+'">'+esc(fmtPh(p.n))+'</a>'
+              + '<span class="wpt">'+esc(p.type||'?')+'</span>';
+          }).join(' ');
+          var em = (o.emails||[]).slice(0,2).map(function(e){
+            return '<a class="wpem" href="mailto:'+esc(e)+'">'+esc(e)+'</a>'; }).join(' · ');
+          return '<div class="wpresidrow"><b>'+esc(o.name||'?')+'</b>'
+            + (ph ? '<div class="wpphs">'+ph+'</div>' : '')
+            + (em ? '<div class="wpems">'+em+'</div>' : '')
+            + '</div>';
+        }).join('')
+      + '</div>';
+  }
+  return head + rows + residHtml + '</div>';
 }
 // GOVERNMENT / CODE-ENFORCEMENT defendants: when the county, a city, code enforcement, or the IRS/US is
 // named as a defendant on THIS case, its lien (if any exists) is only foreclosed OUT if that party stays
