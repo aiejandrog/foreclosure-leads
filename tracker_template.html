@@ -183,8 +183,16 @@ input::-moz-placeholder{color:var(--muted);opacity:1}
   box-shadow:0 2px 9px -3px rgba(35,88,214,.4)}
 .cf.active .cfn{background:#fff;color:var(--blue-ink)}
 button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
-#wk.active,#hd.active,#hf.active,#eq30.active,#td.active,#nc.active,#due.active,#denstog.active{
+#wk.active,#hd.active,#hv.active,#hf.active,#eq30.active,#td.active,#nc.active,#due.active,#denstog.active{
   background:var(--gold);border-color:var(--gold);color:var(--gold-ink);font-weight:700}
+.seenbtn{display:inline-flex;align-items:center;gap:5px;font-weight:700!important;color:var(--ink-2)!important;
+  border:1px solid var(--line)!important;border-radius:999px;padding:5px 11px!important;background:var(--surface)!important;
+  touch-action:manipulation}
+.seenbtn:hover{border-color:var(--gold)!important;color:var(--gold-d)!important;background:var(--gold-soft)!important;text-decoration:none!important}
+.seenbtn.on{background:var(--surface-2)!important;color:var(--muted)!important;border-color:var(--line)!important}
+.links a.seenbtn::after,.clinks a.seenbtn::after{display:none!important}
+.seenchip{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-left:6px}
 /* action cluster */
 .abtn{display:inline-flex;align-items:center;gap:7px;font-weight:600;border-radius:var(--pill)}
 .abtn svg{width:13px;height:13px;display:block;flex:0 0 auto}
@@ -1322,13 +1330,17 @@ header{animation:appIn .5s .05s backwards}
    transform:none) overriding the cascade FOREVER — it silently killed the digest's collapsed
    slide-up/fade-out (max-height still folded, but the panel never glided). Released after entry. */
 .digest,.tblwrap,#cards{animation:appIn .55s .12s backwards}
-#welcome{position:fixed;top:0;left:0;right:0;z-index:250;display:flex;justify-content:center;pointer-events:none}
-.wtoast{margin-top:30px;display:flex;align-items:center;gap:13px;background:var(--surface);
+/* Welcome toast — anchored BOTTOM. It used to sit at top:0/+30px, which parked it directly on the
+   DEALFLOW wordmark: every session opened with the brand covered for ~4s, and on a 390px phone the
+   toast hid the entire masthead. Bottom-anchored is the standard place for a transient confirmation
+   (iOS/Android/Material all do it) and it can never cover the header, the filters, or the first row. */
+#welcome{position:fixed;bottom:0;left:0;right:0;z-index:250;display:flex;justify-content:center;pointer-events:none}
+.wtoast{margin-bottom:max(22px,env(safe-area-inset-bottom));display:flex;align-items:center;gap:13px;background:var(--surface);
   border:1px solid var(--line);border-radius:16px;box-shadow:var(--sh-3),0 0 0 1px rgba(198,161,75,.18);
-  padding:13px 24px 13px 15px;opacity:0;transform:translateY(-30px) scale(.94);
-  transition:opacity .45s ease,transform .6s cubic-bezier(.2,.9,.3,1.35)}
+  padding:13px 24px 13px 15px;opacity:0;transform:translateY(30px) scale(.94);
+  transition:opacity .45s ease,transform .6s cubic-bezier(.2,.9,.3,1.35);max-width:calc(100vw - 28px)}
 .wtoast.show{opacity:1;transform:translateY(0) scale(1)}
-.wtoast.out{opacity:0;transform:translateY(-10px) scale(.985);
+.wtoast.out{opacity:0;transform:translateY(10px) scale(.985);
   transition:opacity .7s cubic-bezier(.4,0,.2,1),transform .8s var(--e-lux)}
 .wcheck{width:36px;height:36px;border-radius:50%;background:var(--gold-grad);display:grid;
   place-items:center;flex:0 0 auto;box-shadow:0 5px 16px rgba(198,161,75,.45)}
@@ -1572,6 +1584,12 @@ body.compact .dg-v{font-size:14.5px}
   background:var(--navy,#0B1730);color:#fff;cursor:pointer;margin:6px 0 8px}
 .cstextbtn:hover{background:#C6A14B;border-color:#C6A14B;color:#0B1730}
 .cstextbtn:disabled{opacity:.45;cursor:not-allowed}
+/* Text-unavailable state — deliberately NOT a button. On a lead where every number is DNC, the
+   primary affordance must not look like "send a text"; it must read as a closed door with the
+   reason. Muted surface, dashed edge, help cursor, no hover lift. */
+.cstextoff{display:inline-flex;align-items:center;font-size:12.5px;font-weight:600;padding:7px 13px;
+  border-radius:8px;border:1px dashed var(--line,#E2E6EE);background:var(--surface-2,#f6f8fa);
+  color:var(--muted,#6b7280);cursor:help;line-height:1.35}
 </style>
 <!-- Investor dispo pack — the print-only one-pager. Populated by exportDispoPack() from the deal-analysis modal. -->
 <div id="dispoPackView" aria-hidden="true">
@@ -1649,6 +1667,7 @@ body.compact .dg-v{font-size:14.5px}
 <span class="fdiv"></span>
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
+<button id="hv" class="active" title="Hide deals you've marked Seen. ON by default so you don't re-see the same properties when you hop back on. Tap Seen on any deal to file it here. Turn this off to browse viewed deals again.">Hide viewed</button>
 <button id="hf" title="Hide leads that don't fit the homeowner-rescue model: already deeded to another investor, HOA case hiding a mortgage bigger than the equity (underwater), or VACANT LAND (no homeowner, speculative land value). Off by default so nothing disappears silently.">Hide flagged</button>
 <button id="eq30" title="Only leads with 30%+ REAL equity: nets out a chain-verified surviving mortgage where we have one (an HOA case with a small judgment can show 90%+ gross while a real first mortgage eats most of it), excludes gross/unverified equity, and excludes anything the records already flagged dead (already sold, or underwater once the real mortgage is counted).">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
@@ -1758,7 +1777,8 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false;
+let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false;
+try { const _hv = localStorage.getItem('fcHideViewed'); if(_hv === '0') hideViewed = false; else if(_hv === '1') hideViewed = true; } catch(e){}
 let nearOnly = false, nearRadius = 5;   // 📍 within N miles of home base (ROUTE_ORIGIN); radius is user-adjustable
 // A lead is in the LIS PENDENS (freshly-filed) stage — no auction date yet, worked as a nurture
 // over months. Set by lis_pendens.py (stage:'LP'). This is the front-of-funnel lane.
@@ -2290,9 +2310,23 @@ function _contactLineHtml(r, ph, opts){
 function _messagesBarHtml(r){
   if(_textContactBlocked(r)) return '';
   const tp = textablePhones(r);
-  const lbl = tp.length ? '💬 Messages — Text / Phone Link' : '💬 Messages — Text / Phone Link (add a # first)';
+  // The Text CTA must only be full-strength when a text can LEGALLY and ACTUALLY be sent. Previously
+  // this rendered the same primary navy button in all three states and just changed the label — so a
+  // lead whose every number is DNC still showed a big "Text" button as the most prominent action on
+  // the sheet, which is exactly the thing that must not happen on those leads (FL FTSA / TCPA).
+  // Three honest states now:
+  if(tp.length){
+    return '<div class="csmsgbar"><span class="csmsglbl">Messages</span>'+
+      '<button type="button" class="cstextbtn" style="margin:0" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">💬 Messages — Text / Phone Link</button></div>';
+  }
+  if((r.phones||[]).length){
+    // has numbers, but every one is DNC / on the Do-Not-Text list -> texting is off the table
+    return '<div class="csmsgbar"><span class="csmsglbl">Messages</span>'+
+      '<span class="cstextoff" title="Every number on this lead is DNC or on your Do-Not-Text list. Texting these is prohibited (FL FTSA / TCPA). Call the number manually, mail the letter, or knock.">🚫 No textable number — call, mail, or door only</span></div>';
+  }
+  // no number at all -> the real next action is finding one, not opening an empty composer
   return '<div class="csmsgbar"><span class="csmsglbl">Messages</span>'+
-    '<button type="button" class="cstextbtn" style="margin:0" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">'+lbl+'</button></div>';
+    '<span class="cstextoff" title="No phone on this lead yet. Use Find a number below (Whitepages / People search) to pull one, then the Text button unlocks.">📵 No number yet — use Find a number below</span></div>';
 }
 // Shared CONTACT body for call sheet + deal analyzer (phones structured the same way).
 function _contactBlockHtml(r){
@@ -3901,6 +3935,24 @@ try { favs = new Set(JSON.parse(localStorage.getItem('fcFavs') || '[]')); } catc
 let favOnly = false;
 function _favSave(){ try { localStorage.setItem('fcFavs', JSON.stringify([...favs])); } catch(e){} }
 function _isFav(c){ return favs.has(c); }
+// Viewed / Seen — personal browse state on THIS device (like Saved). Mark deals you're done looking
+// at so Hide viewed (default ON) keeps them off the board when you hop back on.
+let viewed = new Set();
+try { viewed = new Set(JSON.parse(localStorage.getItem('fcViewed') || '[]')); } catch(e){}
+function _viewedSave(){ try { localStorage.setItem('fcViewed', JSON.stringify([...viewed])); } catch(e){} }
+function _isViewed(c){ return viewed.has(c); }
+function _toggleViewed(c, ev){
+  if(ev){ ev.preventDefault(); ev.stopPropagation(); }
+  if(viewed.has(c)) viewed.delete(c); else viewed.add(c);
+  _viewedSave();
+  render();
+}
+function _viewedBtn(r){
+  var on = viewed.has(r.case);
+  return '<a href="#" class="seenbtn'+(on?' on':'')+'" data-seen="'+esc(r.case)+'" title="'+(on
+    ? 'Marked Seen — click to put it back on the board (also turn off Hide viewed to browse all Seen deals)'
+    : 'Mark Seen — files this deal as viewed on this device. With Hide viewed ON it drops off the board so you don\'t re-see it.')+'" onclick="_toggleViewed(\''+esc(r.case)+'\',event)">'+(on?'✓ Viewed':'👁 Seen')+'</a>';
+}
 function _favCountEls(){
   var n = favs.size, b = document.getElementById('savedbtn');
   if(b){ b.classList.toggle('hasfav', n>0); var c = b.querySelector('.favn'); if(c) c.textContent = n ? (' '+n) : ''; }
@@ -5504,6 +5556,7 @@ function view(){
     // FRESH FILINGS mode: only the lis-pendens (just-filed) leads, its own lane because they have no
     // auction date and are worked as a months-long nurture, not a countdown. Newest filing first.
     rows = _cscope(DATA.filter(r => _isLP(r)));
+    if(hideViewed) rows = rows.filter(r => !viewed.has(r.case));
     rows = rows.slice().sort((a,b) => (toISO(b.filedDate||'') > toISO(a.filedDate||'') ? 1 : -1));
     return rows;
   } else if(closersOnly){
@@ -5536,6 +5589,8 @@ function view(){
     if(nearOnly) rows = rows.filter(r => r.lat && r.lng && _haversine(ROUTE_ORIGIN.lat, ROUTE_ORIGIN.lng, r.lat, r.lng) <= nearRadius);
   }
   rows = rows.slice();
+  // Hide viewed — applies in every lane so hopping back on doesn't resurface Seen deals.
+  if(hideViewed) rows = rows.filter(r => !viewed.has(r.case));
   if(nearOnly){ rows.sort((a,b) => _haversine(ROUTE_ORIGIN.lat,ROUTE_ORIGIN.lng,a.lat,a.lng) - _haversine(ROUTE_ORIGIN.lat,ROUTE_ORIGIN.lng,b.lat,b.lng)); return rows; }   // nearest to home first
   if(closersOnly){ rows.sort((a,b) => _closeScore(b) - _closeScore(a)); return rows.slice(0, 25); }   // top 25 — a focused, workable shortlist ranked by closeability
   const sortVal = r => {
@@ -5612,6 +5667,9 @@ function render(){
   const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
   const hd = document.getElementById('hd');
   if(hd) hd.textContent = 'Hide dead' + (deadN ? ' ('+deadN+')' : '');
+  const viewedN = viewed.size;
+  const hv = document.getElementById('hv');
+  if(hv){ hv.textContent = 'Hide viewed' + (viewedN ? ' ('+viewedN+')' : ''); hv.classList.toggle('active', hideViewed); }
   const prof = rows.filter(r => r._profit > 0);
   const totp = prof.reduce((s,r) => s + r._profit, 0);
   const ds = document.getElementById('dealsum');
@@ -5711,6 +5769,8 @@ function render(){
       // Text lives under CONTACT (Call · Text · WA) — not duplicated here in DO.
       if((r.emails||[]).length) gDo.push('<a href="#" class="cadencegen" data-c="'+esc(r.case)+'" title="Enroll this owner in the 4-touch email cadence (day 0/2/4/7) — sends itself until they reply, then auto-cancels and hands the lead to your warm lane. Opted-out owners are never enrolled.">Cadence</a>');
     }
+    // Seen — always available. With Hide viewed ON, marks drop off the board on this device.
+    gDo.push(_viewedBtn(r));
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
       'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:''),
@@ -5875,6 +5935,7 @@ document.addEventListener('click', e => {
 });
 function resetFilters(){
   tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=nearOnly=false;
+  // hideViewed stays as the user left it (default ON) — clearing filters shouldn't dump Seen deals back on the board
   { const _nh=document.getElementById('nearhome'), _nr=document.getElementById('nearrad'); if(_nh)_nh.classList.remove('active'); if(_nr)_nr.style.display='none'; }
   { const _cb=document.getElementById('closers'); if(_cb) _cb.classList.remove('active'); }
   const g=id=>document.getElementById(id);
@@ -5906,6 +5967,7 @@ function _activeFilters(){
   if(dueOnly) out.push({k:'due', lbl:'Due now'});
   if(ncOnly) out.push({k:'nc', lbl:'Not contacted'});
   if(hideDead) out.push({k:'hd', lbl:'Hiding dead'});
+  if(hideViewed && viewed.size) out.push({k:'hv', lbl:'Hiding viewed ('+viewed.size+')'});
   if(hideFlagged) out.push({k:'hf', lbl:'Hiding flagged'});
   if(eq30Only) out.push({k:'eq30', lbl:'30%+ equity'});
   if(nearOnly) out.push({k:'near', lbl:'📍 Within '+nearRadius+' mi of home'});
@@ -5937,6 +5999,7 @@ function _clearFilter(k){
   else if(k==='due'){ dueOnly=false; if(g('due'))g('due').classList.remove('active'); }
   else if(k==='nc'){ ncOnly=false; if(g('nc'))g('nc').classList.remove('active'); }
   else if(k==='hd'){ hideDead=false; if(g('hd'))g('hd').classList.remove('active'); }
+  else if(k==='hv'){ hideViewed=false; try{localStorage.setItem('fcHideViewed','0');}catch(e){} if(g('hv'))g('hv').classList.remove('active'); }
   else if(k==='hf'){ hideFlagged=false; if(g('hf'))g('hf').classList.remove('active'); }
   else if(k==='eq30'){ eq30Only=false; if(g('eq30'))g('eq30').classList.remove('active'); }
   else if(k==='td'){ tdOnly=false; if(g('td'))g('td').classList.remove('active'); }
@@ -5989,6 +6052,11 @@ function initCountyFilter(){ if(_ctyInit) return; const box=document.getElementB
 function _resetCountyPills(){ const box=document.getElementById('ctygroup'); if(box) box.querySelectorAll('.cf').forEach(x=>x.classList.toggle('active', (x.dataset.cty||'')==='')); }
 document.getElementById('wk').onclick = e => { weekOnly = !weekOnly; e.target.classList.toggle('active', weekOnly); render(); };
 document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.classList.toggle('active', hideDead); render(); };
+{ const _hv = document.getElementById('hv');
+  if(_hv){ _hv.classList.toggle('active', hideViewed);
+    _hv.onclick = e => { hideViewed = !hideViewed; try { localStorage.setItem('fcHideViewed', hideViewed ? '1' : '0'); } catch(err){} e.target.classList.toggle('active', hideViewed); render(); };
+  }
+}
 document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
 document.getElementById('eq30').onclick = e => { eq30Only = !eq30Only; e.target.classList.toggle('active', eq30Only); render(); };
 document.getElementById('td').onclick = e => {
