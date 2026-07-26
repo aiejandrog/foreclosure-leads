@@ -955,6 +955,12 @@ select.status{padding:5px 6px;height:30px;font-size:11px;width:100%;box-sizing:b
 select.status.st-dead{color:var(--red);border-color:#F0CCCC;background:#FCF2F2}
 select.status.st-hot{color:var(--green-ink);border-color:#BEE5CC;background:#EFF9F2;font-weight:600}
 select.status.st-active{color:var(--ink);border-color:rgba(198,161,75,.4)}
+/* The money end of the ladder. CLOSED gets the only gold-filled control on the board — it should
+   feel like a trophy, because it is the event the whole tool exists to cause. */
+select.status.st-won{background:var(--gold-grad,#C6A14B);color:var(--gold-ink,#241C05);
+  border-color:var(--gold-d,#8B6A2C);font-weight:800}
+select.status.st-won-soft{color:var(--gold-d,#8B6A2C);border-color:var(--gold,#C6A14B);
+  background:var(--gold-soft,rgba(198,161,75,.16));font-weight:700}
 textarea.notes{width:100%;box-sizing:border-box;min-height:40px;background:transparent;color:var(--ink);
   border:1px solid var(--line-2);border-radius:var(--r-xs);font-size:12px;padding:6px 8px;resize:vertical;font-family:var(--f-body)}
 textarea.notes:hover{border-color:var(--line)}
@@ -2530,6 +2536,37 @@ function closeDealModal(){
 }
 // ---- contact / follow-up tracker (mini-CRM; per-device, in the same notes[] localStorage) ----
 function _today(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// THE PIPELINE LADDER. Everything before 'Offer made' is outreach; everything after is a deal in
+// motion. The tail states existed nowhere until now — the list stopped at 'Appointment', so a lead
+// that went to contract and closed had no way to say so, and PLAYBOOK §11's monthly funnel review
+// (attempts -> contacts -> contracts -> closes) was unanswerable from the tool.
+const STATUS_OPTS = ['','Letter sent','Skip-traced','Called - no answer','Called - talked',
+  'Door - no answer','Door - spoke','Appointment','Offer made','Under contract','Assigned',
+  'CLOSED','Lost - sold at auction','Dead','DO NOT CONTACT'];
+// Terminal states worth date-stamping so the funnel can be measured over a real time window.
+const _OUTCOME_STATES = ['Offer made','Under contract','Assigned','CLOSED','Lost - sold at auction'];
+// Funnel counts for the current board. Attempts = any logged status at all; the rest are ladder
+// positions AT OR BEYOND that rung, so a CLOSED deal still counts as a contact and a contract.
+function _funnelStats(){
+  const s = {attempts:0, contacts:0, appointments:0, offers:0, contracts:0, closes:0, revenue:0};
+  const CONTACTED = ['Called - talked','Door - spoke','Appointment','Offer made','Under contract','Assigned','CLOSED'];
+  const APPT      = ['Appointment','Offer made','Under contract','Assigned','CLOSED'];
+  const OFFER     = ['Offer made','Under contract','Assigned','CLOSED'];
+  const CONTRACT  = ['Under contract','Assigned','CLOSED'];
+  try{
+    Object.keys(notes||{}).forEach(function(c){
+      const st = (notes[c]||{}).status || '';
+      if(!st) return;
+      s.attempts++;
+      if(CONTACTED.indexOf(st) > -1) s.contacts++;
+      if(APPT.indexOf(st)      > -1) s.appointments++;
+      if(OFFER.indexOf(st)     > -1) s.offers++;
+      if(CONTRACT.indexOf(st)  > -1) s.contracts++;
+      if(st === 'CLOSED'){ s.closes++; s.revenue += (+(notes[c].closedAmt) || 0); }
+    });
+  }catch(e){}
+  return s;
+}
 function _nowTS(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); return _today()+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
 // FTSA compliance audit trail: append a timestamped opt-out/suppression event to a lead's ledger.
 // 'set-local' = an operator marked DO NOT CONTACT here; 'suppressed-here' = a teammate's opt-out
@@ -5791,10 +5828,22 @@ function render(){
   const _td = rows.filter(r=>r.st==='TD'&&!r._nodata).length;
   const _kpi = (l,v,s,cls)=>'<div class="kpi'+(cls?' '+cls:'')+'"><div class="kl">'+l+'</div><div class="kv'+(cls==='gold'?' g':'')+'">'+v+'</div><div class="ks">'+s+'</div></div>';
   const _kb = document.getElementById('kpis');
+  // PIPELINE tile — replaces 'Tax-deed plays' once there is anything real to report. Every other
+  // tile measures OPPORTUNITY (what might happen); this one measures OUTCOME (what did). It only
+  // appears after the first status is logged, so a fresh board is not scolded with zeros.
+  const _fn = _funnelStats();
+  const _fnTile = _fn.closes
+      ? _kpi('Closed', _fn.closes + (_fn.revenue ? ' · '+fmtK(_fn.revenue) : ''),
+             _fn.contracts+' contract'+(_fn.contracts===1?'':'s')+' · '+_fn.contacts+' contacted', 'gold')
+    : _fn.contracts
+      ? _kpi('In contract', _fn.contracts, _fn.offers+' offer'+(_fn.offers===1?'':'s')+' out · '+_fn.contacts+' contacted')
+    : _fn.attempts
+      ? _kpi('Worked', _fn.attempts, _fn.contacts+' reached · '+_fn.appointments+' appointment'+(_fn.appointments===1?'':'s'))
+      : _kpi('Tax-deed plays', _td, 'Jose&rsquo;s lane');
   if(_kb) _kb.innerHTML = _kpi('Strong deals', _sc, rows.length+' in view')
     + _kpi('Est. profit · view', fmtK(_tot), _kp.length+' profitable', 'gold')
     + _kpi('Avg ROI', _avg+'%', 'on profitable deals')
-    + _kpi('Tax-deed plays', _td, 'Jose&rsquo;s lane');
+    + _fnTile;
   // live count on the Hide-dead button so it's obvious what it tracks
   const deadN = DATA.filter(r => { const s=(notes[r.case]||{}).status; return s==='Dead'||s==='DO NOT CONTACT'; }).length;
   const hd = document.getElementById('hd');
@@ -5968,9 +6017,15 @@ function render(){
     const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
       '<div class="submeta">'+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Gross equity — the judgment only covers the FORECLOSING loan. A 2nd mortgage/HELOC, an HOA/junior lien, or a condo special assessment (40-yr recert) can shrink this a lot. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'spread':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
-    const opts = ['','Letter sent','Skip-traced','Called - no answer','Called - talked','Door - no answer','Door - spoke','Appointment','Dead','DO NOT CONTACT'];
-    const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT') ? 'st-dead'
-                : (n.status==='Appointment'||n.status==='Called - talked') ? 'st-hot'
+    // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
+    // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
+    // attempts -> contacts -> contracts -> closes") was a question the tool physically could not
+    // answer. The tail states are what turn this from a lead list into a pipeline.
+    const opts = STATUS_OPTS;
+    const stcls = (n.status==='Dead'||n.status==='DO NOT CONTACT'||n.status==='Lost - sold at auction') ? 'st-dead'
+                : (n.status==='CLOSED') ? 'st-won'
+                : (n.status==='Under contract'||n.status==='Assigned') ? 'st-won-soft'
+                : (n.status==='Appointment'||n.status==='Called - talked'||n.status==='Offer made') ? 'st-hot'
                 : (n.status ? 'st-active' : '');
     const statusSel = '<select class="status '+stcls+'" data-c="'+esc(r.case)+'">'+
       opts.map(s => '<option'+(n.status===s?' selected':'')+'>'+s+'</option>').join('')+'</select>';
@@ -6741,6 +6796,23 @@ document.addEventListener('change', e => {
         save(); render(); return;
       }
       _optLog(notes[c], 'cleared-local'); delete notes[c].optout;
+    }
+    // OUTCOME STAMP — the funnel is only measurable if the terminal states carry a date, and a close
+    // is only worth reviewing if it carries a number. PLAYBOOK §11 asks for attempts -> contacts ->
+    // contracts -> closes every month; without this the answer had to come from memory.
+    if(_OUTCOME_STATES.indexOf(e.target.value) > -1){
+      if(!notes[c].outcomeAt) notes[c].outcomeAt = _today();
+      if(e.target.value === 'CLOSED' && !notes[c].closedAmt){
+        var _amt = (typeof prompt==='function')
+          ? prompt('Deal CLOSED — nice work.\n\nWhat did you make on it? (assignment fee, spread, or fee collected)\nNumbers only; leave blank to skip.', '') : '';
+        if(_amt !== null && String(_amt).trim() !== ''){
+          var _n = Number(String(_amt).replace(/[^0-9.\-]/g,''));
+          if(!isNaN(_n) && _n !== 0) notes[c].closedAmt = _n;
+        }
+      }
+    } else {
+      // moved back out of a terminal state — drop the stamp so the funnel never counts a reversal
+      delete notes[c].outcomeAt; delete notes[c].closedAmt;
     }
     save(); render(); return;
   }
