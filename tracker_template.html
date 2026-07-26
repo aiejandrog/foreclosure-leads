@@ -2293,7 +2293,10 @@ function _contactLineHtml(r, ph, opts){
   if(!digits) return '';
   const isDnc = !!opts.dnc;
   const isMob = opts.mobile !== false; // default mobile unless told landline
-  const canTxt = !r.saleBkAct && !isDnc && !_isDNT(digits) && !_textContactBlocked(r);
+  // isMob gates Text/WA too: the line already renders a "landline" tag, but Text stayed live next to
+  // it — an SMS to a landline goes nowhere and reads to the operator as a delivered message. Keep
+  // Call (a landline is perfectly dialable); withhold Text/WA.
+  const canTxt = !r.saleBkAct && !isDnc && isMob && !_isDNT(digits) && !_textContactBlocked(r);
   const tag = isDnc
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
     : (isMob ? '' : ' <span class="cttag">landline</span>');
@@ -2320,9 +2323,20 @@ function _messagesBarHtml(r){
       '<button type="button" class="cstextbtn" style="margin:0" onclick="openTextSingle(DATA.find(x=>x.case===\''+esc(r.case)+'\'))">💬 Messages — Text / Phone Link</button></div>';
   }
   if((r.phones||[]).length){
-    // has numbers, but every one is DNC / on the Do-Not-Text list -> texting is off the table
+    // Has numbers, but none can receive a text. Say WHICH reason so the operator knows the next move:
+    // a landline is still worth DIALING, whereas a DNC number means call-only-manually / mail / door.
+    const _t = (r.phtype||[]), _d = (r.phdnc||[]);
+    const _allLand = (r.phones||[]).slice(0,4).every((p,i)=> String(_t[i]||'').toLowerCase().indexOf('land')>-1 || _d[i]);
+    const _anyLand = (r.phones||[]).slice(0,4).some((p,i)=> String(_t[i]||'').toLowerCase().indexOf('land')>-1);
+    const _anyDnc  = _d.some(Boolean);
+    const msg = (_anyLand && !_anyDnc) ? '☎ Landline only — call it, no text'
+              : (_anyLand && _anyDnc)  ? '🚫 Landline / DNC only — call or door'
+              : '🚫 No textable number — call, mail, or door only';
+    const tip = (_anyLand && !_anyDnc)
+      ? 'Whitepages types every number on this lead as a landline. An SMS to a landline is delivered nowhere, so Text is withheld — but the number is perfectly dialable. Call it, or knock.'
+      : 'Every number here is DNC, on your Do-Not-Text list, or a landline. Texting is either prohibited (FL FTSA / TCPA) or undeliverable. Call manually, mail the letter, or knock.';
     return '<div class="csmsgbar"><span class="csmsglbl">Messages</span>'+
-      '<span class="cstextoff" title="Every number on this lead is DNC or on your Do-Not-Text list. Texting these is prohibited (FL FTSA / TCPA). Call the number manually, mail the letter, or knock.">🚫 No textable number — call, mail, or door only</span></div>';
+      '<span class="cstextoff" title="'+esc(tip)+'">'+msg+'</span></div>';
   }
   // no number at all -> the real next action is finding one, not opening an empty composer
   return '<div class="csmsgbar"><span class="csmsglbl">Messages</span>'+
@@ -3556,7 +3570,17 @@ function _addDNT(d){ const x=String(d||'').replace(/\D/g,''); if(x){ dnt.add(x);
 function textablePhones(r){
   if(_textContactBlocked(r)) return [];
   const n=notes[r.case]||{}, out=[];
-  (r.phones||[]).slice(0,4).forEach((ph,i)=>{ if(!((r.phdnc||[])[i])){ const d=String(ph).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); } });
+  // LINE-TYPE GATE: an SMS to a landline is delivered nowhere — it silently disappears and the
+  // operator believes he reached the owner. Whitepages already tags each number mobile/landline in
+  // r.phtype; this used to ignore it, leaving 119 landlines on the live board offered with a working
+  // Send button. Drop ONLY numbers explicitly typed as a landline — an unknown type (the majority,
+  // from older skip-trace rows) stays textable, because dropping those would lose real contacts.
+  // The number itself is still shown and still CALLABLE in the contact block; only Text is withheld.
+  (r.phones||[]).slice(0,4).forEach((ph,i)=>{
+    if((r.phdnc||[])[i]) return;
+    if(String((r.phtype||[])[i]||'').toLowerCase().indexOf('land') > -1) return;
+    const d=String(ph).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d);
+  });
   if(n.phone){ const d=String(n.phone).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); }
   return out;
 }
@@ -4018,7 +4042,13 @@ function _carlosMsg(r){
 }
 function _joseMsg(r){
   var owner = (r.owners||'').split(';')[0].trim();
-  var v = (+r.arv? '$'+(+r.arv).toLocaleString()+' (comp ARV)' : (r.value?'$'+(+r.value).toLocaleString()+' (county val)':'value unknown'));
+  // SOURCE-OF-TRUTH: quote the SAME value the deal math used. This used to read raw r.arv, which
+  // bypassed the confidence + range gate in _basisOf() — so a lead whose ARV the analyzer REJECTED
+  // (low conf, or outside 0.7x-2.5x county) still went out to Jose as "$X (comp ARV)". On the
+  // Hialeah lead that was a $2.3M overstatement in a message sent to a partner.
+  var _b = _basisOf(r);
+  var v = _b ? ('$'+Math.round(_b).toLocaleString()+(r._valsrc==='arv' ? ' (comp ARV)' : ' (county val)'))
+             : 'value unknown';
   var senior = r._chainSurv ? '$'+Math.round(r._chainSurv).toLocaleString()+(r.orconf==='ok'?' (verified)':' (~est, verify)') : 'none traced';
   // prefer the VERIFIED docket signal (survival count + distinct bankruptcies) over the year proxy
   var fresh;
@@ -4055,7 +4085,10 @@ function _copyShare(text, label){
 // the owner is still on the line, and says PATCH when ready. Contact first, engineering second.
 function _liveMsg(r){
   var owner = (r.owners||'').split(';')[0].split('&')[0].trim();
-  var v = (+r.arv? '$'+(+r.arv).toLocaleString()+' ARV' : (r.value?'$'+(+r.value).toLocaleString()+' county':'value ?'));
+  // SOURCE-OF-TRUTH (see _joseMsg): never quote a raw ARV the analyzer rejected. This message goes
+  // to Jose while an owner is LIVE on the phone — it is the worst possible place for a phantom number.
+  var _b = _basisOf(r);
+  var v = _b ? ('$'+Math.round(_b).toLocaleString()+(r._valsrc==='arv' ? ' ARV' : ' county')) : 'value ?';
   var fresh = r.saleSurv!=null ? (r.saleSurv>=2?'STALLER '+r.saleSurv+'×':'FRESH') : '';
   if(+r.saleBK) fresh += ' · '+r.saleBK+'× BK';
   return '🔥 LIVE — I have '+owner+' ON THE PHONE RIGHT NOW\n'
