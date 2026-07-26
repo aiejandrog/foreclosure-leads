@@ -1122,6 +1122,26 @@ def make_tracker(leads):
                     for _e in _o['emails']:
                         if _e.lower() in _seen_em: continue
                         _seen_em.add(_e.lower()); _all_em.append(_e)
+                # RESIDENTS — the other people Whitepages places at this address (spouse, adult kids,
+                # relatives). Same shape as person_owners. These were already PAID FOR on every
+                # property call and sat unread in the cache: 41 of 48 cached leads carry them, worth
+                # hundreds of dialable numbers. They are NOT the deed owner, so they are tagged
+                # resident:true — the play is "is <owner> home?", not "hi <owner>". Ranked after the
+                # owners so an owner's own mobile always leads.
+                _residents = []
+                for _rz in (_res.get('residents') or []):
+                    _rr = _wp_own(_rz, _pc)
+                    if not (_rr['phones'] or _rr['emails']): continue
+                    _rr['resident'] = True
+                    _residents.append(_rr)
+                    for _p in sorted(_rr['phones'], key=_rank):
+                        if _p['n'] in _seen_ph: continue
+                        _seen_ph.add(_p['n'])
+                        _all_ph.append({'n': _p['n'], 'type': _p['type'], 'owner': _rr['name'],
+                                        'absentee': _rr['absentee'], 'resident': True})
+                    for _e in _rr['emails']:
+                        if _e.lower() in _seen_em: continue
+                        _seen_em.add(_e.lower()); _all_em.append(_e)
                 # Person Search layer (whitepages_lookup.py --deep / auto-fallback when Property was thin):
                 # extra phones + emails sourced from the owner NAME rather than the property address.
                 # Includes aliases + address history + relatives-tagged numbers Property doesn't touch.
@@ -1147,6 +1167,7 @@ def make_tracker(leads):
                 _all_ph.extend(sorted(_person_phones, key=_rank))
                 _all_em.extend(_person_emails)
                 _r['wpOwners'] = _owns
+                if _residents: _r['wpResidents'] = _residents
                 _r['wpAllPhones'] = _all_ph
                 _r['wpAllEmails'] = _all_em
                 _r['wpPersonRecs'] = len(_person_recs)
@@ -1157,12 +1178,30 @@ def make_tracker(leads):
                 for _p in (_r.get('phones') or []):
                     _pn = _p.get('number') if isinstance(_p, dict) else str(_p)
                     _cur.add(''.join(c for c in _pn if c.isdigit())[-10:])
-                _add = [{'number': p['n'], 'type': ('Mobile' if 'mob' in p['type'] else ('Land Line' if 'land' in p['type'] else 'Unknown')),
-                         'dnc': False, '_src': 'wp'} for p in _all_ph if p['n'] not in _cur]
-                if _add:
-                    _r['phones'] = (_r.get('phones') or []) + _add
-                    _r['phones'] = _r['phones'][:8]
-                    _wpn += len(_add)
+                # SHAPE MUST MATCH THE SKIPTRACE PATH. r.phones is a list of bare digit STRINGS with
+                # metadata carried in the PARALLEL arrays r.phtype / r.phdnc (see the skiptrace merge
+                # above). This block used to append DICTS instead, so the UI's String(ph) turned each
+                # WP number into "[object Object]" -> 0 digits -> _contactLineHtml bailed and the line
+                # rendered EMPTY. Result: 116 numbers across 30 leads that were paid for and then
+                # silently dropped from Call, Text, WhatsApp and the CSV export.
+                _new = [p for p in _all_ph if p['n'] not in _cur]
+                if _new:
+                    _ph  = list(_r.get('phones') or [])
+                    _pt  = list(_r.get('phtype') or [])
+                    _pd  = list(_r.get('phdnc') or [])
+                    # keep the parallel arrays aligned with any pre-existing phones before extending
+                    while len(_pt) < len(_ph): _pt.append('')
+                    while len(_pd) < len(_ph): _pd.append(False)
+                    for p in _new:
+                        _ph.append(p['n'])
+                        _pt.append('mobile' if 'mob' in p['type'] else ('landline' if 'land' in p['type'] else ''))
+                        # Whitepages returns no DNC/TCPA flag — record unknown (False = "not flagged"),
+                        # never a positive claim that the number is scrubbed.
+                        _pd.append(False)
+                    _r['phones'] = _ph[:8]
+                    _r['phtype'] = _pt[:8]
+                    _r['phdnc']  = _pd[:8]
+                    _wpn += len(_new)
                 if _all_em:
                     _cur_em = set((e or '').lower() for e in (_r.get('emails') or []))
                     _add_em = [e for e in _all_em if e.lower() not in _cur_em]
