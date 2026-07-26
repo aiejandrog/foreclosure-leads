@@ -8,8 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="preconnect" href="https://api.fontshare.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
-<link href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@600,700&display=swap" rel="stylesheet">
+<!-- 800 is loaded for DM Sans + Fraunces because 51 rules in this file ask for font-weight:800 and the
+     link previously topped out at 700 — every one of those was SYNTHETIC bold, which the browser fakes
+     by smearing the 700 master. On Fraunces (high-contrast serif) at 22-30px, that is the difference
+     between a private-firm headline and a blurry one. General Sans gets 800 from Fontshare for the
+     same reason. Space Grotesk has no 800 master, so font-synthesis-weight:none (below) makes it fall
+     to a clean 700 instead of a smeared fake. -->
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700;9..40,800&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700;9..144,800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://api.fontshare.com/v2/css?f%5B%5D=general-sans@600,700,800&display=swap" rel="stylesheet">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231A2B4A'/%3E%3Ctext x='16' y='23.5' font-family='Arial,Helvetica,sans-serif' font-size='21' font-weight='800' fill='%23C9A84C' text-anchor='middle'%3ED%3C/text%3E%3C/svg%3E">
 <style>
 /* ============================================================================
@@ -65,7 +71,12 @@ html{scroll-behavior:smooth}
    never shift layout and anchoring buys nothing on this page. */
 html,body{overflow-anchor:none}
 body{font-family:var(--f-body);margin:0;background:var(--bg-wash);color:var(--ink);
-  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:.001em}
+  -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;letter-spacing:.001em;
+  /* Never let the browser FAKE a weight it does not have. Where a real 800 master exists (DM Sans,
+     Fraunces, General Sans — all loaded above) it is used; where it does not (Space Grotesk) the
+     text falls to a clean 700 instead of an algorithmically smeared 800. Faux bold on a
+     high-contrast serif is the single loudest "cheap" tell in a type system. */
+  font-synthesis-weight:none;-webkit-font-synthesis:none}
 ::selection{background:var(--gold-soft);color:var(--ink)}
 ::-webkit-scrollbar{height:11px;width:11px}
 ::-webkit-scrollbar-thumb{background:rgba(16,28,51,.18);border-radius:10px;border:3px solid transparent;background-clip:content-box}
@@ -74,7 +85,10 @@ body{font-family:var(--f-body);margin:0;background:var(--bg-wash);color:var(--in
 body.modal-open{overflow:hidden}
 
 /* ============================== HEADER ============================== */
-header{padding:14px 22px 12px;background:rgba(244,246,250,.82);
+/* 16px matches .kpis (L303) and the table/#cards gutters — the header was at 22px, so the wordmark
+   and every header control sat 6px right of the vertical rule everything below them uses. On a
+   data-dense page a broken left edge is the thing that reads as "assembled" rather than "designed". */
+header{padding:14px 16px 12px;background:rgba(244,246,250,.82);
   backdrop-filter:saturate(180%) blur(18px);-webkit-backdrop-filter:saturate(180%) blur(18px);
   border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
   box-shadow:0 1px 0 rgba(255,255,255,.65) inset;
@@ -297,8 +311,12 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 .kpi.gold::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--gold-grad)}
 .kpi .kl{font-family:var(--f-label);font-size:9px;font-weight:700;letter-spacing:.11em;
   text-transform:uppercase;color:var(--muted)}
-.kpi .kv{font-family:var(--f-num);font-size:30px;font-weight:700;color:var(--ink);margin-top:6px;
-  line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+/* ONE VOICE for the headline number. The product exists to produce a dollar figure, and it was
+   rendering that figure in Fraunces on the call sheet but Space Grotesk here — two typefaces for the
+   same idea. Display numbers (a single figure owning a box) are now the serif; grid numbers in the
+   right-aligned table column stay grotesk, where tabular alignment matters more than voice. */
+.kpi .kv{font-family:var(--f-display);font-size:31px;font-weight:700;color:var(--ink);margin-top:6px;
+  line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.015em}
 .kpi .kv.g{color:var(--green-ink)}
 .kpi .ks{font-size:11px;color:var(--muted);margin-top:6px}
 .kpi.gold{background:var(--navy-grad);border-color:transparent;box-shadow:var(--sh-3)}
@@ -757,8 +775,15 @@ details.csmath[open]>summary::before, details.cslaw-wrap[open]>summary::before{c
 /* SMS next to phone — same weight as dig links so Phone Link is obvious without WhatsApp */
 a.textgen.dig{font-weight:800;letter-spacing:.02em}
 /* the row button — deliberately the loudest control, because this is what you hit mid-call */
-a.dig.digcall{background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730);font-weight:800}
-a.dig.digcall:hover{background:#C6A14B;color:#0B1730;border-color:#C6A14B}
+/* CALL SHEET is the primary row action. The generic `.links a.dig{color:var(--gold-d)}` rule below
+   has EQUAL specificity (0,2,1) and comes later, so it was winning — painting dark gold #6F5514 text
+   on the navy #152747 chip at roughly 1.6:1 contrast. The single most important button on every row
+   was effectively illegible. Parent-scoped selectors here raise specificity to 0,3,1 so white wins
+   in both link containers regardless of source order. */
+.links a.dig.digcall,.clinks a.dig.digcall,a.dig.digcall{
+  background:var(--navy,#0B1730);color:#fff;border-color:var(--navy,#0B1730);font-weight:800}
+.links a.dig.digcall:hover,.clinks a.dig.digcall:hover,a.dig.digcall:hover{
+  background:#C6A14B;color:#0B1730;border-color:#C6A14B}
 @media(max-width:860px){ .csaddr{font-size:21px} .csv{font-size:26px} .csph{font-size:20px;width:100%;text-align:center} }
 /* ===== step-by-step playbook (deal modal) ===== */
 .pblist{list-style:none;counter-reset:pb;margin:4px 0 12px;padding:0}
