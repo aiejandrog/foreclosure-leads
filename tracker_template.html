@@ -209,6 +209,8 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
   color:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin-left:6px}
 /* action cluster */
 .abtn{display:inline-flex;align-items:center;gap:7px;font-weight:600;border-radius:var(--pill)}
+/* The mobile filter disclosure never appears on desktop, where all 25 controls fit fine. */
+.mfiltbtn{display:none}
 .abtn svg{width:13px;height:13px;display:block;flex:0 0 auto}
 /* any icon placed directly inside a button stays glyph-sized (sync, mail, etc.) */
 button>svg{width:13px;height:13px;flex:0 0 auto}
@@ -1439,12 +1441,31 @@ body.compact .dg-v{font-size:14.5px}
      phones ("South Florida · Foreclosure & Tax-Deed Intelligence" wraps at 375px). The shrink
      animation is desktop-only, so release the cap here and let it wrap as two balanced lines. */
   .brand .tag{max-height:none;line-height:1.65;letter-spacing:.11em;text-wrap:balance;padding-right:8px}
+  /* On a phone the brand block is squeezed beside Playbook/Refresh/Lock, so the tagline wraps to
+     four narrow lines and costs ~60px of the fold — on the device used standing at a door, where
+     that space is deals. The DEALFLOW wordmark brands it on its own; the tagline returns at 431px+. */
+  @media(max-width:430px){ .brand .tag{display:none} }
   .brand .upd{display:none}
   .brand .upd.stale{display:inline-block}
   .controls{gap:6px}
   .flbl{display:none}.fdiv{display:none}
   .qwrap{flex:1 1 100%}
   .qwrap input{width:100%}
+  /* COLLAPSED CONTROL CLUSTER (mobile only). Hiding the CHILDREN rather than shrinking the container
+     means removing .mcol restores every element's natural display — no need to guess whether each
+     was inline-flex, flex or block. Search stays out because finding the property you are standing
+     in front of is the one thing you actually do at a door. */
+  /* !important is load-bearing here: #syncbtn/#mailbatch/#bulktext/#cadencebtn/#savedbtn each set
+     display:inline-flex via an ID selector (specificity 1,0,0), which outranks any class-based rule
+     this collapse could use. Scoped to .controls.mcol inside the mobile query, so blast radius is
+     one container on one breakpoint. */
+  .controls.mcol > *{display:none !important}
+  .controls.mcol > .qwrap{display:inline-flex !important}
+  .controls.mcol > .mfiltbtn{display:inline-flex !important}
+  .mfiltbtn{display:inline-flex;align-items:center;gap:6px;order:-1}
+  .controls.mcol{gap:8px}
+  .mfiltn:not(:empty){background:var(--gold-grad,#C6A14B);color:var(--gold-ink,#241C05);
+    font-size:10px;font-weight:800;border-radius:var(--pill,99px);padding:1px 7px;line-height:1.5}
   .tblwrap{display:none}
   #cards{display:block}
   .clinks{display:block}
@@ -1688,7 +1709,13 @@ body.compact .dg-v{font-size:14.5px}
 <button id="refreshbtn" class="lockbtn" style="display:inline-block" title="Refresh the deal data now — fires the cloud pipeline (GitHub Actions). Checks freshness first; 60-min cooldown per device.">&#8635; Refresh</button>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
-<div class="controls">
+<div class="controls mcol">
+<!-- Mobile-only disclosure. On a 390px phone the control cluster is ~500px tall and pushes the first
+     deal card to y=838 — a full screen of filters before a single lead is visible, on the exact
+     device used standing at a front door. This button collapses everything except the search box;
+     desktop is untouched (the rule lives inside the 860px media query). -->
+<button id="mfilt" class="mfiltbtn" type="button" aria-expanded="false"
+  title="Show the tier, county, and mode filters plus the export / sync / mail tools">⚙ Filters <span class="mfiltn"></span></button>
 <span class="fgroup" role="group" aria-label="Tier"><span class="flbl">Tier</span>
 <button class="tf active" data-t="A">A</button>
 <button class="tf" data-t="B">B</button>
@@ -5742,6 +5769,7 @@ function render(){
   const rows = view();
   window._curRows = rows;          // the door-knock route builder (_doorRoute) drives off the current view
   renderActiveFilters();          // show removable pills for whatever is filtering the board
+  if(typeof window._mfiltCount === 'function') window._mfiltCount();   // keep the mobile Filters badge honest
   // sort-direction indicator on the active column header
   document.querySelectorAll('th[data-k]').forEach(th=>{
     const on = th.dataset.k===sortK;
@@ -7021,6 +7049,34 @@ try{ updateDigest(); }catch(e){}
   var apply=function(){ document.body.classList.toggle('compact', on); b.classList.toggle('active', on); };
   b.onclick=function(){ on=!on; try{ localStorage.setItem('fcDensity', on?'1':'0'); }catch(e){} apply(); };
   apply();
+})();
+// MOBILE FILTER DISCLOSURE. Collapsed by default on phones so the board opens on DEALS, not on a
+// screenful of chips (measured: first card sat at y=838 on a 844px viewport). The badge shows how
+// many non-default filters are live, so a collapsed cluster can never hide WHY the list looks short.
+(function(){
+  var btn=document.getElementById('mfilt'); if(!btn) return;
+  var wrap=btn.closest('.controls'); if(!wrap) return;
+  btn.addEventListener('click', function(){
+    var open = wrap.classList.toggle('mcol') === false;   // .mcol present = collapsed
+    btn.classList.toggle('active', open);
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  // Count only filters that DIVERGE from the default view, so the badge means "something is
+  // narrowing your list", not "buttons exist".
+  window._mfiltCount = function(){
+    var n = 0;
+    try{
+      if(typeof tier !== 'undefined' && tier && tier !== 'A') n++;
+      if(typeof county !== 'undefined' && county) n++;
+      ['wk','hd','hf','eq30','td','nc','closers','freshlp','nearhome','plan','due'].forEach(function(id){
+        var el=document.getElementById(id); if(el && el.classList.contains('active')) n++;
+      });
+      var q=document.getElementById('q'); if(q && q.value.trim()) n++;
+    }catch(e){}
+    var badge=btn.querySelector('.mfiltn'); if(badge) badge.textContent = n ? String(n) : '';
+    return n;
+  };
+  window._mfiltCount();
 })();
 // shortcuts: Ctrl/Cmd+K search · ? cheat-sheet (Esc closes)
 document.addEventListener('keydown', function(e){
