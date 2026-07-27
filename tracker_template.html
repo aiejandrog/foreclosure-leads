@@ -1964,8 +1964,18 @@ function landChips(r){ let o='';
 // lead showing 97% gross can be ~25% once a $174k surviving mortgage is counted). Falls back to the raw
 // field when there's no verified surv data to correct with.
 function netEqPct(r){
-  if(r.orconf==='ok' && r.orsurv && r.value) return Math.round((r.value - (r.judg||0) - r.orsurv) / r.value * 100);
-  return r.eq||0;
+  // The "30%+ equity" filter. This was a FOURTH private reading of the board's money: raw r.orsurv
+  // for the chain (ignoring the reconciled _chainSurv and the operator's own researched _slien), raw
+  // r.value for worth (ignoring the ARV confidence gate in _basisOf), and a stale baked r.eq as the
+  // fallback. It also subtracted the judgment on a tax deed, the opening-bid fantasy.
+  //
+  // Measured on the live board it disagreed with the equity shown on the row on 336 leads. 62 leads
+  // that DO have >=30% equity were being hidden by the >=30% filter -- 26 of them verdict STRONG.
+  // He clicks the filter to surface his best deals and it buries them. Now it asks the same two
+  // helpers the row itself renders, so the filter and the number can never disagree again.
+  const basis = _basisOf(r);
+  if(!basis) return 0;                                   // no trustworthy worth -> make no claim
+  return Math.round((_netEqOf(r) / basis) * 100);
 }
 // ===================== CLOSERS COCKPIT (2026-07-20) =====================
 // The leads most worth POURING energy into this week — ranked by expected value × how closeable ×
