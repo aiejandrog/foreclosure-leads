@@ -20,14 +20,30 @@ def load(fn):
     try: return json.load(open(p, encoding='utf-8'))
     except Exception: return None
 
-def ping(name, fn):
-    t = time.time()
-    try:
-        ok, note = fn()
-        ms = int((time.time() - t) * 1000)
-        add('PASS' if ok else 'FAIL', name, f'{note} ({ms}ms)')
-    except Exception as e:
-        add('FAIL', name, f'{str(e)[:60]}')
+_SRC_DOWN = []          # names of sources that failed every retry — used for the systemic rule below
+
+def ping(name, fn, tries=3):
+    """Probe an upstream source. RETRIES before believing it is down, and records a single failure as
+    a WARN rather than a FAIL.
+
+    A county website blipping for 400ms at 6am is not a reason to fail the nightly build and email
+    the owner — and doing so is precisely what trained the owner to ignore the emails while a real
+    week-long outage went unnoticed. One source down is noise; TWO OR MORE down at once is a real
+    signal (egress blocked, DNS, a shared CDN) and only that escalates to FAIL, below."""
+    t = time.time(); last = ''
+    for i in range(tries):
+        try:
+            ok, note = fn()
+            if ok:
+                add('PASS', name, f'{note} ({int((time.time()-t)*1000)}ms)')
+                return
+            last = note
+        except Exception as e:
+            last = str(e)[:60]
+        if i < tries - 1:
+            time.sleep(2 * (i + 1))                       # 2s, then 4s — ride out a momentary blip
+    _SRC_DOWN.append(name)
+    add('WARN', name, f'{last} — unreachable after {tries} tries ({int((time.time()-t)*1000)}ms)')
 
 # ---- 1. the data we shipped -------------------------------------------------------------------
 leads = load('leads_final.json')
@@ -194,7 +210,15 @@ def chk_gis():
     r = requests.get('https://gisweb.miamidade.gov/arcgis/rest/services/MD_ComparableSales/MapServer/5/query',
                      params={'where': "FOLIO='0142060580800'", 'outFields': 'FOLIO', 'returnGeometry': 'false', 'f': 'json'},
                      headers={'User-Agent': UA}, timeout=20)
-    j = r.json(); return (bool(j.get('features')), 'property lookup live')
+    j = r.json()
+    # Health of the SERVICE, not of one parcel. This pinned a single folio into a comparable-SALES
+    # layer, whose rows roll as sales age out — so the probe was destined to start failing on a
+    # perfectly healthy service. A valid ArcGIS envelope with no `error` means the endpoint is up;
+    # the folio having rows today is incidental.
+    if isinstance(j, dict) and j.get('error'):
+        return (False, 'ArcGIS error: ' + str(j['error'])[:60])
+    ok = isinstance(j, dict) and 'features' in j
+    return (ok, 'property lookup live' + ('' if j.get('features') else ' (probe folio has no rows — service fine)'))
 def chk_pa():
     r = requests.get('https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx',
                      params={'Operation': 'GetPropertySearchByFolio', 'clientAppName': 'PropertySearch', 'folioNumber': '0142060580800'},
@@ -211,6 +235,11 @@ ping('source · PA GIS (lookup)', chk_gis)
 ping('source · Property Appraiser', chk_pa)
 ping('source · Clerk OCS (cases)', chk_clerk)
 ping('source · RealForeclose (scrape)', chk_rf)
+# SYSTEMIC RULE. One county site down after 3 tries is their problem and it self-heals; the run stays
+# green. Two or more down at once means something on OUR side or the whole network path — that is
+# worth failing the build and firing the email, because the next scrape will produce garbage.
+if len(_SRC_DOWN) >= 2:
+    add('FAIL', 'upstream sources', f'{len(_SRC_DOWN)} sources unreachable at once ({", ".join(s.split("·")[-1].strip() for s in _SRC_DOWN)}) — systemic, not a blip')
 
 # ---- 4. shipped site freshness ----------------------------------------------------------------
 docs = os.path.join(HERE, 'docs', 'index.html')
