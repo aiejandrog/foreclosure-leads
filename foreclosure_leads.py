@@ -734,10 +734,38 @@ def _fc_type_plaintiff(plaintiff):
     return ''
 
 
+def _senior_surviving(h):
+    """ONE meaning of "what survives the sale", fixed at the merge boundary.
+
+    The three chain engines disagree about what `surv` contains, and the browser could not tell:
+      records_liens.py:305 / broward_liens.py:325 -> surv = sum(all opens except the foreclosing one)
+                                                          = seniors + juniors   (subtract juniors_post)
+      batchdata_liens.py:113                      -> surv = sum(seniors)         (already seniors-only)
+
+    The board applied the records-style subtraction to BOTH, so on every BatchData-sourced lead the
+    junior balance came out of the SENIOR figure a second time — and Math.max(0, ...) then silently
+    swallowed the remainder. On the live cache that erased an entire $811,577 first mortgage to $0
+    (502024CA012300XXXAMB). Anything needing "the surviving senior" calls THIS; a fourth feed adds a
+    branch here and nowhere else.
+    """
+    surv = float(h.get('surv') or 0)
+    if (h.get('source') or '').lower() == 'batchdata':
+        return int(round(surv))                                    # already seniors-only
+    return int(round(max(0.0, surv - float(h.get('juniors_post') or 0))))
+
+
 def _fwd_flags(d, h, ftype):
     """Bake the deal-killer flags from a lien result (records_liens/broward_liens) onto a slim lead. Missing
     keys (e.g. Miami-Dade records that predate the flag fields) are simply skipped."""
     d['orftype'] = h.get('ftype') or ftype
+    d['orsrc'] = (h.get('source') or 'records')      # PROVENANCE. orconf is CONFIDENCE — stop conflating.
+    # Emitted UNCONDITIONALLY, a real 0 included. The `if h.get('surv')` guard below omits the field on
+    # a chain that proved nothing survives, and the board's `+r.orsurv || +r.orjunior || ...` fallback
+    # then reads the JUNIOR as if it were a surviving senior. Measured: 7 leads, $458,777 of invented
+    # first mortgage (worst 502025CA008013XXXAMB, $195,871 on a $537,320 property). Today's
+    # double-subtraction happens to net those to zero by accident — fixing one without the other
+    # would expose the phantom.
+    d['orsurvsen'] = _senior_surviving(h)
     if h.get('surv'): d['orsurv'] = h.get('surv', 0)                 # total open mortgage that survives an HOA sale
     if h.get('surv_first'): d['orsurvfirst'] = h.get('surv_first', 0)  # the first mortgage (headline number)
     if h.get('deeded'):                                             # already deeded to another investor
