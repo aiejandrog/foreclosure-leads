@@ -234,6 +234,13 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 #aftercall button:hover{border-color:var(--gold,#C6A14B);background:var(--gold-soft,#f4ead2)}
 #aftercall .acx{background:none;border:none;color:var(--muted);font-size:15px;padding:6px 8px}
 #aftercall.hasqueue{bottom:82px}                       /* stack above the work bar, never on top of it */
+/* unresolved parcel — states the truth ("not looked up") instead of faking a $0 property */
+.unres{font-family:var(--f-label,inherit);font-size:9.5px;font-weight:800;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--muted);background:var(--surface-2,#f2f0ea);
+  border:1px dashed var(--line,#d8d4c8);border-radius:4px;padding:2px 6px}
+.legalline{color:var(--muted);font-weight:600;font-size:12px;font-style:italic}
+a.dig.resolveparcel{background:var(--gold-soft,#f4ead2)!important;border-color:var(--gold,#C6A14B)!important;
+  color:var(--gold-d,#8a6d1f)!important;font-weight:800!important}
 /* work bar — the queue, one lead at a time, number already in front of him */
 #workbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:8999;max-width:96vw;
   display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:center;
@@ -2349,7 +2356,7 @@ function dealFlags(r){
   if(nn.occ) f.push('Occupied — eviction cost/time included; no interior inspection at auction.');
   if(r.st!=='TD' && r.condo) f.push('Condo: pull the association ESTOPPEL for unpaid dues + any special assessment. A post-Surfside 40-yr recertification can be a large surviving cost that is not in public records.');
   if(r.st!=='TD' && !r.mr && r._equity!=null && r.value && (r._equity/r.value)>0.5 && !nn.jlien && !nn.assess) f.push('Big equity on a bank 1st — pull Official Records for a 2nd mortgage / HELOC. To buy from the owner you clear EVERY mortgage, not just the one foreclosing.');
-  if(r.days>=0 && r.days<=3) f.push('Redemption stays open until the deed issues / full payment to the clerk — not final at the hammer.');
+  if(_hasClock(r) && r.days<=3) f.push('Redemption stays open until the deed issues / full payment to the clerk — not final at the hammer.');
   if((+r.saleBK||0)>=2) f.push('SERIAL BANKRUPTCY FILER — '+r.saleBK+' distinct BK cases on this docket. The automatic stay stops any sale the moment they re-file, so timelines here are unreliable and a rescue deal can be frozen mid-flight. Jose screens these out.');
   if(r.saleBkAct) f.push('⛔ ACTIVE BANKRUPTCY STAY'+(r.saleBkD?' (filed '+r.saleBkD+')':'')+' — 11 U.S.C. §362 prohibits ALL collection contact right now: no calls, letters, door-knocks, WhatsApp, or emails until the case is dismissed/discharged or the stay is lifted. A stay violation carries real sanctions and can unwind work already done. Track it; move when it closes.');
   var _ld = _stayLiftedDays(r);
@@ -2520,8 +2527,8 @@ function dealAnalysisHTML(r){
 // Shared blocks so Deal Analyzer and Call Sheet stay one story (same PLAY, clock, stack, contact/text).
 function _daSubline(r){
   if(r.st==='LP') return esc(r.addr)+' · <b>🌱 Fresh Lis Pendens</b> · filed '+(esc(r.filed||r.filedDate||'recently'))+' · no auction yet';
-  if(r.st==='TD') return esc(r.addr)+' · Tax deed · auction '+esc(r.auction||'—')+(r.days>=0?' · '+r.days+'d':'');
-  return esc(r.addr)+' · Foreclosure · auction '+esc(r.auction||'—')+(r.days>=0?' · '+r.days+'d':'')
+  if(r.st==='TD') return esc(r.addr)+' · Tax deed · auction '+esc(r.auction||'—')+(_hasClock(r)?' · '+r.days+'d':'');
+  return esc(r.addr)+' · Foreclosure · auction '+esc(r.auction||'—')+(_hasClock(r)?' · '+r.days+'d':'')
     +(r.auc?' · <a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener">✓ verify on RealForeclose →</a>':'');
 }
 // One clock body for CS + DA — copy drift here used to make Deal analysis look like a different source.
@@ -2532,9 +2539,9 @@ function _clockBodyHtml(r){
       + row('Auction', '<b>none scheduled yet</b> — typically months of runway before a sale date is set')
       + row('Your edge', 'Be the <b>FIRST</b> contact — reach the owner now, before the auction crowd. People-search the name for a number.');
   }
-  return row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(r.days>=0?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">passed</span>')
+  return row('Auction', '<b>'+esc(r.auction||'—')+' at 9am</b>'+(_hasClock(r)?' <span class="csdays'+(r.days<=7?' urg':'')+'">'+r.days+' days</span>':' <span class="csdays">'+_clockTxt(r)+'</span>')
       +(r.auc?'<a class="csverify" href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Verify this sale on RealForeclose — the LIVE county auction calendar, deep-linked to THIS case. Foreclosure sales get rescheduled or cancelled all the time (reinstatement, bankruptcy stay, continuance), so confirm the date is still ON before you act on it.">✓ verify on RealForeclose →</a>':''))
-    + row('Deal deadline', r.days>=0 ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play')
+    + row('Deal deadline', _hasClock(r) ? '<b'+((r.days-3)<=3?' style="color:#C0392B"':'')+'>'+Math.max(0,r.days-3)+' days</b>'+((r.days-3)<=0?' ⏰ <b style="color:#C0392B">closing today — call NOW or let it ride to surplus</b>':((r.days-3)<=3?' ⏰ tight':''))+' — the attorney needs ~3 days to file' : 'auction passed — surplus play')
     + row('Sale history', r.saleSurv!=null ? (r.saleSurv===0?'<b>FIRST sale ever</b> — never dodged one':r.saleSurv+'× dodged before') : 'no docket data (filed '+(_filedYear(r)||'?')+')')
     + (r.saleBkAct?row('⛔ BANKRUPTCY','<b class="bad">ACTIVE STAY — NO CONTACT</b>'):(+r.saleBK?row('Bankruptcies',r.saleBK+' on file'):''));
 }
@@ -3529,7 +3536,7 @@ function _copyCallSheet(c){
     (jr>0 && r.st!=='TD') ? 'JUNIOR / 2ND:   '+fm(jr)+'  (payoff only on direct purchase; wiped at auction if named)' : '',
     (_netEqLabel(r,1)+':').padEnd(17)+fm(_netEqOf(r))+(r.st==='TD'?'   (at est. winning bid '+fm(r._purchase||0)+')':''),
     '',
-    'AUCTION:  '+r.auction+' 9am'+(r.days>=0?'  ('+r.days+' days, deal deadline in '+Math.max(0,r.days-3)+')':''),
+    'AUCTION:  '+r.auction+' 9am'+(_hasClock(r)?'  ('+r.days+' days, deal deadline in '+Math.max(0,r.days-3)+')':''),
     'PROPERTY: '+(r.dor_desc||'')+(r.beds?', '+r.beds+'bd/'+r.baths+'ba':'')+(r.sqft?', '+(+r.sqft).toLocaleString()+'sf':'')+(r.bought?', owned since '+r.bought:''),
     clean.length?'PHONE:    '+clean.map(p=>fmtPhone?fmtPhone(p):p).join(' / '):'PHONE:    none callable',
     r.defs?'ALSO SUED: '+r.defs:'',
@@ -3929,7 +3936,7 @@ function planRows(){
     const started = !!(n.touches||[]).length;
     // fresh leads only enter the plan when they're worth a two-person day: value known, inside 30
     // days, and not already flagged dead by the records
-    const fresh = !started && r.value>0 && r.days>=0 && r.days<=30 && !(typeof isFlaggedDead==='function' && isFlaggedDead(r));
+    const fresh = !started && r.value>0 && _hasClock(r) && r.days<=30 && !(typeof isFlaggedDead==='function' && isFlaggedDead(r));
     if(fuDue || (started && a) || fresh) due.push({r:r, a:a, fu:fuDue,
       _p:(fuDue?0:started?1:2)*1e9 + (r.days<0?999:r.days)*1e6 - Math.min(999999,Math.round((r.value-(r.judg||0))/1000))});
   });
@@ -3949,7 +3956,7 @@ function planModalBody(){
     arr.forEach(d=>{
       const r=d.r, city=(r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||[])[1]||'';
       h+='<li><b>'+esc((r.owners||'').split(';')[0].split('&')[0].trim())+'</b> · '+esc(r.addr)
-        +' · <b>'+(r.days>=0?r.days+'d to auction':'passed')+'</b>'
+        +' · <b>'+(_hasClock(r)?r.days+'d to auction':_clockTxt(r))+'</b>'
         +(d.fu?' · <span class="cx cx-due">follow-up due</span>':'')
         +'<div class="mut">'+esc(d.a.lbl)+' — '+esc(d.a.why)+'</div>'
         +'<button class="planlog" data-c="'+esc(r.case)+'" type="button">open log</button></li>';
@@ -3958,7 +3965,7 @@ function planModalBody(){
   };
   // door leads grouped roughly by city so a knock route falls out of the list order
   grp.door.sort((a,b)=>{ const ca=(a.r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||['',''])[1], cb=(b.r.addr.match(/,\s*([^,]+),\s*\d{5}\s*$/)||['',''])[1]; return ca<cb?-1:ca>cb?1:a.r.days-b.r.days; });
-  const txt = due.map(d=>{ const r=d.r; return (NA_ICON[d.a.ch]||'')+' '+(r.owners||'').split(';')[0].split('&')[0].trim()+' — '+r.addr+' — '+(r.days>=0?r.days+'d':'passed')+' — '+d.a.lbl; }).join('\n');
+  const txt = due.map(d=>{ const r=d.r; return (NA_ICON[d.a.ch]||'')+' '+(r.owners||'').split(';')[0].split('&')[0].trim()+' — '+r.addr+' — '+(_hasClock(r)?r.days+'d':'passed')+' — '+d.a.lbl; }).join('\n');
   return '<div class="dm-head"><div class="dm-title">Plan today — top '+due.length+' action'+(due.length>1?'s':'')+'</div>'
     +'<div class="dm-sub">Ranked: follow-ups due, then in-progress, then fresh — nearest auction + biggest equity first. '
     +(hidden>0?'<b>'+hidden+' more</b> are due but not shown (finish these first). ':'')
@@ -4139,7 +4146,7 @@ function textCardHtml(r){
   const dncNote=dnc.length?'<div class="mut" style="font-size:11.5px;margin-top:6px">Skipped (DNC — do not text): '+esc(dnc.join(', '))+'</div>':'';
   const saleLine = r.st==='LP'
     ? 'Lis Pendens · just filed'
-    : ((r.st==='TD'?'Tax-deed':'Foreclosure')+' sale <b>'+esc(r.auction||'—')+'</b>'+(r.days>=0?' · in '+r.days+'d':''));
+    : ((r.st==='TD'?'Tax-deed':'Foreclosure')+' sale <b>'+esc(r.auction||'—')+'</b>'+(_hasClock(r)?' · in '+r.days+'d':''));
   return '<div class="dm-head"><div class="dm-title">💬 Text '+esc(owner)+'</div>'
     +'<div class="dm-sub">'+esc(r.addr||'')+' · '+saleLine+'</div>'+pos+'</div>'
     +gate
@@ -4270,7 +4277,7 @@ function logModalBody(r){
     '<div class="ovnote">Do not contact again. If this surfaced after a team merge, the touch predates your knowledge of the opt-out — note the cure here for the record.</div></div>' : '';
   const ledger = (n.optlog && n.optlog.length) ? '<div class="optledger"><div class="olt">🚫 Do-not-contact audit trail</div>'+
     n.optlog.slice().reverse().map(ev=>'<div class="ole"><b>'+esc(ev.ts||'')+'</b> · '+esc(_actLbl[ev.act]||ev.act||'')+(ev.src?' · '+esc(ev.src):'')+'</div>').join('')+'</div>' : '';
-  return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+(r.days>=0?'in '+r.days+'d':'passed')+'</div></div>'+
+  return '<div class="dm-head"><div class="dm-title">'+owner+'</div><div class="dm-sub">'+esc(r.addr)+' · auction '+esc(r.auction)+' · '+_clockTxt(r)+'</div></div>'+
     wrongBanner+violBanner+
     '<div class="dm-sec">Log a touch — one tap</div><div class="qlogwrap">'+btns+'</div>'+
     '<div class="dm-sec">Follow-up date</div><div class="fuwrap">Next: '+fu+' &nbsp;'+fub+'</div>'+
@@ -4622,7 +4629,7 @@ function _wqShow(){
   bar.setAttribute('data-case', r.case);
   bar.innerHTML = '<span class="wbn">'+(_wqi+1)+'/'+_wq.length+'</span>'
     + '<span class="wbaddr">'+esc((r.addr||r.case).split(',')[0])+'</span>'
-    + '<span class="wbwhy">'+esc(item.why)+(typeof r.days==='number' && r.days>=0 ? ' · auction in '+r.days+'d' : '')+'</span>'
+    + '<span class="wbwhy">'+esc(item.why)+(_hasClock(r)?' · auction in '+r.days+'d':'')+'</span>'
     + (tel
         ? '<a class="wbcall" href="tel:'+esc(tel)+'">☎ '+esc(ph[0])+'</a>'
         : '<a class="wbcall wbfind" href="'+esc(_wpNameUrl ? _wpNameUrl(r) : '#')+'" target="_blank" rel="noopener noreferrer">🔎 Find a number</a>')
@@ -4754,7 +4761,7 @@ function _netEqSub(r){
 function _deepLink(r){ return location.origin + location.pathname + '#case=' + encodeURIComponent(r.case); }
 function _carlosMsg(r){
   var owner = (r.owners||'').split(';')[0].split('&')[0].trim();
-  var ph = _bestPhones(r), days = (r.days>=0? r.days+' days out' : 'sale passed');
+  var ph = _bestPhones(r), days = (_hasClock(r)? r.days+' days out' : _clockTxt(r));
   // PLAYBOOK.md §5 Carlos intake + Field Manual door opener / 5 exits.
   return 'DOOR MISSION — '+owner+'\n'
     + r.addr + '\n'
@@ -4791,7 +4798,7 @@ function _joseMsg(r){
   } else { var fy = _filedYear(r); fresh = fy>=2024 ? 'FRESH ('+fy+')' : (fy? 'staller? ('+fy+')' : ''); }
   return 'BLESS THIS? — '+r.addr+'\n'
     + 'Owner: '+owner+'  ·  Case '+r.case+'\n'
-    + 'Auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+(fresh?'  ·  '+fresh:'')+'\n'
+    + 'Auction '+(r.auction||'not set')+(_hasClock(r)?' ('+r.days+'d)':'')+(fresh?'  ·  '+fresh:'')+'\n'
     + 'Value/ARV: '+v+'\n'
     // A tax deed has no foreclosing judgment and no surviving mortgage to quote — sending Jose those
     // lines on a TD invents facts about the deal. Quote the auction economics instead.
@@ -4830,7 +4837,7 @@ function _liveMsg(r){
   if(+r.saleBK) fresh += ' · '+r.saleBK+'× BK';
   return '🔥 LIVE — I have '+owner+' ON THE PHONE RIGHT NOW\n'
     + r.addr+'\n'
-    + 'Case '+r.case+' · auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+(fresh?' · '+fresh:'')+'\n'
+    + 'Case '+r.case+' · auction '+(r.auction||'not set')+(_hasClock(r)?' ('+r.days+'d)':'')+(fresh?' · '+fresh:'')+'\n'
     + (r.st==='TD'
         ? v+' · opening bid '+(r.obid?'$'+Math.round(+r.obid).toLocaleString():'?')
           + ' · est. winning bid ~$'+Math.round(+r._purchase||0).toLocaleString()
@@ -4850,7 +4857,7 @@ function _copyPlaybook(c){
   const p = _playbook(r), owner = (r.owners||'').split(';')[0].trim();
   const strip = h => String(h).replace(/<[^>]+>/g,'').replace(/&middot;/g,'·').replace(/&nbsp;/g,' ').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim();
   const txt = 'PLAYBOOK — '+r.addr+'\n'+owner+'  ·  Case '+r.case+'\n'+
-    'Auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+
+    'Auction '+(r.auction||'not set')+(_hasClock(r)?' ('+r.days+'d)':'')+
     (p.g.mi!=null?'  ·  '+p.g.mi+' mi from '+_baseLL().name+' ('+p.g.lbl+')':'')+'\n\n'+
     p.steps.map((s,i) => (i+1)+'. '+strip(s.t)+(s.state==='now'?'   <-- DO THIS NOW':'')+'\n   '+strip(s.d)+
                          (s.f?'\n   IF THAT FAILS: '+strip(s.f):'')).join('\n\n')+
@@ -4883,7 +4890,7 @@ function openSaved(){
   body += '<div class="savelist">' + list.map(function(r){
     var owner = (r.owners||'').split(';')[0].trim();
     return '<div class="saveitem"><div class="si-main"><b>'+esc(owner)+'</b><span>'+esc(r.addr)+'</span>'
-      + '<span class="si-meta">'+(r.county&&r.county!=='MIAMI-DADE'?esc(r.county)+' · ':'')+'auction '+esc(r.auction)+(r.days>=0?' · '+r.days+'d':'')+'</span></div>'
+      + '<span class="si-meta">'+(r.county&&r.county!=='MIAMI-DADE'?esc(r.county)+' · ':'')+'auction '+esc(r.auction)+(_hasClock(r)?' · '+r.days+'d':'')+'</span></div>'
       + '<button type="button" class="si-open" onclick="closeSaved();openCallSheet(\''+esc(r.case)+'\')" title="Open this property hub">Open</button>'
       + '<button type="button" class="si-rm" onclick="_toggleFav(\''+esc(r.case)+'\')" title="Remove from batch">&times;</button></div>';
   }).join('') + '</div>';
@@ -4911,7 +4918,7 @@ function _carlosPacket(){
   var rowsHtml = list.map(function(r,i){
     var owner = (r.owners||'').split(';')[0].trim();
     var ph = _bestPhones(r);
-    return '<tr><td>'+(i+1)+'</td><td><b>'+esc(owner)+'</b></td><td>'+esc(r.addr)+'</td><td>'+(ph.length?esc(ph.join(' / ')):'&mdash;')+'</td><td>'+esc(r.auction)+(r.days>=0?'<br><span class="d">'+r.days+'d</span>':'')+'</td>'
+    return '<tr><td>'+(i+1)+'</td><td><b>'+esc(owner)+'</b></td><td>'+esc(r.addr)+'</td><td>'+(ph.length?esc(ph.join(' / ')):'&mdash;')+'</td><td>'+esc(r.auction||'not set')+(_hasClock(r)?'<br><span class="d">'+r.days+'d</span>':'')+'</td>'
       + '<td class="ck">&#9744; letter</td><td class="ck">&#9744; hanger</td><td class="ck">&#9744; knocked</td><td class="ck">&#9744; spoke</td></tr>';
   }).join('');
   var hangers = list.map(function(r){
@@ -5002,10 +5009,26 @@ function _stayLiftedDays(r){
   try{ var d = Math.floor((Date.now() - new Date(r.saleLift+'T12:00:00').getTime())/86400000); return d>=0?d:-1; }catch(e){ return -1; }
 }
 function _drvVal(r){ return (r._valsrc==='arv' && r.arv) ? r.arv : r.value; }
+// ONE TRUTHFUL CLOCK. days===9999 is the scraper's "no sale scheduled" sentinel for a lis pendens.
+// Every render site tested `days >= 0`, which 9999 satisfies — so the board printed "in 9999d" as if
+// the auction were 27 years out. A sentinel must never reach the screen.
+const NO_SALE = 9999;
+function _hasClock(r){ return typeof r.days === 'number' && r.days >= 0 && r.days < NO_SALE; }
+function _clockTxt(r){
+  if(_hasClock(r)) return 'in ' + r.days + 'd';
+  if(typeof r.days === 'number' && r.days >= NO_SALE) return 'no sale date yet';
+  return 'passed';
+}
+// Is this lead actually workable, or is it a filing we have not resolved to a property yet? A lis
+// pendens arrives with a case, an owner and a legal description — but no folio and no address, so
+// there is no value, no photo, no comps and no door to knock. Rendering that as "$0 val · $0 owed"
+// states a falsehood: it reads as a worthless property, when the truth is we have not looked it up.
+function _unresolved(r){ return !String(r.addr||'').trim() && !(+r.value||0) && !(+r.arv||0); }
 function _valChip(r){
   // kimi: the row shows the SAME value that drives the deal math. ARV-driving leads carry the tag
   // so the operator sees WHY this number is above the county roll (Save Our Homes cap).
   if(r._valsrc==='arv' && r.arv) return '<b class="pv">'+fmtK(r.arv)+'</b> <span class="arvtag" title="Comps-verified ARV ('+r.arvn+' nearby sales) drives the math — the county roll is Save-Our-Homes capped on long-held homesteads">ARV</span>';
+  if(_unresolved(r)) return '<span class="unres" title="This filing has not been matched to a parcel yet, so there is no value, photo or comps. It is not a $0 property — it is an unlooked-up one. Use the owner + legal description on the row to pull the folio.">parcel not resolved</span>';
   return '<b class="pv">'+fmtK(r.value)+'</b> val';
 }
 // ONE equity percentage everywhere. This used to compute equity two incompatible ways: stack-aware
@@ -6612,6 +6635,16 @@ function render(){
     else if(r.addr) gEval.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No folio for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
     // Auction: live RealForeclose sale page for this date (all parcels + bidding).
     if(r.auc) gEval.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
+    // UNRESOLVED PARCEL — the whole reason this row is empty. A lis pendens gives us a case, an owner
+    // and a legal description but no folio, so every property link above is missing and the lead
+    // looks worthless. This is the one action that turns it into a real lead: find the parcel, and
+    // value/photo/comps/taxes all follow. Put it FIRST so the row leads with what it needs.
+    if(_unresolved(r)){
+      var _ownQ = String(r.oname || r.owners || '').split(';')[0].replace(/,/g,' ').trim();
+      gProp.push('<a class="dig resolveparcel" href="https://apps.miamidadepa.gov/PropertySearch/#/?tab=os&owner='+encodeURIComponent(_ownQ)+'" target="_blank" rel="noopener noreferrer" title="RESOLVE THIS PARCEL — opens the Miami-Dade appraiser owner search pre-filled with '+esc(_ownQ)+'. Match it against the legal description on the row, then paste the folio into the search box here to link it up. Everything else on this lead (value, photo, comps, taxes) is blocked until this is done.">🔗 Resolve parcel</a>');
+      if(String(r.legal||'').trim())
+        gProp.push('<a class="dig" href="https://www.google.com/search?q='+encodeURIComponent(String(r.legal)+' '+ctyName(r.county)+' folio')+'" target="_blank" rel="noopener noreferrer" title="Search the legal description — plat/lot/block often surfaces the folio or the street address directly.">⌕ Legal → folio</a>');
+    }
     // PROPERTY scout — maps + Whitepages Property Intel (value/tax/auction live in Court & sale above).
     if(r.addr){
       var _mq = encodeURIComponent(String(r.addr).replace(/FL-\s*/i, 'FL '));
@@ -6660,7 +6693,12 @@ function render(){
     // Profit cell: big profit, then ROI + cash sub-line, then flags. "no value data" when un-enriched.
     let prof;
     if(r._nodata){
-      prof = '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
+      // "no value data" reads like a dead lead. For an UNRESOLVED filing the truth is different and
+      // actionable: nothing is wrong with the property, we just have not matched it to a parcel yet —
+      // and there is a button on the row that fixes it.
+      prof = _unresolved(r)
+        ? '<span class="meta" title="Not a bad deal — an unlooked-up one. This filing has no folio yet, so there is no value, photo or comps to score. Hit &quot;Resolve parcel&quot; on the row: match the owner + legal description at the appraiser, and the numbers fill in.">needs parcel lookup<br><span style="opacity:.7">then it can be scored</span></span>'
+        : '<span class="meta" title="No market value from the appraiser (parcel not listed or login-gated). Can\'t estimate profit.">no value data</span>';
     } else if(r._verdict==='VERIFY'){
       prof = verdictBadge(r)+_playBadge(r)+'<div class="warn" style="margin-top:4px;white-space:normal">'+esc(r._whyShort||r._why)+'</div>'+dealTrigger(r);
     } else {
@@ -6675,8 +6713,8 @@ function render(){
     }
     const _fc = flagChips(r) + landChips(r) + verifyChip(r); prof = '<div class="fchips">'+_fc+'</div>' + prof;   // TAKEN / 2ND FC / VACANT-LAND / LLC + verification status up top
     // Auction cell: date, countdown, filed/bought sub-lines
-    const auc = '<div>'+esc(r.auction)+'</div>'+
-      '<div class="submeta '+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</div>'+
+    const auc = '<div>'+esc(r.auction || (r.st==='LP' ? 'not set' : '—'))+'</div>'+
+      '<div class="submeta '+(_hasClock(r) && r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</div>'+
       (r.filed||r.bought?'<div class="meta">'+(r.filed?'filed '+r.filed:'')+(r.bought?' · bought '+r.bought:'')+'</div>':'');
     // Owner cell: owner names, plaintiff (clamped), count of other defendants
     // Co-parties named on the case. Each human (co-owner / spouse / relative) is a clickable People
@@ -6700,8 +6738,16 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta clamp2" title="'+esc(r.plaintiff)+'">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml);
     // Property cell: address (with copy), compact numbers line, any warning
-    const prop = '<div class="addrline"><span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+    // A lis pendens arrives with no address — but it DOES carry the legal description, which is what
+    // actually identifies the parcel at the appraiser. An empty address line told him nothing; the
+    // legal is the thing he pastes into the PA search to turn this into a real lead.
+    const _addrLine = String(r.addr||'').trim()
+      ? '<span class="clamp2" title="'+esc(r.addr)+'">'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')
+      : (String(r.legal||'').trim()
+          ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
+          : '<span class="clamp2 legalline">no address on the filing</span>');
+    const prop = '<div class="addrline">'+_addrLine+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -6766,8 +6812,8 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':fmtK(r.judg)+' owed')+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
-      '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+(r.days>=0?'in '+r.days+'d':'passed')+'</span> · '+ctype+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
       dealTrigger(r)+
