@@ -2092,6 +2092,7 @@ function recompute(){
       : !!(r.hs && r.mail && r.addr && String(r.mail).split(',')[0].trim().toUpperCase() === String(r.addr).split(',')[0].trim().toUpperCase());
     const evict = occ ? Math.max(4000, val*0.02) : 0;
     r._slien=slien; r._jlien=jlien; r._assess=assess; r._mlien=mlien; r._btax=btax; r._occ=occ; r._evict=evict;
+    r._slienSet = _dTyped(nn.slien);   // operator researched the survivor — outranks any parser confidence flag
     r._assessSet = _dTyped(nn.assess);   // an explicitly researched assessment (incl. a confirmed $0) lifts the condo MARGINAL cap
     // No market value (un-enriched / login-gated parcel): can't compute a real deal. Blank it.
     if(!val){ r._equity=null; r._purchase=null; r._cash=0; r._profit=null; r._roi=null; r._tight=false; r._nodata=true; r._verdict='PASS'; r._vrank=0; r._why='No market value from the appraiser — pull the parcel manually first.'; r._play=_playFor(r); return; }
@@ -6946,7 +6947,16 @@ function lkReport(a){
     const rows=lead.orliens.map(l=>'<tr><td>'+esc(l.d)+'</td><td>'+esc(l.party)+'</td><td style="text-align:right">'+lkM(l.amt)+'</td>'
       +'<td class="'+(l.st==='OPEN'?'lkbad':'lkok')+'">'+esc(l.st)+'</td></tr>').join('');
     const hoa=(lead.orftype==='HOA'), low=(lead.orconf!=='ok');
-    const sv = hoa ? (+lead.orsurvfirst||0) : (+lead.orjunior||0);
+    // SOURCE OF TRUTH. This was a THIRD independent reading of the chain — raw orsurvfirst/orjunior,
+    // consulting neither the reconciled _chainSurv that drives the deal math nor the operator's own
+    // researched slien override. Measured across the live board it disagreed with the math on 45
+    // leads totalling $10.8M, worst single case $1,308,288. Every divergence pointed the same
+    // dangerous way: Lookup invented a surviving mortgage the chain says does not exist, so the
+    // seller-net below subtracted a phantom payoff and quoted the homeowner a lowball walk-away.
+    // _slien already encodes the HOA branch (whole first survives) AND any typed override — so read it
+    // directly. NOT `_slien || _chainSurv`: a researched 0 ("I checked, nothing survives") is falsy, and
+    // that fallback would resurrect the chain's number over the operator's own verification.
+    const sv = lead._slien != null ? +lead._slien : (+lead._chainSurv || 0);
     let call='';
     if(lead.ordeeded){ const hi=(lead.ordeedconf==='ok');
       call += '<div class="lkcallout '+(hi?'hot':'')+'"><b>'+(hi?'Already sold':'Possibly already sold')+'</b> &mdash; a deed was recorded '+esc(lead.ordeeded.d||'')+' to <b>'+esc(lead.ordeeded.grantee||'an investor')+'</b>. '+(hi?'Another investor already took the deed &mdash; this one is likely gone.':'Common name &mdash; verify in Records before relying on it.')+'</div>'; }
@@ -6966,8 +6976,14 @@ function lkReport(a){
   // auto-add the surviving loan to the payoff ONLY when confident: HOA sale -> the whole first mortgage
   // survives; mortgage foreclosure -> a surviving 2nd. Low-confidence numbers are shown as a warning, not
   // auto-subtracted (conservative), so the user enters what they confirm.
-  const _survAdd = lead ? (lead.orftype==='HOA' ? (+lead.orsurvfirst||0) : (+lead.orjunior||0)) : 0;
-  const po = lead ? Math.round((td?lead.obid:lead.judg) + (lead.orconf==='ok'?_survAdd:0)) : 0;
+  // Same source of truth as the callout above — and it matters more here, because this figure is the
+  // one quoted to a HOMEOWNER as what they walk away with. A phantom survivor here is a lowball net
+  // that loses a deal you could have closed; a missed one promises money that will not be there.
+  const _survAdd = lead ? (lead._slien != null ? +lead._slien : (+lead._chainSurv || 0)) : 0;
+  // orconf is a gate on the PARSER's reading. When the operator typed the survivor themselves they
+  // already did the verifying the gate exists to demand, so their number is auto-added either way.
+  const _survTrust = !!lead && (lead._slienSet || lead.orconf === 'ok');
+  const po = lead ? Math.round((td?lead.obid:lead.judg) + (_survTrust?_survAdd:0)) : 0;
   const calc='<div class="lksec">Deal desk</div><div class="lkcard lkcalc">'
       +'<div class="lkcgrid">'
         +'<label>List / market price $<input id="lklp" type="number" value="'+(val||'')+'" oninput="lkCalc()"></label>'
