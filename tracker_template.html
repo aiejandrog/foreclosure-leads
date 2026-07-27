@@ -121,6 +121,18 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .lockbtn:hover{border-color:var(--gold);color:var(--gold-d)}
 #refreshbtn{border-color:rgba(198,161,75,.55);color:var(--gold-d);font-weight:700}
 #refreshbtn:hover{border-color:var(--gold);box-shadow:0 0 12px rgba(198,161,75,.25)}
+/* Pipeline health on the button itself. A daily refresh that has been dead for a week must be
+   visible WITHOUT opening a modal — that is exactly how 2026-07-20 -> 07-26 went unnoticed. */
+#refreshbtn.gh-bad{border-color:#C0392B;color:#C0392B;background:rgba(192,57,43,.07)}
+#refreshbtn.gh-live{border-color:var(--blue,#1F6FEB);color:var(--blue-ink,#1F4E97);background:var(--blue-soft,#DEEBFB)}
+#refreshbtn .ghdot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;vertical-align:middle}
+#refreshbtn.gh-bad .ghdot{background:#C0392B}
+#refreshbtn.gh-live .ghdot{background:var(--blue,#1F6FEB);animation:ghpulse 1.4s ease-in-out infinite}
+@keyframes ghpulse{0%,100%{opacity:1}50%{opacity:.35}}
+.ghrun{margin-top:11px;padding:9px 11px;border-radius:8px;font-size:12.5px;line-height:1.5}
+.ghrun-ok{background:var(--green-soft,#DDF2E4);color:var(--green-ink,#0E5F31);border:1px solid #BEE5CC}
+.ghrun-bad{background:rgba(192,57,43,.08);color:#8E2C20;border:1px solid rgba(192,57,43,.35)}
+.ghrun-live{background:var(--blue-soft,#DEEBFB);color:var(--blue-ink,#1F4E97);border:1px solid #C9DBFA}
 /* command rows */
 .controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center;transition:gap .25s var(--e-lux),margin .25s var(--e-lux)}
 .controls+.controls{margin-top:8px}
@@ -5552,6 +5564,37 @@ function _refreshCooldownLeft(){
     return Math.max(0, Math.ceil((t + 60*3600000 - Date.now()) / 60000)); }catch(e){ return 0; }
 }
 function _refreshModal(html){ document.getElementById('refreshbody').innerHTML = html; }
+// LAST-RUN STATUS. The modal used to reason only from the local build age, so a scheduled run that
+// had been failing for a week looked identical to a healthy one — the daily refresh died on
+// 2026-07-20 and nothing in the app ever said so. Reads are unauthenticated (public repo), so this
+// works with or without a saved token; firing still needs the token.
+function _ghRuns(cb){
+  try{
+    fetch('https://api.github.com/repos/aiejandrog/foreclosure-leads/actions/workflows/refresh.yml/runs?per_page=5')
+      .then(r => r.ok ? r.json() : null)
+      .then(j => cb((j && j.workflow_runs) || null))
+      .catch(() => cb(null));
+  }catch(e){ cb(null); }
+}
+function _ghRunLine(runs){
+  if(!runs || !runs.length) return '';
+  const r = runs[0];
+  const when = (() => { const h=(Date.now()-new Date(r.created_at).getTime())/36e5;
+    return h<1 ? Math.max(1,Math.round(h*60))+' min ago' : h<24 ? Math.round(h)+'h ago' : (h/24).toFixed(1)+'d ago'; })();
+  const link = '<a href="'+r.html_url+'" target="_blank" rel="noopener" style="color:inherit;text-decoration:underline">run #'+r.run_number+'</a>';
+  if(r.status !== 'completed'){
+    return '<div class="ghrun ghrun-live">⟳ <b>Pipeline running now</b> — '+link+' started '+when+
+      '. The site republishes itself when it finishes.</div>';
+  }
+  if(r.conclusion === 'success'){
+    return '<div class="ghrun ghrun-ok">✓ Last run '+link+' <b>succeeded</b> '+when+'.</div>';
+  }
+  // count how far back the failing streak goes, so a one-off blip reads differently from a dead pipeline
+  let streak = 0;
+  for(const x of runs){ if(x.status==='completed' && x.conclusion!=='success') streak++; else break; }
+  return '<div class="ghrun ghrun-bad">⚠ Last run '+link+' <b>'+(r.conclusion||'failed')+'</b> '+when+
+    (streak>1 ? ' — <b>'+streak+' in a row</b>. The daily refresh is not updating your data.' : '.')+'</div>';
+}
 function openRefresh(){
   const age = _dataAgeH(), left = _refreshCooldownLeft(), tok = _ghTok.get();
   const ageTxt = age == null ? 'unknown' : age < 1 ? 'just now' : age < 24 ? Math.round(age)+'h ago' : (age/24).toFixed(1)+'d ago';
@@ -5573,7 +5616,10 @@ function openRefresh(){
       '<div style="margin-top:10px;display:flex;gap:8px"><button class="syncbtn2" id="gh-fire" type="button" style="background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;border:none;font-weight:700">&#8635; Fire refresh</button></div>';
   }
   body += '<div class="sd" style="color:var(--muted-2);font-size:11px;margin-top:12px">Token on this device: '+(tok?'saved · <a href="#" id="gh-tok-clear" style="color:var(--muted)">forget it</a>':'none')+'</div>';
+  body += '<div id="ghrunslot"></div>';
   _refreshModal(body);
+  // Fill the real last-run status asynchronously so the modal never blocks on the network.
+  _ghRuns(runs => { const slot=document.getElementById('ghrunslot'); if(slot) slot.innerHTML=_ghRunLine(runs); });
   const clr = document.getElementById('gh-tok-clear');
   if(clr) clr.onclick = e => { e.preventDefault(); _ghTok.clear(); openRefresh(); };
   const sv = document.getElementById('gh-tok-save');
@@ -5662,6 +5708,30 @@ document.addEventListener('click', e => {
   if(e.target.closest && e.target.closest('#cadexport')){ e.preventDefault(); exportCadence(); return; }
 });
 document.getElementById('refreshbtn').onclick = () => openRefresh();
+// Paint pipeline health onto the Refresh button at boot, so a dead daily refresh announces itself
+// instead of hiding behind a modal nobody opens. One unauthenticated call; silent on any failure.
+(function(){
+  const b = document.getElementById('refreshbtn'); if(!b || typeof _ghRuns !== 'function') return;
+  const base = b.innerHTML;
+  _ghRuns(runs => {
+    if(!runs || !runs.length) return;
+    const r = runs[0];
+    if(r.status !== 'completed'){
+      b.classList.add('gh-live');
+      b.innerHTML = '<span class="ghdot"></span>Building…';
+      b.title = 'The refresh pipeline is running right now (run #'+r.run_number+'). The site republishes itself when it finishes.';
+      return;
+    }
+    if(r.conclusion === 'success') return;                       // healthy: leave the button alone
+    let streak = 0;
+    for(const x of runs){ if(x.status==='completed' && x.conclusion!=='success') streak++; else break; }
+    b.classList.add('gh-bad');
+    b.innerHTML = '<span class="ghdot"></span>Refresh failed';
+    b.title = 'The last refresh run (#'+r.run_number+') '+(r.conclusion||'failed')
+      + (streak>1 ? ' — '+streak+' failures in a row. Your data is NOT updating daily.' : '.')
+      + ' Open for details and to fire a new run.';
+  });
+})();
 // Playbook: header button + keyboard shortcuts (? or P) — the field manual as on-device reference
 document.getElementById('playbookbtn').onclick = () => openPlaybook();
 document.addEventListener('keydown', e => {
