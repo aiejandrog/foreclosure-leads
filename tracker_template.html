@@ -3277,7 +3277,7 @@ function _callSheet(r){
     big('FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn')+
     big('WORTH TODAY', fm(basis), arv?('ARV from '+r.arvn+' comps'+(r.arvconf==='ok'?' (verified)':' (low conf)')):'county roll — no comps', 'good')+
     survBox+
-    big('NET EQUITY', fm(netEq), survChecked?'worth − judgment − survivors':'⚠ assumes nothing survives — pull the chain', 'good')+
+    big(_netEqLabel(r,1), fm(netEq), (r.st==='TD'||survChecked)?_netEqSub(r):'⚠ assumes nothing survives — pull the chain', 'good')+
   '</div>';
 
   // THE CLOCK + DEBT — shared bodies with Deal analysis so the two screens cannot drift.
@@ -3363,7 +3363,7 @@ function _copyCallSheet(c){
     'WORTH:           '+fm(basis)+(arvUsed?'  ARV from '+r.arvn+' comps':(arv?'  (county roll — ARV rejected)':'  (county roll)')),
     'SURVIVES SALE:   '+(surv?fm(surv)+'  ['+survLabel+']':'$0  ['+survLabel+']'),
     jr>0 ? 'JUNIOR / 2ND:   '+fm(jr)+'  (payoff only on direct purchase; wiped at auction if named)' : '',
-    'NET EQUITY:      '+fm(_netEqOf(r)),
+    (_netEqLabel(r,1)+':').padEnd(17)+fm(_netEqOf(r))+(r.st==='TD'?'   (at est. winning bid '+fm(r._purchase||0)+')':''),
     '',
     'AUCTION:  '+r.auction+' 9am'+(r.days>=0?'  ('+r.days+' days, deal deadline in '+Math.max(0,r.days-3)+')':''),
     'PROPERTY: '+(r.dor_desc||'')+(r.beds?', '+r.beds+'bd/'+r.baths+'ba':'')+(r.sqft?', '+(+r.sqft).toLocaleString()+'sf':'')+(r.bought?', owned since '+r.bought:''),
@@ -4414,10 +4414,41 @@ function _basisOf(r){
   // low -> CS was showing $3M net equity while DA correctly showed $789k).
   return (r && r._valsrc==='arv' && +r.arv) ? +r.arv : ((r && +r.value) || 0);
 }
+// What the OWNER has left after everything recorded against them. Distinct from _netEqOf(): on a tax
+// deed the owner may sit on $2.5M of equity while owing only the delinquent taxes, and it is THIS
+// number — not our auction profit — that decides whether they can be refinanced out of trouble.
+function _ownerEqOf(r){
+  var v = _basisOf(r); if(!v) return 0;
+  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : (+r.judg||0);
+  var stack = owed+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
+  return Math.max(0, v - stack);
+}
 function _netEqOf(r){
   var v = _basisOf(r); if(!v) return 0;
+  // TAX DEED IS NOT A FORECLOSURE. Subtracting the stack models "you acquire at the opening bid" —
+  // true at a foreclosure sale, a fantasy at a tax deed, where the parcel is auctioned to the highest
+  // bidder and an equity parcel gets run up toward market. You cannot win a $2.6M Delray house for its
+  // $91,393 opening. Measured on the live board, the paper number overstated the deal analyzer's own
+  // model by up to $2,023,300 on a single lead (2026-2799TD: row $2,548,223 vs modeled $524,923).
+  // recompute() already models the realistic winning bid (max of opening+markup and clearPct of
+  // market) and nets quiet title, carry and surviving municipal liens — so use that number here and
+  // let every surface, message and export quote the same honest figure.
+  if(r && r.st === 'TD') return (r._profit == null) ? 0 : Math.max(0, +r._profit);
   var stack = (+r.judg||0)+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
   return Math.max(0, v - stack);
+}
+// The number _netEqOf() returns means two different things by sale type, so it must never wear one
+// label. Foreclosure: equity left after the debt stack. Tax deed: modeled profit at a realistic
+// winning bid. Calling the second "net equity" is what let a $524k deal read as $2.5M.
+function _netEqLabel(r, caps){
+  var td = r && r.st === 'TD';
+  return caps ? (td ? 'MODELED PROFIT' : 'NET EQUITY') : (td ? 'Modeled profit' : 'Net equity');
+}
+function _netEqSub(r){
+  return (r && r.st === 'TD')
+    // fm() is scoped inside _callSheet — this helper is called from several surfaces, so format here
+    ? 'at est. winning bid ' + (r._purchase ? '$'+Math.round(+r._purchase).toLocaleString() : '—') + ', after quiet title + carry'
+    : 'worth − judgment − survivors';
 }
 function _deepLink(r){ return location.origin + location.pathname + '#case=' + encodeURIComponent(r.case); }
 function _carlosMsg(r){
@@ -4457,9 +4488,15 @@ function _joseMsg(r){
     + 'Owner: '+owner+'  ·  Case '+r.case+'\n'
     + 'Auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+(fresh?'  ·  '+fresh:'')+'\n'
     + 'Value/ARV: '+v+'\n'
-    + 'Foreclosing judgment: '+(r.judg?'$'+(+r.judg).toLocaleString():'not posted')+'\n'
-    + 'Surviving senior mortgage: '+senior+'\n'
-    + 'Net equity after the stack: ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
+    // A tax deed has no foreclosing judgment and no surviving mortgage to quote — sending Jose those
+    // lines on a TD invents facts about the deal. Quote the auction economics instead.
+    + (r.st==='TD'
+        ? 'Opening bid: '+(r.obid?'$'+Math.round(+r.obid).toLocaleString():'not posted')+'\n'
+          + 'Est. winning bid: ~$'+Math.round(+r._purchase||0).toLocaleString()+'  (equity parcels get bid up)\n'
+          + 'Modeled profit after quiet title + carry: ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
+        : 'Foreclosing judgment: '+(r.judg?'$'+(+r.judg).toLocaleString():'not posted')+'\n'
+          + 'Surviving senior mortgage: '+senior+'\n'
+          + 'Net equity after the stack: ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n')
     + 'Tracker verdict: '+(r._verdict||'—')+(r.zstatus?'  ·  '+r.zstatus:'')+'\n\n'
     + 'Go / no-go? What do you want the first move to be?\n'
     + _deepLink(r);
@@ -4489,9 +4526,13 @@ function _liveMsg(r){
   return '🔥 LIVE — I have '+owner+' ON THE PHONE RIGHT NOW\n'
     + r.addr+'\n'
     + 'Case '+r.case+' · auction '+r.auction+(r.days>=0?' ('+r.days+'d)':'')+(fresh?' · '+fresh:'')+'\n'
-    + v+' · judgment '+(r.judg?'$'+(+r.judg).toLocaleString():'?')
-    + ' · senior '+(r._chainSurv?'$'+Math.round(r._chainSurv).toLocaleString()+(r.orconf==='ok'?' (verified)':' (~est)'):'not traced')
-    + ' · net ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
+    + (r.st==='TD'
+        ? v+' · opening bid '+(r.obid?'$'+Math.round(+r.obid).toLocaleString():'?')
+          + ' · est. winning bid ~$'+Math.round(+r._purchase||0).toLocaleString()
+          + ' · modeled profit ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
+        : v+' · judgment '+(r.judg?'$'+(+r.judg).toLocaleString():'?')
+          + ' · senior '+(r._chainSurv?'$'+Math.round(r._chainSurv).toLocaleString()+(r.orconf==='ok'?' (verified)':' (~est)'):'not traced')
+          + ' · net ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n')
     + 'Drop what you\'re doing — research this while I hold them. Say PATCH when you\'re ready.\n'
     + _deepLink(r);
 }
@@ -4738,7 +4779,11 @@ function _profitPaths(r){
   // had that contradiction visible (worst: 549 MONACO L Delray, cv=$79.5k / arv=$228k conf=ok
   // but 2.87x county -> DA rejected the ARV, profit-paths still quoted $100k referral).
   var val = _basisOf(r);
-  var netEq = _netEqOf(r);
+  // OWNER-side equity on purpose. Every tier below sizes a play against what the OWNER holds — a loan
+  // they could draw, a spread they could walk with. _netEqOf() answers a different question on a tax
+  // deed (our profit at auction), and using it here would quote an owner who owes $91k in back taxes
+  // as carrying $2.08M of debt, poisoning the assignable-contract spread.
+  var netEq = _ownerEqOf(r);
   var debt = val ? Math.max(0, val - netEq) : 0;
   var fresh = _filedYear(r) >= 2024;
   var fc = r.st !== 'TD';
