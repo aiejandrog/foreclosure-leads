@@ -1938,8 +1938,16 @@ let nearOnly = false, nearRadius = 5;   // 📍 within N miles of home base (ROU
 function _isLP(r){ return r && (r.stage === 'LP' || r.st === 'LP'); }
 // a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
 // surviving first mortgage exceeds the equity above the judgment (underwater).
-function isFlaggedDead(r){ return !!((r.ordeeded && r.ordeedconf==='ok') ||
-  (r.orsurvfirst && r.value && (+r.orsurvfirst) > (r.value - (r.judg||0)))); }
+function isFlaggedDead(r){
+  if(r.ordeeded && r.ordeedconf==='ok') return true;
+  // SOURCE OF TRUTH. This predicate hard-kills a lead — it feeds "Hide flagged", the 30%+ equity
+  // filter and the Closers cockpit. It used raw orsurvfirst vs raw value−judgment: blind to the
+  // chain reconciliation, to the ARV the math runs on, and to the operator's typed override — so a
+  // lead where he VERIFIED nothing survives (typed 0) stayed condemned by a stale raw field forever.
+  const s = (r._slien != null) ? +r._slien : (+r.orsurvfirst||0);
+  const basis = (typeof _basisOf==='function' ? _basisOf(r) : 0) || +r.value || 0;
+  return !!(s && basis && s > (basis - (r.judg||0)));
+}
 // VACANT LAND is a systematic false-positive for the homeowner-rescue model: no owner-occupant to help,
 // and the "equity" rides on a speculative land value (e.g. Ocean Breeze 777 LLC's $2.1M raw lots that
 // doubled in a year). Treated like a flagged-dead lead so "Hide flagged" clears it and the 30%+ equity
@@ -2200,7 +2208,10 @@ function _playFor(r){
   if(r.st==='LP') return {t:'LP-EARLY', w:'FRESH LIS PENDENS — the foreclosure was just filed; no auction date yet, months of runway. You are the FIRST contact, before the auction crowd. Reach the owner now: reinstatement, sale, or a pre-foreclosure buy. This is the front of the funnel.'};
   if(r.st==='TD') return {t:'AUCTION', w:'Tax deed — win at the public sale (opening bid + markup), then quiet title before resale. Own model on the row.'};
   if(r.ju) return {t:'RESEARCH', w:'Final judgment not posted yet — pull the docket before you value or offer.'};
-  const nn = notes[r.case]||{}, val = +r.value||0;
+  // basis, not raw county value: r._equity was computed against the gated ARV when it passed the
+  // confidence gate, so dividing by raw r.value mixes numerator and denominator from different value
+  // sources — ARV $500k / county $300k / debt $380k reads 40% BUY when the honest ratio is 24% WHOLESALE.
+  const nn = notes[r.case]||{}, val = _basisOf(r) || 0;
   const seniorUnknown = (r.st!=='TD') && r.mr && r.orconf!=='ok' && !_dTyped(nn.slien);
   if(seniorUnknown) return {t:'SHORT SALE', w:'A senior mortgage likely survives this sale — no clean buy. Play: negotiate the foreclosing/senior lender DOWN (short sale), or wholesale the contract at a steep discount. Confirm the survivor first.'};
   const eq = r._equity;
@@ -2233,10 +2244,17 @@ function verifyChip(r){
 }
 // surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk").
 // Shows the chain's number when we have one (records-verified vs low-confidence estimate).
-function mrText(r){ const s=r._chainSurv || (+r.orsurvfirst||0);
-  if(s>0){ const under=(r.value && s > (r.value-(r.judg||0)));
-    const conf = r.orconf==='ok' ? 'records-verified' : 'LOW-confidence chain — verify the payoff';
+function mrText(r){
+  // SOURCE OF TRUTH: _slien — the chain OR the operator's typed override, INCLUDING a researched 0.
+  // The old read was `_chainSurv || raw orsurvfirst`: blind to the override, and the falsy-zero
+  // fallback resurrected the raw un-reconciled first mortgage precisely when the chain proved $0 —
+  // so after he verified nothing survives, the row STILL screamed "surviving 1st mtg ≈ $174k".
+  const typed = !!r._slienSet;
+  const s = (r._slien != null) ? +r._slien : (+r._chainSurv || 0);
+  if(s>0){ const basis=_basisOf(r)||+r.value||0; const under=(basis && s > (basis-(r.judg||0)));
+    const conf = typed ? 'you entered this from your own research' : r.orconf==='ok' ? 'records-verified' : 'LOW-confidence chain — verify the payoff';
     return '<div class="mrwarn'+(under?' under':'')+'" title="A surviving mortgage of about $'+Math.round(s).toLocaleString()+' rides through this sale &mdash; it is NOT wiped by the auction ('+conf+').'+(under?' It exceeds the equity &mdash; likely underwater.':'')+'">surviving 1st mtg &asymp; $'+Math.round(s/1000)+'k'+(under?' &mdash; underwater':'')+'</div>'; }
+  if(typed) return '';   // researched 0: he verified nothing survives — no warning to contradict him
   return r.mr?'<div class="mrwarn" title="HOA/junior foreclosure &mdash; the first mortgage survives the sale; verify the payoff before valuing the equity.">first mtg survives &mdash; verify</div>':''; }
 function mathLine(label,val,tot){ return '<div class="mathline'+(tot?' tot':'')+'"><span>'+esc(label)+'</span><span>'+fmtMoney(val)+'</span></div>'; }
 function dealFlags(r){
@@ -2543,8 +2561,14 @@ function _debtSheetBody(r){
   const nn=notes[r.case]||{};
   const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
   const judg = +r.judg||0, surv = +r._slien||0, jr = +r._jlien||0;
-  const hoa = (+r._assess||0) || (+r.orhoa||0);
-  const code = (+r._mlien||0) || ((+r.orcode||0)+(+r.orirs||0));
+  // r._assess / r._mlien already resolve autofill + the operator's typed value (a typed 0 wins), and
+  // on an HOA-plaintiff case _assess is the NETTED figure (dues inside the judgment removed). The old
+  // `|| raw` was a falsy-zero: it resurrected the raw scrape exactly when the resolved number was a
+  // researched 0, and un-netted the HOA double-count. When the chain is simply unverified, the raw
+  // figure is still worth SEEING — but labeled as outside the math, never disguised as part of it.
+  const hoa = +r._assess||0, code = +r._mlien||0;
+  const hoaRaw  = (!hoa  && !_dTyped(nn.assess)) ? (+r.orhoa||0) : 0;
+  const codeRaw = (!code && !_dTyped(nn.mlien))  ? ((+r.orcode||0)+(+r.orirs||0)) : 0;
   const survTyped = _dTyped(nn.slien);
   const trust = survTyped ? (surv>0?'YOU ENTERED THIS':'YOU VERIFIED: none survives')
               : r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify'
@@ -2557,7 +2581,9 @@ function _debtSheetBody(r){
   if(r.st!=='TD' && surv) h+=row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
   if(r.st!=='TD' && jr) h+=row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
   if(hoa) h+=row('HOA / association', fm(hoa));
+  else if(hoaRaw) h+=row('HOA / association', fm(hoaRaw)+' — <i>recorded but unverified; NOT in the math</i>');
   if(code) h+=row('Code / muni / IRS', fm(code));
+  else if(codeRaw) h+=row('Code / muni / IRS', fm(codeRaw)+' — <i>recorded but unverified; NOT in the math</i>');
   h+=row('Back taxes', _taxStatusHtml(r, nn));
   h+='</div>';
   const chain=_debtStack(r);
@@ -2950,7 +2976,10 @@ function _debtStack(r){
   // RECONCILIATION vs the authoritative number. _chainSurv is what feeds net equity, profit and the
   // verdict; this stack is a PRESENTATION of the same chain. When the two readings disagree the stack
   // must say so, never quietly contradict the box above it.
-  const _dsBox = +r._chainSurv || 0;
+  // resolved survivor, not the raw chain: the box, the math and the messages all use _slien, so the
+  // reconciliation must compare against the same figure or it re-creates the very contradiction it
+  // exists to catch (typed 0 -> box $0, banner still claiming "the deal math above uses $435,000").
+  const _dsBox = (r._slien != null) ? +r._slien : (+r._chainSurv || 0);
   const _dsStackSenior = fore
     ? open.filter(l => l !== fore && _lienPos(l, foreDate) === 'senior')
           .reduce((s, l) => s + (+l.amt || 0), 0)
@@ -4445,11 +4474,18 @@ function _basisOf(r){
 // What the OWNER has left after everything recorded against them. Distinct from _netEqOf(): on a tax
 // deed the owner may sit on $2.5M of equity while owing only the delinquent taxes, and it is THIS
 // number — not our auction profit — that decides whether they can be refinanced out of trouble.
+function _ownerOwedOf(r){
+  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : (+r.judg||0);
+  // FS 197.502: on a HOMESTEAD tax deed the opening bid = delinquent taxes + HALF the assessed
+  // value. That half is an auction floor, not a debt — the owner does not owe it. Counting it made
+  // a $330k homestead owing ~$1.5k in taxes read $150k poorer than they are (live: 2026-2794TD).
+  if(r.st === 'TD' && r.hs && +r.value) owed = Math.max(0, owed - (+r.value)/2);
+  return owed;
+}
+function _ownerStackOf(r){ return (+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0); }
 function _ownerEqOf(r){
   var v = _basisOf(r); if(!v) return 0;
-  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : (+r.judg||0);
-  var stack = owed+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
-  return Math.max(0, v - stack);
+  return Math.max(0, v - _ownerOwedOf(r) - _ownerStackOf(r));
 }
 function _netEqOf(r){
   var v = _basisOf(r); if(!v) return 0;
@@ -4503,7 +4539,11 @@ function _joseMsg(r){
   var _b = _basisOf(r);
   var v = _b ? ('$'+Math.round(_b).toLocaleString()+(r._valsrc==='arv' ? ' (comp ARV)' : ' (county val)'))
              : 'value unknown';
-  var senior = r._chainSurv ? '$'+Math.round(r._chainSurv).toLocaleString()+(r.orconf==='ok'?' (verified)':' (~est, verify)') : 'none traced';
+  // resolved survivor — the SAME number the "Net equity after the stack" line two rows down is
+  // computed from. Reading raw _chainSurv here put two different readings of one lien in one SMS:
+  // "senior $435,000 (verified)" above a net computed with the $174k he researched and typed.
+  var _sv = (r._slien != null) ? +r._slien : (+r._chainSurv||0), _svTyped = !!r._slienSet;
+  var senior = _sv ? '$'+Math.round(_sv).toLocaleString()+(_svTyped?' (you verified)':(r.orconf==='ok'?' (verified)':' (~est, verify)')) : (_svTyped?'none — you verified':'none traced');
   // prefer the VERIFIED docket signal (survival count + distinct bankruptcies) over the year proxy
   var fresh;
   if(r.saleSurv != null){
@@ -4559,7 +4599,11 @@ function _liveMsg(r){
           + ' · est. winning bid ~$'+Math.round(+r._purchase||0).toLocaleString()
           + ' · modeled profit ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n'
         : v+' · judgment '+(r.judg?'$'+(+r.judg).toLocaleString():'?')
-          + ' · senior '+(r._chainSurv?'$'+Math.round(r._chainSurv).toLocaleString()+(r.orconf==='ok'?' (verified)':' (~est)'):'not traced')
+          // resolved survivor, same as _joseMsg — this alert fires while an owner is ON THE PHONE;
+          // "senior not traced · net ~$210k" when he typed a verified $265k an hour earlier prices a
+          // live walk-away off a survivor the tracker knows exists.
+          + ' · senior '+(function(){var s=(r._slien!=null)?+r._slien:(+r._chainSurv||0),t=!!r._slienSet;
+              return s?'$'+Math.round(s).toLocaleString()+(t?' (you verified)':(r.orconf==='ok'?' (verified)':' (~est)')):(t?'none — you verified':'not traced');})()
           + ' · net ~$'+Math.round(_netEqOf(r)).toLocaleString()+'\n')
     + 'Drop what you\'re doing — research this while I hold them. Say PATCH when you\'re ready.\n'
     + _deepLink(r);
@@ -4727,7 +4771,11 @@ function _valChip(r){
   if(r._valsrc==='arv' && r.arv) return '<b class="pv">'+fmtK(r.arv)+'</b> <span class="arvtag" title="Comps-verified ARV ('+r.arvn+' nearby sales) drives the math — the county roll is Save-Our-Homes capped on long-held homesteads">ARV</span>';
   return '<b class="pv">'+fmtK(r.value)+'</b> val';
 }
-function _eqPct(r){ if(r._valsrc==='arv' && r.arv && r._equity!=null) return Math.round(100*r._equity/r.arv); return r.eq; }
+// ONE equity percentage everywhere. This used to compute equity two incompatible ways: stack-aware
+// on ARV leads, but the server-baked gross r.eq (value − judgment only — blind to every lien, typed
+// or traced) on county-valued leads. netEqPct() is the filter's number and flows through _basisOf +
+// _netEqOf, so the chip, the card and the filter can never disagree again.
+function _eqPct(r){ return netEqPct(r); }
 // Identity warnings — these outrank every deal signal on the row, because a beautiful number on the
 // wrong human is worse than no lead at all.
 function _idChip(r){
@@ -4824,14 +4872,19 @@ function _profitPaths(r){
   if(netEq >= 100000){
     var loan = Math.round(val * 0.65);
     add('Hard-equity loan referral', '~'+fmtK(netEq)+' net equity supports a ~'+fmtK(loan)+' loan → our 2 points ≈ '+fmtK(loan*0.02)+'. Owner keeps the house, we make the referral. Closes in ~5 business days via the lending side.', ['keep']);
-    add('Cash-for-keys + assignable contract', 'Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.', ['sell','walk']);
+    // quote the SAME quantity as the tier below (net equity), then the discount-buy spread on top —
+    // quoting only `val*0.75 − debt` here meant a lead with MORE owner equity could display a
+    // smaller number than the thin-equity tier directly under it ($100k equity → "spread $0").
+    add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity. Owner wants OUT: contract it, $5k down, balance from the end-buyer’s non-refundable deposit. Est. spread at a 75% buy: '+fmtK(Math.max(0, Math.round(val*0.75 - debt)))+'.', ['sell','walk']);
   } else if(netEq >= 25000){
     add('Cash-for-keys + assignable contract', '~'+fmtK(netEq)+' net equity: contract + assign. $5k of our money max — the buyer’s deposit pays the owner the rest.', ['sell','walk']);
   } else {
     add('No-equity rescue — dignity play', 'Still money here: $1,800–$3,000 stop fee, or arrears-reinstatement (bank rolls the past-due back in → rent it at market). And the human lever: we buy them 60–90 days to move out with dignity + $500–800 movers, instead of the sheriff putting grandma’s things on the street. Practice reps live on exactly these.', ['sell','walk','keep']);
   }
   if((r.zstatus||'') === 'LISTED'){
-    add('Realtor referral kickback', 'Already MLS-listed'+(r.zprice?' at '+fmtK(r.zprice):'')+' — if it retails, a referred listing kicks back 1/3 of the commission (≈ '+fmtK(Math.round(val*0.01))+' on a full-commission sale).', ['sell']);
+    // commission is a % of the SALE price — the actual list price when we have it, not the basis.
+    // A $1.7M listing on a $900k basis under-sized the referral by ~half.
+    add('Realtor referral kickback', 'Already MLS-listed'+(r.zprice?' at '+fmtK(r.zprice):'')+' — if it retails, a referred listing kicks back 1/3 of the commission (≈ '+fmtK(Math.round((+r.zprice||val)*0.01))+' on a full-commission sale).', ['sell']);
   }
   if(fc && netEq >= 25000 && val >= 150000 && val <= 550000 && !r.co){
     add('DSCR keep (portfolio layer)', 'Right size band for a rental keep — if market rent clears the note, this is a 5-business-day DSCR close and door #'+ (val<300000?'1':'next') +' of the 25-door plan. Needs the real FICO pulled first.', ['keep']);
@@ -6373,7 +6426,9 @@ function render(){
     } else {
       prof = verdictBadge(r)+_playBadge(r)+' <span class="'+pcls+'">'+fmt0(r._profit)+'</span>'+
         (r._cash>0?'<div class="submeta">'+Math.round(r._roi)+'% ROI · '+fmtK(r._cash)+' in</div>':'')+
-        (r.value>0?'<div class="mvline">'+fmtK(r.value)+'<span class="mvl">market value</span></div>':'')+
+        // the basis the profit above it was computed from, honestly labeled — raw r.value under an
+        // ARV-driven profit showed "$380k market value" beneath a figure that only makes sense at $579k
+        (function(){var b=_basisOf(r);return b>0?'<div class="mvline">'+fmtK(b)+'<span class="mvl">'+(r._valsrc==='arv'?'arv basis':'market value')+'</span></div>':'';})()+
         (r._tight?'<div class="warn" title="Costs/debt eat the margin. Negotiate lower or pass.">thin margin</div>':'')+
         mrText(r)+
         dealTrigger(r);
@@ -6461,7 +6516,9 @@ function render(){
       (!r._nodata&&r._verdict!=='VERIFY'?'<div class="cstats">'+
         '<div class="cstat"><div class="k">ROI</div><div class="v">'+(r._cash>0?Math.round(r._roi)+'%':'—')+'</div></div>'+
         '<div class="cstat"><div class="k">Cash In</div><div class="v">'+fmtK(r._cash)+'</div></div>'+
-        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+((r.eqfake||(r.st!=='TD'&&r.condo))?' eqfake':'')+'">'+(r.eq?((r.eqfake||(r.st!=='TD'&&r.condo))?'~'+r.eq+'%':r.eq+'%'):'—')+'</div></div>'+
+        // _eqPct, not raw r.eq: the baked gross ignored every lien, so this tile said "Equity 94%"
+        // while the submeta two lines below said "41% eq" — on the phone, the device he calls from.
+        '<div class="cstat"><div class="k">'+(r.st==='TD'?'Spread':'Equity')+'</div><div class="v'+((r.eqfake||(r.st!=='TD'&&r.condo))?' eqfake':'')+'">'+(function(){var p=_eqPct(r);return _basisOf(r)?(((r.eqfake||(r.st!=='TD'&&r.condo))?'~':'')+p+'%'):'—';})()+'</div></div>'+
       '</div>':'')+
       (r._verdict!=='VERIFY'?mrText(r):'')+
       '<div class="cowner addrline"><span class="clamp2" style="flex:1">'+esc(r.owners)+'</span>'+copyBtn(r.owners,'owner name')+'</div>'+
@@ -7052,14 +7109,19 @@ function lkReport(a){
   // Same source of truth as the callout above — and it matters more here, because this figure is the
   // one quoted to a HOMEOWNER as what they walk away with. A phantom survivor here is a lowball net
   // that loses a deal you could have closed; a missed one promises money that will not be there.
-  const _survAdd = lead ? (lead._slien != null ? +lead._slien : (+lead._chainSurv || 0)) : 0;
-  // orconf is a gate on the PARSER's reading. When the operator typed the survivor themselves they
-  // already did the verifying the gate exists to demand, so their number is auto-added either way.
-  const _survTrust = !!lead && (lead._slienSet || lead.orconf === 'ok');
-  const po = lead ? Math.round((td?lead.obid:lead.judg) + (_survTrust?_survAdd:0)) : 0;
+  // The field is labeled "Total payoff (all mortgages+liens+HOA)" and drives "Owner walks with ≈" —
+  // the number quoted to a HOMEOWNER. It used to prefill judgment + senior only, dropping juniors,
+  // HOA, code/IRS and back taxes the tracker itself had resolved: on a lead with a $435k recorded
+  // junior it told the owner they walk with $435k more than the tracker's own math says. Now it is
+  // owed + the SAME stack _ownerEqOf() subtracts — one debt figure everywhere, and the homestead
+  // tax-deed half-assessment (auction floor, not debt) is already backed out by _ownerOwedOf().
+  const po = lead ? Math.round(_ownerOwedOf(lead) + _ownerStackOf(lead)) : 0;
+  // seed values from the gated basis the whole board runs on, not the raw county roll — a $500k-ARV
+  // homestead capped at $380k on the roll was being quoted to its owner ~$110k short of retail.
+  const _lkSeed = lead ? Math.round(_basisOf(lead)) || val : val;
   const calc='<div class="lksec">Deal desk</div><div class="lkcard lkcalc">'
       +'<div class="lkcgrid">'
-        +'<label>List / market price $<input id="lklp" type="number" value="'+(val||'')+'" oninput="lkCalc()"></label>'
+        +'<label>List / market price $<input id="lklp" type="number" value="'+(_lkSeed||'')+'" oninput="lkCalc()"></label>'
         +'<label>Total payoff (all mortgages+liens+HOA) $<input id="lkpo" type="number" value="'+po+'" oninput="lkCalc()"></label>'
         +'<label>Sale commission %<input id="lkcm" type="number" value="6" step="0.5" oninput="lkCalc()"></label>'
         +'<label>Closing costs %<input id="lkcc" type="number" value="2" step="0.5" oninput="lkCalc()"></label>'
@@ -7072,7 +7134,7 @@ function lkReport(a){
         +'<label>Cash to owner to walk $<input id="lkcash" type="number" placeholder="10000" oninput="lkCalc()"></label>'
         +'<label>Cost to stop the sale $<input id="lkstop" type="number" placeholder="500" oninput="lkCalc()"></label>'
         +'<label>Rehab budget $<input id="lkrehab" type="number" placeholder="30000" oninput="lkCalc()"></label>'
-        +'<label>Your resale / ARV $<input id="lkarv" type="number" value="'+(val||'')+'" oninput="lkCalc()"></label>'
+        +'<label>Your resale / ARV $<input id="lkarv" type="number" value="'+(_lkSeed||'')+'" oninput="lkCalc()"></label>'
       +'</div>'
       +'<div class="lkdd">'
         +'<div class="lkdd-row"><span>Your all-in (payoff + cash + stop + rehab + exit)</span><b id="lkallin">&mdash;</b></div>'
