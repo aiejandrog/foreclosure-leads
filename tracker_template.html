@@ -1921,6 +1921,7 @@ body.compact .dg-v{font-size:14.5px}
 const NL = String.fromCharCode(10);
 const BOM = String.fromCharCode(65279);
 const RAW = __DATA__;
+const BUILT = "__BUILT__";   // this page's content signature — see the stale-copy check in the gate
 let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
 let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
 const LS = 'fcLeadNotes';
@@ -7369,6 +7370,39 @@ async function boot(){
             setTimeout(() => { gate.style.display='none'; gate.classList.remove('out'); }, 420);
             resolve();
           } else {
+            // A NEW CODE CANNOT UNLOCK AN OLD PAGE. Access codes are baked into the encrypted payload
+            // at build time, so the moment a code is added for someone, anyone holding a cached copy
+            // of index.html gets "wrong code" — the gate blaming the person for a stale file they
+            // cannot see. That is exactly how every new person onboarded (Jose, Carlos, Jesse) hits a
+            // dead end on their first try. Before accusing anyone, ask the server whether this copy
+            // is simply out of date, and if so heal it instead of arguing.
+            err.textContent = 'Checking…';
+            const fresher = await (async () => {
+              // Heal AT MOST ONCE per session. If a CDN keeps serving the stale copy, a second attempt
+              // would reload into the same old file and bounce forever — better to fall through to the
+              // honest error than to trap someone in a refresh loop minutes before an auction.
+              if(sessionStorage.getItem('dfHealed')) return null;
+              // an unsubstituted placeholder (running the raw template in dev) must never look "stale"
+              if(!/^[0-9a-f]{12}$/.test(BUILT)) return null;
+              try {
+                // the coverage marker is the FIRST thing in the file, so a range request reads the
+                // build stamp without pulling 3.6MB. Servers that ignore Range just send the whole
+                // body, which still works.
+                const res = await fetch(location.pathname + '?cb=' + Date.now(),
+                                        {cache:'no-store', headers:{'Range':'bytes=0-400'}});
+                if(!res.ok && res.status !== 206) return null;
+                const m = (await res.text()).match(/DEALFLOW-COVERAGE\s+(\{[^}]*\})/);
+                if(!m) return null;
+                const b = (JSON.parse(m[1])||{}).sig;
+                return (b && b !== BUILT) ? b : null;
+              } catch(e){ return null; }
+            })();
+            if(fresher){
+              try { sessionStorage.setItem('dfHealed', fresher); } catch(e){}
+              err.textContent = 'This page was out of date — updating to the newest build, then try your code again…';
+              setTimeout(() => location.replace(location.pathname + '?v=' + encodeURIComponent(fresher)), 900);
+              return;   // do NOT call the code wrong: we know the file was stale
+            }
             err.textContent = 'Wrong code or phrase — check with the person who shared this';
             gate.classList.remove('shake'); void gate.offsetWidth; gate.classList.add('shake');   // nudge
             inp.select();

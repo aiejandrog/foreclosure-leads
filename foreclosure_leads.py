@@ -10,7 +10,7 @@ Phase 2: enrich each parcel via the Miami-Dade Property Appraiser public API
          (owner, mailing address, market value, homestead, beds/baths, last sale).
 Phase 3: qualify + score (equity/lead-time/homestead/value), write CSV sorted best-first.
 """
-import json, re, time, csv, os, sys, shutil, urllib.parse
+import json, re, time, csv, os, sys, shutil, hashlib, urllib.parse
 from datetime import datetime, date, timedelta
 import requests
 from playwright.sync_api import sync_playwright
@@ -1272,15 +1272,26 @@ def make_tracker(leads):
         'arv':    sum(1 for d in slim if d.get('arv')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
-    _marker = '<!-- DEALFLOW-COVERAGE ' + json.dumps(_cov, separators=(',', ':')) + ' -->\n'
-    print('coverage: ' + json.dumps(_cov, separators=(',', ':')))
     if codes:
-        enc = _encrypt_multi(json.dumps(slim), codes)
-        open(docs,'w',encoding='utf-8').write(_marker + tpl.replace('__DATA__', json.dumps(enc)))
-        print(f'tracker written: docs/index.html (ENCRYPTED · {len(codes)} access code(s)){_dst}')
+        _payload = json.dumps(_encrypt_multi(json.dumps(slim), codes))
     else:
         nophone = [{k: v for k, v in d.items() if k not in ('phones','phdnc','emails')} for d in slim]
-        open(docs,'w',encoding='utf-8').write(_marker + tpl.replace('__DATA__', _esc_json(nophone)))
+        _payload = _esc_json(nophone)
+    # BUILD SIGNATURE — identifies this build by its CONTENT, not by the clock. 'built' is
+    # minute-resolution, so two builds inside the same minute (a code added just as the nightly
+    # refresh runs) share a stamp, and the gate's stale-copy check would conclude "same build" —
+    # exactly the false negative it exists to prevent. The signature moves whenever the payload or
+    # the access-code set changes, which is precisely when a cached page has gone stale.
+    _cov['sig'] = hashlib.sha256(_payload.encode('utf-8')).hexdigest()[:12]
+    _marker = '<!-- DEALFLOW-COVERAGE ' + json.dumps(_cov, separators=(',', ':')) + ' -->\n'
+    print('coverage: ' + json.dumps(_cov, separators=(',', ':')))
+    # The page must know its own signature so the gate can tell a wrong code apart from a stale
+    # cached copy — a newly added access code cannot unlock a page built before it existed.
+    tpl = tpl.replace('__BUILT__', _cov['sig'])
+    open(docs,'w',encoding='utf-8').write(_marker + tpl.replace('__DATA__', _payload))
+    if codes:
+        print(f'tracker written: docs/index.html (ENCRYPTED · {len(codes)} access code(s)){_dst}')
+    else:
         print('tracker written: docs/index.html (public, phone-free)' + ('' if os.environ.get('DEALFLOW_NO_DESKTOP') == '1' else ' + Desktop'))
 
 def main():
