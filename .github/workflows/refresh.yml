@@ -168,6 +168,14 @@ jobs:
           # cache fetch-free and rebuild, THEN publish: yesterday's stay flags beat a naked board.
           python sale_history.py --cache-only
           python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))"
+          # Same guard as [5/5], and it matters MORE here: this build runs before any enrichment
+          # step, so on a cold cache it is the nakedest board of the whole run — it is what produced
+          # the 1.5MB commit that replaced a 3.6MB live board. Blocking costs nothing in compliance
+          # terms: the live board stays as it was, and it already carries yesterday's stay flags.
+          if ! python publish_guard.py; then
+            echo "::warning::Early publish SKIPPED — build lacks enrichment vs the live board. Site left untouched; the final publish will retry after enrichment."
+            exit 0
+          fi
           git add docs/index.html
           if git diff --staged --quiet; then
             echo "no change — nothing to publish yet"
@@ -314,6 +322,19 @@ jobs:
       # ---- [5/5] Publish final ------------------------------------------------------------
       - name: '[5/5] Publish final docs/index.html'
         run: |
+          # PUBLISH GUARD. The runner cannot regenerate most enrichment — no 2Captcha key (MD lien
+          # chains run --cached-only) and the BatchData balance is exhausted (no skip-trace phones,
+          # no PB liens). With a cold restore cache it therefore builds a CORRECT but GUTTED board
+          # and used to publish it straight over the enrichment-rich local build. Measured on real
+          # commits: local ships ~3.6MB, the CI builds that overwrote it shipped 2.7MB and 1.5MB —
+          # the daily run was quietly stripping lien chains and phone numbers off the live site.
+          # A green workflow that degrades the product is worse than a red one that does nothing.
+          if ! python publish_guard.py; then
+            echo "::warning::Publish SKIPPED — this build would strip enrichment from the live board. Site left untouched."
+            echo "### ⚠ Publish skipped — enrichment regression" >> $GITHUB_STEP_SUMMARY
+            echo "The runner built a board with materially less lien/phone data than what is already live, so the publish was blocked and the site was left as-is. See the publish-guard output in the log." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
           # docs/img/ also picks up new photos this run — stage them too. sale_history_cache.json
           # is committed as well: it is the SINGLE SOURCE for stay-compliance (no actions/cache
           # copy anymore), so the daily [3e] refresh must flow back into the repo.
