@@ -850,6 +850,12 @@ def make_tracker(leads):
             'llcnf': bool((llcs.get(r.get('Case #', '')) or {}).get('nf')),
             # the entity Sunbiz actually matched — shown in the UI so a wrong pairing is obvious
             'llcmatch': (llcs.get(r.get('Case #', '')) or {}).get('matched', ''),
+            # LEGAL DESCRIPTION — the only parcel identifier a lis pendens carries. LP filings arrive
+            # with no folio and no street address (all 125 of them), so the row had nothing to show
+            # and rendered as a $0 property. The legal is what he pastes into the appraiser search to
+            # pull the folio; once that lands, value/photo/comps follow. Cheap to bake, useless to omit.
+            'legal': r.get('legal','') or r.get('legal_desc','') or '',
+            'bookpage': r.get('bookpage','') or '',
             'bought': r.get('bought_year',0), 'bprice': r.get('last_sale_price',0) or 0,
             'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
