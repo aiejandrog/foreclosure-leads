@@ -452,6 +452,16 @@ tr.rback td:first-child::before{content:'';position:absolute;left:0;top:0;bottom
   background:var(--gold-grad,#C6A14B)}
 /* Δ — what moved since you last looked. Blue so it reads as NEW INFORMATION, distinct from the grey
    "already seen" chip beside it and from the gold "came back" badge. */
+/* Reachability chip — the first thing to read when triaging who to work next. Green = textable,
+   amber = dialable only, red = do not contact, grey = nothing yet. Household count rides beside it. */
+.rch{display:inline-flex;align-items:center;font-family:var(--f-label,inherit);font-size:9px;font-weight:800;
+  letter-spacing:.03em;padding:2px 7px;border-radius:5px;margin-right:4px;vertical-align:middle;
+  cursor:help;white-space:nowrap;border:1px solid transparent}
+.rch-ok{background:var(--green-soft,#DDF2E4);color:var(--green-ink,#0E5F31);border-color:#BEE5CC}
+.rch-mid{background:var(--amber-soft,#F7EBC7);color:var(--amber-ink,#8A5A00);border-color:#EDDCAF}
+.rch-no{background:rgba(192,57,43,.10);color:#8E2C20;border-color:rgba(192,57,43,.32)}
+.rch-none{background:var(--surface-2,#f6f8fa);color:var(--muted,#6b7280);border-color:var(--line,#E2E6EE)}
+.rch-hh{background:var(--blue-soft,#DEEBFB);color:var(--blue-ink,#1F4E97);border-color:#C9DBFA}
 .deltachip{display:inline-block;font-family:var(--f-label,inherit);font-size:8.5px;font-weight:800;
   letter-spacing:.04em;padding:2px 7px;border-radius:5px;margin-right:4px;vertical-align:middle;
   background:var(--blue-soft,#DEEBFB);color:var(--blue-ink,#1F4E97);border:1px solid #C9DBFA;cursor:help}
@@ -2714,8 +2724,34 @@ function _dialedAfter(n){
 function _dneg(iso){ if(!iso) return null; return Math.round((new Date(iso+'T00:00:00') - new Date(_today()+'T00:00:00'))/86400000); }
 function _rel(iso){ const n=_dneg(iso); if(n===null) return ''; if(n===0) return 'today'; return n<0 ? (-n)+'d ago' : 'in '+n+'d'; }
 const CH_ICON = {call:'☎', email:'✉', letter:'✉', text:'\u{1f4ac}', door:'\u{1f6aa}'};
+// REACHABILITY AT A GLANCE. The row told you what you had already DONE (touches, follow-ups) but
+// never whether the lead can be reached AT ALL — so triaging a call session or a door route meant
+// opening call sheets one by one just to discover which ones have a number. This answers it before
+// you open anything: best available channel first, then how deep the bench is.
+function _reachChip(r){
+  const blk = _textContactBlocked(r);
+  if(blk){
+    const t = blk==='optout' ? 'Opted out — all contact suppressed'
+            : blk==='wrong'  ? 'Marked WRONG PERSON — numbers are not the owner'
+            : 'ACTIVE BANKRUPTCY STAY — contact is illegal right now';
+    return '<span class="rch rch-no" title="'+esc(t)+'">⛔ no contact</span>';
+  }
+  const phones = (r.phones||[]), types = (r.phtype||[]), dnc = (r.phdnc||[]);
+  let mob=0, land=0, blocked=0;
+  phones.forEach((p,i)=>{
+    if(dnc[i]) { blocked++; return; }
+    const t=String(types[i]||'').toLowerCase();
+    if(t.indexOf('land')>-1) land++; else mob++;      // unknown type counts as reachable-by-text
+  });
+  const house = (r.wpResidents||[]).length + (r.wpOwners||[]).length;
+  const hh = house ? '<span class="rch rch-hh" title="'+house+' people Whitepages places at this address (owners + household). Even when the owner screens unknown numbers, a relative usually answers.">👥 '+house+'</span>' : '';
+  if(mob) return '<span class="rch rch-ok" title="'+mob+' number'+(mob===1?'':'s')+' you can call AND text'+(land?' · plus '+land+' landline':'')+(blocked?' · '+blocked+' DNC (call only)':'')+'">📱 '+mob+(land?'+'+land:'')+'</span>'+hh;
+  if(land) return '<span class="rch rch-mid" title="Landline only — dialable, but an SMS to it is delivered nowhere. Call it, or knock.'+(blocked?' Also '+blocked+' DNC.':'')+'">☎ '+land+' landline</span>'+hh;
+  if(blocked) return '<span class="rch rch-mid" title="'+blocked+' number'+(blocked===1?'':'s')+' on file but every one is DNC — manual dial only, no texting (FL FTSA / TCPA). Mail or door is usually the better play.">🚫 DNC only</span>'+hh;
+  return '<span class="rch rch-none" title="No number on this lead yet. Use the Whitepages / People links on the row to pull one — the household count beside this shows how many people are on record at the address.">📵 no #</span>'+hh;
+}
 function contactChip(r){
-  const n=notes[r.case]||{}, ts=n.touches||[]; let h='';
+  const n=notes[r.case]||{}, ts=n.touches||[]; let h=_reachChip(r);
   const viol=_dialedAfter(n);
   if(viol.length){ const lv=viol[viol.length-1]; h+='<span class="cx cx-viol" title="'+esc(viol.length+' outreach touch(es) logged AFTER this owner opted out ('+n.optout+') — FTSA violation risk. Most recent: '+lv.ch+' on '+lv.d+'. Open the log to see the trail and document the cure.')+'">⚠ contacted after opt-out</span>'; }
   if(ts.length){ const last=ts[ts.length-1];
