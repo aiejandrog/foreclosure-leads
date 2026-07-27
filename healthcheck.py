@@ -70,12 +70,24 @@ for _fn, _ck in (('leads_final.json', 'Case #'), ('broward_leads.json', 'case'),
         if _case in _chk:
             _cty_cov[_cy] = _cty_cov.get(_cy, 0) + 1
 if _cty_tot:
+    # COLD-CACHE GUARD. Every lien cache here is gitignored and lives only in the CI cache, and CI has
+    # no 2Captcha key, so it cannot regenerate Miami-Dade chains itself. When the cache misses (evicted
+    # after 7 idle days, or orphaned because the actions/cache path list changed and moved the version
+    # hash), EVERY county reads 0 — which is an infrastructure condition, not a data regression.
+    # Failing there used to fail the job, which SKIPPED the cache save, which guaranteed the next run
+    # missed too: a spiral that ran 2026-07-20 -> 07-26 and could not self-heal. Warn loudly, stay
+    # green, let the save step re-seed the cache, and let the next run come back clean.
+    _cold = (sum(_cty_cov.values()) == 0)
+    if _cold:
+        add('WARN', 'lien cache', 'COLD — no chains restored (cache miss/evicted). '
+                                  'Re-seeds from this run; next run should read normally.')
     for _cy in sorted(_cty_tot):
         _t, _c = _cty_tot[_cy], _cty_cov.get(_cy, 0)
         _pct = round(100 * _c / _t) if _t else 0
         # Palm Beach has no free path — a low % there is a funding/scope call, not a broken scraper.
-        _lvl = 'PASS' if _pct >= 60 else ('WARN' if _pct >= 25 or _cy == 'PALM' else 'FAIL')
+        _lvl = 'PASS' if _pct >= 60 else ('WARN' if _pct >= 25 or _cy == 'PALM' or _cold else 'FAIL')
         _tail = ' — BatchData-only (top up balance to lift)' if _cy == 'PALM' and _pct < 60 else ''
+        if _cold: _tail = ' — cold cache, not a coverage regression'
         add(_lvl, f'lien coverage · {_cy}', f'{_c}/{_t} checked ({_pct}%){_tail}')
     _surv2 = sum(1 for v in list(_md.values()) + list(_bro.values()) if v.get('open_count', 0) >= 2)
     add('PASS', 'surviving-2nd flags', f'{len(_chk)} leads checked total, {_surv2} with a possible surviving 2nd')

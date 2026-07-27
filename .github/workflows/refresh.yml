@@ -81,8 +81,16 @@ jobs:
       #  - broward/palmbeach_liens.json missing -> every run re-traces the WHOLE county book
       #    (and the rebuilt site ships with zero Broward/PB chains until it finishes)
       # Saved on green runs; a failed day just restores the previous day's state.
+      # RESTORE ONLY. The save half is a separate step at the very END with `if: always()`.
+      # Why: actions/cache@v4's implicit post-save runs ONLY when the job succeeds. That produced a
+      # death spiral — the Health step failed on thin coverage, which failed the job, which SKIPPED
+      # the cache save, so the next run restored the same thin cache and failed identically. Seven of
+      # the last nine scheduled runs died this way and it could not self-heal, because every scraper
+      # output here is gitignored and lives ONLY in this cache (CI has no 2Captcha key, so Miami-Dade
+      # liens can never be regenerated in the cloud — the cache is their sole source).
       - name: Restore pipeline state (leads, phones, liens, link tokens)
-        uses: actions/cache@v4
+        id: statecache
+        uses: actions/cache/restore@v4
         with:
           path: |
             leads_final.json
@@ -107,8 +115,14 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          key: dealflow-state-${{ github.run_id }}
-          restore-keys: dealflow-state-
+          # v2 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
+          # cache saved under a different path list is invisible even to a matching restore-key prefix.
+          # Adding whitepages_lookup.json silently orphaned every earlier cache — the restore logged
+          # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
+          # dealflow-state cache sat right there in the repo. Bump this suffix ON PURPOSE whenever the
+          # path list changes, so the invalidation is deliberate and greppable instead of a mystery.
+          key: dealflow-state-v2-${{ github.run_id }}
+          restore-keys: dealflow-state-v2-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -316,10 +330,47 @@ jobs:
             done
           fi
 
+      # ---- Save pipeline state BEFORE the health gate ---------------------------------------
+      # This runs with `if: always()` and sits AHEAD of Health on purpose. A day of scraping —
+      # lien chains, skip-traced phones, comps, geocodes, Whitepages households — is expensive and
+      # in several cases IRREPLACEABLE in CI (no 2Captcha key in the cloud). It must never be thrown
+      # away because a coverage report card came back red. This is the step whose absence created
+      # the death spiral: the old implicit post-save was skipped on failure, so the cache froze on
+      # 2026-07-21 and every run afterwards restored the same empty state.
+      - name: Save pipeline state (always — even if a later step fails)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            leads_final.json
+            leads_raw.json
+            broward_leads.json
+            palmbeach_leads.json
+            skiptrace_results.json
+            cases_qs.json
+            records_qs.json
+            records_liens.json
+            broward_liens.json
+            palmbeach_liens.json
+            batchdata_liens.json
+            county_plaintiffs.json
+            lis_pendens.json
+            lp_leads.json
+            whitepages_lookup.json
+            geocode_cache.json
+            tax_links.json
+            comps.json
+            property_types_cache.json
+            listing_status_cache.json
+            health.json
+            full.json
+          key: dealflow-state-v2-${{ github.run_id }}
+
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
       # workflow, which fires GitHub's built-in workflow-failure email to the repo owner.
       # No Twilio / SMS wiring needed; the notification path is already there for free.
+      # Runs AFTER the cache save so a red report can never cost us the day's data again.
       - name: 'Health'
         run: python healthcheck.py
 
