@@ -1261,13 +1261,26 @@ def make_tracker(leads):
     # phones STRIPPED. This guarantees personal phone numbers never hit the public web unencrypted.
     codes = _load_codes()
     _dst = '' if os.environ.get('DEALFLOW_NO_DESKTOP') == '1' else ' + Desktop (plaintext)'
+    # COVERAGE MARKER — a plaintext, greppable census of how enriched this build actually is, so the
+    # publish guard can compare a new build against the one already live WITHOUT decrypting either.
+    # It carries only counts, never a name, number or address.
+    _cov = {
+        'leads':  len(slim),
+        'phones': sum(1 for d in slim if d.get('phones')),
+        'liens':  sum(1 for d in slim if d.get('orconf') and d.get('orconf') != 'none'),
+        'wp':     sum(1 for d in slim if d.get('wpKey') == 'ok'),
+        'arv':    sum(1 for d in slim if d.get('arv')),
+        'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
+    }
+    _marker = '<!-- DEALFLOW-COVERAGE ' + json.dumps(_cov, separators=(',', ':')) + ' -->\n'
+    print('coverage: ' + json.dumps(_cov, separators=(',', ':')))
     if codes:
         enc = _encrypt_multi(json.dumps(slim), codes)
-        open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', json.dumps(enc)))
+        open(docs,'w',encoding='utf-8').write(_marker + tpl.replace('__DATA__', json.dumps(enc)))
         print(f'tracker written: docs/index.html (ENCRYPTED · {len(codes)} access code(s)){_dst}')
     else:
         nophone = [{k: v for k, v in d.items() if k not in ('phones','phdnc','emails')} for d in slim]
-        open(docs,'w',encoding='utf-8').write(tpl.replace('__DATA__', _esc_json(nophone)))
+        open(docs,'w',encoding='utf-8').write(_marker + tpl.replace('__DATA__', _esc_json(nophone)))
         print('tracker written: docs/index.html (public, phone-free)' + ('' if os.environ.get('DEALFLOW_NO_DESKTOP') == '1' else ' + Desktop'))
 
 def main():
