@@ -233,6 +233,28 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
   border:1px solid var(--line,#ddd);border-radius:999px;padding:9px 12px;cursor:pointer;white-space:nowrap}
 #aftercall button:hover{border-color:var(--gold,#C6A14B);background:var(--gold-soft,#f4ead2)}
 #aftercall .acx{background:none;border:none;color:var(--muted);font-size:15px;padding:6px 8px}
+#aftercall.hasqueue{bottom:82px}                       /* stack above the work bar, never on top of it */
+/* work bar — the queue, one lead at a time, number already in front of him */
+#workbar{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:8999;max-width:96vw;
+  display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:center;
+  background:var(--ink,#14181f);color:#fff;border:1px solid var(--gold,#C6A14B);border-radius:14px;
+  padding:10px 13px;box-shadow:0 8px 30px rgba(0,0,0,.34)}
+#workbar .wbn{font:800 11px/1 var(--f-label,inherit);letter-spacing:.06em;color:var(--gold,#C6A14B);
+  border:1px solid rgba(198,161,75,.45);border-radius:999px;padding:5px 8px}
+#workbar .wbaddr{font-weight:800;font-size:13.5px;color:#fff}
+#workbar .wbwhy{font-size:11.5px;color:rgba(255,255,255,.66)}
+#workbar .wbcall{font:800 13px/1 inherit;color:#14181f;background:var(--gold,#C6A14B);
+  border-radius:999px;padding:10px 14px;text-decoration:none;white-space:nowrap}
+#workbar .wbcall:hover{background:#e0bd6a;text-decoration:none}
+#workbar .wbfind{background:transparent;color:var(--gold,#C6A14B);border:1px solid var(--gold,#C6A14B)}
+#workbar .wbskip{font:700 12.5px/1 inherit;color:rgba(255,255,255,.85);background:rgba(255,255,255,.09);
+  border:1px solid rgba(255,255,255,.18);border-radius:999px;padding:9px 12px;cursor:pointer}
+#workbar .wbskip:hover{background:rgba(255,255,255,.16)}
+#workbar .wbx{background:none;border:none;color:rgba(255,255,255,.55);font-size:15px;padding:6px 8px;cursor:pointer}
+#workbar.wbdone{background:var(--surface,#fff);color:var(--ink)}
+#workbar.wbdone .wbaddr{color:var(--ink)} #workbar.wbdone .wbwhy{color:var(--muted)}
+#workbar.wbdone .wbx{color:var(--muted)}
+@media(max-width:560px){ #workbar{gap:7px;padding:9px 10px} #workbar .wbwhy{width:100%;text-align:center;order:9} }
 .seenbtn.on{background:var(--surface-2)!important;color:var(--muted)!important;border-color:var(--line)!important}
 .links a.seenbtn::after,.clinks a.seenbtn::after{display:none!important}
 .seenchip{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
@@ -1844,6 +1866,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="plan" class="abtn" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5h.01M4 11.5h.01M4 17.5h.01"/></svg>Plan today</button>
 <button id="due" class="abtn" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Due</button>
+<button id="nextup" class="abtn nextup-btn" title="Hands you the ONE lead to work right now and puts its number in front of you — no scanning, no deciding. Ranked by deal value AND by what you've already done: follow-ups you set come due first, leads you already touched today drop out, and anything you filed as Seen is gone. Tap again for the next one."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Next up<span class="nun"></span></button>
 <button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
 <button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
@@ -2037,6 +2060,47 @@ function _closeScore(r){
   // watches dismissals — the freshest door on the board outranks an ordinary fresh lead.
   var lift = (_stayLiftedDays(r) >= 0 && _stayLiftedDays(r) <= 45) ? 1.2 : 1.0;
   return base * fresh * reach * trust * verdict * urg * surv * lift;
+}
+// ---- WORK QUEUE: "who do I call RIGHT NOW?" ----
+// _closeScore ranks leads by how good the DEAL is. It is blind to what the operator has already
+// done — a lead he called yesterday and left a message on ranks identically to one nobody has ever
+// dialed, and a follow-up he set for today does not rise at all. That is the actual confusion:
+// not "have I seen this" (the Seen chip answers that) but "of everything I have NOT finished with,
+// which one is next?" This layers work-state on top of the deal score.
+function _dueDays(n){                                  // days until the follow-up he set (neg = overdue)
+  if(!n || !n.next) return null;
+  var t = Date.parse(n.next + 'T12:00:00'); if(isNaN(t)) return null;
+  return Math.round((t - Date.now()) / 86400000);
+}
+function _queueState(r){
+  var n = notes[r.case] || {};
+  if(filed.has(r.case) && !_viewedResurfaced(r)) return {skip: 'filed'};      // he explicitly closed it out
+  if(_isOptedOut(n) || _isWrongOwner(n)) return {skip: 'nocontact'};
+  if(n.status === 'Dead' || n.status === 'DO NOT CONTACT') return {skip: 'dead'};
+  if(r.saleBkAct) return {skip: 'stay'};                                      // §362 — contact is a violation
+  var due = _dueDays(n);
+  if(due != null && due > 0) return {skip: 'scheduled', due: due};            // he set a date; it is not today
+  var ts = n.touches || [];
+  // no follow-up date set, but touched today already -> leave it alone until tomorrow
+  if(!n.next && ts.length && ts[ts.length-1].d === _today()) return {skip: 'touched-today'};
+  var mult = 1.0, why = 'never contacted';
+  if(due != null && due <= 0){ mult = due < 0 ? 2.2 : 1.9; why = due < 0 ? 'follow-up OVERDUE '+(-due)+'d' : 'follow-up due today'; }
+  else if(ts.length){ mult = 0.75; why = ts.length + ' touch' + (ts.length>1?'es':'') + ', no date set'; }
+  return {score: _closeScore(r) * mult, why: why, due: due, touches: ts.length};
+}
+// The queue itself: reachable, workable, ranked. Reachability is a HARD gate — handing him a lead
+// with no number and no door is handing him nothing.
+function _workQueue(){
+  var out = [];
+  DATA.forEach(function(r){
+    if(!_isCloser(r)) return;
+    var q = _queueState(r); if(q.skip) return;
+    var reach = (_bestPhones(r).length > 0) || !!(r.addr && r.st !== 'LP');   // phone, or a door to knock
+    if(!reach) return;
+    out.push({r: r, s: q.score, why: q.why});
+  });
+  out.sort(function(a, b){ return b.s - a.s; });
+  return out;
 }
 // Prefilled outreach identity — Alejandro fronts Miami Solutions Group directly on the foreclosure side
 // (distinct from the cousin-Jose tax-deed entity). Every generated letter/email/script/contract fills
@@ -4504,6 +4568,7 @@ function _showAfterCall(){
     .map(i => '<button type="button" data-ql="'+i+'">'+QUICKLOG[i].lbl+'</button>').join('');
   const bar = document.createElement('div');
   bar.id = 'aftercall';
+  if(document.getElementById('workbar')) bar.classList.add('hasqueue');   // sit above the work bar
   bar.innerHTML = '<span class="acaddr">'+esc((r.addr||p.c).split(',')[0])+'</span>'
     + '<span class="acq">how’d it go?</span>' + opts
     + '<button type="button" class="acx" title="Skip — log nothing">✕</button>';
@@ -4514,10 +4579,65 @@ function _showAfterCall(){
       if(spec && logTouch(p.c, spec.ch, spec.out, spec) !== false){ try{ render(); }catch(_e){} }
     }
     bar.remove();
+    // CLOSE THE LOOP: if this call came out of the work queue, logging the outcome hands him the
+    // next lead automatically. Call -> log -> next, without a single decision in between.
+    if(document.getElementById('workbar') && _wq.length && _wq[_wqi] && _wq[_wqi].r.case === p.c) _wqNext();
   });
   document.body.appendChild(bar);
   setTimeout(function(){ const el = document.getElementById('aftercall'); if(el) el.remove(); }, 90000);
 }
+// ---- WORK BAR: the queue, one lead at a time, with the number already in front of him. ----
+// He does not open the hub — "I'm just looking for the number." So the queue does not navigate him
+// anywhere: it pins + scrolls the row and puts the callable number in the bar itself. The call
+// button is a real tel: anchor ON PURPOSE, so it flows through the contact-intent listener above —
+// tapping it stamps Seen and arms the after-call bar, and logging the outcome advances the queue.
+// Call -> log -> next, without ever leaving the board.
+let _wq = [], _wqi = 0;
+function _wqOpen(){ _wq = _workQueue(); _wqi = 0; _wqShow(); }
+function _wqNext(){ _wqi++; _wqShow(); }
+function _wqClose(){ const b=document.getElementById('workbar'); if(b) b.remove(); _wq=[]; _wqi=0;
+  const a=document.getElementById('aftercall'); if(a) a.classList.remove('hasqueue'); }
+function _wqShow(){
+  const old = document.getElementById('workbar'); if(old) old.remove();
+  if(_wqi >= _wq.length){
+    const done = document.createElement('div');
+    done.id = 'workbar'; done.className = 'wbdone';
+    done.innerHTML = '<span class="wbaddr">'+(_wq.length ? '✓ Queue clear — '+_wq.length+' worked' : 'Nothing to work right now')+'</span>'
+      + '<span class="wbwhy">'+(_wq.length ? 'Every lead worth calling has been touched today or has a follow-up date set.' : 'No reachable lead passes the closer gate — widen the filters or pull more numbers.')+'</span>'
+      + '<button type="button" class="wbx">✕</button>';
+    done.addEventListener('click', e => { if(e.target.closest('button')) _wqClose(); });
+    document.body.appendChild(done);
+    setTimeout(() => { const el=document.getElementById('workbar'); if(el && el.classList.contains('wbdone')) el.remove(); }, 12000);
+    return;
+  }
+  const item = _wq[_wqi], r = item.r;
+  pinnedCase = r.case; try{ localStorage.setItem('fcPinned', r.case); }catch(e){}
+  render();
+  const ph = _bestPhones(r);
+  const tel = ph.length ? String(ph[0]).replace(/\D/g,'') : '';
+  const bar = document.createElement('div');
+  bar.id = 'workbar';
+  // data-case so the global contact-intent listener can resolve WHICH lead a tap in here belongs to
+  // (it walks .closest('[data-case]')). Without it the bar's own call button stamps nothing.
+  bar.setAttribute('data-case', r.case);
+  bar.innerHTML = '<span class="wbn">'+(_wqi+1)+'/'+_wq.length+'</span>'
+    + '<span class="wbaddr">'+esc((r.addr||r.case).split(',')[0])+'</span>'
+    + '<span class="wbwhy">'+esc(item.why)+(typeof r.days==='number' && r.days>=0 ? ' · auction in '+r.days+'d' : '')+'</span>'
+    + (tel
+        ? '<a class="wbcall" href="tel:'+esc(tel)+'">☎ '+esc(ph[0])+'</a>'
+        : '<a class="wbcall wbfind" href="'+esc(_wpNameUrl ? _wpNameUrl(r) : '#')+'" target="_blank" rel="noopener noreferrer">🔎 Find a number</a>')
+    + '<button type="button" class="wbskip">Skip →</button>'
+    + '<button type="button" class="wbx" title="Close the queue">✕</button>';
+  bar.addEventListener('click', function(e){
+    if(e.target.closest('.wbskip')){ _wqNext(); return; }
+    if(e.target.closest('.wbx')){ _wqClose(); return; }
+    // the tel:/find anchors fall through to the global contact-intent listener on purpose
+  });
+  document.body.appendChild(bar);
+  const el = document.querySelector('#tb tr[data-case="'+CSS.escape(r.case)+'"], #cards .card[data-case="'+CSS.escape(r.case)+'"]');
+  if(el && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function _wqCount(){ try{ return _workQueue().length; }catch(e){ return 0; } }
 document.addEventListener('visibilitychange', function(){ if(!document.hidden) _showAfterCall(); });
 window.addEventListener('focus', _showAfterCall);
 // desktop tel: often never blurs the tab at all — a timer catches that path
@@ -6412,6 +6532,9 @@ function render(){
   const viewedN = filed.size;
   const hv = document.getElementById('hv');
   if(hv){ hv.textContent = 'Hide viewed' + (viewedN ? ' ('+viewedN+')' : ''); hv.classList.toggle('active', hideViewed); }
+  // live count of what is actually workable RIGHT NOW — shrinks as he works the queue down
+  const _nu = document.querySelector('#nextup .nun');
+  if(_nu){ const _n = _wqCount(); _nu.textContent = _n ? ' '+_n : ''; }
   const prof = rows.filter(r => r._profit > 0);
   const totp = prof.reduce((s,r) => s + r._profit, 0);
   const ds = document.getElementById('dealsum');
@@ -6835,6 +6958,9 @@ document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classL
 document.getElementById('plan').onclick = () => openPlanModal();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
 { const _cb = document.getElementById('closers'); if(_cb) _cb.onclick = () => { closersOnly = !closersOnly; _cb.classList.toggle('active', closersOnly); render(); }; }
+// Next up: open the queue, or advance it if it is already open (so the button itself is a "next").
+{ const _nb = document.getElementById('nextup');
+  if(_nb) _nb.onclick = () => { if(document.getElementById('workbar') && _wq.length && _wqi < _wq.length) _wqNext(); else _wqOpen(); }; }
 { const _lp = document.getElementById('freshlp'); if(_lp) _lp.onclick = () => { lpOnly = !lpOnly; if(lpOnly){ closersOnly=false; const c=document.getElementById('closers'); if(c)c.classList.remove('active'); } _lp.classList.toggle('active', lpOnly); render(); }; }
 { const _nh = document.getElementById('nearhome'), _nr = document.getElementById('nearrad');
   if(_nh) _nh.onclick = () => { nearOnly = !nearOnly; if(nearOnly){ closersOnly=lpOnly=false; tier='ALL'; document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL')); ['closers','freshlp'].forEach(id=>{const b=document.getElementById(id); if(b)b.classList.remove('active');}); } _nh.classList.toggle('active', nearOnly); if(_nr) _nr.style.display = nearOnly?'':'none'; render(); };
