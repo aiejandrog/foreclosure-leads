@@ -3253,7 +3253,17 @@ function _callSheet(r){
   const recLink = (r.recqs && _csCty === 'MIAMI-DADE')
       ? 'https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+encodeURIComponent(r.recqs)
       : (r.records || ((typeof CTY_LINKS!=='undefined' && CTY_LINKS[_csCty] && CTY_LINKS[_csCty].records) || 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch'));
-  const survBox = survChecked
+  // A TAX DEED WIPES THE MORTGAGES (FS 197.552). Demanding the operator go pull a senior 2nd on a TD
+  // sends them hunting a lien that will not exist after the sale, and the "eats the equity" warning is
+  // backwards — what actually survives a tax deed is governmental/municipal liens and covenants
+  // running with the land, which is a different search entirely.
+  const survBox = (r.st === 'TD')
+    ? '<div class="csbox"><div class="csl">WHAT SURVIVES THE SALE</div>'+
+      '<div class="csv" style="font-size:22px">MORTGAGES WIPED</div>'+
+      '<div class="css">Tax deed — the sale extinguishes mortgages and most private liens (FS 197.552). '+
+      'What can survive: county/municipal liens, code enforcement, and covenants running with the land. '+
+      '<a class="csreclink" href="'+esc(recLink)+'" target="_blank" rel="noopener" title="Check for municipal/code liens and covenants — the mortgage chain is moot here">check municipal liens →</a></div></div>'
+    : survChecked
     ? '<div class="csbox '+(surv?'warn':'good')+'"><div class="csl">WHAT SURVIVES THE SALE</div>'+
       '<div class="csv">'+(surv?fm(surv):'$0')+'</div><div class="css">'+trust+
       ' · <a class="csreclink" href="'+esc(recLink)+'" target="_blank" rel="noopener" title="Open the county records to re-pull / double-check the chain — the owner is loaded so you can eyeball the mortgages yourself">verify in records →</a></div></div>'
@@ -3274,7 +3284,11 @@ function _callSheet(r){
       + '<div style="margin-top:8px"><b>Owner:</b> '+esc(owner)+' &nbsp;·&nbsp; <b>Foreclosing lender:</b> '+esc(r.plaintiff||'—')+(r.legal?'<br><b>Legal:</b> '+esc(r.legal):'')+'</div>'
       + '<div style="margin-top:8px">Next: People-search the owner for a phone, then pull the folio/appraiser for value and the docket for what is owed.</div>'+_csPeople(r)+'</div></div>'
     : '<div class="csgrid">'+
-    big('FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn')+
+    // No final judgment and no lender exist on a tax deed — that figure is the delinquent tax bill
+    // that sets the auction floor. Homestead parcels have half the assessed value added to it.
+    (r.st==='TD'
+      ? big('OPENING BID — auction floor', fm(+r.obid||judg), (r.hs?'incl. ½ assessed value (homestead, FS 197.502) · ':'')+'delinquent taxes + fees'+(r.plaintiff?' · '+esc(r.plaintiff):''), 'hot')
+      : big('FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn'))+
     big('WORTH TODAY', fm(basis), arv?('ARV from '+r.arvn+' comps'+(r.arvconf==='ok'?' (verified)':' (low conf)')):'county roll — no comps', 'good')+
     survBox+
     big(_netEqLabel(r,1), fm(netEq), (r.st==='TD'||survChecked)?_netEqSub(r):'⚠ assumes nothing survives — pull the chain', 'good')+
@@ -3359,10 +3373,13 @@ function _copyCallSheet(c){
     r.addr, _ownerName((r.owners||'').split(';')[0].trim(), r)+'  ·  Case '+r.case,
     tt ? 'TALK TO: '+tt.name+(tt.rel?' ('+tt.rel+')':'')+(tt.phone?' '+tt.phone:'') : '',
     '',
-    'FINAL JUDGMENT:  '+fm(judg)+(r.plaintiff?'   ('+r.plaintiff+')':''),
+    (r.st==='TD' ? 'OPENING BID:     '+fm(+r.obid||judg)+(r.hs?'   (incl. ½ assessed — homestead)':'')
+                 : 'FINAL JUDGMENT:  '+fm(judg)+(r.plaintiff?'   ('+r.plaintiff+')':'')),
     'WORTH:           '+fm(basis)+(arvUsed?'  ARV from '+r.arvn+' comps':(arv?'  (county roll — ARV rejected)':'  (county roll)')),
-    'SURVIVES SALE:   '+(surv?fm(surv)+'  ['+survLabel+']':'$0  ['+survLabel+']'),
-    jr>0 ? 'JUNIOR / 2ND:   '+fm(jr)+'  (payoff only on direct purchase; wiped at auction if named)' : '',
+    (r.st==='TD'
+      ? 'SURVIVES SALE:   mortgages WIPED (FS 197.552) — check municipal/code liens + covenants'
+      : 'SURVIVES SALE:   '+(surv?fm(surv)+'  ['+survLabel+']':'$0  ['+survLabel+']')),
+    (jr>0 && r.st!=='TD') ? 'JUNIOR / 2ND:   '+fm(jr)+'  (payoff only on direct purchase; wiped at auction if named)' : '',
     (_netEqLabel(r,1)+':').padEnd(17)+fm(_netEqOf(r))+(r.st==='TD'?'   (at est. winning bid '+fm(r._purchase||0)+')':''),
     '',
     'AUCTION:  '+r.auction+' 9am'+(r.days>=0?'  ('+r.days+' days, deal deadline in '+Math.max(0,r.days-3)+')':''),
