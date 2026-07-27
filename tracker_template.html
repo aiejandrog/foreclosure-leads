@@ -215,6 +215,13 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
   border:1px solid var(--line)!important;border-radius:999px;padding:5px 11px!important;background:var(--surface)!important;
   touch-action:manipulation}
 .seenbtn:hover{border-color:var(--gold)!important;color:var(--gold-d)!important;background:var(--gold-soft)!important;text-decoration:none!important}
+/* update-available pill — the unlocked-path staleness check. Fixed bottom-center so it never covers
+   the header controls; one tap swaps to the newest build. */
+#freshpill{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);z-index:9000;
+  font:700 13px/1 var(--f-label,inherit);letter-spacing:.02em;color:#fff;background:var(--gold-d,#8a6d1f);
+  border:1px solid var(--gold,#C6A14B);border-radius:999px;padding:11px 18px;cursor:pointer;
+  box-shadow:0 6px 24px rgba(0,0,0,.28)}
+#freshpill:hover{background:var(--gold,#C6A14B)}
 .seenbtn.on{background:var(--surface-2)!important;color:var(--muted)!important;border-color:var(--line)!important}
 .links a.seenbtn::after,.clinks a.seenbtn::after{display:none!important}
 .seenchip{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
@@ -7556,8 +7563,38 @@ async function boot(){
   if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
   await _fadeIntro(t0, MIN_SPLASH);  // reveal the finished board (no-op if the gate path already faded it)
   if((manual || autoUnlocked) && unlockName) showWelcome(unlockName);   // warm greeting — auto-unlock too
+  // STALE-PAGE CHECK FOR THE UNLOCKED PATH. The gate's self-heal only runs on a FAILED unlock — but
+  // a REMEMBERED device never sees the gate at all, so it can sit on a cached build for weeks and
+  // quietly miss every fix and feature ("the Seen filter doesn't work" when the phone is simply
+  // running last week's page). Same 400-byte marker probe as the gate; behavior depends on timing:
+  // untouched page within 15s -> swap silently (nothing to lose); already in use -> a tap-to-reload
+  // pill, because yanking the board out from under someone mid-call is worse than being stale.
+  _freshCheck(autoUnlocked || manual);
 }
 boot();
+async function _freshCheck(unlocked){
+  try{
+    if(!unlocked) return;
+    if(!/^[0-9a-f]{12}$/.test(BUILT)) return;                    // raw template in dev — never "stale"
+    if(sessionStorage.getItem('dfHealed')) return;               // one heal per session, shared with the gate
+    const res = await fetch(location.pathname + '?cb=' + Date.now(),
+                            {cache:'no-store', headers:{'Range':'bytes=0-400'}});
+    if(!res.ok && res.status !== 206) return;
+    const m = (await res.text()).match(/DEALFLOW-COVERAGE\s+(\{[^}]*\})/);
+    if(!m) return;
+    const sig = (JSON.parse(m[1])||{}).sig;
+    if(!sig || sig === BUILT) return;
+    try{ sessionStorage.setItem('dfHealed', sig); }catch(e){}
+    if(!_userTouched){ location.replace(location.pathname + '?v=' + encodeURIComponent(sig)); return; }
+    const p = document.createElement('button');
+    p.id = 'freshpill'; p.type = 'button';
+    p.textContent = '🔄 Updated board available — tap to load';
+    p.onclick = () => location.replace(location.pathname + '?v=' + encodeURIComponent(sig));
+    document.body.appendChild(p);
+  }catch(e){}
+}
+let _userTouched = false;
+['pointerdown','keydown'].forEach(ev => document.addEventListener(ev, () => { _userTouched = true; }, {once:true, capture:true}));
 // Freshness signal: read the build date stamped into the header and tell the user, at a glance,
 // whether the data is current or the auto-refresh has silently gone stale (auctions are time-sensitive).
 function stampFreshness(){
