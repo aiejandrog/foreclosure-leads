@@ -121,6 +121,9 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .lockbtn:hover{border-color:var(--gold);color:var(--gold-d)}
 #refreshbtn{border-color:rgba(198,161,75,.55);color:var(--gold-d);font-weight:700}
 #refreshbtn:hover{border-color:var(--gold);box-shadow:0 0 12px rgba(198,161,75,.25)}
+/* refresh modal: the instant no-token pull sits above the slow cloud re-scrape */
+.rfrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.rfdiv{height:1px;background:var(--line,#e2ded2);margin:14px 0 10px}
 /* Pipeline health on the button itself. A daily refresh that has been dead for a week must be
    visible WITHOUT opening a modal — that is exactly how 2026-07-20 -> 07-26 went unnoticed. */
 #refreshbtn.gh-bad{border-color:#C0392B;color:#C0392B;background:rgba(192,57,43,.07)}
@@ -6162,8 +6165,11 @@ function _dataAgeH(){
     return Math.max(0, (Date.now() - d.getTime()) / 3600000); }catch(e){ return null; }
 }
 function _refreshCooldownLeft(){
+  // WAS 60*3600000 = 60 HOURS. The UI says "one fire per hour per device" and prints the remainder
+  // as minutes, so a single refresh silently locked the button for two and a half days while
+  // reporting "cooldown clears in 3,540 min". 60 minutes is 60*60000.
   try{ const t = +(localStorage.getItem('fcRefreshAt') || 0);
-    return Math.max(0, Math.ceil((t + 60*3600000 - Date.now()) / 60000)); }catch(e){ return 0; }
+    return Math.max(0, Math.ceil((t + 60*60000 - Date.now()) / 60000)); }catch(e){ return 0; }
 }
 function _refreshModal(html){ document.getElementById('refreshbody').innerHTML = html; }
 // LAST-RUN STATUS. The modal used to reason only from the local build age, so a scheduled run that
@@ -6201,6 +6207,17 @@ function openRefresh(){
   const age = _dataAgeH(), left = _refreshCooldownLeft(), tok = _ghTok.get();
   const ageTxt = age == null ? 'unknown' : age < 1 ? 'just now' : age < 24 ? Math.round(age)+'h ago' : (age/24).toFixed(1)+'d ago';
   let body = '<div class="dm-sec" style="font-size:17px;margin-bottom:2px">Refresh deal data</div>';
+  // TWO DIFFERENT THINGS WERE HIDING BEHIND ONE BUTTON. "Refresh" used to mean only "re-run the full
+  // cloud scrape" — 40-70 minutes, and gated behind a GitHub token you had to create by hand, so on
+  // a device with no token the button did nothing but show a setup form. But the thing he needs
+  // nine times out of ten is just "give me the newest board" — his phone sits on a cached build for
+  // days. That needs no token and takes two seconds. It goes first.
+  body += '<div class="rfrow">'
+        + '<button class="syncbtn2" id="gh-pull" type="button" style="background:linear-gradient(120deg,#C9A84C,#EFDF9E,#C6A14B);color:#0B1730;border:none;font-weight:800">&#8635; Get the latest board</button>'
+        + '<span class="sd" style="color:var(--muted);font-size:11.5px">Instant · no setup. Pulls the newest published build to this device.</span></div>'
+        + '<div id="pullstat" class="sd" style="font-size:12px;margin-top:6px"></div>'
+        + '<div class="rfdiv"></div>'
+        + '<div class="sd" style="font-size:12.5px;font-weight:700;margin-bottom:2px">Re-scrape everything (the slow one)</div>';
   if(!tok){
     body += '<div class="sd" style="color:var(--muted);font-size:12.5px">One-time setup on this device: the refresh fires the cloud pipeline (GitHub Actions), and GitHub asks for a token to prove it&rsquo;s you. Create a <b>fine-grained personal access token</b> — GitHub &rarr; Settings &rarr; Developer settings &rarr; Fine-grained tokens &rarr; repo <b>foreclosure-leads</b> only &rarr; Permissions: <b>Actions = Read and write</b> &rarr; Generate. It stays on this device only.</div>'+
       '<div class="synckeyrow" style="margin-top:10px"><input id="ghtokin" type="password" placeholder="github_pat_…" autocomplete="off" style="flex:1"><button class="syncbtn2" id="gh-tok-save" type="button">Save token</button></div>'+
@@ -6228,9 +6245,38 @@ function openRefresh(){
   if(sv) sv.onclick = () => { const v = (document.getElementById('ghtokin').value||'').trim();
     if(!v.startsWith('github_pat_') && v.length < 40){ sv.textContent = 'That doesn&rsquo;t look like a token'; setTimeout(()=>sv.textContent='Save token',1800); return; }
     _ghTok.set(v); openRefresh(); };
+  const pull = document.getElementById('gh-pull');
+  if(pull) pull.onclick = () => _pullLatest();
   const fire = document.getElementById('gh-fire');
   if(fire) fire.onclick = () => _fireRefresh();
   document.getElementById('refreshmodal').classList.add('show'); document.body.classList.add('modal-open');
+}
+// ON-DEMAND, NO TOKEN. Asks the server what the newest published build is and, if this device is
+// behind, loads it. Same 400-byte marker probe the gate and the boot check use — one mechanism, one
+// source of truth about what "current" means. This is the refresh he actually wants day to day.
+async function _pullLatest(){
+  const slot = document.getElementById('pullstat');
+  const say = t => { if(slot) slot.innerHTML = t; };
+  say('<span style="color:var(--muted)">Checking the server…</span>');
+  try{
+    const res = await fetch(location.pathname + '?cb=' + Date.now(),
+                            {cache:'no-store', headers:{'Range':'bytes=0-400'}});
+    if(!res.ok && res.status !== 206){ say('<span style="color:#C0392B">Could not reach the server — check your connection.</span>'); return; }
+    const m = (await res.text()).match(/DEALFLOW-COVERAGE\s+(\{[^}]*\})/);
+    if(!m){ say('<span style="color:#C0392B">Server did not return a build marker.</span>'); return; }
+    const cov = JSON.parse(m[1]) || {};
+    if(!cov.sig || cov.sig === BUILT){
+      say('<b>Already current.</b> <span style="color:var(--muted)">This is the newest published build'
+        + (cov.built ? ' (' + cov.built.replace('T',' ') + ')' : '') + '. Nothing to pull.</span>');
+      return;
+    }
+    say('<b>Newer board found</b> <span style="color:var(--muted)">— built ' + (cov.built||'').replace('T',' ')
+      + ' · ' + (cov.leads||'?') + ' leads. Loading…</span>');
+    try{ sessionStorage.removeItem('dfHealed'); }catch(e){}
+    setTimeout(() => location.replace(location.pathname + '?v=' + encodeURIComponent(cov.sig)), 700);
+  }catch(e){
+    say('<span style="color:#C0392B">Check failed: ' + esc(String(e && e.message || e)) + '</span>');
+  }
 }
 async function _fireRefresh(){
   _refreshModal('<div class="dm-sec" style="font-size:17px">Firing…</div><div class="sd" style="color:var(--muted);font-size:12.5px">Asking GitHub to start the pipeline.</div>');
