@@ -618,6 +618,38 @@ a.ctact:hover{text-decoration:none;filter:none}
 .csmsgbar{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:6px 0 10px}
 .csmsglbl{font-family:var(--f-label,inherit);font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;
   color:var(--ink-2)}
+/* ===== LINKS SUB-ROW =====
+   The link stack used to be a 12th table column. It was the tallest cell in every row, so it set the
+   row height — a band of dead white space sat under every short cell (Tier / Profit / Score / Auction
+   / Type / Owner / Property / Mailing) while the links themselves wrapped inside a ~230px gutter.
+   Now it is a full-width row directly beneath its data row: same links, room to breathe, and the
+   data row collapses to its natural height. The two <tr>s must read as ONE unit. */
+tr.lrow > td.lcell{padding:9px 16px 13px;border-top:0;background:rgba(11,23,48,.018)}
+/* The five groups sit SIDE BY SIDE across the full width instead of stacking in a narrow gutter.
+   align-items:flex-start keeps every group's label on the same baseline no matter how many chips
+   each one holds; the vertical rules give the eye five clean stations to scan. */
+.lwrap{display:flex;flex-wrap:wrap;align-items:flex-start;gap:0}
+.lcell .lgrp{display:flex;flex-wrap:wrap;align-items:center;gap:5px 7px;
+  margin:0 0 4px;padding:0 16px;border-right:1px solid var(--line,#E2E6EE);
+  align-content:flex-start;flex:0 1 auto;max-width:100%}
+.lcell .lgrp:first-child{padding-left:0}
+.lcell .lgrp:last-child{border-right:0;padding-right:0}
+.lcell .lgrp-lab{display:block;width:100%;margin:0 0 4px}
+/* In the sub-row the contact block sits BESIDE the other four groups, so its phone lines pack
+   horizontally instead of each claiming a full-width bar (which made CONTACT ~820px wide and shoved
+   Court & sale off the right edge). Slightly smaller number, tighter chips — same tap targets. */
+.lcell .lgrp-contact{max-width:46%}
+.lcell .ctline{padding:6px 9px;gap:6px}
+.lcell .ctnum{font-size:15px;min-width:0}
+.lcell .ctact{padding:5px 9px;font-size:11.5px}
+.lcell .csphones,.lcell .lgrp-contact{gap:5px 7px}
+/* size each phone bar to its content so two numbers sit side by side in the 744px group instead of
+   stacking — the tap targets stay full-size, the group just stops running tall. */
+.lcell .ctline{flex:0 1 auto;min-width:0;width:auto}
+/* keep the row visually welded to the deal above it on hover + when pinned */
+tr[data-case]:hover + tr.lrow > td.lcell{background:rgba(198,161,75,.07)}
+tr.lrow.pinfire > td.lcell{background:rgba(198,161,75,.10)}
+@media(max-width:860px){ tr.lrow{display:none} }   /* mobile uses .clinks on the card, not the table */
 /* Board link groups — labeled so Call / Text / WA are not a soup of chips */
 .links .lgrp,.clinks .lgrp{position:relative}
 .lgrp-lab{display:block;font-family:var(--f-label,inherit);font-size:10.5px;font-weight:800;letter-spacing:.1em;
@@ -1824,7 +1856,7 @@ body.compact .dg-v{font-size:14.5px}
 <th data-k="owners">Owner / Case</th>
 <th data-k="addr">Property &amp; Numbers</th>
 <th data-k="mail">Mailing</th>
-<th>Links</th><th>Status</th><th>Notes</th>
+<th>Status</th><th>Notes</th>
 </tr></thead><tbody id="tb"></tbody></table>
 </div>
 <div class="scrollnudge">scroll <b>&#8594;</b></div>
@@ -6042,9 +6074,16 @@ function render(){
       '<td class="owncell">'+owner+'</td>'+
       '<td class="propcell">'+prop+'</td>'+
       '<td class="mailcell"><div class="addrline"><span class="clamp2" title="'+esc(r.mail)+'">'+esc(r.mail)+'</span>'+(r.mail?copyBtn(r.mail,'mailing address'):'')+'</div></td>'+
-      '<td class="links">'+linksHtml+'</td>'+
       '<td><div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+statusSel+'</td>'+
       '<td>'+phoneInp+notesTa+'</td></tr>');
+    // LINKS AS A FULL-WIDTH SUB-ROW. As a 12th column the link stack was the TALLEST cell in every
+    // row, so it set the row height — leaving a band of dead white space under Tier/Profit/Score/
+    // Auction/Type/Owner/Property/Mailing while the links themselves wrapped into a cramped ~230px
+    // gutter. Same links, one row lower, using the full table width: the data row collapses to its
+    // natural height and the five groups get room to sit on one line. No data-case attribute here on
+    // purpose — row counts, fire-lock and the door-route all key off tr[data-case] and must not
+    // double-count this presentational row.
+    trs.push('<tr class="lrow'+(pinnedCase===r.case?' pinfire':'')+'"><td class="links lcell" colspan="11"><div class="lwrap">'+linksHtml+'</div></td></tr>');
     // mobile card
     cards.push('<div data-case="'+esc(r.case)+'" class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+(pinnedCase===r.case?' pinfire':'')+'">'+
       ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+_zstatusBadge(r)+_favStar(r)+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
