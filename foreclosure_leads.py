@@ -672,6 +672,14 @@ def _load_codes():
             return [('shared', pw)]
     return []
 
+_UCN_RE = re.compile(r'^\d{2}\d{4}(CA|CC)\d')   # FL Uniform Case Number: county+year+court type
+def _county_civil(case):
+    """True when the case was filed in COUNTY civil court, across all three case-number dialects.
+    County civil has a jurisdictional cap (~$50k), so it structurally cannot be a residential first-
+    mortgage foreclosure — it is an association or junior action, and the first mortgage survives."""
+    c = (case or '').upper()
+    return bool(c.startswith(('COCE', 'CONO', 'COWE', 'COSO')) or '-CC-' in c
+                or (_UCN_RE.match(c) and _UCN_RE.match(c).group(1) == 'CC'))
 def _fc_type(case):
     """FALLBACK-ONLY classifier from the court case number, used when no plaintiff is available. The prefix
     is a POOR proxy — HOAs routinely foreclose in CIRCUIT court (a CACE number), so a CACE is NOT reliably a
@@ -680,6 +688,20 @@ def _fc_type(case):
     c = (case or '').upper()
     if c.startswith('CACE') or '-CA-' in c: return 'MORTGAGE'
     if c.startswith(('COCE', 'CONO', 'COWE', 'COSO')) or '-CC-' in c: return 'HOA'
+    # FLORIDA UNIFORM CASE NUMBER — {county:2}{year:4}{court:2}{seq:6}{div}. Palm Beach files this way
+    # ("502025CC016197XXXAMB") and matched NONE of the patterns above, which only cover Broward's
+    # CACE/COCE prefixes and Miami-Dade's -CA-/-CC- infixes. Measured: 182/182 Palm Beach leads
+    # classified as '' and therefore defaulted to Bank/Mortgage, including 23 County Court cases.
+    # That inverts the money model: an association lien is SUBORDINATE to a first mortgage (FS
+    # 718.116), so the mortgage SURVIVES an association sale instead of being wiped by it.
+    m = _UCN_RE.match(c)
+    if m:
+        # CC = County Civil. Its jurisdictional cap (~$50k) means a residential MORTGAGE foreclosure
+        # essentially cannot be heard there — so CC is a STRONG association signal.
+        if m.group(1) == 'CC': return 'HOA'
+        # CA = Circuit Civil. Weak signal only, for exactly the reason named above: associations
+        # foreclose in circuit court all the time. Same caveat as CACE.
+        return 'MORTGAGE'
     return ''
 
 
@@ -987,7 +1009,29 @@ def make_tracker(leads):
                     #     ($29k judgment on a $1.2M house is fantasy equity even if a bank filed it.)
                     _v, _j, _e = _d.get('value', 0) or 0, _d.get('judg', 0) or 0, _d.get('eq', 0) or 0
                     _suspect_ratio = bool(_v) and _j > 0 and (_j / _v) < 0.20 and _e >= 40
-                    if _h and _h.get('ftype') == 'MORTGAGE' and not _h.get('surv') and not _suspect_ratio:
+                    #  3. COUNTY CIVIL IS A HARD GATE, not a guess. Court jurisdiction is a matter of
+                    #     law: county civil is capped (~$50k), so it cannot hear a residential FIRST
+                    #     mortgage foreclosure — those are association/junior cases where the 1st
+                    #     SURVIVES. A chain that names a bank plaintiff on a CC case is matching the
+                    #     wrong instrument, not proving senior equity. Measured on the live board: of
+                    #     23 Palm Beach CC cases, 10 were overridden to MORTGAGE by the chain and 3
+                    #     had the risk flag cleared outright — including $18,416 owed on a $1,147,680
+                    #     Wellington house, which headlined as ~98% equity. Being wrong toward
+                    #     "verify the mortgage" costs one lookup; being wrong the other way costs the
+                    #     whole house.
+                    if _county_civil(_d.get('case', '')):
+                        _d['mr'] = True; _d['eqfake'] = True
+                        # Flagging the equity as fantasy is only half the job — the SCORE was already
+                        # computed from that fantasy, so without re-tiering the lead still headlines
+                        # Tier A on the equity sort and lands in the Closers cockpit. Mirror the
+                        # HOA-branch downgrade exactly. NOTE: ctype stays 'Bank/Mortgage' on purpose —
+                        # a county-civil case with a bank plaintiff is usually a JUNIOR/HELOC action,
+                        # not an association one, and calling it "HOA" would trade one false label for
+                        # another. What matters is the shared truth: the first mortgage survives.
+                        _db = 10 if (isinstance(_d.get('days'), int) and 0 <= _d['days'] <= 30) else 0
+                        _d['score'] = (max(0, min(100, (10 if _d.get('hs') else 0) + _db)) if _d.get('value') else 0)
+                        _d['tier'] = 'C'
+                    elif _h and _h.get('ftype') == 'MORTGAGE' and not _h.get('surv') and not _suspect_ratio:
                         _d['mr'] = False; _d['eqfake'] = False                  # verified real senior equity
                         if (_d.get('ctype') or '').upper().startswith('HOA'): _d['ctype'] = 'Bank/Mortgage'
                         # Mirror the HOA-side downward re-tier — but UPWARD: the pipeline had ZEROED
