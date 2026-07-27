@@ -222,6 +222,17 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
   border:1px solid var(--gold,#C6A14B);border-radius:999px;padding:11px 18px;cursor:pointer;
   box-shadow:0 6px 24px rgba(0,0,0,.28)}
 #freshpill:hover{background:var(--gold,#C6A14B)}
+/* after-call bar — one-tap outcome logging for the call/text just made. Bottom sheet, thumb reach. */
+#aftercall{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);z-index:9000;max-width:96vw;
+  display:flex;align-items:center;gap:7px;flex-wrap:wrap;justify-content:center;
+  background:var(--surface,#fff);border:1px solid var(--gold,#C6A14B);border-radius:14px;
+  padding:10px 12px;box-shadow:0 8px 30px rgba(0,0,0,.30)}
+#aftercall .acaddr{font-weight:800;font-size:13px;color:var(--ink)}
+#aftercall .acq{font-size:12px;color:var(--muted);margin-right:2px}
+#aftercall button{font:700 12.5px/1 inherit;color:var(--ink);background:var(--surface-2,#f6f4ee);
+  border:1px solid var(--line,#ddd);border-radius:999px;padding:9px 12px;cursor:pointer;white-space:nowrap}
+#aftercall button:hover{border-color:var(--gold,#C6A14B);background:var(--gold-soft,#f4ead2)}
+#aftercall .acx{background:none;border:none;color:var(--muted);font-size:15px;padding:6px 8px}
 .seenbtn.on{background:var(--surface-2)!important;color:var(--muted)!important;border-color:var(--line)!important}
 .links a.seenbtn::after,.clinks a.seenbtn::after{display:none!important}
 .seenchip{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
@@ -4463,10 +4474,54 @@ document.addEventListener('click', function(e){
   if(!c && typeof callSheetCase !== 'undefined' && callSheetCase) c = callSheetCase;
   if(!c) return;
   _markViewed(c);
+  // OUTREACH (a call or a text) also arms the after-call bar: when he comes back to the tab, ONE tap
+  // records what happened — the answer to "did I check this already?" three days later is "called,
+  // no answer, follow-up Tuesday", not a bare checkmark. People-search clicks are research, not
+  // outreach: they stamp Seen but must never enter the touch funnel (they'd trip cadence logic and
+  // inflate the attempt counts the funnel reports).
+  if(/^tel:/i.test(h)) _afterCall = {c: c, ch: 'call', t: Date.now()};
+  else if(/^sms:/i.test(h) || a.classList.contains('ctact-text') || a.classList.contains('textgen')) _afterCall = {c: c, ch: 'text', t: Date.now()};
   // repaint AFTER the click has done its job (new tab / dialer already opening) — never shuffle the
   // board underneath a tap mid-flight
   setTimeout(function(){ try{ if(!document.body.classList.contains('modal-open')) render(); }catch(_e){} }, 400);
 }, true);
+// ---- AFTER-CALL BAR: one tap to log the outcome of the call/text he just made. ----
+// The Log modal captures everything but costs a modal — which is exactly why it goes unused during a
+// dial session. This is the same data through the same writer (logTouch: identical outcome strings,
+// statuses, follow-up scheduling, opt-out/BK/wrong-owner guards), minus the friction.
+let _afterCall = null;
+function _showAfterCall(){
+  const p = _afterCall; if(!p) return;
+  const age = Date.now() - p.t;
+  if(age < 3000) return;                                    // instant focus-bounce from the dialer prompt
+  if(age > 30*60*1000){ _afterCall = null; return; }        // stale — he moved on long ago
+  _afterCall = null;
+  if(document.getElementById('aftercall')) return;
+  const r = DATA.find(x => x.case === p.c); if(!r) return;
+  // the same specs the Log modal's quick buttons use — one vocabulary, one funnel
+  const CALL_OPTS = [0,1,2,10], TEXT_OPTS = [6];             // QUICKLOG indexes
+  const opts = (p.ch === 'call' ? CALL_OPTS : TEXT_OPTS)
+    .map(i => '<button type="button" data-ql="'+i+'">'+QUICKLOG[i].lbl+'</button>').join('');
+  const bar = document.createElement('div');
+  bar.id = 'aftercall';
+  bar.innerHTML = '<span class="acaddr">'+esc((r.addr||p.c).split(',')[0])+'</span>'
+    + '<span class="acq">how’d it go?</span>' + opts
+    + '<button type="button" class="acx" title="Skip — log nothing">✕</button>';
+  bar.addEventListener('click', function(e){
+    const b = e.target.closest('button'); if(!b) return;
+    if(b.dataset.ql != null){
+      const spec = QUICKLOG[+b.dataset.ql];
+      if(spec && logTouch(p.c, spec.ch, spec.out, spec) !== false){ try{ render(); }catch(_e){} }
+    }
+    bar.remove();
+  });
+  document.body.appendChild(bar);
+  setTimeout(function(){ const el = document.getElementById('aftercall'); if(el) el.remove(); }, 90000);
+}
+document.addEventListener('visibilitychange', function(){ if(!document.hidden) _showAfterCall(); });
+window.addEventListener('focus', _showAfterCall);
+// desktop tel: often never blurs the tab at all — a timer catches that path
+setInterval(function(){ if(_afterCall && Date.now() - _afterCall.t > 20000) _showAfterCall(); }, 5000);
 function _toggleViewed(c, ev){                                         // explicit: file / unfile
   if(ev){ ev.preventDefault(); ev.stopPropagation(); }
   if(filed.has(c)) filed.delete(c); else { filed.add(c); _markViewed(c); }
