@@ -339,6 +339,10 @@ jobs:
       # 2026-07-21 and every run afterwards restored the same empty state.
       - name: Save pipeline state (always — even if a later step fails)
         if: always()
+        # A transient cache-save hiccup must not fail the run — that is the exact shape of the bug
+        # this step exists to kill. If a save is ever lost, the next run reports 'lien cache COLD'
+        # as a WARN and re-seeds itself.
+        continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: |
