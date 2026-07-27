@@ -450,6 +450,11 @@ tr.rback td{background:rgba(198,161,75,.085)}
 tr.rback td:first-child{position:relative}
 tr.rback td:first-child::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;z-index:3;
   background:var(--gold-grad,#C6A14B)}
+/* Δ — what moved since you last looked. Blue so it reads as NEW INFORMATION, distinct from the grey
+   "already seen" chip beside it and from the gold "came back" badge. */
+.deltachip{display:inline-block;font-family:var(--f-label,inherit);font-size:8.5px;font-weight:800;
+  letter-spacing:.04em;padding:2px 7px;border-radius:5px;margin-right:4px;vertical-align:middle;
+  background:var(--blue-soft,#DEEBFB);color:var(--blue-ink,#1F4E97);border:1px solid #C9DBFA;cursor:help}
 .seenchip{display:inline-block;font-family:var(--f-label,inherit);font-size:8.5px;font-weight:700;
   letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-right:4px;
   background:var(--surface-2,#f6f8fa);color:var(--muted,#6b7280);border:1px solid var(--line,#E2E6EE);
@@ -4186,6 +4191,7 @@ function _isFav(c){ return favs.has(c); }
 // one this feature exists to fix. Looking at a deal must never make it disappear out from under you.
 let viewed = new Map();     // case -> epochMillis of last look
 let filed  = new Set();     // case -> explicitly dismissed by the operator
+let seenFP = new Map();     // case -> snapshot of the few facts that decide whether it is worth re-reading
 try {
   const _raw = JSON.parse(localStorage.getItem('fcViewed') || '[]');
   // Legacy array = leads the operator explicitly tapped Seen on, so they migrate to FILED.
@@ -4193,14 +4199,14 @@ try {
   else if(_raw && typeof _raw === 'object'){
     Object.keys(_raw).forEach(c => {
       const v = _raw[c];
-      if(v && typeof v === 'object'){ viewed.set(c, +v.t || 0); if(v.f) filed.add(c); }
+      if(v && typeof v === 'object'){ viewed.set(c, +v.t || 0); if(v.f) filed.add(c); if(v.fp) seenFP.set(c, v.fp); }
       else { viewed.set(c, +v || 0); filed.add(c); }       // older {case:ts} form was explicit too
     });
   }
 } catch(e){}
 function _viewedSave(){
   try {
-    const o={}; viewed.forEach((t,c)=>{ o[c]={t:t}; if(filed.has(c)) o[c].f=1; });
+    const o={}; viewed.forEach((t,c)=>{ o[c]={t:t}; if(filed.has(c)) o[c].f=1; if(seenFP.has(c)) o[c].fp=seenFP.get(c); });
     filed.forEach(c=>{ if(!o[c]) o[c]={t:0,f:1}; });
     localStorage.setItem('fcViewed', JSON.stringify(o));
   } catch(e){}
@@ -4227,10 +4233,44 @@ function _viewedResurfaced(r){
   if(age != null && age < 3) return false;                 // just looked — leave it filed
   return typeof r.days === 'number' && r.days >= 0 && r.days <= 10 && r.st !== 'LP';
 }
-function _markViewed(c){ viewed.set(c, Date.now()); _viewedSave(); }   // auto: look, never hide
+// WHAT CHANGED SINCE YOU LOOKED. A "you saw this 9 days ago" badge tells you the deal is stale but
+// not whether it is worth re-opening. So at view time we snapshot the handful of facts that actually
+// change a decision, and on the way back we diff them. Deliberately tiny — four numbers per lead, so
+// a full board costs a couple of KB in localStorage and no network at all.
+function _fpOf(r){
+  return {
+    d: (typeof r.days === 'number' ? r.days : null),       // days to auction — the clock
+    p: (r.phones || []).length,                            // dialable numbers — can you reach them
+    j: Math.round(+r.judg || 0),                           // judgment — is the debt now known
+    s: (notes[r.case] || {}).status || ''                  // where you left it in the pipeline
+  };
+}
+function _seenDelta(r){
+  const was = seenFP.get(r.case); if(!was) return [];
+  const now = _fpOf(r), out = [];
+  if(was.d != null && now.d != null && now.d < was.d){
+    const moved = was.d - now.d;
+    if(moved >= 3) out.push({k:'clock', t:'auction ' + moved + 'd closer — now ' + (now.d === 0 ? 'TODAY' : now.d + 'd')});
+  }
+  if(now.p > (was.p || 0)) out.push({k:'phone', t:'+' + (now.p - was.p) + ' new phone' + ((now.p - was.p) === 1 ? '' : 's')});
+  if(!was.j && now.j) out.push({k:'judg', t:'judgment now posted — $' + now.j.toLocaleString()});
+  if(now.s !== was.s && now.s) out.push({k:'status', t:'status → ' + now.s});
+  return out;
+}
+function _seenDeltaHtml(r){
+  const d = _seenDelta(r); if(!d.length) return '';
+  return '<span class="deltachip" title="Changed since you last looked at this deal — this is why it is worth re-opening.">Δ ' +
+    d.map(x => esc(x.t)).join(' · ') + '</span> ';
+}
+function _markViewed(c){                                   // auto: look, never hide
+  viewed.set(c, Date.now());
+  const r = DATA.find(x => x.case === c);
+  if(r) seenFP.set(c, _fpOf(r));                           // re-baseline: you have now seen the current facts
+  _viewedSave();
+}
 function _toggleViewed(c, ev){                                         // explicit: file / unfile
   if(ev){ ev.preventDefault(); ev.stopPropagation(); }
-  if(filed.has(c)) filed.delete(c); else { filed.add(c); viewed.set(c, Date.now()); }
+  if(filed.has(c)) filed.delete(c); else { filed.add(c); _markViewed(c); }
   _viewedSave();
   render();
 }
@@ -4239,11 +4279,11 @@ function _toggleViewed(c, ev){                                         // explic
 function _seenChip(r){
   if(!viewed.has(r.case) && !filed.has(r.case)) return '';
   if(_viewedResurfaced(r)){
-    return '<span class="backchip" title="You filed this away '+_viewedAgeTxt(r.case)+', but the auction is now '
+    return _seenDeltaHtml(r)+'<span class="backchip" title="You filed this away '+_viewedAgeTxt(r.case)+', but the auction is now '
       + (r.days===0?'TODAY':'in '+r.days+' day'+(r.days===1?'':'s'))
       + ' — it is back on the board because the clock made it live again.">↩ BACK · '+(r.days===0?'TODAY':r.days+'d')+'</span> ';
   }
-  return '<span class="seenchip" title="You already looked at this deal '+_viewedAgeTxt(r.case)
+  return _seenDeltaHtml(r)+'<span class="seenchip" title="You already looked at this deal '+_viewedAgeTxt(r.case)
     + '. Opening the Call Sheet stamps this automatically.">✓ seen '+_viewedAgeTxt(r.case)+'</span> ';
 }
 function _viewedBtn(r){
