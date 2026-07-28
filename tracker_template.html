@@ -919,7 +919,13 @@ details.cscript{margin-top:10px}
   background:var(--surface,#fff);color:var(--ink,#101C33);cursor:pointer}
 .csbtn:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
 /* Deep Diligence card (Capri-H brief) on Call Sheet */
-.csdil{margin:12px 0 4px;border:1px solid var(--line,#E2E6EE);border-radius:12px;overflow:hidden;background:var(--surface,#fff)}
+.csdil{margin:12px 0 4px;border:1px solid var(--line,#E2E6EE);border-radius:12px;overflow:hidden;background:var(--surface,#fff);
+  min-width:0}   /* let the flex/grid parent shrink us so long children never blow the width */
+/* Force block context to establish a definite containing width for the table below. Without this
+   the .csdil-body inherits intrinsic sizing and .csdil-tbl width:100% resolves against its OWN
+   min-content — which on a phone was 1770px because the table's rows include long text nodes. */
+.csdil-body{max-width:100%}
+.csdil-body > *{max-width:100%}
 .csdil-ban{padding:11px 14px;font-family:var(--f-label,inherit);font-size:12px;font-weight:800;letter-spacing:.06em;
   text-transform:uppercase;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline}
 .csdil-ban .v{font-size:15px;letter-spacing:.1em}
@@ -929,11 +935,26 @@ details.cscript{margin-top:10px}
 .csdil-ban.CONDITIONAL,.csdil-ban.conditional{background:rgba(180,83,9,.12);color:#9A3412;border-bottom:1px solid rgba(180,83,9,.3)}
 .csdil-ban.VERIFY,.csdil-ban.verify{background:rgba(31,111,235,.1);color:#1F4E97;border-bottom:1px solid rgba(31,111,235,.28)}
 .csdil-body{padding:10px 14px 14px;color:var(--ink,#101C33)}
-.csdil-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 10px;color:var(--ink,#101C33)}
-.csdil-tbl th,.csdil-tbl td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line,#E2E6EE);vertical-align:top}
-.csdil-tbl td{color:var(--ink,#101C33);font-weight:650;font-size:13px;line-height:1.4}
-.csdil-tbl th{width:34%;color:var(--muted,#6b7280);font-weight:600;font-family:var(--f-label,inherit);
-  font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+/* WAS a <table>. On a phone the values (URLs, "Lady Bird / life estate unknown — pull latest deed")
+   pushed the internal cell widths to 1170px inside a 338px container, so labels rendered but every
+   value was clipped off-screen right — that's exactly what the "blank card" screenshot showed. A
+   <table> with width:100% + table-layout:fixed still expanded because ancestors had no definite
+   width for it to resolve against (chicken-and-egg). Rewriting as flex rows: display:flex on each
+   row + min-width:0 on the value cell means the row can NEVER grow past its container regardless
+   of value length. Long values wrap. That's guaranteed by the box model, not a table heuristic. */
+.csdil-tbl-wrap{width:100%}
+.csdil-tbl{width:100%;display:block;font-size:12.5px;margin:4px 0 10px;color:var(--ink,#101C33)}
+.csdil-tbl tbody{display:block;width:100%}
+.csdil-tbl tr{display:flex;width:100%;border-bottom:1px solid var(--line,#E2E6EE);align-items:baseline;gap:8px}
+.csdil-tbl th{flex:0 0 38%;text-align:left;padding:5px 8px;color:var(--muted,#6b7280);
+  font-weight:600;font-family:var(--f-label,inherit);font-size:11px;letter-spacing:.04em;
+  text-transform:uppercase;line-height:1.4}
+.csdil-tbl td{flex:1 1 0;min-width:0;overflow-wrap:anywhere;word-break:break-word;
+  color:var(--ink,#101C33);font-weight:650;font-size:13px;line-height:1.4;padding:5px 8px}
+/* the flex layout above is the source of truth for the diligence table now — the old table CSS
+   was appended to be overridden here; the block above replaces it entirely and the tag-selector
+   rules that followed (`.csdil-tbl th,.csdil-tbl td { ... vertical-align:top ... }`) have been
+   removed to keep one definition of truth. */
 .csdil-kill{margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(180,35,24,.07);border:1px solid rgba(180,35,24,.28)}
 .csdil-kill .t{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#B42318;margin-bottom:4px}
 .csdil-kill li{margin:3px 0;font-size:12.5px;line-height:1.45;color:var(--ink,#101C33)}
@@ -944,7 +965,18 @@ details.cscript{margin-top:10px}
 .csdil-tl li:last-child{border-bottom:none}
 .csdil-tl .bp{font-variant-numeric:tabular-nums;font-family:var(--f-num,inherit);white-space:nowrap;color:var(--ink,#101C33)}
 .csdil-cites{font-size:11.5px;color:var(--muted,#6b7280);margin-top:8px;line-height:1.5}
-.csdil-cites code{font-size:11px;background:var(--surface-2,#f6f8fa);padding:1px 5px;border-radius:4px}
+/* WAS the smoking gun. Raw URLs in <code> don't wrap — one 200-char clerk URL forced the whole
+   container to that width, pushing every table VALUE cell off-screen. Break anywhere in an
+   unbroken URL now. Combined with table-layout:fixed above, the card can never grow past its
+   container regardless of citation content. */
+.csdil-cites code{font-size:11px;background:var(--surface-2,#f6f8fa);padding:1px 5px;border-radius:4px;
+  overflow-wrap:anywhere;word-break:break-all;max-width:100%;display:inline-block}
+.csdil-cites a{color:var(--gold-d,#8a6d1f);font-weight:700;text-decoration:none;
+  border-bottom:1px dashed var(--gold,#C6A14B);padding:0 2px}
+.csdil-cites a:hover{color:var(--ink,#0e1b33);border-bottom-color:var(--ink,#0e1b33)}
+.dilg-tag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--gold-d,#8a6d1f);background:var(--gold-soft,#f4ead2);
+  border:1px solid var(--gold,#C6A14B);border-radius:4px;padding:1px 6px;margin-left:6px}
 .csdil-empty{margin:10px 0;padding:12px 14px;border:1px dashed var(--line,#E2E6EE);border-radius:10px;
   background:var(--surface-2,#f6f8fa);font-size:13px;color:var(--muted,#6b7280);line-height:1.5}
 .csdil-empty b{color:var(--ink,#101C33)}
@@ -3839,13 +3871,31 @@ function _csDiligence(r){
       killers.map(k=>'<li>'+esc(k)+'</li>').join('')+'</ul></div>'
     : '';
 
-  const moneyHtml = '<div class="csdil-money">'+
-    '<b>Money:</b> value '+fm(mm.value||r.value)+' − FJ '+fm(mm.judg||judgN)+
-    ' − senior '+fm(mm.surviving_senior)+' − tax '+fm(mm.tax_certs)+
-    (mm.net_equity_est!=null?' → net est <b>'+fm(mm.net_equity_est)+'</b>':'')+
-    (mm.list_price!=null?' · list '+fm(mm.list_price):'')+
-    (mm.notes?'<div class="css" style="margin-top:4px">'+esc(mm.notes)+'</div>':'')+
-  '</div>';
+  // TAX DEED IS NOT A FORECLOSURE. `value − judgment − senior − tax` computes "you acquire at the
+  // OPENING bid" — true at a foreclosure sale, fantasy at a tax deed where an equity parcel is bid
+  // up toward market. On 9723 Rennes (val $2.36M, opening $91k) that formula reported net $2.27M —
+  // a $1.75M lie the row model was already correcting via _netEqOf's modeled profit. Route through
+  // the same helper here so the diligence card and the row can never contradict each other.
+  const _tdBasis = (typeof _basisOf === 'function' ? _basisOf(r) : 0) || +r.value || 0;
+  const _tdProfit = (typeof _netEqOf === 'function' ? _netEqOf(r) : null);
+  const _tdWinBid = +r._purchase || 0;
+  const isTD = r.st === 'TD';
+  const moneyHtml = isTD
+    ? '<div class="csdil-money">'+
+        '<b>Money (tax deed):</b> ARV '+fm(_tdBasis)+' − est. winning bid ~'+fm(_tdWinBid)+
+        ' − quiet title + carry'+
+        (_tdProfit!=null?' → modeled profit <b>'+fm(_tdProfit)+'</b>':'')+
+        '<div class="css" style="margin-top:4px">Opening bid '+fm(+r.obid||judgN)+' — an equity parcel bids up toward market. NET off value − opening is a fantasy.</div>'+
+      '</div>'
+    : '<div class="csdil-money">'+
+        '<b>Money:</b> value '+fm(mm.value||r.value)+' − FJ '+fm(mm.judg||judgN)+
+        ' − senior '+fm(mm.surviving_senior)+
+        ' − tax '+ (mm.tax_checked === false ? '<i>not pulled</i>' : fm(mm.tax_certs))+
+        (mm.net_equity_est!=null?' → net est <b>'+fm(mm.net_equity_est)+'</b>':'')+
+        (mm.list_price!=null?' · list '+fm(mm.list_price):'')+
+        (mm.value_source==='active_listing'?' <span class="dilg-tag">from active listing</span>':'')+
+        (mm.notes?'<div class="css" style="margin-top:4px">'+esc(mm.notes)+'</div>':'')+
+      '</div>';
 
   const tl = d.timeline||[];
   const tlHtml = tl.length
@@ -3854,10 +3904,18 @@ function _csDiligence(r){
         '<span class="bp">'+esc(t.bp||'')+'</span></li>').join('')+'</ul>'
     : '';
 
+  // WAS raw URLs in <code>. On a phone one 200-char clerk URL forced the container to that width
+  // and pushed the whole VALUES column off-screen. Now each citation is a real anchor labeled with
+  // the source name; the URL is the href and the tooltip, never the visible text — so the citation
+  // strip is always one line per source, whatever the URL length.
   const cites = d.citations||[];
   const citeHtml = cites.length
-    ? '<div class="csdil-cites"><b>Citations:</b> '+cites.map(c=>esc(c.label||'')+
-        ' <code>'+esc(c.url_or_bp||'')+'</code>').join(' · ')+'</div>'
+    ? '<div class="csdil-cites"><b>Sources:</b> '+cites.map(c=>{
+        const u = c.url_or_bp || ''; const lbl = esc(c.label||'link');
+        return /^https?:/i.test(u)
+          ? '<a href="'+esc(u)+'" target="_blank" rel="noopener" title="'+esc(u)+'">'+lbl+'&nbsp;↗</a>'
+          : lbl + (u ? ' <code>'+esc(u)+'</code>' : '');
+      }).join(' · ')+'</div>'
     : '';
 
   const outreach = d.outreach_notes
@@ -3877,14 +3935,18 @@ function _csDiligence(r){
     '<div class="csdil-ban '+esc(v)+'"><span class="v">'+esc(v)+'</span>'+
       '<span class="sub">'+esc(d.foreclosure_type||'')+' — '+esc(d.plaintiff||'plaintiff n/a')+'</span></div>'+
     '<div class="csdil-body">'+
-      '<table class="csdil-tbl"><tbody>'+
+      // Wrap in a fixed-width block + explicit colgroup so `table-layout:fixed` actually pins the
+      // column widths. Without the colgroup a long value like a URL or "Lady Bird / life estate
+      // unknown — pull latest deed" would force the browser to fall back to auto layout and blow the
+      // table out to 1770px on a 390px phone (Alejandro's screenshot: labels showed, values off-screen).
+      '<div class="csdil-tbl-wrap"><table class="csdil-tbl"><colgroup><col class="klbl"><col class="kval"></colgroup><tbody>'+
         '<tr><th>Case</th><td>'+esc(caseCell)+'</td></tr>'+
         '<tr><th>Judgment</th><td>'+fm(judgN)+'</td></tr>'+
         '<tr><th>Sale</th><td>'+esc(saleCell)+'</td></tr>'+
         '<tr><th>Open mortgage(s)</th><td>'+mtgCell+'</td></tr>'+
         '<tr><th>Tax certs</th><td>'+taxCell+'</td></tr>'+
         titleRow+
-      '</tbody></table>'+
+      '</tbody></table></div>'+
       killHtml+moneyHtml+tlHtml+outreach+citeHtml+errNote+pendingNote+
       (d.traced?'<div class="css" style="margin-top:6px">traced '+esc(d.traced)+'</div>':'')+
     '</div></div>';
