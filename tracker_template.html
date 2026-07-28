@@ -523,6 +523,27 @@ tr.rback td:first-child::before{content:'';position:absolute;left:0;top:0;bottom
 .card.rseen{opacity:.72}
 .card.rseen:hover{opacity:1}
 .card.rback{box-shadow:inset 4px 0 0 var(--gold,#C6A14B)}
+/* NEW-SINCE-LAST-VISIT. A blue left rail on rows/cards you've never had loaded before — so a fresh
+   scrape's additions are visible AT A GLANCE against seen ones. Doesn't dim, doesn't shout: just a
+   rail he can pattern-match on. Paired with the visit banner up top and the "🆕 New only" filter. */
+tr.rnew td:first-child{box-shadow:inset 4px 0 0 var(--blue,#1F4E97)}
+#cards .card.rnew{box-shadow:inset 4px 0 0 var(--blue,#1F4E97)}
+.visitbanner{display:none;margin:6px 12px 0;padding:9px 14px;border-radius:8px;
+  background:linear-gradient(90deg,rgba(31,78,151,.10),rgba(31,78,151,.03));
+  border:1px solid rgba(31,78,151,.30);color:var(--ink,#0e1b33);
+  font-size:12.5px;align-items:center;gap:10px;flex-wrap:wrap}
+.visitbanner.on{display:flex}
+.visitbanner .vb-icon{font-size:16px}
+.visitbanner .vb-txt{flex:1;line-height:1.35}
+.visitbanner .vb-txt b{color:var(--blue,#1F4E97);font-weight:800}
+.visitbanner .vb-cta{background:var(--blue,#1F4E97);color:#fff;border:none;border-radius:6px;
+  padding:5px 11px;font-weight:700;font-size:11.5px;cursor:pointer;letter-spacing:.02em}
+.visitbanner .vb-cta:hover{filter:brightness(1.08)}
+.visitbanner .vb-x{background:transparent;border:none;color:var(--muted,#6b7280);cursor:pointer;
+  font-size:14px;padding:2px 8px;line-height:1}
+.visitbanner .vb-x:hover{color:var(--ink,#0e1b33)}
+.stats .statses{color:var(--blue,#1F4E97);font-weight:700}
+.stats .statnew{color:var(--gold-d,#8a6d1f);font-weight:700}
 .backchip{display:inline-block;font-family:var(--f-label,inherit);font-size:8.5px;font-weight:800;
   letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-left:5px;
   background:var(--gold-grad,#C6A14B);color:var(--gold-ink,#241C05);vertical-align:middle;cursor:help}
@@ -1985,6 +2006,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
 <button id="hv" class="active" title="Hide deals you've marked Seen. ON by default so you don't re-see the same properties when you hop back on. Tap Seen on any deal to file it here. Turn this off to browse viewed deals again.">Hide viewed</button>
+<button id="newonly" title="Only leads that appeared on the board since your last visit — the shortlist of what's actually new to you. Composes with every other filter.">🆕 New only</button>
 <button id="hf" title="Hide leads that don't fit the homeowner-rescue model: already deeded to another investor, HOA case hiding a mortgage bigger than the equity (underwater), or VACANT LAND (no homeowner, speculative land value). Off by default so nothing disappears silently.">Hide flagged</button>
 <button id="eq30" title="Only leads with 30%+ REAL equity: nets out a chain-verified surviving mortgage where we have one (an HOA case with a small judgment can show 90%+ gross while a real first mortgage eats most of it), excludes gross/unverified equity, and excludes anything the records already flagged dead (already sold, or underwater once the real mortgage is counted).">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
@@ -2060,6 +2082,7 @@ body.compact .dg-v{font-size:14.5px}
 <div class="sh-r"><span>Close dialog</span><kbd>Esc</kbd></div>
 <div class="sh-r"><span>Toggle this panel</span><kbd>?</kbd></div></div>
 <div id="activefilters" class="afbar"></div>
+<div id="visitbanner" class="visitbanner"></div>
 <div class="tblscroll">
 <div class="tblwrap">
 <table id="tbl">
@@ -2096,7 +2119,18 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false;
+let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false, newOnly = false;
+// NEW SINCE LAST VISIT. The other filters answer "which of these leads matter"; this one answers
+// "which of these did I never even see before?". A fresh scrape drops 20 new cases into the middle
+// of a 700-row board — without a delta you re-scan the whole list to find them. Storage: a growing
+// Set of every case number that has ever been LOADED on this device (capped at 5000 so it never
+// balloons), plus a single timestamp for the last time you opened the board.
+let _lastVisit = 0;
+let _seenCases = new Set();
+try { _lastVisit = +(localStorage.getItem('fcLastVisit') || 0); } catch(e){}
+try { _seenCases = new Set(JSON.parse(localStorage.getItem('fcSeenCases') || '[]')); } catch(e){}
+let _sessionSeen = new Set();                 // cases you stamped Seen since page-load (session-scoped, not persisted)
+let _sessionTouches = 0;
 // FC Type / Property kind — exclusive chip groups (like Tier). Empty string = All.
 // fcType: '' | BANK | HOA | TAX | OTHER. Replaces the old tdOnly boolean; Tax chip + #td stay in sync.
 let fcType = '', propKind = '';
@@ -5153,11 +5187,29 @@ function _seenDeltaHtml(r){
     d.map(x => esc(x.t)).join(' · ') + '</span> ';
 }
 function _markViewed(c){                                   // auto: worked, never hide
+  if(!_sessionSeen.has(c)){ _sessionSeen.add(c); _sessionTouches++; }
   viewed.set(c, Date.now());
   const r = DATA.find(x => x.case === c);
   if(r) seenFP.set(c, _fpOf(r));                           // re-baseline: you have now seen the current facts
   _viewedSave();
 }
+// NEW-TO-YOU CHECK. A lead is "new since your last visit" if its case number was NOT in the seen
+// set the last time you were on the board. First-ever visit (empty set) treats nothing as new so we
+// don't paint 700 rows blue on day one — that would defeat the point of the signal.
+function _isNewLead(r){ return _seenCases && _seenCases.size > 0 && r && r.case && !_seenCases.has(r.case); }
+// SAVE VISIT STATE. Every case currently on the board is folded into fcSeenCases so next time we
+// know what's actually new. Capped at 5000 (FIFO) so localStorage never balloons on a heavy scraper.
+function _saveVisitState(){
+  try { localStorage.setItem('fcLastVisit', String(Date.now())); } catch(e){}
+  try {
+    const acc = new Set(_seenCases);
+    (DATA||[]).forEach(r => { if(r && r.case) acc.add(r.case); });
+    const arr = [...acc].slice(-5000);
+    localStorage.setItem('fcSeenCases', JSON.stringify(arr));
+  } catch(e){}
+}
+window.addEventListener('beforeunload', _saveVisitState);
+document.addEventListener('visibilitychange', function(){ if(document.hidden) _saveVisitState(); });
 // WORKED, NOT GLANCED. The stamp fires on contact-intent only — a tel:/sms: tap, a people-search
 // link (TruePeopleSearch / Whitepages / CyberBG / FastPeopleSearch), or the Text CTA — wherever it
 // lives: row links, mobile card, call sheet, lookup. Opening the hub, the map, Street View, the
@@ -7205,6 +7257,7 @@ function view(){
     // auction date and are worked as a months-long nurture, not a countdown. Newest filing first.
     rows = _cscope(DATA.filter(r => _isLP(r)));
     if(hideViewed) rows = rows.filter(r => !filed.has(r.case) || _viewedResurfaced(r));
+  if(newOnly) rows = rows.filter(r => _isNewLead(r));
     rows = rows.slice().sort((a,b) => (toISO(b.filedDate||'') > toISO(a.filedDate||'') ? 1 : -1));
     return rows;
   } else if(closersOnly){
@@ -7252,6 +7305,7 @@ function view(){
   rows = rows.slice();
   // Hide viewed — applies in every lane so hopping back on doesn't resurface Seen deals.
   if(hideViewed) rows = rows.filter(r => !filed.has(r.case) || _viewedResurfaced(r));
+  if(newOnly) rows = rows.filter(r => _isNewLead(r));
   if(nearOnly){ rows.sort((a,b) => _haversine(ROUTE_ORIGIN.lat,ROUTE_ORIGIN.lng,a.lat,a.lng) - _haversine(ROUTE_ORIGIN.lat,ROUTE_ORIGIN.lng,b.lat,b.lng)); return rows; }   // nearest to home first
   if(closersOnly){ rows.sort((a,b) => _closeScore(b) - _closeScore(a)); return rows.slice(0, 25); }   // top 25 — a focused, workable shortlist ranked by closeability
   const sortVal = r => {
@@ -7309,8 +7363,43 @@ function render(){
   const _sc = rows.filter(r=>r._verdict==='STRONG').length, _mc = rows.filter(r=>r._verdict==='MARGINAL').length;
   const _viol = DATA.filter(r=>_dialedAfter(notes[r.case]).length).length;
   const st = document.getElementById('stats');
-  st.textContent = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal';
+  // WITHIN THE CURRENT VIEW: how many haven't been touched yet + how many are new-to-you-since-last-visit.
+  // The two are subtly different — "not seen" is you never worked it; "new" is it wasn't even on the board
+  // the last time you were here. Both help him answer "did I check this already" without opening a card.
+  const _newV = rows.filter(r => _isNewLead(r)).length;
+  const _seenV = rows.filter(r => viewed.has(r.case)).length;
+  st.innerHTML = rows.length + ' shown / ' + DATA.length + ' total · ' + _sc + ' strong · ' + _mc + ' marginal'
+    + (_newV ? ' · <span class="statnew" title="Never loaded on this device before your last visit.">'+_newV+' new</span>' : '')
+    + (_seenV ? ' · <span class="statses" title="You have already worked (called/texted/looked up) these leads at some point.">'+_seenV+' seen</span>' : '')
+    + (_sessionTouches ? ' · <span class="statses" title="Leads you have called, texted, or people-searched since this page loaded.">'+_sessionTouches+' worked this session</span>' : '');
   if(_viol){ const w=document.createElement('span'); w.className='statviol'; w.title='Leads with outreach logged AFTER the owner opted out — open each to review and document the cure.'; w.textContent=' · ⚠ '+_viol+' contacted after opt-out'; st.appendChild(w); }
+  // VISIT BANNER — the "hop back on and know what's new" strip. Two truths worth surfacing:
+  // 1) new leads that dropped since your last visit  2) leads you've already seen but whose FACTS
+  // changed materially (new phone, judgment now posted, auction moved closer, status you set).
+  // Hidden once dismissed for this session; comes back naturally on the next page load.
+  const vb = document.getElementById('visitbanner');
+  if(vb && vb.dataset.dismissed !== '1'){
+    const totalNew = (DATA||[]).filter(r => _isNewLead(r)).length;
+    const totalChg = (DATA||[]).filter(r => viewed.has(r.case) && _seenDelta(r).length).length;
+    if(totalNew || totalChg){
+      const parts = [];
+      if(totalNew) parts.push('<b>'+totalNew+'</b> new lead'+(totalNew===1?'':'s'));
+      if(totalChg) parts.push('<b>'+totalChg+'</b> viewed lead'+(totalChg===1?'':'s')+' changed');
+      // days-first age readout: "2h ago" / "3d ago" — reads cleaner than _ago's "72h ago" on stale visits
+      const _lva = _lastVisit ? (Date.now() - _lastVisit) / 3600e3 : 0;
+      const when = _lva
+        ? 'last visit ' + (_lva < 24 ? Math.max(1, Math.round(_lva)) + 'h ago'
+                                      : Math.round(_lva/24) + 'd ago')
+        : 'since your last visit';
+      vb.innerHTML = '<span class="vb-icon">🆕</span>'
+        + '<span class="vb-txt">'+parts.join(' · ')+' — '+esc(when)+'</span>'
+        + (totalNew ? '<button type="button" class="vb-cta" id="vb-only-new">Show only new</button>' : '')
+        + '<button type="button" class="vb-x" title="Dismiss until next visit">✕</button>';
+      vb.classList.add('on');
+    } else {
+      vb.innerHTML=''; vb.classList.remove('on');
+    }
+  }
   // 🚗 origin-anchored door-knock route: nearest geocoded properties to HOME, spiralling outward, up to 10
   const _geo = rows.filter(r=>r.addr && r.lat && r.lng && r.st!=='LP').length;
   if(_geo){ const rb=document.createElement('button'); rb.type='button'; rb.className='routebtn'; rb.title='Driving route from your HOME BASE (10839 NW 7th St) through the NEAREST properties in this view — nearest first, spiralling outward (up to 10 stops, Maps’ limit). Broaden the board filter for a wider net; the 📍 button starts from your current GPS location instead.'; rb.textContent='🚗 Route from home'; rb.onclick=_doorRoute; st.appendChild(rb);
@@ -7556,7 +7645,7 @@ function render(){
     // Seen-state on the ROW itself. The Seen link was buried among nine others in the DO cluster, so
     // with Hide viewed OFF an already-checked deal looked identical to a fresh one — which is exactly
     // the confusion this is meant to prevent. .rseen dims it; .rback flags the stale-view re-surface.
-    const _seenCls = _viewedResurfaced(r) ? ' rback' : (viewed.has(r.case) ? ' rseen' : '');
+    const _seenCls = _viewedResurfaced(r) ? ' rback' : (viewed.has(r.case) ? ' rseen' : (_isNewLead(r) ? ' rnew' : ''));
     trs.push('<tr data-case="'+esc(r.case)+'" class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+(pinnedCase===r.case?' pinfire':'')+_seenCls+'">'+
       '<td class="pcell">'+_photoThumb(r, _eager)+'</td>'+
       '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
@@ -7690,6 +7779,7 @@ function _activeFilters(){
   if(ncOnly) out.push({k:'nc', lbl:'Not contacted'});
   if(hideDead) out.push({k:'hd', lbl:'Hiding dead'});
   if(hideViewed && filed.size) out.push({k:'hv', lbl:'Hiding viewed ('+filed.size+')'});
+  if(newOnly) out.push({k:'newonly', lbl:'🆕 New since last visit'});
   if(hideFlagged) out.push({k:'hf', lbl:'Hiding flagged'});
   if(eq30Only) out.push({k:'eq30', lbl:'30%+ equity'});
   if(nearOnly) out.push({k:'near', lbl:'📍 Within '+nearRadius+' mi of home'});
@@ -7723,6 +7813,7 @@ function _clearFilter(k){
   else if(k==='nc'){ ncOnly=false; if(g('nc'))g('nc').classList.remove('active'); }
   else if(k==='hd'){ hideDead=false; if(g('hd'))g('hd').classList.remove('active'); }
   else if(k==='hv'){ hideViewed=false; try{localStorage.setItem('fcHideViewed','0');}catch(e){} if(g('hv'))g('hv').classList.remove('active'); }
+  else if(k==='newonly'){ newOnly=false; if(g('newonly'))g('newonly').classList.remove('active'); }
   else if(k==='hf'){ hideFlagged=false; if(g('hf'))g('hf').classList.remove('active'); }
   else if(k==='eq30'){ eq30Only=false; if(g('eq30'))g('eq30').classList.remove('active'); }
   else if(k==='td' || k==='fct'){ fcType=''; _saveTypeFilters(); _syncFcTypePills(); }
@@ -7780,7 +7871,22 @@ document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.cl
   if(_hv){ _hv.classList.toggle('active', hideViewed);
     _hv.onclick = e => { hideViewed = !hideViewed; try { localStorage.setItem('fcHideViewed', hideViewed ? '1' : '0'); } catch(err){} e.target.classList.toggle('active', hideViewed); render(); };
   }
+  const _no = document.getElementById('newonly');
+  if(_no){ _no.onclick = e => { newOnly = !newOnly; e.target.classList.toggle('active', newOnly); render(); }; }
 }
+// visit-banner button delegates — one listener, survives every render
+document.addEventListener('click', function(e){
+  const t = e.target; if(!t) return;
+  if(t.id === 'vb-only-new'){
+    newOnly = true;
+    const _no = document.getElementById('newonly');
+    if(_no) _no.classList.add('active');
+    render();
+  } else if(t.classList && t.classList.contains('vb-x')){
+    const vb = document.getElementById('visitbanner');
+    if(vb){ vb.innerHTML=''; vb.classList.remove('on'); vb.dataset.dismissed='1'; }
+  }
+});
 document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
 document.getElementById('eq30').onclick = e => { eq30Only = !eq30Only; e.target.classList.toggle('active', eq30Only); render(); };
 document.getElementById('td').onclick = e => {
