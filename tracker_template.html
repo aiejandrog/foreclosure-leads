@@ -3836,19 +3836,47 @@ function _csDiligence(r){
   const caseCell = (d.case || r.case || '—');
   const judgN = (+d.judgment || +mm.judg || +r.judg || 0);
   const saleCell = (d.sale || r.auction || '—');
+  // NEVER-LOOKED vs CONFIRMED-NONE. The old "None found on available OR/cache" reads as
+  // "no mortgage exists on this property" — a dangerous lie on 66% of the board where the OR chain
+  // simply has not been pulled yet (records_liens.py is captcha-gated; only ~245 of 723 leads
+  // have chain data). A confirmed-zero from a chain we DID pull is honest. Everything else must say
+  // "not pulled" and hand the operator the Records link so he can look himself.
   const opens = mtgs.filter(m => String(m.st||'').toUpperCase()==='OPEN');
-  let mtgCell = 'None found';
+  const _recordsUrl = r.records || (r.county === 'MIAMI-DADE'
+    ? 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch'
+    : r.county === 'BROWARD'
+    ? 'https://officialrecords.broward.org/AcclaimWeb/'
+    : 'https://erec.mypalmbeachclerk.com/');
+  let mtgCell = '';
   if(opens.length){
     mtgCell = opens.slice(0,3).map(m => fm(m.amt)+' — '+esc(m.party||'?')+(m.bp?' · '+esc(m.bp):'')+(m.date?' · '+esc(m.date):'')).join('<br>');
-  } else if(mtgs.length===0){
-    mtgCell = d._provisional
-      ? '<i>OR pending</i>'
-      : '<b>None found</b> on available OR/cache';
-  } else if(+mm.surviving_senior){
+  } else if(mtgs.length && +mm.surviving_senior){
     mtgCell = fm(mm.surviving_senior)+' surviving (see timeline)';
+  } else if(d._provisional){
+    mtgCell = '<i>OR pull pending…</i>';
+  } else if(r.orconf === 'ok') {
+    mtgCell = '<b style="color:#0a5f2f">CONFIRMED — no open mortgage on record</b>';
+  } else if(mtgs.length === 0 && !r.orconf) {
+    mtgCell = '<b style="color:#8a1c1c">NOT PULLED YET</b>'
+      + ' <a href="'+esc(_recordsUrl)+'" target="_blank" rel="noopener">open Records ↗</a>'
+      + '<div style="font-size:11px;color:var(--muted,#6b7280);margin-top:2px">The county records have not been searched for this owner. Do NOT read "no chain" as "no mortgage" — the first mortgage often survives an association sale.</div>';
+  } else {
+    mtgCell = '<b>None found</b> in the traced chain';
   }
-  let taxCell = esc(tx.status||'unknown');
-  if(tx.certs) taxCell += ' · ~'+fm(tx.certs);
+  // Same principle for taxes.
+  let taxCell = '';
+  if(tx.status && tx.status !== 'unknown'){
+    taxCell = esc(tx.status);
+    if(tx.certs) taxCell += ' · ~'+fm(tx.certs);
+    if(tx.due) taxCell += ' · due '+fm(tx.due);
+    if(tx.url) taxCell += ' <a href="'+esc(tx.url)+'" target="_blank" rel="noopener">tax →</a>';
+  } else if(r.etax) {
+    taxCell = '<b>~'+fm(r.etax)+'/yr</b> annual (est) — <b style="color:#8a1c1c">delinquency NOT pulled</b>'
+      + (tx.url || r.tax ? ' <a href="'+esc(tx.url||r.tax)+'" target="_blank" rel="noopener">open tax collector ↗</a>' : '');
+  } else {
+    taxCell = '<b style="color:#8a1c1c">NOT PULLED YET</b>'
+      + (tx.url || r.tax ? ' <a href="'+esc(tx.url||r.tax)+'" target="_blank" rel="noopener">open tax collector ↗</a>' : '');
+  }
   if(tx.due) taxCell += ' · due '+fm(tx.due);
   if(tx.url) taxCell += ' <a href="'+esc(tx.url)+'" target="_blank" rel="noopener">tax →</a>';
 
