@@ -16,7 +16,28 @@ Usage:
   python records_liens.py --all --cached-only           # everyone we already have a token for (fast, no browser)
   python records_liens.py --all                         # everyone; mint tokens for the rest (slow, flaky)
 """
-import argparse, json, os, re, time, urllib.parse
+import argparse, datetime, json, os, re, time, urllib.parse
+
+
+def _parse_recd(s):
+    """Parse a Miami-Dade recorded-date string into a real date.
+
+    The clerk emits `M/D/YYYY` (with an occasional trailing time slice, e.g. '2/1/2002 1'), which
+    means string comparison `'1/10/2006' >= '10/31/2006'` is True — the day-in-January reads as
+    NEWER than the day-in-October and reversed classifications of every lien pair whose months
+    started with different digits. Return None on unreadable input so a comparison with a real date
+    is False either way; callers must guard on both operands existing before ordering.
+    """
+    parts = (s or '').split()
+    s = parts[0].strip() if parts else ''
+    if not s:
+        return None
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d', '%m-%d-%Y'):
+        try:
+            return datetime.datetime.strptime(s, fmt).date()
+        except ValueError:
+            continue
+    return None
 import requests
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -303,7 +324,13 @@ def analyze(models, folio, judgment, ftype=''):
             fore = min(opens, key=anchor)              # the foreclosing 1st (closest to judgment, else largest)
             first_amt = fore['amt']
             junior = surv = sum(o['amt'] for o in opens if o is not fore)
-            juniors_post = sum(o['amt'] for o in opens if o is not fore and o['d'] >= fore['d'])
+            # DATES COMPARE AS DATES. `o['d']` is 'M/D/YYYY' straight from the clerk — '1/10/2006'
+            # sorts lexically ABOVE '10/31/2006', so string comparison silently classified 1-Jan
+            # loans as "recorded AFTER" 10-Oct loans and swapped seniors with juniors in the
+            # reconciliation the browser trusts. Falling back to the raw string only when parsing
+            # fails means an unreadable date can never claim to be newer than a real one.
+            fd = _parse_recd(fore['d'])
+            juniors_post = sum(o['amt'] for o in opens if o is not fore and _parse_recd(o['d']) and fd and _parse_recd(o['d']) >= fd)
     # --- open non-mortgage liens (kimi: feeds the deal-modal HOA / code / IRS prefills) ------------
     # Lien/Judgment/Notice records, bucketed by holder. code+HOA require the same parcel isolation the
     # mortgages use (folio/subdivision); IRS + money judgments attach to the person and ride anyway.
