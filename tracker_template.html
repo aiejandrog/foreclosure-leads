@@ -881,6 +881,30 @@ details.csmath>summary::before, details.cslaw-wrap>summary::before{content:'▸ 
 details.csmath[open]>summary::before, details.cslaw-wrap[open]>summary::before{content:'▾ '}
 .csmath-body{padding:10px 12px 14px}
 .csmath-body .dm-sec{margin-top:12px}
+/* INLINE CALL SCRIPT — on the call sheet itself, so the pitch and the money sit on one screen. */
+details.cscript{margin-top:10px}
+.cscript-body{padding:12px 14px}
+.cscript-body .scriptknow{background:var(--gold-soft,#f4ead2);border:1px solid var(--gold,#C6A14B);
+  border-radius:10px;padding:12px 14px}
+.cscript-body .scriptknow-h{font-weight:800;color:var(--gold-d,#8a6d1f);font-size:12.5px;
+  margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;letter-spacing:.02em;
+  text-transform:uppercase}
+.cscript-body .scriptknow-verdict{padding:2px 7px;border-radius:4px;background:var(--ink,#0e1b33);
+  color:var(--gold,#C6A14B);font-size:10px;letter-spacing:.05em}
+.cscript-body .scriptknow-verdict.vb-strong{background:#0a5f2f;color:#fff}
+.cscript-body .scriptknow-verdict.vb-marginal{background:#a06f00;color:#fff}
+.cscript-body .scriptknow-verdict.vb-verify{background:#8a1c1c;color:#fff}
+.cscript-body .scriptknow-play{padding:2px 7px;border-radius:4px;background:#fff;
+  color:var(--gold-d,#8a6d1f);font-size:10px;letter-spacing:.05em;border:1px solid var(--gold,#C6A14B)}
+.cscript-body .scriptknow-t{width:100%;border-collapse:collapse;font-size:13px}
+.cscript-body .scriptknow-t td{padding:5px 6px;border-bottom:1px dotted #d9c988}
+.cscript-body .scriptknow-t td b{font-family:var(--f-num,'SF Mono',Menlo,Consolas,monospace);color:var(--ink,#0e1b33)}
+.cscript-body .scriptknow-t td.prov{font-size:11px;color:#78621a;text-align:right}
+.cscript-body .scriptknow-t tr.tot td{background:#efe8d0;font-weight:700;border-bottom:1px solid var(--gold,#C6A14B)}
+.cscript-body .scriptknow-ask{margin-top:9px;padding:8px 10px;background:#fff;border-left:3px solid #8a1c1c;font-size:12.5px;color:#3a2005}
+.cscript-actions{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:12px}
+.cscript-actions a{color:var(--gold-d,#8a6d1f);font-weight:700;text-decoration:none;border-bottom:1px dashed var(--gold,#C6A14B)}
+.cscript-actions a:hover{color:var(--ink,#0e1b33)}
 .csfoot .shbtn{flex:1 1 auto;text-align:center;justify-content:center}
 .dscav{font-size:11.5px;color:var(--muted,#6b7280);background:rgba(180,83,9,.07);border:1px solid rgba(180,83,9,.28);
   border-radius:8px;padding:8px 11px;margin-top:8px;line-height:1.55}
@@ -2840,6 +2864,86 @@ function _csMathHtml(r, open){
     '<summary>Math — underwrite · Ask Jose</summary>'+
     '<div class="csmath-body">'+_csMathInner(r)+'</div></details>';
 }
+// INLINE CALL SCRIPT. The old flow to read the script during a call: click Call script -> a new
+// window opens with a Blob URL -> everything he types (mortgage payoff, HOA arrears, back taxes)
+// has to be transcribed back into the row's Math panel by hand, which is exactly the "call script
+// vs deal analyzer / market button sync" gap he named. The script window is deliberately kept for
+// print/copy — but the SAME content now also renders as a collapsible section right inside the
+// call sheet, above Math, so opening the property hub gives him the pitch + the numbers on one
+// screen. No cross-window messaging, no popup blocker, no copy-paste — the Math inputs below the
+// section update the model live, and the panel at the top of the script rerenders from the same
+// data on every save (openCallSheet is the render).
+function _csScriptHtml(r, open){
+  if(r._nodata) return '';
+  try {
+    // sender defaults so the script prints his name/company/phone even before the Sender setup is
+    // touched. This mirrors what genScript does for the popup, kept close to the sheet so a bare
+    // localStorage read never blows up mid-render.
+    if(typeof genScript !== 'function') return '';
+    // We need the "What the tracker already knows" panel + the goal/opener/qualify/handoff/objections
+    // bilingual body. Rather than fork the huge template, we invoke genScript() when the sheet is
+    // being opened for the FIRST time on this deal in this session, cache its HTML body, and re-inject
+    // it here. genScript already accepts an optional {inline:true} — we pass it below to skip window
+    // open when we just want the HTML string.
+  } catch(_e){}
+  return '<details class="csmath cscript" id="cscript"'+(open?' open':'')+'>'+
+    '<summary>📞 Call script — read on the phone · EN/ES</summary>'+
+    '<div class="csmath-body cscript-body">'+_csScriptBody(r)+'</div></details>';
+}
+// Inline body: the same "What the tracker knows" panel that renders at the top of the script window.
+// Kept in a small standalone function so both surfaces read the SAME resolved data on every render,
+// and we can build it without spinning up the full genScript() print document.
+function _csScriptBody(r){
+  const _fmk = n => (n||0) >= 1e6 ? '$' + ((n/1e6).toFixed(2)) + 'M' : '$' + Math.round((n||0)/1000) + 'k';
+  const _bp = r.orsrc === 'batchdata' ? '~ BatchData (verify)' :
+              r.orconf === 'ok' ? 'records-verified' :
+              r.orconf === 'low' ? 'LOW-confidence chain' :
+              r.orconf === 'bd' ? '~ BatchData estimate' : 'not pulled';
+  const basis = typeof _basisOf === 'function' ? _basisOf(r) : (r.arv || r.value || 0);
+  const basisTag = r._valsrc === 'arv' ? 'ARV, ' + (r.arvn || '?') + ' comps' : 'county roll';
+  const surv = r._slien != null ? +r._slien : (+r._chainSurv || 0);
+  const survTag = r._slienSet ? 'you entered this' : _bp;
+  const td = r.st === 'TD';
+  const ne = typeof _netEqOf === 'function' ? _netEqOf(r) : 0;
+  const oe = typeof _ownerEqOf === 'function' ? _ownerEqOf(r) : 0;
+  const play = (r._play && r._play.t) || '';
+  const rows = [
+    ['Worth today', _fmk(basis), basisTag],
+    [td ? 'Opening bid' : 'Foreclosing judgment', _fmk(td ? (r.obid || 0) : (r.judg || 0)), r.plaintiff ? esc(r.plaintiff.slice(0, 38)) : '—'],
+    ['Surviving senior', surv > 0 ? _fmk(surv) : '$0', survTag],
+  ];
+  if ((+r._jlien || 0) > 0) rows.push(['Junior / 2nd', _fmk(+r._jlien), 'payoff on direct purchase']);
+  if ((+r._assess || 0) > 0) rows.push(['HOA / assessment', _fmk(+r._assess), 'estoppel confirms']);
+  rows.push(['Annual property tax', r.etax ? _fmk(r.etax) : '—', r.etax ? (r.etaxest ? '~ roll model' : 'billed') : 'not pulled']);
+  const totLabel = td ? 'Modeled profit at winning bid' : 'Net equity (our number)';
+  const askEN = (td
+      ? 'Delinquent taxes ' + (r.etax ? '~' + _fmk(r.etax) + '/yr' : 'not pulled — ask')
+      : 'Payoff on the ~' + _fmk(r.judg || 0) + ' judgment — ask') +
+    ' · Any surviving 2nd/HELOC — ask · HOA arrears (estoppel) — ask · Back taxes — ask';
+  return (
+    '<div class="scriptknow">' +
+      '<div class="scriptknow-h">What the tracker already knows ' +
+        (r._verdict ? '<span class="scriptknow-verdict vb-' + r._verdict.toLowerCase() + '">' + r._verdict + '</span> ' : '') +
+        (play ? '<span class="scriptknow-play">' + esc(play) + '</span>' : '') +
+      '</div>' +
+      '<table class="scriptknow-t"><tbody>' +
+        rows.map(([k, v, p]) => '<tr><td>' + k + '</td><td><b>' + v + '</b></td><td class="prov">' + p + '</td></tr>').join('') +
+        '<tr class="tot"><td>' + totLabel + '</td><td><b>' + (ne ? _fmk(ne) : '—') + '</b></td><td class="prov">' + (td ? 'after quiet title + carry' : 'after judg + survivors + liens') + '</td></tr>' +
+        (!td && oe > 0 ? '<tr class="tot"><td>Owner equity (what THEY have)</td><td><b>' + _fmk(oe) + '</b></td><td class="prov">value − everything recorded</td></tr>' : '') +
+        (r.zprice && r.zstatus === 'LISTED' ? '<tr><td>Actively listed at</td><td><b>' + _fmk(+r.zprice) + '</b></td><td class="prov">Zillow ' + esc(r.zstatus) + '</td></tr>' : '') +
+      '</tbody></table>' +
+      '<div class="scriptknow-ask"><b>Ask on the call:</b> ' + askEN + '</div>' +
+    '</div>' +
+    // A row of shortcuts to the full experiences — the popup for print, the on-page hub for edit.
+    '<div class="cscript-actions">' +
+      '<a href="#" class="cscript-open" onclick="event.preventDefault(); const r=DATA.find(x=>x.case===\'' + esc(r.case) + '\'); if(r) genScript(r); return false;">Open full bilingual script →</a>' +
+      '<a href="#" class="cscript-jumpmath" onclick="event.preventDefault(); const m=document.getElementById(\'csmath\'); if(m){m.open=true; m.scrollIntoView({behavior:\'smooth\',block:\'start\'});} return false;">Jump to Math to log what they said ↓</a>' +
+    '</div>'
+  );
+}
+// Track whether the script section was left open, so a re-render inside the same call sheet does not
+// silently close it (mirrors callSheetMathOpen for the Math section).
+let callSheetScriptOpen = false;
 // Legacy name kept so old call sites compile; body is unused — openDealModal routes to Call Sheet Math.
 function dealModalBody(r){ return _csMathInner(r); }
 let dealModalCase = null;   // deprecated — Call Sheet is the hub; kept so Escape/close paths stay safe
@@ -3614,11 +3718,12 @@ function _callSheet(r){
   // Order: Who → Play → Four numbers → Diligence → Contact → Clock → Debt → Math → Property/WP → Rule.
   // Ask Jose / LIVE / Run Diligence live in the footer (mid-call), not buried inside Math Save & share.
   const math = _csMathHtml(r, !!callSheetMathOpen);
+  const script = _csScriptHtml(r, !!callSheetScriptOpen);
   const law = _cflaw
     ? '<details class="cslaw-wrap"><summary>The Rule — what survives (reference)</summary>'+_cflaw+'</details>'
     : '';
   const dil = _csDiligence(r);
-  return '<div class="callsheet">'+who+_csPlay(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+math+prop+_wpHousehold(r)+law+
+  return '<div class="callsheet">'+who+_csPlay(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+law+
     '<div class="csfoot">'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
@@ -3964,6 +4069,7 @@ function openCallSheet(c, opts){
   const m = document.getElementById('csmodal'); if(!m) return;
   callSheetCase = c;
   callSheetMathOpen = !!opts.math;
+  callSheetScriptOpen = !!opts.script;
   closeDealModal();
   document.getElementById('csbody').innerHTML = _callSheet(r);
   m.style.display='block';
@@ -6164,6 +6270,13 @@ function genScript(r){
   .bar button.on{background:#c69a3a;color:#1a1205;border-color:#c69a3a;font-weight:700}
   h1{font-size:20px;margin:0 0 2px}.subh{color:#5b6b8c;font-size:13px;margin-bottom:8px}.subh b{color:#b4402e}
   .tip{background:#eef8f0;border:1px solid #c5e3cc;border-radius:8px;padding:9px 12px;font-size:13px;color:#0e5f31;margin:0 0 14px;font-weight:600}
+  /* INLINE CALL SCRIPT on the call sheet — the "sync" gap. Re-uses the popup's own tokens. */
+  details.cscript{margin-top:10px}
+  details.cscript>summary{background:linear-gradient(90deg,#f6f2e8 0%,#fff 100%)}
+  .cscript-body{padding:12px 14px}
+  .cscript-actions{display:flex;gap:14px;margin-top:10px;flex-wrap:wrap;font-size:12px}
+  .cscript-actions a{color:var(--gold-d,#8a6d1f);font-weight:700;text-decoration:none;border-bottom:1px dashed}
+  .cscript-actions a:hover{color:var(--ink,#0e1b33)}
   /* WHAT THE TRACKER KNOWS — the panel that closes the call-script vs deal-analyzer gap */
   .scriptknow{background:#f6f2e8;border:1px solid #c9a84c;border-radius:10px;padding:12px 14px;margin:0 0 16px}
   .scriptknow-h{font-weight:700;color:#5a4108;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
