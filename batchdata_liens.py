@@ -102,8 +102,16 @@ def normalize(p, judg=0, ftype=''):
     open_liens = [l for l in liens if l['st'] == 'OPEN']
     # foreclosing loan = the open lien whose amount is closest to the judgment (same heuristic the
     # records path uses); everything senior to it survives, everything junior is a payoff/wipe.
+    # AN ASSOCIATION IS NOT FORECLOSING A MORTGAGE, so there is no "foreclosing loan" to elect. This
+    # heuristic ran for EVERY case with a posted judgment — including HOA cases, which all have one —
+    # so `fore` was always truthy and the `elif ftype == 'HOA'` branch below was unreachable. The
+    # mortgage whose recorded amount happened to sit nearest the small association judgment got
+    # mislabelled "the loan being foreclosed" and was then deleted from surv, surv_first AND juniors.
+    # With a single open mortgage that yields surv=0, and _fwd_flags skips the key on the falsy guard,
+    # so the board carried NO surviving mortgage on an HOA sale where the whole stack survives:
+    # $248,000 mortgage -> $0, turning $46,680 of real equity into $294,680 of fiction.
     fore = None
-    if open_liens and judg > 0:
+    if open_liens and judg > 0 and ftype != 'HOA':
         fore = min(open_liens, key=lambda l: abs((l.get('amt') or 0) - judg))
     surv = surv_first = juniors = 0
     if fore:
