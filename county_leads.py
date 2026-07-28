@@ -148,6 +148,10 @@ def to_slim(county, cfg, base, items):
             except Exception: info = None
             if info:
                 val, owner, hs = info['market_value'], info['owner'], info['homestead']
+                # ASSESSED value (Save Our Homes-capped) carried alongside JV so the JS homestead
+                # tax-deed floor can subtract HALF the assessed value per FS 197.502(6)(c) — not
+                # half the market value, which over-subtracts on every SOH-differentiated homestead.
+                assv = info.get('assessed_value') or 0
                 mail, bprice, bought = info['mail_addr'], info['last_sale_price'], info['last_sale_year']
                 condo = bool(re.search(r'CONDO', info.get('legal', ''), re.I)) or str(info.get('use_code', '')) in ('0400', '400', '04')
                 # VACANT LAND: FDOR use code 0 = vacant residential (e.g. '000'/'0000'), 10 vacant
@@ -221,7 +225,7 @@ def to_slim(county, cfg, base, items):
         slim.append({
             'county': county, 'tier': tier, 'score': score, 'auction': r.get('AuctionDate', ''), 'days': days,
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
-            'addr': addr, 'mail': mail, 'value': val, 'judg': judg, 'eq': eqp, 'eqfake': eqfake, 'hs': hs, 'condo': condo,
+            'addr': addr, 'mail': mail, 'value': val, 'assessed_value': assv, 'judg': judg, 'eq': eqp, 'eqfake': eqfake, 'hs': hs, 'condo': condo,
             'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')), 'opart': opart,
             # TAX DEED: the opening bid (certs + fees) and certificate number are the deal inputs —
             # map them so the TD branch of the deal model (winbid off obid) and the row's Certificate #

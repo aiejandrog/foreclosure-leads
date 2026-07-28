@@ -5120,10 +5120,22 @@ function _basisOf(r){
 // number — not our auction profit — that decides whether they can be refinanced out of trouble.
 function _ownerOwedOf(r){
   var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : (+r.judg||0);
-  // FS 197.502: on a HOMESTEAD tax deed the opening bid = delinquent taxes + HALF the assessed
-  // value. That half is an auction floor, not a debt — the owner does not owe it. Counting it made
-  // a $330k homestead owing ~$1.5k in taxes read $150k poorer than they are (live: 2026-2794TD).
-  if(r.st === 'TD' && r.hs && +r.value) owed = Math.max(0, owed - (+r.value)/2);
+  // FS 197.502(6)(c): on a HOMESTEAD tax deed the opening bid = delinquent taxes + HALF the
+  // ASSESSED value on the tax roll. My first pass wrote `r.value / 2` — `r.value` is JV (just /
+  // market) value; on any homestead with a Save Our Homes differential (which is most of them)
+  // assessed is materially below market, so half-market over-subtracts by (market − assessed)/2.
+  // Math.max(0, …) then clamps the impossible negative to zero — so `_ownerOwedOf` reported the
+  // homeowner owes NOTHING, and the Lookup Deal Desk prefilled a $0 payoff on a live homestead
+  // (2026-2794TD, Belle Glade: obid $151,483 on JV $330,410 → owed came out $0). Prefer the real
+  // assessed value when the pipeline carries it; fall back to half-market only when it doesn't,
+  // and expose the negative when it happens instead of silently zeroing it — that is itself proof
+  // the field is wrong (taxes cannot be negative, so obid < half-of-something-real is impossible).
+  if(r.st === 'TD' && r.hs){
+    var _assV = +r.assessed_value || +r.assessed || 0;
+    var _half = _assV ? _assV/2 : ((+r.value||0)/2);
+    var _new  = owed - _half;
+    owed = (_new > 0) ? _new : (_assV ? 0 : owed);   // no assessed value: hold the pre-subtract debt
+  }
   return owed;
 }
 function _ownerStackOf(r){ return (+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0); }
@@ -5982,6 +5994,68 @@ function genScript(r){
     : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Soy comprador de casas local — no le vengo a vender nada. Su propiedad en <b>${addr}</b> salió en el calendario de subastas del condado para el <b>${dt}</b>${caseTagES}, unos ${days} días. Solo quería ver si tiene un plan para la fecha de subasta — hay quienes sí, otros no saben qué opciones tienen. ¿60 segundos?`;
 
   // PLAYBOOK roles: intake books the closer — closer lays out options (not "stops sales").
+  // ---- WHAT THE TRACKER ALREADY KNOWS -----------------------------------------------------------
+  // The script asks the OWNER for the mortgage balance, HOA, back taxes — and the board already has
+  // resolved figures for most of those, plus the deal's own verdict/play. Handing him a script that
+  // starts with "hi, my name is Alejandro" while the modeled numbers sit two clicks away is exactly
+  // the "call script vs deal analyzer" split he named. This panel embeds the resolved model directly
+  // in the script and marks each figure with its provenance, so he calls INFORMED and only asks the
+  // owner to confirm the numbers he cannot see (payoff, HOA arrears, back taxes).
+  const _fmk = n => (n||0)>=1e6 ? '$'+((n/1e6).toFixed(2))+'M' : '$'+Math.round((n||0)/1000)+'k';
+  const _bp  = r.orsrc === 'batchdata' ? '~ BatchData (verify)' :
+               r.orconf === 'ok' ? 'records-verified' :
+               r.orconf === 'low' ? 'LOW-confidence chain' :
+               r.orconf === 'bd' ? '~ BatchData estimate' : 'not pulled';
+  const _basis = typeof _basisOf==='function' ? _basisOf(r) : (r.arv||r.value||0);
+  const _basisTag = r._valsrc==='arv' ? 'ARV, '+(r.arvn||'?')+' comps '+(r.arvconf==='ok'?'ok':'low') : 'county roll';
+  const _survRes = r._slienSet ? +r._slien : (r._slien!=null ? +r._slien : (+r._chainSurv||0));
+  const _survTag = r._slienSet ? 'you entered this' : _bp;
+  const _profit  = (r._profit != null) ? +r._profit : null;
+  const _ne      = typeof _netEqOf==='function' ? _netEqOf(r) : 0;
+  const _oe      = typeof _ownerEqOf==='function' ? _ownerEqOf(r) : 0;
+  const _play    = (r._play && r._play.t) || '';
+  const _play_w  = (r._play && r._play.w) || '';
+  const _msgAsk  = ((td?'Delinquent taxes '+(r.etax?'~'+_fmk(r.etax)+'/yr':'not pulled — ask') :
+                       'Payoff on the ~'+_fmk(r.judg||0)+' judgment — ask') + ' · Any surviving 2nd/HELOC — ask' +
+                    ' · HOA/COA arrears (estoppel) — ask · Back property taxes — ask');
+  const _knowsEN = `
+    <div class="scriptknow">
+      <div class="scriptknow-h">What the tracker already knows about this lead <span class="scriptknow-verdict vb-${(vb||'').toLowerCase()}">${vb||''}</span> ${_play?'<span class="scriptknow-play">'+esc(_play)+'</span>':''}</div>
+      <table class="scriptknow-t"><tbody>
+      <tr><td>Worth today</td><td><b>${_fmk(_basis)}</b></td><td class="prov">${_basisTag}</td></tr>
+      <tr><td>${td?'Opening bid':'Foreclosing judgment'}</td><td><b>${_fmk(td?(r.obid||0):(r.judg||0))}</b></td><td class="prov">${r.plaintiff?esc(r.plaintiff.slice(0,42)):'—'}</td></tr>
+      <tr><td>Surviving senior</td><td><b>${_survRes>0?_fmk(_survRes):'$0'}</b></td><td class="prov">${_survTag}</td></tr>
+      ${(+r._jlien||0)>0?`<tr><td>Junior / 2nd</td><td><b>${_fmk(+r._jlien)}</b></td><td class="prov">payoff only on direct purchase</td></tr>`:''}
+      ${(+r._assess||0)>0?`<tr><td>HOA / assessment</td><td><b>${_fmk(+r._assess)}</b></td><td class="prov">recorded — estoppel still confirms</td></tr>`:''}
+      <tr><td>Annual property tax</td><td><b>${r.etax?_fmk(r.etax):'—'}</b></td><td class="prov">${r.etax?(r.etaxest?'~ roll model':'billed'):'not pulled'}</td></tr>
+      <tr class="tot"><td>${td?'Modeled profit at winning bid':'Net equity (our number)'}</td><td><b>${_ne?_fmk(_ne):'—'}</b></td><td class="prov">${td?'after quiet title + carry':'after judg + survivors + liens'}</td></tr>
+      ${(!td&&_oe>0)?`<tr class="tot"><td>Owner equity (what THEY have)</td><td><b>${_fmk(_oe)}</b></td><td class="prov">value − everything recorded against them</td></tr>`:''}
+      ${(r.zprice&&r.zstatus==='LISTED')?`<tr><td>Actively listed at</td><td><b>${_fmk(+r.zprice)}</b></td><td class="prov">Zillow ${r.zstatus||''}</td></tr>`:''}
+      </tbody></table>
+      <div class="scriptknow-ask"><b>What to ask on the call</b> (the tracker cannot see): ${_msgAsk}</div>
+      ${_play_w?`<div class="scriptknow-play-w"><b>Play:</b> ${esc(_play_w)}</div>`:''}
+    </div>`;
+  const _knowsES = _knowsEN
+    .replace('What the tracker already knows about this lead','Lo que el tracker ya sabe de este lead')
+    .replace('Worth today','Valor hoy')
+    .replace(td?'Opening bid':'Foreclosing judgment', td?'Puja inicial':'Sentencia de ejecución')
+    .replace('Surviving senior','1a hipoteca que sobrevive')
+    .replace('Junior / 2nd','2a / junior')
+    .replace('HOA / assessment','HOA / cuota')
+    .replace('Annual property tax','Impuestos anuales')
+    .replace(td?'Modeled profit at winning bid':'Net equity (our number)', td?'Ganancia modelada':'Equidad neta (nuestra)')
+    .replace('Owner equity (what THEY have)','Equidad del dueño (lo que ELLOS tienen)')
+    .replace('Actively listed at','Publicado en venta a')
+    .replace('What to ask on the call','Qué preguntar en la llamada')
+    .replace('(the tracker cannot see)','(lo que el tracker no ve)')
+    .replace('after quiet title + carry','después de quiet title + carry')
+    .replace('after judg + survivors + liens','después de sentencia + sobrevivientes + gravámenes')
+    .replace('value − everything recorded against them','valor − todo lo recordado en su contra')
+    .replace('you entered this','usted lo verificó').replace('records-verified','verificado en registros')
+    .replace('not pulled','no confirmado').replace('billed','en la factura').replace('roll model','modelado del roll')
+    .replace('recorded — estoppel still confirms','registrado — el estoppel confirma')
+    .replace('payoff only on direct purchase','payoff solo en compra directa')
+    .replace('Play:','Jugada:');
   const offerEN = `Here's how this works. I take information and bring it to my partner ${esc(partner)} — he's the one who puts every option on the table. I'm going to pull your file now${verify?', confirm what is really owed,':','} and brief him. Then I'll call you back at <b>[set a REAL clock time, e.g. 1:15 PM]</b> with ${esc(partner)} on the line. He'll walk the five exits — reinstate, loan mod, short sale, private cash sale, bankruptcy — and which one still fits${verify?' once the debt is confirmed':''}. No cost, no pressure, no commitment. You around then?`;
   const offerES = `Así funciona. Yo tomo información y se la llevo a mi socio ${esc(partner)} — él es quien pone todas las opciones sobre la mesa. Voy a sacar su expediente ahora${verify?', confirmar lo que realmente se debe,':','} y ponerlo al tanto. Luego le devuelvo la llamada a las <b>[fije una hora real, ej. 1:15 PM]</b> con ${esc(partner)} en la línea. Él repasará las cinco salidas — reinstalar, modificación, short sale, venta privada en efectivo, bancarrota — y cuál aún le sirve${verify?' una vez confirmada la deuda':''}. Sin costo, sin presión, sin compromiso. ¿Estará disponible?`;
 
@@ -6054,6 +6128,7 @@ function genScript(r){
               es:{goal:goalES,comp:compES,open:openES,disc:discES,offer:offerES,obj:objES,close:closeES,leave:leaveES} };
   const dualSay = (en, es) => `<div class="dual"><div class="say"><span class="ltag">EN — You say</span>${en}</div><div class="say es"><span class="ltag">ES — Usted dice</span>${es}</div></div>`;
   const render = lang => `
+    ${lang==='es' ? _knowsES : _knowsEN}
     <div class="goal"><span class="lbl">${T[lang].goal}</span>${badge}${S[lang].goal}</div>
     <div class="sec">${T[lang].before}</div><div class="comp"><ul>${S[lang].comp.map(c=>`<li>${c}</li>`).join('')}</ul></div>
     <div class="sec">${T[lang].nums}</div>${phBlock(lang)}
@@ -6066,6 +6141,7 @@ function genScript(r){
   // Default mid-call view: EN + ES dialogue stacked so Spanish is visible without hunting a tab.
   const renderBoth = () => `
     <div class="tip">South Florida default — English and Spanish dialogue side-by-side. Switch language mid-call without flipping tabs.</div>
+    ${_knowsEN}
     <div class="goal"><span class="lbl">Your goal / Su objetivo</span>${badge}${goalEN}<div class="goal-es">${goalES}</div></div>
     <div class="sec">Before you dial / Antes de llamar</div><div class="comp"><ul>${compEN.map(c=>`<li>${c}</li>`).join('')}</ul>
       <div class="comp-es"><ul>${compES.map(c=>`<li>${c}</li>`).join('')}</ul></div></div>
@@ -6088,6 +6164,20 @@ function genScript(r){
   .bar button.on{background:#c69a3a;color:#1a1205;border-color:#c69a3a;font-weight:700}
   h1{font-size:20px;margin:0 0 2px}.subh{color:#5b6b8c;font-size:13px;margin-bottom:8px}.subh b{color:#b4402e}
   .tip{background:#eef8f0;border:1px solid #c5e3cc;border-radius:8px;padding:9px 12px;font-size:13px;color:#0e5f31;margin:0 0 14px;font-weight:600}
+  /* WHAT THE TRACKER KNOWS — the panel that closes the call-script vs deal-analyzer gap */
+  .scriptknow{background:#f6f2e8;border:1px solid #c9a84c;border-radius:10px;padding:12px 14px;margin:0 0 16px}
+  .scriptknow-h{font-weight:700;color:#5a4108;font-size:13px;margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .scriptknow-verdict{padding:2px 7px;border-radius:4px;background:#0e1b33;color:#c69a3a;font-size:10px;letter-spacing:.05em}
+  .scriptknow-verdict.vb-strong{background:#0a5f2f;color:#fff} .scriptknow-verdict.vb-marginal{background:#a06f00;color:#fff}
+  .scriptknow-verdict.vb-verify{background:#8a1c1c;color:#fff}
+  .scriptknow-play{padding:2px 7px;border-radius:4px;background:#fff;color:#5a4108;font-size:10px;letter-spacing:.05em;border:1px solid #c9a84c}
+  .scriptknow-t{width:100%;border-collapse:collapse;font-size:13px}
+  .scriptknow-t td{padding:4px 6px;border-bottom:1px dotted #d9c988}
+  .scriptknow-t td b{font-family:'SF Mono',Menlo,Consolas,monospace;color:#0e1b33}
+  .scriptknow-t td.prov{font-size:11px;color:#78621a;text-align:right}
+  .scriptknow-t tr.tot td{background:#efe8d0;font-weight:700;border-bottom:1px solid #c9a84c}
+  .scriptknow-ask{margin-top:9px;padding:8px 10px;background:#fff;border-left:3px solid #8a1c1c;font-size:12.5px;color:#3a2005}
+  .scriptknow-play-w{margin-top:7px;font-size:12px;color:#5a4108;font-style:italic}
   .sec{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:#8a97b5;font-weight:700;margin:22px 0 7px;border-top:1px solid #e7ebf3;padding-top:13px}
   .goal{background:#eef3ff;border:1px solid #d5e0f5;border-left:4px solid #3f6bd0;border-radius:8px;padding:12px 14px;font-weight:600}
   .goal .lbl{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#3f6bd0;margin-bottom:4px;font-weight:700}

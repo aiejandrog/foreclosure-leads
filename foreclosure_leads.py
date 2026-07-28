@@ -358,6 +358,10 @@ def enrich_clerk(leads):
     return leads
 
 def qualify(leads):
+    # Load comps once so the score can basis on ARV when a confident one exists — must match the
+    # basis _basisOf() picks on the board, or ranking and money disagree by county-vs-ARV.
+    try: comps = json.load(open(os.path.join(HERE, 'comps.json'), encoding='utf-8'))
+    except Exception: comps = {}
     # date-only "today" so a SAME-day auction shows 'in 0d' instead of '-1d'
     # (datetime.now() at 3pm minus AuctionDate parsed at 00:00 gives -0.6 days, .days floors to -1)
     today = datetime.combine(date.today(), datetime.min.time())
@@ -383,8 +387,19 @@ def qualify(leads):
             # Many HOA foreclosures are classified by plaintiff (case_type "HOA/Condo") without a
             # -CC- number, so keying only on the number missed them and left their fake equity scored.
             is_hoa = bool(re.search(r'-CC-', case0)) or (r.get('case_type','') or '').upper().startswith('HOA')
-        r['equity'] = mkt - judg if mkt else 0
-        r['equity_pct'] = round(r['equity']/mkt*100,1) if mkt else 0
+        # Score against the SAME basis every money surface on the board uses. `mkt` is the county
+        # roll; when comps produced a confident ARV inside the 0.7x-2.5x band, that ARV drives
+        # _basisOf / _netEqOf and the row-level percentage. Scoring off the county roll while every
+        # dollar downstream runs on ARV split ranking from money — the exact "Tier and Score baked
+        # from assessed value while every money number runs on comps ARV" bug the audit flagged.
+        _cp = comps.get(r.get('Case #', '')) if isinstance(comps, dict) else None
+        _arv = int(_cp.get('arv') or 0) if _cp else 0
+        _acf = (_cp.get('conf') if _cp else '') or ''
+        _basis = _arv if (_acf == 'ok' and mkt and 0.7*mkt <= _arv <= 2.5*mkt) else mkt
+        r['basis'] = _basis
+        r['basis_src'] = 'arv' if _basis == _arv and _arv else 'county'
+        r['equity'] = _basis - judg if _basis else 0
+        r['equity_pct'] = round(r['equity']/_basis*100,1) if _basis else 0
         try: days = (datetime.strptime(r['AuctionDate'],'%m/%d/%Y') - today).days
         except: days = 0
         r['days_to_auction'] = days
@@ -860,7 +875,7 @@ def make_tracker(leads):
             'auction': r.get('AuctionDate',''), 'days': r.get('days_to_auction',0),
             'case': r.get('Case #',''), 'owners': r.get('owners',''),
             'addr': _clean_addr(r.get('Address','')), 'mail': _clean_addr(r.get('mailing_address','')),
-            'value': r.get('market_value',0) or 0, 'judg': r.get('judgment',0) or 0,
+            'value': r.get('market_value',0) or 0, 'assessed_value': r.get('assessed_value',0) or 0, 'judg': r.get('judgment',0) or 0,
             'eq': r.get('equity_pct',0), 'eqfake': bool(r.get('eq_fake')), 'hs': bool(r.get('homestead')),
             # condo -> the displayed equity is a GROSS upper bound: a special assessment (40-yr recert) or a
             # 2nd mortgage can erase it and neither is in public data. Drives the "verify equity" caveat + a
