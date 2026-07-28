@@ -1,0 +1,645 @@
+{
+ "2026-003288-CA-01": {
+  "checked": "2026-07-28T17:13",
+  "sibs": [
+   {
+    "case": "2026-020206-CC-25",
+    "type": "Mortgage/Real Property Foreclosure (County $8,001- $15K)",
+    "status": "PJREPACT",
+    "plaintiff": "Garden Lake Towers Condominium Association, Inc.",
+    "filed": "02/11/2026",
+    "sold": true,
+    "tpb": "R & V INVESTORS LLC",
+    "cert_sale": "06/01/2026",
+    "cert_title": "06/16/2026",
+    "cert_disb": "06/16/2026",
+    "conf": "high"
+   }
+  ],
+  "claimed": true
+ },
+ "2024-000935-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-021847-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-018502-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-001484-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2022-001855-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-003632-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-023366-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-013103-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-000848-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-000848-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-008113-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-009775-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2011-043379-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-022182-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-002008-CA-01": {
+  "checked": "2026-07-28T17:14",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-019803-CA-01": {
+  "checked": "2026-07-28T17:15",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-002752-CA-01": {
+  "checked": "2026-07-28T17:15",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-028915-CA-01": {
+  "checked": "2026-07-28T17:15",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-010654-CA-01": {
+  "checked": "2026-07-28T17:15",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026A00193": {
+  "checked": "2026-07-28T17:15",
+  "sibs": [],
+  "claimed": false
+ },
+ "2022-022739-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-009328-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2019-032802-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-019702-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2022-024179-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-024683-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-023434-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-007301-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-008781-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2016-021227-CA-01": {
+  "checked": "2026-07-28T17:16",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-021457-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-001544-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-020977-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2017-013509-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-018710-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-022885-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-004437-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2022-018176-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-018229-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2021-021473-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-015293-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-015967-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-012957-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2019-011071-CA-01": {
+  "checked": "2026-07-28T17:17",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-004361-CA-01": {
+  "checked": "2026-07-28T17:18",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-016135-CA-01": {
+  "checked": "2026-07-28T17:18",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-160930-CC-05": {
+  "checked": "2026-07-28T17:18",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-001222-CA-01": {
+  "checked": "2026-07-28T17:18",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-049623-CC-25": {
+  "checked": "2026-07-28T17:18",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-009474-CA-01": {
+  "checked": "2026-07-28T17:18",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-009857-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-018364-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-024979-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-024257-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-008657-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-009306-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-018560-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-008821-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-010449-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2019-002201-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026A00191": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-015181-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-021985-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-007833-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2022-018799-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-000766-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-006803-CA-01": {
+  "checked": "2026-07-28T17:19",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-000672-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2019-003300-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-004203-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-020664-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-009650-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-021468-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-004896-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-008800-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-019697-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-019889-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-025518-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-010684-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-001240-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2012-016505-CC-05": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-023730-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-017868-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2022-002515-CA-01": {
+  "checked": "2026-07-28T17:20",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-020679-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-016017-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-008973-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-022229-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2019-027764-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-004629-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-022404-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-015248-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-001080-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-007150-CC-23": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-022632-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-022826-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-024239-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-024268-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-025901-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-007496-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-074993-CC-05": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-013889-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-001101-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-000229-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-020717-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-021988-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-000304-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-023031-CA-01": {
+  "checked": "2026-07-28T17:21",
+  "sibs": [],
+  "claimed": false
+ },
+ "2012-037486-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2023-028634-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-017553-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-005534-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-012596-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-018996-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-021338-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [
+   {
+    "case": "2026-053106-CC-05",
+    "type": "Mortgage/Real Property Foreclosure (County $8,001- $15K)",
+    "status": "OPEN",
+    "plaintiff": "Keys Gate Condominium No. One Association Inc",
+    "filed": "04/21/2026",
+    "sold": false,
+    "tpb": "",
+    "cert_sale": "",
+    "cert_title": "",
+    "cert_disb": "",
+    "conf": "med"
+   }
+  ],
+  "claimed": false
+ },
+ "2025-018243-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-020414-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-099724-CC-05": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-219256-CC-23": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2024-228193-CC-05": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2026-005645-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ },
+ "2025-011165-CA-01": {
+  "checked": "2026-07-28T17:22",
+  "sibs": [],
+  "claimed": false
+ }
+}

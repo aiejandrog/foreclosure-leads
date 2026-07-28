@@ -216,3 +216,43 @@ closes in ~10 days. They're loyal because we feed them — and replaceable becau
 _The whole thing in one sentence: **find them early, verify before you speak, offer the rung that
 fits, fund it with other people's money, keep the cheap ones, and let the database remember
 everything so you only think about closing.**_
+
+## 12. Field intel — the Martin file (2026-07-28)
+
+Carlos door-knocked 1101 SW 122 AVE #307 (our JPMorgan lead, sale 08/03) and was handed a filed
+motion proving the unit ALREADY SOLD on 05/27 through a sibling case we never tracked — the HOA's
+county-court file. A competitor executed our exact playbook first, and left the receipts:
+
+- **The play (R&V Investors LLC):** bid the cheap HOA case (~$8-15K county file) at auction,
+  Certificate of Title 06/16, then an agreed motion paying the family **$19,600** cash-for-keys +
+  surplus assignment — a ~$223K condo controlled for pennies over the association debt, with only
+  an $18.4K bank lien left to clear.
+- **$19,600 = the cash-for-keys benchmark**: Miami-Dade 2/2 condo, family in place 43 years, no
+  meaningful equity left to them. A real 2026 print from a professional — price against it.
+- **Alberto M. Cardet, Cardet Law PLLC** (Fla Bar 467900, 305-403-7783): repped the family AND the
+  bidder's disbursement motion. A repeatable machine. (a) His name on a docket ⇒ the property is
+  probably claimed, walk. (b) He is exactly the attorney profile Jose's stop-sale layer needs —
+  referral relationship > competition.
+- **Board fix shipped:** `sibling_cases.py` scans every MD lead's owner for OTHER foreclosure
+  cases via the clerk API (no captcha on the per-case pull) and flags 🔴 CLAIMED (title already
+  transferred — dead) / 🟠 2 CASES (second clock running). First sweep: **~13% of MD leads were
+  already claimed** — every one of them was a wasted door before this.
+
+## 13. The 4-second phone opener (rebuilt after a live hang-up, 2026-07-28)
+
+"Hi, is this Salim?" → "who's asking?" → "I saw your property on the foreclosure calendar" →
+CLICK. The old opener confirmed their worst fear (another vulture) before they decided we were
+human. The frame that survives pickup — three beats, "foreclosure" never spoken until beat 3:
+
+1. **"Hi — sorry to bother you. Is this the owner at [street]?"** (WAIT. If "who's asking?":
+   "My name's ___, I'm calling from Miami. Are you the owner there?")
+2. **"Thanks. Real quick — do you still own it, or has that already been handled?"** (a yes/no
+   about THEM buys the next 30 seconds)
+3. **"I'll be straight with you — your case came up on the county records I work through, date
+   of [sale date]. Not the bank, not a lawyer — local buyer. My job is you knowing every option
+   before that date. Got 60 seconds?"**
+
+Never in the first 30 seconds: "foreclosure", "auction", "I want to help you", "I'm an investor".
+After a hang-up: text +24h → door-drop +3d → one re-call +7d with a different opener → log
+no-reach, move on. An owner who says stop (any channel) goes in the opt-out ledger — all channels
+die, including the door. The per-lead Call script now opens with these three beats automatically.

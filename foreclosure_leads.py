@@ -860,6 +860,15 @@ def make_tracker(leads):
                     if _dc: diligence[_dc] = _dj
                 except Exception:
                     pass
+    # SIBLING CASES (sibling_cases.py, committed — public court data). The Martin lesson
+    # (2026-07-28): a condo can carry TWO foreclosure cases, and the one we DON'T track can
+    # auction first. A sibling with a Certificate of Title = the property is already someone
+    # else's; the board must say CLAIMED, not route Carlos to a competitor's doorstep.
+    siblings = {}
+    _sbf = os.path.join(HERE, 'sibling_cases.json')
+    if os.path.exists(_sbf):
+        try: siblings = json.load(open(_sbf, encoding='utf-8'))
+        except Exception: siblings = {}
     # the HUMANS behind LLC-owned leads (llc_officers.py, Sunbiz; committed like the stay cache) —
     # managers/officers + registered agent so a company-owned deal is still a person you can call.
     llcs = {}
@@ -994,6 +1003,15 @@ def make_tracker(leads):
         _dd = diligence.get(r.get('Case #', ''))
         if _dd:
             d['diligence'] = _dd
+        # sibling foreclosure cases on the same owner (sibling_cases.py) — slimmed to what the
+        # UI needs to say "this deal is already gone" and prove it.
+        _sb = siblings.get(r.get('Case #', ''))
+        if _sb and _sb.get('sibs'):
+            d['sib'] = [{'case': s.get('case',''), 'sold': bool(s.get('sold')),
+                         'tpb': s.get('tpb',''), 'title': s.get('cert_title',''),
+                         'sale': s.get('cert_sale',''), 'pl': s.get('plaintiff',''),
+                         'conf': s.get('conf','')} for s in _sb['sibs']]
+            d['sibclaimed'] = bool(_sb.get('claimed'))
         d['county'] = 'MIAMI-DADE'
         slim.append(d)
 
