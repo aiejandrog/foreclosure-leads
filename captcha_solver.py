@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""captcha_solver.py — solve Google reCAPTCHA v3 via 2Captcha, so the county Official Records wall
-stops blocking us.
+"""captcha_solver.py — 2Captcha client for county Official Records / court walls.
 
-The Miami-Dade / Broward / Palm Beach clerk sites gate their record search behind reCAPTCHA v3 —
-score-based and invisible, so there is no image challenge to click. A headless (or even headed)
-browser gets scored as a bot and rejected. 2Captcha generates a high-score v3 token from residential
-infrastructure and returns it; we hand that token to the clerk's `standardsearch` POST in the same
-`x-recaptcha-token` header the browser mint used. reCAPTCHA v3 scores the TOKEN (site secret-key
-verification), not the submitting IP, so a 2Captcha token submitted by plain `requests` validates.
+Uses official API v1 (https://2captcha.com/2captcha-api) — in.php + res.php — same protocol
+the MD Turnstile path already relies on. API v2 createTask/getTaskResult is equivalent; we stay
+on v1 so existing MD/BW callers keep working.
 
-Key lives in captcha.key (gitignored) or the TWOCAPTCHA_KEY / CAPTCHA_KEY env var.
+  reCAPTCHA v2: method=userrecaptcha + googlekey + pageurl
+                → token goes in g-recaptcha-response  (PB Landmark, Broward CaseSearch)
+  reCAPTCHA v3: method=userrecaptcha + version=v3 + action + min_score
+  Turnstile:    method=turnstile + sitekey + pageurl
+                → MD Official Records (x-recaptcha-token header)
 
-    from captcha_solver import solve_recaptcha_v3
-    token = solve_recaptcha_v3(SITE_KEY, 'standardsearch', 'https://onlineservices.miamidadeclerk.gov/officialrecords/')
+Key: captcha.key (gitignored) or TWOCAPTCHA_KEY / CAPTCHA_KEY env. Never log the key.
+
+Docs: https://2captcha.com/api-docs/recaptcha-v2
+      https://2captcha.com/api-docs/cloudflare-turnstile
+      https://2captcha.com/2captcha-api
 """
 import os
 import time
@@ -34,6 +37,33 @@ def _key():
     return ''
 
 
+def has_key():
+    """True when a 2Captcha key is configured. Does not return or log the key."""
+    return bool(_key())
+
+
+def _poll(key, cid, timeout, poll, label='2captcha'):
+    """Poll res.php until ready. Returns token string or None. Never logs the API key."""
+    t0 = time.time()
+    while time.time() - t0 < timeout:
+        time.sleep(poll)
+        try:
+            g = requests.get(
+                RES_URL,
+                params={'key': key, 'action': 'get', 'id': cid, 'json': 1},
+                timeout=30,
+            ).json()
+        except Exception:
+            continue
+        if g.get('status') == 1:
+            return g['request']
+        if g.get('request') != 'CAPCHA_NOT_READY':  # 2captcha's (sic) not-ready sentinel
+            print(f'  [{label}] solve failed: {g.get("request")}')
+            return None
+    print(f'  [{label}] timed out waiting for token')
+    return None
+
+
 def solve_recaptcha_v3(site_key, action, page_url, min_score=0.3, timeout=140, poll=5):
     """Return a solved reCAPTCHA v3 token, or None on failure/timeout. Blocking (polls 2Captcha)."""
     key = _key()
@@ -52,32 +82,24 @@ def solve_recaptcha_v3(site_key, action, page_url, min_score=0.3, timeout=140, p
     if r.get('status') != 1:
         print(f'  [2captcha] submit rejected: {r.get("request")}')
         return None
-    cid = r['request']
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        time.sleep(poll)
-        try:
-            g = requests.get(RES_URL, params={'key': key, 'action': 'get', 'id': cid, 'json': 1}, timeout=30).json()
-        except Exception:
-            continue
-        if g.get('status') == 1:
-            return g['request']
-        if g.get('request') != 'CAPCHA_NOT_READY':      # 2captcha's (sic) not-ready sentinel
-            print(f'  [2captcha] solve failed: {g.get("request")}')
-            return None
-    print('  [2captcha] timed out waiting for token')
-    return None
+    return _poll(key, r['request'], timeout, poll, label='2captcha-v3')
 
 
-def solve_recaptcha_v2(site_key, page_url, timeout=180, poll=5):
-    """Return a solved reCAPTCHA v2 (checkbox) token ('g-recaptcha-response'), or None. Used by the
-    Broward Clerk court case search (browardclerk.org/Web2/CaseSearchECA), which renders a v2 widget
-    (grecaptcha.render with a callback) rather than the score-based v3 the official-records sites use."""
+def solve_recaptcha_v2(site_key, page_url, timeout=240, poll=5):
+    """Return a solved reCAPTCHA v2 checkbox token (g-recaptcha-response), or None.
+
+    Official API v1: POST in.php method=userrecaptcha googlekey=<sitekey> pageurl=<full URL>
+    Used by: Palm Beach Landmark (erec.mypalmbeachclerk.com), Broward CaseSearchECA.
+    """
     key = _key()
     if not key:
         print('  [2captcha] no key — cannot solve recaptcha v2')
         return None
+    if not site_key or not page_url:
+        print('  [2captcha] v2 requires site_key + full page_url')
+        return None
     try:
+        # https://2captcha.com/2captcha-api#solving_recaptchav2_new
         r = requests.post(IN_URL, data={
             'key': key, 'method': 'userrecaptcha',
             'googlekey': site_key, 'pageurl': page_url, 'json': 1,
@@ -88,28 +110,15 @@ def solve_recaptcha_v2(site_key, page_url, timeout=180, poll=5):
     if r.get('status') != 1:
         print(f'  [2captcha] v2 submit rejected: {r.get("request")}')
         return None
-    cid = r['request']
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        time.sleep(poll)
-        try:
-            g = requests.get(RES_URL, params={'key': key, 'action': 'get', 'id': cid, 'json': 1}, timeout=30).json()
-        except Exception:
-            continue
-        if g.get('status') == 1:
-            return g['request']
-        if g.get('request') != 'CAPCHA_NOT_READY':
-            print(f'  [2captcha] v2 solve failed: {g.get("request")}')
-            return None
-    print('  [2captcha] v2 timed out waiting for token')
-    return None
+    print(f'  [2captcha] v2 task {r["request"]} queued — polling…')
+    return _poll(key, r['request'], timeout, poll, label='2captcha-v2')
 
 
 def solve_turnstile(site_key, page_url, action=None, timeout=140, poll=5):
     """Return a solved Cloudflare Turnstile token, or None. Miami-Dade Official Records migrated from
     reCAPTCHA v3 to Turnstile (running in reCAPTCHA-compatibility mode), so the OLD reCAPTCHA site key
     is dead and the app now feeds a TURNSTILE token into the same x-recaptcha-token header. 2Captcha
-    solves Turnstile via method=turnstile."""
+    solves Turnstile via method=turnstile (API v1)."""
     key = _key()
     if not key:
         print('  [2captcha] no key — cannot solve turnstile')
@@ -125,21 +134,7 @@ def solve_turnstile(site_key, page_url, action=None, timeout=140, poll=5):
     if r.get('status') != 1:
         print(f'  [2captcha] turnstile submit rejected: {r.get("request")}')
         return None
-    cid = r['request']
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        time.sleep(poll)
-        try:
-            g = requests.get(RES_URL, params={'key': key, 'action': 'get', 'id': cid, 'json': 1}, timeout=30).json()
-        except Exception:
-            continue
-        if g.get('status') == 1:
-            return g['request']
-        if g.get('request') != 'CAPCHA_NOT_READY':
-            print(f'  [2captcha] turnstile solve failed: {g.get("request")}')
-            return None
-    print('  [2captcha] turnstile timed out')
-    return None
+    return _poll(key, r['request'], timeout, poll, label='2captcha-turnstile')
 
 
 def balance():
@@ -153,18 +148,17 @@ def balance():
 
 
 if __name__ == '__main__':
-    # live smoke test: solve MD Official Records reCAPTCHA v3 and prove the token unlocks a search.
+    # live smoke test: solve MD Official Records Turnstile and prove the token unlocks a search.
     import records_liens as R
+    print('2captcha key configured:', has_key())
     print('2captcha balance: $', balance())
-    site = R.SITE_KEY
     page = 'https://onlineservices.miamidadeclerk.gov/officialrecords/'
-    print('solving reCAPTCHA v3 for MD Official Records...')
+    print('solving Turnstile for MD Official Records...')
     t0 = time.time()
-    tok = solve_recaptcha_v3(site, 'standardsearch', page)
+    tok = solve_turnstile(R.TS_SITE_KEY, page)
     print(f'token: {"<none>" if not tok else tok[:40] + "... (" + str(len(tok)) + " chars)"}  in {int(time.time()-t0)}s')
     if not tok:
         raise SystemExit('SOLVE FAILED')
-    # now try the actual search with a real owner name, requests-only
     import urllib.parse
     name = 'ECHEVERRI EDUARDO'
     url = ('https://onlineservices.miamidadeclerk.gov/officialrecords/api/home/standardsearch'

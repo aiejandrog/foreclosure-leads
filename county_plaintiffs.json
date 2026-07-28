@@ -1,0 +1,737 @@
+{
+ "CACE-24-005649": {
+  "plaintiff": "Mclp Asset Company Inc",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-23-021250": {
+  "plaintiff": "Country Glen Association, Inc.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-24-011211": {
+  "plaintiff": "We Florida Financial",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-005443": {
+  "plaintiff": "CITIBANK, N.A. AS TRUSTEE",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-007347": {
+  "plaintiff": "GALT OCEAN MANOR CONDOMINIUM ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-016380": {
+  "plaintiff": "VILLAS MAINTENANCE, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-017818": {
+  "plaintiff": "CORAL POINTE ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-018558": {
+  "plaintiff": "CENTURA HOMEOWNERS ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "COCE-25-080423": {
+  "plaintiff": "LA Mirage Homeowners Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "COWE-26-021926": {
+  "plaintiff": "Silver Falls Homeowners Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CACE-16-016939": {
+  "plaintiff": "WILMINGTON SAVINGS FUND SOCIETY, FSB, AS TRUSTEE OF UPLAND MORTGAGE LOAN TRUST",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore - >$50K - <$250,000"
+ },
+ "CACE-18-027297": {
+  "plaintiff": "Deutsche Bank National Trust Company",
+  "is_bank_first": true,
+  "case_type": "Real Prop Non-Homestead Res Fore =/>$250,000"
+ },
+ "CACE-19-023537": {
+  "plaintiff": "Wilmington Savings Fund Society",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore =/>$250,000"
+ },
+ "CACE-22-002484": {
+  "plaintiff": "Bank of New York Mellon",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-23-016206": {
+  "plaintiff": "US Bank Trust National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-24-000407": {
+  "plaintiff": "Carrington Mortgage Services Llc, et al",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-24-013582": {
+  "plaintiff": "Stormfield Capital Funding I, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "CACE-25-006823": {
+  "plaintiff": "U.S. Bank Trust National Association, not in its individual capacity but solely as Owner Trustee for RCAF Acquisition Trust",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-010858": {
+  "plaintiff": "Nationstar Mortgage Llc",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-011292": {
+  "plaintiff": "U.S. BANK TRUST NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-25-014341": {
+  "plaintiff": "SOUTH PALM PLACE CONDOMINIUM ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-015415": {
+  "plaintiff": "SOMI RESOURCES, LLC, et al",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-25-016969": {
+  "plaintiff": "Midfirst Bank",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $50,000 or Less"
+ },
+ "CACE-25-017216": {
+  "plaintiff": "U S Bank Trust National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "CACE-20-001203": {
+  "plaintiff": "U.S. Bank Trust National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-22-002423": {
+  "plaintiff": "US Bank National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-22-014096": {
+  "plaintiff": "U.S. Bank Trust National Association, As",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-24-003326": {
+  "plaintiff": "GREAT LAKES CREDIT UNION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-24-008842": {
+  "plaintiff": "THE BANK OF NEW YORK MELLON",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-24-017522": {
+  "plaintiff": "U S Bank Trust National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-002066": {
+  "plaintiff": "U.S. Bank National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-004309": {
+  "plaintiff": "U.S. Bank Trust Company, National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-005412": {
+  "plaintiff": "AAMG FC Properties, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-25-006075": {
+  "plaintiff": "LAKEVIEW LOAN SERVICING, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-009338": {
+  "plaintiff": "Truist Bank",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-010835": {
+  "plaintiff": "WELLS FARGO BANK, NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-016218": {
+  "plaintiff": "THE COURTS AT OAKLAND PARK, CONDOMINIUM ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-019198": {
+  "plaintiff": "Loan Funder LLC Series 56436",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "CACE-26-000704": {
+  "plaintiff": "FIRST INTERNET BANK OF INDIANA",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-26-002995": {
+  "plaintiff": "Daniel Perla",
+  "is_bank_first": false,
+  "case_type": "Contract and Indebtedness"
+ },
+ "CACE-26-004982": {
+  "plaintiff": "TOPAZ SOUTH CONDOMNIUM ASSOCIAITON INC",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-23-014031": {
+  "plaintiff": "WELLS FARGO BANK NA",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-24-005931": {
+  "plaintiff": "Umb Bank National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-24-006273": {
+  "plaintiff": "Carrington Mortgage Services, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-24-010939": {
+  "plaintiff": "THE BANK OF NEW YORK MELLON",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-24-017795": {
+  "plaintiff": "NEWPORT AT LAUDERHILL ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Prop NonHomestead Res Fore $50,000 or Less"
+ },
+ "502025CA004084XXXAMB": {
+  "plaintiff": "WELLS FARGO BANK NA",
+  "is_bank_first": true,
+  "case_type": "NON HR FORECLOSURE > $50K, < $250K"
+ },
+ "CACE-25-000856": {
+  "plaintiff": "SETH CHARLES FISHMAN, P.A",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-25-009197": {
+  "plaintiff": "REIGO BY MEITAV DASH US INVESTMENTS LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "CACE-25-012241": {
+  "plaintiff": "FREEDOM MORTGAGE CORPORATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-26-000650": {
+  "plaintiff": "Ivanhoe West at Century Village Condominium #1 Association, Inc.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "COCE-25-088956": {
+  "plaintiff": "Capitol Hill Homeowners Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CONO-26-013946": {
+  "plaintiff": "Fairhaven 11 Maintenance Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CACE-23-002601": {
+  "plaintiff": "The Bank Of New York Mellon",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-23-020872": {
+  "plaintiff": "U S Bank Trust National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "CACE-24-006544": {
+  "plaintiff": "NATIONSTAR MORTGAGE LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-24-006801": {
+  "plaintiff": "Land Home Financial Services Inc",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-24-009886": {
+  "plaintiff": "HSBC BANK USA NA",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-24-012974": {
+  "plaintiff": "Playa Del Mar Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-009175": {
+  "plaintiff": "LOANDEPOT.COM, LLC.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-009191": {
+  "plaintiff": "LAKEVIEW LOAN SERVICING, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-25-009514": {
+  "plaintiff": "MAJESTIC GARDENS CONDOMINIUM H ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-009656": {
+  "plaintiff": "LAKE EMERALD OWNERS' ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-017505": {
+  "plaintiff": "CITIBANK, N.A.",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-23-000165": {
+  "plaintiff": "WILMINGTON SAVINGS FUND SOCIETY FSB NOT",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-24-001025": {
+  "plaintiff": "PHH MORTGAGE CORPORATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-010537": {
+  "plaintiff": "U.S. BANK TRUST NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-25-016054": {
+  "plaintiff": "Alec Ross",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-25-019546": {
+  "plaintiff": "HARWOOD \"C\" CONDOMINIUM ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-26-002763": {
+  "plaintiff": "Mortgage Research Center Llc",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-26-004770": {
+  "plaintiff": "CMFL INVESTMENTS LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-25-012076": {
+  "plaintiff": "Anabel Lewis, et al",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-25-014829": {
+  "plaintiff": "Lakeview Loan Servicing LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-26-003082": {
+  "plaintiff": "Imperial Towers Condominium, Inc.",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-26-007394": {
+  "plaintiff": "Andrea Holdings LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "COCE-25-060300": {
+  "plaintiff": "REPUBLIC SQUARE CONDOMINIUM ASSOCIATION, INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CONO-24-049683": {
+  "plaintiff": "Woodmont Tract 57 Homeowners Assocaition Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CONO-24-075394": {
+  "plaintiff": "Grand Palms Community Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CONO-25-025015": {
+  "plaintiff": "ROYAL PARK GARDENS CONDOMINIUM II ASSOCIATION, INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $15,001 - $30,000"
+ },
+ "CONO-25-051954": {
+  "plaintiff": "The Gardens at Lauderhill A Condominium Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CONO-26-019464": {
+  "plaintiff": "GRANADA VILLAGE CONDOMINIUM ASSOCIATION, INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "COWE-25-071737": {
+  "plaintiff": "Monte Carlo Townhomes of Margate Homeowners Assoc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CACE-22-014705": {
+  "plaintiff": "U.S. BANK TRUST NATIONAL ASSOCIATION, NOT IN ITS INDIVIDUAL CAPACITY BUT SOLELY AS OWNER TRUSTEE OF RCF 2 ACQUISITION TRUST",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-25-011708": {
+  "plaintiff": "LAKE EMERALD OWNERS' ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-011908": {
+  "plaintiff": "ENVIRON CONDOMINIUM II ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-25-011926": {
+  "plaintiff": "ENVIRON CONDOMINIUM II ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-25-018345": {
+  "plaintiff": "LAKE EMERALD OWNERS ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-019514": {
+  "plaintiff": "FIRST GULFSTREAM GARDEN APARTMENTS CONDOMINIUM INC",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-26-000082": {
+  "plaintiff": "Rocket Mortgage LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-21-006417": {
+  "plaintiff": "MTGLQ Investors, L.P.",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-22-002894": {
+  "plaintiff": "U.S. BANK TRUST NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-22-008576": {
+  "plaintiff": "Crosscountry Mortgage, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-009615": {
+  "plaintiff": "MAINLANDS FIVE, INC.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-014156": {
+  "plaintiff": "NEWREZ LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-016326": {
+  "plaintiff": "Oriole Gardens Condominium Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-017007": {
+  "plaintiff": "Wilmington Savings Fund Society FSB",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "CACE-25-017804": {
+  "plaintiff": "GITSIT SOLUTIONS, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-19-008939": {
+  "plaintiff": "Bank of New York Mellon",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other Fore $250,000 or More"
+ },
+ "CACE-23-001459": {
+  "plaintiff": "HSBC Bank USA, National Association, as Trustee",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-23-020878": {
+  "plaintiff": "U.S. BANK TRUST NATIONAL ASSOCIATION, NOT IN ITS INDIVIDUAL CAPACITY BUT SOLELY AS OWNER TRUSTEE FOR RCF 2 ACQUISITION TRUST, et al",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-24-001145": {
+  "plaintiff": "THE SECRETARY OF THE US DEPARTMENT OF HOUSING",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-24-012388": {
+  "plaintiff": "U.S. Bank National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-24-013472": {
+  "plaintiff": "NATIONSTAR MORTGAGE LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-003370": {
+  "plaintiff": "U.S. BANK TRUST NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-005200": {
+  "plaintiff": "The Bank Of New York Mellon",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-006627": {
+  "plaintiff": "SOUTHSTATE BANK, N.A.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "CACE-25-010102": {
+  "plaintiff": "BARCLAYS MORTGAGE LOAN TRUST 2021-NQM1",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-010119": {
+  "plaintiff": "WILMINGTON SAVINGS FUND SOCIETY, FSB",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-011825": {
+  "plaintiff": "PennyMac Loan Services, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-25-014174": {
+  "plaintiff": "NATIONSTAR MORTGAGE LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-014823": {
+  "plaintiff": "NATIONSTAR MORTGAGE LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-015544": {
+  "plaintiff": "River Reach Incorporated",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-25-016797": {
+  "plaintiff": "Intracoastal Tower Condominium Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-25-017751": {
+  "plaintiff": "TOWD POINT MORTGAGE TRUST 2018-1",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-26-001773": {
+  "plaintiff": "MARRIOTT RESORTS HOSPITALITY CORPORATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "COCE-25-084753": {
+  "plaintiff": "LA MIRAGE HOMEOWNERS ASSOCIATION, INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "COCE-26-012931": {
+  "plaintiff": "CHAPEL TRAIL OWNERS ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CONO-21-003572": {
+  "plaintiff": "Landings of Parkland Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $15,001 - $30,000"
+ },
+ "CONO-24-056410": {
+  "plaintiff": "Park South Four Inc",
+  "is_bank_first": true,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000"
+ },
+ "CACE-09-033060": {
+  "plaintiff": "Donna Davila",
+  "is_bank_first": true,
+  "case_type": "*Real Property MTG Foreclosure + (prior to 1/1/10) - Foreclosure-Prior to SB 1718"
+ },
+ "CACE-22-012251": {
+  "plaintiff": "PennyMac Loan Services LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-23-013997": {
+  "plaintiff": "Wells Fargo Bank N A",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-23-014484": {
+  "plaintiff": "U S Bank Trust National Association Not In Its",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-23-019930": {
+  "plaintiff": "New Rez LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-24-004741": {
+  "plaintiff": "U.S. BANK TRUST NATIONAL ASSOCIATION, NOT IT ITS INDIVIDUAL CAPACITY BUT SOLELY AS TRUSTEE OF PL PRETIUM TRUST",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-24-016110": {
+  "plaintiff": "Rocket Mortgage, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-24-018041": {
+  "plaintiff": "Carrington Mortgage Services, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-002663": {
+  "plaintiff": "WELLS FARGO BANK, N.A.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-006419": {
+  "plaintiff": "NEWTEK SMALL BUSINESS FINANCE, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More"
+ },
+ "CACE-25-019053": {
+  "plaintiff": "Planet Home Lending LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-26-000247": {
+  "plaintiff": "Space Coast Credit Union",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-22-009549": {
+  "plaintiff": "6466 N W 80th Terrace LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-24-006635": {
+  "plaintiff": "CITIZENS BANK NA",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-24-010844": {
+  "plaintiff": "LEGACY MORTGAGE ASSET TRUST 2017-RPL2, et al",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-24-012983": {
+  "plaintiff": "Planet Home Lending, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-24-014862": {
+  "plaintiff": "Lakeview Loan Servicing LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-25-007824": {
+  "plaintiff": "WELLS FARGO BANK, NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-011675": {
+  "plaintiff": "DEUTSCHE BANK TRUST COMPANY AMERICAS",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K"
+ },
+ "CACE-25-013181": {
+  "plaintiff": "AMERIHOME MORTGAGE COMPANY, LLC.",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ },
+ "CACE-25-015235": {
+  "plaintiff": "Wells Fargo Bank, National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-015855": {
+  "plaintiff": "First-Citizens Bank & Trust Company",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore Between $50,000 and $250,000"
+ },
+ "CACE-25-017735": {
+  "plaintiff": "Honey Lake Homeowner Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-26-000191": {
+  "plaintiff": "NEWREZ LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More"
+ },
+ "CACE-26-001078": {
+  "plaintiff": "Environ Condominium I Association, Inc.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less"
+ },
+ "CACE-26-002686": {
+  "plaintiff": "CHRISTOPHER HOUSE CONDOMINIUM APARTMENTS INC",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-26-004371": {
+  "plaintiff": "OMEGA VILLAS CONDOMINIUM ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Condominium Action"
+ },
+ "CACE-23-019709": {
+  "plaintiff": "THE SECRETARY OF THE US DEPARTMENT OF HOUSING",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More"
+ }
+}

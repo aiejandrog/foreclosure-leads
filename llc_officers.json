@@ -1865,5 +1865,22 @@
    "CORY CASINO PARTY RENTALS LLC"
   ],
   "t": "2026-07-26"
+ },
+ "CACE-22-016620": {
+  "ent": "2045 SW 127TH AVENUE LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "2045 SW 127TH AVENUE, LLC",
+  "typo": false,
+  "ra": "Burke, Ryan, MGR",
+  "ra_addr": "3100 NW 126th Avenue, Sunrise, FL 33323",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "Burke Development Group, LLC",
+    "a": "3100 NW 126th Avenue, Sunrise, FL 33323"
+   }
+  ],
+  "t": "2026-07-28"
  }
 }

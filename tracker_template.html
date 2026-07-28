@@ -949,6 +949,11 @@ details.cscript{margin-top:10px}
 .csdil-tbl th{flex:0 0 38%;text-align:left;padding:5px 8px;color:var(--muted,#6b7280);
   font-weight:600;font-family:var(--f-label,inherit);font-size:11px;letter-spacing:.04em;
   text-transform:uppercase;line-height:1.4}
+/* Linkable label rows — the "what does this do" answer. Each label opens the deepest useful URL. */
+.csdil-tbl tr.csdil-linkrow th a{color:var(--gold-d,#8a6d1f);text-decoration:none;
+  border-bottom:1px dashed transparent;padding-bottom:1px}
+.csdil-tbl tr.csdil-linkrow:hover{background:var(--gold-soft,#f4ead2)}
+.csdil-tbl tr.csdil-linkrow:hover th a{border-bottom-color:var(--gold,#C6A14B);color:var(--ink,#0e1b33)}
 .csdil-tbl td{flex:1 1 0;min-width:0;overflow-wrap:anywhere;word-break:break-word;
   color:var(--ink,#101C33);font-weight:650;font-size:13px;line-height:1.4;padding:5px 8px}
 /* the flex layout above is the source of truth for the diligence table now — the old table CSS
@@ -3918,7 +3923,12 @@ function _csDiligence(r){
     : '<div class="csdil-money">'+
         '<b>Money:</b> value '+fm(mm.value||r.value)+' − FJ '+fm(mm.judg||judgN)+
         ' − senior '+fm(mm.surviving_senior)+
-        ' − tax '+ (mm.tax_checked === false ? '<i>not pulled</i>' : fm(mm.tax_certs))+
+        // UNPULLED TAX IS NOT ZERO TAX. mm.tax_checked is only ever `false` on briefs composed by
+        // the updated apply_lead_backed_numbers; when the diligence server has never been called
+        // for this case the field is undefined, so `undefined === false` was FALSE and the money
+        // line rendered "− tax $0" — silently subtracting zero for delinquency. Treat both undefined
+        // AND explicit false as "not pulled". Only when tax_checked is TRUE do we trust the number.
+        ' − tax '+ (mm.tax_checked === true ? fm(mm.tax_certs) : '<i style="color:#8a1c1c">not pulled</i>')+
         (mm.net_equity_est!=null?' → net est <b>'+fm(mm.net_equity_est)+'</b>':'')+
         (mm.list_price!=null?' · list '+fm(mm.list_price):'')+
         (mm.value_source==='active_listing'?' <span class="dilg-tag">from active listing</span>':'')+
@@ -3967,14 +3977,44 @@ function _csDiligence(r){
       // column widths. Without the colgroup a long value like a URL or "Lady Bird / life estate
       // unknown — pull latest deed" would force the browser to fall back to auto layout and blow the
       // table out to 1770px on a 390px phone (Alejandro's screenshot: labels showed, values off-screen).
-      '<div class="csdil-tbl-wrap"><table class="csdil-tbl"><colgroup><col class="klbl"><col class="kval"></colgroup><tbody>'+
-        '<tr><th>Case</th><td>'+esc(caseCell)+'</td></tr>'+
-        '<tr><th>Judgment</th><td>'+fm(judgN)+'</td></tr>'+
-        '<tr><th>Sale</th><td>'+esc(saleCell)+'</td></tr>'+
-        '<tr><th>Open mortgage(s)</th><td>'+mtgCell+'</td></tr>'+
-        '<tr><th>Tax certs</th><td>'+taxCell+'</td></tr>'+
-        titleRow+
-      '</tbody></table></div>'+
+      // EVERY LABEL IS NOW A LINK. Alejandro's screenshot circled the entire label strip: "what's
+      // the purpose of this feature if I can't click it?". The purpose IS the six anchors to
+      // authoritative sources for that lead — a one-tap jump from the summary row to the county
+      // record that backs it. Each label opens the deepest useful URL we have for that fact:
+      //   Case      -> case docket at the clerk
+      //   Judgment  -> case docket (that's where the recorded FJ lives)
+      //   Sale      -> live RealForeclose auction page for THIS sale date
+      //   Open mtgs -> Official Records name search (already keyed to owner in `records` URL)
+      //   Tax certs -> tax collector page for this parcel
+      //   Title     -> Property Appraiser detail (deed history)
+      // If a URL is missing (no folio, no case in the auction system) the row degrades to a static
+      // label — never a dead click, never a false destination.
+      (function(){
+        var dockU = r.docket || r.cases || '';
+        var caseU = dockU;
+        var saleU = r.auc || '';
+        var recU  = r.records || (r.county==='MIAMI-DADE'
+          ? 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch'
+          : r.county==='BROWARD'
+          ? 'https://officialrecords.broward.org/AcclaimWeb/'
+          : 'https://erec.mypalmbeachclerk.com/');
+        var taxU  = (tx.url) || r.tax || '';
+        var paU   = r.pa || '';
+        var row = function(url, title, label, val){
+          if(!url) return '<tr><th>'+label+'</th><td>'+val+'</td></tr>';
+          return '<tr class="csdil-linkrow"><th><a href="'+esc(url)+'" target="_blank" rel="noopener" title="'+esc(title)+'">'+label+'&nbsp;↗</a></th><td>'+val+'</td></tr>';
+        };
+        return '<div class="csdil-tbl-wrap"><table class="csdil-tbl"><colgroup><col class="klbl"><col class="kval"></colgroup><tbody>'+
+          row(caseU, 'Open the case docket at the county clerk',        'Case',              esc(caseCell)) +
+          row(dockU, 'Open the case docket (the recorded FJ lives here)','Judgment',         fm(judgN)) +
+          row(saleU, 'Open the live RealForeclose auction for this date','Sale',             esc(saleCell)) +
+          row(recU,  'Search Official Records for this owner',           'Open mortgage(s)', mtgCell) +
+          row(taxU,  'Open the tax collector page for this parcel',      'Tax certs',        taxCell) +
+          (titleRow ? titleRow.replace('<tr><th>Title</th>',
+              paU ? '<tr class="csdil-linkrow"><th><a href="'+esc(paU)+'" target="_blank" rel="noopener" title="Open Property Appraiser (deed history)">Title&nbsp;↗</a></th>'
+                  : '<tr><th>Title</th>') : '')+
+        '</tbody></table></div>';
+      })()+
       killHtml+moneyHtml+tlHtml+outreach+citeHtml+errNote+pendingNote+
       (d.traced?'<div class="css" style="margin-top:6px">traced '+esc(d.traced)+'</div>':'')+
     '</div></div>';
