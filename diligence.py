@@ -342,8 +342,30 @@ def apply_lead_backed_numbers(d: dict, lead) -> dict:
             d['foreclosure_type'] = ftype_lead
 
     mm = dict(d.get('money_math') or {})
-    if value and not (mm.get('value') or 0):
+    # PREFER THE ACTIVE LIST PRICE OVER THE COUNTY ROLL. An active MLS listing is direct market
+    # evidence — the seller has publicly told the market this is what they want. The county roll is
+    # a tax number, Save Our Homes-capped on homesteads, and typically 20-40% off retail. Capri's
+    # brief was reasoning off $66,407 while $59,900 sat in the same record — every downstream figure
+    # (net equity, "owner walks with", the payoff calc) was framed off the wrong basis. If a listing
+    # exists AND is materially different from the roll, use it as the money-math value and mark it
+    # so the reader can see the switch happened.
+    _lp = float(mm.get('list_price') or lead.get('zprice') or 0) or 0
+    _val_from = value
+    if _lp and (not value or abs(_lp - value) / max(value, 1) > 0.05):
+        _val_from = _lp
+        mm['value_source'] = 'active_listing'
+        # OVERWRITE any prior value that came off the roll. Cursor's seed hard-codes value=66407 for
+        # Capri, so the `not (mm.get('value') or 0)` guard would silently keep it. An active listing
+        # is direct market evidence and must beat the roll number every time it appears — otherwise
+        # net_equity_est stays framed off the roll and the operator quotes a homeowner a $47k walk
+        # instead of the $41k truth (Capri: list $59.9k, roll $66.4k).
+        mm['value'] = int(round(_val_from))
+        mm['net_equity_est'] = None
+    elif value and not (mm.get('value') or 0):
+        mm['value_source'] = 'county_roll'
         mm['value'] = int(round(value))
+    if _lp and not mm.get('list_price'):
+        mm['list_price'] = int(round(_lp))
     dig_judg = float(d.get('judgment') or mm.get('judg') or 0) or 0
     use_judg = dig_judg or judg
     if use_judg and not (mm.get('judg') or 0):
@@ -373,7 +395,8 @@ def apply_lead_backed_numbers(d: dict, lead) -> dict:
                            + 'unpaid years become certificates that survive the sale and outrank every '
                            + 'other lien. Pull the tax bill before you treat this net as real.')
         elif not mm.get('notes'):
-            mm['notes'] = 'Net equity from lead value − FJ − senior − tax certs. OR thin — confirm before wire.'
+            _basis_tag = mm.get('value_source') == 'active_listing' and ' active listing price' or ' county roll value'
+            mm['notes'] = 'Net equity from' + _basis_tag + ' − FJ − senior − tax certs. OR thin — confirm before wire.'
     d['money_math'] = mm
 
     # Tax URL from lead when taxes block lacks it
