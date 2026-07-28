@@ -100,7 +100,12 @@ def fetch_via_turnstile(owner_lf, tries=3):
         from captcha_solver import solve_turnstile
     except Exception:
         return None
-    party = (owner_lf[0] + ' ' + (owner_lf[1] or '')).strip()
+    # THE MD CLERK ACCEPTS ONE WORD. Any name with a space (`WHITE SHUROD`) or comma (`WHITE, SHUROD`)
+    # returns `{isValidSearch:false, qs:null}` with the token accepted. Verified with a $12 wallet
+    # and a fresh solve per test: only `WHITE` alone succeeded. That is why 41 of 43 leads couldn't
+    # be pulled today. Submit the last name only; the downstream analyzer already isolates by folio,
+    # so a broad last-name pool is safe. Companies stay whole (owner_lf[1] is empty for them).
+    party = owner_lf[0].strip()
     url = (OR_BASE + 'api/home/standardsearch?partyName=' + urllib.parse.quote(party)
            + '&dateRangeFrom=&dateRangeTo=&documentType=&searchT=&firstQuery=y&searchtype='
            + urllib.parse.quote('Name/Document'))
@@ -425,10 +430,15 @@ def main():
             sp = split_owner(oc)
             if sp:
                 # PRIMARY path (2026-07-21): solve Turnstile via 2Captcha, no browser. This is what
-                # took the wall from ~15% coverage to near-total. Browser mint is the last resort.
+                # took the wall from ~15% coverage to near-total. Browser mint is the last resort —
+                # skip it silently when the JS template is missing (site migrated away from the old
+                # reCAPTCHA v3 the mint code was built for), so a broken fallback never masks a real
+                # Turnstile failure. `--persist` on the batch is a no-op when the fallback is dead.
                 models = fetch_via_turnstile(sp)
                 if models is None:
-                    models = mint_and_fetch(sp, persist=a.persist)
+                    src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()
+                    if 'JS = r"""' in src:
+                        models = mint_and_fetch(sp, persist=a.persist)
         if models is None:
             print(f"  --  {case:22} {oc:26} (no records / blocked)")
             continue
