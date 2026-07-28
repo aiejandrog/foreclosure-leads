@@ -827,6 +827,24 @@ def make_tracker(leads):
     if os.path.exists(_cf):
         try: comps = json.load(open(_cf, encoding='utf-8'))
         except Exception: comps = {}
+    # Deep Diligence briefs (diligence.py) — Capri-H quality card on the Call Sheet.
+    # Prefer diligence_cache.json; fall back to per-case files under diligence/*.json.
+    diligence = {}
+    _dcf = os.path.join(HERE, 'diligence_cache.json')
+    if os.path.exists(_dcf):
+        try: diligence = json.load(open(_dcf, encoding='utf-8')) or {}
+        except Exception: diligence = {}
+    if not diligence:
+        _ddir = os.path.join(HERE, 'diligence')
+        if os.path.isdir(_ddir):
+            for _fn in os.listdir(_ddir):
+                if not _fn.endswith('.json'): continue
+                try:
+                    _dj = json.load(open(os.path.join(_ddir, _fn), encoding='utf-8'))
+                    _dc = (_dj.get('case') or '').strip()
+                    if _dc: diligence[_dc] = _dj
+                except Exception:
+                    pass
     # the HUMANS behind LLC-owned leads (llc_officers.py, Sunbiz; committed like the stay cache) —
     # managers/officers + registered agent so a company-owned deal is still a person you can call.
     llcs = {}
@@ -958,6 +976,9 @@ def make_tracker(leads):
             d['arv'] = _cp.get('arv', 0); d['arvconf'] = _cp.get('conf', '')
             d['arvpsf'] = _cp.get('psf', 0); d['arvn'] = _cp.get('n', 0)
             d['comps'] = _cp.get('comps', [])
+        _dd = diligence.get(r.get('Case #', ''))
+        if _dd:
+            d['diligence'] = _dd
         d['county'] = 'MIAMI-DADE'
         slim.append(d)
 
@@ -1003,6 +1024,10 @@ def make_tracker(leads):
                     _d['arv'] = _cp.get('arv', 0); _d['arvconf'] = _cp.get('conf', '')
                     _d['arvpsf'] = _cp.get('psf', 0); _d['arvn'] = _cp.get('n', 0)
                     _d['comps'] = _cp.get('comps', [])
+                # Deep Diligence (diligence.py) — Capri-H brief on Call Sheet
+                _dd = diligence.get(_d.get('case', ''))
+                if _dd:
+                    _d['diligence'] = _dd
                 # Sunbiz humans behind a company owner (llc_officers.py)
                 _lo = llcs.get(_d.get('case', ''))
                 if _lo and (_lo.get('officers') or _lo.get('ra')):
@@ -1011,6 +1036,18 @@ def make_tracker(leads):
                     _d['llcmatch'] = _lo.get('matched', '')
                 elif _lo and _lo.get('nf'):
                     _d['llcnf'] = True
+                # ANNUAL TAX for the statewide counties. Miami-Dade bakes est_annual_tax at line 467
+                # (1.3% of value on homestead, 2.1% otherwise); Broward and Palm Beach shipped NOTHING
+                # — 0 of 189 and 0 of 182 — so every diligence brief on those counties showed no tax
+                # line at all, and the money math treated the unknown as $0. Same roll-value model,
+                # same rates, verified against the 198 Miami-Dade leads that carry both figures
+                # (implied effective rate: p25 1.30%, median/p75 2.10%). Clearly an ESTIMATE off the
+                # roll — the per-parcel tax link on the row is still the number to trust before wiring.
+                if not (_d.get('etax') or 0):
+                    _tv = float(_d.get('value') or 0) or 0
+                    if _tv:
+                        _d['etax'] = round(_tv * (0.013 if _d.get('hs') else 0.021))
+                        _d['etaxest'] = True          # flag it so the UI can never pass it off as billed
                 # TRUE type: the recorded-chain plaintiff (broward_liens.analyze -> _h['ftype']) is
                 # authoritative and OVERRIDES the case-number prefix, which mislabels HOA-in-circuit-court
                 # cases (CACE) as MORTGAGE. The slim lead's own plaintiff-or-prefix guess is the next
