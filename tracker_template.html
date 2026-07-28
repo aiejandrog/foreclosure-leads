@@ -2185,6 +2185,7 @@ function _syncPropPills(){
 // a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){
+  if(r.sibclaimed) return true;      // sibling case already sold + title issued — property is gone
   if(r.ordeeded && r.ordeedconf==='ok') return true;
   // SOURCE OF TRUTH. This predicate hard-kills a lead — it feeds "Hide flagged", the 30%+ equity
   // filter and the Closers cockpit. It used raw orsurvfirst vs raw value−judgment: blind to the
@@ -2470,6 +2471,18 @@ function recompute(){
 // ---- worth-it verdict + per-lead deal analysis ----
 function setVerdict(r, x){
   const val = x.val;
+  // CLAIMED — a SIBLING case on this property already sold at auction and title transferred
+  // (sibling_cases.py, verified against the docket). The Martin lesson: Carlos knocked on
+  // 1101 SW 122 AVE 307 off our JPMorgan lead while R&V Investors already held title through
+  // the HOA case we never tracked. No profit math can resurrect a property someone else owns.
+  if(r.sibclaimed){
+    const s=(r.sib||[]).find(x=>x.sold)||{};
+    r._profit=null; r._roi=null; r._verdict='PASS'; r._vrank=1;
+    r._whyShort='CLAIMED — already sold via sibling case';
+    r._why='This property ALREADY SOLD at auction through a sibling case ('+(s.case||'?')+') that this board wasn\'t tracking'
+      +(s.title?' — Certificate of Title issued '+s.title:'')
+      +(s.tpb?' to '+s.tpb:'')+'. The lead case here will likely be dismissed or reduced to a surplus fight. Do not route a door-knock or spend outreach on it.';
+    return; }
   // never show a profit we can't stand behind
   if(r.ju){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2; r._whyShort='Judgment not posted — verify on docket';
     r._why='Final judgment not posted — the debt is unknown. Confirm it on the docket before trusting any profit.'; return; }
@@ -2530,6 +2543,15 @@ function verdictBadge(r){ return r._verdict==='VERIFY' ? '<span class="vb vbv">V
 // deal-killer chips: 🔴 TAKEN (already deeded to an investor) · 🟠 2ND FORECLOSURE (a separate mortgage case).
 // Conservative: solid red only when high-confidence; low-confidence shows amber "MAYBE SOLD / verify".
 function flagChips(r){ let o='';
+  // CLAIMED — the docket-side twin of TAKEN: a sibling foreclosure case on this property already
+  // produced a Certificate of Title to an outside bidder. Verified from the clerk's own docket.
+  if(r.sibclaimed){ const s=(r.sib||[]).find(x=>x.sold)||{};
+    o+='<span class="chip tax" title="This property ALREADY SOLD at auction through sibling case '+esc(s.case||'?')+
+      (s.title?' — Certificate of Title '+esc(s.title):'')+(s.tpb?' to '+esc(s.tpb):'')+
+      '. The case on this board is the one that LOST the race. Do not knock, call, or mail — the owner no longer owns it.">CLAIMED</span>'; }
+  else if((r.sib||[]).length){
+    o+='<span class="chip hoa" title="A SECOND foreclosure case is running on this owner ('+esc((r.sib[0]||{}).case||'')+
+      ' — '+esc((r.sib[0]||{}).pl||'')+'). Whichever auctions first decides who owns the property; check both dockets before valuing this deal.">2 CASES</span>'; }
   if(r.ordeeded){ const hi=(r.ordeedconf==='ok');
     o+='<span class="chip '+(hi?'tax':'hoa')+'" title="A deed was recorded '+esc(r.ordeeded.d||'')+' to '+esc(r.ordeeded.grantee||'an investor')+' &mdash; the owner appears to have already sold this'+(hi?'.':' (possible only, common name &mdash; verify in Records).')+'">'+(hi?'TAKEN':'MAYBE SOLD')+'</span>'; }
   if(r.orsecond){ o+='<span class="chip hoa" title="A SEPARATE mortgage foreclosure is also running: '+esc(r.orsecond.case||'')+(r.orsecond.party?' &mdash; '+esc(r.orsecond.party):'')+'. The small HOA case hides it; verify the mortgage payoff.">2ND FORECLOSURE</span>'; }
@@ -2560,6 +2582,9 @@ function mrText(r){
 function mathLine(label,val,tot){ return '<div class="mathline'+(tot?' tot':'')+'"><span>'+esc(label)+'</span><span>'+fmtMoney(val)+'</span></div>'; }
 function dealFlags(r){
   const f=[], nn=notes[r.case]||{};
+  if(r.sibclaimed){ const s=(r.sib||[]).find(x=>x.sold)||{};
+    f.push('🔴 CLAIMED — already sold at auction via sibling case '+(s.case||'?')+(s.title?' (title '+s.title+')':'')+(s.tpb?' to '+s.tpb:'')+'. Only remaining angle: if a SURPLUS was left in the registry, the FORMER owner can claim it (FS 45.031) — but they no longer own the property.'); }
+  else if((r.sib||[]).length){ f.push('⚠ TWO CASES on this owner: '+r.sib.map(s=>s.case+' ('+(s.pl||'?')+')').join(', ')+'. Whichever auctions first controls the property — track both sale dates.'); }
   if(r.ju) f.push('Final judgment not posted — debt unknown; verify on the docket.');
   if(r.st!=='TD' && r.mr) f.push(r.ip ? 'Private (individual) plaintiff: a senior 1st mortgage likely survives — verify in Official Records.' : 'HOA / junior case: the 1st mortgage survives — must be looked up.');
   if(r.st==='TD'){ f.push('Tax-deed title is not insurable until quiet title (~$1.5-5k, 3-6 mo).');
@@ -3793,7 +3818,17 @@ function _callSheet(r){
     ? '<details class="cslaw-wrap"><summary>The Rule — what survives (reference)</summary>'+_cflaw+'</details>'
     : '';
   const dil = _csDiligence(r);
-  return '<div class="callsheet">'+who+_csPlay(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+law+
+  // CLAIMED banner — the first thing on the sheet when a sibling case already took the property.
+  // Everything below it (contact, script, money) stays visible for forensics, but the operator
+  // must see "someone else owns this" BEFORE dialing, not after.
+  const sibBan = r.sibclaimed ? (function(){ const s=(r.sib||[]).find(x=>x.sold)||{};
+    return '<div class="csbody csgovwarn" style="border-color:#8a1c1c;background:#fff5f4">'+
+      '<b style="color:#8a1c1c">🔴 CLAIMED — THIS PROPERTY ALREADY SOLD AT AUCTION</b><br>'+
+      'Sibling case <b>'+esc(s.case||'?')+'</b>'+(s.pl?' ('+esc(s.pl)+')':'')+' auctioned first'+
+      (s.sale?' — sale '+esc(s.sale):'')+(s.title?', Certificate of Title <b>'+esc(s.title)+'</b>':'')+
+      (s.tpb?' to <b>'+esc(s.tpb)+'</b>':'')+'. The owner here no longer owns it. Do not knock, call, or mail. '+
+      'Only live angle: a registry SURPLUS belongs to the former owner (FS 45.031).</div>'; })() : '';
+  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+law+
     '<div class="csfoot">'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
@@ -4341,6 +4376,12 @@ function _pbRender(){
     +   '<div class="pbscript"><span class="pbtag">EN</span>Sorry I missed you.\nYour foreclosure sale is [date].\nCall or text before then — I\'m local, I can help.\n[phone] — Alejandro</div>'
     +   '<div class="pbscript"><span class="pbtag">ES</span>Lamento no haberlo encontrado.\nSu subasta de ejecución es el [fecha].\nLlame o escriba antes — soy local, puedo ayudar.\n[teléfono] — Alejandro</div>'
     +   '<div class="pbcallout warn"><b>Federal law:</b> tuck it in the door jamb, NEVER the mailbox. Mailbox is USPS-only — dropping a note there is a misdemeanor.</div>'
+    +   '<h4>📞 The PHONE opener — the 4-second rule (rebuilt after a live hang-up, 07/28)</h4>'
+    +   '<p class="pblede">On the phone their thumb is on End Call. "I saw your property on the foreclosure calendar" as sentence one = guaranteed hang-up: it confirms their worst fear (another vulture) before they decide you\'re human. Three beats, in order — "foreclosure" is not spoken until beat 3:</p>'
+    +   '<div class="pbscript"><span class="pbtag">1</span>"Hi — sorry to bother you. Is this the owner at [street]?" — WAIT. If "who\'s asking?": "My name\'s [name], I\'m calling from Miami. Are you the owner there?"</div>'
+    +   '<div class="pbscript"><span class="pbtag">2</span>"Thanks. Real quick — do you still own it, or has that already been handled?" — a yes/no about THEM buys 30 more seconds.</div>'
+    +   '<div class="pbscript"><span class="pbtag">3</span>"I\'ll be straight with you — your case came up on the county records I work through, date of [sale date]. Not the bank, not a lawyer — local buyer. My job is you knowing every option before that date. Got 60 seconds?"</div>'
+    +   '<div class="pbcallout"><b>Never in the first 30 seconds:</b> "foreclosure" · "auction" · "I want to help you" · "I\'m an investor". After a hang-up: text at +24h, door-drop at +3d, one re-call at +7d with a different opener, then log no-reach and move on. Every per-lead Call script now opens with these three beats automatically.</div>'
     + '</section>'
     // ---- 4) OBJECTIONS ----
     + '<section id="pb-objections" class="pbsec">'
@@ -4416,6 +4457,7 @@ function _pbRender(){
     +     '<li><b>Code-enforcement lien search</b> — call the municipal code office directly. Give them the folio. Ask for recorded orders or liens.</li>'
     +     '<li><b>Tax status</b> — pull the Tax Collector page. Confirm current-year taxes paid. Any delinquent = survives.</li>'
     +     '<li><b>Dropped-party check</b> — search the docket for "DROPPING PARTY:" entries. If a code / tax authority was named and dropped, its lien survives — factor it in or pass.</li>'
+    +     '<li><b>SIBLING-CASE check (the Martin lesson, 07/28)</b> — a condo/HOA property routinely carries TWO foreclosure cases (association\'s + bank\'s), and whichever auctions FIRST decides who owns it. Search the owner\'s name in Cases for OTHER foreclosure files; a Certificate of Title on any of them = the property is GONE (the board flags these 🔴 CLAIMED automatically). We learned this when Carlos door-knocked a unit R&V Investors already owned through an HOA case the board never tracked.</li>'
     +   '</ol>'
     +   '<h4>When skip-trace is thin (no phones on the row)</h4>'
     +   '<p class="pblede">Honest limit: free aggregators (TruePeopleSearch, Whitepages consumer name/address pages) are often <b>6–18 months stale</b> on distressed owners — numbers recycle, VoIP burners appear, landlines get dumped, and people use relatives\' addresses. BatchData empty + no Whitepages Pro cache is a <b>known gap</b>, not a dead lead.</p>'
@@ -4427,6 +4469,17 @@ function _pbRender(){
     +     '<li><b>LLC owners</b> — Sunbiz officers, then people-search those humans (Dealflow already surfaces officer links).</li>'
     +   '</ol>'
     +   '<div class="pbcallout warn"><b>Do not:</b> illegal phone-network tricks, device tracking, or watching someone\'s PO box. Stick to public records, paid data you\'re licensed for, mail, and conversations.</div>'
+    + '</section>'
+    // ---- MARKET INTEL — the Martin file (a competitor\'s playbook, recovered in the field) ----
+    + '<section id="pb-intel" class="pbsec">'
+    +   '<h3>Market Intel — the Martin File (07/28)</h3>'
+    +   '<p class="pblede">Carlos door-knocked 1101 SW 122 AVE #307 and was handed a filed motion that is a competitor\'s complete playbook, executed. Study it.</p>'
+    +   '<ul>'
+    +     '<li><b>The play:</b> R&V Investors LLC bid the CHEAP HOA case (a ~$8-15K county-court file) at auction 05/27, took title 06/16, then filed an agreed motion paying the family <b>$19,600</b> to move + assign surplus rights — with only a small bank lien ($18.4K JPMorgan) left to clear. Bought a $223K condo for pennies over the association debt.</li>'
+    +     '<li><b>💵 CASH-FOR-KEYS BENCHMARK: $19,600</b> — a Miami-Dade 2/2 condo, family in place 43 years, no meaningful equity left to them. That is what a professional actually paid in 2026. Price your own cash-for-keys against this anchor, not guesses.</li>'
+    +     '<li><b>The attorney: Alberto M. Cardet, Cardet Law PLLC</b> (Fla Bar 467900, 305-403-7783, Miami). He repped BOTH the family AND the winning bidder\'s disbursement motion — this is a repeatable machine for him. Two ways to use this: (a) check his name on a docket = the property is probably claimed, walk; (b) he is exactly the kind of attorney Jose\'s stop-sale layer needs — a referral relationship is worth more than a fight.</li>'
+    +     '<li><b>The lesson the board learned:</b> every MD lead now gets a sibling-case scan; 🔴 CLAIMED rows are dead (someone else owns them), 🟠 2 CASES rows have a second clock running that may beat yours.</li>'
+    +   '</ul>'
     + '</section>'
     // ---- 8) FELONY BUCKET ----
     + '<section id="pb-felony" class="pbsec">'
@@ -6272,13 +6325,28 @@ function genScript(r){
     : verify ? 'Califique y agende con ' + esc(partner) + '. Deuda desconocida / primera hipoteca puede borrar equity — prioridad #1 el saldo. Nombre las cinco salidas. NO prometa precio ni que alguien detendrá la venta.'
     : 'Califique rápido con las cinco salidas del Manual, luego fije una devolución ESPECÍFICA con ' + esc(partner) + ' para repasar cada opción (comprador solo si encaja).';
 
-  // Field Manual door opener adapted for phone — no pitch, no "stop it."
-  const openEN = td
-    ? `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm a local home buyer — not selling anything. Your property at <b>${addr}</b> is on the county tax-deed calendar for <b>${dt}</b>${caseTagEN}, about ${days} days out. I just wanted to check whether you have a plan for that date — some people do, some don't know their options. Got 60 seconds?`
-    : `Good ${hi}, ${first}? It's ${esc(sN)} with ${esc(sL)}. I'm a local home buyer — not selling anything. Your property at <b>${addr}</b> came up on the county foreclosure calendar for <b>${dt}</b>${caseTagEN}, about ${days} days out. I just wanted to check whether you have a plan for the sale date — some people do, some don't know they have options. Got 60 seconds?`;
-  const openES = td
-    ? `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Soy comprador de casas local — no le vengo a vender nada. Su propiedad en <b>${addr}</b> está en el calendario de tax deed del condado para el <b>${dt}</b>${caseTagES}, unos ${days} días. Solo quería ver si tiene un plan para esa fecha — hay quienes sí, otros no saben qué opciones tienen. ¿60 segundos?`
-    : `Buen${hi==='morning'?'os días':'as tardes'}, ${first}? Le habla ${esc(sN)}, de ${esc(sL)}. Soy comprador de casas local — no le vengo a vender nada. Su propiedad en <b>${addr}</b> salió en el calendario de subastas del condado para el <b>${dt}</b>${caseTagES}, unos ${days} días. Solo quería ver si tiene un plan para la fecha de subasta — hay quienes sí, otros no saben qué opciones tienen. ¿60 segundos?`;
+  // THE 4-SECOND OPENER (rebuilt 2026-07-28 after a live hang-up on "I saw your property on the
+  // foreclosure calendar"). At pickup, their guard is UP and their thumb is on End Call. The old
+  // opener confirmed their worst fear — another vulture — in sentence one. The new frame does three
+  // things before ANY scary word: (1) sound human ("sorry to bother you"), (2) anchor on a fact
+  // they recognize (their street, not their case), (3) force a yes/no about THEM ("still own it?").
+  // Only AFTER they engage does the honest reveal land — with a 60-second ceiling so staying on
+  // feels affordable. "Foreclosure" is not spoken until beat 3.
+  const street = esc((r.addr||'').split(',')[0]);
+  const openEN =
+      `<b>Beat 1 — earn the next 10 seconds (no company, no reason yet):</b><br>`
+    + `"Hi — sorry to bother you. Is this the owner at <b>${street}</b>?" <span class="key">(WAIT. Let them answer. If "who's asking?": "My name's ${esc(sN)} — I'm calling from Miami. Are you the owner there?")</span><br><br>`
+    + `<b>Beat 2 — the yes/no that buys 30 more seconds:</b><br>`
+    + `"Thanks. Real quick — do you still own it, or has that already been handled?" <span class="key">(a question about THEM, not you — they answer almost every time)</span><br><br>`
+    + `<b>Beat 3 — the honest reveal, with a ceiling:</b><br>`
+    + `"I'll be straight with you — your ${td?'property came up on the county tax-deed list':'case came up on the county records I work through'}${caseTagEN ? ' ('+caseNo+')' : ''}, with a date of <b>${dt}</b>, about ${days} days out. I'm not the bank, not a lawyer — I'm a local buyer, and my job is making sure you know every option before that date. Some people have a plan; a lot don't know they have five. Got <b>60 seconds</b>?"`;
+  const openES =
+      `<b>Paso 1 — gane los próximos 10 segundos (sin compañía, sin motivo aún):</b><br>`
+    + `"Hola — perdone la molestia. ¿Hablo con el dueño de <b>${street}</b>?" <span class="key">(ESPERE la respuesta. Si dicen "¿quién habla?": "Me llamo ${esc(sN)} — llamo de Miami. ¿Usted es el dueño?")</span><br><br>`
+    + `<b>Paso 2 — la pregunta sí/no que compra 30 segundos más:</b><br>`
+    + `"Gracias. Rápido — ¿todavía es suya, o eso ya se resolvió?" <span class="key">(una pregunta sobre ELLOS, no sobre usted — casi siempre contestan)</span><br><br>`
+    + `<b>Paso 3 — la verdad, con techo de tiempo:</b><br>`
+    + `"Le hablo claro — su ${td?'propiedad salió en la lista de tax deed del condado':'caso salió en los registros del condado que yo reviso'}${caseTagES ? ' ('+caseNo+')' : ''}, con fecha <b>${dt}</b>, en unos ${days} días. No soy el banco ni abogado — soy comprador local, y mi trabajo es que usted conozca cada opción antes de esa fecha. Hay quien tiene plan; muchos no saben que tienen cinco. ¿Me da <b>60 segundos</b>?"`;
 
   // PLAYBOOK roles: intake books the closer — closer lays out options (not "stops sales").
   // ---- WHAT THE TRACKER ALREADY KNOWS -----------------------------------------------------------
