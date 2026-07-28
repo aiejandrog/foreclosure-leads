@@ -142,7 +142,7 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .fgroup{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap}
 .flbl{font-family:var(--f-label);font-size:11px;font-weight:700;letter-spacing:.1em;
   text-transform:uppercase;color:var(--ink-2);margin-right:2px;
-  opacity:1;max-width:80px;overflow:hidden;white-space:nowrap;
+  opacity:1;max-width:90px;overflow:hidden;white-space:nowrap;
   transition:opacity .25s var(--e-lux),max-width .25s var(--e-lux),margin-right .25s var(--e-lux)}
 .fdiv{width:1px;align-self:stretch;min-height:24px;background:var(--line);margin:0 4px}
 /* ============ SMART HEADER SHRINK (body.mini) ============
@@ -196,11 +196,12 @@ input{cursor:text}
 input::placeholder{color:var(--muted);opacity:1}
 input::-webkit-input-placeholder{color:var(--muted);opacity:1}
 input::-moz-placeholder{color:var(--muted);opacity:1}
-/* segmented tier pills */
-.tf{border-radius:var(--pill);padding:7px 15px;font-weight:600;color:var(--ink-2)}
-.tf:hover{transform:translateY(-1px);border-color:rgba(198,161,75,.4);background-color:rgba(198,161,75,.06)}
-.tf.active{background:var(--navy-grad);color:#fff;border-color:transparent;box-shadow:var(--sh-2)}
-.tf.active:hover{transform:translateY(-1px);filter:brightness(1.1)}
+/* segmented tier / FC Type / Property pills */
+.tf,.xff,.xpf{border-radius:var(--pill);padding:7px 15px;font-weight:600;color:var(--ink-2)}
+.tf:hover,.xff:hover,.xpf:hover{transform:translateY(-1px);border-color:rgba(198,161,75,.4);background-color:rgba(198,161,75,.06)}
+.tf.active,.xff.active,.xpf.active{background:var(--navy-grad);color:#fff;border-color:transparent;box-shadow:var(--sh-2)}
+.tf.active:hover,.xff.active:hover,.xpf.active:hover{transform:translateY(-1px);filter:brightness(1.1)}
+.xff,.xpf{padding:7px 12px}
 /* county pills — blue axis with live count */
 .cf{border-radius:var(--pill);padding:7px 13px;font-weight:600;font-size:13px;color:var(--ink-2);
   display:inline-flex;align-items:center;gap:7px;line-height:1}
@@ -893,6 +894,37 @@ details.csmath[open]>summary::before, details.cslaw-wrap[open]>summary::before{c
 .csbtn{font-size:13px;font-weight:700;padding:9px 16px;border-radius:var(--pill,999px);border:1px solid var(--line,#E2E6EE);
   background:var(--surface,#fff);color:var(--ink,#101C33);cursor:pointer}
 .csbtn:hover{border-color:var(--gold,#C6A14B);color:var(--gold-d,#8B6A2C)}
+/* Deep Diligence card (Capri-H brief) on Call Sheet */
+.csdil{margin:12px 0 4px;border:1px solid var(--line,#E2E6EE);border-radius:12px;overflow:hidden;background:var(--surface,#fff)}
+.csdil-ban{padding:11px 14px;font-family:var(--f-label,inherit);font-size:12px;font-weight:800;letter-spacing:.06em;
+  text-transform:uppercase;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline}
+.csdil-ban .v{font-size:15px;letter-spacing:.1em}
+.csdil-ban .sub{font-size:11.5px;font-weight:600;letter-spacing:0;text-transform:none;opacity:.92}
+.csdil-ban.BUY,.csdil-ban.buy{background:rgba(22,101,52,.12);color:#166534;border-bottom:1px solid rgba(22,101,52,.25)}
+.csdil-ban.PASS,.csdil-ban.pass{background:rgba(180,35,24,.1);color:#B42318;border-bottom:1px solid rgba(180,35,24,.28)}
+.csdil-ban.CONDITIONAL,.csdil-ban.conditional{background:rgba(180,83,9,.12);color:#9A3412;border-bottom:1px solid rgba(180,83,9,.3)}
+.csdil-ban.VERIFY,.csdil-ban.verify{background:rgba(31,111,235,.1);color:#1F4E97;border-bottom:1px solid rgba(31,111,235,.28)}
+.csdil-body{padding:10px 14px 14px;color:var(--ink,#101C33)}
+.csdil-tbl{width:100%;border-collapse:collapse;font-size:12.5px;margin:4px 0 10px;color:var(--ink,#101C33)}
+.csdil-tbl th,.csdil-tbl td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line,#E2E6EE);vertical-align:top}
+.csdil-tbl td{color:var(--ink,#101C33);font-weight:650;font-size:13px;line-height:1.4}
+.csdil-tbl th{width:34%;color:var(--muted,#6b7280);font-weight:600;font-family:var(--f-label,inherit);
+  font-size:10px;letter-spacing:.06em;text-transform:uppercase}
+.csdil-kill{margin:8px 0;padding:8px 10px;border-radius:8px;background:rgba(180,35,24,.07);border:1px solid rgba(180,35,24,.28)}
+.csdil-kill .t{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:#B42318;margin-bottom:4px}
+.csdil-kill li{margin:3px 0;font-size:12.5px;line-height:1.45;color:var(--ink,#101C33)}
+.csdil-money{font-size:12.5px;line-height:1.55;color:var(--ink,#101C33);margin:6px 0 8px}
+.csdil-tl{list-style:none;margin:0;padding:0}
+.csdil-tl li{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:4px 0;
+  border-bottom:1px dashed var(--line,#E2E6EE);color:var(--muted,#6b7280)}
+.csdil-tl li:last-child{border-bottom:none}
+.csdil-tl .bp{font-variant-numeric:tabular-nums;font-family:var(--f-num,inherit);white-space:nowrap;color:var(--ink,#101C33)}
+.csdil-cites{font-size:11.5px;color:var(--muted,#6b7280);margin-top:8px;line-height:1.5}
+.csdil-cites code{font-size:11px;background:var(--surface-2,#f6f8fa);padding:1px 5px;border-radius:4px}
+.csdil-empty{margin:10px 0;padding:12px 14px;border:1px dashed var(--line,#E2E6EE);border-radius:10px;
+  background:var(--surface-2,#f6f8fa);font-size:13px;color:var(--muted,#6b7280);line-height:1.5}
+.csdil-empty b{color:var(--ink,#101C33)}
+.shbtn.shdil{border-color:rgba(31,111,235,.45);color:#1F4E97;font-weight:700}
 /* the actionable NOT-CHECKED survivor box: pull the chain + capture what you find */
 .cssurv-act{border-color:#B45309!important;background:rgba(180,83,9,.07)!important}
 .cssurvbtns{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px}
@@ -1605,7 +1637,16 @@ body.compact .dg-v{font-size:14.5px}
   .controls.mcol > *{display:none !important}
   .controls.mcol > .qwrap{display:inline-flex !important}
   .controls.mcol > .mfiltbtn{display:inline-flex !important}
-  .mfiltbtn{display:inline-flex;align-items:center;gap:6px;order:-1}
+  /* Plan today is a daily action sheet, not a filter — keep it on the collapsed chrome so
+     Alejandro can open the day's list without digging through Filters at the door. Same #plan
+     button + openPlanModal(); no duplicated control. */
+  .controls.mcol > #plan{display:inline-flex !important;order:-1}
+  .mfiltbtn{display:inline-flex;align-items:center;gap:6px;order:-1;
+    min-height:44px;padding:10px 14px;touch-action:manipulation}
+  #plan.abtn{min-height:44px;padding:10px 14px;touch-action:manipulation;
+    -webkit-tap-highlight-color:rgba(198,161,75,.2)}
+  .planlog{min-height:44px;padding:10px 14px;touch-action:manipulation}
+  .planls li{padding:12px 6px}
   .controls.mcol{gap:8px}
   .mfiltn:not(:empty){background:var(--gold-grad,#C6A14B);color:var(--gold-ink,#241C05);
     font-size:10px;font-weight:800;border-radius:var(--pill,99px);padding:1px 7px;line-height:1.5}
@@ -1866,6 +1907,19 @@ body.compact .dg-v{font-size:14.5px}
 <button class="tf" data-t="ALL">All</button>
 </span>
 <span class="fgroup" id="ctygroup" role="group" aria-label="County"></span>
+<span class="fgroup" role="group" aria-label="FC Type"><span class="flbl">FC Type</span>
+<button class="xff active" data-fct="" type="button" title="All foreclosure / plaintiff types">All</button>
+<button class="xff" data-fct="BANK" type="button" title="Bank / mortgage foreclosures">Bank</button>
+<button class="xff" data-fct="HOA" type="button" title="HOA / association / condo plaintiff — 1st mortgage usually survives">HOA</button>
+<button class="xff" data-fct="TAX" type="button" title="Tax-deed sales (Jose's lane)">Tax</button>
+<button class="xff" data-fct="OTHER" type="button" title="Unknown or other plaintiff type">Other</button>
+</span>
+<span class="fgroup" role="group" aria-label="Property"><span class="flbl">Property</span>
+<button class="xpf active" data-pk="" type="button" title="All property kinds">All</button>
+<button class="xpf" data-pk="CONDO" type="button" title="Condo / condominium">Condo</button>
+<button class="xpf" data-pk="HOUSE" type="button" title="Single-family, townhouse, cluster home">House</button>
+<button class="xpf" data-pk="OTHER" type="button" title="Vacant land, multi-family, commercial, or unknown">Other</button>
+</span>
 <span class="fdiv"></span>
 <button id="wk" title="Only leads with an auction in the next 7 days">This week</button>
 <button id="hd" title="As you work leads, set their Status to 'Dead' or 'DO NOT CONTACT'. This button hides those so you only see live ones. The number is how many are marked dead right now.">Hide dead</button>
@@ -1981,12 +2035,59 @@ try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
-let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, tdOnly = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false;
+let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false;
+// FC Type / Property kind — exclusive chip groups (like Tier). Empty string = All.
+// fcType: '' | BANK | HOA | TAX | OTHER. Replaces the old tdOnly boolean; Tax chip + #td stay in sync.
+let fcType = '', propKind = '';
 try { const _hv = localStorage.getItem('fcHideViewed'); if(_hv === '0') hideViewed = false; else if(_hv === '1') hideViewed = true; } catch(e){}
+try {
+  const _ft = localStorage.getItem('fcFcType') || '';
+  if(_ft === 'BANK' || _ft === 'HOA' || _ft === 'TAX' || _ft === 'OTHER') fcType = _ft;
+  const _pk = localStorage.getItem('fcPropKind') || '';
+  if(_pk === 'CONDO' || _pk === 'HOUSE' || _pk === 'OTHER') propKind = _pk;
+} catch(e){}
 let nearOnly = false, nearRadius = 5;   // 📍 within N miles of home base (ROUTE_ORIGIN); radius is user-adjustable
 // A lead is in the LIS PENDENS (freshly-filed) stage — no auction date yet, worked as a nurture
 // over months. Set by lis_pendens.py (stage:'LP'). This is the front-of-funnel lane.
 function _isLP(r){ return r && (r.stage === 'LP' || r.st === 'LP'); }
+// Normalize foreclosure / plaintiff type for the FC Type filter chips. Mirrors the Type column
+// chip (BANK / HOA / TAX DEED) plus plaintiff HOA detection so Capri-style ASSOCIATION cases
+// still match HOA even when ctype was mislabeled. Bank-charter "National Association" is stripped
+// first so Wells Fargo N.A. does not false-positive as HOA (same guard as classify() in Python).
+function _fcTypeOf(r){
+  if(!r) return 'OTHER';
+  if(r.st === 'TD') return 'TAX';
+  var ctype = String(r.ctype||'').toUpperCase();
+  var ftype = String(r.ftype||r.orftype||'').toUpperCase();
+  var pl = String(r.plaintiff||'').toUpperCase();
+  var plH = pl.replace(/\bNATIONAL ASSOCIATION\b/g,' ').replace(/\bN\.?\s*A\.?\b/g,' ');
+  if(ftype === 'HOA' || ctype.indexOf('HOA') > -1 ||
+     /\b(ASSOCIATION|ASSN|CONDO(?:MINIUM)?|HOMEOWNERS?|HOA|MASTER ASSOC|TOWNHOM|VILLAS?)\b/.test(plH))
+    return 'HOA';
+  if(ftype === 'MORTGAGE' || ctype ||
+     /\b(BANK|MORTGAGE|NATIONAL ASSOCIATION|FEDERAL CREDIT|FANNIE|FREDDIE|WELLS FARGO|CHASE|NATIONSTAR|PENNYMAC)\b/.test(pl))
+    return 'BANK';
+  return 'OTHER';
+}
+// Condo vs House vs Other for the Property filter — driven by _ptype() / condo / vac.
+function _propKindOf(r){
+  var t = (typeof _ptype === 'function') ? _ptype(r) : '';
+  var u = String(t||'').toUpperCase();
+  if((r && r.condo) || u === 'CONDO') return 'CONDO';
+  if(u === 'SINGLE FAMILY' || u === 'CLUSTER HOME' || u === 'TOWNHOUSE' ||
+     /\b(SFR|SFH|HOUSE|FAMILY)\b/.test(u)) return 'HOUSE';
+  return 'OTHER';
+}
+function _saveTypeFilters(){
+  try { localStorage.setItem('fcFcType', fcType||''); localStorage.setItem('fcPropKind', propKind||''); } catch(e){}
+}
+function _syncFcTypePills(){
+  document.querySelectorAll('.xff').forEach(function(x){ x.classList.toggle('active', (x.dataset.fct||'') === (fcType||'')); });
+  var td = document.getElementById('td'); if(td) td.classList.toggle('active', fcType === 'TAX');
+}
+function _syncPropPills(){
+  document.querySelectorAll('.xpf').forEach(function(x){ x.classList.toggle('active', (x.dataset.pk||'') === (propKind||'')); });
+}
 // a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){
@@ -2192,8 +2293,15 @@ function recompute(){
     const _legacy = Math.max(0, (+r.orsurv || +r.orjunior || +r.orsurvfirst || 0) - _jp);
     const _survTotal = !chainConf ? 0
                      : (r.orsurvsen != null ? (+r.orsurvsen || 0) : _legacy);
-    const chainSurv = (r.orftype === 'HOA') ? (chainConf ? (+r.orsurvfirst || _survTotal) : 0)
-                                            : _survTotal;
+    // ON AN ASSOCIATION SALE THE WHOLE OPEN STACK SURVIVES (FS 718.116) — and both tracers already
+    // compute exactly that (records_liens.py:299 / broward_liens.py:318 sum EVERY open lien, and
+    // leave juniors_post at 0 so nothing is double-counted). This branch preferred `orsurvfirst`,
+    // which is max(o.amt) — ONE mortgage — so every additional open mortgage vanished, and there was
+    // no second bucket to catch it: with juniors_post 0, _jlien is 0 too. Live lead COCE-26-012931
+    // (20850 NW 1 ST, Pembroke Pines) carries two opens totalling $28,680 but surfaced only $15,899,
+    // dropping $12,781 out of _slien, _netEqOf, netEqPct, _cash and _profit simultaneously — and the
+    // call sheet printed the understated figure tagged RECORDS-VERIFIED.
+    const chainSurv = _survTotal;
     r._chainSurv = chainSurv;
     // An explicit entry — INCLUDING a researched 0 ("I verified there is no senior") — always wins
     // over the chain autofill. The old `||` fallback silently resurrected the chain's number when
@@ -3503,18 +3611,291 @@ function _callSheet(r){
     '</ul>'+
     '<div style="margin-top:10px;font-size:12px;text-align:right"><a href="#" onclick="event.preventDefault(); closeCallSheet(); openPlaybook(\'rule\'); return false;" style="color:var(--blue,#1F6FEB);text-decoration:none;font-weight:700">📖 Read the full Playbook →</a></div>'+
     '</div>';
-  // Order: Who → Play → Four numbers → Contact → Clock → Debt → Math → Property/WP → Rule (collapsed).
-  // Ask Jose / LIVE live in the footer (mid-call), not buried inside Math Save & share.
+  // Order: Who → Play → Four numbers → Diligence → Contact → Clock → Debt → Math → Property/WP → Rule.
+  // Ask Jose / LIVE / Run Diligence live in the footer (mid-call), not buried inside Math Save & share.
   const math = _csMathHtml(r, !!callSheetMathOpen);
   const law = _cflaw
     ? '<details class="cslaw-wrap"><summary>The Rule — what survives (reference)</summary>'+_cflaw+'</details>'
     : '';
-  return '<div class="callsheet">'+who+_csPlay(r)+four+cont+clock+(r.st==='LP'?'':stack)+math+prop+_wpHousehold(r)+law+
+  const dil = _csDiligence(r);
+  return '<div class="callsheet">'+who+_csPlay(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+math+prop+_wpHousehold(r)+law+
     '<div class="csfoot">'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
+      '<button type="button" class="shbtn shdil" onclick="_runDiligence(\''+esc(r.case)+'\')" title="Runs Deep Diligence via local API (127.0.0.1:8765). Prefer install_diligence_autostart.bat once — no window needed.">'+(r.diligence?'🔄 Refresh Diligence':'🔬 Run Diligence')+'</button>'+
       '<button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
     '</div></div>';
+}
+function _csLeadDiligenceStub(r){
+  // Instant Capri-style numbers from the board lead — never leave the table blank while API runs.
+  const judg = +r.judg || 0;
+  const value = +r.value || 0;
+  const sale = r.auction || '';
+  const net = value ? Math.round(value - judg) : null;
+  return {
+    case: r.case,
+    county: r.county || '',
+    addr: r.addr || '',
+    folio: r.folio || '',
+    verdict: 'VERIFY',
+    foreclosure_type: r.ftype || ((r.ctype || '').toUpperCase().indexOf('HOA') >= 0 ? 'HOA' : (r.ctype ? 'MORTGAGE' : 'UNKNOWN')),
+    plaintiff: r.plaintiff || '',
+    judgment: judg,
+    sale: sale,
+    mortgages: [],
+    liens: [],
+    taxes: {status: 'unknown', certs: 0, url: r.tax || ''},
+    title: {},
+    killer_issues: [],
+    money_math: {
+      value: value || 0,
+      judg: judg,
+      surviving_senior: 0,
+      tax_certs: 0,
+      list_price: r.zprice || null,
+      net_equity_est: net,
+      notes: 'Lead-backed provisional — OR dig pending / tap Refresh Diligence for live records.'
+    },
+    timeline: sale ? [{label: 'Auction sale', date: sale, bp: ''}] : [],
+    outreach_notes: 'Provisional from auction board — confirm OR + taxes before wire.',
+    citations: [],
+    sources: {lead_backed: true, provisional: true},
+    traced: '',
+    _provisional: true
+  };
+}
+function _csPatchDiligenceFromLead(d, r){
+  if(!d || !r) return d;
+  const judg = +r.judg || 0;
+  const value = +r.value || 0;
+  const sale = r.auction || '';
+  if(judg && !(+d.judgment)) d.judgment = judg;
+  if(sale && !(d.sale || '').trim()) d.sale = sale;
+  if((r.plaintiff || '').trim() && !(d.plaintiff || '').trim()) d.plaintiff = r.plaintiff;
+  const mm = d.money_math = d.money_math || {};
+  if(value && !(+mm.value)) mm.value = value;
+  if(judg && !(+mm.judg)) mm.judg = judg;
+  if(mm.net_equity_est == null && (+mm.value || value)){
+    mm.net_equity_est = Math.round((+mm.value || value) - (+mm.judg || judg) - (+mm.surviving_senior || 0) - (+mm.tax_certs || 0));
+  }
+  return d;
+}
+function _csDiligence(r){
+  let d = r.diligence || _fcDiligenceLoad(r.case);
+  if(d) d = _csPatchDiligenceFromLead(d, r);
+  if(d && !r.diligence) r.diligence = d;
+  const pending = !d && !!_dilInFlight[r.case];
+  if(!d){
+    d = _csLeadDiligenceStub(r);
+    // Still kick auto-run; stub keeps numbers visible meanwhile.
+  }
+  const fm = n => (n||n===0) ? '$'+Math.round(+n).toLocaleString() : '—';
+  const v = String(d.verdict||'VERIFY').toUpperCase();
+  const mm = d.money_math||{};
+  const tx = d.taxes||{};
+  const title = d.title||{};
+  const mtgs = d.mortgages||[];
+  // Table cells must never look blank when Money line has the same facts.
+  const caseCell = (d.case || r.case || '—');
+  const judgN = (+d.judgment || +mm.judg || +r.judg || 0);
+  const saleCell = (d.sale || r.auction || '—');
+  const opens = mtgs.filter(m => String(m.st||'').toUpperCase()==='OPEN');
+  let mtgCell = 'None found';
+  if(opens.length){
+    mtgCell = opens.slice(0,3).map(m => fm(m.amt)+' — '+esc(m.party||'?')+(m.bp?' · '+esc(m.bp):'')+(m.date?' · '+esc(m.date):'')).join('<br>');
+  } else if(mtgs.length===0){
+    mtgCell = d._provisional
+      ? '<i>OR pending</i>'
+      : '<b>None found</b> on available OR/cache';
+  } else if(+mm.surviving_senior){
+    mtgCell = fm(mm.surviving_senior)+' surviving (see timeline)';
+  }
+  let taxCell = esc(tx.status||'unknown');
+  if(tx.certs) taxCell += ' · ~'+fm(tx.certs);
+  if(tx.due) taxCell += ' · due '+fm(tx.due);
+  if(tx.url) taxCell += ' <a href="'+esc(tx.url)+'" target="_blank" rel="noopener">tax →</a>';
+
+  let titleRow = '';
+  if(title.lady_bird===true){
+    titleRow = '<tr><th>Title</th><td><b>Lady Bird / life estate</b>'+(title.bp?' · '+esc(title.bp):'')+
+      (title.life_estate_holder?' — holder '+esc(title.life_estate_holder):'')+
+      (title.remainder?' · remainder '+esc(title.remainder):'')+'</td></tr>';
+  } else if(title.lady_bird===null || title.lady_bird===undefined){
+    if(title.deed_type || (d.killer_issues||[]).some(k=>/lady bird|life estate|VERIFY/i.test(k||''))){
+      titleRow = '<tr><th>Title</th><td>Lady Bird / life estate <b>unknown</b> — pull latest deed</td></tr>';
+    }
+  } else if(title.deed_type){
+    titleRow = '<tr><th>Title</th><td>'+esc(title.deed_type)+(title.bp?' · '+esc(title.bp):'')+'</td></tr>';
+  }
+
+  const killers = d.killer_issues||[];
+  const killHtml = killers.length
+    ? '<div class="csdil-kill"><div class="t">Killer issues</div><ul style="margin:0;padding-left:18px">'+
+      killers.map(k=>'<li>'+esc(k)+'</li>').join('')+'</ul></div>'
+    : '';
+
+  const moneyHtml = '<div class="csdil-money">'+
+    '<b>Money:</b> value '+fm(mm.value||r.value)+' − FJ '+fm(mm.judg||judgN)+
+    ' − senior '+fm(mm.surviving_senior)+' − tax '+fm(mm.tax_certs)+
+    (mm.net_equity_est!=null?' → net est <b>'+fm(mm.net_equity_est)+'</b>':'')+
+    (mm.list_price!=null?' · list '+fm(mm.list_price):'')+
+    (mm.notes?'<div class="css" style="margin-top:4px">'+esc(mm.notes)+'</div>':'')+
+  '</div>';
+
+  const tl = d.timeline||[];
+  const tlHtml = tl.length
+    ? '<div class="css" style="font-weight:700;margin:6px 0 2px;color:var(--ink,#101C33)">Recorded / sale timeline</div><ul class="csdil-tl">'+
+      tl.map(t=>'<li><span>'+esc(t.label||'')+(t.date?' · '+esc(t.date):'')+'</span>'+
+        '<span class="bp">'+esc(t.bp||'')+'</span></li>').join('')+'</ul>'
+    : '';
+
+  const cites = d.citations||[];
+  const citeHtml = cites.length
+    ? '<div class="csdil-cites"><b>Citations:</b> '+cites.map(c=>esc(c.label||'')+
+        ' <code>'+esc(c.url_or_bp||'')+'</code>').join(' · ')+'</div>'
+    : '';
+
+  const outreach = d.outreach_notes
+    ? '<div class="css" style="margin-top:8px;line-height:1.5;color:var(--ink,#101C33)">'+esc(d.outreach_notes)+'</div>'
+    : '';
+
+  const errNote = (d.sources && d.sources.error)
+    ? '<div class="csdil-empty" style="margin-top:8px">API note: '+esc(String(d.sources.error).slice(0,140))+'</div>'
+    : '';
+  const pendingNote = (d._provisional || pending)
+    ? '<div class="csdil-empty" style="margin-top:8px">'+(pending?'Dig running… ':'')+
+      'Lead numbers shown now. Tap <b>Refresh Diligence</b> for live OR (MD/BW ~30s, PB 1–2 min). '+
+      'Needs API on :8765 — <code>install_diligence_autostart.bat</code>.</div>'
+    : '';
+
+  return '<div class="cssec">DILIGENCE</div><div class="csdil">'+
+    '<div class="csdil-ban '+esc(v)+'"><span class="v">'+esc(v)+'</span>'+
+      '<span class="sub">'+esc(d.foreclosure_type||'')+' — '+esc(d.plaintiff||'plaintiff n/a')+'</span></div>'+
+    '<div class="csdil-body">'+
+      '<table class="csdil-tbl"><tbody>'+
+        '<tr><th>Case</th><td>'+esc(caseCell)+'</td></tr>'+
+        '<tr><th>Judgment</th><td>'+fm(judgN)+'</td></tr>'+
+        '<tr><th>Sale</th><td>'+esc(saleCell)+'</td></tr>'+
+        '<tr><th>Open mortgage(s)</th><td>'+mtgCell+'</td></tr>'+
+        '<tr><th>Tax certs</th><td>'+taxCell+'</td></tr>'+
+        titleRow+
+      '</tbody></table>'+
+      killHtml+moneyHtml+tlHtml+outreach+citeHtml+errNote+pendingNote+
+      (d.traced?'<div class="css" style="margin-top:6px">traced '+esc(d.traced)+'</div>':'')+
+    '</div></div>';
+}
+var _dilInFlight = Object.create(null);
+function _runDiligence(c, opts){
+  opts = opts || {};
+  const auto = !!opts.auto;
+  // Auto-open: fast cache/compose (lead numbers). Manual Refresh: live OR scrape.
+  const wantLive = opts.live != null ? !!opts.live : !auto;
+  if(_dilInFlight[c]) return;
+  const DIL_PORTS = [8765, 8787];
+  const btn = document.querySelector('#csbody .shdil') || document.querySelector('.shdil');
+  const label0 = (DATA.find(x=>x.case===c)||{}).diligence ? '🔄 Refresh Diligence' : '🔬 Run Diligence';
+  const setBtn = function(t, dis){ if(btn){ btn.textContent = t; btn.disabled = !!dis; } };
+  const copyStart = function(){
+    if(auto){
+      _shareToast('Diligence API offline — install_diligence_autostart.bat once, then reopen.');
+      return;
+    }
+    const cmd = 'install_diligence_autostart.bat';
+    const done = function(){
+      _shareToast('Diligence server offline. Run install_diligence_autostart.bat once (or start_diligence.bat for debug).');
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(cmd).then(done, function(){ fallbackCopy(cmd, done); });
+    else fallbackCopy(cmd, done);
+  };
+  _dilInFlight[c] = true;
+  // Re-render so provisional card shows "Dig running…"
+  if(typeof callSheetCase !== 'undefined' && callSheetCase === c){
+    try{ openCallSheet(c, {math: !!callSheetMathOpen, skipAutoDil: true}); }catch(e){}
+  }
+  const withTimeout = function(ms){
+    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const t = ctrl ? setTimeout(function(){ try{ ctrl.abort(); }catch(e){} }, ms) : null;
+    return { signal: ctrl ? ctrl.signal : undefined, clear: function(){ if(t) clearTimeout(t); } };
+  };
+  const tryHealth = function(i){
+    if(i >= DIL_PORTS.length) return Promise.reject(new Error('down'));
+    const to = withTimeout(3500);
+    return fetch('http://127.0.0.1:'+DIL_PORTS[i]+'/health', {signal: to.signal, mode:'cors'})
+      .then(function(r){ to.clear(); if(!r.ok) throw new Error('bad'); return r.json().then(function(j){ return {port: DIL_PORTS[i], j:j}; }); })
+      .catch(function(){ to.clear(); return tryHealth(i+1); });
+  };
+  tryHealth(0).then(function(info){
+    setBtn(wantLive ? 'Running live OR…' : 'Composing…', true);
+    if(!auto) _shareToast(wantLive ? 'Live OR dig — may take 1–5 min (captcha)' : 'Composing diligence…');
+    else _shareToast('Auto-diligence (lead + cache)…');
+    const to = withTimeout(wantLive ? 480000 : 30000);
+    return fetch('http://127.0.0.1:'+info.port+'/diligence', {
+      method: 'POST',
+      mode: 'cors',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({case: c, live: wantLive}),
+      signal: to.signal
+    }).then(function(r){
+      to.clear();
+      return r.json().then(function(j){
+        if(!r.ok) throw new Error((j && (j.detail||j.error)) || ('HTTP '+r.status));
+        return j;
+      });
+    });
+  }).then(function(d){
+    delete _dilInFlight[c];
+    const lead = DATA.find(x=>x.case===c);
+    if(lead){
+      d = _csPatchDiligenceFromLead(d, lead);
+      lead.diligence = d;
+    }
+    _fcDiligenceStore(c, d);
+    setBtn('🔄 Refresh Diligence', false);
+    if(typeof callSheetCase !== 'undefined' && callSheetCase === c){
+      openCallSheet(c, {math: !!callSheetMathOpen, skipAutoDil: true});
+    }
+    _shareToast('Diligence ready — '+(d.verdict||'done')+(d.judgment?(' · FJ $'+Math.round(+d.judgment).toLocaleString()):''));
+  }).catch(function(err){
+    delete _dilInFlight[c];
+    setBtn(label0, false);
+    const msg = String((err && err.message) || err || '');
+    if(/down|Failed to fetch|NetworkError|AbortError|Load failed|fetch/i.test(msg) || msg === 'down'){
+      copyStart();
+    } else {
+      _shareToast('Diligence failed: '+msg.slice(0, 90));
+    }
+    // Keep lead stub visible; stamp error onto provisional if still open
+    if(typeof callSheetCase !== 'undefined' && callSheetCase === c){
+      const lead = DATA.find(x=>x.case===c);
+      if(lead && (!lead.diligence || lead.diligence._provisional)){
+        const stub = _csPatchDiligenceFromLead(_csLeadDiligenceStub(lead), lead);
+        stub.sources = stub.sources || {};
+        stub.sources.error = msg.slice(0, 200);
+        lead.diligence = stub;
+      }
+      try{ openCallSheet(c, {math: !!callSheetMathOpen, skipAutoDil: true}); }catch(e){}
+    }
+  });
+}
+function _fcDiligenceStore(caseId, d){
+  try{
+    if(!d || d._provisional) return; // never persist empty/provisional stubs over good data
+    const mm = d.money_math || {};
+    const emptyMoney = !(+d.judgment) && !(+mm.value) && !(+mm.judg) && !d.sale;
+    if(emptyMoney){
+      const prev = _fcDiligenceLoad(caseId);
+      if(prev && ((+prev.judgment) || (prev.money_math && +prev.money_math.value))) return;
+    }
+    const all = JSON.parse(localStorage.getItem('fcDiligence')||'{}')||{};
+    all[caseId] = d;
+    localStorage.setItem('fcDiligence', JSON.stringify(all));
+  }catch(e){}
+}
+function _fcDiligenceLoad(caseId){
+  try{
+    const all = JSON.parse(localStorage.getItem('fcDiligence')||'{}')||{};
+    return all[caseId] || null;
+  }catch(e){ return null; }
 }
 function _copyCallSheet(c){
   const r = DATA.find(x=>x.case===c); if(!r) return;
@@ -3576,6 +3957,10 @@ function _reopenCallSheet(c){
 function openCallSheet(c, opts){
   opts = opts || {};
   const r = DATA.find(x=>x.case===c); if(!r) return;
+  if(!r.diligence){
+    const cached = _fcDiligenceLoad(c);
+    if(cached) r.diligence = cached;
+  }
   const m = document.getElementById('csmodal'); if(!m) return;
   callSheetCase = c;
   callSheetMathOpen = !!opts.math;
@@ -3597,6 +3982,11 @@ function openCallSheet(c, opts){
       el.open = true;
       setTimeout(function(){ try{ el.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){} }, 40);
     }
+  }
+  // Auto-run Deep Diligence when the card is empty (server on :8765). skipAutoDil avoids a loop
+  // when the sheet re-opens after a successful dig.
+  if(!opts.skipAutoDil && !r.diligence && !_dilInFlight[c]){
+    setTimeout(function(){ try{ _runDiligence(c, {auto:true}); }catch(e){} }, 120);
   }
 }
 function closeCallSheet(){
@@ -6499,14 +6889,27 @@ function view(){
     if(ad1) rows = rows.filter(r => toISO(r.auction) >= ad1);
     if(ad2) rows = rows.filter(r => toISO(r.auction) <= ad2);
     if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
-    if(tdOnly) rows = rows.filter(r => r.st === 'TD');
+    if(fcType) rows = rows.filter(r => _fcTypeOf(r) === fcType);
+    if(propKind) rows = rows.filter(r => _propKindOf(r) === propKind);
     if(hideDead) rows = rows.filter(r => { const st=(notes[r.case]||{}).status; return st!=='Dead' && st!=='DO NOT CONTACT'; });
     if(hideFlagged) rows = rows.filter(r => !isFlaggedDead(r) && !notForModel(r));
     // 30%+ equity, TRUSTED: excludes eqfake (gross/unverified — HOA junior lien or a hidden senior
     // mortgage can show 90%+ equity that isn't real) and anything the records already flagged dead
     // (deeded away / underwater once the surviving mortgage is counted) — a raw >=30% number alone
     // would resurface exactly the fantasy-equity leads the deal-killer flags exist to catch.
-    if(eq30Only) rows = rows.filter(r => netEqPct(r) >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r));
+    // ONE THRESHOLD, TWO DIFFERENT QUANTITIES. netEqPct is an EQUITY ratio on a foreclosure but a
+    // PROFIT MARGIN on a tax deed, and the TD model caps that margin by construction: the winning bid
+    // is floored at clearPct of market (default 70%) and costs are costPct (default 10%), so
+    // profit <= 0.20*value - quiet title. Measured across all 13 tax deeds on the board the MAXIMUM
+    // netEqPct any of them can reach is 20% — so "Tax deeds" + "30%+ equity" always returned an empty
+    // board, silently burying Jose's entire lane. Filter on OWNER equity instead: value minus what is
+    // actually owed against the property, which means the same thing in both lanes and is the
+    // question the button is really asking ("is there real equity here?").
+    if(eq30Only) rows = rows.filter(r => {
+      const b = _basisOf(r); if(!b) return false;
+      const pct = Math.round((_ownerEqOf(r) / b) * 100);
+      return pct >= 30 && !r.eqfake && !isFlaggedDead(r) && !notForModel(r);
+    });
     if(ncOnly) rows = rows.filter(r => { const t=(notes[r.case]||{}).touches; return !t || !t.length; });
     if(dueOnly) rows = rows.filter(r => { const n=notes[r.case]||{}; const due = n.next && _dneg(n.next) <= 0; const hot = (!n.touches||!n.touches.length) && r.days>=0 && r.days<=3; return due || hot; });
     // 📍 NEAR HOME: only properties within nearRadius miles of the home base (ROUTE_ORIGIN). Composes
@@ -6919,7 +7322,8 @@ document.addEventListener('click', e => {
   togglePin(row.dataset.case);
 });
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=tdOnly=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=nearOnly=false;
+  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=nearOnly=false;
+  fcType=''; propKind=''; _saveTypeFilters(); _syncFcTypePills(); _syncPropPills();
   // hideViewed stays as the user left it (default ON) — clearing filters shouldn't dump Seen deals back on the board
   { const _nh=document.getElementById('nearhome'), _nr=document.getElementById('nearrad'); if(_nh)_nh.classList.remove('active'); if(_nr)_nr.style.display='none'; }
   { const _cb=document.getElementById('closers'); if(_cb) _cb.classList.remove('active'); }
@@ -6956,7 +7360,8 @@ function _activeFilters(){
   if(hideFlagged) out.push({k:'hf', lbl:'Hiding flagged'});
   if(eq30Only) out.push({k:'eq30', lbl:'30%+ equity'});
   if(nearOnly) out.push({k:'near', lbl:'📍 Within '+nearRadius+' mi of home'});
-  if(tdOnly) out.push({k:'td', lbl:'Tax deeds'});
+  if(fcType) out.push({k:'fct', lbl:'FC Type: '+(fcType==='BANK'?'Bank':fcType==='TAX'?'Tax':fcType==='HOA'?'HOA':'Other')});
+  if(propKind) out.push({k:'pk', lbl:'Property: '+(propKind==='CONDO'?'Condo':propKind==='HOUSE'?'House':'Other')});
   if(fy1||fy2) out.push({k:'fy', lbl:'Filed '+(fy1||'…')+'–'+(fy2||'…')});
   if(ad1||ad2) out.push({k:'ad', lbl:'Auction '+(ad1||'…')+'–'+(ad2||'…')});
   return out;
@@ -6987,7 +7392,8 @@ function _clearFilter(k){
   else if(k==='hv'){ hideViewed=false; try{localStorage.setItem('fcHideViewed','0');}catch(e){} if(g('hv'))g('hv').classList.remove('active'); }
   else if(k==='hf'){ hideFlagged=false; if(g('hf'))g('hf').classList.remove('active'); }
   else if(k==='eq30'){ eq30Only=false; if(g('eq30'))g('eq30').classList.remove('active'); }
-  else if(k==='td'){ tdOnly=false; if(g('td'))g('td').classList.remove('active'); }
+  else if(k==='td' || k==='fct'){ fcType=''; _saveTypeFilters(); _syncFcTypePills(); }
+  else if(k==='pk'){ propKind=''; _saveTypeFilters(); _syncPropPills(); }
   else if(k==='fy'){ fy1=fy2=''; if(g('fy1'))g('fy1').value=''; if(g('fy2'))g('fy2').value=''; }
   else if(k==='ad'){ ad1=ad2=''; if(g('ad1'))g('ad1').value=''; if(g('ad2'))g('ad2').value=''; }
   render();
@@ -7045,14 +7451,25 @@ document.getElementById('hd').onclick = e => { hideDead = !hideDead; e.target.cl
 document.getElementById('hf').onclick = e => { hideFlagged = !hideFlagged; e.target.classList.toggle('active', hideFlagged); render(); };
 document.getElementById('eq30').onclick = e => { eq30Only = !eq30Only; e.target.classList.toggle('active', eq30Only); render(); };
 document.getElementById('td').onclick = e => {
-  tdOnly = !tdOnly; e.target.classList.toggle('active', tdOnly);
-  // Tax deeds is Jose's dedicated LANE, not a tier sub-filter. Tax-deed leads are almost all
-  // Tier C (small opening bids, no homeowner-rescue score), so filtering them inside the default
-  // Tier A showed 6 of 22 and read as "broken". Turning the lane ON snaps to All tiers so the
-  // whole lane is visible; the tier pills still work to narrow it back down afterward.
-  if(tdOnly && tier!=='ALL'){ tier='ALL'; document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL')); }
+  // Tax deeds button stays as a one-tap lane shortcut — toggles FC Type Tax (same filter).
+  fcType = (fcType === 'TAX') ? '' : 'TAX';
+  _saveTypeFilters(); _syncFcTypePills();
+  if(fcType === 'TAX' && tier!=='ALL'){ tier='ALL'; document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL')); }
   render();
 };
+document.querySelectorAll('.xff').forEach(b => b.onclick = () => {
+  fcType = b.dataset.fct || '';
+  _saveTypeFilters(); _syncFcTypePills();
+  // Tax lane: snap to All tiers (same reason as the Tax deeds button — most TD are Tier C).
+  if(fcType === 'TAX' && tier!=='ALL'){ tier='ALL'; document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL')); }
+  render();
+});
+document.querySelectorAll('.xpf').forEach(b => b.onclick = () => {
+  propKind = b.dataset.pk || '';
+  _saveTypeFilters(); _syncPropPills();
+  render();
+});
+_syncFcTypePills(); _syncPropPills();
 document.getElementById('nc').onclick = e => { ncOnly = !ncOnly; e.target.classList.toggle('active', ncOnly); render(); };
 document.getElementById('plan').onclick = () => openPlanModal();
 document.getElementById('due').onclick = e => { dueOnly = !dueOnly; e.target.classList.toggle('active', dueOnly); render(); };
@@ -8028,9 +8445,14 @@ try{ updateDigest(); }catch(e){}
     try{
       if(typeof tier !== 'undefined' && tier && tier !== 'A') n++;
       if(typeof county !== 'undefined' && county) n++;
-      ['wk','hd','hf','eq30','td','nc','closers','freshlp','nearhome','plan','due'].forEach(function(id){
+      if(typeof fcType !== 'undefined' && fcType) n++;
+      if(typeof propKind !== 'undefined' && propKind) n++;
+      // #plan opens a modal (never .active) — omit from the live-filter badge count
+      ['wk','hd','hf','eq30','nc','closers','freshlp','nearhome','due'].forEach(function(id){
         var el=document.getElementById(id); if(el && el.classList.contains('active')) n++;
       });
+      // #td mirrors FC Type Tax — only count it when FC Type isn't already counted
+      var td=document.getElementById('td'); if(td && td.classList.contains('active') && !fcType) n++;
       var q=document.getElementById('q'); if(q && q.value.trim()) n++;
     }catch(e){}
     var badge=btn.querySelector('.mfiltn'); if(badge) badge.textContent = n ? String(n) : '';
