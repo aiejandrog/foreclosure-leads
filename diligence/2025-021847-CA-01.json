@@ -1,0 +1,126 @@
+{
+  "case": "2025-021847-CA-01",
+  "county": "MIAMI-DADE",
+  "addr": "525 W 79 PL, HIALEAH, FL- 33014",
+  "folio": "0420250580080",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "JUNIOR",
+  "plaintiff": "Jpmorgan Chase Bank National Association",
+  "judgment": 46000.16,
+  "sale": "08/10/2026",
+  "mortgages": [
+    {
+      "party": "FAITH FIN GRP INC",
+      "amt": 112075,
+      "recorded_amt": 112075,
+      "bp": "19028/3305",
+      "date": "3/17/2000 ",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE HOME LOANS INC",
+      "amt": 113935,
+      "recorded_amt": 113935,
+      "bp": "20174/4065",
+      "date": "2/1/2002 1",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NEW CENTURY MTG CORP",
+      "amt": 142500,
+      "recorded_amt": 142500,
+      "bp": "23129/3328",
+      "date": "3/2/2005 1",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "WASHINGTON MUTUAL BNK FA",
+      "amt": 124000,
+      "recorded_amt": 124000,
+      "bp": "25516/1093",
+      "date": "4/8/2007 1",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/0420250580080"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 398096,
+    "judg": 46000.16,
+    "surviving_senior": 142500,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 209596,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/10/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 NEW CENTURY MTG CORP",
+      "date": "3/2/2005 1",
+      "bp": "23129/3328"
+    },
+    {
+      "label": "Open mtg \u2014 WASHINGTON MUTUAL BNK FA",
+      "date": "4/8/2007 1",
+      "bp": "25516/1093"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=0420250580080"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/0420250580080"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/10/2026#AITEM_1507113"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=ZzGA8m4%2FDRZralVfTRV4y67%2FAM15NBvBHX0k%2Bl7oasOjGDuQBNMf%2F7ruudUYMZdK"
+    },
+    {
+      "label": "Mortgage NEW CENTURY MTG CORP",
+      "url_or_bp": "23129/3328"
+    },
+    {
+      "label": "Mortgage WASHINGTON MUTUAL BNK FA",
+      "url_or_bp": "25516/1093"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "default conservative \u2014 confirm OR + taxes + deed",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

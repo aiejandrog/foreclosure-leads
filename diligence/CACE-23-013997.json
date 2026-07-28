@@ -1,0 +1,227 @@
+{
+  "case": "CACE-23-013997",
+  "county": "BROWARD",
+  "addr": "3031 NE 43 ST, FORT LAUDERDALE, 33308",
+  "folio": "494224100780",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "Wells Fargo Bank N A",
+  "judgment": 1405654.16,
+  "sale": "08/18/2026",
+  "mortgages": [
+    {
+      "party": "NATIONSBANK FLORIDA",
+      "amt": 35707,
+      "recorded_amt": 35707,
+      "bp": "22593/70",
+      "date": "1994-09-09",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANK FLORIDA",
+      "amt": 30000,
+      "recorded_amt": 30000,
+      "bp": "22593/83",
+      "date": "1994-09-09",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANK",
+      "amt": 151347,
+      "recorded_amt": 151347,
+      "bp": "28893/1102",
+      "date": "1998-10-07",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "PELICAN NATIONAL BANK",
+      "amt": 265000,
+      "recorded_amt": 265000,
+      "bp": "29583/814",
+      "date": "1999-06-22",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST UNION MTGE CORP",
+      "amt": 608000,
+      "recorded_amt": 608000,
+      "bp": "30488/1136",
+      "date": "2000-05-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 300000,
+      "recorded_amt": 300000,
+      "bp": "32962/1558",
+      "date": "2002-03-28",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST UNION NATIONAL BANK",
+      "amt": 650000,
+      "recorded_amt": 650000,
+      "bp": "33011/1765",
+      "date": "2002-04-12",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WACHOVIA BANK",
+      "amt": 373015,
+      "recorded_amt": 373015,
+      "bp": "33753/1746",
+      "date": "2002-09-06",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WACHOVIA BANK",
+      "amt": 663166,
+      "recorded_amt": 663166,
+      "bp": "37017/947",
+      "date": "2004-03-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WACHOVIA BANK",
+      "amt": 366712,
+      "recorded_amt": 366712,
+      "bp": "37290/1948",
+      "date": "2004-04-21",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 420000,
+      "recorded_amt": 420000,
+      "bp": "42517/1132",
+      "date": "2006-08-02",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 120000,
+      "recorded_amt": 120000,
+      "bp": "42517/1153",
+      "date": "2006-08-02",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 649500,
+      "recorded_amt": 649500,
+      "bp": "43836/838",
+      "date": "2007-04-03",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "TAYLOR MADE LENDING LLC",
+      "amt": 300000,
+      "recorded_amt": 300000,
+      "bp": "",
+      "date": "2022-10-10",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "TAYLOR MADE LENDING LLC",
+      "amt": 335000,
+      "recorded_amt": 335000,
+      "bp": "",
+      "date": "2024-11-21",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/494224-10-0780/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [
+    "Clerk returns case status Closed (filed 05/24/2023, Wells Fargo v Michael Sedra et al) — confirm 08/18/2026 sale is still live before bidding/wiring",
+    "Two OPEN Taylor Made Lending LLC mortgages face $300k (2022-10-10) + $335k (2024-11-21); OR conf=low and opens lack book/page — money line only subtracts $300k senior",
+    "Tax status unknown — pull Broward tax collector before any money moves",
+    "If Taylor Made liens are junior to Wells Fargo FJ, auction may wipe them if named; if senior/unrelated, net equity collapses"
+  ],
+  "money_math": {
+    "value": 2543460,
+    "judg": 1405654.16,
+    "surviving_senior": 300000,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 837806,
+    "notes": "NET EST UNRELIABLE until Taylor Made priority vs Wells Fargo FJ is confirmed. Face open mtgs $635k if both survive outside the FJ."
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/18/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 TAYLOR MADE LENDING LLC",
+      "date": "2022-10-10",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 TAYLOR MADE LENDING LLC",
+      "date": "2024-11-21",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "Plaintiff is Wells Fargo (bank first mortgage FC). Do NOT trust $837k net. Confirm sale still on calendar — clerk status Closed — plus Taylor Made payoffs and taxes.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=494224100780"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/494224-10-0780/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/18/2026#AITEM_1502753"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json (live AcclaimWeb)",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "Taylor Made open liens + clerk Closed status + tax unknown",
+    "plaintiff": "broward_plaintiff (Wells Fargo Bank N A; caseType Real Prop Homestead Res Fore $250,000 or More; status Closed)",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

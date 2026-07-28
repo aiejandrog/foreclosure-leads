@@ -1,0 +1,265 @@
+{
+  "case": "CACE-16-016939",
+  "county": "BROWARD",
+  "addr": "2301 NW 102 AVE, PEMBROKE PINES, 33026",
+  "folio": "514107041150",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 361765.76,
+  "sale": "07/28/2026",
+  "mortgages": [
+    {
+      "party": "AMERICAN SAVINGS FL",
+      "amt": 237600,
+      "recorded_amt": 237600,
+      "bp": "22651/673",
+      "date": "1994-09-26",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "LURIE,DIANA V",
+      "amt": 13000,
+      "recorded_amt": 13000,
+      "bp": "23014/386",
+      "date": "1995-01-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "HOUSEHOLD FINANCE CORP III",
+      "amt": 25000,
+      "recorded_amt": 25000,
+      "bp": "23560/66",
+      "date": "1995-06-13",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NORWEST MTGE INC",
+      "amt": 71750,
+      "recorded_amt": 71750,
+      "bp": "28347/213",
+      "date": "1998-06-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST FEDERATED FUNDING CORP OF S FL INC",
+      "amt": 436050,
+      "recorded_amt": 436050,
+      "bp": "33575/1111",
+      "date": "2002-08-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE HOME LOANS INC",
+      "amt": 215100,
+      "recorded_amt": 215100,
+      "bp": "37481/600",
+      "date": "2004-05-18",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "INDYMAC BANK",
+      "amt": 455000,
+      "recorded_amt": 455000,
+      "bp": "37577/1406",
+      "date": "2004-05-29",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "INDYMAC BANK",
+      "amt": 58500,
+      "recorded_amt": 58500,
+      "bp": "37577/1433",
+      "date": "2004-05-29",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK AMERICA",
+      "amt": 56000,
+      "recorded_amt": 56000,
+      "bp": "38388/436",
+      "date": "2004-10-19",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MARRIOTT OWNERSHIP RESORTS INC",
+      "amt": 9234,
+      "recorded_amt": 9234,
+      "bp": "40666/323",
+      "date": "2005-10-06",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK OF AMERICA",
+      "amt": 124000,
+      "recorded_amt": 124000,
+      "bp": "40840/770",
+      "date": "2005-11-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK OF AMERICA",
+      "amt": 210000,
+      "recorded_amt": 210000,
+      "bp": "41181/1424",
+      "date": "2005-12-29",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK OF AMERICA",
+      "amt": 50000,
+      "recorded_amt": 50000,
+      "bp": "41438/555",
+      "date": "2006-02-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 216000,
+      "recorded_amt": 216000,
+      "bp": "41757/589",
+      "date": "2006-04-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 33316,
+      "recorded_amt": 33316,
+      "bp": "41757/603",
+      "date": "2006-04-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK OF AMERICA",
+      "amt": 150000,
+      "recorded_amt": 150000,
+      "bp": "42793/1258",
+      "date": "2006-09-20",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "JPMORGAN CHASE BANK",
+      "amt": 304000,
+      "recorded_amt": 304000,
+      "bp": "43167/420",
+      "date": "2006-11-27",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "JPMORGAN CHASE BANK",
+      "amt": 76000,
+      "recorded_amt": 76000,
+      "bp": "43167/436",
+      "date": "2006-11-27",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK OF AMERICA",
+      "amt": 50500,
+      "recorded_amt": 50500,
+      "bp": "43442/706",
+      "date": "2007-01-17",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK OF AMERICA",
+      "amt": 150000,
+      "recorded_amt": 150000,
+      "bp": "43692/66",
+      "date": "2007-03-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "ALLEGHENY MUTUAL CASUALTY COMPANY",
+      "amt": 6000,
+      "recorded_amt": 6000,
+      "bp": "47131/938",
+      "date": "2010-06-08",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/514107-04-1150/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 637460,
+    "judg": 361765.76,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 275694,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/28/2026",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=514107041150"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/514107-04-1150/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/28/2026#AITEM_1510614"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

@@ -1,0 +1,134 @@
+{
+  "case": "502025CC004359XXXAMB",
+  "county": "PALM BEACH",
+  "addr": "945 NW 29TH AVE C, DELRAY BEACH, FL 33445",
+  "folio": "12434607040340030",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "HOA",
+  "plaintiff": "",
+  "judgment": 14871.87,
+  "sale": "07/30/2026",
+  "mortgages": [],
+  "liens": [
+    {
+      "label": "Lien - RAINBERRY BAY VILLAS ASSOCIATION INC",
+      "date": "01/10/2025",
+      "bp": "O 35490/341",
+      "amt": null
+    },
+    {
+      "label": "Lis Pendens - RAINBERRY BAY VILLAS ASSOCIATION INC",
+      "date": "03/25/2025",
+      "bp": "O 35630/1060",
+      "amt": null
+    },
+    {
+      "label": "Judgment - RAINBERRY BAY VILLAS ASSOCIATION INC",
+      "date": "06/11/2026",
+      "bp": "O 36582/340",
+      "amt": null
+    }
+  ],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A12-43-46-07-04-034-0030&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 224500,
+    "judg": 14871.87,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 209628,
+    "notes": "HOA \u2014 no open mortgage found on OR cache."
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/30/2026",
+      "bp": ""
+    },
+    {
+      "label": "Deed - PITTER HERBERT & MURIEL",
+      "date": "12/31/1987",
+      "bp": "O 5533/700"
+    },
+    {
+      "label": "Deed - WORTHY PETER H WORTHY PATRICIA A",
+      "date": "04/01/2004",
+      "bp": "O 16747/618"
+    },
+    {
+      "label": "Deed - MELERO DORA E TORRES MARTIN D",
+      "date": "05/07/2015",
+      "bp": "O 27518/525"
+    },
+    {
+      "label": "Mortgage - PARAMOUNT RESIDENTIAL MORTGAGE GROUP INC MORTGAG",
+      "date": "01/31/2023",
+      "bp": "O 34096/1146"
+    },
+    {
+      "label": "Deed - BOSSMAN ANDREA ROBERTS",
+      "date": "01/31/2023",
+      "bp": "O 34096/1143"
+    },
+    {
+      "label": "Lien - RAINBERRY BAY VILLAS ASSOCIATION INC",
+      "date": "01/10/2025",
+      "bp": "O 35490/341"
+    },
+    {
+      "label": "Lis Pendens - RAINBERRY BAY VILLAS ASSOCIATION INC",
+      "date": "03/25/2025",
+      "bp": "O 35630/1060"
+    },
+    {
+      "label": "Judgment - RAINBERRY BAY VILLAS ASSOCIATION INC",
+      "date": "06/11/2026",
+      "bp": "O 36582/340"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=12434607040340030"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A12-43-46-07-04-034-0030&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/30/2026#AITEM_1506044"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "palmbeach_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

@@ -1,0 +1,94 @@
+{
+  "case": "CACE-20-001203",
+  "county": "BROWARD",
+  "addr": "1481 NW 104 AVE, PLANTATION, 33322",
+  "folio": "494131071590",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 518374.24,
+  "sale": "07/29/2026",
+  "mortgages": [
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 256410,
+      "recorded_amt": 256410,
+      "bp": "46373/872",
+      "date": "2009-07-14",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 325125,
+      "recorded_amt": 325125,
+      "bp": "",
+      "date": "2018-08-07",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/494131-07-1590/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 669030,
+    "judg": 518374.24,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": 639500,
+    "net_equity_est": 150656,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/29/2026",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=494131071590"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/494131-07-1590/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/29/2026#AITEM_1505994"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

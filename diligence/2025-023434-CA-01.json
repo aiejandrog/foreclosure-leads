@@ -1,0 +1,90 @@
+{
+  "case": "2025-023434-CA-01",
+  "county": "MIAMI-DADE",
+  "addr": "10831 NW 7 ST 9-14, MIAMI, FL- 33172",
+  "folio": "3030560540120",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "U.S. BANK TRUST COMPANY, NATIONAL ASSOCIATION, AS",
+  "judgment": 148379.95,
+  "sale": "08/03/2026",
+  "mortgages": [
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 160000,
+      "recorded_amt": 160000,
+      "bp": "24747/3907",
+      "date": "7/24/2006 ",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 190400,
+      "recorded_amt": 190400,
+      "bp": "25835/1081",
+      "date": "8/6/2007 1",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/3030560540120"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 276065,
+    "judg": 148379.95,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 127685,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/03/2026",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=3030560540120"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/3030560540120"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/03/2026#AITEM_1507785"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=ZzGA8m4%2FDRZralVfTRV4y0gDYQGuWvSjqnU5R3zmozIrrb7TJbrsM5R6mjLpIxT3"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "mortgage FC \u2014 confirm payoff / surplus math",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

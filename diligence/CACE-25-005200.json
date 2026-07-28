@@ -1,0 +1,139 @@
+{
+  "case": "CACE-25-005200",
+  "county": "BROWARD",
+  "addr": "17149 SW 49 PL, MIRAMAR, 33027",
+  "folio": "514032063060",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 237967.32,
+  "sale": "08/13/2026",
+  "mortgages": [
+    {
+      "party": "HOMEBUYERS FINANCIAL CORP",
+      "amt": 116000,
+      "recorded_amt": 116000,
+      "bp": "30798/90",
+      "date": "2000-08-25",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE HOME LOANS INC",
+      "amt": 118275,
+      "recorded_amt": 118275,
+      "bp": "32663/1413",
+      "date": "2002-01-22",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE HOME LOANS INC",
+      "amt": 50000,
+      "recorded_amt": 50000,
+      "bp": "36891/839",
+      "date": "2004-02-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 194800,
+      "recorded_amt": 194800,
+      "bp": "39436/84",
+      "date": "2005-04-14",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 30000,
+      "recorded_amt": 30000,
+      "bp": "41706/454",
+      "date": "2006-03-28",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE HOME LOANS INC.",
+      "amt": 32000,
+      "recorded_amt": 32000,
+      "bp": "42572/654",
+      "date": "2006-08-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE HOME LOANS INC",
+      "amt": 257000,
+      "recorded_amt": 257000,
+      "bp": "44129/567",
+      "date": "2007-06-04",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/514032-06-3060/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 584470,
+    "judg": 237967.32,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 346503,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/13/2026",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=514032063060"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/514032-06-3060/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/13/2026#AITEM_1505003"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-28"
+}

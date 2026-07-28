@@ -1,0 +1,115 @@
+{
+  "case": "502025CA010656XXXAMB",
+  "county": "PALM BEACH",
+  "addr": "5373 GENE CIR, WEST PALM BEACH, FL 33415",
+  "folio": "00424411210000911",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 229110.38,
+  "sale": "08/03/2026",
+  "mortgages": [
+    {
+      "party": "SHEILA ELLIOTT",
+      "amt": 150900,
+      "recorded_amt": 150900,
+      "bp": "",
+      "date": "2017-06-27",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "LAKEVIEW LOAN SERVICING LLC",
+      "amt": 182025,
+      "recorded_amt": 207085,
+      "bp": "",
+      "date": "2020-12-02",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "DEPARTMENT OF HOUSING & URBAN DEV",
+      "amt": 20336,
+      "recorded_amt": 20991,
+      "bp": "",
+      "date": "2024-08-14",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-44-11-21-000-0911&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": null,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [
+    "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+  ],
+  "money_math": {
+    "value": 273924,
+    "judg": 229110.38,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 44814,
+    "notes": "OR chain missing/incomplete \u2014 mortgage & deed calls are provisional."
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/03/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 LAKEVIEW LOAN SERVICING LLC",
+      "date": "2020-12-02",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 DEPARTMENT OF HOUSING & URBAN DEV",
+      "date": "2024-08-14",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424411210000911"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-44-11-21-000-0911&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/03/2026#AITEM_1503137"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "batchdata_liens.json (OR missing)",
+    "or_missing": true,
+    "conf": "bd",
+    "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

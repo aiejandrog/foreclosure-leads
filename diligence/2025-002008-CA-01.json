@@ -1,0 +1,90 @@
+{
+  "case": "2025-002008-CA-01",
+  "county": "MIAMI-DADE",
+  "addr": "1717 N BAYSHORE DR A-4245, MIAMI, FL- 33132",
+  "folio": "0132310480456",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "Nationstar Mortgage Llc",
+  "judgment": 246268.15,
+  "sale": "08/24/2026",
+  "mortgages": [
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 265500,
+      "recorded_amt": 265500,
+      "bp": "27546/522",
+      "date": "1/7/2011 1",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/0132310480456"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 517898,
+    "judg": 246268.15,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 271630,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/24/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "date": "1/7/2011 1",
+      "bp": "27546/522"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=0132310480456"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/0132310480456"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/24/2026#AITEM_1511665"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=ZzGA8m4%2FDRZralVfTRV4y3nbyroCLCCop5rLF4B8d1B5G33OGsxwuA%2FDuPR%2BF8H1"
+    },
+    {
+      "label": "Mortgage MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "url_or_bp": "27546/522"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "mortgage FC \u2014 confirm payoff / surplus math",
+    "lead_backed": true
+  },
+  "traced": "2026-07-28"
+}

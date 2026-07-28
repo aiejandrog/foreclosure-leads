@@ -1,0 +1,155 @@
+{
+  "case": "502025CA008176XXXAMB",
+  "county": "PALM BEACH",
+  "addr": "136 LAKESHORE DR 511, NORTH PALM BEACH, FL 33408",
+  "folio": "68434209230005110",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 845221.72,
+  "sale": "07/30/2026",
+  "mortgages": [],
+  "liens": [
+    {
+      "label": "Lien - OLD PORT COVE CONDOMINIUM ASSOCIATION TWO INC",
+      "date": "11/08/2024",
+      "bp": "O 35376/477",
+      "amt": null
+    },
+    {
+      "label": "Lis Pendens - AMERISTAR PROPERTIES OF SOUTH FLORIDA INC",
+      "date": "08/14/2025",
+      "bp": "O 35942/403",
+      "amt": null
+    },
+    {
+      "label": "Judgment - AMERISTAR PROPERTIES OF SOUTH FLORIDA INC",
+      "date": "03/18/2026",
+      "bp": "O 36385/884",
+      "amt": null
+    },
+    {
+      "label": "Judgment - AMERISTAR PROPERTIES OF SOUTH FLORIDA INC",
+      "date": "05/12/2026",
+      "bp": "O 36512/748",
+      "amt": null
+    }
+  ],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A68-43-42-09-23-000-5110&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 343000,
+    "judg": 845221.72,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": -502222,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/30/2026",
+      "bp": ""
+    },
+    {
+      "label": "Deed - MCCUSKER FRED H & SUSAN",
+      "date": "07/02/1985",
+      "bp": "O 4588/351"
+    },
+    {
+      "label": "Deed - CUNNINGHAM JOHN H & GWEN CUNNINGHAM GWEN (M)",
+      "date": "04/21/1998",
+      "bp": "O 10351/869"
+    },
+    {
+      "label": "Deed - CUNNINGHAM RAMONA GWEN LAMBERT TR CUNNINGHAM GWE",
+      "date": "08/02/2000",
+      "bp": "O 11930/1082"
+    },
+    {
+      "label": "Mortgage - AMERISTAR PROPERTIES OF SOUTH FLORIDA INC",
+      "date": "09/07/2023",
+      "bp": "O 34543/1719"
+    },
+    {
+      "label": "Deed - FRANZA DAVID E",
+      "date": "09/07/2023",
+      "bp": "O 34543/1716"
+    },
+    {
+      "label": "Notice Of Commencement - FRANZA DAVID",
+      "date": "11/17/2023",
+      "bp": "O 34674/1143"
+    },
+    {
+      "label": "Lien - OLD PORT COVE CONDOMINIUM ASSOCIATION TWO INC",
+      "date": "11/08/2024",
+      "bp": "O 35376/477"
+    },
+    {
+      "label": "Lis Pendens - AMERISTAR PROPERTIES OF SOUTH FLORIDA INC",
+      "date": "08/14/2025",
+      "bp": "O 35942/403"
+    },
+    {
+      "label": "Deed - FRANZA DAVID E",
+      "date": "11/24/2025",
+      "bp": "O 36153/329"
+    },
+    {
+      "label": "Judgment - AMERISTAR PROPERTIES OF SOUTH FLORIDA INC",
+      "date": "03/18/2026",
+      "bp": "O 36385/884"
+    },
+    {
+      "label": "Judgment - AMERISTAR PROPERTIES OF SOUTH FLORIDA INC",
+      "date": "05/12/2026",
+      "bp": "O 36512/748"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=68434209230005110"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A68-43-42-09-23-000-5110&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/30/2026#AITEM_1509195"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "palmbeach_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

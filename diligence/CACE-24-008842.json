@@ -1,0 +1,112 @@
+{
+  "case": "CACE-24-008842",
+  "county": "BROWARD",
+  "addr": "4921 NW 11 PL, LAUDERHILL, 33313",
+  "folio": "494136031270",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 219656.52,
+  "sale": "07/29/2026",
+  "mortgages": [
+    {
+      "party": "ISLAND MTGE NETWORK INC",
+      "amt": 93550,
+      "recorded_amt": 93550,
+      "bp": "30337/632",
+      "date": "2000-03-16",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AMERIQUEST MTGE CO",
+      "amt": 128500,
+      "recorded_amt": 128500,
+      "bp": "38393/1277",
+      "date": "2004-10-20",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 191250,
+      "recorded_amt": 191250,
+      "bp": "41515/43",
+      "date": "2006-02-23",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/494136-03-1270/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 380160,
+    "judg": 219656.52,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 160503,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/29/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "date": "2006-02-23",
+      "bp": "41515/43"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=494136031270"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/494136-03-1270/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/29/2026#AITEM_1509010"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    },
+    {
+      "label": "Mortgage MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "url_or_bp": "41515/43"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

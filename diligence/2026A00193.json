@@ -1,0 +1,69 @@
+{
+  "case": "2026A00193",
+  "county": "MIAMI-DADE",
+  "addr": "16131 NW 18 CT, MIAMI GARDENS, FL- 33054-0000",
+  "folio": "3421150012130",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "TAX_DEED",
+  "plaintiff": "",
+  "judgment": 185534.91,
+  "sale": "08/06/2026",
+  "mortgages": [],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/3421150012130"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": null,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [
+    "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+  ],
+  "money_math": {
+    "value": 292896,
+    "judg": 185534.91,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 107361,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/06/2026",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=3421150012130"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/3421150012130"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/06/2026#AITEM_1507504"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

@@ -1,0 +1,160 @@
+{
+  "case": "502022CA010679XXXXMB",
+  "county": "PALM BEACH",
+  "addr": "950 PASEO MORELLA, WEST PALM BEACH, FL 33405",
+  "folio": "74434333060070130",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 333350.92,
+  "sale": "08/03/2026",
+  "mortgages": [
+    {
+      "party": "ABN AMRO MORTGAGE GROUP INC",
+      "amt": 99450,
+      "recorded_amt": 99450,
+      "bp": "",
+      "date": "2001-07-03",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WACHOVIA BANK NA",
+      "amt": 32594,
+      "recorded_amt": 32594,
+      "bp": "",
+      "date": "2003-10-08",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WACHOVIA BANK NA",
+      "amt": 87600,
+      "recorded_amt": 87600,
+      "bp": "",
+      "date": "2005-05-04",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WACHOVIA MORTGAGE CORP",
+      "amt": 165000,
+      "recorded_amt": 165000,
+      "bp": "",
+      "date": "2006-04-04",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WACHOVIA BANK NA",
+      "amt": 24000,
+      "recorded_amt": 24000,
+      "bp": "",
+      "date": "2008-01-31",
+      "st": "OPEN",
+      "heloc": true
+    },
+    {
+      "party": "WACHOVIA BANK NA",
+      "amt": 124722,
+      "recorded_amt": 208466,
+      "bp": "",
+      "date": "2008-01-31",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "WACHOVIA BANK NA",
+      "amt": 24000,
+      "recorded_amt": 24000,
+      "bp": "",
+      "date": "2008-03-13",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "CITY OF WEST PALM BEACH",
+      "amt": 4163,
+      "recorded_amt": 4163,
+      "bp": "",
+      "date": "2008-12-23",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A74-43-43-33-06-007-0130&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": null,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [
+    "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+  ],
+  "money_math": {
+    "value": 325869,
+    "judg": 333350.92,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": -7482,
+    "notes": "OR chain missing/incomplete \u2014 mortgage & deed calls are provisional."
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/03/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 WACHOVIA BANK NA",
+      "date": "2008-01-31",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 WACHOVIA BANK NA",
+      "date": "2008-01-31",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=74434333060070130"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A74-43-43-33-06-007-0130&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/03/2026#AITEM_1509434"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "batchdata_liens.json (OR missing)",
+    "or_missing": true,
+    "conf": "bd",
+    "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

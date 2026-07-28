@@ -1,0 +1,208 @@
+{
+  "case": "CACE-25-010858",
+  "county": "BROWARD",
+  "addr": "5380 NW 32 CT, MARGATE, 33063",
+  "folio": "484219031080",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 226311.29,
+  "sale": "07/28/2026",
+  "mortgages": [
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 154800,
+      "recorded_amt": 154800,
+      "bp": "34296/1307",
+      "date": "2002-12-23",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE BANK",
+      "amt": 32000,
+      "recorded_amt": 32000,
+      "bp": "37037/518",
+      "date": "2004-03-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WELLS FARGO BANK",
+      "amt": 227430,
+      "recorded_amt": 227430,
+      "bp": "41611/1709",
+      "date": "2006-03-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "ALL STAR MORTGAGE FINANCIAL CORP",
+      "amt": 281581,
+      "recorded_amt": 281581,
+      "bp": "41803/200",
+      "date": "2006-04-12",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 63822,
+      "recorded_amt": 63822,
+      "bp": "46969/954",
+      "date": "2010-03-25",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 115995,
+      "recorded_amt": 115995,
+      "bp": "50960/862",
+      "date": "2014-07-24",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 242869,
+      "recorded_amt": 242869,
+      "bp": "",
+      "date": "2016-03-22",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 244399,
+      "recorded_amt": 244399,
+      "bp": "",
+      "date": "2016-12-30",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 252543,
+      "recorded_amt": 252543,
+      "bp": "",
+      "date": "2018-03-14",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 235653,
+      "recorded_amt": 235653,
+      "bp": "",
+      "date": "2020-05-04",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "SECRETARY OF HOUSING & URBAN DEVELOPMENT",
+      "amt": 60466,
+      "recorded_amt": 60466,
+      "bp": "",
+      "date": "2021-11-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "SECRETARY OF HOUSING & URBAN DEVELOPMENT",
+      "amt": 60466,
+      "recorded_amt": 60466,
+      "bp": "",
+      "date": "2021-11-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "SECRETARY OF HOUSING & URBAN DEVELOPMENT",
+      "amt": 54735,
+      "recorded_amt": 54735,
+      "bp": "",
+      "date": "2022-12-15",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/484219-03-1080/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 485770,
+    "judg": 226311.29,
+    "surviving_senior": 307278,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": -47819,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/28/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "date": "2018-03-14",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "date": "2020-05-04",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 SECRETARY OF HOUSING & URBAN DEVELOPMENT",
+      "date": "2022-12-15",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=484219031080"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/484219-03-1080/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/28/2026#AITEM_1508242"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

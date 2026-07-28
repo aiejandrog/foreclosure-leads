@@ -1,0 +1,535 @@
+{
+  "case": "CACE-24-000407",
+  "county": "BROWARD",
+  "addr": "10275 SW 24 ST, MIRAMAR, 33025",
+  "folio": "514119092240",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 424052.74,
+  "sale": "07/28/2026",
+  "mortgages": [
+    {
+      "party": "EMPIRE MTGE GROUP INC",
+      "amt": 82451,
+      "recorded_amt": 82451,
+      "bp": "21526/872",
+      "date": "1993-12-17",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BARNETT BANK BROWARD CO",
+      "amt": 60000,
+      "recorded_amt": 60000,
+      "bp": "22042/961",
+      "date": "1994-04-24",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BARNETT BANK BROWARD CO",
+      "amt": 760000,
+      "recorded_amt": 760000,
+      "bp": "22070/940",
+      "date": "1994-04-29",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BARNETT BANK S FL",
+      "amt": 49000,
+      "recorded_amt": 49000,
+      "bp": "22286/792",
+      "date": "1994-06-21",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANKATLANTIC",
+      "amt": 6000,
+      "recorded_amt": 6000,
+      "bp": "22864/913",
+      "date": "1994-11-28",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "GOLD COAST FUNDING GROUP INC",
+      "amt": 52147,
+      "recorded_amt": 52147,
+      "bp": "23325/237",
+      "date": "1995-04-11",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANK FLORIDA",
+      "amt": 150000,
+      "recorded_amt": 150000,
+      "bp": "23439/477",
+      "date": "1995-05-11",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "ASSOCIATES FINANCIAL SERVICES",
+      "amt": 16640,
+      "recorded_amt": 16640,
+      "bp": "24076/403",
+      "date": "1995-10-27",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "EASTERN FINANCIAL FEDERAL CR UN",
+      "amt": 18000,
+      "recorded_amt": 18000,
+      "bp": "24166/12",
+      "date": "1995-11-21",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONAL LENDING CENTER INC",
+      "amt": 40000,
+      "recorded_amt": 40000,
+      "bp": "24667/1",
+      "date": "1996-03-28",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANC MTGE CORP",
+      "amt": 38500,
+      "recorded_amt": 38500,
+      "bp": "24717/845",
+      "date": "1996-04-09",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "OPTION ONE MTGE CORP",
+      "amt": 67500,
+      "recorded_amt": 67500,
+      "bp": "25722/344",
+      "date": "1996-12-03",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NORWEST MTGE INC",
+      "amt": 57000,
+      "recorded_amt": 57000,
+      "bp": "25808/53",
+      "date": "1996-12-20",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST UNION NATL BANK FL",
+      "amt": 6469,
+      "recorded_amt": 6469,
+      "bp": "25828/31",
+      "date": "1996-12-27",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST UNION NATL BANK FL",
+      "amt": 9638,
+      "recorded_amt": 9638,
+      "bp": "25924/408",
+      "date": "1997-01-17",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BARNETT BANK",
+      "amt": 500000,
+      "recorded_amt": 500000,
+      "bp": "26162/597",
+      "date": "1997-03-18",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "HOME SAVINGS AMERICA",
+      "amt": 49900,
+      "recorded_amt": 49900,
+      "bp": "26519/903",
+      "date": "1997-06-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "APEX FINANCIAL GROUP INC DBA",
+      "amt": 158000,
+      "recorded_amt": 158000,
+      "bp": "26563/412",
+      "date": "1997-06-13",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AMERICAN SOUTHERN FINANCIAL GRP",
+      "amt": 96534,
+      "recorded_amt": 96534,
+      "bp": "26686/81",
+      "date": "1997-07-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NORTH AMERICAN MTGE CO",
+      "amt": 68850,
+      "recorded_amt": 68850,
+      "bp": "27509/278",
+      "date": "1998-01-07",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AMERIPRIDE MTGE INC",
+      "amt": 96626,
+      "recorded_amt": 96626,
+      "bp": "28176/760",
+      "date": "1998-05-07",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "PEMBROKE PINES CITY",
+      "amt": 9999,
+      "recorded_amt": 9999,
+      "bp": "28176/770",
+      "date": "1998-05-07",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANK",
+      "amt": 80000,
+      "recorded_amt": 80000,
+      "bp": "28509/547",
+      "date": "1998-07-07",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONAL LENDING CENTER INC",
+      "amt": 57600,
+      "recorded_amt": 57600,
+      "bp": "28551/889",
+      "date": "1998-07-13",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONAL LENDING CENTER INC",
+      "amt": 14400,
+      "recorded_amt": 14400,
+      "bp": "28551/900",
+      "date": "1998-07-13",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FAITH FINANCIAL GROUP INC",
+      "amt": 86700,
+      "recorded_amt": 86700,
+      "bp": "28560/953",
+      "date": "1998-07-14",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANKATLANTIC",
+      "amt": 92000,
+      "recorded_amt": 92000,
+      "bp": "28648/399",
+      "date": "1998-07-30",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANC MTGE CORP",
+      "amt": 740000,
+      "recorded_amt": 740000,
+      "bp": "29142/153",
+      "date": "1999-01-11",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST UNION NATIONAL BANK",
+      "amt": 34000,
+      "recorded_amt": 34000,
+      "bp": "29155/18",
+      "date": "1999-01-14",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANK",
+      "amt": 80000,
+      "recorded_amt": 80000,
+      "bp": "29301/930",
+      "date": "1999-03-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANK",
+      "amt": 48909,
+      "recorded_amt": 48909,
+      "bp": "29325/1512",
+      "date": "1999-03-19",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WASHINGTON MUTUAL BANK",
+      "amt": 123675,
+      "recorded_amt": 123675,
+      "bp": "29501/1516",
+      "date": "1999-06-01",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "CHASE MANHATTAN MTGE CORP",
+      "amt": 95050,
+      "recorded_amt": 95050,
+      "bp": "29510/802",
+      "date": "1999-06-03",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "EGRET INVESTMENTS LTD PRTNR",
+      "amt": 57016,
+      "recorded_amt": 57016,
+      "bp": "29571/224",
+      "date": "1999-06-18",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NATIONSBANK",
+      "amt": 20000,
+      "recorded_amt": 20000,
+      "bp": "29663/1486",
+      "date": "1999-07-15",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST UNION MTGE CORP",
+      "amt": 82300,
+      "recorded_amt": 82300,
+      "bp": "29905/1510",
+      "date": "1999-10-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "EQUICREDIT CORP OF AMER",
+      "amt": 28050,
+      "recorded_amt": 28050,
+      "bp": "29910/1454",
+      "date": "1999-10-06",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "PALM VACATION GROUP",
+      "amt": 14940,
+      "recorded_amt": 14940,
+      "bp": "30017/196",
+      "date": "1999-11-15",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK AMERICA",
+      "amt": 11056,
+      "recorded_amt": 11056,
+      "bp": "30158/780",
+      "date": "2000-01-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK AMERICA",
+      "amt": 11056,
+      "recorded_amt": 11056,
+      "bp": "30158/780",
+      "date": "2000-01-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK AMERICA",
+      "amt": 75082,
+      "recorded_amt": 75082,
+      "bp": "30162/1442",
+      "date": "2000-01-06",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE HOME LOANS INC",
+      "amt": 20000,
+      "recorded_amt": 20000,
+      "bp": "30426/411",
+      "date": "2000-04-17",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AQUINO,LUIS",
+      "amt": 6246,
+      "recorded_amt": 6246,
+      "bp": "30439/18",
+      "date": "2000-04-20",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AEGIS MTGE CORP",
+      "amt": 72000,
+      "recorded_amt": 72000,
+      "bp": "30439/1214",
+      "date": "2000-04-21",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK AMERICA",
+      "amt": 10000,
+      "recorded_amt": 10000,
+      "bp": "30678/1878",
+      "date": "2000-07-17",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "SUNTRUST BANK",
+      "amt": 132000,
+      "recorded_amt": 132000,
+      "bp": "30892/743",
+      "date": "2000-09-29",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST UNION NATIONAL BANK",
+      "amt": 28000,
+      "recorded_amt": 28000,
+      "bp": "31311/557",
+      "date": "2001-02-26",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK AMERICA",
+      "amt": 79910,
+      "recorded_amt": 79910,
+      "bp": "31399/1539",
+      "date": "2001-03-22",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AAPEX MTGE",
+      "amt": 135000,
+      "recorded_amt": 135000,
+      "bp": "31428/1738",
+      "date": "2001-03-30",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK AMERICA",
+      "amt": 21000,
+      "recorded_amt": 21000,
+      "bp": "31565/1650",
+      "date": "2001-05-08",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK AMERICA",
+      "amt": 21000,
+      "recorded_amt": 21000,
+      "bp": "31565/1650",
+      "date": "2001-05-08",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/514119-09-2240/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 580920,
+    "judg": 424052.74,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 156867,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/28/2026",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=514119092240"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/514119-09-2240/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/28/2026#AITEM_1509706"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

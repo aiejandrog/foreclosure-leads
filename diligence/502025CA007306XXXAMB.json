@@ -1,0 +1,129 @@
+{
+  "case": "502025CA007306XXXAMB",
+  "county": "PALM BEACH",
+  "addr": "45 ATWELL DR, WEST PALM BEACH, FL 33411",
+  "folio": "00424405110000570",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 400000.0,
+  "sale": "07/28/2026",
+  "mortgages": [],
+  "liens": [
+    {
+      "label": "Tax Lien - PALM BEACH COUNTY PROPERTY APPRAISER",
+      "date": "01/22/2018",
+      "bp": "O 29601/144",
+      "amt": null
+    },
+    {
+      "label": "Lis Pendens - LAKEVIEW LOAN SERVICING LLC",
+      "date": "01/02/2026",
+      "bp": "O 36227/1105",
+      "amt": null
+    },
+    {
+      "label": "Lien - SEQUOIA HOMEOWNERS ASSOCIATION INC",
+      "date": "06/04/2026",
+      "bp": "O 36566/1204",
+      "amt": null
+    }
+  ],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-44-05-11-000-0570&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 487202,
+    "judg": 400000.0,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 87202,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/28/2026",
+      "bp": ""
+    },
+    {
+      "label": "Deed - PORTER SHANTA M",
+      "date": "01/02/2013",
+      "bp": "O 25689/1694"
+    },
+    {
+      "label": "Mortgage - MORTGAGE ELECTRONIC REGISTRATION SYSTEMS INC UNI",
+      "date": "01/02/2013",
+      "bp": "O 25689/1696"
+    },
+    {
+      "label": "Tax Lien - PALM BEACH COUNTY PROPERTY APPRAISER",
+      "date": "01/22/2018",
+      "bp": "O 29601/144"
+    },
+    {
+      "label": "Satisfaction - PORTER SHANTA",
+      "date": "04/25/2018",
+      "bp": "O 29805/1757"
+    },
+    {
+      "label": "Deed - PORTER SHANTA M LAMBERT DEWIGHT COURTNEY",
+      "date": "09/08/2022",
+      "bp": "O 33826/486"
+    },
+    {
+      "label": "Lis Pendens - LAKEVIEW LOAN SERVICING LLC",
+      "date": "01/02/2026",
+      "bp": "O 36227/1105"
+    },
+    {
+      "label": "Lien - SEQUOIA HOMEOWNERS ASSOCIATION INC",
+      "date": "06/04/2026",
+      "bp": "O 36566/1204"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424405110000570"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-44-05-11-000-0570&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/28/2026#AITEM_1506394"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "palmbeach_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

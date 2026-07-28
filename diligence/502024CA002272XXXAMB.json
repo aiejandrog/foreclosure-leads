@@ -1,0 +1,128 @@
+{
+  "case": "502024CA002272XXXAMB",
+  "county": "PALM BEACH",
+  "addr": "22035 SW 58TH AVE, BOCA RATON, FL 33428",
+  "folio": "00424730060220490",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 322965.01,
+  "sale": "08/03/2026",
+  "mortgages": [
+    {
+      "party": "LONG BEACH MORTGAGE CO",
+      "amt": 116250,
+      "recorded_amt": 116250,
+      "bp": "",
+      "date": "2001-06-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AAMES HOME LOAN",
+      "amt": 175500,
+      "recorded_amt": 175500,
+      "bp": "",
+      "date": "2002-12-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AAMES FUNDING CORP",
+      "amt": 224000,
+      "recorded_amt": 224000,
+      "bp": "",
+      "date": "2004-09-13",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "COUNTRYWIDE BANK NA",
+      "amt": 315000,
+      "recorded_amt": 315000,
+      "bp": "",
+      "date": "2007-02-01",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "SCHLICHTMANN DON",
+      "amt": 34800,
+      "recorded_amt": 34800,
+      "bp": "",
+      "date": "2023-05-04",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-47-30-06-022-0490&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": null,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [
+    "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+  ],
+  "money_math": {
+    "value": 479023,
+    "judg": 322965.01,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": 640000,
+    "net_equity_est": 156058,
+    "notes": "OR chain missing/incomplete \u2014 mortgage & deed calls are provisional."
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/03/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 COUNTRYWIDE BANK NA",
+      "date": "2007-02-01",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424730060220490"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-47-30-06-022-0490&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/03/2026#AITEM_1505866"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "batchdata_liens.json (OR missing)",
+    "or_missing": true,
+    "conf": "bd",
+    "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

@@ -1,0 +1,73 @@
+{
+  "case": "2025-007384-CA-01",
+  "county": "MIAMI-DADE",
+  "addr": "8923 SW 206 ST, MIAMI, FL- 33189",
+  "folio": "3660090301180",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "JUNIOR",
+  "plaintiff": "BANK OF AMERICA NA",
+  "judgment": 61861.51,
+  "sale": "08/24/2026",
+  "mortgages": [],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/3660090301180"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": null,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [
+    "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+  ],
+  "money_math": {
+    "value": 535875,
+    "judg": 61861.51,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 474013,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/24/2026",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=3660090301180"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/3660090301180"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/24/2026#AITEM_1510395"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=ZzGA8m4%2FDRZralVfTRV4y3tzpIsOs47hD9iriTlWWnEOT06dl8P7Q9iZ1s8aAPZR"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "none",
+    "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

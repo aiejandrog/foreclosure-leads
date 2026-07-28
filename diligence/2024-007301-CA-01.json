@@ -1,0 +1,108 @@
+{
+  "case": "2024-007301-CA-01",
+  "county": "MIAMI-DADE",
+  "addr": "15248 SW 31 ST, MIAMI, FL- 33185",
+  "folio": "3049160240470",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "U S Bank Trust Company National Association",
+  "judgment": 253667.58,
+  "sale": "08/04/2026",
+  "mortgages": [
+    {
+      "party": "IVANHOE FIN INC",
+      "amt": 153990,
+      "recorded_amt": 153990,
+      "bp": "21610/1875",
+      "date": "9/5/2003 1",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MASTER FIN INC",
+      "amt": 188000,
+      "recorded_amt": 188000,
+      "bp": "23300/1070",
+      "date": "4/22/2005 ",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 266250,
+      "recorded_amt": 266250,
+      "bp": "25199/4695",
+      "date": "12/17/2006",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/3049160240470"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 410000,
+    "judg": 253667.58,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": 600000,
+    "net_equity_est": 156332,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/04/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "date": "12/17/2006",
+      "bp": "25199/4695"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=3049160240470"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/3049160240470"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/04/2026#AITEM_1507326"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=SIAu1RyerjjtwQ2jiu1rIlx7sYpD91s%2B8AmldfqjanTQTw01fv0at1HSvyZnNDVh"
+    },
+    {
+      "label": "Mortgage MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "url_or_bp": "25199/4695"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "mortgage FC \u2014 confirm payoff / surplus math",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

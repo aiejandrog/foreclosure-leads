@@ -1,0 +1,269 @@
+{
+  "case": "502025CC016197XXXAMB",
+  "county": "PALM BEACH",
+  "addr": "343 CAPRI H, DELRAY BEACH, FL 33484",
+  "folio": "00424623060083430",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "HOA",
+  "plaintiff": "",
+  "judgment": 15320.86,
+  "sale": "08/17/2026",
+  "mortgages": [],
+  "liens": [
+    {
+      "label": "Judgment Certified - FLORIDA PALM BEACH COUNTY",
+      "date": "05/30/2012",
+      "bp": "O 25231/1326",
+      "amt": null
+    },
+    {
+      "label": "Judgment - FLORIDA DEPARTMENT OF REVENUE KING JESSICA L",
+      "date": "03/21/2013",
+      "bp": "O 25892/630",
+      "amt": null
+    },
+    {
+      "label": "Judgment - KING JESSICA L",
+      "date": "06/04/2013",
+      "bp": "O 26067/1020",
+      "amt": null
+    },
+    {
+      "label": "Judgment - ROLLE JESSICA L",
+      "date": "10/29/2014",
+      "bp": "O 27126/1952",
+      "amt": null
+    },
+    {
+      "label": "Lien - CAPRI H ASSOCIATION INC",
+      "date": "07/10/2025",
+      "bp": "O 35867/1172",
+      "amt": null
+    },
+    {
+      "label": "Lis Pendens - CAPRI H ASSOCIATION INC",
+      "date": "10/09/2025",
+      "bp": "O 36054/105",
+      "amt": null
+    },
+    {
+      "label": "Lien - PALM BEACH COUNTY",
+      "date": "01/12/2026",
+      "bp": "O 36246/1286",
+      "amt": null
+    },
+    {
+      "label": "Lien - CAPRI H ASSOCIATION INC LAW OFFICE OF PAUL A KRA",
+      "date": "03/31/2026",
+      "bp": "O 36414/993",
+      "amt": null
+    },
+    {
+      "label": "Judgment - CAPRI H ASSOCIATION INC",
+      "date": "05/26/2026",
+      "bp": "O 36541/1833",
+      "amt": null
+    }
+  ],
+  "taxes": {
+    "status": "delinquent",
+    "certs": 3724,
+    "due": 3724,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-46-23-06-008-3430&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "Lady Bird / enhanced life estate",
+    "lady_bird": true,
+    "life_estate_holder": "Mattie G. St. Juste",
+    "remainder": "Shurod L. White",
+    "bp": "O 34698/1315"
+  },
+  "killer_issues": [
+    "Lady Bird deed O 34698/1315: Mattie G. St. Juste keeps the life estate; White only gets fee on her death. Case names White only \u2014 if Mattie is alive and was not joined, auction may buy a remainder interest (usable equity ~$0)."
+  ],
+  "money_math": {
+    "value": 59900,
+    "judg": 15320.86,
+    "surviving_senior": 0,
+    "tax_certs": 3724,
+    "list_price": 59900,
+    "net_equity_est": 40855,
+    "notes": "HOA \u2014 no open mortgage found on OR cache.",
+    "value_source": "active_listing",
+    "tax_checked": true
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/17/2026",
+      "bp": ""
+    },
+    {
+      "label": "Deed - MILSTEIN MONROE",
+      "date": "01/04/1985",
+      "bp": "O 4435/643"
+    },
+    {
+      "label": "Deed - JACOBSON JOSEPH",
+      "date": "02/11/1997",
+      "bp": "O 9651/1727"
+    },
+    {
+      "label": "Deed - JACOBSON JOSEPH JACOBSON MAX",
+      "date": "04/10/1997",
+      "bp": "O 9738/1456"
+    },
+    {
+      "label": "Deed - JACOBSON JOSEPH",
+      "date": "04/05/2006",
+      "bp": "O 20152/731"
+    },
+    {
+      "label": "Deed - JACOBSON JOSEPH",
+      "date": "10/25/2006",
+      "bp": "O 21006/492"
+    },
+    {
+      "label": "Deed - ROSENBLUM JUDITH",
+      "date": "06/14/2007",
+      "bp": "O 21838/1621"
+    },
+    {
+      "label": "Deed - FREDERIKSEN BARBARA",
+      "date": "03/28/2008",
+      "bp": "O 22536/1883"
+    },
+    {
+      "label": "Judgment Certified - FLORIDA PALM BEACH COUNTY",
+      "date": "05/30/2012",
+      "bp": "O 25231/1326"
+    },
+    {
+      "label": "Deed - MENDOZA SOCRATES W VITERI",
+      "date": "10/11/2012",
+      "bp": "O 25518/1719"
+    },
+    {
+      "label": "Judgment - FLORIDA DEPARTMENT OF REVENUE KING JESSICA L",
+      "date": "03/21/2013",
+      "bp": "O 25892/630"
+    },
+    {
+      "label": "Judgment - KING JESSICA L",
+      "date": "06/04/2013",
+      "bp": "O 26067/1020"
+    },
+    {
+      "label": "Judgment - ROLLE JESSICA L",
+      "date": "10/29/2014",
+      "bp": "O 27126/1952"
+    },
+    {
+      "label": "Deed - MENDOZA SOCRATES WILFRIDO VITERI VITERI YESSENIA",
+      "date": "12/06/2016",
+      "bp": "O 28749/528"
+    },
+    {
+      "label": "Deed - ST JUSTE MATTIE G",
+      "date": "04/02/2020",
+      "bp": "O 31335/725"
+    },
+    {
+      "label": "Deed - ST JUSTE MATTIE G WHITE SHUROD LAMONT",
+      "date": "12/04/2023",
+      "bp": "O 34698/1315"
+    },
+    {
+      "label": "Lien - CAPRI H ASSOCIATION INC",
+      "date": "07/10/2025",
+      "bp": "O 35867/1172"
+    },
+    {
+      "label": "Lis Pendens - CAPRI H ASSOCIATION INC",
+      "date": "10/09/2025",
+      "bp": "O 36054/105"
+    },
+    {
+      "label": "Lien - PALM BEACH COUNTY",
+      "date": "01/12/2026",
+      "bp": "O 36246/1286"
+    },
+    {
+      "label": "Lien - CAPRI H ASSOCIATION INC LAW OFFICE OF PAUL A KRA",
+      "date": "03/31/2026",
+      "bp": "O 36414/993"
+    },
+    {
+      "label": "Judgment - CAPRI H ASSOCIATION INC",
+      "date": "05/26/2026",
+      "bp": "O 36541/1833"
+    }
+  ],
+  "outreach_notes": "Do not wire / do not treat as clear title until Mattie is confirmed deceased (or joined/bought out) + tax redeem path is locked. Cash outreach to White is fine as a pre-auction options talk; auction bidding is a trap until the Lady Bird is cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424623060083430"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-46-23-06-008-3430&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/17/2026#AITEM_1503351"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    },
+    {
+      "label": "Lady Bird deed",
+      "url_or_bp": "O 34698/1315"
+    },
+    {
+      "label": "Claim of lien",
+      "url_or_bp": "O 35867/1172"
+    },
+    {
+      "label": "Lis Pendens",
+      "url_or_bp": "O 36054/105"
+    },
+    {
+      "label": "Second Capri lien",
+      "url_or_bp": "O 36414/993"
+    },
+    {
+      "label": "FJ recorded",
+      "url_or_bp": "O 36541/1833"
+    },
+    {
+      "label": "PAO parcel",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424623060083430"
+    },
+    {
+      "label": "Auction preview",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/17/2026#AITEM_1503351"
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "palmbeach_liens.json + Capri seed fill for deed text / known labels",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "Lady Bird / life estate on title (seed + live)",
+    "lead_backed": true,
+    "seed_merge": [
+      "title Lady Bird (Mattie / White / O 34698/1315) \u2014 live lacked deed text",
+      "tax certs from verified Capri seed",
+      "outreach Lady Bird warning from seed",
+      "money_math tax_certs from seed"
+    ],
+    "note": "Live scrape tried first; seed used only for fields live could not fill (Lady Bird deed text, known OR labels)."
+  },
+  "traced": "2026-07-28"
+}

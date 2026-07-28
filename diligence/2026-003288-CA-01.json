@@ -1,0 +1,90 @@
+{
+  "case": "2026-003288-CA-01",
+  "county": "MIAMI-DADE",
+  "addr": "1101 SW 122 AVE 307, MIAMI, FL- 33184",
+  "folio": "3049120530370",
+  "verdict": "BUY",
+  "foreclosure_type": "JUNIOR",
+  "plaintiff": "Jpmorgan Chase Bank, National Association",
+  "judgment": 18362.75,
+  "sale": "08/03/2026",
+  "mortgages": [
+    {
+      "party": "NATIONAL TITLE INS CO",
+      "amt": 56000,
+      "recorded_amt": 56000,
+      "bp": "18409/1599",
+      "date": "12/28/1998",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/3049120530370"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 223438,
+    "judg": 18362.75,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 205075,
+    "notes": " Soft BUY note: soft BUY \u2014 HOA/junior, no senior on OR, no title killer, taxes small (still confirm deed + estoppel)"
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/03/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 NATIONAL TITLE INS CO",
+      "date": "12/28/1998",
+      "bp": "18409/1599"
+    }
+  ],
+  "outreach_notes": "Soft BUY \u2014 still confirm deed, estoppel, and tax status before wire.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=3049120530370"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/3049120530370"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/03/2026#AITEM_1505619"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=j7Qp%2Bg9iUYLZb05FebX1ewmIH0OtQagoL5BqEmJmm6aH3vN6RIxytpANsXQwXW0O"
+    },
+    {
+      "label": "Mortgage NATIONAL TITLE INS CO",
+      "url_or_bp": "18409/1599"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "soft BUY \u2014 HOA/junior, no senior on OR, no title killer, taxes small (still confirm deed + estoppel)",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

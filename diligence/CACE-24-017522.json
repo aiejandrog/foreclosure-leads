@@ -1,0 +1,130 @@
+{
+  "case": "CACE-24-017522",
+  "county": "BROWARD",
+  "addr": "142 NW 8 AVE, DANIA BEACH, 33004",
+  "folio": "504234014041",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 308360.96,
+  "sale": "07/29/2026",
+  "mortgages": [
+    {
+      "party": "BANK UNITED",
+      "amt": 79959,
+      "recorded_amt": 79959,
+      "bp": "30944/1701",
+      "date": "2000-10-18",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "CHASE MANHATTAN MTGE CORP",
+      "amt": 97440,
+      "recorded_amt": 97440,
+      "bp": "33876/872",
+      "date": "2002-10-01",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "AMERIQUEST MTGE CO",
+      "amt": 127000,
+      "recorded_amt": 127000,
+      "bp": "36686/1564",
+      "date": "2004-01-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 150000,
+      "recorded_amt": 150000,
+      "bp": "38463/584",
+      "date": "2004-11-02",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WORLD SAVINGS BANK",
+      "amt": 175000,
+      "recorded_amt": 175000,
+      "bp": "41656/943",
+      "date": "2006-03-20",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BANK OF AMERICA NA",
+      "amt": 194100,
+      "recorded_amt": 194100,
+      "bp": "44367/236",
+      "date": "2007-07-24",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/504234-01-4041/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 449350,
+    "judg": 308360.96,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": 190000,
+    "net_equity_est": 140989,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/29/2026",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=504234014041"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/504234-01-4041/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/29/2026#AITEM_1504194"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

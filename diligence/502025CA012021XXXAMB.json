@@ -1,0 +1,128 @@
+{
+  "case": "502025CA012021XXXAMB",
+  "county": "PALM BEACH",
+  "addr": "2771 ASHLEY DR E J, WEST PALM BEACH, FL 33415",
+  "folio": "00424413150020100",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 77367.37,
+  "sale": "07/29/2026",
+  "mortgages": [],
+  "liens": [
+    {
+      "label": "Lis Pendens - TH MSR HOLDINGS LLC",
+      "date": "11/20/2025",
+      "bp": "O 36144/1510",
+      "amt": null
+    },
+    {
+      "label": "Judgment - TH MSR HOLDINGS LLC",
+      "date": "06/29/2026",
+      "bp": "O 36621/194",
+      "amt": null
+    }
+  ],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-44-13-15-002-0100&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 98182,
+    "judg": 77367.37,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 20815,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/29/2026",
+      "bp": ""
+    },
+    {
+      "label": "Deed - KUSENKO WALLY J",
+      "date": "09/03/1992",
+      "bp": "O 7381/827"
+    },
+    {
+      "label": "Deed - KRUMRINE IRENE",
+      "date": "05/07/2001",
+      "bp": "O 12527/241"
+    },
+    {
+      "label": "Deed - NATIONSTAR MORTGAGE LLC CHAMPION MORTGAGE COMPAN",
+      "date": "11/22/2016",
+      "bp": "O 28720/1413"
+    },
+    {
+      "label": "Deed - NATIONSTAR MORTGAGE LLC CHAMPION MORTGAGE COMPAN",
+      "date": "12/12/2016",
+      "bp": "O 28762/1439"
+    },
+    {
+      "label": "Deed - CASPER THOMAS",
+      "date": "01/11/2017",
+      "bp": "O 28822/639"
+    },
+    {
+      "label": "Deed - FORMAN CAROL",
+      "date": "07/07/2017",
+      "bp": "O 29204/1615"
+    },
+    {
+      "label": "Lis Pendens - TH MSR HOLDINGS LLC",
+      "date": "11/20/2025",
+      "bp": "O 36144/1510"
+    },
+    {
+      "label": "Judgment - TH MSR HOLDINGS LLC",
+      "date": "06/29/2026",
+      "bp": "O 36621/194"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424413150020100"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-44-13-15-002-0100&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/29/2026#AITEM_1508431"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "palmbeach_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

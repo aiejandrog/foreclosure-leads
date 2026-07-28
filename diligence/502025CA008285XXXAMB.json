@@ -1,0 +1,142 @@
+{
+  "case": "502025CA008285XXXAMB",
+  "county": "PALM BEACH",
+  "addr": "6935 DEARBORN PL, BOYNTON BEACH, FL 33437",
+  "folio": "00424522010001970",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 183070.8,
+  "sale": "07/30/2026",
+  "mortgages": [
+    {
+      "party": "SUNTRUST BANK",
+      "amt": 32000,
+      "recorded_amt": 32000,
+      "bp": "",
+      "date": "2002-12-23",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "CITIFINANCIAL MORTGAGE COMPANY FL LLC",
+      "amt": 264381,
+      "recorded_amt": 264381,
+      "bp": "",
+      "date": "2005-08-03",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "JPMORGAN CHASE BANK NA",
+      "amt": 28000,
+      "recorded_amt": 28000,
+      "bp": "",
+      "date": "2006-10-23",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WASHINGTON MUTUAL BANK FA",
+      "amt": 325800,
+      "recorded_amt": 325800,
+      "bp": "",
+      "date": "2007-10-04",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "QUICKEN LOANS INC",
+      "amt": 189610,
+      "recorded_amt": 251500,
+      "bp": "",
+      "date": "2015-01-26",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "AUDRIC SMITH ETAL",
+      "amt": 115000,
+      "recorded_amt": 115000,
+      "bp": "",
+      "date": "2023-11-09",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-45-22-01-000-1970&pg=1&g=-1&moduleId=449"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": null,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [
+    "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+  ],
+  "money_math": {
+    "value": 481150,
+    "judg": 183070.8,
+    "surviving_senior": 189610,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 108469,
+    "notes": "OR chain missing/incomplete \u2014 mortgage & deed calls are provisional."
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/30/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 QUICKEN LOANS INC",
+      "date": "2015-01-26",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 AUDRIC SMITH ETAL",
+      "date": "2023-11-09",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424522010001970"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-45-22-01-000-1970&pg=1&g=-1&moduleId=449"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/30/2026#AITEM_1508022"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+    }
+  ],
+  "sources": {
+    "lead": "palmbeach_leads.json",
+    "or": "batchdata_liens.json (OR missing)",
+    "or_missing": true,
+    "conf": "bd",
+    "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

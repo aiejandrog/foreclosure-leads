@@ -1,0 +1,108 @@
+{
+  "case": "2024-023366-CA-01",
+  "county": "MIAMI-DADE",
+  "addr": "888 BRICKELL KEY DR 807, MIAMI, FL- 33131",
+  "folio": "0142060580800",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "JPMORGAN CHASE BANK, NATIONAL ASSOCIATION",
+  "judgment": 191445.55,
+  "sale": "08/03/2026",
+  "mortgages": [
+    {
+      "party": "WASHINGTON MUTUAL BNK FA",
+      "amt": 378335,
+      "recorded_amt": 378335,
+      "bp": "20322/2027",
+      "date": "4/10/2002 ",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WASHINGTON MUTUAL BNK FA",
+      "amt": 170000,
+      "recorded_amt": 170000,
+      "bp": "24128/3828",
+      "date": "1/10/2006 ",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WASHINGTON MUTUAL BNK",
+      "amt": 100000,
+      "recorded_amt": 100000,
+      "bp": "25441/1625",
+      "date": "3/12/2007 ",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/0142060580800"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 856065,
+    "judg": 191445.55,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": 1100000,
+    "net_equity_est": 664619,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/03/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 WASHINGTON MUTUAL BNK",
+      "date": "3/12/2007 ",
+      "bp": "25441/1625"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=0142060580800"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/0142060580800"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/03/2026#AITEM_1506654"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=SIAu1RyerjjtwQ2jiu1rIj50UT%2BHCeQHpwXws%2FFcNqsMGkejOQSjkcJKp%2BoipZFE"
+    },
+    {
+      "label": "Mortgage WASHINGTON MUTUAL BNK",
+      "url_or_bp": "25441/1625"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "mortgage FC \u2014 confirm payoff / surplus math",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

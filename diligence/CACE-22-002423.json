@@ -1,0 +1,349 @@
+{
+  "case": "CACE-22-002423",
+  "county": "BROWARD",
+  "addr": "9571 ASHLEY DR, MIRAMAR, 33025",
+  "folio": "514120080480",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 229646.67,
+  "sale": "07/29/2026",
+  "mortgages": [
+    {
+      "party": "WORLD SAVINGS",
+      "amt": 99000,
+      "recorded_amt": 99000,
+      "bp": "22758/239",
+      "date": "1994-10-25",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "SEA GARDENS BEACH & TENNIS RSRT",
+      "amt": 9200,
+      "recorded_amt": 9200,
+      "bp": "23853/128",
+      "date": "1995-08-31",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "RYDER SYSTEM FEDERAL CR UN",
+      "amt": 173700,
+      "recorded_amt": 173700,
+      "bp": "25748/289",
+      "date": "1996-12-09",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MARKET STREET MTGE CORP",
+      "amt": 200000,
+      "recorded_amt": 200000,
+      "bp": "25818/100",
+      "date": "1996-12-24",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "OPTION ONE MTGE CORP",
+      "amt": 49600,
+      "recorded_amt": 49600,
+      "bp": "26719/491",
+      "date": "1997-07-16",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "GE CAPITAL MTGE SERV INC",
+      "amt": 202400,
+      "recorded_amt": 202400,
+      "bp": "28336/128",
+      "date": "1998-06-04",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "OCEAN RANCH VACATION GRP",
+      "amt": 10115,
+      "recorded_amt": 10115,
+      "bp": "29151/237",
+      "date": "1999-01-13",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "STEPHEN J ALLOCO PA",
+      "amt": 5000,
+      "recorded_amt": 5000,
+      "bp": "29224/770",
+      "date": "1999-02-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "RAINSOFT OF POMPANO",
+      "amt": 2295,
+      "recorded_amt": 2295,
+      "bp": "29999/1214",
+      "date": "1999-11-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "REPUBLIC SECURITY BANK",
+      "amt": 55900,
+      "recorded_amt": 55900,
+      "bp": "30943/1065",
+      "date": "2000-10-18",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BROWARD COUNTY",
+      "amt": 5000,
+      "recorded_amt": 5000,
+      "bp": "30943/1081",
+      "date": "2000-10-18",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "REPUBLIC SECURITY BANK",
+      "amt": 700,
+      "recorded_amt": 700,
+      "bp": "30943/1091",
+      "date": "2000-10-18",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "PALM VACATION GROUP",
+      "amt": 5865,
+      "recorded_amt": 5865,
+      "bp": "31024/455",
+      "date": "2000-11-15",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BERKLEY VACATION RESORTS INC",
+      "amt": 12510,
+      "recorded_amt": 12510,
+      "bp": "32727/1652",
+      "date": "2002-02-05",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FIRST UNION NATIONAL BANK",
+      "amt": 64000,
+      "recorded_amt": 64000,
+      "bp": "32999/1821",
+      "date": "2002-04-10",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "WELLS FARGO HOME MTGE INC",
+      "amt": 200000,
+      "recorded_amt": 200000,
+      "bp": "34234/1830",
+      "date": "2002-12-11",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "PALM VACATION GROUP",
+      "amt": 8730,
+      "recorded_amt": 8730,
+      "bp": "36752/883",
+      "date": "2004-01-14",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 392150,
+      "recorded_amt": 392150,
+      "bp": "36909/1169",
+      "date": "2004-02-13",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 224000,
+      "recorded_amt": 224000,
+      "bp": "37542/159",
+      "date": "2004-05-26",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 454500,
+      "recorded_amt": 454500,
+      "bp": "40062/1566",
+      "date": "2005-07-14",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "PERL MORTGAGE INC",
+      "amt": 416000,
+      "recorded_amt": 416000,
+      "bp": "44172/1114",
+      "date": "2007-06-12",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "GMAC BANK",
+      "amt": 271200,
+      "recorded_amt": 271200,
+      "bp": "46347/318",
+      "date": "2009-07-02",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 152940,
+      "recorded_amt": 152940,
+      "bp": "47807/1674",
+      "date": "2011-03-25",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "FLORIDA HOUSING FINANCE CORP",
+      "amt": 7500,
+      "recorded_amt": 7500,
+      "bp": "47807/1686",
+      "date": "2011-03-25",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "PALM VACATION GROUP",
+      "amt": 10954,
+      "recorded_amt": 10954,
+      "bp": "50346/24",
+      "date": "2013-11-19",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "SECRETARY OF HOUSING & URBAN DEVELOPMENT",
+      "amt": 11181,
+      "recorded_amt": 11181,
+      "bp": "50398/244",
+      "date": "2013-12-11",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 219942,
+      "recorded_amt": 219942,
+      "bp": "",
+      "date": "2016-07-14",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "BRIGHTSTAR CREDIT UNION",
+      "amt": 45500,
+      "recorded_amt": 45500,
+      "bp": "",
+      "date": "2018-03-29",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [
+    {
+      "label": "Code/muni open",
+      "date": "",
+      "bp": "",
+      "amt": 6698.14
+    }
+  ],
+  "taxes": {
+    "status": "delinquent",
+    "certs": 6698,
+    "due": 6698,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/514120-08-0480/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 533800,
+    "judg": 229646.67,
+    "surviving_senior": 416000,
+    "tax_certs": 6698,
+    "list_price": null,
+    "net_equity_est": -118545,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/29/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 PERL MORTGAGE INC",
+      "date": "2007-06-12",
+      "bp": "44172/1114"
+    },
+    {
+      "label": "Open mtg \u2014 BRIGHTSTAR CREDIT UNION",
+      "date": "2018-03-29",
+      "bp": ""
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=514120080480"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/514120-08-0480/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/29/2026#AITEM_1509704"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    },
+    {
+      "label": "Mortgage PERL MORTGAGE INC",
+      "url_or_bp": "44172/1114"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

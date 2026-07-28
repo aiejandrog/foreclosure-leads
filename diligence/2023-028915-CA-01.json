@@ -1,0 +1,117 @@
+{
+  "case": "2023-028915-CA-01",
+  "county": "MIAMI-DADE",
+  "addr": "385 NE 129 ST, NORTH MIAMI, FL- 33161",
+  "folio": "0622300260290",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "Deutsche Bank National Trust Company",
+  "judgment": 404439.83,
+  "sale": "08/17/2026",
+  "mortgages": [
+    {
+      "party": "WORLD SV BNK FSB",
+      "amt": 131250,
+      "recorded_amt": 131250,
+      "bp": "20845/1870",
+      "date": "12/4/2002 ",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "NEW CENTURY MTG CORP",
+      "amt": 193200,
+      "recorded_amt": 193200,
+      "bp": "23183/1210",
+      "date": "3/18/2005 ",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "SMALL BUSN ADMN",
+      "amt": 50000,
+      "recorded_amt": 50000,
+      "bp": "26355/803",
+      "date": "5/1/2008 1",
+      "st": "OPEN",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/0622300260290"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 676428,
+    "judg": 404439.83,
+    "surviving_senior": 50000,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 221988,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "08/17/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 NEW CENTURY MTG CORP",
+      "date": "3/18/2005 ",
+      "bp": "23183/1210"
+    },
+    {
+      "label": "Open mtg \u2014 SMALL BUSN ADMN",
+      "date": "5/1/2008 1",
+      "bp": "26355/803"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=0622300260290"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/0622300260290"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/17/2026#AITEM_1502737"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=VHRWvyF5eQVZqQLWIGhKhqqObGW%2FbKgJx7RBJ%2Fa%2F6tzHsGiaUNWXnBCBeCeizeFW"
+    },
+    {
+      "label": "Mortgage NEW CENTURY MTG CORP",
+      "url_or_bp": "23183/1210"
+    },
+    {
+      "label": "Mortgage SMALL BUSN ADMN",
+      "url_or_bp": "26355/803"
+    }
+  ],
+  "sources": {
+    "lead": "leads_final.json",
+    "or": "records_liens.json",
+    "or_missing": false,
+    "conf": "low",
+    "verdict_reason": "default conservative \u2014 confirm OR + taxes + deed",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}

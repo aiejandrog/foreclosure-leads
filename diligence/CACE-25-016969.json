@@ -1,0 +1,121 @@
+{
+  "case": "CACE-25-016969",
+  "county": "BROWARD",
+  "addr": "6109 LINCOLN ST, HOLLYWOOD, 33024",
+  "folio": "514113190100",
+  "verdict": "CONDITIONAL",
+  "foreclosure_type": "MORTGAGE",
+  "plaintiff": "",
+  "judgment": 46382.57,
+  "sale": "07/28/2026",
+  "mortgages": [
+    {
+      "party": "APPROVED HOME MTGE CORP",
+      "amt": 54846,
+      "recorded_amt": 54846,
+      "bp": "29709/522",
+      "date": "1999-07-30",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "APPROVED HOME MTGE CORP",
+      "amt": 54846,
+      "recorded_amt": 54846,
+      "bp": "31295/1222",
+      "date": "2001-02-21",
+      "st": "OPEN",
+      "heloc": false
+    },
+    {
+      "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+      "amt": 23600,
+      "recorded_amt": 23600,
+      "bp": "45648/1309",
+      "date": "2008-09-02",
+      "st": "SATISFIED",
+      "heloc": false
+    },
+    {
+      "party": "SECRETARY OF HOUSING AND URBAN DEVELOPME",
+      "amt": 5073,
+      "recorded_amt": 5073,
+      "bp": "49590/81",
+      "date": "2013-03-12",
+      "st": "SATISFIED",
+      "heloc": false
+    }
+  ],
+  "liens": [],
+  "taxes": {
+    "status": "unknown",
+    "certs": 0,
+    "due": null,
+    "url": "https://broward.county-taxes.com/public/real_estate/parcels/514113-19-0100/bills"
+  },
+  "title": {
+    "deed_type": "",
+    "lady_bird": false,
+    "life_estate_holder": "",
+    "remainder": "",
+    "bp": ""
+  },
+  "killer_issues": [],
+  "money_math": {
+    "value": 211760,
+    "judg": 46382.57,
+    "surviving_senior": 0,
+    "tax_certs": 0,
+    "list_price": null,
+    "net_equity_est": 165377,
+    "notes": ""
+  },
+  "timeline": [
+    {
+      "label": "Auction sale",
+      "date": "07/28/2026",
+      "bp": ""
+    },
+    {
+      "label": "Open mtg \u2014 APPROVED HOME MTGE CORP",
+      "date": "2001-02-21",
+      "bp": "31295/1222"
+    }
+  ],
+  "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+  "citations": [
+    {
+      "label": "Property appraiser",
+      "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=514113190100"
+    },
+    {
+      "label": "Tax collector",
+      "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/514113-19-0100/bills"
+    },
+    {
+      "label": "Auction",
+      "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=07/28/2026#AITEM_1508410"
+    },
+    {
+      "label": "Case docket",
+      "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+    },
+    {
+      "label": "Official Records",
+      "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+    },
+    {
+      "label": "Mortgage APPROVED HOME MTGE CORP",
+      "url_or_bp": "31295/1222"
+    }
+  ],
+  "sources": {
+    "lead": "broward_leads.json",
+    "or": "broward_liens.json",
+    "or_missing": false,
+    "conf": "ok",
+    "verdict_reason": "plaintiff / foreclosure type unresolved",
+    "lead_backed": true
+  },
+  "traced": "2026-07-27"
+}
