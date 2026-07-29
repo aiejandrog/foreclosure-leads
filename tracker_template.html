@@ -6413,6 +6413,50 @@ function genDialReady(r){
     dncNote = '<div class="drdncwarn">Every number here is on the Do-Not-Call registry. Manual dial only, and log the exemption reason (established relationship / prior consent).</div>';
   if(!rows.length)
     dncNote = '<div class="drdncwarn">No phone traced yet. Use the People-search on the call sheet to find one — the People/CyberBG links are on the row.</div>';
+  // ONE-TAP OUTCOME BAR — the workflow's #1 pick. The problem is not "how do I log a call outcome" — the
+  // problem is that the outcome bar lives on the MAIN tab and Dial-Ready lives in a new tab, so after the
+  // dialer returns, the log button is on a screen the operator can't see. Embedding six outcome buttons
+  // HERE, right below the dial button, and postMessage-ing the outcome back to the parent, means the log
+  // happens in the same field of view as the call. The parent listens (see the docroom listener) and calls
+  // logTouch() with the QUICKLOG index — same code path as the after-call bar, so cadence + status +
+  // follow-up date all fire exactly as they would from the main-tab bar. Six buttons, mapped by QUICKLOG
+  // index: 0 no-answer · 1 left-message · 2 spoke · 3 callback-set · 9 said-STOP · 10 not-interested.
+  var OUTCOMES = [
+    {i:0,  en:'☎ No answer',      es:'☎ Sin respuesta',    bg:'#f6f8fa'},
+    {i:1,  en:'☎ Left message',   es:'☎ Dejé mensaje',     bg:'#f6f8fa'},
+    {i:2,  en:'☎ Spoke',          es:'☎ Hablé',            bg:'#eaf5ec'},
+    {i:3,  en:'⭐ Callback set',   es:'⭐ Devolución',      bg:'#f4e5a7'},
+    {i:9,  en:'⛔ Said STOP',      es:'⛔ Dijo BASTA',      bg:'#f9e5e5'},
+    {i:10, en:'✕ Not interested', es:'✕ No interesado',    bg:'#f9e5e5'},
+  ];
+  var outcomeCss = ''
+    + '<style>'
+    + '.drout{margin-top:20px;padding-top:16px;border-top:1px solid #e2e6ee}'
+    + '.drouth{font:700 11px "Segoe UI",Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8a94a8;margin-bottom:8px}'
+    + '.drouts{display:grid;grid-template-columns:1fr 1fr;gap:8px}'
+    + '.droutbtn{display:block;padding:12px 10px;border:1px solid #d5dae4;border-radius:8px;background:#fff;color:#0e1b33;font:700 13.5px "Segoe UI",Arial,sans-serif;cursor:pointer;text-align:center;transition:transform .05s}'
+    + '.droutbtn:hover{border-color:#0B1730;background:#fbfaf6}'
+    + '.droutbtn:active{transform:scale(.97)}'
+    + '.droutbtn.done{background:#286c34;color:#fff;border-color:#286c34;pointer-events:none}'
+    + '.dr.es .droutbtn .doen{display:none}.dr:not(.es) .droutbtn .does{display:none}'
+    + '</style>';
+  var outcomeBtns = OUTCOMES.map(function(o){
+    return '<button type="button" class="droutbtn" data-out="'+o.i+'" style="border-left:4px solid '+o.bg+'">'
+      + '<span class="doen">'+esc(o.en)+'</span><span class="does">'+esc(o.es)+'</span></button>';
+  }).join('');
+  var outcomeScript = '<script>document.addEventListener("click",function(e){var b=e.target.closest(".droutbtn");if(!b||b.classList.contains("done"))return;'
+    + 'try{window.opener&&window.opener.postMessage({dialoutcome:{c:'+JSON.stringify(r.case)+',out:+b.dataset.out}},"*");}catch(_e){}'
+    + 'b.classList.add("done");'
+    + 'var was=b.querySelector(".doen").textContent;b.querySelector(".doen").textContent="✓ "+was+" — logged";'
+    + 'var wasES=b.querySelector(".does").textContent;b.querySelector(".does").textContent="✓ "+wasES+" — registrado";'
+    + 'b.parentNode.querySelectorAll(".droutbtn").forEach(function(x){if(x!==b)x.style.opacity=.35;});'
+    + '});<\/script>';
+  var outcomeBar = outcomeCss
+    + '<div class="drout" id="drout">'
+    +   '<div class="drouth"><span class="den">Log the outcome — one tap</span><span class="dres">Registrar resultado — un toque</span></div>'
+    +   '<div class="drouts">' + outcomeBtns + '</div>'
+    + '</div>'
+    + outcomeScript;
   var css = ''
     + '<style>'
     + '.dr{max-width:520px;margin:14px auto;background:#fff;border-radius:14px;box-shadow:0 4px 22px rgba(11,23,48,.12);padding:22px 22px 26px}'
@@ -6470,6 +6514,7 @@ function genDialReady(r){
     +   '<div class="drdials den">' + rows.map(dialBtnEN).join('') + '</div>'
     +   '<div class="drdials dres">' + rows.map(dialBtnES).join('') + '</div>'
     +   dncNote
+    +   outcomeBar
     +   '<div class="drfoot">'
     +     '<span class="den">Tap a number to dial. After the call, log the outcome on the board so tomorrow you know where you left off.</span>'
     +     '<span class="dres">Toque un número para marcar. Después, registre el resultado en el tablero para saber dónde quedó mañana.</span>'
@@ -6506,6 +6551,21 @@ window.addEventListener('message', function(ev){
   if(!fn) return;
   _openDoc(fn(r));
   _docLog(r.case, d.key, 'bi');
+});
+// listen for outcome logging coming back from the Dial-Ready tab — the workflow's #1 pick.
+// The Dial-Ready tab shows the 6-button outcome bar right under the tap-to-dial buttons; when
+// tapped, it posts {dialoutcome:{c,out}} back here so the SAME code path used by the after-call
+// bar (logTouch via QUICKLOG index) fires — cadence, status, follow-up date all identical.
+// Toast on the main tab so the operator sees confirmation next time they focus this window.
+window.addEventListener('message', function(ev){
+  var d = ev && ev.data && ev.data.dialoutcome; if(!d) return;
+  var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
+  var spec = (typeof QUICKLOG !== 'undefined') ? QUICKLOG[+d.out] : null;
+  if(!spec) return;
+  try { if(typeof logTouch === 'function') logTouch(r.case, spec.ch, spec.out, spec); } catch(e){}
+  try { if(typeof render === 'function') render(); } catch(e){}
+  if(typeof _shareToast === 'function')
+    _shareToast('Logged: '+spec.lbl+' — '+(r.oname||r.owners||r.case).split(';')[0]);
 });
 
 /* ============================================================================================
