@@ -3833,6 +3833,10 @@ function _callSheet(r){
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
       '<button type="button" class="shbtn shdil" onclick="_runDiligence(\''+esc(r.case)+'\')" title="Runs Deep Diligence via local API (127.0.0.1:8765). Prefer install_diligence_autostart.bat once — no window needed.">'+(r.diligence?'🔄 Refresh Diligence':'🔬 Run Diligence')+'</button>'+
+      // THE DOOR HANGER LIVES WHERE THE DOOR VISIT IS DECIDED. It was only on the board row, so
+      // anyone arriving by shared link (Carlos, every time) had to close the sheet and hunt the row
+      // for it. This is the sheet you read before you knock — print the leave-behind from here.
+      '<button type="button" class="shbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+esc(r.case)+'\';}); if(x) genHanger(x);})()" title="Neighbor-safe door hanger for this property — English + Spanish, Z-folds so only the owner\'s first name shows. Print, fold, tape to the door (never the mailbox).">🚪 Door hanger</button>'+
       '<button type="button" class="csbtn" onclick="_copyCallSheet(\''+esc(r.case)+'\')">Copy all numbers</button>'+
     '</div></div>';
 }
@@ -5696,6 +5700,19 @@ function _carlosPacket(){
       + '<p>I buy houses. Not selling anything, not a rescue company. Five exits: reinstate, loan mod, short sale, private cash sale, or bankruptcy. Five minutes, no charge.</p>'
       + '<p>Please call or text me at <b>'+esc(sP)+'</b> before the sale date.</p>'
       + '<p>If a private sale fits, we talk. If another exit is better, I will say so.</p>'
+      // SPANISH ON EVERY HANGER, not a separate print run. Miami-Dade is majority Spanish-speaking
+      // and Carlos cannot know which door needs which language BEFORE he knocks — a one-language
+      // hanger is a coin flip he loses half the time. Both languages, same panel, inside the fold
+      // (the privacy rule is unchanged: nothing readable while it hangs). The single-lead
+      // genHanger() has carried EN+ES since Jose's 07-21 spec; the batch packet never did.
+      + '<div class="esdiv"><div class="eslbl">Español</div>'
+      +   '<div class="hh">'+esc(greet)+',</div>'
+      +   '<p>Pasé por aquí — su propiedad salió en el calendario del condado.</p>'
+      +   '<p>La subasta está programada para el <b>'+esc(r.auction)+'</b> a las <b>9am</b>.</p>'
+      +   '<p>Yo compro casas. No le vengo a vender nada y no soy una empresa de “rescate.” Cinco salidas: reinstalar, modificación, short sale, venta privada en efectivo, o bancarrota. Cinco minutos, sin costo.</p>'
+      +   '<p>Por favor llámeme o escríbame al <b>'+esc(sP)+'</b> antes de la fecha de subasta.</p>'
+      +   '<p>Si una venta privada le sirve, hablamos. Si otra salida es mejor, se lo digo.</p>'
+      + '</div>'
       + '<div class="cta">'+esc(sN||'your local buyer')+(sL?' — '+esc(sL):'')+'</div>'
       + '<div class="pers">Personal</div>'
       + '<div class="fold">— — — — — — — — — fold / cut here — — — — — — — — —</div></div>';
@@ -5713,6 +5730,9 @@ function _carlosPacket(){
     + '.hwl{border-bottom:1.5px solid #222;height:0.42in;margin-bottom:8px}'
     + '.hwl.short{width:55%}.hwl.tiny{width:26%}'
     + '.hwc{font-size:10.5px;color:#8a93a6;letter-spacing:.03em;margin-top:2px}'
+    + '.esdiv{border-top:1px dashed #c3c8d2;margin:13px 0 0;padding-top:9px}'
+    + '.esdiv .hh{font-size:17px;margin-top:2px}'
+    + '.eslbl{font-size:9.5px;letter-spacing:.2em;text-transform:uppercase;color:#8a93a6;font-weight:700}'
     + '.pers{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:#444;border-top:1px solid #ddd;padding-top:7px;margin-top:12px}'
     + '.pgb{page-break-before:always}@media print{.noprint{display:none}}'
     + '.bar{background:#0B1730;color:#fff;padding:10px 14px;margin:-28px -28px 20px;display:flex;gap:10px}'
@@ -5733,7 +5753,27 @@ function _openHashDeal(){
   var c = decodeURIComponent(m[1]);
   var blob = (location.hash||'') + '&' + (location.search||'');
   var wantMath = /(?:^|[&#?])(?:math|underwrite)=1\b/.test(blob);
-  if(DATA.some(function(x){return x.case===c;})) setTimeout(function(){ openCallSheet(c, {math: wantMath}); }, 300);
+  if(!DATA.some(function(x){return x.case===c;})) return;
+  // LAND ON THE PROPERTY, NOT ON THE BOARD BEHIND IT.
+  // A shared link (the one Carlos and Jose actually receive) used to open the call sheet on top of
+  // the UNFILTERED 713-lead board. The moment they pressed × the property vanished into the pile
+  // and there was no way back to it — the link had delivered them to a haystack, not a needle.
+  // Now the board underneath is SEARCHED + PINNED to this one property BEFORE the sheet opens.
+  // Close the sheet and the property is still there, alone and fire-marked. The search chip in the
+  // filter bar ("Search: 2026-…") is the one-tap escape back to the full board.
+  // Search is the right mechanism, not a filter: view() lets q span every tier and ignore
+  // freshness/hide-viewed, so a shared lead can never be filtered out from under the recipient.
+  q = c;
+  var _qi = document.getElementById('q'); if(_qi) _qi.value = c;
+  county = ''; if(typeof _resetCountyPills === 'function') _resetCountyPills();
+  pinnedCase = c; try{ localStorage.setItem('fcPinned', c); }catch(e){}
+  try{ render(); }catch(e){}
+  setTimeout(function(){
+    openCallSheet(c, {math: wantMath});
+    // tell them what happened, in their words — they were SENT this one property
+    if(typeof _shareToast === 'function')
+      _shareToast('Shared link — showing this property. Close the sheet and it stays on screen; clear the search to see the whole board.');
+  }, 300);
 }
 // Filing year: the `filed` field when the scraper carried it (MD), else derived from the case
 // number itself — MD `2025-021847-CA-01`, PB `502024CA012300…`, BW `CACE-24-009886` all encode it.
