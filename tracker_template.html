@@ -587,6 +587,14 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csplay{display:flex;align-items:flex-start;gap:9px;margin:11px 0 3px;padding:9px 11px;background:var(--surface-2,#f6f8fa);border-radius:9px;border-left:3px solid var(--muted,#6b7280)}
 .csplay .playbadge{margin-left:0;font-size:9px;padding:3px 8px;flex:none;margin-top:1px}
 .csplayw{font-size:12.5px;line-height:1.45;color:var(--fg,#2a3140)}
+/* TAKE ACTION strip — above the fold on every call sheet. Gold-tinted panel so it reads as
+   "next moves" not "more table content". Wraps cleanly on mobile; buttons never split. */
+.csact{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 6px;padding:10px 11px;background:var(--gold-soft,#f4ead2);border:1px solid var(--gold,#C6A14B);border-radius:9px}
+.csactbtn{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;font-size:13px;font-weight:700;letter-spacing:.01em;background:#fff;color:var(--ink,#0e1b33);border:1px solid var(--gold,#C6A14B);border-radius:7px;cursor:pointer;line-height:1.15;box-shadow:0 1px 2px rgba(11,23,48,.05);white-space:nowrap}
+.csactbtn:hover{background:var(--ink,#0e1b33);color:var(--gold,#C6A14B);border-color:var(--ink,#0e1b33)}
+.csactbtn .csactsub{font-size:10px;color:var(--muted,#6b7280);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-left:2px}
+.csactbtn:hover .csactsub{color:#e6cf88}
+.csactbtn.csact-save.on{background:var(--ink,#0e1b33);color:var(--gold,#C6A14B);border-color:var(--ink,#0e1b33)}
 /* People/CyberBG lookup line inside the call sheet — find a number without leaving the sheet */
 .cspeople{margin-top:9px;font-size:12px;color:var(--muted,#8892a6)}
 .cspeolbl{display:block;font-family:var(--f-label,inherit);font-size:10.5px;font-weight:800;
@@ -3615,6 +3623,23 @@ function _csPlay(r){ const p=r&&r._play; if(!p) return '';
   return '<div class="csplay" style="border-left-color:'+c+'"><span class="playbadge" style="background:'+c+'">'+esc(p.t)+'</span>'
     +'<span class="csplayw"><b>PLAY:</b> '+esc(p.w)+'</span></div>';
 }
+// TAKE-ACTION STRIP — sits at the TOP of every call sheet, above the fold, so the buttons
+// you press MOST ("this one is worth a knock" / "print the door hanger" / "print the letter")
+// are visible without scrolling. Alejandro missed the hanger button at the bottom of a
+// 3000-line sheet on 07/28 — that is a placement bug, not a missing feature.
+// Suppressed on a CLAIMED lead: the sib banner already reads "do not knock, call, or mail",
+// and an action strip beneath it would send exactly the opposite signal.
+function _csTakeAction(r){
+  if(r.sibclaimed) return '';
+  var caseEsc = esc(r.case);
+  return '<div class="csact">'
+    + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genHanger(x);})()" title="Neighbor-safe door hanger — English + Spanish, Z-folds so only the owner\'s first name shows. Print, fold, tape to the door (never the mailbox).">🚪 Door hanger <span class="csactsub">EN + ES</span></button>'
+    + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genLetter(x);})()" title="Formal rescue-window letter (5 exits, buyer posture). Mail this alongside the door hanger for a two-touch approach.">✉️ Letter</button>'
+    + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
+    + '<button type="button" class="csactbtn csact-save'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+caseEsc+'\',event)" title="Save to your batch (drives the Carlos field packet).">'+(_isFav(r.case)?'★ Saved':'☆ Save')+'</button>'
+    + '<button type="button" class="csactbtn" onclick="_shareTo(\''+caseEsc+'\',\'carlos\')" title="Copy a ready-to-send door mission for Carlos with a link that opens straight to this property.">👷 Send to Carlos</button>'
+    + '</div>';
+}
 // Whitepages links, built client-side from fields every lead already carries (owners + addr) — no
 // re-bake needed, covers all counties + LP filings. The reverse-ADDRESS page is the money shot: its
 // FREE tier prints the household's shared LANDLINE unmasked plus every resident/relative by name+age
@@ -3828,7 +3853,7 @@ function _callSheet(r){
       (s.sale?' — sale '+esc(s.sale):'')+(s.title?', Certificate of Title <b>'+esc(s.title)+'</b>':'')+
       (s.tpb?' to <b>'+esc(s.tpb)+'</b>':'')+'. The owner here no longer owns it. Do not knock, call, or mail. '+
       'Only live angle: a registry SURPLUS belongs to the former owner (FS 45.031).</div>'; })() : '';
-  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+law+
+  return '<div class="callsheet">'+who+sibBan+_csPlay(r)+_csTakeAction(r)+four+dil+cont+clock+(r.st==='LP'?'':stack)+script+math+prop+_wpHousehold(r)+law+
     '<div class="csfoot">'+
       '<button type="button" class="shbtn" onclick="_shareTo(\''+esc(r.case)+'\',\'jose\')" title="Copy the deal brief to send Jose for his go/no-go">🎯 Ask Jose</button>'+
       '<button type="button" class="shbtn shlive" onclick="_shareTo(\''+esc(r.case)+'\',\'live\')" title="They ANSWERED? One tap — copies the LIVE alert for Jose so he researches while you hold them.">📞 LIVE — alert Jose</button>'+
