@@ -224,11 +224,34 @@ motion proving the unit ALREADY SOLD on 05/27 through a sibling case we never tr
 county-court file. A competitor executed our exact playbook first, and left the receipts:
 
 - **The play (R&V Investors LLC):** bid the cheap HOA case (~$8-15K county file) at auction,
-  Certificate of Title 06/16, then an agreed motion paying the family **$19,600** cash-for-keys +
-  surplus assignment — a ~$223K condo controlled for pennies over the association debt, with only
-  an $18.4K bank lien left to clear.
-- **$19,600 = the cash-for-keys benchmark**: Miami-Dade 2/2 condo, family in place 43 years, no
-  meaningful equity left to them. A real 2026 print from a professional — price against it.
+  Certificate of Title 06/16 — a ~$223K condo controlled for pennies over the association debt,
+  with only an $18.4K bank lien left to clear.
+- **🔴 READ THE MONEY DIRECTION TWICE (corrected 2026-07-29 — Alejandro caught this).** The motion
+  does **NOT** say R&V paid the family $19,600. It says the opposite. Paragraph 6 + the WHEREFORE
+  clause direct the Clerk to disburse **$19,600 OUT OF THE COURT-REGISTRY SURPLUS TO R&V
+  INVESTORS**, "and the remaining balance to Teresita M. Martin." That surplus is the FORMER
+  OWNER'S money by statute (FS 45.031). So the investor did not fund a cash-for-keys out of
+  pocket — the investor carved $19,600 off the homeowner's own surplus as the consideration in a
+  "Stipulation for Possession," and the family kept only what was left.
+- **THERE IS NO $19,600 CASH-FOR-KEYS BENCHMARK. Delete that number from your pricing.** It was
+  never what a professional paid a family. Treating it as an anchor would have had us *overpaying*
+  by benchmarking against a payment that never happened.
+- **What we still do NOT know** (the Stipulation for Possession itself is a separate document we
+  have never seen): what the family got in exchange — most likely a rent-free stay-through date or
+  waived holdover/use-and-occupancy, possibly reimbursement of costs R&V fronted. Do not assume
+  malice from two pages of a filed motion.
+- **When this pattern is legitimate vs. when it is a felony — they look nearly identical on paper.**
+  Legitimate: full written disclosure that the money comes out of HER surplus, independent counsel
+  for the owner, arm's length, fair consideration. Problem territory: the owner believing the
+  investor is paying her out of pocket when the investor is paying her with her own money.
+  Florida polices this exact fact pattern (surplus statutes FS 45.031-45.035, tightened after the
+  surplus-recovery scandals; plus FS 501.1377). **Do not replicate this play without Jose's
+  attorney AND Alejandro's own attorney reviewing the actual paper.** See §"Felony Bucket."
+- **Open conflict question on the attorney.** The motion's signature block reads Cardet Law, PLLC,
+  *"Attorney for Third-Party Bidder"* (i.e. R&V). But the Clerk's own party record lists Cardet as
+  lead attorney for the DEFENDANT, Milagros J. Martin. Either the clerk index is an artifact of
+  who filed last (common), or one lawyer sat on both sides of a deal that moved $19,600 from the
+  homeowner to the buyer. Worth knowing which before treating him as a referral partner.
 - **Alberto M. Cardet, Cardet Law PLLC** (Fla Bar 467900, 305-403-7783): repped the family AND the
   bidder's disbursement motion. A repeatable machine. (a) His name on a docket ⇒ the property is
   probably claimed, walk. (b) He is exactly the attorney profile Jose's stop-sale layer needs —
