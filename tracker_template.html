@@ -2022,6 +2022,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="due" class="abtn" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Due</button>
 <button id="nextup" class="abtn nextup-btn" title="Hands you the ONE lead to work right now and puts its number in front of you — no scanning, no deciding. Ranked by deal value AND by what you've already done: follow-ups you set come due first, leads you already touched today drop out, and anything you filed as Seen is gone. Tap again for the next one."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Next up<span class="nun"></span></button>
 <button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
+<button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — opens a queue tab of up to 20 leads (Tier A/B, sale 3-45 days out, not touched in 72 hours). One card at a time: tap Email / Text / WP-lookup to hand the lead off to the existing sender in a new tab, tap Done to log worked + auto-advance to next lead. Nothing auto-sends (TCPA/FTSA rails intact); you tap send yourself. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker</button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
 <button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
 <select id="nearrad" class="tf" title="Radius from your home base — expand to broaden the net" style="display:none;padding:5px 8px"><option value="1">1&nbsp;mi</option><option value="2">2&nbsp;mi</option><option value="3">3&nbsp;mi</option><option value="5" selected>5&nbsp;mi</option><option value="10">10&nbsp;mi</option><option value="15">15&nbsp;mi</option><option value="25">25&nbsp;mi</option><option value="50">50&nbsp;mi</option></select>
@@ -6023,6 +6024,34 @@ function _openDoc(html){
    ============================================================================================ */
 var DOCROOM_MODE = 'BUYER_ONLY';   // flipping this must disable the FIELD tier — enforced in _docGate
 
+/* Attorney-approval fingerprint registry (Tier 2). Empty = awaiting. Any template edit that
+   changes the fingerprinted source voids a prior approval automatically. */
+var ATTY_APPROVALS = {
+  psa:    {by:'', date:'', fingerprint:''},
+  cancel: {by:'', date:'', fingerprint:''},
+  tpa:    {by:'', date:'', fingerprint:''}
+};
+function _docFingerprint(src){
+  // FNV-1a 32-bit over the template source string
+  var h = 0x811c9dc5, s = String(src||'');
+  for(var i=0;i<s.length;i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return ('00000000' + (h >>> 0).toString(16)).slice(-8);
+}
+function _docApproved(key, src){
+  var rec = ATTY_APPROVALS[key];
+  if(!rec || !rec.by || !rec.date || !rec.fingerprint) return false;
+  return String(rec.fingerprint) === _docFingerprint(src);
+}
+function _docAwaitHtml(label){
+  return '<div style="border:1px dashed #8a1c1c;border-radius:8px;padding:12px 14px;margin:8px 0;background:#fff5f4">'
+    + '<b style="color:#8a1c1c">'+esc(label)+'</b>'
+    + '<div class="mini" style="margin-top:4px">Awaiting attorney approval — template fingerprint not locked. Will not print until ATTY_APPROVALS is filled with by / date / fingerprint.</div>'
+    + '</div>';
+}
+
 function _docFields(r){
   // ONE source of merge fields. Owner MUST come from owner_clean (commit c8d217c fix — a fresh
   // split of `owners` reintroduced the spouse/co-party bug on 91/220 People links). Every
@@ -6036,18 +6065,23 @@ function _docFields(r){
   var todayLong = today.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   var todayLongES = today.toLocaleDateString('es-US',{year:'numeric',month:'long',day:'numeric'});
   var s = (typeof sender === 'object' && sender) ? sender : {};
+  var cty = (r && r.county) ? (typeof ctyName==='function' ? ctyName(r.county) : r.county) : _b;
   return {
     ownerFull: full || _b, ownerFirst: first || _b,
     propAddr: (r && r.addr) || _b, mailAddr: (r && r.mail) || _b,
-    county: (r && r.county) || _b, folio: (r && r.folio) || _b,
+    county: cty, folio: (r && r.folio) || _b,
     legalDesc: (r && r.legal) || _b, bookPage: (r && r.bookpage) || _b,
     caseNo: (r && r.case) || _b, plaintiff: (r && r.plaintiff) || _b,
     saleDate: (r && r.auction) || _b, judgAmt: (r && r.judg) ? ('$'+(+r.judg).toLocaleString()) : _b,
     days: (r && typeof r.days==='number' && r.days>=0) ? String(r.days) : _b,
     docket: (r && r.docket) || _b,
+    st: (r && r.st) || _b,
+    orconf: (r && r.orconf) || _b,
     // buyer identity (SENDER on this device — MUST NOT include Carlos or an attorney;
     // Carlos is the door-visit worker, not the buyer)
-    buyerName: s.name || _b, buyerLLC: s.llc || _b, buyerPhone: s.phone || _b,
+    buyerName: s.name || _b, buyerLLC: s.llc || 'DealFlow Investments LLC',
+    buyerPhone: s.phone || _b, buyerEmail: s.email || _b,
+    buyerAddr: s.addr || _b, buyerTitle: s.title || _b, buyerWeb: s.web || _b,
     todayLong: todayLong, todayLongES: todayLongES
   };
 }
@@ -6057,6 +6091,11 @@ function _dfHtml(v){
   if(v == null || v === '' || v === '__blank__')
     return '<span class="docfb" aria-label="blank field">&nbsp;____________________&nbsp;</span>';
   return esc(v);
+}
+function _dfLine(w){
+  // Longer ruled blank for multi-word answers Carlos writes by hand.
+  var n = Math.max(28, Math.min(72, w||48));
+  return '<span class="docfb" style="min-width:'+(n*0.42)+'em;display:inline-block" aria-label="blank">&nbsp;</span>';
 }
 function _docGate(r){
   // The one place that decides whether a document may render for THIS lead. Returns
@@ -6071,9 +6110,18 @@ function _docGate(r){
   }
   if(r.saleBkAct) return {ok:false, why:'ACTIVE bankruptcy stay (11 U.S.C. §362). Every contact — including a door drop — is a federal violation until the stay lifts.'};
   var nn = notes && notes[r.case] || {};
+  if(typeof _isOptedOut === 'function' && _isOptedOut(nn))
+    return {ok:false, why:'Owner is on the opt-out ledger. All channels are closed — no letter, no door, no text.'};
+  if(typeof _isWrongOwner === 'function' && _isWrongOwner(nn))
+    return {ok:false, why:'Identity unproven / wrong-owner flag. Re-verify who owns this before any door drop.'};
   var st = String(nn.status||'').toUpperCase();
   if(nn.optout || nn.opted_out || nn.dnc || st==='DO NOT CONTACT' || st==='OPTED OUT')
     return {ok:false, why:'Owner is on the opt-out ledger. All channels are closed — no letter, no door, no text.'};
+  if(typeof _textContactBlocked === 'function'){
+    var blk = _textContactBlocked(r);
+    if(blk === 'optout' || blk === 'wrong')
+      return {ok:false, why:'Contact blocked ('+blk+'). Doc Room stays closed.'};
+  }
   if(DOCROOM_MODE !== 'BUYER_ONLY')
     return {ok:false, why:'Doc Room is BUYER_ONLY. The current mode ('+DOCROOM_MODE+') disables the FIELD tier — the Identity card claim "I will not ask you for money" would be false.'};
   if(r.st === 'LP')
@@ -6104,15 +6152,19 @@ function _docShell(title, bodyHtml, opts){
     + '.bar .stamp{margin-left:auto;color:#9fb0d6;font-size:11.5px}'
     + '.doc{max-width:7.5in;background:#fff;margin:22px auto;padding:36px 44px;box-shadow:0 1px 5px rgba(0,0,0,.08);border-radius:6px}'
     + '.doc h1{font:800 22px/1.25 Arial,sans-serif;margin:0 0 3px}'
+    + '.doc h2{font:700 13px/1.3 Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;margin:16px 0 8px;color:#0B1730}'
     + '.doc .kicker{font:700 10.5px/1 Arial,sans-serif;letter-spacing:.15em;text-transform:uppercase;color:#8a1c1c;margin-bottom:10px}'
     + '.doc .sub{color:#555;font-size:12.5px;border-bottom:1px solid #ddd;padding-bottom:10px;margin-bottom:16px}'
     + '.doc p{margin:8px 0}'
+    + '.doc ul.chk{list-style:none;padding:0;margin:6px 0}.doc ul.chk li{margin:3px 0}'
+    + '.doc .box{border:1px solid #ccc;padding:10px 12px;margin:10px 0;background:#fafafa}'
     + '.docfb{display:inline-block;border-bottom:1px solid #222;min-width:180px;padding:0 6px;color:transparent;user-select:none}'
     + '.sigrow{display:flex;gap:26px;margin-top:26px;flex-wrap:wrap}'
     + '.sig{flex:1;min-width:220px}.sig .l{border-bottom:1px solid #222;height:0.5in;margin-bottom:4px}'
     + '.sig .c{font-size:11px;color:#555;letter-spacing:.02em}'
     + '.rule{border-top:1px dashed #bbb;margin:18px 0}'
     + '.mini{font-size:11.5px;color:#555;line-height:1.5}'
+    + '.kw{display:inline-block;background:#0B1730;color:#F4E5A7;padding:4px 12px;border-radius:4px;letter-spacing:.14em;font:800 14px Arial,sans-serif}'
     + '.footer{margin-top:22px;padding-top:10px;border-top:1px solid #ddd;font-size:10.5px;color:#666;letter-spacing:.02em}'
     + '.pgb{page-break-before:always}'
     + '@media print{.noprint{display:none}body{background:#fff}.doc{box-shadow:none;margin:0;padding:24px 32px}}'
@@ -6128,71 +6180,111 @@ function _docShell(title, bodyHtml, opts){
 // over. Only the Visit Record gets a signature — HIS signature, not the owner's.
 function genIdentityCard(r){
   var f = _docFields(r);
+  var llc = (f.buyerLLC!=='__blank__' ? f.buyerLLC : 'DealFlow Investments LLC');
   var body = ''
-    + '<div class="doc"><div class="kicker">WHO I AM · IDENTIDAD</div>'
-    +   '<h1>' + _dfHtml(f.buyerName) + (f.buyerLLC!=='__blank__' ? ' &middot; <span style="font:600 15px Arial">'+esc(f.buyerLLC)+'</span>' : '') + '</h1>'
-    +   '<div class="sub">'+_dfHtml(f.buyerPhone)+' &middot; local Florida home buyer</div>'
-    +   '<p><b>I am NOT:</b> your lender · an attorney · a government agency · a "foreclosure rescue" service.</p>'
-    +   '<p><b>What I do:</b> I buy houses with cash, before or after the auction. I make offers. You decide.</p>'
-    +   '<p><b>You will never pay me anything.</b> I do not charge fees. Anyone asking you for money to "stop" a foreclosure is against Florida law (FS 501.1377).</p>'
-    +   '<p><b>You can walk away from any conversation with me at any time.</b> Nothing you say here binds you to anything.</p>'
+    + '<div class="doc"><div class="kicker">WHO I AM · QUIÉN SOY</div>'
+    +   '<h1>'+esc(llc)+'</h1>'
+    +   '<div class="sub">Local Florida home buyer · not your lender, not the court</div>'
+    +   '<p><b>My name:</b> '+_dfHtml(f.buyerName)+'<br>'
+    +     '<b>My company:</b> '+esc(llc)+'<br>'
+    +     '<b>Phone:</b> '+_dfHtml(f.buyerPhone)+' &nbsp; <b>Email:</b> '+_dfHtml(f.buyerEmail)+'</p>'
+    +   '<p>I am a real estate investor who buys houses. If your property fits what I buy, I may make a cash offer. You decide.</p>'
+    +   '<div class="box"><b>I am NOT:</b>'
+    +     '<ul class="chk">'
+    +       '<li>□ An attorney</li>'
+    +       '<li>□ A credit counselor</li>'
+    +       '<li>□ A government employee</li>'
+    +       '<li>□ A loan modification specialist</li>'
+    +       '<li>□ A foreclosure rescue consultant</li>'
+    +     '</ul>'
+    +     '<b>I do NOT:</b>'
+    +     '<ul class="chk">'
+    +       '<li>□ Charge you money for information</li>'
+    +       '<li>□ Charge you money to talk about your situation</li>'
+    +       '<li>□ Promise to stop your foreclosure sale</li>'
+    +       '<li>□ Guarantee any specific outcome</li>'
+    +     '</ul>'
+    +     '<p style="font:800 15px/1.35 Arial,sans-serif;margin:8px 0 0;letter-spacing:.02em">I AM NOT PAID BY YOU.<br>I WILL NOT ASK YOU FOR MONEY.</p>'
+    +   '</div>'
     +   '<div class="rule"></div>'
     +   '<div class="kicker" style="color:#0B1730">ESPAÑOL</div>'
-    +   '<p><b>Yo NO soy:</b> su prestamista · abogado · agencia del gobierno · un servicio de "rescate de ejecuciones".</p>'
-    +   '<p><b>Lo que hago:</b> compro casas en efectivo, antes o después de la subasta. Hago ofertas. Usted decide.</p>'
-    +   '<p><b>Usted nunca me pagará nada.</b> No cobro tarifas. Cualquiera que le pida dinero para "detener" una ejecución viola la ley de Florida (FS 501.1377).</p>'
-    +   '<p><b>Puede terminar cualquier conversación conmigo en cualquier momento.</b> Nada de lo que diga aquí lo obliga a nada.</p>'
-    +   '<div class="footer">Regarding your case at ' + _dfHtml(f.propAddr) + ' · County of ' + _dfHtml(f.county) + ' · Case ' + _dfHtml(f.caseNo) + '</div>'
+    +   '<p><b>Mi nombre:</b> '+_dfHtml(f.buyerName)+'<br>'
+    +     '<b>Mi empresa:</b> '+esc(llc)+'<br>'
+    +     '<b>Teléfono:</b> '+_dfHtml(f.buyerPhone)+' &nbsp; <b>Correo:</b> '+_dfHtml(f.buyerEmail)+'</p>'
+    +   '<p>Soy un inversionista inmobiliario que compra casas. Si su propiedad encaja con lo que compro, puedo hacer una oferta en efectivo. Usted decide.</p>'
+    +   '<div class="box"><b>NO SOY:</b>'
+    +     '<ul class="chk">'
+    +       '<li>□ Un abogado</li>'
+    +       '<li>□ Un consejero de crédito</li>'
+    +       '<li>□ Un empleado del gobierno</li>'
+    +       '<li>□ Un especialista en modificación de préstamos</li>'
+    +       '<li>□ Un consultante de rescate de ejecución hipotecaria</li>'
+    +     '</ul>'
+    +     '<p style="font:800 14px/1.35 Arial,sans-serif;margin:8px 0 0">USTED NO ME PAGA.<br>NO LE PEDIRÉ DINERO.</p>'
+    +   '</div>'
+    +   '<div class="footer">Property: '+_dfHtml(f.propAddr)+' · County of '+_dfHtml(f.county)
+    +     ' · Case (record locator): '+_dfHtml(f.caseNo)+' · '+esc(f.todayLong)+'</div>'
     + '</div>';
-  return _docShell('Identity — '+(f.buyerName!=='__blank__'?f.buyerName:'buyer'), body, {key:'identity'});
+  return _docShell('Identity — '+(f.buyerName!=='__blank__'?f.buyerName:llc), body, {key:'identity'});
 }
 function genResourcesCard(r){
   var f = _docFields(r);
   var body = ''
     + '<div class="doc"><div class="kicker">HELP THAT IS FREE · AYUDA GRATUITA</div>'
-    +   '<h1>Free foreclosure help in Florida</h1>'
-    +   '<div class="sub">Every number below is government or bar-approved. None charge you a fee.</div>'
-    +   '<p><b>HUD-approved housing counselor</b> (free 1:1 counseling): <b>800-569-4287</b> · <span class="mini">hud.gov/counseling</span></p>'
-    +   '<p><b>Florida Bar Lawyer Referral Service</b> (30-min consult, low fee): <b>800-342-8011</b> · <span class="mini">floridabar.org/lrs</span></p>'
-    +   '<p><b>Florida Attorney General — Foreclosure Rescue Fraud complaint line</b>: <b>866-966-7226</b> · <span class="mini">myfloridalegal.com</span></p>'
-    +   '<p><b>Your county Clerk of Court self-help center</b> — pulls your own case for free.'
-    +      (f.docket!=='__blank__' ? ' Your docket: <span class="mini">'+esc(f.docket)+'</span>' : '')
+    +   '<h1>Free foreclosure resources</h1>'
+    +   '<div class="sub">No cost · No obligation · Independent of DealFlow Investments LLC</div>'
+    +   '<p><b>HUD-approved housing counseling</b> (free by law — they do not sell anything)<br>'
+    +     'Florida: <b>1-888-995-HOPE (4673)</b><br>'
+    +     '<span class="mini">National: hud.gov/counseling</span></p>'
+    +   '<p><b>Florida Bar Lawyer Referral Service</b> (30-min consult — low fee / free if you qualify)<br>'
+    +     '<b>1-800-342-8011</b> · <span class="mini">floridabar.org/lrs</span></p>'
+    +   '<p><b>Florida Attorney General — foreclosure rescue fraud</b><br>'
+    +     '<b>1-866-9NO-SCAM (1-866-966-7226)</b> · <span class="mini">myfloridalegal.com/consumer</span></p>'
+    +   '<p><b>Your county Clerk of Court</b> — view your own case file online for free<br>'
+    +     'County of '+_dfHtml(f.county)+'<br>'
+    +     'Case number (record locator only): <b>'+_dfHtml(f.caseNo)+'</b>'
+    +     (f.docket!=='__blank__' ? '<br><span class="mini">Docket: '+esc(f.docket)+'</span>' : '')
     +   '</p>'
+    +   '<p class="mini">These resources are independent of DealFlow Investments LLC. We do not control them and receive no payment from them.</p>'
     +   '<div class="rule"></div>'
-    +   '<div class="kicker" style="color:#0B1730">ESPAÑOL — SI NECESITA AYUDA GRATIS:</div>'
-    +   '<p><b>Consejero de vivienda aprobado por HUD</b> (consejería 1:1 gratis): <b>800-569-4287</b></p>'
-    +   '<p><b>Servicio de Referencia de Abogados del Colegio de Florida</b> (consulta 30 min, costo bajo): <b>800-342-8011</b></p>'
-    +   '<p><b>Fiscal General de Florida — línea de denuncia de fraudes de rescate</b>: <b>866-966-7226</b></p>'
-    +   '<p><b>El Centro de Autoayuda del Secretario de su condado</b> — puede ver su propio caso gratis.</p>'
+    +   '<div class="kicker" style="color:#0B1730">ESPAÑOL</div>'
+    +   '<p><b>Asesoramiento de vivienda aprobado por HUD</b> (gratis por ley)<br>'
+    +     'Florida: <b>1-888-995-HOPE (4673)</b> · hud.gov/counseling</p>'
+    +   '<p><b>Referencia de Abogados del Colegio de Florida</b>: <b>1-800-342-8011</b></p>'
+    +   '<p><b>Fiscal General de Florida — fraude de rescate</b>: <b>1-866-9NO-SCAM (1-866-966-7226)</b></p>'
+    +   '<p><b>Secretario del Tribunal de su condado</b> — vea su expediente gratis<br>'
+    +     'Condado de '+_dfHtml(f.county)+' · Número de caso: <b>'+_dfHtml(f.caseNo)+'</b></p>'
     +   '<div class="footer">Provided as a public reference. This is not advice on your case.</div>'
     + '</div>';
   return _docShell('Free foreclosure resources', body, {key:'resources'});
 }
 function genInfoSheet(r){
   var f = _docFields(r);
-  // STATIC information about the five exits. No ordering, no recommendation, no computed
-  // days-to-sale — those are "advice" and cross the line. The only lead-specific item is
-  // the docket URL as a record locator so the owner can read their own file.
+  // STATIC — playbook five exits (reinstate / mod / short / private sale / BK). No ordering,
+  // no emphasis, no computed days-to-sale, no DIL on the field sheet (decision §2). Case # is
+  // a record locator only so the owner can read their own file.
   var body = ''
     + '<div class="doc"><div class="kicker">GENERAL INFORMATION · INFORMACIÓN GENERAL</div>'
-    +   '<h1>What Florida homeowners in foreclosure typically consider</h1>'
-    +   '<div class="sub">General information only. This is not advice about your case. Talk to a licensed attorney.</div>'
+    +   '<h1>Florida foreclosure: five common paths</h1>'
+    +   '<div class="sub">General information only — not legal advice. Every case is different. Talk to an attorney.</div>'
     +   '<ol>'
-    +     '<li><b>Reinstate</b> — pay the arrears and fees; the loan returns to current.</li>'
-    +     '<li><b>Loan modification</b> — the servicer changes the loan terms (60–120 days is common).</li>'
+    +     '<li><b>Reinstatement</b> — pay the past-due amount plus costs to bring the loan current. You keep the house.</li>'
+    +     '<li><b>Loan modification</b> — negotiate new loan terms with your lender. Requires lender approval.</li>'
     +     '<li><b>Short sale</b> — the lender accepts less than the balance owed at sale.</li>'
-    +     '<li><b>Private sale before auction</b> — sell to a cash buyer; if the price covers what is owed, the foreclosure is dismissed.</li>'
-    +     '<li><b>Bankruptcy</b> — an automatic stay pauses collection actions. Serious credit consequences.</li>'
+    +     '<li><b>Private sale before auction</b> — sell to a cash buyer; if the price covers what is owed, the foreclosure may be dismissed.</li>'
+    +     '<li><b>Bankruptcy</b> — a federal process that can pause collection. Requires an attorney. Serious credit consequences.</li>'
     +   '</ol>'
+    +   '<p class="mini">This list is not in order of preference. No path is right for everyone. I am a buyer, not an advisor. I cannot tell you which path to choose.</p>'
     +   '<div class="rule"></div>'
     +   '<div class="kicker" style="color:#0B1730">ESPAÑOL</div>'
     +   '<ol>'
-    +     '<li><b>Reinstalar</b> — pagar los atrasos y cargos; el préstamo vuelve al día.</li>'
-    +     '<li><b>Modificación de préstamo</b> — el banco cambia los términos (60–120 días típico).</li>'
-    +     '<li><b>Short sale</b> — el banco acepta menos del saldo en la venta.</li>'
-    +     '<li><b>Venta privada antes de la subasta</b> — venda a un comprador en efectivo; si cubre lo debido, se cancela la ejecución.</li>'
-    +     '<li><b>Bancarrota</b> — la suspensión automática pausa acciones de cobro. Consecuencias serias de crédito.</li>'
+    +     '<li><b>Reinstalación</b> — pagar los atrasos y costos para poner el préstamo al día. Usted se queda con la casa.</li>'
+    +     '<li><b>Modificación de préstamo</b> — negociar nuevos términos con su prestamista. Requiere aprobación.</li>'
+    +     '<li><b>Short sale</b> — el prestamista acepta menos del saldo en la venta.</li>'
+    +     '<li><b>Venta privada antes de la subasta</b> — vender a un comprador en efectivo; si cubre lo debido, la ejecución puede cancelarse.</li>'
+    +     '<li><b>Bancarrota</b> — proceso federal que puede pausar cobros. Requiere abogado. Consecuencias serias de crédito.</li>'
     +   '</ol>'
+    +   '<p class="mini">Esta lista no está en orden de preferencia. Soy un comprador, no un asesor. No puedo decirle qué camino elegir.</p>'
     +   '<div class="footer">'
     +     'Record locator for your own case (free at the county clerk):<br>'
     +     'Case: '+_dfHtml(f.caseNo)+' · County of '+_dfHtml(f.county)
@@ -6204,23 +6296,49 @@ function genInfoSheet(r){
 function genIntakeSheet(r){
   var f = _docFields(r);
   // Carlos WRITES; owner speaks. No owner signature. Fact-gathering — the secretarial
-  // side of Brumbaugh. Every "answer" is a blank so nothing is filled in advance.
-  function q(en, es){ return '<p><b>'+en+' <span style="color:#555;font-weight:400">/ '+es+'</span></b><br>'+_dfHtml(null)+'</p>'; }
+  // side of Brumbaugh. Dollar blanks are OWNER'S STATED knowledge Carlos writes — never
+  // pre-filled from judg/ARV/equity. Sale date deliberately omitted (field docs).
   var body = ''
     + '<div class="doc"><div class="kicker">SELLER INFORMATION SHEET · HOJA DE INFORMACIÓN</div>'
-    +   '<h1>Notes from our conversation</h1>'
-    +   '<div class="sub">Written by the visitor with the owner\'s permission. Not a contract. No signature required.</div>'
-    +   '<p><b>Property:</b> '+_dfHtml(f.propAddr)+'<br><b>Owner on record:</b> '+_dfHtml(f.ownerFull)+'<br><b>Case:</b> '+_dfHtml(f.caseNo)+' · <b>Sale scheduled:</b> '+_dfHtml(f.saleDate)+'</p>'
-    +   '<div class="rule"></div>'
-    +   q('Who currently lives at the property?', '¿Quién vive actualmente en la propiedad?')
-    +   q('Whose name is on the title?', '¿A nombre de quién está la escritura?')
-    +   q('Marital status of the title-holder?', '¿Estado civil de quien está en la escritura?')
-    +   q('Best phone number and best time to call?', '¿Mejor número de teléfono y mejor hora para llamar?')
-    +   q('Any liens you know about (2nd mortgage, HELOC, HOA arrears, taxes, code)?', '¿Gravámenes conocidos (2a hipoteca, HELOC, HOA atrasada, impuestos, código)?')
-    +   q('Any bankruptcy filed at any time?', '¿Alguna bancarrota presentada alguna vez?')
-    +   q('What is your goal — keep the home, or leave with money in your pocket?', '¿Su meta — quedarse con la casa, o irse con dinero en el bolsillo?')
-    +   q('Anything else you want the office to know?', '¿Algo más que quiera que la oficina sepa?')
-    +   '<div class="footer">Prepared by ' + _dfHtml(f.buyerName) + ' / ' + _dfHtml(f.buyerLLC) + ' · ' + esc(f.todayLong) + '</div>'
+    +   '<h1>Property information</h1>'
+    +   '<div class="sub">Written by the visitor from what the owner says. Not a contract. <b>No homeowner signature on this document.</b></div>'
+    +   '<p><b>Date:</b> '+_dfLine(18)+' &nbsp; <b>Time:</b> '+_dfLine(14)+'<br>'
+    +     '<b>Property:</b> '+_dfHtml(f.propAddr)+'<br>'
+    +     '<b>Case / loan # (record locator):</b> '+_dfHtml(f.caseNo)+'<br>'
+    +     '<b>Owner on record:</b> '+_dfHtml(f.ownerFull)+'</p>'
+    +   '<h2>Person who answered the door</h2>'
+    +   '<p>Name: '+_dfLine(40)+'<br>'
+    +     'Relationship to owner: '+_dfLine(32)+'<br>'
+    +     'Is owner home now? □ Yes &nbsp; □ No<br>'
+    +     'Best phone: '+_dfLine(28)+' &nbsp; Alternate: '+_dfLine(28)+'</p>'
+    +   '<h2>If owner is available — ask and record</h2>'
+    +   '<p>Owner\'s full name: '+_dfLine(40)+'<br>'
+    +     'Are you the only owner? □ Yes &nbsp; □ No<br>'
+    +     'If no, who else is on title? '+_dfLine(36)+'<br>'
+    +     'Marital status: □ Single &nbsp; □ Married &nbsp; □ Divorced &nbsp; □ Widowed<br>'
+    +     'Spouse name (if married): '+_dfLine(32)+'</p>'
+    +   '<p>Do you live in the property? □ Yes &nbsp; □ No<br>'
+    +     'If yes, how long? '+_dfLine(24)+'<br>'
+    +     'If no, who lives there? '+_dfLine(32)+'<br>'
+    +     'Is it rented? □ Yes &nbsp; □ No &nbsp; Monthly rent (owner stated): '+_dfLine(16)+'</p>'
+    +   '<h2>Loan / mortgage (owner\'s knowledge only — write what they say)</h2>'
+    +   '<p>Original lender: '+_dfLine(36)+'<br>'
+    +     'Current servicer (if known): '+_dfLine(32)+'<br>'
+    +     'Approx. balance owed (owner stated): '+_dfLine(20)+'<br>'
+    +     'Monthly payment (owner stated): '+_dfLine(16)+' &nbsp; Current / Behind? '+_dfLine(16)+'<br>'
+    +     'Other liens / judgments owner knows about:<br>'+_dfLine(56)+'<br>'+_dfLine(56)+'</p>'
+    +   '<h2>Owner\'s situation</h2>'
+    +   '<p>What happened that led to this situation?<br>'+_dfLine(56)+'<br>'+_dfLine(56)+'</p>'
+    +   '<p><b>What is your goal?</b> <span class="mini">(Do NOT advise — just record)</span><br>'
+    +     '□ Keep the house &nbsp; □ Sell the house &nbsp; □ Not sure &nbsp; □ Other: '+_dfLine(24)+'</p>'
+    +   '<p>Filed bankruptcy? □ Yes &nbsp; □ No &nbsp; When? '+_dfLine(18)+'<br>'
+    +     'Tried loan modification? □ Yes &nbsp; □ No &nbsp; Result: '+_dfLine(24)+'</p>'
+    +   '<h2>Visitor notes (observations, condition, access)</h2>'
+    +   '<p>'+_dfLine(56)+'<br>'+_dfLine(56)+'</p>'
+    +   '<p>Next step: □ Call office &nbsp; □ Schedule appointment &nbsp; □ None</p>'
+    +   '<p><b>Filled out by:</b> '+_dfLine(28)+' &nbsp; <b>Date:</b> '+_dfLine(16)+'</p>'
+    +   '<div class="footer">NO HOMEOWNER SIGNATURE ON THIS DOCUMENT · '+esc(f.todayLong)
+    +     ' · '+_dfHtml(f.buyerLLC)+'</div>'
     + '</div>';
   return _docShell('Seller information — '+(f.ownerFull!=='__blank__'?f.ownerFull:'lead'), body, {key:'intake'});
 }
@@ -6228,44 +6346,71 @@ function genVisitRecord(r){
   var f = _docFields(r);
   var body = ''
     + '<div class="doc"><div class="kicker">DOOR VISIT RECORD — INTERNAL</div>'
-    +   '<h1>Visit log</h1>'
-    +   '<div class="sub">Signed by the visitor. Not signed by the homeowner. Kept as an internal record.</div>'
-    +   '<p><b>Property:</b> '+_dfHtml(f.propAddr)+' · <b>Case:</b> '+_dfHtml(f.caseNo)+'</p>'
-    +   '<p><b>Date &amp; time on door:</b> '+_dfHtml(null)+'</p>'
-    +   '<p><b>Who answered?</b> owner / tenant / other / no answer &nbsp;— name: '+_dfHtml(null)+'</p>'
-    +   '<p><b>What was said (in a sentence):</b><br>'+_dfHtml(null)+'</p>'
-    +   '<p><b>What was left at the door:</b> □ Identity card □ Resources card □ Info sheet □ Consent card □ Door hanger</p>'
-    +   '<div class="rule"></div>'
-    +   '<p style="background:#fff5f4;border-left:4px solid #8a1c1c;padding:8px 12px"><b>Tripwire — answer both, honestly:</b><br>'
-    +     'Did I promise to stop, delay, or reverse the sale? &nbsp; YES &nbsp; / &nbsp; NO<br>'
-    +     'Did I ask the owner for money of any kind, at any time? &nbsp; YES &nbsp; / &nbsp; NO<br>'
-    +     '<span class="mini">A "YES" on either is a red-flag entry. Note it now, tell the office today.</span>'
-    +   '</p>'
-    +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Visitor signature (not the homeowner)</div></div>'
-    +     '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Printed name · date</div></div></div>'
-    +   '<div class="footer">Retained by ' + _dfHtml(f.buyerLLC) + ' as an internal record.</div>'
+    +   '<h1>Door visit record</h1>'
+    +   '<div class="sub">Internal only. Signed by the visitor. <b>The homeowner does NOT sign this document.</b></div>'
+    +   '<p><b>Date:</b> '+_dfLine(16)+' &nbsp; <b>Arrived:</b> '+_dfLine(12)+' &nbsp; <b>Departed:</b> '+_dfLine(12)+'<br>'
+    +     '<b>Property:</b> '+_dfHtml(f.propAddr)+'<br>'
+    +     '<b>Case / file #:</b> '+_dfHtml(f.caseNo)+'</p>'
+    +   '<h2>Who answered</h2>'
+    +   '<p>□ Property owner &nbsp; □ Spouse &nbsp; □ Family member &nbsp; □ Tenant &nbsp; □ No answer &nbsp; □ Other: '+_dfLine(16)+'<br>'
+    +     'Name spoken with: '+_dfLine(32)+'<br>'
+    +     'Relationship to owner: '+_dfLine(28)+'</p>'
+    +   '<h2>What was left at the door</h2>'
+    +   '<p>□ Identity card &nbsp; □ Resources card &nbsp; □ Info sheet &nbsp; □ Consent card &nbsp; □ Door hanger</p>'
+    +   '<h2>What was discussed (summary)</h2>'
+    +   '<p>'+_dfLine(56)+'<br>'+_dfLine(56)+'<br>'+_dfLine(56)+'</p>'
+    +   '<div class="box" style="border-color:#8a1c1c;background:#fff5f4">'
+    +     '<b>Tripwire questions — answer honestly:</b>'
+    +     '<ol style="margin:8px 0 0;padding-left:20px">'
+    +       '<li>Did you promise to stop the foreclosure sale?<br>□ NO &nbsp; □ YES — Explain: '+_dfLine(28)+'</li>'
+    +       '<li>Did you discuss taking money from the owner for any foreclosure-related service?<br>□ NO &nbsp; □ YES — Explain: '+_dfLine(28)+'</li>'
+    +       '<li>Did you quote a price, price range, or “at least” amount?<br>□ NO &nbsp; □ YES — What was said: '+_dfLine(24)+'</li>'
+    +       '<li>Did you recommend one option over another?<br>□ NO &nbsp; □ YES — Explain: '+_dfLine(28)+'</li>'
+    +       '<li>Did the owner sign ANY document?<br>□ NO &nbsp; □ YES — What: '+_dfLine(28)+'</li>'
+    +     '</ol>'
+    +     '<p class="mini" style="margin:8px 0 0">A YES on any tripwire is a red-flag entry. Note it now, tell the office today.</p>'
+    +   '</div>'
+    +   '<h2>Follow-up</h2>'
+    +   '<p>□ Owner wants call — best time: '+_dfLine(20)+'<br>'
+    +     '□ Owner will text consent card<br>'
+    +     '□ Return visit scheduled for: '+_dfLine(24)+'<br>'
+    +     '□ Do not return — why: '+_dfLine(28)+'</p>'
+    +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Visitor signature (Carlos) — not the homeowner</div></div>'
+    +     '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Printed name · date / time signed</div></div></div>'
+    +   '<h2>Supervisor review</h2>'
+    +   '<p>Reviewed by: '+_dfLine(24)+' &nbsp; Date: '+_dfLine(16)+'<br>'
+    +     '□ Approved &nbsp; □ Issue flagged — Notes: '+_dfLine(32)+'</p>'
+    +   '<div class="footer">Retained by '+_dfHtml(f.buyerLLC)+' as an internal record.</div>'
     + '</div>';
   return _docShell('Door visit — '+(f.propAddr!=='__blank__'?f.propAddr:'record'), body, {key:'visit'});
 }
 function genConsentCard(r){
   var f = _docFields(r);
+  // Leave-behind. Text-back keyword DEALFLOW or return card. NO owner signature at the door.
   var body = ''
     + '<div class="doc"><div class="kicker">CONTACT CONSENT · CONSENTIMIENTO DE CONTACTO</div>'
-    +   '<h1>Would you like us to contact you?</h1>'
-    +   '<div class="sub">Optional. Return this card, or text the keyword below. You can stop replies any time by replying STOP.</div>'
-    +   '<p style="font-size:16px"><b>Text the word</b> &nbsp;<span style="background:#0B1730;color:#F4E5A7;padding:4px 10px;border-radius:4px;letter-spacing:.1em">HELP</span>&nbsp; <b>to '+_dfHtml(f.buyerPhone)+'</b> &nbsp;— or fill this out and return it.</p>'
-    +   '<div class="rule"></div>'
-    +   '<p>Name: '+_dfHtml(null)+'</p>'
-    +   '<p>Best phone: '+_dfHtml(null)+' &nbsp; Best time to call: '+_dfHtml(null)+'</p>'
-    +   '<p>Email (optional): '+_dfHtml(null)+'</p>'
-    +   '<p><label><input type="checkbox"> Yes, please contact me about a possible cash offer for '+_dfHtml(f.propAddr)+'.</label></p>'
-    +   '<p><label><input type="checkbox"> I am OK receiving text messages at the number above.</label></p>'
-    +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Owner signature · date</div></div></div>'
+    +   '<h1>Stay in touch — your choice</h1>'
+    +   '<div class="sub">Optional. You are not obligated to respond. Reply STOP anytime to end messages.</div>'
+    +   '<h2>Option 1 — Text us</h2>'
+    +   '<p>Text this keyword to <b>'+_dfHtml(f.buyerPhone)+'</b>:</p>'
+    +   '<p style="text-align:center;margin:14px 0"><span class="kw">DEALFLOW</span></p>'
+    +   '<p class="mini" style="text-align:center">You will receive a confirmation text.</p>'
+    +   '<h2>Option 2 — Return this card</h2>'
+    +   '<p>Name: '+_dfLine(40)+'<br>'
+    +     'Property: '+_dfHtml(f.propAddr)+'<br>'
+    +     'Phone: '+_dfLine(28)+' &nbsp; Email: '+_dfLine(28)+'<br>'
+    +     'Best time to call: □ Morning &nbsp; □ Afternoon &nbsp; □ Evening</p>'
+    +   '<p>□ I would like to discuss a possible sale<br>'
+    +     '□ I have questions<br>'
+    +     '□ Please have an attorney call me (free referral)</p>'
+    +   '<p class="mini">Return this card later, or leave it for pickup — <b>no signature is required at the door.</b></p>'
     +   '<div class="rule"></div>'
     +   '<div class="kicker" style="color:#0B1730">ESPAÑOL</div>'
-    +   '<p><b>Envíe la palabra</b> &nbsp;<span style="background:#0B1730;color:#F4E5A7;padding:4px 10px;border-radius:4px;letter-spacing:.1em">AYUDA</span>&nbsp; <b>por texto al '+_dfHtml(f.buyerPhone)+'</b> &nbsp;— o llene esta tarjeta y devuélvala.</p>'
-    +   '<p class="mini">Puede responder <b>STOP</b> en cualquier momento y no le enviaremos más mensajes.</p>'
-    +   '<div class="footer">Return to ' + _dfHtml(f.buyerName) + ' / ' + _dfHtml(f.buyerLLC) + ' · ' + _dfHtml(f.buyerPhone) + '</div>'
+    +   '<p><b>Opción 1:</b> Envíe la palabra <span class="kw">DEALFLOW</span> por texto al <b>'+_dfHtml(f.buyerPhone)+'</b>.</p>'
+    +   '<p><b>Opción 2:</b> Complete y devuelva esta tarjeta más tarde. Nombre: '+_dfLine(28)+' · Teléfono: '+_dfLine(24)+'</p>'
+    +   '<p class="mini">Puede responder <b>STOP</b> en cualquier momento. No se requiere firma en la puerta.</p>'
+    +   '<div class="footer">'+_dfHtml(f.buyerLLC)+' · '+_dfHtml(f.buyerPhone)
+    +     (f.buyerEmail!=='__blank__'?' · '+_dfHtml(f.buyerEmail):'')+'</div>'
     + '</div>';
   return _docShell('Contact consent card', body, {key:'consent'});
 }
@@ -6273,7 +6418,6 @@ function genDoorFolder(r){
   // One combined print — Carlos runs it once, folds it, walks up. Each doc gets its own
   // page-break so it prints as separate sheets.
   function _bare(html){
-    // strip the shell so we concatenate the six documents into one shell
     return html.replace(/^[\s\S]*?<body>/, '').replace(/<\/body>[\s\S]*$/, '');
   }
   var parts = [genIdentityCard(r), genResourcesCard(r), genInfoSheet(r),
@@ -6281,16 +6425,217 @@ function genDoorFolder(r){
   var combined = parts.map(function(h,i){ return (i?'<div class="pgb"></div>':'') + _bare(h); }).join('');
   return _docShell('Door folder — '+((r&&r.addr)||'lead'), combined, {key:'door-folder', note:'6 pages — print, fold, walk.'});
 }
+
+// --- TIER 2 — OFFICE (attorney-approved, merge-only) ----------------------------------------
+// Stable source strings for fingerprinting. Edit these (or the body builders) → approval voids.
+var _CANCEL_NOTICE_SRC = 'DOC7-NOTICE-RIGHT-TO-CANCEL-v1';
+var _CANCEL_FORM_SRC   = 'DOC8-CANCELLATION-FORM-v1';
+var _CANCEL_SRC        = _CANCEL_NOTICE_SRC + '|' + _CANCEL_FORM_SRC; // one approval locks both pages
+var _TPA_SRC           = 'DOC9-THIRD-PARTY-AUTH-v1';
+function _psaSrc(){ return String(genContract); }
+
+function genCancelNotice(r){
+  if(!_docApproved('cancel', _CANCEL_SRC))
+    return _docShell('Cancel notice — blocked', '<div class="doc"><h1>Awaiting attorney approval</h1><p>Notice of Right to Cancel will not print until ATTY_APPROVALS.cancel is locked.</p></div>', {key:'cancel-blocked'});
+  var f = _docFields(r);
+  // OWN PAGE — no other content. Statutory formatting is attorney-finalized; this is the merge shell.
+  var body = ''
+    + '<div class="doc">'
+    +   '<h1 style="text-align:center;margin:48px 0 28px">NOTICE OF RIGHT TO CANCEL</h1>'
+    +   '<p style="font-size:15px">You may cancel this transaction, without any penalty or obligation, within three (3) business days from the date of this agreement or from the date you received this notice, whichever is later.</p>'
+    +   '<p>To cancel this transaction, sign and date the separate Cancellation Form and either:</p>'
+    +   '<p>(1) Mail or deliver it to:<br>'
+    +     _dfHtml(f.buyerLLC)+'<br>'+_dfHtml(f.buyerName)+'<br>'+_dfHtml(f.buyerAddr)+'<br>'+_dfHtml(f.buyerPhone)
+    +   '</p>'
+    +   '<p>OR (2) Deliver it by the method your attorney-approved agreement provides.</p>'
+    +   '<p>If you cancel, any payments you have made must be returned to you within ten (10) business days following receipt of your cancellation notice.</p>'
+    +   '<div class="rule"></div>'
+    +   '<p><b>ACKNOWLEDGMENT OF RECEIPT</b></p>'
+    +   '<p>I acknowledge that I have received two copies of this Notice of Right to Cancel.</p>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Seller signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Buyer signature · date</div></div>'
+    +   '</div>'
+    +   '<div class="footer">Property: '+_dfHtml(f.propAddr)+' · Case '+_dfHtml(f.caseNo)
+    +     ' · Own page — no other material. Attorney-approved template.</div>'
+    + '</div>';
+  return _docShell('Notice of Right to Cancel', body, {key:'cancel-notice', note:'OWN PAGE — print alone.'});
+}
+function genCancelForm(r){
+  if(!_docApproved('cancel', _CANCEL_FORM_SRC))
+    return _docShell('Cancel form — blocked', '<div class="doc"><h1>Awaiting attorney approval</h1><p>Cancellation Form will not print until ATTY_APPROVALS.cancel is locked.</p></div>', {key:'cancel-form-blocked'});
+  var f = _docFields(r);
+  var body = ''
+    + '<div class="doc">'
+    +   '<h1 style="text-align:center;margin:36px 0 24px">NOTICE OF CANCELLATION</h1>'
+    +   '<p><b>To:</b> '+_dfHtml(f.buyerLLC)+' / '+_dfHtml(f.buyerName)+'<br>'
+    +     '<b>From (Seller):</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +     '<b>Property:</b> '+_dfHtml(f.propAddr)+'<br>'
+    +     '<b>Date of Agreement:</b> '+_dfLine(24)+'</p>'
+    +   '<div class="rule"></div>'
+    +   '<p style="font-size:15px">I hereby cancel the transaction for the sale of the property described above.</p>'
+    +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Seller signature · date</div></div>'
+    +     '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Print name</div></div></div>'
+    +   '<div class="rule"></div>'
+    +   '<p>Send to: '+_dfHtml(f.buyerLLC)+' · '+_dfHtml(f.buyerAddr)+' · '+_dfHtml(f.buyerPhone)+'</p>'
+    +   '<div class="footer">Separate returnable form · Attorney-approved template · Case '+_dfHtml(f.caseNo)+'</div>'
+    + '</div>';
+  return _docShell('Cancellation Form', body, {key:'cancel-form'});
+}
+function genThirdPartyAuth(r){
+  if(!_docApproved('tpa', _TPA_SRC))
+    return _docShell('Third-party auth — blocked', '<div class="doc"><h1>Awaiting attorney approval</h1><p>Third-Party Authorization will not print until ATTY_APPROVALS.tpa is locked.</p></div>', {key:'tpa-blocked'});
+  var f = _docFields(r);
+  var body = ''
+    + '<div class="doc"><div class="kicker">OFFICE ONLY · NOT A DOOR DOCUMENT</div>'
+    +   '<h1>Third-party authorization</h1>'
+    +   '<div class="sub">Loan information release — payoff / reinstatement / estoppel</div>'
+    +   '<p style="background:#fff8e8;border-left:4px solid #C6A14B;padding:10px 12px;font-size:13px">'
+    +     '<b>Preferred practice:</b> use the servicer\'s own published authorization form, or let the title company / attorney order the payoff on their own authority. Use this merge template only if counsel drafted and fingerprinted it.'
+    +   '</p>'
+    +   '<p><b>Property:</b> '+_dfHtml(f.propAddr)+'<br>'
+    +     '<b>Folio:</b> '+_dfHtml(f.folio)+' · <b>County:</b> '+_dfHtml(f.county)+'<br>'
+    +     '<b>Loan number:</b> '+_dfLine(28)+'<br>'
+    +     '<b>Borrower name(s):</b> '+_dfHtml(f.ownerFull)+'<br>'+_dfLine(40)+'</p>'
+    +   '<p>I/we hereby authorize '+_dfLine(36)+' (name of authorized party) to obtain:</p>'
+    +   '<p>□ Current payoff amount &nbsp; □ Reinstatement amount &nbsp; □ Payment history<br>'
+    +     '□ Escrow balance &nbsp; □ Estoppel letter</p>'
+    +   '<p class="mini">This authorization is valid for 90 days from the date below. A copy may be used as an original.</p>'
+    +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Borrower signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Co-borrower signature · date (if any)</div></div></div>'
+    +   '<div class="box"><b>Notary block — complete at title company / law office only</b><br>'
+    +     'State of Florida · County of '+_dfLine(18)+'<br>'
+    +     'Sworn to and subscribed before me this '+_dfLine(8)+' day of '+_dfLine(14)+', 20'+_dfLine(4)
+    +     ', by '+_dfLine(28)+'.<br><br>'
+    +     'Notary signature: '+_dfLine(28)+'<br>'
+    +     'Print name &amp; commission #: '+_dfLine(32)+'<br>'
+    +     'My commission expires: '+_dfLine(16)
+    +   '</div>'
+    +   '<div class="footer">Signed at a title company or law office — never at a door. Case '+_dfHtml(f.caseNo)+'</div>'
+    + '</div>';
+  return _docShell('Third-party authorization — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {key:'tpa'});
+}
+function genContractPrint(r){
+  // Doc Room wrapper: gate PSA behind fingerprint, then reuse existing genContract.
+  if(!_docApproved('psa', _psaSrc())){
+    return _docShell('PSA — blocked',
+      '<div class="doc"><h1>Awaiting attorney approval</h1>'
+      +'<p>As-Is Purchase and Sale Agreement will not print until ATTY_APPROVALS.psa is locked.</p></div>',
+      {key:'psa-blocked'});
+  }
+  genContract(r);
+  return null;
+}
+
+// --- TIER 3 — COUNSEL ----------------------------------------------------------------------
+function _docRefList(){
+  var items = [
+    ['Quit claim deed', 'Preparing a deed for another person is UPL (Furman). Execution needs two witnesses + notary (FS 689.01).'],
+    ['Warranty deed', 'Same as quit claim. Also creates title warranties that require legal analysis of encumbrances.'],
+    ['Special warranty deed', 'Limited warranty scope is a legal judgment on what claims to exclude.'],
+    ['Power of attorney (any form)', 'Two witnesses + notary in physical presence (FS 709.2105). POA to buyer at door = equity-stripping pattern.'],
+    ['Deed in lieu of foreclosure', 'Negotiated with the lender under written terms. Lender must approve. Attorney-only.'],
+    ['Lease-back agreement', 'Heightened FS 501.1377 rules if owner keeps ANY interest. Equity-purchaser regime attaches.'],
+    ['Occupancy after closing', 'Same as lease-back. Seller retention of possession triggers rescue-transaction scrutiny.'],
+    ['Option to repurchase', 'Repurchase right = retained interest under 501.1377(5). Cannot be presented at a door.'],
+    ['Assignment of surplus funds', 'Surplus is the former owner\'s money (FS 45.031). Never without independent counsel for the assignor.'],
+    ['Mortgage / note / satisfaction', 'Creating or releasing encumbrances is UPL.'],
+    ['Land trust agreement', 'Complex title-holding structure requiring legal analysis of beneficial interest.'],
+    ['Stop-sale engagement', 'Any fee for foreclosure-related help = rescue consultant under 501.1377. Attorney-only engagement.'],
+    ['Short-sale negotiation agreement', 'Negotiating with a lender for compensation requires a license or an attorney.'],
+    ['Subject-to transaction documents', 'Due-on-sale, insurance, escrow complexities. If owner stays = rescue transaction.']
+  ];
+  return '<ul style="font-size:13px;line-height:1.55;padding-left:18px;margin:8px 0">'
+    + items.map(function(it){
+        return '<li style="margin:6px 0"><b>'+esc(it[0])+'</b><br><span class="mini">Why: '+esc(it[1])+'</span></li>';
+      }).join('')
+    + '</ul>';
+}
+function genAttyPacket(r){
+  var f = _docFields(r);
+  var nn = (notes && r && notes[r.case]) || {};
+  var noteTxt = String(nn.note || '').trim();
+  var conf = f.orconf;
+  var confHtml = (conf!=='__blank__')
+    ? esc(String(conf))
+    : '□ High &nbsp; □ Medium &nbsp; □ Low';
+  var liens = (r && r.orliens) || [];
+  var lienLines = liens.length
+    ? liens.slice(0,8).map(function(L){
+        var bits = [L.holder||L.name||L.type||'lien', L.pos||'', L.rec||L.date||''].filter(Boolean);
+        return esc(bits.join(' · '));
+      }).join('<br>')
+    : _dfLine(56);
+  // Speculative equity ONLY on attorney packet, with verify disclaimer — never on FIELD docs.
+  var eqSpec = '';
+  if(r && (r.eq != null || r.equity != null || (r.value && r.judg))){
+    var eqv = r.eq != null ? r.eq : (r.equity != null ? r.equity : (+r.value - +r.judg));
+    if(typeof eqv === 'number' && isFinite(eqv))
+      eqSpec = '$'+Math.round(eqv).toLocaleString()+' <span class="mini">(HIGHLY SPECULATIVE — ATTORNEY TO VERIFY)</span>';
+    else if(eqv) eqSpec = esc(String(eqv))+' <span class="mini">(ATTORNEY TO VERIFY)</span>';
+  }
+  if(!eqSpec) eqSpec = _dfLine(20)+' <span class="mini">(HIGHLY SPECULATIVE — ATTORNEY TO VERIFY)</span>';
+  var body = ''
+    + '<div class="doc"><div class="kicker">ATTORNEY PACKET · FACTS ONLY</div>'
+    +   '<h1>Attorney referral packet</h1>'
+    +   '<div class="sub">Facts only — no legal analysis · no recommended structure · no instrument selection</div>'
+    +   '<p><b>Generated:</b> '+esc(f.todayLong)+' &nbsp; <b>Case:</b> '+_dfHtml(f.caseNo)+'</p>'
+    +   '<h2>1. Property</h2>'
+    +   '<p>Address: '+_dfHtml(f.propAddr)+'<br>'
+    +     'Folio / parcel: '+_dfHtml(f.folio)+'<br>'
+    +     'County: '+_dfHtml(f.county)+'<br>'
+    +     'Legal (from roll — ATTORNEY TO VERIFY FROM TITLE COMMITMENT): '+_dfHtml(f.legalDesc)+'</p>'
+    +   '<h2>2. Ownership</h2>'
+    +   '<p>Recorded owner(s): '+_dfHtml(f.ownerFull)+'<br>'
+    +     'Chain confidence: '+confHtml+'<br>'
+    +     'Chain issues noted: '+_dfLine(40)+'</p>'
+    +   '<h2>3. Foreclosure</h2>'
+    +   '<p>Case type: '+(f.st==='TD'?'Tax Deed':(f.st==='LP'?'Lis Pendens':'Foreclosure'))+' ('+_dfHtml(f.st)+')<br>'
+    +     'Case number: '+_dfHtml(f.caseNo)+'<br>'
+    +     'Plaintiff: '+_dfHtml(f.plaintiff)+'<br>'
+    +     'Sale date (if scheduled): '+_dfHtml(f.saleDate)+'</p>'
+    +   '<h2>4. Lien information (records-derived estimates)</h2>'
+    +   '<p class="mini">All figures are estimates from public records. Attorney to order official payoff / estoppel.</p>'
+    +   '<p>Foreclosing mortgage (est.): '+_dfHtml(f.judgAmt)+'<br>'
+    +     'Other liens / judgments found:<br>'+lienLines+'<br>'
+    +     'Equity estimate: '+eqSpec+'</p>'
+    +   '<h2>5. Owner\'s stated goal (owner\'s words)</h2>'
+    +   (noteTxt
+        ? '<p style="white-space:pre-wrap;border:1px solid #ddd;padding:10px;background:#fafafa">'+esc(noteTxt)+'</p>'
+        : '<p>'+_dfLine(56)+'<br>'+_dfLine(56)+'<br>'+_dfLine(56)+'</p>')
+    +   '<p>Owner\'s timeline stated: '+_dfLine(36)+'</p>'
+    +   '<h2>6. Contact history</h2>'
+    +   '<p>Date of first contact: '+_dfLine(20)+' &nbsp; Method: □ Door &nbsp; □ Phone &nbsp; □ Mail &nbsp; □ Referral<br>'
+    +     'Documents left: '+_dfLine(36)+'<br>'
+    +     'Follow-up attempts: '+_dfLine(36)+'</p>'
+    +   '<h2>7. Referring party</h2>'
+    +   '<p>Referred by: DealFlow Investments LLC / '+_dfHtml(f.buyerName)+'<br>'
+    +     'Phone: '+_dfHtml(f.buyerPhone)+' &nbsp; Email: '+_dfHtml(f.buyerEmail)+'<br>'
+    +     'Relationship: Potential buyer / referral only<br>'
+    +     'Compensation arrangement: <b>NONE</b> — no fee-splitting; no referral fees on legal services.</p>'
+    +   '<div class="box" style="border-color:#0B1730">'
+    +     '<b>THIS PACKET CONTAINS FACTS ONLY.</b><br>'
+    +     'NO LEGAL ANALYSIS. NO RECOMMENDED STRUCTURE. NO INSTRUMENT SELECTION.<br>'
+    +     'Attorney to determine appropriate documents and strategy.'
+    +   '</div>'
+    +   '<div class="footer">DealFlow · Document 15 · BUYER_ONLY · '+esc(f.todayLong)+'</div>'
+    + '</div>';
+  return _docShell('Attorney packet — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {key:'atty-packet'});
+}
+
 // --- HUB UI ---------------------------------------------------------------------------------
 function openDocRoom(caseId){
   var r = DATA.find(function(x){return x.case===caseId;});
   var gate = _docGate(r);
   var f = r ? _docFields(r) : {};
+  var psaOk = _docApproved('psa', _psaSrc());
+  var cancelOk = _docApproved('cancel', _CANCEL_NOTICE_SRC) && _docApproved('cancel', _CANCEL_FORM_SRC);
+  var tpaOk = _docApproved('tpa', _TPA_SRC);
   var head = ''
     + '<div class="doc"><div class="kicker">DOC ROOM · DEALFLOW</div>'
     +   '<h1>Documents for '+_dfHtml(f.propAddr||'')+'</h1>'
     +   '<div class="sub"><b>' + _dfHtml(f.ownerFull||'') + '</b> &middot; Case ' + _dfHtml(f.caseNo||'')
-    +     ' &middot; Sale ' + _dfHtml(f.saleDate||'') + '</div>'
+    +     ' &middot; County ' + _dfHtml(f.county||'') + '</div>'
     +   '<p style="background:#0B1730;color:#F4E5A7;padding:10px 14px;border-radius:6px;font:600 13.5px/1.5 Arial,sans-serif">'
     +     'No homeowner signature happens at a door. Signatures happen at a title company or a law office.'
     +   '</p>';
@@ -6300,14 +6645,13 @@ function openDocRoom(caseId){
       +   '🔒 Doc Room is disabled for this lead.<br><span style="font-weight:400">'+esc(gate.why)+'</span>'
       + '</p></div>', {key:'gate-blocked'}));
   }
-  // FIELD registry — no COUNSEL items are rendered; they're listed as text at the bottom.
   var FIELD = [
-    {key:'identity',  t:'Identity / Who I Am',       s:'Bilingual card — hand to the owner first.',           fn:'genIdentityCard'},
-    {key:'resources', t:'Free resources',            s:'HUD counselor, FL Bar referral, AG complaint line.',  fn:'genResourcesCard'},
-    {key:'info',      t:'General information sheet', s:'The five exits — static, no advice, no ordering.',    fn:'genInfoSheet'},
-    {key:'intake',    t:'Seller information sheet',  s:'Carlos WRITES; owner speaks. No owner signature.',    fn:'genIntakeSheet'},
-    {key:'consent',   t:'Contact consent card',      s:'Leave for owner to text back or return.',             fn:'genConsentCard'},
-    {key:'visit',     t:'Visitor door record',       s:'Signed by the visitor, not the owner. Tripwire on it.',fn:'genVisitRecord'},
+    {key:'identity',  t:'Identity / Who I Am',       s:'Bilingual card — named entity, NOT list, no money ask. Hand over first.', fn:'genIdentityCard'},
+    {key:'resources', t:'Free resources',            s:'HUD 1-888-995-HOPE · FL Bar LRS · AG 1-866-9NO-SCAM · county clerk.', fn:'genResourcesCard'},
+    {key:'info',      t:'General information sheet', s:'Five exits (reinstate / mod / short / private / BK) — static, no advice.', fn:'genInfoSheet'},
+    {key:'intake',    t:'Seller information sheet',  s:'Carlos WRITES; owner speaks. Expanded intake. No owner signature.', fn:'genIntakeSheet'},
+    {key:'consent',   t:'Contact consent card',      s:'Text DEALFLOW or return card later. No signature at the door.', fn:'genConsentCard'},
+    {key:'visit',     t:'Visitor door record',       s:'5 tripwire questions. Carlos signs. Supervisor review blanks.', fn:'genVisitRecord'},
   ];
   function card(x){
     return '<div style="border:1px solid #ddd;border-radius:8px;padding:12px 14px;margin:8px 0;background:#fbfaf6">'
@@ -6320,18 +6664,25 @@ function openDocRoom(caseId){
   var body = head
     + (gate.note ? '<p class="mini" style="background:#fffdf3;border-left:3px solid #C6A14B;padding:8px 12px">'+esc(gate.note)+'</p>' : '')
     + '<div class="kicker" style="color:#286c34;margin-top:14px">FIELD — Carlos may print &amp; hand over</div>'
-    + FIELD.map(card).join('')
+    + FIELD.map(function(x){ return card(x); }).join('')
     + '<div style="text-align:center;margin:8px 0"><button class="docprint" data-fn="genDoorFolder" data-key="door-folder" '
     +   'style="padding:10px 18px;background:#C6A14B;color:#0B1730;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Print the whole folder (6 pages)</button></div>'
-    + '<div class="kicker" style="color:#8a1c1c;margin-top:20px">COUNSEL — the app does NOT generate these. Reason each one is here:</div>'
-    + '<ul style="font-size:13px;line-height:1.6">'
-    +   '<li><b>Quit claim / warranty deed</b> — preparing a deed for another is UPL; execution needs two witnesses + notary (FS 689.01 / 695.03).</li>'
-    +   '<li><b>Power of attorney (any form)</b> — two witnesses + notary in physical presence (FS 709.2105); a distressed owner giving a POA to a buyer at their own door is the equity-stripping pattern.</li>'
-    +   '<li><b>Deed in lieu of foreclosure</b> — negotiated with the lender under written terms; attorney only.</li>'
-    +   '<li><b>Lease-back, occupancy-after-closing, option to repurchase</b> — heightened FS 501.1377 rules if the owner keeps ANY interest or right to repurchase; do not present.</li>'
-    +   '<li><b>Assignment of surplus funds</b> — the surplus is the former owner\'s money (FS 45.031). This is the exact instrument used against Milagros Martin on 07/28 — never emit without counsel.</li>'
-    +   '<li><b>Purchase &amp; sale agreement</b> — the existing Contract button prints one; do not present at a door either. Signatures at a title company.</li>'
-    + '</ul>'
+    + '<div class="kicker" style="color:#6a4a10;margin-top:20px">OFFICE — attorney-approved templates · signed at title / law office</div>'
+    + (psaOk
+        ? card({key:'psa', t:'As-Is Purchase &amp; Sale Agreement', s:'Existing genContract — merge-only. Never present at a door.', fn:'genContractPrint'})
+        : _docAwaitHtml('As-Is Purchase & Sale Agreement (PSA)'))
+    + (cancelOk
+        ? card({key:'cancel-notice', t:'Notice of Right to Cancel', s:'Own page — no other content.', fn:'genCancelNotice'})
+          + card({key:'cancel-form', t:'Cancellation Form', s:'Separate returnable form.', fn:'genCancelForm'})
+        : _docAwaitHtml('Notice of Right to Cancel + Cancellation Form'))
+    + (tpaOk
+        ? card({key:'tpa', t:'Third-Party Authorization', s:'Prefer servicer form / title orders payoff. Merge blanks only.', fn:'genThirdPartyAuth'})
+        : _docAwaitHtml('Third-Party Authorization'))
+    + '<div class="kicker" style="color:#8a1c1c;margin-top:20px">COUNSEL — the app does NOT generate these</div>'
+    + '<p class="mini">Reference list only. One button sends a facts-only deal sheet. No instrument picker.</p>'
+    + _docRefList()
+    + '<div style="text-align:center;margin:12px 0"><button class="docprint" data-fn="genAttyPacket" data-key="atty-packet" '
+    +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Send file to attorney</button></div>'
     + '<div class="footer">DealFlow · BUYER_ONLY mode. Anything requiring a signature happens at a title company or a law office — never at a door.</div>'
     + '</div>'
     + '<script>document.addEventListener("click",function(e){var b=e.target.closest("button.docprint");if(!b)return;'
@@ -6552,9 +6903,14 @@ window.addEventListener('message', function(ev){
   var fn = ({genIdentityCard:genIdentityCard, genResourcesCard:genResourcesCard,
              genInfoSheet:genInfoSheet, genIntakeSheet:genIntakeSheet,
              genConsentCard:genConsentCard, genVisitRecord:genVisitRecord,
-             genDoorFolder:genDoorFolder})[d.fn];
+             genDoorFolder:genDoorFolder,
+             genCancelNotice:genCancelNotice, genCancelForm:genCancelForm,
+             genThirdPartyAuth:genThirdPartyAuth, genAttyPacket:genAttyPacket,
+             genContractPrint:genContractPrint})[d.fn];
   if(!fn) return;
-  _openDoc(fn(r));
+  var html = fn(r);
+  // genContractPrint calls genContract (which already _openDoc's) and returns null when approved
+  if(html) _openDoc(html);
   _docLog(r.case, d.key, 'bi');
 });
 /* ============================================================================================
@@ -6946,6 +7302,162 @@ function openOwnerInfoSheet(caseId){
   return _openDoc(genOwnerInfoSheet(r));
 }
 
+/* ============================================================================================
+   MORNING WORKER — the 7 AM outreach queue, in its own tab.
+   Alejandro's ask (2026-07-29): "have a worker work on my Chrome / a separate tab" that emails
+   + texts leads until satisfied. This is that worker. It does NOT auto-send anything — that's
+   the TCPA/FTSA wall (autodial to non-consented consumers = $500-1,500/msg federal, worse in
+   FL). Instead the worker BUILDS the queue, opens each outreach in the existing per-lead
+   surface (genEmail for email → user taps Open in Gmail; openBulkText for SMS → user taps
+   send in Phone Link/Messages), logs the outcome back on the main board, and advances to the
+   next lead. Same manual-dial model, but zero decision-making time between leads.
+
+   QUEUE = _isCloser-worthy leads that (a) are not sibclaimed/BK/opted-out, (b) have not been
+   touched in the last 3 days, (c) sale date is between 3 and 45 days out (skip yesterday's
+   sales and skip anything 6 weeks out — those are letter-only). Cap 20/session.
+
+   BUTTONS carry stable IDs (id="mw-email", id="mw-text", id="mw-wp", id="mw-skip", id="mw-done")
+   so Claude-in-Chrome or any browser automation can drive the tab without DOM-guessing.
+   ============================================================================================ */
+function _workerQueue(){
+  var today = Date.now();
+  return DATA.filter(function(r){
+    if(!r || !r.case) return false;
+    if(r.sibclaimed || r.saleBkAct) return false;
+    var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
+    if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD') return false;
+    var d = typeof r.days==='number' ? r.days : null;
+    if(d==null || d<3 || d>45) return false;
+    // skip if touched in last 3 days
+    var touches = n.touches||[];
+    var last = touches.length ? (touches[touches.length-1].tsu || 0) : 0;
+    if(last && (today - last) < 3*86400000) return false;
+    if(r.tier !== 'A' && r.tier !== 'B') return false;
+    return true;
+  }).sort(function(a,b){ return (a.days||9999) - (b.days||9999); }).slice(0, 20);
+}
+function genMorningWorker(){
+  var queue = _workerQueue();
+  var qCases = JSON.stringify(queue.map(function(r){ return r.case; }));
+  // per-lead facts we need in the worker tab (kept slim to avoid postMessage bloat)
+  var qData = JSON.stringify(queue.map(function(r){
+    var f = _docFields(r); var chip = _urgencyChip(r.days);
+    var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); }).slice(0,3);
+    var emList = (r.emails||[]).slice(0,3);
+    var wpUrl = r.peopleaddr || r.people || '';
+    return {
+      c: r.case, addr: r.addr||'', owner: r.oname||(r.owners||'').split(';')[0]||'',
+      first: (f.ownerFirst==='__blank__'?'':f.ownerFirst),
+      days: r.days, saleDate: r.auction||'',
+      chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
+      phones: phList, emails: emList, wpUrl: wpUrl, hs: !!r.hs, condo: !!r.condo,
+      tier: r.tier || ''
+    };
+  }));
+  var body = ''
+    + '<style>'
+    +   '.mw{max-width:820px;margin:0 auto;padding:20px 22px 40px;font:15px/1.55 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33;background:#fbfaf6;min-height:100vh}'
+    +   '.mwtop{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid #e2e6ee;margin-bottom:18px;flex-wrap:wrap}'
+    +   '.mwtitle{font:800 22px "Segoe UI",Arial,sans-serif;margin:0}'
+    +   '.mwtitle .sub{display:block;font:600 12px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:2px;letter-spacing:.02em}'
+    +   '.mwprog{background:#0B1730;color:#F4E5A7;padding:8px 14px;border-radius:6px;font:700 13px "Segoe UI",Arial,sans-serif;letter-spacing:.02em}'
+    +   '.mwcard{background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(11,23,48,.09);padding:22px 24px;margin-bottom:14px}'
+    +   '.mwname{font:800 26px/1.1 "Segoe UI",Arial,sans-serif;margin:0 0 3px}'
+    +   '.mwaddr{color:#5b6472;font:600 14px "Segoe UI",Arial,sans-serif;margin-bottom:12px}'
+    +   '.mwchip{display:inline-block;font:800 11px "Segoe UI",Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-radius:5px;margin-bottom:14px}'
+    +   '.mwfacts{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:13.5px;margin-bottom:16px}'
+    +   '.mwfacts .k{color:#8a94a8;font:700 10px "Segoe UI",Arial,sans-serif;text-transform:uppercase;letter-spacing:.06em}'
+    +   '.mwfacts .v{font-weight:600;color:#0e1b33}'
+    +   '.mwacts{display:grid;grid-template-columns:1fr 1fr;gap:10px}'
+    +   '.mwbtn{display:block;padding:14px 16px;border:1px solid #d5dae4;border-radius:8px;background:#fff;color:#0e1b33;font:700 14px "Segoe UI",Arial,sans-serif;cursor:pointer;text-align:center;text-decoration:none;transition:transform .05s}'
+    +   '.mwbtn:hover{border-color:#0B1730;background:#fbfaf6}'
+    +   '.mwbtn:active{transform:scale(.97)}'
+    +   '.mwbtn.email{background:#0B1730;color:#F4E5A7;border-color:#0B1730}'
+    +   '.mwbtn.email:hover{background:#1a2b52}'
+    +   '.mwbtn.text{background:#286c34;color:#fff;border-color:#286c34}'
+    +   '.mwbtn.text:hover{background:#1f5528}'
+    +   '.mwbtn.wp{background:#fff2d7;color:#7a5a10;border-color:#eadb9f}'
+    +   '.mwbtn.skip{background:#f6f8fa;color:#5b6472}'
+    +   '.mwbtn.done{background:#c6a14b;color:#0B1730;border-color:#c6a14b;font-weight:800}'
+    +   '.mwbtn.disabled{opacity:.35;pointer-events:none}'
+    +   '.mwbtn .sub{display:block;font:600 11px "Segoe UI",Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;margin-top:3px;opacity:.8}'
+    +   '.mwlog{background:#fff;border-radius:8px;padding:10px 14px;margin-top:14px;font:12.5px "Segoe UI",Arial,sans-serif;color:#5b6472;max-height:180px;overflow-y:auto}'
+    +   '.mwlog div{padding:3px 0;border-bottom:1px dashed #f0f2f5}'
+    +   '.mwlog div:last-child{border-bottom:none}'
+    +   '.mwdone{text-align:center;padding:40px 22px;background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(11,23,48,.09)}'
+    +   '.mwdone h2{font:800 26px "Segoe UI",Arial,sans-serif;margin:0 0 10px}'
+    +   '.mwdone .stats{font:600 15px/1.7 "Segoe UI",Arial,sans-serif;color:#5b6472;margin:16px 0}'
+    +   '.mwnone{padding:40px 20px;background:#fff;border-radius:12px;text-align:center;color:#5b6472}'
+    + '</style>'
+    + '<div class="mw">'
+    +   '<div class="mwtop">'
+    +     '<h1 class="mwtitle">Morning outreach worker'
+    +       '<span class="sub">Tier A/B · sale 3-45 days · not touched in 72 hours · cap 20</span></h1>'
+    +     '<div class="mwprog" id="mwprog">0 of ' + queue.length + '</div>'
+    +   '</div>'
+    +   '<div id="mwmain"></div>'
+    +   '<div class="mwlog" id="mwlog"><div><b>Session log</b> — outcomes logged back to the board in real time</div></div>'
+    + '</div>'
+    + '<script>(function(){'
+    +   'var Q=' + qData + ';'
+    +   'var i=0, stats={email:0, text:0, wp:0, skip:0, done:0};'
+    +   'var main=document.getElementById("mwmain"), prog=document.getElementById("mwprog"), log=document.getElementById("mwlog");'
+    +   'function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}'
+    +   'function fm(n){return n?"$"+Math.round(+n).toLocaleString():"—";}'
+    +   'function post(kind, extra){'
+    +     'try{window.opener&&window.opener.postMessage({workerAct:{c:Q[i].c, k:kind, extra:extra||null}},"*");}catch(e){}'
+    +     'stats[kind]=(stats[kind]||0)+1;'
+    +     'var line=document.createElement("div");'
+    +     'line.innerHTML="<b>"+esc(Q[i].first||Q[i].owner)+"</b> · "+esc(Q[i].addr.split(",")[0])+" — <span style=\'color:#286c34\'>"+kind.toUpperCase()+"</span>";'
+    +     'log.insertBefore(line, log.children[1]||null);'
+    +   '}'
+    +   'function next(){ i++; render(); }'
+    +   'function render(){'
+    +     'if(!Q.length){ main.innerHTML="<div class=\'mwnone\'><b>Nothing in the queue this morning.</b><br><br>Every eligible lead has either been touched in the last 3 days, is outside the 3-45 day sale window, or is opted-out / claimed / in BK stay.<br><br>Come back tomorrow, or expand the window in the code.</div>"; prog.textContent="0 of 0"; return; }'
+    +     'if(i>=Q.length){'
+    +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'>Worked <b>"+Q.length+"</b> leads<br>Email: <b>"+stats.email+"</b> · Text: <b>"+stats.text+"</b> · WP lookup: <b>"+stats.wp+"</b> · Skipped: <b>"+stats.skip+"</b></div><p>Everything you clicked is logged on the main board. Reopen the worker tomorrow for a fresh queue.</p></div>";'
+    +       'prog.textContent=Q.length+" of "+Q.length+" &#x2713;";'
+    +       'return;'
+    +     '}'
+    +     'var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length;'
+    +     'var phEmoji=(r.phones.length?"<b>"+esc(r.phones[0])+"</b>":"<i style=\'color:#8a1c1c\'>no phone traced</i>");'
+    +     'var emEmoji=(r.emails.length?"<b>"+esc(r.emails[0])+"</b>":"<i style=\'color:#8a1c1c\'>no email traced</i>");'
+    +     'main.innerHTML='
+    +       '"<div class=\'mwcard\'>"'
+    +       '+"<div class=\'mwchip\' style=\'color:"+r.chip.c+";background:"+r.chip.bg+"\'>"+esc(r.chip.t)+"</div>"'
+    +       '+"<h2 class=\'mwname\'>"+esc(r.first||r.owner)+"</h2>"'
+    +       '+"<div class=\'mwaddr\'>"+esc(r.addr)+" · Tier "+esc(r.tier)+(r.hs?" · Homestead":"")+(r.condo?" · Condo":"")+"</div>"'
+    +       '+"<div class=\'mwfacts\'>"'
+    +         '+"<div><div class=\'k\'>Sale date</div><div class=\'v\'>"+esc(r.saleDate)+" ("+r.days+"d)</div></div>"'
+    +         '+"<div><div class=\'k\'>Plaintiff</div><div class=\'v\'>"+esc((r.plaintiff||"—").slice(0,40))+"</div></div>"'
+    +         '+"<div><div class=\'k\'>Judgment / Value</div><div class=\'v\'>"+fm(r.judg)+" / "+fm(r.value)+"</div></div>"'
+    +         '+"<div><div class=\'k\'>Phone / Email</div><div class=\'v\'>"+phEmoji+" · "+emEmoji+"</div></div>"'
+    +       '+"</div>"'
+    +       '+"<div class=\'mwacts\'>"'
+    +         '+"<button id=\'mw-email\' class=\'mwbtn email"+(r.emails.length?"":" disabled")+"\' data-fn=\'email\'>&#128231; Send email<span class=\'sub\'>Opens genEmail in a new tab</span></button>"'
+    +         '+"<button id=\'mw-text\' class=\'mwbtn text"+(r.phones.length?"":" disabled")+"\' data-fn=\'text\'>&#128241; Send text<span class=\'sub\'>Opens Phone Link composer</span></button>"'
+    +         '+"<button id=\'mw-wp\' class=\'mwbtn wp"+(r.wpUrl?"":" disabled")+"\' data-fn=\'wp\'>&#128269; Whitepages lookup<span class=\'sub\'>Find missing phone/email</span></button>"'
+    +         '+"<button id=\'mw-skip\' class=\'mwbtn skip\' data-fn=\'skip\'>&#9197; Skip<span class=\'sub\'>Not now — next lead</span></button>"'
+    +         '+"<button id=\'mw-done\' class=\'mwbtn done\' data-fn=\'done\' style=\'grid-column:1/-1\'>&#10003; Done with this lead &mdash; next<span class=\'sub\'>Marks as worked, advances the queue</span></button>"'
+    +       '+"</div>"'
+    +       '+"</div>";'
+    +   '}'
+    +   'document.addEventListener("click", function(e){'
+    +     'var b=e.target.closest(".mwbtn"); if(!b||b.classList.contains("disabled"))return;'
+    +     'var fn=b.dataset.fn; if(!fn)return;'
+    +     'if(fn==="email"||fn==="text"||fn==="wp"){ post(fn); /* main tab opens the real UI */ return; }'
+    +     'if(fn==="skip"){ post("skip"); next(); return; }'
+    +     'if(fn==="done"){ post("done"); next(); return; }'
+    +   '});'
+    +   'render();'
+    + '})();<\/script>';
+  return _docShell('Morning worker · '+queue.length+' leads', body, {key:'worker'});
+}
+function openMorningWorker(){
+  _docLog('__batch__', 'worker-open', 'en');
+  return _openDoc(genMorningWorker());
+}
+
 // listen for outcome logging coming back from the Dial-Ready tab — the workflow's #1 pick.
 // The Dial-Ready tab shows the 6-button outcome bar right under the tap-to-dial buttons; when
 // tapped, it posts {dialoutcome:{c,out}} back here so the SAME code path used by the after-call
@@ -6967,6 +7479,36 @@ window.addEventListener('message', function(ev){
   _toggleContract(d.c);
   try{ render(); }catch(e){}
   if(typeof _shareToast==='function') _shareToast('Marked as UNDER CONTRACT — re-open Assignment to generate the buyer pitch.');
+});
+// listen for Morning Worker actions. The worker tab does NOT send anything itself — it posts
+// {workerAct:{c, k}} and this parent listener opens the REAL tool (genEmail / openBulkText /
+// Whitepages) in a new tab, or logs skip/done. That keeps the send flow identical to what the
+// operator uses manually — no autodial pattern, no TCPA/FTSA exposure — while the worker
+// eliminates decision time between leads.
+window.addEventListener('message', function(ev){
+  var d = ev && ev.data && ev.data.workerAct; if(!d || !d.c) return;
+  var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
+  if(d.k === 'email'){
+    if(typeof genEmail === 'function') _openDoc(genEmail(r));
+    _docLog(r.case, 'worker-email', 'bi');
+  } else if(d.k === 'text'){
+    // openBulkText walks a queue; open just this one lead via openTextSingle if available
+    if(typeof openTextSingle === 'function') openTextSingle(r);
+    else if(typeof openBulkText === 'function') openBulkText();
+    _docLog(r.case, 'worker-text', 'bi');
+  } else if(d.k === 'wp'){
+    var wp = r.peopleaddr || r.people || '';
+    if(wp) window.open(wp, '_blank', 'noopener');
+    _docLog(r.case, 'worker-wp', 'en');
+  } else if(d.k === 'done' || d.k === 'skip'){
+    // log a lightweight "worked" touch on the board — same funnel as QUICKLOG
+    var n = notes[r.case] = notes[r.case]||{status:'',note:''};
+    n.touches = n.touches||[];
+    n.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'worker', out:d.k==='done'?'worked (morning batch)':'skipped'});
+    if(d.k==='done' && !n.status) n.status = 'Called - no answer';   // conservative default; user can flip later
+    if(typeof save==='function') save();
+    try{ render(); }catch(e){}
+  }
 });
 
 /* ============================================================================================
@@ -9796,6 +10338,9 @@ async function boot(){
   syncFreshness();
   _favCountEls();                    // show the saved-count on the Saved button
   _openHashDeal();                   // shared #case= link opens straight to that property
+  // #worker=morning auto-opens the Morning Worker after boot. Lets Windows Task Scheduler
+  // fire Chrome at 7 AM to the URL + fragment and land straight in the queue.
+  if(/worker=morning/.test(location.hash||'')) setTimeout(function(){ try{ openMorningWorker(); }catch(e){} }, 500);
   if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
   await _fadeIntro(t0, MIN_SPLASH);  // reveal the finished board (no-op if the gate path already faded it)
   if((manual || autoUnlocked) && unlockName) showWelcome(unlockName);   // warm greeting — auto-unlock too
