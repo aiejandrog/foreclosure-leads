@@ -3637,6 +3637,7 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genLetter(x);})()" title="Formal rescue-window letter (5 exits, buyer posture). Mail this alongside the door hanger for a two-touch approach.">✉️ Letter</button>'
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
     + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — bilingual door folder Carlos may print + hand over (identity, resources, info sheet, intake, consent, visit record). No homeowner signature at a door. Deeds/POAs/leasebacks are COUNSEL — the hub lists them, does not generate them.">📁 Doc Room</button>'
+    + '<button type="button" class="csactbtn" onclick="openDialReady(\''+caseEsc+'\')" title="Dial-Ready Card — the 5-second briefing you read WHILE dialing. Bilingual EN/ES toggle, 3-beat opener in big type, five facts you must not stumble on, tap-to-dial buttons for every non-DNC number. Same gate as Doc Room.">🎯 Dial-Ready</button>'
     + '<button type="button" class="csactbtn csact-save'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+caseEsc+'\',event)" title="Save to your batch (drives the Carlos field packet).">'+(_isFav(r.case)?'★ Saved':'☆ Save')+'</button>'
     + '<button type="button" class="csactbtn" onclick="_shareTo(\''+caseEsc+'\',\'carlos\')" title="Copy a ready-to-send door mission for Carlos with a link that opens straight to this property.">👷 Send to Carlos</button>'
     + '</div>';
@@ -6333,6 +6334,166 @@ function openDocRoom(caseId){
     +   'try{window.opener&&window.opener.postMessage({docroom:msg},"*");}catch(_e){}'
     + '});<\/script>';
   return _openDoc(_docShell('Doc Room — '+(f.propAddr||caseId), body, {key:'docroom'}));
+}
+/* ============================================================================================
+   DIAL-READY CARD — the 5-second briefing you read WHILE dialing.
+   The full Call script prints a wall of text; useful, but too much to read the moment your
+   thumb is over the number. This card is one screen: giant owner name, the 3 opener beats
+   in big type, the five facts you must not stumble on, and a tap-to-dial button. Bilingual
+   toggle in the corner. Uses the same _docGate/_docShell/_openDoc plumbing as Doc Room —
+   claimed / BK-stay / opted-out leads are suppressed, exactly as they must be.
+   ============================================================================================ */
+function _urgencyChip(days){
+  if(days==null || days<0) return {t:'Sale date not set', c:'#5b6472', bg:'#f6f8fa'};
+  if(days<=1) return {t:'SALE TOMORROW · MOVE NOW', c:'#fff', bg:'#8a1c1c'};
+  if(days<=3) return {t:'SALE IN '+days+' DAYS', c:'#fff', bg:'#a13a1c'};
+  if(days<=7) return {t:'SALE IN '+days+' DAYS', c:'#7a5a10', bg:'#f4e5a7'};
+  if(days<=30) return {t:days+' days to sale', c:'#286c34', bg:'#eaf5ec'};
+  return {t:days+' days out', c:'#5b6472', bg:'#f6f8fa'};
+}
+function genDialReady(r){
+  var f = _docFields(r);
+  var days = (typeof r.days==='number' && r.days>=0) ? r.days : null;
+  var chip = _urgencyChip(days);
+  var street = (r.addr || '').split(',')[0] || _dfHtml(f.propAddr);
+  // phone list — mobile-first, non-DNC first (same rule the row uses)
+  var rows = [];
+  (r.phones||[]).forEach(function(p,i){
+    var dnc = !!((r.phdnc||[])[i]);
+    var typ = ((r.phtype||[])[i]||'').toLowerCase();
+    if(p) rows.push({num:p, dnc:dnc, mobile:typ.indexOf('mob')===0});
+  });
+  var manual = (notes[r.case]||{}).phone;
+  if(manual) rows.unshift({num:manual, dnc:false, mobile:true});
+  rows.sort(function(a,b){ return (a.dnc?1:0)-(b.dnc?1:0) || (a.mobile?0:1)-(b.mobile?0:1); });
+  function dialBtnEN(x){
+    var d = String(x.num||'').replace(/\D/g,'');
+    return '<a href="tel:+1'+esc(d)+'" class="drdial'+(x.dnc?' dnc':'')+'">'
+      + '📞 '+esc(fmtPhone(d))+(x.dnc?'<div class="drmini">DNC — do not call</div>':(x.mobile?'<div class="drmini">mobile · dial now</div>':'<div class="drmini">landline</div>'))
+      + '</a>';
+  }
+  function dialBtnES(x){
+    var d = String(x.num||'').replace(/\D/g,'');
+    return '<a href="tel:+1'+esc(d)+'" class="drdial'+(x.dnc?' dnc':'')+'">'
+      + '📞 '+esc(fmtPhone(d))+(x.dnc?'<div class="drmini">NO LLAMAR</div>':(x.mobile?'<div class="drmini">móvil · marcar ahora</div>':'<div class="drmini">línea fija</div>'))
+      + '</a>';
+  }
+  // facts row — the five things you absolutely must not stumble on live
+  function fact(k, v){
+    return '<div class="drfact"><div class="drk">'+esc(k)+'</div><div class="drv">'+_dfHtml(v)+'</div></div>';
+  }
+  var valFmt = (r.value ? '$'+Math.round(+r.value).toLocaleString() : null);
+  var judgFmt = (r.judg ? '$'+Math.round(+r.judg).toLocaleString() : null);
+  var survRaw = (r._slien!=null ? +r._slien : (+r._chainSurv||0));
+  var survFmt = survRaw>0 ? '$'+Math.round(survRaw).toLocaleString() : (r.mr && r.orconf!=='ok' ? 'not pulled' : '$0');
+  var ownerType = r.co ? 'company (ask for the manager)' : (r.hs ? 'homestead — family home' : 'owner-occupant unknown');
+  var factsEN = ''
+    + fact('Sale date', chip.t)
+    + fact('Value / Judgment', (valFmt||'—')+' / '+(judgFmt||'—'))
+    + fact('Surviving 1st mortgage', survFmt)
+    + fact('Plaintiff', r.plaintiff)
+    + fact('Signal on the owner', ownerType);
+  var factsES = ''
+    + fact('Fecha subasta', chip.t)
+    + fact('Valor / Sentencia', (valFmt||'—')+' / '+(judgFmt||'—'))
+    + fact('1ª hipoteca que sobrevive', survFmt)
+    + fact('Demandante', r.plaintiff)
+    + fact('Señal del dueño', r.co?'empresa (pida por el manager)':(r.hs?'homestead — casa familiar':'estatus desconocido'));
+  // the 3 beats — mirror genScript's 4-second opener, just SHORTER for at-a-glance reading
+  var beatsEN = ''
+    + '<div class="drbeat"><span class="drn">1</span>“Hi — sorry to bother you. Is this the owner at <b>'+esc(street)+'</b>?” <span class="drwait">WAIT</span></div>'
+    + '<div class="drbeat"><span class="drn">2</span>“Real quick — do you still own it, or has that already been handled?”</div>'
+    + '<div class="drbeat"><span class="drn">3</span>“I’ll be straight — your case came up on the county records I work through, date of <b>'+_dfHtml(f.saleDate)+'</b>. Not the bank, not a lawyer — local buyer. Got <b>60 seconds</b>?”</div>';
+  var beatsES = ''
+    + '<div class="drbeat"><span class="drn">1</span>“Hola — perdone la molestia. ¿Hablo con el dueño de <b>'+esc(street)+'</b>?” <span class="drwait">ESPERE</span></div>'
+    + '<div class="drbeat"><span class="drn">2</span>“Rápido — ¿todavía es suya, o eso ya se resolvió?”</div>'
+    + '<div class="drbeat"><span class="drn">3</span>“Le hablo claro — su caso salió en los registros del condado, con fecha <b>'+_dfHtml(f.saleDate)+'</b>. No soy el banco ni abogado — comprador local. ¿Me da <b>60 segundos</b>?”</div>';
+  var dncNote = '';
+  if(rows.length && rows.every(function(x){return x.dnc;}))
+    dncNote = '<div class="drdncwarn">Every number here is on the Do-Not-Call registry. Manual dial only, and log the exemption reason (established relationship / prior consent).</div>';
+  if(!rows.length)
+    dncNote = '<div class="drdncwarn">No phone traced yet. Use the People-search on the call sheet to find one — the People/CyberBG links are on the row.</div>';
+  var css = ''
+    + '<style>'
+    + '.dr{max-width:520px;margin:14px auto;background:#fff;border-radius:14px;box-shadow:0 4px 22px rgba(11,23,48,.12);padding:22px 22px 26px}'
+    + '.drtop{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}'
+    + '.drname{font:800 30px/1.05 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33;margin:0}'
+    + '.drname .at{font:600 15px "Segoe UI",Arial,sans-serif;color:#5b6472;display:block;margin-top:5px;letter-spacing:.02em}'
+    + '.drlang{display:inline-flex;background:#f6f8fa;border-radius:6px;padding:3px}'
+    + '.drlang button{border:none;background:transparent;padding:5px 11px;font:700 12px "Segoe UI",Arial,sans-serif;border-radius:4px;cursor:pointer;color:#5b6472;letter-spacing:.05em}'
+    + '.drlang button.on{background:#0B1730;color:#F4E5A7}'
+    + '.drchip{display:inline-block;font:800 12px "Segoe UI",Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:6px 12px;border-radius:6px;margin:0 0 16px;color:'+chip.c+';background:'+chip.bg+'}'
+    + '.drbeats{margin:14px 0 18px}'
+    + '.drbeat{display:flex;gap:11px;align-items:flex-start;font:16.5px/1.35 Georgia,serif;color:#0e1b33;padding:11px 0;border-top:1px solid #e2e6ee}'
+    + '.drbeat:first-child{border-top:none;padding-top:6px}'
+    + '.drn{flex:none;width:26px;height:26px;background:#C6A14B;color:#0B1730;border-radius:50%;text-align:center;line-height:26px;font:800 14px "Segoe UI",Arial,sans-serif;margin-top:1px}'
+    + '.drwait{background:#0B1730;color:#F4E5A7;padding:1px 8px;border-radius:4px;font:700 11px "Segoe UI",Arial,sans-serif;letter-spacing:.1em;margin-left:6px;vertical-align:2px}'
+    + '.drfacts{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin:0 0 18px}'
+    + '.drfact{background:#f6f8fa;border-radius:8px;padding:8px 11px}'
+    + '.drk{font:700 10px "Segoe UI",Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8a94a8}'
+    + '.drv{font:600 13.5px/1.3 "Segoe UI",Arial,sans-serif;color:#0e1b33;margin-top:3px;word-break:break-word}'
+    + '.drremind{background:#fff8e1;border-left:4px solid #C6A14B;padding:10px 13px;border-radius:0 6px 6px 0;font:500 13.5px/1.5 "Segoe UI",Arial,sans-serif;color:#7a5a10;margin:0 0 18px}'
+    + '.drremind b{color:#0e1b33}'
+    + '.drdials{display:flex;flex-direction:column;gap:9px}'
+    + '.drdial{display:block;background:#0B1730;color:#F4E5A7;text-decoration:none;padding:14px 16px;border-radius:10px;text-align:center;font:800 20px "Segoe UI",Arial,sans-serif;letter-spacing:.02em}'
+    + '.drdial:hover{background:#1a2b52}'
+    + '.drdial.dnc{background:#3a1c1c;color:#f4c9c9}'
+    + '.drdial .drmini{display:block;font:600 11px "Segoe UI",Arial,sans-serif;letter-spacing:.06em;text-transform:uppercase;color:#9fb0d6;margin-top:3px}'
+    + '.drdial.dnc .drmini{color:#e8c9c9}'
+    + '.drdncwarn{background:#fff5f4;border-left:4px solid #8a1c1c;padding:10px 13px;border-radius:0 6px 6px 0;font:600 13px "Segoe UI",Arial,sans-serif;color:#8a1c1c;margin:12px 0 0}'
+    + '.drfoot{font:12px "Segoe UI",Arial,sans-serif;color:#8a94a8;text-align:center;margin-top:18px;letter-spacing:.02em}'
+    + '.dres{display:none}.dr.es .den{display:none}.dr.es .dres{display:block}'
+    + '@media (max-width:520px){.dr{margin:6px;padding:16px 14px 20px;border-radius:10px}.drname{font-size:26px}.drbeat{font-size:15px}.drdial{font-size:18px;padding:16px}}'
+    + '</style>';
+  var body = css
+    + '<div class="dr" id="dr">'
+    +   '<div class="drtop">'
+    +     '<h1 class="drname">'
+    +       '<span class="den">Call <b>'+_dfHtml(f.ownerFirst)+'</b></span>'
+    +       '<span class="dres">Llame a <b>'+_dfHtml(f.ownerFirst)+'</b></span>'
+    +       '<span class="at">at '+esc(street)+'</span>'
+    +     '</h1>'
+    +     '<div class="drlang" role="tablist">'
+    +       '<button type="button" class="drl on" data-l="en">EN</button>'
+    +       '<button type="button" class="drl" data-l="es">ES</button>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="drchip">'+esc(chip.t)+'</div>'
+    +   '<div class="drremind">'
+    +     '<span class="den"><b>60 seconds.</b> Not the bank, not a lawyer. Never promise to stop the sale. Never quote a price on this call.</span>'
+    +     '<span class="dres"><b>60 segundos.</b> No es el banco, no es abogado. Nunca prometa detener la subasta. Nunca dé precio en esta llamada.</span>'
+    +   '</div>'
+    +   '<div class="drbeats den">'+beatsEN+'</div>'
+    +   '<div class="drbeats dres">'+beatsES+'</div>'
+    +   '<div class="drfacts den">'+factsEN+'</div>'
+    +   '<div class="drfacts dres">'+factsES+'</div>'
+    +   '<div class="drdials den">' + rows.map(dialBtnEN).join('') + '</div>'
+    +   '<div class="drdials dres">' + rows.map(dialBtnES).join('') + '</div>'
+    +   dncNote
+    +   '<div class="drfoot">'
+    +     '<span class="den">Tap a number to dial. After the call, log the outcome on the board so tomorrow you know where you left off.</span>'
+    +     '<span class="dres">Toque un número para marcar. Después, registre el resultado en el tablero para saber dónde quedó mañana.</span>'
+    +   '</div>'
+    + '</div>'
+    + '<script>document.addEventListener("click",function(e){var b=e.target.closest(".drl");if(!b)return;'
+    +   'var dr=document.getElementById("dr");dr.classList.toggle("es",b.dataset.l==="es");'
+    +   'dr.querySelectorAll(".drl").forEach(function(x){x.classList.toggle("on",x===b);});'
+    + '});<\/script>';
+  return _docShell('Dial ready — '+(f.ownerFirst!=='__blank__'?f.ownerFirst:'lead'), body, {key:'dial-ready'});
+}
+function openDialReady(caseId){
+  var r = DATA.find(function(x){return x.case===caseId;});
+  var gate = _docGate(r);
+  if(!gate.ok){
+    var f = r ? _docFields(r) : {};
+    return _openDoc(_docShell('Dial-Ready — blocked',
+      '<div class="doc"><div class="kicker">DIAL-READY · BLOCKED</div>'
+      +'<h1>Do not dial this lead</h1>'
+      +'<p style="background:#fff5f4;border-left:4px solid #8a1c1c;padding:12px 14px;font:600 14.5px Arial,sans-serif">🔒 '+esc(gate.why)+'</p>'
+      +'</div>', {key:'dial-blocked'}));
+  }
+  _docLog(r.case, 'dial-ready', 'bi');
+  return _openDoc(genDialReady(r));
 }
 // listen for print requests coming back from the opened Doc Room tab
 window.addEventListener('message', function(ev){
