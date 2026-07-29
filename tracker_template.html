@@ -3638,6 +3638,11 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
     + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — bilingual door folder Carlos may print + hand over (identity, resources, info sheet, intake, consent, visit record). No homeowner signature at a door. Deeds/POAs/leasebacks are COUNSEL — the hub lists them, does not generate them.">📁 Doc Room</button>'
     + '<button type="button" class="csactbtn" onclick="openDialReady(\''+caseEsc+'\')" title="Dial-Ready Card — the 5-second briefing you read WHILE dialing. Bilingual EN/ES toggle, 3-beat opener in big type, five facts you must not stumble on, tap-to-dial buttons for every non-DNC number. Same gate as Doc Room.">🎯 Dial-Ready</button>'
+    + '<button type="button" class="csactbtn" onclick="openRentalModel(\''+caseEsc+'\')" title="Rental cash-flow model — interactive worksheet with live math. Answers &quot;does the rent pay off the property?&quot; Purchase price + rehab + HOA + tax + insurance + hold months. Verdict: YES if payback ≤ 10 years, MAYBE if ≤ 20, NO otherwise. Internal only.">📊 Rental Model</button>'
+    + '<button type="button" class="csactbtn" onclick="openDealSnapshot(\''+caseEsc+'\')" title="30-Second Deal Snapshot — Ask-Jose visual. Address + urgency chip + debt stack + ARV band + best exit one-liner + auto red-flag banners. INTERNAL — Do Not Share With Homeowner banner at top so a stray forward can\'t misfile it. No bilingual — Jose reads English.">⚡ Snapshot</button>'
+    + '<button type="button" class="csactbtn" onclick="openAssignPackage(\''+caseEsc+'\')" title="Assignment Package — post-contract buyer/lender pitch. Fires only when the lead is marked as UNDER CONTRACT (opens with a toggle prompt otherwise). ARV shown as a range, buyer profit as a range, amber &quot;subject to court&quot; banner on any BK case.">💼 Assignment</button>'
+    + '<button type="button" class="csactbtn" onclick="openDocketSnapshot(\''+caseEsc+'\')" title="Court Docket Snapshot — bilingual owner leave-behind. Public-record data + FS Ch. 45 framework only. NO 5-exits menu, NO urgency chip, NO interpretation (all deleted by legal review). Disclaimer at TOP, same font size, EN+ES side-by-side.">📜 Docket</button>'
+    + '<button type="button" class="csactbtn" onclick="openOwnerInfoSheet(\''+caseEsc+'\')" title="Owner Information Sheet — bilingual, statute-quote only. Reinstatement = &quot;call your servicer, this doc cannot calculate it.&quot; Surplus (FS 45.032) shown as statutory framework, not a computed number. Signed tear-off receipt.">📋 Info Sheet</button>'
     + '<button type="button" class="csactbtn csact-save'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+caseEsc+'\',event)" title="Save to your batch (drives the Carlos field packet).">'+(_isFav(r.case)?'★ Saved':'☆ Save')+'</button>'
     + '<button type="button" class="csactbtn" onclick="_shareTo(\''+caseEsc+'\',\'carlos\')" title="Copy a ready-to-send door mission for Carlos with a link that opens straight to this property.">👷 Send to Carlos</button>'
     + '</div>';
@@ -6552,6 +6557,395 @@ window.addEventListener('message', function(ev){
   _openDoc(fn(r));
   _docLog(r.case, d.key, 'bi');
 });
+/* ============================================================================================
+   RENTAL CASH-FLOW MODEL — "does the rent pay off the property?"
+   Ships from Alejandro's Capri question (2026-07-29): "how much does it rent for, so we can see if
+   it could pay off the property." Interactive form with defaults from the lead, live math, honest
+   verdict. Internal analysis tool — no gate, no bilingual (he reads this, not the owner).
+   ============================================================================================ */
+function genRentalModel(r){
+  var f = _docFields(r);
+  var val = +r.value || 0;
+  var judg = +r.judg || 0;
+  var arv = +r.arv || 0;
+  var basisTop = arv > val ? arv : val;
+  // sensible defaults from the lead
+  var defOffer = Math.max(15000, Math.round((basisTop*0.6 - judg) / 1000) * 1000);
+  var defRehab = r.condo ? 8000 : 15000;
+  var defTaxMo = r.etax ? Math.round(+r.etax/12) : Math.round(basisTop*0.011/12);
+  var defInsMo = r.condo ? 85 : 165;
+  var defHoaMo = r.condo ? 600 : 0;
+  var defHold  = r.condo ? 12 : 0;                       // condos routinely bar leasing first 12 mo
+  var defRent  = r.condo ? 1500 : Math.max(1400, Math.round(basisTop*0.008/50)*50);
+  var body = ''
+    + '<style>'
+    +   '.rm{max-width:820px;margin:14px auto;background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(11,23,48,.1);padding:22px 26px 28px;font:14.5px/1.5 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33}'
+    +   '.rmh{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:10px;flex-wrap:wrap}'
+    +   '.rmt{font:800 22px/1.2 -apple-system,"Segoe UI",Arial,sans-serif;margin:0}'
+    +   '.rmt .sub{display:block;font:600 13px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:3px}'
+    +   '.rmi{background:#0B1730;color:#F4E5A7;padding:5px 10px;border-radius:5px;font:700 10px "Segoe UI",Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;align-self:center;white-space:nowrap}'
+    +   '.rmgrid{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:16px}'
+    +   '.rms{background:#fbfaf6;border:1px solid #e2e6ee;border-radius:9px;padding:14px 16px}'
+    +   '.rms h3{font:700 11px "Segoe UI",Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#8a94a8;margin:0 0 10px}'
+    +   '.rmf{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:6px 0}'
+    +   '.rmf label{font:600 13px "Segoe UI",Arial,sans-serif;color:#334155;flex:1}'
+    +   '.rmf input{width:110px;padding:6px 8px;border:1px solid #d5dae4;border-radius:5px;font:600 14px "Segoe UI",Arial,sans-serif;text-align:right}'
+    +   '.rmf input:focus{outline:2px solid #C6A14B;outline-offset:1px}'
+    +   '.rmv{margin-top:20px;background:#0B1730;color:#F4E5A7;padding:18px 20px;border-radius:10px}'
+    +   '.rmvline{display:flex;justify-content:space-between;font:14.5px "Segoe UI",Arial,sans-serif;padding:5px 0;border-bottom:1px solid rgba(244,229,167,.15)}'
+    +   '.rmvline:last-of-type{border-bottom:none;padding-top:9px;margin-top:5px;border-top:2px solid rgba(244,229,167,.3);font-weight:800;font-size:16px}'
+    +   '.rmvline .rmvn{font-family:-apple-system,"Segoe UI",Arial,sans-serif;font-variant-numeric:tabular-nums}'
+    +   '.rmverdict{margin-top:14px;padding:14px 16px;border-radius:8px;font:700 14.5px/1.5 "Segoe UI",Arial,sans-serif}'
+    +   '.rmverdict.yes{background:#eaf5ec;color:#286c34;border:2px solid #286c34}'
+    +   '.rmverdict.no{background:#fff5f4;color:#8a1c1c;border:2px solid #8a1c1c}'
+    +   '.rmverdict.maybe{background:#fff8e1;color:#7a5a10;border:2px solid #C6A14B}'
+    +   '.rmnote{font:500 12px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:10px;line-height:1.5}'
+    +   '@media(max-width:700px){.rmgrid{grid-template-columns:1fr}}'
+    + '</style>'
+    + '<div class="rm">'
+    +   '<div class="rmh">'
+    +     '<h1 class="rmt">Rental cash-flow model'
+    +       '<span class="sub">'+esc(r.addr||'')+'</span></h1>'
+    +     '<span class="rmi">Internal · Alejandro only</span>'
+    +   '</div>'
+    +   '<div class="rmgrid">'
+    +     '<div class="rms"><h3>Purchase &amp; rehab</h3>'
+    +       '<div class="rmf"><label>Cash purchase price</label><input type="number" id="rmOffer" value="'+defOffer+'"></div>'
+    +       '<div class="rmf"><label>Rehab budget</label><input type="number" id="rmRehab" value="'+defRehab+'"></div>'
+    +       '<div class="rmf"><label>Hold months before rent</label><input type="number" id="rmHold" value="'+defHold+'"></div>'
+    +     '</div>'
+    +     '<div class="rms"><h3>Monthly income &amp; costs</h3>'
+    +       '<div class="rmf"><label>Est. rent /mo</label><input type="number" id="rmRent" value="'+defRent+'"></div>'
+    +       '<div class="rmf"><label>HOA /mo</label><input type="number" id="rmHoa" value="'+defHoaMo+'"></div>'
+    +       '<div class="rmf"><label>Property tax /mo</label><input type="number" id="rmTax" value="'+defTaxMo+'"></div>'
+    +       '<div class="rmf"><label>Insurance /mo</label><input type="number" id="rmIns" value="'+defInsMo+'"></div>'
+    +       '<div class="rmf"><label>Mgmt + reserve %</label><input type="number" id="rmMgt" value="15"></div>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="rmv" id="rmv"></div>'
+    +   '<div class="rmnote">Defaults come from this lead (value, county tax estimate). HOA and rent are educated guesses when the system does not know — override with real numbers. Verdict logic: <b>YES</b> = pays back in ≤ 10 years cash. <b>MAYBE</b> = 10-20 years. <b>NO</b> = &gt;20 years or negative cash flow. Uses conservative 15% for management + real reserve on an aging building — knock that to 10% if you self-manage.</div>'
+    + '</div>'
+    + '<script>(function(){'
+    +   'var g=function(id){return document.getElementById(id);};'
+    +   'function n(id){return +g(id).value||0;}'
+    +   'function fm(x){return "$"+Math.round(x).toLocaleString();}'
+    +   'function calc(){'
+    +     'var offer=n("rmOffer"),rehab=n("rmRehab"),hold=n("rmHold");'
+    +     'var rent=n("rmRent"),hoa=n("rmHoa"),tax=n("rmTax"),ins=n("rmIns"),mgt=n("rmMgt")/100;'
+    +     'var monthlyExp=hoa+tax+ins;'
+    +     'var mgtCost=rent*mgt;'
+    +     'var netMo=rent-monthlyExp-mgtCost;'
+    +     'var holdBleed=hold*monthlyExp;'
+    +     'var allIn=offer+rehab+holdBleed;'
+    +     'var payback=netMo>0?Math.round(allIn/netMo):-1;'
+    +     'var payYr=netMo>0?(allIn/netMo/12).toFixed(1):"never";'
+    +     'var coc=netMo>0?(netMo*12/allIn*100).toFixed(1):"—";'
+    +     'var v="maybe",vt="MARGINAL";'
+    +     'if(netMo<=0){v="no";vt="NO — DOES NOT CASH-FLOW";}'
+    +     'else if(payYr==="never"||+payYr>20){v="no";vt="NO — payback &gt; 20 years";}'
+    +     'else if(+payYr<=10){v="yes";vt="YES — pays back in "+payYr+" years";}'
+    +     'else{v="maybe";vt="MARGINAL — "+payYr+" years";}'
+    +     'g("rmv").innerHTML='
+    +       '"<div class=\'rmvline\'><span>All-in (purchase + rehab + " + hold + "mo carry)</span><span class=\'rmvn\'>"+fm(allIn)+"</span></div>"'
+    +      '+"<div class=\'rmvline\'><span>Monthly expenses (HOA + tax + ins + mgt%)</span><span class=\'rmvn\'>"+fm(monthlyExp+mgtCost)+"</span></div>"'
+    +      '+"<div class=\'rmvline\'><span>Net cash flow (year "+(hold>0?"2+":"1+")+")</span><span class=\'rmvn\'>"+fm(netMo)+"/mo</span></div>"'
+    +      '+"<div class=\'rmvline\'><span>Cash-on-cash return</span><span class=\'rmvn\'>"+coc+"%</span></div>"'
+    +      '+"<div class=\'rmvline\'><span>Payback period</span><span class=\'rmvn\'>"+(payback>0?payback+" months (~"+payYr+" yr)":"never at these numbers")+"</span></div>"'
+    +      '+"<div class=\'rmverdict "+v+"\'>Verdict: "+vt+"</div>";'
+    +   '}'
+    +   'document.querySelectorAll(".rm input").forEach(function(x){x.addEventListener("input",calc);});'
+    +   'calc();'
+    + '})();<\/script>';
+  return _docShell('Rental model — '+(r.addr||'lead'), body, {key:'rental-model'});
+}
+function openRentalModel(caseId){
+  var r = DATA.find(function(x){return x.case===caseId;});
+  if(!r) return;
+  _docLog(r.case, 'rental-model', 'en');
+  return _openDoc(genRentalModel(r));
+}
+
+/* ============================================================================================
+   30-SECOND DEAL SNAPSHOT — the Ask-Jose visual. Internal only (English). Header banner reads
+   "INTERNAL — Do Not Share With Homeowner" so a stray forward doesn't misfile it as owner comms.
+   ============================================================================================ */
+function genDealSnapshot(r){
+  var f = _docFields(r);
+  var days = (typeof r.days==='number' && r.days>=0) ? r.days : null;
+  var chip = _urgencyChip(days);
+  function fm(n){ if(!n) return '—'; return '$'+Math.round(+n).toLocaleString(); }
+  function fmk(n){ if(!n) return '—'; if(Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; return '$'+Math.round(n/1000)+'k'; }
+  var judg = +r.judg||0, val = +r.value||0, arv = +r.arv||0;
+  var surv = (r._slien!=null?+r._slien:(+r._chainSurv||0));
+  var basis = arv>0 ? arv : val;
+  var owed = judg + surv + (+r.orhoa||0) + (+r.orcode||0) + (+r.orirs||0);
+  var spread = basis>0 ? Math.max(0, basis - owed) : 0;
+  var flags = [];
+  if(r.sibclaimed) flags.push({t:'CLAIMED — sibling case already sold', c:'#8a1c1c'});
+  if(r.saleBkAct) flags.push({t:'ACTIVE BK STAY — no contact permitted', c:'#8a1c1c'});
+  if(r.mr && r.orconf!=='ok') flags.push({t:'Surviving 1st mortgage unverified', c:'#a35a10'});
+  if(r.ju) flags.push({t:'Final judgment not posted — debt unknown', c:'#a35a10'});
+  if(r.condo && !r._assessSet) flags.push({t:'Condo — pull the estoppel (special assessment risk)', c:'#a35a10'});
+  if(r.co) flags.push({t:'Company-owned — call Sunbiz officer, not the LLC', c:'#5b6472'});
+  var bestExit = spread >= 40000 ? 'BUY — cash offer at 70% of ARV, resell or hold' :
+                 spread >= 15000 ? 'WHOLESALE — assign to a cash buyer for a fee' :
+                 spread > 0      ? 'SHORT SALE — negotiate the lender down' :
+                                   'PASS or SURPLUS RECOVERY only';
+  var body = ''
+    + '<style>'
+    +   '.ds{max-width:720px;margin:14px auto;background:#fff;border-radius:10px;box-shadow:0 3px 16px rgba(11,23,48,.1);padding:22px 24px;font:14.5px/1.55 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33}'
+    +   '.dsban{background:#8a1c1c;color:#fff;padding:7px 12px;border-radius:5px;font:700 11px "Segoe UI",Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px;text-align:center}'
+    +   '.dsh{margin:0 0 6px;font:800 22px/1.2 "Segoe UI",Arial,sans-serif}'
+    +   '.dssub{color:#5b6472;font:600 13.5px "Segoe UI",Arial,sans-serif;margin-bottom:14px;border-bottom:1px solid #e2e6ee;padding-bottom:10px}'
+    +   '.dschip{display:inline-block;font:800 11.5px "Segoe UI",Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-radius:5px;margin-right:8px;color:'+chip.c+';background:'+chip.bg+'}'
+    +   '.dsgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:12px 0}'
+    +   '.dsbox{background:#fbfaf6;border:1px solid #e2e6ee;border-radius:8px;padding:12px 14px}'
+    +   '.dsbox h4{font:700 10px "Segoe UI",Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8a94a8;margin:0 0 8px}'
+    +   '.dsl{display:flex;justify-content:space-between;font:14px "Segoe UI",Arial,sans-serif;padding:3px 0}'
+    +   '.dsl .n{font-family:-apple-system,"Segoe UI",Arial,sans-serif;font-variant-numeric:tabular-nums;font-weight:700}'
+    +   '.dsspread{background:#0B1730;color:#F4E5A7;padding:14px 18px;border-radius:9px;margin-top:10px;display:flex;justify-content:space-between;align-items:center}'
+    +   '.dsspread .s{font:800 26px "Segoe UI",Arial,sans-serif}'
+    +   '.dsexit{background:#eaf5ec;border-left:4px solid #286c34;padding:11px 14px;border-radius:0 6px 6px 0;margin-top:12px;font:600 14px "Segoe UI",Arial,sans-serif;color:#0e1b33}'
+    +   '.dsflag{border-left:4px solid;padding:7px 12px;margin:5px 0;border-radius:0 5px 5px 0;font:600 13px "Segoe UI",Arial,sans-serif;background:#fff8e1}'
+    + '</style>'
+    + '<div class="ds">'
+    +   '<div class="dsban">Internal — Do Not Share With Homeowner</div>'
+    +   '<h1 class="dsh">'+esc(r.addr||'—')+'</h1>'
+    +   '<div class="dssub"><span class="dschip">'+esc(chip.t)+'</span>Case '+esc(r.case||'')+' · Owner '+esc(r.oname||r.owners||'—').split(';')[0]+(r.co?' <b>[LLC]</b>':(r.hs?' <b>[Homestead]</b>':''))+'</div>'
+    +   '<div class="dsgrid">'
+    +     '<div class="dsbox"><h4>Debt stack (what survives)</h4>'
+    +       '<div class="dsl"><span>Foreclosing judgment</span><span class="n">'+fm(judg)+'</span></div>'
+    +       '<div class="dsl"><span>Surviving 1st mortgage</span><span class="n">'+(surv>0?fm(surv):(r.mr?'unverified':'$0'))+'</span></div>'
+    +       (+r.orjunior>0 ? '<div class="dsl"><span>Junior / 2nd</span><span class="n">'+fm(+r.orjunior)+'</span></div>' : '')
+    +       (+r.orhoa>0    ? '<div class="dsl"><span>HOA / COA lien</span><span class="n">'+fm(+r.orhoa)+'</span></div>' : '')
+    +       (+r.orcode>0   ? '<div class="dsl"><span>Code enforcement</span><span class="n">'+fm(+r.orcode)+'</span></div>' : '')
+    +       (+r.orirs>0    ? '<div class="dsl"><span>IRS lien (120-day redemption)</span><span class="n">'+fm(+r.orirs)+'</span></div>' : '')
+    +       '<div class="dsl" style="border-top:1px solid #d5dae4;margin-top:5px;padding-top:6px"><span><b>Total owed</b></span><span class="n">'+fm(owed)+'</span></div>'
+    +     '</div>'
+    +     '<div class="dsbox"><h4>Value &amp; upside</h4>'
+    +       '<div class="dsl"><span>County value</span><span class="n">'+fm(val)+'</span></div>'
+    +       (arv>0 ? '<div class="dsl"><span>ARV (comps '+(r.arvconf==='ok'?'verified':'low conf')+')</span><span class="n">'+fm(arv)+'</span></div>' : '<div class="dsl"><span>ARV</span><span class="n">no comps yet</span></div>')
+    +       (+r.zprice>0 ? '<div class="dsl"><span>Zillow listed at</span><span class="n">'+fm(+r.zprice)+' ('+esc(r.zstatus||'?')+')</span></div>' : '')
+    +       '<div class="dsl"><span>Beds / Baths / Sqft</span><span class="n">'+(r.beds||'—')+' / '+(r.baths||'—')+' / '+(r.sqft?(+r.sqft).toLocaleString():'—')+'</span></div>'
+    +     '</div>'
+    +   '</div>'
+    +   '<div class="dsspread"><span>Gross spread (basis − total owed)</span><span class="s">'+fm(spread)+'</span></div>'
+    +   '<div class="dsexit"><b>Best exit:</b> '+esc(bestExit)+'</div>'
+    +   (flags.length ? '<div style="margin-top:12px">'+flags.map(function(x){return '<div class="dsflag" style="border-left-color:'+x.c+';color:'+x.c+'">'+esc(x.t)+'</div>';}).join('')+'</div>' : '')
+    +   '<div style="margin-top:16px;font:12px "Segoe UI";color:#8a94a8;text-align:center">DEALFLOW · '+esc(new Date().toLocaleString())+' · fund/pass before Alejandro parks</div>'
+    + '</div>';
+  return _docShell('Snapshot — '+(r.addr||r.case), body, {key:'snapshot'});
+}
+function openDealSnapshot(caseId){
+  var r = DATA.find(function(x){return x.case===caseId;});
+  if(!r) return;
+  _docLog(r.case, 'snapshot', 'en');
+  return _openDoc(genDealSnapshot(r));
+}
+
+/* ============================================================================================
+   ASSIGNMENT PACKAGE — post-contract only. Fires only when notes[case].contract === true.
+   Framed strictly as "under contract to purchase, right to assign to qualified end buyer."
+   Buyer profit rendered as RANGE only, never a single number. Amber "subject to court" banner
+   on any BK case that leaks through.
+   ============================================================================================ */
+function _isUnderContract(caseId){ var n=notes[caseId]||{}; return !!n.contract; }
+function _toggleContract(caseId){ var n=notes[caseId]=notes[caseId]||{status:'',note:''}; n.contract=!n.contract; if(typeof save==='function') save(); }
+function genAssignPackage(r){
+  var f = _docFields(r);
+  function fm(n){ if(!n) return '—'; return '$'+Math.round(+n).toLocaleString(); }
+  var n = notes[r.case]||{};
+  var purchase = +n.purchase || 0;
+  var arvLow  = Math.round((+r.arv || +r.value || 0) * 0.90);
+  var arvHigh = Math.round((+r.arv || +r.value || 0) * 1.05);
+  var fee     = +n.assignFee || 5000;
+  var rehab   = +n.rehab || (r.condo?8000:20000);
+  var buyerProfitLow  = Math.max(0, arvLow  - (purchase + fee + rehab + Math.round(arvLow*0.10)));
+  var buyerProfitHigh = Math.max(0, arvHigh - (purchase + fee + rehab + Math.round(arvHigh*0.08)));
+  var bkBanner = r.saleBkAct ? '<div style="background:#fff8e1;border-left:4px solid #a35a10;padding:10px 14px;color:#7a5a10;font:600 13px Arial,sans-serif;margin:10px 0">Automatic bankruptcy stay in place — buyer must accept SUBJECT-TO-COURT approval and closing timing may shift.</div>' : '';
+  var body = ''
+    + '<style>'
+    +   '.ap{max-width:760px;margin:14px auto;background:#fff;border-radius:10px;box-shadow:0 3px 16px rgba(11,23,48,.1);padding:26px 28px;font:14.5px/1.6 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33}'
+    +   '.apkick{font:700 10px "Segoe UI",Arial,sans-serif;letter-spacing:.12em;text-transform:uppercase;color:#286c34;background:#eaf5ec;padding:4px 10px;border-radius:4px;display:inline-block;margin-bottom:6px}'
+    +   '.aph{font:800 24px/1.2 "Segoe UI",Arial,sans-serif;margin:0 0 4px}'
+    +   '.apsub{color:#5b6472;font:600 13px "Segoe UI",Arial,sans-serif;margin-bottom:16px}'
+    +   '.apgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:16px 0}'
+    +   '.apbox{background:#fbfaf6;border:1px solid #e2e6ee;border-radius:8px;padding:12px 14px;text-align:center}'
+    +   '.apbox .k{font:700 10px "Segoe UI",Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8a94a8}'
+    +   '.apbox .v{font:800 18px "Segoe UI",Arial,sans-serif;color:#0e1b33;margin-top:5px}'
+    +   '.apmath{background:#0B1730;color:#F4E5A7;padding:14px 18px;border-radius:9px;margin-top:14px}'
+    +   '.apmath h4{margin:0 0 8px;font:700 11px "Segoe UI",Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#9fb0d6}'
+    +   '.apl{display:flex;justify-content:space-between;padding:3px 0;font:14px "Segoe UI",Arial,sans-serif}'
+    +   '.apl.tot{border-top:1px solid rgba(244,229,167,.3);margin-top:6px;padding-top:8px;font-weight:800;font-size:16px}'
+    +   '.apfoot{margin-top:18px;padding-top:12px;border-top:1px solid #e2e6ee;font:12px "Segoe UI",Arial,sans-serif;color:#5b6472;line-height:1.5}'
+    + '</style>'
+    + '<div class="ap">'
+    +   '<div class="apkick">Assignment Available · Cash Buyers</div>'
+    +   '<h1 class="aph">'+esc(r.addr||'—')+'</h1>'
+    +   '<div class="apsub">'+(r.beds?r.beds+'BR / '+(r.baths||'?')+'BA / '+(r.sqft?(+r.sqft).toLocaleString()+' sqft':'?'):'')+(r.dor_desc?' · '+esc(r.dor_desc):'')+' · '+esc(r.county||'—')+'</div>'
+    +   bkBanner
+    +   '<div class="apgrid">'
+    +     '<div class="apbox"><div class="k">Purchase price</div><div class="v">'+fm(purchase)+'</div></div>'
+    +     '<div class="apbox"><div class="k">ARV band</div><div class="v">'+fm(arvLow)+'–'+fm(arvHigh)+'</div></div>'
+    +     '<div class="apbox"><div class="k">Assignment fee</div><div class="v">'+fm(fee)+'</div></div>'
+    +   '</div>'
+    +   '<div class="apmath"><h4>Buyer\'s math (illustrative range only)</h4>'
+    +     '<div class="apl"><span>End buyer pays (purchase + fee)</span><span>'+fm(purchase + fee)+'</span></div>'
+    +     '<div class="apl"><span>Rehab budget (est.)</span><span>'+fm(rehab)+'</span></div>'
+    +     '<div class="apl"><span>Selling costs (~10% of resale)</span><span>~10%</span></div>'
+    +     '<div class="apl"><span>Resale (ARV band)</span><span>'+fm(arvLow)+'–'+fm(arvHigh)+'</span></div>'
+    +     '<div class="apl tot"><span>Estimated buyer profit range</span><span>'+fm(buyerProfitLow)+'–'+fm(buyerProfitHigh)+'</span></div>'
+    +   '</div>'
+    +   '<div class="apfoot">'
+    +     'Under contract to purchase. Right to assign to a qualified end buyer. All figures illustrative — buyer verifies title, condition, and their own numbers before EMD. Case '+esc(r.case)+' · '+esc(new Date().toLocaleDateString())+'.'
+    +   '</div>'
+    + '</div>';
+  return _docShell('Assignment — '+(r.addr||r.case), body, {key:'assignment'});
+}
+function openAssignPackage(caseId){
+  var r = DATA.find(function(x){return x.case===caseId;});
+  if(!r) return;
+  if(!_isUnderContract(caseId)){
+    var msg = '<div class="doc"><div class="kicker">ASSIGNMENT PACKAGE</div>'
+      + '<h1>This lead is not marked as under contract yet.</h1>'
+      + '<p>The Assignment Package is a buyer-facing document — the seller must sign a purchase agreement first.</p>'
+      + '<p>When you have that signed contract in hand, tap the button below and this package will generate.</p>'
+      + '<div style="margin-top:20px"><button onclick="try{window.opener&&window.opener.postMessage({assignContract:{c:'+JSON.stringify(caseId)+'}},\'*\');window.close();}catch(e){}" '
+      + 'style="padding:11px 20px;background:#286c34;color:#fff;border:none;border-radius:6px;font:700 14px Arial,sans-serif;cursor:pointer">✓ Mark as under contract</button></div>'
+      + '</div>';
+    return _openDoc(_docShell('Assignment — pending contract', msg, {key:'assign-pending'}));
+  }
+  _docLog(caseId, 'assignment', 'en');
+  return _openDoc(genAssignPackage(r));
+}
+
+/* ============================================================================================
+   COURT DOCKET SNAPSHOT — bilingual owner leave-behind. Public-record data + statute framework
+   only. NO 5-exits menu (deleted per legal review), NO urgency chip, NO interpretation, NO
+   ordering of options. The disclaimer sits at the TOP, same font size, EN+ES side-by-side.
+   ============================================================================================ */
+function genDocketSnapshot(r){
+  var f = _docFields(r);
+  var body = ''
+    + '<style>'
+    +   '.dk{max-width:8.5in;margin:14px auto;background:#fff;padding:28px 40px;border-radius:8px;box-shadow:0 2px 12px rgba(11,23,48,.08);font:15px/1.55 Georgia,serif;color:#111}'
+    +   '.dkh{font:800 21px/1.2 Arial,sans-serif;margin:0 0 4px;color:#0e1b33}'
+    +   '.dkalert{background:#fff8e1;border:2px solid #C6A14B;padding:12px 15px;border-radius:6px;margin:12px 0;font:600 13px Arial,sans-serif;color:#7a5a10}'
+    +   '.dkalert .en{display:block}.dkalert .es{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(198,161,75,.3)}'
+    +   '.dksec{margin:18px 0}.dksec h2{font:700 12px Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#8a94a8;margin:0 0 6px}'
+    +   '.dkrow{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #ddd;font-size:14px}'
+    +   '.dkrow:last-child{border-bottom:none}'
+    +   '.dkrow .lbl{color:#5b6472}.dkrow .v{font-weight:700;text-align:right}'
+    +   '.dkq{background:#fbfaf6;border-left:4px solid #0B1730;padding:11px 14px;font-style:italic;color:#334155;margin:8px 0;font-size:13.5px}'
+    +   '.dkmini{font-size:11.5px;color:#5b6472;margin-top:5px}'
+    +   '.dkfoot{margin-top:22px;padding-top:12px;border-top:1px solid #ddd;font-size:11px;color:#666}'
+    + '</style>'
+    + '<div class="dk">'
+    +   '<h1 class="dkh">Court file snapshot · Instantánea del expediente</h1>'
+    +   '<div class="dkalert">'
+    +     '<span class="en"><b>This is not legal advice.</b> Sale dates in Florida foreclosures are routinely cancelled, reset, or stayed by court order. For your specific case, talk to a Florida licensed attorney or call the county Clerk of Court. HUD-approved housing counselor (free): <b>800-569-4287</b>.</span>'
+    +     '<span class="es"><b>Esto NO es asesoría legal.</b> Las fechas de subasta en ejecuciones de Florida se cancelan, reprograman o suspenden rutinariamente por orden del juez. Para su caso, consulte a un abogado con licencia en Florida o llame al Secretario del Tribunal. Consejero de vivienda aprobado por HUD (gratis): <b>800-569-4287</b>.</span>'
+    +   '</div>'
+    +   '<div class="dksec"><h2>Property · Propiedad</h2>'
+    +     '<div class="dkrow"><span class="lbl">Address / Dirección</span><span class="v">'+_dfHtml(f.propAddr)+'</span></div>'
+    +     '<div class="dkrow"><span class="lbl">County / Condado</span><span class="v">'+_dfHtml(f.county)+'</span></div>'
+    +     '<div class="dkrow"><span class="lbl">Parcel / Folio</span><span class="v">'+_dfHtml(f.folio)+'</span></div>'
+    +   '</div>'
+    +   '<div class="dksec"><h2>Court file · Expediente</h2>'
+    +     '<div class="dkrow"><span class="lbl">Case number / Número de caso</span><span class="v">'+_dfHtml(f.caseNo)+'</span></div>'
+    +     '<div class="dkrow"><span class="lbl">Plaintiff of record / Demandante</span><span class="v">'+_dfHtml(f.plaintiff)+'</span></div>'
+    +     '<div class="dkrow"><span class="lbl">Judgment amount / Monto de sentencia</span><span class="v">'+_dfHtml(f.judgAmt)+'</span></div>'
+    +     '<div class="dkrow"><span class="lbl">Scheduled sale date / Fecha de subasta</span><span class="v">'+_dfHtml(f.saleDate)+'</span></div>'
+    +     '<div class="dkmini">EN: The plaintiff of record may be different from the current note holder. Call the plaintiff\'s attorney (or servicer) for today\'s exact payoff — this figure is as of the judgment date only.<br>ES: El demandante de registro puede ser diferente del actual tenedor del pagaré. Llame al abogado del demandante (o al servicer) para el saldo exacto de hoy — esta cifra es solo a la fecha de la sentencia.</div>'
+    +   '</div>'
+    +   '<div class="dksec"><h2>Legal framework · Marco legal</h2>'
+    +     '<div class="dkq">EN: The public sale procedure for Florida foreclosures is set by Florida Statutes Chapter 45 — specifically §45.031 (judicial sales procedure) and §45.032-§45.033 (surplus funds). Only a licensed Florida attorney or the county Clerk of Court can walk you through what applies to your specific case.</div>'
+    +     '<div class="dkq">ES: El procedimiento de subasta pública para ejecuciones en Florida se rige por el Capítulo 45 de los Estatutos de Florida — en particular §45.031 (procedimiento de subasta judicial) y §45.032-§45.033 (fondos excedentes). Solo un abogado con licencia en Florida o el Secretario del Tribunal puede explicarle lo que aplica a su caso específico.</div>'
+    +   '</div>'
+    +   '<div class="dkfoot">Public record locator: '+_dfHtml(f.docket)+' · Prepared '+esc(f.todayLong)+'. Not affiliated with the court or with the plaintiff. No sale-date guarantee.</div>'
+    + '</div>';
+  return _docShell('Docket snapshot — '+(r.addr||r.case), body, {key:'docket-snap'});
+}
+function openDocketSnapshot(caseId){
+  var r = DATA.find(function(x){return x.case===caseId;});
+  var gate = _docGate(r);
+  if(!gate.ok){
+    return _openDoc(_docShell('Docket Snapshot — blocked',
+      '<div class="doc"><h1>Not available for this lead</h1><p>🔒 '+esc(gate.why)+'</p></div>',
+      {key:'docket-blocked'}));
+  }
+  _docLog(r.case, 'docket-snap', 'bi');
+  return _openDoc(genDocketSnapshot(r));
+}
+
+/* ============================================================================================
+   OWNER INFORMATION SHEET — bilingual, statute-quote only. NO computed private-sale net range,
+   NO reinstatement quote — deleted per legal review. Only Scenario B (surplus) survives, as
+   a statutory framework quote. Signed tear-off receipt at bottom for the owner's own records
+   (not a contract — "I received this sheet, no one asked me to sign anything today").
+   ============================================================================================ */
+function genOwnerInfoSheet(r){
+  var f = _docFields(r);
+  var body = ''
+    + '<style>'
+    +   '.oi{max-width:8.5in;margin:14px auto;background:#fff;padding:28px 40px;border-radius:8px;box-shadow:0 2px 12px rgba(11,23,48,.08);font:15px/1.6 Georgia,serif;color:#111}'
+    +   '.oih{font:800 22px/1.2 Arial,sans-serif;margin:0}'
+    +   '.oisub{color:#5b6472;font-size:13px;margin:3px 0 14px;padding-bottom:10px;border-bottom:1px solid #ddd}'
+    +   '.oialert{background:#fff8e1;border:2px solid #C6A14B;padding:12px 15px;border-radius:6px;font:600 13px Arial,sans-serif;color:#7a5a10;margin:14px 0}'
+    +   '.oialert .en{display:block}.oialert .es{display:block;margin-top:8px;padding-top:8px;border-top:1px solid rgba(198,161,75,.3)}'
+    +   '.oisec{margin:18px 0}.oisec h2{font:700 12px Arial,sans-serif;letter-spacing:.1em;text-transform:uppercase;color:#8a94a8;margin:0 0 8px}'
+    +   '.oip{margin:8px 0}'
+    +   '.oiq{background:#fbfaf6;border-left:4px solid #0B1730;padding:11px 14px;font-style:italic;color:#334155;margin:8px 0;font-size:13.5px}'
+    +   '.oiresc{background:#eaf5ec;border-left:4px solid #286c34;padding:11px 14px;margin:12px 0;font-weight:600;color:#0e1b33;font-size:14px}'
+    +   '.oirec{margin-top:26px;padding:16px;border:2px dashed #8a94a8;border-radius:8px;background:#fbfaf6}'
+    +   '.oirec h3{margin:0 0 8px;font:700 12px Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#5b6472}'
+    +   '.oiline{border-bottom:1px solid #222;height:.45in;margin:8px 0 4px}'
+    +   '.oictl{font-size:11px;color:#5b6472}'
+    + '</style>'
+    + '<div class="oi">'
+    +   '<h1 class="oih">Information for Florida homeowners in foreclosure · Información para dueños en ejecución</h1>'
+    +   '<div class="oisub">'+_dfHtml(f.propAddr)+' · Case '+_dfHtml(f.caseNo)+'</div>'
+    +   '<div class="oialert">'
+    +     '<span class="en"><b>This document is not an offer. It is not legal advice. No one is asking you to sign a contract today.</b> Every number specific to your case must come from your loan servicer or a Florida attorney — this document cannot calculate it for you.</span>'
+    +     '<span class="es"><b>Este documento NO es una oferta. No es asesoría legal. Nadie le está pidiendo que firme un contrato hoy.</b> Todo número específico de su caso debe venir de su prestamista o de un abogado de Florida — este documento no puede calcularlo por usted.</span>'
+    +   '</div>'
+    +   '<div class="oisec"><h2>If you want to KEEP the home · Si quiere QUEDARSE con la casa</h2>'
+    +     '<p class="oip"><b>Reinstatement / Reinstalación:</b></p>'
+    +     '<p class="oip">EN: Call your loan servicer and ask for the exact reinstatement figure (past-due payments + fees). <b>Only your servicer can give you this number.</b> This document cannot calculate it.</p>'
+    +     '<p class="oip">ES: Llame a su prestamista y pida la cifra exacta de reinstalación (pagos atrasados + cargos). <b>Solo su prestamista puede darle este número.</b> Este documento no puede calcularlo.</p>'
+    +     '<p class="oip">EN: Loan modification, forbearance, and repayment plans are separate options — a HUD-approved counselor at <b>800-569-4287</b> can walk you through them for free.</p>'
+    +     '<p class="oip">ES: Modificación del préstamo, indulgencia y planes de pago son opciones separadas — un consejero HUD al <b>800-569-4287</b> puede explicárselas gratis.</p>'
+    +   '</div>'
+    +   '<div class="oisec"><h2>If the property sells at auction · Si la propiedad se vende en subasta</h2>'
+    +     '<div class="oiq">EN: Under Florida Statutes §45.032, when a foreclosure sale produces MORE money than is owed on the case, the extra ("surplus") is deposited with the Clerk of Court. The statute creates a REBUTTABLE PRESUMPTION that the owner of record at the time the Certificate of Title issued is the person entitled to the surplus — AFTER any subordinate lienholders are paid. This is public court money.</div>'
+    +     '<div class="oiq">ES: Bajo el Estatuto de Florida §45.032, cuando una subasta produce MÁS dinero del que se debe en el caso, el excedente ("surplus") se deposita con el Secretario del Tribunal. El estatuto crea una PRESUNCIÓN REFUTABLE de que el dueño en el momento en que se emitió el Certificado de Título es la persona con derecho al excedente — DESPUÉS de que se paguen los acreedores subordinados. Es dinero público del tribunal.</div>'
+    +     '<div class="oiresc">EN: Surplus is NOT paid automatically. You must file a Motion for Surplus Funds. A Florida attorney reviews your specific case — ask whether you qualify. Many attorneys handle surplus recovery on contingency (no fee unless money is recovered).<br><br>ES: El excedente NO se paga automáticamente. Debe presentar una Moción de Fondos Excedentes. Un abogado de Florida revisa su caso específico — pregunte si califica. Muchos manejan la recuperación por contingencia (sin cobro a menos que se recupere el dinero).</div>'
+    +   '</div>'
+    +   '<div class="oisec"><h2>Free help · Ayuda gratuita</h2>'
+    +     '<p class="oip"><b>HUD housing counselor / Consejero de vivienda HUD:</b> <b>800-569-4287</b></p>'
+    +     '<p class="oip"><b>Florida Bar Lawyer Referral / Referencia de Abogados FL:</b> <b>800-342-8011</b></p>'
+    +     '<p class="oip"><b>Florida AG foreclosure-rescue fraud line / Línea antifraude FL:</b> <b>866-966-7226</b></p>'
+    +   '</div>'
+    +   '<div class="oirec"><h3>Receipt · Recibo</h3>'
+    +     '<p class="oip" style="font-size:13.5px">EN: I received this information sheet today. I understand it is NOT an offer, and no one asked me to sign a contract. I understand I can call HUD, the Florida Bar, or my own attorney at any time.<br>ES: Recibí esta hoja informativa hoy. Entiendo que NO es una oferta, y nadie me pidió firmar un contrato. Entiendo que puedo llamar a HUD, al Colegio de Abogados de FL, o a mi propio abogado en cualquier momento.</p>'
+    +     '<div class="oiline"></div><div class="oictl">Signature / Firma &nbsp;·&nbsp; Date / Fecha</div>'
+    +   '</div>'
+    +   '<div style="margin-top:14px;font-size:11px;color:#5b6472;text-align:center">DEALFLOW · Prepared '+esc(f.todayLong)+' · Not affiliated with the court or with the plaintiff.</div>'
+    + '</div>';
+  return _docShell('Owner information — '+(r.addr||r.case), body, {key:'owner-info'});
+}
+function openOwnerInfoSheet(caseId){
+  var r = DATA.find(function(x){return x.case===caseId;});
+  var gate = _docGate(r);
+  if(!gate.ok){
+    return _openDoc(_docShell('Owner Info — blocked',
+      '<div class="doc"><h1>Not available for this lead</h1><p>🔒 '+esc(gate.why)+'</p></div>',
+      {key:'owner-info-blocked'}));
+  }
+  _docLog(r.case, 'owner-info', 'bi');
+  return _openDoc(genOwnerInfoSheet(r));
+}
+
 // listen for outcome logging coming back from the Dial-Ready tab — the workflow's #1 pick.
 // The Dial-Ready tab shows the 6-button outcome bar right under the tap-to-dial buttons; when
 // tapped, it posts {dialoutcome:{c,out}} back here so the SAME code path used by the after-call
@@ -6566,6 +6960,13 @@ window.addEventListener('message', function(ev){
   try { if(typeof render === 'function') render(); } catch(e){}
   if(typeof _shareToast === 'function')
     _shareToast('Logged: '+spec.lbl+' — '+(r.oname||r.owners||r.case).split(';')[0]);
+});
+// listen for "mark under contract" toggle coming back from the Assignment Package tab
+window.addEventListener('message', function(ev){
+  var d = ev && ev.data && ev.data.assignContract; if(!d || !d.c) return;
+  _toggleContract(d.c);
+  try{ render(); }catch(e){}
+  if(typeof _shareToast==='function') _shareToast('Marked as UNDER CONTRACT — re-open Assignment to generate the buyer pitch.');
 });
 
 /* ============================================================================================
