@@ -1341,6 +1341,26 @@ def make_tracker(leads):
         except Exception as e:
             print(f"code_liens.json skipped ({e})")
 
+    # bake the PropStream overlay (propstream_import.py, CSV bridge — PropStream has no API).
+    # Advisory context on leads we already have: their AVM vs ours, open-loan balance, distress
+    # flags we cannot scrape (divorce, bankruptcy, tax-delinquent). psPhones/psEmails stay
+    # QUARANTINED — no DNC scrub to vouch for, so they never enter r.phones (FTSA).
+    _psf = os.path.join(HERE, 'propstream_overlay.json')
+    if os.path.exists(_psf):
+        try:
+            _ps = json.load(open(_psf, encoding='utf-8')); _pn = 0
+            for _r in slim:
+                _h = _ps.get(_r.get('case', ''))
+                if _h:
+                    for _k in ('psValue', 'psEquity', 'psOpenLoans', 'psDistress', 'psPhones', 'psEmails', 'psJoin'):
+                        if _h.get(_k) not in (None, '', [], 0):
+                            _r[_k] = _h[_k]
+                    _pn += 1
+            if _pn:
+                print(f"propstream: overlay merged onto {_pn} lead(s)")
+        except Exception as e:
+            print(f"propstream_overlay.json skipped ({e})")
+
     # bake lat/lng from geocode_cache.json (geo_enrich.py, keyless US Census) so the board's origin-
     # anchored door route can sort deals by REAL distance and expand outward from home.
     _gcf = os.path.join(HERE, 'geocode_cache.json')

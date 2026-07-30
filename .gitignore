@@ -42,13 +42,21 @@ site.pass
 skiptrace_results.json
 # lp_addresses.json
 # code-enforcement hits (folio+violation for named owners) — public repo, keep it out
-code_liens.json — resolved street addresses + owner-of-record names for 125 named individuals
+code_liens.json
+# PropStream exports + derived overlays: owner PII on a PUBLIC repo — never commit
+propstream/
+propstream_overlay.json
+propstream_leads.json — resolved street addresses + owner-of-record names for 125 named individuals
 # in foreclosure. This repo is PUBLIC. It is derived from public records, but publishing a
 # ready-made list of distressed homeowners with their home addresses is a different act from those
 # records existing on a county server. Same reason skiptrace_results.json is here.
 lp_addresses.json
 # code-enforcement hits (folio+violation for named owners) — public repo, keep it out
 code_liens.json
+# PropStream exports + derived overlays: owner PII on a PUBLIC repo — never commit
+propstream/
+propstream_overlay.json
+propstream_leads.json
 tps_cookies.txt
 site.codes
 tracerfy.key
