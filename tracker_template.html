@@ -2224,6 +2224,40 @@ let unlockName = '';   // name sealed in the matching access-code blob (for the 
 const LS = 'fcLeadNotes';
 let notes = {};
 try { notes = JSON.parse(localStorage.getItem(LS) || '{}'); } catch(e) {}
+/* ---- SERVER OPT-OUT LEDGER --------------------------------------------------------------------
+   Baked from optouts.json at build time. Until this existed, every opt-out lived ONLY in this
+   browser's localStorage: an owner who put "please stop" in writing was suppressed on one device
+   and callable on every other one — a teammate's phone, a reinstall, a second profile. That is an
+   FTSA exposure per message and, more to the point, a person who asked to be left alone not being
+   left alone.
+
+   THE MERGE IS ONE-WAY ON PURPOSE. The server can ADD an opt-out; it can never clear one. A local
+   opt-out that has not yet been exported to the ledger must survive, and a stale server file must
+   never resurrect somebody as callable. When the two disagree, the more restrictive wins — always.
+   Nothing else on the note is touched: status/optout only, so local touches, follow-ups and
+   research on that lead stay exactly as they were. */
+const SERVER_OPTOUTS = __OPTOUTS__;
+(function(){
+  try {
+    var added = 0;
+    Object.keys(SERVER_OPTOUTS || {}).forEach(function(c){
+      var srv = SERVER_OPTOUTS[c] || {};
+      var n = notes[c] = notes[c] || {status:'', note:''};
+      var already = n.optout || String(n.status||'').toUpperCase() === 'DO NOT CONTACT';
+      if(!n.optout) n.optout = srv.optout || _today();
+      if(String(n.status||'').toUpperCase() !== 'DO NOT CONTACT') n.status = 'DO NOT CONTACT';
+      if(!already){
+        added++;
+        n.optlog = n.optlog || [];
+        n.optlog.push({d:(srv.optout||''), src:'server-ledger', ts:Date.now()});
+      }
+    });
+    // Persist so the suppression survives the next load even if the ledger later disappears —
+    // an opt-out is not something that should depend on a file still being present.
+    if(added && typeof save === 'function') save();
+    if(added) console.info('[dealflow] '+added+' opt-out(s) applied from the server ledger');
+  } catch(e){}
+})();
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';

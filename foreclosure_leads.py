@@ -904,6 +904,20 @@ def _haversine_mi(la1, lo1, la2, lo2):
     a = math.sin(dla/2)**2 + math.cos(la1*t) * math.cos(la2*t) * math.sin(dlo/2)**2
     return 2 * R * math.asin(math.sqrt(a))
 
+def _money(v):
+    """'$225,577.00' | 225577 | None -> int. The county scrapes hand back formatted currency
+    strings; every downstream consumer wants a number, and a string silently fails every
+    comparison it is used in rather than raising."""
+    if v is None or v == '':
+        return 0
+    if isinstance(v, (int, float)):
+        return int(v)
+    try:
+        return int(float(re.sub(r'[^0-9.\-]', '', str(v)) or 0))
+    except Exception:
+        return 0
+
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -1000,7 +1014,15 @@ def make_tracker(leads):
             'auction': r.get('AuctionDate',''), 'days': r.get('days_to_auction',0),
             'case': r.get('Case #',''), 'owners': r.get('owners',''),
             'addr': _clean_addr(r.get('Address','')), 'mail': _clean_addr(r.get('mailing_address','')),
-            'value': r.get('market_value',0) or 0, 'assessed_value': r.get('assessed_value',0) or 0, 'judg': r.get('judgment',0) or 0,
+            # assessed_value: the Miami-Dade scrape writes the TITLE-CASE key 'Assessed Value' as a
+            # formatted string ("$225,577.00"); nothing on this path has ever set the lowercase key
+            # this line used to read, so all 350 MD rows shipped assessed_value=0 while 201 of them
+            # carried a real number in leads_final.json. Broward/Palm Beach were unaffected
+            # (county_leads.py sets it properly), which is why the gap looked like a county quirk
+            # rather than a key typo. Accept either key and either shape.
+            'value': r.get('market_value',0) or 0,
+            'assessed_value': _money(r.get('assessed_value') or r.get('Assessed Value')),
+            'judg': r.get('judgment',0) or 0,
             'eq': r.get('equity_pct',0), 'eqfake': bool(r.get('eq_fake')), 'hs': bool(r.get('homestead')),
             # condo -> the displayed equity is a GROSS upper bound: a special assessment (40-yr recert) or a
             # 2nd mortgage can erase it and neither is in public data. Drives the "verify equity" caveat + a
@@ -1278,6 +1300,15 @@ def make_tracker(leads):
                 if _ph and _ph.get('phones'):
                     _d['phones'] = [p.get('number') for p in _ph['phones'] if p.get('number')][:4]
                     _d['phdnc'] = [bool(p.get('dnc')) for p in _ph['phones']][:4]
+                    # phtype was dropped here while the Miami-Dade merge above (line ~1110) kept it.
+                    # skiptrace.py stores a per-phone type and 447 of the Broward/Palm Beach numbers
+                    # come back 'Land Line' — but with the array missing, both consumers
+                    # (textablePhones and the row's text button) DEFAULT TO MOBILE, so the board
+                    # offered a Text button on hundreds of landlines. Those texts go nowhere and
+                    # the operator reads the silence as "they ignored me" instead of "that was a
+                    # landline". Same expression as the MD path so the two cannot drift again.
+                    _d['phtype'] = ['mobile' if (p.get('type') or '').lower().startswith('mob') else 'landline'
+                                    for p in _ph['phones']][:4]
                     _d['emails'] = (_ph.get('emails') or [])[:3]
             slim.extend(xl)
             _nl = sum(1 for _d in xl if _d.get('orliens'))
@@ -1512,6 +1543,43 @@ def make_tracker(leads):
     tpl = tpl.replace('__REPLIES__', _esc_json(_replies))
     if _replies:
         print(f'replies: {len(_replies)} owner reply/replies merged')
+
+    # ---- SERVER-SIDE OPT-OUT LEDGER -----------------------------------------------------------
+    # optouts.json is the WRITTEN record of who told us to stop. cadence.py writes it, replies.py
+    # tells the operator to act on it, and _carlos_route.py refuses to route a door to anyone in
+    # it -- but until now make_tracker never opened the file, so the BOARD never saw it. The whole
+    # opt-out suppression machinery in the page (logTouch's preventive guard, the Doc Room gate,
+    # the Morning Worker's eligibility test, Closers, the daily plan) was fed exclusively by
+    # localStorage `notes`, which lives on ONE browser profile on ONE device.
+    # Concretely, today: Norma Hendy (CACE-25-005200) replied "Please stop" in writing on
+    # 2026-07-28. She is suppressed only where that JSON was hand-imported. Any other device, any
+    # teammate, any reinstall -- she is a callable lead again, and every contact after a written
+    # opt-out is an FTSA exposure (~$500-1,500 per message) plus the thing itself: a person who
+    # asked to be left alone, not being left alone.
+    # Baked in here so suppression travels with the page. Merge is SAFETY-ONE-WAY on the client:
+    # the server can add an opt-out, never clear one.
+    _optouts = {}
+    _of = os.path.join(HERE, 'optouts.json')
+    if os.path.exists(_of):
+        try:
+            _raw_oo = json.load(open(_of, encoding='utf-8')) or {}
+            # the file is a notes-export envelope {_dealflow_notes, exported, device, notes:{...}}
+            _oo_notes = _raw_oo.get('notes') if isinstance(_raw_oo, dict) else None
+            if not isinstance(_oo_notes, dict):
+                _oo_notes = _raw_oo if isinstance(_raw_oo, dict) else {}
+            for _c, _n in _oo_notes.items():
+                if not isinstance(_n, dict):
+                    continue
+                _st = str(_n.get('status') or '').upper()
+                if _n.get('optout') or _st in ('DO NOT CONTACT', 'OPTED OUT'):
+                    # carry only what suppression needs — never the free-text note (it can quote
+                    # the owner verbatim and this file ships inside a page that leaves the machine)
+                    _optouts[_c] = {'optout': _n.get('optout') or '', 'status': _n.get('status') or 'DO NOT CONTACT'}
+        except Exception as e:
+            print(f'optouts.json unreadable ({e}) — board falls back to device-local suppression only')
+    tpl = tpl.replace('__OPTOUTS__', _esc_json(_optouts))
+    if _optouts:
+        print(f'opt-outs: {len(_optouts)} owner(s) baked in from the server ledger (suppressed on EVERY device)')
 
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would
