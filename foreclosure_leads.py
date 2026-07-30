@@ -1501,6 +1501,17 @@ def make_tracker(leads):
     # failed to boot. Both new placeholders are resolved here, before either copy is written.
     tpl = tpl.replace('__BUILTAT__', datetime.now().strftime('%Y-%m-%dT%H:%M'))
     tpl = tpl.replace('__ZIPCENT__', _esc_json(_zip_centroids(slim)))
+    # Owner replies detected by replies.py (gitignored replies.json, written from IMAP). Absent
+    # until the operator adds gmail.key -- and an empty table is the honest state: the Proof Sheet
+    # then reads "awaiting reply" for every send instead of implying nobody wrote back.
+    _replies = {}
+    _rf = os.path.join(HERE, 'replies.json')
+    if os.path.exists(_rf):
+        try: _replies = json.load(open(_rf, encoding='utf-8')) or {}
+        except Exception: _replies = {}
+    tpl = tpl.replace('__REPLIES__', _esc_json(_replies))
+    if _replies:
+        print(f'replies: {len(_replies)} owner reply/replies merged')
 
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would
