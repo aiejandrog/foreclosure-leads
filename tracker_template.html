@@ -2089,6 +2089,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="nextup" class="abtn nextup-btn" title="Hands you the ONE lead to work right now and puts its number in front of you — no scanning, no deciding. Ranked by deal value AND by what you've already done: follow-ups you set come due first, leads you already touched today drop out, and anything you filed as Seen is gone. Tap again for the next one."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Next up<span class="nun"></span></button>
 <button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
 <button id="nearmebtn" class="abtn near-btn" onclick="openNearMe()" title="NEAR ME — build Carlos a door run. Start from your GPS or a typed ZIP, pick how many doors (10/15/20), and export the same bilingual Carlos PDF packet. Miami-Dade ONLY (gas). Auto-excludes: active bankruptcy stays (federal violation to knock), already-sold-via-sibling-case, opted-out, and any lead whose coordinate is not a real street-level geocode."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near Me</button>
+<button id="replybtn" class="abtn" onclick="openReplyInbox()" title="REPLY INBOX — every owner who wrote back, STOP requests first, then soonest sale. A reply outranks every score and tier on this board. Fills from your own ✉ They replied flags, and automatically from replies.py once gmail.key holds a real App Password."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>Replies<span class="replyn"></span></button>
 <button id="proofbtn" class="abtn" onclick="openProofSheet('today')" title="PROOF SHEET — the receipt of what actually went out. Reprints the VERBATIM subject and body of every message sent, timestamped, with reply status beside each one, plus the full activity log. Printable. Shift-click for all-time instead of today."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M9 16h6M9 8h2"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>Proof sheet</button>
 <button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — opens a queue tab of up to 20 leads (Tier A/B, sale 3-45 days out, not touched in 72 hours). One card at a time: tap Email / Text / WP-lookup to hand the lead off to the existing sender in a new tab, tap Done to log worked + auto-advance to next lead. Nothing auto-sends (TCPA/FTSA rails intact); you tap send yourself. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker</button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
@@ -3720,6 +3721,10 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
     + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — bilingual door folder Carlos may print + hand over (identity, resources, info sheet, intake, consent, visit record). No homeowner signature at a door. Deeds/POAs/leasebacks are COUNSEL — the hub lists them, does not generate them.">📁 Doc Room</button>'
     + '<button type="button" class="csactbtn" onclick="openDialReady(\''+caseEsc+'\')" title="Dial-Ready Card — the 5-second briefing you read WHILE dialing. Bilingual EN/ES toggle, 3-beat opener in big type, five facts you must not stumble on, tap-to-dial buttons for every non-DNC number. Same gate as Doc Room.">🎯 Dial-Ready</button>'
+    + (function(){ var rep=_isReplied(r);
+        return '<button type="button" class="csactbtn'+(rep?' csact-save on':'')+'" onclick="_markReplied(\''+caseEsc+'\',event)" '
+          + 'title="Flag that this owner WROTE BACK. A reply is the warmest signal on the board — it jumps them to the top of the Reply inbox, ahead of every score and tier. Works with no setup; replies.py fills this in automatically once gmail.key holds a real App Password.">'
+          + (rep ? '✅ Replied' : '✉ They replied') + '</button>'; })()
     + '<button type="button" class="csactbtn" onclick="openRentalModel(\''+caseEsc+'\')" title="Rental cash-flow model — interactive worksheet with live math. Answers &quot;does the rent pay off the property?&quot; Purchase price + rehab + HOA + tax + insurance + hold months. Verdict: YES if payback ≤ 10 years, MAYBE if ≤ 20, NO otherwise. Internal only.">📊 Rental Model</button>'
     + '<button type="button" class="csactbtn" onclick="openDealSnapshot(\''+caseEsc+'\')" title="30-Second Deal Snapshot — Ask-Jose visual. Address + urgency chip + debt stack + ARV band + best exit one-liner + auto red-flag banners. INTERNAL — Do Not Share With Homeowner banner at top so a stray forward can\'t misfile it. No bilingual — Jose reads English.">⚡ Snapshot</button>'
     + '<button type="button" class="csactbtn" onclick="openAssignPackage(\''+caseEsc+'\')" title="Assignment Package — post-contract buyer/lender pitch. Fires only when the lead is marked as UNDER CONTRACT (opens with a toggle prompt otherwise). ARV shown as a range, buyer profit as a range, amber &quot;subject to court&quot; banner on any BK case.">💼 Assignment</button>'
@@ -7759,6 +7764,114 @@ function _wlog(caseId, action, detail, ok){
 }
 // CONTACT MEMORY — the answer to "who have I already reached?", read straight off the durable
 // touch ledger so it survives a cleared activity feed and agrees with what the board shows.
+/* ---- REPLY INBOX — the warmest signal in the system, and until now it had no home -------------
+   A reply means someone in foreclosure chose to write back. That outranks every score, tier and
+   ARV on the board. Two independent sources feed it, deliberately:
+     REPLIES[...]        detected by replies.py over IMAP (automatic, needs gmail.key)
+     notes[c].replied    marked by hand from the call sheet (works TODAY, no credentials)
+   The manual path exists because reply tracking should not be blocked on a Google App Password —
+   he can flag "they wrote back" the moment it happens and the inbox is useful immediately.
+   -------------------------------------------------------------------------------------------- */
+function _isReplied(r){
+  if(!r || !r.case) return null;
+  var n = (typeof notes!=='undefined' && notes[r.case]) || {};
+  if(n.replied) return {src:'manual', when:n.replied, note:n.repliedNote||'', stop:!!n.repliedStop};
+  var auto = _replyFor(r.case, (r.emails||[])[0]);
+  if(auto) return {src:'email', when:auto.when||'', note:auto.subject||'', stop:!!auto.stop, n:auto.n||1};
+  return null;
+}
+function _markReplied(caseId, evt){
+  if(evt) evt.preventDefault();
+  var n = notes[caseId] = notes[caseId]||{status:'',note:''};
+  if(n.replied){ delete n.replied; delete n.repliedNote; delete n.repliedStop; }
+  else {
+    n.replied = _nowTS();
+    // A reply is a live conversation — surface it in the funnel immediately.
+    if(!n.status || n.status==='' ) n.status = 'Called - talked';
+    n.touches = n.touches||[];
+    n.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'email', out:'OWNER REPLIED'});
+    _wlog(caseId, 'done', 'OWNER REPLIED — marked by hand', true);
+  }
+  if(typeof save==='function') save();
+  try{ render(); }catch(e){}
+  if(typeof _shareToast==='function')
+    _shareToast(n.replied ? 'Marked as REPLIED — it is at the top of the Reply inbox now.' : 'Reply flag cleared.');
+}
+function _replyList(){
+  var out = [];
+  DATA.forEach(function(r){
+    var rep = _isReplied(r);
+    if(rep) out.push({r:r, rep:rep});
+  });
+  // STOP replies first (a legal obligation beats a warm lead), then soonest sale.
+  out.sort(function(a,b){
+    if(!!b.rep.stop !== !!a.rep.stop) return (b.rep.stop?1:0)-(a.rep.stop?1:0);
+    var da = (typeof a.r.days==='number'?a.r.days:9999), db = (typeof b.r.days==='number'?b.r.days:9999);
+    return da-db;
+  });
+  return out;
+}
+function genReplyInbox(){
+  var list = _replyList();
+  var stops = list.filter(function(x){return x.rep.stop;}).length;
+  function card(x){
+    var r = x.r, rep = x.rep, chip = _urgencyChip(r.days);
+    var ph = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); })[0] || '';
+    var em = (r.emails||[])[0] || '';
+    return '<div class="rbcard'+(rep.stop?' stop':'')+'">'
+      + (rep.stop ? '<div class="rbstop">&#9940; THIS REPLY CONTAINS A STOP REQUEST — add them to the opt-out ledger and do not contact again</div>' : '')
+      + '<div class="rbtop">'
+      +   '<div><div class="rbname">'+esc((r.oname||r.owners||'').split(';')[0]||r.case)+'</div>'
+      +     '<div class="rbaddr">'+esc(r.addr||'')+'</div></div>'
+      +   '<div style="text-align:right"><span class="rbchip" style="color:'+chip.c+';background:'+chip.bg+'">'+esc(chip.t)+'</span>'
+      +     '<div class="rbsrc">'+(rep.src==='email'?'&#9993; detected in inbox':'&#9998; marked by you')+'</div></div>'
+      + '</div>'
+      + (rep.note ? '<div class="rbnote">'+esc(String(rep.note).slice(0,200))+'</div>' : '')
+      + '<div class="rbacts">'
+      +   (ph ? '<a class="rbbtn call" href="tel:+1'+esc(String(ph).replace(/\D/g,''))+'">&#128222; Call '+esc(fmtPhone(ph))+'</a>' : '<span class="rbbtn dis">no phone traced</span>')
+      +   (em ? '<a class="rbbtn" href="mailto:'+esc(em)+'">&#9993; '+esc(em)+'</a>' : '')
+      +   '<a class="rbbtn" href="#case='+esc(r.case)+'" onclick="closeReplyInbox&&closeReplyInbox()">Open call sheet &rarr;</a>'
+      + '</div></div>';
+  }
+  var body = ''
+    + '<style>'
+    +   '.rb{max-width:760px;margin:0 auto;padding:22px 24px 44px;font:15px/1.55 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33}'
+    +   '.rbh{border-bottom:2px solid #0B1730;padding-bottom:11px;margin-bottom:16px}'
+    +   '.rbh h1{margin:0 0 3px;font:800 23px "Segoe UI",Arial,sans-serif}'
+    +   '.rbh .s{color:#5b6472;font-size:13px}'
+    +   '.rbcard{border:1px solid #e2e6ee;border-left:4px solid #286c34;border-radius:10px;padding:15px 17px;margin:0 0 13px;background:#fff}'
+    +   '.rbcard.stop{border-left-color:#8a1c1c;background:#fff5f4}'
+    +   '.rbstop{background:#8a1c1c;color:#fff;padding:8px 11px;border-radius:6px;font:700 11.5px "Segoe UI",Arial,sans-serif;margin-bottom:11px}'
+    +   '.rbtop{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px}'
+    +   '.rbname{font:800 19px "Segoe UI",Arial,sans-serif}'
+    +   '.rbaddr{color:#5b6472;font-size:13px;margin-top:2px}'
+    +   '.rbchip{display:inline-block;font:800 10.5px "Segoe UI",Arial,sans-serif;letter-spacing:.07em;text-transform:uppercase;padding:4px 9px;border-radius:5px}'
+    +   '.rbsrc{font-size:11px;color:#8a94a8;margin-top:4px}'
+    +   '.rbnote{background:#f6f8fa;border-radius:7px;padding:9px 12px;font:13px/1.5 Georgia,serif;color:#334155;margin-bottom:10px}'
+    +   '.rbacts{display:flex;gap:8px;flex-wrap:wrap}'
+    +   '.rbbtn{display:inline-block;padding:9px 14px;border:1px solid #d5dae4;border-radius:7px;background:#fff;color:#0e1b33;text-decoration:none;font:700 13px "Segoe UI",Arial,sans-serif}'
+    +   '.rbbtn.call{background:#286c34;color:#fff;border-color:#286c34}'
+    +   '.rbbtn.dis{color:#8a94a8;background:#f6f8fa}'
+    +   '.rbempty{padding:38px 24px;text-align:center;background:#fbfaf6;border-radius:11px;color:#5b6472}'
+    +   '.rbempty b{display:block;font-size:17px;color:#0e1b33;margin-bottom:8px}'
+    +   '.rbhow{background:#fff8e1;border-left:4px solid #C6A14B;padding:12px 15px;border-radius:0 7px 7px 0;font-size:12.5px;color:#7a5a10;margin-top:18px;line-height:1.6}'
+    + '</style>'
+    + '<div class="rb"><div class="rbh"><h1>&#9993; Reply inbox</h1>'
+    +   '<div class="s">'+list.length+' owner'+(list.length===1?'':'s')+' wrote back'
+    +   (stops?' &middot; <b style="color:#8a1c1c">'+stops+' contain a STOP request</b>':'')
+    +   ' &middot; STOP requests first, then soonest sale</div></div>'
+    + (list.length ? list.map(card).join('')
+        : '<div class="rbempty"><b>Nobody has written back yet.</b>'
+          + 'When an owner replies, flag it from their call sheet and they land here at the top of your day.<br><br>'
+          + 'A reply is the warmest signal on the board — it outranks every score and tier.</div>')
+    + '<div class="rbhow"><b>Two ways this fills up.</b> '
+    +   'Manually: open any call sheet and tap <b>&#9993; They replied</b> — works right now, no setup. '
+    +   'Automatically: <code>python replies.py</code> checks the sending inbox over IMAP and flags every owner who wrote back '
+    +   '(needs <code>gmail.key</code> with a 16-character Google <b>App Password</b> — an account password will not authenticate).</div>'
+    + '</div>';
+  return _docShell('Reply inbox — '+list.length, body, {key:'replies'});
+}
+function openReplyInbox(){ _docLog('__batch__','reply-inbox','en'); return _openDoc(genReplyInbox()); }
 function _wlogContacted(caseId){
   var n = (typeof notes!=='undefined' && notes[caseId]) || {};
   var ts = n.touches || [];
@@ -9843,6 +9956,17 @@ function render(){
   // live count of what is actually workable RIGHT NOW — shrinks as he works the queue down
   const _nu = document.querySelector('#nextup .nun');
   if(_nu){ const _n = _wqCount(); _nu.textContent = _n ? ' '+_n : ''; }
+  // live reply count on the header button — a reply is the one number worth interrupting for,
+  // so it renders even when zero-state everywhere else is quiet.
+  try {
+    const _rb = document.querySelector('#replybtn .replyn');
+    if(_rb){ const _rl = _replyList(); const _st = _rl.filter(function(x){return x.rep.stop;}).length;
+      _rb.textContent = _rl.length ? ' '+_rl.length : '';
+      _rb.style.color = _st ? '#8a1c1c' : '';
+      const _btn = document.getElementById('replybtn');
+      if(_btn) _btn.classList.toggle('active', _rl.length > 0);
+    }
+  } catch(e){}
   const prof = rows.filter(r => r._profit > 0);
   const totp = prof.reduce((s,r) => s + r._profit, 0);
   const ds = document.getElementById('dealsum');
