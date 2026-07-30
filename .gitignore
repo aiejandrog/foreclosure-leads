@@ -20,6 +20,7 @@ _*.py
 !_optouttest.py
 !_casestatustest.py
 !_workeremailtest.py
+!_codelientest.py
 _*.html
 _*.json
 _*.txt
@@ -39,11 +40,15 @@ diligence_server.log
 batchdata.key
 site.pass
 skiptrace_results.json
-# lp_addresses.json — resolved street addresses + owner-of-record names for 125 named individuals
+# lp_addresses.json
+# code-enforcement hits (folio+violation for named owners) — public repo, keep it out
+code_liens.json — resolved street addresses + owner-of-record names for 125 named individuals
 # in foreclosure. This repo is PUBLIC. It is derived from public records, but publishing a
 # ready-made list of distressed homeowners with their home addresses is a different act from those
 # records existing on a county server. Same reason skiptrace_results.json is here.
 lp_addresses.json
+# code-enforcement hits (folio+violation for named owners) — public repo, keep it out
+code_liens.json
 tps_cookies.txt
 site.codes
 tracerfy.key

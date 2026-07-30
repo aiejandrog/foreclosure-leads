@@ -239,6 +239,11 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 #aftercall .acx{background:none;border:none;color:var(--muted);font-size:15px;padding:6px 8px}
 #aftercall.hasqueue{bottom:82px}                       /* stack above the work bar, never on top of it */
 /* unresolved parcel — states the truth ("not looked up") instead of faking a $0 property */
+.codechip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
+  border-radius:3px;cursor:help;border:1px solid}
+.codechip.cf{background:#fff5f4;color:#8a1c1c;border-color:#e8bcbc}
+.codechip.cl{background:#fff2d7;color:#7a5a10;border-color:#eadb9f}
+.codechip.co{background:#f6f8fa;color:#5b6472;border-color:#d5dae4}
 .deadchip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
   border-radius:3px;background:#fff5f4;color:#8a1c1c;border:1px solid #e8bcbc;cursor:help}
 .closedchip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
@@ -6472,6 +6477,34 @@ function _unvalued(r){ return !(+r.value||0) && !(+r.arv||0); }
    A computed-but-invisible field is worse than a missing one: the work was paid for, the operator
    believes the row is complete, and the single fact that would have changed the call is sitting in
    memory unread. Both of these are that. */
+function _codeLienChip(r){
+  // A code-enforcement lien never appears in the mortgage chain, so the equity number does not
+  // know about it. This is the junior lien that turns "90% equity" into a loss — surface it hard,
+  // right next to the value, and let the tooltip carry the specifics so the operator can verify the
+  // fine balance before modelling the deal. Miami-Dade only (CCVIOL); other counties render nothing.
+  if(!r || !r.codeConcern) return '';
+  var hits = r.codeliens || [];
+  var lienHits = hits.filter(function(h){ return h.lien; });
+  var detail = hits.slice(0,4).map(function(h){
+    return h.stLabel + (h.problem ? ' — ' + h.problem : '') + (h.lienRef ? ' (OR ' + h.lienRef + ')' : '');
+  }).join(' · ');
+  if(r.codeConcern === 'foreclosing')
+    return ' <span class="codechip cf" title="'
+      + esc('THE COUNTY IS FORECLOSING ON ITS OWN CODE LIEN here (Active LP). This is a separate '
+          + 'foreclosure track from the mortgage — the parcel can be lost to the county over unpaid '
+          + 'code fines. Verify before you touch equity. Cases: ' + detail)
+      + '">⚠ CODE FORECLOSURE</span>';
+  if(r.codeConcern === 'lien')
+    return ' <span class="codechip cl" title="'
+      + esc('RECORDED CODE-ENFORCEMENT LIEN (' + lienHits.length + ') — a junior lien that is NOT in '
+          + 'the mortgage chain and is NOT in the equity number you see. Accrued daily fines attach to '
+          + 'the parcel; a "high equity" read here is optimistic until you pull the payoff. ' + detail)
+      + '">⚠ CODE LIEN</span>';
+  return ' <span class="codechip co" title="'
+    + esc('Open code-enforcement case — fines may be accruing, no lien recorded yet. Not fatal, but '
+        + 'a cost the equity number does not include. ' + detail)
+    + '">CODE CASE</span>';
+}
 function _caseDeadChip(r){
   // Only meaningful on a lead with NO scheduled sale. Measured on this board: all 220 auction
   // leads carrying a clerk status have a FUTURE sale and 180 of them read CLOSED — because
@@ -11126,7 +11159,7 @@ function render(){
           ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
           : '<span class="clamp2 legalline">no address on the filing</span>');
     const prop = '<div class="addrline">'+_addrLine+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_codeLienChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -11191,7 +11224,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_codeLienChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+

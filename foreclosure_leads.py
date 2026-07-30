@@ -1318,6 +1318,29 @@ def make_tracker(leads):
         except Exception as e:
             print(f"skip {_xf}: {e}")
 
+    # bake code-enforcement liens (code_liens.py, free Miami-Dade CCVIOL ArcGIS, folio-keyed). A code
+    # lien is a JUNIOR lien that never shows in the mortgage chain, so a lead reading "90% equity" can
+    # be quietly underwater once the county's accrued fines attach. codeliens = [{case,st,stLabel,
+    # problem,lien,lienRef}]; codeConcern = the worst status on the parcel, for a one-glance chip.
+    _clf = os.path.join(HERE, 'code_liens.json')
+    if os.path.exists(_clf):
+        try:
+            _cl = json.load(open(_clf, encoding='utf-8')); _cn = 0
+            for _r in slim:
+                _f = str(_r.get('folio') or '').strip().replace('-', '')
+                _hits = _cl.get(_f)
+                if _hits:
+                    _r['codeliens'] = _hits[:6]
+                    # worst-first: county-foreclosing > recorded-lien > open/referred
+                    if any(h.get('st') == '9' for h in _hits):   _r['codeConcern'] = 'foreclosing'
+                    elif any(h.get('lien') for h in _hits):       _r['codeConcern'] = 'lien'
+                    else:                                          _r['codeConcern'] = 'open'
+                    _cn += 1
+            if _cn:
+                print(f"code liens: flagged {_cn} lead(s) with an open case or recorded code lien")
+        except Exception as e:
+            print(f"code_liens.json skipped ({e})")
+
     # bake lat/lng from geocode_cache.json (geo_enrich.py, keyless US Census) so the board's origin-
     # anchored door route can sort deals by REAL distance and expand outward from home.
     _gcf = os.path.join(HERE, 'geocode_cache.json')
