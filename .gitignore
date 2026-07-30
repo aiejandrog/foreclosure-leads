@@ -17,6 +17,7 @@ _*.py
 !_lanetest.py
 !_carlos_route.py
 !_stalefixtest.py
+!_optouttest.py
 _*.html
 _*.json
 _*.txt
