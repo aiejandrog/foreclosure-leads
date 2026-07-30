@@ -2022,6 +2022,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="due" class="abtn" title="Your worklist: follow-ups due today or overdue, plus not-yet-contacted leads with an auction within 3 days"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>Due</button>
 <button id="nextup" class="abtn nextup-btn" title="Hands you the ONE lead to work right now and puts its number in front of you — no scanning, no deciding. Ranked by deal value AND by what you've already done: follow-ups you set come due first, leads you already touched today drop out, and anything you filed as Seen is gone. Tap again for the next one."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Next up<span class="nun"></span></button>
 <button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
+<button id="nearmebtn" class="abtn near-btn" onclick="openNearMe()" title="NEAR ME — build Carlos a door run. Start from your GPS or a typed ZIP, pick how many doors (10/15/20), and export the same bilingual Carlos PDF packet. Miami-Dade ONLY (gas). Auto-excludes: active bankruptcy stays (federal violation to knock), already-sold-via-sibling-case, opted-out, and any lead whose coordinate is not a real street-level geocode."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near Me</button>
 <button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — opens a queue tab of up to 20 leads (Tier A/B, sale 3-45 days out, not touched in 72 hours). One card at a time: tap Email / Text / WP-lookup to hand the lead off to the existing sender in a new tab, tap Done to log worked + auto-advance to next lead. Nothing auto-sends (TCPA/FTSA rails intact); you tap send yourself. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker</button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
 <button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
@@ -2119,6 +2120,15 @@ const NL = String.fromCharCode(10);
 const BOM = String.fromCharCode(65279);
 const RAW = __DATA__;
 const BUILT = "__BUILT__";   // this page's content signature — see the stale-copy check in the gate
+const BUILTAT = "__BUILTAT__";   // when the BOARD DATA was built (not when a page is printed)
+// ZIP -> {lat,lng,n} centroids computed at BUILD TIME from our own routable leads. Zero runtime
+// API, no CORS, no key — works inside the encrypted offline file. `n` = how many leads produced
+// the centroid, so the UI can downgrade confidence when it is really just one lead's position.
+// Wrapped in a try so an unsubstituted placeholder degrades to "no ZIP table" instead of throwing
+// a parse-time ReferenceError that kills the entire board (which is exactly what happened on the
+// Desktop copy when this substitution ran after the Desktop write). Same defensive posture as
+// BUILT's `if(!/^[0-9a-f]{12}$/.test(BUILT))` guard in the gate.
+const ZIP_CENT = (function(){ try { return __ZIPCENT__; } catch(e){ return {}; } })();
 let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
 let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
 const LS = 'fcLeadNotes';
@@ -5701,15 +5711,296 @@ function _copyBatch(who){
 // One printable PDF for Carlos: a route sheet (the whole list + names + checkboxes) then a
 // privacy-safe door hanger per property (owner first name + the auction date + call-to-action with
 // the sender's number; the word "foreclosure" never appears on the hanger, per the door-safe rule).
-function _carlosPacket(){
-  var list = _favLeads(); if(!list.length){ _shareToast('Save some deals first'); return; }
+/* ============================================================================================
+   NEAR-ME DOOR RUN — origin resolution, knock-eligibility, routability, and the query.
+   Built 2026-07-29. Every guard below exists because a measurement proved it was needed;
+   the comment names the measurement so nobody "simplifies" the guard away later.
+   ============================================================================================ */
+var MD_BBOX = {la0:25.13, la1:25.99, lo0:-80.88, lo1:-80.11};
+
+// KNOCK ELIGIBILITY. This is the gate that was MISSING from _carlosPacket entirely — the packet
+// took _favLeads() raw and applied zero suppression. Measured against the live board: 46 of the
+// 190 geocoded Miami-Dade leads are must-not-knock — 45 under an ACTIVE 11 U.S.C. §362
+// bankruptcy stay (knocking is a federal violation) and 1 already sold via a sibling case.
+// The local python packet (_carlos_route.py::_live_lead) has always gated these; the browser
+// packet never did. Ported here.
+function _knockEligible(r){
+  if(!r || !r.case) return {ok:false, why:'no lead'};
+  if(r.saleBkAct && !r.saleLift) return {ok:false, why:'ACTIVE §362 BANKRUPTCY STAY — knocking is a federal violation'};
+  if(r.sibclaimed){
+    var s = ((r.sib||[]).find(function(x){return x.sold;})) || {};
+    return {ok:false, why:'ALREADY SOLD via sibling case '+(s.case||'?')+' — owner no longer owns it'};
+  }
+  var n = (typeof notes!=='undefined' && notes[r.case]) || {};
+  var st = String(n.status||'').toUpperCase();
+  if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT') return {ok:false, why:'OPT-OUT LEDGER — all channels closed'};
+  if(n.wrongown) return {ok:false, why:'WRONG OWNER confirmed — re-verify title first'};
+  return {ok:true, why:''};
+}
+// ROUTABILITY. Three conditions, and the third is the one that matters most.
+function _routable(r){
+  if(!r || !r.lat || !r.lng) return {ok:false, why:'no coordinates — cannot be distance-ranked'};
+  if(!(r.lat>=MD_BBOX.la0 && r.lat<=MD_BBOX.la1 && r.lng>=MD_BBOX.lo0 && r.lng<=MD_BBOX.lo1))
+    return {ok:false, why:'coordinate falls OUTSIDE Miami-Dade — bad geocode'};
+  // WHY THE STREET-NUMBER TEST EXISTS AND MUST NOT BE REMOVED: a street-less address gives the
+  // geocoder nothing, so it falls back to a city centroid. Case 2026A00080 is a HOMESTEAD
+  // property whose coordinate landed 0.9 mi from DOWNTOWN MIAMI — 27 miles from the property.
+  // The bbox above does NOT catch it, because downtown Miami is legitimately inside the county.
+  // Only this test catches it. Without it a radius filter ranks that lead "near me" and sends
+  // Carlos on a 54-mile round trip to nothing.
+  if(!/^\s*\d+\s+\S/.test(String(r.addr||'')))
+    return {ok:false, why:'address has no street number — geocode is a city centroid, not the property'};
+  return {ok:true, why:''};
+}
+// ORIGIN RESOLUTION — named tiers, never a silent fallback. Returns a Promise.
+function _resolveOrigin(opts){
+  opts = opts || {};
+  return new Promise(function(resolve){
+    // tier 'zip' — explicit ZIP wins when the operator typed one
+    if(opts.zip){
+      var z = ZIP_CENT[String(opts.zip).trim()];
+      if(z) return resolve({lat:z.lat, lng:z.lng, label:'ZIP '+opts.zip, tier:'zip',
+                            confidence: z.n>=3 ? 'med' : 'low', anchors:z.n});
+      return resolve({lat:ROUTE_ORIGIN.lat, lng:ROUTE_ORIGIN.lng, label:"Carlos's house (ZIP "+opts.zip+" has no leads)",
+                      tier:'home', confidence:'high', anchors:1, note:'ZIP '+opts.zip+' has no routable leads on the board'});
+    }
+    // tier 'gps' — needs a secure context. The HTTPS GitHub Pages copy qualifies; the local
+    // file:// Desktop copy does NOT, so say so instead of hanging on a prompt that never appears.
+    if(opts.gps){
+      if(!navigator.geolocation || !window.isSecureContext){
+        return resolve({lat:ROUTE_ORIGIN.lat, lng:ROUTE_ORIGIN.lng, label:"Carlos's house", tier:'home',
+                        confidence:'high', anchors:1,
+                        note:'GPS unavailable here (needs HTTPS — the local Desktop copy is file://). Using Carlos’s house.'});
+      }
+      var done=false;
+      var t = setTimeout(function(){ if(done) return; done=true;
+        resolve({lat:ROUTE_ORIGIN.lat, lng:ROUTE_ORIGIN.lng, label:"Carlos's house", tier:'home',
+                 confidence:'high', anchors:1, note:'GPS timed out after 8s. Using Carlos’s house.'});
+      }, 8000);
+      navigator.geolocation.getCurrentPosition(function(p){
+        if(done) return; done=true; clearTimeout(t);
+        resolve({lat:p.coords.latitude, lng:p.coords.longitude, label:'your current location',
+                 tier:'gps', confidence:'high', anchors:1,
+                 note: (p.coords.accuracy>3000 ? 'GPS accuracy is only ±'+Math.round(p.coords.accuracy/1609)+' mi (desktop IP lookup). Consider typing a ZIP instead.' : '')});
+      }, function(err){
+        if(done) return; done=true; clearTimeout(t);
+        resolve({lat:ROUTE_ORIGIN.lat, lng:ROUTE_ORIGIN.lng, label:"Carlos's house", tier:'home',
+                 confidence:'high', anchors:1, note:'Location permission denied. Using Carlos’s house.'});
+      }, {enableHighAccuracy:true, timeout:8000, maximumAge:60000});
+      return;
+    }
+    // tier 'home' — the explicit default
+    resolve({lat:ROUTE_ORIGIN.lat, lng:ROUTE_ORIGIN.lng, label:"Carlos's house", tier:'home', confidence:'high', anchors:1});
+  });
+}
+// THE QUERY. Order of operations matters and is deliberate — see the comments.
+function _nearMeRun(cfg){
+  cfg = cfg || {};
+  var origin = cfg.origin, count = +cfg.count || 10, cap = +cfg.radiusCap || 25;
+  // A low-confidence origin (a ZIP whose centroid came from <3 leads) cannot support a tight
+  // radius — its "center" is really just one lead's rooftop. Clamp rather than pretend.
+  var minCap = (origin && origin.confidence==='low') ? 5 : 1;
+  if(cap < minCap) cap = minCap;
+  var ex = {county:0, unroutable:0, ineligible:0, outOfRange:0};
+  var pool = [];
+  DATA.forEach(function(r){
+    // 1. MIAMI-DADE ONLY — hard exclusion, not a sort preference. Gas is the whole reason
+    //    this feature exists; Broward and Palm Beach must be impossible to reach from here.
+    if((r.county||'MIAMI-DADE') !== 'MIAMI-DADE'){ ex.county++; return; }
+    if(!_routable(r).ok){ ex.unroutable++; return; }
+    if(!_knockEligible(r).ok){ ex.ineligible++; return; }
+    var d = _haversine(origin.lat, origin.lng, r.lat, r.lng);
+    if(d > cap){ ex.outOfRange++; return; }
+    r._nmDist = d;
+    pool.push(r);
+  });
+  // Nearest first; at equal distance a real house beats a condo unit, because a unit number is
+  // a lobby buzzer behind a locked door, not a knockable door. (Measured: 6 of the 8 nearest
+  // leads to Carlos's house are condo units.)
+  pool.sort(function(a,b){
+    var dd = a._nmDist - b._nmDist;
+    if(Math.abs(dd) > 0.05) return dd;
+    return (_isUnitAddr(a)?1:0) - (_isUnitAddr(b)?1:0);
+  });
+  return {picked: pool.slice(0, count), origin: origin, excluded: ex,
+          poolSize: pool.length, radiusUsed: cap, clamped: (minCap>1 && cap===minCap)};
+}
+function _isUnitAddr(r){
+  var a = String(r && r.addr || '');
+  if(/\b(APT|UNIT|STE|#)\s*[\w-]+/i.test(a)) return true;
+  // THE DOMINANT PATTERN IN THIS DATA has no APT/UNIT/# keyword at all — the unit number simply
+  // trails the street-type token before the comma. Real examples off the live board:
+  //   "1101 SW 122 AVE 307, MIAMI"      -> unit 307
+  //   "10831 NW 7 ST 9-14, MIAMI"       -> unit 9-14
+  //   "3964 ESTEPONA AVE 5-D-3, DORAL"  -> unit 5-D-3
+  //   "6441 SW 116 CT E97, MIAMI"       -> unit E97
+  //   "18021 BISCAYNE BLVD 1902-2"      -> unit 1902-2
+  // A plain house ends at the street type: "8923 SW 206 ST, MIAMI" -> no unit.
+  if(/\b(ST|AVE|BLVD|CT|TER|LN|DR|PL|WAY|RD|CIR|PKWY|HWY|PLZ|TRL|LOOP)\.?\s+[\w-]+\s*(?:,|$)/i.test(a)) return true;
+  return !!(r && r.condo);
+}
+// Board-data age, for the packet provenance stamp.
+function _boardAgeDays(){
+  if(!/^\d{4}-\d{2}-\d{2}/.test(BUILTAT||'')) return null;
+  var t = Date.parse(BUILTAT.replace(' ','T'));
+  if(!t) return null;
+  return Math.floor((Date.now()-t)/86400000);
+}
+
+// ---- NEAR-ME PANEL (modal on the main tab, so the "Build packet" click is its own gesture) ----
+// GESTURE-TOKEN RULE: geolocation is async. Firing the packet from inside the getCurrentPosition
+// callback loses the user-gesture token and the Blob anchor gets popup-blocked (this is the exact
+// bug _openDoc was created to fix). So: resolve the origin FIRST, render results, and let the
+// operator tap "Build Carlos packet" as a SEPARATE click.
+var _nmLast = null;
+function openNearMe(){
+  var host = document.getElementById('nearmebody');
+  if(!host){
+    var m = document.createElement('div');
+    m.id = 'nearmemodal'; m.className = 'dm';
+    m.innerHTML = '<div class="dm-backdrop" onclick="closeNearMe()"></div><div class="dm-card">'
+      + '<button class="dm-close" type="button" onclick="closeNearMe()" title="Close">&times;</button>'
+      + '<div id="nearmebody"></div></div>';
+    document.body.appendChild(m);
+    host = document.getElementById('nearmebody');
+  }
+  document.getElementById('nearmemodal').classList.add('show');
+  document.body.classList.add('modal-open');
+  _nmRender();
+}
+function closeNearMe(){
+  var m = document.getElementById('nearmemodal');
+  if(m) m.classList.remove('show');
+  document.body.classList.remove('modal-open');
+}
+function _nmZipOptions(){
+  // ONLY ZIPs that actually have routable leads, with counts, so he cannot pick an empty ZIP.
+  // (The tier-A trap: ZIP 33033 is the densest ZIP on the board with 13 routable leads and has
+  // ZERO tier-A leads — a tier-respecting run would return an empty board on the best ZIP.)
+  var counts = {};
+  DATA.forEach(function(r){
+    if((r.county||'MIAMI-DADE')!=='MIAMI-DADE') return;
+    if(!_routable(r).ok || !_knockEligible(r).ok) return;
+    var m = String(r.addr||'').match(/\b(3\d{4})\b/);
+    if(m) counts[m[1]] = (counts[m[1]]||0)+1;
+  });
+  return Object.keys(counts).sort().map(function(z){
+    return '<option value="'+z+'">'+z+' — '+counts[z]+' lead'+(counts[z]===1?'':'s')+'</option>';
+  }).join('');
+}
+function _nmRender(res){
+  var host = document.getElementById('nearmebody'); if(!host) return;
+  var age = _boardAgeDays();
+  var h = '<div class="dm-sec">📍 Near Me — build Carlos a door run</div>';
+  if(age!=null && age>=3)
+    h += '<div class="csbody csgovwarn" style="border-color:#8a1c1c;background:#fff5f4">'
+      +  '<b style="color:#8a1c1c">⚠ Board data is '+age+' days old.</b> Properties may have already sold. '
+      +  'Run the ↻ Refresh before sending Carlos out.</div>';
+  h += '<div class="csbody" style="font-size:13px;color:var(--muted)">Miami-Dade only — Broward and Palm Beach are excluded outright, because gas is the whole point.</div>'
+    + '<div class="csbody" style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end">'
+    +   '<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:3px">Start from</label>'
+    +     '<button type="button" class="csbtn" id="nm-gps">Use my location</button></div>'
+    +   '<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:3px">…or a ZIP</label>'
+    +     '<input list="nm-zips" id="nm-zip" placeholder="33172" style="width:110px;padding:7px 9px;border:1px solid var(--line);border-radius:5px">'
+    +     '<datalist id="nm-zips">'+_nmZipOptions()+'</datalist></div>'
+    +   '<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:3px">Doors</label>'
+    +     '<select id="nm-count" style="padding:7px 9px;border:1px solid var(--line);border-radius:5px">'
+    +       '<option value="10" selected>10</option><option value="15">15</option><option value="20">20</option></select></div>'
+    +   '<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:3px">Max miles</label>'
+    +     '<select id="nm-cap" style="padding:7px 9px;border:1px solid var(--line);border-radius:5px">'
+    +       '<option value="5">5</option><option value="10" selected>10</option><option value="15">15</option><option value="25">25</option></select></div>'
+    +   '<button type="button" class="csbtn" id="nm-find" style="background:var(--ink);color:var(--gold)">Find doors</button>'
+    + '</div>';
+  if(res){
+    var o = res.origin, ex = res.excluded;
+    h += '<div class="csbody csgovwarn" style="border-color:var(--gold);background:var(--gold-soft)">'
+      +  '<b>Centered on '+esc(o.label)+'</b> <span style="font-size:11.5px">('+esc(o.tier)+' · '+esc(o.confidence)+' confidence'
+      +  (o.tier==='zip'?' · '+o.anchors+' anchor lead'+(o.anchors===1?'':'s'):'')+')</span>'
+      +  (o.note ? '<br><span style="font-size:12px;color:#8a1c1c">'+esc(o.note)+'</span>' : '')
+      +  (res.clamped ? '<br><span style="font-size:12px">Radius clamped to '+res.radiusUsed+' mi — a single-anchor ZIP centroid cannot support a tighter search.</span>' : '')
+      +  '</div>';
+    h += '<div class="csbody" style="font-size:12.5px;color:var(--muted)">'
+      +  '<b>'+res.picked.length+'</b> door'+(res.picked.length===1?'':'s')+' selected of <b>'+res.poolSize+'</b> eligible within '+res.radiusUsed+' mi.<br>'
+      +  'Excluded: '+ex.county+' out-of-county · '+ex.unroutable+' no usable street-level coordinate · '
+      +  ex.ineligible+' do-not-knock (BK stay / sold / opted out) · '+ex.outOfRange+' beyond '+res.radiusUsed+' mi.'
+      +  '</div>';
+    if(!res.picked.length){
+      h += '<div class="csbody csgovwarn" style="border-color:#8a1c1c;background:#fff5f4">'
+        +  '<b>Nothing found in range.</b> Widen the radius above and tap Find doors again — '
+        +  'the tool will not widen on its own, because that is how Carlos ends up 20 miles out.</div>';
+    } else {
+      h += '<div class="csdil-tbl-wrap"><table class="csdil-tbl"><tbody>'
+        + res.picked.map(function(r,i){
+            return '<tr><th style="width:34px">'+(i+1)+'</th><td><b>'+esc((r.addr||'').split(',')[0])+'</b>'
+              + (_isUnitAddr(r)?' <span style="font-size:9.5px;background:#eef3fa;color:#3c5b8a;padding:1px 5px;border-radius:3px">UNIT</span>':'')
+              + '<br><span style="font-size:11.5px;color:var(--muted)">'+r._nmDist.toFixed(1)+' mi · sale '+esc(r.auction||'—')
+              + ' · '+esc((r.oname||r.owners||'').split(';')[0])+'</span></td></tr>';
+          }).join('')
+        + '</tbody></table></div>'
+        + '<div class="csfoot"><button type="button" class="shbtn" id="nm-build" '
+        +   'style="background:var(--gold);color:var(--ink);font-weight:800">📄 Build Carlos packet ('+res.picked.length+')</button>'
+        + '<button type="button" class="csbtn" id="nm-route">🚗 Google Maps route</button></div>';
+    }
+  }
+  host.innerHTML = h;
+  // wire — each handler is its own user gesture
+  var g = function(id){ return document.getElementById(id); };
+  if(g('nm-gps')) g('nm-gps').onclick = function(){
+    g('nm-gps').textContent = 'Locating…';
+    _resolveOrigin({gps:true}).then(function(o){
+      _nmLast = _nearMeRun({origin:o, count:+g('nm-count').value, radiusCap:+g('nm-cap').value});
+      _nmRender(_nmLast);
+    });
+  };
+  if(g('nm-find')) g('nm-find').onclick = function(){
+    var z = (g('nm-zip').value||'').trim();
+    _resolveOrigin(z ? {zip:z} : {}).then(function(o){
+      _nmLast = _nearMeRun({origin:o, count:+g('nm-count').value, radiusCap:+g('nm-cap').value});
+      _nmRender(_nmLast);
+    });
+  };
+  // SEPARATE GESTURE — this click is what opens the Blob, so the popup blocker stays happy.
+  if(g('nm-build')) g('nm-build').onclick = function(){
+    if(!_nmLast || !_nmLast.picked.length) return;
+    _carlosPacket(_nmLast.picked, {origin:_nmLast.origin, radiusUsed:_nmLast.radiusUsed});
+    _docLog('__batch__', 'nearme-packet', 'en');
+  };
+  if(g('nm-route')) g('nm-route').onclick = function(){
+    if(!_nmLast || !_nmLast.picked.length) return;
+    if(typeof _buildRoute === 'function') _buildRoute(_nmLast.origin);
+    else if(typeof _doorRoute === 'function') _doorRoute();
+  };
+}
+
+function _carlosPacket(list, meta){
+  // BACKWARD COMPATIBLE: the Saved-batch button calls _carlosPacket() with no arguments and must
+  // keep behaving exactly as before.
+  list = list || _favLeads(); if(!list.length){ _shareToast('Save some deals first'); return; }
+  // SUPPRESSION — the fix for the shipped bug. Anything ineligible is PULLED from the printed
+  // packet and listed with its reason. Never silently dropped: if leads vanish with no
+  // explanation the operator assumes the tool lost them and stops trusting it.
+  var pulled = [];
+  list = list.filter(function(r){
+    var k = _knockEligible(r);
+    if(!k.ok){ pulled.push({r:r, why:k.why}); return false; }
+    return true;
+  });
+  if(!list.length){
+    _shareToast('Every lead in this batch is a do-not-knock (BK stay / sold / opted out).');
+  }
+  meta = meta || {};
+  meta._pulled = pulled;
   var sN = (sender&&sender.name)||'', sL=(sender&&sender.llc)||'', sP=(sender&&sender.phone)||'[SET YOUR PHONE IN SENDER SETUP]';
   var initial = ((sN||'C').trim()[0]||'C').toUpperCase();   // the single hand-signed initial on the outside panel
   var today = new Date().toLocaleDateString();
   var rowsHtml = list.map(function(r,i){
     var owner = (r.owners||'').split(';')[0].trim();
     var ph = _bestPhones(r);
-    return '<tr><td>'+(i+1)+'</td><td><b>'+esc(owner)+'</b></td><td>'+esc(r.addr)+'</td><td>'+(ph.length?esc(ph.join(' / ')):'&mdash;')+'</td><td>'+esc(r.auction||'not set')+(_hasClock(r)?'<br><span class="d">'+r.days+'d</span>':'')+'</td>'
+    // A unit number is a lobby buzzer behind a locked door, not a knockable door. Measured: 6 of
+    // the 8 nearest leads to Carlos's house are condo units. Badge it so he knows before he parks.
+    var unit = _isUnitAddr(r) ? '<span class="unitbadge">unit · buzzer</span>' : '';
+    var dist = (r._nmDist != null) ? '<br><span class="d">'+r._nmDist.toFixed(1)+' mi</span>' : '';
+    return '<tr><td>'+(i+1)+'</td><td><b>'+esc(owner)+'</b></td><td>'+esc(r.addr)+unit+dist+'</td><td>'+(ph.length?esc(ph.join(' / ')):'&mdash;')+'</td><td>'+esc(r.auction||'not set')+(_hasClock(r)?'<br><span class="d">'+r.days+'d</span>':'')+'</td>'
       + '<td class="ck">&#9744; letter</td><td class="ck">&#9744; hanger</td><td class="ck">&#9744; knocked</td><td class="ck">&#9744; spoke</td></tr>';
   }).join('');
   var hangers = list.map(function(r){
@@ -5772,10 +6063,42 @@ function _carlosPacket(){
     + '.pgb{page-break-before:always}@media print{.noprint{display:none}}'
     + '.bar{background:#0B1730;color:#fff;padding:10px 14px;margin:-28px -28px 20px;display:flex;gap:10px}'
     + '.bar button{padding:8px 14px;border:1px solid #33436A;background:#152747;color:#CDD8EF;border-radius:6px;cursor:pointer;font-size:14px}'
+    + '.stale{background:#8a1c1c;color:#fff;padding:11px 14px;border-radius:6px;margin:0 0 14px;font-weight:800;font-size:13px}'
+    + '.prov{background:#f4ead2;border-left:4px solid #C6A14B;padding:9px 13px;border-radius:0 5px 5px 0;margin:0 0 14px;font-size:12px;color:#7a5a10}'
+    + '.pulled{background:#fff5f4;border:2px solid #8a1c1c;border-radius:7px;padding:12px 15px;margin:0 0 16px}'
+    + '.pulled h3{margin:0 0 7px;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#8a1c1c}'
+    + '.pulled li{font-size:12.5px;margin:3px 0;color:#5a1010}'
+    + '.unitbadge{display:inline-block;background:#eef3fa;color:#3c5b8a;font-size:9.5px;font-weight:700;'
+    +   'letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:3px;margin-left:5px}'
     + '</style></head><body>'
     + '<div class="bar noprint"><button onclick="window.print()">Print / Save as PDF</button><span style="align-self:center;color:#9fb0d6">'+list.length+' stops · hand to Carlos</span></div>'
     + '<h1>Field Route — '+list.length+' propert'+(list.length===1?'y':'ies')+'</h1>'
-    + '<div class="sub">'+today+(sN?' · '+esc(sN):'')+(sL?' · '+esc(sL):'')+' · callback '+esc(sP)+'</div>'
+    // PROVENANCE: board-data date is NOT the print date. The daily refresh has failed silently
+    // before (the ExecutionTimeLimit bug), and Carlos cannot tell stale paper from fresh paper.
+    + '<div class="sub">Printed '+today+(sN?' · '+esc(sN):'')+(sL?' · '+esc(sL):'')+' · callback '+esc(sP)+'</div>'
+    + (function(){
+        var age = _boardAgeDays();
+        var bd = /^\d{4}-\d{2}-\d{2}/.test(BUILTAT||'') ? BUILTAT.replace('T',' ') : 'unknown';
+        var out = '<div class="prov"><b>Board data:</b> '+esc(bd)
+                + (age!=null ? ' &nbsp;('+(age===0?'today':age+' day'+(age===1?'':'s')+' old')+')' : '')
+                + (meta.origin ? ' &nbsp;·&nbsp; <b>Centered on:</b> '+esc(meta.origin.label)
+                    + ' ('+esc(meta.origin.tier)+', '+esc(meta.origin.confidence)+' confidence)' : '')
+                + (meta.radiusUsed ? ' &nbsp;·&nbsp; within '+meta.radiusUsed+' mi' : '')
+                + '</div>';
+        if(age!=null && age>=3)
+          out = '<div class="stale">&#9888; DATA IS '+age+' DAYS OLD — properties may have already sold. '
+              + 'Re-run the refresh before driving.</div>' + out;
+        return out;
+      })()
+    + (function(){
+        var p = meta._pulled||[];
+        if(!p.length) return '';
+        return '<div class="pulled"><h3>&#128683; Pulled from this run — DO NOT KNOCK ('+p.length+')</h3><ul>'
+          + p.map(function(x){
+              return '<li><b>'+esc((x.r.addr||x.r.case||'').split(',')[0])+'</b> — '+esc(x.why)+'</li>';
+            }).join('')
+          + '</ul></div>';
+      })()
     + '<table><thead><tr><th>#</th><th>Owner</th><th>Address</th><th>Phone</th><th>Auction</th><th>&nbsp;</th><th>&nbsp;</th><th>&nbsp;</th><th>&nbsp;</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'
     + '<div class="pgb"></div><h1>Door hangers</h1><div class="sub">One per property — fold on the line, hang on the door if no answer.</div>'+hangers
     + '</body></html>';
