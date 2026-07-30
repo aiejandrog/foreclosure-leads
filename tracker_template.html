@@ -7719,6 +7719,60 @@ function openOwnerInfoSheet(caseId){
    BUTTONS carry stable IDs (id="mw-email", id="mw-text", id="mw-wp", id="mw-skip", id="mw-done")
    so Claude-in-Chrome or any browser automation can drive the tab without DOM-guessing.
    ============================================================================================ */
+/* ---- WORKER ACTIVITY LOG — persistent, cross-session, owned by the MAIN tab ------------------
+   Alejandro (2026-07-30): "a log where it says successfully sent or they contacted them and
+   waited when proceeding, and it keeps in mind who it contacted."
+   Three separate jobs, deliberately not merged:
+     fcWorkerLog        — the chronological ACTIVITY FEED (what happened, when, to whom)
+     notes[c].touches[] — the per-lead CRM history the board already renders (unchanged)
+     _wlogContacted()   — the "who did I already reach" memory the queue reads to skip people
+   The feed lives in localStorage so closing the worker tab does not erase the morning's work.
+   Capped at 800 entries; the tail is dropped oldest-first. -------------------------------------- */
+var WLOG_KEY = 'fcWorkerLog', WLOG_MAX = 800;
+function _wlogAll(){
+  try { var a = JSON.parse(localStorage.getItem(WLOG_KEY)||'[]'); return Array.isArray(a)?a:[]; }
+  catch(e){ return []; }
+}
+function _wlog(caseId, action, detail, ok){
+  var r = DATA.find(function(x){return x.case===caseId;}) || {};
+  var e = {
+    t: Date.now(),
+    ts: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
+    d: new Date().toISOString().slice(0,10),
+    c: caseId,
+    addr: (r.addr||'').split(',')[0] || caseId,
+    who: ((r.oname || r.owners || '').split(';')[0] || '').slice(0,30),
+    a: action,                       // 'email' | 'text' | 'wp' | 'done' | 'skip' | 'wait' | 'open'
+    detail: detail || '',
+    ok: ok !== false
+  };
+  var all = _wlogAll();
+  all.push(e);
+  if(all.length > WLOG_MAX) all = all.slice(all.length - WLOG_MAX);
+  try { localStorage.setItem(WLOG_KEY, JSON.stringify(all)); } catch(err){}
+  return e;
+}
+// CONTACT MEMORY — the answer to "who have I already reached?", read straight off the durable
+// touch ledger so it survives a cleared activity feed and agrees with what the board shows.
+function _wlogContacted(caseId){
+  var n = (typeof notes!=='undefined' && notes[caseId]) || {};
+  var ts = n.touches || [];
+  var real = ts.filter(function(t){ return ['call','text','email','letter','door'].indexOf(t.ch) >= 0; });
+  if(!real.length) return null;
+  var last = real[real.length-1];
+  var when = last.tsu || (last.d ? Date.parse(last.d+'T12:00:00') : 0);
+  return {n: real.length, out: last.out||'', days: when ? Math.floor((Date.now()-when)/86400000) : null};
+}
+function _wlogToday(){
+  var d = new Date().toISOString().slice(0,10);
+  return _wlogAll().filter(function(e){ return e.d === d; });
+}
+function _wlogStats(){
+  var t = _wlogToday(), s = {email:0, text:0, wp:0, done:0, skip:0, leads:{}};
+  t.forEach(function(e){ if(s[e.a]!=null) s[e.a]++; s.leads[e.c]=1; });
+  s.uniqueLeads = Object.keys(s.leads).length;
+  return s;
+}
 function _workerQueue(){
   var today = Date.now();
   return DATA.filter(function(r){
@@ -7751,9 +7805,14 @@ function genMorningWorker(){
       days: r.days, saleDate: r.auction||'',
       chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
       phones: phList, emails: emList, wpUrl: wpUrl, hs: !!r.hs, condo: !!r.condo,
-      tier: r.tier || ''
+      tier: r.tier || '',
+      prior: _wlogContacted(r.case)   // "have I reached this person before?" — shown on the card
     };
   }));
+  // Seed the worker tab with today's activity so the log is populated the moment it opens,
+  // instead of looking empty until the first click.
+  var seedLog = JSON.stringify(_wlogToday().slice(-40));
+  var seedStats = JSON.stringify(_wlogStats());
   var body = ''
     + '<style>'
     +   '.mw{max-width:820px;margin:0 auto;padding:20px 22px 40px;font:15px/1.55 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33;background:#fbfaf6;min-height:100vh}'
@@ -7781,9 +7840,31 @@ function genMorningWorker(){
     +   '.mwbtn.done{background:#c6a14b;color:#0B1730;border-color:#c6a14b;font-weight:800}'
     +   '.mwbtn.disabled{opacity:.35;pointer-events:none}'
     +   '.mwbtn .sub{display:block;font:600 11px "Segoe UI",Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;margin-top:3px;opacity:.8}'
-    +   '.mwlog{background:#fff;border-radius:8px;padding:10px 14px;margin-top:14px;font:12.5px "Segoe UI",Arial,sans-serif;color:#5b6472;max-height:180px;overflow-y:auto}'
-    +   '.mwlog div{padding:3px 0;border-bottom:1px dashed #f0f2f5}'
-    +   '.mwlog div:last-child{border-bottom:none}'
+    // ---- activity log ----
+    +   '.mwlogwrap{background:#fff;border-radius:10px;margin-top:16px;box-shadow:0 2px 10px rgba(11,23,48,.06);overflow:hidden}'
+    +   '.mwloghead{display:flex;justify-content:space-between;align-items:center;padding:11px 15px;background:#0B1730;color:#F4E5A7;font:700 11px "Segoe UI",Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase}'
+    +   '.mwlogstats{font:600 10.5px "Segoe UI",Arial,sans-serif;color:#9fb0d6;letter-spacing:.04em;text-transform:none}'
+    +   '.mwlog{font:12.5px/1.5 "Segoe UI",Arial,sans-serif;color:#334155;max-height:260px;overflow-y:auto}'
+    +   '.mwle{display:flex;gap:10px;align-items:baseline;padding:8px 15px;border-bottom:1px solid #f0f2f5}'
+    +   '.mwle:last-child{border-bottom:none}'
+    +   '.mwle .t{flex:none;font:600 11px "Segoe UI",Arial,sans-serif;color:#8a94a8;font-variant-numeric:tabular-nums}'
+    +   '.mwle .ic{flex:none;width:17px;text-align:center}'
+    +   '.mwle .tx{flex:1;min-width:0}'
+    +   '.mwle .tx b{color:#0e1b33}'
+    +   '.mwle .tx span{color:#5b6472}'
+    +   '.mwle.ok .ic{color:#286c34}.mwle.warn .ic{color:#a35a10}.mwle.wait{background:#fffdf3}'
+    +   '.mwlogempty{padding:18px 15px;color:#8a94a8;font-style:italic;text-align:center}'
+    // ---- pacing bar (the "contacted them and waited before proceeding" state) ----
+    +   '.mwpace{background:#fffdf3;border:2px solid #C6A14B;border-radius:10px;padding:15px 17px;margin:12px 0;text-align:center}'
+    +   '.mwpace .h{font:800 15px "Segoe UI",Arial,sans-serif;color:#7a5a10;margin-bottom:5px}'
+    +   '.mwpace .s{font:13px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-bottom:11px}'
+    +   '.mwpace .cd{font:800 30px "Segoe UI",Arial,sans-serif;color:#0B1730;font-variant-numeric:tabular-nums;line-height:1}'
+    +   '.mwpace .bar{height:5px;background:#eadb9f;border-radius:3px;overflow:hidden;margin:11px 0 9px}'
+    +   '.mwpace .bar i{display:block;height:100%;background:#C6A14B;transition:width .95s linear}'
+    +   '.mwpace button{padding:8px 15px;border:1px solid #C6A14B;background:#fff;color:#7a5a10;border-radius:7px;font:700 12.5px "Segoe UI",Arial,sans-serif;cursor:pointer}'
+    // ---- prior-contact memory badge ----
+    +   '.mwprior{display:inline-block;background:#ecebfa;color:#463ea1;font:700 10px "Segoe UI",Arial,sans-serif;'
+    +     'letter-spacing:.05em;text-transform:uppercase;padding:3px 8px;border-radius:4px;margin-left:8px}'
     +   '.mwdone{text-align:center;padding:40px 22px;background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(11,23,48,.09)}'
     +   '.mwdone h2{font:800 26px "Segoe UI",Arial,sans-serif;margin:0 0 10px}'
     +   '.mwdone .stats{font:600 15px/1.7 "Segoe UI",Arial,sans-serif;color:#5b6472;margin:16px 0}'
@@ -7796,60 +7877,139 @@ function genMorningWorker(){
     +     '<div class="mwprog" id="mwprog">0 of ' + queue.length + '</div>'
     +   '</div>'
     +   '<div id="mwmain"></div>'
-    +   '<div class="mwlog" id="mwlog"><div><b>Session log</b> — outcomes logged back to the board in real time</div></div>'
+    +   '<div class="mwlogwrap">'
+    +     '<div class="mwloghead"><span>&#128220; Activity log — live</span><span class="mwlogstats" id="mwlogstats"></span></div>'
+    +     '<div class="mwlog" id="mwlog"></div>'
+    +   '</div>'
     + '</div>'
     + '<script>(function(){'
     +   'var Q=' + qData + ';'
-    +   'var i=0, stats={email:0, text:0, wp:0, skip:0, done:0};'
-    +   'var main=document.getElementById("mwmain"), prog=document.getElementById("mwprog"), log=document.getElementById("mwlog");'
+    +   'var LOG=' + seedLog + ', STATS=' + seedStats + ';'
+    +   'var i=0, auto=false, paceMs=45000, tick=null, healing=null;'
+    +   'var main=document.getElementById("mwmain"), prog=document.getElementById("mwprog"),'
+    +     'logEl=document.getElementById("mwlog"), statEl=document.getElementById("mwlogstats");'
     +   'function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}'
     +   'function fm(n){return n?"$"+Math.round(+n).toLocaleString():"—";}'
-    +   'function post(kind, extra){'
-    +     'try{window.opener&&window.opener.postMessage({workerAct:{c:Q[i].c, k:kind, extra:extra||null}},"*");}catch(e){}'
-    +     'stats[kind]=(stats[kind]||0)+1;'
-    +     'var line=document.createElement("div");'
-    +     'line.innerHTML="<b>"+esc(Q[i].first||Q[i].owner)+"</b> · "+esc(Q[i].addr.split(",")[0])+" — <span style=\'color:#286c34\'>"+kind.toUpperCase()+"</span>";'
-    +     'log.insertBefore(line, log.children[1]||null);'
+    +   'function now(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"});}'
+    +   'var ICON={email:"&#128231;",text:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
+    +   'function addLog(kind, who, text, cls){'
+    +     'LOG.push({ts:now(), a:kind, who:who||"", detail:text||"", ok:cls!=="warn"});'
+    +     'if(LOG.length>200) LOG=LOG.slice(-200);'
+    +     'if(STATS[kind]!=null) STATS[kind]++;'
+    +     'renderLog();'
     +   '}'
-    +   'function next(){ i++; render(); }'
+    +   'function renderLog(){'
+    +     'if(!LOG.length){ logEl.innerHTML="<div class=\'mwlogempty\'>Nothing logged yet — start the run and every action lands here.</div>"; return; }'
+    +     'logEl.innerHTML=LOG.slice().reverse().map(function(e){'
+    +       'var cls=e.a==="fail"?"warn":(e.a==="wait"?"wait":"ok");'
+    +       'return "<div class=\'mwle "+cls+"\'><span class=\'t\'>"+esc(e.ts)+"</span>"'
+    +         '+"<span class=\'ic\'>"+(ICON[e.a]||ICON.info)+"</span>"'
+    +         '+"<span class=\'tx\'><b>"+esc(e.who||e.addr||"")+"</b> <span>"+esc(e.detail||e.a)+"</span></span></div>";'
+    +     '}).join("");'
+    +     'statEl.innerHTML="email "+(STATS.email||0)+" · text "+(STATS.text||0)+" · wp "+(STATS.wp||0)+" · done "+(STATS.done||0)+" · skip "+(STATS.skip||0);'
+    +   '}'
+    +   'function post(kind, extra){'
+    +     'try{window.opener&&window.opener.postMessage({workerAct:{c:Q[i].c,k:kind,extra:extra||null}},"*");return true;}'
+    +     'catch(e){return false;}'
+    +   '}'
+    +   'function channels(r){'
+    +     'var out=[];'
+    +     'out.push({k:"email", why:(r.emails&&r.emails.length)?null:"no email address on file"});'
+    +     'out.push({k:"text",  why:(r.phones&&r.phones.length)?null:"no textable phone on file"});'
+    +     'out.push({k:"wp",    why:r.wpUrl?null:"no people-search URL available"});'
+    +     'return out;'
+    +   '}'
+    +   'function attempt(r, idx, tries){'
+    +     'var ch=channels(r), step=ch[idx];'
+    +     'if(!step){'
+    +       'addLog("fail", r.first||r.owner, "no reachable channel — logged unreachable, moving on", "warn");'
+    +       'post("skip"); return advance();'
+    +     '}'
+    +     'if(step.why){'
+    +       'addLog("fail", r.first||r.owner, step.k.toUpperCase()+" failed: "+step.why+" → trying "+(ch[idx+1]?ch[idx+1].k:"nothing left"), "warn");'
+    +       'healing=setTimeout(function(){ attempt(r, idx+1, 0); }, 900); return;'
+    +     '}'
+    +     'if(!post(step.k)){'
+    +       'if(tries<2){'
+    +         'addLog("heal", r.first||r.owner, "could not reach the main tab — retry "+(tries+1)+"/2 in 2s", "warn");'
+    +         'healing=setTimeout(function(){ attempt(r, idx, tries+1); }, 2000); return;'
+    +       '}'
+    +       'addLog("fail", r.first||r.owner, "main tab unreachable after 2 retries — is the board tab still open?", "warn");'
+    +       'return pause();'
+    +     '}'
+    +     'addLog(step.k, r.first||r.owner, step.k==="email"?"email composer opened — review and hit Send":(step.k==="text"?"text composer opened — review and hit Send":"people-search opened — grab the number"));'
+    +     'startPace(r);'
+    +   '}'
+    +   'function startPace(r){'
+    +     'var left=Math.round(paceMs/1000), total=left;'
+    +     'main.innerHTML="<div class=\'mwpace\'>"'
+    +       '+"<div class=\'h\'>&#9203; Sent — holding before the next lead</div>"'
+    +       '+"<div class=\'s\'>Finish the send in the tab that just opened. The run resumes on its own.</div>"'
+    +       '+"<div class=\'cd\' id=\'mwcd\'>"+left+"s</div>"'
+    +       '+"<div class=\'bar\'><i id=\'mwbar\' style=\'width:100%\'></i></div>"'
+    +       '+"<button id=\'mwskipwait\'>Skip the wait &rarr;</button>"'
+    +     '+"</div>";'
+    +     'clearInterval(tick);'
+    +     'tick=setInterval(function(){'
+    +       'left--;'
+    +       'var cd=document.getElementById("mwcd"), bar=document.getElementById("mwbar");'
+    +       'if(cd) cd.textContent=left+"s";'
+    +       'if(bar) bar.style.width=Math.max(0,(left/total)*100)+"%";'
+    +       'if(left<=0){ clearInterval(tick); addLog("wait", r.first||r.owner, "paced "+total+"s — advancing"); post("wait", total); post("done"); advance(); }'
+    +     '}, 1000);'
+    +     'var sk=document.getElementById("mwskipwait");'
+    +     'if(sk) sk.onclick=function(){ clearInterval(tick); addLog("wait", r.first||r.owner, "wait skipped by operator"); post("done"); advance(); };'
+    +   '}'
+    +   'function advance(){ i++; if(auto && i<Q.length){ setTimeout(runOne, 700); } else { render(); } }'
+    +   'function pause(){ auto=false; render(); }'
+    +   'function runOne(){ if(i>=Q.length) return render(); var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length; attempt(r,0,0); }'
     +   'function render(){'
-    +     'if(!Q.length){ main.innerHTML="<div class=\'mwnone\'><b>Nothing in the queue this morning.</b><br><br>Every eligible lead has either been touched in the last 3 days, is outside the 3-45 day sale window, or is opted-out / claimed / in BK stay.<br><br>Come back tomorrow, or expand the window in the code.</div>"; prog.textContent="0 of 0"; return; }'
+    +     'clearInterval(tick); if(healing) clearTimeout(healing);'
+    +     'if(!Q.length){ main.innerHTML="<div class=\'mwnone\'><b>Nothing in the queue this morning.</b><br><br>Every eligible lead was either worked in the last 3 days, sits outside the 3-45 day sale window, or is opted-out / claimed / in an active bankruptcy stay.<br><br>Come back after the next refresh.</div>"; prog.textContent="0 of 0"; renderLog(); return; }'
     +     'if(i>=Q.length){'
-    +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'>Worked <b>"+Q.length+"</b> leads<br>Email: <b>"+stats.email+"</b> · Text: <b>"+stats.text+"</b> · WP lookup: <b>"+stats.wp+"</b> · Skipped: <b>"+stats.skip+"</b></div><p>Everything you clicked is logged on the main board. Reopen the worker tomorrow for a fresh queue.</p></div>";'
-    +       'prog.textContent=Q.length+" of "+Q.length+" &#x2713;";'
-    +       'return;'
+    +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'>Worked <b>"+Q.length+"</b> leads<br>Email <b>"+(STATS.email||0)+"</b> · Text <b>"+(STATS.text||0)+"</b> · WP <b>"+(STATS.wp||0)+"</b> · Skipped <b>"+(STATS.skip||0)+"</b></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
+    +       'prog.textContent=Q.length+" of "+Q.length+" &#x2713;"; renderLog(); return;'
     +     '}'
     +     'var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length;'
-    +     'var phEmoji=(r.phones.length?"<b>"+esc(r.phones[0])+"</b>":"<i style=\'color:#8a1c1c\'>no phone traced</i>");'
-    +     'var emEmoji=(r.emails.length?"<b>"+esc(r.emails[0])+"</b>":"<i style=\'color:#8a1c1c\'>no email traced</i>");'
+    +     'var ph=(r.phones.length?"<b>"+esc(r.phones[0])+"</b>":"<i style=\'color:#8a1c1c\'>none traced</i>");'
+    +     'var em=(r.emails.length?"<b>"+esc(r.emails[0])+"</b>":"<i style=\'color:#8a1c1c\'>none traced</i>");'
+    +     'var prior=r.prior?("<span class=\'mwprior\'>contacted "+(r.prior.days!=null?r.prior.days+"d ago":"before")+" · "+r.prior.n+"x</span>"):"";'
     +     'main.innerHTML='
     +       '"<div class=\'mwcard\'>"'
     +       '+"<div class=\'mwchip\' style=\'color:"+r.chip.c+";background:"+r.chip.bg+"\'>"+esc(r.chip.t)+"</div>"'
-    +       '+"<h2 class=\'mwname\'>"+esc(r.first||r.owner)+"</h2>"'
+    +       '+"<h2 class=\'mwname\'>"+esc(r.first||r.owner)+prior+"</h2>"'
     +       '+"<div class=\'mwaddr\'>"+esc(r.addr)+" · Tier "+esc(r.tier)+(r.hs?" · Homestead":"")+(r.condo?" · Condo":"")+"</div>"'
     +       '+"<div class=\'mwfacts\'>"'
     +         '+"<div><div class=\'k\'>Sale date</div><div class=\'v\'>"+esc(r.saleDate)+" ("+r.days+"d)</div></div>"'
     +         '+"<div><div class=\'k\'>Plaintiff</div><div class=\'v\'>"+esc((r.plaintiff||"—").slice(0,40))+"</div></div>"'
     +         '+"<div><div class=\'k\'>Judgment / Value</div><div class=\'v\'>"+fm(r.judg)+" / "+fm(r.value)+"</div></div>"'
-    +         '+"<div><div class=\'k\'>Phone / Email</div><div class=\'v\'>"+phEmoji+" · "+emEmoji+"</div></div>"'
+    +         '+"<div><div class=\'k\'>Phone / Email</div><div class=\'v\'>"+ph+" · "+em+"</div></div>"'
     +       '+"</div>"'
     +       '+"<div class=\'mwacts\'>"'
-    +         '+"<button id=\'mw-email\' class=\'mwbtn email"+(r.emails.length?"":" disabled")+"\' data-fn=\'email\'>&#128231; Send email<span class=\'sub\'>Opens genEmail in a new tab</span></button>"'
-    +         '+"<button id=\'mw-text\' class=\'mwbtn text"+(r.phones.length?"":" disabled")+"\' data-fn=\'text\'>&#128241; Send text<span class=\'sub\'>Opens Phone Link composer</span></button>"'
-    +         '+"<button id=\'mw-wp\' class=\'mwbtn wp"+(r.wpUrl?"":" disabled")+"\' data-fn=\'wp\'>&#128269; Whitepages lookup<span class=\'sub\'>Find missing phone/email</span></button>"'
-    +         '+"<button id=\'mw-skip\' class=\'mwbtn skip\' data-fn=\'skip\'>&#9197; Skip<span class=\'sub\'>Not now — next lead</span></button>"'
-    +         '+"<button id=\'mw-done\' class=\'mwbtn done\' data-fn=\'done\' style=\'grid-column:1/-1\'>&#10003; Done with this lead &mdash; next<span class=\'sub\'>Marks as worked, advances the queue</span></button>"'
+    +         '+"<button id=\'mw-auto\' class=\'mwbtn done\' data-fn=\'auto\' style=\'grid-column:1/-1\'>&#9654; Start auto-run — walk the whole queue<span class=\'sub\'>opens each composer in turn, paces "+Math.round(paceMs/1000)+"s, logs everything, heals past failures</span></button>"'
+    +         '+"<button id=\'mw-email\' class=\'mwbtn email"+(r.emails.length?"":" disabled")+"\' data-fn=\'email\'>&#128231; Email<span class=\'sub\'>"+(r.emails.length?"composer":"none on file")+"</span></button>"'
+    +         '+"<button id=\'mw-text\' class=\'mwbtn text"+(r.phones.length?"":" disabled")+"\' data-fn=\'text\'>&#128241; Text<span class=\'sub\'>"+(r.phones.length?"composer":"no phone")+"</span></button>"'
+    +         '+"<button id=\'mw-wp\' class=\'mwbtn wp"+(r.wpUrl?"":" disabled")+"\' data-fn=\'wp\'>&#128269; Lookup<span class=\'sub\'>find contact</span></button>"'
+    +         '+"<button id=\'mw-skip\' class=\'mwbtn skip\' data-fn=\'skip\'>&#9197; Skip<span class=\'sub\'>next lead</span></button>"'
+    +         '+"<button id=\'mw-done\' class=\'mwbtn done\' data-fn=\'done\' style=\'grid-column:1/-1\'>&#10003; Done — next lead<span class=\'sub\'>logs worked, advances</span></button>"'
     +       '+"</div>"'
     +       '+"</div>";'
     +   '}'
     +   'document.addEventListener("click", function(e){'
     +     'var b=e.target.closest(".mwbtn"); if(!b||b.classList.contains("disabled"))return;'
-    +     'var fn=b.dataset.fn; if(!fn)return;'
-    +     'if(fn==="email"||fn==="text"||fn==="wp"){ post(fn); /* main tab opens the real UI */ return; }'
-    +     'if(fn==="skip"){ post("skip"); next(); return; }'
-    +     'if(fn==="done"){ post("done"); next(); return; }'
+    +     'var fn=b.dataset.fn; if(!fn)return; var r=Q[i]; if(!r)return;'
+    +     'if(fn==="auto"){ auto=true; addLog("open", r.first||r.owner, "auto-run started — "+Q.length+" leads queued"); return runOne(); }'
+    +     'if(fn==="email"||fn==="text"||fn==="wp"){'
+    +       'var has=(fn==="email"?r.emails.length:(fn==="text"?r.phones.length:!!r.wpUrl));'
+    +       'if(!has){ addLog("fail", r.first||r.owner, fn.toUpperCase()+" unavailable for this lead", "warn"); return; }'
+    +       'if(post(fn)) addLog(fn, r.first||r.owner, fn+" composer opened");'
+    +       'else addLog("fail", r.first||r.owner, "could not reach the main tab — is the board still open?", "warn");'
+    +       'return;'
+    +     '}'
+    +     'if(fn==="skip"){ post("skip"); addLog("skip", r.first||r.owner, "skipped"); return advance(); }'
+    +     'if(fn==="done"){ post("done"); addLog("done", r.first||r.owner, "marked worked"); return advance(); }'
     +   '});'
-    +   'render();'
+    +   'renderLog(); render();'
     + '})();<\/script>';
   return _docShell('Morning worker · '+queue.length+' leads', body, {key:'worker'});
 }
@@ -7889,18 +8049,27 @@ window.addEventListener('message', function(ev){
   var d = ev && ev.data && ev.data.workerAct; if(!d || !d.c) return;
   var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
   if(d.k === 'email'){
+    var em = (r.emails||[])[0] || '';
     if(typeof genEmail === 'function') _openDoc(genEmail(r));
     _docLog(r.case, 'worker-email', 'bi');
+    _wlog(r.case, 'email', em ? 'composer opened → '+em : 'composer opened (no email on file)', true);
   } else if(d.k === 'text'){
     // openBulkText walks a queue; open just this one lead via openTextSingle if available
+    var ph = (r.phones||[])[0] || '';
     if(typeof openTextSingle === 'function') openTextSingle(r);
     else if(typeof openBulkText === 'function') openBulkText();
     _docLog(r.case, 'worker-text', 'bi');
+    _wlog(r.case, 'text', ph ? 'composer opened → '+(typeof fmtPhone==='function'?fmtPhone(ph):ph) : 'composer opened (no phone)', true);
   } else if(d.k === 'wp'){
     var wp = r.peopleaddr || r.people || '';
     if(wp) window.open(wp, '_blank', 'noopener');
     _docLog(r.case, 'worker-wp', 'en');
+    _wlog(r.case, 'wp', wp ? 'people-search opened' : 'no lookup URL available', !!wp);
+  } else if(d.k === 'wait'){
+    _wlog(r.case, 'wait', d.extra ? ('paced '+d.extra+'s before advancing') : 'paced before advancing', true);
+    return;
   } else if(d.k === 'done' || d.k === 'skip'){
+    _wlog(r.case, d.k, d.k==='done' ? 'marked worked — advancing' : 'skipped — advancing', true);
     // log a lightweight "worked" touch on the board — same funnel as QUICKLOG
     var n = notes[r.case] = notes[r.case]||{status:'',note:''};
     n.touches = n.touches||[];
