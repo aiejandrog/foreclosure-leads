@@ -2089,6 +2089,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="nextup" class="abtn nextup-btn" title="Hands you the ONE lead to work right now and puts its number in front of you — no scanning, no deciding. Ranked by deal value AND by what you've already done: follow-ups you set come due first, leads you already touched today drop out, and anything you filed as Seen is gone. Tap again for the next one."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4l10 8-10 8z"/><path d="M19 4v16"/></svg>Next up<span class="nun"></span></button>
 <button id="closers" class="abtn closers-btn" title="This week's closers — the leads most worth working, ranked by expected value × how closeable × how trustworthy the number is. FRESH cases only, real (never fantasy) equity, enough runway to close, verified chains first. This is the 5-10 to pour energy into."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/></svg>Closers</button>
 <button id="nearmebtn" class="abtn near-btn" onclick="openNearMe()" title="NEAR ME — build Carlos a door run. Start from your GPS or a typed ZIP, pick how many doors (10/15/20), and export the same bilingual Carlos PDF packet. Miami-Dade ONLY (gas). Auto-excludes: active bankruptcy stays (federal violation to knock), already-sold-via-sibling-case, opted-out, and any lead whose coordinate is not a real street-level geocode."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near Me</button>
+<button id="proofbtn" class="abtn" onclick="openProofSheet('today')" title="PROOF SHEET — the receipt of what actually went out. Reprints the VERBATIM subject and body of every message sent, timestamped, with reply status beside each one, plus the full activity log. Printable. Shift-click for all-time instead of today."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M9 16h6M9 8h2"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>Proof sheet</button>
 <button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — opens a queue tab of up to 20 leads (Tier A/B, sale 3-45 days out, not touched in 72 hours). One card at a time: tap Email / Text / WP-lookup to hand the lead off to the existing sender in a new tab, tap Done to log worked + auto-advance to next lead. Nothing auto-sends (TCPA/FTSA rails intact); you tap send yourself. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker</button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
 <button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
@@ -2195,6 +2196,10 @@ const BUILTAT = "__BUILTAT__";   // when the BOARD DATA was built (not when a pa
 // Desktop copy when this substitution ran after the Desktop write). Same defensive posture as
 // BUILT's `if(!/^[0-9a-f]{12}$/.test(BUILT))` guard in the gate.
 const ZIP_CENT = (function(){ try { return __ZIPCENT__; } catch(e){ return {}; } })();
+// Owner replies detected by replies.py (IMAP against the Gmail account that sent the outreach).
+// Empty until gmail.key exists — and an empty table honestly renders "awaiting reply" everywhere
+// rather than inventing a status we have not observed.
+const REPLIES = (function(){ try { return __REPLIES__; } catch(e){ return {}; } })();
 let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
 let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
 const LS = 'fcLeadNotes';
@@ -7763,6 +7768,37 @@ function _wlogContacted(caseId){
   var when = last.tsu || (last.d ? Date.parse(last.d+'T12:00:00') : 0);
   return {n: real.length, out: last.out||'', days: when ? Math.floor((Date.now()-when)/86400000) : null};
 }
+/* ---- SENT ARCHIVE — the receipt of what actually went out ------------------------------------
+   The activity log answers "what did I do"; this answers "what exactly did the owner receive".
+   Stores the real composed subject + body per send, so the Proof Sheet can reprint it verbatim
+   weeks later and a dispute has a record. Separate key from the activity feed because it is
+   heavier and the feed must stay cheap to append.
+   Capped at 300 sends; oldest dropped first. ---------------------------------------------------- */
+var SENT_KEY = 'fcSentArchive', SENT_MAX = 300;
+function _sentAll(){
+  try { var a = JSON.parse(localStorage.getItem(SENT_KEY)||'[]'); return Array.isArray(a)?a:[]; }
+  catch(e){ return []; }
+}
+function _sentAdd(entry){
+  var all = _sentAll();
+  all.push(entry);
+  if(all.length > SENT_MAX) all = all.slice(all.length - SENT_MAX);
+  try { localStorage.setItem(SENT_KEY, JSON.stringify(all)); } catch(e){}
+  return entry;
+}
+function _sentToday(){
+  var d = new Date().toISOString().slice(0,10);
+  return _sentAll().filter(function(s){ return (s.d||'') === d; });
+}
+// REPLY STATUS — populated by replies.py via replies.json, baked in at build time. Until the
+// operator adds gmail.key this is simply empty and every lead reads "awaiting reply", which is
+// honest: we genuinely do not know. It never guesses.
+function _replyFor(caseId, email){
+  var R = (typeof REPLIES !== 'undefined' && REPLIES) ? REPLIES : {};
+  if(R[caseId]) return R[caseId];
+  if(email && R['@'+String(email).toLowerCase()]) return R['@'+String(email).toLowerCase()];
+  return null;
+}
 function _wlogToday(){
   var d = new Date().toISOString().slice(0,10);
   return _wlogAll().filter(function(e){ return e.d === d; });
@@ -7773,6 +7809,97 @@ function _wlogStats(){
   s.uniqueLeads = Object.keys(s.leads).length;
   return s;
 }
+/* ---- PROOF SHEET — "show me exactly what went out" -------------------------------------------
+   Alejandro asked for pictures of what is being sent. A page cannot screenshot itself without an
+   external library, and the published file is offline/CSP-locked — so instead this reprints the
+   VERBATIM content of every send, timestamped, with the reply status beside it. For a dispute or
+   a review that is strictly better than a screenshot: searchable, printable, and it cannot be
+   cropped to mislead. Opens as its own tab through the same _openDoc Blob path.
+   -------------------------------------------------------------------------------------------- */
+function genProofSheet(scope){
+  var sends = (scope === 'all') ? _sentAll() : _sentToday();
+  sends = sends.slice().reverse();                       // newest first
+  var acts  = (scope === 'all') ? _wlogAll() : _wlogToday();
+  var st    = _wlogStats();
+  var repliedN = 0;
+  var rows = sends.map(function(s, n){
+    var rep = _replyFor(s.c, s.to);
+    if(rep) repliedN++;
+    var badge = rep
+      ? '<span class="pfrep">&#9993; REPLIED '+esc(rep.when||'')+'</span>'
+      : '<span class="pfwait">awaiting reply</span>';
+    return '<div class="pfcard">'
+      + '<div class="pfh"><div class="pfwho"><b>'+esc(s.who||s.c)+'</b>'
+      +   '<span class="pfaddr">'+esc((s.addr||'').split(',')[0])+'</span></div>'
+      +   '<div class="pfmeta">'+badge+'<span class="pfts">'+esc(s.ts||'')+'</span></div></div>'
+      + '<div class="pfline"><span class="k">Channel</span><span class="v">'+esc((s.ch||'email').toUpperCase())+'</span></div>'
+      + '<div class="pfline"><span class="k">To</span><span class="v">'+esc(s.to||'—')+'</span></div>'
+      + '<div class="pfline"><span class="k">Subject</span><span class="v"><b>'+esc(s.subj||'—')+'</b></span></div>'
+      + '<div class="pfbody">'+esc(s.body||'(no body captured)')+'</div>'
+      + (s.bodyES ? '<details class="pfes"><summary>Spanish version sent alongside</summary><div class="pfbody">'+esc(s.bodyES)+'</div></details>' : '')
+      + '</div>';
+  }).join('');
+  var actRows = acts.slice().reverse().slice(0,120).map(function(e){
+    return '<tr><td class="t">'+esc(e.ts||'')+'</td><td class="a">'+esc((e.a||'').toUpperCase())+'</td>'
+      + '<td>'+esc(e.who||e.addr||e.c||'')+'</td><td class="d">'+esc(e.detail||'')+'</td></tr>';
+  }).join('');
+  var body = ''
+    + '<style>'
+    +   '.pf{max-width:8.2in;margin:0 auto;padding:22px 26px 50px;font:14.5px/1.6 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33}'
+    +   '.pfhead{border-bottom:2px solid #0B1730;padding-bottom:12px;margin-bottom:16px}'
+    +   '.pfhead h1{margin:0 0 3px;font:800 23px "Segoe UI",Arial,sans-serif}'
+    +   '.pfhead .sub{color:#5b6472;font-size:13px}'
+    +   '.pfstats{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 20px}'
+    +   '.pfstat{background:#fbfaf6;border:1px solid #e2e6ee;border-radius:8px;padding:9px 14px;text-align:center;min-width:78px}'
+    +   '.pfstat .n{font:800 20px "Segoe UI",Arial,sans-serif;color:#0e1b33}'
+    +   '.pfstat .l{font:700 9.5px "Segoe UI",Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#8a94a8;margin-top:2px}'
+    +   '.pfcard{border:1px solid #e2e6ee;border-left:4px solid #C6A14B;border-radius:9px;padding:15px 17px;margin:0 0 14px;background:#fff;page-break-inside:avoid}'
+    +   '.pfh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:9px}'
+    +   '.pfwho b{font-size:16px}.pfaddr{display:block;font-size:12px;color:#5b6472;margin-top:2px}'
+    +   '.pfmeta{text-align:right}.pfts{display:block;font-size:11px;color:#8a94a8;margin-top:3px}'
+    +   '.pfrep{background:#eaf5ec;color:#286c34;border:1px solid #bfe0c8;padding:3px 9px;border-radius:5px;font:700 10.5px "Segoe UI",Arial,sans-serif;letter-spacing:.05em}'
+    +   '.pfwait{background:#f6f8fa;color:#8a94a8;border:1px solid #e2e6ee;padding:3px 9px;border-radius:5px;font:600 10.5px "Segoe UI",Arial,sans-serif}'
+    +   '.pfline{display:flex;gap:10px;font-size:13px;padding:2px 0}'
+    +   '.pfline .k{flex:none;width:66px;color:#8a94a8;font:700 9.5px "Segoe UI",Arial,sans-serif;letter-spacing:.07em;text-transform:uppercase;padding-top:4px}'
+    +   '.pfline .v{flex:1;min-width:0;word-break:break-word}'
+    +   '.pfbody{white-space:pre-wrap;background:#fbfaf6;border:1px solid #eef1f5;border-radius:7px;padding:12px 14px;margin-top:9px;font:13px/1.6 Georgia,serif;color:#1c2b47}'
+    +   '.pfes summary{cursor:pointer;font:600 11.5px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:8px}'
+    +   '.pfsec{font:800 12px "Segoe UI",Arial,sans-serif;letter-spacing:.09em;text-transform:uppercase;color:#8a94a8;margin:28px 0 9px;padding-bottom:6px;border-bottom:1px solid #e2e6ee}'
+    +   'table{width:100%;border-collapse:collapse;font-size:12px}'
+    +   'td{padding:5px 7px;border-bottom:1px solid #f0f2f5;vertical-align:top}'
+    +   'td.t{white-space:nowrap;color:#8a94a8;font-variant-numeric:tabular-nums;width:78px}'
+    +   'td.a{white-space:nowrap;font-weight:700;width:62px}'
+    +   'td.d{color:#5b6472}'
+    +   '.pfnone{padding:34px;text-align:center;color:#8a94a8;font-style:italic;background:#fbfaf6;border-radius:9px}'
+    +   '.pfnote{background:#fff8e1;border-left:4px solid #C6A14B;padding:11px 14px;border-radius:0 6px 6px 0;font-size:12.5px;color:#7a5a10;margin:16px 0}'
+    +   '@media print{.noprint{display:none}}'
+    + '</style>'
+    + '<div class="pf">'
+    +   '<div class="pfhead"><h1>Outreach proof sheet</h1>'
+    +     '<div class="sub">'+(scope==='all'?'All recorded sends':'Today, '+new Date().toLocaleDateString())
+    +       +' &middot; generated '+esc(new Date().toLocaleString())+'</div></div>'
+    +   '<div class="pfstats">'
+    +     '<div class="pfstat"><div class="n">'+sends.length+'</div><div class="l">sends</div></div>'
+    +     '<div class="pfstat"><div class="n">'+repliedN+'</div><div class="l">replied</div></div>'
+    +     '<div class="pfstat"><div class="n">'+(st.email||0)+'</div><div class="l">email</div></div>'
+    +     '<div class="pfstat"><div class="n">'+(st.text||0)+'</div><div class="l">text</div></div>'
+    +     '<div class="pfstat"><div class="n">'+(st.wp||0)+'</div><div class="l">lookups</div></div>'
+    +     '<div class="pfstat"><div class="n">'+(st.uniqueLeads||0)+'</div><div class="l">leads</div></div>'
+    +   '</div>'
+    +   ((typeof REPLIES === 'undefined' || !REPLIES || !Object.keys(REPLIES).length)
+          ? '<div class="pfnote"><b>Reply tracking is not live yet.</b> Every send below reads "awaiting reply" because nothing is checking the inbox. '
+            + 'To turn it on: create <code>gmail.key</code> in the repo (one line, <code>you@gmail.com:APP_PASSWORD</code> from a Google App Password) '
+            + 'and run <code>python replies.py</code>. It never guesses a reply it has not actually seen.</div>'
+          : '')
+    +   '<div class="pfsec">What was sent — verbatim</div>'
+    +   (sends.length ? rows : '<div class="pfnone">No sends recorded '+(scope==='all'?'yet':'today')+'.</div>')
+    +   '<div class="pfsec">Full activity log</div>'
+    +   (actRows ? '<table><tbody>'+actRows+'</tbody></table>' : '<div class="pfnone">No activity recorded.</div>')
+    + '</div>';
+  return _docShell('Proof sheet — '+sends.length+' send'+(sends.length===1?'':'s'), body, {key:'proof'});
+}
+function openProofSheet(scope){ return _openDoc(genProofSheet(scope||'today')); }
+
 function _workerQueue(){
   var today = Date.now();
   return DATA.filter(function(r){
@@ -8072,9 +8199,39 @@ window.addEventListener('message', function(ev){
   var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
   if(d.k === 'email'){
     var em = (r.emails||[])[0] || '';
-    if(typeof genEmail === 'function') _openDoc(genEmail(r));
+    // STRAIGHT TO GMAIL COMPOSE — one click from Send.
+    // Previously this opened the genEmail PREVIEW page, so the operator had to click "Open in
+    // Gmail" there and only THEN press Send: two clicks and a page he had already approved the
+    // copy for. Now the worker jumps directly to Gmail's compose URL with to/subject/body
+    // prefilled -- the exact same URL the preview page's own button builds. He lands in a ready
+    // message and presses Send. Still a human send; nothing leaves the machine on its own.
+    // genEmail() is still called first because building it is what populates __lastEmail, which
+    // is how the Proof Sheet archives the verbatim text that went out.
+    var opened = false;
+    try {
+      if(typeof genEmail === 'function') genEmail(r, true);    // quiet: compose + stash, no preview tab
+      var LE = window.__lastEmail;
+      if(LE && LE.c === r.case && (LE.to || em)){
+        var gurl = 'https://mail.google.com/mail/?view=cm&fs=1'
+                 + '&to=' + encodeURIComponent(LE.to || em)
+                 + '&su=' + encodeURIComponent(LE.subj || '')
+                 + '&body=' + encodeURIComponent(LE.body || '');
+        window.open(gurl, '_blank', 'noopener');
+        opened = true;
+        _sentAdd({d:new Date().toISOString().slice(0,10), t:Date.now(),
+                  ts:new Date().toLocaleString(), c:r.case, ch:'email',
+                  to:LE.to||em, who:LE.who||'', addr:LE.addr||r.addr||'',
+                  subj:LE.subj||'', body:LE.body||'', subjES:LE.subjES||'', bodyES:LE.bodyES||''});
+      }
+    } catch(e){}
+    // No address, or Gmail refused to open -> fall back to the preview page so he still has the
+    // copy and the Copy-email button rather than a dead click.
+    if(!opened && typeof genEmail === 'function') _openDoc(genEmail(r));
     _docLog(r.case, 'worker-email', 'bi');
-    _wlog(r.case, 'email', em ? 'composer opened → '+em : 'composer opened (no email on file)', true);
+    _wlog(r.case, 'email',
+          opened ? ('Gmail compose opened, prefilled → '+(em||'owner')+' — press Send')
+                 : (em ? 'preview opened (Gmail blocked) → '+em : 'no email on file — preview opened'),
+          opened);
   } else if(d.k === 'text'){
     // openBulkText walks a queue; open just this one lead via openTextSingle if available
     var ph = (r.phones||[])[0] || '';
@@ -8746,7 +8903,7 @@ function genScript(r){
 }
 // ---- per-lead OUTREACH EMAIL: one generic foreclosure email, auto-filled per prospect so each reads
 //      personal. Opens pre-addressed to the owner's skip-traced email (EN/ES), or Copy to paste. ----
-function genEmail(r){
+function genEmail(r, quiet){
   const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
   const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
@@ -8773,6 +8930,13 @@ function genEmail(r){
     ? `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Antes de esa fecha, los dueños suelen mirar pagar impuestos atrasados, vender en privado en efectivo, o reclamar el excedente si la ley lo permite.\n\nSin costo ni compromiso. Si una venta privada encaja, puedo comprar tal cual y cerrar antes de la fecha; si otro camino es mejor, se lo digo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`
     : `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con subasta el ${dt}.\n\nNo escribo para convencerlo. Las cinco salidas de todo propietario en ejecución en Florida son: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo antes de la subasta — ahí entra un comprador como yo — y (5) bancarrota. Mi trabajo es que sepa que las cinco están sobre la mesa.\n\nSin costo ni compromiso. Si quiere poner todas las opciones sobre la mesa, conteste cuando llamemos; si no le interesa, dígamelo — nadie se ofende.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
   const D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
+  // SENT-CONTENT CAPTURE. Alejandro: "I need to see the results of what's sending. What is the
+  // input?" Stash the EXACT composed subject+body on a global the moment it is built, so the
+  // worker's log can archive the real text rather than a summary. Reading it from here instead
+  // of recomputing it in the logger guarantees the archive can never drift from what he saw.
+  try { window.__lastEmail = {c:r.case, to:to, addr:r.addr||'', who:owner,
+                              subj:D.en.subj, body:D.en.body,
+                              subjES:D.es.subj, bodyES:D.es.body, at:Date.now()}; } catch(e){}
   const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
   const recip = emails.length
     ? emails.map((e,i)=>'<a href="mailto:'+esc(e)+'"'+(i===0?' class="primary"':'')+'>'+esc(e)+'</a>').join(' ') + (emails.length>1?' <span class="mut">(first = primary)</span>':'')
@@ -8808,7 +8972,13 @@ function openGmail(){window.open('https://mail.google.com/mail/?view=cm&fs=1&to=
 function copyEmail(){var t='Subject: '+D[cur].subj+'\\n\\n'+D[cur].body;function ok(){var b=document.getElementById('cpy');b.textContent='Copied!';setTimeout(function(){b.textContent='Copy email';},1500);}function fb(){var a=document.createElement('textarea');a.value=t;a.style.position='fixed';a.style.opacity='0';document.body.appendChild(a);a.select();try{document.execCommand('copy');ok();}catch(e){}document.body.removeChild(a);}if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,fb);}else{fb();}}
 show('en');<\/script>
 </body></html>`;
+  // QUIET MODE: the Morning Worker calls genEmail(r, true) purely to COMPOSE — it needs the
+  // subject/body stashed on __lastEmail so it can build the Gmail compose URL and archive the
+  // verbatim text, but it must NOT pop the preview page (that was opening a second, redundant
+  // tab on every send). Every existing caller passes no second argument and is unaffected.
+  if(quiet) return doc;
   _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
+  return doc;
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); }
