@@ -1301,8 +1301,12 @@ input.ph::placeholder{color:#8FBFA0}
 .cctl textarea{flex:1}
 
 /* ============================== MODALS (shared shell) ============================== */
-#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal,#savedmodal,#csmodal,#playbookmodal,#textmodal{display:none;position:fixed;inset:0;z-index:120}
-#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show,#savedmodal.show,#textmodal.show{display:block}
+/* NOTE FOR ANYONE ADDING A MODAL: these two lists are BY EXPLICIT ID. A modal whose id is not in
+   BOTH of them gets no position:fixed, no z-index and no display toggle — it renders as a plain
+   static block in document flow and appears clipped behind the sticky header. That is exactly what
+   happened to #nearmemodal on first ship (2026-07-30). Add your id to BOTH lines. */
+#dealmodal,#logmodal,#planmodal,#gallerymodal,#lookupmodal,#syncmodal,#mailmodal,#refreshmodal,#cadencemodal,#savedmodal,#csmodal,#playbookmodal,#textmodal,#nearmemodal{display:none;position:fixed;inset:0;z-index:120}
+#dealmodal.show,#logmodal.show,#planmodal.show,#gallerymodal.show,#lookupmodal.show,#syncmodal.show,#mailmodal.show,#refreshmodal.show,#cadencemodal.show,#savedmodal.show,#textmodal.show,#nearmemodal.show{display:block}
 #syncmodal{z-index:122}#planmodal{z-index:121}#lookupmodal{z-index:121}#gallerymodal{z-index:130}
 .dm-backdrop{position:absolute;inset:0;background:rgba(9,16,31,.5);backdrop-filter:blur(5px);
   -webkit-backdrop-filter:blur(5px);animation:dmFade .2s ease}
@@ -1316,6 +1320,68 @@ input.ph::placeholder{color:#8FBFA0}
 #planmodal .dm-card{width:min(640px,95vw);max-height:86vh}
 #syncmodal .dm-card{width:min(560px,94vw)}
 #logmodal .dm-card{max-width:440px}
+/* ---- NEAR ME panel ------------------------------------------------------------------------ */
+/* overflow:hidden OVERRIDES the base .dm-card's overflow-y:auto on purpose. If the CARD scrolls,
+   the inner .nmlist never gets a bounded height, grows past the card, and pushes the
+   "Build Carlos packet" action bar off-screen — the one button the whole run exists to reach.
+   The card is a fixed frame; the RESULTS LIST is the only thing that scrolls. */
+#nearmemodal .dm-card{width:min(660px,95vw);max-height:88vh;display:flex;flex-direction:column;
+  padding:24px 24px 20px;overflow:hidden}
+/* THE FLEX CHAIN MUST BE UNBROKEN from .dm-card down to .nmlist, or the list never receives a
+   bounded height and grows past the card (measured: a 1031px list inside a 413px card, action bar
+   pushed off-screen). #nearmebody sits between the card and .nmwrap as a plain block, so it has to
+   participate too — every link needs flex:1 AND min-height:0. */
+#nearmemodal #nearmebody{display:flex;flex-direction:column;flex:1 1 auto;min-height:0}
+.nmwrap{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
+/* On a short viewport the head (form + origin + stats) can eat the entire card and collapse the
+   results list to nothing — measured at 10px on a 483px-tall window. So the HEAD yields first:
+   it may shrink and scroll internally, while .nmlist keeps a guaranteed minimum below. */
+.nmhead{flex:0 1 auto;min-height:0;overflow-y:auto}
+.nmlede{font-size:12.5px;color:var(--muted);line-height:1.5;margin:2px 0 14px}
+/* the control row: a real grid so labels sit above their inputs and nothing crowds */
+.nmform{display:grid;grid-template-columns:auto 1fr auto auto;gap:10px;align-items:end;
+  background:var(--surface-2,#f6f8fa);border:1px solid var(--line);border-radius:10px;padding:12px 13px;margin-bottom:12px}
+.nmf{display:flex;flex-direction:column;gap:4px;min-width:0}
+.nmf label{font:700 9.5px/1 var(--f-label,inherit);letter-spacing:.09em;text-transform:uppercase;color:var(--muted)}
+.nmf input,.nmf select{padding:8px 10px;border:1px solid var(--line);border-radius:7px;background:var(--surface);
+  color:var(--ink);font:600 14px/1.2 inherit;width:100%;transition:border-color .15s,box-shadow .15s}
+.nmf input:focus,.nmf select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+.nmf input{min-width:92px}
+.nmbtn{padding:9px 15px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  font:700 13px/1.2 inherit;cursor:pointer;white-space:nowrap;transition:all .15s}
+.nmbtn:hover{border-color:var(--ink);background:var(--surface-2)}
+.nmbtn.go{background:var(--ink);color:var(--gold);border-color:var(--ink)}
+.nmbtn.go:hover{background:#1a2b52}
+.nmbtn:active{transform:translateY(1px)}
+/* origin + counts */
+.nmorigin{background:var(--gold-soft);border-left:3px solid var(--gold);border-radius:0 8px 8px 0;
+  padding:10px 13px;margin-bottom:10px;font-size:13.5px;color:var(--ink);flex:none}
+.nmorigin .sub{display:block;font-size:11.5px;color:var(--gold-ink,#7a5a10);margin-top:3px;line-height:1.45}
+.nmstats{font-size:12px;color:var(--muted);line-height:1.55;margin-bottom:10px;flex:none}
+.nmstats b{color:var(--ink)}
+.nmwarn{background:#fff5f4;border-left:3px solid #8a1c1c;border-radius:0 8px 8px 0;padding:10px 13px;
+  margin-bottom:10px;font-size:13px;color:#8a1c1c;flex:none}
+/* the results list scrolls INSIDE the card so the action bar never leaves the screen */
+.nmlist{flex:1 1 auto;min-height:min(160px,34vh);overflow-y:auto;border:1px solid var(--line);
+  border-radius:9px;background:var(--surface);-webkit-overflow-scrolling:touch}
+.nmrow{display:flex;gap:11px;align-items:baseline;padding:9px 12px;border-bottom:1px solid var(--line);font-size:13.5px}
+.nmrow:last-child{border-bottom:none}
+.nmrow:hover{background:var(--gold-soft)}
+.nmrow .n{flex:none;width:20px;font:700 12px/1.4 var(--f-label,inherit);color:var(--muted);text-align:right}
+.nmrow .a{flex:1;min-width:0}
+.nmrow .a b{display:block;font-size:13.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nmrow .a span{font-size:11.5px;color:var(--muted)}
+.nmrow .mi{flex:none;font:800 13px/1.3 var(--f-label,inherit);color:var(--gold-d,#8a6d1f);white-space:nowrap}
+.nmunit{display:inline-block;font:700 8.5px/1 var(--f-label,inherit);letter-spacing:.06em;text-transform:uppercase;
+  background:#eef3fa;color:#3c5b8a;padding:2px 5px;border-radius:3px;margin-left:6px;vertical-align:1px}
+.nmacts{display:flex;gap:9px;flex-wrap:wrap;padding-top:13px;margin-top:2px;border-top:1px solid var(--line);flex:none}
+.nmacts .nmbtn{flex:1 1 auto;text-align:center;justify-content:center}
+.nmacts .nmbtn.pack{background:var(--gold-grad,var(--gold));color:var(--gold-ink,#241C05);border-color:var(--gold);font-weight:800}
+@media(max-width:560px){
+  .nmform{grid-template-columns:1fr 1fr;gap:9px}
+  .nmform .nmf.zip{grid-column:1/-1}
+  .nmform .nmbtn.go{grid-column:1/-1}
+}
 .dm-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);
   font-size:24px;line-height:1;cursor:pointer;padding:2px 8px;border-radius:var(--r-xs)}
 .dm-close:hover{color:var(--ink);background:var(--surface-2);transform:none;box-shadow:none}
@@ -5852,12 +5918,12 @@ function _boardAgeDays(){
 // callback loses the user-gesture token and the Blob anchor gets popup-blocked (this is the exact
 // bug _openDoc was created to fix). So: resolve the origin FIRST, render results, and let the
 // operator tap "Build Carlos packet" as a SEPARATE click.
-var _nmLast = null;
+var _nmLast = null, _nmEscBound = false;
 function openNearMe(){
   var host = document.getElementById('nearmebody');
   if(!host){
     var m = document.createElement('div');
-    m.id = 'nearmemodal'; m.className = 'dm';
+    m.id = 'nearmemodal';   // styling comes from the by-ID modal lists in the CSS — no class needed
     m.innerHTML = '<div class="dm-backdrop" onclick="closeNearMe()"></div><div class="dm-card">'
       + '<button class="dm-close" type="button" onclick="closeNearMe()" title="Close">&times;</button>'
       + '<div id="nearmebody"></div></div>';
@@ -5891,57 +5957,60 @@ function _nmZipOptions(){
 function _nmRender(res){
   var host = document.getElementById('nearmebody'); if(!host) return;
   var age = _boardAgeDays();
-  var h = '<div class="dm-sec">📍 Near Me — build Carlos a door run</div>';
+  // Structure: fixed head (title/form/origin/stats) + a SCROLLING results list + a pinned action
+  // bar. Without the flex/min-height:0 chain the list grows the card past the viewport and the
+  // "Build Carlos packet" button ends up off-screen — the whole point of the run.
+  var h = '<div class="nmwrap"><div class="nmhead">'
+    + '<div class="dm-sec">📍 Near Me — build Carlos a door run</div>'
+    + '<div class="nmlede">Miami-Dade only — Broward and Palm Beach are excluded outright, because gas is the whole point.</div>';
   if(age!=null && age>=3)
-    h += '<div class="csbody csgovwarn" style="border-color:#8a1c1c;background:#fff5f4">'
-      +  '<b style="color:#8a1c1c">⚠ Board data is '+age+' days old.</b> Properties may have already sold. '
-      +  'Run the ↻ Refresh before sending Carlos out.</div>';
-  h += '<div class="csbody" style="font-size:13px;color:var(--muted)">Miami-Dade only — Broward and Palm Beach are excluded outright, because gas is the whole point.</div>'
-    + '<div class="csbody" style="display:flex;gap:9px;flex-wrap:wrap;align-items:flex-end">'
-    +   '<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:3px">Start from</label>'
-    +     '<button type="button" class="csbtn" id="nm-gps">Use my location</button></div>'
-    +   '<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:3px">…or a ZIP</label>'
-    +     '<input list="nm-zips" id="nm-zip" placeholder="33172" style="width:110px;padding:7px 9px;border:1px solid var(--line);border-radius:5px">'
+    h += '<div class="nmwarn"><b>⚠ Board data is '+age+' days old.</b> Properties may have already sold — run ↻ Refresh before sending Carlos out.</div>';
+  h += '<div class="nmform">'
+    +   '<div class="nmf"><label>Start from</label><button type="button" class="nmbtn" id="nm-gps">Use my location</button></div>'
+    +   '<div class="nmf zip"><label>…or a ZIP</label>'
+    +     '<input list="nm-zips" id="nm-zip" placeholder="33172" inputmode="numeric" autocomplete="postal-code">'
     +     '<datalist id="nm-zips">'+_nmZipOptions()+'</datalist></div>'
-    +   '<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:3px">Doors</label>'
-    +     '<select id="nm-count" style="padding:7px 9px;border:1px solid var(--line);border-radius:5px">'
-    +       '<option value="10" selected>10</option><option value="15">15</option><option value="20">20</option></select></div>'
-    +   '<div><label style="font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);display:block;margin-bottom:3px">Max miles</label>'
-    +     '<select id="nm-cap" style="padding:7px 9px;border:1px solid var(--line);border-radius:5px">'
-    +       '<option value="5">5</option><option value="10" selected>10</option><option value="15">15</option><option value="25">25</option></select></div>'
-    +   '<button type="button" class="csbtn" id="nm-find" style="background:var(--ink);color:var(--gold)">Find doors</button>'
+    +   '<div class="nmf"><label>Doors</label><select id="nm-count">'
+    +     '<option value="10" selected>10</option><option value="15">15</option><option value="20">20</option></select></div>'
+    +   '<div class="nmf"><label>Max miles</label><select id="nm-cap">'
+    +     '<option value="5">5</option><option value="10" selected>10</option><option value="15">15</option><option value="25">25</option></select></div>'
+    +   '<button type="button" class="nmbtn go" id="nm-find" style="grid-column:1/-1">Find doors</button>'
     + '</div>';
   if(res){
     var o = res.origin, ex = res.excluded;
-    h += '<div class="csbody csgovwarn" style="border-color:var(--gold);background:var(--gold-soft)">'
-      +  '<b>Centered on '+esc(o.label)+'</b> <span style="font-size:11.5px">('+esc(o.tier)+' · '+esc(o.confidence)+' confidence'
-      +  (o.tier==='zip'?' · '+o.anchors+' anchor lead'+(o.anchors===1?'':'s'):'')+')</span>'
-      +  (o.note ? '<br><span style="font-size:12px;color:#8a1c1c">'+esc(o.note)+'</span>' : '')
-      +  (res.clamped ? '<br><span style="font-size:12px">Radius clamped to '+res.radiusUsed+' mi — a single-anchor ZIP centroid cannot support a tighter search.</span>' : '')
-      +  '</div>';
-    h += '<div class="csbody" style="font-size:12.5px;color:var(--muted)">'
-      +  '<b>'+res.picked.length+'</b> door'+(res.picked.length===1?'':'s')+' selected of <b>'+res.poolSize+'</b> eligible within '+res.radiusUsed+' mi.<br>'
-      +  'Excluded: '+ex.county+' out-of-county · '+ex.unroutable+' no usable street-level coordinate · '
-      +  ex.ineligible+' do-not-knock (BK stay / sold / opted out) · '+ex.outOfRange+' beyond '+res.radiusUsed+' mi.'
-      +  '</div>';
+    h += '<div class="nmorigin"><b>Centered on '+esc(o.label)+'</b>'
+      +  '<span class="sub">'+esc(o.tier)+' · '+esc(o.confidence)+' confidence'
+      +  (o.tier==='zip'?' · '+o.anchors+' anchor lead'+(o.anchors===1?'':'s'):'')
+      +  (o.note ? '<br>'+esc(o.note) : '')
+      +  (res.clamped ? '<br>Radius held at '+res.radiusUsed+' mi — a single-anchor ZIP centroid cannot support a tighter search.' : '')
+      +  '</span></div>';
+    h += '<div class="nmstats"><b>'+res.picked.length+'</b> door'+(res.picked.length===1?'':'s')
+      +  ' of <b>'+res.poolSize+'</b> eligible within '+res.radiusUsed+' mi.<br>'
+      +  'Left out: '+ex.county+' out-of-county · '+ex.unroutable+' no street-level coordinate · '
+      +  ex.ineligible+' do-not-knock · '+ex.outOfRange+' beyond '+res.radiusUsed+' mi.</div>';
+  }
+  h += '</div>';   // /nmhead
+  if(res){
     if(!res.picked.length){
-      h += '<div class="csbody csgovwarn" style="border-color:#8a1c1c;background:#fff5f4">'
-        +  '<b>Nothing found in range.</b> Widen the radius above and tap Find doors again — '
+      h += '<div class="nmwarn"><b>Nothing found in range.</b> Widen Max miles and tap Find doors again — '
         +  'the tool will not widen on its own, because that is how Carlos ends up 20 miles out.</div>';
     } else {
-      h += '<div class="csdil-tbl-wrap"><table class="csdil-tbl"><tbody>'
+      h += '<div class="nmlist">'
         + res.picked.map(function(r,i){
-            return '<tr><th style="width:34px">'+(i+1)+'</th><td><b>'+esc((r.addr||'').split(',')[0])+'</b>'
-              + (_isUnitAddr(r)?' <span style="font-size:9.5px;background:#eef3fa;color:#3c5b8a;padding:1px 5px;border-radius:3px">UNIT</span>':'')
-              + '<br><span style="font-size:11.5px;color:var(--muted)">'+r._nmDist.toFixed(1)+' mi · sale '+esc(r.auction||'—')
-              + ' · '+esc((r.oname||r.owners||'').split(';')[0])+'</span></td></tr>';
+            return '<div class="nmrow"><div class="n">'+(i+1)+'</div><div class="a">'
+              + '<b>'+esc((r.addr||'').split(',')[0])
+              + (_isUnitAddr(r)?'<span class="nmunit">unit</span>':'')+'</b>'
+              + '<span>sale '+esc(r.auction||'—')+' · '+esc(((r.oname||r.owners||'').split(';')[0]||'').slice(0,34))+'</span>'
+              + '</div><div class="mi">'+r._nmDist.toFixed(1)+' mi</div></div>';
           }).join('')
-        + '</tbody></table></div>'
-        + '<div class="csfoot"><button type="button" class="shbtn" id="nm-build" '
-        +   'style="background:var(--gold);color:var(--ink);font-weight:800">📄 Build Carlos packet ('+res.picked.length+')</button>'
-        + '<button type="button" class="csbtn" id="nm-route">🚗 Google Maps route</button></div>';
+        + '</div>'
+        + '<div class="nmacts">'
+        +   '<button type="button" class="nmbtn pack" id="nm-build">📄 Build Carlos packet ('+res.picked.length+')</button>'
+        +   '<button type="button" class="nmbtn" id="nm-route">🚗 Maps route</button>'
+        + '</div>';
     }
   }
+  h += '</div>';   // /nmwrap
   host.innerHTML = h;
   // wire — each handler is its own user gesture
   var g = function(id){ return document.getElementById(id); };
@@ -5959,6 +6028,14 @@ function _nmRender(res){
       _nmRender(_nmLast);
     });
   };
+  // Enter in the ZIP box runs the search — typing a ZIP then hunting for a button is friction.
+  if(g('nm-zip')) g('nm-zip').onkeydown = function(e){ if(e.key==='Enter'){ e.preventDefault(); g('nm-find').click(); } };
+  // Esc closes, matching every other modal in the app.
+  if(!_nmEscBound){ _nmEscBound = true;
+    document.addEventListener('keydown', function(e){
+      if(e.key==='Escape' && document.querySelector('#nearmemodal.show')) closeNearMe();
+    });
+  }
   // SEPARATE GESTURE — this click is what opens the Blob, so the popup blocker stays happy.
   if(g('nm-build')) g('nm-build').onclick = function(){
     if(!_nmLast || !_nmLast.picked.length) return;
