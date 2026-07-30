@@ -38,6 +38,11 @@ jobs:
       BATCHDATA_API_KEY: ${{ secrets.BATCHDATA_API_KEY }}
       # accept whatever the WP Pro secret is named in the repo settings
       WHITEPAGES_KEY: ${{ secrets.WHITEPAGES_KEY || secrets.WHITEPAGES_API_KEY || secrets.WP_PRO_KEY }}
+      # Gmail App Password for reply detection. Accept "user@domain:apppassword" in one secret, or
+      # a password-only secret plus GMAIL_ACCOUNT. NOT a Google account password — an App Password
+      # (myaccount.google.com -> Security -> App passwords), which is revocable on its own.
+      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD || secrets.GMAIL_KEY }}
+      GMAIL_ACCOUNT: ${{ secrets.GMAIL_ACCOUNT }}
       # accept whatever you named the 2Captcha secret — no need to match one exact name
       CAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY || secrets.TWOCAPTCHA_KEY || secrets.CAPTCHA || secrets.TWO_CAPTCHA_KEY || secrets.TWOCAPTCHA }}
       TWOCAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY || secrets.TWOCAPTCHA_KEY || secrets.CAPTCHA || secrets.TWO_CAPTCHA_KEY || secrets.TWOCAPTCHA }}
@@ -110,6 +115,7 @@ jobs:
             lp_addresses.json
             _lp_pagis_cache.json
             _lp_values_cache.json
+            replies.json
             whitepages_lookup.json
             geocode_cache.json
             tax_links.json
@@ -118,17 +124,19 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          # v3 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
+          # v4 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
           # cache saved under a different path list is invisible even to a matching restore-key prefix.
           # Adding whitepages_lookup.json silently orphaned every earlier cache — the restore logged
           # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
           # dealflow-state cache sat right there in the repo. Bump this suffix ON PURPOSE whenever the
           # path list changes, so the invalidation is deliberate and greppable instead of a mystery.
-          # v2 -> v3 (2026-07-30): added lp_addresses.json + _lp_pagis_cache.json so the lis-pendens
-          # address resolver keeps its parcel-roll cache between runs instead of re-querying cold.
+          # v2 -> v3 -> v4 (both 2026-07-30, before v3 ever ran): v3 added the lis-pendens address
+          # resolver caches (lp_addresses.json, _lp_pagis_cache.json, _lp_values_cache.json) so the
+          # parcel roll is not re-queried cold every morning; v4 added replies.json so a day with no
+          # new reply keeps yesterday's rather than blanking the Reply Inbox.
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v3-${{ github.run_id }}
-          restore-keys: dealflow-state-v3-
+          key: dealflow-state-v4-${{ github.run_id }}
+          restore-keys: dealflow-state-v4-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -151,6 +159,9 @@ jobs:
           [ -n "$BATCHDATA_API_KEY" ] && printf '%s' "$BATCHDATA_API_KEY" > batchdata.key || true
           [ -n "$TRACERFY_API_KEY"  ] && printf '%s' "$TRACERFY_API_KEY"  > tracerfy.key  || true
           [ -n "$CAPTCHA_KEY"       ] && printf '%s' "$CAPTCHA_KEY"       > captcha.key   || true
+          # replies.py reads env directly, but write the file too so a local-style run inside CI
+          # behaves identically to Alejandro's machine — one code path, not two.
+          [ -n "$GMAIL_APP_PASSWORD" ] && printf '%s' "$GMAIL_APP_PASSWORD" > gmail.key    || true
           echo "keys -> batchdata=$([ -s batchdata.key ] && echo Y || echo N) tracerfy=$([ -s tracerfy.key ] && echo Y || echo N) captcha=$([ -s captcha.key ] && echo Y || echo N)"
 
       - name: Configure git identity
@@ -329,6 +340,22 @@ jobs:
         continue-on-error: true
         run: python llc_officers.py --limit 40
 
+      # ---- [3g/5] Owner replies (IMAP) ----------------------------------------------------
+      # MUST run before [4/5]: make_tracker bakes replies.json into the page, so a reply detected
+      # after the rebuild would not surface until the NEXT day's run. This was the last enrichment
+      # step that only existed on Alejandro's machine — the Reply Inbox went stale between manual
+      # runs, and a reply is the single warmest signal on the board. A STOP word in a reply is also
+      # an opt-out we are legally obliged to honour (FTSA/TCPA), so detecting it a day late is not
+      # a cosmetic delay.
+      # Fail-soft: no secret, or Gmail refusing the login, leaves yesterday's replies.json in place
+      # and the board keeps saying "awaiting reply" — the honest state, never a fabricated one.
+      - name: '[3g/5] Owner replies (Gmail IMAP -> replies.json)'
+        if: env.GMAIL_APP_PASSWORD != ''
+        continue-on-error: true
+        run: |
+          python replies.py --days 30
+          python -c "import json,os; d=json.load(open('replies.json',encoding='utf-8')) if os.path.exists('replies.json') else {}; a=[k for k in d if k.startswith('@')]; s=[k for k in a if (d[k] or {}).get('stop')]; print('::notice::replies: %d address(es) replied, %d with a STOP word' % (len(a), len(s))); print('::warning::STOP words in replies — add them to optouts.json before any further contact' if s else '')"
+
       # ---- [4/5] Final rebuild with everything baked in -----------------------------------
       - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
         run: |
@@ -399,6 +426,7 @@ jobs:
             lp_addresses.json
             _lp_pagis_cache.json
             _lp_values_cache.json
+            replies.json
             whitepages_lookup.json
             geocode_cache.json
             tax_links.json
@@ -407,7 +435,7 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          key: dealflow-state-v3-${{ github.run_id }}
+          key: dealflow-state-v4-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the

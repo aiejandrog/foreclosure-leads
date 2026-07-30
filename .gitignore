@@ -2,6 +2,21 @@ leads_raw.json
 leads_final.json
 _check.js
 _*.py
+# ...EXCEPT the regression suites and the route generator. `_` means "scratch" here, and that rule
+# is right for the dozens of one-shot probes — but it also meant every suite that guards this
+# board's behaviour lived on exactly one laptop and died with a fresh clone. These are the files
+# that fail loudly when a change breaks something: keep them.
+!_cstest.py
+!_redesign_verify.py
+!_gatetest.py
+!_diligencetest.py
+!_filtertest.py
+!_funneltest.py
+!_workerui.py
+!_deedtest.py
+!_lanetest.py
+!_carlos_route.py
+!_stalefixtest.py
 _*.html
 _*.json
 _*.txt
@@ -63,6 +78,8 @@ _wp_*.py
 _wp_*.html
 _wp_*.json
 _chunk.html
-_cstest.py
+# _cstest.py was re-ignored here, AFTER the !_cstest.py negation above — and in git the LAST
+# matching rule wins, so the negation was dead. Removed: the 129-check call-sheet audit is the
+# most valuable suite in the repo and should not be the one file that never survives a clone.
 balloon_refi.json
 replies.json
