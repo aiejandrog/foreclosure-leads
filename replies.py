@@ -84,14 +84,24 @@ def owner_emails():
     return out
 
 
-def load_key():
+def load_key(account_override=None):
+    """gmail.key holds 'user:app_password'. --account swaps the mailbox without editing the file.
+
+    WHY THE OVERRIDE EXISTS (found the hard way 2026-07-30): an App Password is minted against
+    whichever Google account you were signed into, and with several accounts open it is easy to
+    create one under the wrong mailbox. The key looked textbook-correct -- 16 lowercase chars, no
+    spaces -- and Gmail still returned AUTHENTICATIONFAILED, because the password belonged to the
+    personal Gmail rather than the Workspace address in the same file. Rather than rewrite the
+    credential file to chase that, point the run at the mailbox the password actually opens.
+    Also the more correct default: replies land in whichever inbox the outreach was SENT from.
+    """
     if not os.path.exists(KEY):
         return None
     raw = open(KEY, encoding='utf-8').read().strip()
     if ':' not in raw:
         return None
     user, _, pw = raw.partition(':')
-    return user.strip(), pw.strip()
+    return (account_override or user).strip(), pw.strip()
 
 
 def _decode(s):
@@ -108,6 +118,10 @@ def main():
     if '--days' in args:
         try: days = int(args[args.index('--days') + 1])
         except Exception: pass
+    account = None
+    if '--account' in args:
+        try: account = args[args.index('--account') + 1]
+        except Exception: pass
 
     by_case = owner_emails()
     all_emails = sorted({e for ems in by_case.values() for e in ems})
@@ -117,7 +131,7 @@ def main():
         print('No owner emails on file yet — run skiptrace.py first. Nothing to check.')
         return
 
-    cred = load_key()
+    cred = load_key(account)
     if not cred:
         print('\ngmail.key MISSING — cannot check replies.')
         print('  Create it in this folder, one line:   you@gmail.com:APP_PASSWORD')
@@ -135,6 +149,7 @@ def main():
         return
 
     user, pw = cred
+    print(f'checking mailbox: {user}')
     since = (datetime.now() - timedelta(days=days)).strftime('%d-%b-%Y')
     found = {}
     try:
@@ -146,18 +161,62 @@ def main():
             if typ != 'OK' or not data or not data[0]:
                 continue
             ids = data[0].split()
-            # newest message from this sender
-            typ, msg_data = M.fetch(ids[-1], '(RFC822.HEADER)')
-            subj, when = '', ''
+            # FETCH THE WHOLE MESSAGE, NOT JUST THE HEADER.
+            # Caught on the first live run (2026-07-30): Norma Hendy replied "Please stop" and the
+            # scan scored it stop=False, because her subject was the untouched "Re: Regarding your
+            # property at ..." and only the BODY carried the opt-out. Scanning subjects alone
+            # misses the ordinary way a person actually says stop -- and a missed opt-out is an
+            # FTSA/TCPA problem, not a cosmetic one. Read subject AND body.
+            typ, msg_data = M.fetch(ids[-1], '(RFC822)')
+            subj, when, body = '', '', ''
             if typ == 'OK' and msg_data and msg_data[0]:
                 try:
-                    hdr = email.message_from_bytes(msg_data[0][1])
-                    subj = _decode(hdr.get('Subject'))
-                    when = _decode(hdr.get('Date'))[:31]
+                    msg = email.message_from_bytes(msg_data[0][1])
+                    subj = _decode(msg.get('Subject'))
+                    when = _decode(msg.get('Date'))[:31]
+                    if msg.is_multipart():
+                        for part in msg.walk():
+                            if part.get_content_type() == 'text/plain':
+                                try:
+                                    body += part.get_payload(decode=True).decode(
+                                        part.get_content_charset() or 'utf-8', 'replace')
+                                except Exception:
+                                    pass
+                    else:
+                        try:
+                            body = msg.get_payload(decode=True).decode(
+                                msg.get_content_charset() or 'utf-8', 'replace')
+                        except Exception:
+                            body = str(msg.get_payload())[:4000]
                 except Exception:
                     pass
+            # ONLY THE NEW TEXT COUNTS, and getting this wrong is expensive in BOTH directions.
+            # Our own outreach template ends with "Reply STOP or ask me not to contact you again",
+            # and every reply quotes that template underneath. If the quoted block reaches the
+            # scanner, EVERY reply reads as an opt-out -- including Deondre, who wrote back with
+            # his phone number asking for a call. Suppressing a hot lead as a false opt-out is
+            # worse than the miss this guard was written for.
+            # The first cut required the quote marker to start a line; real Gmail replies inline it
+            # ("...call you On Mon, Jul 27, 2026 at 2:48 PM Alejandro Gonzalez <...> wrote:"), so
+            # the quote leaked through. Match the marker ANYWHERE, and cut at the earliest hit.
+            _QUOTE = [
+                r'On .{0,120}?wrote:',            # Gmail / Apple Mail
+                r'-{2,}\s*Original Message',      # Outlook
+                r'_{5,}',                          # Outlook divider rule
+                r'From:\s*\S+@',                  # forwarded header
+                r'Sent from my ',                 # signature that precedes a quote
+                r'\n\s*>',                        # classic quote marker
+            ]
+            cut = len(body)
+            for pat in _QUOTE:
+                m = re.search(pat, body, re.I | re.S)
+                if m and m.start() < cut:
+                    cut = m.start()
+            fresh = body[:cut][:2000]
+            is_stop = bool(STOP_WORDS.search(subj or '') or STOP_WORDS.search(fresh))
             rec = {'email': addr, 'n': len(ids), 'subject': subj, 'when': when,
-                   'stop': bool(STOP_WORDS.search(subj or '')),
+                   'stop': is_stop,
+                   'excerpt': ' '.join(fresh.split())[:220],
                    'checked': datetime.now().isoformat(timespec='minutes')}
             found['@' + addr] = rec
             for case, ems in by_case.items():

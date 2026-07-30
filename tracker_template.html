@@ -7777,7 +7777,10 @@ function _isReplied(r){
   var n = (typeof notes!=='undefined' && notes[r.case]) || {};
   if(n.replied) return {src:'manual', when:n.replied, note:n.repliedNote||'', stop:!!n.repliedStop};
   var auto = _replyFor(r.case, (r.emails||[])[0]);
-  if(auto) return {src:'email', when:auto.when||'', note:auto.subject||'', stop:!!auto.stop, n:auto.n||1};
+  // Prefer the EXCERPT (what they actually wrote) over the subject — the subject is just our own
+  // "Re: Regarding your property at ...", which tells him nothing. The excerpt is the reply.
+  if(auto) return {src:'email', when:auto.when||'', note:(auto.excerpt||auto.subject||''),
+                   stop:!!auto.stop, n:auto.n||1};
   return null;
 }
 function _markReplied(caseId, evt){
