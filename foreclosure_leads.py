@@ -10,7 +10,7 @@ Phase 2: enrich each parcel via the Miami-Dade Property Appraiser public API
          (owner, mailing address, market value, homestead, beds/baths, last sale).
 Phase 3: qualify + score (equity/lead-time/homestead/value), write CSV sorted best-first.
 """
-import json, re, time, csv, os, sys, shutil, hashlib, urllib.parse
+import json, re, time, csv, os, sys, shutil, hashlib, math, urllib.parse
 from datetime import datetime, date, timedelta
 import requests
 from playwright.sync_api import sync_playwright
@@ -788,6 +788,77 @@ def _fwd_flags(d, h, ftype):
     if h.get('second_fc'): d['orsecond'] = h['second_fc']           # a separate CACE mortgage foreclosure
 
 
+# ---------------------------------------------------------------------------------------------
+# MIAMI-DADE bounding box. A coordinate outside this is a provably bad geocode for an MD lead.
+# Measured hit: case 2026A00186 ("MIAMI GARDENS, FL- 33056", no street number) geocoded to
+# 26.1425,-80.1472 — that is in BROWARD, north of the county line.
+MD_BBOX = (25.13, 25.99, -80.88, -80.11)   # lat_min, lat_max, lng_min, lng_max
+
+def _has_street(addr):
+    """True when the address starts with a street number.
+
+    WHY THIS MATTERS MORE THAN THE BOUNDING BOX: a street-less address ("HOMESTEAD, FL- 33034")
+    gives the geocoder nothing to work with, so it falls back to a city/county centroid. Case
+    2026A00080 is a Homestead property whose coordinate landed 0.9 miles from DOWNTOWN MIAMI --
+    27 miles from the actual property. The bbox check cannot catch that, because downtown Miami
+    is legitimately inside Miami-Dade. Only the street-number test catches it. Without this, a
+    radius filter ranks that lead "near me" and sends Carlos on a 54-mile round trip to nothing.
+    """
+    return bool(re.match(r'^\s*\d+\s+\S', str(addr or '')))
+
+def _routable_py(d):
+    """Server-side twin of the browser's _routable(). Keep the two in sync."""
+    la, lo = d.get('lat'), d.get('lng')
+    if not (la and lo):
+        return False
+    if not (MD_BBOX[0] <= la <= MD_BBOX[1] and MD_BBOX[2] <= lo <= MD_BBOX[3]):
+        return False
+    return _has_street(d.get('addr'))
+
+def _zip_centroids(slim):
+    """ZIP -> {lat, lng, n} centroid table, built from our own ROUTABLE Miami-Dade leads.
+
+    Accuracy measured on the live board: median max-spread 1.39 mi across the 28 ZIPs holding 3+
+    geocoded leads -- good enough to anchor a 5-mile radius. But 26 of 64 ZIPs hold exactly ONE
+    geocoded lead, so their "centroid" is just that lead's position; `n` is returned so the UI can
+    downgrade confidence and refuse a precision it cannot support.
+
+    OUTLIER REJECT: any contributing point more than 4 miles from the provisional centroid is
+    dropped and the centroid recomputed. This is the guard that surfaced the 33056 bug, where one
+    street-less lead stretched the raw spread to 12.9 mi inside a ZIP only ~3 mi across.
+    """
+    import collections
+    buckets = collections.defaultdict(list)
+    for d in slim:
+        if (d.get('county') or 'MIAMI-DADE') != 'MIAMI-DADE':
+            continue
+        if not _routable_py(d):
+            continue
+        m = re.search(r'\b(3\d{4})\b', str(d.get('addr') or ''))
+        if m:
+            buckets[m.group(1)].append((d['lat'], d['lng']))
+    out = {}
+    for z, pts in buckets.items():
+        for _ in range(2):                     # provisional centroid, reject outliers, recompute
+            clat = sum(p[0] for p in pts) / len(pts)
+            clng = sum(p[1] for p in pts) / len(pts)
+            keep = [p for p in pts if _haversine_mi(clat, clng, p[0], p[1]) <= 4.0]
+            if len(keep) == len(pts) or not keep:
+                break
+            pts = keep
+        clat = sum(p[0] for p in pts) / len(pts)
+        clng = sum(p[1] for p in pts) / len(pts)
+        out[z] = {'lat': round(clat, 6), 'lng': round(clng, 6), 'n': len(pts)}
+    return out
+
+def _haversine_mi(la1, lo1, la2, lo2):
+    R = 3958.8
+    t = math.pi / 180
+    dla = (la2 - la1) * t
+    dlo = (lo2 - lo1) * t
+    a = math.sin(dla/2)**2 + math.cos(la1*t) * math.cos(la2*t) * math.sin(dlo/2)**2
+    return 2 * R * math.asin(math.sqrt(a))
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -1369,6 +1440,16 @@ def make_tracker(leads):
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')
 
+    # Substitute the build clock + ZIP centroid table BEFORE the Desktop copy is written.
+    # ORDERING BUG THIS FIXES (caught in the browser 2026-07-29): the Desktop write below runs
+    # ~55 lines before the __BUILT__ substitution, so any placeholder added next to BUILT was
+    # left raw in the Desktop copy. __BUILT__ survived that because it sits inside quotes and the
+    # gate explicitly tolerates an unsubstituted value; `const ZIP_CENT = __ZIPCENT__` is a BARE
+    # identifier, so the Desktop copy threw ReferenceError at parse time and the whole board
+    # failed to boot. Both new placeholders are resolved here, before either copy is written.
+    tpl = tpl.replace('__BUILTAT__', datetime.now().strftime('%Y-%m-%dT%H:%M'))
+    tpl = tpl.replace('__ZIPCENT__', _esc_json(_zip_centroids(slim)))
+
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would
     # just pollute the checkout with a junk "C:\Users\..." directory + duplicate photo copies.
@@ -1436,6 +1517,19 @@ def make_tracker(leads):
     # The page must know its own signature so the gate can tell a wrong code apart from a stale
     # cached copy — a newly added access code cannot unlock a page built before it existed.
     tpl = tpl.replace('__BUILT__', _cov['sig'])
+    # BOARD-DATA DATE (distinct from the content signature above). The Carlos packet used to stamp
+    # only the PRINT date, so paper printed today off a week-old board looked identical to fresh
+    # paper — and the daily refresh task has failed silently before (the ExecutionTimeLimit bug).
+    # Carlos cannot tell stale paper from fresh, and he pays for the gas. Bake the build clock so
+    # every printed artifact can show where its data actually came from.
+    # (already substituted above, before the Desktop write — this is a no-op safety net)
+    tpl = tpl.replace('__BUILTAT__', _cov['built'])
+    # ZIP -> CENTROID table for the Near-Me run, computed from OUR OWN geocoded leads. Zero runtime
+    # API, no CORS, no key, works offline in the encrypted file. Only leads that are genuinely
+    # ROUTABLE contribute: a street-less address geocodes to a city centroid (a Homestead lead was
+    # carrying a coordinate 0.9mi from downtown Miami, 27mi from the property), so including it
+    # would poison the very centroid meant to locate it.
+    tpl = tpl.replace('__ZIPCENT__', _esc_json(_zip_centroids(slim)))
     open(docs,'w',encoding='utf-8').write(_marker + tpl.replace('__DATA__', _payload))
     if codes:
         print(f'tracker written: docs/index.html (ENCRYPTED · {len(codes)} access code(s)){_dst}')
