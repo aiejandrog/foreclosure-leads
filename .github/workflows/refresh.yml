@@ -107,6 +107,9 @@ jobs:
             county_plaintiffs.json
             lis_pendens.json
             lp_leads.json
+            lp_addresses.json
+            _lp_pagis_cache.json
+            _lp_values_cache.json
             whitepages_lookup.json
             geocode_cache.json
             tax_links.json
@@ -115,14 +118,17 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          # v2 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
+          # v3 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
           # cache saved under a different path list is invisible even to a matching restore-key prefix.
           # Adding whitepages_lookup.json silently orphaned every earlier cache — the restore logged
           # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
           # dealflow-state cache sat right there in the repo. Bump this suffix ON PURPOSE whenever the
           # path list changes, so the invalidation is deliberate and greppable instead of a mystery.
-          key: dealflow-state-v2-${{ github.run_id }}
-          restore-keys: dealflow-state-v2-
+          # v2 -> v3 (2026-07-30): added lp_addresses.json + _lp_pagis_cache.json so the lis-pendens
+          # address resolver keeps its parcel-roll cache between runs instead of re-querying cold.
+          # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
+          key: dealflow-state-v3-${{ github.run_id }}
+          restore-keys: dealflow-state-v3-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -245,10 +251,19 @@ jobs:
       # The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
       # file most foreclosures over a rolling ISO window, keep the LIS PENDENS, dedupe -> the owner the
       # DAY their case is filed. lp_leads.py shapes them into st='LP' board leads (Fresh-filings lane).
-      - name: '[2c/5] Fresh Lis Pendens (lender-sweep -> lp_leads.json)'
+      # lp_resolve.py sits BETWEEN the sweep and lp_leads.py on purpose. A lis pendens names the
+      # property by legal description, never by folio or street address, so without this step every
+      # LP lead lands on the board with addr='' — un-skiptraceable, un-mappable, un-mailable, and the
+      # Morning Worker's EARLY lane reads 0 workable. lp_resolve matches the legal description against
+      # the free Miami-Dade parcel roll (MDC.PaGis, no key, no captcha) and grades every hit; lp_leads
+      # then fills addr/folio from the `high` rows ONLY. Ordering matters — lp_leads reads the file
+      # lp_resolve writes, so a swap here silently reverts us to blank addresses.
+      - name: '[2c/5] Fresh Lis Pendens (lender-sweep -> resolve addresses -> lp_leads.json)'
         continue-on-error: true
         run: |
           if [ -s captcha.key ]; then python lis_pendens.py --days 30; fi
+          if [ -f lis_pendens.json ]; then python lp_resolve.py; fi
+          if [ -f lp_addresses.json ]; then python lp_values.py; fi
           if [ -f lis_pendens.json ]; then python lp_leads.py; fi
 
       # ---- [2d/5] Geocode leads (keyless US Census) -> lat/lng for the origin-anchored door route -----
@@ -381,6 +396,9 @@ jobs:
             county_plaintiffs.json
             lis_pendens.json
             lp_leads.json
+            lp_addresses.json
+            _lp_pagis_cache.json
+            _lp_values_cache.json
             whitepages_lookup.json
             geocode_cache.json
             tax_links.json
@@ -389,7 +407,7 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          key: dealflow-state-v2-${{ github.run_id }}
+          key: dealflow-state-v3-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the

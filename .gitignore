@@ -21,6 +21,11 @@ diligence_server.log
 batchdata.key
 site.pass
 skiptrace_results.json
+# lp_addresses.json — resolved street addresses + owner-of-record names for 125 named individuals
+# in foreclosure. This repo is PUBLIC. It is derived from public records, but publishing a
+# ready-made list of distressed homeowners with their home addresses is a different act from those
+# records existing on a county server. Same reason skiptrace_results.json is here.
+lp_addresses.json
 tps_cookies.txt
 site.codes
 tracerfy.key
