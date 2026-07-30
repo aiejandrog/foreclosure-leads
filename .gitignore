@@ -18,6 +18,7 @@ _*.py
 !_carlos_route.py
 !_stalefixtest.py
 !_optouttest.py
+!_casestatustest.py
 _*.html
 _*.json
 _*.txt

@@ -115,6 +115,7 @@ jobs:
             lp_addresses.json
             _lp_pagis_cache.json
             _lp_values_cache.json
+            _lp_status_cache.json
             replies.json
             whitepages_lookup.json
             geocode_cache.json
@@ -124,19 +125,19 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          # v4 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
+          # v5 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
           # cache saved under a different path list is invisible even to a matching restore-key prefix.
           # Adding whitepages_lookup.json silently orphaned every earlier cache — the restore logged
           # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
           # dealflow-state cache sat right there in the repo. Bump this suffix ON PURPOSE whenever the
           # path list changes, so the invalidation is deliberate and greppable instead of a mystery.
-          # v2 -> v3 -> v4 (both 2026-07-30, before v3 ever ran): v3 added the lis-pendens address
+          # v2 -> v5 (all 2026-07-30, before any of them ran — still ONE cold run, not four): v3 added the lis-pendens address
           # resolver caches (lp_addresses.json, _lp_pagis_cache.json, _lp_values_cache.json) so the
           # parcel roll is not re-queried cold every morning; v4 added replies.json so a day with no
           # new reply keeps yesterday's rather than blanking the Reply Inbox.
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v4-${{ github.run_id }}
-          restore-keys: dealflow-state-v4-
+          key: dealflow-state-v5-${{ github.run_id }}
+          restore-keys: dealflow-state-v5-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -275,6 +276,11 @@ jobs:
           if [ -s captcha.key ]; then python lis_pendens.py --days 30; fi
           if [ -f lis_pendens.json ]; then python lp_resolve.py; fi
           if [ -f lp_addresses.json ]; then python lp_values.py; fi
+          # Is the case still alive? A lis pendens stays recorded forever, so nothing in the feed
+          # says the foreclosure ended. 8 of the current 125 are voluntarily dismissed — without
+          # this they sit in the EARLY lane looking fresh and somebody calls a homeowner about a
+          # case that no longer exists. Must run BEFORE lp_leads.py, which reads its cache.
+          if [ -f lis_pendens.json ]; then python lp_status.py; fi
           if [ -f lis_pendens.json ]; then python lp_leads.py; fi
 
       # ---- [2d/5] Geocode leads (keyless US Census) -> lat/lng for the origin-anchored door route -----
@@ -426,6 +432,7 @@ jobs:
             lp_addresses.json
             _lp_pagis_cache.json
             _lp_values_cache.json
+            _lp_status_cache.json
             replies.json
             whitepages_lookup.json
             geocode_cache.json
@@ -435,7 +442,7 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          key: dealflow-state-v4-${{ github.run_id }}
+          key: dealflow-state-v5-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
