@@ -6664,13 +6664,24 @@ function _profitPaths(r){
 // Letter/Door hanger/packet never opened on mobile). A Blob URL opened via a real anchor click,
 // synchronously inside the tap gesture, is not blocked. Falls back to same-tab navigation if even
 // the anchor is refused, and to a tap-link toast as a last resort.
-function _openDoc(html){
+function _openDoc(html, opts){
   var url;
   try { url = URL.createObjectURL(new Blob([html], {type:'text/html'})); }
   catch(e){ return false; }
   try {
     var a = document.createElement('a');
-    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    // rel DECIDES WHETHER THE CHILD CAN TALK BACK, and defaulting to 'noopener' here silently
+    // killed every interactive document. The Morning Worker, the Dial-Ready outcome bar and the
+    // Doc Room print buttons all report back via window.opener.postMessage — but with
+    // rel='noopener' the child's window.opener is null, so every one of those bridges was dead:
+    // Email taps opened nothing, Done/Skip never logged a touch, print buttons went nowhere. The
+    // worker's post() treated null-opener as success on top of it, so the logs claimed the sends
+    // happened. Alejandro caught it live ("it just gives me activity… it's false").
+    // 'noopener' remains the default for static printables (hangers, letters, PDFs) — they never
+    // talk back, and no-opener is the safer posture for anything that might get shared onward.
+    // Interactive docs pass {keepOpener:true}; rel='opener' is the explicit opt-in (Chrome 88+).
+    a.href = url; a.target = '_blank';
+    a.rel = (opts && opts.keepOpener) ? 'opener' : 'noopener';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
   } catch(e){
     try { window.location.href = url; } catch(e2){}
@@ -7729,7 +7740,7 @@ function openDocRoom(caseId){
     +   'var msg={key:b.dataset.key,fn:b.dataset.fn,c:'+JSON.stringify(caseId)+'};'
     +   'try{window.opener&&window.opener.postMessage({docroom:msg},"*");}catch(_e){}'
     + '});<\/script>';
-  return _openDoc(_docShell('Doc Room — '+(f.propAddr||caseId), body, {key:'docroom'}));
+  return _openDoc(_docShell('Doc Room — '+(f.propAddr||caseId), body, {key:'docroom'}), {keepOpener:true});
 }
 /* ============================================================================================
    DIAL-READY CARD — the 5-second briefing you read WHILE dialing.
@@ -7949,7 +7960,7 @@ function openDialReady(caseId){
       +'</div>', {key:'dial-blocked'}));
   }
   _docLog(r.case, 'dial-ready', 'bi');
-  return _openDoc(genDialReady(r));
+  return _openDoc(genDialReady(r), {keepOpener:true});
 }
 // listen for print requests coming back from the opened Doc Room tab
 window.addEventListener('message', function(ev){
@@ -8782,6 +8793,25 @@ function _workerCard(r){
     days: days, saleDate: r.auction||'',
     chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
     phones: phList, emails: emList, wpUrl: r.peopleaddr || r.people || '',
+    // The Gmail compose URL is BAKED PER CARD so the WORKER tab can open it on the user's own
+    // click. The old design posted to the board tab and had the BOARD call window.open — but the
+    // click happened in the worker tab, so the board tab had no user activation and the browser
+    // blocked the popup. Worse, the code set opened=true without checking (window.open returns
+    // null when blocked, it does not throw), so the activity log said "composer opened — press
+    // Send" while nothing opened at all, and the Proof Sheet archived a send that never existed.
+    // Alejandro caught it live: "it just gives me activity… I don't see it open. It's false."
+    gurl: (function(){
+      try {
+        if(typeof genEmail !== 'function' || !(r.emails||[]).length) return '';
+        genEmail(r, true);                       // quiet: compose + stash on __lastEmail only
+        var LE = window.__lastEmail;
+        if(!LE || LE.c !== r.case) return '';
+        return 'https://mail.google.com/mail/?view=cm&fs=1'
+             + '&to=' + encodeURIComponent(LE.to || (r.emails||[])[0] || '')
+             + '&su=' + encodeURIComponent(LE.subj || '')
+             + '&body=' + encodeURIComponent(LE.body || '');
+      } catch(e){ return ''; }
+    })(),
     hs: !!r.hs, condo: !!r.condo, st: r.st||'', tier: r.tier || '',
     mismatch: !!r.ownerMismatch, paOwner: String(r.paOwner||'').split(';')[0].trim(),
     prior: _wlogContacted(r.case)   // "have I reached this person before?" — shown on the card
@@ -8986,7 +9016,11 @@ function genMorningWorker(lane){
     +     'var t=e.target.closest(".mwlane"); if(t) setLane(t.dataset.lane);'
     +   '});'
     +   'function post(kind, extra){'
-    +     'try{window.opener&&window.opener.postMessage({workerAct:{c:Q[i].c,k:kind,extra:extra||null}},"*");return true;}'
+    // A null opener was counted as SUCCESS here (opener&&post evaluates to undefined, no throw),
+    // which is how a dead bridge produced healthy-looking logs. No opener = the board cannot
+    // hear us = false, so the caller's heal/fail path actually fires.
+    +     'if(!window.opener) return false;'
+    +     'try{window.opener.postMessage({workerAct:{c:Q[i].c,k:kind,extra:extra||null}},"*");return true;}'
     +     'catch(e){return false;}'
     +   '}'
     +   'function channels(r){'
@@ -8995,6 +9029,30 @@ function genMorningWorker(lane){
     +     'out.push({k:"text",  why:(r.phones&&r.phones.length)?null:"no textable phone on file"});'
     +     'out.push({k:"wp",    why:r.wpUrl?null:"no people-search URL available"});'
     +     'return out;'
+    +   '}'
+    // OPEN FROM THIS TAB, VERIFY IT ACTUALLY OPENED. The old flow posted to the board tab and let
+    // IT call window.open — but the user's click happened HERE, so the board tab had no user
+    // activation and the browser silently blocked the popup. window.open returns null when
+    // blocked (it does not throw), and the old code never checked, so the log claimed "composer
+    // opened — press Send" over a click that did nothing and the Proof Sheet archived a phantom
+    // send. Now: this tab opens the URL itself; a null return renders a TAP-TO-OPEN button (the
+    // tap carries real user activation, which always succeeds) and the log tells the truth.
+    +   'function openHere(url){'
+    +     'if(!url) return false;'
+    +     'try { var w = window.open(url, "_blank"); return !!w; } catch(e){ return false; }'
+    +   '}'
+    +   'function tapToOpen(r, kind, url, after){'
+    +     'addLog("wait", r.first||r.owner, kind+" popup was blocked — tap the gold button to open it", "warn");'
+    +     'main.innerHTML="<div class=\'mwpace\'>"'
+    +       '+"<div class=\'h\'>&#9993; Composer blocked by the browser</div>"'
+    +       '+"<div class=\'s\'>Auto-opens need popup permission. Your tap does not — one tap opens the prefilled "+kind+".</div>"'
+    +       '+"<button id=\'mwtapopen\' class=\'mwbtn done\' style=\'margin-top:14px\'>&#9993; Open "+kind+" now</button>"'
+    +       '+"<button id=\'mwtapskip\' class=\'mwbtn skip\' style=\'margin-top:8px\'>Skip this lead &rarr;</button>"'
+    +     '+"</div>";'
+    +     'var b=document.getElementById("mwtapopen");'
+    +     'if(b) b.onclick=function(){ if(openHere(url)){ after(); } };'
+    +     'var sk=document.getElementById("mwtapskip");'
+    +     'if(sk) sk.onclick=function(){ post("skip"); addLog("skip", r.first||r.owner, "skipped at blocked popup"); advance(); };'
     +   '}'
     +   'function attempt(r, idx, tries){'
     +     'var ch=channels(r), step=ch[idx];'
@@ -9006,6 +9064,18 @@ function genMorningWorker(lane){
     +       'addLog("fail", r.first||r.owner, step.k.toUpperCase()+" failed: "+step.why+" → trying "+(ch[idx+1]?ch[idx+1].k:"nothing left"), "warn");'
     +       'healing=setTimeout(function(){ attempt(r, idx+1, 0); }, 900); return;'
     +     '}'
+    // email + people-search open from THIS tab. Text still hands off to the board (its composer
+    // is a modal there) — and the log now says WHERE it opened instead of implying it is here.
+    +     'if(step.k==="email" || step.k==="wp"){'
+    +       'var url = step.k==="email" ? r.gurl : r.wpUrl;'
+    +       'var done = function(){'
+    +         'post(step.k);'                                     /* board archives + logs the touch */
+    +         'addLog(step.k, r.first||r.owner, step.k==="email"?"Gmail compose opened, prefilled — press Send":"people-search opened — grab the number");'
+    +         'startPace(r);'
+    +       '};'
+    +       'if(openHere(url)) return done();'
+    +       'return tapToOpen(r, step.k==="email"?"Gmail draft":"people search", url, done);'
+    +     '}'
     +     'if(!post(step.k)){'
     +       'if(tries<2){'
     +         'addLog("heal", r.first||r.owner, "could not reach the main tab — retry "+(tries+1)+"/2 in 2s", "warn");'
@@ -9014,7 +9084,7 @@ function genMorningWorker(lane){
     +       'addLog("fail", r.first||r.owner, "main tab unreachable after 2 retries — is the board tab still open?", "warn");'
     +       'return pause();'
     +     '}'
-    +     'addLog(step.k, r.first||r.owner, step.k==="email"?"email composer opened — review and hit Send":(step.k==="text"?"text composer opened — review and hit Send":"people-search opened — grab the number"));'
+    +     'addLog(step.k, r.first||r.owner, "text composer opened ON THE BOARD TAB — switch tabs to send");'
     +     'startPace(r);'
     +   '}'
     +   'function finishPace(r, why){'
@@ -9124,7 +9194,15 @@ function genMorningWorker(lane){
     +     'if(fn==="email"||fn==="text"||fn==="wp"){'
     +       'var has=(fn==="email"?r.emails.length:(fn==="text"?r.phones.length:!!r.wpUrl));'
     +       'if(!has){ addLog("fail", r.first||r.owner, fn.toUpperCase()+" unavailable for this lead", "warn"); return; }'
-    +       'if(post(fn)) addLog(fn, r.first||r.owner, fn+" composer opened");'
+    // Manual taps have live user activation RIGHT NOW — open directly from this tab and only
+    // claim success when window.open returned a window. Text stays a board-tab hand-off.
+    +       'if(fn==="email"||fn==="wp"){'
+    +         'var u = fn==="email" ? r.gurl : r.wpUrl;'
+    +         'if(openHere(u)){ post(fn); addLog(fn, r.first||r.owner, fn==="email"?"Gmail compose opened, prefilled — press Send":"people-search opened"); }'
+    +         'else addLog("fail", r.first||r.owner, (fn==="email"?"Gmail":"lookup")+" window did not open — check the popup blocker icon in the address bar", "warn");'
+    +         'return;'
+    +       '}'
+    +       'if(post(fn)) addLog(fn, r.first||r.owner, "text composer opened ON THE BOARD TAB — switch tabs to send");'
     +       'else addLog("fail", r.first||r.owner, "could not reach the main tab — is the board still open?", "warn");'
     +       'return;'
     +     '}'
@@ -9138,7 +9216,7 @@ function genMorningWorker(lane){
 }
 function openMorningWorker(lane){
   _docLog('__batch__', 'worker-open', 'en');
-  return _openDoc(genMorningWorker(lane || 'urgent'));
+  return _openDoc(genMorningWorker(lane || 'urgent'), {keepOpener:true});
 }
 
 // listen for outcome logging coming back from the Dial-Ready tab — the workflow's #1 pick.
@@ -9181,36 +9259,35 @@ window.addEventListener('message', function(ev){
     // message and presses Send. Still a human send; nothing leaves the machine on its own.
     // genEmail() is still called first because building it is what populates __lastEmail, which
     // is how the Proof Sheet archives the verbatim text that went out.
-    var opened = false;
+    // THE WORKER TAB OPENS GMAIL NOW, NOT THIS ONE. This handler used to window.open here — in a
+    // background tab with no user activation — so the browser silently blocked it, and because
+    // window.open returns null instead of throwing, `opened` was set true anyway: the log said
+    // "composer opened" over a dead click and the Proof Sheet archived a send that never happened.
+    // The worker only posts 'email' AFTER its own window.open returned a real window, so by the
+    // time this runs the composer is genuinely on screen. This side's job is the paper trail:
+    // regenerate the identical content (genEmail is deterministic) and archive the verbatim text.
+    var archived = false;
     try {
       if(typeof genEmail === 'function') genEmail(r, true);    // quiet: compose + stash, no preview tab
       var LE = window.__lastEmail;
       if(LE && LE.c === r.case && (LE.to || em)){
-        var gurl = 'https://mail.google.com/mail/?view=cm&fs=1'
-                 + '&to=' + encodeURIComponent(LE.to || em)
-                 + '&su=' + encodeURIComponent(LE.subj || '')
-                 + '&body=' + encodeURIComponent(LE.body || '');
-        window.open(gurl, '_blank', 'noopener');
-        opened = true;
+        archived = true;
         _sentAdd({d:new Date().toISOString().slice(0,10), t:Date.now(),
                   ts:new Date().toLocaleString(), c:r.case, ch:'email',
                   to:LE.to||em, who:LE.who||'', addr:LE.addr||r.addr||'',
                   subj:LE.subj||'', body:LE.body||'', subjES:LE.subjES||'', bodyES:LE.bodyES||''});
       }
     } catch(e){}
-    // No address, or Gmail refused to open -> fall back to the preview page so he still has the
-    // copy and the Copy-email button rather than a dead click.
-    if(!opened && typeof genEmail === 'function') _openDoc(genEmail(r));
     _docLog(r.case, 'worker-email', 'bi');
     _wlog(r.case, 'email',
-          opened ? ('Gmail compose opened, prefilled → '+(em||'owner')+' — press Send')
-                 : (em ? 'preview opened (Gmail blocked) → '+em : 'no email on file — preview opened'),
-          opened);
+          archived ? ('Gmail compose opened in the worker tab → '+(em||'owner')+' — verbatim copy archived')
+                   : 'compose reported open but the archive could not rebuild the content — check the Proof Sheet',
+          archived);
     // Record the CHANNEL on the board's touch ledger, not just the activity feed. The 'done' tap
     // below logs ch:'worker', which says a lead was handled but not HOW — so a funnel keyed on
     // channel could never advance past "called". autoLog dedupes same-day/same-channel, so tapping
     // Email twice on one lead does not double-count it.
-    if(opened){ try { autoLog(r, 'email', 'emailed (morning batch)'); } catch(e){} }
+    if(archived){ try { autoLog(r, 'email', 'emailed (morning batch)'); } catch(e){} }
   } else if(d.k === 'text'){
     // openBulkText walks a queue; open just this one lead via openTextSingle if available
     var ph = (r.phones||[])[0] || '';
@@ -9220,10 +9297,10 @@ window.addEventListener('message', function(ev){
     _wlog(r.case, 'text', ph ? 'composer opened → '+(typeof fmtPhone==='function'?fmtPhone(ph):ph) : 'composer opened (no phone)', true);
     if(ph){ try { autoLog(r, 'text', 'texted (morning batch)'); } catch(e){} }   // channel on the ledger — see the email branch
   } else if(d.k === 'wp'){
-    var wp = r.peopleaddr || r.people || '';
-    if(wp) window.open(wp, '_blank', 'noopener');
+    // The worker tab already opened the lookup on the user's own click — opening it here too
+    // either double-opens or gets popup-blocked in this background tab. This side only logs.
     _docLog(r.case, 'worker-wp', 'en');
-    _wlog(r.case, 'wp', wp ? 'people-search opened' : 'no lookup URL available', !!wp);
+    _wlog(r.case, 'wp', 'people-search opened in the worker tab', true);
   } else if(d.k === 'wait'){
     _wlog(r.case, 'wait', d.extra ? ('paced '+d.extra+'s before advancing') : 'paced before advancing', true);
     return;
