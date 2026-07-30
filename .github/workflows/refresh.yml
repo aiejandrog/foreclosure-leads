@@ -116,6 +116,8 @@ jobs:
             _lp_pagis_cache.json
             _lp_values_cache.json
             _lp_status_cache.json
+            _code_liens_cache.json
+            code_liens.json
             replies.json
             whitepages_lookup.json
             geocode_cache.json
@@ -125,7 +127,7 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          # v5 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
+          # v6 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
           # cache saved under a different path list is invisible even to a matching restore-key prefix.
           # Adding whitepages_lookup.json silently orphaned every earlier cache — the restore logged
           # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
@@ -136,8 +138,8 @@ jobs:
           # parcel roll is not re-queried cold every morning; v4 added replies.json so a day with no
           # new reply keeps yesterday's rather than blanking the Reply Inbox.
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v5-${{ github.run_id }}
-          restore-keys: dealflow-state-v5-
+          key: dealflow-state-v6-${{ github.run_id }}
+          restore-keys: dealflow-state-v6-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -433,6 +435,8 @@ jobs:
             _lp_pagis_cache.json
             _lp_values_cache.json
             _lp_status_cache.json
+            _code_liens_cache.json
+            code_liens.json
             replies.json
             whitepages_lookup.json
             geocode_cache.json
@@ -442,7 +446,7 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          key: dealflow-state-v5-${{ github.run_id }}
+          key: dealflow-state-v6-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
