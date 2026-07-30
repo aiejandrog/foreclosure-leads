@@ -19,6 +19,7 @@ _*.py
 !_stalefixtest.py
 !_optouttest.py
 !_casestatustest.py
+!_workeremailtest.py
 _*.html
 _*.json
 _*.txt
