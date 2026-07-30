@@ -239,6 +239,10 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 #aftercall .acx{background:none;border:none;color:var(--muted);font-size:15px;padding:6px 8px}
 #aftercall.hasqueue{bottom:82px}                       /* stack above the work bar, never on top of it */
 /* unresolved parcel — states the truth ("not looked up") instead of faking a $0 property */
+.mmchip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
+  border-radius:3px;background:#fff2d7;color:#7a5a10;border:1px solid #eadb9f;cursor:help}
+.gschip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
+  border-radius:3px;background:#f6f8fa;color:#5b6472;border:1px solid #d5dae4;cursor:help}
 .unres{font-family:var(--f-label,inherit);font-size:9.5px;font-weight:800;letter-spacing:.07em;
   text-transform:uppercase;color:var(--muted);background:var(--surface-2,#f2f0ea);
   border:1px dashed var(--line,#d8d4c8);border-radius:4px;padding:2px 6px}
@@ -6421,6 +6425,37 @@ function _unresolved(r){ return !String(r.addr||'').trim() && !(+r.value||0) && 
 // written to prevent. Caught by _cstest. Split the two questions: "do we know WHERE it is" and
 // "do we know what it is WORTH" are independent, and only the second one licenses printing a number.
 function _unvalued(r){ return !(+r.value||0) && !(+r.arv||0); }
+/* Two facts the lis-pendens resolver produces that were reaching the board and rendering NOWHERE.
+   A computed-but-invisible field is worse than a missing one: the work was paid for, the operator
+   believes the row is complete, and the single fact that would have changed the call is sitting in
+   memory unread. Both of these are that. */
+function _mismatchChip(r){
+  // The parcel is right; the PERSON is stale. Title moved after the lis pendens was filed (sold,
+  // deeded to an LLC, into a trust, back to the lender). The address is safe to use and the NAME
+  // IS NOT — dial the defendant, greet them by name at that house, and you are talking to whoever
+  // bought it. 12 rows on the current board.
+  if(!r || !r.ownerMismatch) return '';
+  var now = String(r.paOwner || '').split(';')[0].trim();
+  return ' <span class="mmchip" title="'
+    + esc('The county roll now shows a DIFFERENT owner than the foreclosure defendant'
+        + (now ? ' — currently: ' + now : '')
+        + '. The property is right; the name is stale. Title moved after the case was filed. '
+        + 'Do not greet whoever answers by the defendant’s name, and re-verify who you are '
+        + 'dealing with before discussing the case.')
+    + '">OWNER CHANGED</span>';
+}
+function _guessAddrChip(r){
+  // A medium/low-confidence address from lp_resolve. Deliberately never written to r.addr, so
+  // nothing downstream can mail, map, route or skip-trace it — but the operator still deserves to
+  // see it, because a 90%-resolved lead is a 30-second confirmation, not a dead end.
+  if(!r || !String(r.addrGuess || '').trim()) return '';
+  return ' <span class="gschip" title="'
+    + esc('Likely address, NOT confirmed: ' + r.addrGuess
+        + (r.addrWhy ? ' — ' + r.addrWhy : '')
+        + '. It is deliberately kept out of the address field so no letter, route or skip-trace '
+        + 'uses it. Confirm the parcel before contacting anyone at this address.')
+    + '">ADDRESS UNCONFIRMED</span>';
+}
 function _valChip(r){
   // kimi: the row shows the SAME value that drives the deal math. ARV-driving leads carry the tag
   // so the operator sees WHY this number is above the county roll (Save Our Homes cap).
@@ -7455,6 +7490,86 @@ function openQuitClaim(r, multi){
   _docLog(r.case, 'quitclaim' + (multi ? '-multi' : '-single'), 'en');
   return _openDoc(genQuitClaim(r, {multi: !!multi}));
 }
+/* ══════════════════════ ATTORNEY APPROVAL PACKET ══════════════════════════════════════════════
+   FOUR documents ship locked — the purchase agreement, the right-to-cancel pair, the third-party
+   authorization and the quit claim deed. None of them will produce a page today. That is correct
+   (each moves money or title, and none has been read by a lawyer), but it has been the standing
+   blocker for weeks, and the reason is friction: nobody knows what to hand the attorney.
+
+   This is that. One print job: every locked template, its fingerprint, and a sign-off block. The
+   attorney marks each one, signs once, and the fingerprints get pasted into ATTY_APPROVALS.
+
+   THE FINGERPRINT IS THE WHOLE POINT. It is a hash of the template's own source, so approval is
+   bound to the exact wording that was reviewed. Change a clause afterwards and the hash moves,
+   approval evaporates, and the document stops printing until it is re-read. An approval that
+   could silently outlive the text it approved would be worse than no approval at all.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+function genApprovalPacket(){
+  var items = [
+    {k:'psa',       t:'As-Is Purchase & Sale Agreement',
+     s:_psaSrc(),   w:'Binds a purchase. Merge-only; never presented at a door.'},
+    {k:'cancel',    t:'Notice of Right to Cancel + Cancellation Form',
+     s:_CANCEL_SRC, w:'Statutory cancellation disclosure. One approval locks both pages.'},
+    {k:'tpa',       t:'Third-Party Authorization',
+     s:_TPA_SRC,    w:'Lets us request a payoff from the servicer. Prefer the servicer’s own form where one exists.'},
+    {k:'quitclaim', t:'Quit Claim Deed (single and multi-grantor)',
+     s:_qcSrc(),    w:'Conveys title. Two witnesses + notary; homestead requires spousal joinder.'}
+  ];
+  var rows = items.map(function(x){
+    var fp = _docFingerprint(x.s);
+    var on = _docApproved(x.k, x.s);
+    return '<tr>'
+      + '<td><b>'+esc(x.t)+'</b><div class="mini">'+esc(x.w)+'</div></td>'
+      + '<td class="mono">'+esc(x.k)+'</td>'
+      + '<td class="mono"><b>'+esc(fp)+'</b></td>'
+      + '<td>'+(on ? '<span class="okp">APPROVED</span>' : '<span class="nop">LOCKED</span>')+'</td>'
+      + '<td class="apbox">&#9744; approve<br>&#9744; approve as marked<br>&#9744; do not use</td>'
+      + '</tr>';
+  }).join('');
+  var body = ''
+    + '<div class="doc">'
+    +   '<div class="kicker">FOR ATTORNEY REVIEW</div>'
+    +   '<h1>Template approval packet</h1>'
+    +   '<div class="sub">DealFlow generates these four documents from public-record data. Each is '
+    +     'locked and will not print until approved below. Nothing here has been used.</div>'
+    +   '<table class="aptab"><thead><tr><th>Document</th><th>Key</th><th>Fingerprint</th>'
+    +     '<th>Status</th><th>Reviewer</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +   '<h2>What approval means here</h2>'
+    +   '<p>Approval is bound to the <b>fingerprint</b> — a hash of that template’s exact text. '
+    +     'If a single word changes afterwards the hash changes with it, the approval no longer '
+    +     'matches, and the document stops printing until it is reviewed again. An approval cannot '
+    +     'silently outlive the wording it was given for.</p>'
+    +   '<p>The operator fills only merge fields drawn from public records — owner name, folio, legal '
+    +     'description, county, case number. No clause is generated, chosen, or varied per deal. '
+    +     'Selecting which instrument a homeowner should sign is not done by the software or by the '
+    +     'field operator.</p>'
+    +   '<h2>To activate</h2>'
+    +   '<p class="mini">In <code>tracker_template.html</code>, set for each approved key:<br>'
+    +     '<code>ATTY_APPROVALS.&lt;key&gt; = {by:\'Name, Esq.\', date:\'YYYY-MM-DD\', '
+    +     'fingerprint:\'&lt;from the table above&gt;\'}</code></p>'
+    +   '<div class="sigrow" style="margin-top:34px">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Attorney signature</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Printed name &amp; Florida Bar number</div></div>'
+    +   '</div>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Firm</div></div>'
+    +   '</div>'
+    +   '<div class="footer">Generated '+esc(new Date().toLocaleString())+' &middot; fingerprints are '
+    +     'valid only for the template text as it exists in this build.</div>'
+    + '</div>';
+  var css = '<style>'
+    + '.aptab{width:100%;border-collapse:collapse;margin:14px 0;font-size:12.5px}'
+    + '.aptab th{text-align:left;background:#0B1730;color:#F4E5A7;padding:7px 9px;font:700 11px Arial,sans-serif;'
+    +   'letter-spacing:.06em;text-transform:uppercase}'
+    + '.aptab td{border-bottom:1px solid #ddd;padding:9px;vertical-align:top}'
+    + '.mono{font-family:ui-monospace,Consolas,monospace}'
+    + '.okp{color:#286c34;font-weight:800}.nop{color:#8a1c1c;font-weight:800}'
+    + '.apbox{font-size:11.5px;line-height:1.7;white-space:nowrap}'
+    + '</style>';
+  return _docShell('Attorney approval packet', css + body, {key:'atty-approval'});
+}
+function openApprovalPacket(){ return _openDoc(genApprovalPacket()); }
 function openDocRoom(caseId){
   var r = DATA.find(function(x){return x.case===caseId;});
   var gate = _docGate(r);
@@ -7538,7 +7653,13 @@ function openDocRoom(caseId){
     + '<p class="mini">Reference list only. One button sends a facts-only deal sheet. No instrument picker.</p>'
     + _docRefList()
     + '<div style="text-align:center;margin:12px 0"><button class="docprint" data-fn="genAttyPacket" data-key="atty-packet" '
-    +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Send file to attorney</button></div>'
+    +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Send file to attorney</button>'
+    // Four templates are locked and none of them prints. The blocker has never been the lawyer's
+    // time — it is that nobody knew what to hand them. This is the one page that does it.
+    +   ' <button class="docprint" data-fn="genApprovalPacket" data-key="atty-approval" '
+    +   'style="padding:10px 18px;background:#C6A14B;color:#0B1730;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer;margin-left:6px">&#9878; Approval packet ('
+    +   [_docApproved('psa',_psaSrc()), _docApproved('cancel',_CANCEL_SRC), _docApproved('tpa',_TPA_SRC), _docApproved('quitclaim',_qcSrc())].filter(function(x){return !x;}).length
+    +   ' locked)</button></div>'
     + '<div class="footer">DealFlow · BUYER_ONLY mode. Anything requiring a signature happens at a title company or a law office — never at a door.</div>'
     + '</div>'
     + '<script>document.addEventListener("click",function(e){var b=e.target.closest("button.docprint");if(!b)return;'
@@ -7677,6 +7798,8 @@ function genDialReady(r){
     + '<style>'
     + '.dr{max-width:520px;margin:14px auto;background:#fff;border-radius:14px;box-shadow:0 4px 22px rgba(11,23,48,.12);padding:22px 22px 26px}'
     + '.drtop{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px}'
+    + '.drmm{background:#fff2d7;border:1px solid #eadb9f;color:#7a5a10;border-radius:6px;padding:8px 11px;'
+    +   'margin:10px 0 2px;font:600 12.5px/1.45 "Segoe UI",Arial,sans-serif}'
     + '.drname{font:800 30px/1.05 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33;margin:0}'
     + '.drname .at{font:600 15px "Segoe UI",Arial,sans-serif;color:#5b6472;display:block;margin-top:5px;letter-spacing:.02em}'
     + '.drlang{display:inline-flex;background:#f6f8fa;border-radius:6px;padding:3px}'
@@ -7713,6 +7836,15 @@ function genDialReady(r){
     +       '<span class="dres">Llame a <b>'+_dfHtml(f.ownerFirst)+'</b></span>'
     +       '<span class="at">at '+esc(street)+'</span>'
     +     '</h1>'
+    // THE NAME ON THIS CARD MAY NOT BE WHO OWNS IT ANY MORE. This is the one screen where that
+    // matters most: the whole card is built to be read in the two seconds before the line picks
+    // up, and opening with the wrong person's name is how a call ends before it starts.
+    +     (r.ownerMismatch
+        ? '<div class="drmm">&#9888; The county roll now shows a <b>different owner</b>'
+          + (r.paOwner ? ' &mdash; <b>'+esc(String(r.paOwner).split(';')[0].trim())+'</b>' : '')
+          + '. Title moved after this case was filed. <b>Do not open with '
+          + _dfHtml(f.ownerFirst) + '&rsquo;s name</b> &mdash; ask who you are speaking with first.</div>'
+        : '')
     +     '<div class="drlang" role="tablist">'
     +       '<button type="button" class="drl on" data-l="en">EN</button>'
     +       '<button type="button" class="drl" data-l="es">ES</button>'
@@ -7767,7 +7899,8 @@ window.addEventListener('message', function(ev){
              genCancelNotice:genCancelNotice, genCancelForm:genCancelForm,
              genThirdPartyAuth:genThirdPartyAuth, genAttyPacket:genAttyPacket,
              genContractPrint:genContractPrint,
-             genQuitClaimSingle:genQuitClaimSingle, genQuitClaimMulti:genQuitClaimMulti})[d.fn];
+             genQuitClaimSingle:genQuitClaimSingle, genQuitClaimMulti:genQuitClaimMulti,
+             genApprovalPacket:genApprovalPacket})[d.fn];
   if(!fn) return;
   var html = fn(r);
   // genContractPrint calls genContract (which already _openDoc's) and returns null when approved
@@ -8587,6 +8720,7 @@ function _workerCard(r){
     chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
     phones: phList, emails: emList, wpUrl: r.peopleaddr || r.people || '',
     hs: !!r.hs, condo: !!r.condo, st: r.st||'', tier: r.tier || '',
+    mismatch: !!r.ownerMismatch, paOwner: String(r.paOwner||'').split(';')[0].trim(),
     prior: _wlogContacted(r.case)   // "have I reached this person before?" — shown on the card
   };
 }
@@ -8620,6 +8754,8 @@ function genMorningWorker(lane){
     +   '.mwcard{background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(11,23,48,.09);padding:22px 24px;margin-bottom:14px}'
     +   '.mwname{font:800 26px/1.1 "Segoe UI",Arial,sans-serif;margin:0 0 3px}'
     +   '.mwaddr{color:#5b6472;font:600 14px "Segoe UI",Arial,sans-serif;margin-bottom:12px}'
+    +   '.mwmm{background:#fff2d7;border:1px solid #eadb9f;color:#7a5a10;border-radius:6px;'
+    +     'padding:8px 11px;margin:0 0 12px;font:600 12.5px/1.45 "Segoe UI",Arial,sans-serif}'
     +   '.mwchip{display:inline-block;font:800 11px "Segoe UI",Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-radius:5px;margin-bottom:14px}'
     +   '.mwfacts{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:13.5px;margin-bottom:16px}'
     +   '.mwfacts .k{color:#8a94a8;font:700 10px "Segoe UI",Arial,sans-serif;text-transform:uppercase;letter-spacing:.06em}'
@@ -8896,6 +9032,9 @@ function genMorningWorker(lane){
     +       '+"<div class=\'mwchip\' style=\'color:"+r.chip.c+";background:"+r.chip.bg+"\'>"+esc(r.chip.t)+"</div>"'
     +       '+"<h2 class=\'mwname\'>"+esc(r.first||r.owner)+prior+"</h2>"'
     +       '+"<div class=\'mwaddr\'>"+esc(r.addr)+" · Tier "+esc(r.tier)+(r.hs?" · Homestead":"")+(r.condo?" · Condo":"")+"</div>"'
+    // The worker is a rapid-fire queue — it is exactly where a stale name gets used without
+    // thinking. Say it on the card, before the Email/Text buttons, not in a tooltip.
+    +       '+(r.mismatch?"<div class=\'mwmm\'>&#9888; County roll shows a DIFFERENT owner"+(r.paOwner?" — <b>"+esc(r.paOwner)+"</b>":"")+". Title moved after this case was filed — confirm who you have before using "+esc(r.first||r.owner)+"&rsquo;s name.</div>":"")'
     +       '+"<div class=\'mwfacts\'>"'
     // EARLY leads have no auction date yet — that is the whole point of the lane, so say so instead
     // of rendering "(nulld)". "No sale date" is the SELLING point: nobody else is calling yet.
@@ -10847,7 +10986,7 @@ function render(){
           ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
           : '<span class="clamp2 legalline">no address on the filing</span>');
     const prop = '<div class="addrline">'+_addrLine+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -10912,7 +11051,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+

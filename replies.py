@@ -95,6 +95,21 @@ def load_key(account_override=None):
     credential file to chase that, point the run at the mailbox the password actually opens.
     Also the more correct default: replies land in whichever inbox the outreach was SENT from.
     """
+    # ENV FIRST, FILE SECOND — the same contract every other scraper here uses (batchdata.key,
+    # tracerfy.key, captcha.key all check env then fall back to a gitignored file). On GitHub
+    # Actions only env exists; on Alejandro's machine only the file does. Without this branch
+    # replies.py is the one enrichment step that can never run in the cloud, which is exactly
+    # why reply detection was still a manual chore after everything else automated.
+    env = (os.environ.get('GMAIL_APP_PASSWORD') or '').strip()
+    if env:
+        if ':' in env:
+            user, _, pw = env.partition(':')
+        else:
+            # password-only secret — the mailbox must then come from --account or gmail.key
+            user, pw = '', env
+        user = (account_override or user or os.environ.get('GMAIL_ACCOUNT', '')).strip()
+        if user and pw:
+            return user, pw.strip()
     if not os.path.exists(KEY):
         return None
     raw = open(KEY, encoding='utf-8').read().strip()
