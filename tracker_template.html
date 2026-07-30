@@ -2091,7 +2091,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="nearmebtn" class="abtn near-btn" onclick="openNearMe()" title="NEAR ME — build Carlos a door run. Start from your GPS or a typed ZIP, pick how many doors (10/15/20), and export the same bilingual Carlos PDF packet. Miami-Dade ONLY (gas). Auto-excludes: active bankruptcy stays (federal violation to knock), already-sold-via-sibling-case, opted-out, and any lead whose coordinate is not a real street-level geocode."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near Me</button>
 <button id="replybtn" class="abtn" onclick="openReplyInbox()" title="REPLY INBOX — every owner who wrote back, STOP requests first, then soonest sale. A reply outranks every score and tier on this board. Fills from your own ✉ They replied flags, and automatically from replies.py once gmail.key holds a real App Password."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>Replies<span class="replyn"></span></button>
 <button id="proofbtn" class="abtn" onclick="openProofSheet('today')" title="PROOF SHEET — the receipt of what actually went out. Reprints the VERBATIM subject and body of every message sent, timestamped, with reply status beside each one, plus the full activity log. Printable. Shift-click for all-time instead of today."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M9 16h6M9 8h2"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>Proof sheet</button>
-<button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — opens a queue tab of up to 20 leads (Tier A/B, sale 3-45 days out, not touched in 72 hours). One card at a time: tap Email / Text / WP-lookup to hand the lead off to the existing sender in a new tab, tap Done to log worked + auto-advance to next lead. Nothing auto-sends (TCPA/FTSA rails intact); you tap send yourself. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker</button>
+<button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — three lanes by urgency: URGENT (sale inside 7 days), ACTIVE (8-45 days), EARLY (fresh filing, no auction date yet). All tiers, contactable leads not touched in 72 hours. One card at a time: tap Email / Text / WP-lookup to hand the lead off to the existing sender in a new tab, tap Done to log worked + auto-advance. Daily send cap warns at 40 and hard-stops at 50 to protect the sending inbox; calls are never capped. Nothing auto-sends (TCPA/FTSA rails intact); you tap send yourself. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker</button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
 <button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
 <select id="nearrad" class="tf" title="Radius from your home base — expand to broaden the net" style="display:none;padding:5px 8px"><option value="1">1&nbsp;mi</option><option value="2">2&nbsp;mi</option><option value="3">3&nbsp;mi</option><option value="5" selected>5&nbsp;mi</option><option value="10">10&nbsp;mi</option><option value="15">15&nbsp;mi</option><option value="25">25&nbsp;mi</option><option value="50">50&nbsp;mi</option></select>
@@ -7110,6 +7110,10 @@ function openDocRoom(caseId){
    claimed / BK-stay / opted-out leads are suppressed, exactly as they must be.
    ============================================================================================ */
 function _urgencyChip(days){
+  // NO_SALE (9999) is the baker's "no auction date" sentinel for Lis Pendens rows. Without this
+  // line the chip renders the literal "9999 days out" on every fresh filing — found 2026-07-30
+  // while building the EARLY lane.
+  if(days!=null && days>=NO_SALE) days = null;
   if(days==null || days<0) return {t:'Sale date not set', c:'#5b6472', bg:'#f6f8fa'};
   if(days<=1) return {t:'SALE TOMORROW · MOVE NOW', c:'#fff', bg:'#8a1c1c'};
   if(days<=3) return {t:'SALE IN '+days+' DAYS', c:'#fff', bg:'#a13a1c'};
@@ -8016,42 +8020,145 @@ function genProofSheet(scope){
 }
 function openProofSheet(scope){ return _openDoc(genProofSheet(scope||'today')); }
 
-function _workerQueue(){
-  var today = Date.now();
-  return DATA.filter(function(r){
-    if(!r || !r.case) return false;
-    if(r.sibclaimed || r.saleBkAct) return false;
-    var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
-    if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD') return false;
-    var d = typeof r.days==='number' ? r.days : null;
-    if(d==null || d<3 || d>45) return false;
-    // skip if touched in last 3 days
-    var touches = n.touches||[];
-    var last = touches.length ? (touches[touches.length-1].tsu || 0) : 0;
-    if(last && (today - last) < 3*86400000) return false;
-    if(r.tier !== 'A' && r.tier !== 'B') return false;
-    return true;
-  }).sort(function(a,b){ return (a.days||9999) - (b.days||9999); }).slice(0, 20);
+/* ---- DAILY SEND CAP — the ceiling is Gmail's, not this code's ---------------------------------
+   Measured reality (2026-07-30): 306 leads are contactable. Gmail's hard cap is ~500/day free /
+   2,000 Workspace, but for COLD unsolicited mail the practical ceiling is far lower — burst a few
+   hundred and Gmail throttles mid-run, recipients' providers start filing you as spam, and the
+   reputation damage lands on the mailbox Alejandro runs his actual business from (Jose, lenders,
+   the SSA). A slow pipeline is recoverable; a spam-flagged primary inbox is not.
+   So: warn at 40, hard-stop at 50. Counted from the activity feed, which only logs real sends. --- */
+var DAILY_WARN = 40, DAILY_MAX = 50;
+function _sentTodayCount(){ var s = _wlogStats(); return (s.email||0) + (s.text||0); }
+function _capState(){
+  var n = _sentTodayCount();
+  return {n:n, left:Math.max(0, DAILY_MAX-n), warn:n>=DAILY_WARN, blocked:n>=DAILY_MAX,
+          warnAt:DAILY_WARN, max:DAILY_MAX};
 }
-function genMorningWorker(){
-  var queue = _workerQueue();
-  var qCases = JSON.stringify(queue.map(function(r){ return r.case; }));
-  // per-lead facts we need in the worker tab (kept slim to avoid postMessage bloat)
-  var qData = JSON.stringify(queue.map(function(r){
-    var f = _docFields(r); var chip = _urgencyChip(r.days);
-    var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); }).slice(0,3);
-    var emList = (r.emails||[]).slice(0,3);
-    var wpUrl = r.peopleaddr || r.people || '';
-    return {
-      c: r.case, addr: r.addr||'', owner: r.oname||(r.owners||'').split(';')[0]||'',
-      first: (f.ownerFirst==='__blank__'?'':f.ownerFirst),
-      days: r.days, saleDate: r.auction||'',
-      chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
-      phones: phList, emails: emList, wpUrl: wpUrl, hs: !!r.hs, condo: !!r.condo,
-      tier: r.tier || '',
-      prior: _wlogContacted(r.case)   // "have I reached this person before?" — shown on the card
-    };
-  }));
+/* ---- THREE LANES instead of one truncated queue -----------------------------------------------
+   The old queue took Tier A/B with a sale 3-45 days out and capped at 20 — which drew from 28 of
+   306 contactable leads, hiding 91% of the board. Two exclusions did the damage:
+     Tier A/B only        dropped 218 Tier C leads. Tier C means thinner equity, not "bad".
+     Must have a sale date dropped 203 fresh Lis Pendens filings — the BIGGEST bucket, and
+                          strategically the best one: just-served owners, auction 8-14 months out,
+                          nobody else calling yet. The playbook calls that the front of the funnel.
+   Lanes are by URGENCY, which is what actually decides who to call first. All tiers in every lane.
+   -------------------------------------------------------------------------------------------- */
+// Days-to-sale, or null when there is genuinely no auction date. Reading r.days raw is a trap:
+// a missing date arrives as the NO_SALE sentinel (9999), so all 125 Lis Pendens rows read as
+// "9999 days out" and fell out of every lane. _hasClock already encodes the sentinel rule; this
+// returns the NUMBER (or null) rather than a boolean, which is what the lane tests need.
+function _saleDays(r){
+  if(!r || !String(r.auction||'').trim()) return null;
+  return _hasClock(r) ? r.days : null;
+}
+var WORKER_LANES = {
+  urgent: {t:'URGENT',  ic:'🔴', d:'Sale inside 7 days — call these first',
+           test:function(d,r){ return d!=null && d>=0 && d<=7; }},
+  active: {t:'ACTIVE',  ic:'🟡', d:'Sale 8–45 days out — the working middle',
+           test:function(d,r){ return d!=null && d>=8 && d<=45; }},
+  early:  {t:'EARLY',   ic:'🌱', d:'Fresh filing, no sale date yet — be the first call',
+           test:function(d,r){ return d==null || r.st==='LP'; }}
+};
+// Serializable copy for the worker tab. JSON.stringify would silently drop the `test` functions
+// anyway; doing it explicitly means a future field added to WORKER_LANES does not leak by accident.
+function WORKER_LANES_META(){
+  var o = {};
+  Object.keys(WORKER_LANES).forEach(function(k){
+    o[k] = {t:WORKER_LANES[k].t, ic:WORKER_LANES[k].ic, d:WORKER_LANES[k].d};
+  });
+  return o;
+}
+function _workerEligible(r){
+  // Shared gate for every lane. Suppression first — these are legal, not preferences.
+  if(!r || !r.case) return false;
+  if(r.sibclaimed || r.saleBkAct) return false;
+  var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
+  if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD') return false;
+  // must be reachable at all — a lead with no phone and no email is a lookup task, not outreach
+  if(!((r.phones||[]).length || (r.emails||[]).length)) return false;
+  // not touched in the last 72h
+  var touches = n.touches||[];
+  var last = touches.length ? (touches[touches.length-1].tsu || 0) : 0;
+  if(last && (Date.now() - last) < 3*86400000) return false;
+  return true;
+}
+function _laneCount(lane){ return _laneStats(lane).n; }
+// WHY a lane is empty matters more than THAT it is empty. Building the EARLY lane surfaced this:
+// all 125 Lis Pendens rows on the board have zero traced phones and zero emails, so the lane was
+// correct and starved. A generic "nothing here" would have read as a bug and sent Alejandro
+// looking through code instead of running skiptrace. Count the pool and the reasons separately.
+function _laneStats(lane){
+  var L = WORKER_LANES[lane];
+  var s = {n:0, pool:0, noContact:0, suppressed:0, touched:0};
+  if(!L) return s;
+  DATA.forEach(function(r){
+    if(!r || !r.case || !L.test(_saleDays(r), r)) return;
+    s.pool++;
+    if(r.sibclaimed || r.saleBkAct){ s.suppressed++; return; }
+    var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
+    if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD'){ s.suppressed++; return; }
+    if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }
+    var t = n.touches||[]; var last = t.length ? (t[t.length-1].tsu||0) : 0;
+    if(last && (Date.now()-last) < 3*86400000){ s.touched++; return; }
+    s.n++;
+  });
+  return s;
+}
+function _workerQueue(lane){
+  lane = lane || 'urgent';
+  var L = WORKER_LANES[lane] || WORKER_LANES.urgent;
+  var cap = _capState();
+  var out = DATA.filter(function(r){
+    if(!_workerEligible(r)) return false;
+    return L.test(_saleDays(r), r);
+  });
+  // soonest sale first; inside a tie, better tier first. Dateless (EARLY) falls back to tier then
+  // filing recency, because "who was served most recently" is the real freshness signal there.
+  var TR = {A:0, B:1, C:2};
+  out.sort(function(a,b){
+    var da = _saleDays(a); da = (da==null) ? 99999 : da;
+    var db = _saleDays(b); db = (db==null) ? 99999 : db;
+    if(da !== db) return da - db;
+    var ta = TR[a.tier]!=null?TR[a.tier]:3, tb = TR[b.tier]!=null?TR[b.tier]:3;
+    if(ta !== tb) return ta - tb;
+    return (+b.filed||0) - (+a.filed||0);
+  });
+  // Never hand him more than the day's remaining send budget — a queue longer than the cap just
+  // invites him to blow through it and get the sending account flagged.
+  return out.slice(0, Math.max(0, cap.left));
+}
+// One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
+// of these get serialized into the document, so anything not on screen stays out.
+function _workerCard(r){
+  var f = _docFields(r); var days = _saleDays(r); var chip = _urgencyChip(days);
+  var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); }).slice(0,3);
+  var emList = (r.emails||[]).slice(0,3);
+  return {
+    c: r.case, addr: r.addr||'', owner: r.oname||(r.owners||'').split(';')[0]||'',
+    first: (f.ownerFirst==='__blank__'?'':f.ownerFirst),
+    days: days, saleDate: r.auction||'',
+    chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
+    phones: phList, emails: emList, wpUrl: r.peopleaddr || r.people || '',
+    hs: !!r.hs, condo: !!r.condo, st: r.st||'', tier: r.tier || '',
+    prior: _wlogContacted(r.case)   // "have I reached this person before?" — shown on the card
+  };
+}
+function genMorningWorker(lane){
+  lane = lane || 'urgent';
+  var cap = _capState();
+  var laneMeta = WORKER_LANES[lane] || WORKER_LANES.urgent;
+  var laneStats  = {urgent:_laneStats('urgent'), active:_laneStats('active'), early:_laneStats('early')};
+  var laneCounts = {urgent:laneStats.urgent.n, active:laneStats.active.n, early:laneStats.early.n};
+  // ALL THREE lanes are baked in, so switching lanes is instant and offline. Reopening the doc to
+  // change lane would lose the in-tab activity log and the operator's place in the run — the two
+  // things the worker exists to keep.
+  var queues = {
+    urgent: _workerQueue('urgent').map(_workerCard),
+    active: _workerQueue('active').map(_workerCard),
+    early:  _workerQueue('early').map(_workerCard)
+  };
+  var queue = queues[lane] || [];
+  var qData = JSON.stringify(queues);
   // Seed the worker tab with today's activity so the log is populated the moment it opens,
   // instead of looking empty until the first click.
   var seedLog = JSON.stringify(_wlogToday().slice(-40));
@@ -8060,7 +8167,7 @@ function genMorningWorker(){
     + '<style>'
     +   '.mw{max-width:820px;margin:0 auto;padding:20px 22px 40px;font:15px/1.55 -apple-system,"Segoe UI",Arial,sans-serif;color:#0e1b33;background:#fbfaf6;min-height:100vh}'
     +   '.mwtop{display:flex;justify-content:space-between;align-items:center;gap:14px;padding-bottom:12px;border-bottom:1px solid #e2e6ee;margin-bottom:18px;flex-wrap:wrap}'
-    +   '.mwtitle{font:800 22px "Segoe UI",Arial,sans-serif;margin:0}'
+    +   '.mwtitle{font:800 22px "Segoe UI",Arial,sans-serif;margin:0;flex:1 1 260px;min-width:0}'
     +   '.mwtitle .sub{display:block;font:600 12px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:2px;letter-spacing:.02em}'
     +   '.mwprog{background:#0B1730;color:#F4E5A7;padding:8px 14px;border-radius:6px;font:700 13px "Segoe UI",Arial,sans-serif;letter-spacing:.02em}'
     +   '.mwcard{background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(11,23,48,.09);padding:22px 24px;margin-bottom:14px}'
@@ -8112,12 +8219,57 @@ function genMorningWorker(){
     +   '.mwdone h2{font:800 26px "Segoe UI",Arial,sans-serif;margin:0 0 10px}'
     +   '.mwdone .stats{font:600 15px/1.7 "Segoe UI",Arial,sans-serif;color:#5b6472;margin:16px 0}'
     +   '.mwnone{padding:40px 20px;background:#fff;border-radius:12px;text-align:center;color:#5b6472}'
+    // ---- lane tabs ----
+    +   '.mwlanes{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 14px}'
+    +   '.mwlane{flex:1 1 190px;background:#fff;border:2px solid #e2e6ee;border-radius:10px;padding:11px 13px;'
+    +     'cursor:pointer;text-align:left;font:inherit;transition:all .15s}'
+    +   '.mwlane:hover{border-color:#C6A14B}'
+    +   '.mwlane.on{border-color:#0B1730;background:#0B1730;color:#F4E5A7}'
+    +   '.mwlane .lt{font:800 13.5px "Segoe UI",Arial,sans-serif;display:flex;justify-content:space-between;gap:8px;align-items:center}'
+    +   '.mwlane .ln{font:800 17px "Segoe UI",Arial,sans-serif}'
+    +   '.mwlane .ld{font:500 11px "Segoe UI",Arial,sans-serif;color:#8a94a8;margin-top:3px;line-height:1.35}'
+    +   '.mwlane.on .ld{color:#9fb0d6}'
+    // ---- daily cap meter ----
+    +   '.mwcap{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e2e6ee;'
+    +     'border-radius:10px;padding:11px 14px;margin:0 0 14px;font:13px "Segoe UI",Arial,sans-serif}'
+    +   '.mwcap.warn{border-color:#C6A14B;background:#fffdf3}'
+    +   '.mwcap.blocked{border-color:#8a1c1c;background:#fff5f4}'
+    +   '.mwcap .cnum{font:800 20px "Segoe UI",Arial,sans-serif;white-space:nowrap}'
+    +   '.mwcap .cbar{flex:1;height:7px;background:#eef1f5;border-radius:4px;overflow:hidden;min-width:80px}'
+    +   '.mwcap .cbar i{display:block;height:100%;background:#286c34;transition:width .3s}'
+    +   '.mwcap.warn .cbar i{background:#C6A14B}.mwcap.blocked .cbar i{background:#8a1c1c}'
+    +   '.mwcap .ctx{color:#5b6472;line-height:1.4}'
+    +   '.mwblocked{background:#fff5f4;border:2px solid #8a1c1c;border-radius:12px;padding:26px 24px;text-align:center}'
+    +   '.mwblocked h2{margin:0 0 9px;font:800 21px "Segoe UI",Arial,sans-serif;color:#8a1c1c}'
+    +   '.mwblocked p{color:#5b6472;font-size:13.5px;line-height:1.6;margin:8px 0}'
     + '</style>'
     + '<div class="mw">'
     +   '<div class="mwtop">'
     +     '<h1 class="mwtitle">Morning outreach worker'
-    +       '<span class="sub">Tier A/B · sale 3-45 days · not touched in 72 hours · cap 20</span></h1>'
+    +       '<span class="sub">' + esc(laneMeta.ic + ' ' + laneMeta.t) + ' · ' + esc(laneMeta.d)
+    +       ' · all tiers · not touched in 72h</span></h1>'
     +     '<div class="mwprog" id="mwprog">0 of ' + queue.length + '</div>'
+    +   '</div>'
+    // LANE TABS — counts are the WHOLE lane, not the truncated queue, so he can see what is waiting
+    // behind today's send budget instead of thinking the lane is empty.
+    +   '<div class="mwlanes">'
+    +     ['urgent','active','early'].map(function(k){
+          var L = WORKER_LANES[k], st = laneStats[k];
+          // A bare "0" on a lane that holds 125 leads reads as broken. Show the workable count,
+          // and when it is zero say what the pool is so the number is explainable at a glance.
+          var sub = st.n ? esc(L.d)
+                         : (st.pool ? st.pool + ' in this lane · none reachable yet' : esc(L.d));
+          return '<button type="button" class="mwlane'+(k===lane?' on':'')+'" data-lane="'+k+'">'
+            + '<div class="lt"><span>'+L.ic+' '+esc(L.t)+'</span><span class="ln">'+st.n+'</span></div>'
+            + '<div class="ld">'+sub+'</div></button>';
+        }).join('')
+    +   '</div>'
+    // DAILY CAP METER — the real ceiling is Gmail's reputation limit, so show it as a budget he is
+    // spending rather than a rule that ambushes him at lead 41.
+    +   '<div class="mwcap" id="mwcap">'
+    +     '<span class="cnum" id="mwcapn"></span>'
+    +     '<span class="cbar"><i id="mwcapbar"></i></span>'
+    +     '<span class="ctx" id="mwcaptx"></span>'
     +   '</div>'
     +   '<div id="mwmain"></div>'
     +   '<div class="mwlogwrap">'
@@ -8126,7 +8278,9 @@ function genMorningWorker(){
     +   '</div>'
     + '</div>'
     + '<script>(function(){'
-    +   'var Q=' + qData + ';'
+    +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
+    +   'var lane=' + JSON.stringify(lane) + ', Q=LANES[lane]||[];'
+    +   'var CAP=' + JSON.stringify(cap) + ', LSTAT=' + JSON.stringify(laneStats) + ';'
     +   'var LOG=' + seedLog + ', STATS=' + seedStats + ';'
     // PACING, rebuilt 2026-07-30. A fixed 45s wait was dead time — the operator tabs over, sends,
     // and then sits watching a countdown for 30 more seconds. The smart signal is FOCUS: the moment
@@ -8146,6 +8300,7 @@ function genMorningWorker(){
     +     'renderLog();'
     +   '}'
     +   'function renderLog(){'
+    +     'renderCap();'   // cap meter must paint even on an empty log — it is a day-level fact
     +     'if(!LOG.length){ logEl.innerHTML="<div class=\'mwlogempty\'>Nothing logged yet — start the run and every action lands here.</div>"; return; }'
     +     'logEl.innerHTML=LOG.slice().reverse().map(function(e){'
     +       'var cls=e.a==="fail"?"warn":(e.a==="wait"?"wait":"ok");'
@@ -8155,6 +8310,35 @@ function genMorningWorker(){
     +     '}).join("");'
     +     'statEl.innerHTML="email "+(STATS.email||0)+" · text "+(STATS.text||0)+" · wp "+(STATS.wp||0)+" · done "+(STATS.done||0)+" · skip "+(STATS.skip||0);'
     +   '}'
+    +   'function sentToday(){ return (STATS.email||0)+(STATS.text||0); }'
+    +   'function renderCap(){'
+    +     'var n=sentToday(), left=Math.max(0,CAP.max-n), blocked=n>=CAP.max, warn=n>=CAP.warnAt;'
+    +     'var box=document.getElementById("mwcap");'
+    +     'box.className="mwcap"+(blocked?" blocked":(warn?" warn":""));'
+    +     'document.getElementById("mwcapn").textContent=n+" / "+CAP.max;'
+    +     'document.getElementById("mwcapbar").style.width=Math.min(100,Math.round(n/CAP.max*100))+"%";'
+    +     'var msg = blocked ? "<b>Daily send limit reached.</b> Stop emailing and texting — keep calling, calls are not capped."'
+    +       ' : warn ? "<b>"+left+" sends left today.</b> Cold volume past this point risks the inbox you run your business from."'
+    +       ' : left+" sends left today · safe cold-outreach rate for a Gmail account";'
+    +     'document.getElementById("mwcaptx").innerHTML=msg;'
+    +   '}'
+    // Lane switch is a pure re-point at another baked-in queue: the log, the stats and the cap all
+    // carry over, because they are per-DAY facts, not per-lane ones.
+    +   'function setLane(k){'
+    +     'if(!LANES[k] || k===lane) return;'
+    +     'clearInterval(tick); if(healing) clearTimeout(healing);'
+    +     'auto=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
+    +     'Array.prototype.forEach.call(document.querySelectorAll(".mwlane"), function(el){'
+    +       'el.classList.toggle("on", el.dataset.lane===k);'
+    +     '});'
+    +     'var sub=document.querySelector(".mwtitle .sub");'
+    +     'if(sub) sub.textContent=LMETA[k].ic+" "+LMETA[k].t+" · "+LMETA[k].d+" · all tiers · not touched in 72h";'
+    +     'addLog("open","","switched to "+LMETA[k].t+" — "+Q.length+" ready to work");'
+    +     'render();'
+    +   '}'
+    +   'document.addEventListener("click", function(e){'
+    +     'var t=e.target.closest(".mwlane"); if(t) setLane(t.dataset.lane);'
+    +   '});'
     +   'function post(kind, extra){'
     +     'try{window.opener&&window.opener.postMessage({workerAct:{c:Q[i].c,k:kind,extra:extra||null}},"*");return true;}'
     +     'catch(e){return false;}'
@@ -8230,7 +8414,28 @@ function genMorningWorker(){
     +   'function runOne(){ if(i>=Q.length) return render(); var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length; attempt(r,0,0); }'
     +   'function render(){'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
-    +     'if(!Q.length){ main.innerHTML="<div class=\'mwnone\'><b>Nothing in the queue this morning.</b><br><br>Every eligible lead was either worked in the last 3 days, sits outside the 3-45 day sale window, or is opted-out / claimed / in an active bankruptcy stay.<br><br>Come back after the next refresh.</div>"; prog.textContent="0 of 0"; renderLog(); return; }'
+    // The cap is checked at RENDER time, not just at open time, so a run that crosses the ceiling
+    // mid-morning stops there instead of finishing the queue it was handed.
+    // STATS is seeded from the SAME today-counter the cap reads, so email+text IS the live total.
+    +     'if(sentToday() >= CAP.max){'
+    +       'auto=false;'
+    +       'main.innerHTML="<div class=\'mwblocked\'><h2>&#9940; That is the day&rsquo;s sending limit</h2>"'
+    +         '+"<p>You have sent <b>"+CAP.max+"</b> cold messages today. Stop here.</p>"'
+    +         '+"<p>This is not an arbitrary rule: past roughly 50 unsolicited messages a day, Gmail starts throttling and recipient providers start scoring the sender as spam. The account that takes the damage is the one you run the business from &mdash; Jose, lenders, the county. A slow pipeline recovers; a burned inbox does not.</p>"'
+    +         '+"<p><b>Calling is not capped.</b> Work the phone for the rest of the day &mdash; it converts better than email anyway.</p></div>";'
+    +       'prog.textContent="cap reached"; renderLog(); return;'
+    +     '}'
+    +     'if(!Q.length){'
+    +       'var s=LSTAT[lane]||{}, why="";'
+    // Name the actual blocker. "No phone or email traced" is a task with an owner and a fix;
+    // "nothing here" is a mystery that costs an hour of reading code to disprove.
+    +       'if(!s.pool) why="No leads match this lane on the current board at all.";'
+    +       'else if(s.noContact && s.noContact>=s.pool-s.suppressed) why="<b>"+s.pool+" leads sit in this lane, and not one has a traced phone or email.</b> That is a data gap, not an empty pipeline &mdash; the outreach tools have nothing to send to. Run <code>skiptrace.py</code> against these, then rebuild the board.";'
+    +       'else why="Every lead here was worked in the last 3 days, has no traced phone or email ("+(s.noContact||0)+"), or is opted-out / claimed / in an active bankruptcy stay ("+(s.suppressed||0)+").";'
+    +       'var others=["urgent","active","early"].filter(function(k){return k!==lane && (LANES[k]||[]).length;});'
+    +       'main.innerHTML="<div class=\'mwnone\'><b>Nothing to work in "+esc(LMETA[lane].t)+".</b><br><br>"+why'
+    +         '+(others.length?"<br><br>Still open: <b>"+others.map(function(k){return LMETA[k].ic+" "+LMETA[k].t+" ("+LANES[k].length+")";}).join(" &middot; ")+"</b> &mdash; tap a lane above.":"<br><br>Come back after the next refresh.")'
+    +       '+"</div>"; prog.textContent="0 of 0"; renderLog(); return; }'
     +     'if(i>=Q.length){'
     +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'>Worked <b>"+Q.length+"</b> leads<br>Email <b>"+(STATS.email||0)+"</b> · Text <b>"+(STATS.text||0)+"</b> · WP <b>"+(STATS.wp||0)+"</b> · Skipped <b>"+(STATS.skip||0)+"</b></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
     +       'prog.textContent=Q.length+" of "+Q.length+" &#x2713;"; renderLog(); return;'
@@ -8245,7 +8450,10 @@ function genMorningWorker(){
     +       '+"<h2 class=\'mwname\'>"+esc(r.first||r.owner)+prior+"</h2>"'
     +       '+"<div class=\'mwaddr\'>"+esc(r.addr)+" · Tier "+esc(r.tier)+(r.hs?" · Homestead":"")+(r.condo?" · Condo":"")+"</div>"'
     +       '+"<div class=\'mwfacts\'>"'
-    +         '+"<div><div class=\'k\'>Sale date</div><div class=\'v\'>"+esc(r.saleDate)+" ("+r.days+"d)</div></div>"'
+    // EARLY leads have no auction date yet — that is the whole point of the lane, so say so instead
+    // of rendering "(nulld)". "No sale date" is the SELLING point: nobody else is calling yet.
+    +         '+"<div><div class=\'k\'>"+(r.days==null?"Stage":"Sale date")+"</div><div class=\'v\'>"'
+    +           '+(r.days==null?"Just filed — no auction set":esc(r.saleDate)+" ("+r.days+"d)")+"</div></div>"'
     +         '+"<div><div class=\'k\'>Plaintiff</div><div class=\'v\'>"+esc((r.plaintiff||"—").slice(0,40))+"</div></div>"'
     +         '+"<div><div class=\'k\'>Judgment / Value</div><div class=\'v\'>"+fm(r.judg)+" / "+fm(r.value)+"</div></div>"'
     +         '+"<div><div class=\'k\'>Phone / Email</div><div class=\'v\'>"+ph+" · "+em+"</div></div>"'
@@ -8276,11 +8484,12 @@ function genMorningWorker(){
     +   '});'
     +   'renderLog(); render();'
     + '})();<\/script>';
-  return _docShell('Morning worker · '+queue.length+' leads', body, {key:'worker'});
+  return _docShell('Morning worker · '+(laneCounts.urgent+laneCounts.active+laneCounts.early)+' leads across 3 lanes',
+                   body, {key:'worker'});
 }
-function openMorningWorker(){
+function openMorningWorker(lane){
   _docLog('__batch__', 'worker-open', 'en');
-  return _openDoc(genMorningWorker());
+  return _openDoc(genMorningWorker(lane || 'urgent'));
 }
 
 // listen for outcome logging coming back from the Dial-Ready tab — the workflow's #1 pick.
@@ -9038,6 +9247,14 @@ function genEmail(r, quiet){
   const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
   const subjEN = `Regarding your property at ${street}`;
   const subjES = `Referente a su propiedad en ${street}`;
+  // EARLY-STAGE (Lis Pendens, no auction date yet). Without this branch the standard body renders
+  // "with a sale scheduled for ." — a blank where the date should be, which reads as a mail-merge
+  // failure and kills the credibility the case number was included to build. It is also the WRONG
+  // pitch: a just-served owner has 8-14 months, so urgency is a lie and "before the auction" means
+  // nothing to them. What is true and useful is that the clock started and nobody else has called.
+  const early = !td && !dt;
+  const bodyEarlyEN = `Hi ${first},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nA foreclosure case was recently filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. No auction date has been set yet, and that is the point of this letter: right now you have the most options you will ever have, and the fewest people pressuring you.\n\nHere is what normally happens next. You have 20 days from being served to respond to the court. From there a typical Florida case runs several months to over a year before any sale is scheduled. In that window the five exits are all still open: (1) reinstate the loan, (2) loan modification, (3) short sale, (4) private cash sale — that is where a buyer like me comes in — and (5) bankruptcy.\n\nI am not asking you to sell. I am telling you the clock started, so you can decide on your terms instead of in the last two weeks. No cost, no obligation.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+  const bodyEarlyES = `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nRecientemente se presentó un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Todavía no hay fecha de subasta, y ese es el punto de esta carta: ahora mismo usted tiene más opciones que nunca y menos gente presionándolo.\n\nLo que normalmente sigue: tiene 20 días desde que le entregaron los papeles para responder a la corte. Después, un caso típico en Florida toma varios meses o más de un año antes de que se fije una subasta. En esa ventana las cinco salidas siguen abiertas: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo — ahí entra un comprador como yo — y (5) bancarrota.\n\nNo le pido que venda. Le aviso que el reloj empezó, para que decida en sus términos y no en las últimas dos semanas. Sin costo ni compromiso.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
   // Mirror Field Manual letter: buyer posture + five exits (FC) / tax paths (TD).
   const bodyEN = td
     ? `Hi ${first},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nCounty records show your property at ${addr} is scheduled for a tax deed sale on ${dt}${caseTagEN}. Before that date, owners usually look at paying the back taxes, selling privately for cash, or claiming any surplus the law allows if it sells for more than is owed.\n\nNo cost and no obligation to talk. If a private sale fits, I can buy as-is and close before the deadline; if another path is better, I will say so.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`
@@ -9045,7 +9262,9 @@ function genEmail(r, quiet){
   const bodyES = td
     ? `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Antes de esa fecha, los dueños suelen mirar pagar impuestos atrasados, vender en privado en efectivo, o reclamar el excedente si la ley lo permite.\n\nSin costo ni compromiso. Si una venta privada encaja, puedo comprar tal cual y cerrar antes de la fecha; si otro camino es mejor, se lo digo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`
     : `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con subasta el ${dt}.\n\nNo escribo para convencerlo. Las cinco salidas de todo propietario en ejecución en Florida son: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo antes de la subasta — ahí entra un comprador como yo — y (5) bancarrota. Mi trabajo es que sepa que las cinco están sobre la mesa.\n\nSin costo ni compromiso. Si quiere poner todas las opciones sobre la mesa, conteste cuando llamemos; si no le interesa, dígamelo — nadie se ofende.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
-  const D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
+  const D = early
+    ? {en:{subj:subjEN, body:bodyEarlyEN}, es:{subj:subjES, body:bodyEarlyES}}
+    : {en:{subj:subjEN, body:bodyEN},      es:{subj:subjES, body:bodyES}};
   // SENT-CONTENT CAPTURE. Alejandro: "I need to see the results of what's sending. What is the
   // input?" Stash the EXACT composed subject+body on a global the moment it is built, so the
   // worker's log can archive the real text rather than a summary. Reading it from here instead
@@ -9073,7 +9292,7 @@ function genEmail(r, quiet){
   @media print{.bar{display:none}}`;
   const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Email - ${esc(owner)}</title><style>${CSS}</style></head><body>
 <div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button class="act" onclick="openGmail()">Open in Gmail</button><button class="act" onclick="openMail()">Open in email app</button><button class="act" id="cpy" onclick="copyEmail()">Copy email</button></div>
-<h1>${esc(owner)}</h1><div class="sub">${esc(addr)} &middot; ${td?'Tax-deed sale':'Foreclosure sale'} <b>${esc(dt)}</b></div>
+<h1>${esc(owner)}</h1><div class="sub">${esc(addr)} &middot; ${early?'Foreclosure filed &mdash; <b>no auction date set yet</b>':(td?'Tax-deed sale':'Foreclosure sale')+' <b>'+esc(dt)+'</b>'}</div>
 <div class="lbl">To</div><div class="to">${recip}</div>
 <div class="lbl">Subject</div><div class="subj" id="subjline"></div>
 <div class="lbl">Message</div><div class="body" id="bodybox"></div>
