@@ -815,6 +815,51 @@ def _routable_py(d):
         return False
     return _has_street(d.get('addr'))
 
+def _js_guard(tpl):
+    """Parse every inline <script> block with Node and abort the build on a syntax error.
+
+    WHY THIS EXISTS: the page generates whole documents (door hangers, doc room, dial-ready,
+    the morning worker) as JS strings concatenated inside other JS strings. A single dropped
+    backslash produces valid-looking HTML whose script dies at parse time, so the feature is
+    simply dead on the live site while every Python test still passes -- Python never parses
+    that JavaScript. Two shipped that way on 2026-07-30 before this guard existed.
+
+    Node is optional: if it is not installed we warn and continue rather than blocking a build
+    on a machine that cannot run the check.
+    """
+    import subprocess, tempfile
+    blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', tpl, re.S | re.I)
+    if not blocks:
+        return
+    try:
+        subprocess.run(['node', '--version'], capture_output=True, timeout=10, check=True)
+    except Exception:
+        print('WARN: node not available - skipping inline-JS syntax guard')
+        return
+    bad = 0
+    for n, src in enumerate(blocks, 1):
+        if not src.strip():
+            continue
+        with tempfile.NamedTemporaryFile('w', suffix='.js', delete=False, encoding='utf-8') as fh:
+            fh.write(src)
+            path = fh.name
+        try:
+            p = subprocess.run(['node', '--check', path], capture_output=True, text=True, timeout=30)
+            if p.returncode != 0:
+                bad += 1
+                first = (p.stderr or '').strip().split('\n')
+                print(f'JS SYNTAX ERROR in inline <script> #{n}:')
+                for line in first[:6]:
+                    print('   ' + line)
+        finally:
+            try: os.unlink(path)
+            except Exception: pass
+    if bad:
+        raise SystemExit(f'BUILD ABORTED: {bad} inline <script> block(s) failed node --check. '
+                         'Fix the escaping before publishing - the page would load but the '
+                         'feature would be dead on the live site.')
+    print(f'js-guard: {len(blocks)} inline script block(s) parsed clean')
+
 def _zip_centroids(slim):
     """ZIP -> {lat, lng, n} centroid table, built from our own ROUTABLE Miami-Dade leads.
 
@@ -1439,6 +1484,13 @@ def make_tracker(leads):
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')
+
+    # SYNTAX-GUARD every inline <script> the template emits. These blocks are built by string
+    # concatenation inside JS strings, which means one dropped backslash silently ships a page that
+    # parses as HTML but dies at runtime — twice in one session: `<\\/script>` (never closed the
+    # tag) and `"\\""` as an object key (Unexpected string). Neither showed up in the Python tests
+    # because Python never parses that JS. Node does, in ~200ms, so do it here and fail the build.
+    _js_guard(tpl)
 
     # Substitute the build clock + ZIP centroid table BEFORE the Desktop copy is written.
     # ORDERING BUG THIS FIXES (caught in the browser 2026-07-29): the Desktop write below runs
