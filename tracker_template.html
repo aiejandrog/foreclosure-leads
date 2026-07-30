@@ -6603,7 +6603,14 @@ var DOCROOM_MODE = 'BUYER_ONLY';   // flipping this must disable the FIELD tier 
 var ATTY_APPROVALS = {
   psa:    {by:'', date:'', fingerprint:''},
   cancel: {by:'', date:'', fingerprint:''},
-  tpa:    {by:'', date:'', fingerprint:''}
+  tpa:    {by:'', date:'', fingerprint:''},
+  // A DEED IS THE MOST CONSEQUENTIAL PAPER IN THE WHOLE ROOM. It moves title. A defect is not a
+  // typo, it is a void conveyance or a cloud somebody litigates years later — and a non-lawyer
+  // who selects and prepares deeds for other people is the exact conduct enjoined in
+  // Fla. Bar v. Furman. So the quit claim sits behind the same fingerprint lock as the PSA:
+  // it will not print until an attorney has read THIS template and signed off, and any edit to
+  // the generator changes the fingerprint and revokes that approval automatically.
+  quitclaim: {by:'', date:'', fingerprint:''}
 };
 function _docFingerprint(src){
   // FNV-1a 32-bit over the template source string
@@ -7198,6 +7205,256 @@ function genAttyPacket(r){
 }
 
 // --- HUB UI ---------------------------------------------------------------------------------
+/* ══════════════════════ QUIT CLAIM DEED — individual and multi-grantor ══════════════════════
+   Typeset from Alejandro's own two blanks (BLANK Quit Claim Deed INDIVIDUAL.pdf / COUPLE.doc),
+   word for word on the operative language, with the merge fields the board already knows filled
+   in. It exists so the grantor's name, the folio, the legal description and the county are not
+   hand-copied at a kitchen table — that is where the typos that get a deed REJECTED at recording
+   come from, and a rejected deed after a signing is a lost deal.
+
+   FOUR THINGS THIS FORM ENFORCES THAT A BLANK PDF CANNOT
+   1. TWO SUBSCRIBING WITNESSES. Fla. Stat. 689.01 — a conveyance of an interest in Florida land
+      must be signed in the presence of two subscribing witnesses. One witness voids it. The
+      witnesses must actually watch the signing; signing later, off to the side, does not count.
+   2. NOTARY ACKNOWLEDGMENT. Fla. Stat. 695.03 — without it the deed cannot be RECORDED, and an
+      unrecorded deed loses to a later recorded interest under the recording statute.
+   3. HOMESTEAD SPOUSAL JOINDER. Fla. Const. Art. X §4(c) — if the property is homestead and the
+      owner is married, the SPOUSE MUST ALSO SIGN even when the spouse is not on the title. This
+      is the single most common way one of these deeds is later declared void, and it is exactly
+      why a two-grantor form has to exist. The form asks the question out loud.
+   4. THE PRICE. The blanks say "$10.00 and other good and valuable consideration", which is
+      correct between family or to clear a cloud on title. A $10 deed taken from a homeowner in
+      active foreclosure is the fact pattern for an equity-stripping claim under Fla. Stat.
+      501.1377, and it is the number a judge reads first. So the consideration is a REAL field.
+
+   WHAT THIS IS NOT. It is not legal advice and it does not choose the instrument. Selecting a
+   quit claim over a warranty deed, and deciding whether a deed is the right move at all, is the
+   attorney's call — Fla. Bar v. Furman is the case where a non-lawyer preparing and advising on
+   deeds for others was enjoined for unauthorized practice of law. Filling known facts onto a form
+   the principal asked for is clerical; telling the owner what it does is not. The page says so.
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+function _grantors(r){
+  // The board stores co-owners semicolon-separated. "SMITH JOHN & MARY" is also one string with
+  // two humans in it, so split on both — a deed that names only half the owners conveys only
+  // half the property, and nobody notices until title work.
+  var raw = String((r && r.owners) || '').trim();
+  if(!raw) return [];
+  var parts = [];
+  raw.split(';').forEach(function(chunk){
+    chunk = chunk.trim(); if(!chunk) return;
+    // "&W" / "&H" (and-wife / and-husband) are county-roll shorthand for a married couple
+    var m = chunk.match(/^(.*?)\s*&\s*[WH]\s+(.*)$/i);
+    if(m){ parts.push(m[1].trim()); parts.push(m[2].trim()); return; }
+    if(/\s&\s/.test(chunk)){ chunk.split(/\s&\s/).forEach(function(p){ if(p.trim()) parts.push(p.trim()); }); return; }
+    parts.push(chunk);
+  });
+  return parts.filter(function(x,i,a){ return x && a.indexOf(x)===i; });
+}
+function _qcSrc(){ return String(genQuitClaim); }
+function genQuitClaim(r, opts){
+  opts = opts || {};
+  if(!_docApproved('quitclaim', _qcSrc()))
+    return _docShell('Quit Claim Deed — awaiting attorney approval',
+      '<div class="doc"><div class="kicker">NOT AVAILABLE</div>'
+      + '<h1>This deed template has not been approved yet</h1>'
+      + '<p>The form is typeset and the merge fields are wired, but it will not print until an '
+      + 'attorney has reviewed <b>this exact template</b> and <code>ATTY_APPROVALS.quitclaim</code> '
+      + 'is filled in with their name, the date, and the template fingerprint.</p>'
+      + '<p>That is deliberate. A deed moves title: a defective one is a void conveyance or a title '
+      + 'cloud somebody litigates later, and choosing and preparing deeds for other people is the '
+      + 'conduct at issue in <i>Fla. Bar v. Furman</i>. Editing the generator changes the '
+      + 'fingerprint and revokes approval automatically, so an approved form can never silently '
+      + 'drift into an unreviewed one.</p>'
+      + '<div class="box"><b>To unlock:</b> send the attorney the printed template, then set '
+      + '<code>by</code>, <code>date</code> and <code>fingerprint</code> '
+      + '(<code>'+esc(_docFingerprint(_qcSrc()))+'</code>) in ATTY_APPROVALS.</div>'
+      + '</div>', {key:'quitclaim-blocked'});
+  var f = _docFields(r);
+  var owners = _grantors(r);
+  // couple/multi form when asked for, or whenever the roll actually shows more than one owner
+  var multi = !!opts.multi || owners.length > 1;
+  var n = multi ? Math.max(2, owners.length) : 1;
+  var countyName = (f.county !== '__blank__' ? f.county : 'MIAMI-DADE').toUpperCase();
+  var grantee = (f.buyerLLC !== '__blank__') ? f.buyerLLC : 'DealFlow Investments LLC';
+  var isHS = !!(r && r.hs);
+  var B = function(w){ return _dfLine(w); };
+
+  // ---- the instrument -------------------------------------------------------------------
+  var body = ''
+    + '<div class="doc">'
+    +   '<div class="qcprep">'
+    +     '<div>This document prepared by<br>and return to:</div>'
+    +     '<div class="qcpreplines">'
+    +       '<div>'+B(46)+'</div><div>'+B(46)+'</div><div>'+B(46)+'</div>'
+    +     '</div>'
+    +   '</div>'
+    +   '<h1 class="qctitle">Quit Claim Deed</h1>'
+    +   '<div class="qcfolio">Folio # '+_dfHtml(f.folio)+'</div>'
+
+    +   '<p>THIS QUIT CLAIM DEED, Executed this '+B(8)+' day of '+B(22)+', 20'+B(6)+', by, '
+    +     '<b>'+(owners.length ? esc(owners.slice(0,n).join(' and ')) : _dfHtml('__blank__'))+'</b>, '
+    +     'a '+B(20)+', whose address is '+_dfHtml(r && (r.mail || r.addr))+', <b>(Grantor)</b>, '
+    +     'and <b>'+esc(grantee)+'</b>, a '+B(20)+', whose primary address is '
+    +     _dfHtml(f.buyerAddr)+', <b>(Grantee)</b>.</p>'
+
+    // CONSIDERATION — a real field, not a hardcoded $10. See the header note.
+    +   '<p>WITNESSETH, That said Grantor, for and in consideration of the sum of '
+    +     '$'+B(14)+' ('+B(34)+' DOLLARS) '
+    +     'and other good and valuable consideration of the Grantor in hand paid by Grantee, the '
+    +     'receipt whereof is hereby acknowledged, have granted, bargained and Quit-Claimed to the '
+    +     'said Grantee and Grantee&rsquo;s heirs, successors and assigns forever, the following '
+    +     'described land, situated, lying and being in the County of <b>'+esc(countyName)+'</b>, '
+    +     'State of FLORIDA, to wit:</p>'
+
+    +   '<div class="qclegal"><div class="qclbl">Legal Desc:</div>'
+    +     (f.legalDesc !== '__blank__'
+        ? '<div class="qclegaltext">'+esc(f.legalDesc)+'</div>'
+        : '<div>'+B(64)+'</div><div>'+B(64)+'</div><div>'+B(64)+'</div>')
+    +   '</div>'
+    +   '<p class="qcpub">OF THE PUBLIC RECORDS OF '+esc(countyName)+' COUNTY, FLORIDA.</p>'
+    +   '<p>Parcel ID# : <b>'+_dfHtml(f.folio)+'</b> &nbsp; C/K/A: <b>'+_dfHtml(f.propAddr)+'</b><br>'
+    +     '<span class="mini">(subject to county taxes and mortgage(s) if applicable)</span></p>'
+
+    +   '<p>To Have and to Hold The same together with all and singular the appurtenances thereunto '
+    +     'belonging or in anywise appertaining, and all the estate, right, title, interest, equity '
+    +     'and claim whatsoever of the said first party, wither in law or equity, to the equity, to '
+    +     'the only property use, benefit and behoof of the said second party forever.</p>'
+    +   '<div class="qcpage">Page 1 of 2</div>'
+    + '</div>'
+
+    // ---- page 2: execution ----------------------------------------------------------------
+    + '<div class="doc pgb">'
+    +   '<p>In Witness Whereof, Grantor has hereunto set Grantor&rsquo;s hand and seal the day and '
+    +     'year first above written.</p>'
+    +   '<p><b>Signed, sealed and delivered in our presence:</b></p>';
+
+  // Grantor signature blocks — one per named owner, each paired with the two witnesses who must
+  // watch THAT signature happen (689.01). Rendering only one line on a two-owner property is how
+  // a half-interest deed gets signed.
+  for(var i=0; i<n; i++){
+    var who = owners[i] || '';
+    body += ''
+      + '<div class="qcsigrow">'
+      +   '<div class="qccol">'
+      +     '<div class="qcline"></div><div class="qccap">Witness Signature</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness Printed name</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness Signature</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness Printed name</div>'
+      +   '</div>'
+      +   '<div class="qccol">'
+      +     '<div class="qcline"></div><div class="qccap">Signature (Grantor'+(n>1?' '+(i+1):'')+')</div>'
+      +     '<div class="qcline"></div>'
+      +     '<div class="qccap">Printed name'+(who ? ' &mdash; <b>'+esc(who)+'</b>' : '')+'</div>'
+      +   '</div>'
+      + '</div>';
+  }
+
+  body += ''
+    +   '<div class="rule"></div>'
+    +   '<p>STATE OF FLORIDA<br>COUNTY OF '+esc(countyName)+'</p>'
+    +   '<p>The foregoing instrument was acknowledged before me this '+B(8)+' day of '+B(22)+', '
+    +     '20'+B(6)+', by '+B(46)+', a '+B(16)+', who '
+    +     (multi ? 'is/are' : 'is')+' '+B(5)+' personally known to me or '
+    +     (multi ? 'has/have' : 'has')+' produced a '+B(30)+' as identification.</p>'
+    +   '<div class="qcsigrow"><div class="qccol">'
+    +     '<div class="qcline"></div><div class="qccap">NOTARY PUBLIC</div>'
+    +     '<div class="qccap" style="margin-top:10px">MY COMMISSION EXPIRES '+B(18)+'</div>'
+    +   '</div><div class="qccol"><div class="qcseal">NOTARY SEAL</div></div></div>'
+    +   '<div class="qcpage">Page 2 of 2</div>'
+    + '</div>'
+
+    // ---- the checklist. Explicitly NOT part of the recorded instrument. --------------------
+    + '<div class="doc pgb qccheck">'
+    +   '<div class="kicker">DO NOT RECORD THIS PAGE &mdash; IT IS NOT PART OF THE INSTRUMENT</div>'
+    +   '<h1>Before anyone signs</h1>'
+    +   '<div class="sub">Every line below has voided a real Florida deed. Walk them in order.</div>'
+
+    +   '<h2>1 &middot; Two witnesses, watching</h2>'
+    +   '<p>Fla. Stat. 689.01: a conveyance of Florida land must be signed in the presence of '
+    +     '<b>two subscribing witnesses</b>. They have to actually watch the grantor sign &mdash; '
+    +     'collecting a witness signature afterward does not cure it. One witness voids the deed. '
+    +     'The notary may serve as one of the two, but you still need a second body in the room.</p>'
+
+    +   '<h2>2 &middot; A notary with no stake in the deal</h2>'
+    +   '<p>Fla. Stat. 695.03: no acknowledgment, no recording &mdash; and an unrecorded deed loses '
+    +     'to anyone who records first. Fla. Stat. 117.107(12): a notary may not notarize a '
+    +     'transaction in which they have a financial interest. <b>Nobody on the buying side '
+    +     'notarizes this.</b> Bring a disinterested notary or use a mobile one.</p>'
+
+    +   '<h2>3 &middot; Is it homestead? Then the spouse signs too'+(isHS?' &mdash; THIS ONE IS FLAGGED HOMESTEAD':'')+'</h2>'
+    +   '<p>Fla. Const. Art. X &sect;4(c): if the property is homestead and the owner is married, '
+    +     '<b>the spouse must join in the conveyance even if the spouse is not on the title</b>. '
+    +     'A deed signed by one married owner alone is void as to homestead. Ask the question out '
+    +     'loud &mdash; &ldquo;are you married?&rdquo; &mdash; and if the answer is yes, the spouse '
+    +     'signs as a grantor on this form, whatever the county roll says about who owns it.</p>'
+    +     (isHS ? '<div class="box"><b>The county roll flags this parcel as homestead.</b> Confirm '
+    +       'marital status before a single-grantor version of this deed is used.</div>' : '')
+
+    +   '<h2>4 &middot; The consideration line is the price, not $10</h2>'
+    +   '<p>The blank form&rsquo;s &ldquo;$10.00 and other good and valuable consideration&rdquo; is '
+    +     'normal between family or to clear title. On a deed taken from an owner in active '
+    +     'foreclosure it reads as equity stripping, and Fla. Stat. 501.1377 governs '
+    +     'foreclosure-related transactions with distressed homeowners &mdash; including a right to '
+    +     'cancel and a bar on collecting fees up front. <b>State what you are actually paying.</b></p>'
+
+    +   '<h2>5 &middot; Doc stamps are owed on more than the cash</h2>'
+    +   '<p>Fla. Stat. 201.02: documentary stamp tax is due on the consideration &mdash; and taking '
+    +     'title <i>subject to</i> an existing mortgage counts the unpaid balance as consideration. '
+    +     'A &ldquo;$10&rdquo; deed on a house with a $200,000 mortgage is not a $0.70 stamp. The '
+    +     'clerk will compute it at recording; know the number before you are standing there.</p>'
+
+    +   '<h2>6 &middot; What this form is not</h2>'
+    +   '<p>A quit claim conveys only whatever interest the grantor happens to have, with '
+    +     '<b>no warranty of title whatsoever</b> &mdash; it does not clear liens, it does not stop '
+    +     'the foreclosure, and it does not make the mortgage go away. Whether a deed is the right '
+    +     'instrument here is a legal question for the attorney, not for the person holding the pen '
+    +     'at the table. This page prepares a form; it does not give advice.</p>'
+    +   '<p><b>Where the line is.</b> In <i>The Florida Bar v. Furman</i> a non-lawyer who selected '
+    +     'and prepared legal instruments for other people, and advised them on what those '
+    +     'instruments would do, was enjoined for the unauthorized practice of law. Typing known '
+    +     'facts onto a form the principal asked for is clerical. Telling the owner which document '
+    +     'they need, or what it will accomplish for them, is not. If the conversation turns into '
+    +     '&ldquo;what should I sign,&rdquo; that is the attorney&rsquo;s question &mdash; hand it '
+    +     'over rather than answering it.</p>'
+
+    +   '<div class="rule"></div>'
+    +   '<div class="mini"><b>Lead:</b> '+_dfHtml(f.caseNo)+' &middot; '+_dfHtml(f.propAddr)
+    +     ' &middot; generated '+esc(new Date().toLocaleString())
+    +     ' &middot; form: '+(multi ? 'multi-grantor' : 'single grantor')+'</div>'
+    + '</div>';
+
+  var css = '<style>'
+    + '.qcprep{display:flex;gap:16px;font-size:12.5px;margin-bottom:18px}'
+    + '.qcpreplines{flex:1}.qcpreplines div{margin-bottom:7px}'
+    + '.qctitle{text-align:center;font:700 20px Georgia,serif;letter-spacing:.02em;margin:14px 0 6px}'
+    + '.qcfolio{text-align:right;font-size:13px;margin-bottom:14px}'
+    + '.qclegal{margin:10px 0}.qclbl{font-weight:700;display:inline-block;margin-right:6px}'
+    + '.qclegaltext{border:1px solid #bbb;padding:8px 10px;background:#fbfbfb;font-size:13px;margin-top:4px}'
+    + '.qcpub{font-size:12.5px;letter-spacing:.02em}'
+    + '.qcsigrow{display:flex;gap:34px;margin:22px 0;flex-wrap:wrap}'
+    + '.qccol{flex:1;min-width:230px}'
+    + '.qcline{border-bottom:1px solid #222;height:34px;margin-bottom:3px}'
+    + '.qccap{font-size:11px;color:#444;margin-bottom:14px}'
+    + '.qcseal{border:1px dashed #999;height:110px;display:flex;align-items:center;justify-content:center;'
+    +   'color:#999;font-size:11px;letter-spacing:.12em}'
+    + '.qcpage{text-align:center;font-size:11px;color:#777;margin-top:26px}'
+    + '.qccheck h2{margin-top:18px}'
+    + '</style>';
+
+  return _docShell((multi ? 'Quit Claim Deed (multi-grantor) — ' : 'Quit Claim Deed — ')
+                   + (f.propAddr!=='__blank__' ? f.propAddr : (r&&r.case) || ''),
+                   css + body,
+                   {key:'quitclaim'+(multi?'-multi':'-single'),
+                    note:'Blanks are intentional — nothing about who signs is guessed.'});
+}
+function genQuitClaimSingle(r){ return genQuitClaim(r, {multi:false}); }
+function genQuitClaimMulti(r){  return genQuitClaim(r, {multi:true}); }
+function openQuitClaim(r, multi){
+  var g = _docGate(r);
+  if(!g.ok){ alert('Doc Room blocked for this lead:\n\n' + g.why); return; }
+  _docLog(r.case, 'quitclaim' + (multi ? '-multi' : '-single'), 'en');
+  return _openDoc(genQuitClaim(r, {multi: !!multi}));
+}
 function openDocRoom(caseId){
   var r = DATA.find(function(x){return x.case===caseId;});
   var gate = _docGate(r);
@@ -7205,6 +7462,7 @@ function openDocRoom(caseId){
   var psaOk = _docApproved('psa', _psaSrc());
   var cancelOk = _docApproved('cancel', _CANCEL_NOTICE_SRC) && _docApproved('cancel', _CANCEL_FORM_SRC);
   var tpaOk = _docApproved('tpa', _TPA_SRC);
+  var qcOk  = _docApproved('quitclaim', _qcSrc());
   var head = ''
     + '<div class="doc"><div class="kicker">DOC ROOM · DEALFLOW</div>'
     +   '<h1>Documents for '+_dfHtml(f.propAddr||'')+'</h1>'
@@ -7252,6 +7510,30 @@ function openDocRoom(caseId){
     + (tpaOk
         ? card({key:'tpa', t:'Third-Party Authorization', s:'Prefer servicer form / title orders payoff. Merge blanks only.', fn:'genThirdPartyAuth'})
         : _docAwaitHtml('Third-Party Authorization'))
+    // QUIT CLAIM DEED — both forms. The board already knows how many humans are on title, so it
+    // recommends the right one instead of leaving that to memory at a signing table: naming one
+    // grantor on a two-owner property conveys a half interest and nobody notices until title work.
+    + (function(){
+        var owners = _grantors(r), multi = owners.length > 1;
+        var who = owners.length
+          ? owners.length + ' owner' + (owners.length>1?'s':'') + ' on title: ' + owners.slice(0,3).join(' · ')
+          : 'no owner name on this lead — verify before either form';
+        var rec = '<div class="mini" style="margin:6px 0 2px"><b>'
+          + (multi ? '↓ Use the multi-grantor form' : '↓ Use the single-grantor form')
+          + '</b> — ' + esc(who)
+          + (r && r.hs ? ' · <b>flagged HOMESTEAD</b>: if the owner is married the spouse must join, even if not on title (Fla. Const. Art. X §4(c))' : '')
+          + '</div>';
+        if(!qcOk) return rec + _docAwaitHtml('Quit Claim Deed (single + multi-grantor)');
+        return rec
+          + card({key:'quitclaim-single', t:'Quit Claim Deed &mdash; single grantor'
+                  + (multi ? ' <span style="color:#8a1c1c">(not recommended here)</span>' : ''),
+                  s:'One owner signs. Two witnesses + notary. Folio, legal description and county merge in.',
+                  fn:'genQuitClaimSingle'})
+          + card({key:'quitclaim-multi', t:'Quit Claim Deed &mdash; couple / multiple owners'
+                  + (multi ? ' <span style="color:#286c34">(recommended)</span>' : ''),
+                  s:'A signature block per owner, "is/are" + "has/have" acknowledgment. Required for homestead spousal joinder.',
+                  fn:'genQuitClaimMulti'});
+      })()
     + '<div class="kicker" style="color:#8a1c1c;margin-top:20px">COUNSEL — the app does NOT generate these</div>'
     + '<p class="mini">Reference list only. One button sends a facts-only deal sheet. No instrument picker.</p>'
     + _docRefList()
@@ -7484,7 +7766,8 @@ window.addEventListener('message', function(ev){
              genDoorFolder:genDoorFolder,
              genCancelNotice:genCancelNotice, genCancelForm:genCancelForm,
              genThirdPartyAuth:genThirdPartyAuth, genAttyPacket:genAttyPacket,
-             genContractPrint:genContractPrint})[d.fn];
+             genContractPrint:genContractPrint,
+             genQuitClaimSingle:genQuitClaimSingle, genQuitClaimMulti:genQuitClaimMulti})[d.fn];
   if(!fn) return;
   var html = fn(r);
   // genContractPrint calls genContract (which already _openDoc's) and returns null when approved
