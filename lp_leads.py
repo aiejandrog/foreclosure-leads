@@ -34,6 +34,7 @@ import county_leads as C        # _people_name / _rec_name
 HERE = os.path.dirname(os.path.abspath(__file__))
 IN = os.path.join(HERE, 'lis_pendens.json')
 ADDR = os.path.join(HERE, 'lp_addresses.json')
+STATUS = os.path.join(HERE, '_lp_status_cache.json')
 OUT = os.path.join(HERE, 'lp_leads.json')
 COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|TR|EST|ESTATE|PROPERT|INVEST|GROUP|REALTY|CAPITAL|VENTURES|CONDO)\b', re.I)
 
@@ -46,6 +47,20 @@ def _addresses():
         return json.load(open(ADDR, encoding='utf-8')) or {}
     except Exception as e:
         print(f'lp_addresses.json unreadable ({e}) — continuing without addresses')
+        return {}
+
+
+def _statuses():
+    """case -> clerk case status from lp_status.py. A lis pendens stays in the Official Records
+    forever, so nothing in the LP feed says the case DIED — the owner reinstated, refinanced, sold,
+    or the bank withdrew. 8 of the current 125 are voluntarily dismissed. Without this they sit in
+    the EARLY nurture lane looking fresh, and somebody calls a homeowner about a foreclosure that
+    no longer exists."""
+    if not os.path.exists(STATUS):
+        return {}
+    try:
+        return json.load(open(STATUS, encoding='utf-8')) or {}
+    except Exception:
         return {}
 
 
@@ -68,7 +83,8 @@ def build():
         print('no lis_pendens.json — run lis_pendens.py first'); return []
     feed = json.load(open(IN, encoding='utf-8'))
     addrs = _addresses()
-    nhigh = nadv = nmismatch = nvalued = 0
+    stats = _statuses()
+    nhigh = nadv = nmismatch = nvalued = ndismissed = nclosed = 0
     out, seen = [], set()
     for lp in feed:
         case = str(lp.get('case') or '').strip()
@@ -115,6 +131,19 @@ def build():
         if value:
             nvalued += 1
 
+        # ---- is the case still alive? ------------------------------------------------------
+        _s = stats.get(case) or {}
+        lp_status = str(_s.get('status') or '')
+        lp_dismissed = bool(_s.get('dismissed'))
+        # terminal WITHOUT a dismissal docket: the case ended some other way (likely judgment).
+        # Either way it is no longer a fresh filing, but the two are different stories and the
+        # board says which rather than collapsing them.
+        lp_closed = bool(_s.get('terminal')) and not lp_dismissed
+        if lp_dismissed:
+            ndismissed += 1
+        elif lp_closed:
+            nclosed += 1
+
         out.append({
             'county': 'MIAMI-DADE', 'st': 'LP', 'stage': 'LP',   # 'LP' -> _isLP()/lpOnly Fresh-filings lane
             'case': case or ('LP-' + re.sub(r'\W', '', owner)[:16]),
@@ -137,6 +166,7 @@ def build():
             'mr': False, 'ip': False, 'tier': 'C', 'score': 0, 'auction': '', 'days': 9999,
             'filed': lp.get('date', ''), 'filedDate': lp.get('date', ''),   # the Fresh-filings sort keys on filedDate
             'lpkind': lp.get('kind', ''), 'legal': lp.get('legal', ''),
+            'cstatus': lp_status, 'lpDismissed': lp_dismissed, 'lpClosed': lp_closed,
             'bookpage': lp.get('bookpage', ''),
             'zillow': '', 'pa': 'https://apps.miamidadepa.gov/PropertySearch/#/',
             'people': people, 'peopleaddr': '', 'cyberbg': F.cyberbg_url(nm, '') if (nm and not is_co and not ent) else '',
@@ -150,6 +180,8 @@ def build():
     if addrs:
         print(f'  addresses: {nhigh} filled (high confidence, skiptrace-ready) · '
               f'{nadv} advisory only (needs human) · {nmismatch} owner-of-record changed since filing')
+        print(f'  case:      {ndismissed} DISMISSED, {nclosed} closed without a dismissal docket'
+              + (' — these drop out of the EARLY lane' if (ndismissed or nclosed) else ''))
         print(f'  values:    {nvalued} priced from the Property Appraiser'
               + ('' if nvalued else ' — run lp_values.py to rank these by equity'))
     else:
