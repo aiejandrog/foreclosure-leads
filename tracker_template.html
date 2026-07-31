@@ -6797,23 +6797,6 @@ function _openDoc(html, opts){
    ============================================================================================ */
 var DOCROOM_MODE = 'BUYER_ONLY';   // flipping this must disable the FIELD tier — enforced in _docGate
 
-/* Approval fingerprint helpers kept as no-ops. Operator (2026-07-31) removed the attorney-lock
-   gate so OFFICE / quit-claim templates print and view straight from Doc Room. */
-var ATTY_APPROVALS = {};
-function _docFingerprint(src){
-  var h = 0x811c9dc5, s = String(src||'');
-  for(var i=0;i<s.length;i++){
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-  return ('00000000' + (h >>> 0).toString(16)).slice(-8);
-}
-function _docApproved(key, src){ return true; }
-function _docAwaitHtml(label){
-  // Unused — kept so old call sites don't throw if any remain.
-  return '';
-}
-
 function _docFields(r){
   // ONE source of merge fields. Owner MUST come from owner_clean (commit c8d217c fix — a fresh
   // split of `owners` reintroduced the spouse/co-party bug on 91/220 People links). Every
@@ -7189,12 +7172,6 @@ function genDoorFolder(r){
 }
 
 // --- TIER 2 — OFFICE (merge-only; print / view freely) ----------------------------------------
-var _CANCEL_NOTICE_SRC = 'DOC7-NOTICE-RIGHT-TO-CANCEL-v1';
-var _CANCEL_FORM_SRC   = 'DOC8-CANCELLATION-FORM-v1';
-var _CANCEL_SRC        = _CANCEL_NOTICE_SRC + '|' + _CANCEL_FORM_SRC;
-var _TPA_SRC           = 'DOC9-THIRD-PARTY-AUTH-v1';
-function _psaSrc(){ return String(genContract); }
-
 function genCancelNotice(r){
   var f = _docFields(r);
   // OWN PAGE — no other content. Statutory formatting is attorney-finalized; this is the merge shell.
@@ -7413,7 +7390,6 @@ function _grantors(r){
   });
   return parts.filter(function(x,i,a){ return x && a.indexOf(x)===i; });
 }
-function _qcSrc(){ return String(genQuitClaim); }
 function genQuitClaim(r, opts){
   opts = opts || {};
   var f = _docFields(r);
@@ -7644,49 +7620,6 @@ function openQuitClaim(r, multi){
   _docLog(r.case, 'quitclaim' + (multi ? '-multi' : '-single'), 'en');
   return _openDoc(genQuitClaim(r, {multi: !!multi}));
 }
-/* Optional inventory of OFFICE / deed templates (no print lock). Prefer genAttyPacket for a
-   facts-only counsel handoff on a specific lead. */
-function genApprovalPacket(){
-  var items = [
-    {k:'psa',       t:'As-Is Purchase & Sale Agreement',
-     s:_psaSrc(),   w:'Merge-only PSA. Never present at a door.'},
-    {k:'cancel',    t:'Notice of Right to Cancel + Cancellation Form',
-     s:_CANCEL_SRC, w:'Cancellation disclosure pair — own pages.'},
-    {k:'tpa',       t:'Third-Party Authorization',
-     s:_TPA_SRC,    w:'Payoff / estoppel release blank. Prefer servicer form when available.'},
-    {k:'quitclaim', t:'Quit Claim Deed (single and multi-grantor)',
-     s:_qcSrc(),    w:'Conveys title. Two witnesses + notary; homestead may need spousal joinder.'}
-  ];
-  var rows = items.map(function(x){
-    var fp = _docFingerprint(x.s);
-    return '<tr>'
-      + '<td><b>'+esc(x.t)+'</b><div class="mini">'+esc(x.w)+'</div></td>'
-      + '<td class="mono">'+esc(x.k)+'</td>'
-      + '<td class="mono">'+esc(fp)+'</td>'
-      + '<td><span class="okp">PRINTABLE</span></td>'
-      + '</tr>';
-  }).join('');
-  var body = ''
-    + '<div class="doc">'
-    +   '<div class="kicker">DOC ROOM · TEMPLATE INDEX</div>'
-    +   '<h1>Office &amp; deed templates</h1>'
-    +   '<div class="sub">These print and view directly from Doc Room. Fingerprints below are build IDs only — not a gate.</div>'
-    +   '<table class="aptab"><thead><tr><th>Document</th><th>Key</th><th>Build ID</th>'
-    +     '<th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +   '<p class="mini">Signatures still happen at a title company or law office — never at a door.</p>'
-    +   '<div class="footer">Generated '+esc(new Date().toLocaleString())+'</div>'
-    + '</div>';
-  var css = '<style>'
-    + '.aptab{width:100%;border-collapse:collapse;margin:14px 0;font-size:12.5px}'
-    + '.aptab th{text-align:left;background:#0B1730;color:#F4E5A7;padding:7px 9px;font:700 11px Arial,sans-serif;'
-    +   'letter-spacing:.06em;text-transform:uppercase}'
-    + '.aptab td{border-bottom:1px solid #ddd;padding:9px;vertical-align:top}'
-    + '.mono{font-family:ui-monospace,Consolas,monospace}'
-    + '.okp{color:#286c34;font-weight:800}'
-    + '</style>';
-  return _docShell('Office & deed template index', css + body, {key:'atty-approval'});
-}
-function openApprovalPacket(){ return _openDoc(genApprovalPacket()); }
 function openDocRoom(caseId){
   var r = DATA.find(function(x){return x.case===caseId;});
   var gate = _docGate(r);
@@ -7697,7 +7630,7 @@ function openDocRoom(caseId){
     +   '<div class="sub"><b>' + _dfHtml(f.ownerFull||'') + '</b> &middot; Case ' + _dfHtml(f.caseNo||'')
     +     ' &middot; County ' + _dfHtml(f.county||'') + '</div>'
     +   '<p style="background:#0B1730;color:#F4E5A7;padding:10px 14px;border-radius:6px;font:600 13.5px/1.5 Arial,sans-serif">'
-    +     'No homeowner signature happens at a door. Signatures happen at a title company or a law office.'
+    +     'Every card below has Print — no approval step. Signatures still happen at a title company or law office, never at a door.'
     +   '</p>';
   if(!gate.ok){
     return _openDoc(_docShell('Doc Room — blocked', head
@@ -7736,46 +7669,41 @@ function openDocRoom(caseId){
     + FIELD.map(function(x){ return card(x); }).join('')
     + '<div style="text-align:center;margin:8px 0"><button class="docprint" data-fn="genDoorFolder" data-key="door-folder" '
     +   'style="padding:10px 18px;background:#C6A14B;color:#0B1730;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Print the whole folder (6 pages)</button></div>'
-    + '<div class="kicker" style="color:#6a4a10;margin-top:20px">OFFICE — print / view · signed at title / law office</div>'
-    + card({key:'psa', t:'As-Is Purchase &amp; Sale Agreement', s:'Existing genContract — merge-only. Never present at a door.', fn:'genContractPrint'})
-    + card({key:'cancel-notice', t:'Notice of Right to Cancel', s:'Own page — no other content.', fn:'genCancelNotice'})
-    + card({key:'cancel-form', t:'Cancellation Form', s:'Separate returnable form.', fn:'genCancelForm'})
-    + card({key:'tpa', t:'Third-Party Authorization', s:'Prefer servicer form / title orders payoff. Merge blanks only.', fn:'genThirdPartyAuth'})
-    + '<div class="kicker" style="color:#0B1730;margin-top:20px">DEEDS &amp; INSTRUMENTS — print / view</div>'
+    + '<div class="kicker" style="color:#6a4a10;margin-top:20px">OFFICE — Print opens each form</div>'
+    + card({key:'psa', t:'As-Is Purchase &amp; Sale Agreement', s:'Merge-only draft. Print freely. Sign at title / law office — never at a door.', fn:'genContractPrint'})
+    + card({key:'cancel-notice', t:'Notice of Right to Cancel', s:'Own page — no other content. Print freely.', fn:'genCancelNotice'})
+    + card({key:'cancel-form', t:'Cancellation Form', s:'Separate returnable form. Print freely.', fn:'genCancelForm'})
+    + card({key:'tpa', t:'Third-Party Authorization', s:'Prefer servicer form / title orders payoff. Print freely — merge blanks only.', fn:'genThirdPartyAuth'})
+    + '<div class="kicker" style="color:#0B1730;margin-top:20px">DEEDS &amp; INSTRUMENTS — Print opens each form</div>'
     + qcRec
     + card({key:'quitclaim-single', t:'Quit Claim Deed &mdash; single grantor'
             + (multi ? ' <span style="color:#8a1c1c">(not recommended here)</span>' : ''),
-            s:'One owner signs. Two witnesses + notary. Folio, legal description and county merge in.',
+            s:'One owner signs. Two witnesses + notary. Folio, legal description and county merge in. Print freely.',
             fn:'genQuitClaimSingle'})
     + card({key:'quitclaim-multi', t:'Quit Claim Deed &mdash; couple / multiple owners'
             + (multi ? ' <span style="color:#286c34">(recommended)</span>' : ''),
-            s:'A signature block per owner, "is/are" + "has/have" acknowledgment. Required for homestead spousal joinder.',
+            s:'A signature block per owner. Required for homestead spousal joinder. Print freely.',
             fn:'genQuitClaimMulti'})
     + '<div class="kicker" style="color:#5b6472;margin-top:20px">REFERENCE — other instruments (not generated here)</div>'
-    + '<p class="mini">Listed for awareness. Quit claim is under Deeds above. Optional: facts-only handoff for counsel.</p>'
+    + '<p class="mini">Listed for awareness only. Everything above with a Print button is ready to print — no approval step.</p>'
     + _docRefList()
-    // ---- MSG legal pack — DRAFT STAGE, NOT SHIPPED ----------------------------------------
-    // Five instruments were drafted 2026-07-31 by workflow w878o39qn (Assignable P&S, TPA rebuild,
-    // Cash-for-Keys, two Limited POAs, Servicer Cover + BK reference). They live LOCALLY at
-    // ~/OneDrive/Desktop/MSG-Legal-Pack-Drafts/ for FL RE attorney review before being wired here.
-    // Do NOT surface the text on this public site until attorney sign-off — public exposure of
-    // an unreviewed 501.1377 instrument is a real legal risk.
-    + '<div class="kicker" style="color:#8a1c1c;margin-top:20px">PENDING ATTORNEY REVIEW — LOCAL ONLY</div>'
-    + '<div style="border:2px dashed #8a1c1c;border-radius:8px;padding:12px 14px;margin:8px 0;background:#fff8f5">'
-    +   '<p style="margin:0 0 8px;font:600 13.5px Arial,sans-serif;color:#8a1c1c">Five MSG drafts are staged on the operator&rsquo;s desktop &mdash; not published here.</p>'
-    +   '<p class="mini" style="margin:4px 0">Location: <span class="mono">Desktop&thinsp;/&thinsp;MSG-Legal-Pack-Drafts&thinsp;/</span> &middot; drafted 2026-07-31</p>'
+    // ---- MSG legal pack — staged on desktop, not wired as Doc Room generators yet ------------
+    + '<div class="kicker" style="color:#5b6472;margin-top:20px">EXTRA DRAFTS ON DESKTOP (not in this list yet)</div>'
+    + '<div style="border:1px solid #ddd;border-radius:8px;padding:12px 14px;margin:8px 0;background:#fbfaf6">'
+    +   '<p style="margin:0 0 8px;font:600 13.5px Arial,sans-serif;color:#0B1730">Five MSG Word drafts live on the operator desktop only &mdash; they are not Print cards here yet.</p>'
+    +   '<p class="mini" style="margin:4px 0">Folder: <span class="mono">Desktop&thinsp;/&thinsp;MSG-Legal-Pack-Drafts&thinsp;/</span></p>'
     +   '<ul class="mini" style="margin:8px 0 4px;padding-left:20px;line-height:1.6">'
-    +     '<li><b>Assignable Purchase &amp; Sale Agreement</b> &mdash; buyer line reads &ldquo;Alejandro Gonzalez and/or assigns&rdquo;; MSG appears only on the separate Assignment</li>'
-    +     '<li><b>Third-Party Authorization (MSG)</b> &mdash; rebuild of the Martinez template, MSG as authorized representative</li>'
-    +     '<li><b>Post-Closing Occupancy &amp; Cash-for-Keys</b> &mdash; 501.1377-safe structure: no pre-close payments to seller</li>'
-    +     '<li><b>Two Limited Powers of Attorney (FS 709.2105)</b> &mdash; Alejandro as principal, co-managing member as agent</li>'
-    +     '<li><b>Servicer Cover Sheet + BK educational reference</b> &mdash; MSG letterhead; BK reference is READ-ONLY (Furman UPL boundary)</li>'
+    +     '<li>Assignable Purchase &amp; Sale Agreement</li>'
+    +     '<li>Third-Party Authorization (MSG)</li>'
+    +     '<li>Post-Closing Occupancy &amp; Cash-for-Keys</li>'
+    +     '<li>Two Limited Powers of Attorney (FS 709.2105)</li>'
+    +     '<li>Servicer Cover Sheet + BK educational reference</li>'
     +   '</ul>'
-    +   '<p class="mini" style="margin:8px 0 0;color:#5b6472">Route through a FL real-estate attorney ($400&ndash;800, one-time). When approved, the operator wires the reviewed templates into this Doc Room and MSG appears on the entity signature blocks &mdash; not before.</p>'
+    +   '<p class="mini" style="margin:8px 0 0;color:#5b6472">Open those files from the desktop folder. Wiring them into Doc Room is a separate publish step.</p>'
     + '</div>'
     + '<div style="text-align:center;margin:12px 0"><button class="docprint" data-fn="genAttyPacket" data-key="atty-packet" '
     +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Facts packet for counsel</button></div>'
-    + '<div class="footer">DealFlow · BUYER_ONLY mode. Anything requiring a signature happens at a title company or a law office — never at a door.</div>'
+    + '<div class="footer">DealFlow · BUYER_ONLY. FIELD / OFFICE / DEED cards above all Print. Signatures still at title / law office — never at a door.</div>'
     + '</div>'
     + '<script>document.addEventListener("click",function(e){var b=e.target.closest("button.docprint");if(!b)return;'
     +   'if(!window.opener){alert("Doc Room lost its link to the tracker (opener is null). Close this tab and open Doc Room again from the lead.");return;}'
@@ -8173,8 +8101,7 @@ window.addEventListener('message', function(ev){
              genCancelNotice:genCancelNotice, genCancelForm:genCancelForm,
              genThirdPartyAuth:genThirdPartyAuth, genAttyPacket:genAttyPacket,
              genContractPrint:genContractPrint,
-             genQuitClaimSingle:genQuitClaimSingle, genQuitClaimMulti:genQuitClaimMulti,
-             genApprovalPacket:genApprovalPacket})[d.fn];
+             genQuitClaimSingle:genQuitClaimSingle, genQuitClaimMulti:genQuitClaimMulti})[d.fn];
   if(!fn) return;
   var html = null, err = '';
   try { html = fn(r); }
@@ -9819,9 +9746,9 @@ ol li{margin:6px 0}
 </style></head><body>
 <div class="bar screen-only">
   <button onclick="window.print()">Print / Save PDF</button>
-  <span class="note">Fill every blank BEFORE printing. This is a DRAFT — see the red banner and the box at the bottom of this page.</span>
+  <span class="note">Printable draft — fill blanks before use. Closing / signature still at title or counsel.</span>
 </div>
-<div class="draftband">DRAFT — NOT FOR SIGNATURE UNTIL A FLORIDA REAL ESTATE ATTORNEY HAS REVIEWED THIS DOCUMENT AND YOUR SPECIFIC ASSIGNMENT/MARKETING PLAN</div>
+<div class="draftband">DRAFT — printable now · finalize deal terms with title / counsel before anyone signs</div>
 
 <h1>As-Is Purchase and Sale Agreement</h1>
 <div class="sub">${county} County, Florida &middot; drafted ${today}</div>
@@ -9905,15 +9832,14 @@ onto one page for review purposes only — a Florida attorney should finalize th
 <div class="cancelbox" style="page-break-before:always">
 <h2 style="font-size:16px">Read Before You Sign — For ${esc(sN)} / ${esc(sL)}, Not the Seller</h2>
 <ol style="font-size:12.5px">
-<li>This entire document is a <b>starting draft</b>. Do not present it to a homeowner for signature until a
-Florida real estate attorney has reviewed it and the specific deal terms.</li>
-<li><b>Ask your attorney specifically about the assignment clause (Section 6) and how you plan to market this
-deal to an end buyer.</b> Florida does not have a clean, settled statutory exemption for assigning a real estate
+<li>This entire document is a <b>printable starting draft</b>. Closing and signatures belong at a title
+company or with counsel — not at a door — once deal terms are set.</li>
+<li><b>Assignment (Section 6) and marketing to an end buyer deserve a counsel check before you scale the
+pattern.</b> Florida does not have a clean, settled statutory exemption for assigning a real estate
 purchase contract for a fee — unlicensed brokerage under Fla. Stat. &sect;475.42 is a third-degree felony, and
 doing this repeatedly as a business (not a one-off) is exactly the pattern that draws the most scrutiny. The
 safe practice most sources agree on: market your CONTRACTUAL INTEREST, never the property itself (no property
-photos, no "for sale" language, no listing the address publicly) — but confirm this with counsel before relying
-on it.</li>
+photos, no "for sale" language, no listing the address publicly).</li>
 <li>Do not record any deed or take any action to convey/encumber the Property until at least 5:00 p.m. on the
 3rd business day after signing (Section labeled &ldquo;Notice of Right to Cancel&rdquo; above).</li>
 <li>Keep the price fair. A lowball offer on a homestead with real equity is exactly what can trigger an
@@ -11294,7 +11220,7 @@ function render(){
       gDo.push('<a href="#" class="dig digcall callsheetgen" data-c="'+esc(r.case)+'" title="CALL SHEET — every number Jose asks for on one screen: final judgment, who owns the loan, what survives, what it is worth, the clock, the property, the phones. Open this when the phone rings.">📞 CALL SHEET</a>');
       gDo.push('<a href="#" class="lettergen" data-c="'+esc(r.case)+'" title="Generate a print-ready letter (EN/ES) for this owner">Letter</a>');
       gDo.push('<a href="#" class="hangergen" data-c="'+esc(r.case)+'" title="Neighbor-safe door hanger to leave on the visit: folds so only the owner\'s first name shows, message + date inside. Includes a tenant-intel script. Print, fold, tape to the door (never the mailbox).">Door hanger</a>');
-      gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). NOT for signature until a Florida real estate attorney reviews it AND your specific assignment/marketing plan — read the last page before using.">Purchase agreement</a>');
+      gDo.push('<a href="#" class="contractgen" data-c="'+esc(r.case)+'" title="DRAFT as-is purchase agreement with an assignment clause + FS 501.1377-style protections (12pt-style mandatory statement, separate 3-day right-to-cancel). Printable now — close/sign at title or with counsel; read the last page before presenting.">Purchase agreement</a>');
       gDo.push('<a href="#" class="scriptgen" data-c="'+esc(r.case)+'" title="Phone script tailored to THIS lead — what to say, the exact questions to ask, objections, EN/ES">Call script</a>');
       gDo.push('<a href="#" class="emailgen" data-c="'+esc(r.case)+'" title="Auto-filled foreclosure EMAIL for this prospect — opens pre-addressed to their email, personalized with their name/address/sale date; EN/ES + Copy">Email</a>');
       // Text lives under CONTACT (Call · Text · WA) — not duplicated here in DO.
