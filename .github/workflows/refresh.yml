@@ -274,6 +274,23 @@ jobs:
       # the free Miami-Dade parcel roll (MDC.PaGis, no key, no captcha) and grades every hit; lp_leads
       # then fills addr/folio from the `high` rows ONLY. Ordering matters — lp_leads reads the file
       # lp_resolve writes, so a swap here silently reverts us to blank addresses.
+      # ---- [2b1/5] Code-enforcement liens (free Miami-Dade CCVIOL ArcGIS, folio-keyed) ---------
+      # A code lien is a junior lien invisible to the mortgage chain — the thing that turns a
+      # "90% equity" lead into a loss. Free, no key, no captcha; cross-references every MD folio.
+      - name: '[2b1/5] Code-enforcement liens (Miami-Dade)'
+        continue-on-error: true
+        run: python code_liens.py
+
+      # ---- [2b2/5] Delinquent property taxes, Miami-Dade + Broward (Playwright past Cloudflare) --
+      # First-priority lien that survives foreclosure (FS 197.122), invisible to the mortgage chain.
+      # The cap is deliberately SMALL: short runs render ~83% at ~9.3s/parcel, but a 202-parcel run
+      # degraded to 24% at 41.7s/parcel because the county throttles sustained load. Chipping away
+      # 60/morning beats one long run. Unrendered parcels are never cached, so they simply retry.
+      # Palm Beach is not on this platform (see county_taxes.py) and never gets a false $0.
+      - name: '[2b2/5] County back-taxes MD+BW (verified, capped)'
+        continue-on-error: true
+        run: python county_taxes.py --limit 60 --conc 4
+
       - name: '[2c/5] Fresh Lis Pendens (lender-sweep -> resolve addresses -> lp_leads.json)'
         continue-on-error: true
         run: |
