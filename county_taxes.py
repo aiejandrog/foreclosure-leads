@@ -36,6 +36,15 @@ cost real debugging and must not be "cleaned up":
      the challenge + SPA boot + iframe fetch need. Skip it and you get $0 for everything.
 Folio dashes are optional — the platform normalizes both (verified on MD and BW).
 
+SUSTAINED-RUN THROTTLING — measured the hard way
+Short batches and long batches behave DIFFERENTLY. A 24-parcel run at concurrency 4 rendered ~83%
+at 9.3s/parcel. A 202-parcel run in the same session rendered only 49 (24%) at 41.7s/parcel — the
+county server clearly degrades service under sustained load, and the later a request lands in a
+long run the likelier it is to time out. Nothing is lost (an unrendered parcel is never cached, so
+it simply retries), but a big --limit is FALSE ECONOMY: it burns wall-clock for a shrinking yield.
+The right shape is what the cloud already does — a modest cap every morning, chipping away daily.
+Hence DEFAULT_LIMIT is deliberately small. Raise it only if you are willing to watch it.
+
 SPEED — measured, not estimated
 A single lookup is ~22s wall-clock and nearly all of it is idle waiting, so pages run CONCURRENTLY.
 Measured on live batches: concurrency 6 gave 11.5s/parcel effective but only ~50% of pages rendered
@@ -71,7 +80,7 @@ COUNTIES = {
 }
 UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
       '(KHTML, like Gecko) Chrome/126 Safari/537.36')
-DEFAULT_LIMIT = 120
+DEFAULT_LIMIT = 60       # see SUSTAINED-RUN THROTTLING: bigger runs yield less, not more
 DEFAULT_CONC = 4      # measured sweet spot: higher trades render-rate for little wall-clock
 
 
