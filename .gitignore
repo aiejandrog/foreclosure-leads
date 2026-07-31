@@ -21,6 +21,7 @@ _*.py
 !_casestatustest.py
 !_workeremailtest.py
 !_codelientest.py
+!_fieldsheettest.py
 _*.html
 _*.json
 _*.txt
