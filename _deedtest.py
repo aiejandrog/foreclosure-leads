@@ -38,7 +38,9 @@ JS = r"""() => {
   const f = _docFields(r);
 
   const sigBlocks = h => (h.match(/Signature \(Grantor/g) || []).length;
-  const witnesses = h => (h.match(/Witness Signature/g) || []).length;
+  // Labels changed 2026-07-31 to "Witness 1 &mdash; Signature" / "Witness 2 &mdash; Signature"
+  // (numbered + em-dash) so each witness's name/address rows can be paired unambiguously.
+  const witnesses = h => (h.match(/Witness \d+ &mdash; Signature/g) || []).length;
 
   out.rendered = {
     singleSigs: sigBlocks(single), multiSigs: sigBlocks(multi),
