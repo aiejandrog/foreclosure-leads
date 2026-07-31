@@ -7266,9 +7266,9 @@ function genThirdPartyAuth(r){
   return _docShell('Third-party authorization — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {key:'tpa'});
 }
 function genContractPrint(r){
-  // Doc Room → existing PSA generator (no attorney lock).
-  genContract(r);
-  return null;
+  // Doc Room → PSA HTML string (quiet). Parent/child print bridge opens it — do not
+  // call _openDoc here or popup blockers eat the click after postMessage.
+  return genContract(r, true);
 }
 
 // --- TIER 3 — COUNSEL ----------------------------------------------------------------------
@@ -7711,8 +7711,24 @@ function openDocRoom(caseId){
     + '<div class="footer">DealFlow · BUYER_ONLY mode. Anything requiring a signature happens at a title company or a law office — never at a door.</div>'
     + '</div>'
     + '<script>document.addEventListener("click",function(e){var b=e.target.closest("button.docprint");if(!b)return;'
-    +   'var msg={key:b.dataset.key,fn:b.dataset.fn,c:'+JSON.stringify(caseId)+'};'
-    +   'try{window.opener&&window.opener.postMessage({docroom:msg},"*");}catch(_e){}'
+    +   'if(!window.opener){alert("Doc Room lost its link to the tracker (opener is null). Close this tab and open Doc Room again from the lead.");return;}'
+    +   'var req=String(Date.now())+"-"+Math.random().toString(36).slice(2,8);'
+    +   'var msg={key:b.dataset.key,fn:b.dataset.fn,c:'+JSON.stringify(caseId)+',reply:1,req:req};'
+    // Open the blank tab UNDER the user gesture so the async parent reply can fill it.
+    // Parent-side _openDoc after postMessage is outside the gesture and gets popup-blocked.
+    +   'var w=null;try{w=window.open("about:blank","_blank");}catch(_e){}'
+    +   'function onReply(ev){var p=ev&&ev.data&&ev.data.docroomReply;if(!p||p.req!==req)return;'
+    +     'window.removeEventListener("message",onReply);'
+    +     'if(!p.html){if(w)try{w.close();}catch(_c){}if(p.err)alert(p.err);return;}'
+    +     'if(w){try{w.document.open();w.document.write(p.html);w.document.close();return;}catch(_w){}}'
+    +     'try{var url=URL.createObjectURL(new Blob([p.html],{type:"text/html"}));'
+    +       'var a=document.createElement("a");a.href=url;a.target="_blank";a.rel="noopener";'
+    +       'document.body.appendChild(a);a.click();document.body.removeChild(a);'
+    +       'if(w)try{w.close();}catch(_c2){}}catch(_b){alert("Document built but the browser blocked opening it.");}'
+    +   '}'
+    +   'window.addEventListener("message",onReply);'
+    +   'try{window.opener.postMessage({docroom:msg},"*");}catch(_e){}'
+    +   'setTimeout(function(){window.removeEventListener("message",onReply);},20000);'
     + '});<\/script>';
   return _openDoc(_docShell('Doc Room — '+(f.propAddr||caseId), body, {key:'docroom'}), {keepOpener:true});
 }
@@ -8093,9 +8109,18 @@ window.addEventListener('message', function(ev){
              genQuitClaimSingle:genQuitClaimSingle, genQuitClaimMulti:genQuitClaimMulti,
              genApprovalPacket:genApprovalPacket})[d.fn];
   if(!fn) return;
-  var html = fn(r);
-  // genContractPrint calls genContract (which already _openDoc's) and returns null when approved
-  if(html) _openDoc(html);
+  var html = null, err = '';
+  try { html = fn(r); }
+  catch(ex){ err = 'Doc Room could not build that document: ' + (ex && ex.message ? ex.message : ex); }
+  if(d.reply && ev.source){
+    try { ev.source.postMessage({docroomReply:{req:d.req, html:html||'', err:err}}, '*'); }
+    catch(_e){}
+  } else if(html){
+    // Legacy path (no reply flag) — may be popup-blocked outside a user gesture.
+    _openDoc(html);
+  } else if(err){
+    try { alert(err); } catch(_a){}
+  }
   _docLog(r.case, d.key, 'bi');
 });
 /* ============================================================================================
@@ -9655,7 +9680,7 @@ body{font-family:Georgia,serif;color:#111;margin:0;padding:0;background:#f4f5f7}
 // with doing this repeatedly as a business pattern — exactly this use case. The assignment clause below is
 // standard boilerplate; whether/how it's safe to MARKET an assignment to a third-party buyer, repeatedly,
 // is a specific question for Florida real-estate counsel — flagged prominently in the printed draft itself.
-function genContract(r){
+function genContract(r, quiet){
   const sN = sender.name || '[BUYER NAME]', sL = (sender.llc||'').trim() || '[BUYER ENTITY]';
   const sP = sender.phone || '[BUYER PHONE]', sA = (sender.addr||'').trim() || '[BUYER BUSINESS ADDRESS]';
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
@@ -9788,7 +9813,9 @@ and every dollar figure independently before using it.</li>
 </ol>
 </div>
 </body></html>`;
+  if(quiet) return doc;
   _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
+  return doc;
 }
 // ---- per-lead PHONE SCRIPT: what to actually say when you call this owner (EN/ES, tailored) ----
 function genScript(r){
