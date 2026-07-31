@@ -1375,31 +1375,35 @@ def make_tracker(leads):
         except Exception as e:
             print(f"propstream_overlay.json skipped ({e})")
 
-    # bake verified Broward delinquent taxes (broward_taxes.py, Playwright past the Cloudflare wall).
-    # Back property taxes are a FIRST-PRIORITY lien that survives foreclosure (FS 197.122) and are
-    # invisible to the mortgage chain, so a "records-verified $0 survives" lead can still owe six
-    # figures. taxDue feeds the deal math (below, in recompute) as the DEFAULT back-tax unless the
-    # operator typed their own override; taxCert flags that a certificate was sold = a second,
-    # separate tax-deed foreclosure clock is running.
-    _btf = os.path.join(HERE, 'broward_taxes.json')
-    if os.path.exists(_btf):
+    # bake verified delinquent property taxes (county_taxes.py — Miami-Dade + Broward, Playwright
+    # past the Cloudflare wall). Back taxes are a FIRST-PRIORITY lien that survives foreclosure
+    # (FS 197.122) and are invisible to the mortgage chain, so a "records-verified $0 survives" lead
+    # can still owe six figures. taxDue feeds the deal math as the DEFAULT back-tax unless the
+    # operator typed their own override; taxCert flags that a certificate was SOLD, which means a
+    # second, separate tax-deed foreclosure clock is already running on the parcel.
+    # PALM BEACH IS DELIBERATELY ABSENT: its collector is not on the county-taxes.com platform
+    # (DNN/__VIEWSTATE postback), so no PB lead ever gets a taxDue and none gets a false $0 either.
+    _ctf = os.path.join(HERE, 'county_taxes.json')
+    if os.path.exists(_ctf):
         try:
-            _bt = json.load(open(_btf, encoding='utf-8')); _btn = 0
+            _ct = json.load(open(_ctf, encoding='utf-8')); _ctn = 0
             for _r in slim:
-                if str(_r.get('county') or '') != 'BROWARD':
+                _cty = str(_r.get('county') or 'MIAMI-DADE')
+                if _cty not in ('MIAMI-DADE', 'BROWARD'):
                     continue
                 _f = re.sub(r'\D', '', str(_r.get('folio') or ''))
-                _h = _bt.get(_f)
-                if _h and _h.get('due'):
+                _h = _ct.get(_f)
+                # guard the join: only apply a record scraped for THIS lead's county
+                if _h and _h.get('due') and str(_h.get('county') or _cty) == _cty:
                     _r['taxDue'] = int(_h['due'])
                     _r['taxYears'] = [y.get('year') for y in (_h.get('years') or []) if y.get('year')]
                     _r['taxCert'] = bool(_h.get('cert'))
                     _r['taxChecked'] = _h.get('checked', '')
-                    _btn += 1
-            if _btn:
-                print(f"broward taxes: {_btn} lead(s) carry verified delinquent taxes")
+                    _ctn += 1
+            if _ctn:
+                print(f"county taxes: {_ctn} lead(s) carry verified delinquent taxes")
         except Exception as e:
-            print(f"broward_taxes.json skipped ({e})")
+            print(f"county_taxes.json skipped ({e})")
 
     # bake lat/lng from geocode_cache.json (geo_enrich.py, keyless US Census) so the board's origin-
     # anchored door route can sort deals by REAL distance and expand outward from home.
