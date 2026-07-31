@@ -24,6 +24,7 @@ _*.py
 !_fieldsheettest.py
 !_taxtest.py
 !_docroomtest.py
+!_portfoliotest.py
 _*.html
 _*.json
 _*.txt

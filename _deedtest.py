@@ -18,17 +18,16 @@ JS = r"""() => {
     none:   _grantors({owners:''}),
     dupes:  _grantors({owners:'JOHN DOE; JOHN DOE'})
   };
-  // blocked while unapproved
+  // ------------------------------------------------------------------------------------------
+  // ATTORNEY-APPROVAL GATE (_docApproved / ATTY_APPROVALS) was removed in commit 739d05a — Doc
+  // Room now prints on every generator. The two ex-gate assertions are stubbed here so the rest
+  // of the deed suite can run; they intentionally FAIL to keep the "gate is gone" state visible.
+  // ------------------------------------------------------------------------------------------
   const r = DATA.find(x => _grantors(x).length > 1) || DATA[0];
   const solo = DATA.find(x => _grantors(x).length === 1) || DATA[0];
-  const blocked = genQuitClaim(r, {multi:true});
-  out.blockedWhenUnapproved = blocked.indexOf('awaiting attorney approval') > -1
-                           || blocked.indexOf('has not been approved') > -1;
-  out.fingerprintShown = /[0-9a-f]{8}/.test(blocked);
-  out.approvedFlag = _docApproved('quitclaim', _qcSrc());
-
-  // now approve it in-memory and render for real
-  ATTY_APPROVALS.quitclaim = {by:'TEST', date:'2026-07-30', fingerprint:_docFingerprint(_qcSrc())};
+  out.blockedWhenUnapproved = false;                 // gate removed
+  out.fingerprintShown = false;                       // gate removed
+  out.approvedFlag = false;                           // gate removed
   // A single-grantor deed on a TWO-owner property conveys a half interest. Asking for the single
   // form on a multi-owner lead must auto-upgrade rather than quietly do the dangerous thing.
   const upgraded = genQuitClaim(r, {multi:false});
@@ -73,7 +72,7 @@ JS = r"""() => {
     // no NaN leaks
     nan: multi.indexOf('NaN') > -1 || multi.indexOf('undefined') > -1
   };
-  ATTY_APPROVALS.quitclaim = {by:'', date:'', fingerprint:''};   // restore
+  // (approval gate removed in commit 739d05a — no ATTY_APPROVALS to restore)
   return out;
 }"""
 

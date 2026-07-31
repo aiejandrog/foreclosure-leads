@@ -13,8 +13,12 @@ async def main():
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
         await pg.goto(SRC.as_uri()); await pg.wait_for_timeout(3000)
 
-        gate = await pg.evaluate("() => ({approved: _docApproved('quitclaim','x'), mode: DOCROOM_MODE})")
-        rec('approval gate is OPEN (ungated build)', gate['approved'] is True, gate)
+        # ATTORNEY-APPROVAL GATE (_docApproved / ATTY_APPROVALS) was removed in commit 739d05a —
+        # Doc Room is now ungated. The old probe threw ReferenceError before the rest of the
+        # suite could run; the "gate is open" invariant is now checked below by verifying every
+        # generator returns real HTML (not a "blocked" shell).
+        gate = await pg.evaluate("() => ({mode: (typeof DOCROOM_MODE!=='undefined')?DOCROOM_MODE:'ungated'})")
+        rec('approval gate is OPEN (ungated build)', True, gate)
 
         # every OFFICE generator must now return real HTML, not a "blocked" shell
         gens = await pg.evaluate("""() => {
