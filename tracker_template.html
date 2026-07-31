@@ -8700,6 +8700,32 @@ function _sentToday(){
   var d = new Date().toISOString().slice(0,10);
   return _sentAll().filter(function(s){ return (s.d||'') === d; });
 }
+/* ---- RECIPIENT DEDUPE — spam-reputation guard, not a legal one ---------------------------------
+   2026-07-31 audit surfaced an owner with SIX concurrent-sale properties in Miami-Dade, all
+   correctly attached to the same skip-traced email. Sending six separate emails to that inbox
+   in one morning is technically correct AND reads as spam to Gmail, whose filter files the
+   sending account and burns the primary business mailbox for months. So: queue-time dedupe by
+   recipient, plus portfolio consolidation (see _workerQueue for the grouping logic).
+   Reads the sent archive (localStorage), returns {n, last, hoursAgo} if the address was hit inside
+   the window; null otherwise. The window default is 24h — a full business day between contacts. --- */
+function _recentlyEmailedTo(addr, hours){
+  if(!addr) return null;
+  addr = String(addr).toLowerCase().trim();
+  var cutoff = Date.now() - (hours||24)*3600000;
+  var hits = _sentAll().filter(function(s){
+    if((s.ch||'email') !== 'email' || !s.to) return false;
+    if(String(s.to).toLowerCase().trim() !== addr) return false;
+    var ts = s.t || s.tsu || (s.d ? Date.parse(s.d+'T12:00:00') : 0);
+    return ts >= cutoff;
+  });
+  if(!hits.length) return null;
+  hits.sort(function(a,b){ return (b.t||0) - (a.t||0); });
+  return {n: hits.length, last: hits[0],
+          hoursAgo: Math.max(0, Math.round((Date.now()-(hits[0].t||0))/3600000))};
+}
+function _leadEmail(r){
+  return String((((r||{}).emails)||[])[0]||'').toLowerCase().trim();
+}
 // REPLY STATUS — populated by replies.py via replies.json, baked in at build time. Until the
 // operator adds gmail.key this is simply empty and every lead reads "awaiting reply", which is
 // honest: we genuinely do not know. It never guesses.
@@ -8920,24 +8946,59 @@ function _workerQueue(lane){
   lane = lane || 'urgent';
   var L = WORKER_LANES[lane] || WORKER_LANES.urgent;
   var cap = _capState();
-  var out = DATA.filter(function(r){
+  var pool = DATA.filter(function(r){
     if(!_workerEligible(r)) return false;
     return L.test(_saleDays(r), r);
   });
-  // soonest sale first; inside a tie, better tier first. Dateless (EARLY) falls back to tier then
-  // filing recency, because "who was served most recently" is the real freshness signal there.
+
   var TR = {A:0, B:1, C:2};
-  out.sort(function(a,b){
-    var da = _saleDays(a); da = (da==null) ? 99999 : da;
-    var db = _saleDays(b); db = (db==null) ? 99999 : db;
-    if(da !== db) return da - db;
-    var ta = TR[a.tier]!=null?TR[a.tier]:3, tb = TR[b.tier]!=null?TR[b.tier]:3;
-    if(ta !== tb) return ta - tb;
-    return (+b.filed||0) - (+a.filed||0);
+  function _qsort(list){
+    return list.sort(function(a,b){
+      var da=_saleDays(a); da=(da==null)?99999:da;
+      var db=_saleDays(b); db=(db==null)?99999:db;
+      if(da!==db) return da-db;
+      var ta=TR[a.tier]!=null?TR[a.tier]:3, tb=TR[b.tier]!=null?TR[b.tier]:3;
+      if(ta!==tb) return ta-tb;
+      return (+b.filed||0) - (+a.filed||0);
+    });
+  }
+
+  // ---- PORTFOLIO CONSOLIDATION + RECIPIENT DEDUPE ----------------------------------------------
+  // Group leads by their primary email. Portfolios (one owner, N properties) become ONE queue
+  // entry with the extra properties riding along as .portfolio; the operator sends a single
+  // consolidated email that lists all N addresses instead of hitting the same inbox N times.
+  // Also: any recipient already emailed inside the 24h window is dropped from today's queue —
+  // the whole group, not just duplicates within today's run. Spam-reputation guard, not a
+  // legal one; a full business day between contacts to the same inbox is the safe minimum.
+  // See the 2026-07-31 audit note in _recentlyEmailedTo for the portfolio-owner failure mode
+  // this closes.
+  var byEmail = {};                                // primary_email -> [leads]
+  var noEmail = [];                                // phone-only leads keep their own slot
+  pool.forEach(function(r){
+    var e = _leadEmail(r);
+    if(!e){ noEmail.push(r); return; }
+    (byEmail[e] = byEmail[e] || []).push(r);
   });
-  // Never hand him more than the day's remaining send budget — a queue longer than the cap just
-  // invites him to blow through it and get the sending account flagged.
-  return out.slice(0, Math.max(0, cap.left));
+
+  var deduped = [];
+  Object.keys(byEmail).forEach(function(e){
+    if(_recentlyEmailedTo(e, 24)) return;          // whole group deferred to tomorrow
+    var group = _qsort(byEmail[e].slice());
+    var head = group[0];
+    // Attach a NON-ENUMERABLE-ish tag so the sort below and the card builder see it, but
+    // downstream serialisation (JSON.stringify of DATA elsewhere) skips it — plain assignment
+    // is fine because _workerCard reads it explicitly and the queue is never re-JSONed as-is.
+    head._portfolio = group.length > 1 ? group.slice(1) : [];
+    deduped.push(head);
+  });
+  // Phone-only leads carry no dedupe key (no email to hit twice), so they pass through.
+  deduped = deduped.concat(noEmail);
+
+  _qsort(deduped);
+  // Never hand him more than the day's remaining send budget. Portfolio consolidation now means
+  // each queue slot = at most one Gmail send even when it represents N properties, so the cap
+  // finally maps 1:1 to inbox hits.
+  return deduped.slice(0, Math.max(0, cap.left));
 }
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
@@ -8960,8 +9021,14 @@ function _workerCard(r){
     // Alejandro caught it live: "it just gives me activity… I don't see it open. It's false."
     gurl: (function(){
       try {
-        if(typeof genEmail !== 'function' || !(r.emails||[]).length) return '';
-        genEmail(r, true);                       // quiet: compose + stash on __lastEmail only
+        if(!(r.emails||[]).length) return '';
+        // If _workerQueue attached a portfolio, compose the CONSOLIDATED email; else the single.
+        var isPort = r._portfolio && r._portfolio.length;
+        var composer = (isPort && typeof genPortfolioEmail === 'function')
+          ? function(){ return genPortfolioEmail(r, r._portfolio, true); }
+          : (typeof genEmail === 'function' ? function(){ return genEmail(r, true); } : null);
+        if(!composer) return '';
+        composer();
         var LE = window.__lastEmail;
         if(!LE || LE.c !== r.case) return '';
         return 'https://mail.google.com/mail/?view=cm&fs=1'
@@ -8970,6 +9037,14 @@ function _workerCard(r){
              + '&body=' + encodeURIComponent(LE.body || '');
       } catch(e){ return ''; }
     })(),
+    // Portfolio metadata — populated by _workerQueue when one contact appears on N leads. The
+    // worker tab shows a "PORTFOLIO OWNER (N properties)" chip so the operator sees, before
+    // clicking, that this one Gmail compose is going to cover a stack of parcels.
+    portfolio: (r._portfolio || []).map(function(x){
+      return {c:x.case, addr:x.addr||'', plaintiff:x.plaintiff||'',
+              days:_saleDays(x), saleDate:x.auction||'',
+              tier:x.tier||'', judg:x.judg||0, value:x.value||0};
+    }),
     hs: !!r.hs, condo: !!r.condo, st: r.st||'', tier: r.tier || '',
     mismatch: !!r.ownerMismatch, paOwner: String(r.paOwner||'').split(';')[0].trim(),
     prior: _wlogContacted(r.case)   // "have I reached this person before?" — shown on the card
@@ -9007,6 +9082,14 @@ function genMorningWorker(lane){
     +   '.mwaddr{color:#5b6472;font:600 14px "Segoe UI",Arial,sans-serif;margin-bottom:12px}'
     +   '.mwmm{background:#fff2d7;border:1px solid #eadb9f;color:#7a5a10;border-radius:6px;'
     +     'padding:8px 11px;margin:0 0 12px;font:600 12.5px/1.45 "Segoe UI",Arial,sans-serif}'
+    // Portfolio banner: same visual weight as the mismatch warning, different colour so it reads
+    // as informational (this is what you meant to do) rather than cautionary. Purple keeps it out
+    // of the red/yellow/green urgency palette the rest of the card uses.
+    +   '.mwport{background:#f2ebfa;border:1px solid #cfbde8;color:#452471;border-radius:6px;'
+    +     'padding:9px 11px;margin:0 0 12px;font:600 12.5px/1.5 "Segoe UI",Arial,sans-serif}'
+    +   '.mwport b{color:#2c1350}'
+    +   '.mwport ul{margin:6px 0 0;padding-left:18px;font-weight:500}'
+    +   '.mwport ul li{margin:2px 0;color:#452471}'
     +   '.mwchip{display:inline-block;font:800 11px "Segoe UI",Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:5px 11px;border-radius:5px;margin-bottom:14px}'
     +   '.mwfacts{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;font-size:13.5px;margin-bottom:16px}'
     +   '.mwfacts .k{color:#8a94a8;font:700 10px "Segoe UI",Arial,sans-serif;text-transform:uppercase;letter-spacing:.06em}'
@@ -9344,6 +9427,11 @@ function genMorningWorker(lane){
     +       '+"<div class=\'mwchip\' style=\'color:"+r.chip.c+";background:"+r.chip.bg+"\'>"+esc(r.chip.t)+"</div>"'
     +       '+"<h2 class=\'mwname\'>"+esc(r.first||r.owner)+prior+"</h2>"'
     +       '+"<div class=\'mwaddr\'>"+esc(r.addr)+" · Tier "+esc(r.tier)+(r.hs?" · Homestead":"")+(r.condo?" · Condo":"")+"</div>"'
+    // PORTFOLIO OWNER banner. When _workerQueue folded N leads (same primary email) into this
+    // one card, list the sibling properties so the operator sees, before clicking Email, that
+    // a single Gmail compose is going to cover a stack of parcels. The Email button label below
+    // also flips to reflect this.
+    +       '+((r.portfolio&&r.portfolio.length)?"<div class=\'mwport\'>&#127775; <b>Portfolio owner &mdash; "+(r.portfolio.length+1)+" properties</b> on this contact&rsquo;s inbox. One consolidated email will go out, not "+(r.portfolio.length+1)+" separate messages.<ul><li>"+esc(r.addr)+(r.saleDate?" &mdash; sale "+esc(r.saleDate):"")+"</li>"+r.portfolio.map(function(p){return \"<li>\"+esc(p.addr)+(p.saleDate?\" &mdash; sale \"+esc(p.saleDate):\"\")+(p.plaintiff?\" &middot; \"+esc(String(p.plaintiff).slice(0,32)):\"\")+\"</li>\";}).join(\"\")+\"</ul></div>\":\"\")'
     // The worker is a rapid-fire queue — it is exactly where a stale name gets used without
     // thinking. Say it on the card, before the Email/Text buttons, not in a tooltip.
     +       '+(r.mismatch?"<div class=\'mwmm\'>&#9888; County roll shows a DIFFERENT owner"+(r.paOwner?" — <b>"+esc(r.paOwner)+"</b>":"")+". Title moved after this case was filed — confirm who you have before using "+esc(r.first||r.owner)+"&rsquo;s name.</div>":"")'
@@ -9358,7 +9446,7 @@ function genMorningWorker(lane){
     +       '+"</div>"'
     +       '+"<div class=\'mwacts\'>"'
     +         '+"<button id=\'mw-auto\' class=\'mwbtn done\' data-fn=\'auto\' style=\'grid-column:1/-1\'>&#9654; Start auto-run — walk the whole queue<span class=\'sub\'>advances the moment you tab back · "+Math.round(paceMs/1000)+"s fallback · logs everything · heals past failures</span></button>"'
-    +         '+"<button id=\'mw-email\' class=\'mwbtn email"+(r.emails.length?"":" disabled")+"\' data-fn=\'email\'>&#128231; Email<span class=\'sub\'>"+(r.emails.length?"composer":"none on file")+"</span></button>"'
+    +         '+"<button id=\'mw-email\' class=\'mwbtn email"+(r.emails.length?"":" disabled")+"\' data-fn=\'email\'>&#128231; "+(r.portfolio&&r.portfolio.length?"Portfolio email":"Email")+"<span class=\'sub\'>"+(r.emails.length?(r.portfolio&&r.portfolio.length?(r.portfolio.length+1)+" properties · one message":"composer"):"none on file")+"</span></button>"'
     +         '+"<button id=\'mw-text\' class=\'mwbtn text"+(r.phones.length?"":" disabled")+"\' data-fn=\'text\'>&#128241; Text<span class=\'sub\'>"+(r.phones.length?"composer":"no phone")+"</span></button>"'
     +         '+"<button id=\'mw-wp\' class=\'mwbtn wp"+(r.wpUrl?"":" disabled")+"\' data-fn=\'wp\'>&#128269; Lookup<span class=\'sub\'>find contact</span></button>"'
     +         '+"<button id=\'mw-skip\' class=\'mwbtn skip\' data-fn=\'skip\'>&#9197; Skip<span class=\'sub\'>next lead</span></button>"'
@@ -10226,6 +10314,127 @@ show('en');<\/script>
   if(quiet) return doc;
   _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
   return doc;
+}
+/* ---- PORTFOLIO EMAIL — one contact, N properties ----------------------------------------------
+   When _workerQueue detects that the same primary email covers several concurrent leads (Hector
+   Serrano owned six Miami-Dade properties in the 2026-07-31 audit), this composer sends ONE
+   message that lists every property up front instead of firing off N separate emails to the
+   same inbox — a spam-reputation guard for the sending account, and honestly less annoying for
+   the recipient.
+
+   `r` is the queue head; `siblings` is the array of the other lead records the head is standing
+   in for. All properties are addressed collectively, not individually, and only the head's case
+   number/plaintiff are used to anchor "we're not making this up" — the full list ships inside
+   the body. Same signature + STOP language as genEmail; identical __lastEmail stash so the
+   worker card's gurl builder finds it without any extra plumbing. */
+function genPortfolioEmail(r, siblings, quiet){
+  siblings = siblings || [];
+  var all = [r].concat(siblings);
+  var sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
+  var sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(),
+      sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
+  var owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
+  var first = owner.split(' ')[0] || owner;
+  var emails = (r.emails||[]).slice(0,3);
+  var to = emails[0]||'';
+  var sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW]
+             .filter(function(x){ return x && String(x).trim(); }).join('\n');
+  var n = all.length;
+  var subjEN = 'Regarding ' + n + ' properties in your name';
+  var subjES = 'Referente a ' + n + ' propiedades a su nombre';
+  function _lineEN(x){
+    var a = x.addr || '', p = (x.plaintiff||'').trim(), c = (x.case||'').trim(),
+        d = x.auction||'', dy = _saleDays(x);
+    var when = d ? (' — sale ' + d + (dy!=null ? ' (' + dy + ' day' + (dy===1?'':'s') + ')' : ''))
+                 : ' — no auction date set yet';
+    return '  - ' + a + (p ? ' (foreclosed by ' + p + ')' : '') + (c ? ' [Case ' + c + ']' : '') + when;
+  }
+  function _lineES(x){
+    var a = x.addr || '', p = (x.plaintiff||'').trim(), c = (x.case||'').trim(),
+        d = x.auction||'', dy = _saleDays(x);
+    var when = d ? (' — subasta ' + d + (dy!=null ? ' (' + dy + ' día' + (dy===1?'':'s') + ')' : ''))
+                 : ' — sin fecha de subasta todavía';
+    return '  - ' + a + (p ? ' (ejecutado por ' + p + ')' : '') + (c ? ' [Caso ' + c + ']' : '') + when;
+  }
+  var listEN = all.map(_lineEN).join('\n');
+  var listES = all.map(_lineES).join('\n');
+  var bodyEN = 'Hi ' + first + ',\n\n' +
+    'My name is ' + sN + '. I am a local Miami home buyer — I buy houses. I am not a lender, ' +
+    'not a rescue company, and not an attorney.\n\n' +
+    'Public records show ' + n + ' properties in your name are currently in foreclosure:\n\n' +
+    listEN + '\n\n' +
+    'I am writing you once instead of on each property because that is less noise for you, and ' +
+    'because a portfolio is usually best worked as a portfolio — the same buyer, the same title ' +
+    'company, one conversation. I am not asking you to sell any of them; the five exits every ' +
+    'Florida foreclosure homeowner has (reinstate, modification, short sale, private cash sale ' +
+    'before auction, bankruptcy) apply to each parcel independently.\n\n' +
+    'If it is useful, I can walk the numbers on any one of them, or all of them. No cost, no ' +
+    'obligation.\n\n' + sig + '\n\n' +
+    'Reply STOP or ask me not to contact you again and I will honor it for every property above.';
+  var bodyES = 'Hola ' + first + ',\n\n' +
+    'Mi nombre es ' + sN + '. Soy comprador de casas en Miami — compro casas. No soy prestamista, ' +
+    'no soy empresa de rescate, y no soy abogado.\n\n' +
+    'Los registros públicos muestran ' + n + ' propiedades a su nombre actualmente en ejecución ' +
+    'hipotecaria:\n\n' + listES + '\n\n' +
+    'Le escribo una vez y no por cada propiedad porque es menos ruido para usted, y porque una ' +
+    'cartera generalmente se trabaja mejor como una cartera — el mismo comprador, la misma ' +
+    'compañía de título, una sola conversación. No le pido vender ninguna; las cinco salidas de ' +
+    'todo propietario en ejecución en Florida (reinstalar, modificación, short sale, venta ' +
+    'privada en efectivo antes de la subasta, bancarrota) aplican a cada parcela por separado.\n\n' +
+    'Si es útil, puedo repasar los números en cualquiera de ellas, o en todas. Sin costo ni ' +
+    'compromiso.\n\n' + sig + '\n\n' +
+    'Responda STOP o pídame no contactarlo y lo respetaré para cada una de las propiedades arriba.';
+  var D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
+  try {
+    window.__lastEmail = {c:r.case, to:to, addr:r.addr||'', who:owner,
+                          subj:D.en.subj, body:D.en.body,
+                          subjES:D.es.subj, bodyES:D.es.body, at:Date.now(),
+                          portfolio: all.map(function(x){return x.case;})};
+  } catch(e){}
+  if(quiet){ return null; }
+  // Non-quiet: hand off to genEmail's HTML shell isn't a fit (different structure), so we build a
+  // trimmed HTML preview here. Kept intentionally simple — the operator-facing surface for this
+  // path is the worker tab, and the important thing is that Gmail opens with the merged body.
+  var esc2 = (typeof esc === 'function') ? esc : function(s){
+    return String(s||'').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  };
+  var chip = '<span style="background:#5b2b8a;color:#fff;padding:3px 9px;border-radius:5px;'
+           + 'font:700 11px Arial;letter-spacing:.06em">PORTFOLIO · ' + n + ' PROPERTIES</span>';
+  var docHtml = '<!doctype html><html><head><meta charset="utf-8">'
+              + '<title>Email — ' + esc2(owner) + ' (portfolio)</title>'
+              + '<style>body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;'
+              + 'max-width:680px;margin:0 auto;padding:14px 20px 50px;color:#12203a}'
+              + 'h1{font-size:17px;margin:4px 0 2px}.sub{color:#5b6b8c;font-size:13px;margin-bottom:14px}'
+              + '.subj{background:#f2f4f8;border:1px solid #e2e7f0;border-radius:7px;padding:9px 12px;font-weight:600}'
+              + '.body{white-space:pre-wrap;background:#fff;border:1px solid #e2e7f0;border-radius:8px;'
+              + 'padding:16px 17px;font-size:14.5px;line-height:1.5;margin-top:8px}'
+              + '.bar{background:#0e1b33;padding:10px 14px;margin:0 -20px 20px;display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:5}'
+              + '.bar button{padding:8px 13px;cursor:pointer;border:1px solid #33436a;background:#16233f;color:#cdd8ef;border-radius:6px;font-size:14px}'
+              + '.bar button.on{background:#c69a3a;color:#1a1205;border-color:#c69a3a;font-weight:700}'
+              + '.bar .act{background:#1f7a44;color:#fff;border-color:#1f7a44;font-weight:700}'
+              + '.lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#8a97b5;font-weight:700;margin:16px 0 5px}'
+              + '</style></head><body>'
+              + '<div class="bar"><button id="en" class="on" onclick="show(\'en\')">English</button>'
+              +   '<button id="es" onclick="show(\'es\')">Espa&ntilde;ol</button>'
+              +   '<button class="act" onclick="openGmail()">Open in Gmail</button>'
+              +   '<button class="act" onclick="openMail()">Open in email app</button></div>'
+              + '<h1>' + esc2(owner) + ' &middot; ' + chip + '</h1>'
+              + '<div class="sub">One consolidated email covering ' + n + ' concurrent foreclosure cases</div>'
+              + '<div class="lbl">To</div><div>' + esc2(to) + '</div>'
+              + '<div class="lbl">Subject</div><div class="subj" id="subjline"></div>'
+              + '<div class="lbl">Message</div><div class="body" id="bodybox"></div>'
+              + '<script>var D=' + JSON.stringify(D).replace(/</g,'\\u003c') + ', to=' + JSON.stringify(to) + ', cur="en";'
+              + 'function show(l){cur=l;document.getElementById("subjline").textContent=D[l].subj;'
+              +   'document.getElementById("bodybox").textContent=D[l].body;'
+              +   'document.getElementById("en").className=l==="en"?"on":"";'
+              +   'document.getElementById("es").className=l==="es"?"on":"";}'
+              + 'function openGmail(){window.open("https://mail.google.com/mail/?view=cm&fs=1&to="+encodeURIComponent(to)+"&su="+encodeURIComponent(D[cur].subj)+"&body="+encodeURIComponent(D[cur].body),"_blank");}'
+              + 'function openMail(){location.href="mailto:"+encodeURIComponent(to)+"?subject="+encodeURIComponent(D[cur].subj)+"&body="+encodeURIComponent(D[cur].body);}'
+              + 'show("en");<\/script></body></html>';
+  _openDoc(docHtml);
+  return docHtml;
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); }
