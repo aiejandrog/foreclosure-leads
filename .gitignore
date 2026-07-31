@@ -22,6 +22,7 @@ _*.py
 !_workeremailtest.py
 !_codelientest.py
 !_fieldsheettest.py
+!_taxtest.py
 _*.html
 _*.json
 _*.txt
@@ -44,6 +45,8 @@ skiptrace_results.json
 # lp_addresses.json
 # code-enforcement hits (folio+violation for named owners) — public repo, keep it out
 code_liens.json
+# verified back-tax data (folio+owner delinquency) — public repo, keep out
+broward_taxes.json
 # PropStream exports + derived overlays: owner PII on a PUBLIC repo — never commit
 propstream/
 propstream_overlay.json
@@ -54,6 +57,8 @@ propstream_leads.json — resolved street addresses + owner-of-record names for 
 lp_addresses.json
 # code-enforcement hits (folio+violation for named owners) — public repo, keep it out
 code_liens.json
+# verified back-tax data (folio+owner delinquency) — public repo, keep out
+broward_taxes.json
 # PropStream exports + derived overlays: owner PII on a PUBLIC repo — never commit
 propstream/
 propstream_overlay.json
