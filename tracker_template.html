@@ -2482,7 +2482,13 @@ function _workQueue(){
 // the first name is hard-coded here; llc/phone/email/addr are blank ON PURPOSE so the tracker
 // bans a mailing until Jose fills them in via Filters & setup. See the incomplete-sender banner
 // wired below (looks for the same 4 required fields and warns if any are still missing).
-const SENDER_DEFAULTS = {name:'Jose', llc:'', phone:'', addr:'', title:'', email:'', web:'', partner:''};
+// Entity is Miami Solutions Group LLC (the joint foreclosure-side entity — distinct from
+// Alejandro's personal Tradervert). MSG has two managing members; either can sign for the company.
+// Do NOT surface ownership percentages in any generated doc; do NOT put MSG on an initial purchase
+// contract's buyer line — buyer is "Alejandro Gonzalez and/or assigns" per the wholesale convention,
+// and MSG only appears on the separate Assignment and on documents where the entity itself is the
+// counterparty (deed grantee, TPA representative, cash-for-keys, servicer cover).
+const SENDER_DEFAULTS = {name:'Jose', llc:'Miami Solutions Group LLC', phone:'', addr:'', title:'', email:'', web:'', partner:''};
 let sender = Object.assign({}, SENDER_DEFAULTS);
 // CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
 // Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
@@ -4698,7 +4704,6 @@ function _pbRender(){
     +   '</ol>'
     +   '<h4>Also useful (but not "solutions")</h4>'
     +   '<ul>'
-    +     '<li><b>Deed in lieu</b> — hand deed to bank. Rare (banks prefer to foreclose).</li>'
     +     '<li><b>Surplus recovery (FL 45.033)</b> — if sale price > judgment, surplus goes to owner + junior lienholders. Regulated recovery process — do NOT solicit surplus recovery outside statute.</li>'
     +   '</ul>'
     + '</section>'
@@ -7273,10 +7278,11 @@ function genContractPrint(r){
 
 // --- TIER 3 — COUNSEL ----------------------------------------------------------------------
 function _docRefList(){
+  // Warranty deed + deed in lieu intentionally removed 2026-07-31 per operator direction:
+  // wholesale exits use quit claim (their title company purchases warranty), and we do not
+  // negotiate deeds in lieu — that path is bank-driven, not investor-driven.
   var items = [
-    ['Warranty / special warranty deed', 'Not generated here — quit claim is under Deeds. Counsel usually drafts warranty forms.'],
     ['Power of attorney (any form)', 'Two witnesses + notary in physical presence (FS 709.2105). Do not present at a door.'],
-    ['Deed in lieu of foreclosure', 'Negotiated with the lender under written terms; usually counsel drafts.'],
     ['Lease-back, occupancy-after-closing, option to repurchase', 'Heightened FS 501.1377 scrutiny if owner keeps ANY interest — never at a door.'],
     ['Assignment of surplus funds', 'Surplus is former owner money (FS 45.031). Use counsel when assigning.'],
     ['Mortgage / note / satisfaction / land trust', 'Creating or releasing encumbrances / complex title — counsel drafts.'],
@@ -7414,9 +7420,12 @@ function genQuitClaim(r, opts){
   var owners = _grantors(r);
   // couple/multi form when asked for, or whenever the roll actually shows more than one owner
   var multi = !!opts.multi || owners.length > 1;
-  var n = multi ? Math.max(2, owners.length) : 1;
+  // Baseline count: one line per named owner (multi enforces min 2). If the operator wants an
+  // extra unnamed blank block (spouse joinder discovered at signing, undisclosed co-grantor,
+  // late-added party), opts.extraBlank appends one more empty grantor row.
+  var n = (multi ? Math.max(2, owners.length) : 1) + (opts.extraBlank ? 1 : 0);
   var countyName = (f.county !== '__blank__' ? f.county : 'MIAMI-DADE').toUpperCase();
-  var grantee = (f.buyerLLC !== '__blank__') ? f.buyerLLC : 'DealFlow Investments LLC';
+  var grantee = (f.buyerLLC !== '__blank__') ? f.buyerLLC : 'Miami Solutions Group LLC';
   var isHS = !!(r && r.hs);
   var B = function(w){ return _dfLine(w); };
 
@@ -7477,10 +7486,12 @@ function genQuitClaim(r, opts){
     body += ''
       + '<div class="qcsigrow">'
       +   '<div class="qccol">'
-      +     '<div class="qcline"></div><div class="qccap">Witness Signature</div>'
-      +     '<div class="qcline"></div><div class="qccap">Witness Printed name</div>'
-      +     '<div class="qcline"></div><div class="qccap">Witness Signature</div>'
-      +     '<div class="qcline"></div><div class="qccap">Witness Printed name</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness 1 &mdash; Signature</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness 1 &mdash; Printed name</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness 1 &mdash; Address (street, city, state, zip)</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness 2 &mdash; Signature</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness 2 &mdash; Printed name</div>'
+      +     '<div class="qcline"></div><div class="qccap">Witness 2 &mdash; Address (street, city, state, zip)</div>'
       +   '</div>'
       +   '<div class="qccol">'
       +     '<div class="qcline"></div><div class="qccap">Signature (Grantor'+(n>1?' '+(i+1):'')+')</div>'
@@ -7495,10 +7506,35 @@ function genQuitClaim(r, opts){
     +   '<p>STATE OF FLORIDA<br>COUNTY OF '+esc(countyName)+'</p>'
     +   '<p>The foregoing instrument was acknowledged before me this '+B(8)+' day of '+B(22)+', '
     +     '20'+B(6)+', by '+B(46)+', a '+B(16)+', who '
-    +     (multi ? 'is/are' : 'is')+' '+B(5)+' personally known to me or '
-    +     (multi ? 'has/have' : 'has')+' produced a '+B(30)+' as identification.</p>'
+    +     (multi ? 'is/are' : 'is')+':</p>'
+    // ID checkboxes — operator marks one on paper. "valid" is prefixed to the ID slot so a marked
+    // "produced" box reads "produced a valid ___ FL driver's license as identification" without a
+    // separate qualifier line. FS 117.05(5) accepts either method; this makes the choice explicit.
+    +   '<p class="qcidbox">'
+    +     '<span class="qcbox"></span>&nbsp;personally known to me'
+    +     '&nbsp;&nbsp;&nbsp;&nbsp;'
+    +     '<span class="qcbox"></span>&nbsp;produced a <b>valid</b>&nbsp;'+B(24)+'&nbsp;FL driver&rsquo;s license as identification'
+    +   '</p>'
+    // Witness identity block inside the notary section — Miami-Dade and several other FL clerks
+    // request witness printed names and addresses on the recorded page, not only in the marginalia.
+    // FS 695.26 does not require witness addresses in the deed itself, but recording desks bounce
+    // instruments that omit them; safer to include on every one.
+    +   '<div class="qcwitbox">'
+    +     '<div class="qcwithdr">Witness identity (subscribing witnesses under FS 689.01)</div>'
+    +     '<div class="qcsigrow">'
+    +       '<div class="qccol">'
+    +         '<div class="qcline"></div><div class="qccap">Witness 1 &mdash; Printed name</div>'
+    +         '<div class="qcline"></div><div class="qccap">Witness 1 &mdash; Address</div>'
+    +       '</div>'
+    +       '<div class="qccol">'
+    +         '<div class="qcline"></div><div class="qccap">Witness 2 &mdash; Printed name</div>'
+    +         '<div class="qcline"></div><div class="qccap">Witness 2 &mdash; Address</div>'
+    +       '</div>'
+    +     '</div>'
+    +   '</div>'
     +   '<div class="qcsigrow"><div class="qccol">'
     +     '<div class="qcline"></div><div class="qccap">NOTARY PUBLIC</div>'
+    +     '<div class="qcline"></div><div class="qccap">Printed name &amp; commission #</div>'
     +     '<div class="qccap" style="margin-top:10px">MY COMMISSION EXPIRES '+B(18)+'</div>'
     +   '</div><div class="qccol"><div class="qcseal">NOTARY SEAL</div></div></div>'
     +   '<div class="qcpage">Page 2 of 2</div>'
@@ -7570,12 +7606,24 @@ function genQuitClaim(r, opts){
     + '.qctitle{text-align:center;font:700 20px Georgia,serif;letter-spacing:.02em;margin:14px 0 6px}'
     + '.qcfolio{text-align:right;font-size:13px;margin-bottom:14px}'
     + '.qclegal{margin:10px 0}.qclbl{font-weight:700;display:inline-block;margin-right:6px}'
-    + '.qclegaltext{border:1px solid #bbb;padding:8px 10px;background:#fbfbfb;font-size:13px;margin-top:4px}'
+    // Screen: cap legal desc at ~4 lines with a scroll fallback so long metes/bounds don't blow
+    // out the review UI. Print: unbound — the recorded instrument must show the full description.
+    + '.qclegaltext{border:1px solid #bbb;padding:8px 10px;background:#fbfbfb;font-size:13px;'
+    +   'margin-top:4px;line-height:1.35em;max-height:5.6em;overflow:auto;white-space:pre-wrap;'
+    +   'word-break:break-word}'
+    + '@media print{.qclegaltext{max-height:none;overflow:visible}}'
     + '.qcpub{font-size:12.5px;letter-spacing:.02em}'
     + '.qcsigrow{display:flex;gap:34px;margin:22px 0;flex-wrap:wrap}'
     + '.qccol{flex:1;min-width:230px}'
     + '.qcline{border-bottom:1px solid #222;height:34px;margin-bottom:3px}'
     + '.qccap{font-size:11px;color:#444;margin-bottom:14px}'
+    // ID-method checkbox row inside the notary block: small hand-checkable squares, print-safe.
+    + '.qcidbox{margin:12px 0 6px 4px;font-size:13px;line-height:1.7}'
+    + '.qcbox{display:inline-block;width:12px;height:12px;border:1.5px solid #222;'
+    +   'vertical-align:-2px;background:#fff}'
+    + '.qcwitbox{margin:10px 0 12px;padding:8px 10px;border:1px dashed #999;background:#fafafa}'
+    + '.qcwithdr{font-size:11px;font-weight:700;letter-spacing:.06em;color:#333;'
+    +   'text-transform:uppercase;margin-bottom:6px}'
     + '.qcseal{border:1px dashed #999;height:110px;display:flex;align-items:center;justify-content:center;'
     +   'color:#999;font-size:11px;letter-spacing:.12em}'
     + '.qcpage{text-align:center;font-size:11px;color:#777;margin-top:26px}'
@@ -7706,6 +7754,25 @@ function openDocRoom(caseId){
     + '<div class="kicker" style="color:#5b6472;margin-top:20px">REFERENCE — other instruments (not generated here)</div>'
     + '<p class="mini">Listed for awareness. Quit claim is under Deeds above. Optional: facts-only handoff for counsel.</p>'
     + _docRefList()
+    // ---- MSG legal pack — DRAFT STAGE, NOT SHIPPED ----------------------------------------
+    // Five instruments were drafted 2026-07-31 by workflow w878o39qn (Assignable P&S, TPA rebuild,
+    // Cash-for-Keys, two Limited POAs, Servicer Cover + BK reference). They live LOCALLY at
+    // ~/OneDrive/Desktop/MSG-Legal-Pack-Drafts/ for FL RE attorney review before being wired here.
+    // Do NOT surface the text on this public site until attorney sign-off — public exposure of
+    // an unreviewed 501.1377 instrument is a real legal risk.
+    + '<div class="kicker" style="color:#8a1c1c;margin-top:20px">PENDING ATTORNEY REVIEW — LOCAL ONLY</div>'
+    + '<div style="border:2px dashed #8a1c1c;border-radius:8px;padding:12px 14px;margin:8px 0;background:#fff8f5">'
+    +   '<p style="margin:0 0 8px;font:600 13.5px Arial,sans-serif;color:#8a1c1c">Five MSG drafts are staged on the operator&rsquo;s desktop &mdash; not published here.</p>'
+    +   '<p class="mini" style="margin:4px 0">Location: <span class="mono">Desktop&thinsp;/&thinsp;MSG-Legal-Pack-Drafts&thinsp;/</span> &middot; drafted 2026-07-31</p>'
+    +   '<ul class="mini" style="margin:8px 0 4px;padding-left:20px;line-height:1.6">'
+    +     '<li><b>Assignable Purchase &amp; Sale Agreement</b> &mdash; buyer line reads &ldquo;Alejandro Gonzalez and/or assigns&rdquo;; MSG appears only on the separate Assignment</li>'
+    +     '<li><b>Third-Party Authorization (MSG)</b> &mdash; rebuild of the Martinez template, MSG as authorized representative</li>'
+    +     '<li><b>Post-Closing Occupancy &amp; Cash-for-Keys</b> &mdash; 501.1377-safe structure: no pre-close payments to seller</li>'
+    +     '<li><b>Two Limited Powers of Attorney (FS 709.2105)</b> &mdash; Alejandro as principal, co-managing member as agent</li>'
+    +     '<li><b>Servicer Cover Sheet + BK educational reference</b> &mdash; MSG letterhead; BK reference is READ-ONLY (Furman UPL boundary)</li>'
+    +   '</ul>'
+    +   '<p class="mini" style="margin:8px 0 0;color:#5b6472">Route through a FL real-estate attorney ($400&ndash;800, one-time). When approved, the operator wires the reviewed templates into this Doc Room and MSG appears on the entity signature blocks &mdash; not before.</p>'
+    + '</div>'
     + '<div style="text-align:center;margin:12px 0"><button class="docprint" data-fn="genAttyPacket" data-key="atty-packet" '
     +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Facts packet for counsel</button></div>'
     + '<div class="footer">DealFlow · BUYER_ONLY mode. Anything requiring a signature happens at a title company or a law office — never at a door.</div>'
@@ -8830,6 +8897,28 @@ function _capState(){
   return {n:n, left:Math.max(0, DAILY_MAX-n), warn:n>=DAILY_WARN, blocked:n>=DAILY_MAX,
           warnAt:DAILY_WARN, max:DAILY_MAX};
 }
+/* ---- FL FTSA CALL WINDOW ---------------------------------------------------------------------
+   Florida FTSA (FS 501.059) restricts telephonic solicitation to 8:00 AM – 8:00 PM local time of
+   the CALLED party. Every FL lead on this board is by definition FL local, so ET is the only zone
+   that matters. Sends outside that window are $500–$1,500 per contact under FTSA, statutory, no
+   proof of harm needed. Texts to cell phones are covered too.
+   NON-BLOCKING BY DESIGN — an operator working out of state or before dawn should still be able to
+   RESEARCH leads, mark WARM-NURTURE, do everything except send. The banner says clearly what's at
+   risk; the daily cap keeps the volume safe. If we later want a hard-stop, extend _capState with a
+   `hoursBlocked` flag and short-circuit the outreach paths — the message shape below already fits. */
+function _ftsaHours(){
+  // Assume the operator's local clock is ET (Miami-Dade). All FL leads are ET-local anyway, so the
+  // few edge cases (running from a laptop out of state) are the operator's own to notice.
+  var h = new Date().getHours();
+  var safe = h >= 8 && h < 20;
+  var label = safe
+    ? 'inside the 8 AM–8 PM ET call window'
+    : (h < 8 ? 'BEFORE the 8 AM ET call window'
+             : 'AFTER the 8 PM ET call window');
+  return {safe: safe, hour: h, label: label,
+          why: safe ? '' : 'FL FTSA (FS 501.059) restricts calls + texts to 8 AM–8 PM local time. '
+             + 'Sends now are $500–$1,500 per contact, statutory. Research leads freely; hold outbound.'};
+}
 /* ---- THREE LANES instead of one truncated queue -----------------------------------------------
    The old queue took Tier A/B with a sale 3-45 days out and capped at 20 — which drew from 28 of
    306 contactable leads, hiding 91% of the board. Two exclusions did the damage:
@@ -9089,6 +9178,9 @@ function genMorningWorker(lane){
     +     '<span class="cbar"><i id="mwcapbar"></i></span>'
     +     '<span class="ctx" id="mwcaptx"></span>'
     +   '</div>'
+    // FTSA CALL-WINDOW BANNER — only appears outside 8 AM–8 PM ET. Non-blocking on purpose (an
+    // operator running early research should be able to work), but says clearly what is at risk.
+    +   '<div id="mwftsa" class="mwftsa" style="display:none"></div>'
     +   '<div id="mwmain"></div>'
     +   '<div class="mwlogwrap">'
     +     '<div class="mwloghead"><span>&#128220; Activity log — live</span><span class="mwlogstats" id="mwlogstats"></span></div>'
@@ -9099,6 +9191,11 @@ function genMorningWorker(lane){
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var lane=' + JSON.stringify(lane) + ', Q=LANES[lane]||[];'
     +   'var CAP=' + JSON.stringify(cap) + ', LSTAT=' + JSON.stringify(laneStats) + ';'
+    // FTSA state is baked in at doc-open time BUT re-evaluated every render, so someone who opens
+    // the worker at 7:55 AM crosses into the safe window without a page reload.
+    +   'function _wftsa(){var h=new Date().getHours();var safe=h>=8&&h<20;'
+    +     'return {safe:safe,hour:h,label:safe?"inside the 8 AM-8 PM ET call window":'
+    +     '(h<8?"BEFORE the 8 AM ET call window":"AFTER the 8 PM ET call window")};}'
     +   'var LOG=' + seedLog + ', STATS=' + seedStats + ';'
     // PACING, rebuilt 2026-07-30. A fixed 45s wait was dead time — the operator tabs over, sends,
     // and then sits watching a countdown for 30 more seconds. The smart signal is FOCUS: the moment
@@ -9139,6 +9236,19 @@ function genMorningWorker(lane){
     +       ' : warn ? "<b>"+left+" sends left today.</b> Cold volume past this point risks the inbox you run your business from."'
     +       ' : left+" sends left today · safe cold-outreach rate for a Gmail account";'
     +     'document.getElementById("mwcaptx").innerHTML=msg;'
+    +     'renderFtsa();'
+    +   '}'
+    // FTSA banner: hidden inside the 8 AM–8 PM ET window, red-bordered outside it. Re-checked on
+    // every render so a session that crosses 8 PM does not silently keep letting you send. Not a
+    // hard block by design — see the JS-side comment on _ftsaHours.
+    +   'function renderFtsa(){'
+    +     'var f=_wftsa(), box=document.getElementById("mwftsa");'
+    +     'if(!box) return;'
+    +     'if(f.safe){ box.style.display="none"; box.innerHTML=""; return; }'
+    +     'box.style.display="block";'
+    +     'box.innerHTML="<b>&#9888; "+f.label+".</b> FL FTSA (FS 501.059) restricts calls + texts '
+    +       'to 8 AM&ndash;8 PM ET local. Sends now are <b>$500&ndash;$1,500 per contact</b>, '
+    +       'statutory, no proof of harm needed. Research leads freely; hold outbound until 8 AM.";'
     +   '}'
     // Lane switch is a pure re-point at another baked-in queue: the log, the stats and the cap all
     // carry over, because they are per-DAY facts, not per-lane ones.
