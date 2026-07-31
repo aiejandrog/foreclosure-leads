@@ -118,8 +118,8 @@ jobs:
             _lp_status_cache.json
             _code_liens_cache.json
             code_liens.json
-            _broward_taxes_cache.json
-            broward_taxes.json
+            _county_taxes_cache.json
+            county_taxes.json
             replies.json
             whitepages_lookup.json
             geocode_cache.json
@@ -129,7 +129,7 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          # v7 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
+          # v8 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
           # cache saved under a different path list is invisible even to a matching restore-key prefix.
           # Adding whitepages_lookup.json silently orphaned every earlier cache — the restore logged
           # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
@@ -140,8 +140,8 @@ jobs:
           # parcel roll is not re-queried cold every morning; v4 added replies.json so a day with no
           # new reply keeps yesterday's rather than blanking the Reply Inbox.
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v7-${{ github.run_id }}
-          restore-keys: dealflow-state-v7-
+          key: dealflow-state-v8-${{ github.run_id }}
+          restore-keys: dealflow-state-v8-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -439,8 +439,8 @@ jobs:
             _lp_status_cache.json
             _code_liens_cache.json
             code_liens.json
-            _broward_taxes_cache.json
-            broward_taxes.json
+            _county_taxes_cache.json
+            county_taxes.json
             replies.json
             whitepages_lookup.json
             geocode_cache.json
@@ -450,7 +450,7 @@ jobs:
             listing_status_cache.json
             health.json
             full.json
-          key: dealflow-state-v7-${{ github.run_id }}
+          key: dealflow-state-v8-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
