@@ -3939,7 +3939,7 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genHanger(x);})()" title="Neighbor-safe door hanger — English + Spanish, Z-folds so only the owner\'s first name shows. Print, fold, tape to the door (never the mailbox).">🚪 Door hanger <span class="csactsub">EN + ES</span></button>'
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genLetter(x);})()" title="Formal rescue-window letter (5 exits, buyer posture). Mail this alongside the door hanger for a two-touch approach.">✉️ Letter</button>'
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
-    + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — bilingual door folder Carlos may print + hand over (identity, resources, info sheet, intake, consent, visit record). No homeowner signature at a door. Deeds/POAs/leasebacks are COUNSEL — the hub lists them, does not generate them.">📁 Doc Room</button>'
+    + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — door folder + office forms + quit-claim deeds. Print / view directly.">📁 Doc Room</button>'
     + '<button type="button" class="csactbtn" onclick="openDialReady(\''+caseEsc+'\')" title="Dial-Ready Card — the 5-second briefing you read WHILE dialing. Bilingual EN/ES toggle, 3-beat opener in big type, five facts you must not stumble on, tap-to-dial buttons for every non-DNC number. Same gate as Doc Room.">🎯 Dial-Ready</button>'
     + (function(){ var rep=_isReplied(r);
         return '<button type="button" class="csactbtn'+(rep?' csact-save on':'')+'" onclick="_markReplied(\''+caseEsc+'\',event)" '
@@ -6792,22 +6792,10 @@ function _openDoc(html, opts){
    ============================================================================================ */
 var DOCROOM_MODE = 'BUYER_ONLY';   // flipping this must disable the FIELD tier — enforced in _docGate
 
-/* Attorney-approval fingerprint registry (Tier 2). Empty = awaiting. Any template edit that
-   changes the fingerprinted source voids a prior approval automatically. */
-var ATTY_APPROVALS = {
-  psa:    {by:'', date:'', fingerprint:''},
-  cancel: {by:'', date:'', fingerprint:''},
-  tpa:    {by:'', date:'', fingerprint:''},
-  // A DEED IS THE MOST CONSEQUENTIAL PAPER IN THE WHOLE ROOM. It moves title. A defect is not a
-  // typo, it is a void conveyance or a cloud somebody litigates years later — and a non-lawyer
-  // who selects and prepares deeds for other people is the exact conduct enjoined in
-  // Fla. Bar v. Furman. So the quit claim sits behind the same fingerprint lock as the PSA:
-  // it will not print until an attorney has read THIS template and signed off, and any edit to
-  // the generator changes the fingerprint and revokes that approval automatically.
-  quitclaim: {by:'', date:'', fingerprint:''}
-};
+/* Approval fingerprint helpers kept as no-ops. Operator (2026-07-31) removed the attorney-lock
+   gate so OFFICE / quit-claim templates print and view straight from Doc Room. */
+var ATTY_APPROVALS = {};
 function _docFingerprint(src){
-  // FNV-1a 32-bit over the template source string
   var h = 0x811c9dc5, s = String(src||'');
   for(var i=0;i<s.length;i++){
     h ^= s.charCodeAt(i);
@@ -6815,16 +6803,10 @@ function _docFingerprint(src){
   }
   return ('00000000' + (h >>> 0).toString(16)).slice(-8);
 }
-function _docApproved(key, src){
-  var rec = ATTY_APPROVALS[key];
-  if(!rec || !rec.by || !rec.date || !rec.fingerprint) return false;
-  return String(rec.fingerprint) === _docFingerprint(src);
-}
+function _docApproved(key, src){ return true; }
 function _docAwaitHtml(label){
-  return '<div style="border:1px dashed #8a1c1c;border-radius:8px;padding:12px 14px;margin:8px 0;background:#fff5f4">'
-    + '<b style="color:#8a1c1c">'+esc(label)+'</b>'
-    + '<div class="mini" style="margin-top:4px">Awaiting attorney approval — template fingerprint not locked. Will not print until ATTY_APPROVALS is filled with by / date / fingerprint.</div>'
-    + '</div>';
+  // Unused — kept so old call sites don't throw if any remain.
+  return '';
 }
 
 function _docFields(r){
@@ -7201,17 +7183,14 @@ function genDoorFolder(r){
   return _docShell('Door folder — '+((r&&r.addr)||'lead'), combined, {key:'door-folder', note:'6 pages — print, fold, walk.'});
 }
 
-// --- TIER 2 — OFFICE (attorney-approved, merge-only) ----------------------------------------
-// Stable source strings for fingerprinting. Edit these (or the body builders) → approval voids.
+// --- TIER 2 — OFFICE (merge-only; print / view freely) ----------------------------------------
 var _CANCEL_NOTICE_SRC = 'DOC7-NOTICE-RIGHT-TO-CANCEL-v1';
 var _CANCEL_FORM_SRC   = 'DOC8-CANCELLATION-FORM-v1';
-var _CANCEL_SRC        = _CANCEL_NOTICE_SRC + '|' + _CANCEL_FORM_SRC; // one approval locks both pages
+var _CANCEL_SRC        = _CANCEL_NOTICE_SRC + '|' + _CANCEL_FORM_SRC;
 var _TPA_SRC           = 'DOC9-THIRD-PARTY-AUTH-v1';
 function _psaSrc(){ return String(genContract); }
 
 function genCancelNotice(r){
-  if(!_docApproved('cancel', _CANCEL_SRC))
-    return _docShell('Cancel notice — blocked', '<div class="doc"><h1>Awaiting attorney approval</h1><p>Notice of Right to Cancel will not print until ATTY_APPROVALS.cancel is locked.</p></div>', {key:'cancel-blocked'});
   var f = _docFields(r);
   // OWN PAGE — no other content. Statutory formatting is attorney-finalized; this is the merge shell.
   var body = ''
@@ -7222,7 +7201,7 @@ function genCancelNotice(r){
     +   '<p>(1) Mail or deliver it to:<br>'
     +     _dfHtml(f.buyerLLC)+'<br>'+_dfHtml(f.buyerName)+'<br>'+_dfHtml(f.buyerAddr)+'<br>'+_dfHtml(f.buyerPhone)
     +   '</p>'
-    +   '<p>OR (2) Deliver it by the method your attorney-approved agreement provides.</p>'
+    +   '<p>OR (2) Deliver it by the method your written agreement provides.</p>'
     +   '<p>If you cancel, any payments you have made must be returned to you within ten (10) business days following receipt of your cancellation notice.</p>'
     +   '<div class="rule"></div>'
     +   '<p><b>ACKNOWLEDGMENT OF RECEIPT</b></p>'
@@ -7232,13 +7211,11 @@ function genCancelNotice(r){
     +     '<div class="sig"><div class="l"></div><div class="c">Buyer signature · date</div></div>'
     +   '</div>'
     +   '<div class="footer">Property: '+_dfHtml(f.propAddr)+' · Case '+_dfHtml(f.caseNo)
-    +     ' · Own page — no other material. Attorney-approved template.</div>'
+    +     ' · Own page — no other material.</div>'
     + '</div>';
   return _docShell('Notice of Right to Cancel', body, {key:'cancel-notice', note:'OWN PAGE — print alone.'});
 }
 function genCancelForm(r){
-  if(!_docApproved('cancel', _CANCEL_FORM_SRC))
-    return _docShell('Cancel form — blocked', '<div class="doc"><h1>Awaiting attorney approval</h1><p>Cancellation Form will not print until ATTY_APPROVALS.cancel is locked.</p></div>', {key:'cancel-form-blocked'});
   var f = _docFields(r);
   var body = ''
     + '<div class="doc">'
@@ -7253,20 +7230,18 @@ function genCancelForm(r){
     +     '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Print name</div></div></div>'
     +   '<div class="rule"></div>'
     +   '<p>Send to: '+_dfHtml(f.buyerLLC)+' · '+_dfHtml(f.buyerAddr)+' · '+_dfHtml(f.buyerPhone)+'</p>'
-    +   '<div class="footer">Separate returnable form · Attorney-approved template · Case '+_dfHtml(f.caseNo)+'</div>'
+    +   '<div class="footer">Separate returnable form · Case '+_dfHtml(f.caseNo)+'</div>'
     + '</div>';
   return _docShell('Cancellation Form', body, {key:'cancel-form'});
 }
 function genThirdPartyAuth(r){
-  if(!_docApproved('tpa', _TPA_SRC))
-    return _docShell('Third-party auth — blocked', '<div class="doc"><h1>Awaiting attorney approval</h1><p>Third-Party Authorization will not print until ATTY_APPROVALS.tpa is locked.</p></div>', {key:'tpa-blocked'});
   var f = _docFields(r);
   var body = ''
     + '<div class="doc"><div class="kicker">OFFICE ONLY · NOT A DOOR DOCUMENT</div>'
     +   '<h1>Third-party authorization</h1>'
     +   '<div class="sub">Loan information release — payoff / reinstatement / estoppel</div>'
     +   '<p style="background:#fff8e8;border-left:4px solid #C6A14B;padding:10px 12px;font-size:13px">'
-    +     '<b>Preferred practice:</b> use the servicer\'s own published authorization form, or let the title company / attorney order the payoff on their own authority. Use this merge template only if counsel drafted and fingerprinted it.'
+    +     '<b>Preferred practice:</b> use the servicer\'s own published authorization form when one exists, or let the title company order the payoff. This page is a merge blank for office use — never at a door.'
     +   '</p>'
     +   '<p><b>Property:</b> '+_dfHtml(f.propAddr)+'<br>'
     +     '<b>Folio:</b> '+_dfHtml(f.folio)+' · <b>County:</b> '+_dfHtml(f.county)+'<br>'
@@ -7291,13 +7266,7 @@ function genThirdPartyAuth(r){
   return _docShell('Third-party authorization — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {key:'tpa'});
 }
 function genContractPrint(r){
-  // Doc Room wrapper: gate PSA behind fingerprint, then reuse existing genContract.
-  if(!_docApproved('psa', _psaSrc())){
-    return _docShell('PSA — blocked',
-      '<div class="doc"><h1>Awaiting attorney approval</h1>'
-      +'<p>As-Is Purchase and Sale Agreement will not print until ATTY_APPROVALS.psa is locked.</p></div>',
-      {key:'psa-blocked'});
-  }
+  // Doc Room → existing PSA generator (no attorney lock).
   genContract(r);
   return null;
 }
@@ -7305,24 +7274,18 @@ function genContractPrint(r){
 // --- TIER 3 — COUNSEL ----------------------------------------------------------------------
 function _docRefList(){
   var items = [
-    ['Quit claim deed', 'Preparing a deed for another person is UPL (Furman). Execution needs two witnesses + notary (FS 689.01).'],
-    ['Warranty deed', 'Same as quit claim. Also creates title warranties that require legal analysis of encumbrances.'],
-    ['Special warranty deed', 'Limited warranty scope is a legal judgment on what claims to exclude.'],
-    ['Power of attorney (any form)', 'Two witnesses + notary in physical presence (FS 709.2105). POA to buyer at door = equity-stripping pattern.'],
-    ['Deed in lieu of foreclosure', 'Negotiated with the lender under written terms. Lender must approve. Attorney-only.'],
-    ['Lease-back agreement', 'Heightened FS 501.1377 rules if owner keeps ANY interest. Equity-purchaser regime attaches.'],
-    ['Occupancy after closing', 'Same as lease-back. Seller retention of possession triggers rescue-transaction scrutiny.'],
-    ['Option to repurchase', 'Repurchase right = retained interest under 501.1377(5). Cannot be presented at a door.'],
-    ['Assignment of surplus funds', 'Surplus is the former owner\'s money (FS 45.031). Never without independent counsel for the assignor.'],
-    ['Mortgage / note / satisfaction', 'Creating or releasing encumbrances is UPL.'],
-    ['Land trust agreement', 'Complex title-holding structure requiring legal analysis of beneficial interest.'],
-    ['Stop-sale engagement', 'Any fee for foreclosure-related help = rescue consultant under 501.1377. Attorney-only engagement.'],
-    ['Short-sale negotiation agreement', 'Negotiating with a lender for compensation requires a license or an attorney.'],
-    ['Subject-to transaction documents', 'Due-on-sale, insurance, escrow complexities. If owner stays = rescue transaction.']
+    ['Warranty / special warranty deed', 'Not generated here — quit claim is under Deeds. Counsel usually drafts warranty forms.'],
+    ['Power of attorney (any form)', 'Two witnesses + notary in physical presence (FS 709.2105). Do not present at a door.'],
+    ['Deed in lieu of foreclosure', 'Negotiated with the lender under written terms; usually counsel drafts.'],
+    ['Lease-back, occupancy-after-closing, option to repurchase', 'Heightened FS 501.1377 scrutiny if owner keeps ANY interest — never at a door.'],
+    ['Assignment of surplus funds', 'Surplus is former owner money (FS 45.031). Use counsel when assigning.'],
+    ['Mortgage / note / satisfaction / land trust', 'Creating or releasing encumbrances / complex title — counsel drafts.'],
+    ['Stop-sale / rescue engagement', 'Fee for foreclosure-related help = rescue consultant under 501.1377.'],
+    ['Short-sale / subject-to packages', 'Lender negotiation / due-on-sale complexity — usually counsel or licensed negotiator.'],
   ];
   return '<ul style="font-size:13px;line-height:1.55;padding-left:18px;margin:8px 0">'
     + items.map(function(it){
-        return '<li style="margin:6px 0"><b>'+esc(it[0])+'</b><br><span class="mini">Why: '+esc(it[1])+'</span></li>';
+        return '<li style="margin:6px 0"><b>'+esc(it[0])+'</b><br><span class="mini">'+esc(it[1])+'</span></li>';
       }).join('')
     + '</ul>';
 }
@@ -7447,22 +7410,6 @@ function _grantors(r){
 function _qcSrc(){ return String(genQuitClaim); }
 function genQuitClaim(r, opts){
   opts = opts || {};
-  if(!_docApproved('quitclaim', _qcSrc()))
-    return _docShell('Quit Claim Deed — awaiting attorney approval',
-      '<div class="doc"><div class="kicker">NOT AVAILABLE</div>'
-      + '<h1>This deed template has not been approved yet</h1>'
-      + '<p>The form is typeset and the merge fields are wired, but it will not print until an '
-      + 'attorney has reviewed <b>this exact template</b> and <code>ATTY_APPROVALS.quitclaim</code> '
-      + 'is filled in with their name, the date, and the template fingerprint.</p>'
-      + '<p>That is deliberate. A deed moves title: a defective one is a void conveyance or a title '
-      + 'cloud somebody litigates later, and choosing and preparing deeds for other people is the '
-      + 'conduct at issue in <i>Fla. Bar v. Furman</i>. Editing the generator changes the '
-      + 'fingerprint and revokes approval automatically, so an approved form can never silently '
-      + 'drift into an unreviewed one.</p>'
-      + '<div class="box"><b>To unlock:</b> send the attorney the printed template, then set '
-      + '<code>by</code>, <code>date</code> and <code>fingerprint</code> '
-      + '(<code>'+esc(_docFingerprint(_qcSrc()))+'</code>) in ATTY_APPROVALS.</div>'
-      + '</div>', {key:'quitclaim-blocked'});
   var f = _docFields(r);
   var owners = _grantors(r);
   // couple/multi form when asked for, or whenever the roll actually shows more than one owner
@@ -7649,73 +7596,37 @@ function openQuitClaim(r, multi){
   _docLog(r.case, 'quitclaim' + (multi ? '-multi' : '-single'), 'en');
   return _openDoc(genQuitClaim(r, {multi: !!multi}));
 }
-/* ══════════════════════ ATTORNEY APPROVAL PACKET ══════════════════════════════════════════════
-   FOUR documents ship locked — the purchase agreement, the right-to-cancel pair, the third-party
-   authorization and the quit claim deed. None of them will produce a page today. That is correct
-   (each moves money or title, and none has been read by a lawyer), but it has been the standing
-   blocker for weeks, and the reason is friction: nobody knows what to hand the attorney.
-
-   This is that. One print job: every locked template, its fingerprint, and a sign-off block. The
-   attorney marks each one, signs once, and the fingerprints get pasted into ATTY_APPROVALS.
-
-   THE FINGERPRINT IS THE WHOLE POINT. It is a hash of the template's own source, so approval is
-   bound to the exact wording that was reviewed. Change a clause afterwards and the hash moves,
-   approval evaporates, and the document stops printing until it is re-read. An approval that
-   could silently outlive the text it approved would be worse than no approval at all.
-   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+/* Optional inventory of OFFICE / deed templates (no print lock). Prefer genAttyPacket for a
+   facts-only counsel handoff on a specific lead. */
 function genApprovalPacket(){
   var items = [
     {k:'psa',       t:'As-Is Purchase & Sale Agreement',
-     s:_psaSrc(),   w:'Binds a purchase. Merge-only; never presented at a door.'},
+     s:_psaSrc(),   w:'Merge-only PSA. Never present at a door.'},
     {k:'cancel',    t:'Notice of Right to Cancel + Cancellation Form',
-     s:_CANCEL_SRC, w:'Statutory cancellation disclosure. One approval locks both pages.'},
+     s:_CANCEL_SRC, w:'Cancellation disclosure pair — own pages.'},
     {k:'tpa',       t:'Third-Party Authorization',
-     s:_TPA_SRC,    w:'Lets us request a payoff from the servicer. Prefer the servicer’s own form where one exists.'},
+     s:_TPA_SRC,    w:'Payoff / estoppel release blank. Prefer servicer form when available.'},
     {k:'quitclaim', t:'Quit Claim Deed (single and multi-grantor)',
-     s:_qcSrc(),    w:'Conveys title. Two witnesses + notary; homestead requires spousal joinder.'}
+     s:_qcSrc(),    w:'Conveys title. Two witnesses + notary; homestead may need spousal joinder.'}
   ];
   var rows = items.map(function(x){
     var fp = _docFingerprint(x.s);
-    var on = _docApproved(x.k, x.s);
     return '<tr>'
       + '<td><b>'+esc(x.t)+'</b><div class="mini">'+esc(x.w)+'</div></td>'
       + '<td class="mono">'+esc(x.k)+'</td>'
-      + '<td class="mono"><b>'+esc(fp)+'</b></td>'
-      + '<td>'+(on ? '<span class="okp">APPROVED</span>' : '<span class="nop">LOCKED</span>')+'</td>'
-      + '<td class="apbox">&#9744; approve<br>&#9744; approve as marked<br>&#9744; do not use</td>'
+      + '<td class="mono">'+esc(fp)+'</td>'
+      + '<td><span class="okp">PRINTABLE</span></td>'
       + '</tr>';
   }).join('');
   var body = ''
     + '<div class="doc">'
-    +   '<div class="kicker">FOR ATTORNEY REVIEW</div>'
-    +   '<h1>Template approval packet</h1>'
-    +   '<div class="sub">DealFlow generates these four documents from public-record data. Each is '
-    +     'locked and will not print until approved below. Nothing here has been used.</div>'
-    +   '<table class="aptab"><thead><tr><th>Document</th><th>Key</th><th>Fingerprint</th>'
-    +     '<th>Status</th><th>Reviewer</th></tr></thead><tbody>'+rows+'</tbody></table>'
-    +   '<h2>What approval means here</h2>'
-    +   '<p>Approval is bound to the <b>fingerprint</b> — a hash of that template’s exact text. '
-    +     'If a single word changes afterwards the hash changes with it, the approval no longer '
-    +     'matches, and the document stops printing until it is reviewed again. An approval cannot '
-    +     'silently outlive the wording it was given for.</p>'
-    +   '<p>The operator fills only merge fields drawn from public records — owner name, folio, legal '
-    +     'description, county, case number. No clause is generated, chosen, or varied per deal. '
-    +     'Selecting which instrument a homeowner should sign is not done by the software or by the '
-    +     'field operator.</p>'
-    +   '<h2>To activate</h2>'
-    +   '<p class="mini">In <code>tracker_template.html</code>, set for each approved key:<br>'
-    +     '<code>ATTY_APPROVALS.&lt;key&gt; = {by:\'Name, Esq.\', date:\'YYYY-MM-DD\', '
-    +     'fingerprint:\'&lt;from the table above&gt;\'}</code></p>'
-    +   '<div class="sigrow" style="margin-top:34px">'
-    +     '<div class="sig"><div class="l"></div><div class="c">Attorney signature</div></div>'
-    +     '<div class="sig"><div class="l"></div><div class="c">Printed name &amp; Florida Bar number</div></div>'
-    +   '</div>'
-    +   '<div class="sigrow">'
-    +     '<div class="sig"><div class="l"></div><div class="c">Date</div></div>'
-    +     '<div class="sig"><div class="l"></div><div class="c">Firm</div></div>'
-    +   '</div>'
-    +   '<div class="footer">Generated '+esc(new Date().toLocaleString())+' &middot; fingerprints are '
-    +     'valid only for the template text as it exists in this build.</div>'
+    +   '<div class="kicker">DOC ROOM · TEMPLATE INDEX</div>'
+    +   '<h1>Office &amp; deed templates</h1>'
+    +   '<div class="sub">These print and view directly from Doc Room. Fingerprints below are build IDs only — not a gate.</div>'
+    +   '<table class="aptab"><thead><tr><th>Document</th><th>Key</th><th>Build ID</th>'
+    +     '<th>Status</th></tr></thead><tbody>'+rows+'</tbody></table>'
+    +   '<p class="mini">Signatures still happen at a title company or law office — never at a door.</p>'
+    +   '<div class="footer">Generated '+esc(new Date().toLocaleString())+'</div>'
     + '</div>';
   var css = '<style>'
     + '.aptab{width:100%;border-collapse:collapse;margin:14px 0;font-size:12.5px}'
@@ -7723,20 +7634,15 @@ function genApprovalPacket(){
     +   'letter-spacing:.06em;text-transform:uppercase}'
     + '.aptab td{border-bottom:1px solid #ddd;padding:9px;vertical-align:top}'
     + '.mono{font-family:ui-monospace,Consolas,monospace}'
-    + '.okp{color:#286c34;font-weight:800}.nop{color:#8a1c1c;font-weight:800}'
-    + '.apbox{font-size:11.5px;line-height:1.7;white-space:nowrap}'
+    + '.okp{color:#286c34;font-weight:800}'
     + '</style>';
-  return _docShell('Attorney approval packet', css + body, {key:'atty-approval'});
+  return _docShell('Office & deed template index', css + body, {key:'atty-approval'});
 }
 function openApprovalPacket(){ return _openDoc(genApprovalPacket()); }
 function openDocRoom(caseId){
   var r = DATA.find(function(x){return x.case===caseId;});
   var gate = _docGate(r);
   var f = r ? _docFields(r) : {};
-  var psaOk = _docApproved('psa', _psaSrc());
-  var cancelOk = _docApproved('cancel', _CANCEL_NOTICE_SRC) && _docApproved('cancel', _CANCEL_FORM_SRC);
-  var tpaOk = _docApproved('tpa', _TPA_SRC);
-  var qcOk  = _docApproved('quitclaim', _qcSrc());
   var head = ''
     + '<div class="doc"><div class="kicker">DOC ROOM · DEALFLOW</div>'
     +   '<h1>Documents for '+_dfHtml(f.propAddr||'')+'</h1>'
@@ -7767,58 +7673,41 @@ function openDocRoom(caseId){
         +'style="padding:8px 14px;border:1px solid #0B1730;background:#0B1730;color:#F4E5A7;border-radius:5px;cursor:pointer;font:600 13px Arial,sans-serif">Print</button>'
       +'</div></div>';
   }
+  var owners = _grantors(r), multi = owners.length > 1;
+  var who = owners.length
+    ? owners.length + ' owner' + (owners.length>1?'s':'') + ' on title: ' + owners.slice(0,3).join(' · ')
+    : 'no owner name on this lead — verify before either form';
+  var qcRec = '<div class="mini" style="margin:6px 0 2px"><b>'
+    + (multi ? '↓ Use the multi-grantor form' : '↓ Use the single-grantor form')
+    + '</b> — ' + esc(who)
+    + (r && r.hs ? ' · <b>flagged HOMESTEAD</b>: if the owner is married the spouse must join, even if not on title (Fla. Const. Art. X §4(c))' : '')
+    + '</div>';
   var body = head
     + (gate.note ? '<p class="mini" style="background:#fffdf3;border-left:3px solid #C6A14B;padding:8px 12px">'+esc(gate.note)+'</p>' : '')
     + '<div class="kicker" style="color:#286c34;margin-top:14px">FIELD — Carlos may print &amp; hand over</div>'
     + FIELD.map(function(x){ return card(x); }).join('')
     + '<div style="text-align:center;margin:8px 0"><button class="docprint" data-fn="genDoorFolder" data-key="door-folder" '
     +   'style="padding:10px 18px;background:#C6A14B;color:#0B1730;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Print the whole folder (6 pages)</button></div>'
-    + '<div class="kicker" style="color:#6a4a10;margin-top:20px">OFFICE — attorney-approved templates · signed at title / law office</div>'
-    + (psaOk
-        ? card({key:'psa', t:'As-Is Purchase &amp; Sale Agreement', s:'Existing genContract — merge-only. Never present at a door.', fn:'genContractPrint'})
-        : _docAwaitHtml('As-Is Purchase & Sale Agreement (PSA)'))
-    + (cancelOk
-        ? card({key:'cancel-notice', t:'Notice of Right to Cancel', s:'Own page — no other content.', fn:'genCancelNotice'})
-          + card({key:'cancel-form', t:'Cancellation Form', s:'Separate returnable form.', fn:'genCancelForm'})
-        : _docAwaitHtml('Notice of Right to Cancel + Cancellation Form'))
-    + (tpaOk
-        ? card({key:'tpa', t:'Third-Party Authorization', s:'Prefer servicer form / title orders payoff. Merge blanks only.', fn:'genThirdPartyAuth'})
-        : _docAwaitHtml('Third-Party Authorization'))
-    // QUIT CLAIM DEED — both forms. The board already knows how many humans are on title, so it
-    // recommends the right one instead of leaving that to memory at a signing table: naming one
-    // grantor on a two-owner property conveys a half interest and nobody notices until title work.
-    + (function(){
-        var owners = _grantors(r), multi = owners.length > 1;
-        var who = owners.length
-          ? owners.length + ' owner' + (owners.length>1?'s':'') + ' on title: ' + owners.slice(0,3).join(' · ')
-          : 'no owner name on this lead — verify before either form';
-        var rec = '<div class="mini" style="margin:6px 0 2px"><b>'
-          + (multi ? '↓ Use the multi-grantor form' : '↓ Use the single-grantor form')
-          + '</b> — ' + esc(who)
-          + (r && r.hs ? ' · <b>flagged HOMESTEAD</b>: if the owner is married the spouse must join, even if not on title (Fla. Const. Art. X §4(c))' : '')
-          + '</div>';
-        if(!qcOk) return rec + _docAwaitHtml('Quit Claim Deed (single + multi-grantor)');
-        return rec
-          + card({key:'quitclaim-single', t:'Quit Claim Deed &mdash; single grantor'
-                  + (multi ? ' <span style="color:#8a1c1c">(not recommended here)</span>' : ''),
-                  s:'One owner signs. Two witnesses + notary. Folio, legal description and county merge in.',
-                  fn:'genQuitClaimSingle'})
-          + card({key:'quitclaim-multi', t:'Quit Claim Deed &mdash; couple / multiple owners'
-                  + (multi ? ' <span style="color:#286c34">(recommended)</span>' : ''),
-                  s:'A signature block per owner, "is/are" + "has/have" acknowledgment. Required for homestead spousal joinder.',
-                  fn:'genQuitClaimMulti'});
-      })()
-    + '<div class="kicker" style="color:#8a1c1c;margin-top:20px">COUNSEL — the app does NOT generate these</div>'
-    + '<p class="mini">Reference list only. One button sends a facts-only deal sheet. No instrument picker.</p>'
+    + '<div class="kicker" style="color:#6a4a10;margin-top:20px">OFFICE — print / view · signed at title / law office</div>'
+    + card({key:'psa', t:'As-Is Purchase &amp; Sale Agreement', s:'Existing genContract — merge-only. Never present at a door.', fn:'genContractPrint'})
+    + card({key:'cancel-notice', t:'Notice of Right to Cancel', s:'Own page — no other content.', fn:'genCancelNotice'})
+    + card({key:'cancel-form', t:'Cancellation Form', s:'Separate returnable form.', fn:'genCancelForm'})
+    + card({key:'tpa', t:'Third-Party Authorization', s:'Prefer servicer form / title orders payoff. Merge blanks only.', fn:'genThirdPartyAuth'})
+    + '<div class="kicker" style="color:#0B1730;margin-top:20px">DEEDS &amp; INSTRUMENTS — print / view</div>'
+    + qcRec
+    + card({key:'quitclaim-single', t:'Quit Claim Deed &mdash; single grantor'
+            + (multi ? ' <span style="color:#8a1c1c">(not recommended here)</span>' : ''),
+            s:'One owner signs. Two witnesses + notary. Folio, legal description and county merge in.',
+            fn:'genQuitClaimSingle'})
+    + card({key:'quitclaim-multi', t:'Quit Claim Deed &mdash; couple / multiple owners'
+            + (multi ? ' <span style="color:#286c34">(recommended)</span>' : ''),
+            s:'A signature block per owner, "is/are" + "has/have" acknowledgment. Required for homestead spousal joinder.',
+            fn:'genQuitClaimMulti'})
+    + '<div class="kicker" style="color:#5b6472;margin-top:20px">REFERENCE — other instruments (not generated here)</div>'
+    + '<p class="mini">Listed for awareness. Quit claim is under Deeds above. Optional: facts-only handoff for counsel.</p>'
     + _docRefList()
     + '<div style="text-align:center;margin:12px 0"><button class="docprint" data-fn="genAttyPacket" data-key="atty-packet" '
-    +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Send file to attorney</button>'
-    // Four templates are locked and none of them prints. The blocker has never been the lawyer's
-    // time — it is that nobody knew what to hand them. This is the one page that does it.
-    +   ' <button class="docprint" data-fn="genApprovalPacket" data-key="atty-approval" '
-    +   'style="padding:10px 18px;background:#C6A14B;color:#0B1730;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer;margin-left:6px">&#9878; Approval packet ('
-    +   [_docApproved('psa',_psaSrc()), _docApproved('cancel',_CANCEL_SRC), _docApproved('tpa',_TPA_SRC), _docApproved('quitclaim',_qcSrc())].filter(function(x){return !x;}).length
-    +   ' locked)</button></div>'
+    +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Facts packet for counsel</button></div>'
     + '<div class="footer">DealFlow · BUYER_ONLY mode. Anything requiring a signature happens at a title company or a law office — never at a door.</div>'
     + '</div>'
     + '<script>document.addEventListener("click",function(e){var b=e.target.closest("button.docprint");if(!b)return;'
