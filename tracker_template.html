@@ -241,6 +241,10 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
 /* unresolved parcel — states the truth ("not looked up") instead of faking a $0 property */
 .pschip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
   border-radius:3px;background:#eef4ff;color:#2b4a8a;border:1px solid #c9d9f2;cursor:help}
+.taxchip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
+  border-radius:3px;cursor:help;border:1px solid}
+.taxchip.tc{background:#fff5f4;color:#8a1c1c;border-color:#e8bcbc}
+.taxchip.td{background:#fff2d7;color:#7a5a10;border-color:#eadb9f}
 .codechip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
   border-radius:3px;cursor:help;border:1px solid}
 .codechip.cf{background:#fff5f4;color:#8a1c1c;border-color:#e8bcbc}
@@ -2569,9 +2573,13 @@ function recompute(){
     const jlien = _dTyped(nn.jlien) ? Math.max(0, +nn.jlien||0) : _jp;   // juniors recorded AFTER the foreclosing one — payoff for clean title on a purchase
     const assess = _dTyped(nn.assess) ? Math.max(0, +nn.assess||0) : (nonMortConf ? (r.orhoa||0) : 0);     // recorded HOA/association open liens (estoppel still confirms at contract); BD path never checks these
     const mlien = _dTyped(nn.mlien) ? Math.max(0, +nn.mlien||0) : (nonMortConf ? ((r.orcode||0)+(r.orirs||0)) : 0);   // code/muni/IRS + money judgments — BD path never checks these
-    // btax stays manual ON PURPOSE: foreclosure ≠ tax-delinquent (the default is the MORTGAGE), and the
-    // only honest delinquency figure lives on the tax bill — one click via the deep 'Taxes' link.
-    const btax = Math.max(0, +nn.btax || 0);     // delinquent property taxes — first-priority lien, survives FC (FS 197.122)
+    // Back taxes: a MANUAL override always wins (the operator pulled the bill and typed it). Else,
+    // for Broward, use the VERIFIED figure broward_taxes.py scraped off the county tax collector —
+    // r.taxDue. Miami-Dade/PB have no auto-checker yet, so there the default stays 0 and the number
+    // is entered by hand as before. This was the one place the design could safely auto-populate:
+    // "foreclosure ≠ tax-delinquent" was the objection to ASSUMING back taxes, but a verified county
+    // figure is a fact, not an assumption — first-priority lien, survives FC (FS 197.122).
+    const btax = _dTyped(nn.btax) ? Math.max(0, +nn.btax||0) : Math.max(0, +r.taxDue||0);
     const occ = (nn.occ != null) ? !!nn.occ      // occupied: user-set wins; else homestead + owner mails to the site street = living there
       : !!(r.hs && r.mail && r.addr && String(r.mail).split(',')[0].trim().toUpperCase() === String(r.addr).split(',')[0].trim().toUpperCase());
     const evict = occ ? Math.max(4000, val*0.02) : 0;
@@ -6497,6 +6505,29 @@ function _psChip(r){
         + bits.join(' · ')
         + ((r.psPhones||[]).length ? '. Their skip-trace found ' + r.psPhones.length + ' phone(s) — QUARANTINED until DNC-scrubbed through the normal skiptrace path; not dialable from here.' : ''))
     + '">PS: ' + esc((r.psDistress || 'DATA').slice(0,18)) + '</span>';
+}
+function _taxChip(r){
+  // Verified delinquent property taxes (Broward, broward_taxes.py). First-priority lien that
+  // survives foreclosure and is NOT in the mortgage chain — so it prints next to the value, and a
+  // sold certificate escalates the wording because that is a SECOND foreclosure clock (a tax-deed
+  // sale on a separate track from the bank's case). Already folded into the equity number via
+  // recompute; the chip is the visible "why the equity dropped" and the door-conversation leverage.
+  if(!r || !(+r.taxDue)) return '';
+  var due = +r.taxDue;
+  var yrs = (r.taxYears||[]).length;
+  var k = '$' + Math.round(due).toLocaleString();
+  if(r.taxCert)
+    return ' <span class="taxchip tc" title="'
+      + esc('VERIFIED BACK TAXES: '+k+' unpaid'+(yrs?' ('+yrs+' year'+(yrs>1?'s':'')+')':'')
+          + ' — AND a tax certificate has been SOLD, which starts a SECOND foreclosure clock: the '
+          + 'certificate holder can force a tax-deed sale on a separate track from the bank. This is '
+          + 'already subtracted from the equity shown. Survives the mortgage foreclosure (FS 197.122).')
+      + '">&#9888; TAX CERT &middot; '+esc(k)+'</span>';
+  return ' <span class="taxchip td" title="'
+    + esc('VERIFIED BACK TAXES: '+k+' unpaid'+(yrs?' across '+yrs+' year'+(yrs>1?'s':''):'')
+        + ' off the county tax collector. First-priority lien that survives the foreclosure (FS '
+        + '197.122) and is NOT in the mortgage chain. Already subtracted from the equity shown.')
+    + '">&#9888; TAXES '+esc(k)+'</span>';
 }
 function _codeLienChip(r){
   // A code-enforcement lien never appears in the mortgage chain, so the equity number does not
@@ -11323,7 +11354,7 @@ function render(){
           ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
           : '<span class="clamp2 legalline">no address on the filing</span>');
     const prop = '<div class="addrline">'+_addrLine+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -11388,7 +11419,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
