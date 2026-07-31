@@ -828,6 +828,20 @@ def _js_guard(tpl):
     on a machine that cannot run the check.
     """
     import subprocess, tempfile
+
+    # STATIC LINT FIRST — catches the bug node --check CANNOT. This template builds documents as
+    # JS strings with a leading-`+` continuation style ("...' \n + 'more'"). A continuation line
+    # that reads "+ +'text'" or "+ + (expr)" is a UNARY PLUS on a string, which is valid JS that
+    # evaluates to NaN at runtime -- so node --check passes and the page ships "JoseNaNNaN" or
+    # "call these firstNaN" into a printed field sheet. This exact typo shipped three times
+    # (2026-07-30/31). The concat continuation is always "+ <value>", never "+ +<value>", so a
+    # doubled leading plus is never intentional here.
+    for m in re.finditer(r'\n[ \t]*\+[ \t]+\+[ \t]*[\'"(]', tpl):
+        ctx = tpl[max(0, m.start()):m.start() + 70].replace('\n', ' ').strip()
+        raise SystemExit('BUILD ABORTED: unary-plus concat bug ("+ +" continuation -> NaN at '
+                         'runtime, invisible to node --check):\n   ...' + ctx + '\n'
+                         'Delete the second "+". See _js_guard for why.')
+
     blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', tpl, re.S | re.I)
     if not blocks:
         return

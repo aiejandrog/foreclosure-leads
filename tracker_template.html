@@ -623,6 +623,9 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csactbtn .csactsub{font-size:10px;color:var(--muted,#6b7280);font-weight:600;text-transform:uppercase;letter-spacing:.08em;margin-left:2px}
 .csactbtn:hover .csactsub{color:#e6cf88}
 .csactbtn.csact-save.on{background:var(--ink,#0e1b33);color:var(--gold,#C6A14B);border-color:var(--ink,#0e1b33)}
+/* Field Sheet is the primary door output — solid navy+gold so it reads as THE button to press. */
+.csactbtn.csact-field{background:var(--ink,#0B1730);color:var(--gold,#F4E5A7);border-color:var(--ink,#0B1730)}
+.csactbtn.csact-field:hover{background:#1a2b52}
 /* People/CyberBG lookup line inside the call sheet — find a number without leaving the sheet */
 .cspeople{margin-top:9px;font-size:12px;color:var(--muted,#8892a6)}
 .cspeolbl{display:block;font-family:var(--f-label,inherit);font-size:10.5px;font-weight:800;
@@ -3924,6 +3927,7 @@ function _csTakeAction(r){
   if(r.sibclaimed) return '';
   var caseEsc = esc(r.case);
   return '<div class="csact">'
+    + '<button type="button" class="csactbtn csact-field" onclick="openFieldSheet(\''+caseEsc+'\')" title="FIELD SHEET — the whole deal on one printable page for Carlos to take to the door: address, auction day, deal deadline, the four money numbers (all matching this screen), who to ask for + phone, the bilingual opener, the do-NOT-say rails, and an outcome checkbox. Hit Print / Save as PDF. As easy as it gets.">🖨️ Field Sheet (PDF) <span class="csactsub">door-ready</span></button>'
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genHanger(x);})()" title="Neighbor-safe door hanger — English + Spanish, Z-folds so only the owner\'s first name shows. Print, fold, tape to the door (never the mailbox).">🚪 Door hanger <span class="csactsub">EN + ES</span></button>'
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genLetter(x);})()" title="Formal rescue-window letter (5 exits, buyer posture). Mail this alongside the door hanger for a two-touch approach.">✉️ Letter</button>'
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
@@ -7812,6 +7816,149 @@ function _urgencyChip(days){
   if(days<=30) return {t:days+' days to sale', c:'#286c34', bg:'#eaf5ec'};
   return {t:days+' days out', c:'#5b6472', bg:'#f6f8fa'};
 }
+/* ══════════════════ CARLOS FIELD SHEET — one page, print-to-PDF, door-ready ══════════════════
+   Alejandro (2026-07-30): a button on every cost sheet that makes a PDF with the address, auction
+   day, owner name and every important number, "as easy as it gets" — so Carlos can walk up to a
+   door holding the whole deal on one sheet.
+
+   This is a PRINTABLE, not a modal. It reuses the same _basisOf/_netEqOf/_urgencyChip source-of-
+   truth the call sheet uses, so the sheet in Carlos's hand can never quote a different equity than
+   the screen Jose is looking at. "Print / Save as PDF" is the browser's own dialog — zero deps,
+   works from the file:// desktop copy and the https board alike.
+
+   It leads with the ONE THING that decides the whole visit — the deal deadline — then the money,
+   then who to ask for and what to say, then the do-not-say rails. Everything a nervous person at a
+   stranger's door needs, nothing they have to scroll past. */
+function genFieldSheet(r){
+  var f = _docFields(r);
+  var fm = function(n){ return (n||n===0) ? '$'+Math.round(+n).toLocaleString() : '—'; };
+  var owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
+  var first = (owner.split(' ')[0]||owner);
+  var days = (typeof r.days==='number' && r.days>=0) ? r.days : null;
+  var chip = _urgencyChip(days);
+  var deadline = (days!=null && days>=3) ? (days-3) : null;   // deal must close ~3 days before the gavel
+  var basis = _basisOf(r), judg = +r.judg||0, netEq = _netEqOf(r), surv = +r._slien||0;
+  var tt = _talkTo(r);
+  var codeNote = r.codeConcern === 'foreclosing' ? 'County is ALSO foreclosing on a code lien — separate track'
+               : r.codeConcern === 'lien' ? 'Recorded CODE LIEN on this parcel — not in the equity above'
+               : r.codeConcern === 'open' ? 'Open code-enforcement case on this parcel' : '';
+  // phones that survived DNC, mobile-first — the number Carlos actually dials from the porch
+  var ph = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); });
+  var phone = ph[0] || (r.phones||[])[0] || '';
+
+  var box = function(lbl, v, sub, cls){
+    return '<div class="fbx '+(cls||'')+'"><div class="fbl">'+lbl+'</div><div class="fbv">'+v+'</div>'
+      + (sub ? '<div class="fbs">'+sub+'</div>' : '') + '</div>';
+  };
+
+  var body = ''
+    + '<div class="fdoc">'
+    +   '<div class="fhead">'
+    +     '<div class="ftag">TODAY&rsquo;S FOCUS &middot; DOOR VISIT</div>'
+    +     '<h1>'+esc(r.addr||_dfHtml(f.propAddr))+'</h1>'
+    +     '<div class="fsub"><b>'+esc(owner)+'</b>'
+    +       (r.co?' &middot; COMPANY':'') + (r.hs?' &middot; Homestead':'')
+    +       ' &middot; Case '+esc(r.case)+' &middot; '+esc(r.county||'MIAMI-DADE')
+    +       (r.folio?' &middot; folio '+esc(r.folio):'') + '</div>'
+    +   '</div>'
+
+    // THE CLOCK — biggest thing on the page, because it decides whether the trip matters at all
+    +   '<div class="fclock" style="background:'+chip.bg+';color:'+chip.c+'">'
+    +     '<div class="fcm">'+esc(chip.t)+'</div>'
+    +     '<div class="fcd">'
+    +       (r.auction ? 'Auction '+esc(r.auction)+(days!=null?' &middot; '+days+' days out':'') : 'No auction date set')
+    +       (deadline!=null ? ' &middot; <b>deal deadline in ~'+deadline+' days</b> (auction minus 3)' : '')
+    +     '</div>'
+    +   '</div>'
+
+    // THE MONEY — the four numbers, source-of-truth, same as the screen
+    +   '<div class="fgrid">'
+    +     box('Owed (judgment)', fm(judg), r.auction?'what stops the sale':'', 'red')
+    +     box('Worth', fm(basis), (r.arv?('ARV · '+r.arvn+' comps'):'county roll'), '')
+    +     box('Survives the sale', fm(surv), (r.orconf==='ok'?'records-verified':(surv?'verify payoff':'nothing found')), surv?'amber':'green')
+    +     box('Net equity', fm(netEq), 'the reason we are here', 'gold')
+    +   '</div>'
+    +   (codeNote ? '<div class="fwarn">&#9888; '+esc(codeNote)+'</div>' : '')
+
+    // WHO TO ASK FOR + THE NUMBER
+    +   '<div class="frow"><span class="frk">Ask for</span><span class="frv"><b>'
+    +     esc((tt && tt.name) ? tt.name : owner)+'</b>'
+    +     ((tt && tt.rel) ? ' <span class="fmut">('+esc(tt.rel)+')</span>' : '')
+    +     (phone ? ' &middot; <b>'+esc(phone)+'</b>' : '') + '</span></div>'
+
+    // THE OPENER — bilingual, the four-second version, from the playbook
+    +   '<div class="fsec">The opener &middot; el saludo</div>'
+    +   '<div class="fscript">'
+    +     '<p><b>EN:</b> &ldquo;Hi, are you '+esc(first)+'? My name is '+esc((typeof sender==="object"&&sender.name)||'[your name]')
+    +       '. I&rsquo;m a local home buyer &mdash; I&rsquo;m not a lender or an attorney. I saw the county has a sale '
+    +       'date on this property and I wanted to see, face to face, if there&rsquo;s a way I can help before that date.&rdquo;</p>'
+    +     '<p><b>ES:</b> &ldquo;Hola, &iquest;es usted '+esc(first)+'? Me llamo '+esc((typeof sender==="object"&&sender.name)||'[su nombre]')
+    +       '. Soy comprador de casas local &mdash; no soy prestamista ni abogado. Vi que el condado tiene fecha de '
+    +       'subasta y quer&iacute;a ver, en persona, si puedo ayudar antes de esa fecha.&rdquo;</p>'
+    +   '</div>'
+
+    // THE RAILS — what NOT to say, because this is where FS 501.1377 lives
+    +   '<div class="fsec">Do NOT say</div>'
+    +   '<ul class="frails">'
+    +     '<li>Do <b>not</b> promise to stop or delay the sale, or take a fee up front (Fla. Stat. 501.1377).</li>'
+    +     '<li>Do <b>not</b> take a signature at the door &mdash; anything signed happens at a title company or law office.</li>'
+    +     '<li>If they say stop, or it&rsquo;s the wrong person, stop and mark it. Never argue.</li>'
+    +     '<li>You are a BUYER, not a rescue service. The five exits are theirs to choose &mdash; reinstate, modify, short sale, sell to us, bankruptcy.</li>'
+    +   '</ul>'
+
+    // OUTCOME — a place to write the result, because a paper sheet is useless if it can't capture one
+    +   '<div class="fsec">After the knock</div>'
+    +   '<div class="fout">'
+    +     '<div class="foc">&#9744; No answer &mdash; left door hanger</div>'
+    +     '<div class="foc">&#9744; Talked &mdash; interested</div>'
+    +     '<div class="foc">&#9744; Talked &mdash; not interested</div>'
+    +     '<div class="foc">&#9744; Wrong person / not owner</div>'
+    +     '<div class="foc">&#9744; Said STOP</div>'
+    +     '<div class="fnote"><div class="fnl">Notes / callback number</div><div class="fnline"></div><div class="fnline"></div></div>'
+    +   '</div>'
+
+    +   '<div class="ffoot">Generated '+esc(new Date().toLocaleString())+' &middot; DealFlow &middot; every number matches the deal screen. Not legal advice.</div>'
+    + '</div>';
+
+  var css = '<style>'
+    + '.fdoc{max-width:7.4in;margin:0 auto}'
+    + '.fhead{border-bottom:3px solid #0B1730;padding-bottom:10px;margin-bottom:14px}'
+    + '.ftag{font:800 10.5px "Segoe UI",Arial,sans-serif;letter-spacing:.16em;color:#8a1c1c;margin-bottom:4px}'
+    + '.fhead h1{font:800 25px/1.15 "Segoe UI",Arial,sans-serif;margin:0 0 4px}'
+    + '.fsub{font:600 13px "Segoe UI",Arial,sans-serif;color:#444}'
+    + '.fclock{border-radius:8px;padding:12px 16px;margin:0 0 14px;text-align:center}'
+    + '.fcm{font:800 18px "Segoe UI",Arial,sans-serif;letter-spacing:.02em}'
+    + '.fcd{font:600 13px "Segoe UI",Arial,sans-serif;margin-top:3px}'
+    + '.fgrid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:9px;margin-bottom:12px}'
+    + '.fbx{border:1px solid #d5dae4;border-radius:8px;padding:10px 11px;text-align:center}'
+    + '.fbx .fbl{font:700 9.5px "Segoe UI",Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#8a94a8}'
+    + '.fbx .fbv{font:800 19px "Segoe UI",Arial,sans-serif;color:#0B1730;margin:2px 0}'
+    + '.fbx .fbs{font:600 10px "Segoe UI",Arial,sans-serif;color:#5b6472}'
+    + '.fbx.red .fbv{color:#8a1c1c}.fbx.gold{background:#fffbe9;border-color:#e5cf85}.fbx.gold .fbv{color:#7a5a10}'
+    + '.fbx.green .fbv{color:#286c34}.fbx.amber .fbv{color:#7a5a10}'
+    + '.fwarn{background:#fff5f4;border-left:4px solid #8a1c1c;padding:8px 12px;font:700 12.5px "Segoe UI",Arial,sans-serif;color:#8a1c1c;border-radius:0 5px 5px 0;margin-bottom:12px}'
+    + '.frow{display:flex;gap:10px;padding:9px 12px;background:#f6f8fa;border-radius:7px;margin-bottom:12px;font-size:14px}'
+    + '.frk{font:700 10.5px "Segoe UI",Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#8a94a8;align-self:center}'
+    + '.frv{flex:1}.fmut{color:#8a94a8;font-weight:400}'
+    + '.fsec{font:800 11px "Segoe UI",Arial,sans-serif;letter-spacing:.08em;text-transform:uppercase;color:#0B1730;margin:14px 0 6px;border-bottom:1px solid #e2e6ee;padding-bottom:3px}'
+    + '.fscript p{margin:5px 0;font-size:13.5px;line-height:1.5}'
+    + '.frails{margin:4px 0;padding-left:20px;font-size:12.5px;line-height:1.55}.frails li{margin:2px 0}'
+    + '.fout{border:1px solid #d5dae4;border-radius:8px;padding:10px 13px}'
+    + '.foc{font:600 13px "Segoe UI",Arial,sans-serif;margin:5px 0}'
+    + '.fnote{margin-top:8px}.fnl{font:700 9.5px "Segoe UI",Arial,sans-serif;letter-spacing:.05em;text-transform:uppercase;color:#8a94a8;margin-bottom:4px}'
+    + '.fnline{border-bottom:1px solid #999;height:24px}'
+    + '.ffoot{margin-top:16px;padding-top:8px;border-top:1px solid #ddd;font:400 10px "Segoe UI",Arial,sans-serif;color:#888}'
+    + '@media print{.fgrid{grid-template-columns:1fr 1fr 1fr 1fr}}'
+    + '</style>';
+
+  return _docShell('Field sheet — '+(r.addr||r.case), css+body, {key:'field-'+r.case});
+}
+function openFieldSheet(c){
+  var r = (typeof DATA!=='undefined') && DATA.find(function(x){return x.case===c;});
+  if(!r){ alert('Lead not found'); return; }
+  try { _docLog(r.case, 'field-sheet', 'bi'); } catch(e){}
+  return _openDoc(genFieldSheet(r));
+}
 function genDialReady(r){
   var f = _docFields(r);
   var days = (typeof r.days==='number' && r.days>=0) ? r.days : null;
@@ -8701,7 +8848,7 @@ function genProofSheet(scope){
     + '<div class="pf">'
     +   '<div class="pfhead"><h1>Outreach proof sheet</h1>'
     +     '<div class="sub">'+(scope==='all'?'All recorded sends':'Today, '+new Date().toLocaleDateString())
-    +       +' &middot; generated '+esc(new Date().toLocaleString())+'</div></div>'
+    +       ' &middot; generated '+esc(new Date().toLocaleString())+'</div></div>'
     +   '<div class="pfstats">'
     +     '<div class="pfstat"><div class="n">'+sends.length+'</div><div class="l">sends</div></div>'
     +     '<div class="pfstat"><div class="n">'+repliedN+'</div><div class="l">replied</div></div>'
