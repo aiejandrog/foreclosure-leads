@@ -875,18 +875,29 @@ def _js_guard(tpl):
     print(f'js-guard: {len(blocks)} inline script block(s) parsed clean')
 
 def _zip_centroids(slim):
-    """ZIP -> {lat, lng, n} centroid table, built from our own ROUTABLE Miami-Dade leads.
+    """ZIP -> {lat, lng, n, city?, county?, src} centroid table.
 
-    Accuracy measured on the live board: median max-spread 1.39 mi across the 28 ZIPs holding 3+
-    geocoded leads -- good enough to anchor a 5-mile radius. But 26 of 64 ZIPs hold exactly ONE
-    geocoded lead, so their "centroid" is just that lead's position; `n` is returned so the UI can
-    downgrade confidence and refuse a precision it cannot support.
+    Two source layers, board-anchored first:
 
-    OUTLIER REJECT: any contributing point more than 4 miles from the provisional centroid is
-    dropped and the centroid recomputed. This is the guard that surfaced the 33056 bug, where one
-    street-less lead stretched the raw spread to 12.9 mi inside a ZIP only ~3 mi across.
+    1. `src:'board'` — centroid computed from our own ROUTABLE Miami-Dade leads. Accuracy on the
+       live board: median max-spread 1.39 mi across the 28 ZIPs holding 3+ geocoded leads --
+       good enough to anchor a 5-mile radius. 26 of 64 ZIPs hold exactly ONE geocoded lead, so
+       their "centroid" is just that lead's position; `n` is returned so the UI can downgrade
+       confidence and refuse a precision it cannot support.
+
+       OUTLIER REJECT: any contributing point more than 4 miles from the provisional centroid is
+       dropped and the centroid recomputed. This is the guard that surfaced the 33056 bug, where
+       one street-less lead stretched the raw spread to 12.9 mi inside a ZIP only ~3 mi across.
+
+    2. `src:'fl_bundle'` — statewide FL fallback loaded from fl_zip_centroids.json (1,464 active
+       FL ZIPs). Fills any ZIP not present in the board layer, so the operator can type ANY
+       Florida ZIP and get a real centroid instead of a silent fallback to Carlos's house. Marked
+       `n:0` so the UI clamps radius to minCap=5 (single-point origins cannot support tighter).
+
+    Board data wins on collision — a ZIP with 3+ real leads geocodes tighter than the USPS ZIP
+    centroid, which is a population-weighted point that can sit half a mile from every lead.
     """
-    import collections
+    import collections, pathlib
     buckets = collections.defaultdict(list)
     for d in slim:
         if (d.get('county') or 'MIAMI-DADE') != 'MIAMI-DADE':
@@ -907,7 +918,27 @@ def _zip_centroids(slim):
             pts = keep
         clat = sum(p[0] for p in pts) / len(pts)
         clng = sum(p[1] for p in pts) / len(pts)
-        out[z] = {'lat': round(clat, 6), 'lng': round(clng, 6), 'n': len(pts)}
+        out[z] = {'lat': round(clat, 6), 'lng': round(clng, 6), 'n': len(pts), 'src': 'board'}
+
+    # Layer 2: FL statewide fallback. Missing file is not fatal — degrades to board-only.
+    fl_path = pathlib.Path(__file__).parent / 'fl_zip_centroids.json'
+    if fl_path.exists():
+        try:
+            fl = __import__('json').loads(fl_path.read_text(encoding='utf-8'))
+            fallback_added = 0
+            for z, rec in fl.items():
+                if z in out:
+                    continue                                # board layer wins on collision
+                out[z] = {'lat': rec['lat'], 'lng': rec['lng'], 'n': 0,
+                          'city': rec.get('city', ''), 'county': rec.get('county', ''),
+                          'src': 'fl_bundle'}
+                fallback_added += 1
+            print(f'zip centroids: {len(buckets)} board + {fallback_added} FL bundle '
+                  f'= {len(out)} total')
+        except Exception as e:
+            print(f'zip centroids: FL bundle load failed ({e}); board-only')
+    else:
+        print(f'zip centroids: board-only ({len(out)} ZIPs) — fl_zip_centroids.json not found')
     return out
 
 def _haversine_mi(la1, lo1, la2, lo2):
