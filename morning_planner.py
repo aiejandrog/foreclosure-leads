@@ -198,6 +198,102 @@ def _late_count(leads, gt_days=45):
     return sum(1 for r in leads if (_days(r) is not None and _days(r) > gt_days))
 
 
+# ---------------------------------------------------------------- Carlos cluster
+MD_BBOX = {'la0': 25.13, 'la1': 25.99, 'lo0': -80.88, 'lo1': -80.11}
+
+
+def _has_coords(r):
+    try:
+        lat, lng = float(r.get('lat')), float(r.get('lng'))
+    except (TypeError, ValueError):
+        return False
+    return (MD_BBOX['la0'] <= lat <= MD_BBOX['la1']
+            and MD_BBOX['lo0'] <= lng <= MD_BBOX['lo1'])
+
+
+def _addr(r):
+    """MD scrape stores 'Address' (capital A); tracker-processed rows use 'addr'. Try both."""
+    return str(r.get('addr') or r.get('Address') or '')
+
+
+def _routable_addr(r):
+    """Same rule the tracker uses: address must start with a street number, else the geocode is
+    a city centroid and Carlos ends up in downtown Miami instead of on the block."""
+    import re
+    return bool(re.match(r'^\s*\d+\s+\S', _addr(r)))
+
+
+def _knock_eligible(r):
+    if r.get('saleBkAct') and not r.get('saleLift'):
+        return False
+    if r.get('sibclaimed'):
+        return False
+    return True
+
+
+def _zip_of(r):
+    import re
+    m = re.search(r'\b(3\d{4})\b', _addr(r))
+    return m.group(1) if m else ''
+
+
+def _carlos_cluster(leads, exclude_zips=('33172',), max_days=45, min_cluster=3, top_n=4):
+    """Pick the ZIP (excluding worked-out ones) with the most workable leads clustered together.
+    Returns (zip, city_hint, [top leads]) or (None, '', []) if nothing hits the threshold.
+
+    Alejandro's constraint: Carlos already exhausted 33172; give him a FRESH tight cluster where
+    3+ properties are within a few minutes of each other so he isn't burning gas between them.
+
+    NOTE ON GEOMETRY: this uses the ZIP code as the cluster proxy, not lat/lng radius. The reason
+    is honest -- raw leads_final.json has no coordinates; those are added at build time by
+    make_tracker's geocoder. So a coord/bbox filter here would drop 100% of leads (which is what
+    the first pass did). ZIP is a good-enough neighborhood; most Miami-Dade ZIPs are 2-4 miles
+    across, so 3 leads in one ZIP genuinely are 'a few minutes apart' in Carlos's van."""
+    from collections import defaultdict
+    buckets = defaultdict(list)
+    for r in leads:
+        if (r.get('county') or 'MIAMI-DADE') != 'MIAMI-DADE':
+            continue
+        if not _routable_addr(r):
+            continue
+        if not _knock_eligible(r):
+            continue
+        if _is_company(r):
+            continue
+        d = _days(r)
+        if d is None or d < 0 or d > max_days:
+            continue
+        z = _zip_of(r)
+        if not z or z in exclude_zips:
+            continue
+        buckets[z].append(r)
+    # Dedupe by owner: a portfolio owner with 4 properties in one ZIP is ONE door to Carlos
+    # (they live at one, not all four), and the Portfolio-owners section already surfaces the
+    # multi-property picture. What Carlos needs here is 3+ DIFFERENT doors in the same ZIP.
+    def _dedupe_by_owner(rows):
+        seen, out = set(), []
+        for r in rows:
+            key = _owner(r).lower().strip()
+            if key and key not in seen:
+                seen.add(key)
+                out.append(r)
+        return out
+
+    ranked = []
+    for z, rs in buckets.items():
+        rs = _dedupe_by_owner(rs)
+        if len(rs) < min_cluster:
+            continue
+        avg_days = sum(_days(x) for x in rs) / len(rs)
+        rs.sort(key=lambda r: _days(r) or 99999)
+        ranked.append((len(rs), avg_days, z, rs))
+    if not ranked:
+        return None, '', []
+    ranked.sort(key=lambda x: (-x[0], x[1]))
+    _, _, best_zip, rs = ranked[0]
+    return best_zip, '', rs[:top_n]
+
+
 def _early_count(leads):
     return sum(1 for r in leads if (r.get('st') == 'LP' or r.get('stage') == 'LP')
                or _days(r) is None)
@@ -266,7 +362,10 @@ def _esc(s):
 
 
 def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
-           min_days=13, max_days=45):
+           min_days=13, max_days=45,
+           alej_call_target=50, alej_email_target=30, carlos_visits_target=3,
+           exclude_zips=('33172',),
+           meeting_time='7:30 AM ET', meeting_kind='Morning standup'):
     weekday = day_dt.weekday()
     day_name, theme_label, theme_hint = THEMES[weekday]
 
@@ -278,6 +377,8 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
                      if (_days(r) is not None and 0 <= _days(r) <= min_days - 1))
     late_n = _late_count(leads, gt_days=max_days)
     early_n = _early_count(leads)
+    cluster_zip, _, cluster_leads = _carlos_cluster(
+        leads, exclude_zips=exclude_zips, max_days=max_days)
     portfolios = _portfolios(leads)
     blockers = _blockers(leads)
     board_age = _board_age_days()
@@ -324,6 +425,46 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
         f'<tr><td colspan="8" class="empty">Nothing inside {min_days} days.</td></tr>'
     )
 
+    # Carlos cluster rows
+    cluster_rows = ''.join(
+        f'<tr><td class="d">{_days(r)}d</td>'
+        f'<td><b>{_esc(_owner(r))}</b><div class="sub">{_esc(_addr_short(r))}</div></td>'
+        f'<td>{_esc(_sale(r) or "—")}</td>'
+        f'<td>{_esc(_tier(r))}</td>'
+        f'<td class="mono">{_esc(_case(r))}</td></tr>'
+        for r in cluster_leads
+    )
+
+    # Talking points -- sentences to READ aloud, not just tables to glance at.
+    workable_bit = (
+        f"We have <b>{workable_n} workable leads</b> in the {min_days}-to-{max_days}-day window "
+        f"tonight. That is our real pipeline. Expiring is at {expiring_n} — call today or write off, "
+        f"do not let it eat the meeting."
+    )
+    portfolio_bit = (
+        f"<b>{len(portfolios)} portfolio owners</b> on the board — one contact, several properties. "
+        f"That is one conversation for a stack of parcels. Do NOT hit them twice."
+        if portfolios else ""
+    )
+    reply_bit = (
+        f"<b>{len(new_replies)} new replies</b> since yesterday. Every reply outranks every score on the board."
+        if new_replies else
+        "Zero new replies since yesterday. If we sent emails, the worker composes — you have to click Send in Gmail. Ground truth is the Sent folder, not the Proof Sheet."
+    )
+    blocker_bit = (
+        f"<b>{blockers} leads sit with no traced phone AND no email</b> — that is a skip-trace TODO, "
+        f"not an outreach task. If we do not fix that this week the pipeline stops growing."
+    )
+    cluster_bit = (
+        f"Carlos's fresh cluster is <b>ZIP {cluster_zip}</b> — {len(cluster_leads)} properties, "
+        f"soonest sale in {_days(cluster_leads[0])}d. Not 33172; the goal is a new tight cluster he "
+        f"can hit in one drive."
+        if cluster_zip else
+        "No fresh cluster (>=3 properties in one ZIP outside 33172) on today's board. Carlos gets a "
+        "solo assignment; see the Sale-in-7 / Workable tables for one-off targets."
+    )
+    focus_body = _esc(focus_override) if focus_override else theme_hint
+
     port_rows = ''.join(
         f'<tr><td><b>{_esc(p["owner"])}</b><div class="sub">{_esc(p["email"])}</div></td>'
         f'<td class="ck">{p["count"]} properties</td>'
@@ -340,8 +481,6 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
         f'<td contenteditable="true" data-ph="Who is following up?"></td></tr>'
         for e in new_replies[:10]
     ) or '<tr><td colspan="4" class="empty">No new replies since yesterday. If you sent yesterday, check your Gmail Sent folder — the worker composes, YOU click Send.</td></tr>'
-
-    focus_body = _esc(focus_override) if focus_override else theme_hint
 
     return f'''<!doctype html>
 <html lang="en">
@@ -436,12 +575,12 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
 
   <div class="head">
     <div class="brand">
-      Morning Standup
+      {_esc(meeting_kind)}
       <small>Miami Solutions Group &middot; auto-planner</small>
     </div>
     <div class="meta">
       <div><b>{_esc(day_dt.strftime("%A, %B %d, %Y"))}</b></div>
-      <div><b>Start:</b> 7:30 AM ET &nbsp;&nbsp;<b>Duration:</b> 30 min</div>
+      <div><b>Start:</b> {_esc(meeting_time)} &nbsp;&nbsp;<b>Duration:</b> 30 min</div>
       <div><b>Chair:</b> Alejandro &nbsp;&nbsp;<b>Scribe:</b> rotates</div>
     </div>
   </div>
@@ -459,6 +598,16 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
     <div class="stat"><div class="n">{mail_today}</div><div class="l">Emails sent today</div></div>
   </div>
 
+  <h2>What Alejandro says out loud</h2>
+  <div class="sub">Talking points, spelled out as sentences. Read them if you have to. Do not skip &mdash; if you cannot say them, nobody in the room knows the state of the business.</div>
+  <div class="box">
+    <p>{workable_bit}</p>
+    {"<p>" + portfolio_bit + "</p>" if portfolio_bit else ""}
+    <p>{reply_bit}</p>
+    <p>{blocker_bit}</p>
+    <p>{cluster_bit}</p>
+  </div>
+
   <h2>Attendees</h2>
   <div class="att">
     <label class="row"><input type="checkbox" checked><span class="name">Alejandro</span> <span class="role">— DealFlow / strategy</span></label>
@@ -466,6 +615,30 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
     <label class="row"><input type="checkbox"><span class="name">Carlos</span> <span class="role">— door runs / mail</span></label>
     <label class="row"><input type="checkbox"><span class="name">Guest</span> <span class="role" contenteditable="true" data-ph="— name / role"></span></label>
   </div>
+
+  <h2>Daily targets &mdash; per person</h2>
+  <div class="sub">Non-negotiable. If we do not hit these numbers, nothing else in the meeting matters.</div>
+  <table>
+    <thead><tr><th>Who</th><th>Target</th><th>Done today</th><th>Notes</th></tr></thead>
+    <tbody>
+      <tr><td><b>Alejandro</b></td>
+          <td><b>{alej_call_target}</b> calls &middot; <b>{alej_email_target}</b> emails</td>
+          <td contenteditable="true" data-ph="calls / emails so far"></td>
+          <td contenteditable="true" data-ph="blockers?"></td></tr>
+      <tr><td><b>Carlos</b></td>
+          <td><b>{carlos_visits_target}</b> property visits (cluster below)</td>
+          <td contenteditable="true" data-ph="visited so far"></td>
+          <td contenteditable="true" data-ph="starts afternoon; packet ready"></td></tr>
+      <tr><td><b>Jose</b></td>
+          <td contenteditable="true" data-ph="e.g. sign 2 offers, review 3 title chains"></td>
+          <td contenteditable="true" data-ph=""></td>
+          <td contenteditable="true" data-ph=""></td></tr>
+    </tbody>
+  </table>
+
+  <h2>Carlos&rsquo;s cluster of the day{" &mdash; ZIP " + _esc(cluster_zip) if cluster_zip else ""}</h2>
+  <div class="sub">Fresh territory (not 33172, that's already worked out). Pick the packet from this cluster so his stops are all within a few minutes of each other and he burns less gas between doors. Alejandro to hand him this list before he starts driving in the afternoon.</div>
+  {"<table><thead><tr><th>Days</th><th>Owner / property</th><th>Sale</th><th>Tier</th><th>Case</th></tr></thead><tbody>" + cluster_rows + "</tbody></table>" if cluster_zip else '<div class="box"><i>No fresh cluster with 3+ properties in a single ZIP outside 33172 tonight. Carlos gets solo assignments &mdash; pull them from the Sale-in-7 / Workable tables above.</i></div>'}
 
   <h2>Today&rsquo;s focus &mdash; {_esc(day_name)}: {_esc(theme_label)}</h2>
   <div class="sub">{focus_body}</div>
@@ -552,6 +725,18 @@ def main():
                          'Sub-13d sales bucket into "Expiring" and get de-emphasised.')
     ap.add_argument('--max-days', type=int, default=45,
                     help='maximum days-to-auction for the workable section (default: 45)')
+    ap.add_argument('--meeting-time', default='7:30 AM ET',
+                    help='what the header shows for start time (e.g. "10:30 PM ET" for a night sync)')
+    ap.add_argument('--meeting-kind', default='Morning Standup',
+                    help='header title (e.g. "Night sync", "Weekly review")')
+    ap.add_argument('--calls',  type=int, default=50,
+                    help="Alejandro's daily call target (default 50)")
+    ap.add_argument('--emails', type=int, default=30,
+                    help="Alejandro's daily email target (default 30)")
+    ap.add_argument('--visits', type=int, default=3,
+                    help="Carlos's daily property-visit target (default 3)")
+    ap.add_argument('--exclude-zips', default='33172',
+                    help='comma-separated ZIPs Carlos has already worked out (default 33172)')
     ap.add_argument('--out', default='', help='output path (default: Desktop/MSG-Meeting-Agendas/YYYY-MM-DD_standup.html)')
     ap.add_argument('--no-open', action='store_true', help='skip auto-opening in the default browser')
     args = ap.parse_args()
@@ -563,8 +748,12 @@ def main():
     optouts = _load_json('optouts.json', {})
     mail_ledger = _load_json('mail_sent.json', [])
 
+    excl = tuple(z.strip() for z in args.exclude_zips.split(',') if z.strip())
     html_out = render(day_dt, leads, replies, optouts, args.focus, mail_ledger,
-                      min_days=args.min_days, max_days=args.max_days)
+                      min_days=args.min_days, max_days=args.max_days,
+                      alej_call_target=args.calls, alej_email_target=args.emails,
+                      carlos_visits_target=args.visits, exclude_zips=excl,
+                      meeting_time=args.meeting_time, meeting_kind=args.meeting_kind)
 
     out_path = args.out
     if not out_path:
