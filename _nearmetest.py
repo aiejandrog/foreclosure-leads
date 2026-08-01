@@ -183,6 +183,33 @@ E_UI = r"""async () => {
 }"""
 
 
+POMPANO_SCENARIO = r"""async () => {
+  // Reproduce Alejandro's exact 2026-08-01 report: type ZIP 33067 (Pompano Beach, Broward),
+  // radius 10 mi, click Find. Expect: 0 doors, and the empty-state must NAME the actual
+  // distance to the nearest MD lead + suggest a specific higher Max miles value.
+  window.openNearMe();
+  await new Promise(r => setTimeout(r, 60));
+  document.getElementById('nm-zip').value = '33067';
+  document.getElementById('nm-cap').value = '10';
+  document.getElementById('nm-find').click();
+  await new Promise(r => setTimeout(r, 260));
+  const warn = document.querySelector('.nmwrap .nmwarn');
+  const text = warn ? warn.textContent : '';
+  const rows = document.querySelectorAll('.nmrow').length;
+  const origin = document.querySelector('.nmorigin b');
+  window.closeNearMe();
+  return {
+    rows: rows,
+    originText: origin ? origin.textContent : '',
+    warnText: text,
+    namesNearest: /nearest Miami-Dade door is\s+[\d.]+\s+mi/i.test(text),
+    suggestsCap: /Set\s+Max miles\s+to\s+(?:5|10|15|25)/i.test(text)
+                 || /past the 25-mile ceiling/i.test(text),
+    stillRefusesAutoWiden: /never widens on its own/i.test(text)
+  };
+}"""
+
+
 F_LIVE = r"""() => {
   // F. LIVE DATA smoke — before any inject, how many real leads pass?  Called AFTER cleanup.
   // We can't easily undo the injection, but we CAN filter injections out and measure the rest.
@@ -327,6 +354,19 @@ async def main():
         rec('U: trailing-number "E97" flagged as unit', U['trailNum2'] is True, U)
         rec('U: r.condo=true flagged as unit', U['condoFlag'] is True, U)
         rec('U: empty record does not crash', U['empty'] is False, U)
+
+        # ---------- Pompano scenario — Alejandro's 2026-08-01 report -------------------------
+        P = await pg.evaluate(POMPANO_SCENARIO)
+        rec('P: 33067 with 10mi cap returns 0 doors (correct — Pompano is out of MD range)',
+            P['rows'] == 0, {'rows': P['rows'], 'origin': P['originText']})
+        rec('P: origin label shows the Pompano ZIP (not silently swapped)',
+            '33067' in P['originText'], {'origin': P['originText']})
+        rec('P: empty state NAMES the distance to the nearest MD door',
+            P['namesNearest'], {'warn': (P['warnText'] or '')[:180]})
+        rec('P: empty state SUGGESTS a specific Max miles value',
+            P['suggestsCap'], {'warn': (P['warnText'] or '')[:180]})
+        rec('P: empty state still refuses to auto-widen', P['stillRefusesAutoWiden'],
+            {'warn': (P['warnText'] or '')[:180]})
 
         # ---------- F. live-data smoke -------------------------------------------------------
         F = await pg.evaluate(F_LIVE)
