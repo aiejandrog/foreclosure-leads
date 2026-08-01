@@ -6128,7 +6128,12 @@ function _nearMeRun(cfg){
 }
 function _isUnitAddr(r){
   var a = String(r && r.addr || '');
-  if(/\b(APT|UNIT|STE|#)\s*[\w-]+/i.test(a)) return true;
+  // NOTE: `#` cannot live inside the `\b(APT|UNIT|STE|#)` alternation — `\b` requires a word-
+  // character neighbour and `#` is non-word, so `\b#` never matches (in "ST # 4B" both sides of
+  // `#` are non-word). Split the check: keyword alt with a word-boundary, then a separate
+  // hash-with-following-designator match. Verified by _nearmetest.py::UNIT_ADDR.
+  if(/\b(APT|UNIT|STE)\s*[\w-]+/i.test(a)) return true;
+  if(/#\s*[\w-]+/.test(a)) return true;
   // THE DOMINANT PATTERN IN THIS DATA has no APT/UNIT/# keyword at all — the unit number simply
   // trails the street-type token before the comma. Real examples off the live board:
   //   "1101 SW 122 AVE 307, MIAMI"      -> unit 307
