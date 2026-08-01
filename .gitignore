@@ -107,3 +107,4 @@ _chunk.html
 # most valuable suite in the repo and should not be the one file that never survives a clone.
 balloon_refi.json
 replies.json
+!_nearmetest.py
