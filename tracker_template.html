@@ -6057,13 +6057,28 @@ function _routable(r){
 function _resolveOrigin(opts){
   opts = opts || {};
   return new Promise(function(resolve){
-    // tier 'zip' — explicit ZIP wins when the operator typed one
+    // tier 'zip' — explicit ZIP wins when the operator typed one. Two centroid layers:
+    //   src:'board'     — computed from our own leads in that ZIP (best accuracy, has anchors)
+    //   src:'fl_bundle' — statewide FL fallback so ANY FL ZIP resolves, not just ones on the
+    //                     board. Marked n:0 so the query clamps its radius to minCap=5.
     if(opts.zip){
-      var z = ZIP_CENT[String(opts.zip).trim()];
-      if(z) return resolve({lat:z.lat, lng:z.lng, label:'ZIP '+opts.zip, tier:'zip',
-                            confidence: z.n>=3 ? 'med' : 'low', anchors:z.n});
-      return resolve({lat:ROUTE_ORIGIN.lat, lng:ROUTE_ORIGIN.lng, label:"Carlos's house (ZIP "+opts.zip+" has no leads)",
-                      tier:'home', confidence:'high', anchors:1, note:'ZIP '+opts.zip+' has no routable leads on the board'});
+      var zk = String(opts.zip).trim();
+      var z = ZIP_CENT[zk];
+      if(z){
+        var isBundle = (z.src === 'fl_bundle');
+        var label = 'ZIP ' + zk + (z.city ? ' · ' + z.city : '');
+        var conf  = z.n >= 3 ? 'med' : 'low';
+        var note  = isBundle
+          ? 'ZIP has no leads on the board — using FL statewide centroid. Query still returns nearest MIAMI-DADE leads.'
+          : '';
+        return resolve({lat:z.lat, lng:z.lng, label:label, tier:'zip',
+                        confidence:conf, anchors:(z.n||0), src:(z.src||'board'), note:note});
+      }
+      // Not in board or FL bundle → out-of-state or invalid. Fall back honestly.
+      return resolve({lat:ROUTE_ORIGIN.lat, lng:ROUTE_ORIGIN.lng,
+                      label:"Carlos's house (ZIP "+zk+" not in Florida)",
+                      tier:'home', confidence:'high', anchors:1,
+                      note:'ZIP '+zk+' is not a Florida ZIP. Using Carlos’s house as origin.'});
     }
     // tier 'gps' — needs a secure context. The HTTPS GitHub Pages copy qualifies; the local
     // file:// Desktop copy does NOT, so say so instead of hanging on a prompt that never appears.

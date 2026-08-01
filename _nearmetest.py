@@ -76,14 +76,18 @@ INJECT = r"""() => {
 
 
 A_ORIGIN = r"""() => {
-  // A. origin resolution
+  // A. origin resolution — five real branches + three new FL-bundle branches (2026-07-31)
   return Promise.all([
     _resolveOrigin({}),                                   // 0: home
-    _resolveOrigin({zip:'33172'}),                        // 1: valid ZIP with anchors
-    _resolveOrigin({zip:'99999'}),                        // 2: unknown ZIP → home fallback with note
+    _resolveOrigin({zip:'33172'}),                        // 1: valid ZIP with board anchors
+    _resolveOrigin({zip:'99999'}),                        // 2: out-of-state (not FL) → home fallback
     _resolveOrigin({zip:''}),                             // 3: empty zip → home
-    _resolveOrigin({gps:true})                            // 4: gps in file:// context → home fallback
-  ]).then(([home, zip, bad, empty, gps]) => ({home, zip, bad, empty, gps}));
+    _resolveOrigin({gps:true}),                           // 4: gps in file:// context → home fallback
+    _resolveOrigin({zip:'33301'}),                        // 5: FL bundle — Fort Lauderdale (no board leads)
+    _resolveOrigin({zip:'32801'}),                        // 6: FL bundle — Orlando (nowhere near MD)
+    _resolveOrigin({zip:'33401'})                         // 7: FL bundle — West Palm Beach
+  ]).then(([home, zip, bad, empty, gps, ftl, orl, wpb]) =>
+    ({home, zip, bad, empty, gps, ftl, orl, wpb}));
 }"""
 
 
@@ -229,9 +233,25 @@ async def main():
         rec('A: {} resolves to home tier', A['home'].get('tier') == 'home', A['home'])
         rec('A: {zip:"33172"} resolves to zip tier',
             A['zip'].get('tier') == 'zip' and A['zip'].get('anchors', 0) > 0, A['zip'])
-        rec('A: unknown ZIP falls back to home WITH a note',
-            A['bad'].get('tier') == 'home' and 'no routable leads' in (A['bad'].get('note') or ''),
+        rec('A: out-of-state ZIP (99999) falls back to home with note',
+            A['bad'].get('tier') == 'home' and 'not a Florida' in (A['bad'].get('note') or ''),
             {'tier': A['bad'].get('tier'), 'note': (A['bad'].get('note') or '')[:80]})
+        # NEW: FL statewide bundle should resolve any FL ZIP even if no leads are on that ZIP
+        rec('A: Fort Lauderdale ZIP (33301) resolves via FL bundle',
+            A['ftl'].get('tier') == 'zip' and A['ftl'].get('src') == 'fl_bundle'
+            and 26.0 <= A['ftl'].get('lat', 0) <= 26.3,
+            {'label': A['ftl'].get('label'), 'src': A['ftl'].get('src'),
+             'lat': A['ftl'].get('lat')})
+        rec('A: Orlando ZIP (32801) resolves via FL bundle',
+            A['orl'].get('tier') == 'zip' and A['orl'].get('src') == 'fl_bundle'
+            and 28.4 <= A['orl'].get('lat', 0) <= 28.7,
+            {'label': A['orl'].get('label'), 'lat': A['orl'].get('lat')})
+        rec('A: West Palm Beach ZIP (33401) resolves via FL bundle',
+            A['wpb'].get('tier') == 'zip' and A['wpb'].get('src') == 'fl_bundle',
+            {'label': A['wpb'].get('label'), 'lat': A['wpb'].get('lat')})
+        rec('A: FL bundle label includes the city name',
+            'Fort Lauderdale' in (A['ftl'].get('label') or ''),
+            A['ftl'].get('label'))
         rec('A: empty ZIP resolves to home', A['empty'].get('tier') == 'home', A['empty'])
         # GPS in headless Chrome on file:// can take either fallback path — Chrome treats file://
         # as secure so getCurrentPosition fires, and Playwright's context grants no permission →
