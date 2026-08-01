@@ -6119,6 +6119,10 @@ function _nearMeRun(cfg){
   if(cap < minCap) cap = minCap;
   var ex = {county:0, unroutable:0, ineligible:0, outOfRange:0};
   var pool = [];
+  // Track the closest eligible MD lead even when it's beyond `cap` — the empty-state UI needs
+  // to tell the operator HOW FAR to widen. Alejandro typed 33067 (Pompano, Broward) and got
+  // "0 doors within 10 mi", which is correct but useless without the actual number to widen to.
+  var nearestOutOfRange = Infinity;
   DATA.forEach(function(r){
     // 1. MIAMI-DADE ONLY — hard exclusion, not a sort preference. Gas is the whole reason
     //    this feature exists; Broward and Palm Beach must be impossible to reach from here.
@@ -6126,7 +6130,11 @@ function _nearMeRun(cfg){
     if(!_routable(r).ok){ ex.unroutable++; return; }
     if(!_knockEligible(r).ok){ ex.ineligible++; return; }
     var d = _haversine(origin.lat, origin.lng, r.lat, r.lng);
-    if(d > cap){ ex.outOfRange++; return; }
+    if(d > cap){
+      ex.outOfRange++;
+      if(d < nearestOutOfRange) nearestOutOfRange = d;
+      return;
+    }
     r._nmDist = d;
     pool.push(r);
   });
@@ -6139,7 +6147,10 @@ function _nearMeRun(cfg){
     return (_isUnitAddr(a)?1:0) - (_isUnitAddr(b)?1:0);
   });
   return {picked: pool.slice(0, count), origin: origin, excluded: ex,
-          poolSize: pool.length, radiusUsed: cap, clamped: (minCap>1 && cap===minCap)};
+          poolSize: pool.length, radiusUsed: cap, clamped: (minCap>1 && cap===minCap),
+          // nearestOutOfRange is Infinity when either every eligible lead is inside `cap`, or no
+          // eligible leads exist at all. UI checks isFinite() before naming a number.
+          nearestOutOfRange: nearestOutOfRange};
 }
 function _isUnitAddr(r){
   var a = String(r && r.addr || '');
@@ -6222,8 +6233,16 @@ function _nmRender(res){
     h += '<div class="nmwarn"><b>⚠ Board data is '+age+' days old.</b> Properties may have already sold — run ↻ Refresh before sending Carlos out.</div>';
   h += '<div class="nmform">'
     +   '<div class="nmf"><label>Start from</label><button type="button" class="nmbtn" id="nm-gps">Use my location</button></div>'
+    // AUTOCOMPLETE TRAP: `autocomplete="postal-code"` invited Chrome's SAVED-ADDRESS autofill
+    // (a separate mechanism from <datalist>). Alejandro typed 33172 and Chrome silently swapped
+    // in 33067 from his address history — the tool then dutifully centered on Pompano Beach.
+    // Fix: kill the semantic hint AND use a non-standard name so Chrome cannot pattern-match
+    // this field to any remembered postal code. maxlength=5 prevents accidental long inputs.
     +   '<div class="nmf zip"><label>…or a ZIP</label>'
-    +     '<input list="nm-zips" id="nm-zip" placeholder="33172" inputmode="numeric" autocomplete="postal-code">'
+    +     '<input list="nm-zips" id="nm-zip" name="nm-df-zip-code" '
+    +       'placeholder="33172" inputmode="numeric" pattern="[0-9]{5}" maxlength="5" '
+    +       'autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" '
+    +       'data-lpignore="true" data-form-type="other">'
     +     '<datalist id="nm-zips">'+_nmZipOptions()+'</datalist></div>'
     +   '<div class="nmf"><label>Doors</label><select id="nm-count">'
     +     '<option value="10" selected>10</option><option value="15">15</option><option value="20">20</option></select></div>'
@@ -6247,8 +6266,33 @@ function _nmRender(res){
   h += '</div>';   // /nmhead
   if(res){
     if(!res.picked.length){
-      h += '<div class="nmwarn"><b>Nothing found in range.</b> Widen Max miles and tap Find doors again — '
-        +  'the tool will not widen on its own, because that is how Carlos ends up 20 miles out.</div>';
+      // Empty-state coaching. If we know the exact miles to the nearest eligible MD lead, name
+      // it — that turns a dead-end message ("widen the radius") into an actionable one ("widen
+      // to X miles"). Alejandro typed 33067 (Pompano, Broward), got "0 within 10 mi", and the
+      // old message left him guessing whether MD was 12 mi away or 40. The tool still refuses
+      // to widen on its own, on purpose — but it hands him the number to type in.
+      var near = res.nearestOutOfRange;
+      var suggest = '';
+      if(isFinite(near)){
+        // Round UP to the next Max-miles select option (5, 10, 15, 25).
+        var opts = [5, 10, 15, 25];
+        var next = opts.find(function(v){ return v >= near; }) || null;
+        var nearTxt = near.toFixed(1) + ' mi';
+        if(next){
+          suggest = '<b>The nearest Miami-Dade door is ' + nearTxt + ' away.</b><br>'
+                  + 'Set <b>Max miles</b> to <b>' + next + '</b> (or higher) and tap <b>Find doors</b> again.';
+        } else {
+          suggest = '<b>The nearest Miami-Dade door is ' + nearTxt + ' away — past the 25-mile ceiling.</b><br>'
+                  + 'Start from a ZIP inside Miami-Dade instead. Broward and Palm Beach are excluded outright, '
+                  + 'because gas is the whole point.';
+        }
+      } else {
+        suggest = '<b>No Miami-Dade leads on the board are reachable from this origin.</b><br>'
+                + 'Check that your ZIP is inside or adjacent to Miami-Dade, or run <b>&#x21bb; Refresh</b> '
+                + 'to pull fresh leads.';
+      }
+      h += '<div class="nmwarn">' + suggest
+        +  '<br><span class="sub">The tool never widens on its own — that is how Carlos ends up 20 miles out.</span></div>';
     } else {
       h += '<div class="nmlist">'
         + res.picked.map(function(r,i){
