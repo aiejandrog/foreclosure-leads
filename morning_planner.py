@@ -175,19 +175,27 @@ def _board_age_days():
 
 
 # ---------------------------------------------------------------- signals
-def _urgent_leads(leads, limit=25):
-    rows = []
-    for r in leads:
-        d = _days(r)
-        if d is None or d < 0 or d > 7:
-            continue
-        rows.append(r)
+def _workable_leads(leads, min_days=13, max_days=45, limit=40):
+    """The lane Alejandro actually meets on: sales far enough out that a letter can arrive, a
+    call can land, an offer can be negotiated, and a title company can close. Sub-13 days is
+    already too close to work realistically -- see _expiring_leads for that separate section."""
+    rows = [r for r in leads
+            if (_days(r) is not None and min_days <= _days(r) <= max_days)]
     rows.sort(key=lambda r: (_days(r) or 0, {'A': 0, 'B': 1, 'C': 2}.get(_tier(r), 3)))
     return rows[:limit]
 
 
-def _active_count(leads):
-    return sum(1 for r in leads if (_days(r) is not None and 8 <= _days(r) <= 45))
+def _expiring_leads(leads, max_days=12, limit=20):
+    """Sales inside the min_days window. Named honestly: these are past the letter-arrival
+    window; the meeting decision is call/door-knock TODAY or write them off. Not the focus."""
+    rows = [r for r in leads
+            if (_days(r) is not None and 0 <= _days(r) <= max_days)]
+    rows.sort(key=lambda r: (_days(r) or 0, {'A': 0, 'B': 1, 'C': 2}.get(_tier(r), 3)))
+    return rows[:limit]
+
+
+def _late_count(leads, gt_days=45):
+    return sum(1 for r in leads if (_days(r) is not None and _days(r) > gt_days))
 
 
 def _early_count(leads):
@@ -257,12 +265,18 @@ def _esc(s):
     return html.escape(str(s) if s is not None else '')
 
 
-def render(day_dt, leads, replies, optouts, focus_override, mail_ledger):
+def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
+           min_days=13, max_days=45):
     weekday = day_dt.weekday()
     day_name, theme_label, theme_hint = THEMES[weekday]
 
-    urgent = _urgent_leads(leads, limit=25)
-    active_n = _active_count(leads)
+    workable = _workable_leads(leads, min_days=min_days, max_days=max_days, limit=40)
+    expiring = _expiring_leads(leads, max_days=min_days - 1, limit=20)
+    workable_n = sum(1 for r in leads
+                     if (_days(r) is not None and min_days <= _days(r) <= max_days))
+    expiring_n = sum(1 for r in leads
+                     if (_days(r) is not None and 0 <= _days(r) <= min_days - 1))
+    late_n = _late_count(leads, gt_days=max_days)
     early_n = _early_count(leads)
     portfolios = _portfolios(leads)
     blockers = _blockers(leads)
@@ -283,22 +297,32 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger):
     if board_age is not None and board_age >= 2:
         banner_bits.append(f'<div class="warn">⚠ Board data is <b>{board_age} days old</b>. Run '
                            f'<code>python refresh.py</code> before making bids.</div>')
-    if not urgent:
-        banner_bits.append('<div class="ok">✓ No sales inside 7 days on the current board.</div>')
+    if not workable:
+        banner_bits.append(f'<div class="ok">✓ No sales in the workable window ({min_days}–{max_days}d). '
+                           f'Focus on EARLY (lis pendens) instead.</div>')
     banner = ''.join(banner_bits)
 
-    urgent_rows = ''.join(
-        f'<tr><td class="d">{_days(r)}d</td>'
-        f'<td><b>{_esc(_owner(r))}</b><div class="sub">{_esc(_addr_short(r))}</div></td>'
-        f'<td>{_esc(_sale(r) or "—")}</td>'
-        f'<td>{_esc(_tier(r))}</td>'
-        f'<td class="mono">{_esc(_case(r))}</td>'
-        f'<td>{_esc(_plaintiff(r)[:26])}</td>'
-        f'<td class="ck">{"📞" if _has_phone(r) else ""}{"✉" if _has_email(r) else ""}'
-        f'{"" if _has_phone(r) or _has_email(r) else "🚫"}</td>'
-        f'<td contenteditable="true" data-ph="—"></td></tr>'
-        for r in urgent
-    ) or '<tr><td colspan="8" class="empty">Nothing inside 7 days. Focus the meeting on ACTIVE + EARLY.</td></tr>'
+    def _row(r):
+        return (
+            f'<tr><td class="d">{_days(r)}d</td>'
+            f'<td><b>{_esc(_owner(r))}</b><div class="sub">{_esc(_addr_short(r))}</div></td>'
+            f'<td>{_esc(_sale(r) or "—")}</td>'
+            f'<td>{_esc(_tier(r))}</td>'
+            f'<td class="mono">{_esc(_case(r))}</td>'
+            f'<td>{_esc(_plaintiff(r)[:26])}</td>'
+            f'<td class="ck">{"📞" if _has_phone(r) else ""}{"✉" if _has_email(r) else ""}'
+            f'{"" if _has_phone(r) or _has_email(r) else "🚫"}</td>'
+            f'<td contenteditable="true" data-ph="—"></td></tr>'
+        )
+
+    workable_rows = ''.join(_row(r) for r in workable) or (
+        f'<tr><td colspan="8" class="empty">No leads in the workable window ({min_days}–{max_days}d). '
+        f'Focus on EARLY (lis pendens) for pipeline; ignore the expiring section — too late to work.</td></tr>'
+    )
+
+    expiring_rows = ''.join(_row(r) for r in expiring) or (
+        f'<tr><td colspan="8" class="empty">Nothing inside {min_days} days.</td></tr>'
+    )
 
     port_rows = ''.join(
         f'<tr><td><b>{_esc(p["owner"])}</b><div class="sub">{_esc(p["email"])}</div></td>'
@@ -425,13 +449,13 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
   {banner}
 
   <div class="stats">
-    <div class="stat urg"><div class="n">{len(urgent)}</div><div class="l">Sale ≤ 7d</div></div>
-    <div class="stat"><div class="n">{active_n}</div><div class="l">Sale 8–45d</div></div>
+    <div class="stat ok"><div class="n">{workable_n}</div><div class="l">Workable · {min_days}–{max_days}d</div></div>
+    <div class="stat warn"><div class="n">{expiring_n}</div><div class="l">Expiring · &lt;{min_days}d</div></div>
     <div class="stat"><div class="n">{early_n}</div><div class="l">Lis pendens / early</div></div>
+    <div class="stat"><div class="n">{late_n}</div><div class="l">Sale &gt; {max_days}d out</div></div>
     <div class="stat"><div class="n">{len(portfolios)}</div><div class="l">Portfolio owners</div></div>
     <div class="stat"><div class="n">{len(new_replies)}</div><div class="l">Replies since y'day</div></div>
     <div class="stat warn"><div class="n">{blockers}</div><div class="l">No phone or email</div></div>
-    <div class="stat"><div class="n">{opt_count}</div><div class="l">Opt-outs on file</div></div>
     <div class="stat"><div class="n">{mail_today}</div><div class="l">Emails sent today</div></div>
   </div>
 
@@ -447,11 +471,19 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
   <div class="sub">{focus_body}</div>
   <div class="box" contenteditable="true" data-ph="Specific items under today's theme — filled in the morning before the call."></div>
 
-  <h2>Sale-in-7 sweep &mdash; every urgent lead, sorted soonest</h2>
-  <div class="sub">Contact icons: 📞 phone traced &middot; ✉ email traced &middot; 🚫 no channel — this lead is a skip-trace or door task, not an outreach one.</div>
+  <h2>Workable sweep &mdash; sales {min_days}–{max_days} days out</h2>
+  <div class="sub">Primary focus. Far enough that a letter can arrive, a call can land, an offer can be negotiated, a title company can close.
+  Contact icons: 📞 phone traced &middot; ✉ email traced &middot; 🚫 no channel — this lead is a skip-trace or door task, not an outreach one.</div>
   <table>
     <thead><tr><th>Days</th><th>Owner / property</th><th>Sale</th><th>Tier</th><th>Case</th><th>Plaintiff</th><th>Reach</th><th>Assigned to</th></tr></thead>
-    <tbody>{urgent_rows}</tbody>
+    <tbody>{workable_rows}</tbody>
+  </table>
+
+  <h2>Expiring &mdash; sales inside {min_days} days</h2>
+  <div class="sub">Secondary. Past the letter-arrival window; decision is <b>call/door today</b> or <b>write them off</b>. Not the meeting focus — do NOT let the panic here drown out the workable pipeline above.</div>
+  <table>
+    <thead><tr><th>Days</th><th>Owner / property</th><th>Sale</th><th>Tier</th><th>Case</th><th>Plaintiff</th><th>Reach</th><th>Assigned to</th></tr></thead>
+    <tbody>{expiring_rows}</tbody>
   </table>
 
   <h2>Portfolio owners &mdash; one contact, several properties</h2>
@@ -470,7 +502,8 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
   <h2>Standing agenda &mdash; every day, in this order</h2>
   <div class="agenda">
     <ol>
-      <li><b>Sale-in-7 sweep</b> — the table above. Anyone still un-worked? Blockers?</li>
+      <li><b>Workable sweep ({min_days}–{max_days}d)</b> — the primary table above. Anyone un-worked? Who owns each?</li>
+      <li><b>Expiring (&lt;{min_days}d)</b> — call/door TODAY or write off. Do NOT overrun the meeting on these.</li>
       <li><b>Yesterday&rsquo;s replies + call-backs</b> — who wrote back, who we owe a call.</li>
       <li><b>Money in motion</b> — open offers, pending closings, cash-for-keys tenants, mail budget burn.</li>
       <li><b>Today&rsquo;s focus</b> ({_esc(theme_label)}) — the one item that only gets attention on {_esc(day_name)}.</li>
@@ -514,6 +547,11 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--date', help='YYYY-MM-DD (default: today)', default=None)
     ap.add_argument('--focus', default='', help='override the day-theme hint under "Today\'s focus"')
+    ap.add_argument('--min-days', type=int, default=13,
+                    help='minimum days-to-auction for the "workable" section (default: 13). '
+                         'Sub-13d sales bucket into "Expiring" and get de-emphasised.')
+    ap.add_argument('--max-days', type=int, default=45,
+                    help='maximum days-to-auction for the workable section (default: 45)')
     ap.add_argument('--out', default='', help='output path (default: Desktop/MSG-Meeting-Agendas/YYYY-MM-DD_standup.html)')
     ap.add_argument('--no-open', action='store_true', help='skip auto-opening in the default browser')
     args = ap.parse_args()
@@ -525,7 +563,8 @@ def main():
     optouts = _load_json('optouts.json', {})
     mail_ledger = _load_json('mail_sent.json', [])
 
-    html_out = render(day_dt, leads, replies, optouts, args.focus, mail_ledger)
+    html_out = render(day_dt, leads, replies, optouts, args.focus, mail_ledger,
+                      min_days=args.min_days, max_days=args.max_days)
 
     out_path = args.out
     if not out_path:
@@ -537,7 +576,10 @@ def main():
 
     print(f'wrote {out_path}  ({os.path.getsize(out_path):,} bytes)')
     print(f'  leads loaded: {len(leads)}')
-    print(f'  urgent (sale <= 7d): {sum(1 for r in leads if _days(r) is not None and 0<=_days(r)<=7)}')
+    print(f'  workable ({args.min_days}-{args.max_days}d): '
+          f'{sum(1 for r in leads if _days(r) is not None and args.min_days<=_days(r)<=args.max_days)}')
+    print(f'  expiring (<{args.min_days}d): '
+          f'{sum(1 for r in leads if _days(r) is not None and 0<=_days(r)<args.min_days)}')
     print(f'  portfolio owners: {sum(1 for _ in _portfolios(leads))}')
     print(f'  new replies since yesterday: {len(_new_replies(replies))}')
 
