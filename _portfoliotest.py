@@ -92,7 +92,12 @@ PROBE_COMPOSE = r"""() => {
   // head with the two siblings.
   try { localStorage.removeItem('fcSentArchive'); } catch(e){}
   const q = _workerQueue('urgent');
-  const head = q.find(r => (r._portfolio||[]).length);
+  // Pin explicitly to the TEST-A synthetic portfolio -- the earlier `find first with portfolio`
+  // was fragile: as the real board grows and real portfolios bubble up ahead of the synthetic
+  // one (soonest-sale wins), the compose probe started measuring real portfolios instead of the
+  // one this test seeded. Look up by case id so the assertion is deterministic regardless of
+  // what the live board looks like today.
+  const head = q.find(r => r.case === 'TEST-A');
   if(!head) return {err:'no portfolio head found'};
   window.__lastEmail = null;
   genPortfolioEmail(head, head._portfolio, true);
