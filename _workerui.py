@@ -53,11 +53,22 @@ async def main():
         rec('lane switch is written to the activity log', 'switched to ACTIVE' in log)
         rec('card re-renders for the new lane', bool((await w.locator('.mwname').inner_text()).strip()))
 
-        # switch to EARLY (known-empty: honest empty state, not a generic one)
+        # EARLY was starved for months (125 lis-pendens leads, none with a traced phone/email) and
+        # this asserted the honest empty state. The 2026-08-02 skip-trace funded it — 59 reachable
+        # as of that run — so hardcoding "empty" now fails on a board that got BETTER. Assert
+        # whichever state is real: a populated lane must render a card, an empty one must still
+        # explain the DATA GAP rather than show a generic "nothing here".
         await w.locator('.mwlane[data-lane="early"]').click(); await w.wait_for_timeout(600)
-        empty = await w.locator('#mwmain').inner_text()
-        rec('EARLY explains WHY it is empty (data gap, not bug)', 'traced phone or email' in empty, empty[:110].replace('\n',' '))
-        rec('EARLY points back at the funded lanes', 'Still open' in empty)
+        early_txt = await w.locator('#mwmain').inner_text()
+        early_n = await pg.evaluate("() => _laneCount('early')")
+        if early_n:
+            has_card = bool((await w.locator('.mwname').inner_text()).strip())
+            rec(f'EARLY is funded ({early_n} leads) and renders a real card', has_card,
+                early_txt[:70].replace('\n', ' '))
+        else:
+            rec('EARLY explains WHY it is empty (data gap, not bug)',
+                'traced phone or email' in early_txt, early_txt[:110].replace('\n', ' '))
+            rec('EARLY points back at the funded lanes', 'Still open' in early_txt)
         await w.screenshot(path=str(SHOTS/'worker_early.png'), full_page=False)
 
         # CAP ENFORCEMENT, through the real path: the worker's script is IIFE-scoped (no test hooks

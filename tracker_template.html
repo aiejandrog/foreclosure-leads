@@ -5077,14 +5077,14 @@ function _waLink(r, ph){
   // clean first name from oname ("Ian Vanbuskirk" -> "Ian"); raw owners string is the fallback
   const rawFirst = r.oname ? String(r.oname).trim().split(' ')[0]
                            : String((r.owners||'').split(',')[0] || '').trim().split(' ')[0];
-  const first = (rawFirst || 'there').replace(/[<>&"']/g,'');
+  const first = (_firstName(rawFirst) || 'there').replace(/[<>&"']/g,'');
   const who = sender.name ? ('this is '+sender.name) : 'my name is [your name]';
   const co = sender.llc ? (' with '+sender.llc) : ' — I work with a small local team';
   const addr = r.addr || 'your property';
   const when = r.auction || 'soon';
   // BRIEF + bilingual (many owners are Spanish-dominant), with the STOP opt-out. Send-ready: fills the
   // owner's first name, the address + auction date, and the sender (defaults to Jose; override in Sender setup).
-  const msg = 'Hi '+first+', '+who+co+'. I saw '+addr+' has a court auction coming up '+when
+  const msg = 'Hi'+(first?' '+first:'')+', '+who+co+'. I saw '+addr+' has a court auction coming up '+when
     +'. I help owners look at their real options before that date — no cost, no pressure. Worth a quick chat?'
     +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+'. ':'')+'vi que '+addr+' tiene una subasta el '+when
     +'. Ayudo a dueños a ver sus opciones antes de esa fecha, sin costo ni compromiso. ¿Podemos hablar?'
@@ -5128,7 +5128,7 @@ function textablePhones(r){
 function _smsFirst(r){
   const rawFirst = r.oname ? String(r.oname).trim().split(/\s+/)[0]
     : _ownerName((r.owners||'').split(';')[0].trim(), r).split(/\s+/)[0];
-  return (rawFirst || 'there').replace(/[<>&"']/g,'');
+  return (_firstName(rawFirst) || 'there').replace(/[<>&"']/g,'');
 }
 function _smsStreet(r){ return ((r.addr||'').split(',')[0]||r.addr||'your property').trim(); }
 function _defaultTextTone(r){
@@ -5149,14 +5149,14 @@ function smsMsg(r, lang, tone){
   let en, es;
   // Field Manual: buyer posture; hint at exits without rescue/"stop sale" promises.
   if(tone==='urgent'){
-    en = 'Hi '+first+', '+sN+' — local Miami buyer (I buy houses). '+street+' still has '+saleEN+whenEN+'. Date is close — five exits still exist (reinstate / mod / short / private sale / BK). No cost. Want the rundown? Reply STOP to opt out.';
-    es = 'Hola '+first+', '+sN+' — comprador en Miami (compro casas). '+street+' aún tiene '+saleES+whenES+'. Fecha cerca — aún hay cinco salidas. Sin costo. ¿Se las repaso? Responda STOP para no recibir más.';
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' — local Miami buyer (I buy houses). '+street+' still has '+saleEN+whenEN+'. Date is close — five exits still exist (reinstate / mod / short / private sale / BK). No cost. Want the rundown? Reply STOP to opt out.';
+    es = 'Hola'+(first?' '+first:'')+', '+sN+' — comprador en Miami (compro casas). '+street+' aún tiene '+saleES+whenES+'. Fecha cerca — aún hay cinco salidas. Sin costo. ¿Se las repaso? Responda STOP para no recibir más.';
   } else if(tone==='followup'){
-    en = 'Hi '+first+', '+sN+' again on '+street+' ('+saleEN+whenEN+'). Still glad to walk the five exits if useful — no pressure. Reply STOP to opt out.';
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' again on '+street+' ('+saleEN+whenEN+'). Still glad to walk the five exits if useful — no pressure. Reply STOP to opt out.';
     es = 'Hola '+first+', de nuevo '+sN+' por '+street+' ('+saleES+whenES+'). Con gusto repasamos las cinco salidas si le sirve — sin presión. Responda STOP para no recibir más.';
   } else {
-    en = 'Hi '+first+', '+sN+' — local Miami home buyer. I saw '+street+' on the county calendar ('+saleEN+whenEN+'). Not selling anything — just checking if you have a plan / know your options. No cost. Reply STOP to opt out.';
-    es = 'Hola '+first+', '+sN+' — comprador de casas en Miami. Vi '+street+' en el calendario del condado ('+saleES+whenES+'). No le vengo a vender nada — ¿tiene plan / conoce sus opciones? Sin costo. Responda STOP para no recibir más.';
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' — local Miami home buyer. I saw '+street+' on the county calendar ('+saleEN+whenEN+'). Not selling anything — just checking if you have a plan / know your options. No cost. Reply STOP to opt out.';
+    es = 'Hola'+(first?' '+first:'')+', '+sN+' — comprador de casas en Miami. Vi '+street+' en el calendario del condado ('+saleES+whenES+'). No le vengo a vender nada — ¿tiene plan / conoce sus opciones? Sin costo. Responda STOP para no recibir más.';
   }
   if(lang==='en') return en;
   if(lang==='es') return es;
@@ -5399,6 +5399,23 @@ function titleCase(s){ return String(s||'').toLowerCase().replace(/\b([a-z])/g, 
 // every comma-less name would have broken Miami-Dade in the opposite direction, so the flip is
 // county-gated. Also strips the dangling "&" the state roll leaves when it drops a co-owner line.
 const _NAME_SUFFIX = /^(EST|ESTATE|TR|TRS|TRUST|LE|JR|SR|II|III|IV|MD|DDS|ETAL|ET|AL)$/i;
+/* PLACEHOLDER OWNER NAMES ------------------------------------------------------------------
+   Added 2026-08-02, the morning 12 homeowners in foreclosure received an email opening
+   "Hi (owner,". The Broward / Palm Beach scrapers write the LITERAL string
+   "(owner via title search)" when no name could be resolved -- 84 leads carry it right now --
+   and every greeting did owner.split(' ')[0], which yields "(owner".
+   In outreach whose entire premise is "I did my homework on your property", a visibly broken
+   name is worse than no name. _firstName() returns '' for these so greetings collapse to a bare
+   "Hi," / "Hola," -- natural in both languages, and never wrong. */
+function _isPlaceholderOwner(s){
+  s = String(s == null ? '' : s).trim();
+  return !s || /^\(|owner via title|unknown owner|not available|^n\/a$|no name on/i.test(s);
+}
+function _firstName(owner){
+  var s = String(owner == null ? '' : owner).trim();
+  if(_isPlaceholderOwner(s)) return '';
+  return (s.split(/\s+/)[0] || '').replace(/[.,]/g, '');
+}
 function _ownerName(raw, r){
   let s = String(raw||'').trim().replace(/\s*&\s*$/,'').replace(/,\s*$/,'');
   if(!s) return '';
@@ -6871,7 +6888,7 @@ function _docFields(r){
   var _b = '__blank__';
   var oc = (r && r.oname ? r.oname : (r && r.owner_clean ? r.owner_clean : '')) || '';
   var full = String(oc || (r && (r.owners||'').split(';')[0] || '')).trim();
-  var first = (full.split(/\s+/)[0] || '').replace(/[.,]/g,'');
+  var first = _firstName(full);
   var today = new Date();
   var todayLong = today.toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
   var todayLongES = today.toLocaleDateString('es-US',{year:'numeric',month:'long',day:'numeric'});
@@ -8417,7 +8434,7 @@ function genFieldSheet(r){
   var f = _docFields(r);
   var fm = function(n){ return (n||n===0) ? '$'+Math.round(+n).toLocaleString() : '—'; };
   var owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
-  var first = (owner.split(' ')[0]||owner);
+  var first = _firstName(owner);
   var days = (typeof r.days==='number' && r.days>=0) ? r.days : null;
   var chip = _urgencyChip(days);
   var deadline = (days!=null && days>=3) ? (days-3) : null;   // deal must close ~3 days before the gavel
@@ -9419,7 +9436,7 @@ function _wlogToday(){
      'call'  -> a dial was placed (uncapped by design — FTSA limits hours, not volume).
    The cap reads 'sent'+'text'. It must NEVER read 'email' again. */
 function _wlogStats(){
-  var t = _wlogToday(), s = {email:0, sent:0, call:0, text:0, wp:0, done:0, skip:0, leads:{}};
+  var t = _wlogToday(), s = {email:0, sent:0, call:0, text:0, textopen:0, wp:0, done:0, skip:0, leads:{}};
   t.forEach(function(e){ if(s[e.a]!=null) s[e.a]++; s.leads[e.c]=1; });
   s.uniqueLeads = Object.keys(s.leads).length;
   return s;
@@ -9739,6 +9756,18 @@ function _workerCard(r){
     days: days, saleDate: r.auction||'',
     chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
     phones: phList, emails: emList, wpUrl: r.peopleaddr || r.people || '',
+    // SMS BAKED PER CARD, for exactly the reason the Gmail URL is (see below). The old text step
+    // posted to the board and the BOARD opened a modal — so the composer appeared on a tab the
+    // operator was not looking at, the log literally said "switch tabs to send", and he never
+    // switched. Six leads on 2026-08-02 were logged as texted with nothing sent. An sms: href on
+    // the card lets the WORKER tab open Phone Link / Messages on the operator's own click.
+    smsHref: (function(){
+      try {
+        var tp = (typeof textablePhones === 'function') ? textablePhones(r) : [];
+        if(!tp.length || typeof smsMsg !== 'function' || typeof _smsHref !== 'function') return '';
+        return _smsHref(tp[0], smsMsg(r, 'both', _defaultTextTone(r)));
+      } catch(e){ return ''; }
+    })(),
     // The Gmail compose URL is BAKED PER CARD so the WORKER tab can open it on the user's own
     // click. The old design posted to the board tab and had the BOARD call window.open — but the
     // click happened in the worker tab, so the board tab had no user activation and the browser
@@ -9959,7 +9988,7 @@ function genMorningWorker(lane){
     +   'function now(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"});}'
     // 'sent' gets its own glyph so a DELIVERED line is visually distinct from an ATTEMPT at a
     // glance — that distinction is the whole point of the rewrite.
-    +   'var ICON={call:"&#128222;",sent:"&#9989;",email:"&#128231;",text:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
+    +   'var ICON={call:"&#128222;",sent:"&#9989;",email:"&#128231;",text:"&#128241;",textopen:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
     +   'function addLog(kind, who, text, cls){'
     +     'LOG.push({ts:now(), a:kind, who:who||"", detail:text||"", ok:cls!=="warn"});'
     +     'if(LOG.length>200) LOG=LOG.slice(-200);'
@@ -9975,7 +10004,7 @@ function genMorningWorker(lane){
     +         '+"<span class=\'ic\'>"+(ICON[e.a]||ICON.info)+"</span>"'
     +         '+"<span class=\'tx\'><b>"+esc(e.who||e.addr||"")+"</b> <span>"+esc(e.detail||e.a)+"</span></span></div>";'
     +     '}).join("");'
-    +     'statEl.innerHTML="calls "+(STATS.call||0)+" · <b>delivered "+(STATS.sent||0)+"</b> · text "+(STATS.text||0)+" · attempts "+(STATS.email||0)+" · wp "+(STATS.wp||0)+" · skip "+(STATS.skip||0);'
+    +     'statEl.innerHTML="calls "+(STATS.call||0)+" · <b>delivered "+(STATS.sent||0)+"</b> · texts sent "+(STATS.text||0)+" · attempts "+((STATS.email||0)+(STATS.textopen||0))+" · wp "+(STATS.wp||0)+" · skip "+(STATS.skip||0);'
     +   '}'
     // CONFIRMED DELIVERY ONLY — mirrors the board's _sentTodayCount. Reading STATS.email here
     // (the old behaviour) counted composer-opens and pre-flight log lines as sends, so the meter
@@ -10132,19 +10161,28 @@ function genMorningWorker(lane){
        A hand-sent Gmail message genuinely left, but the page cannot observe it. Guessing either
        way is wrong: assume sent and the cap/CRM lie (the old bug); assume unsent and real work
        vanishes. So ASK. Untapped, the lead stays in tomorrow's queue — the safe default. */
-    +   'function confirmSend(r, why){'
-    +     'addLog("email", r.first||r.owner, why+" — press Send in Gmail, then confirm below", "warn");'
+    // ch: "email" (default) or "text". Both channels are ATTEMPTS until the operator confirms —
+    // the text path was added 2026-08-02 after six leads were logged as texted with nothing sent.
+    +   'function confirmSend(r, why, ch){'
+    +     'var isTxt = (ch==="text"||why==="text");'
+    +     'var app = isTxt ? "Messages / Phone Link" : "Gmail";'
+    +     'addLog(isTxt?"textopen":"email", r.first||r.owner, "press Send in "+app+", then confirm below", "warn");'
     +     'main.innerHTML="<div class=\'mwpace\'>"'
-    +       '+"<div class=\'h\'>&#9993; Did it send?</div>"'
-    +       '+"<div class=\'s\'>Gmail is open with the message prefilled. Press <b>Send</b> there, then tell us — "'
+    +       '+"<div class=\'h\'>"+(isTxt?"&#128241; Did the text send?":"&#9993; Did it send?")+"</div>"'
+    +       '+"<div class=\'s\'>"+app+" is open with the message prefilled. Press <b>Send</b> there, then tell us — "'
     +       '+"nothing counts against today&rsquo;s cap and this lead is not marked contacted until you do.</div>"'
     +       '+"<button id=\'mwsentyes\' class=\'mwbtn done\' style=\'margin-top:14px\'>&#10003; I sent it</button>"'
     +       '+"<button id=\'mwsentno\' class=\'mwbtn skip\' style=\'margin-top:8px\'>Didn&rsquo;t send &mdash; next lead</button>"'
     +     '+"</div>";'
     +     'var yes=document.getElementById("mwsentyes");'
     +     'if(yes) yes.onclick=function(){'
-    +       'post("sent", {mid:"", via:"manual-confirmed", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
-    +       'addLog("sent", r.first||r.owner, "✓ confirmed sent by hand via Gmail");'
+    +       'if(isTxt){'
+    +         'post("text", {via:"manual-confirmed"});'
+    +         'addLog("text", r.first||r.owner, "✓ confirmed sent by hand via "+app);'
+    +       '} else {'
+    +         'post("sent", {mid:"", via:"manual-confirmed", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
+    +         'addLog("sent", r.first||r.owner, "✓ confirmed sent by hand via Gmail");'
+    +       '}'
     +       'advance();'
     +     '};'
     +     'var no=document.getElementById("mwsentno");'
@@ -10405,8 +10443,18 @@ function genMorningWorker(lane){
     // compose — so "Start auto-run", the headline feature, was structurally incapable of
     // sending anything. doSend() is now the only way email leaves the worker.
     +       'if(fn==="email"){ doSend(r); return; }'
-    +       'if(post(fn)) addLog(fn, r.first||r.owner, "text composer opened ON THE BOARD TAB — switch tabs to send");'
-    +       'else addLog("fail", r.first||r.owner, "could not reach the main tab — is the board still open?", "warn");'
+    // TEXT: open Phone Link / Messages from THIS tab via the baked sms: href, on the operator's
+    // own click. It used to post to the board, which opened a modal on a tab he was not looking
+    // at ("switch tabs to send") — he never switched, and six leads were still logged as texted.
+    // A text is an ATTEMPT until he says otherwise: no cap charge, no CRM touch, lead stays queued.
+    +       'if(fn==="text"){'
+    +         'if(!r.smsHref){ addLog("fail", r.first||r.owner, "no textable number (DNC or landline) — call instead", "warn"); return; }'
+    +         'openHere(r.smsHref);'
+    +         'post("textopen");'
+    +         'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
+    +         'confirmSend(r, "text");'
+    +         'return;'
+    +       '}'
     +       'return;'
     +     '}'
     +     'if(fn==="skip"){ post("skip"); addLog("skip", r.first||r.owner, "skipped"); return advance(); }'
@@ -10546,14 +10594,24 @@ window.addEventListener('message', function(ev){
     save();
     if(typeof render === 'function') render();
 
-  } else if(d.k === 'text'){
-    // openBulkText walks a queue; open just this one lead via openTextSingle if available
-    var ph = (r.phones||[])[0] || '';
-    if(typeof openTextSingle === 'function') openTextSingle(r);
-    else if(typeof openBulkText === 'function') openBulkText();
+  } else if(d.k === 'textopen'){
+    // ATTEMPT ONLY. This branch used to be 'text': it opened a modal ON THIS TAB and then called
+    // autoLog(r,'text','texted (morning batch)') — a CRM touch claiming the owner was texted, which
+    // also retired the lead for 72h and charged the daily cap. On 2026-08-02 six leads were drained
+    // that way with nothing sent, because the composer opened on a tab the operator wasn't viewing.
+    // The worker now opens sms: in its OWN tab; this side just records that we tried.
+    var phA = (r.phones||[])[0] || '';
     _docLog(r.case, 'worker-text', 'bi');
-    _wlog(r.case, 'text', ph ? 'composer opened → '+(typeof fmtPhone==='function'?fmtPhone(ph):ph) : 'composer opened (no phone)', true);
-    if(ph){ try { autoLog(r, 'text', 'texted (morning batch)'); } catch(e){} }   // channel on the ledger — see the email branch
+    _wlog(r.case, 'textopen',
+          'Messages opened for '+(phA ? (typeof fmtPhone==='function'?fmtPhone(phA):phA) : 'this lead')
+          + ' — NOT counted as sent; lead stays in the queue until confirmed', true);
+    // No _sentAdd, no autoLog: an unconfirmed text is not a contact.
+  } else if(d.k === 'text'){
+    // CONFIRMED by the operator ("I sent it"). Only now does it count, retire the lead, and charge
+    // the cap — same contract as email's 'sent'.
+    var ph = (r.phones||[])[0] || '';
+    _wlog(r.case, 'text', 'confirmed sent by hand'+(ph ? ' → '+(typeof fmtPhone==='function'?fmtPhone(ph):ph) : ''), true);
+    try { autoLog(r, 'text', 'texted (morning batch)'); } catch(e){}
   } else if(d.k === 'wp'){
     // The worker tab already opened the lookup on the user's own click — opening it here too
     // either double-opens or gets popup-blocked in this background tab. This side only logs.
@@ -10604,7 +10662,7 @@ function genLetter(r){
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
-  const first = owner.split(' ')[0] || owner;
+  const first = _firstName(owner);
   const addr = esc(r.addr), mail = esc(r.mail||r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
   const plaintiff = esc((r.plaintiff||'').trim());
@@ -10680,7 +10738,7 @@ function genHanger(r){
   //    DOES name the foreclosure plainly (Jose's copy), because the fold hides it.
   const sN = sender.name || '[YOUR NAME]', sP = sender.phone || '[YOUR PHONE]', sL=(sender.llc||'').trim();
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
-  const first = owner.split(' ')[0] || owner;
+  const first = _firstName(owner);
   const initial = (sN.trim()[0] || 'C').toUpperCase();
   const addr = esc(r.addr), dt = esc(r.auction);
   // INSIDE letter — Jose's exact script, EN + ES. Auction date and phone pre-filled (the blanks in
@@ -10939,7 +10997,7 @@ function genScript(r){
   const days = r.days >= 0 ? r.days : 0;
   const hi = (new Date().getHours() < 12) ? 'morning' : 'afternoon';
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
-  const first = esc(owner.split(' ')[0] || owner);
+  const first = esc(_firstName(owner));
   const addr = esc(r.addr), dt = esc(r.auction);
   const td = (r.st === 'TD');
   const nn = notes[r.case] || {};
@@ -11223,7 +11281,7 @@ function genEmail(r, quiet){
   const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
   const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
-  const first = owner.split(' ')[0] || owner;
+  const first = _firstName(owner);
   const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
   const street = (addr.split(',')[0]||addr).trim();
   const plaintiff = (r.plaintiff||'').trim();   // the bank / association foreclosing — personalizes it
@@ -11244,15 +11302,15 @@ function genEmail(r, quiet){
   // pitch: a just-served owner has 8-14 months, so urgency is a lie and "before the auction" means
   // nothing to them. What is true and useful is that the clock started and nobody else has called.
   const early = !td && !dt;
-  const bodyEarlyEN = `Hi ${first},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nA foreclosure case was recently filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. No auction date has been set yet, and that is the point of this letter: right now you have the most options you will ever have, and the fewest people pressuring you.\n\nHere is what normally happens next. You have 20 days from being served to respond to the court. From there a typical Florida case runs several months to over a year before any sale is scheduled. In that window the five exits are all still open: (1) reinstate the loan, (2) loan modification, (3) short sale, (4) private cash sale — that is where a buyer like me comes in — and (5) bankruptcy.\n\nI am not asking you to sell. I am telling you the clock started, so you can decide on your terms instead of in the last two weeks. No cost, no obligation.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
-  const bodyEarlyES = `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nRecientemente se presentó un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Todavía no hay fecha de subasta, y ese es el punto de esta carta: ahora mismo usted tiene más opciones que nunca y menos gente presionándolo.\n\nLo que normalmente sigue: tiene 20 días desde que le entregaron los papeles para responder a la corte. Después, un caso típico en Florida toma varios meses o más de un año antes de que se fije una subasta. En esa ventana las cinco salidas siguen abiertas: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo — ahí entra un comprador como yo — y (5) bancarrota.\n\nNo le pido que venda. Le aviso que el reloj empezó, para que decida en sus términos y no en las últimas dos semanas. Sin costo ni compromiso.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
+  const bodyEarlyEN = `Hi${first?' '+first:''},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nA foreclosure case was recently filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. No auction date has been set yet, and that is the point of this letter: right now you have the most options you will ever have, and the fewest people pressuring you.\n\nHere is what normally happens next. You have 20 days from being served to respond to the court. From there a typical Florida case runs several months to over a year before any sale is scheduled. In that window the five exits are all still open: (1) reinstate the loan, (2) loan modification, (3) short sale, (4) private cash sale — that is where a buyer like me comes in — and (5) bankruptcy.\n\nI am not asking you to sell. I am telling you the clock started, so you can decide on your terms instead of in the last two weeks. No cost, no obligation.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+  const bodyEarlyES = `Hola${first?' '+first:''},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nRecientemente se presentó un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Todavía no hay fecha de subasta, y ese es el punto de esta carta: ahora mismo usted tiene más opciones que nunca y menos gente presionándolo.\n\nLo que normalmente sigue: tiene 20 días desde que le entregaron los papeles para responder a la corte. Después, un caso típico en Florida toma varios meses o más de un año antes de que se fije una subasta. En esa ventana las cinco salidas siguen abiertas: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo — ahí entra un comprador como yo — y (5) bancarrota.\n\nNo le pido que venda. Le aviso que el reloj empezó, para que decida en sus términos y no en las últimas dos semanas. Sin costo ni compromiso.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
   // Mirror Field Manual letter: buyer posture + five exits (FC) / tax paths (TD).
   const bodyEN = td
-    ? `Hi ${first},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nCounty records show your property at ${addr} is scheduled for a tax deed sale on ${dt}${caseTagEN}. Before that date, owners usually look at paying the back taxes, selling privately for cash, or claiming any surplus the law allows if it sells for more than is owed.\n\nNo cost and no obligation to talk. If a private sale fits, I can buy as-is and close before the deadline; if another path is better, I will say so.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`
-    : `Hi ${first},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nPublic records show ${addr} is in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale scheduled for ${dt}.\n\nI am not writing to talk you into anything. The five exits every Florida foreclosure homeowner has are: (1) reinstate the loan, (2) loan modification, (3) short sale, (4) private cash sale before auction — that is where a buyer like me comes in — and (5) bankruptcy. My job is to make sure you know all five are on the table.\n\nNo cost, no obligation. If you want to put every option on the table, answer when we call; if you are not interested, tell me — nobody's feelings get hurt.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+    ? `Hi${first?' '+first:''},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nCounty records show your property at ${addr} is scheduled for a tax deed sale on ${dt}${caseTagEN}. Before that date, owners usually look at paying the back taxes, selling privately for cash, or claiming any surplus the law allows if it sells for more than is owed.\n\nNo cost and no obligation to talk. If a private sale fits, I can buy as-is and close before the deadline; if another path is better, I will say so.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`
+    : `Hi${first?' '+first:''},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nPublic records show ${addr} is in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale scheduled for ${dt}.\n\nI am not writing to talk you into anything. The five exits every Florida foreclosure homeowner has are: (1) reinstate the loan, (2) loan modification, (3) short sale, (4) private cash sale before auction — that is where a buyer like me comes in — and (5) bankruptcy. My job is to make sure you know all five are on the table.\n\nNo cost, no obligation. If you want to put every option on the table, answer when we call; if you are not interested, tell me — nobody's feelings get hurt.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
   const bodyES = td
-    ? `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Antes de esa fecha, los dueños suelen mirar pagar impuestos atrasados, vender en privado en efectivo, o reclamar el excedente si la ley lo permite.\n\nSin costo ni compromiso. Si una venta privada encaja, puedo comprar tal cual y cerrar antes de la fecha; si otro camino es mejor, se lo digo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`
-    : `Hola ${first},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con subasta el ${dt}.\n\nNo escribo para convencerlo. Las cinco salidas de todo propietario en ejecución en Florida son: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo antes de la subasta — ahí entra un comprador como yo — y (5) bancarrota. Mi trabajo es que sepa que las cinco están sobre la mesa.\n\nSin costo ni compromiso. Si quiere poner todas las opciones sobre la mesa, conteste cuando llamemos; si no le interesa, dígamelo — nadie se ofende.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
+    ? `Hola${first?' '+first:''},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Antes de esa fecha, los dueños suelen mirar pagar impuestos atrasados, vender en privado en efectivo, o reclamar el excedente si la ley lo permite.\n\nSin costo ni compromiso. Si una venta privada encaja, puedo comprar tal cual y cerrar antes de la fecha; si otro camino es mejor, se lo digo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`
+    : `Hola${first?' '+first:''},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con subasta el ${dt}.\n\nNo escribo para convencerlo. Las cinco salidas de todo propietario en ejecución en Florida son: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo antes de la subasta — ahí entra un comprador como yo — y (5) bancarrota. Mi trabajo es que sepa que las cinco están sobre la mesa.\n\nSin costo ni compromiso. Si quiere poner todas las opciones sobre la mesa, conteste cuando llamemos; si no le interesa, dígamelo — nadie se ofende.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
   const D = early
     ? {en:{subj:subjEN, body:bodyEarlyEN}, es:{subj:subjES, body:bodyEarlyES}}
     : {en:{subj:subjEN, body:bodyEN},      es:{subj:subjES, body:bodyES}};
@@ -11325,7 +11383,7 @@ function genPortfolioEmail(r, siblings, quiet){
   var sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(),
       sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
   var owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
-  var first = owner.split(' ')[0] || owner;
+  var first = _firstName(owner);
   var emails = (r.emails||[]).slice(0,3);
   var to = emails[0]||'';
   var sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW]
