@@ -13,14 +13,20 @@ async def main():
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
         await pg.goto(SRC.as_uri()); await pg.wait_for_timeout(3000)
 
-        # ATTORNEY-APPROVAL GATE (_docApproved / ATTY_APPROVALS) was removed in commit 739d05a —
-        # Doc Room is now ungated. The old probe threw ReferenceError before the rest of the
-        # suite could run; the "gate is open" invariant is now checked below by verifying every
-        # generator returns real HTML (not a "blocked" shell).
-        gate = await pg.evaluate("() => ({mode: (typeof DOCROOM_MODE!=='undefined')?DOCROOM_MODE:'ungated'})")
-        rec('approval gate is OPEN (ungated build)', True, gate)
+        # ATTORNEY-APPROVAL GATE — restored 2026-08-02, DEED-ONLY (see tracker_template around
+        # ATTY_APPROVALS for the full history). Contract under test: the quit claim is LOCKED on
+        # the shipped board; every merge-blank form still prints freely.
+        gate = await pg.evaluate("""() => ({
+          hasGate: typeof _docApproved === 'function' && typeof ATTY_APPROVALS === 'object',
+          deedLocked: typeof _docApproved === 'function' ? !_docApproved('quitclaim', _qcSrc()) : null,
+          keys: typeof ATTY_APPROVALS === 'object' ? Object.keys(ATTY_APPROVALS) : []
+        })""")
+        rec('approval gate EXISTS and the deed ships locked',
+            gate['hasGate'] and gate['deedLocked'], gate)
+        rec('the lock is deed-only (no other template is gated)',
+            gate['keys'] == ['quitclaim'], gate['keys'])
 
-        # every OFFICE generator must now return real HTML, not a "blocked" shell
+        # merge-blank generators stay OPEN; the two deed generators must return the block shell
         gens = await pg.evaluate("""() => {
           const r = DATA.find(x => x.addr && x.case) || DATA[0];
           const out = {};
@@ -37,16 +43,27 @@ async def main():
           return out;
         }""")
         for k,v in gens.items():
-            rec(f'{k} generates a real document', (not v.get('err')) and v.get('len',0)>500 and not v.get('blocked'), v)
+            if k.startswith('quitclaim'):
+                rec(f'{k} returns the approval page, not a printable deed',
+                    (not v.get('err')) and v.get('blocked') is True, v)
+            else:
+                rec(f'{k} generates a real document', (not v.get('err')) and v.get('len',0)>500 and not v.get('blocked'), v)
             if v.get('len'): rec(f'{k} has no NaN', not v.get('nan'))
 
-        # the deed must STILL carry its safety content even though the lock is off
+        # the deed must STILL carry its safety content — verified through the unlock path (inject
+        # the correct fingerprint, render, then re-lock), which also proves approval works.
         deed = await pg.evaluate("""() => {
-          const r = DATA.find(x=>x.addr)||DATA[0]; const h = genQuitClaimMulti(r);
+          const r = DATA.find(x=>x.addr)||DATA[0];
+          const keep = ATTY_APPROVALS.quitclaim;
+          ATTY_APPROVALS.quitclaim = {by:'TEST', date:'2026-08-02', fingerprint:_docFingerprint(_qcSrc())};
+          const h = genQuitClaimMulti(r);
+          ATTY_APPROVALS.quitclaim = keep;
           return {furman: h.indexOf('Furman')>-1, witnesses: h.indexOf('689.01')>-1,
                   notary: h.indexOf('695.03')>-1, homestead: h.indexOf('4(c)')>-1,
-                  rescue: h.indexOf('501.1377')>-1, norecord: h.indexOf('DO NOT RECORD')>-1};
+                  rescue: h.indexOf('501.1377')>-1, norecord: h.indexOf('DO NOT RECORD')>-1,
+                  relocked: !_docApproved('quitclaim', _qcSrc())};
         }""")
+        rec('gate re-locks after the probe (no approval leaked into the page)', deed['relocked'])
         rec('deed still carries the UPL note (Fla. Bar v. Furman)', deed['furman'])
         rec('deed still carries two-witness + notary statutes', deed['witnesses'] and deed['notary'])
         rec('deed still carries homestead spousal joinder', deed['homestead'])

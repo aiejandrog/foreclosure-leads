@@ -7899,6 +7899,77 @@ function genAttyPacket(r){
 }
 
 // --- HUB UI ---------------------------------------------------------------------------------
+/* ══════════════════ ATTORNEY-APPROVAL GATE — deed only (restored 2026-08-02) ══════════════════
+   History, so nobody relitigates it blind: the original gate (bfd820e) locked psa/cancel/tpa/
+   quitclaim behind attorney fingerprints. The operator removed the locks on 2026-07-31 (3117073,
+   then 739d05a deleted the dead code) because a Doc Room where every card says "blocked" is a Doc
+   Room nobody opens. That was the right call for the merge-blank forms — they are clerical, they
+   carry their own statutory banners, and they get signed at a title/law office where a
+   professional reads them anyway.
+
+   The DEED is different in kind, not degree. It moves title. A defective quit claim is not a bad
+   draft to be re-signed later — it is a void conveyance, a cloud on title, or the exhibit in an
+   equity-stripping claim (FS 501.1377), and a non-lawyer who selects and prepares deeds for
+   others is the conduct enjoined in Fla. Bar v. Furman. It is also the ONE form printed at a
+   kitchen table by a runner, not at a closing where counsel would catch a defect. So the deed —
+   and only the deed — sits behind the fingerprint lock again.
+
+   How the lock works: the fingerprint is FNV-1a over the generator's own source. Approve the
+   template and any later edit — even one character — changes the fingerprint and silently
+   revokes the approval. To unlock after attorney review, fill in:
+       ATTY_APPROVALS.quitclaim = {by:'Attorney Name', date:'YYYY-MM-DD', fingerprint:'<8 hex>'}
+   with the fingerprint shown on the blocked page, then rebuild. (Task #30/#33 — the reviewed
+   drafts to send are on Desktop/MSG-Legal-Pack-Drafts.)
+   ═══════════════════════════════════════════════════════════════════════════════════════════ */
+var ATTY_APPROVALS = {
+  quitclaim: {by:'', date:'', fingerprint:''}
+};
+function _docFingerprint(src){
+  // FNV-1a 32-bit over the template source string
+  var h = 0x811c9dc5, s = String(src||'');
+  for(var i=0;i<s.length;i++){
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return ('00000000' + (h >>> 0).toString(16)).slice(-8);
+}
+function _docApproved(key, src){
+  var rec = ATTY_APPROVALS[key];
+  if(!rec || !rec.by || !rec.date || !rec.fingerprint) return false;
+  return String(rec.fingerprint) === _docFingerprint(src);
+}
+function _qcSrc(){
+  // Fingerprint the deed generator's SOURCE, not a rendered instance — stable across leads,
+  // voided by any template edit. _grantors is included because who signs is template behaviour.
+  return String(genQuitClaim) + String(_grantors);
+}
+function _qcBlockedPage(r){
+  var f = _docFields(r || {});
+  var fp = _docFingerprint(_qcSrc());
+  var body = ''
+    + '<div class="doc">'
+    +   '<h1>Awaiting attorney approval</h1>'
+    +   '<p><b>This quit claim deed will not print</b> until a Florida real-estate attorney has '
+    +     'reviewed <b>this exact template</b> and <code>ATTY_APPROVALS.quitclaim</code> is filled '
+    +     'with their name, the date, and the template fingerprint below.</p>'
+    +   '<div style="border:1px dashed #8a1c1c;border-radius:8px;padding:14px 16px;margin:14px 0;background:#fff5f4">'
+    +     '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#8a1c1c;text-transform:uppercase">Template fingerprint</div>'
+    +     '<div style="font:700 22px Consolas,monospace;margin-top:4px">'+esc(fp)+'</div>'
+    +     '<div class="mini" style="margin-top:6px">Any edit to the deed template changes this value and revokes a prior approval automatically.</div>'
+    +   '</div>'
+    +   '<p class="mini"><b>Why the lock exists:</b> a deed moves title. A defect is a void conveyance or a '
+    +     'cloud on title, not a typo — and preparing deeds for others without counsel is the conduct '
+    +     'enjoined in <i>Fla. Bar v. Furman</i>. Every other Doc Room form still prints freely.</p>'
+    +   '<p class="mini"><b>To unlock:</b> send the deed draft (Desktop / MSG-Legal-Pack-Drafts) and the '
+    +     '&ldquo;Facts packet for counsel&rdquo; from this Doc Room to a FL RE attorney ($400&ndash;800, one-time). '
+    +     'On sign-off, enter <code>{by, date, fingerprint:&nbsp;'+esc(fp)+'}</code> in '
+    +     '<code>tracker_template.html &rarr; ATTY_APPROVALS.quitclaim</code> and rebuild the board.</p>'
+    +   '<div class="footer">DealFlow · BUYER_ONLY · deed locked pending counsel'
+    +     (f.todayLong && f.todayLong !== '__blank__' ? ' · '+esc(f.todayLong) : '')+'</div>'
+    + '</div>';
+  return _docShell('Quit Claim Deed — awaiting attorney approval', body, {key:'quitclaim-blocked'});
+}
+
 /* ══════════════════════ QUIT CLAIM DEED — individual and multi-grantor ══════════════════════
    Typeset from Alejandro's own two blanks (BLANK Quit Claim Deed INDIVIDUAL.pdf / COUPLE.doc),
    word for word on the operative language, with the merge fields the board already knows filled
@@ -7946,6 +8017,10 @@ function _grantors(r){
 }
 function genQuitClaim(r, opts){
   opts = opts || {};
+  // THE GATE LIVES HERE, not in the open* wrappers — every print path (board-side openQuitClaim,
+  // the Doc Room tab's postMessage dispatch, any future caller) flows through this function, so
+  // there is no route around it.
+  if(!_docApproved('quitclaim', _qcSrc())) return _qcBlockedPage(r);
   var f = _docFields(r);
   var owners = _grantors(r);
   // couple/multi form when asked for, or whenever the roll actually shows more than one owner
@@ -8232,11 +8307,13 @@ function openDocRoom(caseId){
     + qcRec
     + card({key:'quitclaim-single', t:'Quit Claim Deed &mdash; single grantor'
             + (multi ? ' <span style="color:#8a1c1c">(not recommended here)</span>' : ''),
-            s:'One owner signs. Two witnesses + notary. Folio, legal description and county merge in. Print freely.',
+            s:'One owner signs. Two witnesses + notary. Folio, legal description and county merge in.'
+              + (_docApproved('quitclaim', _qcSrc()) ? '' : ' 🔒 LOCKED pending attorney review — Print opens the approval page.'),
             fn:'genQuitClaimSingle'})
     + card({key:'quitclaim-multi', t:'Quit Claim Deed &mdash; couple / multiple owners'
             + (multi ? ' <span style="color:#286c34">(recommended)</span>' : ''),
-            s:'A signature block per owner. Required for homestead spousal joinder. Print freely.',
+            s:'A signature block per owner. Required for homestead spousal joinder.'
+              + (_docApproved('quitclaim', _qcSrc()) ? '' : ' 🔒 LOCKED pending attorney review — Print opens the approval page.'),
             fn:'genQuitClaimMulti'})
     + '<div class="kicker" style="color:#8a1c1c;margin-top:20px">OFFICE INSTRUMENTS — never at a door · title / law office only</div>'
     + '<p class="mini">Statutory banners + merge blanks. Not attorney-approved / not court-approved. Verify with counsel before execution.</p>'
@@ -8279,7 +8356,7 @@ function openDocRoom(caseId){
     + '</div>'
     + '<div style="text-align:center;margin:12px 0"><button class="docprint" data-fn="genAttyPacket" data-key="atty-packet" '
     +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Facts packet for counsel</button></div>'
-    + '<div class="footer">DealFlow · BUYER_ONLY. FIELD / OFFICE / DEED / INSTRUMENT / PACKAGE cards Print freely. Signatures still at title / law office — never at a door.</div>'
+    + '<div class="footer">DealFlow · BUYER_ONLY. FIELD / OFFICE / INSTRUMENT / PACKAGE cards Print freely. The quit claim deed is locked pending attorney review. Signatures still at title / law office — never at a door.</div>'
     + '</div>'
     + '<script>document.addEventListener("click",function(e){var b=e.target.closest("button.docprint");if(!b)return;'
     +   'if(!window.opener){alert("Doc Room lost its link to the tracker (opener is null). Close this tab and open Doc Room again from the lead.");return;}'
