@@ -35,7 +35,15 @@ jobs:
       # only env is available; on Alejandro's local machine only files are.
       GOOGLE_STREET_VIEW_KEY: ${{ secrets.GOOGLE_STREET_VIEW_KEY }}
       TRACERFY_API_KEY: ${{ secrets.TRACERFY_API_KEY }}
-      BATCHDATA_API_KEY: ${{ secrets.BATCHDATA_API_KEY }}
+      # BATCHDATA DISABLED IN THE CLOUD (2026-08-02). BatchData bills per call, and this runner
+      # spends the SAME wallet as the laptop -- but bd_budget.py's shared daily ledger is a file on
+      # disk, so a cloud run cannot see what the laptop already spent, or vice versa. Two
+      # ungoverned spenders on one balance is exactly how $50 vanished in five minutes. Phones and
+      # liens are now owned by the local nightly job, which IS under the shared cap.
+      # To re-enable: restore the secret line AND give the runner a budget the ledger can enforce
+      # (persist batchdata_spend.json via actions/cache and hard-fail the step when it is spent).
+      # BATCHDATA_API_KEY: ${{ secrets.BATCHDATA_API_KEY }}
+      BATCHDATA_API_KEY: ''
       # accept whatever the WP Pro secret is named in the repo settings
       WHITEPAGES_KEY: ${{ secrets.WHITEPAGES_KEY || secrets.WHITEPAGES_API_KEY || secrets.WP_PRO_KEY }}
       # Gmail App Password for reply detection. Accept "user@domain:apppassword" in one secret, or
