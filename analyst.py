@@ -55,8 +55,8 @@ TARGET_DOORS_WK = 5            # Carlos field visits (playbook: 5-10/wk)
 # next deep review updates them. (source: DealFlow Business Review 2026-08-02)
 STATIC_SCORES = {
     'team_leverage':  {'score': 3.0, 'asof': '2026-08-02'},
-    'tooling_roi':    {'score': 5.0, 'asof': '2026-08-02'},
-    'founder_focus':  {'score': 3.0, 'asof': '2026-08-02'},
+    'tooling_roi':    {'score': 2.5, 'asof': '2026-08-02'},
+    'founder_focus':  {'score': 4.0, 'asof': '2026-08-02'},
 }
 WEIGHTS = {  # must sum to 1.0 -- the review rubric
     'data_quality': 0.15, 'outreach': 0.25, 'followup': 0.20,
