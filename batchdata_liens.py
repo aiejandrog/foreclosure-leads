@@ -26,10 +26,14 @@ import time
 import requests
 
 import skiptrace as SK   # reuse parse_addr / _mailaddr / _propaddr / is_company
+import bd_budget         # SHARED daily $ cap — this script bills the SAME wallet as skiptrace.py
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'batchdata_liens.json')
 API = 'https://api.batchdata.com/api/v1/property/lookup/all-attributes'
+# BatchData does not publish this endpoint's per-call price in our docs; assume it bills like a
+# skip-trace until proven otherwise. Under-estimating a cost is how a budget silently overruns.
+COST_PER_LOOKUP = 0.15
 LENDER_HINT = re.compile(r'\b(BANK|MORTG|LOAN|LENDING|FINANC|CAPITAL|CREDIT|FUND|FSB|N\.?A\.?|TRUST|SERVICING)\b', re.I)
 
 
@@ -189,17 +193,26 @@ def main():
         picked = picked[:a.limit]
 
     print(f'{len(picked)} leads to look up via BatchData property API')
+    print('  ' + bd_budget.banner('batchdata_liens', COST_PER_LOOKUP))
     done = hits = 0
     for case, r in picked:
         addr = SK.parse_addr(SK._mailaddr(r)) or SK.parse_addr(SK._propaddr(r))
         if not addr:
             print(f'  --  {case:24} (no address)'); continue
         try:
+            bd_budget.require(COST_PER_LOOKUP, script='batchdata_liens')
+        except bd_budget.BudgetExhausted as e:
+            print(f'\n!! DAILY BUDGET REACHED — {e}')
+            print(f'   {done} looked up. Raise it with: python bd_budget.py --cap 3')
+            break
+        try:
             p = lookup(session, key, addr)
         except BalanceExhausted as e:
             print(f'\n!! BatchData balance exhausted ({e}). Stopping after {done} lookups.')
             print('   Top up at https://batchdata.com to resume Palm Beach / fallback coverage.')
             break
+        finally:
+            bd_budget.charge(COST_PER_LOOKUP)      # a miss still bills — charge on every call out
         if not p:
             print(f'  --  {case:24} (no BatchData match)'); continue
         judg = 0

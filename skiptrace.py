@@ -40,6 +40,7 @@ import glob as _glob
 import json, os, re, sys, time, argparse
 from datetime import date
 import requests
+import bd_budget                      # SHARED daily $ cap across every BatchData script
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'leads_final.json')
@@ -264,10 +265,15 @@ def trace_one(session, prov, key, lead, raw=False):
     headers = {'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'User-Agent': UA}
 
     for attempt in range(4):                               # 1 try + up to 3 backoff retries for 429
+        # Ask the SHARED ledger before every billable call. A retry is a second billable call, so
+        # it is gated too — that is why this sits inside the loop, not above it.
+        bd_budget.require(p['cost'], script='skiptrace')
         try:
             r = session.post(p['url'], json=p['body'](addr), timeout=30, headers=headers)
         except requests.exceptions.RequestException as e:  # timeout, connection reset, DNS, etc.
+            bd_budget.charge(p['cost'])                    # it left the machine; assume it billed
             raise TraceTransient(f"{type(e).__name__}: {str(e)[:120]}")
+        bd_budget.charge(p['cost'])                        # a miss still costs — charge on response
 
         if raw:
             print('--- RAW', lead.get('Case #', ''), r.status_code, '---')
@@ -360,8 +366,11 @@ def main():
     if args.limit:
         todo = todo[:args.limit]
 
+    _cached = len(picked) - len([r for r in picked if args.refresh or (_case(r) not in results)
+                                 or _stale_empty(_case(r))])
     print(f"provider: {provider}  |  {len(picked)} eligible lead(s); {len(todo)} to trace "
-          f"({len(picked)-len(todo)} already cached). Est. cost: ${len(todo)*cost_per:.2f}")
+          f"({_cached} already cached). Est. cost: ${len(todo)*cost_per:.2f}")
+    print('  ' + bd_budget.banner('skiptrace', cost_per))
     _comp = sum(1 for r in todo if r.get('_trace_entity'))
     if _comp:
         print(f"  (of those, {_comp} are LLC-owned -> tracing the Sunbiz officer/agent behind the company)")
@@ -430,6 +439,12 @@ def main():
                 print(f"  [{i}/{len(todo)}] {case}: skip ({e})")
                 time.sleep(0.3)
                 continue
+            except bd_budget.BudgetExhausted as e:
+                _save()
+                print(f"\n  >>> DAILY BUDGET REACHED — {e}")
+                print(f"      {done} traced today. Raise it with: python bd_budget.py --cap 3")
+                print(f"      (nothing was overspent; the rest resume tomorrow.) (exit 5)")
+                sys.exit(5)
 
             strikes = 0                                        # a success clears the transient streak
             done += 1
