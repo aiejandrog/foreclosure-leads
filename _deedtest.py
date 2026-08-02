@@ -19,15 +19,32 @@ JS = r"""() => {
     dupes:  _grantors({owners:'JOHN DOE; JOHN DOE'})
   };
   // ------------------------------------------------------------------------------------------
-  // ATTORNEY-APPROVAL GATE (_docApproved / ATTY_APPROVALS) was removed in commit 739d05a — Doc
-  // Room now prints on every generator. The two ex-gate assertions are stubbed here so the rest
-  // of the deed suite can run; they intentionally FAIL to keep the "gate is gone" state visible.
+  // ATTORNEY-APPROVAL GATE — restored 2026-08-02, DEED-ONLY. (739d05a removed the original
+  // everything-locked gate; these were tombstoned false until the restore.) The rendered-deed
+  // assertions below inject a correct approval first, which also proves the unlock path.
   // ------------------------------------------------------------------------------------------
   const r = DATA.find(x => _grantors(x).length > 1) || DATA[0];
   const solo = DATA.find(x => _grantors(x).length === 1) || DATA[0];
-  out.blockedWhenUnapproved = false;                 // gate removed
-  out.fingerprintShown = false;                       // gate removed
-  out.approvedFlag = false;                           // gate removed
+  const fp = _docFingerprint(_qcSrc());
+
+  // 1. Ships locked: no approval on the shipped board, so the deed must NOT print.
+  const blockedHtml = genQuitClaim(r, {});
+  out.blockedWhenUnapproved = ATTY_APPROVALS.quitclaim.fingerprint === ''
+                              && blockedHtml.indexOf('Awaiting attorney approval') > -1
+                              && blockedHtml.indexOf('THIS QUIT CLAIM DEED') === -1;
+  // 2. The block page hands the operator the exact fingerprint to approve with.
+  out.fingerprintShown = blockedHtml.indexOf(fp) > -1;
+  // 3. A WRONG fingerprint (i.e. the template changed after sign-off) must stay blocked —
+  //    this is the edit-revokes-approval property, the whole point of fingerprinting.
+  ATTY_APPROVALS.quitclaim = {by:'TEST ATTY', date:'2026-08-02', fingerprint:'deadbeef'};
+  out.staleApprovalBlocked = genQuitClaim(r, {}).indexOf('Awaiting attorney approval') > -1;
+  // 4. The CORRECT fingerprint unlocks — every rendered-deed assertion below runs unlocked.
+  ATTY_APPROVALS.quitclaim = {by:'TEST ATTY', date:'2026-08-02', fingerprint:fp};
+  out.approvedFlag = _docApproved('quitclaim', _qcSrc());
+  // 5. Everything ELSE still prints freely — the operator's 2026-07-31 decision stands for the
+  //    merge-blank forms; only the title-moving instrument is locked.
+  out.othersOpen = typeof genThirdPartyAuth === 'function'
+    ? String(genThirdPartyAuth(r)).indexOf('Awaiting attorney approval') === -1 : null;
   // A single-grantor deed on a TWO-owner property conveys a half interest. Asking for the single
   // form on a multi-owner lead must auto-upgrade rather than quietly do the dangerous thing.
   const upgraded = genQuitClaim(r, {multi:false});
@@ -91,9 +108,12 @@ async def main():
         rec('no owner returns empty, not a phantom grantor', P['none']==[], P['none'])
         rec('duplicate names collapse', P['dupes']==['JOHN DOE'], P['dupes'])
 
-        rec('deed will NOT print without attorney approval', d['blockedWhenUnapproved'])
+        rec('deed ships LOCKED: will NOT print without attorney approval', d['blockedWhenUnapproved'])
         rec('block page shows the fingerprint to unlock with', d['fingerprintShown'])
-        rec('ships unapproved by default', not d['approvedFlag'])
+        rec('a STALE approval (template edited after sign-off) stays blocked', d['staleApprovalBlocked'])
+        rec('the correct fingerprint unlocks the deed', d['approvedFlag'])
+        rec('every other Doc Room form still prints freely (deed-only lock)',
+            d['othersOpen'] is not False, d['othersOpen'])
 
         rec('single form has exactly 1 grantor signature block',
             R['singleSigs']==1, f"{R['singleSigs']} block, {R['soloOwners']} owner")
