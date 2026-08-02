@@ -107,6 +107,10 @@ _chunk.html
 # most valuable suite in the repo and should not be the one file that never survives a clone.
 balloon_refi.json
 replies.json
+# tracker localStorage mirrored to disk by send_server.py POST /notes — full PII call history
+worker_notes.json
+worker_notes_snapshots/
+!_notesbridgetest.py
 !_nearmetest.py
 !_callmodetest.py
 !_sendbridgetest.py

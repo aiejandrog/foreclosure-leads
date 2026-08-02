@@ -24,6 +24,11 @@ ENDPOINTS:
     GET  /health   -> {"ok": true, "user": "you@gmail.com", "sent_today": 3, "cap": 50}
     POST /send     -> {"to","subj","body","meta":{"c","owner","addr","lang","portfolio","test"}}
                       returns {"ok": true, "message_id": "..."} or {"ok": false, "err": "..."}
+    POST /notes    -> the tracker's full localStorage state {_dealflow_notes, device, notes,
+                      workerLog, sentArchive}. Written atomically to worker_notes.json plus a
+                      daily snapshot in worker_notes_snapshots/. This is how call dispositions,
+                      statuses and the activity feed reach DISK — before this, the entire call
+                      history of the business lived only inside one Chrome profile.
 """
 import argparse
 import datetime as dt
@@ -43,9 +48,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 KEY_FILE = os.path.join(HERE, 'gmail.key')
 SENDER_FILE = os.path.join(HERE, 'sender.json')
 SENT_LEDGER = os.path.join(HERE, 'mail_sent.json')
+NOTES_FILE = os.path.join(HERE, 'worker_notes.json')
+NOTES_SNAP_DIR = os.path.join(HERE, 'worker_notes_snapshots')
 
 _EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
 _LEDGER_LOCK = threading.Lock()
+_NOTES_LOCK = threading.Lock()
 
 
 # ---------------------------------------------------------------- credential + sender loading
@@ -94,6 +102,29 @@ def _append_ledger(entry):
         os.replace(tmp, SENT_LEDGER)
 
 
+def _write_notes(payload):
+    """Atomic write of the tracker's localStorage state + one snapshot file per day.
+
+    worker_notes.json is always the latest full state (last write wins — the bridge is
+    127.0.0.1-only, so only THIS machine's browser can reach it; there is no multi-device
+    merge problem to solve here). Snapshots are date-named so a bad push can never destroy
+    history older than today.
+    """
+    with _NOTES_LOCK:
+        os.makedirs(NOTES_SNAP_DIR, exist_ok=True)
+        raw = json.dumps(payload, indent=1, ensure_ascii=False)
+        tmp = NOTES_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(raw)
+        os.replace(tmp, NOTES_FILE)
+        snap = os.path.join(NOTES_SNAP_DIR, 'worker_notes_%s.json' % dt.date.today().isoformat())
+        tmp2 = snap + '.tmp'
+        with open(tmp2, 'w', encoding='utf-8') as f:
+            f.write(raw)
+        os.replace(tmp2, snap)
+    return len(raw)
+
+
 def _sent_today_count():
     today = dt.date.today().isoformat()
     return sum(1 for e in _load_ledger()
@@ -139,8 +170,19 @@ class Handler(BaseHTTPRequestHandler):
     daily_cap = 50
 
     def log_message(self, fmt, *args):
-        """Terse one-line per request in the terminal, no HTTP boilerplate."""
-        sys.stderr.write(f'  {dt.datetime.now().strftime("%H:%M:%S")}  {fmt % args}\n')
+        """Terse one-line per request in the terminal, no HTTP boilerplate.
+
+        Under pythonw.exe (the silent autostart launcher) sys.stderr is None — an unguarded
+        write raised AttributeError INSIDE request handling, killing every response with an
+        empty reply. The autostart bridge was dead on arrival because of this line; only a
+        console-started `python send_server.py` ever worked.
+        """
+        try:
+            out = sys.stderr or sys.stdout
+            if out:
+                out.write(f'  {dt.datetime.now().strftime("%H:%M:%S")}  {fmt % args}\n')
+        except Exception:
+            pass
 
     def _cors(self):
         """Same-origin doesn't apply from file:// to http://127.0.0.1, so we explicitly allow it.
@@ -177,7 +219,36 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json(404, {'ok': False, 'err': 'unknown path'})
 
+    def _handle_notes(self):
+        """POST /notes — persist the tracker's full localStorage state to disk.
+
+        Body cap is 25 MB: fcSentArchive keeps up to 300 full email bodies and fcLeadNotes grows
+        with every touch, so the 200 KB /send cap would reject a healthy payload within weeks.
+        The `_dealflow_notes` flag is required so a stray POST can never overwrite the ledger
+        with junk.
+        """
+        length = int(self.headers.get('Content-Length', 0) or 0)
+        if length <= 0 or length > 25_000_000:
+            return self._json(400, {'ok': False, 'err': 'missing or oversized body'})
+        try:
+            payload = json.loads(self.rfile.read(length).decode('utf-8'))
+        except Exception as e:
+            return self._json(400, {'ok': False, 'err': f'bad json: {e}'})
+        if not (isinstance(payload, dict) and payload.get('_dealflow_notes')):
+            return self._json(400, {'ok': False, 'err': 'not a dealflow notes payload'})
+        payload['received_utc'] = dt.datetime.now(dt.timezone.utc).isoformat()
+        try:
+            size = _write_notes(payload)
+        except Exception as e:
+            return self._json(500, {'ok': False, 'err': f'write failed: {e}'})
+        n_notes = len(payload.get('notes') or {})
+        self.log_message('notes push: %d leads, %d log entries, %d KB',
+                         n_notes, len(payload.get('workerLog') or []), size // 1024)
+        return self._json(200, {'ok': True, 'saved': True, 'notes_count': n_notes, 'bytes': size})
+
     def do_POST(self):
+        if self.path.startswith('/notes'):
+            return self._handle_notes()
         if not self.path.startswith('/send'):
             return self._json(404, {'ok': False, 'err': 'unknown path'})
 
