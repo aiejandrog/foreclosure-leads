@@ -9319,8 +9319,19 @@ function _wlogToday(){
   var d = new Date().toISOString().slice(0,10);
   return _wlogAll().filter(function(e){ return e.d === d; });
 }
+/* ACTION VOCABULARY — intent and delivery are DIFFERENT events, 2026-08-02.
+   Before this split there was one 'email' action, fired both when a composer opened and when a
+   send was confirmed. Everything downstream inherited that conflation: the daily cap counted
+   composer-opens as sends, the CRM touch ledger retired leads nobody had actually reached, and
+   the Proof Sheet archived mail that never left. Nine commits of worker engineering produced
+   ZERO real sends and nobody could see why, because the logs all said it worked.
+     'email' -> an ATTEMPT (composer opened / bridge tried). Costs nothing, retires nothing.
+     'sent'  -> CONFIRMED DELIVERY only: bridge HTTP 200 with a Message-ID, or the operator
+                explicitly tapping "I sent it" after a manual Gmail send.
+     'call'  -> a dial was placed (uncapped by design — FTSA limits hours, not volume).
+   The cap reads 'sent'+'text'. It must NEVER read 'email' again. */
 function _wlogStats(){
-  var t = _wlogToday(), s = {email:0, text:0, wp:0, done:0, skip:0, leads:{}};
+  var t = _wlogToday(), s = {email:0, sent:0, call:0, text:0, wp:0, done:0, skip:0, leads:{}};
   t.forEach(function(e){ if(s[e.a]!=null) s[e.a]++; s.leads[e.c]=1; });
   s.uniqueLeads = Object.keys(s.leads).length;
   return s;
@@ -9422,9 +9433,14 @@ function openProofSheet(scope){ return _openDoc(genProofSheet(scope||'today')); 
    hundred and Gmail throttles mid-run, recipients' providers start filing you as spam, and the
    reputation damage lands on the mailbox Alejandro runs his actual business from (Jose, lenders,
    the SSA). A slow pipeline is recoverable; a spam-flagged primary inbox is not.
-   So: warn at 40, hard-stop at 50. Counted from the activity feed, which only logs real sends. --- */
+   So: warn at 40, hard-stop at 50.
+
+   COUNTS CONFIRMED DELIVERY ONLY. This line used to read (s.email||0)+(s.text||0), which counted
+   composer-opens and even pre-flight "trying bridge..." log lines. A single real send burned two
+   of the fifty, and fifty opened-but-unsent composers announced "you have sent 50 today" having
+   sent none. 'sent' is written only on a bridge 200 or an explicit operator confirmation. --- */
 var DAILY_WARN = 40, DAILY_MAX = 50;
-function _sentTodayCount(){ var s = _wlogStats(); return (s.email||0) + (s.text||0); }
+function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||0); }
 function _capState(){
   var n = _sentTodayCount();
   return {n:n, left:Math.max(0, DAILY_MAX-n), warn:n>=DAILY_WARN, blocked:n>=DAILY_MAX,
@@ -9492,12 +9508,19 @@ function _workerEligible(r){
   if(r.sibclaimed || r.saleBkAct || r.lpDismissed) return false;
   var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
   if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD') return false;
+  // A wrong number recorded from call mode is a data problem, not a lead — re-verify title first.
+  if(n.wrongown) return false;
   // must be reachable at all — a lead with no phone and no email is a lookup task, not outreach
   if(!((r.phones||[]).length || (r.emails||[]).length)) return false;
-  // not touched in the last 72h
+  /* COOLDOWN — outcome-aware, defaults to 72h.
+     A flat three-day rule is wrong for a call list: a no-answer or a voicemail should come back
+     TOMORROW (people are reachable at different hours), while an actual conversation or a "not
+     interested" deserves the full 72h of breathing room. Call mode writes notes[case].cooldownH
+     when the operator logs an outcome; anything else keeps the original 72h. */
   var touches = n.touches||[];
   var last = touches.length ? (touches[touches.length-1].tsu || 0) : 0;
-  if(last && (Date.now() - last) < 3*86400000) return false;
+  var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
+  if(last && (Date.now() - last) < coolH*3600000) return false;
   return true;
 }
 function _laneCount(lane){ return _laneStats(lane).n; }
@@ -9516,8 +9539,11 @@ function _laneStats(lane){
     var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
     if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD'){ s.suppressed++; return; }
     if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }
+    if(n.wrongown){ s.suppressed++; return; }
+    // Mirrors _workerEligible's outcome-aware cooldown — see the comment there.
     var t = n.touches||[]; var last = t.length ? (t[t.length-1].tsu||0) : 0;
-    if(last && (Date.now()-last) < 3*86400000){ s.touched++; return; }
+    var cH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
+    if(last && (Date.now()-last) < cH*3600000){ s.touched++; return; }
     s.n++;
   });
   return s;
@@ -9580,12 +9606,45 @@ function _workerQueue(lane){
   // finally maps 1:1 to inbox hits.
   return deduped.slice(0, Math.max(0, cap.left));
 }
+/* COMPOSE THE MESSAGE ON THE BOARD — the worker tab cannot do it. --------------------------------
+   The worker is a Blob document with its own global scope: DATA, genEmail, genPortfolioEmail and
+   window.__lastEmail are all `undefined` in there. The SMTP-bridge code originally tried to rebuild
+   the message inside the worker with `DATA.find(...)` + `genEmail(...)`; that threw ReferenceError
+   on the first line, the surrounding try/catch swallowed it, subj/body stayed empty, and every send
+   fell through the "no payload" branch to Gmail compose. The bridge was unreachable from the day it
+   shipped — which is exactly why the ledger recorded zero worker sends.
+   Compose ONCE here and carry the result on the card: `gurl` for the manual Gmail path, subj/body
+   for the bridge payload. Both derive from the same __lastEmail, so they cannot drift apart. */
+function _cardMail(r){
+  var EMPTY = {gurl:'', to:'', subj:'', body:''};
+  try {
+    if(!(r.emails||[]).length) return EMPTY;
+    // If _workerQueue attached a portfolio, compose the CONSOLIDATED email; else the single.
+    var isPort = r._portfolio && r._portfolio.length;
+    var composer = (isPort && typeof genPortfolioEmail === 'function')
+      ? function(){ return genPortfolioEmail(r, r._portfolio, true); }
+      : (typeof genEmail === 'function' ? function(){ return genEmail(r, true); } : null);
+    if(!composer) return EMPTY;
+    composer();
+    var LE = window.__lastEmail;
+    if(!LE || LE.c !== r.case) return EMPTY;
+    var to = LE.to || (r.emails||[])[0] || '';
+    return {
+      to: to, subj: LE.subj || '', body: LE.body || '',
+      gurl: 'https://mail.google.com/mail/?view=cm&fs=1'
+          + '&to=' + encodeURIComponent(to)
+          + '&su=' + encodeURIComponent(LE.subj || '')
+          + '&body=' + encodeURIComponent(LE.body || '')
+    };
+  } catch(e){ return EMPTY; }
+}
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
 function _workerCard(r){
   var f = _docFields(r); var days = _saleDays(r); var chip = _urgencyChip(days);
   var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); }).slice(0,3);
   var emList = (r.emails||[]).slice(0,3);
+  var M = _cardMail(r);
   return {
     c: r.case, addr: r.addr||'', owner: r.oname||(r.owners||'').split(';')[0]||'',
     first: (f.ownerFirst==='__blank__'?'':f.ownerFirst),
@@ -9599,24 +9658,17 @@ function _workerCard(r){
     // null when blocked, it does not throw), so the activity log said "composer opened — press
     // Send" while nothing opened at all, and the Proof Sheet archived a send that never existed.
     // Alejandro caught it live: "it just gives me activity… I don't see it open. It's false."
-    gurl: (function(){
-      try {
-        if(!(r.emails||[]).length) return '';
-        // If _workerQueue attached a portfolio, compose the CONSOLIDATED email; else the single.
-        var isPort = r._portfolio && r._portfolio.length;
-        var composer = (isPort && typeof genPortfolioEmail === 'function')
-          ? function(){ return genPortfolioEmail(r, r._portfolio, true); }
-          : (typeof genEmail === 'function' ? function(){ return genEmail(r, true); } : null);
-        if(!composer) return '';
-        composer();
-        var LE = window.__lastEmail;
-        if(!LE || LE.c !== r.case) return '';
-        return 'https://mail.google.com/mail/?view=cm&fs=1'
-             + '&to=' + encodeURIComponent(LE.to || (r.emails||[])[0] || '')
-             + '&su=' + encodeURIComponent(LE.subj || '')
-             + '&body=' + encodeURIComponent(LE.body || '');
-      } catch(e){ return ''; }
-    })(),
+    /* COMPOSED CONTENT IS BAKED HERE, ON THE BOARD. It has to be.
+       The worker tab is a Blob document with its own global scope: DATA, genEmail,
+       genPortfolioEmail and window.__lastEmail are all `undefined` inside it. The SMTP-bridge
+       code originally tried to rebuild the message in the worker tab with
+       `DATA.find(...)` + `genEmail(...)`; that threw ReferenceError on the first line, the
+       surrounding try/catch swallowed it, subj/body stayed empty, and every single send fell
+       through the "no payload" branch to Gmail compose. The bridge was unreachable from the day
+       it shipped — which is exactly why the ledger recorded zero worker sends.
+       Compose ONCE here, carry the result on the card: gurl for the manual Gmail path, subj/body
+       for the bridge payload. Both come from the same __lastEmail, so they cannot drift. */
+    gurl: M.gurl, mailTo: M.to, mailSubj: M.subj, mailBody: M.body,
     // Portfolio metadata — populated by _workerQueue when one contact appears on N leads. The
     // worker tab shows a "PORTFOLIO OWNER (N properties)" chip so the operator sees, before
     // clicking, that this one Gmail compose is going to cover a stack of parcels.
@@ -9736,6 +9788,22 @@ function genMorningWorker(lane){
     +   '.mwcap .cbar i{display:block;height:100%;background:#286c34;transition:width .3s}'
     +   '.mwcap.warn .cbar i{background:#C6A14B}.mwcap.blocked .cbar i{background:#8a1c1c}'
     +   '.mwcap .ctx{color:#5b6472;line-height:1.4}'
+    // Bridge badge: green when one-click delivery is live, amber when the operator is in
+    // Gmail-compose mode. Deliberately not red — compose mode is a supported way to work, just
+    // a slower one, and crying wolf about it would train him to ignore the strip.
+    +   '.mwbridge{border-radius:8px;padding:9px 13px;margin:0 0 14px;font:12.5px/1.5 "Segoe UI",Arial,sans-serif}'
+    +   '.mwbridge.probing{background:#f6f8fa;border:1px solid #e2e6ee;color:#8a94a8}'
+    +   '.mwbridge.up{background:#eaf5ec;border:1px solid #bfe0c8;color:#286c34}'
+    +   '.mwbridge.down{background:#fffdf3;border:1px solid #eadb9f;color:#7a5a10}'
+    +   '.mwbridge code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:3px;font-size:11.5px}'
+    // Call button + disposition bar. Green like Text (both are phone channels), but full-width
+    // and first so the eye lands on it before email.
+    +   '.mwbtn.call{background:#1f7a44;color:#fff;border-color:#1f7a44}'
+    +   '.mwbtn.call:hover{background:#186036}'
+    +   '.mwbtn.warnb{background:#fffdf3;color:#7a5a10;border-color:#eadb9f}'
+    +   '.mwbtn.dnc{background:#fff5f4;color:#8a1c1c;border-color:#e5bdb8;font-weight:800}'
+    +   '.mwocwrap{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:16px}'
+    +   '.mwocwrap .mwbtn{padding:13px 12px;font-size:13.5px}'
     +   '.mwblocked{background:#fff5f4;border:2px solid #8a1c1c;border-radius:12px;padding:26px 24px;text-align:center}'
     +   '.mwblocked h2{margin:0 0 9px;font:800 21px "Segoe UI",Arial,sans-serif;color:#8a1c1c}'
     +   '.mwblocked p{color:#5b6472;font-size:13.5px;line-height:1.6;margin:8px 0}'
@@ -9771,6 +9839,10 @@ function genMorningWorker(lane){
     // FTSA CALL-WINDOW BANNER — only appears outside 8 AM–8 PM ET. Non-blocking on purpose (an
     // operator running early research should be able to work), but says clearly what is at risk.
     +   '<div id="mwftsa" class="mwftsa" style="display:none"></div>'
+    // BRIDGE STATUS. Whether one-click sending is live was previously discoverable only by
+    // attempting a send and watching it fail — so the operator could work a whole queue in
+    // Gmail-compose mode without realising the terminal was closed. Now it says so up front.
+    +   '<div id="mwbridge" class="mwbridge probing">checking send bridge&hellip;</div>'
     +   '<div id="mwmain"></div>'
     +   '<div class="mwlogwrap">'
     +     '<div class="mwloghead"><span>&#128220; Activity log — live</span><span class="mwlogstats" id="mwlogstats"></span></div>'
@@ -9797,7 +9869,9 @@ function genMorningWorker(lane){
     +   'function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}'
     +   'function fm(n){return n?"$"+Math.round(+n).toLocaleString():"—";}'
     +   'function now(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"});}'
-    +   'var ICON={email:"&#128231;",text:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
+    // 'sent' gets its own glyph so a DELIVERED line is visually distinct from an ATTEMPT at a
+    // glance — that distinction is the whole point of the rewrite.
+    +   'var ICON={call:"&#128222;",sent:"&#9989;",email:"&#128231;",text:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
     +   'function addLog(kind, who, text, cls){'
     +     'LOG.push({ts:now(), a:kind, who:who||"", detail:text||"", ok:cls!=="warn"});'
     +     'if(LOG.length>200) LOG=LOG.slice(-200);'
@@ -9813,9 +9887,35 @@ function genMorningWorker(lane){
     +         '+"<span class=\'ic\'>"+(ICON[e.a]||ICON.info)+"</span>"'
     +         '+"<span class=\'tx\'><b>"+esc(e.who||e.addr||"")+"</b> <span>"+esc(e.detail||e.a)+"</span></span></div>";'
     +     '}).join("");'
-    +     'statEl.innerHTML="email "+(STATS.email||0)+" · text "+(STATS.text||0)+" · wp "+(STATS.wp||0)+" · done "+(STATS.done||0)+" · skip "+(STATS.skip||0);'
+    +     'statEl.innerHTML="calls "+(STATS.call||0)+" · <b>delivered "+(STATS.sent||0)+"</b> · text "+(STATS.text||0)+" · attempts "+(STATS.email||0)+" · wp "+(STATS.wp||0)+" · skip "+(STATS.skip||0);'
     +   '}'
-    +   'function sentToday(){ return (STATS.email||0)+(STATS.text||0); }'
+    // CONFIRMED DELIVERY ONLY — mirrors the board's _sentTodayCount. Reading STATS.email here
+    // (the old behaviour) counted composer-opens and pre-flight log lines as sends, so the meter
+    // hit 50 at roughly 25 real deliveries, and could hit 50 at zero.
+    +   'function sentToday(){ return (STATS.sent||0)+(STATS.text||0); }'
+    /* ---- bridge health -----------------------------------------------------------------------
+       One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
+       resolution) so the badge reflects reality rather than a stale boot-time reading. */
+    +   'var BRIDGE_OK=null;'
+    +   'function renderBridge(){'
+    +     'var b=document.getElementById("mwbridge"); if(!b) return;'
+    +     'if(BRIDGE_OK===null){ b.className="mwbridge probing"; b.innerHTML="checking send bridge&hellip;"; return; }'
+    +     'if(BRIDGE_OK){ b.className="mwbridge up";'
+    +       'b.innerHTML="&#9889; <b>One-click send is ON</b> &middot; Email delivers straight from here";'
+    +     '} else { b.className="mwbridge down";'
+    +       'b.innerHTML="&#9993; <b>Gmail compose mode</b> &middot; each email opens Gmail and you press Send. '
+    +       'For one-click, run <code>python send_server.py</code> and reopen this tab.";'
+    +     '}'
+    +   '}'
+    +   'function bridgeUp(ok){ if(BRIDGE_OK!==ok){ BRIDGE_OK=ok; renderBridge(); } }'
+    +   'function probeBridge(){'
+    +     'var ac = (typeof AbortController!=="undefined") ? new AbortController() : null;'
+    +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
+    +     'fetch("http://127.0.0.1:8823/health", ac?{signal:ac.signal}:{})'
+    +       '.then(function(resp){ return resp.json(); })'
+    +       '.then(function(j){ if(to) clearTimeout(to); bridgeUp(!!(j && j.ready)); })'
+    +       '.catch(function(){ if(to) clearTimeout(to); bridgeUp(false); });'
+    +   '}'
     +   'function renderCap(){'
     +     'var n=sentToday(), left=Math.max(0,CAP.max-n), blocked=n>=CAP.max, warn=n>=CAP.warnAt;'
     +     'var box=document.getElementById("mwcap");'
@@ -9883,6 +9983,148 @@ function genMorningWorker(lane){
     +     'if(!url) return false;'
     +     'try { var w = window.open(url, "_blank"); return !!w; } catch(e){ return false; }'
     +   '}'
+    /* ---- doSend: the ONE email path ---------------------------------------------------------
+       Called by the manual Email button AND by auto-run's attempt(). Three outcomes:
+         bridge 200        -> post("sent"): counts, archives, retires the lead. Auto-advances.
+         bridge offline    -> open Gmail compose, post("email") (an ATTEMPT only), then show the
+                              "I sent it" confirm card. Nothing counts until the operator says so.
+         bridge error/cap  -> resolve explicitly (pause or advance) — never dead-end the run. */
+    +   'function doSend(r){'
+    // Subject/body are BAKED ONTO THE CARD by _cardMail on the board. They cannot be rebuilt in
+    // here: this tab is a Blob document where DATA and genEmail simply do not exist. The original
+    // bridge code tried anyway, threw ReferenceError into a silent catch, and every send in the
+    // product's history fell through to the Gmail-compose branch below.
+    +     'var subj = r.mailSubj || "", body = r.mailBody || "";'
+    +     'var to   = r.mailTo || (r.emails||[])[0] || "";'
+    +     'if(!subj || !body || !to){'
+    +       'if(openHere(r.gurl)){ post("email"); confirmSend(r, "no composed payload on this card — Gmail compose opened"); }'
+    +       'else { addLog("fail", r.first||r.owner, "Gmail window did not open — check the popup blocker icon", "warn"); advance(); }'
+    +       'return;'
+    +     '}'
+    +     'var payload = {to:to, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
+    // NOTE: no pre-flight log line here. There used to be an addLog("email","trying bridge...")
+    // before the fetch, and because addLog increments STATS[kind], a single successful send
+    // charged the 50/day cap TWICE — effective ceiling 25 — and every failed attempt still
+    // charged 1. Log only what actually resolved.
+    +     'fetch("http://127.0.0.1:8823/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)})'
+    +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
+    +       '.then(function(x){'
+    +         'if(x.status===200 && x.j.ok){'
+    +           'bridgeUp(true);'
+    +           'post("sent", {mid:x.j.message_id||"", via:"bridge", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
+    +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
+    +           'setTimeout(function(){ advance(); }, 900);'
+    +         '} else if(x.status===409 && x.j.skip){'
+    +           'bridgeUp(true);'
+    +           'addLog("skip", r.first||r.owner, "already emailed inside 24h — deferred", "warn");'
+    +           'post("skip"); setTimeout(function(){ advance(); }, 700);'
+    +         '} else if(x.status===429){'
+    // Cap is a STOP, not a skip. Pausing surfaces it instead of silently grinding through the queue.
+    +           'bridgeUp(true);'
+    +           'addLog("fail", r.first||r.owner, "server daily cap reached — stopping the run: "+String(x.j.err||""), "warn");'
+    +           'pause();'
+    +         '} else if(x.status===401){'
+    +           'bridgeUp(true);'
+    +           'addLog("fail", r.first||r.owner, "SMTP auth failed — fix gmail.key, then restart send_server.py", "warn");'
+    +           'pause();'
+    +         '} else {'
+    // A single bad lead must not end the morning. Log it and keep moving.
+    +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
+    +           'setTimeout(function(){ advance(); }, 700);'
+    +         '}'
+    +       '})'
+    +       '.catch(function(err){'
+    // Bridge offline -> graceful degradation to manual Gmail. This is an ATTEMPT, never a send.
+    +         'bridgeUp(false);'
+    +         'if(openHere(r.gurl)){ post("email"); confirmSend(r, "bridge offline — Gmail compose opened"); }'
+    +         'else { addLog("fail", r.first||r.owner, "bridge offline AND Gmail popup blocked", "warn"); advance(); }'
+    +       '});'
+    +   '}'
+    /* ---- confirmSend: the honest middle state ------------------------------------------------
+       A hand-sent Gmail message genuinely left, but the page cannot observe it. Guessing either
+       way is wrong: assume sent and the cap/CRM lie (the old bug); assume unsent and real work
+       vanishes. So ASK. Untapped, the lead stays in tomorrow's queue — the safe default. */
+    +   'function confirmSend(r, why){'
+    +     'addLog("email", r.first||r.owner, why+" — press Send in Gmail, then confirm below", "warn");'
+    +     'main.innerHTML="<div class=\'mwpace\'>"'
+    +       '+"<div class=\'h\'>&#9993; Did it send?</div>"'
+    +       '+"<div class=\'s\'>Gmail is open with the message prefilled. Press <b>Send</b> there, then tell us — "'
+    +       '+"nothing counts against today&rsquo;s cap and this lead is not marked contacted until you do.</div>"'
+    +       '+"<button id=\'mwsentyes\' class=\'mwbtn done\' style=\'margin-top:14px\'>&#10003; I sent it</button>"'
+    +       '+"<button id=\'mwsentno\' class=\'mwbtn skip\' style=\'margin-top:8px\'>Didn&rsquo;t send &mdash; next lead</button>"'
+    +     '+"</div>";'
+    +     'var yes=document.getElementById("mwsentyes");'
+    +     'if(yes) yes.onclick=function(){'
+    +       'post("sent", {mid:"", via:"manual-confirmed", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
+    +       'addLog("sent", r.first||r.owner, "✓ confirmed sent by hand via Gmail");'
+    +       'advance();'
+    +     '};'
+    +     'var no=document.getElementById("mwsentno");'
+    +     'if(no) no.onclick=function(){'
+    +       'addLog("skip", r.first||r.owner, "not sent — stays in the queue for tomorrow");'
+    +       'advance();'
+    +     '};'
+    +   '}'
+    /* ---- CALL MODE ---------------------------------------------------------------------------
+       Six outcomes, mirroring the Dial-Ready tab's QUICKLOG bar so one vocabulary covers the whole
+       app. The cooldown differs per outcome, because a flat 72h rule is wrong for calls: a
+       voicemail should not retire a lead as long as an actual conversation does. `sup` marks the
+       two outcomes that suppress the lead permanently rather than for hours. */
+    +   'var CALL_OUTCOMES=['
+    +     '{k:"noanswer", t:"No answer",     hrs:24,  cls:"skip"},'
+    +     '{k:"voicemail",t:"Left voicemail",hrs:24,  cls:"skip"},'
+    +     '{k:"talked",   t:"Talked",        hrs:72,  cls:"done"},'
+    +     '{k:"wrong",    t:"Wrong number",  hrs:0,   cls:"warnb", sup:true},'
+    +     '{k:"notint",   t:"Not interested",hrs:72,  cls:"warnb"},'
+    +     '{k:"dnc",      t:"DNC — do not contact", hrs:0, cls:"dnc", sup:true}'
+    +   '];'
+    +   'function doCall(r){'
+    +     'if(!(r.phones && r.phones.length)){'
+    +       'addLog("fail", r.first||r.owner, "no traced phone — run skiptrace on this lead", "warn"); return;'
+    +     '}'
+    // FTSA is an hours rule, not a volume rule. Warn but do not block — the operator may be
+    // logging a call placed earlier, and a hard stop would just teach him to work around it.
+    +     'var f=_wftsa();'
+    +     'if(!f.safe) addLog("wait", r.first||r.owner, "&#9888; "+f.label+" — FL FTSA restricts calls to 8 AM-8 PM ET", "warn");'
+    // ORDER MATTERS. Render the outcome screen BEFORE dialling: `window.location.href="tel:..."`
+    // navigates the document, which tore the worker tab down mid-click and the disposition bar
+    // never appeared (caught in test — the queue silently lost the lead). An anchor click hands
+    // the URL to the OS protocol handler without touching this document's location.
+    +     'addLog("call", r.first||r.owner, "dialing "+r.phones[0]+" — log the outcome below");'
+    +     'callOutcome(r);'
+    +     'try {'
+    +       'var a=document.createElement("a");'
+    +       'a.href="tel:"+String(r.phones[0]).replace(/[^0-9+]/g,"");'
+    +       'a.style.display="none"; document.body.appendChild(a);'
+    +       'a.click(); document.body.removeChild(a);'
+    +     '} catch(e){}'
+    +   '}'
+    /* The disposition screen. This is the whole point of call mode: "the phone is not hitting" was
+       an untestable feeling because NOTHING recorded what happened on a call. Six taps make it a
+       measurable funnel — and a wrong number or a DNC finally becomes actionable from the queue
+       instead of requiring a trip back to the board. */
+    +   'function callOutcome(r){'
+    +     'var btns = CALL_OUTCOMES.map(function(o){'
+    +       'return "<button class=\'mwbtn "+o.cls+" mwoc\' data-oc=\'"+o.k+"\'>"+o.t+"</button>";'
+    +     '}).join("");'
+    +     'main.innerHTML="<div class=\'mwpace\'>"'
+    +       '+"<div class=\'h\'>&#128222; How did the call go?</div>"'
+    +       '+"<div class=\'s\'>"+esc(r.first||r.owner)+" &middot; "+esc(r.phones[0])+"<br>'
+    +         'Every outcome is logged to the lead. This is the data that tells us whether the phone '
+    +         'is working &mdash; guessing has never worked.</div>"'
+    +       '+"<div class=\'mwocwrap\'>"+btns+"</div>"'
+    +     '+"</div>";'
+    +     'Array.prototype.forEach.call(document.querySelectorAll(".mwoc"), function(b){'
+    +       'b.onclick=function(){'
+    +         'var o = CALL_OUTCOMES.filter(function(x){return x.k===b.dataset.oc;})[0]; if(!o) return;'
+    +         'post("callout", {oc:o.k, label:o.t, hrs:o.hrs, sup:!!o.sup});'
+    +         'addLog(o.sup?"skip":"call", r.first||r.owner,'
+    +           '"outcome: "+o.t+(o.sup?" — suppressed, will not be queued again":" — back in "+o.hrs+"h"),'
+    +           'o.sup?"warn":undefined);'
+    +         'advance();'
+    +       '};'
+    +     '});'
+    +   '}'
     +   'function tapToOpen(r, kind, url, after){'
     +     'addLog("wait", r.first||r.owner, kind+" popup was blocked — tap the gold button to open it", "warn");'
     +     'main.innerHTML="<div class=\'mwpace\'>"'
@@ -9892,9 +10134,17 @@ function genMorningWorker(lane){
     +       '+"<button id=\'mwtapskip\' class=\'mwbtn skip\' style=\'margin-top:8px\'>Skip this lead &rarr;</button>"'
     +     '+"</div>";'
     +     'var b=document.getElementById("mwtapopen");'
-    +     'if(b) b.onclick=function(){ if(openHere(url)){ after(); } };'
+    // AUTO-RUN DEADLOCK GUARD. This screen used to have no timer: it never set awaitingReturn, so
+    // onBack short-circuited and the 8s pacing fallback never armed. Walk away from a blocked
+    // popup mid-auto-run and the queue sat here forever. Now an untapped rescue times out and the
+    // run continues — 20s rather than 8s because this one genuinely needs a human hand.
+    +     'var bail=setTimeout(function(){'
+    +       'addLog("skip", r.first||r.owner, "blocked-popup rescue untouched for 20s — moving on", "warn");'
+    +       'post("skip"); advance();'
+    +     '}, 20000);'
+    +     'if(b) b.onclick=function(){ clearTimeout(bail); if(openHere(url)){ after(); } };'
     +     'var sk=document.getElementById("mwtapskip");'
-    +     'if(sk) sk.onclick=function(){ post("skip"); addLog("skip", r.first||r.owner, "skipped at blocked popup"); advance(); };'
+    +     'if(sk) sk.onclick=function(){ clearTimeout(bail); post("skip"); addLog("skip", r.first||r.owner, "skipped at blocked popup"); advance(); };'
     +   '}'
     +   'function attempt(r, idx, tries){'
     +     'var ch=channels(r), step=ch[idx];'
@@ -9906,17 +10156,22 @@ function genMorningWorker(lane){
     +       'addLog("fail", r.first||r.owner, step.k.toUpperCase()+" failed: "+step.why+" → trying "+(ch[idx+1]?ch[idx+1].k:"nothing left"), "warn");'
     +       'healing=setTimeout(function(){ attempt(r, idx+1, 0); }, 900); return;'
     +     '}'
-    // email + people-search open from THIS tab. Text still hands off to the board (its composer
-    // is a modal there) — and the log now says WHERE it opened instead of implying it is here.
-    +     'if(step.k==="email" || step.k==="wp"){'
-    +       'var url = step.k==="email" ? r.gurl : r.wpUrl;'
+    // EMAIL goes through doSend — the same path the manual button uses. Previously this branch
+    // called openHere(r.gurl) directly, which meant auto-run could only ever open composers and
+    // never actually deliver: the bridge existed but the headline feature could not reach it.
+    // doSend owns its own advancement (send -> advance, cap/auth -> pause, offline -> confirm),
+    // so there is deliberately no startPace() here.
+    +     'if(step.k==="email"){ return doSend(r); }'
+    // people-search opens from THIS tab; the log says WHERE it opened rather than implying here.
+    +     'if(step.k==="wp"){'
+    +       'var url = r.wpUrl;'
     +       'var done = function(){'
-    +         'post(step.k);'                                     /* board archives + logs the touch */
-    +         'addLog(step.k, r.first||r.owner, step.k==="email"?"Gmail compose opened, prefilled — press Send":"people-search opened — grab the number");'
+    +         'post("wp");'
+    +         'addLog("wp", r.first||r.owner, "people-search opened — grab the number");'
     +         'startPace(r);'
     +       '};'
     +       'if(openHere(url)) return done();'
-    +       'return tapToOpen(r, step.k==="email"?"Gmail draft":"people search", url, done);'
+    +       'return tapToOpen(r, "people search", url, done);'
     +     '}'
     +     'if(!post(step.k)){'
     +       'if(tries<2){'
@@ -9995,7 +10250,9 @@ function genMorningWorker(lane){
     +         '+(others.length?"<br><br>Still open: <b>"+others.map(function(k){return LMETA[k].ic+" "+LMETA[k].t+" ("+LANES[k].length+")";}).join(" &middot; ")+"</b> &mdash; tap a lane above.":"<br><br>Come back after the next refresh.")'
     +       '+"</div>"; prog.textContent="0 of 0"; renderLog(); return; }'
     +     'if(i>=Q.length){'
-    +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'>Worked <b>"+Q.length+"</b> leads<br>Email <b>"+(STATS.email||0)+"</b> · Text <b>"+(STATS.text||0)+"</b> · WP <b>"+(STATS.wp||0)+"</b> · Skipped <b>"+(STATS.skip||0)+"</b></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
+    // Calls and DELIVERED emails lead the summary — those are the two numbers that mean work
+    // happened. "Email" here is attempts, shown small, because an attempt is not an outcome.
+    +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'>Worked <b>"+Q.length+"</b> leads<br>&#128222; Calls <b>"+(STATS.call||0)+"</b> · &#9993; Delivered <b>"+(STATS.sent||0)+"</b> · Text <b>"+(STATS.text||0)+"</b><br><span style=\'font-size:12px;opacity:.75\'>attempts "+(STATS.email||0)+" · lookups "+(STATS.wp||0)+" · skipped "+(STATS.skip||0)+"</span></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
     +       'prog.textContent=Q.length+" of "+Q.length+" &#x2713;"; renderLog(); return;'
     +     '}'
     +     'var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length;'
@@ -10026,6 +10283,11 @@ function genMorningWorker(lane){
     +       '+"</div>"'
     +       '+"<div class=\'mwacts\'>"'
     +         '+"<button id=\'mw-auto\' class=\'mwbtn done\' data-fn=\'auto\' style=\'grid-column:1/-1\'>&#9654; Start auto-run — walk the whole queue<span class=\'sub\'>advances the moment you tab back · "+Math.round(paceMs/1000)+"s fallback · logs everything · heals past failures</span></button>"'
+    // CALL FIRST — full width, above email. Calling is the highest-converting channel and the
+    // only one with no daily cap, yet the worker had no call button at all: r.phones sat on the
+    // card unused while `done` hardcoded the outcome "Called - no answer" whether or not anyone
+    // had dialled. Now the dial is real and the outcome is recorded by the operator.
+    +         '+"<button id=\'mw-call\' class=\'mwbtn call"+(r.phones.length?"":" disabled")+"\' data-fn=\'call\' style=\'grid-column:1/-1\'>&#128222; Call "+(r.phones.length?esc(r.phones[0]):"")+"<span class=\'sub\'>"+(r.phones.length?"opens your dialer · log the outcome after · never capped":"no phone traced — this is a skip-trace task")+"</span></button>"'
     +         '+"<button id=\'mw-email\' class=\'mwbtn email"+(r.emails.length?"":" disabled")+"\' data-fn=\'email\'>&#128231; "+(r.portfolio&&r.portfolio.length?"Portfolio email":"Email")+"<span class=\'sub\'>"+(r.emails.length?(r.portfolio&&r.portfolio.length?(r.portfolio.length+1)+" properties · one message":"composer"):"none on file")+"</span></button>"'
     +         '+"<button id=\'mw-text\' class=\'mwbtn text"+(r.phones.length?"":" disabled")+"\' data-fn=\'text\'>&#128241; Text<span class=\'sub\'>"+(r.phones.length?"composer":"no phone")+"</span></button>"'
     +         '+"<button id=\'mw-wp\' class=\'mwbtn wp"+(r.wpUrl?"":" disabled")+"\' data-fn=\'wp\'>&#128269; Lookup<span class=\'sub\'>find contact</span></button>"'
@@ -10038,6 +10300,9 @@ function genMorningWorker(lane){
     +     'var b=e.target.closest(".mwbtn"); if(!b||b.classList.contains("disabled"))return;'
     +     'var fn=b.dataset.fn; if(!fn)return; var r=Q[i]; if(!r)return;'
     +     'if(fn==="auto"){ auto=true; addLog("open", r.first||r.owner, "auto-run started — "+Q.length+" leads queued"); return runOne(); }'
+    // CALL is handled before the email/text/wp guard below — it is not one of those channels and
+    // must not be filtered by their availability check.
+    +     'if(fn==="call"){ return doCall(r); }'
     +     'if(fn==="email"||fn==="text"||fn==="wp"){'
     +       'var has=(fn==="email"?r.emails.length:(fn==="text"?r.phones.length:!!r.wpUrl));'
     +       'if(!has){ addLog("fail", r.first||r.owner, fn.toUpperCase()+" unavailable for this lead", "warn"); return; }'
@@ -10047,62 +10312,11 @@ function genMorningWorker(lane){
     +         'else addLog("fail", r.first||r.owner, "lookup window did not open — check the popup blocker icon in the address bar", "warn");'
     +         'return;'
     +       '}'
-    // EMAIL: try the localhost SMTP bridge first (send_server.py on 127.0.0.1:8823). If it is
-    // running and Gmail accepts the message, we get a real Message-ID back and the ledger is
-    // updated by the server. If it is offline OR errors, fall back to opening Gmail compose
-    // (the pre-existing behavior) so the worker keeps functioning either way.
-    +       'if(fn==="email"){'
-    +         'var subj = "", body = "", src = null;'
-    +         'try {'
-    +           'var full = DATA.find(function(x){return x.case === r.c;});'
-    +           'if(full){'
-    +             'var isPort = r.portfolio && r.portfolio.length;'
-    +             'if(isPort && typeof genPortfolioEmail === "function"){'
-    +               'var sibs = (r.portfolio||[]).map(function(p){return DATA.find(function(x){return x.case === p.c;});}).filter(Boolean);'
-    +               'genPortfolioEmail(full, sibs, true);'
-    +             '} else if(typeof genEmail === "function") {'
-    +               'genEmail(full, true);'
-    +             '}'
-    +             'if(window.__lastEmail && window.__lastEmail.c === r.c){'
-    +               'subj = window.__lastEmail.subj || "";'
-    +               'body = window.__lastEmail.body || "";'
-    +             '}'
-    +           '}'
-    +         '} catch(e){}'
-    +         'if(!subj || !body){'
-    // Cannot build a payload -> fall straight through to Gmail compose.
-    +           'if(openHere(r.gurl)){ post("email"); addLog("email", r.first||r.owner, "Gmail compose opened (no server payload) — click Send"); }'
-    +           'else addLog("fail", r.first||r.owner, "Gmail window did not open — check popup blocker", "warn");'
-    +           'return;'
-    +         '}'
-    +         'var payload = {to:r.emails[0], subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
-    +         'addLog("email", r.first||r.owner, "trying SMTP bridge...");'
-    +         'fetch("http://127.0.0.1:8823/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)})'
-    +           '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
-    +           '.then(function(x){'
-    +             'if(x.status===200 && x.j.ok){'
-    +               'post("email"); addLog("email", r.first||r.owner, "✓ SENT via SMTP bridge — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
-    // Auto-advance after a successful send so auto-run keeps moving. Delay so the log paints.
-    +               'setTimeout(function(){ advance(); }, 900);'
-    +             '} else if(x.status===409 && x.j.skip){'
-    +               'addLog("skip", r.first||r.owner, "already emailed inside 24h — deferred", "warn"); post("skip"); setTimeout(function(){ advance(); }, 700);'
-    +             '} else if(x.status===429){'
-    +               'addLog("fail", r.first||r.owner, "daily cap reached: "+String(x.j.err||""), "warn");'
-    +             '} else if(x.status===401){'
-    +               'addLog("fail", r.first||r.owner, "SMTP auth failed — fix gmail.key; falling back to Gmail compose", "warn");'
-    +               'openHere(r.gurl);'
-    +             '} else {'
-    +               'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown"), "warn");'
-    +             '}'
-    +           '})'
-    +           '.catch(function(err){'
-    // Bridge offline (server not running) — this is the graceful degradation path. Fall back
-    // to opening Gmail compose so the operator can still send manually.
-    +             'if(openHere(r.gurl)){ post("email"); addLog("email", r.first||r.owner, "⚡ bridge offline — opened Gmail compose (click Send). Run `python send_server.py` for one-click.", "warn"); }'
-    +             'else addLog("fail", r.first||r.owner, "bridge offline AND Gmail popup blocked", "warn");'
-    +           '});'
-    +         'return;'
-    +       '}'
+    // EMAIL: one code path, called from BOTH the manual button and auto-run's attempt().
+    // It used to be two: the button hit the SMTP bridge while attempt() always opened Gmail
+    // compose — so "Start auto-run", the headline feature, was structurally incapable of
+    // sending anything. doSend() is now the only way email leaves the worker.
+    +       'if(fn==="email"){ doSend(r); return; }'
     +       'if(post(fn)) addLog(fn, r.first||r.owner, "text composer opened ON THE BOARD TAB — switch tabs to send");'
     +       'else addLog("fail", r.first||r.owner, "could not reach the main tab — is the board still open?", "warn");'
     +       'return;'
@@ -10110,7 +10324,7 @@ function genMorningWorker(lane){
     +     'if(fn==="skip"){ post("skip"); addLog("skip", r.first||r.owner, "skipped"); return advance(); }'
     +     'if(fn==="done"){ post("done"); addLog("done", r.first||r.owner, "marked worked"); return advance(); }'
     +   '});'
-    +   'renderLog(); render();'
+    +   'renderBridge(); probeBridge(); renderLog(); render();'
     + '})();<\/script>';
   return _docShell('Morning worker · '+(laneCounts.urgent+laneCounts.active+laneCounts.early)+' leads across 3 lanes',
                    body, {key:'worker'});
@@ -10150,45 +10364,97 @@ window.addEventListener('message', function(ev){
 window.addEventListener('message', function(ev){
   var d = ev && ev.data && ev.data.workerAct; if(!d || !d.c) return;
   var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
+  // ---- 'email' = ATTEMPT ONLY (composer opened, or bridge tried and fell back) ----------------
+  // This branch deliberately does almost nothing now. It used to archive the verbatim copy AND
+  // call autoLog(), which wrote a CRM touch — and _workerEligible drops any lead touched inside
+  // 72h. So merely OPENING a Gmail composer removed the lead from the queue for three days. Fifty
+  // opened composers drained fifty leads out of the pipeline without a single email being sent,
+  // and the operator had no way to see it: every log line said the work had happened.
+  // An attempt is now just a breadcrumb. Delivery is the 'sent' branch below.
   if(d.k === 'email'){
     var em = (r.emails||[])[0] || '';
-    // STRAIGHT TO GMAIL COMPOSE — one click from Send.
-    // Previously this opened the genEmail PREVIEW page, so the operator had to click "Open in
-    // Gmail" there and only THEN press Send: two clicks and a page he had already approved the
-    // copy for. Now the worker jumps directly to Gmail's compose URL with to/subject/body
-    // prefilled -- the exact same URL the preview page's own button builds. He lands in a ready
-    // message and presses Send. Still a human send; nothing leaves the machine on its own.
-    // genEmail() is still called first because building it is what populates __lastEmail, which
-    // is how the Proof Sheet archives the verbatim text that went out.
-    // THE WORKER TAB OPENS GMAIL NOW, NOT THIS ONE. This handler used to window.open here — in a
-    // background tab with no user activation — so the browser silently blocked it, and because
-    // window.open returns null instead of throwing, `opened` was set true anyway: the log said
-    // "composer opened" over a dead click and the Proof Sheet archived a send that never happened.
-    // The worker only posts 'email' AFTER its own window.open returned a real window, so by the
-    // time this runs the composer is genuinely on screen. This side's job is the paper trail:
-    // regenerate the identical content (genEmail is deterministic) and archive the verbatim text.
+    _docLog(r.case, 'worker-email', 'bi');
+    _wlog(r.case, 'email',
+          'composer opened for '+(em||'owner')+' — NOT counted as sent, lead stays in the queue '
+          + 'until delivery is confirmed', true);
+    // No _sentAdd: the Proof Sheet is evidence of what LEFT, not of what was drafted.
+    // No autoLog: an unreached lead must come back tomorrow.
+
+  // ---- 'sent' = CONFIRMED DELIVERY -----------------------------------------------------------
+  // Reached only via a bridge HTTP 200 (real Message-ID from Gmail's SMTP) or the operator
+  // explicitly tapping "I sent it" after a manual Gmail send. This is the ONLY path that may
+  // charge the daily cap, archive to the Proof Sheet, or retire the lead.
+  } else if(d.k === 'sent'){
+    var em2 = (r.emails||[])[0] || '';
+    var mid = (d.extra && d.extra.mid) || '';
+    var via = (d.extra && d.extra.via) || 'bridge';   // 'bridge' | 'manual-confirmed'
     var archived = false;
     try {
-      if(typeof genEmail === 'function') genEmail(r, true);    // quiet: compose + stash, no preview tab
+      // genEmail/genPortfolioEmail are deterministic, so re-running them reproduces exactly what
+      // the worker sent. That is what makes the archive trustworthy rather than a summary.
+      var sibs = (d.extra && d.extra.portfolio) || [];
+      if(sibs.length && typeof genPortfolioEmail === 'function'){
+        var sibRows = sibs.map(function(cs){ return DATA.find(function(x){return x.case===cs;}); }).filter(Boolean);
+        genPortfolioEmail(r, sibRows, true);
+      } else if(typeof genEmail === 'function'){
+        genEmail(r, true);
+      }
       var LE = window.__lastEmail;
-      if(LE && LE.c === r.case && (LE.to || em)){
+      if(LE && LE.c === r.case && (LE.to || em2)){
         archived = true;
         _sentAdd({d:new Date().toISOString().slice(0,10), t:Date.now(),
                   ts:new Date().toLocaleString(), c:r.case, ch:'email',
-                  to:LE.to||em, who:LE.who||'', addr:LE.addr||r.addr||'',
-                  subj:LE.subj||'', body:LE.body||'', subjES:LE.subjES||'', bodyES:LE.bodyES||''});
+                  to:LE.to||em2, who:LE.who||'', addr:LE.addr||r.addr||'',
+                  subj:LE.subj||'', body:LE.body||'', subjES:LE.subjES||'', bodyES:LE.bodyES||'',
+                  via:via, mid:mid});
       }
     } catch(e){}
     _docLog(r.case, 'worker-email', 'bi');
-    _wlog(r.case, 'email',
-          archived ? ('Gmail compose opened in the worker tab → '+(em||'owner')+' — verbatim copy archived')
-                   : 'compose reported open but the archive could not rebuild the content — check the Proof Sheet',
-          archived);
-    // Record the CHANNEL on the board's touch ledger, not just the activity feed. The 'done' tap
-    // below logs ch:'worker', which says a lead was handled but not HOW — so a funnel keyed on
-    // channel could never advance past "called". autoLog dedupes same-day/same-channel, so tapping
-    // Email twice on one lead does not double-count it.
-    if(archived){ try { autoLog(r, 'email', 'emailed (morning batch)'); } catch(e){} }
+    _wlog(r.case, 'sent',
+          (via==='bridge' ? '✓ DELIVERED via SMTP bridge → ' : '✓ Operator confirmed manual send → ')
+          + (em2||'owner') + (mid ? ' · id '+String(mid).replace(/[<>]/g,'').slice(0,26) : ''),
+          true);
+    // NOW the CRM touch is honest — someone really was contacted. autoLog dedupes same-day /
+    // same-channel, so a double-tap cannot double-count.
+    try { autoLog(r, 'email', 'emailed (morning batch)'); } catch(e){}
+
+  /* ---- 'callout' = a real call outcome -------------------------------------------------------
+     Replaces the old behaviour where `done` blind-stamped every lead 'Called - no answer' whether
+     or not a phone had been touched. Six outcomes, each carrying its own cooldown, so the queue
+     can treat a voicemail differently from a conversation. Two of them suppress permanently.
+     Calls never touch the send cap — FTSA limits the HOURS you may call, not the volume. */
+  } else if(d.k === 'callout'){
+    var oc  = (d.extra && d.extra.oc) || 'noanswer';
+    var lbl = (d.extra && d.extra.label) || oc;
+    var hrs = (d.extra && typeof d.extra.hrs === 'number') ? d.extra.hrs : 24;
+    var sup = !!(d.extra && d.extra.sup);
+    var n = notes[r.case] || (notes[r.case] = {});
+    _docLog(r.case, 'worker-call', 'en');
+    _wlog(r.case, 'call', 'call outcome: ' + lbl
+          + (sup ? ' — SUPPRESSED, will not be queued again' : ' — returns in ' + hrs + 'h'), true);
+    // The touch carries the real outcome, so the funnel can finally distinguish "tried" from
+    // "reached". autoLog dedupes same-day/same-channel; logTouch is the underlying writer.
+    try { autoLog(r, 'call', lbl); } catch(e){}
+    // COOLDOWN. _workerEligible reads a flat 72h off the newest touch. `cooldownH` lets a
+    // no-answer come back tomorrow instead of in three days, which is how a call list should work.
+    n.cooldownH = hrs;
+    if(oc === 'dnc'){
+      // An owner saying "stop" must be honoured immediately and permanently. Previously this was
+      // impossible from the worker — you had to leave, find the lead, and set it by hand.
+      n.optout = true;
+      n.status = 'DO NOT CONTACT';
+      _wlog(r.case, 'skip', 'DNC recorded from the worker — all channels closed for this owner', true);
+    } else if(oc === 'wrong'){
+      n.wrongown = true;
+      n.status = n.status || 'Wrong number';
+    } else if(oc === 'talked' && !n.status){
+      n.status = 'Contacted';
+    } else if(oc === 'notint' && !n.status){
+      n.status = 'Not interested';
+    }
+    save();
+    if(typeof render === 'function') render();
+
   } else if(d.k === 'text'){
     // openBulkText walks a queue; open just this one lead via openTextSingle if available
     var ph = (r.phones||[])[0] || '';
