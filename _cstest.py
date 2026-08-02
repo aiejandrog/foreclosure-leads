@@ -710,9 +710,19 @@ with sync_playwright() as p:
     # started filling addr/folio on lis pendens leads (2026-07-30); now 85 of 125 LP rows ARE
     # resolved and correctly carry no Resolve-parcel action, so comparing against rows-shown
     # failed on a board that had just gotten better. Assert the thing the name promises.
+    #
+    # ...but `unresolved` is a WHOLE-BOARD DATA.filter (149 of 854 leads) while `resolveBtns`
+    # counts buttons in the LP lane's rendered DOM (80). Comparing them made this fail forever on
+    # a lane that is in fact perfectly covered: 80 rows say "parcel not resolved" and all 80 offer
+    # the action. Compare like with like — rendered against rendered.
     rec('LP lane: every unresolved row offers a Resolve-parcel action',
-        lpv['resolveBtns'] >= lpv['unresolved'] and lpv['unresolved'] > 0,
-        f"{lpv['resolveBtns']} buttons / {lpv['unresolved']} unresolved")
+        lpv['resolveBtns'] == lpv['honestVal'] and lpv['honestVal'] > 0,
+        f"{lpv['resolveBtns']} buttons / {lpv['honestVal']} unresolved rows in-lane")
+    # The board-wide number is the pipeline gap, not a UI gap: unresolved leads outside the LP
+    # lane have no Resolve action anywhere. Tracked as the LP-resolver backlog, asserted here only
+    # so a silent jump in that count is visible.
+    rec('board-wide unresolved count stays within the known LP backlog',
+        lpv['unresolved'] <= 200, f"{lpv['unresolved']} unresolved board-wide")
     rec('LP lane: the legal description is baked and shown as the parcel identity',
         lpv['legalBaked'] > 0 and lpv['legalShown'] > 0,
         f"{lpv['legalBaked']} baked / {lpv['legalShown']} rendered")
