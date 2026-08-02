@@ -24,6 +24,17 @@ Usage:
 
 Compliance: providers filter TCPA-restricted numbers by default (we keep that). Still, dial MANUALLY,
 scrub against the federal DNC list, and never autodial/text these owners (FL FTSA + TCPA).
+
+EXIT CODES (the whole point of the 2026-08-02 hardening — automation depends on these):
+  0  success. Every queued lead was attempted; misses (200 with no data) are fine, still 0.
+  1  no API key present at all.
+  2  provider REJECTED the key — bad key or (BatchData) exhausted balance. Aborts on the FIRST
+     such error instead of burning the whole queue. The cause body is printed. THIS is what makes
+     `run-phones*.bat`'s `if errorlevel 1` guard real, so a dead key never rebuilds/pushes an
+     empty board over a good one.
+  3  aborted after 3 consecutive transient failures (timeout / 5xx / connection) — provider likely
+     down. One bad lead does NOT abort; a systemic outage does.
+  4  projected spend exceeds --max-spend. Nothing was called. Raise the ceiling or narrow the run.
 """
 import glob as _glob
 import json, os, re, sys, time, argparse
@@ -36,6 +47,28 @@ RESULTS = os.path.join(HERE, 'skiptrace_results.json')
 UA = 'foreclosure-leads-skiptrace/1.1'
 
 COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|TR|EST|ESTATE)\b', re.I)
+
+
+class TraceAborted(Exception):
+    """The provider rejected us in a way that will reject every subsequent lead too — a bad/expired
+    key or an exhausted balance. Raised from trace_one so the loop bails on the FIRST occurrence
+    instead of churning hundreds of guaranteed-failing calls (the 23/23-403 incident, 2026-08-02).
+    `balance` distinguishes 'top up' from 'the key itself is wrong'; `body` is printed verbatim."""
+    def __init__(self, msg, body='', balance=False):
+        super().__init__(msg)
+        self.body = body
+        self.balance = balance
+
+
+class TraceTransient(Exception):
+    """A timeout / 5xx / connection error on ONE lead — a signal the PROVIDER may be down. Not fatal
+    on its own; the caller counts consecutive occurrences and aborts (exit 3) only if they pile up."""
+
+
+class TraceSkip(Exception):
+    """A per-lead client error (e.g. 400 on an address the provider won't accept). This lead is bad,
+    not the provider — skip it and DON'T count it toward the transient-abort strike counter, or a
+    run of bad addresses would look like an outage and kill an otherwise-healthy run."""
 
 
 # ---- schema helpers: work across Miami-Dade (leads_final.json) AND county files (broward/palmbeach_leads.json)
@@ -211,16 +244,63 @@ def select(leads, args, llcs=None):
         out.append(r)
     return out
 
+def _err_body(r):
+    """Pull the provider's human message out of the response, JSON or text, for the operator."""
+    try:
+        b = r.json() or {}
+        msg = ((b.get('status') or {}).get('message')      # BatchData shape
+               or b.get('message') or b.get('error') or '')
+        return (msg or '').strip(), b
+    except Exception:
+        return (r.text or '').strip()[:400], {}
+
+
 def trace_one(session, prov, key, lead, raw=False):
+    """One provider call, classified. Returns (phones, emails) on a 200. Raises TraceAborted on an
+    auth/balance rejection (fatal for the whole run) or TraceTransient on a timeout/5xx/connection
+    error (fatal only if it repeats). 429 is retried in place with backoff before giving up."""
     p = PROVIDERS[prov]
     addr = lead.get('_trace_addr') or address_for(lead)   # officer address for a company, else the owner's
-    r = session.post(p['url'], json=p['body'](addr), timeout=30,
-                     headers={'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'User-Agent': UA})
-    if raw:
-        print('--- RAW', lead.get('Case #', ''), r.status_code, '---')
-        print(r.text[:2000])
-    r.raise_for_status()
-    return p['extract'](r.json())
+    headers = {'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'User-Agent': UA}
+
+    for attempt in range(4):                               # 1 try + up to 3 backoff retries for 429
+        try:
+            r = session.post(p['url'], json=p['body'](addr), timeout=30, headers=headers)
+        except requests.exceptions.RequestException as e:  # timeout, connection reset, DNS, etc.
+            raise TraceTransient(f"{type(e).__name__}: {str(e)[:120]}")
+
+        if raw:
+            print('--- RAW', lead.get('Case #', ''), r.status_code, '---')
+            print(r.text[:2000])
+
+        sc = r.status_code
+        if sc == 200:
+            try:
+                return p['extract'](r.json())
+            except ValueError:                             # 200 but unparseable body — treat as transient
+                raise TraceTransient(f"200 but non-JSON body: {(r.text or '')[:120]}")
+
+        msg, body = _err_body(r)
+        # BatchData can also signal 403 inside a 200-ish envelope: body.status.code == 403.
+        body_code = (body.get('status') or {}).get('code') if isinstance(body, dict) else None
+
+        if sc in (401, 402, 403) or body_code in (401, 402, 403):
+            balance = 'balance' in (msg or '').lower() or 'insufficient' in (msg or '').lower()
+            raise TraceAborted(f"{sc} {msg or 'rejected'}", body=(r.text or '')[:600], balance=balance)
+
+        if sc == 429:                                      # rate limited — back off and retry in place
+            if attempt < 3:
+                wait = 20 * (2 ** attempt)                 # 20, 40, 80s (whitepages pattern)
+                print(f"      429 rate-limited, backing off {wait}s (retry {attempt+1}/3)")
+                time.sleep(wait)
+                continue
+            raise TraceAborted(f"429 still rate-limited after 3 backoffs: {msg}", body=(r.text or '')[:600])
+
+        if 500 <= sc < 600:                                # provider-side outage — transient
+            raise TraceTransient(f"{sc} server error: {msg[:120]}")
+
+        # Anything else (400/404/422 for THIS lead's address) — skip the lead, not the run.
+        raise TraceSkip(f"{sc}: {msg[:120]}")
 
 def main():
     ap = argparse.ArgumentParser()
@@ -232,10 +312,29 @@ def main():
     ap.add_argument('--refresh', action='store_true')
     ap.add_argument('--raw', action='store_true')
     ap.add_argument('--provider', default='', help='tracerfy | batchdata (default: auto-detect by key file)')
+    ap.add_argument('--max-spend', type=float, default=70.0,
+                    help='abort (exit 4) if the run would cost more than this many dollars. '
+                         'Guards a wiped cache from silently re-spending on a nightly --all.')
+    ap.add_argument('--check-key', action='store_true',
+                    help='confirm a key is loaded for the provider and exit (0 present, 1 missing). '
+                         'No API call, no spend. The nightly job can gate on this.')
+    ap.add_argument('--retry-empty', type=int, default=0, metavar='DAYS',
+                    help='also re-queue cached leads whose phones came back EMPTY and were traced '
+                         'more than DAYS ago (opt-in; re-spends). Default 0 = off.')
     args = ap.parse_args()
 
     provider = pick_provider(args.provider)
     cost_per = PROVIDERS[provider]['cost']
+
+    if args.check_key:                                          # cheap "is the key even loaded?" gate — no call
+        k = load_key(provider)
+        if k:
+            print(f"OK: '{provider}' key loaded ({len(k)} chars). NOTE: presence != valid — a live "
+                  f"trace still confirms the balance. (exit 0)")
+            sys.exit(0)
+        kf = PROVIDERS[provider]['keyfile']
+        print(f"MISSING: no key for '{provider}'. Put it in {kf} or set {PROVIDERS[provider]['env']}. (exit 1)")
+        sys.exit(1)
 
     leads = load_all_leads()                                    # Miami-Dade + Broward + Palm Beach
     results = json.load(open(RESULTS, encoding='utf-8')) if os.path.exists(RESULTS) else {}
@@ -243,7 +342,21 @@ def main():
     llcs = json.load(open(_lof, encoding='utf-8')) if os.path.exists(_lof) else {}
 
     picked = select(leads, args, llcs)
-    todo = [r for r in picked if args.refresh or (_case(r) not in results)]
+
+    def _stale_empty(case):
+        # opt-in: a cached lead whose phones came back EMPTY and was traced > --retry-empty days ago.
+        if not args.retry_empty:
+            return False
+        c = results.get(case)
+        if not c or c.get('phones'):
+            return False
+        try:
+            age = (date.today() - date.fromisoformat(str(c.get('traced', '')))).days
+        except (ValueError, TypeError):
+            return True                                        # no/garbage traced date -> treat as stale
+        return age >= args.retry_empty
+
+    todo = [r for r in picked if args.refresh or (_case(r) not in results) or _stale_empty(_case(r))]
     if args.limit:
         todo = todo[:args.limit]
 
@@ -264,18 +377,62 @@ def main():
     if not todo:
         print("nothing to trace."); return
 
+    projected = len(todo) * cost_per
+    if projected > args.max_spend:                             # spend ceiling — never called anything yet
+        print(f"ABORT: this run would cost ~${projected:.2f}, over the --max-spend ${args.max_spend:.2f} "
+              f"ceiling ({len(todo)} leads x ${cost_per}). Raise --max-spend or narrow the run "
+              f"(--tier / --limit). Nothing was traced. (exit 4)")
+        sys.exit(4)
+
     key = load_key(provider)
     if not key:
         kf = PROVIDERS[provider]['keyfile']
         print(f"NO API KEY for '{provider}'. Put your key in {kf} or set {PROVIDERS[provider]['env']}. Aborting.")
         sys.exit(1)
 
+    def _save():
+        json.dump(results, open(RESULTS, 'w', encoding='utf-8'), indent=1)
+
     s = requests.Session()
-    ok = 0
-    for i, r in enumerate(todo, 1):
-        case = _case(r) or (r.get('Folio', '') or r.get('folio', '') or f'row{i}')
-        try:
-            phones, emails = trace_one(s, provider, key, r, raw=args.raw)
+    ok = 0            # leads that got at least one phone
+    done = 0          # leads attempted (200, whether or not phones came back)
+    strikes = 0       # consecutive transient failures -> provider looks down
+    MAX_STRIKES = 3
+    try:
+        for i, r in enumerate(todo, 1):
+            case = _case(r) or (r.get('Folio', '') or r.get('folio', '') or f'row{i}')
+            try:
+                phones, emails = trace_one(s, provider, key, r, raw=args.raw)
+            except TraceAborted as e:
+                # Fatal for the WHOLE run — this rejection will hit every remaining lead too.
+                _save()
+                print(f"\n  [{i}/{len(todo)}] {case}: {e}")
+                print(f"      provider said: {e.body[:300]}")
+                if e.balance:
+                    print("\n  >>> TOP UP BATCHDATA: https://batchdata.com  (skip-trace balance is exhausted)")
+                else:
+                    print("\n  >>> KEY REJECTED — the API key is bad/expired or your plan doesn't include "
+                          "this endpoint. Fix the key, then re-run.")
+                print(f"  Stopped after {done} attempted so nothing else was spent. (exit 2)")
+                sys.exit(2)
+            except TraceTransient as e:
+                strikes += 1
+                print(f"  [{i}/{len(todo)}] {case}: transient {e}  (strike {strikes}/{MAX_STRIKES})")
+                if strikes >= MAX_STRIKES:
+                    _save()
+                    print(f"\n  >>> ABORTING — {MAX_STRIKES} failures in a row; provider looks down. "
+                          f"{done} attempted, cache saved. Re-run later. (exit 3)")
+                    sys.exit(3)
+                time.sleep(0.3)
+                continue
+            except TraceSkip as e:
+                # bad address for THIS lead — skip it, don't count it against the provider
+                print(f"  [{i}/{len(todo)}] {case}: skip ({e})")
+                time.sleep(0.3)
+                continue
+
+            strikes = 0                                        # a success clears the transient streak
+            done += 1
             _ta = r.get('_trace_addr') or {}
             results[case] = {
                 'name': r.get('_trace_name') or (r.get('owners', '') or '').split(';')[0].strip(),
@@ -287,12 +444,14 @@ def main():
             }
             if phones: ok += 1
             print(f"  [{i}/{len(todo)}] {case}: {len(phones)} phone(s), {len(emails)} email(s)")
-        except Exception as e:
-            print(f"  [{i}/{len(todo)}] {case}: ERROR {str(e)[:140]}")
-        time.sleep(0.3)
-        json.dump(results, open(RESULTS, 'w', encoding='utf-8'), indent=1)  # save as we go
+            time.sleep(0.3)
+            if done % 20 == 0:                                 # periodic checkpoint, not every iteration
+                _save()
+    finally:
+        _save()                                                # always land the cache we did earn
 
-    print(f"\nDONE: {ok}/{len(todo)} leads got a phone. Results -> skiptrace_results.json (local, gitignored).")
+    print(f"\nDONE: {ok}/{len(todo)} leads got a phone ({done} attempted). "
+          f"Results -> skiptrace_results.json (local, gitignored).")
     print("Reminder: MANUAL dial only, scrub the federal DNC list, no autodial/SMS (FL FTSA + TCPA).")
 
 if __name__ == '__main__':
