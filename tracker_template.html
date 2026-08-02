@@ -3945,7 +3945,7 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genHanger(x);})()" title="Neighbor-safe door hanger — English + Spanish, Z-folds so only the owner\'s first name shows. Print, fold, tape to the door (never the mailbox).">🚪 Door hanger <span class="csactsub">EN + ES</span></button>'
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genLetter(x);})()" title="Formal rescue-window letter (5 exits, buyer posture). Mail this alongside the door hanger for a two-touch approach.">✉️ Letter</button>'
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
-    + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — door folder + office forms + quit-claim deeds. Print / view directly.">📁 Doc Room</button>'
+    + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — door folder + office forms + deed cards. Forms print directly; the quit claim deed is locked pending attorney review.">📁 Doc Room</button>'
     + '<button type="button" class="csactbtn" onclick="openDialReady(\''+caseEsc+'\')" title="Dial-Ready Card — the 5-second briefing you read WHILE dialing. Bilingual EN/ES toggle, 3-beat opener in big type, five facts you must not stumble on, tap-to-dial buttons for every non-DNC number. Same gate as Doc Room.">🎯 Dial-Ready</button>'
     + (function(){ var rep=_isReplied(r);
         return '<button type="button" class="csactbtn'+(rep?' csact-save on':'')+'" onclick="_markReplied(\''+caseEsc+'\',event)" '
@@ -8259,7 +8259,7 @@ function openDocRoom(caseId){
     +   '<div class="sub"><b>' + _dfHtml(f.ownerFull||'') + '</b> &middot; Case ' + _dfHtml(f.caseNo||'')
     +     ' &middot; County ' + _dfHtml(f.county||'') + '</div>'
     +   '<p style="background:#0B1730;color:#F4E5A7;padding:10px 14px;border-radius:6px;font:600 13.5px/1.5 Arial,sans-serif">'
-    +     'Every card below has Print — no approval step. Signatures still happen at a title company or law office, never at a door.'
+    +     'Every card below has Print. The quit claim deed is the one exception — it opens an approval page until a FL attorney signs off on the template. Signatures still happen at a title company or law office, never at a door.'
     +   '</p>';
   if(!gate.ok){
     return _openDoc(_docShell('Doc Room — blocked', head
@@ -8743,8 +8743,19 @@ function openDialReady(caseId){
   _docLog(r.case, 'dial-ready', 'bi');
   return _openDoc(genDialReady(r), {keepOpener:true});
 }
+// ---- postMessage trust boundary (added 2026-08-02 after the deed-gate adversarial audit) -------
+// Every child tab (Doc Room, Morning Worker, Dial-Ready, Assignment) is a Blob document CREATED BY
+// THIS PAGE, so on http(s) its origin equals ours. Without this check, any web page holding a
+// window handle to the public board could post {docroom:...} and receive lead-PII documents in the
+// reply, or post {workerAct:...}/{dialoutcome:...} and pollute the CRM ledger. On the file://
+// desktop build all origins are opaque ('null'), so accept — a hostile web page cannot be file://.
+function _msgTrusted(ev){
+  if(location.protocol === 'file:') return true;
+  return !!ev && ev.origin === location.origin;
+}
 // listen for print requests coming back from the opened Doc Room tab
 window.addEventListener('message', function(ev){
+  if(!_msgTrusted(ev)) return;
   var d = ev && ev.data && ev.data.docroom; if(!d) return;
   var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
   var fn = ({genIdentityCard:genIdentityCard, genResourcesCard:genResourcesCard,
@@ -10417,6 +10428,7 @@ function openMorningWorker(lane){
 // bar (logTouch via QUICKLOG index) fires — cadence, status, follow-up date all identical.
 // Toast on the main tab so the operator sees confirmation next time they focus this window.
 window.addEventListener('message', function(ev){
+  if(!_msgTrusted(ev)) return;
   var d = ev && ev.data && ev.data.dialoutcome; if(!d) return;
   var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
   var spec = (typeof QUICKLOG !== 'undefined') ? QUICKLOG[+d.out] : null;
@@ -10428,6 +10440,7 @@ window.addEventListener('message', function(ev){
 });
 // listen for "mark under contract" toggle coming back from the Assignment Package tab
 window.addEventListener('message', function(ev){
+  if(!_msgTrusted(ev)) return;
   var d = ev && ev.data && ev.data.assignContract; if(!d || !d.c) return;
   _toggleContract(d.c);
   try{ render(); }catch(e){}
@@ -10439,6 +10452,7 @@ window.addEventListener('message', function(ev){
 // operator uses manually — no autodial pattern, no TCPA/FTSA exposure — while the worker
 // eliminates decision time between leads.
 window.addEventListener('message', function(ev){
+  if(!_msgTrusted(ev)) return;
   var d = ev && ev.data && ev.data.workerAct; if(!d || !d.c) return;
   var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
   // ---- 'email' = ATTEMPT ONLY (composer opened, or bridge tried and fell back) ----------------
