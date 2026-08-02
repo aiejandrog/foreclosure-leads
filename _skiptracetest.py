@@ -20,6 +20,12 @@ import requests
 HERE = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import skiptrace as ST
+import bd_budget
+
+# The shared daily budget is GLOBAL by design — which means an un-isolated test run would spend the
+# operator's real allowance on fake calls and then start failing for lack of budget. Point the
+# ledger at a throwaway and lift the cap so each scenario measures skiptrace, not the wallet.
+os.environ['BATCHDATA_DAILY_CAP'] = '9999'
 
 ok, bad = [], []
 def rec(n, cond, d=''):
@@ -59,12 +65,16 @@ def _lead(case):
             'mailing_address': '123 MAIN ST, MIAMI, FL 33101', 'county': 'MIAMI-DADE'}
 
 
-def run(leads, actions, argv, seed=None):
-    """Run ST.main() against fakes. Returns (exit_code, results_dict, session)."""
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix='sktest_')) / 'skiptrace_results.json'
+def run(leads, actions, argv, seed=None, ledger=None):
+    """Run ST.main() against fakes. Returns (exit_code, results_dict, session).
+    `ledger` shares one spend ledger across calls — that's how the 'the cap is per DAY, not per
+    run' property gets tested (two runs, one wallet)."""
+    d = pathlib.Path(tempfile.mkdtemp(prefix='sktest_'))
+    tmp = d / 'skiptrace_results.json'
     if seed is not None:
         tmp.write_text(json.dumps(seed), encoding='utf-8')
     ST.RESULTS = str(tmp)
+    bd_budget.LEDGER = str(ledger or (d / 'batchdata_spend.json'))   # never the real money ledger
     ST.load_all_leads = lambda: [dict(x) for x in leads]
     ST.load_key = lambda prov: 'FAKEKEY'
     ST.time.sleep = lambda *a, **k: None                 # no 0.3s waits, no 20s 429 backoff
@@ -164,6 +174,24 @@ code, res, sess = run([_lead('C1'), _lead('C2')], [FakeResp(200, PHONES), FakeRe
                       ['--all', '--refresh'],
                       seed={'C1': {'phones': [], 'traced': '2026-08-01'}})
 rec('--refresh re-traces cached cases (2 calls)', sess.calls == 2, f'{sess.calls} calls')
+
+# 9 ─ THE SHARED DAILY BUDGET — the guard that exists because $50 vanished in five minutes -----
+# Two BatchData scripts bill one wallet from three schedulers; a per-script cap can't bound that.
+# Only a shared ledger can. Cap at $0.30 = exactly 2 lookups, then it must refuse.
+os.environ['BATCHDATA_DAILY_CAP'] = '0.30'
+SHARED = pathlib.Path(tempfile.mkdtemp(prefix='skbudget_')) / 'batchdata_spend.json'
+code, res, sess = run([_lead(f'C{i}') for i in range(10)],
+                      [FakeResp(200, PHONES)] * 10, ['--all'], ledger=SHARED)
+rec('daily budget stops the run once the cap is spent (exit 5)', code == 5, f'exit {code}')
+rec('budget allows EXACTLY the number of calls it can pay for (2 x $0.15 = $0.30)',
+    sess.calls == 2, f'{sess.calls} calls')
+rec('leads paid for before the cap are kept, not lost', len(res) == 2, f'{len(res)} cached')
+
+# the cap is SHARED: a second script/scheduler run the same day gets nothing more
+code2, res2, sess2 = run([_lead('D1')], [FakeResp(200, PHONES)], ['--all'], ledger=SHARED)
+rec('a SECOND run the same day is refused (shared ledger, not per-run)',
+    sess2.calls == 0 and code2 == 5, f'{sess2.calls} calls, exit {code2}')
+os.environ['BATCHDATA_DAILY_CAP'] = '9999'
 
 total = len(ok) + len(bad)
 print(f'\n==== {len(ok)}/{total} skiptrace hardening checks passed ====')

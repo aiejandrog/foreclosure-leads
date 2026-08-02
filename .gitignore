@@ -111,3 +111,6 @@ replies.json
 !_callmodetest.py
 !_sendbridgetest.py
 !_skiptracetest.py
+# BatchData shared spend ledger + cap config (local money state, not code)
+batchdata_spend.json
+bd_budget.json
