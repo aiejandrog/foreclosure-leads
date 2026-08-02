@@ -9239,6 +9239,7 @@ function _wlog(caseId, action, detail, ok){
   all.push(e);
   if(all.length > WLOG_MAX) all = all.slice(all.length - WLOG_MAX);
   try { localStorage.setItem(WLOG_KEY, JSON.stringify(all)); } catch(err){}
+  if(typeof notesBridgePushSoon==='function') notesBridgePushSoon();
   return e;
 }
 // CONTACT MEMORY — the answer to "who have I already reached?", read straight off the durable
@@ -9379,6 +9380,7 @@ function _sentAdd(entry){
   all.push(entry);
   if(all.length > SENT_MAX) all = all.slice(all.length - SENT_MAX);
   try { localStorage.setItem(SENT_KEY, JSON.stringify(all)); } catch(e){}
+  if(typeof notesBridgePushSoon==='function') notesBridgePushSoon();
   return entry;
 }
 function _sentToday(){
@@ -11486,7 +11488,7 @@ function genPortfolioEmail(r, siblings, quiet){
   return docHtml;
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
-function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); }
+function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); if(typeof notesBridgePushSoon==='function') notesBridgePushSoon(); }
 
 // ================= CROSS-DEVICE SYNC (serverless, file-as-transport) =================
 // The whole app is a static file with per-device localStorage, so a teammate's opt-outs, calls and
@@ -11500,6 +11502,33 @@ function exportNotes(){
   a.href = URL.createObjectURL(blob); a.download = 'dealflow-notes-'+_today()+'.json'; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
 }
+
+/* ---- LOCAL NOTES BRIDGE (localStorage -> disk via send_server.py) ----------------------------
+   Every call disposition, status, touch, the worker activity feed and the sent archive live ONLY
+   in this browser's localStorage. One cleared Chrome profile = the entire call history of the
+   business is gone, and no on-disk tool (analyst.py, morning_planner.py) can see a single dial.
+   Fix: a debounced push of all three stores to the localhost bridge, which atomic-writes
+   worker_notes.json + a daily snapshot. Fails silent when the bridge is down — the manual Export
+   button and the encrypted team sync are unchanged and remain the fallbacks. The payload is
+   re-read from localStorage at PUSH time (not queue time), so a burst of edits collapses into
+   one push carrying the final state. */
+let _nbTimer = null, _nbBusy = false;
+function _notesBridgePayload(){
+  return { _dealflow_notes: 1, exported: _today(), device: (localStorage.getItem('fcDevice')||''),
+           notes: notes,
+           workerLog: (typeof _wlogAll==='function') ? _wlogAll() : [],
+           sentArchive: (typeof _sentAll==='function') ? _sentAll() : [] };
+}
+function notesBridgePush(){
+  if(_nbBusy) return; _nbBusy = true;
+  try{
+    fetch('http://127.0.0.1:8823/notes', {method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify(_notesBridgePayload())})
+      .catch(function(){ return null; })
+      .then(function(){ _nbBusy = false; });
+  }catch(e){ _nbBusy = false; }
+}
+function notesBridgePushSoon(){ clearTimeout(_nbTimer); _nbTimer = setTimeout(notesBridgePush, 5000); }
 
 // ---- Dispo pack (Round D): export the deal-analysis view as a one-page PDF a cash buyer can act on. -----------
 // Wired from the deal-analysis modal footer. Uses only fields already on `r` — no invented ARV / comps / rehab.
@@ -13674,6 +13703,10 @@ async function boot(){
   // fire Chrome at 7 AM to the URL + fragment and land straight in the queue.
   if(/worker=morning/.test(location.hash||'')) setTimeout(function(){ try{ openMorningWorker(); }catch(e){} }, 500);
   if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
+  // push the full localStorage state (notes + worker log + sent archive) to the local disk
+  // bridge shortly after boot — so opening the board is enough to back up the call history,
+  // even on a day with zero edits. Silent no-op when the bridge isn't running.
+  setTimeout(function(){ try{ notesBridgePush(); }catch(e){} }, 3000);
   await _fadeIntro(t0, MIN_SPLASH);  // reveal the finished board (no-op if the gate path already faded it)
   if((manual || autoUnlocked) && unlockName) showWelcome(unlockName);   // warm greeting — auto-unlock too
   // STALE-PAGE CHECK FOR THE UNLOCKED PATH. The gate's self-heal only runs on a FAILED unlock — but
