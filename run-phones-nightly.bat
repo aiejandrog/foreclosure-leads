@@ -18,7 +18,7 @@ python llc_officers.py --all >> "%LOG%" 2>&1
 rem 2) the hardened trace. The REAL ceiling is the shared daily budget in bd_budget.py (one wallet,
 rem    every script, every scheduler) -- see `python bd_budget.py` to view or `--cap N` to change.
 rem    --max-spend is a second belt on top of it, scoped to this one run.
-python skiptrace.py --all --max-spend 5 >> "%LOG%" 2>&1
+python skiptrace.py --all --max-spend 1 >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
 if not "%RC%"=="0" (
   echo [%STAMP%] PHONES BLOCKED - skiptrace exit %RC% [2=key/balance 3=provider-down 4=over-budget]. Nothing rebuilt or pushed. See phones-run.log.> "%STATUS%"
