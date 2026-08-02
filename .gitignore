@@ -114,3 +114,6 @@ replies.json
 # BatchData shared spend ledger + cap config (local money state, not code)
 batchdata_spend.json
 bd_budget.json
+
+# hard-bounced homeowner addresses (bounces.py) — real emails, PUBLIC repo, never commit
+bounced_emails.json

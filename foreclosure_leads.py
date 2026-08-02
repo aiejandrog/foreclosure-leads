@@ -969,6 +969,27 @@ def make_tracker(leads):
     if os.path.exists(RESULTS_FILE):
         try: st = json.load(open(RESULTS_FILE, encoding='utf-8'))
         except Exception: st = {}
+    # HARD-BOUNCED ADDRESSES (produced by bounces.py, gitignored). The first real outreach run on
+    # 2026-08-02 sent 41 emails and 13 came back "mailbox disabled" — a 32% hard-bounce rate,
+    # because skip-trace returns whatever address it holds including decade-dead AOL / EarthLink /
+    # Netscape accounts. Providers treat a sustained bounce rate as proof of a purchased list (the
+    # tolerated ceiling is ~2%) and respond by throttling, then spam-foldering, then blocking — and
+    # this is the operator's PERSONAL Gmail, the inbox the business runs on. Strip them here so a
+    # dead address can never be queued a second time.
+    _bounced = set()
+    _bf = os.path.join(HERE, 'bounced_emails.json')
+    if os.path.exists(_bf):
+        try: _bounced = {str(k).lower() for k in json.load(open(_bf, encoding='utf-8'))}
+        except Exception: _bounced = set()
+    if _bounced:
+        _stripped = 0
+        for _v in st.values():
+            _em = _v.get('emails') or []
+            _keep = [e for e in _em if str(e).lower() not in _bounced]
+            if len(_keep) != len(_em):
+                _stripped += len(_em) - len(_keep)
+                _v['emails'] = _keep
+        print(f"bounce guard: {len(_bounced)} dead address(es) known — {_stripped} stripped from the queue")
     # direct-to-results OCS "Cases" tokens per owner (produced by gen_cases_qs.py, gitignored)
     cq = {}
     _cqf = os.path.join(HERE, 'cases_qs.json')
