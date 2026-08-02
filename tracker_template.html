@@ -6851,8 +6851,10 @@ function _openDoc(html, opts){
        disable the FIELD tier entirely, because the "we do not charge you" line on the
        Identity card is only true under BUYER_ONLY. `_docGate` reads the mode.
      - No homeowner signature at a door. Zero. FIELD docs are Carlos-only signatures
-       (Visit Record) or leave-behinds. Deeds/POAs/leasebacks are Tier 3 (COUNSEL) —
-       the app names them and refuses to generate them.
+       (Visit Record) or leave-behinds. Deeds, POAs, leasebacks, surplus assignments,
+       encumbrance shells, stop-sale / rescue engagement, short-sale and subject-to
+       packs print as OFFICE / INSTRUMENT templates with door bans and statutory
+       banners — signatures still at title company / law office only.
      - Suppressed on `sibclaimed` (property already sold via sibling case),
        `saleBkAct` (11 U.S.C. §362 active stay), and any opt-out in notes.
    Doc generators return a body string; `_docShell` wraps every one in the same print
@@ -7311,30 +7313,518 @@ function genThirdPartyAuth(r){
     + '</div>';
   return _docShell('Third-party authorization — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {key:'tpa'});
 }
+
+// --- OFFICE INSTRUMENTS & PACKAGES (printable shells; never door) --------------------------
+// Court-safe = engineering discipline: statutory banners, door bans, merge blanks only,
+// Florida witness/notary blocks where the instrument needs them. Not legal advice. Not
+// "attorney approved" / "court approved." Verify with counsel before execution.
+function _docBareBody(html){
+  return String(html||'').replace(/^[\s\S]*?<body>/, '').replace(/<\/body>[\s\S]*$/, '');
+}
+function _docDoorBan(){
+  return '<div class="box" style="border-color:#8a1c1c;background:#fff5f4;margin:0 0 14px">'
+    + '<b style="color:#8a1c1c;letter-spacing:.04em">NOT FOR DOOR PRESENTATION</b><br>'
+    + '<span class="mini">Title company / law office only. Do not hand this form at a door, kitchen table, '
+    + 'or any signing outside a title company or law office with a disinterested notary in physical presence.</span>'
+    + '</div>';
+}
+function _docStatBanner(cite, text){
+  return '<div class="box" style="border-color:#0B1730;background:#f4f6fb;margin:0 0 12px">'
+    + (cite ? '<b>'+cite+'</b><br>' : '')
+    + '<span class="mini">'+text+'</span></div>';
+}
+function _docOfficeFoot(f, extra){
+  return '<div class="footer">OFFICE TEMPLATE · merge blanks only · verify with counsel before execution'
+    + (extra ? ' · '+extra : '')
+    + ' · Property '+_dfHtml(f.propAddr)+' · Case '+_dfHtml(f.caseNo)+' · '+esc(f.todayLong)
+    + ' · '+_dfHtml(f.buyerLLC)+'</div>';
+}
+function _docNotaryBlockFL(f){
+  var cty = (f.county !== '__blank__' ? f.county : '');
+  return '<div class="box"><b>Notary acknowledgment — physical presence required (FS 117.05 / FS 709.2105)</b><br>'
+    + 'State of Florida &nbsp;·&nbsp; County of '+(cty ? esc(cty) : _dfLine(18))+'<br><br>'
+    + 'The foregoing instrument was acknowledged before me by means of □ physical presence '
+    + '□ online notarization this '+_dfLine(8)+' day of '+_dfLine(16)+', 20'+_dfLine(4)
+    + ', by '+_dfLine(36)+', who is □ personally known to me □ produced '
+    + _dfLine(24)+' as identification.<br><br>'
+    + '<div class="sigrow">'
+    +   '<div class="sig"><div class="l"></div><div class="c">Notary Public signature</div></div>'
+    +   '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Printed name · commission # · expires</div></div>'
+    + '</div>'
+    + '<p class="mini" style="margin:8px 0 0">Notary must be disinterested (FS 117.107). Nobody on the buying / engagement side notarizes.</p>'
+    + '</div>';
+}
+function _docWitnessPrincipal(principalLabel){
+  return '<p><b>Signed, sealed and delivered in the physical presence of two subscribing witnesses:</b></p>'
+    + '<div class="sigrow">'
+    +   '<div class="sig">'
+    +     '<div class="l"></div><div class="c">Witness 1 — signature</div>'
+    +     '<div class="l" style="height:.35in"></div><div class="c">Witness 1 — printed name</div>'
+    +     '<div class="l" style="height:.35in"></div><div class="c">Witness 1 — address</div>'
+    +   '</div>'
+    +   '<div class="sig">'
+    +     '<div class="l"></div><div class="c">Witness 2 — signature</div>'
+    +     '<div class="l" style="height:.35in"></div><div class="c">Witness 2 — printed name</div>'
+    +     '<div class="l" style="height:.35in"></div><div class="c">Witness 2 — address</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="sigrow">'
+    +   '<div class="sig"><div class="l"></div><div class="c">'+(principalLabel||'Principal')+' — signature · date</div></div>'
+    +   '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Printed name</div></div>'
+    + '</div>';
+}
+function _docPropBlock(f){
+  return '<p><b>Property address:</b> '+_dfHtml(f.propAddr)+'<br>'
+    + '<b>Folio / parcel:</b> '+_dfHtml(f.folio)+' &nbsp;·&nbsp; <b>County:</b> '+_dfHtml(f.county)+'<br>'
+    + '<b>Legal description (from roll — verify against title commitment):</b><br>'
+    + (f.legalDesc !== '__blank__'
+        ? '<span style="white-space:pre-wrap">'+esc(f.legalDesc)+'</span>'
+        : _dfLine(56)+'<br>'+_dfLine(56)+'<br>'+_dfLine(56))
+    + '<br><b>Case (record locator):</b> '+_dfHtml(f.caseNo)
+    + ' &nbsp;·&nbsp; <b>Plaintiff (if any):</b> '+_dfHtml(f.plaintiff)+'</p>';
+}
+
+function genLimitedPOA(r){
+  var f = _docFields(r);
+  var agent = (f.buyerName !== '__blank__' ? f.buyerName : '') || '';
+  var body = ''
+    + '<div class="doc"><div class="kicker">OFFICE ONLY · LIMITED POWER OF ATTORNEY · FS 709.2105</div>'
+    +   '<h1>Limited Power of Attorney — real estate closing only</h1>'
+    +   '<div class="sub">Narrow authority for a single closing. Not a general POA. Not for door presentation.</div>'
+    +   _docDoorBan()
+    +   _docStatBanner('Florida Statutes §709.2105',
+      'A power of attorney must be signed by the principal and by two subscribing witnesses, '
+      + 'and acknowledged by the principal before a notary public. Physical presence of the '
+      + 'notary with the principal is required for a paper POA unless a lawful online notarization '
+      + 'statute applies. This template does not claim online-notary compliance — assume in-person.')
+    +   '<p><b>Principal (owner / seller):</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +     'Principal address: '+_dfHtml(f.mailAddr !== '__blank__' ? f.mailAddr : f.propAddr)+'<br>'
+    +     '<b>Agent (attorney-in-fact):</b> '+(agent ? esc(agent) : _dfLine(36))+'<br>'
+    +     'Agent of: '+_dfHtml(f.buyerLLC)+'<br>'
+    +     'Agent address: '+_dfHtml(f.buyerAddr)+'</p>'
+    +   _docPropBlock(f)
+    +   '<h2>Limited powers granted</h2>'
+    +   '<p>Principal hereby appoints Agent as attorney-in-fact <b>solely</b> to take the following '
+    +     'acts with respect to the Property described above, and no others:</p>'
+    +   '<ul class="chk">'
+    +     '<li>□ Execute closing documents for the sale / refinance / short-sale of the Property on terms '
+    +       'already agreed in writing by Principal (PSA / addenda dated '+_dfLine(20)+')</li>'
+    +     '<li>□ Sign HUD-1 / Closing Disclosure, affidavits, W-9, and title-company forms for that closing</li>'
+    +     '<li>□ Receive / direct net proceeds only to: '+_dfLine(40)+'</li>'
+    +     '<li>□ Other (describe narrowly): '+_dfLine(48)+'</li>'
+    +   '</ul>'
+    +   '<h2>Powers expressly NOT granted</h2>'
+    +   '<p>Agent may <b>not</b>: gift the Property; change beneficiaries; create a trust; amend this POA; '
+    +     'collect a foreclosure-rescue fee from Principal; or act after the earlier of (a) completion of the '
+    +     'named closing, (b) written revocation by Principal, or (c) '+_dfLine(18)+' (expiration date).</p>'
+    +   '<p class="mini">Durable? □ Yes (survives Principal incapacity under FS ch. 709) &nbsp; □ No (ends on incapacity)</p>'
+    +   _docWitnessPrincipal('Principal')
+    +   _docNotaryBlockFL(f)
+    +   _docOfficeFoot(f, 'FS 709.2105 limited POA shell')
+    + '</div>';
+  return _docShell('Limited POA — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
+    {key:'limited-poa', note:'NEVER door — two witnesses + notary physical presence.'});
+}
+
+function genLeasebackOccupancy(r){
+  var f = _docFields(r);
+  var body = ''
+    + '<div class="doc"><div class="kicker">OFFICE ONLY · FS 501.1377 HEIGHTENED · NEVER DOOR</div>'
+    +   '<h1>Post-closing occupancy / lease-back / option to repurchase</h1>'
+    +   '<div class="sub">Shell for title / counsel review. Owner retaining any interest after sale triggers heightened scrutiny.</div>'
+    +   _docDoorBan()
+    +   _docStatBanner('Florida Statutes §501.1377 — foreclosure-related rescue transactions',
+      'If the former owner keeps a right to occupy, repurchase, or any equitable interest after '
+      + 'conveying title while in foreclosure distress, the arrangement may be treated as a '
+      + 'foreclosure-rescue transaction. Right-to-cancel notices and other statutory duties may apply. '
+      + 'This form does not make the structure lawful by itself — counsel must clear the structure '
+      + 'before anyone signs. Print Notice of Right to Cancel on its OWN PAGE if an engagement applies.')
+    +   _docPropBlock(f)
+    +   '<p><b>Seller / Occupant:</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +     '<b>Buyer / Landlord:</b> '+_dfHtml(f.buyerLLC)+' / '+_dfHtml(f.buyerName)+'</p>'
+    +   '<h2>A. Structure selected (check ONE — counsel to confirm)</h2>'
+    +   '<p>□ Post-closing occupancy / cash-for-keys (license to occupy until move-out date)<br>'
+    +     '□ Lease-back (landlord-tenant after closing)<br>'
+    +     '□ Option to repurchase (separate option agreement — attach terms)<br>'
+    +     '□ Combination: '+_dfLine(40)+'</p>'
+    +   '<h2>B. Occupancy terms (blanks — do not invent)</h2>'
+    +   '<p>Occupancy start (closing date or): '+_dfLine(20)+'<br>'
+    +     'Vacate / lease end date: '+_dfLine(20)+'<br>'
+    +     'Monthly occupancy / rent amount: $'+_dfLine(14)+' &nbsp; due day: '+_dfLine(8)+'<br>'
+    +     'Security / holdback (if any): $'+_dfLine(14)+'<br>'
+    +     'Cash-for-keys amount on timely vacate (if any): $'+_dfLine(14)+'<br>'
+    +     'Utilities paid by: □ Occupant &nbsp; □ Buyer &nbsp; □ Split: '+_dfLine(20)+'</p>'
+    +   '<h2>C. Option to repurchase (only if checked above)</h2>'
+    +   '<p>Option exercise deadline: '+_dfLine(20)+'<br>'
+    +     'Option consideration paid: $'+_dfLine(14)+'<br>'
+    +     'Repurchase price / formula: '+_dfLine(40)+'<br>'
+    +     'Recording of option / memorandum: □ Yes &nbsp; □ No — counsel decides</p>'
+    +   '<h2>D. Acknowledgments</h2>'
+    +   '<ul class="chk">'
+    +     '<li>□ Occupant understands conveyance of title is real and may be permanent if option is not exercised</li>'
+    +     '<li>□ Occupant has been advised they may seek independent legal counsel</li>'
+    +     '<li>□ No promise was made that this arrangement will stop the foreclosure sale by itself</li>'
+    +     '<li>□ If FS 501.1377 applies, Notice of Right to Cancel was delivered on a separate page</li>'
+    +   '</ul>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Seller / Occupant signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Buyer / Landlord signature · date</div></div>'
+    +   '</div>'
+    +   _docNotaryBlockFL(f)
+    +   _docOfficeFoot(f, 'lease-back / occupancy / repurchase shell')
+    + '</div>'
+    + '<div class="doc pgb">'
+    +   '<div class="kicker">OWN PAGE IF 501.1377 ENGAGEMENT APPLIES</div>'
+    +   '<p class="mini">If counsel determines this structure is a foreclosure-rescue transaction, print '
+    +     '<b>Notice of Right to Cancel</b> and <b>Cancellation Form</b> from Doc Room OFFICE cards as '
+    +     'separate pages — do not bury cancel text inside this agreement.</p>'
+    +   _docOfficeFoot(f, 'cancel reminder page')
+    + '</div>';
+  return _docShell('Lease-back / occupancy — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
+    {key:'leaseback', note:'FS 501.1377 heightened — NEVER door. Cancel on own page if rescue applies.'});
+}
+
+function genSurplusAssignment(r){
+  var f = _docFields(r);
+  var body = ''
+    + '<div class="doc"><div class="kicker">OFFICE ONLY · SURPLUS FUNDS · FS 45.031 · COUNSEL-AWARE</div>'
+    +   '<h1>Assignment of surplus funds</h1>'
+    +   '<div class="sub">Surplus after foreclosure sale belongs to the former owner (and lienholders by priority) — not invent amounts.</div>'
+    +   _docDoorBan()
+    +   _docStatBanner('Florida Statutes §45.031 (and related surplus disbursement practice)',
+      'Surplus funds from a judicial foreclosure sale are claimed through the clerk / court process. '
+      + 'Amounts are unknown until the sale completes and the clerk accounts. This template leaves '
+      + 'dollar fields blank on purpose. Independent advice acknowledgment is required below. '
+      + 'Prefer counsel when assigning surplus rights.')
+    +   _docPropBlock(f)
+    +   '<p><b>Assignor (former / current owner):</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +     '<b>Assignee:</b> '+_dfLine(40)+'<br>'
+    +     'Assignee address: '+_dfLine(40)+'<br>'
+    +     'Foreclosure case: '+_dfHtml(f.caseNo)+' · County of '+_dfHtml(f.county)+'<br>'
+    +     'Sale date (if known): '+_dfHtml(f.saleDate)+'</p>'
+    +   '<h2>Assignment</h2>'
+    +   '<p>Assignor hereby assigns to Assignee whatever right, title, and interest Assignor may have '
+    +     'in surplus funds, if any, arising from the foreclosure sale of the Property in the case above, '
+    +     'subject to superior claims and clerk / court order.</p>'
+    +   '<p><b>Consideration for this assignment:</b> $'+_dfLine(16)
+    +     ' &nbsp; (or describe: '+_dfLine(36)+')</p>'
+    +   '<p><b>Estimated surplus (if any — DO NOT invent; leave blank if unknown):</b> $'+_dfLine(16)+'</p>'
+    +   '<div class="box" style="border-color:#8a1c1c;background:#fff5f4">'
+    +     '<b>Clear statement:</b> Surplus, if any, belongs in the first instance to the former owner '
+    +     'and other persons entitled under Florida law and the court\'s surplus order. An assignment '
+    +     'does not create surplus. An assignment may be challenged. Clerk procedures and deadlines apply.'
+    +   '</div>'
+    +   '<h2>Independent advice acknowledgment</h2>'
+    +   '<p>□ Assignor has had an opportunity to seek independent legal counsel regarding this assignment<br>'
+    +     '□ Assignor declines counsel at this time (still may seek counsel later)<br>'
+    +     'Counsel name (if consulted): '+_dfLine(36)+'</p>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Assignor signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Assignee signature · date</div></div>'
+    +   '</div>'
+    +   _docNotaryBlockFL(f)
+    +   _docOfficeFoot(f, 'surplus assignment shell — counsel-aware')
+    + '</div>';
+  return _docShell('Surplus assignment — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
+    {key:'surplus-assign', note:'FS 45.031 — never invent surplus dollars.'});
+}
+
+function genEncumbranceShell(r){
+  var f = _docFields(r);
+  function page(kicker, title, inner){
+    return '<div class="doc">'
+      + '<div class="kicker">'+kicker+'</div>'
+      + '<h1>'+title+'</h1>'
+      + '<div class="sub">High-blank office shell — do not invent note terms, balances, or recording data.</div>'
+      + _docDoorBan()
+      + _docPropBlock(f)
+      + inner
+      + _docOfficeFoot(f, title)
+      + '</div>';
+  }
+  var p1 = page('OFFICE · MORTGAGE SHELL', 'Mortgage (office blank)',
+    _docStatBanner('Encumbrance instruments',
+      'Creating or releasing a mortgage / note / land-trust interest changes title risk. '
+      + 'Fill only facts verified by counsel or the title company. Blank lines that remain blank '
+      + 'must stay blank — never guess unpaid principal, interest rate, or maturity.')
+    + '<p><b>Mortgagor:</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +   '<b>Mortgagee:</b> '+_dfLine(40)+'<br>'
+    +   'Principal amount: $'+_dfLine(16)+' &nbsp; Interest rate: '+_dfLine(10)+'% &nbsp; Maturity: '+_dfLine(16)+'<br>'
+    +   'Note date: '+_dfLine(16)+' &nbsp; Mortgage dated: '+_dfLine(16)+'<br>'
+    +   'Recording book/page (if known): '+_dfHtml(f.bookPage)+'</p>'
+    + '<p>This mortgage secures the Note described above against the Property. Terms of payment, '
+    +   'default, and foreclosure remedies: <b>ATTACH COUNSEL-APPROVED RIDER</b> — not drafted here.</p>'
+    + '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Mortgagor signature · date</div></div>'
+    +   '<div class="sig"><div class="l"></div><div class="c">Mortgagee signature · date</div></div></div>'
+    + _docWitnessPrincipal('Mortgagor')
+    + _docNotaryBlockFL(f));
+  var p2 = page('OFFICE · PROMISSORY NOTE SHELL', 'Promissory note (office blank)',
+    '<p><b>Maker:</b> '+_dfHtml(f.ownerFull)+' / '+_dfLine(28)+'<br>'
+    +   '<b>Payee:</b> '+_dfLine(40)+'<br>'
+    +   'Principal: $'+_dfLine(16)+' &nbsp; Interest: '+_dfLine(10)+'% per annum<br>'
+    +   'Payment schedule: '+_dfLine(48)+'<br>'
+    +   'Maturity / balloon date: '+_dfLine(20)+'<br>'
+    +   'Prepayment: □ Allowed &nbsp; □ Restricted as attached<br>'
+    +   'Default rate / late fee: '+_dfLine(28)+'</p>'
+    + '<p class="mini">Do not pre-fill judgment amount ('+_dfHtml(f.judgAmt)+') as the note principal — '
+    +   'judgment ≠ note terms.</p>'
+    + '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Maker signature · date</div></div>'
+    +   '<div class="sig"><div class="l"></div><div class="c">Payee acknowledgment · date</div></div></div>');
+  var p3 = page('OFFICE · SATISFACTION OF MORTGAGE', 'Satisfaction of mortgage (office blank)',
+    '<p><b>Mortgage being satisfied — OR book/page:</b> '+_dfLine(28)+'<br>'
+    +   'Original mortgagee: '+_dfLine(36)+'<br>'
+    +   'Current holder of note/mortgage: '+_dfLine(36)+'<br>'
+    +   'Date of mortgage: '+_dfLine(16)+' &nbsp; Recording date: '+_dfLine(16)+'</p>'
+    + '<p>The undersigned, being the holder of the mortgage described above, acknowledges that the '
+    +   'indebtedness secured thereby has been paid / released and the mortgage is satisfied of record '
+    +   'as to the Property.</p>'
+    + '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Holder signature · title · date</div></div></div>'
+    + _docNotaryBlockFL(f));
+  var p4 = page('OFFICE · LAND TRUST SHELL', 'Land trust direction / beneficial interest (office blank)',
+    _docStatBanner('Land trust',
+      'Florida land trusts (often FS ch. 689 practices + trust agreement) are counsel-drafted. '
+      + 'This page is a direction / intake shell only — it does not create a trust by itself.')
+    + '<p><b>Trustee (to be named by counsel):</b> '+_dfLine(40)+'<br>'
+    +   '<b>Beneficiary / beneficiaries:</b> '+_dfLine(40)+'<br>'+_dfLine(40)+'<br>'
+    +   'Trust agreement date: '+_dfLine(16)+' &nbsp; Trust name/number: '+_dfLine(24)+'<br>'
+    +   'Deed into trust: □ To be prepared by counsel &nbsp; □ Already recorded: '+_dfLine(20)+'</p>'
+    + '<p>Directions regarding sale, financing, or occupancy: '+_dfLine(56)+'<br>'+_dfLine(56)+'</p>'
+    + '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Beneficiary signature · date</div></div>'
+    +   '<div class="sig"><div class="l"></div><div class="c">Trustee acknowledgment · date</div></div></div>');
+  var combined = [p1,p2,p3,p4].map(function(h,i){ return (i?'<div class="pgb"></div>':'')+h; }).join('');
+  return _docShell('Encumbrance shells — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), combined,
+    {key:'encumbrance', note:'4 pages — mortgage / note / satisfaction / land trust blanks.'});
+}
+
+function genStopSaleEngagement(r){
+  var f = _docFields(r);
+  var body = ''
+    + '<div class="doc"><div class="kicker">OFFICE ONLY · RESCUE-CONSULTANT FRAMING · FS 501.1377</div>'
+    +   '<h1>Stop-sale / foreclosure-related engagement</h1>'
+    +   '<div class="sub">If you charge a fee for foreclosure-related help, you may be a foreclosure rescue consultant.</div>'
+    +   _docDoorBan()
+    +   _docStatBanner('Florida Statutes §501.1377',
+      'A person who, for compensation, offers services to stop, prevent, or reverse a foreclosure '
+      + 'may be a “foreclosure rescue consultant.” Up-front fees, misleading guarantees, and missing '
+      + 'cancel rights create civil / criminal exposure. Prefer BUYER_ONLY (no fee from homeowner). '
+      + 'If any fee or stop-sale promise exists, use this engagement + OWN-PAGE cancel notice.')
+    +   _docPropBlock(f)
+    +   '<p><b>Homeowner:</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +     '<b>Company / consultant:</b> '+_dfHtml(f.buyerLLC)+' / '+_dfHtml(f.buyerName)+'<br>'
+    +     'Phone: '+_dfHtml(f.buyerPhone)+' &nbsp; Email: '+_dfHtml(f.buyerEmail)+'</p>'
+    +   '<h2>Services described (blanks — no guarantees)</h2>'
+    +   '<p>□ Communicate with lender / servicer about options<br>'
+    +     '□ Assemble hardship / financial package for short sale or other loss mitigation<br>'
+    +     '□ Coordinate with title / counsel<br>'
+    +     '□ Other (describe without promising sale stop): '+_dfLine(40)+'</p>'
+    +   '<p><b>Fee arrangement:</b> $'+_dfLine(14)+' &nbsp; when due: '+_dfLine(24)+'<br>'
+    +     '□ <b>No fee from homeowner</b> (buyer / wholesale only — preferred under BUYER_ONLY mode)</p>'
+    +   '<div class="box" style="border-color:#8a1c1c;background:#fff5f4">'
+    +     '<b>No guarantee of outcome.</b> Nobody can promise the court or lender will stop the sale. '
+    +     'Auction dates move; lenders reject packages; counsel decisions control litigation strategy.'
+    +   '</div>'
+    +   '<h2>Homeowner acknowledgments</h2>'
+    +   '<ul class="chk">'
+    +     '<li>□ I understand this is not legal representation and not a law firm engagement</li>'
+    +     '<li>□ I may seek free HUD counseling (1-888-995-HOPE) and Florida Bar LRS (1-800-342-8011)</li>'
+    +     '<li>□ I received a separate Notice of Right to Cancel on its own page (if a rescue fee applies)</li>'
+    +     '<li>□ I was not asked to sign this at my front door</li>'
+    +   '</ul>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Homeowner signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Company representative · date</div></div>'
+    +   '</div>'
+    +   _docOfficeFoot(f, 'stop-sale / rescue engagement shell')
+    + '</div>'
+    // OWN PAGE cancel — required posture for 501.1377 engagement docs
+    + '<div class="doc pgb">'
+    +   '<h1 style="text-align:center;margin:48px 0 28px">NOTICE OF RIGHT TO CANCEL</h1>'
+    +   '<p class="mini" style="text-align:center;color:#8a1c1c"><b>OWN PAGE — no other content on this sheet when used as statutory cancel notice.</b></p>'
+    +   '<p style="font-size:15px">You may cancel this transaction, without any penalty or obligation, within three (3) '
+    +     'business days from the date of this agreement or from the date you received this notice, whichever is later.</p>'
+    +   '<p>To cancel, sign and date the Cancellation Form below (or the separate Doc Room Cancellation Form) and mail or deliver to:<br>'
+    +     _dfHtml(f.buyerLLC)+'<br>'+_dfHtml(f.buyerName)+'<br>'+_dfHtml(f.buyerAddr)+'<br>'+_dfHtml(f.buyerPhone)+'</p>'
+    +   '<p>If you cancel, any payments you have made under a covered rescue transaction must be returned '
+    +     'within ten (10) business days following receipt of your cancellation notice, as applicable by law.</p>'
+    +   '<p><b>ACKNOWLEDGMENT OF RECEIPT</b> — I acknowledge I have received two copies of this Notice.</p>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Homeowner signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Company signature · date</div></div>'
+    +   '</div>'
+    +   '<div class="rule"></div>'
+    +   '<h2 style="text-align:center">NOTICE OF CANCELLATION</h2>'
+    +   '<p>I hereby cancel the stop-sale / foreclosure-related engagement for Property: '+_dfHtml(f.propAddr)+'</p>'
+    +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Homeowner signature · date</div></div></div>'
+    +   _docOfficeFoot(f, '501.1377 cancel — own page')
+    + '</div>';
+  return _docShell('Stop-sale engagement — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
+    {key:'stop-sale', note:'2 pages — engagement + OWN-PAGE cancel. NEVER door.'});
+}
+
+function genShortSalePack(r){
+  var f = _docFields(r);
+  var p1 = ''
+    + '<div class="doc"><div class="kicker">OFFICE · SHORT-SALE PACKAGE · PAGE 1 OF 3</div>'
+    +   '<h1>Short-sale — seller authorization to negotiate</h1>'
+    +   '<div class="sub">Authorization only. Lender may reject. Not a rescue-fee engagement unless a separate engagement is signed.</div>'
+    +   _docDoorBan()
+    +   _docPropBlock(f)
+    +   '<p><b>Seller / borrower:</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +     '<b>Authorized negotiator / buyer contact:</b> '+_dfHtml(f.buyerName)+' · '+_dfHtml(f.buyerLLC)+'<br>'
+    +     'Phone: '+_dfHtml(f.buyerPhone)+' · Email: '+_dfHtml(f.buyerEmail)+'<br>'
+    +     'Loan / servicer account #: '+_dfLine(28)+'<br>'
+    +     'Current servicer name: '+_dfLine(36)+'</p>'
+    +   '<p>I/we authorize the named party to communicate with my/our mortgage servicer(s) and gather '
+    +     'information reasonably necessary to explore a short sale of the Property. This authorization '
+    +     'does not require the servicer to approve any sale.</p>'
+    +   '<p>□ Prefer servicer\'s own third-party authorization form when available</p>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Seller signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Co-seller / co-borrower · date</div></div>'
+    +   '</div>'
+    +   _docNotaryBlockFL(f)
+    +   _docOfficeFoot(f, 'short-sale auth')
+    + '</div>';
+  var p2 = ''
+    + '<div class="doc"><div class="kicker">OFFICE · SHORT-SALE PACKAGE · PAGE 2 OF 3</div>'
+    +   '<h1>Hardship &amp; financial information (blanks)</h1>'
+    +   '<div class="sub">Seller states facts. Do not invent income, assets, or hardship narrative.</div>'
+    +   _docDoorBan()
+    +   '<p><b>Property:</b> '+_dfHtml(f.propAddr)+' · <b>Owner:</b> '+_dfHtml(f.ownerFull)+'</p>'
+    +   '<h2>Hardship (check all that apply — seller\'s statement)</h2>'
+    +   '<p>□ Job loss / reduction of income &nbsp; □ Medical &nbsp; □ Divorce / separation<br>'
+    +     '□ Death in family &nbsp; □ ARM / payment increase &nbsp; □ Business failure<br>'
+    +     '□ Distant relocation &nbsp; □ Incarceration &nbsp; □ Other: '+_dfLine(28)+'</p>'
+    +   '<p>Brief narrative (seller\'s words):<br>'+_dfLine(56)+'<br>'+_dfLine(56)+'<br>'+_dfLine(56)+'</p>'
+    +   '<h2>Financial snapshot (seller-stated — leave blank if unknown)</h2>'
+    +   '<p>Gross monthly household income: $'+_dfLine(14)+'<br>'
+    +     'Monthly expenses (approx.): $'+_dfLine(14)+'<br>'
+    +     'Liquid assets (approx.): $'+_dfLine(14)+'<br>'
+    +     'Other real estate owned: '+_dfLine(40)+'<br>'
+    +     'Bankruptcy filed / planned: □ No &nbsp; □ Yes — chapter/date: '+_dfLine(20)+'</p>'
+    +   '<p class="mini">Judgment / lis pendens figures on the lead are not hardship proof — servicer packages need '
+    +     'seller docs (paystubs, tax returns, bank statements) assembled separately.</p>'
+    +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Seller signature · date — information is true to the best of my knowledge</div></div></div>'
+    +   _docOfficeFoot(f, 'short-sale hardship blanks')
+    + '</div>';
+  var p3 = ''
+    + '<div class="doc"><div class="kicker">OFFICE · SHORT-SALE PACKAGE · PAGE 3 OF 3</div>'
+    +   '<h1>Short-sale acknowledgments</h1>'
+    +   _docDoorBan()
+    +   '<ul class="chk" style="font-size:14px;line-height:1.7">'
+    +     '<li>□ Lender / investor / mortgage insurer may reject, delay, or counter any short-sale request</li>'
+    +     '<li>□ A short sale may have tax / credit consequences — seller should ask their own tax and legal advisors</li>'
+    +     '<li>□ Deficiency / release of liability is not guaranteed unless the lender agrees in writing</li>'
+    +     '<li>□ Listing / marketing / PSA terms are separate documents</li>'
+    +     '<li>□ This package is <b>not</b> a fee-for-rescue engagement; if any fee for stop-sale help is charged, '
+    +       'use the Stop-Sale / Rescue Engagement card and OWN-PAGE cancel notice instead</li>'
+    +     '<li>□ No one promised the foreclosure auction will be cancelled</li>'
+    +   '</ul>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Seller acknowledgment · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Negotiator / company · date</div></div>'
+    +   '</div>'
+    +   _docOfficeFoot(f, 'short-sale acknowledgments')
+    + '</div>';
+  var combined = [p1,p2,p3].map(function(h,i){ return (i?'<div class="pgb"></div>':'')+h; }).join('');
+  return _docShell('Short-sale package — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), combined,
+    {key:'short-sale', note:'3 pages — auth · hardship blanks · acknowledgments.'});
+}
+
+function genSubjectToPack(r){
+  var f = _docFields(r);
+  var p1 = ''
+    + '<div class="doc"><div class="kicker">OFFICE · SUBJECT-TO PACKAGE · PAGE 1 OF 3</div>'
+    +   '<h1>Subject-to purchase — disclosures</h1>'
+    +   '<div class="sub">Taking title subject to an existing mortgage. Due-on-sale and insurance risks on the face.</div>'
+    +   _docDoorBan()
+    +   _docStatBanner('Due-on-sale / Garn-St Germain (federal) + loan documents',
+      'Most residential mortgages contain a due-on-sale clause. Transfer of title without lender consent '
+      + 'may allow the lender to accelerate the loan. Some transfers have limited federal protections; '
+      + 'do not assume an exception applies. This template does not approve any transfer.')
+    +   _docPropBlock(f)
+    +   '<p><b>Seller:</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +     '<b>Buyer:</b> '+_dfHtml(f.buyerLLC)+' / '+_dfHtml(f.buyerName)+'<br>'
+    +     'Existing lender / servicer: '+_dfLine(36)+'<br>'
+    +     'Approximate unpaid principal (blank if unknown — do not invent): $'+_dfLine(16)+'<br>'
+    +     'Monthly PITI / escrow (blank if unknown): $'+_dfLine(14)+'</p>'
+    +   '<h2>Face disclosures (read aloud before any signature)</h2>'
+    +   '<ol style="font-size:14px;line-height:1.65">'
+    +     '<li><b>Due-on-sale:</b> Lender may call the loan due after transfer of title.</li>'
+    +     '<li><b>Insurance:</b> Hazard / flood insurance and mortgagee clause must be correct; force-placed '
+    +       'insurance and coverage gaps are real risks.</li>'
+    +     '<li><b>Escrow / taxes / insurance:</b> Escrow shortages, tax sales, and lapsed insurance can still hit the property.</li>'
+    +     '<li><b>Credit / liability:</b> Seller\'s name may remain on the note until refinance or release — '
+    +       'late payments can affect seller credit if the loan stays in seller\'s name.</li>'
+    +     '<li><b>Foreclosure continues until cured or dismissed</b> — subject-to is not an automatic stop-sale.</li>'
+    +   '</ol>'
+    +   _docOfficeFoot(f, 'subject-to disclosures')
+    + '</div>';
+  var p2 = ''
+    + '<div class="doc"><div class="kicker">OFFICE · SUBJECT-TO PACKAGE · PAGE 2 OF 3 · FS 501.1377</div>'
+    +   '<h1>Owner-occupancy after closing — 501.1377 trigger</h1>'
+    +   _docDoorBan()
+    +   _docStatBanner('Florida Statutes §501.1377',
+      'If Seller remains in the Property after conveying title (lease-back, occupancy agreement, '
+      + 'or option to repurchase) while in foreclosure distress, the deal may be a foreclosure-rescue '
+      + 'transaction with cancel rights and other duties. Put that risk on the face — do not hide it.')
+    +   '<p><b>Will Seller (or Seller\'s family) occupy the Property after closing?</b><br>'
+    +     '□ NO — vacant / tenant already in place under existing lease (attach)<br>'
+    +     '□ YES — complete occupancy terms below and treat as heightened 501.1377 review; '
+    +     'print lease-back / occupancy card + OWN-PAGE cancel if engagement applies</p>'
+    +   '<p>If YES — planned vacate date: '+_dfLine(16)+' &nbsp; monthly occupancy payment: $'+_dfLine(12)+'<br>'
+    +     'Option to repurchase? □ No &nbsp; □ Yes — see lease-back / option card</p>'
+    +   '<div class="box" style="border-color:#8a1c1c;background:#fff5f4">'
+    +     '<b>On the face of this package:</b> Owner-occupancy after a distressed conveyance is the fact '
+    +     'pattern regulators and courts scrutinize. If the answer is YES, stop and have counsel clear '
+    +     'structure before signing subject-to papers.'
+    +   '</div>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Seller initials · occupancy answer is accurate</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Buyer initials · reviewed 501.1377 risk</div></div>'
+    +   '</div>'
+    +   _docOfficeFoot(f, 'subject-to occupancy / 501.1377')
+    + '</div>';
+  var p3 = ''
+    + '<div class="doc"><div class="kicker">OFFICE · SUBJECT-TO PACKAGE · PAGE 3 OF 3</div>'
+    +   '<h1>Subject-to acknowledgments &amp; signature</h1>'
+    +   _docDoorBan()
+    +   '<ul class="chk">'
+    +     '<li>□ Parties had opportunity to seek independent counsel and title advice</li>'
+    +     '<li>□ Purchase contract / deed / insurance binder are separate documents</li>'
+    +     '<li>□ Doc stamps and recording costs: parties understand consideration may include unpaid mortgage balance (FS 201.02 context)</li>'
+    +     '<li>□ No promise the lender will consent or waive due-on-sale</li>'
+    +     '<li>□ Not signed at a door</li>'
+    +   '</ul>'
+    +   '<p>Additional agreed terms (or “see PSA”):<br>'+_dfLine(56)+'<br>'+_dfLine(56)+'</p>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Seller signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Buyer signature · date</div></div>'
+    +   '</div>'
+    +   _docNotaryBlockFL(f)
+    +   _docOfficeFoot(f, 'subject-to acknowledgments')
+    + '</div>';
+  var combined = [p1,p2,p3].map(function(h,i){ return (i?'<div class="pgb"></div>':'')+h; }).join('');
+  return _docShell('Subject-to package — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), combined,
+    {key:'subject-to', note:'3 pages — disclosures · 501.1377 occupancy · signatures.'});
+}
+
 function genContractPrint(r){
   // Doc Room → PSA HTML string (quiet). Parent/child print bridge opens it — do not
   // call _openDoc here or popup blockers eat the click after postMessage.
   return genContract(r, true);
 }
 
-// --- TIER 3 — COUNSEL ----------------------------------------------------------------------
+// --- REFERENCE (non-generated leftovers) ----------------------------------------------------
 function _docRefList(){
-  // Warranty deed + deed in lieu intentionally removed 2026-07-31 per operator direction:
-  // wholesale exits use quit claim (their title company purchases warranty), and we do not
-  // negotiate deeds in lieu — that path is bank-driven, not investor-driven.
-  var items = [
-    ['Power of attorney (any form)', 'Two witnesses + notary in physical presence (FS 709.2105). Do not present at a door.'],
-    ['Lease-back, occupancy-after-closing, option to repurchase', 'Heightened FS 501.1377 scrutiny if owner keeps ANY interest — never at a door.'],
-    ['Assignment of surplus funds', 'Surplus is former owner money (FS 45.031). Use counsel when assigning.'],
-    ['Mortgage / note / satisfaction / land trust', 'Creating or releasing encumbrances / complex title — counsel drafts.'],
-    ['Stop-sale / rescue engagement', 'Fee for foreclosure-related help = rescue consultant under 501.1377.'],
-    ['Short-sale / subject-to packages', 'Lender negotiation / due-on-sale complexity — usually counsel or licensed negotiator.'],
-  ];
-  return '<ul style="font-size:13px;line-height:1.55;padding-left:18px;margin:8px 0">'
-    + items.map(function(it){
-        return '<li style="margin:6px 0"><b>'+esc(it[0])+'</b><br><span class="mini">'+esc(it[1])+'</span></li>';
-      }).join('')
-    + '</ul>';
+  // Instruments that used to live only as awareness bullets now have Print generators above
+  // (limited POA, lease-back/occupancy, surplus assignment, encumbrance shells, stop-sale
+  // engagement, short-sale pack, subject-to pack). Warranty deed + deed in lieu stay off the
+  // board per 2026-07-31 operator direction.
+  return '<p class="mini" style="margin:8px 0">All formerly listed reference instruments now have '
+    + '<b>Print</b> cards under <b>OFFICE INSTRUMENTS</b> and <b>PACKAGES</b> above. '
+    + 'Still not generated here: warranty deed and deed-in-lieu (title company / bank-driven). '
+    + 'Templates are office shells — verify with counsel before execution. Never door.</p>';
 }
 function genAttyPacket(r){
   var f = _docFields(r);
@@ -7748,13 +8238,36 @@ function openDocRoom(caseId){
             + (multi ? ' <span style="color:#286c34">(recommended)</span>' : ''),
             s:'A signature block per owner. Required for homestead spousal joinder. Print freely.',
             fn:'genQuitClaimMulti'})
-    + '<div class="kicker" style="color:#5b6472;margin-top:20px">REFERENCE — other instruments (not generated here)</div>'
-    + '<p class="mini">Listed for awareness only. Everything above with a Print button is ready to print — no approval step.</p>'
+    + '<div class="kicker" style="color:#8a1c1c;margin-top:20px">OFFICE INSTRUMENTS — never at a door · title / law office only</div>'
+    + '<p class="mini">Statutory banners + merge blanks. Not attorney-approved / not court-approved. Verify with counsel before execution.</p>'
+    + card({key:'limited-poa', t:'Limited Power of Attorney (closing only)',
+            s:'FS 709.2105 — two witnesses + notary physical presence. Narrow closing authority. NEVER door.',
+            fn:'genLimitedPOA'})
+    + card({key:'leaseback', t:'Lease-back / occupancy / option to repurchase',
+            s:'FS 501.1377 heightened if owner keeps any interest. Cancel on own page if rescue applies. NEVER door.',
+            fn:'genLeasebackOccupancy'})
+    + card({key:'surplus-assign', t:'Assignment of surplus funds',
+            s:'FS 45.031 — surplus is former-owner money. Never invent dollars. Counsel-aware. NEVER door.',
+            fn:'genSurplusAssignment'})
+    + card({key:'encumbrance', t:'Mortgage / note / satisfaction / land trust',
+            s:'4-page high-blank encumbrance shells. Do not invent note terms. NEVER door.',
+            fn:'genEncumbranceShell'})
+    + card({key:'stop-sale', t:'Stop-sale / rescue engagement',
+            s:'FS 501.1377 rescue-consultant framing + OWN-PAGE cancel. Prefer no homeowner fee. NEVER door.',
+            fn:'genStopSaleEngagement'})
+    + '<div class="kicker" style="color:#6a4a10;margin-top:20px">PACKAGES — short-sale · subject-to</div>'
+    + card({key:'short-sale', t:'Short-sale package',
+            s:'3 pages: seller auth to negotiate · hardship blanks · lender-may-reject acknowledgments. No rescue-fee framing.',
+            fn:'genShortSalePack'})
+    + card({key:'subject-to', t:'Subject-to package',
+            s:'3 pages: due-on-sale / insurance / escrow risks · 501.1377 if seller stays · signature block. NEVER door.',
+            fn:'genSubjectToPack'})
+    + '<div class="kicker" style="color:#5b6472;margin-top:20px">REFERENCE</div>'
     + _docRefList()
-    // ---- MSG legal pack — staged on desktop, not wired as Doc Room generators yet ------------
-    + '<div class="kicker" style="color:#5b6472;margin-top:20px">EXTRA DRAFTS ON DESKTOP (not in this list yet)</div>'
+    // ---- MSG Word drafts still staged on desktop (HTML generators above cover the core set) --
+    + '<div class="kicker" style="color:#5b6472;margin-top:20px">EXTRA DRAFTS ON DESKTOP (Word / MSG)</div>'
     + '<div style="border:1px solid #ddd;border-radius:8px;padding:12px 14px;margin:8px 0;background:#fbfaf6">'
-    +   '<p style="margin:0 0 8px;font:600 13.5px Arial,sans-serif;color:#0B1730">Five MSG Word drafts live on the operator desktop only &mdash; they are not Print cards here yet.</p>'
+    +   '<p style="margin:0 0 8px;font:600 13.5px Arial,sans-serif;color:#0B1730">MSG Word drafts may still live on the operator desktop for comparison &mdash; Doc Room Print cards above are the HTML generators.</p>'
     +   '<p class="mini" style="margin:4px 0">Folder: <span class="mono">Desktop&thinsp;/&thinsp;MSG-Legal-Pack-Drafts&thinsp;/</span></p>'
     +   '<ul class="mini" style="margin:8px 0 4px;padding-left:20px;line-height:1.6">'
     +     '<li>Assignable Purchase &amp; Sale Agreement</li>'
@@ -7763,11 +8276,10 @@ function openDocRoom(caseId){
     +     '<li>Two Limited Powers of Attorney (FS 709.2105)</li>'
     +     '<li>Servicer Cover Sheet + BK educational reference</li>'
     +   '</ul>'
-    +   '<p class="mini" style="margin:8px 0 0;color:#5b6472">Open those files from the desktop folder. Wiring them into Doc Room is a separate publish step.</p>'
     + '</div>'
     + '<div style="text-align:center;margin:12px 0"><button class="docprint" data-fn="genAttyPacket" data-key="atty-packet" '
     +   'style="padding:10px 18px;background:#0B1730;color:#F4E5A7;border:none;border-radius:6px;font:800 14px Arial,sans-serif;cursor:pointer">📁 Facts packet for counsel</button></div>'
-    + '<div class="footer">DealFlow · BUYER_ONLY. FIELD / OFFICE / DEED cards above all Print. Signatures still at title / law office — never at a door.</div>'
+    + '<div class="footer">DealFlow · BUYER_ONLY. FIELD / OFFICE / DEED / INSTRUMENT / PACKAGE cards Print freely. Signatures still at title / law office — never at a door.</div>'
     + '</div>'
     + '<script>document.addEventListener("click",function(e){var b=e.target.closest("button.docprint");if(!b)return;'
     +   'if(!window.opener){alert("Doc Room lost its link to the tracker (opener is null). Close this tab and open Doc Room again from the lead.");return;}'
@@ -8165,7 +8677,11 @@ window.addEventListener('message', function(ev){
              genCancelNotice:genCancelNotice, genCancelForm:genCancelForm,
              genThirdPartyAuth:genThirdPartyAuth, genAttyPacket:genAttyPacket,
              genContractPrint:genContractPrint,
-             genQuitClaimSingle:genQuitClaimSingle, genQuitClaimMulti:genQuitClaimMulti})[d.fn];
+             genQuitClaimSingle:genQuitClaimSingle, genQuitClaimMulti:genQuitClaimMulti,
+             genLimitedPOA:genLimitedPOA, genLeasebackOccupancy:genLeasebackOccupancy,
+             genSurplusAssignment:genSurplusAssignment, genEncumbranceShell:genEncumbranceShell,
+             genStopSaleEngagement:genStopSaleEngagement,
+             genShortSalePack:genShortSalePack, genSubjectToPack:genSubjectToPack})[d.fn];
   if(!fn) return;
   var html = null, err = '';
   try { html = fn(r); }
