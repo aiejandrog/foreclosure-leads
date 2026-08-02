@@ -64,7 +64,25 @@ async def main():
         # in production code), so drive it the way reality would — put today's send count over the
         # ceiling on the BOARD, then open a fresh worker and see what it bakes.
         await w.close()
-        await pg.evaluate("() => { window._wlogStats = function(){ return {email: DAILY_MAX, text:0, wp:0, done:0, skip:0}; }; }")
+
+        # FIRST, the inverse — this is the bug that produced nine commits of "sent" with an empty
+        # Gmail Sent folder. DAILY_MAX opened composers is not DAILY_MAX delivered emails, and it
+        # must NOT block the run. Attempts are free; only confirmed delivery spends the budget.
+        await pg.evaluate("() => { window._wlogStats = function(){"
+                          "  return {email: DAILY_MAX, sent:0, call:0, text:0, wp:0, done:0, skip:0}; }; }")
+        async with ctx.expect_page() as npA:
+            await pg.evaluate("() => openMorningWorker('urgent')")
+        wA = await npA.value
+        wA.on('pageerror', lambda e: werrs.append(str(e)))
+        await wA.wait_for_timeout(1000)
+        attempts_only = await wA.locator('#mwmain').inner_text()
+        rec('DAILY_MAX opened composers does NOT block the run (attempts are not sends)',
+            'sending limit' not in attempts_only.lower(), attempts_only[:70].replace('\n', ' '))
+        await wA.close()
+
+        # NOW the real ceiling: DAILY_MAX confirmed deliveries.
+        await pg.evaluate("() => { window._wlogStats = function(){"
+                          "  return {email:0, sent: DAILY_MAX, call:0, text:0, wp:0, done:0, skip:0}; }; }")
         async with ctx.expect_page() as np2:
             await pg.evaluate("() => openMorningWorker('urgent')")
         w = await np2.value

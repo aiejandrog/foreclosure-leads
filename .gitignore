@@ -108,3 +108,5 @@ _chunk.html
 balloon_refi.json
 replies.json
 !_nearmetest.py
+!_callmodetest.py
+!_sendbridgetest.py
