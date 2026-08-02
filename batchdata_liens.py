@@ -22,6 +22,7 @@ import json
 import os
 import re
 import time
+from datetime import date
 
 import requests
 
@@ -31,9 +32,13 @@ import bd_budget         # SHARED daily $ cap — this script bills the SAME wal
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'batchdata_liens.json')
 API = 'https://api.batchdata.com/api/v1/property/lookup/all-attributes'
-# BatchData does not publish this endpoint's per-call price in our docs; assume it bills like a
-# skip-trace until proven otherwise. Under-estimating a cost is how a budget silently overruns.
-COST_PER_LOOKUP = 0.15
+# DERIVED price, not a vendor quote. On 2026-08-02 a $50 balance funded 213 skip-traces ($31.95 at
+# the stated $0.15) and 80 of these lookups; the remaining $18.05 / 80 = ~$0.226 per lookup. A
+# second anchor agrees: the balance was ~$14 when a manual run started and died after exactly 93
+# skip-traces ($13.95). So this endpoint costs ~50% MORE per call than a skip-trace. Rounded UP —
+# under-estimating a cost is how a budget silently overruns. Replace with the real number off the
+# BatchData invoice when it is in hand.
+COST_PER_LOOKUP = 0.23
 LENDER_HINT = re.compile(r'\b(BANK|MORTG|LOAN|LENDING|FINANC|CAPITAL|CREDIT|FUND|FSB|N\.?A\.?|TRUST|SERVICING)\b', re.I)
 
 
@@ -54,6 +59,12 @@ class BalanceExhausted(Exception):
     """BatchData returned 403 Insufficient balance — stop the whole run, don't churn 600 leads."""
 
 
+class LookupFailed(Exception):
+    """A transient error (timeout / 5xx / bad JSON) on ONE lead. Distinct from a genuine no-match:
+    a no-match is permanent and gets negative-cached, a failure must NOT be, or one bad minute
+    would permanently blacklist a lead we already paid to look up."""
+
+
 def lookup(session, key, addr):
     """One property, all attributes. Returns the property dict or None.
     Raises BalanceExhausted on a 403 insufficient-balance so the caller can bail immediately
@@ -71,8 +82,11 @@ def lookup(session, key, addr):
         return props[0] if props else None
     except BalanceExhausted:
         raise
-    except Exception:
-        return None
+    except Exception as e:
+        # Was a bare `return None`, which made a billed timeout/5xx/JSON error indistinguishable
+        # from a genuine "no match" — so a transient failure got negative-cached as a permanent
+        # miss and the lead was never looked up again. Re-raise so the caller can tell them apart.
+        raise LookupFailed(f"{type(e).__name__}: {str(e)[:120]}")
 
 
 def normalize(p, judg=0, ftype=''):
@@ -159,6 +173,9 @@ def main():
     ap.add_argument('--county', default='')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--refresh', action='store_true', help='re-pull even if already in the cache')
+    ap.add_argument('--max-spend', type=float, default=2.0,
+                    help='stop this run once it has spent this many dollars. Belt on top of the '
+                         'shared daily cap in bd_budget.py (which bounds ALL scripts together).')
     a = ap.parse_args()
 
     key = _key()
@@ -195,15 +212,28 @@ def main():
     print(f'{len(picked)} leads to look up via BatchData property API')
     print('  ' + bd_budget.banner('batchdata_liens', COST_PER_LOOKUP))
     done = hits = 0
+    spent = 0.0
+    today = f"{date.today():%Y-%m-%d}"
     for case, r in picked:
-        addr = SK.parse_addr(SK._mailaddr(r)) or SK.parse_addr(SK._propaddr(r))
+        # PROPERTY address first. This is a /property/lookup — it wants the house being foreclosed.
+        # The mailing address was tried first here until 2026-08-02, which for an absentee owner
+        # bought the lien chain of the OWNER'S OWN HOME instead of the subject property: wrong data
+        # AND a wasted call. Mailing address stays only as a fallback for rows with no property addr.
+        addr = SK.parse_addr(SK._propaddr(r)) or SK.parse_addr(SK._mailaddr(r))
         if not addr:
-            print(f'  --  {case:24} (no address)'); continue
+            # Negative-cache it. Unparseable addresses never become parseable on their own, and an
+            # uncached skip silently squats a slot of --limit on EVERY future run (25 of today's 80
+            # were exactly this), starving the leads that could actually be bought.
+            out[case] = {'miss': 'no-address', 'traced': today}
+            print(f'  --  {case:24} (no address — cached so it stops re-queueing)'); continue
         try:
             bd_budget.require(COST_PER_LOOKUP, script='batchdata_liens')
         except bd_budget.BudgetExhausted as e:
             print(f'\n!! DAILY BUDGET REACHED — {e}')
             print(f'   {done} looked up. Raise it with: python bd_budget.py --cap 3')
+            break
+        if spent + COST_PER_LOOKUP > a.max_spend:
+            print(f'\n!! --max-spend ${a.max_spend:.2f} reached for this run. Stopping after {done}.')
             break
         try:
             p = lookup(session, key, addr)
@@ -211,10 +241,19 @@ def main():
             print(f'\n!! BatchData balance exhausted ({e}). Stopping after {done} lookups.')
             print('   Top up at https://batchdata.com to resume Palm Beach / fallback coverage.')
             break
+        except LookupFailed as e:
+            # transient — do NOT negative-cache, this lead deserves another try another day
+            print(f'  !!  {case:24} (transient {e} — not cached, will retry)'); continue
         finally:
             bd_budget.charge(COST_PER_LOOKUP)      # a miss still bills — charge on every call out
+            spent += COST_PER_LOOKUP
         if not p:
-            print(f'  --  {case:24} (no BatchData match)'); continue
+            # THE RECURRING LEAK, fixed 2026-08-02: this used to `continue` without writing anything,
+            # so a PAID no-match was re-bought on every single run, forever. 26 of them show up
+            # repeatedly in leads-run.log. Cache the miss; --refresh re-tries if ever needed.
+            out[case] = {'miss': 'no-match', 'traced': today}
+            json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+            print(f'  --  {case:24} (no BatchData match — cached, will not re-buy)'); continue
         judg = 0
         try:
             judg = float(r.get('judgment') or r.get('judg') or 0)

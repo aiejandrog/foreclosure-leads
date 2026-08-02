@@ -62,7 +62,7 @@ rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chai
 if exist broward_leads.json python broward_liens.py --all >> "%LOG%" 2>&1
 rem  BatchData property API = the second lien feed + the ONLY automated path for Palm Beach (no captcha).
 rem  Fails fast + skips itself when the balance is exhausted, so it's safe to leave wired.
-if exist batchdata.key python batchdata_liens.py --all --limit 20 >> "%LOG%" 2>&1
+if exist batchdata.key python batchdata_liens.py --all --limit 4 >> "%LOG%" 2>&1
 
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
@@ -90,7 +90,7 @@ goto :rebuild
 :phones
 rem  --all = every human owner + (via the code) every resolved LLC officer, not just Tier A.
 rem  --limit 120 caps a single run's spend; already-cached leads are skipped so it stays incremental.
-python skiptrace.py --all --limit 20 >> "%LOG%" 2>&1
+python skiptrace.py --all --limit 6 >> "%LOG%" 2>&1
 
 rem [3a-2] Whitepages Pro API - one paid /v2/property call returns EVERY owner + resident + all
 rem typed phones (mobile/landline unmasked) + emails per lead. ~$0.10/call est.; --limit 30 caps
