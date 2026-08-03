@@ -13700,9 +13700,38 @@ function lkReport(a){
       +'<div class="lka-row"><span>Case</span><b>'+esc(lead.case||'')+'</b></div>'
       +(spread!=null?'<div class="lka-row"><span>Gross spread</span><b>'+lkM(spread)+' <i>before 2nd/HOA &mdash; verify</i></b></div>':'')
       +'<a href="#" class="lkgoto" data-c="'+esc(lead.case)+'">Show this lead in the tracker &rarr;</a>'
+      +(casURL?' <a href="'+esc(casURL)+'" target="_blank" rel="noopener" class="lkgoto">Court docket search &rarr;</a>':'')
       +'</div></div>';
   } else {
-    alert='<div class="lkclear">&#10003; not on the current auction list &mdash; no pending FC/TD sale found in DEALFLOW</div>';
+    /* RETIRED-CASE AWARENESS (2026-08-03, the Martin condo). "Not on the auction list" used to be
+       the whole answer even when DEALFLOW itself had retired a case on this exact folio days
+       earlier — the green all-clear read as "nothing ever happened here" on a property that was
+       auctioned in May and dismissed-after-redemption in July. The server dead ledger can carry
+       folio + related case numbers, so a lookup on that folio now shows the retired cases and a
+       docket link instead of a false all-clear. */
+    var deadHit=null, deadCase='';
+    try {
+      Object.keys(SERVER_DEADS||{}).forEach(function(c){
+        var e=SERVER_DEADS[c]||{}; var ef=String(e.folio||'').replace(/\D/g,'');
+        if(!deadHit && ef && ef===folio){ deadHit=e; deadCase=c; }
+      });
+    } catch(e){}
+    if(deadHit){
+      var dkCases=[deadCase].concat(deadHit.cases||[]).filter(function(x,i,arr){return x&&arr.indexOf(x)===i;});
+      alert='<div class="lkalert past">'
+        +'<div class="lka-l"><div class="lka-k">RETIRED CASE ON THIS FOLIO</div>'
+        +'<div class="lka-d">'+esc(deadHit.d||'')+'</div>'
+        +'<div class="lka-t">DEALFLOW dead ledger</div></div>'
+        +'<div class="lka-r">'
+        +dkCases.map(function(c){ return '<div class="lka-row"><span>Case</span><b>'+esc(c)+'</b></div>'; }).join('')
+        +(deadHit.why?'<div class="lka-row"><span>Why</span><b>'+esc(deadHit.why)+'</b></div>':'')
+        +(casURL?'<a href="'+esc(casURL)+'" target="_blank" rel="noopener" class="lkgoto">Open the court docket search &rarr;</a>':'')
+        +'</div></div>';
+    } else {
+      alert='<div class="lkclear">&#10003; not on the current auction list &mdash; no pending FC/TD sale found in DEALFLOW'
+        +(casURL?' &middot; <a href="'+esc(casURL)+'" target="_blank" rel="noopener" style="color:inherit;font-weight:700">double-check the docket &rarr;</a>':'')
+        +'</div>';
+    }
   }
   // ---- hero stats ----
   const stats='<div class="lkstats">'
