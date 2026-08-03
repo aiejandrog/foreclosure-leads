@@ -13617,15 +13617,33 @@ async function decryptPayload(enc, password){
     // ENVELOPE (per-person codes): each wrapped blob holds {master key, name} sealed under one code.
     // Try each; the one this code opens gives us the master key (decrypts the shared payload) AND
     // the person's name (for the personalized welcome). Name never appears in plaintext in the file.
-    for(const k of enc.keys){
+    // PERF: each attempt is a 200k-iteration PBKDF2 derive, so a code in slot 9 costs 9× the work —
+    // and a remembered device re-runs this on EVERY page load. Try the slot that opened last time on
+    // this device FIRST, then fall through to the full loop. Storing only the INDEX leaks nothing
+    // (it's useless without the code, which already lives in fcPw for auto-unlock), and any miss —
+    // e.g. after a code rotation reorders the keys — silently falls back to trying every slot, so
+    // the fast path can never lock anyone out.
+    const _openSlot = async (k) => {
+      const wk = await derive(k.salt);
+      const blobRaw = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(k.iv)}, wk, dec(k.ct));
+      const blob = JSON.parse(new TextDecoder().decode(blobRaw));   // {mk, name}
+      const mk = await crypto.subtle.importKey('raw', dec(blob.mk), {name:'AES-GCM'}, false, ['decrypt']);
+      const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, mk, dec(enc.ct));
+      const payload = JSON.parse(new TextDecoder().decode(pt));
+      unlockName = blob.name || '';   // only set AFTER the full chain succeeds
+      return payload;
+    };
+    let order = enc.keys.map((_, i) => i);
+    let remembered = -1;
+    try{ remembered = parseInt(localStorage.getItem('fcKeySlot'), 10); }catch(e){}
+    if(remembered >= 0 && remembered < enc.keys.length){
+      order = [remembered].concat(order.filter(i => i !== remembered));
+    }
+    for(const i of order){
       try{
-        const wk = await derive(k.salt);
-        const blobRaw = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(k.iv)}, wk, dec(k.ct));
-        const blob = JSON.parse(new TextDecoder().decode(blobRaw));   // {mk, name}
-        unlockName = blob.name || '';
-        const mk = await crypto.subtle.importKey('raw', dec(blob.mk), {name:'AES-GCM'}, false, ['decrypt']);
-        const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, mk, dec(enc.ct));
-        return JSON.parse(new TextDecoder().decode(pt));
+        const payload = await _openSlot(enc.keys[i]);
+        try{ localStorage.setItem('fcKeySlot', String(i)); }catch(e){}
+        return payload;
       }catch(e){ /* this code doesn't open this wrapped key — try the next */ }
     }
     throw new Error('no matching code');
