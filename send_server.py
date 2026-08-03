@@ -102,26 +102,67 @@ def _append_ledger(entry):
         os.replace(tmp, SENT_LEDGER)
 
 
+def _richness(payload):
+    """A rough 'how much real call history is in here' score. An empty / fresh browser still carries
+    ~1 note (the opt-out ledger auto-bakes on every load), so counting notes alone isn't enough —
+    weight actual activity (touches + the worker log + the sent archive)."""
+    notes = (payload or {}).get('notes') or {}
+    touches = 0
+    for n in notes.values():
+        if isinstance(n, dict):
+            touches += len(n.get('touches') or [])
+    return len(notes) + touches + len((payload or {}).get('workerLog') or []) \
+        + len((payload or {}).get('sentArchive') or [])
+
+
 def _write_notes(payload):
     """Atomic write of the tracker's localStorage state + one snapshot file per day.
 
-    worker_notes.json is always the latest full state (last write wins — the bridge is
-    127.0.0.1-only, so only THIS machine's browser can reach it; there is no multi-device
-    merge problem to solve here). Snapshots are date-named so a bad push can never destroy
-    history older than today.
+    RICHEST-WINS, not last-write-wins. 127.0.0.1 keeps LAN/internet out, but it does NOT keep out a
+    second browser profile, a fresh browser with empty localStorage, or an automated test tab on the
+    SAME machine — any of those pushes near-empty state, and plain last-write-wins would let it CLOBBER
+    a backup that holds the real call history (demonstrated 2026-08-03: Playwright test tabs overwrote
+    it). So: overwrite the primary backup only when the incoming push is at least as rich as what's on
+    disk, OR it comes from the same device (a device updating itself — even a legit deletion — wins),
+    OR there is no backup yet. A poorer push from a different/blank device is ignored for the primary
+    file (its real data is already safe) but still snapshotted for audit. Same guard on the day
+    snapshot so a poor push can't clobber a rich same-day snapshot either. Mirrors the opt-out
+    ledger's safety-first, never-lose-data posture.
     """
     with _NOTES_LOCK:
         os.makedirs(NOTES_SNAP_DIR, exist_ok=True)
         raw = json.dumps(payload, indent=1, ensure_ascii=False)
-        tmp = NOTES_FILE + '.tmp'
-        with open(tmp, 'w', encoding='utf-8') as f:
-            f.write(raw)
-        os.replace(tmp, NOTES_FILE)
-        snap = os.path.join(NOTES_SNAP_DIR, 'worker_notes_%s.json' % dt.date.today().isoformat())
-        tmp2 = snap + '.tmp'
-        with open(tmp2, 'w', encoding='utf-8') as f:
-            f.write(raw)
-        os.replace(tmp2, snap)
+        inc_rich = _richness(payload)
+        inc_dev = str((payload or {}).get('device') or '')
+        # decide whether this push may replace the primary backup
+        wins = True
+        try:
+            if os.path.exists(NOTES_FILE):
+                cur = json.load(open(NOTES_FILE, encoding='utf-8'))
+                cur_rich = _richness(cur)
+                cur_dev = str((cur or {}).get('device') or '')
+                same_device = bool(inc_dev) and inc_dev == cur_dev
+                wins = same_device or inc_rich >= cur_rich
+        except Exception:
+            wins = True   # unreadable/corrupt backup — a good push should be allowed to heal it
+        if wins:
+            tmp = NOTES_FILE + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                f.write(raw)
+            os.replace(tmp, NOTES_FILE)
+            snap = os.path.join(NOTES_SNAP_DIR, 'worker_notes_%s.json' % dt.date.today().isoformat())
+            tmp2 = snap + '.tmp'
+            with open(tmp2, 'w', encoding='utf-8') as f:
+                f.write(raw)
+            os.replace(tmp2, snap)
+        else:
+            # keep the richer primary + winning snapshot untouched; record the rejected push for audit
+            rej = os.path.join(NOTES_SNAP_DIR, 'rejected_%s.json' % dt.date.today().isoformat())
+            try:
+                with open(rej, 'w', encoding='utf-8') as f:
+                    f.write(raw)
+            except Exception:
+                pass
     return len(raw)
 
 
