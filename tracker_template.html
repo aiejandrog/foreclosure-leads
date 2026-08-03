@@ -13153,11 +13153,18 @@ function fallbackCopy(text, done){
   try { document.execCommand('copy'); done && done(); } catch(e) {}
   document.body.removeChild(ta);
 }
-document.getElementById('q').oninput = e => { q = e.target.value; render(); };
-document.getElementById('fy1').oninput = e => { fy1 = e.target.value; render(); };
-document.getElementById('fy2').oninput = e => { fy2 = e.target.value; render(); };
-document.getElementById('ad1').oninput = e => { ad1 = e.target.value; render(); };
-document.getElementById('ad2').oninput = e => { ad2 = e.target.value; render(); };
+// PERF: render() is ~215ms over 851 leads, and these text filters used to fire it on EVERY
+// keystroke — typing a 10-char address = ~2s of jank. Debounce so the state updates instantly
+// but the heavy re-render coalesces into ONE pass ~130ms after you stop typing. The value binding
+// stays synchronous (q/fy1/… are current immediately); only the paint is deferred. Enter-to-lookup
+// is a separate keydown handler and is unaffected.
+function _debounce(fn, ms){ let t; return function(){ clearTimeout(t); t = setTimeout(fn, ms); }; }
+const _renderSoon = _debounce(function(){ try{ render(); }catch(_e){} }, 130);
+document.getElementById('q').oninput = e => { q = e.target.value; _renderSoon(); };
+document.getElementById('fy1').oninput = e => { fy1 = e.target.value; _renderSoon(); };
+document.getElementById('fy2').oninput = e => { fy2 = e.target.value; _renderSoon(); };
+document.getElementById('ad1').oninput = e => { ad1 = e.target.value; _renderSoon(); };
+document.getElementById('ad2').oninput = e => { ad2 = e.target.value; _renderSoon(); };
 document.getElementById('clr').onclick = () => {
   fy1 = fy2 = ad1 = ad2 = '';
   ['fy1','fy2','ad1','ad2'].forEach(id => document.getElementById(id).value = '');
