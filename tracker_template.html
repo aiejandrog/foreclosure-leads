@@ -2288,6 +2288,37 @@ const SERVER_OPTOUTS = __OPTOUTS__;
     if(added) console.info('[dealflow] '+added+' opt-out(s) applied from the server ledger');
   } catch(e){}
 })();
+/* ---- STOP-REPLY AUTO-SUPPRESSION --------------------------------------------------------------
+   A "please stop" detected by replies.py (REPLIES[case].stop) is a written opt-out under FTSA/TCPA
+   and must be honored THE MOMENT it's detected — not after a human manually adds the lead to the
+   ledger. Before this, a fresh STOP reply only raised a Reply-Inbox banner, leaving a window in
+   which the automated morning worker could re-contact the owner between detection and the manual
+   step (and replies.py now runs daily). Treat a stop reply exactly like a server opt-out: set the
+   scalar + a 'set-local' audit event so _isOptedOut → true everywhere (worker queue, call sheet,
+   dial, cadence). One-way and idempotent: skip anything already suppressed (so a server opt-out
+   like Hendy isn't double-counted); a false-positive STOP can still be reversed with 'cleared-local'
+   in the UI. Erring toward suppression on a detected STOP is the legally-correct default. */
+(function(){
+  try {
+    if(typeof REPLIES !== 'object' || !REPLIES) return;
+    var added = 0;
+    Object.keys(REPLIES).forEach(function(c){
+      var rep = REPLIES[c] || {};
+      if(!rep.stop) return;
+      if(String(c).charAt(0) === '@') return;   // REPLIES is indexed by case# AND '@email'; only case# is a lead
+      var n = notes[c] = notes[c] || {status:'', note:''};
+      if(n.optout || String(n.status||'').toUpperCase() === 'DO NOT CONTACT') return;  // already suppressed
+      n.optout = _today();
+      n.status = 'DO NOT CONTACT';
+      // use the canonical audit-event helper so the shape matches (ts=string, tsu=number) — a
+      // hand-built {ts:Date.now()} breaks _effOptout's key(), which expects ts to be a string.
+      _optLog(n, 'set-local', 'stop-reply');
+      added++;
+    });
+    if(added && typeof save === 'function') save();
+    if(added) console.info('[dealflow] '+added+' lead(s) auto-suppressed from a STOP reply');
+  } catch(e){}
+})();
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
