@@ -111,6 +111,7 @@ replies.json
 worker_notes.json
 worker_notes_snapshots/
 !_notesbridgetest.py
+!_redfintest.py
 !_nearmetest.py
 !_callmodetest.py
 !_sendbridgetest.py

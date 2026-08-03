@@ -24,6 +24,10 @@ Writes onto each lead:
   zstatus : one of LISTED | PENDING | SOLD | RENTAL | OFF-MARKET  ('' = never checked)
   zprice  : asking price in dollars when LISTED/PENDING (0 otherwise)
   zdoz    : days on Zillow when LISTED (0 otherwise)
+  zest    : the Zillow Zestimate (AVM) in dollars, valid for ANY status incl. off-market (0 if
+            the page carried no Zestimate). Free to grab — it rides the same homedetails HTML we
+            already download. Feeds the board's advisory value cross-check alongside the Redfin
+            Estimate; it never drives the deal math.
 
 Run:  python listing_status.py [--limit N] [--ttl-days 7]
 """
@@ -48,6 +52,9 @@ PAT_HS = re.compile(r'homeStatus\\*"\s*:\s*\\*"([A-Z_]+)')
 PAT_LTD = re.compile(r'listingTypeDimension\\*"\s*:\s*\\*"([^"\\]+)')
 PAT_PRC = re.compile(r'[{,]\\*"price\\*"\s*:\s*(\d+)')
 PAT_DOZ = re.compile(r'daysOnZillow\\*"\s*:\s*(-?\d+)')
+# The [{,] prefix anchor is load-bearing: the page also carries "rentZestimate":<num>, and an
+# unanchored zestimate pattern's tail would match it. Same guard PAT_PRC uses.
+PAT_ZEST = re.compile(r'[{,]\\*"zestimate\\*"\s*:\s*(\d+)')
 
 TRUE_LISTING_TYPES = ('for sale by agent', 'for sale by owner', 'new construction', 'coming soon')
 
@@ -111,30 +118,32 @@ def _blocked(text):
 
 
 def fetch_status(addr):
-    """(zstatus, zprice, zdoz) for one address. '' status = TRANSIENT failure (blocked/timeout),
-    retried next run. A clean search with no property match is NOT transient — Zillow indexes
-    essentially every parcel, so no-match means no listing exists: classified OFF-MARKET so
-    every reachable property ends up with a badge instead of a permanent hole."""
+    """(zstatus, zprice, zdoz, zest) for one address. '' status = TRANSIENT failure (blocked/
+    timeout), retried next run. A clean search with no property match is NOT transient — Zillow
+    indexes essentially every parcel, so no-match means no listing exists: classified OFF-MARKET so
+    every reachable property ends up with a badge instead of a permanent hole. zest is the
+    Zestimate off the same homedetails page (0 when the page carries none / on the no-match path)."""
     try:
         sess = requests.Session()
         sess.headers.update(pp._ZHDRS)
         url = 'https://www.zillow.com/homes/' + requests.utils.quote(addr) + '_rb/'
         r = sess.get(url, timeout=20)
         if r.status_code != 200 or _blocked(r.text):
-            return '', 0, 0
+            return '', 0, 0, 0
         lm = re.search(r'https://www\.zillow\.com/homedetails/[^"\'<>\s]+/(\d+)_zpid/', r.text)
         if not lm:
-            return 'OFF-MARKET', 0, 0
+            return 'OFF-MARKET', 0, 0, 0
         h2 = dict(pp._ZHDRS)
         h2['Referer'] = url
         h2['Sec-Fetch-Site'] = 'same-origin'
         r2 = sess.get(lm.group(0), headers=h2, timeout=20)
         if r2.status_code != 200 or _blocked(r2.text):
-            return '', 0, 0
+            return '', 0, 0, 0
         hs = PAT_HS.search(r2.text)
         ltd = PAT_LTD.search(r2.text)
         prc = PAT_PRC.search(r2.text)
         doz = PAT_DOZ.search(r2.text)
+        zst = PAT_ZEST.search(r2.text)
         status = classify(hs.group(1) if hs else '', ltd.group(1) if ltd else '',
                           int(prc.group(1)) if prc else 0, int(doz.group(1)) if doz else 0)
         # Page fetched cleanly but no recognizable homeStatus: that's Zillow's bare Zestimate
@@ -143,13 +152,14 @@ def fetch_status(addr):
             status = 'OFF-MARKET'
         price = int(prc.group(1)) if prc else 0
         days = max(0, int(doz.group(1))) if doz else 0
+        zest = int(zst.group(1)) if zst else 0
         # Price/days only meaningful for live retail states
         if status not in ('LISTED', 'PENDING'):
             price = price if status == 'SOLD' else 0
             days = 0
-        return status, price, days
+        return status, price, days, zest
     except Exception:
-        return '', 0, 0
+        return '', 0, 0, 0
 
 
 def _load_cache():
@@ -177,8 +187,14 @@ def enrich_file(path, cache, ttl_s, limit_state):
             continue
         ent = cache.get(k)
         if ent and (now - ent.get('t', 0)) < ttl_s:
-            if r.get('zstatus') != ent['s'] or r.get('zprice') != ent.get('p', 0):
+            # Re-apply cached values in place (this is ALSO how county rows get zstatus/zest without
+            # a county_leads.py change — the county scrape rebuilds the file, this pass re-stamps it).
+            # ent.get('z',0): older cache entries predate zest; default 0, no forced refetch — the
+            # 7-day TTL rolls them over naturally within a week.
+            if (r.get('zstatus') != ent['s'] or r.get('zprice') != ent.get('p', 0)
+                    or r.get('zest', 0) != ent.get('z', 0)):
                 r['zstatus'], r['zprice'], r['zdoz'] = ent['s'], ent.get('p', 0), ent.get('d', 0)
+                r['zest'] = ent.get('z', 0)
                 changed += 1
             continue
         addr = pp._addr_of(r)
@@ -193,16 +209,16 @@ def enrich_file(path, cache, ttl_s, limit_state):
                 # be checked without an address — mark honestly instead of leaving a hole that
                 # reads as a glitch. Cached so the row doesn't re-probe the PA daily; the 7-day
                 # TTL re-checks in case a later scrape run starts carrying the address.
-                r['zstatus'], r['zprice'], r['zdoz'] = 'NO-ADDR', 0, 0
-                cache[k] = {'s': 'NO-ADDR', 'p': 0, 'd': 0, 't': now}
+                r['zstatus'], r['zprice'], r['zdoz'], r['zest'] = 'NO-ADDR', 0, 0, 0
+                cache[k] = {'s': 'NO-ADDR', 'p': 0, 'd': 0, 'z': 0, 't': now}
                 changed += 1
                 continue
-        status, price, days = fetch_status(addr)
+        status, price, days, zest = fetch_status(addr)
         fetched += 1
         limit_state['n'] -= 1
         if status:
-            r['zstatus'], r['zprice'], r['zdoz'] = status, price, days
-            cache[k] = {'s': status, 'p': price, 'd': days, 't': now}
+            r['zstatus'], r['zprice'], r['zdoz'], r['zest'] = status, price, days, zest
+            cache[k] = {'s': status, 'p': price, 'd': days, 'z': zest, 't': now}
             changed += 1
         # A failed fetch is NOT cached — retried next run.
         time.sleep(1.2)  # same pacing the photo pass uses; Zillow tolerates it

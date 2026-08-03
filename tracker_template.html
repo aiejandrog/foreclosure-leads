@@ -258,6 +258,10 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
   border-radius:3px;background:#fff2d7;color:#7a5a10;border:1px solid #eadb9f;cursor:help}
 .gschip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
   border-radius:3px;background:#f6f8fa;color:#5b6472;border:1px solid #d5dae4;cursor:help}
+.vxchip{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.3px;padding:0 4px;
+  border-radius:3px;vertical-align:1px;cursor:help}
+.vxchip.split{background:#fff2d7;color:#7a5a10;border:1px solid #eadb9f}
+.vxchip.tri{background:rgba(30,122,60,.12);color:#1e5a2b;border:1px solid rgba(30,122,60,.35)}
 .unres{font-family:var(--f-label,inherit);font-size:9.5px;font-weight:800;letter-spacing:.07em;
   text-transform:uppercase;color:var(--muted);background:var(--surface-2,#f2f0ea);
   border:1px dashed var(--line,#d8d4c8);border-radius:4px;padding:2px 6px}
@@ -2536,6 +2540,28 @@ function recompute(){
     const arvOK = cv>0 && (r.arv||0)>0 && r.arvconf==='ok' && r.arv >= 0.7*cv && r.arv <= 2.5*cv;
     const val = arvOK ? r.arv : cv;
     r._valsrc = arvOK ? 'arv' : 'county';
+    // ---- ADVISORY value triangulation (Redfin Estimate + Zillow Zestimate vs the driving value) ----
+    // READ-ONLY. Nothing below feeds val / _valsrc / _profit — the deal math is byte-identical with
+    // or without this block. It only tells the operator when independent AVMs corroborate the number
+    // the math already uses (trust it) or contradict it (pull comps before you bid). `val` is already
+    // fixed above; `_valx` is never read by any dollar path (_basisOf, _drvVal, verdict logic).
+    (function(){
+      const avms = [];
+      if(+r.rfval > 0) avms.push({s:'Redfin', v:+r.rfval, u:r.rfurl||''});
+      if(+r.zest  > 0) avms.push({s:'Zestimate', v:+r.zest});
+      if(!avms.length || !val){ r._valx = null; return; }
+      const all = avms.map(a=>a.v).concat([val]).sort((a,b)=>a-b);
+      const mid = all.length % 2 ? all[(all.length-1)/2] : (all[all.length/2-1]+all[all.length/2])/2;
+      const tol = Math.max(50000, val*0.20);              // scale of _dsRecon's max(5000,15%), sized for values
+      const out = avms.filter(a => Math.abs(a.v - val) > tol);
+      r._valx = {
+        srcs: avms, blend: mid, lo: all[0], hi: all[all.length-1], spread: all[all.length-1]-all[0],
+        div: out.length > 0, out: out,
+        // triangulated: comps ARV exists AND every present AVM sits within 10% of it — value is
+        // effectively triple-sourced (county/comps + Redfin + Zillow agree).
+        tri: (+r.arv>0) && avms.length>0 && avms.every(a => Math.abs(a.v - r.arv) <= 0.10*r.arv)
+      };
+    })();
     // per-lead adjustments the user researches on the docket/title (saved with this case's notes)
     const nn = notes[r.case] || {};
     // TRACED CHAIN AUTO-FILL (the Echeverri rule, made automatic): the recorded lien chain's
@@ -2819,6 +2845,19 @@ function dealAnalysisHTML(r){
       if(r._valsrc!=='arv') rows.push(mathLine('ARV · '+r.arvn+' comps ('+(r.arvconf==='ok'?'verified':'low conf')+')', r.arv));
       rows.push('<div class="compsline">'+r.comps.map(c =>
         '<div class="comp"><span class="compa">'+esc(c.addr)+'</span><span class="compn">'+fmtK(c.price)+' · '+c.yr+' · '+c.sqft.toLocaleString()+'sf · $'+c.psf+'/sf</span></div>').join('')+'</div>');
+    }
+    // Independent AVMs — ADVISORY ONLY. These mathLine rows carry no sign and are NOT deducted;
+    // _profit is read from r._profit (computed in recompute, blind to these). They exist so the
+    // operator sees a second and third opinion next to the driving value.
+    if(+r.rfval>0) rows.push(mathLine('Redfin Estimate (advisory — not in the math)', +r.rfval));
+    if(+r.zest>0)  rows.push(mathLine('Zillow Zestimate (advisory — not in the math)', +r.zest));
+    if(r._valx && r._valx.div){
+      rows.push('<div class="dsrecon" style="margin:6px 0">⚠ <b>VALUE NOT TRIANGULATED</b> — '
+        + r._valx.out.map(function(a){return a.s+' says '+fmtK(a.v);}).join(', ')
+        + ', but the math above uses <b>'+fmtK(drv)+'</b> ('+(r._valsrc==='arv'?'comps ARV':'county value')
+        + '). Advisory only — pull comps and confirm before you bid.</div>');
+    } else if(r._valx && r._valx.tri){
+      rows.push('<div class="dsrecon" style="margin:6px 0;background:rgba(30,122,60,.08);border-color:rgba(30,122,60,.3);color:#1e5a2b">✓ <b>VALUE TRIANGULATED</b> — comps, Redfin and Zillow agree within 10%. The driving number is independently corroborated.</div>');
     }
     if(r.st==='TD'){ rows.push(mathLine('Est. winning bid', -r._purchase)); rows.push(mathLine('Quiet title', -(Math.max(0,+deal.quiettitle||3000)))); }
     else if(r.mr){
@@ -3203,6 +3242,7 @@ function _csScriptBody(r){
         '<tr class="tot"><td>' + totLabel + '</td><td><b>' + (ne ? _fmk(ne) : '—') + '</b></td><td class="prov">' + (td ? 'after quiet title + carry' : 'after judg + survivors + liens') + '</td></tr>' +
         (!td && oe > 0 ? '<tr class="tot"><td>Owner equity (what THEY have)</td><td><b>' + _fmk(oe) + '</b></td><td class="prov">value − everything recorded</td></tr>' : '') +
         (r.zprice && r.zstatus === 'LISTED' ? '<tr><td>Actively listed at</td><td><b>' + _fmk(+r.zprice) + '</b></td><td class="prov">Zillow ' + esc(r.zstatus) + '</td></tr>' : '') +
+        (+r.rfval > 0 ? '<tr><td>Redfin Estimate</td><td><b>' + _fmk(+r.rfval) + '</b></td><td class="prov">independent AVM · advisory</td></tr>' : '') +
       '</tbody></table>' +
       '<div class="scriptknow-ask"><b>Ask on the call:</b> ' + askEN + '</div>' +
     '</div>' +
@@ -4120,6 +4160,7 @@ function _callSheet(r){
     row('Type', esc(r.dor_desc||'—')+(r.beds?' · '+r.beds+' bed / '+r.baths+' bath':'')+(r.sqft?' · '+(+r.sqft).toLocaleString()+' sqft':'')) +
     row('Owned since', (r.bought?'<b>'+r.bought+'</b>'+(r.bprice?' — paid '+fm(r.bprice):''):'—')+(r.bought?' <span class="csmut">('+(new Date().getFullYear()-r.bought)+' years)</span>':'')) +
     row('County value', fm(val)+(arv?' <span class="csmut">(tax-capped — ARV above is the real number)</span>':'')) +
+    ((+r.rfval>0||+r.zest>0) ? row('AVM cross-check', [(+r.rfval>0?'Redfin '+fm(+r.rfval):''),(+r.zest>0?'Zestimate '+fm(+r.zest):'')].filter(Boolean).join(' · ')+' <span class="csmut">(advisory — not in the math)</span>') : '') +
     row('On the market?', esc(r.zstatus||'not checked')) +
     row('Distance', g.mi!=null ? g.mi+' mi from '+_baseLL().name+' · '+esc(g.lbl) : 'unknown') +
   '</div>';
@@ -6701,6 +6742,29 @@ function _valChip(r){
     + '">' + (String(r.addr||'').trim() ? 'value not pulled' : 'parcel not resolved') + '</span>';
   return '<b class="pv">'+fmtK(r.value)+'</b> val';
 }
+function _valXChip(r){
+  // Advisory AVM cross-check (Redfin Estimate + Zillow Zestimate vs the number the math uses).
+  // NEVER affects the math — see r._valx in recompute(). Two states worth a chip: the independent
+  // AVMs contradict our value (verify before bidding), or they all corroborate the comps (trust it).
+  var x = r && r._valx; if(!x) return '';
+  var drv = (r._valsrc==='arv' && r.arv) ? r.arv : r.value;
+  var basis = r._valsrc==='arv' ? 'comps ARV' : 'the county value';
+  if(x.div){
+    var who = x.out.map(function(a){ return a.s+' '+fmtK(a.v); }).join(' · ');
+    return ' <span class="vxchip split" title="'
+      + esc('Independent estimates disagree with the value the deal math uses ('+fmtK(drv)+', '+basis+'): '
+          + who + '. This is ADVISORY only — the math is unchanged. Pull comps and confirm the number before you make an offer.')
+      + '">AVM SPLIT ~'+fmtK(x.spread)+'</span>';
+  }
+  if(x.tri){
+    return ' <span class="vxchip tri" title="'
+      + esc('Comps ARV, Redfin and Zillow all agree within 10% ('
+          + x.srcs.map(function(a){return a.s+' '+fmtK(a.v);}).join(' · ')
+          + '). The value is effectively triple-sourced — advisory confidence, does not change the math.')
+      + '">VALUE ×'+(x.srcs.length+1)+'</span>';
+  }
+  return '';
+}
 // ONE equity percentage everywhere. This used to compute equity two incompatible ways: stack-aware
 // on ARV leads, but the server-baked gross r.eq (value − judgment only — blind to every lien, typed
 // or traced) on county-valued leads. netEqPct() is the filter's number and flows through _basisOf +
@@ -8971,6 +9035,8 @@ function genDealSnapshot(r){
     +       '<div class="dsl"><span>County value</span><span class="n">'+fm(val)+'</span></div>'
     +       (arv>0 ? '<div class="dsl"><span>ARV (comps '+(r.arvconf==='ok'?'verified':'low conf')+')</span><span class="n">'+fm(arv)+'</span></div>' : '<div class="dsl"><span>ARV</span><span class="n">no comps yet</span></div>')
     +       (+r.zprice>0 ? '<div class="dsl"><span>Zillow listed at</span><span class="n">'+fm(+r.zprice)+' ('+esc(r.zstatus||'?')+')</span></div>' : '')
+    +       (+r.rfval>0 ? '<div class="dsl"><span>Redfin Estimate (advisory)</span><span class="n">'+fm(+r.rfval)+'</span></div>' : '')
+    +       (+r.zest>0 ? '<div class="dsl"><span>Zestimate (advisory)</span><span class="n">'+fm(+r.zest)+'</span></div>' : '')
     +       '<div class="dsl"><span>Beds / Baths / Sqft</span><span class="n">'+(r.beds||'—')+' / '+(r.baths||'—')+' / '+(r.sqft?(+r.sqft).toLocaleString():'—')+'</span></div>'
     +     '</div>'
     +   '</div>'
@@ -12498,6 +12564,9 @@ function render(){
       gProp.push('<a href="https://www.google.com/maps/search/?api=1&query='+_mq+'" target="_blank" rel="noopener noreferrer" title="Open the property in Google Maps — flip to satellite to eyeball the lot, roof, pool, additions, and the neighborhood.">🛰 Map</a>');
       gProp.push('<a href="https://www.google.com/maps?q='+_mq+'&layer=c&cbp=12,0,0,0,0" target="_blank" rel="noopener noreferrer" title="Street View — see the house from the road BEFORE you drive out: condition, boarded windows, cars in the drive, occupied or vacant. Your best free scouting tool.">👁 Street View</a>');
       gProp.push('<a href="https://www.google.com/maps/dir/?api=1&destination='+_mq+'&travelmode=driving" target="_blank" rel="noopener noreferrer" title="Turn-by-turn directions from where you are now — opens the Google Maps app on your phone.">🧭 Directions</a>');
+      // Redfin — an independent second opinion on value. Deep-link to the exact property page when
+      // redfin_value.py resolved it; otherwise a search fallback. Advisory only; not in the math.
+      gProp.push('<a class="dig" href="'+esc(r.rfurl || ('https://www.google.com/search?q='+encodeURIComponent('site:redfin.com '+String(r.addr||''))))+'" target="_blank" rel="noopener noreferrer" title="'+esc(r.rfval>0 ? ('Redfin Estimate '+fmtK(r.rfval)+' — independent AVM, a second opinion on value. Advisory only, not in the deal math.') : 'Find this property on Redfin for a second-opinion value estimate.')+'">🔴 Redfin'+(r.rfval>0?' '+fmtK(r.rfval):'')+'</a>');
     }
     // DO — actions. Outreach generators are suppressed once a lead opts out (only Log/Copy remain,
     // so the opt-out itself stays auditable).
@@ -12593,7 +12662,7 @@ function render(){
           ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
           : '<span class="clamp2 legalline">no address on the filing</span>');
     const prop = '<div class="addrline">'+_addrLine+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -12658,7 +12727,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
@@ -13355,6 +13424,7 @@ function lkReport(a){
   if(paURL) L.push(['Appraiser', paURL]);
   if(taxURL) L.push(['Taxes', taxURL]);
   L.push(['Zillow', (lead&&lead.zillow) || ('https://www.zillow.com/homes/'+encodeURIComponent((site||folio)+' '+placeQ)+'_rb/')]);
+  L.push(['Redfin', (lead&&lead.rfurl) || ('https://www.google.com/search?q='+encodeURIComponent('site:redfin.com '+site+' '+placeQ))]);
   L.push(['Maps','https://www.google.com/maps/search/'+encodeURIComponent(site+(city?', '+city:'')+' FL')]);
   if(people) L.push(['People (name)',people]); if(paddr) L.push(['People (address)',paddr]);
   if(recURL) L.push([ctyName(cty)+' Official Records', recURL]);

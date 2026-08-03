@@ -181,6 +181,16 @@ if _ALL:
     comps = load('comps.json') or {}
     arv = _pct(sum(1 for r in _ALL if comps.get(r.get('case') or r.get('Case #'))), N)
     _rule('RULE: ARV-comp coverage', arv, 30, f'{arv}% have comps')
+    # Redfin Estimate — redfin_value.py sidecar. rfval never lands in the lead files (it's a
+    # build-time post-pass merge), so measure the CACHE against folio-carrying leads. Redfin indexes
+    # fewer parcels than Zillow, so the floor is lower; WARN-tier — a blocked cloud run is expected
+    # and the local nightly backfills. Denominator is leads with a resolvable folio.
+    _rf = load('redfin_cache.json') or {}
+    _rf_ok = {k for k, v in _rf.items() if isinstance(v, dict) and int(v.get('v') or 0) > 0}
+    _folioed = [re.sub(r'\D', '', str(r.get('folio') or r.get('Folio') or '')) for r in _ALL]
+    _folioed = [f for f in _folioed if f]
+    rfp = _pct(sum(1 for f in _folioed if f in _rf_ok), len(_folioed))
+    _rule('RULE: redfin-estimate coverage', rfp, 20, f'{rfp}% of folio leads carry a Redfin Estimate')
     # sale-history survival count — sale_history.py (Miami-Dade docket). Measured against MD leads only
     # (BW/PB use the filing-year proxy), so a drop toward 0 means the OCS docket enrich stopped running.
     md = [r for r in _ALL if re.match(r'\d{4}-\d+-\w+-\d+', str(r.get('Case #') or r.get('case') or '')) and (r.get('sale_type') or r.get('st')) != 'TD']
