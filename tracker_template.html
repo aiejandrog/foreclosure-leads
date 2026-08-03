@@ -12373,6 +12373,13 @@ function _doorRouteGPS(){ if(!navigator.geolocation){ _doorRoute(); return; }
 function render(){
   initCountyFilter();
   const rows = view();
+  // PERF: the loop below used to build BOTH the desktop table rows AND the mobile cards for every
+  // lead, every render — but only one is ever visible (CSS 860px breakpoint). Build just the visible
+  // layout and skip the ~233 hidden nodes' string-build + innerHTML parse. Safe because nothing reads
+  // the hidden layout's DOM: door-route/counts key off window._curRows (data), and the click handler
+  // reads closest() on whatever was actually clicked (always visible). A breakpoint cross re-renders
+  // (listener below) so the newly-shown layout is never left empty.
+  const _mob = !!(window.matchMedia && matchMedia('(max-width:860px)').matches);
   window._curRows = rows;          // the door-knock route builder (_doorRoute) drives off the current view
   renderActiveFilters();          // show removable pills for whatever is filtering the board
   renderFunnelBar();              // rung counts move whenever a touch is logged — repaint every render
@@ -12683,6 +12690,7 @@ function render(){
     // with Hide viewed OFF an already-checked deal looked identical to a fresh one — which is exactly
     // the confusion this is meant to prevent. .rseen dims it; .rback flags the stale-view re-surface.
     const _seenCls = _viewedResurfaced(r) ? ' rback' : (viewed.has(r.case) ? ' rseen' : (_isNewLead(r) ? ' rnew' : ''));
+    if(!_mob){
     trs.push('<tr data-case="'+esc(r.case)+'" class="'+(r._nodata?'':('rv'+r._vrank+(r._verdict==='VERIFY'?' rvv':'')))+(pinnedCase===r.case?' pinfire':'')+_seenCls+'">'+
       '<td class="pcell">'+_photoThumb(r, _eager)+'</td>'+
       '<td class="'+esc(r.tier)+'">'+esc(r.tier)+'</td>'+
@@ -12703,7 +12711,9 @@ function render(){
     // purpose — row counts, fire-lock and the door-route all key off tr[data-case] and must not
     // double-count this presentational row.
     trs.push('<tr class="lrow'+(pinnedCase===r.case?' pinfire':'')+'"><td class="links lcell" colspan="11"><div class="lwrap">'+linksHtml+'</div></td></tr>');
+    }
     // mobile card
+    if(_mob){
     cards.push('<div data-case="'+esc(r.case)+'" class="card '+(r._nodata?'':('v'+r._vrank+(r._verdict==='VERIFY'?' vv':'')))+(pinnedCase===r.case?' pinfire':'')+_seenCls+'">'+
       ((r.photos||[]).length?'<a class="phero pthumb"'+(_zurl(r)?' href="'+esc(_zurl(r))+'" target="_blank" rel="noopener"':'')+' title="Open this property on Zillow"><img src="'+esc(r.photos[0])+'" data-fb="'+esc(r.aurl||'')+'"'+(_eager?'':' loading="lazy"')+' alt="property" onerror="imgFB(this)">'+_zstatusBadge(r)+_favStar(r)+(r.photos.length>1?'<span class="pcount">▣ '+r.photos.length+' photos</span>':'')+'</a>':'')+
       '<div class="chead"><span class="'+esc(r.tier)+' cbadge">'+esc(r.tier)+'</span>'+
@@ -12735,6 +12745,7 @@ function render(){
       '<div class="cxwrap" data-c="'+esc(r.case)+'" title="Open the contact log — record calls/emails, set a follow-up">'+contactChip(r)+'</div>'+
       '<div class="cctl">'+statusSel+phoneInp+'</div><div class="cctl">'+notesTa+'</div>'+
       '</div>');
+    }
   });
   const cc = document.getElementById('cards');
   if(!rows.length){
@@ -12759,9 +12770,23 @@ function render(){
     if(cc) cc.innerHTML = msg;
     return;
   }
-  document.getElementById('tb').innerHTML = trs.join('');
-  if(cc) cc.innerHTML = cards.join('');
+  // inject ONLY the visible layout and CLEAR the hidden one, so the DOM never holds both at once
+  // (halves node count / memory for good, not just until the first resize). The breakpoint listener
+  // rebuilds the other side the instant the width crosses 860px, so nothing is ever left blank.
+  const _tb = document.getElementById('tb');
+  if(_mob){ if(cc) cc.innerHTML = cards.join(''); if(_tb) _tb.innerHTML = ''; }
+  else { if(_tb) _tb.innerHTML = trs.join(''); if(cc) cc.innerHTML = ''; }
 }
+// PERF companion to the visible-layout-only render: when the viewport crosses the 860px breakpoint,
+// the newly-shown layout was skipped on the last render and would be empty — repaint once on the
+// crossing so table↔cards never flashes blank. Browser dedupes identical listeners; guarded for
+// engines without matchMedia.addEventListener.
+try{
+  const _bpMq = matchMedia('(max-width:860px)');
+  const _bpFn = function(){ try{ if(typeof render==='function') render(); }catch(_e){} };
+  if(_bpMq.addEventListener) _bpMq.addEventListener('change', _bpFn);
+  else if(_bpMq.addListener) _bpMq.addListener(_bpFn);
+}catch(_e){}
 // ---- fire-lock (pinned lead): click any NON-CONTROL area of a row/card to lock it in gold
 // ember. Single selection — clicking another lead moves the lock, clicking the locked lead
 // again releases it. Persisted per device (localStorage fcPinned). Controls keep their own
