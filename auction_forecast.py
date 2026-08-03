@@ -254,6 +254,33 @@ def build_md(cand, max_days, min_equity, today):
                 dtd.strftime('%m/%d'), _owner(r)[:22] + hs, (_addr(r) or '')[:26],
                 _money(_value(r)), _money(_rf(r)), ratio, _money(_judg(r)), _money(_hi_eq(r))))
         A('')
+    # CLEANEST EQUITY — the single best quality signal: a tiny judgment relative to value means the
+    # owner's equity is almost entirely UNENCUMBERED, so little debt can eat it and the seller has the
+    # most to save. A better primary filter than the Redfin cross-check (it caught Holly Morgan —
+    # $1.09M home, $24k judgment — whom Redfin never flagged because the county value was already
+    # right). Judgment < 25% of value, sorted by equity. Spans all counties (the biggest ones are
+    # often Broward/PB — huge equity, phone/mail plays).
+    clean = sorted(
+        [(r, eq, d) for r, eq, d in cand
+         if _value(r) >= 200000 and _judg(r) > 0 and (_judg(r) / _value(r)) <= 0.25],
+        key=lambda t: t[1], reverse=True)
+    if clean:
+        A('## 🟢 Cleanest equity — tiny judgment vs value (the safest deals; verify no surviving senior)')
+        A('Judgment is <25% of value here, so the equity is almost all unencumbered — the safest bets '
+          'and the sellers with the most to save. The one risk left is a *surviving* 1st/2nd mortgage '
+          'the judgment amount doesn\'t reveal; confirm the debt stack on the Call Sheet. 🏠 = homestead '
+          '(owner-occupied → rescue framing). Several of the biggest are Broward/Palm Beach — too far '
+          'to door, but a $600k–$1M equity phone/mail play is worth the reach.')
+        A('| Auction | County | Owner | Address | Judgment (% of value) | Equity |')
+        A('|---|---|---|---|---|---|')
+        for r, eq, d in clean[:12]:
+            dtd = today + dt.timedelta(days=d)
+            hs = ' 🏠' if r.get('hs') else ''
+            pct = 100.0 * _judg(r) / _value(r)
+            A('| {} | {} | {} | {} | {} ({:.0f}%) | **~{}** |'.format(
+                dtd.strftime('%m/%d'), _county(r)[:2], _owner(r)[:20] + hs, (_addr(r) or '')[:26],
+                _money(_judg(r)), pct, _money(eq)))
+        A('')
     # Broward / Palm Beach
     oth = [t for t in cand if _county(t[0]) != 'MIAMI-DADE' and t[2] <= 10]
     if oth:
