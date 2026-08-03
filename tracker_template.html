@@ -5189,10 +5189,12 @@ function _waLink(r, ph){
   const when = r.auction || 'soon';
   // BRIEF + bilingual (many owners are Spanish-dominant), with the STOP opt-out. Send-ready: fills the
   // owner's first name, the address + auction date, and the sender (defaults to Jose; override in Sender setup).
-  const msg = 'Hi'+(first?' '+first:'')+', '+who+co+'. I saw '+addr+' has a court auction coming up '+when
-    +'. I help owners look at their real options before that date — no cost, no pressure. Worth a quick chat?'
-    +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+'. ':'')+'vi que '+addr+' tiene una subasta el '+when
-    +'. Ayudo a dueños a ver sus opciones antes de esa fecha, sin costo ni compromiso. ¿Podemos hablar?'
+  // Buyer posture, same voice as smsMsg — "I help owners" was the one surviving rescue-flavored
+  // line in any owner-facing channel, and FL 501.1377 is exactly about not sounding like rescue.
+  const msg = 'Hi'+(first?' '+first:'')+', '+who+co+' — I\'m a local buyer, I buy houses. I saw '+addr+' has a court auction coming up '+when
+    +'. Not here to pressure you — just making sure you know the options before that date. No cost. Worth a quick chat?'
+    +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+'. ':'')+'compro casas aquí en Miami. Vi que '+addr+' tiene una subasta el '+when
+    +'. No le vengo a presionar — solo quiero que conozca sus opciones antes de esa fecha. Sin costo. ¿Hablamos?'
     +'\n\n(Not interested / No le interesa? Reply STOP · responda STOP.)';
   return 'https://wa.me/'+_waNum(ph)+'?text='+encodeURIComponent(msg);
 }
@@ -5240,6 +5242,32 @@ function _defaultTextTone(r){
   const n=notes[r.case]||{}, ts=n.touches||[];
   if(ts.some(t => /text|call|spoke|talked/i.test((t.ch||'')+' '+(t.out||'')))) return 'followup';
   if(typeof r.days==='number' && r.days>=0 && r.days<=14 && r.st!=='LP') return 'urgent';
+  return 'cold';
+}
+/* Email retargeting counterpart of _defaultTextTone. Counts confirmed OUTBOUND email touches and
+   spots an inbound reply (the OWNER REPLIED marker shares ch:'email' — it is inbound, not a send).
+   Before this, a lead came off the 72h cooldown and genEmail composed the IDENTICAL cold email
+   again — the third copy of "My name is..." to the same inbox reads as spam and burns the lead.
+   sends is honest: autoLog dedupes same-day/same-channel and the cooldown makes >1/day impossible.
+   Limitation: notes are per-device (server backup is richest-wins, not re-baked), so a send
+   confirmed on another device may be invisible here until notes sync. Single operator — accepted. */
+function _mailHist(r){
+  var n=notes[r.case]||{}, ts=n.touches||[], sends=0, replied=false;
+  ts.forEach(function(t){
+    if((t.ch||'')!=='email') return;
+    if(/replied/i.test(t.out||'')){ replied=true; return; }
+    sends++;
+  });
+  return {sends:sends, replied:replied};
+}
+/* cold (never emailed) | follow (1 send, no reply) | final (2 sends, no reply) | done (3+: the
+   final note promised "I won't email you again" — the code honors the promise) | replied. */
+function _mailStage(r){
+  var H=_mailHist(r);
+  if(H.replied) return 'replied';
+  if(H.sends>=3) return 'done';
+  if(H.sends===2) return 'final';
+  if(H.sends===1) return 'follow';
   return 'cold';
 }
 function smsMsg(r, lang, tone){
@@ -9873,9 +9901,17 @@ function _workerQueue(lane){
    Compose ONCE here and carry the result on the card: `gurl` for the manual Gmail path, subj/body
    for the bridge payload. Both derive from the same __lastEmail, so they cannot drift apart. */
 function _cardMail(r){
-  var EMPTY = {gurl:'', to:'', subj:'', body:''};
+  var EMPTY = {gurl:'', to:'', subj:'', body:'', mailWhy:''};
   try {
     if(!(r.emails||[]).length) return EMPTY;
+    /* RETARGETING GUARD. Auto-run must not template a lead whose owner already WROTE BACK — that
+       is a live conversation, and the third cold pitch into it reads as a bot. And once three
+       sends are out, the final note literally promised "I won't email you again" — the code keeps
+       the promise. mailWhy rides the card so channels()/attempt() can say WHY honestly and fall
+       through to the phone path. Manual compose on the board stays available (human judgment). */
+    var MS = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
+    if(MS === 'replied'){ var E1={gurl:'',to:'',subj:'',body:'',mailWhy:'replied'}; return E1; }
+    if(MS === 'done'){    var E2={gurl:'',to:'',subj:'',body:'',mailWhy:'done'};    return E2; }
     // If _workerQueue attached a portfolio, compose the CONSOLIDATED email; else the single.
     var isPort = r._portfolio && r._portfolio.length;
     var composer = (isPort && typeof genPortfolioEmail === 'function')
@@ -9937,7 +9973,7 @@ function _workerCard(r){
        it shipped — which is exactly why the ledger recorded zero worker sends.
        Compose ONCE here, carry the result on the card: gurl for the manual Gmail path, subj/body
        for the bridge payload. Both come from the same __lastEmail, so they cannot drift. */
-    gurl: M.gurl, mailTo: M.to, mailSubj: M.subj, mailBody: M.body,
+    gurl: M.gurl, mailTo: M.to, mailSubj: M.subj, mailBody: M.body, mailWhy: M.mailWhy || '',
     // Portfolio metadata — populated by _workerQueue when one contact appears on N leads. The
     // worker tab shows a "PORTFOLIO OWNER (N properties)" chip so the operator sees, before
     // clicking, that this one Gmail compose is going to cover a stack of parcels.
@@ -10258,7 +10294,11 @@ function genMorningWorker(lane){
     // the people-search fallback when there is no contact at all.
     +   'function channels(r){'
     +     'var out=[];'
-    +     'out.push({k:"email", why:(r.emails&&r.emails.length)?null:"no email address on file"});'
+    // mailWhy is baked by _cardMail (board scope): "replied" = owner wrote back, this is a live
+    // conversation — never template it; "done" = 3 sends out, the final note promised no more
+    // emails and the code keeps the promise. step.why makes attempt() log it and fall through
+    // to the phone path using machinery that already exists.
+    +     'out.push({k:"email", why: r.mailWhy==="replied" ? "owner REPLIED — live conversation, no templates. Call them." : r.mailWhy==="done" ? "3 emails sent, final note promised no more — phone/text only now" : (r.emails&&r.emails.length)?null:"no email address on file"});'
     +     'out.push({k:"callq", why:(r.phones&&r.phones.length)?null:"no phone on file"});'
     +     'out.push({k:"wp",    why:r.wpUrl?null:"no people-search URL available"});'
     +     'return out;'
@@ -10573,6 +10613,13 @@ function genMorningWorker(lane){
     // captures it, so we never lose the lead. Advance immediately — there is no send to wait on.
     +     'if(step.k==="callq"){'
     +       'try{ post("callq"); }catch(e){}'
+    // Owner REPLIED -> straight to the Call list even if textable. A templated batch text into a
+    // live conversation is the same mistake as the templated email the guard just blocked.
+    +       'if(r.mailWhy==="replied"){'
+    +         'callQAdd(r);'
+    +         'addLog("callq", r.first||r.owner, "&#9742; owner REPLIED — added to the Call list. Talk like a person, no templates.");'
+    +         'return advance();'
+    +       '}'
     // textable (smsHref baked, so DNC/landline/opt-out already excluded) -> TEXT BATCH; otherwise
     // dial-only. Either way NOTHING is sent here and nothing is retired.
     +       'if(r.smsHref){'
@@ -11630,16 +11677,50 @@ function genEmail(r, quiet){
   // pitch: a just-served owner has 8-14 months, so urgency is a lie and "before the auction" means
   // nothing to them. What is true and useful is that the clock started and nobody else has called.
   const early = !td && !dt;
-  const bodyEarlyEN = `Hi${first?' '+first:''},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nA foreclosure case was recently filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. No auction date has been set yet, and that is the point of this letter: right now you have the most options you will ever have, and the fewest people pressuring you.\n\nHere is what normally happens next. You have 20 days from being served to respond to the court. From there a typical Florida case runs several months to over a year before any sale is scheduled. In that window the five exits are all still open: (1) reinstate the loan, (2) loan modification, (3) short sale, (4) private cash sale — that is where a buyer like me comes in — and (5) bankruptcy.\n\nI am not asking you to sell. I am telling you the clock started, so you can decide on your terms instead of in the last two weeks. No cost, no obligation.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
-  const bodyEarlyES = `Hola${first?' '+first:''},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nRecientemente se presentó un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Todavía no hay fecha de subasta, y ese es el punto de esta carta: ahora mismo usted tiene más opciones que nunca y menos gente presionándolo.\n\nLo que normalmente sigue: tiene 20 días desde que le entregaron los papeles para responder a la corte. Después, un caso típico en Florida toma varios meses o más de un año antes de que se fije una subasta. En esa ventana las cinco salidas siguen abiertas: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo — ahí entra un comprador como yo — y (5) bancarrota.\n\nNo le pido que venda. Le aviso que el reloj empezó, para que decida en sus términos y no en las últimas dos semanas. Sin costo ni compromiso.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
-  // Mirror Field Manual letter: buyer posture + five exits (FC) / tax paths (TD).
+  /* ---- EMAIL RETARGETING — stage-aware compose --------------------------------------------------
+     _mailStage(r): cold | follow | final | done | replied. The second identical cold email to the
+     same inbox reads as spam and burns the lead; follow/final are different, shorter notes that
+     thread under the first send. The "Re: " subject keeps replies.py PASS-2 matching intact — the
+     IMAP SUBJECT search is substring on "Regarding your property at" and the address regex anchors
+     on `property at\s+(.+)$`, both of which survive the prefix. 'done'/'replied' still compose
+     (manual sends are the operator's judgment) — the AUTO path is suppressed in _cardMail. */
+  const stage = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
+  const reSubjEN = 'Re: ' + subjEN, reSubjES = 'Re: ' + subjES;
+  /* Voice (2026-08-03): warm, contractions, plain words — the Toni-thread tone. Educational core:
+     each exit gets one plain-English line instead of a bare list; the case number is framed as
+     "check it yourself" credibility. Kept intact on every variant: buyer-posture disclaimer, no
+     rescue promises, case number, STOP line, CAN-SPAM sig. */
+  const exitsEN = `1. Reinstate — catch up what's past due and the case ends.\n2. Loan modification — the bank reworks the loan so the payment fits again.\n3. Short sale — sell with the bank's okay if you owe more than the house is worth.\n4. Private cash sale before the auction — that's where a buyer like me comes in. You pick the price and keep the equity that's yours, instead of letting an auction decide.\n5. Bankruptcy — pauses everything while you regroup (that one's for an attorney, not me).`;
+  const exitsES = `1. Reinstalar — se pone al día con lo atrasado y el caso termina.\n2. Modificación del préstamo — el banco ajusta el préstamo para que el pago vuelva a ser posible.\n3. Short sale — vende con el visto bueno del banco si debe más de lo que vale la casa.\n4. Venta privada en efectivo antes de la subasta — ahí entro yo como comprador. Usted fija el precio y se queda con el capital que es suyo, en vez de dejar que una subasta decida.\n5. Bancarrota — pausa todo mientras se reorganiza (eso es con un abogado, no conmigo).`;
+  const introEN = `My name is ${sN} — I'm a local Miami home buyer. I buy houses. I'm not a lender, not a "foreclosure rescue" company, and not an attorney.`;
+  const introES = `Mi nombre es ${sN} — compro casas aquí en Miami. No soy prestamista, no soy empresa de "rescate de ejecuciones", y no soy abogado.`;
+  const bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm reaching out because a foreclosure case was recently filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. There's no auction date yet — and honestly, that's the whole point of this note: right now you have the most options you'll ever have, and the fewest people pressuring you.\n\nHere's what normally happens next. You have 20 days from being served to respond to the court, and a typical Florida case runs months — often more than a year — before any sale is scheduled. In that window, all five ways out are still open:\n\n${exitsEN}\n\nI'm not asking you to sell. I'm telling you the clock started, so you can decide on your terms instead of in the last two weeks. If it'd help to talk it through, call or text me — no cost, no obligation.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+  const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo porque recientemente se presentó un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Todavía no hay fecha de subasta — y sinceramente, ese es el punto de esta nota: ahora mismo usted tiene más opciones que nunca, y menos gente presionándolo.\n\nLo que normalmente sigue: tiene 20 días desde que le entregaron los papeles para responder a la corte, y un caso típico en Florida toma meses — a veces más de un año — antes de que se fije una subasta. En esa ventana, las cinco salidas siguen abiertas:\n\n${exitsES}\n\nNo le pido que venda. Le aviso que el reloj empezó, para que decida en sus términos y no en las últimas dos semanas. Si le sirve hablarlo, llámeme o mándeme un texto — sin costo, sin compromiso.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
   const bodyEN = td
-    ? `Hi${first?' '+first:''},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nCounty records show your property at ${addr} is scheduled for a tax deed sale on ${dt}${caseTagEN}. Before that date, owners usually look at paying the back taxes, selling privately for cash, or claiming any surplus the law allows if it sells for more than is owed.\n\nNo cost and no obligation to talk. If a private sale fits, I can buy as-is and close before the deadline; if another path is better, I will say so.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`
-    : `Hi${first?' '+first:''},\n\nMy name is ${sN}. I am a local Miami home buyer — I buy houses. I am not a lender, not a rescue company, and not an attorney.\n\nPublic records show ${addr} is in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale scheduled for ${dt}.\n\nI am not writing to talk you into anything. The five exits every Florida foreclosure homeowner has are: (1) reinstate the loan, (2) loan modification, (3) short sale, (4) private cash sale before auction — that is where a buyer like me comes in — and (5) bankruptcy. My job is to make sure you know all five are on the table.\n\nNo cost, no obligation. If you want to put every option on the table, answer when we call; if you are not interested, tell me — nobody's feelings get hurt.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+    ? `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm reaching out because county records show your property at ${addr} is scheduled for a tax deed sale on ${dt}${caseTagEN}. You can verify that yourself on the county's site — I include the number so you know this isn't a mass mailer.\n\nBefore that date, owners in your spot usually have three real paths:\n\n1. Pay the back taxes — the sale gets cancelled and you keep the property.\n2. Sell privately for cash before the date — that's where a buyer like me comes in. I can buy as-is and close before the deadline.\n3. Claim the surplus — if it sells at auction for more than what's owed, the law may let you claim the difference.\n\nIf it'd help to talk through which one fits, call or text me — no cost, no obligation, and if another path is better for you, I'll say so.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`
+    : `Hi${first?' '+first:''},\n\n${introEN}\n\nI'm reaching out because public records show ${addr} is in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale date of ${dt}. That case number is real — you can look it up yourself on the county clerk's site. I include it so you know this isn't a mass mailer.\n\nI'm not writing to talk you into anything. It's just that most owners are never actually told they have five ways out, and every single one works better with time left on the clock:\n\n${exitsEN}\n\nIf it'd help to talk any of this through, call or text me — no cost, no obligation, and if selling isn't your best move I'll tell you that straight.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
   const bodyES = td
-    ? `Hola${first?' '+first:''},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Antes de esa fecha, los dueños suelen mirar pagar impuestos atrasados, vender en privado en efectivo, o reclamar el excedente si la ley lo permite.\n\nSin costo ni compromiso. Si una venta privada encaja, puedo comprar tal cual y cerrar antes de la fecha; si otro camino es mejor, se lo digo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`
-    : `Hola${first?' '+first:''},\n\nMi nombre es ${sN}. Soy comprador de casas en Miami — compro casas. No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\nLos registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con subasta el ${dt}.\n\nNo escribo para convencerlo. Las cinco salidas de todo propietario en ejecución en Florida son: (1) reinstalar el préstamo, (2) modificación, (3) short sale, (4) venta privada en efectivo antes de la subasta — ahí entra un comprador como yo — y (5) bancarrota. Mi trabajo es que sepa que las cinco están sobre la mesa.\n\nSin costo ni compromiso. Si quiere poner todas las opciones sobre la mesa, conteste cuando llamemos; si no le interesa, dígamelo — nadie se ofende.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
-  const D = early
+    ? `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo porque los registros del condado muestran que su propiedad en ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Usted mismo puede verificarlo en el sitio del condado — incluyo el número para que sepa que esto no es correo masivo.\n\nAntes de esa fecha, los dueños en su situación normalmente tienen tres caminos reales:\n\n1. Pagar los impuestos atrasados — la subasta se cancela y usted se queda con la propiedad.\n2. Vender en privado en efectivo antes de la fecha — ahí entro yo como comprador. Puedo comprar tal cual y cerrar antes del plazo.\n3. Reclamar el excedente — si se vende en subasta por más de lo que se debe, la ley puede permitirle reclamar la diferencia.\n\nSi le sirve hablar de cuál le conviene, llámeme o mándeme un texto — sin costo, sin compromiso, y si otro camino es mejor para usted, se lo digo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`
+    : `Hola${first?' '+first:''},\n\n${introES}\n\nLe escribo porque los registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con fecha de subasta el ${dt}. Ese número de caso es real — usted mismo puede verificarlo en el sitio del clerk del condado. Lo incluyo para que sepa que esto no es correo masivo.\n\nNo le escribo para convencerlo de nada. Es que a la mayoría de los dueños nunca les explican que tienen cinco salidas, y todas funcionan mejor con tiempo en el reloj:\n\n${exitsES}\n\nSi le sirve hablar de cualquiera de estas opciones, llámeme o mándeme un texto — sin costo, sin compromiso, y si vender no es su mejor opción, se lo digo tal cual.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
+  // FOLLOW / FINAL are type-agnostic: only the date clause changes when no auction date exists,
+  // so one pair of bodies serves FC, TD and LP leads alike.
+  const dlEN = dt ? `before ${dt}` : 'before the court moves the case forward';
+  const dlES = dt ? `antes del ${dt}` : 'antes de que la corte avance el caso';
+  const bodyFollowEN = `Hi${first?' '+first:''},\n\n${sN} again — I emailed you a few days back about ${street}. These emails are easy to lose, so one more quick note.\n\nThe reason timing matters: every option — reinstating, a modification, a short sale, a private sale — needs runway ${dlEN}, and a couple of them need weeks, not days. The options don't disappear because an email got ignored; they disappear when the date arrives.\n\nNothing has to happen over email. If it's easier, just reply with a good number and a time, and I'll call you. No cost, no pressure — and "no thanks" is a perfectly fine answer.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+  const bodyFollowES = `Hola${first?' '+first:''},\n\nSoy ${sN} otra vez — le escribí hace unos días sobre ${street}. Estos correos se pierden fácil, así que una nota rápida más.\n\nPor qué importa el tiempo: cada opción — reinstalar, una modificación, un short sale, una venta privada — necesita margen ${dlES}, y un par de ellas necesitan semanas, no días. Las opciones no desaparecen por ignorar un correo; desaparecen cuando llega la fecha.\n\nNada tiene que resolverse por correo. Si le es más fácil, responda con un buen número y una hora, y yo lo llamo. Sin costo, sin presión — y "no, gracias" es una respuesta perfectamente válida.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
+  const fdEN = dt ? `If the ${dt} sale date is already handled` : 'If the case is already handled';
+  const fdES = dt ? `Si la subasta del ${dt} ya está resuelta` : 'Si el caso ya está resuelto';
+  const bodyFinalEN = `Hi${first?' '+first:''},\n\nThis is my last note about ${street} — I don't want to be one more thing filling your inbox.\n\n${fdEN}, ignore this and I genuinely wish you the best with it. If it's not, and you want a straight rundown of what's still possible with the time left, I'm one call away.\n\nEither way, I won't email you again after this.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+  const bodyFinalES = `Hola${first?' '+first:''},\n\nEsta es mi última nota sobre ${street} — no quiero ser una cosa más llenando su correo.\n\n${fdES}, ignore este mensaje y le deseo lo mejor, de verdad. Si no lo está, y quiere un repaso directo de lo que todavía es posible con el tiempo que queda, estoy a una llamada.\n\nDe cualquier forma, no le vuelvo a escribir después de esta.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
+  // 'replied' composes the follow body (a manual send should still be short + threaded, never the
+  // cold pitch); 'done' composes the final body. Both are manual-only paths — _cardMail blanks them.
+  const isFinal  = (stage==='final' || stage==='done');
+  const isFollow = (stage==='follow' || stage==='replied');
+  const D = isFinal
+    ? {en:{subj:reSubjEN, body:bodyFinalEN},  es:{subj:reSubjES, body:bodyFinalES}}
+    : isFollow
+    ? {en:{subj:reSubjEN, body:bodyFollowEN}, es:{subj:reSubjES, body:bodyFollowES}}
+    : early
     ? {en:{subj:subjEN, body:bodyEarlyEN}, es:{subj:subjES, body:bodyEarlyES}}
     : {en:{subj:subjEN, body:bodyEN},      es:{subj:subjES, body:bodyES}};
   // SENT-CONTENT CAPTURE. Alejandro: "I need to see the results of what's sending. What is the
@@ -11648,7 +11729,7 @@ function genEmail(r, quiet){
   // of recomputing it in the logger guarantees the archive can never drift from what he saw.
   try { window.__lastEmail = {c:r.case, to:to, addr:r.addr||'', who:owner,
                               subj:D.en.subj, body:D.en.body,
-                              subjES:D.es.subj, bodyES:D.es.body, at:Date.now()}; } catch(e){}
+                              subjES:D.es.subj, bodyES:D.es.body, stage:stage, at:Date.now()}; } catch(e){}
   const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
   const recip = emails.length
     ? emails.map((e,i)=>'<a href="mailto:'+esc(e)+'"'+(i===0?' class="primary"':'')+'>'+esc(e)+'</a>').join(' ') + (emails.length>1?' <span class="mut">(first = primary)</span>':'')
@@ -11669,7 +11750,13 @@ function genEmail(r, quiet){
   @media print{.bar{display:none}}`;
   const doc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Email - ${esc(owner)}</title><style>${CSS}</style></head><body>
 <div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button class="act" onclick="openGmail()">Open in Gmail</button><button class="act" onclick="openMail()">Open in email app</button><button class="act" id="cpy" onclick="copyEmail()">Copy email</button></div>
-<h1>${esc(owner)}</h1><div class="sub">${esc(addr)} &middot; ${early?'Foreclosure filed &mdash; <b>no auction date set yet</b>':(td?'Tax-deed sale':'Foreclosure sale')+' <b>'+esc(dt)+'</b>'}</div>
+<h1>${esc(owner)}</h1><div class="sub">${esc(addr)} &middot; ${early?'Foreclosure filed &mdash; <b>no auction date set yet</b>':(td?'Tax-deed sale':'Foreclosure sale')+' <b>'+esc(dt)+'</b>'} &middot; <span style="background:${stage==='cold'?'#e8eef8':'#fdf3dc'};border:1px solid ${stage==='cold'?'#c9d6ea':'#e8cf96'};border-radius:5px;padding:1px 8px;font-weight:700;font-size:12px">${
+    stage==='cold'   ? 'first touch'
+  : stage==='follow' ? 'follow-up #2 · threads under the first email'
+  : stage==='final'  ? 'final note #3 · promises no more emails'
+  : stage==='done'   ? '3 sent · auto-email stopped — phone/text only'
+  :                    'OWNER REPLIED'
+}</span></div>${stage==='replied' ? '<div class="hint warn" style="border:1px solid #dda69a;background:#fbeeea;font-size:14px"><b>⚠ OWNER REPLIED</b> — reply personally in the Gmail thread, not with a template. This composer is here only as a fallback.</div>' : ''}
 <div class="lbl">To</div><div class="to">${recip}</div>
 <div class="lbl">Subject</div><div class="subj" id="subjline"></div>
 <div class="lbl">Message</div><div class="body" id="bodybox"></div>
@@ -11735,31 +11822,38 @@ function genPortfolioEmail(r, siblings, quiet){
   }
   var listEN = all.map(_lineEN).join('\n');
   var listES = all.map(_lineES).join('\n');
+  // Same humanized voice as genEmail (2026-08-03). No staging here — portfolio follow-ups stay a
+  // manual, human job; this composer only ever writes the first touch.
   var bodyEN = 'Hi ' + first + ',\n\n' +
-    'My name is ' + sN + '. I am a local Miami home buyer — I buy houses. I am not a lender, ' +
-    'not a rescue company, and not an attorney.\n\n' +
-    'Public records show ' + n + ' properties in your name are currently in foreclosure:\n\n' +
+    'My name is ' + sN + ' — I\'m a local Miami home buyer. I buy houses. I\'m not a lender, ' +
+    'not a "foreclosure rescue" company, and not an attorney.\n\n' +
+    'I\'m reaching out because public records show ' + n + ' properties in your name are in ' +
+    'foreclosure right now. Every case number below is real — you can look each one up on the ' +
+    'county clerk\'s site:\n\n' +
     listEN + '\n\n' +
-    'I am writing you once instead of on each property because that is less noise for you, and ' +
-    'because a portfolio is usually best worked as a portfolio — the same buyer, the same title ' +
-    'company, one conversation. I am not asking you to sell any of them; the five exits every ' +
-    'Florida foreclosure homeowner has (reinstate, modification, short sale, private cash sale ' +
-    'before auction, bankruptcy) apply to each parcel independently.\n\n' +
-    'If it is useful, I can walk the numbers on any one of them, or all of them. No cost, no ' +
-    'obligation.\n\n' + sig + '\n\n' +
+    'I\'m writing you once instead of once per property — less noise for you, and honestly a ' +
+    'portfolio works best as one conversation: same buyer, same title company, one sit-down. ' +
+    'I\'m not asking you to sell any of them. The five ways out (reinstate, modification, short ' +
+    'sale, private cash sale before auction, bankruptcy) apply to each property on its own — ' +
+    'you could keep one, sell another, and let a third go.\n\n' +
+    'If it\'d help, I can walk the numbers on any one of them, or all of them. No cost, no ' +
+    'obligation — and if selling isn\'t your best move on a given property, I\'ll tell you that ' +
+    'straight.\n\n' + sig + '\n\n' +
     'Reply STOP or ask me not to contact you again and I will honor it for every property above.';
   var bodyES = 'Hola ' + first + ',\n\n' +
-    'Mi nombre es ' + sN + '. Soy comprador de casas en Miami — compro casas. No soy prestamista, ' +
-    'no soy empresa de rescate, y no soy abogado.\n\n' +
-    'Los registros públicos muestran ' + n + ' propiedades a su nombre actualmente en ejecución ' +
-    'hipotecaria:\n\n' + listES + '\n\n' +
-    'Le escribo una vez y no por cada propiedad porque es menos ruido para usted, y porque una ' +
-    'cartera generalmente se trabaja mejor como una cartera — el mismo comprador, la misma ' +
-    'compañía de título, una sola conversación. No le pido vender ninguna; las cinco salidas de ' +
-    'todo propietario en ejecución en Florida (reinstalar, modificación, short sale, venta ' +
-    'privada en efectivo antes de la subasta, bancarrota) aplican a cada parcela por separado.\n\n' +
-    'Si es útil, puedo repasar los números en cualquiera de ellas, o en todas. Sin costo ni ' +
-    'compromiso.\n\n' + sig + '\n\n' +
+    'Mi nombre es ' + sN + ' — compro casas aquí en Miami. No soy prestamista, no soy empresa ' +
+    'de "rescate de ejecuciones", y no soy abogado.\n\n' +
+    'Le escribo porque los registros públicos muestran ' + n + ' propiedades a su nombre en ' +
+    'ejecución hipotecaria ahora mismo. Cada número de caso abajo es real — puede verificarlos ' +
+    'usted mismo en el sitio del clerk del condado:\n\n' + listES + '\n\n' +
+    'Le escribo una sola vez y no por cada propiedad — menos ruido para usted, y sinceramente ' +
+    'una cartera se trabaja mejor en una sola conversación: el mismo comprador, la misma ' +
+    'compañía de título, una sola reunión. No le pido vender ninguna. Las cinco salidas ' +
+    '(reinstalar, modificación, short sale, venta privada en efectivo antes de la subasta, ' +
+    'bancarrota) aplican a cada propiedad por separado — podría quedarse con una, vender otra, ' +
+    'y dejar ir una tercera.\n\n' +
+    'Si le sirve, puedo repasar los números de cualquiera de ellas, o de todas. Sin costo, sin ' +
+    'compromiso — y si vender no es su mejor opción en alguna, se lo digo tal cual.\n\n' + sig + '\n\n' +
     'Responda STOP o pídame no contactarlo y lo respetaré para cada una de las propiedades arriba.';
   var D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   try {
