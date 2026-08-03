@@ -127,6 +127,17 @@ def _equity_ceiling(r):
     return v - _judg(r)
 
 
+def _is_junior(r):
+    """True when the board flags this as a JUNIOR / HOA / code foreclosure (r.mr) — a 1st mortgage
+    SURVIVES the sale. Load-bearing for equity: value - judgment badly OVERSTATES equity here, because
+    the tiny judgment is an HOA/code lien, not the senior debt. A $640k home foreclosing on a $11k HOA
+    lien is NOT $629k of clean equity — the untraced first mortgage rides on top. Buying at that
+    auction takes title SUBJECT TO that mortgage. So a tiny judgment is usually a RED flag, not a green
+    one (55 of 61 'low-debt' leads were mr=True). Only mr=False (a real 1st-mortgage foreclosure, where
+    the judgment IS the senior debt) makes value - judgment a trustworthy equity number."""
+    return bool(r.get('mr'))
+
+
 def _county(r):
     return str(r.get('county') or 'MIAMI-DADE')
 
@@ -234,16 +245,18 @@ def build_md(cand, max_days, min_equity, today):
     # that clears a meaningful floor. This is the number that actually decides whether to knock.
     def _hi_eq(r):
         return max(_value(r), _rf(r)) - _judg(r)
+    # BOTH equity screens now require mr=False (a real 1ST-MORTGAGE foreclosure). On mr=True junior/HOA
+    # foreclosures a senior mortgage SURVIVES, so value − judgment is not real equity — those go to the
+    # separate "junior/HOA" bucket below with a verify-the-survivor warning.
     hidden = sorted(
         [(r, eq, d) for r, eq, d in cand
-         if _value(r) and _rf(r) > _value(r) * 1.15 and _hi_eq(r) >= 50000],
+         if not _is_junior(r) and _value(r) and _rf(r) > _value(r) * 1.15 and _hi_eq(r) >= 50000],
         key=lambda t: _hi_eq(t[0]), reverse=True)
     if hidden:
-        A('## 💡 Hidden equity — Redfin values these ABOVE the county roll AND real equity survives the judgment')
-        A('The board equity uses the *county* value; Redfin says these are worth 15%+ more. The last '
-          'column is best-case equity — **max(county, Redfin) − judgment** — so leads whose judgment '
-          'eats the spread (e.g. Toney: 1.48× but a $1.3M judgment) are correctly excluded. Pull comps '
-          'to confirm Redfin, but this is the honest short-list of where the biggest upside hides.')
+        A('## 💡 Hidden equity — Redfin ABOVE county, real 1st-mortgage foreclosure (equity is trustworthy)')
+        A('These are 1st-mortgage foreclosures (no surviving senior), so the judgment IS the senior debt '
+          'and best-case equity — **max(county, Redfin) − judgment** — is real. Redfin also says they\'re '
+          'worth 15%+ more than the county roll. Pull comps to confirm Redfin; this is the honest upside list.')
         A('| Auction | Owner | Address | County → Redfin | Judgment | Best-case eq |')
         A('|---|---|---|---|---|---|')
         for r, eq, d in hidden[:10]:
@@ -254,23 +267,20 @@ def build_md(cand, max_days, min_equity, today):
                 dtd.strftime('%m/%d'), _owner(r)[:22] + hs, (_addr(r) or '')[:26],
                 _money(_value(r)), _money(_rf(r)), ratio, _money(_judg(r)), _money(_hi_eq(r))))
         A('')
-    # CLEANEST EQUITY — the single best quality signal: a tiny judgment relative to value means the
-    # owner's equity is almost entirely UNENCUMBERED, so little debt can eat it and the seller has the
-    # most to save. A better primary filter than the Redfin cross-check (it caught Holly Morgan —
-    # $1.09M home, $24k judgment — whom Redfin never flagged because the county value was already
-    # right). Judgment < 25% of value, sorted by equity. Spans all counties (the biggest ones are
-    # often Broward/PB — huge equity, phone/mail plays).
+    # CLEANEST EQUITY — a real 1st-mortgage foreclosure (mr=False) where the judgment is small vs value.
+    # CRITICAL: 'small judgment' is only clean equity when it's the SENIOR debt. On a junior/HOA
+    # foreclosure a small judgment sits IN FRONT OF a surviving 1st mortgage — the opposite of clean —
+    # so those are excluded here (55 of 61 'low-debt' leads were mr=True junior/HOA; ranking them as
+    # clean equity was flat wrong). Requiring mr=False makes value − judgment trustworthy.
     clean = sorted(
         [(r, eq, d) for r, eq, d in cand
-         if _value(r) >= 200000 and _judg(r) > 0 and (_judg(r) / _value(r)) <= 0.25],
+         if not _is_junior(r) and _value(r) >= 200000 and _judg(r) > 0 and (_judg(r) / _value(r)) <= 0.45],
         key=lambda t: t[1], reverse=True)
     if clean:
-        A('## 🟢 Cleanest equity — tiny judgment vs value (the safest deals; verify no surviving senior)')
-        A('Judgment is <25% of value here, so the equity is almost all unencumbered — the safest bets '
-          'and the sellers with the most to save. The one risk left is a *surviving* 1st/2nd mortgage '
-          'the judgment amount doesn\'t reveal; confirm the debt stack on the Call Sheet. 🏠 = homestead '
-          '(owner-occupied → rescue framing). Several of the biggest are Broward/Palm Beach — too far '
-          'to door, but a $600k–$1M equity phone/mail play is worth the reach.')
+        A('## 🟢 Cleanest equity — REAL 1st-mortgage foreclosures, judgment is the whole senior debt')
+        A('These are 1st-mortgage foreclosures (mr=False), so the judgment IS the senior loan and '
+          'value − judgment is the true owner equity — no hidden senior to eat it. The safest, most '
+          'trustworthy equity numbers on the board. 🏠 = homestead (owner-occupied → rescue framing).')
         A('| Auction | County | Owner | Address | Judgment (% of value) | Equity |')
         A('|---|---|---|---|---|---|')
         for r, eq, d in clean[:12]:
@@ -280,6 +290,30 @@ def build_md(cand, max_days, min_equity, today):
             A('| {} | {} | {} | {} | {} ({:.0f}%) | **~{}** |'.format(
                 dtd.strftime('%m/%d'), _county(r)[:2], _owner(r)[:20] + hs, (_addr(r) or '')[:26],
                 _money(_judg(r)), pct, _money(eq)))
+        A('')
+    # JUNIOR / HOA foreclosures — big value, TINY judgment, but a 1st mortgage SURVIVES. NOT clean
+    # equity: buying at the sale takes title subject to that mortgage. Worth chasing ONLY after the
+    # surviving-senior is confirmed small/paid. This is where the "$629k Boursiquot / $1.07M Morgan"
+    # excitement actually belongs — real upside IF the 1st is small, a trap if it isn't.
+    junior = sorted(
+        [(r, eq, d) for r, eq, d in cand
+         if _is_junior(r) and _value(r) >= 300000],
+        key=lambda t: _value(t[0]), reverse=True)
+    if junior:
+        A('## ⚠️ Junior / HOA foreclosures — a 1st mortgage SURVIVES (verify before you get excited)')
+        A('Big homes with a TINY judgment — but the board flags a surviving senior (HOA/code/junior '
+          'foreclosure). value − judgment is **NOT** the equity here; buying at the sale takes the '
+          'property SUBJECT TO the first mortgage. These are real upside ONLY if that 1st is small or '
+          'paid off — pull the recorded mortgage chain (Lookup panel) FIRST. Do not quote equity to '
+          'these owners until the senior is confirmed. Ranked by home value.')
+        A('| Auction | County | Owner | Address | Home value | Judgment | ⚠ 1st survives |')
+        A('|---|---|---|---|---|---|---|')
+        for r, eq, d in junior[:10]:
+            dtd = today + dt.timedelta(days=d)
+            hs = ' 🏠' if r.get('hs') else ''
+            A('| {} | {} | {} | {} | {} | {} | verify |'.format(
+                dtd.strftime('%m/%d'), _county(r)[:2], _owner(r)[:20] + hs, (_addr(r) or '')[:24],
+                _money(_value(r)), _money(_judg(r))))
         A('')
     # Broward / Palm Beach
     oth = [t for t in cand if _county(t[0]) != 'MIAMI-DADE' and t[2] <= 10]
