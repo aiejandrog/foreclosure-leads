@@ -9407,7 +9407,7 @@ function genReplyInbox(){
     var ph = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); })[0] || '';
     var em = (r.emails||[])[0] || '';
     return '<div class="rbcard'+(rep.stop?' stop':'')+'">'
-      + (rep.stop ? '<div class="rbstop">&#9940; THIS REPLY CONTAINS A STOP REQUEST — add them to the opt-out ledger and do not contact again</div>' : '')
+      + (rep.stop ? '<div class="rbstop">&#9940; STOP REQUEST — this owner has been AUTO-SUPPRESSED (removed from every outreach queue). Nothing more to do. If this was a false alarm, open the lead and clear the opt-out.</div>' : '')
       + '<div class="rbtop">'
       +   '<div><div class="rbname">'+esc((r.oname||r.owners||'').split(';')[0]||r.case)+'</div>'
       +     '<div class="rbaddr">'+esc(r.addr||'')+'</div></div>'
