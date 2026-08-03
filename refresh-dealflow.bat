@@ -119,6 +119,9 @@ rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phon
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 
+echo [4b/5] Refreshing the Deals-on-the-Clock auction forecast (reads the freshly-built board)...
+python auction_forecast.py >> "%LOG%" 2>&1
+
 :publish
 echo [5/5] Publishing to the live site...
 git add docs/index.html >> "%LOG%" 2>&1
