@@ -1314,6 +1314,14 @@ input.ph::placeholder{color:#8FBFA0}
 #cards{display:none;padding:14px 12px 52px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-lg);
   padding:16px 16px 15px;margin-bottom:13px;box-shadow:var(--sh-2);position:relative;overflow:hidden}
+/* PERF/SMOOTHNESS (mobile): each lead card is tall (~1700px) and there are ~76 of them = ~130,000px
+   of content the browser otherwise lays out and paints all at once. content-visibility:auto lets it
+   skip layout+paint for cards scrolled off-screen, rendering only the visible one(s) — big cut to
+   initial paint and scroll jank on phones. contain-intrinsic-size (≈ measured avg card height) keeps
+   the scrollbar length stable so offscreen cards still reserve their space. Scoped to #cards .card
+   so the print/doc .card is untouched. Purely presentational — no logic, no math, no DOM change.
+   scrollIntoView (the #case= deep-link) and find-in-page both work with content-visibility:auto. */
+#cards .card{content-visibility:auto;contain-intrinsic-size:0 1700px}
 .card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--muted-2)}
 .card.v3::before{background:var(--green)}
 .card.v2::before{background:var(--amber)}
