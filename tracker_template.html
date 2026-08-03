@@ -8538,7 +8538,11 @@ function genFieldSheet(r){
   var fm = function(n){ return (n||n===0) ? '$'+Math.round(+n).toLocaleString() : '—'; };
   var owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   var first = _firstName(owner);
-  var days = (typeof r.days==='number' && r.days>=0) ? r.days : null;
+  // _hasClock, not a raw days>=0: the latter accepts the NO_SALE=9999 lis-pendens sentinel, so a
+  // no-auction lead printed "9999 days out" and (on the field sheet) a fake "deal deadline in ~9996
+  // days" next to "No auction date set". _hasClock routes those through the same null path the docs
+  // already handle for genuinely-missing dates. (Same fix the render sites got at _hasClock's defn.)
+  var days = _hasClock(r) ? r.days : null;
   var chip = _urgencyChip(days);
   var deadline = (days!=null && days>=3) ? (days-3) : null;   // deal must close ~3 days before the gavel
   var basis = _basisOf(r), judg = +r.judg||0, netEq = _netEqOf(r), surv = +r._slien||0;
@@ -8665,7 +8669,11 @@ function openFieldSheet(c){
 }
 function genDialReady(r){
   var f = _docFields(r);
-  var days = (typeof r.days==='number' && r.days>=0) ? r.days : null;
+  // _hasClock, not a raw days>=0: the latter accepts the NO_SALE=9999 lis-pendens sentinel, so a
+  // no-auction lead printed "9999 days out" and (on the field sheet) a fake "deal deadline in ~9996
+  // days" next to "No auction date set". _hasClock routes those through the same null path the docs
+  // already handle for genuinely-missing dates. (Same fix the render sites got at _hasClock's defn.)
+  var days = _hasClock(r) ? r.days : null;
   var chip = _urgencyChip(days);
   var street = (r.addr || '').split(',')[0] || _dfHtml(f.propAddr);
   // phone list — mobile-first, non-DNC first (same rule the row uses)
@@ -9019,7 +9027,11 @@ function openRentalModel(caseId){
    ============================================================================================ */
 function genDealSnapshot(r){
   var f = _docFields(r);
-  var days = (typeof r.days==='number' && r.days>=0) ? r.days : null;
+  // _hasClock, not a raw days>=0: the latter accepts the NO_SALE=9999 lis-pendens sentinel, so a
+  // no-auction lead printed "9999 days out" and (on the field sheet) a fake "deal deadline in ~9996
+  // days" next to "No auction date set". _hasClock routes those through the same null path the docs
+  // already handle for genuinely-missing dates. (Same fix the render sites got at _hasClock's defn.)
+  var days = _hasClock(r) ? r.days : null;
   var chip = _urgencyChip(days);
   function fm(n){ if(!n) return '—'; return '$'+Math.round(+n).toLocaleString(); }
   function fmk(n){ if(!n) return '—'; if(Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; return '$'+Math.round(n/1000)+'k'; }
