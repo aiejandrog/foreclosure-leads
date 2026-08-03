@@ -1,0 +1,64 @@
+OPERATOR NOTE — Alejandro only (do not give this page to Milagros / Teresita)
+File: Milagros-Recovery-Agreement.html
+Date drafted: 2026-08-03
+
+1) FATAL COMMERCIAL RISK (read before you ask anyone to sign)
+   Your own DEALFLOW case file (Martin-Surplus-Recovery-Case-File-2026-08-03.html) already
+   concluded: the "$19k recovery" premise is largely gone. The $19,600 in the signed Stipulation
+   is documented as $18,000 six-month forbearance (stay through 12/12/2026) + $1,600 R&V fees —
+   i.e., the price of housing, not a pure grab. Teresita is already in line for ≈$55,988.34 of
+   surplus. Charging $9,000 against money the court is already sending (or treating the whole
+   surplus as "Recovered Amount") is the move that case file exists to stop.
+
+   The HTML Agreement tries to wall that off in §4(d): fee only on clawback of the Target Amount,
+   not on unrelated surplus. If you cannot honestly say you caused a clawback of the ~$19k, do
+   not collect under this paper.
+
+2) "RV" in your verbal deal almost certainly means R&V Investors LLC — not a recreational vehicle.
+   Property is the Garden Lake Towers condo: 1101 SW 122 Ave #307, Miami FL 33184.
+   Folio 30-4912-053-0370. Cases: 2026-020206-CC-25 (HOA / surplus) and 2026-003288-CA-01
+   (Chase — dismissed 07/31/2026).
+
+3) WRONG SIGNATORY RISK
+   Stipulation ¶10: Milagros assigned her surplus interest to daughter Teresita M. Martin.
+   If the money path runs to Teresita, a signature from Milagros alone may not control the funds
+   or create a collectible fee. Get Teresita on an addendum if she is the disbursement payee.
+
+4) LEGAL / REGULATORY LANDMINES (not legal advice — verify with FL counsel)
+   - MSG is not a law firm. Do not hold out as attorneys. Court attacks on the Stipulation =
+     lawyer work. Fee-splitting with counsel is barred (Fla. Bar Rule 4-5.4). UPL risk if you
+     draft/file court papers or negotiate legal rights as if counsel.
+   - If this is papered/used as a transfer or assignment of foreclosure surplus rights, FS 45.033
+     caps assignee compensation at 12% of the surplus + mandatory disclosures + court review.
+     A flat $9,000 on $19,000 (~47%) blows past 12% if a court treats it as surplus-assignment
+     compensation. Structure and facts matter; do not assume the HTML saves you.
+   - FS 501.1377 (foreclosure rescue consultant) was intentionally NOT inserted — this is not an
+     equity-purchase / homestead rescue deal. Do not shoehorn that statute in "to look official."
+   - Attacking the Stipulation can also kill the family's six-month runway; writ of possession
+     was already ordered 07/08/2026. Housing plan first.
+
+5) WHAT THE HTML ENCODES (commercial terms)
+   - $0 upfront / no retainer
+   - Success = actual recovery of $19,000 Target Amount
+   - Full success split: Client $10,000 / Company $9,000 (cap)
+   - Partial: Client 10/19, Company 9/19 of amount actually recovered
+   - $0 recovered ⇒ $0 owed
+   - Company bears its own ordinary costs unless written otherwise
+   - Florida law; Miami-Dade venue; independent-counsel acknowledgment
+   - Explicit: not a law firm; no guarantee of recovery
+
+6) BLANKS LEFT FOR FIELD FILL
+   Effective date; Client phone/email; exact claimed amount if $19,600; opposing party confirm;
+   recovery source checkboxes; account/VIN/instrument; legal description; optional notary;
+   Company signatory name/title.
+
+7) DOC ROOM
+   Not wired. Lead is dead/surplus; Doc Room is BUYER_ONLY gated. Desktop HTML is the ship path.
+
+8) BETTER EARN PATH (from your case file — still true)
+   Make the ≈$56k check land (mailing address) for free trust capital; earn on relocation /
+   next housing with ~$56k in hand by 12/12/2026; if family wants to attack the Stipulation,
+   that is independent counsel's lane — not a MSG contingent cut of legal recovery.
+
+Bottom line: the printable agreement matches the deal you described. Whether you should present
+it is a separate question — and your own 08/03 fact memo says you mostly should not.
