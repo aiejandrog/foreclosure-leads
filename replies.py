@@ -30,11 +30,16 @@ Run:  python replies.py            # check the last 30 days
 """
 import os, sys, json, re, imaplib, email
 from email.header import decode_header, make_header
+from email.utils import parseaddr
 from datetime import datetime, timedelta
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KEY = os.path.join(HERE, 'gmail.key')
 OUT = os.path.join(HERE, 'replies.json')
+
+# The subject our outreach always sends. Replies keep it as "Re: Regarding your property at ...",
+# which is what makes PASS 2 (subject matching) possible — see main().
+SUBJ_TAG = 'Regarding your property at'
 
 # Words that mean "stop contacting me". A reply carrying one of these is flagged so the operator
 # can push it into the opt-out ledger immediately -- an opt-out is more urgent than a warm lead.
@@ -50,6 +55,89 @@ def _load_json(path, default):
         return json.load(open(p, encoding='utf-8'))
     except Exception:
         return default
+
+
+def _norm_addr(a):
+    """'1533 W RIVER DR, MARGATE, 33063' -> '1533WRIVERDR'. Street part only, alnum, upper —
+    so a subject line survives punctuation/casing/truncation and still joins to its lead."""
+    s = str(a or '').split(',')[0]
+    return re.sub(r'[^A-Z0-9]', '', s.upper())
+
+
+def owner_addrs():
+    """case-number -> normalized street address, for PASS-2 subject matching."""
+    out = {}
+    for fn in ('leads_final.json', 'broward_leads.json', 'palmbeach_leads.json'):
+        d = _load_json(fn, [])
+        rows = d if isinstance(d, list) else d.get('leads', d)
+        if not isinstance(rows, list):
+            continue
+        for r in rows:
+            case = r.get('case') or r.get('Case #')
+            a = _norm_addr(r.get('addr') or r.get('Address') or '')
+            if case and a:
+                out[case] = a
+    return out
+
+
+# ONLY THE NEW TEXT COUNTS, and getting this wrong is expensive in BOTH directions.
+# Our own template ends with "Reply STOP or ask me not to contact you again", and every reply
+# quotes that template underneath. If the quoted block reaches the scanner, EVERY reply reads as
+# an opt-out -- including Deondre, who wrote back with his phone number asking for a call.
+# Suppressing a hot lead as a false opt-out is worse than the miss this guard was written for.
+# The first cut required the quote marker to start a line; real Gmail replies inline it
+# ("...call you On Mon, Jul 27, 2026 at 2:48 PM Alejandro Gonzalez <...> wrote:"), so the quote
+# leaked through. Match the marker ANYWHERE, and cut at the earliest hit.
+_QUOTE = [
+    r'On .{0,120}?wrote:',            # Gmail / Apple Mail
+    r'-{2,}\s*Original Message',      # Outlook
+    r'_{5,}',                          # Outlook divider rule
+    r'From:\s*\S+@',                  # forwarded header
+    r'Sent from my ',                 # signature that precedes a quote
+    r'\n\s*>',                        # classic quote marker
+]
+
+
+def _read_msg(raw):
+    """(subject, date, fresh_body, is_stop, sender) from one raw RFC822 message.
+
+    SHARED BY BOTH SCAN PASSES ON PURPOSE. The opt-out decision is safety-critical (a missed STOP
+    is an FTSA/TCPA problem), so it must live in exactly one place -- two copies would drift.
+
+    FETCH THE WHOLE MESSAGE, NOT JUST THE HEADER. Caught on the first live run (2026-07-30):
+    Norma Hendy replied "Please stop" and the scan scored it stop=False, because her subject was
+    the untouched "Re: Regarding your property at ..." and only the BODY carried the opt-out.
+    """
+    subj, when, body, sender = '', '', '', ''
+    try:
+        msg = email.message_from_bytes(raw)
+        subj = _decode(msg.get('Subject'))
+        when = _decode(msg.get('Date'))[:31]
+        sender = (parseaddr(msg.get('From') or '')[1] or '').strip().lower()
+        if msg.is_multipart():
+            for part in msg.walk():
+                if part.get_content_type() == 'text/plain':
+                    try:
+                        body += part.get_payload(decode=True).decode(
+                            part.get_content_charset() or 'utf-8', 'replace')
+                    except Exception:
+                        pass
+        else:
+            try:
+                body = msg.get_payload(decode=True).decode(
+                    msg.get_content_charset() or 'utf-8', 'replace')
+            except Exception:
+                body = str(msg.get_payload())[:4000]
+    except Exception:
+        pass
+    cut = len(body)
+    for pat in _QUOTE:
+        m = re.search(pat, body, re.I | re.S)
+        if m and m.start() < cut:
+            cut = m.start()
+    fresh = body[:cut][:2000]
+    is_stop = bool(STOP_WORDS.search(subj or '') or STOP_WORDS.search(fresh))
+    return subj, when, fresh, is_stop, sender
 
 
 def owner_emails():
@@ -171,64 +259,15 @@ def main():
         M = imaplib.IMAP4_SSL('imap.gmail.com')
         M.login(user, pw)
         M.select('INBOX')
+        # ---- PASS 1: FROM a known owner address -------------------------------------------------
         for addr in all_emails:
             typ, data = M.search(None, f'(SINCE {since} FROM "{addr}")')
             if typ != 'OK' or not data or not data[0]:
                 continue
             ids = data[0].split()
-            # FETCH THE WHOLE MESSAGE, NOT JUST THE HEADER.
-            # Caught on the first live run (2026-07-30): Norma Hendy replied "Please stop" and the
-            # scan scored it stop=False, because her subject was the untouched "Re: Regarding your
-            # property at ..." and only the BODY carried the opt-out. Scanning subjects alone
-            # misses the ordinary way a person actually says stop -- and a missed opt-out is an
-            # FTSA/TCPA problem, not a cosmetic one. Read subject AND body.
             typ, msg_data = M.fetch(ids[-1], '(RFC822)')
-            subj, when, body = '', '', ''
-            if typ == 'OK' and msg_data and msg_data[0]:
-                try:
-                    msg = email.message_from_bytes(msg_data[0][1])
-                    subj = _decode(msg.get('Subject'))
-                    when = _decode(msg.get('Date'))[:31]
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == 'text/plain':
-                                try:
-                                    body += part.get_payload(decode=True).decode(
-                                        part.get_content_charset() or 'utf-8', 'replace')
-                                except Exception:
-                                    pass
-                    else:
-                        try:
-                            body = msg.get_payload(decode=True).decode(
-                                msg.get_content_charset() or 'utf-8', 'replace')
-                        except Exception:
-                            body = str(msg.get_payload())[:4000]
-                except Exception:
-                    pass
-            # ONLY THE NEW TEXT COUNTS, and getting this wrong is expensive in BOTH directions.
-            # Our own outreach template ends with "Reply STOP or ask me not to contact you again",
-            # and every reply quotes that template underneath. If the quoted block reaches the
-            # scanner, EVERY reply reads as an opt-out -- including Deondre, who wrote back with
-            # his phone number asking for a call. Suppressing a hot lead as a false opt-out is
-            # worse than the miss this guard was written for.
-            # The first cut required the quote marker to start a line; real Gmail replies inline it
-            # ("...call you On Mon, Jul 27, 2026 at 2:48 PM Alejandro Gonzalez <...> wrote:"), so
-            # the quote leaked through. Match the marker ANYWHERE, and cut at the earliest hit.
-            _QUOTE = [
-                r'On .{0,120}?wrote:',            # Gmail / Apple Mail
-                r'-{2,}\s*Original Message',      # Outlook
-                r'_{5,}',                          # Outlook divider rule
-                r'From:\s*\S+@',                  # forwarded header
-                r'Sent from my ',                 # signature that precedes a quote
-                r'\n\s*>',                        # classic quote marker
-            ]
-            cut = len(body)
-            for pat in _QUOTE:
-                m = re.search(pat, body, re.I | re.S)
-                if m and m.start() < cut:
-                    cut = m.start()
-            fresh = body[:cut][:2000]
-            is_stop = bool(STOP_WORDS.search(subj or '') or STOP_WORDS.search(fresh))
+            raw = msg_data[0][1] if (typ == 'OK' and msg_data and msg_data[0]) else b''
+            subj, when, fresh, is_stop, _snd = _read_msg(raw)
             rec = {'email': addr, 'n': len(ids), 'subject': subj, 'when': when,
                    'stop': is_stop,
                    'excerpt': ' '.join(fresh.split())[:220],
@@ -239,6 +278,54 @@ def main():
                     found[case] = rec
             flag = '  [STOP WORD IN SUBJECT]' if rec['stop'] else ''
             print(f'  REPLY from {addr} — {len(ids)} msg(s) · {subj[:52]}{flag}')
+
+        # ---- PASS 2: SUBJECT match — a reply from an address we DON'T have on file ---------------
+        # PASS 1 only searches FROM the addresses skiptrace found. An owner who replies from ANY
+        # other address is invisible to it. That is not hypothetical: 2026-08-03, Toni Labriola
+        # (1533 W River Dr, auction 3 days out) replied "call me tomorrow" from an address not in
+        # her file, and the scan reported zero new replies -- Alejandro only caught it by reading
+        # his own inbox. Same failure class as the Capri lead: the warmest signal the system can
+        # produce, sitting invisible.
+        # Our subject is always "Regarding your property at <ADDRESS>", and replies keep it as
+        # "Re: ...", so the SUBJECT itself identifies the lead even when the sender doesn't.
+        # Skip anything PASS 1 already has, and skip our own address (a reply we sent).
+        seen = set(all_emails)
+        typ, data = M.search(None, f'(SINCE {since} SUBJECT "{SUBJ_TAG}")')
+        if typ == 'OK' and data and data[0]:
+            addr_map = owner_addrs()
+            for mid in data[0].split():
+                typ2, md = M.fetch(mid, '(RFC822)')
+                if typ2 != 'OK' or not md or not md[0]:
+                    continue
+                subj, when, fresh, is_stop, sender = _read_msg(md[0][1])
+                if not sender or sender == str(user).lower() or sender in seen:
+                    continue
+                # a bounce/auto-notice is not an owner writing back
+                if re.search(r'(mailer-daemon|postmaster|no-?reply|do-?not-?reply)', sender, re.I):
+                    continue
+                m = re.search(r'property at\s+(.+)$', subj or '', re.I)
+                frag = _norm_addr(m.group(1)) if m else ''
+                if not frag:
+                    continue
+                case = None
+                for c, a in addr_map.items():
+                    if a and (a.startswith(frag) or frag.startswith(a)):
+                        case = c
+                        break
+                rec = {'email': sender, 'n': 1, 'subject': subj, 'when': when,
+                       'stop': is_stop,
+                       'excerpt': ' '.join(fresh.split())[:220],
+                       'via': 'subject-match', 'new_address': True,
+                       'checked': datetime.now().isoformat(timespec='minutes')}
+                found['@' + sender] = rec
+                if case:
+                    found[case] = rec
+                seen.add(sender)
+                flag = '  [STOP WORD]' if is_stop else ''
+                print(f'  REPLY from {sender} (NEW ADDRESS, matched by subject) — '
+                      f'{subj[:46]}{flag}')
+                print(f'      -> lead: {case or "no case matched — check the address"}'
+                      f'   ** add {sender} to this owner\'s file **')
         M.logout()
     except Exception as e:
         print('IMAP check failed:', str(e)[:140])
