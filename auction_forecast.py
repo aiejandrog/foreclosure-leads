@@ -228,24 +228,31 @@ def build_md(cand, max_days, min_equity, today):
             ' · '.join(flags)))
     A('')
     # HIDDEN EQUITY — the Redfin cross-check's payoff: leads where Redfin's AVM is materially ABOVE
-    # the county value the board (and its equity math) uses, so the real spread may be much bigger
-    # than the "apparent eq" column shows. This is why the Redfin enrichment exists.
+    # the county value the board uses. BUT a high Redfin/county ratio alone is a trap — Marcus Toney
+    # is 1.48x ($1.05M county / $1.55M Redfin) yet has a $1.3M judgment, so real equity is NEGATIVE.
+    # Rank by REAL best-case equity = max(county, Redfin) − judgment, and only surface leads where
+    # that clears a meaningful floor. This is the number that actually decides whether to knock.
+    def _hi_eq(r):
+        return max(_value(r), _rf(r)) - _judg(r)
     hidden = sorted(
-        [(r, eq, d) for r, eq, d in cand if _value(r) and _rf(r) > _value(r) * 1.15],
-        key=lambda t: _rf(t[0]) / _value(t[0]), reverse=True)
+        [(r, eq, d) for r, eq, d in cand
+         if _value(r) and _rf(r) > _value(r) * 1.15 and _hi_eq(r) >= 50000],
+        key=lambda t: _hi_eq(t[0]), reverse=True)
     if hidden:
-        A('## 💡 Hidden equity — Redfin values these ABOVE the county roll (pull comps first)')
-        A('The board equity above uses the *county* value. On these, Redfin\'s estimate is 15%+ higher '
-          '— so the true spread may be well beyond the ceiling shown. Pull comps to confirm; these are '
-          'where the biggest surprises hide.')
-        A('| Auction | Owner | Address | County value | Redfin | Redfin/county |')
+        A('## 💡 Hidden equity — Redfin values these ABOVE the county roll AND real equity survives the judgment')
+        A('The board equity uses the *county* value; Redfin says these are worth 15%+ more. The last '
+          'column is best-case equity — **max(county, Redfin) − judgment** — so leads whose judgment '
+          'eats the spread (e.g. Toney: 1.48× but a $1.3M judgment) are correctly excluded. Pull comps '
+          'to confirm Redfin, but this is the honest short-list of where the biggest upside hides.')
+        A('| Auction | Owner | Address | County → Redfin | Judgment | Best-case eq |')
         A('|---|---|---|---|---|---|')
         for r, eq, d in hidden[:10]:
             dtd = today + dt.timedelta(days=d)
             ratio = _rf(r) / _value(r)
-            A('| {} | {} | {} | {} | **{}** | {:.2f}× |'.format(
-                dtd.strftime('%m/%d'), _owner(r)[:22], (_addr(r) or '')[:30],
-                _money(_value(r)), _money(_rf(r)), ratio))
+            hs = ' 🏠' if r.get('hs') else ''
+            A('| {} | {} | {} | {} → **{}** ({:.2f}×) | {} | **~{}** |'.format(
+                dtd.strftime('%m/%d'), _owner(r)[:22] + hs, (_addr(r) or '')[:26],
+                _money(_value(r)), _money(_rf(r)), ratio, _money(_judg(r)), _money(_hi_eq(r))))
         A('')
     # Broward / Palm Beach
     oth = [t for t in cand if _county(t[0]) != 'MIAMI-DADE' and t[2] <= 10]
