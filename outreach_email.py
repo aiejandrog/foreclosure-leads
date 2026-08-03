@@ -284,10 +284,49 @@ def _sent_today_count(ledger):
 
 
 # ---------------------------------------------------------------- eligibility
+_WORKER_HIST = None
+
+
+def _worker_hist():
+    """case -> {'sends': n, 'replied': bool} from worker_notes.json (the send_server backup of the
+    board's notes). The headless sender is COLD-ONLY: staged follow-ups belong to the morning
+    worker, where confirmSend keeps every send honest. Without this guard the CLI would fire the
+    same cold email at a lead the worker already emailed -- or worse, at an owner mid-conversation.
+    Missing/unreadable file degrades to empty (same posture as _load_optouts): the ledger's own
+    per-address cooldown still applies."""
+    global _WORKER_HIST
+    if _WORKER_HIST is not None:
+        return _WORKER_HIST
+    out = {}
+    try:
+        data = json.load(open(os.path.join(HERE, 'worker_notes.json'), encoding='utf-8'))
+        for case, n in (data.get('notes') or {}).items():
+            sends, replied = 0, False
+            for t in (n.get('touches') or []):
+                if (t.get('ch') or '') != 'email':
+                    continue
+                if 'replied' in str(t.get('out') or '').lower():
+                    replied = True
+                else:
+                    sends += 1
+            if sends or replied:
+                out[str(case)] = {'sends': sends, 'replied': replied}
+    except Exception:
+        out = {}
+    _WORKER_HIST = out
+    return out
+
+
 def _eligible(r, ledger, optouts, min_hours):
     """Returns (ok:bool, why:str). Mirrors the tracker's _workerEligible + a few CLI extras."""
     if not _case(r):
         return False, 'no case id'
+    w = _worker_hist().get(_case(r))
+    if w:
+        if w['replied']:
+            return False, 'owner REPLIED - live thread, human only'
+        if w['sends'] >= 1:
+            return False, 'worker already emailed - follow-ups are the worker\'s job'
     if _is_company_owner(r):
         return False, 'company-owner'
     if r.get('saleBkAct') and not r.get('saleLift'):
@@ -360,55 +399,120 @@ def _compose_single(r, snd, lang='en'):
     subj_en = f'Regarding your property at {street}'
     subj_es = f'Referente a su propiedad en {street}'
 
-    if td:
+    # Humanized voice (2026-08-03) -- mirrors tracker genEmail exactly (its ASCII conventions:
+    # -- for em dash, stripped accents). Educational core: one plain-English line per exit.
+    exits_en = (
+        "1. Reinstate -- catch up what's past due and the case ends.\n"
+        '2. Loan modification -- the bank reworks the loan so the payment fits again.\n'
+        "3. Short sale -- sell with the bank's okay if you owe more than the house is worth.\n"
+        "4. Private cash sale before the auction -- that's where a buyer like me comes in. "
+        "You pick the price and keep the equity that's yours, instead of letting an auction decide.\n"
+        "5. Bankruptcy -- pauses everything while you regroup (that one's for an attorney, not me)."
+    )
+    exits_es = (
+        '1. Reinstalar -- se pone al dia con lo atrasado y el caso termina.\n'
+        '2. Modificacion del prestamo -- el banco ajusta el prestamo para que el pago vuelva a ser posible.\n'
+        '3. Short sale -- vende con el visto bueno del banco si debe mas de lo que vale la casa.\n'
+        '4. Venta privada en efectivo antes de la subasta -- ahi entro yo como comprador. '
+        'Usted fija el precio y se queda con el capital que es suyo, en vez de dejar que una subasta decida.\n'
+        '5. Bancarrota -- pausa todo mientras se reorganiza (eso es con un abogado, no conmigo).'
+    )
+    intro_en = (f"My name is {sN} -- I'm a local Miami home buyer. I buy houses. I'm not a "
+                f'lender, not a "foreclosure rescue" company, and not an attorney.')
+    intro_es = (f'Mi nombre es {sN} -- compro casas aqui en Miami. No soy prestamista, no soy '
+                f'empresa de "rescate de ejecuciones", y no soy abogado.')
+    early = (not td) and (not dt)
+    if early:
+        # LP / no auction date. Without this branch the FC body rendered "a sale date of ." --
+        # a blank where the date should be (the tracker grew this branch first; now mirrored).
         body_en = (
-            f'Hi {first},\n\nMy name is {sN}. I am a local Miami home buyer -- I buy houses. '
-            f'I am not a lender, not a rescue company, and not an attorney.\n\n'
-            f'County records show your property at {addr} is scheduled for a tax deed sale on '
-            f'{dt}{case_tag_en}. Before that date, owners usually look at paying the back taxes, '
-            f'selling privately for cash, or claiming any surplus the law allows if it sells for '
-            f'more than is owed.\n\nNo cost and no obligation to talk. If a private sale fits, I '
-            f'can buy as-is and close before the deadline; if another path is better, I will say '
-            f'so.\n\n{sig}\n\nReply STOP or ask me not to contact you again and I will honor it.'
+            f'Hi {first},\n\n{intro_en}\n\n'
+            f"I'm reaching out because a foreclosure case was recently filed against {addr}"
+            f'{" by " + plaintiff if plaintiff else ""}{case_tag_en}. There\'s no auction date '
+            f"yet -- and honestly, that's the whole point of this note: right now you have the "
+            f"most options you'll ever have, and the fewest people pressuring you.\n\n"
+            f"Here's what normally happens next. You have 20 days from being served to respond "
+            f'to the court, and a typical Florida case runs months -- often more than a year -- '
+            f'before any sale is scheduled. In that window, all five ways out are still open:\n\n'
+            f"{exits_en}\n\nI'm not asking you to sell. I'm telling you the clock started, so "
+            f"you can decide on your terms instead of in the last two weeks. If it'd help to "
+            f'talk it through, call or text me -- no cost, no obligation.\n\n{sig}\n\n'
+            f'Reply STOP or ask me not to contact you again and I will honor it.'
         )
         body_es = (
-            f'Hola {first},\n\nMi nombre es {sN}. Soy comprador de casas en Miami -- compro casas. '
-            f'No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\n'
-            f'Los registros del condado muestran que {addr} tiene subasta de tax deed el {dt}'
-            f'{case_tag_es}. Antes de esa fecha, los duenos suelen mirar pagar impuestos atrasados, '
-            f'vender en privado en efectivo, o reclamar el excedente si la ley lo permite.\n\n'
-            f'Sin costo ni compromiso. Si una venta privada encaja, puedo comprar tal cual y cerrar '
-            f'antes de la fecha; si otro camino es mejor, se lo digo.\n\n{sig}\n\n'
+            f'Hola {first},\n\n{intro_es}\n\n'
+            f'Le escribo porque recientemente se presento un caso de ejecucion hipotecaria '
+            f'contra {addr}{" por parte de " + plaintiff if plaintiff else ""}{case_tag_es}. '
+            f'Todavia no hay fecha de subasta -- y sinceramente, ese es el punto de esta nota: '
+            f'ahora mismo usted tiene mas opciones que nunca, y menos gente presionandolo.\n\n'
+            f'Lo que normalmente sigue: tiene 20 dias desde que le entregaron los papeles para '
+            f'responder a la corte, y un caso tipico en Florida toma meses -- a veces mas de un '
+            f'ano -- antes de que se fije una subasta. En esa ventana, las cinco salidas siguen '
+            f'abiertas:\n\n{exits_es}\n\nNo le pido que venda. Le aviso que el reloj empezo, '
+            f'para que decida en sus terminos y no en las ultimas dos semanas. Si le sirve '
+            f'hablarlo, llameme o mandeme un texto -- sin costo, sin compromiso.\n\n{sig}\n\n'
+            f'Responda STOP o pidame no contactarlo y lo respeto.'
+        )
+    elif td:
+        body_en = (
+            f'Hi {first},\n\n{intro_en}\n\n'
+            f"I'm reaching out because county records show your property at {addr} is scheduled "
+            f'for a tax deed sale on {dt}{case_tag_en}. You can verify that yourself on the '
+            f"county's site -- I include the number so you know this isn't a mass mailer.\n\n"
+            f'Before that date, owners in your spot usually have three real paths:\n\n'
+            f'1. Pay the back taxes -- the sale gets cancelled and you keep the property.\n'
+            f"2. Sell privately for cash before the date -- that's where a buyer like me comes "
+            f'in. I can buy as-is and close before the deadline.\n'
+            f'3. Claim the surplus -- if it sells at auction for more than what\'s owed, the law '
+            f'may let you claim the difference.\n\n'
+            f"If it'd help to talk through which one fits, call or text me -- no cost, no "
+            f"obligation, and if another path is better for you, I'll say so.\n\n{sig}\n\n"
+            f'Reply STOP or ask me not to contact you again and I will honor it.'
+        )
+        body_es = (
+            f'Hola {first},\n\n{intro_es}\n\n'
+            f'Le escribo porque los registros del condado muestran que su propiedad en {addr} '
+            f'tiene subasta de tax deed el {dt}{case_tag_es}. Usted mismo puede verificarlo en '
+            f'el sitio del condado -- incluyo el numero para que sepa que esto no es correo '
+            f'masivo.\n\nAntes de esa fecha, los duenos en su situacion normalmente tienen tres '
+            f'caminos reales:\n\n'
+            f'1. Pagar los impuestos atrasados -- la subasta se cancela y usted se queda con la propiedad.\n'
+            f'2. Vender en privado en efectivo antes de la fecha -- ahi entro yo como comprador. '
+            f'Puedo comprar tal cual y cerrar antes del plazo.\n'
+            f'3. Reclamar el excedente -- si se vende en subasta por mas de lo que se debe, la '
+            f'ley puede permitirle reclamar la diferencia.\n\n'
+            f'Si le sirve hablar de cual le conviene, llameme o mandeme un texto -- sin costo, '
+            f'sin compromiso, y si otro camino es mejor para usted, se lo digo.\n\n{sig}\n\n'
             f'Responda STOP o pidame no contactarlo y lo respeto.'
         )
     else:
         plaint_bit_en = f' by {plaintiff}' if plaintiff else ''
         plaint_bit_es = f' por parte de {plaintiff}' if plaintiff else ''
         body_en = (
-            f'Hi {first},\n\nMy name is {sN}. I am a local Miami home buyer -- I buy houses. '
-            f'I am not a lender, not a rescue company, and not an attorney.\n\n'
-            f'Public records show {addr} is in foreclosure{plaint_bit_en}{case_tag_en}, with a '
-            f'sale scheduled for {dt}.\n\nI am not writing to talk you into anything. The five '
-            f'exits every Florida foreclosure homeowner has are: (1) reinstate the loan, (2) '
-            f'loan modification, (3) short sale, (4) private cash sale before auction -- that is '
-            f'where a buyer like me comes in -- and (5) bankruptcy. My job is to make sure you '
-            f'know all five are on the table.\n\nNo cost, no obligation. If you want to put every '
-            f'option on the table, answer when we call; if you are not interested, tell me -- '
-            f'nobody\'s feelings get hurt.\n\n{sig}\n\n'
-            f'Reply STOP or ask me not to contact you again and I will honor it.'
+            f'Hi {first},\n\n{intro_en}\n\n'
+            f"I'm reaching out because public records show {addr} is in foreclosure"
+            f'{plaint_bit_en}{case_tag_en}, with a sale date of {dt}. That case number is real '
+            f"-- you can look it up yourself on the county clerk's site. I include it so you "
+            f"know this isn't a mass mailer.\n\n"
+            f"I'm not writing to talk you into anything. It's just that most owners are never "
+            f'actually told they have five ways out, and every single one works better with '
+            f'time left on the clock:\n\n{exits_en}\n\n'
+            f"If it'd help to talk any of this through, call or text me -- no cost, no "
+            f"obligation, and if selling isn't your best move I'll tell you that straight.\n\n"
+            f'{sig}\n\nReply STOP or ask me not to contact you again and I will honor it.'
         )
         body_es = (
-            f'Hola {first},\n\nMi nombre es {sN}. Soy comprador de casas en Miami -- compro casas. '
-            f'No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\n'
-            f'Los registros publicos muestran que {addr} esta en ejecucion hipotecaria'
-            f'{plaint_bit_es}{case_tag_es}, con subasta el {dt}.\n\nNo escribo para convencerlo. '
-            f'Las cinco salidas de todo propietario en ejecucion en Florida son: (1) reinstalar '
-            f'el prestamo, (2) modificacion, (3) short sale, (4) venta privada en efectivo antes '
-            f'de la subasta -- ahi entra un comprador como yo -- y (5) bancarrota. Mi trabajo es '
-            f'que sepa que las cinco estan sobre la mesa.\n\nSin costo ni compromiso. Si quiere '
-            f'poner todas las opciones sobre la mesa, conteste cuando llamemos; si no le interesa, '
-            f'digamelo -- nadie se ofende.\n\n{sig}\n\n'
-            f'Responda STOP o pidame no contactarlo y lo respeto.'
+            f'Hola {first},\n\n{intro_es}\n\n'
+            f'Le escribo porque los registros publicos muestran que {addr} esta en ejecucion '
+            f'hipotecaria{plaint_bit_es}{case_tag_es}, con fecha de subasta el {dt}. Ese numero '
+            f'de caso es real -- usted mismo puede verificarlo en el sitio del clerk del '
+            f'condado. Lo incluyo para que sepa que esto no es correo masivo.\n\n'
+            f'No le escribo para convencerlo de nada. Es que a la mayoria de los duenos nunca '
+            f'les explican que tienen cinco salidas, y todas funcionan mejor con tiempo en el '
+            f'reloj:\n\n{exits_es}\n\n'
+            f'Si le sirve hablar de cualquiera de estas opciones, llameme o mandeme un texto -- '
+            f'sin costo, sin compromiso, y si vender no es su mejor opcion, se lo digo tal '
+            f'cual.\n\n{sig}\n\nResponda STOP o pidame no contactarlo y lo respeto.'
         )
     return {
         'en': {'subj': subj_en, 'body': body_en},
@@ -447,32 +551,40 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
 
     subj_en = f'Regarding {n} properties in your name'
     subj_es = f'Referente a {n} propiedades a su nombre'
+    # Humanized voice (2026-08-03) -- mirrors tracker genPortfolioEmail. Cold-only by design.
     body_en = (
-        f'Hi {first},\n\nMy name is {sN}. I am a local Miami home buyer -- I buy houses. I am not '
-        f'a lender, not a rescue company, and not an attorney.\n\n'
-        f'Public records show {n} properties in your name are currently in foreclosure:\n\n' +
+        f"Hi {first},\n\nMy name is {sN} -- I'm a local Miami home buyer. I buy houses. I'm not "
+        f'a lender, not a "foreclosure rescue" company, and not an attorney.\n\n'
+        f"I'm reaching out because public records show {n} properties in your name are in "
+        f'foreclosure right now. Every case number below is real -- you can look each one up on '
+        f"the county clerk's site:\n\n" +
         '\n'.join(_line_en(r) for r in all_leads) + '\n\n'
-        f'I am writing you once instead of on each property because that is less noise for you, '
-        f'and because a portfolio is usually best worked as a portfolio -- the same buyer, the '
-        f'same title company, one conversation. I am not asking you to sell any of them; the five '
-        f'exits every Florida foreclosure homeowner has (reinstate, modification, short sale, '
-        f'private cash sale before auction, bankruptcy) apply to each parcel independently.\n\n'
-        f'If it is useful, I can walk the numbers on any one of them, or all of them. No cost, '
-        f'no obligation.\n\n{sig}\n\n'
+        f"I'm writing you once instead of once per property -- less noise for you, and honestly "
+        f'a portfolio works best as one conversation: same buyer, same title company, one '
+        f"sit-down. I'm not asking you to sell any of them. The five ways out (reinstate, "
+        f'modification, short sale, private cash sale before auction, bankruptcy) apply to each '
+        f'property on its own -- you could keep one, sell another, and let a third go.\n\n'
+        f"If it'd help, I can walk the numbers on any one of them, or all of them. No cost, no "
+        f"obligation -- and if selling isn't your best move on a given property, I'll tell you "
+        f'that straight.\n\n{sig}\n\n'
         f'Reply STOP or ask me not to contact you again and I will honor it for every property above.'
     )
     body_es = (
-        f'Hola {first},\n\nMi nombre es {sN}. Soy comprador de casas en Miami -- compro casas. '
-        f'No soy prestamista, no soy empresa de rescate, y no soy abogado.\n\n'
-        f'Los registros publicos muestran {n} propiedades a su nombre actualmente en ejecucion '
-        f'hipotecaria:\n\n' + '\n'.join(_line_es(r) for r in all_leads) + '\n\n'
-        f'Le escribo una vez y no por cada propiedad porque es menos ruido para usted, y porque '
-        f'una cartera generalmente se trabaja mejor como una cartera -- el mismo comprador, la '
-        f'misma compania de titulo, una sola conversacion. No le pido vender ninguna; las cinco '
-        f'salidas de todo propietario en ejecucion en Florida (reinstalar, modificacion, short '
-        f'sale, venta privada en efectivo antes de la subasta, bancarrota) aplican a cada '
-        f'parcela por separado.\n\nSi es util, puedo repasar los numeros en cualquiera de ellas, '
-        f'o en todas. Sin costo ni compromiso.\n\n{sig}\n\n'
+        f'Hola {first},\n\nMi nombre es {sN} -- compro casas aqui en Miami. No soy prestamista, '
+        f'no soy empresa de "rescate de ejecuciones", y no soy abogado.\n\n'
+        f'Le escribo porque los registros publicos muestran {n} propiedades a su nombre en '
+        f'ejecucion hipotecaria ahora mismo. Cada numero de caso abajo es real -- puede '
+        f'verificarlos usted mismo en el sitio del clerk del condado:\n\n' +
+        '\n'.join(_line_es(r) for r in all_leads) + '\n\n'
+        f'Le escribo una sola vez y no por cada propiedad -- menos ruido para usted, y '
+        f'sinceramente una cartera se trabaja mejor en una sola conversacion: el mismo '
+        f'comprador, la misma compania de titulo, una sola reunion. No le pido vender ninguna. '
+        f'Las cinco salidas (reinstalar, modificacion, short sale, venta privada en efectivo '
+        f'antes de la subasta, bancarrota) aplican a cada propiedad por separado -- podria '
+        f'quedarse con una, vender otra, y dejar ir una tercera.\n\n'
+        f'Si le sirve, puedo repasar los numeros de cualquiera de ellas, o de todas. Sin costo, '
+        f'sin compromiso -- y si vender no es su mejor opcion en alguna, se lo digo tal '
+        f'cual.\n\n{sig}\n\n'
         f'Responda STOP o pidame no contactarlo y lo respetare para cada una de las propiedades arriba.'
     )
     return {
