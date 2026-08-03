@@ -1779,7 +1779,10 @@ def make_tracker(leads):
     # ran. Had the scrape been blocked (the standing Broward failure mode), the worker would still
     # be emailing a house that is out of foreclosure. deads.json is the durable record; the merge
     # is SAFETY-ONE-WAY on the client (server can mark Dead, never resurrect).
-    # Shape: {case: {status:'Dead', d:'YYYY-MM-DD', why:'...'}}
+    # Shape: {case: {status:'Dead', d:'YYYY-MM-DD', why:'...', folio:'digits', cases:[siblings]}}
+    # folio + cases are optional: when present, the LOOKUP page can recognize a retired case on a
+    # folio the board no longer carries (the Martin condo went "all clear" 4 days after DEALFLOW
+    # itself retired it — the dig page had no memory) and link every related docket.
     _deads = {}
     _df = os.path.join(HERE, 'deads.json')
     if os.path.exists(_df):
@@ -1789,7 +1792,9 @@ def make_tracker(leads):
                 if not isinstance(_n, dict):
                     continue
                 if str(_n.get('status') or '').upper() in ('DEAD', 'CLOSED', 'LOST - SOLD AT AUCTION'):
-                    _deads[_c] = {'status': 'Dead', 'd': _n.get('d') or '', 'why': str(_n.get('why') or '')[:160]}
+                    _deads[_c] = {'status': 'Dead', 'd': _n.get('d') or '', 'why': str(_n.get('why') or '')[:160],
+                                  'folio': re.sub(r'\D', '', str(_n.get('folio') or '')),
+                                  'cases': [str(x) for x in (_n.get('cases') or []) if x][:6]}
         except Exception as e:
             print(f'deads.json unreadable ({e}) — board falls back to device-local dead marks only')
     tpl = tpl.replace('__DEADS__', _esc_json(_deads))
