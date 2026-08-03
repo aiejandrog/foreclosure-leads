@@ -7004,7 +7004,7 @@ function _docFields(r){
     legalDesc: (r && r.legal) || _b, bookPage: (r && r.bookpage) || _b,
     caseNo: (r && r.case) || _b, plaintiff: (r && r.plaintiff) || _b,
     saleDate: (r && r.auction) || _b, judgAmt: (r && r.judg) ? ('$'+(+r.judg).toLocaleString()) : _b,
-    days: (r && typeof r.days==='number' && r.days>=0) ? String(r.days) : _b,
+    days: (r && _hasClock(r)) ? String(r.days) : _b,   // _hasClock excludes the NO_SALE=9999 sentinel
     docket: (r && r.docket) || _b,
     st: (r && r.st) || _b,
     orconf: (r && r.orconf) || _b,
@@ -11134,6 +11134,16 @@ function genScript(r){
   const caseNo = esc((r.case||'').trim());
   const caseTagEN = caseNo ? `, case number ${caseNo}` : '';
   const caseTagES = caseNo ? `, número de caso ${caseNo}` : '';
+  // LP / no-sale leads have no auction date and days===9999 (NO_SALE). Saying "with a date of
+  // [blank], about 9999 days out" on a live call instantly reads as a bot and kills Beat 3 (the
+  // honest reveal). For those, use the stronger, TRUE frame — just filed, no sale date yet, most
+  // options now — the same framing the early-stage letter uses. Real-clock leads are unchanged.
+  const dateClauseEN = _hasClock(r)
+    ? `with a date of <b>${dt}</b>, about ${days} days out`
+    : `that was just filed — no sale date has been set yet, which honestly means you have more options right now than you will later`;
+  const dateClauseES = _hasClock(r)
+    ? `con fecha <b>${dt}</b>, en unos ${days} días`
+    : `que apenas se presentó — todavía no hay fecha de venta, lo cual significa que ahora mismo usted tiene más opciones que las que tendrá después`;
 
   // Field Manual: qualify → name the 5 exits → book callback. Buyer posture, never "we stop sales."
   const goalEN = td
@@ -11159,14 +11169,14 @@ function genScript(r){
     + `<b>Beat 2 — the yes/no that buys 30 more seconds:</b><br>`
     + `"Thanks. Real quick — do you still own it, or has that already been handled?" <span class="key">(a question about THEM, not you — they answer almost every time)</span><br><br>`
     + `<b>Beat 3 — the honest reveal, with a ceiling:</b><br>`
-    + `"I'll be straight with you — your ${td?'property came up on the county tax-deed list':'case came up on the county records I work through'}${caseTagEN ? ' ('+caseNo+')' : ''}, with a date of <b>${dt}</b>, about ${days} days out. I'm not the bank, not a lawyer — I'm a local buyer, and my job is making sure you know every option before that date. Some people have a plan; a lot don't know they have five. Got <b>60 seconds</b>?"`;
+    + `"I'll be straight with you — your ${td?'property came up on the county tax-deed list':'case came up on the county records I work through'}${caseTagEN ? ' ('+caseNo+')' : ''}, ${dateClauseEN}. I'm not the bank, not a lawyer — I'm a local buyer, and my job is making sure you know every option before that date. Some people have a plan; a lot don't know they have five. Got <b>60 seconds</b>?"`;
   const openES =
       `<b>Paso 1 — gane los próximos 10 segundos (sin compañía, sin motivo aún):</b><br>`
     + `"Hola — perdone la molestia. ¿Hablo con el dueño de <b>${street}</b>?" <span class="key">(ESPERE la respuesta. Si dicen "¿quién habla?": "Me llamo ${esc(sN)} — llamo de Miami. ¿Usted es el dueño?")</span><br><br>`
     + `<b>Paso 2 — la pregunta sí/no que compra 30 segundos más:</b><br>`
     + `"Gracias. Rápido — ¿todavía es suya, o eso ya se resolvió?" <span class="key">(una pregunta sobre ELLOS, no sobre usted — casi siempre contestan)</span><br><br>`
     + `<b>Paso 3 — la verdad, con techo de tiempo:</b><br>`
-    + `"Le hablo claro — su ${td?'propiedad salió en la lista de tax deed del condado':'caso salió en los registros del condado que yo reviso'}${caseTagES ? ' ('+caseNo+')' : ''}, con fecha <b>${dt}</b>, en unos ${days} días. No soy el banco ni abogado — soy comprador local, y mi trabajo es que usted conozca cada opción antes de esa fecha. Hay quien tiene plan; muchos no saben que tienen cinco. ¿Me da <b>60 segundos</b>?"`;
+    + `"Le hablo claro — su ${td?'propiedad salió en la lista de tax deed del condado':'caso salió en los registros del condado que yo reviso'}${caseTagES ? ' ('+caseNo+')' : ''}, ${dateClauseES}. No soy el banco ni abogado — soy comprador local, y mi trabajo es que usted conozca cada opción antes de esa fecha. Hay quien tiene plan; muchos no saben que tienen cinco. ¿Me da <b>60 segundos</b>?"`;
 
   // PLAYBOOK roles: intake books the closer — closer lays out options (not "stops sales").
   // ---- WHAT THE TRACKER ALREADY KNOWS -----------------------------------------------------------
