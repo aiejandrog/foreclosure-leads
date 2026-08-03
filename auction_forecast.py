@@ -118,13 +118,24 @@ def _judg(r):
         return 0.0
 
 
+def _tax(r):
+    """Verified delinquent back taxes (county_taxes.py). A first-priority lien that SURVIVES the
+    foreclosure sale, so it comes straight off equity — same as a surviving senior. e.g. Spong owes
+    $76,143, so his real equity is value − judgment − $76k, not value − judgment."""
+    try:
+        return float(r.get('taxDue') or 0) or 0.0
+    except Exception:
+        return 0.0
+
+
 def _equity_ceiling(r):
-    """value - judgment. Deliberately NOT the raw `equity` field (mixed units). A ceiling: surviving
-    seniors + HOA are not subtracted here."""
+    """value - judgment - verified back taxes. Deliberately NOT the raw `equity` field (mixed units).
+    Still a ceiling on mr=False leads (no *surviving mortgage* is netted — but on a real 1st-mortgage
+    foreclosure the judgment already IS the senior, so this is close to true equity)."""
     v = _value(r)
     if not v:
         return None
-    return v - _judg(r)
+    return v - _judg(r) - _tax(r)
 
 
 def _is_junior(r):
@@ -244,7 +255,7 @@ def build_md(cand, max_days, min_equity, today):
     # Rank by REAL best-case equity = max(county, Redfin) − judgment, and only surface leads where
     # that clears a meaningful floor. This is the number that actually decides whether to knock.
     def _hi_eq(r):
-        return max(_value(r), _rf(r)) - _judg(r)
+        return max(_value(r), _rf(r)) - _judg(r) - _tax(r)
     # BOTH equity screens now require mr=False (a real 1ST-MORTGAGE foreclosure). On mr=True junior/HOA
     # foreclosures a senior mortgage SURVIVES, so value − judgment is not real equity — those go to the
     # separate "junior/HOA" bucket below with a verify-the-survivor warning.
