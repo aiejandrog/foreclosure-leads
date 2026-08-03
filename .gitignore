@@ -122,3 +122,4 @@ bd_budget.json
 
 # hard-bounced homeowner addresses (bounces.py) — real emails, PUBLIC repo, never commit
 bounced_emails.json
+deads.json

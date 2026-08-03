@@ -1460,6 +1460,32 @@ def make_tracker(leads):
         except Exception as e:
             print(f"county_taxes.json skipped ({e})")
 
+    # ---- RE-CLOCK days AT BAKE TIME ------------------------------------------------------------
+    # `days` was a snapshot frozen at SCRAPE time and copied forever. The county lead files are
+    # rewritten in place by half a dozen enrichment passes, none of which recompute it — so when a
+    # county's real scrape stalls (Broward, routinely), every one of its rows drifts a day further
+    # off per rebuild. Caught live 2026-08-03: all 159 Broward rows were +3 days wrong, and
+    # COCE-25-088956 sat in the URGENT lane reading "closing today" for an auction held 3 days
+    # earlier. The auction DATE is the durable fact; the countdown belongs to the day the page is
+    # built. Rows without a parseable date keep their value (preserves the LP 9999 no-sale sentinel
+    # and the county -1 parse-failure sentinel). Negative = auction passed; the board retires those
+    # from outreach and shows the surplus play.
+    _today_rc = datetime.now().date()
+    _rcn = _rcchg = 0
+    for _r in slim:
+        _auc = str(_r.get('auction') or '').strip()
+        if not _auc:
+            continue
+        try:
+            _d_new = (datetime.strptime(_auc, '%m/%d/%Y').date() - _today_rc).days
+        except Exception:
+            continue
+        _rcn += 1
+        if _r.get('days') != _d_new:
+            _r['days'] = _d_new
+            _rcchg += 1
+    print(f"days re-clocked: {_rcn} dated rows, {_rcchg} corrected")
+
     # Redfin Estimate (redfin_value.py) — advisory second-opinion value, folio-keyed post-pass.
     # A PURE sidecar merge: rfval/rfurl/rfchk never touch the lead files, so they can't be lost by
     # the MD rebuild or the county slim.extend. Only apply a real, address-matched estimate
@@ -1744,6 +1770,31 @@ def make_tracker(leads):
     tpl = tpl.replace('__OPTOUTS__', _esc_json(_optouts))
     if _optouts:
         print(f'opt-outs: {len(_optouts)} owner(s) baked in from the server ledger (suppressed on EVERY device)')
+
+    # ---- SERVER-SIDE DEAD LEDGER --------------------------------------------------------------
+    # Same disease as opt-outs, different symptom: "this deal no longer exists" lived only in one
+    # browser's localStorage. Concretely: MILAGROS MARTIN (2026-003288-CA-01) was DISMISSED on
+    # 07/31 (redeemed by a third-party LLC) yet stayed a Tier-A lead on the board through 08/02 —
+    # she only vanished because the county happened to pull the 08/03 calendar and a full scrape
+    # ran. Had the scrape been blocked (the standing Broward failure mode), the worker would still
+    # be emailing a house that is out of foreclosure. deads.json is the durable record; the merge
+    # is SAFETY-ONE-WAY on the client (server can mark Dead, never resurrect).
+    # Shape: {case: {status:'Dead', d:'YYYY-MM-DD', why:'...'}}
+    _deads = {}
+    _df = os.path.join(HERE, 'deads.json')
+    if os.path.exists(_df):
+        try:
+            _raw_dd = json.load(open(_df, encoding='utf-8')) or {}
+            for _c, _n in _raw_dd.items():
+                if not isinstance(_n, dict):
+                    continue
+                if str(_n.get('status') or '').upper() in ('DEAD', 'CLOSED', 'LOST - SOLD AT AUCTION'):
+                    _deads[_c] = {'status': 'Dead', 'd': _n.get('d') or '', 'why': str(_n.get('why') or '')[:160]}
+        except Exception as e:
+            print(f'deads.json unreadable ({e}) — board falls back to device-local dead marks only')
+    tpl = tpl.replace('__DEADS__', _esc_json(_deads))
+    if _deads:
+        print(f'dead ledger: {len(_deads)} case(s) baked in (retired on EVERY device)')
 
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would

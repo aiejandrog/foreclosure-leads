@@ -2319,6 +2319,29 @@ const SERVER_OPTOUTS = __OPTOUTS__;
     if(added) console.info('[dealflow] '+added+' lead(s) auto-suppressed from a STOP reply');
   } catch(e){}
 })();
+/* ---- SERVER DEAD LEDGER -----------------------------------------------------------------------
+   deads.json baked at build time — cases where the DEAL no longer exists (dismissed, redeemed,
+   sold). Same one-way posture as SERVER_OPTOUTS: the server can retire a lead on every device,
+   it can never resurrect one, and it never overwrites a status that is already terminal locally.
+   Born from Milagros Martin (2026-003288-CA-01): dismissed 07/31, still pitched as Tier A for two
+   more days because "dead" only existed in one browser's localStorage. */
+const SERVER_DEADS = __DEADS__;
+(function(){
+  try {
+    var n_dead = 0;
+    var TERMINAL = {'DEAD':1,'DO NOT CONTACT':1,'OPTED OUT':1,'CLOSED':1,'LOST - SOLD AT AUCTION':1};
+    Object.keys(SERVER_DEADS || {}).forEach(function(c){
+      var srv = SERVER_DEADS[c] || {};
+      var n = notes[c] = notes[c] || {status:'', note:''};
+      if(TERMINAL[String(n.status||'').toUpperCase()]) return;   // already retired — never downgrade
+      n.status = 'Dead';
+      if(srv.why && !n.note) n.note = '[server] ' + srv.why;
+      n_dead++;
+    });
+    if(n_dead && typeof save === 'function') save();
+    if(n_dead) console.info('[dealflow] '+n_dead+' dead case(s) applied from the server ledger');
+  } catch(e){}
+})();
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'A', q = '', sortK = '_profit', sortD = -1;
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
@@ -3558,8 +3581,10 @@ function _funnelStage(r){
 
   var ts = n.touches || [];
   var d  = _fDays(r);
-  // Auction already happened — not outreach any more, it is a surplus conversation.
-  if(d != null && d < 0) return 'out';
+  // Auction already happened — not outreach any more, it is a surplus conversation. The old test
+  // (d < 0) was dead code: _fDays/_saleDays return null for negative days, so it never fired and
+  // passed auctions leaked through as fresh leads. _aucPassed reads the raw fields.
+  if((d != null && d < 0) || _aucPassed(r)) return 'out';
 
   // ---- someone actually talked to us. Nothing outranks that, not even a closer auction.
   if(ts.some(function(t){ return /spoke|talked|callback|interested/i.test(t.out||''); })) return 'warm';
@@ -6637,6 +6662,11 @@ function _drvVal(r){ return (r._valsrc==='arv' && r.arv) ? r.arv : r.value; }
 // the auction were 27 years out. A sentinel must never reach the screen.
 const NO_SALE = 9999;
 function _hasClock(r){ return typeof r.days === 'number' && r.days >= 0 && r.days < NO_SALE; }
+// AUCTION ALREADY HELD. Distinct from "no clock": there IS a date and it is behind us. With days
+// re-clocked at bake (negative = passed), these are surplus-recovery conversations, not outreach —
+// the worker must never queue them, and before this helper they fell through _saleDays()'s null
+// into the EARLY lane as "fresh filing, be the first call" (a 3-days-past auction pitched as new).
+function _aucPassed(r){ return !!String((r&&r.auction)||'').trim() && typeof r.days === 'number' && r.days < 0; }
 function _clockTxt(r){
   if(_hasClock(r)) return 'in ' + r.days + 'd';
   if(typeof r.days === 'number' && r.days >= NO_SALE) return 'no sale date yet';
@@ -9730,6 +9760,9 @@ function _workerEligible(r){
   // Shared gate for every lane. Suppression first — these are legal, not preferences.
   if(!r || !r.case) return false;
   if(r.sibclaimed || r.saleBkAct || r.lpDismissed) return false;
+  // Auction already held → surplus conversation, never outreach. Without this, a passed auction
+  // fell through _saleDays()'s null into the EARLY lane as "fresh filing, be the first call".
+  if(_aucPassed(r)) return false;
   var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
   if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD') return false;
   // A wrong number recorded from call mode is a data problem, not a lead — re-verify title first.
@@ -9759,7 +9792,7 @@ function _laneStats(lane){
   DATA.forEach(function(r){
     if(!r || !r.case || !L.test(_saleDays(r), r)) return;
     s.pool++;
-    if(r.sibclaimed || r.saleBkAct){ s.suppressed++; return; }
+    if(r.sibclaimed || r.saleBkAct || _aucPassed(r)){ s.suppressed++; return; }
     var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
     if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD'){ s.suppressed++; return; }
     if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }
@@ -10084,6 +10117,16 @@ function genMorningWorker(lane){
     // sends SMS; auto-texting cold leads is an FTSA/TCPA violation). Auto-run parks them here as
     // one-tap tel:/sms: links instead of the old phantom "text sent" that retired the lead and ate
     // the daily cap. Hidden until the first one lands. Calls are never capped.
+    // TEXT BATCH — leads with a textable number, collected during the run and sent as a one-tap
+    // station at the end. Nothing is ever auto-sent: each tap opens Messages pre-filled and HE
+    // presses send. Sits above the call list because it is the actionable one.
+    +   '<div class="mwtextq" id="mwtextq" style="display:none;background:#fff;border-radius:10px;margin-top:16px;box-shadow:0 2px 10px rgba(11,23,48,.06);overflow:hidden">'
+    +     '<div class="mwloghead" style="background:#12224A;color:#CFE0FF"><span>&#128241; Text batch &mdash; pre-filled, you press send</span><span class="mwlogstats" id="mwtextqn"></span></div>'
+    +     '<div style="padding:10px 14px;border-bottom:1px solid #eef0f5">'
+    +       '<button id="mwtextqgo" style="width:100%;background:#12224A;color:#fff;border:0;border-radius:8px;padding:11px 14px;font:700 13.5px Segoe UI,Arial;cursor:pointer">&#9654; Start text batch</button>'
+    +     '</div>'
+    +     '<div id="mwtextqlist" style="max-height:280px;overflow-y:auto"></div>'
+    +   '</div>'
     +   '<div class="mwcallq" id="mwcallq" style="display:none;background:#fff;border-radius:10px;margin-top:16px;box-shadow:0 2px 10px rgba(11,23,48,.06);overflow:hidden">'
     +     '<div class="mwloghead" style="background:#0B2A17;color:#CFF3DC"><span>&#9742; Call these &mdash; phone only, no email</span><span class="mwlogstats" id="mwcallqn"></span></div>'
     +     '<div id="mwcallqlist" style="max-height:320px;overflow-y:auto"></div>'
@@ -10220,12 +10263,33 @@ function genMorningWorker(lane){
     +     'out.push({k:"wp",    why:r.wpUrl?null:"no people-search URL available"});'
     +     'return out;'
     +   '}'
-    // the growing Call list (phone-only leads the auto-run parked for a human). Deduped by case.
-    +   'var CALLQ=[];'
+    /* PHONE-ONLY PARKING LOTS. Auto-run cannot email these and must never auto-text them (no
+       browser sends SMS; auto-texting cold leads is an FTSA violation). So they split two ways:
+         TEXTQ  — has a baked smsHref (textable: DNC/landline/opt-out already excluded at bake)
+                  → the end-of-run BATCH TEXT STATION: one tap opens Messages PRE-FILLED, he
+                    presses send, confirms, next. Every send is a human tap.
+         CALLQ  — phone present but not textable → dial only.
+       Keyed by x.c === r.c: worker cards carry `c`, NOT `case` (there is no r.case in this scope).
+       The first cut compared r.case, so every entry deduped against undefined and the list could
+       never hold more than one lead. */
+    +   'var CALLQ=[], TEXTQ=[];'
+    +   'function _esc2(s){return String(s==null?"":s).replace(/[&<>\"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}'
+    +   'function _telHref(p){return "tel:+1"+String(p||"").replace(/\\D/g,"");}'
     +   'function callQAdd(r){'
-    +     'if(CALLQ.some(function(x){return x.c===r.case;})) return;'
-    +     'CALLQ.push({c:r.case, name:r.first||r.owner||r.case, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||""});'
+    +     'if(CALLQ.some(function(x){return x.c===r.c;})) return;'
+    +     'CALLQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||""});'
     +     'renderCallQ();'
+    +   '}'
+    +   'function textQAdd(r){'
+    +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
+    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner});'
+    +     'renderTextQ();'
+    +   '}'
+    +   'function _qrow(x, btns){'
+    +     'return "<div style=\'display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid #eef0f5\'>"'
+    +       '+"<div style=\'flex:1;min-width:0\'><div style=\'font-weight:700;color:#0e1b33\'>"+_esc2(x.name)+"</div>"'
+    +         '+"<div style=\'font:12px/1.3 monospace;color:#5b6472\'>"+_esc2(x.phone||"no number — Lookup")+"</div></div>"'
+    +       '+btns+"</div>";'
     +   '}'
     +   'function renderCallQ(){'
     +     'var wrap=document.getElementById("mwcallq"), list=document.getElementById("mwcallqlist"), n=document.getElementById("mwcallqn");'
@@ -10233,16 +10297,61 @@ function genMorningWorker(lane){
     +     'if(!CALLQ.length){ wrap.style.display="none"; return; }'
     +     'wrap.style.display="block";'
     +     'if(n) n.textContent=CALLQ.length+" to call · not capped";'
-    +     'var esc2=function(s){return String(s==null?"":s).replace(/[&<>\"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});};'
-    +     'var tel=function(p){return "tel:+1"+String(p||"").replace(/\\D/g,"");};'
     +     'list.innerHTML=CALLQ.map(function(x){'
-    +       'return "<div style=\'display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid #eef0f5\'>"'
-    +         '+"<div style=\'flex:1;min-width:0\'><div style=\'font-weight:700;color:#0e1b33\'>"+esc2(x.name)+"</div>"'
-    +           '+"<div style=\'font:12px/1.3 monospace;color:#5b6472\'>"+esc2(x.phone||\"no number — Lookup\")+"</div></div>"'
-    +         '+(x.phone?"<a href=\'"+tel(x.phone)+"\' style=\'background:#eaf5ec;color:#1a5a2b;border:1px solid #cfe6d4;border-radius:7px;padding:8px 12px;text-decoration:none;font-weight:700;font-size:13px\'>☎ Call</a>":"")'
-    +         '+(x.sms?"<a href=\'"+esc2(x.sms)+"\' style=\'background:#eef3fa;color:#3c5b8a;border:1px solid #d4e0f2;border-radius:7px;padding:8px 12px;text-decoration:none;font-weight:700;font-size:13px\'>✉ Text</a>":"")'
-    +       '+"</div>";'
+    +       'return _qrow(x, x.phone?"<a href=\'"+_telHref(x.phone)+"\' data-qcall=\'"+_esc2(x.c)+"\' style=\'background:#eaf5ec;color:#1a5a2b;border:1px solid #cfe6d4;border-radius:7px;padding:8px 12px;text-decoration:none;font-weight:700;font-size:13px\'>&#9742; Call</a>":"");'
     +     '}).join("");'
+    +   '}'
+    +   'function renderTextQ(){'
+    +     'var wrap=document.getElementById("mwtextq"), list=document.getElementById("mwtextqlist"), n=document.getElementById("mwtextqn"), b=document.getElementById("mwtextqgo");'
+    +     'if(!wrap||!list) return;'
+    +     'if(!TEXTQ.length){ wrap.style.display="none"; return; }'
+    +     'wrap.style.display="block";'
+    +     'if(n) n.textContent=TEXTQ.length+" ready · you press send";'
+    +     'if(b) b.textContent="\\u25B6 Start text batch ("+TEXTQ.length+")";'
+    +     'list.innerHTML=TEXTQ.map(function(x){'
+    +       'return _qrow(x, "<a href=\'"+_telHref(x.phone)+"\' data-qcall=\'"+_esc2(x.c)+"\' style=\'background:#eaf5ec;color:#1a5a2b;border:1px solid #cfe6d4;border-radius:7px;padding:7px 10px;text-decoration:none;font-weight:700;font-size:12.5px\'>&#9742;</a>"'
+    +         '+"<button data-qtext=\'"+_esc2(x.c)+"\' style=\'background:#eef3fa;color:#3c5b8a;border:1px solid #d4e0f2;border-radius:7px;padding:7px 11px;font-weight:700;font-size:12.5px;cursor:pointer\'>&#9993; Text</button>");'
+    +     '}).join("");'
+    +   '}'
+    /* BATCH TEXT STATION. Walks TEXTQ one lead at a time: tap -> Messages/Phone Link opens with the
+       bilingual body PRE-FILLED -> he presses send there -> confirmSend() asks "did it send?" ->
+       only a YES posts the confirmed 'text' (charges the cap, retires the lead). Gated per send on
+       the 8AM-8PM window and the daily cap. FTSA 3-per-24h is structurally satisfied: at most one
+       text per lead here, and _workerEligible already required 24h+ since the last touch. */
+    +   'var TBI=0, TBSENT=0, TBSKIP=0, tbOn=false;'
+    +   'function textBatchStart(){'
+    +     'if(!TEXTQ.length) return;'
+    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","&#9200; "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; textBatchStep();'
+    +   '}'
+    +   'function textBatchStep(){'
+    +     'if(TBI>=TEXTQ.length) return textBatchDone();'
+    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","&#9200; "+g.label+" — batch stopped mid-run. Resume after 8 AM ET.","warn"); return textBatchDone(); }'
+    +     'if(sentToday()>=CAP.max){ addLog("fail","batch","&#9940; daily send cap reached ("+CAP.max+") — stop texting, keep calling.","warn"); return textBatchDone(); }'
+    +     'var x=TEXTQ[TBI], body="";'
+    +     'try{ var m=/[?&]body=([^&]*)/.exec(x.sms||""); if(m) body=decodeURIComponent(m[1].replace(/\\+/g," ")); }catch(e){}'
+    +     'main.innerHTML="<div class=\'mwpace\'>"'
+    +       '+"<div style=\'font:700 11px/1 Segoe UI,Arial;letter-spacing:.14em;text-transform:uppercase;color:#8a6d1f\'>Text batch &middot; "+(TBI+1)+" of "+TEXTQ.length+" &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</div>"'
+    +       '+"<h2 style=\'margin:8px 0 2px\'>"+_esc2(x.name)+"</h2>"'
+    +       '+"<div style=\'font:13px monospace;color:#5b6472;margin-bottom:10px\'>"+_esc2(x.phone)+"</div>"'
+    +       '+"<div style=\'background:#f6f8fc;border:1px solid #e2e6ee;border-radius:8px;padding:10px 12px;text-align:left;font:12.5px/1.5 Segoe UI,Arial;color:#334155;max-height:160px;overflow-y:auto;white-space:pre-wrap\'>"+_esc2(body||"(message pre-filled in Messages)")+"</div>"'
+    +       '+"<button id=\'tb-open\' class=\'mwbtn text\' style=\'margin-top:12px;width:100%\'>&#128241; Open Messages &mdash; pre-filled<span class=\'sub\'>press send there, then confirm</span></button>"'
+    +       '+"<button id=\'tb-skip\' class=\'mwbtn skip\' style=\'margin-top:8px;width:100%\'>&#9197; Skip this one<span class=\'sub\'>stays for tomorrow</span></button>"'
+    +     '+"</div>";'
+    +     'var ob=document.getElementById("tb-open"), sb=document.getElementById("tb-skip");'
+    +     'if(ob) ob.onclick=function(){'
+    +       'openHere(x.sms);'
+    +       'post("textopen");'
+    +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
+    +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +     '};'
+    +     'if(sb) sb.onclick=function(){ TBSKIP++; addLog("skip", x.name, "text skipped — stays for tomorrow"); TBI++; textBatchStep(); };'
+    +   '}'
+    +   'function textBatchDone(){'
+    +     'tbOn=false;'
+    +     'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Text batch done</h2><div class=\'stats\'>Sent <b>"+TBSENT+"</b> &middot; skipped <b>"+TBSKIP+"</b><br><span style=\'font-size:12px;opacity:.75\'>Skipped leads stay in tomorrow&rsquo;s queue.</span></div></div>";'
+    +     'addLog("done","batch","text batch finished — "+TBSENT+" sent, "+TBSKIP+" skipped");'
+    +     'renderTextQ();'
     +   '}'
     // OPEN FROM THIS TAB, VERIFY IT ACTUALLY OPENED. The old flow posted to the board tab and let
     // IT call window.open — but the user's click happened HERE, so the board tab had no user
@@ -10338,11 +10447,14 @@ function genMorningWorker(lane){
     +         'post("sent", {mid:"", via:"manual-confirmed", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
     +         'addLog("sent", r.first||r.owner, "✓ confirmed sent by hand via Gmail");'
     +       '}'
+    // inside the text batch the "next lead" is the next BATCH entry, not the main queue.
+    +       'if(tbOn){ TBSENT++; TBI++; return textBatchStep(); }'
     +       'advance();'
     +     '};'
     +     'var no=document.getElementById("mwsentno");'
     +     'if(no) no.onclick=function(){'
     +       'addLog("skip", r.first||r.owner, "not sent — stays in the queue for tomorrow");'
+    +       'if(tbOn){ TBSKIP++; TBI++; return textBatchStep(); }'
     +       'advance();'
     +     '};'
     +   '}'
@@ -10461,8 +10573,15 @@ function genMorningWorker(lane){
     // captures it, so we never lose the lead. Advance immediately — there is no send to wait on.
     +     'if(step.k==="callq"){'
     +       'try{ post("callq"); }catch(e){}'
-    +       'callQAdd(r);'
-    +       'addLog("callq", r.first||r.owner, "&#9742; phone only — no email to auto-send. Added to the Call list (not capped). Nothing was sent.");'
+    // textable (smsHref baked, so DNC/landline/opt-out already excluded) -> TEXT BATCH; otherwise
+    // dial-only. Either way NOTHING is sent here and nothing is retired.
+    +       'if(r.smsHref){'
+    +         'textQAdd(r);'
+    +         'addLog("callq", r.first||r.owner, "&#128241; phone only — queued to the TEXT BATCH (pre-filled, you press send at the end). Nothing sent yet.");'
+    +       '} else {'
+    +         'callQAdd(r);'
+    +         'addLog("callq", r.first||r.owner, "&#9742; phone only, not textable (DNC/landline) — added to the Call list (never capped). Nothing was sent.");'
+    +       '}'
     +       'return advance();'
     +     '}'
     // unknown channel — never fake a send; skip honestly.
@@ -10538,6 +10657,12 @@ function genMorningWorker(lane){
     // Calls and DELIVERED emails lead the summary — those are the two numbers that mean work
     // happened. "Email" here is attempts, shown small, because an attempt is not an outcome.
     +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'>Worked <b>"+Q.length+"</b> leads<br>&#128222; Calls <b>"+(STATS.call||0)+"</b> · &#9993; Delivered <b>"+(STATS.sent||0)+"</b> · Text <b>"+(STATS.text||0)+"</b><br><span style=\'font-size:12px;opacity:.75\'>attempts "+(STATS.email||0)+" · lookups "+(STATS.wp||0)+" · skipped "+(STATS.skip||0)+"</span></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
+    // queue done → if texts were batched, offer the station right here (the panels below survive
+    // this render because it only rewrites #mwmain).
+    +       'if(TEXTQ.length && !tbOn){'
+    +         'main.innerHTML+="<div style=\'text-align:center;margin-top:6px\'><button id=\'mwdonetext\' class=\'mwbtn text\' style=\'width:100%\'>&#128241; Start text batch ("+TEXTQ.length+")<span class=\'sub\'>pre-filled &middot; you press send &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</span></button></div>";'
+    +         'var dtb=document.getElementById("mwdonetext"); if(dtb) dtb.onclick=textBatchStart;'
+    +       '}'
     +       'prog.textContent=Q.length+" of "+Q.length+" &#x2713;"; renderLog(); return;'
     +     '}'
     +     'var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length;'
@@ -10581,6 +10706,30 @@ function genMorningWorker(lane){
     +       '+"</div>"'
     +       '+"</div>";'
     +   '}'
+    // PANEL CLICKS (text-batch + queue rows). These live OUTSIDE #mwmain and are not .mwbtn, so
+    // they need their own delegate. The first cut shipped the panel Text link as a bare <a href=sms:>
+    // which bypassed the hours gate, the textopen log and confirmSend entirely — the one text path
+    // that dodged the whole 2026-08-02 honesty rework. Everything routes through the gate now.
+    +   'document.addEventListener("click", function(e){'
+    +     'var go=e.target.closest&&e.target.closest("#mwtextqgo");'
+    +     'if(go){ e.preventDefault(); return textBatchStart(); }'
+    +     'var tb=e.target.closest&&e.target.closest("[data-qtext]");'
+    +     'if(tb){'
+    +       'e.preventDefault();'
+    +       'var xc=tb.getAttribute("data-qtext"), x=null;'
+    +       'TEXTQ.forEach(function(y){ if(String(y.c)===String(xc)) x=y; });'
+    +       'if(!x) return;'
+    +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "&#9200; "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
+    +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "&#9940; daily cap reached — keep calling instead.", "warn"); return; }'
+    +       'openHere(x.sms); post("textopen");'
+    +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
+    +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
+    +       'return;'
+    +     '}'
+    // the panel Call links stay plain tel: anchors (calls are never capped) — just log the breadcrumb.
+    +     'var qc=e.target.closest&&e.target.closest("[data-qcall]");'
+    +     'if(qc){ addLog("call", qc.getAttribute("data-qcall")||"lead", "dialer opened from the queue panel"); return; }'
+    +   '});'
     +   'document.addEventListener("click", function(e){'
     +     'var b=e.target.closest(".mwbtn"); if(!b||b.classList.contains("disabled"))return;'
     +     'var fn=b.dataset.fn; if(!fn)return; var r=Q[i]; if(!r)return;'
