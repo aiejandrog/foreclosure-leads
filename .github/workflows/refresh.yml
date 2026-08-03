@@ -135,6 +135,7 @@ jobs:
             comps.json
             property_types_cache.json
             listing_status_cache.json
+            redfin_cache.json
             health.json
             full.json
           # v8 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
@@ -147,9 +148,10 @@ jobs:
           # resolver caches (lp_addresses.json, _lp_pagis_cache.json, _lp_values_cache.json) so the
           # parcel roll is not re-queried cold every morning; v4 added replies.json so a day with no
           # new reply keeps yesterday's rather than blanking the Reply Inbox.
+          # v8 -> v9 (2026-08-02): added redfin_cache.json (Redfin Estimate sidecar).
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v8-${{ github.run_id }}
-          restore-keys: dealflow-state-v8-
+          key: dealflow-state-v9-${{ github.run_id }}
+          restore-keys: dealflow-state-v9-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -359,6 +361,15 @@ jobs:
         continue-on-error: true
         run: python listing_status.py --limit 120
 
+      # ---- [3d2/5] Redfin Estimate (advisory AVM cross-check) -------------------------------------
+      # BEST-EFFORT in the cloud: Redfin, like Zillow (see the photo_seed note in foreclosure_leads.py),
+      # will likely block this datacenter IP — that's fine. Failures are never cached, so a blocked
+      # cloud run costs nothing; the real fetching happens in the LOCAL nightly (residential IP,
+      # refresh-dealflow.bat) and its 21-day cache — restored below — still bakes the values here.
+      - name: '[3d2/5] Redfin Estimate (advisory)'
+        continue-on-error: true
+        run: python redfin_value.py --limit 100
+
       # ---- [3e/5] Sale-history survival count (the REAL staller signal, Miami-Dade docket) --------
       # Counts how many scheduled foreclosure sales each owner has already dodged (cancelled/reset),
       # straight from the MD Clerk OCS docket — free, same endpoint the clerk-enrich already hits.
@@ -473,9 +484,10 @@ jobs:
             comps.json
             property_types_cache.json
             listing_status_cache.json
+            redfin_cache.json
             health.json
             full.json
-          key: dealflow-state-v8-${{ github.run_id }}
+          key: dealflow-state-v9-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the

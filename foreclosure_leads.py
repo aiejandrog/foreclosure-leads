@@ -1105,6 +1105,9 @@ def make_tracker(leads):
             # asking price + days-on-Zillow. County rows pass through via slim.extend; MD needs
             # the explicit copy just like dor_desc/photos.
             'zstatus': r.get('zstatus',''), 'zprice': r.get('zprice',0) or 0, 'zdoz': r.get('zdoz',0) or 0,
+            # Zillow Zestimate (AVM, listing_status.py) — advisory value cross-check, never drives
+            # the math. Same MD-explicit-copy rule as zstatus; county rows re-stamp from cache.
+            'zest': r.get('zest',0) or 0,
             'condo': bool(re.search(r'CONDO', str(r.get('dor_desc','') or ''), re.I)),
             # VACANT LAND (no homeowner + speculative land value) and COMPANY-OWNED — systematic
             # false-positives for the homeowner-rescue model; badged in the UI so a big-equity vacant
@@ -1457,6 +1460,28 @@ def make_tracker(leads):
         except Exception as e:
             print(f"county_taxes.json skipped ({e})")
 
+    # Redfin Estimate (redfin_value.py) — advisory second-opinion value, folio-keyed post-pass.
+    # A PURE sidecar merge: rfval/rfurl/rfchk never touch the lead files, so they can't be lost by
+    # the MD rebuild or the county slim.extend. Only apply a real, address-matched estimate
+    # (v>0 and conf in ok/addr); nomatch/zero entries are skipped so the row stays clean. Advisory
+    # only — nothing here feeds val/_valsrc/_profit (see tracker_template.html r._valx).
+    _rff = os.path.join(HERE, 'redfin_cache.json')
+    if os.path.exists(_rff):
+        try:
+            _rf = json.load(open(_rff, encoding='utf-8')); _rfn = 0
+            for _r in slim:
+                _f = re.sub(r'\D', '', str(_r.get('folio') or ''))
+                _h = _rf.get(_f)
+                if _h and int(_h.get('v') or 0) > 0 and _h.get('conf') in ('ok', 'addr'):
+                    _r['rfval'] = int(_h['v'])
+                    _r['rfurl'] = _h.get('url', '')
+                    _r['rfchk'] = time.strftime('%Y-%m-%d', time.localtime(_h.get('t') or 0))
+                    _rfn += 1
+            if _rfn:
+                print(f"redfin: {_rfn} lead(s) carry a Redfin Estimate")
+        except Exception as e:
+            print(f"redfin_cache.json skipped ({e})")
+
     # bake lat/lng from geocode_cache.json (geo_enrich.py, keyless US Census) so the board's origin-
     # anchored door route can sort deals by REAL distance and expand outward from home.
     _gcf = os.path.join(HERE, 'geocode_cache.json')
@@ -1769,6 +1794,8 @@ def make_tracker(leads):
         'liens':  sum(1 for d in slim if d.get('orconf') and d.get('orconf') != 'none'),
         'wp':     sum(1 for d in slim if d.get('wpKey') == 'ok'),
         'arv':    sum(1 for d in slim if d.get('arv')),
+        'rfval':  sum(1 for d in slim if d.get('rfval')),
+        'zest':   sum(1 for d in slim if d.get('zest')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
     if codes:
