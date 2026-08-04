@@ -1486,6 +1486,59 @@ def make_tracker(leads):
             _rcchg += 1
     print(f"days re-clocked: {_rcn} dated rows, {_rcchg} corrected")
 
+    # ---- ACCRUE POST-JUDGMENT INTEREST ---------------------------------------------------------
+    # Same class of bug as the stale `days` above, but it costs REAL MONEY instead of a wrong
+    # countdown. The county publishes the judgment AMOUNT, which is frozen at entry; what a payoff
+    # actually costs on sale day is that amount plus post-judgment interest (FS 55.03), which runs
+    # at the rate the FJ recites and RE-ADJUSTS every January 1. On 1212 NE 91 ST the board read
+    # "$599,980 equity" from a judgment entered 12/04/2024 — by the 09/02/2026 sale the true payoff
+    # is ~$1.35M and the real equity ~$416k. A $184k overstatement, on a number an operator says
+    # out loud to a homeowner.
+    # judgment_interest.py pulls the entry DATE off the Miami-Dade docket (the counties never
+    # publish it) into judgment_dates.json. NO DATE -> NO ACCRUAL, EVER: the row keeps its
+    # as-entered judgment and carries jaccrued=False so the board can label it honestly rather
+    # than invent a payoff. Broward/PB have no open docket API here, so they stay unaccrued.
+    try:
+        import judgment_interest as _JI
+        _jdates = _JI.load_cache()
+        _jn = _jskip = 0
+        _jsum = 0.0
+        for _r in slim:
+            _c = str(_r.get('case') or '').strip()
+            _amt = float(_r.get('judg') or 0)
+            _ent = (_jdates.get(_c) or {}).get('d') or ''
+            _jd = _JI._parse_date(_ent) if _ent else None
+            if _amt <= 0 or not _jd:
+                _r['jaccrued'] = False
+                if _amt > 0:
+                    _jskip += 1
+                continue
+            # accrue to the auction date; if the sale has no date yet, accrue to today (what a
+            # payoff would cost right now — the honest "as of" for an LP/undated lead).
+            _asof = None
+            _aucs = str(_r.get('auction') or '').strip()
+            if _aucs:
+                try:
+                    _asof = datetime.strptime(_aucs, '%m/%d/%Y').date()
+                except Exception:
+                    _asof = None
+            _asof = _asof or _today_rc
+            _acc = _JI.accrue(_amt, _jd, _asof, stated_rate=(_jdates.get(_c) or {}).get('rate'))
+            if _acc['interest'] <= 0:
+                _r['jaccrued'] = False
+                continue
+            _r['payoff'] = _acc['payoff']         # what it costs to satisfy on `asof`
+            _r['jaccr'] = _acc['interest']        # the interest alone (shown as a delta)
+            _r['jdate'] = _jd.isoformat()         # entry date, so the board can cite it
+            _r['jasof'] = _asof.isoformat()
+            _r['jaccrued'] = True
+            _jn += 1
+            _jsum += _acc['interest']
+        print(f"post-judgment interest: {_jn} row(s) accrued (+${_jsum:,.0f} total unseen debt), "
+              f"{_jskip} judgment(s) left as-entered (no verified entry date)")
+    except Exception as _e:
+        print(f"post-judgment interest: SKIPPED ({_e}) — judgments shown as entered")
+
     # Redfin Estimate (redfin_value.py) — advisory second-opinion value, folio-keyed post-pass.
     # A PURE sidecar merge: rfval/rfurl/rfchk never touch the lead files, so they can't be lost by
     # the MD rebuild or the county slim.extend. Only apply a real, address-matched estimate

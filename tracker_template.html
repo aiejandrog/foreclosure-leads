@@ -2583,6 +2583,23 @@ const fmtK = n => { n=+n||0; const s=n<0?'-':''; n=Math.abs(n); const k=Math.rou
 // including a deliberate 0 — from "never touched" (null/''). Shared by recompute() and the modal
 // so the math and the UI can never disagree about whose number is in play.
 function _dTyped(v){ return v != null && v !== ''; }
+/* ---- POST-JUDGMENT INTEREST helpers (FS 55.03) -------------------------------------------------
+   `payoff` is baked by foreclosure_leads.py ONLY when the judgment's entry date was verified on the
+   docket; otherwise it is absent and we fall back to the as-entered amount. Every money surface
+   should call _payoffOf() so the board can never show the frozen number in one place and the
+   accrued one in another — that inconsistency is worse than either number alone. */
+function _payoffOf(r){ return (+((r||{}).payoff) > 0) ? +r.payoff : (+((r||{}).judg) || 0); }
+function _isAccrued(r){ return !!((r||{}).jaccrued) && (+((r||{}).payoff) > 0); }
+function _accrNote(r, long){
+  if(!_isAccrued(r)) return (+((r||{}).judg) > 0 && long)
+    ? 'as entered — post-judgment interest not accrued (entry date unverified)' : '';
+  var d = String(r.jdate||'').split('-'), ent = d.length===3 ? (d[1]+'/'+d[2]+'/'+d[0]) : (r.jdate||'');
+  return long
+    ? ('judgment ' + fmtMoney(r.judg) + ' entered ' + ent + ' + ' + fmtMoney(r.jaccr)
+       + ' post-judgment interest (FS 55.03) = ' + fmtMoney(r.payoff) + ' to satisfy'
+       + (r.jasof ? ' on ' + r.jasof : ''))
+    : ('+' + fmtMoney(r.jaccr) + ' interest since ' + ent);
+}
 function recompute(){
   const bpRaw = (deal.buypct===''||deal.buypct==null||isNaN(+deal.buypct)) ? 75 : +deal.buypct;
   const buyPct = Math.max(0, bpRaw) / 100;                       // honor an explicit 0
@@ -2591,7 +2608,14 @@ function recompute(){
   const bidOver = Math.max(0, +deal.bidover || 0) / 100;        // tax-deed only
   const clearPct = Math.max(0, +deal.tdclear || 70) / 100;     // tax-deed: max you'd pay at auction as % of market (disciplined ceiling)
   DATA.forEach(r => {
-    const judg = r.judg||0;
+    /* WHAT IT COSTS TO PAY OFF, not what the judgment said the day it was signed.
+       A final judgment is a frozen snapshot; post-judgment interest (FS 55.03) keeps running at
+       the recited rate and resets every January 1 until it is paid. foreclosure_leads.py accrues
+       it at bake time from the docket's entry date and bakes `payoff` — so ONE substitution here
+       makes every downstream number (equity, cash, profit, verdict, call sheets) honest at once.
+       Rows with no verified entry date have no `payoff` and fall back to the as-entered amount;
+       `jaccrued` tells the UI which is which so it can label them instead of bluffing. */
+    const judg = (+r.payoff > 0) ? +r.payoff : (r.judg||0);
     // kimi: the value that drives the math. Florida's Save Our Homes cap suppresses the county
     // just/market value on long-held homesteads — 102 leads on this board have a comps-VERIFIED
     // ARV >=1.3x the capped county number (this one: capped $380k vs verified $579k), and every
@@ -3164,7 +3188,9 @@ function _debtSheetBody(r){
   if(r.st==='LP') return '';
   const nn=notes[r.case]||{};
   const fm = n => (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—';
-  const judg = +r.judg||0, surv = +r._slien||0, jr = +r._jlien||0;
+  // ACCRUED payoff, not the frozen judgment — same number recompute() uses, so the debt sheet the
+  // operator prints can never disagree with the equity the board showed him.
+  const judg = _payoffOf(r), surv = +r._slien||0, jr = +r._jlien||0;
   // r._assess / r._mlien already resolve autofill + the operator's typed value (a typed 0 wins), and
   // on an HOA-plaintiff case _assess is the NETTED figure (dues inside the judgment removed). The old
   // `|| raw` was a falsy-zero: it resurrected the raw scrape exactly when the resolved number was a
@@ -3181,7 +3207,10 @@ function _debtSheetBody(r){
   const row = (k, v) => '<div class="csrow"><span class="csk">'+k+'</span><span class="csvv">'+v+'</span></div>';
   let h='<div class="csbody">';
   h+=row(r.st==='TD'?'Tax collector / certificate':'Foreclosing lender', '<b>'+esc(r.plaintiff||'—')+'</b>');
-  h+=row(r.st==='TD'?'Amount due / opening':'Final judgment', '<b>'+fm(judg)+'</b>');
+  h+=row(r.st==='TD'?'Amount due / opening':(_isAccrued(r)?'Payoff (judgment + interest)':'Final judgment'),
+         '<b>'+fm(judg)+'</b>'+(_isAccrued(r)
+           ? '<div class="mut" style="font-weight:400;font-size:11px;margin-top:2px">'+esc(_accrNote(r,true))+'</div>'
+           : ''));
   if(r.st!=='TD' && surv) h+=row('Surviving senior mortgage', '<b class="bad">'+fm(surv)+'</b> — '+trust);
   if(r.st!=='TD' && jr) h+=row('Junior / 2nd', fm(jr)+' — payoff only if you buy direct');
   if(hoa) h+=row('HOA / association', fm(hoa));
@@ -4292,7 +4321,9 @@ function _callSheet(r){
 }
 function _csLeadDiligenceStub(r){
   // Instant Capri-style numbers from the board lead — never leave the table blank while API runs.
-  const judg = +r.judg || 0;
+  // Accrued payoff: this stub feeds the CALL SHEET, i.e. the equity figure that gets said out loud
+  // to an owner. The frozen judgment overstates it by every month since entry.
+  const judg = _payoffOf(r);
   const value = +r.value || 0;
   const sale = r.auction || '';
   const net = value ? Math.round(value - judg) : null;
@@ -4330,7 +4361,7 @@ function _csLeadDiligenceStub(r){
 }
 function _csPatchDiligenceFromLead(d, r){
   if(!d || !r) return d;
-  const judg = +r.judg || 0;
+  const judg = _payoffOf(r);   // accrued — see _csLeadDiligenceStub
   const value = +r.value || 0;
   const sale = r.auction || '';
   if(judg && !(+d.judgment)) d.judgment = judg;
