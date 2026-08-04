@@ -147,6 +147,9 @@ def main():
     ap.add_argument('--refresh', action='store_true')
     ap.add_argument('--report', action='store_true')
     ap.add_argument('--limit', type=int, default=200)
+    ap.add_argument('--mature-days', type=int, default=21,
+                    help='wait this long after a sale before looking for the certificate of title '
+                         '(observed: 20 days on the Martin condo)')
     a = ap.parse_args()
 
     cache = load_cache()
@@ -156,20 +159,39 @@ def main():
 
     today = datetime.date.today()
     cut = today - datetime.timedelta(days=a.days)
-    board = _load_board()
     targets = []
-    for r in board:
-        dt = _d(r.get('auction'))
-        case = (r.get('case') or '').strip()
-        if not dt or not case or not re.search(r'-(CA|CC)-', case):
+
+    # ARCHIVE FIRST. The board sheds a property the moment it sells, so sourcing targets from it
+    # capped this tool at "sales still visible today" — 15 of an entire summer on 2026-08-04.
+    # auction_archive.py remembers every sale we ever watched, which is what lets the buyer list
+    # build itself over time instead of being re-derived from a shrinking window.
+    try:
+        import auction_archive
+        arc = auction_archive.load()
+    except Exception:
+        arc = {}
+    for case, v in arc.items():
+        dt = _d(v.get('auction'))
+        if not dt or not re.search(r'-(CA|CC)-', case):
             continue
-        if cut <= dt < today:
-            targets.append(r)
+        # Only cases whose certificate of title has had time to issue (Martin: sale 05/27 ->
+        # cert 06/16, twenty days). Checking sooner caches a false "no buyer".
+        if cut <= dt <= (today - datetime.timedelta(days=a.mature_days)):
+            targets.append({'case': case, 'auction': v.get('auction'), 'addr': v.get('addr'),
+                            'value': v.get('value'), 'judg': v.get('judg')})
+    if not targets:      # archive not seeded yet — fall back to whatever the board still shows
+        for r in _load_board():
+            dt = _d(r.get('auction'))
+            case = (r.get('case') or '').strip()
+            if dt and case and re.search(r'-(CA|CC)-', case) \
+                    and cut <= dt <= (today - datetime.timedelta(days=a.mature_days)):
+                targets.append(r)
     if not a.refresh:
         targets = [r for r in targets if r.get('case') not in cache]
     targets = targets[:a.limit]
-    print(f'{len(targets)} past-auction Miami-Dade case(s) to check '
-          f'(window {cut} .. {today})')
+    print(f'{len(targets)} matured past-auction case(s) to check '
+          f'(sold {cut} .. {today - datetime.timedelta(days=a.mature_days)}; '
+          f'archive holds {len(arc)})')
 
     s = requests.Session()
     found = 0
