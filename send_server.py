@@ -172,6 +172,23 @@ def _sent_today_count():
                if e.get('ch') == 'email' and str(e.get('d') or '') == today)
 
 
+def _recipients_today():
+    """Gmail meters RECIPIENTS, not messages — and BCC fans one send out to ~2.7 of them.
+
+    At a 150-message cap that is ~400 recipients on an average day, but a day weighted toward
+    six-address leads crosses Gmail's 500/day ceiling. Crossing it does not fail politely: the
+    server starts rejecting mid-run and can temporarily lock the account, which takes EVERY lead
+    on the board dark, not just the ones left in the queue. So the cap is enforced on both axes
+    and whichever binds first wins."""
+    today = dt.date.today().isoformat()
+    n = 0
+    for e in _load_ledger():
+        if e.get('ch') != 'email' or str(e.get('d') or '') != today:
+            continue
+        n += 1 + len([a for a in str(e.get('bcc') or '').split(',') if a.strip()])
+    return n
+
+
 def _recently_emailed_to(addr, hours=24):
     if not addr:
         return False
@@ -219,7 +236,8 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc=''):
 # ---------------------------------------------------------------- HTTP handler
 class Handler(BaseHTTPRequestHandler):
     server_version = 'DealFlowSend/1.0'
-    daily_cap = 50
+    daily_cap = 150          # messages/day (operator-set 2026-08-04)
+    recipient_cap = 450      # addresses/day — safety margin under Gmail's 500
 
     def log_message(self, fmt, *args):
         """Terse one-line per request in the terminal, no HTTP boilerplate.
@@ -266,6 +284,8 @@ class Handler(BaseHTTPRequestHandler):
                 'has_password': bool(pw),
                 'sent_today': _sent_today_count(),
                 'cap': self.daily_cap,
+                'recipients_today': _recipients_today(),
+                'recipient_cap': self.recipient_cap,
                 'ready': bool(user and pw),
             })
         else:
@@ -328,6 +348,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {'ok': False, 'err': 'subj and body required'})
 
         # ---- daily cap ----
+        rcpt = _recipients_today()
+        if rcpt >= self.recipient_cap:
+            return self._json(429, {
+                'ok': False,
+                'err': (f'daily RECIPIENT cap reached ({rcpt}/{self.recipient_cap}) — '
+                        f'BCC fan-out counts toward the 500/day Gmail limit'),
+                'sent_today': _sent_today_count(), 'cap': self.daily_cap,
+                'recipients_today': rcpt, 'recipient_cap': self.recipient_cap})
         n = _sent_today_count()
         if n >= self.daily_cap:
             return self._json(429, {
@@ -370,7 +398,10 @@ class Handler(BaseHTTPRequestHandler):
             'd': dt.date.today().isoformat(),
             'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
             'ch': 'email',
-            'from': user, 'to': to,
+            # bcc is recorded because _recipients_today() meters Gmail's real limit off it.
+            # Without it every multi-address send would count as one recipient and the ceiling
+            # would never bind — the exact failure the ceiling exists to prevent.
+            'from': user, 'to': to, 'bcc': bcc,
             'owner': meta.get('owner') or '',
             'case': meta.get('c') or '',
             'addr': meta.get('addr') or '',
@@ -394,8 +425,12 @@ def main():
     ap.add_argument('--host', default='127.0.0.1',
                     help='bind address (default 127.0.0.1 — DO NOT change unless you know why)')
     ap.add_argument('--port', type=int, default=8823)
-    ap.add_argument('--limit', type=int, default=50,
-                    help='daily send cap (default 50; Gmail cold-mail practical ceiling)')
+    # NOTE: this default SILENTLY OVERRODE Handler.daily_cap — raising the class attribute alone
+    # did nothing because main() always reassigns from args. Keep the two in sync.
+    ap.add_argument('--limit', type=int, default=Handler.daily_cap,
+                    help=f'daily MESSAGE cap (default {Handler.daily_cap}). A separate '
+                         f'{Handler.recipient_cap}-RECIPIENT ceiling also applies, because BCC '
+                         f'fan-out is what Gmail actually meters.')
     args = ap.parse_args()
 
     Handler.daily_cap = args.limit

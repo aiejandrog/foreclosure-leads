@@ -9752,7 +9752,10 @@ function openProofSheet(scope){ return _openDoc(genProofSheet(scope||'today')); 
    composer-opens and even pre-flight "trying bridge..." log lines. A single real send burned two
    of the fifty, and fifty opened-but-unsent composers announced "you have sent 50 today" having
    sent none. 'sent' is written only on a bridge 200 or an explicit operator confirmation. --- */
-var DAILY_WARN = 40, DAILY_MAX = 50;
+// Operator-set 2026-08-04: 150 messages/day. send_server enforces the real ceiling on BOTH
+// axes — 150 messages AND 450 recipients — because BCC fans one send out to ~2.7 addresses
+// and Gmail meters recipients, not messages. This board number is the message axis.
+var DAILY_WARN = 120, DAILY_MAX = 150;
 function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||0); }
 function _capState(){
   var n = _sentTodayCount();
