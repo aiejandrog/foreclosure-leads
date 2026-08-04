@@ -9955,7 +9955,11 @@ function _cardMail(r){
     composer();
     var LE = window.__lastEmail;
     if(!LE || LE.c !== r.case) return EMPTY;
-    var to = LE.to || (r.emails||[])[0] || '';
+    // FALLBACK MUST RESPECT THE ALLOWLIST. This read `(r.emails||[])[0]` — the raw, unfiltered
+    // first address — so a lead whose ONLY address was a work mailbox still produced a send
+    // payload. Measured: 4 leads leaked, incl. darin.mcmurray@lennar.com, i.e. a foreclosure
+    // notice addressed to a homeowner's employer. No sendable address means NO EMAIL.
+    var to = LE.to || _mailableList(r)[0] || '';
     return {
       to: to, bcc: LE.bcc || '', subj: LE.subj || '', body: LE.body || '',
       gurl: 'https://mail.google.com/mail/?view=cm&fs=1'
@@ -10451,7 +10455,9 @@ function genMorningWorker(lane, autostart){
     // bridge code tried anyway, threw ReferenceError into a silent catch, and every send in the
     // product's history fell through to the Gmail-compose branch below.
     +     'var subj = r.mailSubj || "", body = r.mailBody || "";'
-    +     'var to   = r.mailTo || (r.emails||[])[0] || "";'
+    // Card-baked address only. The old `|| r.emails[0]` fallback re-introduced filtered
+    // addresses inside the worker, where nobody is watching. No mailTo means no send.
+    +     'var to   = r.mailTo || "";'
     +     'var bcc  = r.mailBcc || "";'
     +     'if(!subj || !body || !to){'
     +       'if(openHere(r.gurl)){ post("email"); confirmSend(r, "no composed payload on this card — Gmail compose opened"); }'
@@ -11737,6 +11743,52 @@ function genScript(r){
 }
 // ---- per-lead OUTREACH EMAIL: one generic foreclosure email, auto-filled per prospect so each reads
 //      personal. Opens pre-addressed to the owner's skip-traced email (EN/ES), or Copy to paste. ----
+/* ---- MAILABLE-DOMAIN ALLOWLIST -----------------------------------------------------------------
+   Skiptrace returns whatever it can find attached to a person, and a meaningful slice of that is
+   not a personal mailbox at all. Measured across the 1,171 addresses on this board, 81 (6.9%) fall
+   into three buckets we must never auto-send to:
+
+     1. EMPLOYER / WORK addresses — darin.mcmurray@lennar.com, someone@ncl.com, @nautiluslegal.com,
+        @barucapital.com, @broward.org, @fsu.edu. Emailing a homeowner's WORK account about their
+        foreclosure routes the message through their employer's mail server and can disclose their
+        financial distress to their boss. Same reasoning that put the other addresses in BCC.
+     2. DEAD PROVIDERS — webtv.net (shut 2013), collegeclub.com, altavista.com, excite.com,
+        adelphia.net, gateway.net, aattbi.com. These hard-bounce, and bounce rate is the single
+        biggest input to sender reputation. Enough of them and Gmail throttles the whole account.
+     3. SKIPTRACE JUNK — ameritrade.com is a brokerage, not a mailbox; media.net, claria.us,
+        address.com are noise the data vendor attached to the wrong human.
+
+   ALLOWLIST rather than blocklist on purpose: a new junk domain appears every scrape, but the set
+   of real consumer mailbox providers barely changes. Unknown = not sent. The addresses stay VISIBLE
+   on the card and in the modal so the operator can still use them by hand — this governs only what
+   the machine sends unattended. A lead whose every address is filtered simply has no email and
+   routes to the Call list, which is the honest outcome.
+   ISP/legacy domains are deliberately included: this demographic runs on aol, bellsouth and att. */
+var MAILABLE_DOMAINS = {
+  'gmail.com':1,'googlemail.com':1,'yahoo.com':1,'ymail.com':1,'rocketmail.com':1,'yahoo.co.uk':1,
+  'yahoo.es':1,'yahoo.fr':1,'yahoo.ca':1,'yahoo.com.mx':1,'hotmail.com':1,'hotmail.es':1,
+  'hotmail.fr':1,'hotmail.co.uk':1,'outlook.com':1,'outlook.es':1,'live.com':1,'live.com.mx':1,
+  'msn.com':1,'aol.com':1,'aim.com':1,'icloud.com':1,'me.com':1,'mac.com':1,'protonmail.com':1,
+  'proton.me':1,'gmx.com':1,'gmx.net':1,'zoho.com':1,'fastmail.com':1,'mail.com':1,'hushmail.com':1,
+  'yandex.com':1,
+  'comcast.net':1,'bellsouth.net':1,'att.net':1,'sbcglobal.net':1,'verizon.net':1,'charter.net':1,
+  'cox.net':1,'earthlink.net':1,'juno.com':1,'netzero.net':1,'netscape.net':1,'prodigy.net':1,
+  'roadrunner.com':1,'gte.net':1,'alltel.net':1,'flash.net':1,'centurylink.net':1,'centurytel.net':1,
+  'qwest.net':1,'uswest.net':1,'ameritech.net':1,'mchsi.com':1,'insightbb.com':1,'peoplepc.com':1,
+  'localnet.com':1,'bright.net':1,'cs.com':1,'optonline.net':1,'optimum.net':1,'frontier.com':1,
+  'windstream.net':1,'embarqmail.com':1,'suddenlink.net':1,'mediacombb.net':1,'ptd.net':1,
+  'snet.net':1,'pacbell.net':1,'swbell.net':1,'bell.net':1,'shaw.ca':1,'telus.net':1,
+  'sympatico.ca':1,'rogers.com':1
+};
+function _mailable(addr){
+  var a = String(addr||'').trim().toLowerCase();
+  if(a.indexOf('@') < 1) return false;
+  var d = a.split('@').pop();
+  // Road Runner is regional (tampabay.rr.com, hawaii.rr.com, cfl.rr.com...) — allow the whole family.
+  return !!MAILABLE_DOMAINS[d] || /\.rr\.com$/.test(d);
+}
+function _mailableList(r){ return ((r&&r.emails)||[]).filter(_mailable); }
+
 function genEmail(r, quiet){
   const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
   const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
@@ -11762,7 +11814,10 @@ function genEmail(r, quiet){
      foreclosure. That is someone's private financial distress, disclosed by us, in writing.
      smtplib's send_message() delivers to Bcc recipients and strips the header, so nobody sees
      anyone else. */
-  const emails = (r.emails||[]).slice(0, 6);
+  // Allowlisted mailboxes only — see MAILABLE_DOMAINS. Work addresses, dead providers and
+  // skiptrace junk never receive an auto-send; they stay visible on the card for manual use.
+  const emails = _mailableList(r).slice(0, 6);
+  const emailsFiltered = ((r.emails||[]).length - _mailableList(r).length);
   const to = emails[0] || '';
   const bcc = emails.slice(1).join(', ');
   // professional signature block (blank fields skipped)
@@ -11829,9 +11884,19 @@ function genEmail(r, quiet){
                               subj:D.en.subj, body:D.en.body,
                               subjES:D.es.subj, bodyES:D.es.body, stage:stage, at:Date.now()}; } catch(e){}
   const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
-  const recip = emails.length
-    ? emails.map((e,i)=>'<a href="mailto:'+esc(e)+'"'+(i===0?' class="primary"':'')+'>'+esc(e)+'</a>').join(' ') + (emails.length>1?' <span class="mut">(first = primary)</span>':'')
-    : '<span class="warn">No email on file — use <b>Copy email</b> and paste it, or find one via the People link.</span>';
+  // Show the held-back addresses rather than hiding them: the operator may still want to use a work
+  // address by hand, and a silent filter looks like missing data.
+  const _held = ((r.emails||[]).filter(function(e){ return !_mailable(e); }));
+  const heldNote = _held.length
+    ? '<div class="hint">' + _held.length + ' address' + (_held.length>1?'es':'') + ' held back from '
+      + 'auto-send (work address, dead provider or unrecognised domain): '
+      + _held.map(function(e){ return '<span class="mut">'+esc(e)+'</span>'; }).join(', ')
+      + ' — use by hand if you know it is good.</div>'
+    : '';
+  const recip = (emails.length
+    ? emails.map((e,i)=>'<a href="mailto:'+esc(e)+'"'+(i===0?' class="primary"':'')+'>'+esc(e)+'</a>').join(' ') + (emails.length>1?' <span class="mut">(first = To, rest BCC)</span>':'')
+    : '<span class="warn">No sendable email on file — use <b>Copy email</b> and paste it, or find one via the People link.</span>')
+    + heldNote;
   const compHint = sA ? '' : '<div class="hint warn">Add your mailing address under <b>Filters &amp; setup → Sender</b> so the email is CAN-SPAM compliant.</div>';
   const CSS = `body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:680px;margin:0 auto;padding:0 20px 50px;color:#12203a;font-size:15px;line-height:1.5}
   .bar{background:#0e1b33;padding:10px 14px;margin:0 -20px 20px;display:flex;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:5}
@@ -11897,7 +11962,7 @@ function genPortfolioEmail(r, siblings, quiet){
       sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
   var owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   var first = _firstName(owner);
-  var emails = (r.emails||[]).slice(0, 6);
+  var emails = _mailableList(r).slice(0, 6);   // allowlisted mailboxes only — see genEmail
   // every address on file, BCC'd — see the privacy note in genEmail
   var to = emails[0] || '';
   var bcc = emails.slice(1).join(', ');
