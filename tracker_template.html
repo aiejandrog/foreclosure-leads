@@ -14304,7 +14304,30 @@ async function boot(){
   // Opened BY the 8am Windows task -> auto-start the run (countdown + cancel inside the worker).
   // A human clicking the toolbar button still gets the manual Start, which is the right default:
   // only the scheduler's deep link implies "nobody is here, go".
-  if(/worker=morning/.test(location.hash||'')) setTimeout(function(){ try{ openMorningWorker('urgent', true); }catch(e){} }, 500);
+  /* ONE AUTO-START PER DAY, AND THE HASH MUST NOT SURVIVE THE LOAD.
+     The 8am task opens Chrome at ...#worker=morning and that hash STAYS in the address bar. Before
+     auto-start existed the deep link merely opened the worker, which was harmless. Once it also
+     began sending, every reload of that tab re-armed a live run — measured 2026-08-04: a reload
+     during debugging fired a second unattended run and put ~27 additional cold emails on real
+     homeowners before anyone realised the tab was the trigger.
+     Two independent guards, because one is not enough for something irreversible:
+       1. strip the hash the moment it is consumed, so a refresh cannot replay it;
+       2. a per-DAY key, so even a fresh tab opened at the same URL will not auto-send twice.
+     A human can always still press "Start auto-run" — this only governs the unattended path. */
+  if(/worker=morning/.test(location.hash||'')){
+    var _asKey = 'dealflow_autostart_' + new Date().toISOString().slice(0,10);
+    var _already = false;
+    try { _already = !!localStorage.getItem(_asKey); } catch(e){}
+    try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
+    if(_already){
+      // Opened again the same day: show the worker, but never auto-send. Say why, out loud.
+      setTimeout(function(){ try{ openMorningWorker('urgent', false); }catch(e){} }, 500);
+      try { console.info('[dealflow] auto-run already ran today — worker opened in MANUAL mode.'); } catch(e){}
+    } else {
+      try { localStorage.setItem(_asKey, String(Date.now())); } catch(e){}
+      setTimeout(function(){ try{ openMorningWorker('urgent', true); }catch(e){} }, 500);
+    }
+  }
   if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
   // push the full localStorage state (notes + worker log + sent archive) to the local disk
   // bridge shortly after boot — so opening the board is enough to back up the call history,
