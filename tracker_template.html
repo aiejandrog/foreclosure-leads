@@ -9954,7 +9954,7 @@ function _cardMail(r){
     if(!LE || LE.c !== r.case) return EMPTY;
     var to = LE.to || (r.emails||[])[0] || '';
     return {
-      to: to, subj: LE.subj || '', body: LE.body || '',
+      to: to, bcc: LE.bcc || '', subj: LE.subj || '', body: LE.body || '',
       gurl: 'https://mail.google.com/mail/?view=cm&fs=1'
           + '&to=' + encodeURIComponent(to)
           + '&su=' + encodeURIComponent(LE.subj || '')
@@ -10004,7 +10004,7 @@ function _workerCard(r){
        it shipped — which is exactly why the ledger recorded zero worker sends.
        Compose ONCE here, carry the result on the card: gurl for the manual Gmail path, subj/body
        for the bridge payload. Both come from the same __lastEmail, so they cannot drift. */
-    gurl: M.gurl, mailTo: M.to, mailSubj: M.subj, mailBody: M.body, mailWhy: M.mailWhy || '',
+    gurl: M.gurl, mailTo: M.to, mailBcc: M.bcc || '', mailSubj: M.subj, mailBody: M.body, mailWhy: M.mailWhy || '',
     // Portfolio metadata — populated by _workerQueue when one contact appears on N leads. The
     // worker tab shows a "PORTFOLIO OWNER (N properties)" chip so the operator sees, before
     // clicking, that this one Gmail compose is going to cover a stack of parcels.
@@ -10018,7 +10018,7 @@ function _workerCard(r){
     prior: _wlogContacted(r.case)   // "have I reached this person before?" — shown on the card
   };
 }
-function genMorningWorker(lane){
+function genMorningWorker(lane, autostart){
   lane = lane || 'urgent';
   var cap = _capState();
   var laneMeta = WORKER_LANES[lane] || WORKER_LANES.urgent;
@@ -10207,6 +10207,7 @@ function genMorningWorker(lane){
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var lane=' + JSON.stringify(lane) + ', Q=LANES[lane]||[];'
     +   'var CAP=' + JSON.stringify(cap) + ', LSTAT=' + JSON.stringify(laneStats) + ';'
+    +   'var AUTOSTART=' + (autostart ? 'true' : 'false') + ';'
     // FTSA state is baked in at doc-open time BUT re-evaluated every render, so someone who opens
     // the worker at 7:55 AM crosses into the safe window without a page reload.
     +   'function _wftsa(){var h=new Date().getHours();var safe=h>=8&&h<20;'
@@ -10448,12 +10449,13 @@ function genMorningWorker(lane){
     // product's history fell through to the Gmail-compose branch below.
     +     'var subj = r.mailSubj || "", body = r.mailBody || "";'
     +     'var to   = r.mailTo || (r.emails||[])[0] || "";'
+    +     'var bcc  = r.mailBcc || "";'
     +     'if(!subj || !body || !to){'
     +       'if(openHere(r.gurl)){ post("email"); confirmSend(r, "no composed payload on this card — Gmail compose opened"); }'
     +       'else { addLog("fail", r.first||r.owner, "Gmail window did not open — check the popup blocker icon", "warn"); advance(); }'
     +       'return;'
     +     '}'
-    +     'var payload = {to:to, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
+    +     'var payload = {to:to, bcc:bcc, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
     // NOTE: no pre-flight log line here. There used to be an addLog("email","trying bridge...")
     // before the fetch, and because addLog increments STATS[kind], a single successful send
     // charged the 50/day cap TWICE — effective ceiling 25 — and every failed attempt still
@@ -10850,13 +10852,46 @@ function genMorningWorker(lane){
     +     'if(fn==="done"){ post("done"); addLog("done", r.first||r.owner, "marked worked"); return advance(); }'
     +   '});'
     +   'renderBridge(); probeBridge(); renderLog(); render();'
+    /* ---- UNATTENDED START (Windows Task Scheduler opens this at 8:00 AM) ---------------------
+       The 8am task opened the worker and then nothing happened until a human clicked "Start
+       auto-run" — so on any morning Alejandro was driving, the queue simply sat there.
+       Auto-start closes that gap, with three guards, because this actually sends email:
+         - a visible COUNTDOWN with a cancel button. Never begin sending on a page the operator
+           may have opened by accident; they get a real chance to stop it.
+         - hours gate (_wftsa). CAN-SPAM does not restrict email hours, but auto-run also parks
+           text/call work, and a machine that starts outreach at 3am is one config slip from an
+           FTSA problem. Refuse outside the safe window and say so.
+         - cap + empty-queue check, so it never starts work it cannot finish.
+       The 50/day cap, opt-out ledger and per-lead cooldown all still apply inside the run. */
+    +   'if(AUTOSTART && Q.length){'
+    +     '(function(){'
+    +       'var g=_wftsa();'
+    +       'if(!g.safe){ addLog("fail","auto-start","&#9200; "+g.label+" — auto-run NOT started. Open it inside calling hours.","warn"); return; }'
+    +       'if(sentToday()>=CAP.max){ addLog("fail","auto-start","&#9940; daily cap already reached — nothing to auto-run.","warn"); return; }'
+    +       'var left=20, box=document.createElement("div");'
+    +       'box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#122048;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:16px;font:14px/1.4 Segoe UI,Arial,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.3)";'
+    +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — "+Q.length+" leads queued. Emails will send automatically.</div>"'
+    +         '+"<button id=\'mwcancel\' style=\'padding:9px 18px;border:0;border-radius:7px;background:#b3372f;color:#fff;font-weight:700;cursor:pointer;font-size:14px\'>Cancel</button>";'
+    +       'document.body.appendChild(box);'
+    +       'var t=setInterval(function(){'
+    +         'left--; var el=document.getElementById("mwcd"); if(el) el.textContent=left;'
+    +         'if(left<=0){ clearInterval(t); box.remove();'
+    +           'auto=true; addLog("open","auto-start","&#9654; auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
+    +           'runOne(); }'
+    +       '},1000);'
+    +       'document.getElementById("mwcancel").addEventListener("click",function(){'
+    +         'clearInterval(t); box.remove();'
+    +         'addLog("skip","auto-start","auto-run cancelled by operator — queue is still here, press Start when ready");'
+    +       '});'
+    +     '})();'
+    +   '}'
     + '})();<\/script>';
   return _docShell('Morning worker · '+(laneCounts.urgent+laneCounts.active+laneCounts.early)+' leads across 3 lanes',
                    body, {key:'worker'});
 }
-function openMorningWorker(lane){
+function openMorningWorker(lane, autostart){
   _docLog('__batch__', 'worker-open', 'en');
-  return _openDoc(genMorningWorker(lane || 'urgent'), {keepOpener:true});
+  return _openDoc(genMorningWorker(lane || 'urgent', !!autostart), {keepOpener:true});
 }
 
 // listen for outcome logging coming back from the Dial-Ready tab — the workflow's #1 pick.
@@ -11696,8 +11731,21 @@ function genEmail(r, quiet){
   const caseNo = (r.case||'').trim();
   const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
   const caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
-  const emails = (r.emails||[]).slice(0,3);
-  const to = emails[0]||'';
+  /* REACH EVERY ADDRESS ON FILE — BUT VIA BCC.
+     Why all of them: skiptrace returns several addresses per lead and only one is usually live.
+     Toni Labriola replied from labriola.toni@gmail.com, which was NOT the address we mailed
+     (labriolatoni@gmail.com) — that reply only reached us because replies.py also matches on
+     subject. Mailing the first address alone is a coin flip on whether the owner ever sees it.
+     Why BCC and never a shared To:: these are NOT all the owner's own addresses. Case
+     2025-007384-CA-01 is owned by DEBORAH C DAVIS SLADE, yet the six traced addresses include
+     shamikamiley@, wanda.smiley@ and talldadman@ — household members or relatives. A visible To:
+     would publish six strangers' addresses to each other AND tell five of them that Deborah is in
+     foreclosure. That is someone's private financial distress, disclosed by us, in writing.
+     smtplib's send_message() delivers to Bcc recipients and strips the header, so nobody sees
+     anyone else. */
+  const emails = (r.emails||[]).slice(0, 6);
+  const to = emails[0] || '';
+  const bcc = emails.slice(1).join(', ');
   // professional signature block (blank fields skipped)
   const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
   const subjEN = `Regarding your property at ${street}`;
@@ -11758,7 +11806,7 @@ function genEmail(r, quiet){
   // input?" Stash the EXACT composed subject+body on a global the moment it is built, so the
   // worker's log can archive the real text rather than a summary. Reading it from here instead
   // of recomputing it in the logger guarantees the archive can never drift from what he saw.
-  try { window.__lastEmail = {c:r.case, to:to, addr:r.addr||'', who:owner,
+  try { window.__lastEmail = {c:r.case, to:to, bcc:bcc, addr:r.addr||'', who:owner,
                               subj:D.en.subj, body:D.en.body,
                               subjES:D.es.subj, bodyES:D.es.body, stage:stage, at:Date.now()}; } catch(e){}
   const Djson = JSON.stringify(D).replace(/</g,'\\u003c');
@@ -11830,8 +11878,10 @@ function genPortfolioEmail(r, siblings, quiet){
       sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
   var owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   var first = _firstName(owner);
-  var emails = (r.emails||[]).slice(0,3);
-  var to = emails[0]||'';
+  var emails = (r.emails||[]).slice(0, 6);
+  // every address on file, BCC'd — see the privacy note in genEmail
+  var to = emails[0] || '';
+  var bcc = emails.slice(1).join(', ');
   var sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW]
              .filter(function(x){ return x && String(x).trim(); }).join('\n');
   var n = all.length;
@@ -11888,7 +11938,7 @@ function genPortfolioEmail(r, siblings, quiet){
     'Responda STOP o pídame no contactarlo y lo respetaré para cada una de las propiedades arriba.';
   var D = {en:{subj:subjEN, body:bodyEN}, es:{subj:subjES, body:bodyES}};
   try {
-    window.__lastEmail = {c:r.case, to:to, addr:r.addr||'', who:owner,
+    window.__lastEmail = {c:r.case, to:to, bcc:bcc, addr:r.addr||'', who:owner,
                           subj:D.en.subj, body:D.en.body,
                           subjES:D.es.subj, bodyES:D.es.body, at:Date.now(),
                           portfolio: all.map(function(x){return x.case;})};
@@ -14235,7 +14285,10 @@ async function boot(){
   _openHashDeal();                   // shared #case= link opens straight to that property
   // #worker=morning auto-opens the Morning Worker after boot. Lets Windows Task Scheduler
   // fire Chrome at 7 AM to the URL + fragment and land straight in the queue.
-  if(/worker=morning/.test(location.hash||'')) setTimeout(function(){ try{ openMorningWorker(); }catch(e){} }, 500);
+  // Opened BY the 8am Windows task -> auto-start the run (countdown + cancel inside the worker).
+  // A human clicking the toolbar button still gets the manual Start, which is the right default:
+  // only the scheduler's deep link implies "nobody is here, go".
+  if(/worker=morning/.test(location.hash||'')) setTimeout(function(){ try{ openMorningWorker('urgent', true); }catch(e){} }, 500);
   if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
   // push the full localStorage state (notes + worker log + sent archive) to the local disk
   // bridge shortly after boot — so opening the board is enough to back up the call history,

@@ -190,10 +190,21 @@ def _recently_emailed_to(addr, hours=24):
 
 
 # ---------------------------------------------------------------- SMTP
-def _smtp_send(user, pw, from_display, to_addr, subj, body):
+def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc=''):
+    """bcc carries the owner's OTHER traced addresses.
+
+    Skiptrace returns several addresses per lead and only one is usually live, so reaching all of
+    them materially raises the odds the owner ever sees the letter. They must be BCC, never a
+    shared To:. Case 2025-007384-CA-01 is owned by DEBORAH C DAVIS SLADE while its six traced
+    addresses include shamikamiley@, wanda.smiley@ and talldadman@ — household members, not her.
+    A visible To: would publish six strangers' addresses to each other and disclose Deborah's
+    foreclosure to five people who are not her.
+    smtplib's send_message() delivers to Bcc recipients and does NOT transmit the header."""
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{user}>' if from_display else user
     msg['To'] = to_addr
+    if bcc:
+        msg['Bcc'] = bcc
     msg['Subject'] = subj
     msg['Message-ID'] = make_msgid(domain=user.split('@', 1)[-1])
     msg['Date'] = formatdate(localtime=True)
@@ -303,6 +314,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {'ok': False, 'err': f'bad json: {e}'})
 
         to = str(payload.get('to') or '').strip().lower()
+        # extra traced addresses for the same owner — validated individually so one
+        # malformed skiptrace result cannot poison the whole send.
+        bcc = ', '.join(a for a in (x.strip().lower() for x in
+                        str(payload.get('bcc') or '').split(',')) if _EMAIL_RE.match(a))
         subj = str(payload.get('subj') or '').strip()
         body = str(payload.get('body') or '')
         meta = payload.get('meta') or {}
@@ -336,7 +351,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---- send ----
         try:
-            mid = _smtp_send(user, pw, from_display, to, subj, body)
+            mid = _smtp_send(user, pw, from_display, to, subj, body, bcc)
         except smtplib.SMTPAuthenticationError as e:
             return self._json(401, {'ok': False, 'err': f'SMTP AUTH failed: {e}'})
         except Exception as e:
