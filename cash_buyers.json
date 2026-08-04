@@ -1,0 +1,152 @@
+{
+ "2019-027764-CA-01": {
+  "addr": "8620 SW 85 AVE, MIAMI, FL 33143",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 1075953.02,
+  "sale": "08/03/2026",
+  "value": 776109
+ },
+ "2022-002515-CA-01": {
+  "addr": "366 W 12 ST, HIALEAH, FL 33010",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 677944.82,
+  "sale": "08/03/2026",
+  "value": 1467620
+ },
+ "2023-015095-CA-01": {
+  "addr": "200 NE 158 ST, MIAMI, FL 33162",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 305348.62,
+  "sale": "08/03/2026",
+  "value": 945710
+ },
+ "2024-004748-CA-01": {
+  "addr": "16851 NE 23 AVE B-504, NORTH MIAMI BEACH, FL 33160",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 499876.23,
+  "sale": "08/03/2026",
+  "value": 137896
+ },
+ "2024-010684-CA-01": {
+  "addr": "11333 SW 243 TER, HOMESTEAD, FL 33032",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 499360.62,
+  "sale": "08/03/2026",
+  "value": 495061
+ },
+ "2024-014493-CA-01": {
+  "addr": "4 NW 22 ST, HOMESTEAD, FL 33030",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 661196.71,
+  "sale": "08/03/2026",
+  "value": 534530
+ },
+ "2024-020679-CA-01": {
+  "addr": "3121 SHERIDAN AVE, MIAMI BEACH, FL 33140",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 3625131.68,
+  "sale": "08/03/2026",
+  "value": 1693090
+ },
+ "2024-023366-CA-01": {
+  "addr": "888 BRICKELL KEY DR 807, MIAMI, FL 33131",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 191445.55,
+  "sale": "08/03/2026",
+  "value": 856065
+ },
+ "2025-009236-CA-01": {
+  "addr": "20379 W COUNTRY CLUB DR 1635, AVENTURA, FL 33180",
+  "auction": "08/03/2026",
+  "buyer": "Fishman, Yuval",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 34615.37,
+  "sale": "08/03/2026",
+  "value": 173865
+ },
+ "2025-010449-CA-01": {
+  "addr": "4125 W 11 LN 52, HIALEAH, FL 33012",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 286341.74,
+  "sale": "08/03/2026",
+  "value": 220220
+ },
+ "2025-015939-CA-01": {
+  "addr": "1698 JEFFERSON AVE 32, MIAMI BEACH, FL 33139",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 53734.87,
+  "sale": "08/03/2026",
+  "value": 213740
+ },
+ "2025-023434-CA-01": {
+  "addr": "10831 NW 7 ST 9-14, MIAMI, FL 33172",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 148379.95,
+  "sale": "08/03/2026",
+  "value": 276065
+ },
+ "2025-116123-CC-05": {
+  "addr": "2501 BRICKELL AVE 408, MIAMI, FL 33129",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 51328.06,
+  "sale": "08/03/2026",
+  "value": 307000
+ },
+ "2026-001101-CA-01": {
+  "addr": "3300 NE 192 ST PH16, AVENTURA, FL 33180",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 329913.94,
+  "sale": "08/03/2026",
+  "value": 274402
+ },
+ "2026-001478-CA-01": {
+  "addr": "1750 NE 191 ST 225-4, MIAMI, FL 33179",
+  "auction": "08/03/2026",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-08-04",
+  "judg": 13413.36,
+  "sale": "08/03/2026",
+  "value": 146775
+ }
+}

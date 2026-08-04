@@ -115,6 +115,8 @@ jobs:
             records_qs.json
             records_liens.json
             judgment_dates.json
+            auction_archive.json
+            cash_buyers.json
             broward_liens.json
             palmbeach_liens.json
             batchdata_liens.json
@@ -145,6 +147,7 @@ jobs:
           # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
           # dealflow-state cache sat right there in the repo. Bump this suffix ON PURPOSE whenever the
           # path list changes, so the invalidation is deliberate and greppable instead of a mystery.
+          # v10 -> v11 (2026-08-04): added auction_archive.json + cash_buyers.json (self-building buyer list).
           # v9 -> v10 (2026-08-04): added judgment_dates.json (post-judgment interest entry dates).
           # v2 -> v5 (all 2026-07-30, before any of them ran — still ONE cold run, not four): v3 added the lis-pendens address
           # resolver caches (lp_addresses.json, _lp_pagis_cache.json, _lp_values_cache.json) so the
@@ -152,8 +155,8 @@ jobs:
           # new reply keeps yesterday's rather than blanking the Reply Inbox.
           # v8 -> v9 (2026-08-02): added redfin_cache.json (Redfin Estimate sidecar).
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v10-${{ github.run_id }}
-          restore-keys: dealflow-state-v10-
+          key: dealflow-state-v11-${{ github.run_id }}
+          restore-keys: dealflow-state-v11-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -423,6 +426,23 @@ jobs:
         run: |
           python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))"
 
+      # ---- [4b/5] Remember today's calendar, then harvest matured sales for BUYERS -------------
+      # The pipeline used to forget every sale the moment it closed: a sold property drops off the
+      # next scrape and takes its case number with it. On 2026-08-04 that left 15 recoverable cases
+      # out of an entire summer of Miami-Dade auctions.
+      # auction_archive.py appends every sale we see (append-only, a few hundred KB/yr) so the case
+      # numbers survive. cash_buyers.py then reads back the ones whose sale is >21 days old — the
+      # observed lag before a certificate of title issues (Martin condo: sale 05/27 -> cert 06/16) —
+      # and records the third-party bidder named on it.
+      # Net effect: the proven-cash-buyer list accumulates on its own, every night, with no operator
+      # action. It yields nothing for the first three weeks by design, then compounds.
+      # Order matters: snapshot AFTER the rebuild so the archive captures the enriched board.
+      - name: '[4b/5] Archive the auction calendar + harvest cert-of-title buyers'
+        continue-on-error: true
+        run: |
+          python auction_archive.py
+          python cash_buyers.py --days 120 --limit 60
+
       # ---- [5/5] Publish final ------------------------------------------------------------
       - name: '[5/5] Publish final docs/index.html'
         run: |
@@ -442,7 +462,7 @@ jobs:
           # docs/img/ also picks up new photos this run — stage them too. sale_history_cache.json
           # is committed as well: it is the SINGLE SOURCE for stay-compliance (no actions/cache
           # copy anymore), so the daily [3e] refresh must flow back into the repo.
-          git add docs/index.html docs/img sale_history_cache.json llc_officers.json judgment_dates.json
+          git add docs/index.html docs/img sale_history_cache.json llc_officers.json judgment_dates.json auction_archive.json cash_buyers.json
           if git diff --staged --quiet; then
             echo "nothing changed — site already current"
           else
@@ -480,6 +500,8 @@ jobs:
             records_qs.json
             records_liens.json
             judgment_dates.json
+            auction_archive.json
+            cash_buyers.json
             broward_liens.json
             palmbeach_liens.json
             batchdata_liens.json
@@ -504,7 +526,7 @@ jobs:
             redfin_cache.json
             health.json
             full.json
-          key: dealflow-state-v10-${{ github.run_id }}
+          key: dealflow-state-v11-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
