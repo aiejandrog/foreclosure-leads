@@ -75,6 +75,44 @@ def _d(s):
     return None
 
 
+_RL_CACHE = {}
+
+
+def _open_mortgages(r):
+    """Open (unsatisfied) mortgages the tracer actually recorded for this case.
+
+    The board bakes `orsurvsen` — the surviving-SENIOR total — which is deliberately 0 whenever the
+    tracer believes the open mortgage IS the instrument being foreclosed. On a junior/association
+    case that leaves the brief saying "unquantified" while records_liens.json is sitting on the
+    concrete finding ("$1,105,000 Angel Oak, recorded 3/8/2022"). Naming the instrument turns a
+    dead end into a 10-minute title-desk question, which is the difference between a report a bidder
+    pays for and one they ignore. Read-only: this never feeds a bid number.
+    """
+    case = r.get('case') or ''
+    if not _RL_CACHE:
+        for fn in ('records_liens.json', 'broward_liens.json', 'palmbeach_liens.json',
+                   'batchdata_liens.json'):
+            p = os.path.join(HERE, fn)
+            if not os.path.exists(p):
+                continue
+            try:
+                for k, v in (json.load(open(p, encoding='utf-8')) or {}).items():
+                    _RL_CACHE.setdefault(k, v)
+            except Exception:
+                pass
+        _RL_CACHE.setdefault('__loaded__', {})
+    rec = _RL_CACHE.get(case) or {}
+    out = []
+    for l in (rec.get('liens') or []):
+        if str(l.get('st')).upper() != 'OPEN':
+            continue
+        amt = float(l.get('amt') or 0)
+        if amt > 0:
+            out.append({'d': str(l.get('d') or '')[:10], 'amt': amt,
+                        'party': str(l.get('party') or ''), 'bp': str(l.get('bp') or '')})
+    return sorted(out, key=lambda m: -m['amt'])
+
+
 def survival_analysis(r, dil):
     """WHAT LANDS ON THE WINNING BIDDER. The single most valuable section.
 
@@ -93,14 +131,35 @@ def survival_analysis(r, dil):
 
     surv_senior = float(r.get('orsurvsen') or 0)
     if is_hoa:
+        # `mr` means "a senior survives this sale" and covers TWO shapes: a true association
+        # foreclosure, and a county-civil case with a bank plaintiff (usually a junior/HELOC action).
+        # foreclosure_leads.py deliberately keeps ctype='Bank/Mortgage' on the latter, warning that
+        # calling it "HOA" trades one false label for another. Say what is actually known instead.
+        assoc = (ftype == 'HOA') or str(r.get('ctype') or '').upper().startswith('HOA')
+        kind = ('Association foreclosure — the senior mortgage is NOT wiped (FS 718.116).'
+                if assoc else
+                'This is a junior/subordinate action (county-civil case, bank plaintiff) — the '
+                'FIRST mortgage is ahead of it and is NOT wiped.')
         if surv_senior > 0:
             rows.append(('SURVIVES', 'First mortgage', surv_senior,
-                         'Association foreclosure — the senior mortgage is NOT wiped (FS 718.116). '
-                         'You take title subject to it.'))
+                         kind + ' You take title subject to it.'))
         else:
-            unknown.append(('First mortgage', 'Association case, but no verified open mortgage in the '
-                                              'recorded chain. Could be free-and-clear — or an unindexed '
-                                              'senior. PULL THE CHAIN BEFORE BIDDING.'))
+            found = _open_mortgages(r)
+            if found:
+                tot = sum(m['amt'] for m in found)
+                detail = '; '.join(f"{m['d']} ${m['amt']:,.0f} {m['party'][:28]}" for m in found[:3])
+                unknown.append((
+                    'First mortgage',
+                    f'{kind} The recorded chain shows {len(found)} open mortgage(s) totalling '
+                    f'about ${tot:,.0f} ({detail}) — but the automated tracer could not establish '
+                    f'which instrument is being foreclosed, so we cannot say how much of that '
+                    f'survives. Assume the full amount until a title search proves otherwise.'))
+            else:
+                unknown.append((
+                    'First mortgage',
+                    kind + ' The automated chain search returned NO recorded mortgage documents for '
+                    'this parcel. That is not the same as free-and-clear — an unindexed or '
+                    'differently-named instrument is common. A title search is required.'))
     elif is_td:
         rows.append(('SURVIVES', 'Municipal / code liens', float(r.get('orcode') or 0),
                      'Tax-deed sale: governmental liens can survive (FS 197.552).'))
