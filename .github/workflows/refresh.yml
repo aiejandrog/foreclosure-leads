@@ -114,6 +114,7 @@ jobs:
             cases_qs.json
             records_qs.json
             records_liens.json
+            judgment_dates.json
             broward_liens.json
             palmbeach_liens.json
             batchdata_liens.json
@@ -144,14 +145,15 @@ jobs:
           # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
           # dealflow-state cache sat right there in the repo. Bump this suffix ON PURPOSE whenever the
           # path list changes, so the invalidation is deliberate and greppable instead of a mystery.
+          # v9 -> v10 (2026-08-04): added judgment_dates.json (post-judgment interest entry dates).
           # v2 -> v5 (all 2026-07-30, before any of them ran — still ONE cold run, not four): v3 added the lis-pendens address
           # resolver caches (lp_addresses.json, _lp_pagis_cache.json, _lp_values_cache.json) so the
           # parcel roll is not re-queried cold every morning; v4 added replies.json so a day with no
           # new reply keeps yesterday's rather than blanking the Reply Inbox.
           # v8 -> v9 (2026-08-02): added redfin_cache.json (Redfin Estimate sidecar).
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v9-${{ github.run_id }}
-          restore-keys: dealflow-state-v9-
+          key: dealflow-state-v10-${{ github.run_id }}
+          restore-keys: dealflow-state-v10-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -301,6 +303,20 @@ jobs:
         continue-on-error: true
         run: python county_taxes.py --limit 60 --conc 4
 
+      # ---- [2b3/5] Judgment ENTRY DATES -> post-judgment interest (FS 55.03) ---------------------
+      # A judgment is frozen at entry; the real payoff keeps accruing at the rate the FJ recites and
+      # RESETS every January 1. The counties publish the amount but never the date, so without this
+      # step the bake cannot accrue and every new lead publishes a frozen — i.e. overstated — equity
+      # number until someone runs it by hand. The first full pull was worth $15.3M of unseen debt
+      # across 298 rows and flipped 10 verdicts, one of them a STRONG that was really a PASS.
+      # Incremental by design: judgment_interest.py caches HITS AND MISSES in judgment_dates.json and
+      # skips anything already there, so a normal night pulls only the handful of new cases.
+      # continue-on-error: a clerk outage must never block the rebuild — undated rows just stay
+      # labeled "as entered" rather than guessing a payoff (NO DATE -> NO ACCRUAL, EVER).
+      - name: '[2b3/5] Judgment entry dates (Miami-Dade docket) -> post-judgment interest'
+        continue-on-error: true
+        run: python judgment_interest.py --all --limit 120
+
       - name: '[2c/5] Fresh Lis Pendens (lender-sweep -> resolve addresses -> lp_leads.json)'
         continue-on-error: true
         run: |
@@ -426,7 +442,7 @@ jobs:
           # docs/img/ also picks up new photos this run — stage them too. sale_history_cache.json
           # is committed as well: it is the SINGLE SOURCE for stay-compliance (no actions/cache
           # copy anymore), so the daily [3e] refresh must flow back into the repo.
-          git add docs/index.html docs/img sale_history_cache.json llc_officers.json
+          git add docs/index.html docs/img sale_history_cache.json llc_officers.json judgment_dates.json
           if git diff --staged --quiet; then
             echo "nothing changed — site already current"
           else
@@ -463,6 +479,7 @@ jobs:
             cases_qs.json
             records_qs.json
             records_liens.json
+            judgment_dates.json
             broward_liens.json
             palmbeach_liens.json
             batchdata_liens.json
@@ -487,7 +504,7 @@ jobs:
             redfin_cache.json
             health.json
             full.json
-          key: dealflow-state-v9-${{ github.run_id }}
+          key: dealflow-state-v10-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
