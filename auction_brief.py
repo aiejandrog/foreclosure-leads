@@ -191,14 +191,34 @@ def build_brief(r, dil):
     resale_cost = exit_value * 0.08
     max_bid = max(0.0, exit_value * 0.70 - survives_total - resale_cost)
 
+    # ---- BLOCKING UNKNOWNS -------------------------------------------------------------------
+    # A headline number must never contradict the caveat printed beneath it. Caught on
+    # 17189 NEWPORT CLUB DR: a $19,421 association judgment on a $737k house rendered
+    # "MAX BID $530,437 / headroom $836,123" in 21pt while the survival table admitted, in small
+    # type, that the first mortgage was UNVERIFIED. A bidder skims the hero, wins at $530k and
+    # inherits a $600k first — the precise catastrophe this brief is sold to prevent.
+    # When an unquantified lien could plausibly exceed the whole margin, we do not print a bid at
+    # all. Refusing to give a number IS the professional answer; a confident wrong number is what
+    # ends the business.
+    blockers = []
+    if any(lbl == 'First mortgage' for lbl, _ in unknown):
+        blockers.append('The senior mortgage on this association foreclosure is UNQUANTIFIED. '
+                        'It survives the sale and could exceed the entire margin. No bid figure '
+                        'can be responsibly stated until the recorded chain is pulled.')
+    if judg <= 0:
+        blockers.append('No final judgment amount is published — the debt itself is unknown.')
+    if not exit_value:
+        blockers.append('No market value available for this parcel — the exit is unknown.')
+
     return {
         'case': case, 'r': r, 'dil': dil,
         'value': value, 'arv': arv, 'arv_ok': arv_ok, 'exit_value': exit_value,
         'judg': judg, 'payoff': payoff, 'accrued': accrued,
         'surv_rows': surv_rows, 'unknown': unknown, 'survives_total': survives_total,
         'opening': opening, 'all_in_at_opening': all_in_at_opening,
-        'max_bid': max_bid, 'resale_cost': resale_cost, 'is_td': is_td,
-        'headroom': exit_value - all_in_at_opening,
+        'max_bid': (None if blockers else max_bid), 'resale_cost': resale_cost, 'is_td': is_td,
+        'headroom': (None if blockers else exit_value - all_in_at_opening),
+        'blockers': blockers,
     }
 
 
@@ -287,7 +307,13 @@ def render_html(b):
 
     # ---- the verdict band
     hr = b['headroom']
-    if b['judg'] <= 0:
+    if b['blockers']:
+        vb = 'flag'
+        vt = ('<b>NO BID FIGURE CAN BE GIVEN — and that is the finding.</b><ul>'
+              + ''.join(f'<li>{_esc(x)}</li>' for x in b['blockers'])
+              + '</ul>Resolve the item(s) above and the numbers become computable. '
+                'Bidding before then is guessing with your deposit.')
+    elif b['judg'] <= 0:
         vb, vt = 'flag', 'DO NOT BID YET — no published judgment; the debt is unknown.'
     elif hr <= 0:
         vb, vt = 'flag', (f'NO ROOM AT THE OPENING. Clearing the payoff plus surviving liens costs '
@@ -329,10 +355,12 @@ Folio <span class="mono">{_esc(r.get('folio',''))}</span> ·
 Prepared {today} from primary sources (clerk docket, official records, county tax collector, property appraiser).</div>
 
 <div class="big">
-  <div class="card hero"><div class="k">Max disciplined bid</div><div class="v">{_money(b['max_bid'])}</div>
-    <div class="s">70% of exit, less surviving liens &amp; resale cost. Guidance, not an appraisal.</div></div>
-  <div class="card"><div class="k">To clear at the opening</div><div class="v">{_money(b['all_in_at_opening'])}</div>
-    <div class="s">payoff {_money(b['opening'])} + {_money(b['survives_total'])} surviving</div></div>
+  <div class="card hero"><div class="k">Max disciplined bid</div>
+    <div class="v">{_money(b['max_bid']) if b['max_bid'] is not None else 'NO BID'}</div>
+    <div class="s">{'70% of exit, less surviving liens &amp; resale cost. Guidance, not an appraisal.' if b['max_bid'] is not None else 'Unquantified lien or unknown debt — see below. We will not print a number we cannot stand behind.'}</div></div>
+  <div class="card"><div class="k">To clear at the opening</div>
+    <div class="v">{_money(b['all_in_at_opening']) if not b['blockers'] else '?'}</div>
+    <div class="s">{'payoff ' + _money(b['opening']) + ' + ' + _money(b['survives_total']) + ' surviving' if not b['blockers'] else 'cannot be computed until the unknown above is resolved'}</div></div>
   <div class="card"><div class="k">Exit value</div><div class="v">{_money(b['exit_value'])}</div>
     <div class="s">{'comps ARV (' + str(r.get('arvn', 0)) + ' comps)' if b['arv_ok'] else 'county just value — no verified comps'}</div></div>
 </div>
@@ -404,6 +432,101 @@ def write_brief(r, dil, make_pdf=False):
     return b, out
 
 
+def render_index(briefs, auction_date):
+    """THE COVER SHEET — the most valuable page in a sale-day sweep.
+
+    A bidder cannot work 54 properties in one morning. The sweep's job is to say "spend your day on
+    these five, and here is exactly why the other forty-nine are traps." Ranked by headroom (exit
+    value less what it costs to clear at the opening), with take-backs and title gates called out so
+    the reasoning is auditable rather than a black-box score.
+    """
+    # Blocked properties are ranked NOWHERE — they are neither buys nor skips, they are unfinished
+    # work. Sorting them by a headroom we just said we cannot compute would reintroduce the exact
+    # false confidence build_brief() strips out.
+    ranked = [b for b in briefs if not b['blockers']]
+    blocked = [b for b in briefs if b['blockers']]
+    rows = sorted(ranked, key=lambda b: -b['headroom'])
+    live = [b for b in rows if b['headroom'] > 0 and b['judg'] > 0]
+    dead = [b for b in rows if b['headroom'] <= 0 or b['judg'] <= 0]
+
+    def line(b, rank=None):
+        r = b['r']
+        gates = (b['dil'].get('killer_issues') or [])
+        gate = ('<div class="est" style="color:#b3372f">⚠ ' + _esc(str(gates[0])[:120]) + '</div>') if gates else ''
+        acc = '' if b['accrued'] else '<div class="est">judgment as entered — interest not accrued</div>'
+        blocked_note = ('<div class="est" style="color:#b3372f">⛔ ' + _esc(b['blockers'][0][:110]) + '</div>') if b['blockers'] else ''
+        hr = b['headroom']
+        return (f'<tr><td class="n">{rank if rank else ""}</td>'
+                f'<td><b>{_esc(str(r.get("addr"))[:44] or r.get("case"))}</b>'
+                f'<div class="est mono">{_esc(r.get("case"))} · {_esc(r.get("county"))}</div>'
+                f'{gate}{acc}{blocked_note}</td>'
+                f'<td class="n">{_money(b["exit_value"])}</td>'
+                f'<td class="n">{_money(b["all_in_at_opening"]) if not b["blockers"] else "?"}</td>'
+                f'<td class="n" style="color:{"#1e7a3c" if (hr or 0) > 0 else "#b3372f"}">'
+                f'{"?" if hr is None else (_money(hr) if hr else "none")}</td>'
+                f'<td class="n">{"NO BID" if b["max_bid"] is None else _money(b["max_bid"])}</td></tr>')
+
+    live_html = ''.join(line(b, i + 1) for i, b in enumerate(live))
+    dead_html = ''.join(line(b) for b in dead)
+    blocked_html = ''.join(line(b) for b in blocked)
+    total_exit = sum(b['exit_value'] for b in briefs)
+    accrued_n = sum(1 for b in briefs if b['accrued'])
+    today = datetime.date.today().isoformat()
+
+    return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<title>Sale-Day Sweep — {_esc(auction_date)}</title><style>{CSS}
+.rank{{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--mut);font-weight:700}}
+</style></head><body>
+<div class="hdr">
+  <div><div class="brand">Sale-Day Sweep</div><h1>Miami-Dade &amp; Palm Beach — {_esc(auction_date)}</h1></div>
+  <div style="text-align:right"><div class="brand" style="color:var(--navy)">{len(briefs)} PROPERTIES</div>
+  <div class="est">prepared {today}</div></div>
+</div>
+<div class="sub">Every judgment-bearing property on this sale date, ranked by room between the exit
+value and what it costs to clear at the opening. {accrued_n} of {len(briefs)} carry a docket-verified
+judgment entry date, so their payoff includes accrued post-judgment interest (FS 55.03); the rest
+state the judgment as entered and say so. Combined exit value {_money(total_exit)}.</div>
+
+<div class="big">
+  <div class="card hero"><div class="k">Worth your morning</div><div class="v">{len(live)}</div>
+    <div class="s">room exists at the opening bid</div></div>
+  <div class="card"><div class="k">No room / do not bid</div><div class="v">{len(dead)}</div>
+    <div class="s">plaintiff take-backs and unknown debt</div></div>
+  <div class="card"><div class="k">Unquantified — no bid</div><div class="v">{len(blocked)}</div>
+    <div class="s">a surviving lien or the debt itself is unknown</div></div>
+  <div class="card"><div class="k">Best headroom</div><div class="v">{_money(live[0]['headroom']) if live else '—'}</div>
+    <div class="s">{_esc(str(live[0]['r'].get('addr'))[:30]) if live else 'none this date'}</div></div>
+</div>
+
+<h2>Worth bidding — ranked</h2>
+<table><tr><th class="n">#</th><th>Property</th><th class="n">Exit value</th>
+<th class="n">Clear at opening</th><th class="n">Headroom</th><th class="n">Max bid</th></tr>
+{live_html or '<tr><td colspan="6" class="est">No property on this date clears at the opening.</td></tr>'}</table>
+
+<h2>No room at the opening — skip these</h2>
+<div class="est">Clearing the payoff plus surviving liens costs more than the property is worth. These
+are plaintiff take-backs unless you know something the record does not show.</div>
+<table><tr><th class="n"></th><th>Property</th><th class="n">Exit value</th>
+<th class="n">Clear at opening</th><th class="n">Headroom</th><th class="n">Max bid</th></tr>
+{dead_html or '<tr><td colspan="6" class="est">None.</td></tr>'}</table>
+
+<h2>Unquantified — we will not price these</h2>
+<div class="est">A lien that survives the sale is unknown, or the debt itself is unpublished. These are
+not "bad deals" — they are unfinished diligence. Several are association foreclosures on valuable
+property where the senior mortgage is invisible in the automated record; pull the recorded chain and
+they may become the best buys on the calendar.</div>
+<table><tr><th class="n"></th><th>Property</th><th class="n">Exit value</th>
+<th class="n">Clear at opening</th><th class="n">Headroom</th><th class="n">Max bid</th></tr>
+{blocked_html or '<tr><td colspan="6" class="est">None — every property on this date is fully quantified.</td></tr>'}</table>
+
+<div class="foot">One brief per property accompanies this sheet — each shows what survives the sale,
+the accrued payoff with its source, title gates and occupancy. Prepared by Miami Solutions Group from
+public records on {today}. <b>Research, not legal, tax or investment advice, and not a title opinion.</b>
+Confirm each sale is still on the morning of; sales cancel constantly for payoff, bankruptcy and
+loss mitigation.</div>
+</body></html>"""
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--case', default='')
@@ -448,15 +571,37 @@ def main():
     else:
         sys.exit('pass --case, --auction or --list')
 
+    built = []
     for r in targets:
         dil = _best_diligence(r, dcache)
         b, paths = write_brief(r, dil, make_pdf=a.pdf)
+        built.append(b)
         print(f"\n{r.get('addr')}  [{r.get('case')}]")
         print(f"   exit {_money(b['exit_value'])} · payoff {_money(b['payoff'])}"
               f"{'' if b['accrued'] else ' (as entered)'} · survives {_money(b['survives_total'])}")
         print(f"   MAX BID {_money(b['max_bid'])} · headroom at opening {_money(b['headroom'])}")
         for x in paths:
             print(f'   -> {x}')
+
+    # A sweep without a ranked cover sheet is 54 PDFs, not a product — see render_index().
+    if a.auction and built:
+        os.makedirs(OUT_DIR, exist_ok=True)
+        safe = a.auction.replace('/', '-')
+        idx = os.path.join(OUT_DIR, f'_SWEEP-{safe}.html')
+        open(idx, 'w', encoding='utf-8').write(render_index(built, a.auction))
+        print(f'\n=== SWEEP INDEX -> {idx}')
+        if a.pdf and os.path.exists(EDGE):
+            pdf = idx[:-5] + '.pdf'
+            try:
+                subprocess.run([EDGE, '--headless', '--disable-gpu', '--no-pdf-header-footer',
+                                f'--print-to-pdf={pdf}', 'file:///' + idx.replace('\\', '/')],
+                               check=True, capture_output=True, timeout=120)
+                print(f'    -> {pdf}')
+            except Exception as e:
+                print(f'    (pdf skipped: {str(e)[:70]})')
+        live = sum(1 for b in built if (b['headroom'] or 0) > 0 and b['judg'] > 0)
+        blocked = sum(1 for b in built if b['blockers'])
+        print(f'    {live} of {len(built)} have room at the opening · {blocked} unquantified (no bid)')
     return 0
 
 
