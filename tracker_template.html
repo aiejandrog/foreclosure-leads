@@ -10504,6 +10504,22 @@ function genMorningWorker(lane, autostart){
     +     'var isTxt = (ch==="text"||why==="text");'
     +     'var app = isTxt ? "Messages / Phone Link" : "Gmail";'
     +     'addLog(isTxt?"textopen":"email", r.first||r.owner, "press Send in "+app+", then confirm below", "warn");'
+    /* UNATTENDED WATCHDOG. confirmSend is a HUMAN gate by design — it is the honest middle state
+       that keeps a composer-open from being logged as a delivery. But auto-start means the 8am run
+       has nobody to click it. Measured on the first unattended morning (2026-08-04): 21 emails
+       sent, then one bridge hiccup dropped the run onto this screen at 08:02 and it sat there for
+       four hours with 29 leads unworked.
+       So when the run is unattended, wait a beat for a human and then move on WITHOUT claiming
+       anything: no post("sent"), no autoLog, no cap charge, no retire. The lead is untouched and
+       comes back tomorrow. A real click still wins — both buttons clear this timer. */
+    +     'if(auto){'
+    +       'clearTimeout(window.__cfWatch);'
+    +       'window.__cfWatch=setTimeout(function(){'
+    +         'addLog("skip", r.first||r.owner, "&#9200; unattended — nobody confirmed in 45s. NOT counted as sent; lead stays queued for tomorrow.", "warn");'
+    +         'try{ post("skip"); }catch(e){}'
+    +         'advance();'
+    +       '}, 45000);'
+    +     '}'
     +     'main.innerHTML="<div class=\'mwpace\'>"'
     +       '+"<div class=\'h\'>"+(isTxt?"&#128241; Did the text send?":"&#9993; Did it send?")+"</div>"'
     +       '+"<div class=\'s\'>"+app+" is open with the message prefilled. Press <b>Send</b> there, then tell us — "'
@@ -10512,7 +10528,7 @@ function genMorningWorker(lane, autostart){
     +       '+"<button id=\'mwsentno\' class=\'mwbtn skip\' style=\'margin-top:8px\'>Didn&rsquo;t send &mdash; next lead</button>"'
     +     '+"</div>";'
     +     'var yes=document.getElementById("mwsentyes");'
-    +     'if(yes) yes.onclick=function(){'
+    +     'if(yes) yes.onclick=function(){ clearTimeout(window.__cfWatch);'
     +       'if(isTxt){'
     +         'post("text", {via:"manual-confirmed"});'
     +         'addLog("text", r.first||r.owner, "✓ confirmed sent by hand via "+app);'
@@ -10525,7 +10541,7 @@ function genMorningWorker(lane, autostart){
     +       'advance();'
     +     '};'
     +     'var no=document.getElementById("mwsentno");'
-    +     'if(no) no.onclick=function(){'
+    +     'if(no) no.onclick=function(){ clearTimeout(window.__cfWatch);'
     +       'addLog("skip", r.first||r.owner, "not sent — stays in the queue for tomorrow");'
     +       'if(tbOn){ TBSKIP++; TBI++; return textBatchStep(); }'
     +       'advance();'
