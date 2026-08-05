@@ -10543,9 +10543,15 @@ function genMorningWorker(lane, autostart){
     // addresses inside the worker, where nobody is watching. No mailTo means no send.
     +     'var to   = r.mailTo || "";'
     +     'var bcc  = r.mailBcc || "";'
+    // r.gurl is always "" whenever subj/body/to are genuinely empty (_cardMail's EMPTY object never
+    // sets it), so openHere(r.gurl) below is never a real popup-blocker situation — it is always
+    // this branch, and the old message ("check the popup blocker icon") blamed the wrong thing on
+    // every reply/done/no-mailable-address lead. r.mailWhy carries the real reason when one is set.
     +     'if(!subj || !body || !to){'
-    +       'if(openHere(r.gurl)){ post("email"); confirmSend(r, "no composed payload on this card — Gmail compose opened"); }'
-    +       'else { addLog("fail", r.first||r.owner, "Gmail window did not open — check the popup blocker icon", "warn"); advance(); }'
+    +       'var whyMap={replied:"owner already replied — this is a live conversation, not a template",'
+    +                   'done:"3 emails already sent — the last one promised no more, honoring that"};'
+    +       'addLog("skip", r.first||r.owner, "no email to send ("+(whyMap[r.mailWhy]||"no reachable mailbox for this lead")+")", "warn");'
+    +       'advance();'
     +       'return;'
     +     '}'
     +     'var payload = {to:to, bcc:bcc, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
@@ -10581,8 +10587,19 @@ function genMorningWorker(lane, autostart){
     +         '}'
     +       '})'
     +       '.catch(function(err){'
-    // Bridge offline -> graceful degradation to manual Gmail. This is an ATTEMPT, never a send.
     +         'bridgeUp(false);'
+    // AUTO-RUN: never open a Gmail composer or wait on a confirm click — that is precisely the
+    // "composer emails" experience the operator told us to stop producing. The bridge going down
+    // mid-run should have been caught before start (see the BRIDGE_OK gate on auto-run start), but
+    // if it drops mid-queue anyway, PAUSE rather than grinding every remaining lead through a
+    // popup — same posture as the cap/auth failures above, and it leaves the whole remaining
+    // queue untouched (not falsely skipped) for the next run once the bridge is back.
+    +         'if(auto){'
+    +           'addLog("fail", r.first||r.owner, "send bridge went offline mid-run — pausing auto-run so nothing opens a composer. Restart send_server.py, then press Start Auto again.", "warn");'
+    +           'pause(); return;'
+    +         '}'
+    // MANUAL (operator clicked Email on this one lead): a human is right here, so the Gmail-compose
+    // fallback + confirm click is legitimate — this is an ATTEMPT, never a send.
     +         'if(openHere(r.gurl)){ post("email"); confirmSend(r, "bridge offline — Gmail compose opened"); }'
     +         'else { addLog("fail", r.first||r.owner, "bridge offline AND Gmail popup blocked", "warn"); advance(); }'
     +       '});'
@@ -10922,7 +10939,17 @@ function genMorningWorker(lane, autostart){
     +   'document.addEventListener("click", function(e){'
     +     'var b=e.target.closest(".mwbtn"); if(!b||b.classList.contains("disabled"))return;'
     +     'var fn=b.dataset.fn; if(!fn)return; var r=Q[i]; if(!r)return;'
-    +     'if(fn==="auto"){ auto=true; addLog("open", r.first||r.owner, "auto-run started — "+Q.length+" leads queued"); return runOne(); }'
+    // BRIDGE GATE. Auto-run must never degrade into a wall of Gmail-compose-and-confirm popups —
+    // that is the exact "composer emails" experience the operator told us to stop showing him. If
+    // the bridge is not confirmed up, refuse to start (same posture as the FTSA gate below) and
+    // say exactly how to fix it, instead of starting a run that will beg for a click on every lead.
+    +     'if(fn==="auto"){'
+    +       'if(BRIDGE_OK!==true){'
+    +         'addLog("fail", "auto-run", "&#9940; send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.", "warn");'
+    +         'return;'
+    +       '}'
+    +       'auto=true; addLog("open", r.first||r.owner, "auto-run started — "+Q.length+" leads queued"); return runOne();'
+    +     '}'
     // CALL is handled before the email/text/wp guard below — it is not one of those channels and
     // must not be filtered by their availability check.
     +     'if(fn==="call"){ return doCall(r); }'
@@ -10985,6 +11012,15 @@ function genMorningWorker(lane, autostart){
     +       'var t=setInterval(function(){'
     +         'left--; var el=document.getElementById("mwcd"); if(el) el.textContent=left;'
     +         'if(left<=0){ clearInterval(t); box.remove();'
+    // BRIDGE GATE (mirrors the manual Start-Auto button). probeBridge() fired 20s ago and its
+    // 1.5s-timeout result is long since settled, so BRIDGE_OK is trustworthy here. Without this,
+    // a bridge that is down at 8am does not just fail quietly — it opens a real Gmail composer
+    // and a "did it send?" prompt for every single queued lead, unattended, all morning. That is
+    // the exact failure the operator told us to stop producing.
+    +           'if(BRIDGE_OK!==true){'
+    +             'addLog("fail","auto-start","&#9940; send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
+    +             'return;'
+    +           '}'
     +           'auto=true; addLog("open","auto-start","&#9654; auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
     +           'runOne(); }'
     +       '},1000);'
