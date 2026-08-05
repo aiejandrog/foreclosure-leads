@@ -1882,5 +1882,1268 @@
    }
   ],
   "t": "2026-07-28"
+ },
+ "CACE-25-005564": {
+  "ent": "MJA VENTURES LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "MJA VENTURES LLC",
+  "typo": false,
+  "ra": "ICON EQUITY GROUP LLC",
+  "ra_addr": "23 S SWINTON AVE, DELRAY BEACH, FL 33444",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "SHAFER, ANTHONY D",
+    "a": "23 S SWINTON AVE, DELRAY BEACH, FL 33444",
+    "p": "https://www.truepeoplesearch.com/results?name=ANTHONY%20D%20SHAFER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=23%20S%20SWINTON%20AVE&citystatezip=DELRAY%20BEACH%2C%20FL%2033444",
+    "cba": "https://www.cyberbackgroundchecks.com/address/23-s-swinton-ave/delray-beach/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/anthony-d-shafer/fl/delray-beach"
+   }
+  ],
+  "t": "2026-07-29"
+ },
+ "CACE-25-018141": {
+  "ent": "CARIBBEAN ISLAND DEALS LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [],
+  "t": "2026-07-29"
+ },
+ "2025-020931-CA-01": {
+  "ent": "PRESERVATION TRUST",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [],
+  "t": "2026-07-31"
+ },
+ "2025-023570-CA-01": {
+  "ent": "TM CONSULTING & CO LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [],
+  "t": "2026-07-31"
+ },
+ "2026A00190": {
+  "ent": "HUDSON CHARTERS LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "HUDSON CHASE LLC",
+   "HUDSON CHIMNEY, INC.",
+   "HUDSON CHIROPRACTIC, P.A."
+  ],
+  "t": "2026-08-01"
+ },
+ "2026A00205": {
+  "ent": "RIM GROUP INVESTMENTS II CORP",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "RIM GROUP INVESTMENTS II CORP.",
+  "typo": false,
+  "ra": "DE ARMAS, JULIO",
+  "ra_addr": "4100 SALZEDO STREET APT 1010, MIAMI, FL 33146",
+  "officers": [
+   {
+    "t": "PSD",
+    "n": "GORRIN, RAUL A",
+    "a": "4100 SALZEDO STREET APT 1010, MIAMI, FL 33146",
+    "p": "https://www.truepeoplesearch.com/results?name=RAUL%20A%20GORRIN",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4100%20SALZEDO%20STREET%20APT%201010&citystatezip=MIAMI%2C%20FL%2033146",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4100-salzedo-street-apt-1010/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/raul-a-gorrin/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026A00210": {
+  "ent": "PLATINUM EDGE LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "PLATINUM EDGE, LLC",
+  "typo": false,
+  "ra": "Anderson Registered Agents, Inc.",
+  "ra_addr": "625 E. Twiggs Street, Suite 110, Tampa, FL 33602",
+  "officers": [
+   {
+    "t": "CEO",
+    "n": "PATEL, MITCH",
+    "a": "111 BROADWAY, SUITE 300, NASHVILLE, TN 37201",
+    "p": "https://www.truepeoplesearch.com/results?name=MITCH%20PATEL",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=111%20BROADWAY&citystatezip=SUITE%20300%20NASHVILLE%2C%20TN%2037201",
+    "cba": "https://www.cyberbackgroundchecks.com/address/111-broadway/suite-300-nashville/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/mitch-patel/fl/nashville"
+   },
+   {
+    "t": "Authorized",
+    "n": "Villa, Vanessa",
+    "a": "111 BROADWAY, SUITE 300",
+    "p": "https://www.truepeoplesearch.com/results?name=Vanessa%20Villa",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=111%20BROADWAY&citystatezip=SUITE%20300%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/111-broadway/suite-300/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/vanessa-villa/fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026A00211": {
+  "ent": "COOGEE LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "COOGEE LLC",
+  "typo": false,
+  "ra": "Sierra, Sofia, Sofia sierra",
+  "ra_addr": "1549 NE 123RD ST, NORTH MIAMI, FL 33161",
+  "officers": [
+   {
+    "t": "MANAGER",
+    "n": "SIERRA, SOFIA",
+    "a": "1860 Venice Park Drive, Unit 126",
+    "p": "https://www.truepeoplesearch.com/results?name=SOFIA%20SIERRA",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1860%20Venice%20Park%20Drive&citystatezip=Unit%20126%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1860-venice-park-drive/unit-126/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/sofia-sierra/fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2024-017395-CA-01": {
+  "ent": "YACHT MANAGEMENT SERVICES FL LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "YACHT MANAGEMENT SERVICES FL, LLC",
+  "typo": false,
+  "ra": "GIROLAMO, NICOLLE",
+  "ra_addr": "1206 STIRLING RD, STE 4A",
+  "officers": [
+   {
+    "t": "MGR, Manag",
+    "n": "GIROLAMO, NICOLLE",
+    "a": "1206 Stirling Rd, Ste 4A",
+    "p": "https://www.truepeoplesearch.com/results?name=NICOLLE%20GIROLAMO",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1206%20Stirling%20Rd&citystatezip=Ste%204A%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1206-stirling-rd/ste-4a/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/nicolle-girolamo/fl"
+   },
+   {
+    "t": "CFO",
+    "n": "Torres, Jessica",
+    "a": "1206 Stirling Rd, Ste 4A",
+    "p": "https://www.truepeoplesearch.com/results?name=Jessica%20Torres",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1206%20Stirling%20Rd&citystatezip=Ste%204A%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1206-stirling-rd/ste-4a/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/jessica-torres/fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2024-020875-CA-01": {
+  "ent": "LAMILA LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "LAMILA, LLC",
+  "typo": false,
+  "ra": "ARNAIZ, ISABEL",
+  "ra_addr": "11918 SW 271ST STREET, HOMESTEAD, FL 33032",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "ARNAIZ, ISABEL",
+    "a": "11918 SW 271ST STREET, HOMESTEAD, FL 33032",
+    "p": "https://www.truepeoplesearch.com/results?name=ISABEL%20ARNAIZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=11918%20SW%20271ST%20STREET&citystatezip=HOMESTEAD%2C%20FL%2033032",
+    "cba": "https://www.cyberbackgroundchecks.com/address/11918-sw-271st-street/homestead/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/isabel-arnaiz/fl/homestead"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-005786-CA-01": {
+  "ent": "D3N9 BAYSHORE HOLDINGS LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "D3N9 BAYSHORE HOLDINGS LLC",
+  "typo": false,
+  "ra": "ZenBusiness Inc.",
+  "ra_addr": "336 E. College Ave., Suite 301",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "ADDISU, ANTENEH",
+    "a": "1065 SW 8TH STREET, MIAMI, FL 33137",
+    "p": "https://www.truepeoplesearch.com/results?name=ANTENEH%20ADDISU",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1065%20SW%208TH%20STREET&citystatezip=MIAMI%2C%20FL%2033137",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1065-sw-8th-street/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/anteneh-addisu/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-008073-CA-01": {
+  "ent": "PARAMOUNT WORLD 4008 BEATRIZ LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "PARAMOUNT WORLD 4008 BEATRIZ LLC",
+  "typo": false,
+  "ra": "Bamieh, Morella Lucia",
+  "ra_addr": "13132 SW 57 Terrace, Miami, FL 33183",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "BOHON, OTTO RAMON",
+    "a": "5443 S 12TH AVE, tucson, AZ 85706",
+    "p": "https://www.truepeoplesearch.com/results?name=OTTO%20RAMON%20BOHON",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=5443%20S%2012TH%20AVE&citystatezip=tucson%2C%20AZ%2085706",
+    "cba": "https://www.cyberbackgroundchecks.com/address/5443-s-12th-ave/tucson/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/otto-ramon-bohon/fl/tucson"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-024501-CA-01": {
+  "ent": "URBANICK LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "URBANICK LLC",
+  "typo": false,
+  "ra": "BARRANTES ARDILA, CAMILO E",
+  "ra_addr": "595 NW 34TH STREET, MIAMI, FL 33127",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "BARRANTES ARDILA, CAMILO E",
+    "a": "595 NW 34TH ST, MIAMI, FL 33127",
+    "p": "https://www.truepeoplesearch.com/results?name=CAMILO%20E%20BARRANTES%20ARDILA",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=595%20NW%2034TH%20ST&citystatezip=MIAMI%2C%20FL%2033127",
+    "cba": "https://www.cyberbackgroundchecks.com/address/595-nw-34th-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/camilo-e-barrantes-ardila/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-001789-CA-01": {
+  "ent": "MILA 2209 LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "MILA 2209 LLC",
+  "typo": false,
+  "ra": "REGISTERED AGENT GROUP LLC",
+  "ra_addr": "31 SE 5TH STREET, SUITE 312",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "LEON PORTILLA, ROBERTO J",
+    "a": "31 SE 5TH STREET, STE 312, MIAMI, FL 33131",
+    "p": "https://www.truepeoplesearch.com/results?name=ROBERTO%20J%20LEON%20PORTILLA",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=31%20SE%205TH%20STREET&citystatezip=STE%20312%20MIAMI%2C%20FL%2033131",
+    "cba": "https://www.cyberbackgroundchecks.com/address/31-se-5th-street/ste-312-miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/roberto-j-leon-portilla/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2020-017725-CA-01": {
+  "ent": "FRESH BRIX PROPERTIES LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "FRESH BRIX PROPERTIES, LLC",
+  "typo": false,
+  "ra": "EGUSQUIZA, JOHN",
+  "ra_addr": "9960 SW 40 STREET, MIAMI, FL 33165",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "HOEPKER, THOMAS M",
+    "a": "1395 Brickell Avenue, Suite 800",
+    "p": "https://www.truepeoplesearch.com/results?name=THOMAS%20M%20HOEPKER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1395%20Brickell%20Avenue&citystatezip=Suite%20800%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1395-brickell-avenue/suite-800/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/thomas-m-hoepker/fl"
+   },
+   {
+    "t": "AMBR",
+    "n": "KRUCHEN, CHRISTINE",
+    "a": "1395 Brickell Avenue, Suite 800",
+    "p": "https://www.truepeoplesearch.com/results?name=CHRISTINE%20KRUCHEN",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1395%20Brickell%20Avenue&citystatezip=Suite%20800%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1395-brickell-avenue/suite-800/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/christine-kruchen/fl"
+   },
+   {
+    "t": "MGR",
+    "n": "WEST HILL REALTY SERVICES",
+    "a": "1395 Brickell Avenue, Suite 800"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-024541-CA-01": {
+  "ent": "S.J.T.K ENTERPRISE LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "S.J.T.K ENTERPRISE LLC",
+  "typo": false,
+  "ra": "JOSEPH, KENOL",
+  "ra_addr": "1370 NW 179TH ST, MIAMI GARDENS, FL 33169",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "JOSEPH, Kenol",
+    "a": "1370 NW 179th St, Miami fl, FL 33169",
+    "p": "https://www.truepeoplesearch.com/results?name=Kenol%20JOSEPH",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1370%20NW%20179th%20St&citystatezip=Miami%20fl%2C%20FL%2033169",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1370-nw-179th-st/miami-fl/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/kenol-joseph/fl/miami-fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-008491-CA-01": {
+  "ent": "MICKINS PROPERTY GROUP, INC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "MICK INTELLIGENCE, LLC",
+   "MICK INVESTMENTS LLC",
+   "MICKI OSTER, INC."
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-014438-CA-01": {
+  "ent": "SMITH & JACKSON HOME INVESTMENT, LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "SMITH & JACKSON HOME INVESTMENT, LLC",
+  "typo": false,
+  "ra": "SPIEGEL &amp; UTRERA, P.A.",
+  "ra_addr": "1840 SW 22ND ST., 4TH FLOOR",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "ATKINS, SONDRA",
+    "a": "7905 SW 195 ST, MIAMI, FL 33157",
+    "p": "https://www.truepeoplesearch.com/results?name=SONDRA%20ATKINS",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=7905%20SW%20195%20ST&citystatezip=MIAMI%2C%20FL%2033157",
+    "cba": "https://www.cyberbackgroundchecks.com/address/7905-sw-195-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/sondra-atkins/fl/miami"
+   },
+   {
+    "t": "Manager",
+    "n": "SMITH, BETTY",
+    "a": "7905 SW 195 ST, MIAMI, FL 33157",
+    "p": "https://www.truepeoplesearch.com/results?name=BETTY%20SMITH",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=7905%20SW%20195%20ST&citystatezip=MIAMI%2C%20FL%2033157",
+    "cba": "https://www.cyberbackgroundchecks.com/address/7905-sw-195-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/betty-smith/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2023-023471-CA-01": {
+  "ent": "23 BISCAYNE INVESTMENTS LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "23 BISCAYNE INVESTMENTS LLC",
+  "typo": false,
+  "ra": "Essenwanger, Mariagracia",
+  "ra_addr": "601 NE 23 STREET TH3, MIAMI, FL 33137",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "CAMPINS, ALVARO",
+    "a": "1600 PONCE DE LEON BLVD STE 1201, CORAL GABLES, FL 33134",
+    "p": "https://www.truepeoplesearch.com/results?name=ALVARO%20CAMPINS",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1600%20PONCE%20DE%20LEON%20BLVD%20STE%201201&citystatezip=CORAL%20GABLES%2C%20FL%2033134",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1600-ponce-de-leon-blvd-ste-1201/coral-gables/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/alvaro-campins/fl/coral-gables"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-008840-CA-01": {
+  "ent": "GLOBAL RISK SOLUTIONS, INC.",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "GLOBAL RISK SOLUTIONS, INC.",
+  "typo": false,
+  "ra": "RADIGAN, ARTHUR K",
+  "ra_addr": "4724 Lena Road, Bradenton, FL 34211",
+  "officers": [
+   {
+    "t": "P/D",
+    "n": "RADIGAN, ARTHUR K",
+    "a": "4724 Lena Road, Bradenton, FL 34211",
+    "p": "https://www.truepeoplesearch.com/results?name=ARTHUR%20K%20RADIGAN",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4724%20Lena%20Road&citystatezip=Bradenton%2C%20FL%2034211",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4724-lena-road/bradenton/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/arthur-k-radigan/fl/bradenton"
+   },
+   {
+    "t": "CFO/S/D",
+    "n": "LEVITO, VINCENT U",
+    "a": "4724 Lena Road, Bradenton, FL 34211",
+    "p": "https://www.truepeoplesearch.com/results?name=VINCENT%20U%20LEVITO",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4724%20Lena%20Road&citystatezip=Bradenton%2C%20FL%2034211",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4724-lena-road/bradenton/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/vincent-u-levito/fl/bradenton"
+   },
+   {
+    "t": "COO/D",
+    "n": "GOSSER, CHARLES S.",
+    "a": "4724 Lena Road, Bradenton, FL 34211",
+    "p": "https://www.truepeoplesearch.com/results?name=CHARLES%20S.%20GOSSER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4724%20Lena%20Road&citystatezip=Bradenton%2C%20FL%2034211",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4724-lena-road/bradenton/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/charles-s-gosser/fl/bradenton"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-007818-CA-01": {
+  "ent": "VUKOTA COLORADO SPRINGS II, LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "VUKOVIC LLC",
+   "VUKOVIC LLC",
+   "VUKOVIC, ALEXANDRIA"
+  ],
+  "t": "2026-08-01"
+ },
+ "2022-012065-CA-01": {
+  "ent": "BLUE WATER COAST SERVICES LLC TR",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "BLUE WATER COATINGS, INC.",
+   "BLUEWATER COATINGS LLC",
+   "BLUEWATER COATINGS OF FLORIDA , L.L.C."
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-004475-CA-01": {
+  "ent": "MOD OM 1 LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "MOD OM 1 LLC",
+  "typo": false,
+  "ra": "DRUIN, YISROEL",
+  "ra_addr": "1050 JEFFERSON ST, HOLLYWOOD, FL 33019",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "DRUIN, YISROEL",
+    "a": "1050 Jefferson St, Hollywood, FL 33019",
+    "p": "https://www.truepeoplesearch.com/results?name=YISROEL%20DRUIN",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1050%20Jefferson%20St&citystatezip=Hollywood%2C%20FL%2033019",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1050-jefferson-st/hollywood/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/yisroel-druin/fl/hollywood"
+   },
+   {
+    "t": "AMBR",
+    "n": "POLTER, MENACHEM",
+    "a": "315 NELL CT NE, ATLANTA, GA 30342",
+    "p": "https://www.truepeoplesearch.com/results?name=MENACHEM%20POLTER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=315%20NELL%20CT%20NE&citystatezip=ATLANTA%2C%20GA%2030342",
+    "cba": "https://www.cyberbackgroundchecks.com/address/315-nell-ct-ne/atlanta/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/menachem-polter/fl/atlanta"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-006521-CA-01": {
+  "ent": "MARKSSAFC, LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "MARKSSAFC LLC",
+  "typo": false,
+  "ra": "HERNANDEZ, MARCO",
+  "ra_addr": "480 NE 31ST ST, MIAMI, FL 33137",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "HERNANDEZ MEDINA, MARCO ANTONIO",
+    "a": "480 NE 31ST ST, MIAMI, FL 33137",
+    "p": "https://www.truepeoplesearch.com/results?name=MARCO%20ANTONIO%20HERNANDEZ%20MEDINA",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=480%20NE%2031ST%20ST&citystatezip=MIAMI%2C%20FL%2033137",
+    "cba": "https://www.cyberbackgroundchecks.com/address/480-ne-31st-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/marco-antonio-hernandez-medina/fl/miami"
+   },
+   {
+    "t": "MGR",
+    "n": "HERNANDEZ SANDOVAL, SAHARAI",
+    "a": "480 NE 31ST ST, MIAMI, FL 33137",
+    "p": "https://www.truepeoplesearch.com/results?name=SAHARAI%20HERNANDEZ%20SANDOVAL",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=480%20NE%2031ST%20ST&citystatezip=MIAMI%2C%20FL%2033137",
+    "cba": "https://www.cyberbackgroundchecks.com/address/480-ne-31st-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/saharai-hernandez-sandoval/fl/miami"
+   },
+   {
+    "t": "AMBR",
+    "n": "HERNANDEZ SANDOVAL, ARANTXA",
+    "a": "480 NE 31ST ST, MIAMI, FL 33137",
+    "p": "https://www.truepeoplesearch.com/results?name=ARANTXA%20HERNANDEZ%20SANDOVAL",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=480%20NE%2031ST%20ST&citystatezip=MIAMI%2C%20FL%2033137",
+    "cba": "https://www.cyberbackgroundchecks.com/address/480-ne-31st-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/arantxa-hernandez-sandoval/fl/miami"
+   },
+   {
+    "t": "AMBR",
+    "n": "HERNANDEZ SANDOVAL, FERNANDO INAKI",
+    "a": "480 NE 31ST ST, MIAMI, FL 33137",
+    "p": "https://www.truepeoplesearch.com/results?name=FERNANDO%20INAKI%20HERNANDEZ%20SANDOVAL",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=480%20NE%2031ST%20ST&citystatezip=MIAMI%2C%20FL%2033137",
+    "cba": "https://www.cyberbackgroundchecks.com/address/480-ne-31st-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/fernando-inaki-hernandez-sandoval/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-016007-CA-01": {
+  "ent": "JMH INVESTMENT GROUP LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "JMH INVESTMENT GROUP, LLC",
+  "typo": false,
+  "ra": "ATLANTIC MARINE INC",
+  "ra_addr": "8091 W 21ST LN, HIALEAH, FL 33016",
+  "officers": [
+   {
+    "t": "MANAGER",
+    "n": "HERNANDEZ, JUAN",
+    "a": "8091 W 21ST LN, HIALEAH, FL 33016",
+    "p": "https://www.truepeoplesearch.com/results?name=JUAN%20HERNANDEZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=8091%20W%2021ST%20LN&citystatezip=HIALEAH%2C%20FL%2033016",
+    "cba": "https://www.cyberbackgroundchecks.com/address/8091-w-21st-ln/hialeah/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/juan-hernandez/fl/hialeah"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-007090-CA-01": {
+  "ent": "EMPORIUM LOGISTICS 1706, LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "EMPORIUM LOGISTICS 1706 LLC",
+  "typo": false,
+  "ra": "WAYNE, ROBERT",
+  "ra_addr": "C/O ROBERT WAYNE, 11410 N Kendall Drive",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "GONZALEZ, MANUEL A",
+    "a": "C/O ROBERT WAYNE, 11410 N Kendall Drive",
+    "p": "https://www.truepeoplesearch.com/results?name=MANUEL%20A%20GONZALEZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=C/O%20ROBERT%20WAYNE&citystatezip=11410%20N%20Kendall%20Drive%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/c-o-robert-wayne/11410-n-kendall-drive/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/manuel-a-gonzalez/fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-007129-CA-01": {
+  "ent": "EMPORIUM LOGISTICS 1706, LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "EMPORIUM LOGISTICS 1706 LLC",
+  "typo": false,
+  "ra": "WAYNE, ROBERT",
+  "ra_addr": "C/O ROBERT WAYNE, 11410 N Kendall Drive",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "GONZALEZ, MANUEL A",
+    "a": "C/O ROBERT WAYNE, 11410 N Kendall Drive",
+    "p": "https://www.truepeoplesearch.com/results?name=MANUEL%20A%20GONZALEZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=C/O%20ROBERT%20WAYNE&citystatezip=11410%20N%20Kendall%20Drive%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/c-o-robert-wayne/11410-n-kendall-drive/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/manuel-a-gonzalez/fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-002335-CA-01": {
+  "ent": "LA 8, LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "LA 8, LLC",
+  "typo": false,
+  "ra": "WEYNE, ROBERT",
+  "ra_addr": "C/O ROBERT WEYNE, 11410 N. Kendall Dr.",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "GONZALEZ, MANUEL A",
+    "a": "C/O ROBERT WEYNE, 11410 N. Kendall Dr.",
+    "p": "https://www.truepeoplesearch.com/results?name=MANUEL%20A%20GONZALEZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=C/O%20ROBERT%20WEYNE&citystatezip=11410%20N.%20Kendall%20Dr.%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/c-o-robert-weyne/11410-n-kendall-dr/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/manuel-a-gonzalez/fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "502025CA009956XXXAMB": {
+  "ent": "4545 N OCEAN BLVD 18D LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "4545 N.W. BOCA RATON BLVD. LLC",
+   "4545 RADIO ROAD, LLC.",
+   "4545 ROSEBUD ST LLC"
+  ],
+  "t": "2026-08-01"
+ },
+ "502025CA001116XXXAMB": {
+  "ent": "DP8484G LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "DP8484G LLC",
+  "typo": false,
+  "ra": "RIVERSIDE FILINGS LLC",
+  "ra_addr": "155 OFFICE PLAZA DR., 1ST FL., TALLAHASSEE, FL 32301",
+  "officers": [],
+  "t": "2026-08-01"
+ },
+ "502025CA009251XXXAMB": {
+  "ent": "SPANGLISH REALTY LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "SPANGLISH REALTY, LLC",
+  "typo": false,
+  "ra": "COLON, MARY E",
+  "ra_addr": "3310 Horse Trail Ct., Merritt Island, FL 32953",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "COLON, MARY E",
+    "a": "3310 Horse Trail Ct., Merritt Island, FL 32953",
+    "p": "https://www.truepeoplesearch.com/results?name=MARY%20E%20COLON",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=3310%20Horse%20Trail%20Ct.&citystatezip=Merritt%20Island%2C%20FL%2032953",
+    "cba": "https://www.cyberbackgroundchecks.com/address/3310-horse-trail-ct/merritt-island/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/mary-e-colon/fl/merritt-island"
+   },
+   {
+    "t": "Trustee",
+    "n": "Santiago, Danny Ricardo",
+    "a": "639 Executive Center Dr, Bld. O-101",
+    "p": "https://www.truepeoplesearch.com/results?name=Danny%20Ricardo%20Santiago",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=639%20Executive%20Center%20Dr&citystatezip=Bld.%20O-101%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/639-executive-center-dr/bld-o-101/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/danny-ricardo-santiago/fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "502025CA009304XXXAMB": {
+  "ent": "PROPEL HOME INVESTMENTS LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "PROPEL HOME INVESTMENTS LLC",
+  "typo": false,
+  "ra": "SOUZA, ELISA",
+  "ra_addr": "4375 NW 128TH ST, OPA LOCKA, FL 33054",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "SOUZA, ELISA",
+    "a": "4375 NW 128TH ST, OPA LOCKA, FL 33054 UN",
+    "p": "https://www.truepeoplesearch.com/results?name=ELISA%20SOUZA",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4375%20NW%20128TH%20ST&citystatezip=OPA%20LOCKA%20FL%2033054%2C%20UN",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4375-nw-128th-st/opa-locka-fl-33054/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/elisa-souza/fl/opa-locka"
+   },
+   {
+    "t": "PRES",
+    "n": "ANJOS, ALLISON",
+    "a": "4375 NW 128TH ST, MIAMI, FL 33016",
+    "p": "https://www.truepeoplesearch.com/results?name=ALLISON%20ANJOS",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4375%20NW%20128TH%20ST&citystatezip=MIAMI%2C%20FL%2033016",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4375-nw-128th-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/allison-anjos/fl/miami"
+   },
+   {
+    "t": "MGR",
+    "n": "SCHULER, ANGELA",
+    "a": "4375 NW 128TH ST, OPA LOCKA, FL 33054",
+    "p": "https://www.truepeoplesearch.com/results?name=ANGELA%20SCHULER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4375%20NW%20128TH%20ST&citystatezip=OPA%20LOCKA%2C%20FL%2033054",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4375-nw-128th-st/opa-locka/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/angela-schuler/fl/opa-locka"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "502025CA005588XXXAMB": {
+  "ent": "SMALL INVESTMENTS GROUP LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "SMALL INVESTMENTS GROUP, LLC",
+  "typo": false,
+  "ra": "Roberts, David",
+  "ra_addr": "7901 4th St N, STE 300",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "PIERRE, WAKLY",
+    "a": "7901 4th St N, STE 300",
+    "p": "https://www.truepeoplesearch.com/results?name=WAKLY%20PIERRE",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=7901%204th%20St%20N&citystatezip=STE%20300%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/7901-4th-st-n/ste-300/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/wakly-pierre/fl"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "502025CA010873XXXAMB": {
+  "ent": "BRYSTE HOLDINGS LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "BRYSTE HOLDINGS, LLC",
+  "typo": false,
+  "ra": "Bryste Holdings LLC",
+  "ra_addr": "10299 Southern Blvd, 211387",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "bryste holdings llc",
+    "a": "10299 Southern Blvd, 211387"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "502024CA009313XXXAMB": {
+  "ent": "MISHEHU HOLECH TAMID ITI TRUST",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "MISHEKEI EXPEDITE LLC",
+   "MISHELANU LLC",
+   "MISHELA REHAB SPACE CORP."
+  ],
+  "t": "2026-08-01"
+ },
+ "502025CC008275XXXAMB": {
+  "ent": "RCK007 LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "RCK1 INC.",
+   "RCK1401, LLC",
+   "RCK2 ADVISORS LLC"
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2661TD": {
+  "ent": "TARPON IV LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "TARPON IV LLC",
+  "typo": false,
+  "ra": "USA-RA LLC",
+  "ra_addr": "841 PRUDENTIAL DRIVE 12TH FLOOR, JACKSONVILLE, FL 32207",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "LEDBETTER, MARK",
+    "a": "8345 NW 66ST #4987, MIAMI, FL 33166",
+    "p": "https://www.truepeoplesearch.com/results?name=MARK%20LEDBETTER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=8345%20NW%2066ST%20%234987&citystatezip=MIAMI%2C%20FL%2033166",
+    "cba": "https://www.cyberbackgroundchecks.com/address/8345-nw-66st-4987/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/mark-ledbetter/fl/miami"
+   },
+   {
+    "t": "MGRM",
+    "n": "LEDBETTER, LEAH",
+    "a": "8345 NW 66ST #4987, MIAMI, FL 33166",
+    "p": "https://www.truepeoplesearch.com/results?name=LEAH%20LEDBETTER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=8345%20NW%2066ST%20%234987&citystatezip=MIAMI%2C%20FL%2033166",
+    "cba": "https://www.cyberbackgroundchecks.com/address/8345-nw-66st-4987/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/leah-ledbetter/fl/miami"
+   },
+   {
+    "t": "MGRM",
+    "n": "LEDBETTER, MAGNOLIA",
+    "a": "8345 NW 66ST #4987, MIAMI, FL 33166",
+    "p": "https://www.truepeoplesearch.com/results?name=MAGNOLIA%20LEDBETTER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=8345%20NW%2066ST%20%234987&citystatezip=MIAMI%2C%20FL%2033166",
+    "cba": "https://www.cyberbackgroundchecks.com/address/8345-nw-66st-4987/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/magnolia-ledbetter/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2666TD": {
+  "ent": "MALBEC II LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "MALBEC II LLC",
+  "typo": false,
+  "ra": "TARPON IV LLC",
+  "ra_addr": "8345 NW 66TH ST, #4987",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "LEDBETTER, MARK A",
+    "a": "358 FAIRFIELD DRIVE, SEVERN, MD 21144",
+    "p": "https://www.truepeoplesearch.com/results?name=MARK%20A%20LEDBETTER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=358%20FAIRFIELD%20DRIVE&citystatezip=SEVERN%2C%20MD%2021144",
+    "cba": "https://www.cyberbackgroundchecks.com/address/358-fairfield-drive/severn/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/mark-a-ledbetter/fl/severn"
+   },
+   {
+    "t": "MGRM",
+    "n": "DUFF, KIMBERLY N",
+    "a": "906 N. FRANKLINTOWN RD, BALTIMORE, MD 21216",
+    "p": "https://www.truepeoplesearch.com/results?name=KIMBERLY%20N%20DUFF",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=906%20N.%20FRANKLINTOWN%20RD&citystatezip=BALTIMORE%2C%20MD%2021216",
+    "cba": "https://www.cyberbackgroundchecks.com/address/906-n-franklintown-rd/baltimore/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/kimberly-n-duff/fl/baltimore"
+   },
+   {
+    "t": "MGR",
+    "n": "TARPON IV LLC",
+    "a": "8345 NW 66 ST, #4987, MIAMI, FL 33166"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2686TD": {
+  "ent": "CANAL POINT LAND TRUST",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "CANAL POINT LIQUORS INC",
+   "CANAL POINT MAINTENANCE CO.",
+   "CANAL POINT MEDICAL SVC INC."
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2718TD": {
+  "ent": "CANOPUS INVESTMENT GROUP LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "CANOPUS INVESTMENT GROUP, LLC",
+  "typo": false,
+  "ra": "Chantale Milord LLC",
+  "ra_addr": "6671 W. Indiantown Rd, 379",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "Chantale Milord LLC",
+    "a": "6671 W. Indiantown Rd, 379"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2830TD": {
+  "ent": "COTREXAL LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "COTREXAL LLC",
+  "typo": false,
+  "ra": "ALONSO, ALEJANDRO H",
+  "ra_addr": "18591 SOUTH DIXIE HIGHWAY, #1043",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "ALONSO, ALEJANDRO H",
+    "a": "18591 SOUTH DIXIE HIGHWAY #1043, MIAMI, FL 33157",
+    "p": "https://www.truepeoplesearch.com/results?name=ALEJANDRO%20H%20ALONSO",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=18591%20SOUTH%20DIXIE%20HIGHWAY%20%231043&citystatezip=MIAMI%2C%20FL%2033157",
+    "cba": "https://www.cyberbackgroundchecks.com/address/18591-south-dixie-highway-1043/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/alejandro-h-alonso/fl/miami"
+   },
+   {
+    "t": "AMBR",
+    "n": "PLUGEL, LEONARDO C",
+    "a": "316 84th Street, MIAMI, FL 33150",
+    "p": "https://www.truepeoplesearch.com/results?name=LEONARDO%20C%20PLUGEL",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=316%2084th%20Street&citystatezip=MIAMI%2C%20FL%2033150",
+    "cba": "https://www.cyberbackgroundchecks.com/address/316-84th-street/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/leonardo-c-plugel/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2831TD": {
+  "ent": "ALISA INVESTMENT LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "ALISA INVESTMENT LLC",
+  "typo": false,
+  "ra": "TURKOGLU, HASAN",
+  "ra_addr": "829 SE 1st Way, Deerfield Beach, FL 33441",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "Turkoglu, Hasan B",
+    "a": "829 SE 1st Way, Deerfield Beach, FL 33441",
+    "p": "https://www.truepeoplesearch.com/results?name=Hasan%20B%20Turkoglu",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=829%20SE%201st%20Way&citystatezip=Deerfield%20Beach%2C%20FL%2033441",
+    "cba": "https://www.cyberbackgroundchecks.com/address/829-se-1st-way/deerfield-beach/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/hasan-b-turkoglu/fl/deerfield-beach"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2833TD": {
+  "ent": "COHEN BROTHERS REALTY CORP OF",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "COHEN BROTHERS REALTY CORPORATION OF FLORIDA LLC",
+   "COHEN BROTHERS REALTY SERVICES OF FLORIDA, INC.",
+   "COHEN BROWN MANAGEMENT GROUP, INC."
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2835TD": {
+  "ent": "BENIES INVESTMENT GROUP",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "BENIES INVESTMENT GROUP, LLC",
+  "typo": true,
+  "ra": "EKUNKONYE, STEPHANIE",
+  "ra_addr": "20200 WEST DIXIE HIGHWAY, 209",
+  "officers": [
+   {
+    "t": "PRES",
+    "n": "EKUNKONYE, STEPHANIE",
+    "a": "19821 NW 2 AVE #381, MIAMI, FL 33169",
+    "p": "https://www.truepeoplesearch.com/results?name=STEPHANIE%20EKUNKONYE",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=19821%20NW%202%20AVE%20%23381&citystatezip=MIAMI%2C%20FL%2033169",
+    "cba": "https://www.cyberbackgroundchecks.com/address/19821-nw-2-ave-381/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/stephanie-ekunkonye/fl/miami"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2839TD": {
+  "ent": "SC STABLES LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "SC STABLES LLC",
+  "typo": false,
+  "ra": "HAYES, SENAN",
+  "ra_addr": "13833 WELLINGTON TRACE E4-223, WELLINGTON, FL 33414",
+  "officers": [
+   {
+    "t": "MBR",
+    "n": "HAYES, SENAN",
+    "a": "13833 WELLINGTON TRACE E4-223, WELLINGTON, FL 33414",
+    "p": "https://www.truepeoplesearch.com/results?name=SENAN%20HAYES",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=13833%20WELLINGTON%20TRACE%20E4-223&citystatezip=WELLINGTON%2C%20FL%2033414",
+    "cba": "https://www.cyberbackgroundchecks.com/address/13833-wellington-trace-e4-223/wellington/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/senan-hayes/fl/wellington"
+   },
+   {
+    "t": "MBR",
+    "n": "MCGUCKIAN, COLM",
+    "a": "13833 WELLINGTON TRACE E4-223, WELLINGTON, FL 33414",
+    "p": "https://www.truepeoplesearch.com/results?name=COLM%20MCGUCKIAN",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=13833%20WELLINGTON%20TRACE%20E4-223&citystatezip=WELLINGTON%2C%20FL%2033414",
+    "cba": "https://www.cyberbackgroundchecks.com/address/13833-wellington-trace-e4-223/wellington/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/colm-mcguckian/fl/wellington"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2841TD": {
+  "ent": "ISLAND BEST RESTAURANT LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "ISLAND BEST RESTAURANT LLC",
+  "typo": false,
+  "ra": "LAROSE, MARCKENS",
+  "ra_addr": "726 LYTLE ST, WEST PALM BEACH, FL 33460",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "LAROSE, MARCKENS",
+    "a": "726 LYTLE ST, WEST PALM BEACH, FL 33460",
+    "p": "https://www.truepeoplesearch.com/results?name=MARCKENS%20LAROSE",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=726%20LYTLE%20ST&citystatezip=WEST%20PALM%20BEACH%2C%20FL%2033460",
+    "cba": "https://www.cyberbackgroundchecks.com/address/726-lytle-st/west-palm-beach/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/marckens-larose/fl/west-palm-beach"
+   },
+   {
+    "t": "MGR",
+    "n": "FONROSE, IMMACULEE G",
+    "a": "726 LYTLE ST, WEST PALM BEACH, FL 33460",
+    "p": "https://www.truepeoplesearch.com/results?name=IMMACULEE%20G%20FONROSE",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=726%20LYTLE%20ST&citystatezip=WEST%20PALM%20BEACH%2C%20FL%2033460",
+    "cba": "https://www.cyberbackgroundchecks.com/address/726-lytle-st/west-palm-beach/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/immaculee-g-fonrose/fl/west-palm-beach"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2843TD": {
+  "ent": "332 WALTON BOULEVARD LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "332 WALTON BOULEVARD, LLC",
+  "typo": false,
+  "ra": "NORTHWEST REGISTERED AGENT LLC",
+  "ra_addr": "7901 4th St N, STE 300",
+  "officers": [
+   {
+    "t": "Authorized",
+    "n": "Kirschbaum, Philipp",
+    "a": "7901 4th St N Ste 300, St. Petersburg, FL 33702",
+    "p": "https://www.truepeoplesearch.com/results?name=Philipp%20Kirschbaum",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=7901%204th%20St%20N%20Ste%20300&citystatezip=St.%20Petersburg%2C%20FL%2033702",
+    "cba": "https://www.cyberbackgroundchecks.com/address/7901-4th-st-n-ste-300/st-petersburg/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/philipp-kirschbaum/fl/st-petersburg"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2844TD": {
+  "ent": "ONE COMMUNITY CHURCH INC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "ONE COMMUNITY CHURCH INC.",
+  "typo": false,
+  "ra": "Hanke, Alexander R",
+  "ra_addr": "1619 Lehall Square South, LAKELAND, FL 33810",
+  "officers": [
+   {
+    "t": "P",
+    "n": "Hanke, Alexander R",
+    "a": "1619 LeHall Square South, LAKELAND, FL 33810",
+    "p": "https://www.truepeoplesearch.com/results?name=Alexander%20R%20Hanke",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1619%20LeHall%20Square%20South&citystatezip=LAKELAND%2C%20FL%2033810",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1619-lehall-square-south/lakeland/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/alexander-r-hanke/fl/lakeland"
+   },
+   {
+    "t": "T",
+    "n": "Kendrick, Kelly",
+    "a": "PO Box 593, Kathleen, FL 33849",
+    "p": "https://www.truepeoplesearch.com/results?name=Kelly%20Kendrick",
+    "cb": "https://www.cyberbackgroundchecks.com/people/kelly-kendrick/fl/kathleen"
+   },
+   {
+    "t": "S",
+    "n": "Hanke, Mandy M",
+    "a": "1619 Lehall Square South, Lakeland, FL 33810",
+    "p": "https://www.truepeoplesearch.com/results?name=Mandy%20M%20Hanke",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1619%20Lehall%20Square%20South&citystatezip=Lakeland%2C%20FL%2033810",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1619-lehall-square-south/lakeland/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/mandy-m-hanke/fl/lakeland"
+   },
+   {
+    "t": "VP",
+    "n": "Kendrick, Kevin",
+    "a": "PO Box 593, Kathleen, FL 33849",
+    "p": "https://www.truepeoplesearch.com/results?name=Kevin%20Kendrick",
+    "cb": "https://www.cyberbackgroundchecks.com/people/kevin-kendrick/fl/kathleen"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2845TD": {
+  "ent": "STEWARTS RESORT PROPERTIES LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "STEWART'S RESTORATION, INC.",
+   "STEWART'S ROYAL PALM, LLC",
+   "STEWARTS SARASOTA INC"
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2847TD": {
+  "ent": "INDIAN WELLS HMOWN ASSN INC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "INDIAN WELLS HOLDINGS 1, LLC",
+   "INDIAN WELLS HOLDINGS 2, LLC",
+   "INDIAN WELLS HOLDINGS 3, LLC"
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2852TD": {
+  "ent": "COFFIE & COFFIE LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "COFFIE & COFFIE LLC",
+  "typo": false,
+  "ra": "Donia Adams Roberts, P.A.",
+  "ra_addr": "257 SE DR MLK JR BLVD, BELLE GLADE, FL 33430",
+  "officers": [
+   {
+    "t": "MEMBER, MA",
+    "n": "DEBORAH B. COFFIE, AS SUCCESSOR TRUSTEE OF THE CLOVER COFFIE",
+    "a": "34 NORTHEAST AVENUE H, BELLE GLADE, FL 33430",
+    "p": "https://www.truepeoplesearch.com/results?name=AS%20SUCCESSOR%20TRUSTEE%20OF%20THE%20CLOVER%20COFFIE%20DEBORAH%20B.%20COFFIE",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=34%20NORTHEAST%20AVENUE%20H&citystatezip=BELLE%20GLADE%2C%20FL%2033430",
+    "cba": "https://www.cyberbackgroundchecks.com/address/34-northeast-avenue-h/belle-glade/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/as-successor-trustee-of-the-clover-coffie-deborah-b-coffie/fl/belle-glade"
+   }
+  ],
+  "t": "2026-08-01"
+ },
+ "2026-2856TD": {
+  "ent": "LAKE EDWARD J TRUST",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "LAKEEFE BAILEY'S HANDYMAN SERVICE AND MAINTENANCE, INC.",
+   "LAKE EFFECT LLC",
+   "LAKE EFFECT ENTERPRISES, LLC"
+  ],
+  "t": "2026-08-01"
+ },
+ "2025-000133-CA-01": {
+  "ent": "13925 OLD CUTLER ROAD LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "13925 OLD CUTLER ROAD LLC",
+  "typo": false,
+  "ra": "PARROTT, KEVIN",
+  "ra_addr": "13925 Old Cutler Road, LLC, 150 Alhambra Circle, 10th Floor",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "PARROTT, KEVIN",
+    "a": "13925 Old Cutler Road, LLC, 150 Alhambra Circle, 10th Floor",
+    "p": "https://www.truepeoplesearch.com/results?name=KEVIN%20PARROTT",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=13925%20Old%20Cutler%20Road&citystatezip=LLC%20150%20Alhambra%20Circle%2010th%20Floor%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/13925-old-cutler-road/llc-150-alhambra-circle-10th-floor/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/kevin-parrott/fl"
+   }
+  ],
+  "t": "2026-08-04"
+ },
+ "2025-002770-CA-01": {
+  "ent": "10867 NW 59TH ST DORAL FL 33178, LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "10867 NW 59TH ST DORAL FL 33178 LLC",
+  "typo": false,
+  "ra": "GARRIDO PALACIO, LUIS B",
+  "ra_addr": "10867 NW 59TH ST, DORAL, FL 33178",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "GARRIDO PALACIO, LUIS B",
+    "a": "10867 NW 59TH ST, DORAL, FL 33178",
+    "p": "https://www.truepeoplesearch.com/results?name=LUIS%20B%20GARRIDO%20PALACIO",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=10867%20NW%2059TH%20ST&citystatezip=DORAL%2C%20FL%2033178",
+    "cba": "https://www.cyberbackgroundchecks.com/address/10867-nw-59th-st/doral/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/luis-b-garrido-palacio/fl/doral"
+   }
+  ],
+  "t": "2026-08-04"
+ },
+ "2025-011422-CA-01": {
+  "ent": "ALGORITHM RENOVATION SOLUTION LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "ALGORITHM RENOVATION SOLUTION, LLC",
+  "typo": false,
+  "ra": "VILENKIN, NATALIE",
+  "ra_addr": "17555 COLLINS AVE #802, SUNNY ISLES BEACH, FL 33160",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "SEBOS, ELEONORA",
+    "a": "17555 Collins Ave, Apt 802",
+    "p": "https://www.truepeoplesearch.com/results?name=ELEONORA%20SEBOS",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=17555%20Collins%20Ave&citystatezip=Apt%20802%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/17555-collins-ave/apt-802/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/eleonora-sebos/fl"
+   },
+   {
+    "t": "AMBR",
+    "n": "VILENKIN, NATALIE",
+    "a": "17555 COLLINS AVE #802, SUNNY ISLES BEACH, FL 33160",
+    "p": "https://www.truepeoplesearch.com/results?name=NATALIE%20VILENKIN",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=17555%20COLLINS%20AVE%20%23802&citystatezip=SUNNY%20ISLES%20BEACH%2C%20FL%2033160",
+    "cba": "https://www.cyberbackgroundchecks.com/address/17555-collins-ave-802/sunny-isles-beach/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/natalie-vilenkin/fl/sunny-isles-beach"
+   }
+  ],
+  "t": "2026-08-04"
+ },
+ "2025-019128-CA-01": {
+  "ent": "STUDIO HOUSE LLC (THE)",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "STUDIO HOUSE, INC.",
+   "THE STUDIO HOUSE LLC",
+   "THE STUDIO HOUSE, INC."
+  ],
+  "t": "2026-08-04"
  }
 }
