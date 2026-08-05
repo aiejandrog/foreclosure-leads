@@ -37,6 +37,8 @@ import os
 import re
 import sys
 
+import msg_brand
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOB_KEY_FILE = os.path.join(HERE, 'lob.key')
 SENDER_FILE = os.path.join(HERE, 'sender.json')
@@ -181,11 +183,51 @@ def parse_address(s):
 
 
 def _sig_lines(snd):
-    order = [snd.get('name'), snd.get('title'), snd.get('llc'),
-             ('Phone: ' + snd['phone']) if snd.get('phone') else '',
-             ('Email: ' + snd['email']) if snd.get('email') else '',
-             snd.get('addr'), snd.get('web')]
+    # Short on purpose — mirrors genLetter()'s sigHtml. The letterhead above carries phone / email /
+    # address and the body already gives the owner the number to call; repeating the whole block under
+    # "Respectfully" is what made the old letter read like a form. CAN-SPAM governs email, not paper.
+    order = [snd.get('name'), snd.get('title'), snd.get('llc')]
     return [x.strip() for x in order if x and str(x).strip()]
+
+
+def _lh_header(snd, height_px=44):
+    """MSG letterhead block — logo left, contact right, black rule under.
+
+    Byte-for-byte the same lockup genLetter() renders in the board (_msgHead), so a letter Alejandro
+    prints from the tracker and one Lob drops in the mail are the same piece of paper. Every value
+    comes from the sender profile; nothing about the operator is hardcoded here."""
+    e = html.escape
+    llc = (snd.get('llc') or 'Miami Solutions Group LLC').strip()
+    w = msg_brand.mark_size(height_px)
+    lines = []
+    if (snd.get('addr') or '').strip():
+        lines.append(e(snd['addr'].strip()))
+    pe = []
+    if (snd.get('phone') or '').strip():
+        pe.append('<b>P</b> ' + e(snd['phone'].strip()))
+    if (snd.get('email') or '').strip():
+        pe.append('<b>E</b> ' + e(snd['email'].strip()))
+    if pe:
+        lines.append('&nbsp;&nbsp;&middot;&nbsp;&nbsp;'.join(pe))
+    if (snd.get('web') or '').strip():
+        lines.append(e(snd['web'].strip()))
+    return ('<table class="msg-lh" role="presentation"><tr>'
+            f'<td class="msg-lh-mark"><img src="{msg_brand.MONO_B64}" width="{w}" height="{height_px}" alt="{e(llc)}"></td>'
+            f'<td class="msg-lh-meta"><div class="n">{e(llc)}</div>{"<br>".join(lines)}</td>'
+            '</tr></table><div class="msg-lh-rule"></div>')
+
+
+def _lh_sign(snd):
+    """The gray name line that closes the page, with the compliance disclaimer attached."""
+    e = html.escape
+    nm, ti = (snd.get('name') or '').strip(), (snd.get('title') or '').strip()
+    mid = [(snd.get('llc') or 'Miami Solutions Group LLC').strip()]
+    for k in ('phone', 'email'):
+        if (snd.get(k) or '').strip():
+            mid.append(snd[k].strip())
+    name_span = f'<span class="nm">{e(nm)}{"&nbsp;&middot;&nbsp;" + e(ti) if ti else ""}</span>' if nm else ''
+    return ('<div class="msg-sig">' + name_span + e(' · '.join(mid))
+            + '<br>Not a law firm. Not a HUD-approved housing counselor.</div>')
 
 
 def build_letter_html(r, snd, lang='en'):
@@ -269,20 +311,37 @@ def build_letter_html(r, snd, lang='en'):
 
     today = datetime.date.today().strftime('%B %d, %Y')
     ret = '<br>'.join(e(x) for x in [snd.get('name'), snd.get('llc'), snd.get('addr')] if x and str(x).strip())
+    lh_head, lh_sign = _lh_header(snd), _lh_sign(snd)
     # 2.6in top pad reserves the #10 window zone for Lob's stamped recipient address (address_placement).
+    # The MSG letterhead therefore goes BELOW that reserve, as the first thing in the content area — a
+    # logo inside the window band would print underneath Lob's own address overlay and ruin real,
+    # paid-for mail. Everything above 2.6in stays Lob's.
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @page{{margin:0}}
 html,body{{margin:0;padding:0}}
-body{{font-family:Georgia,'Times New Roman',serif;color:#111;line-height:1.5;font-size:12pt}}
-.page{{width:8.5in;height:11in;box-sizing:border-box;padding:2.6in 0.9in 0.9in;position:relative}}
+body{{font-family:Georgia,'Times New Roman',serif;color:#111;line-height:1.36;font-size:10.5pt}}
+.page{{width:8.5in;height:11in;box-sizing:border-box;padding:2.6in 0.8in 0.35in;position:relative}}
 .ret{{position:absolute;top:0.55in;left:0.9in;font-size:10pt;color:#333;line-height:1.35}}
-.date{{margin:0 0 18px;color:#333}}
+.date{{margin:0 0 10px;color:#333}}
 ul{{margin:10px 0}}
-p{{margin:0 0 12px}}
+p{{margin:0 0 6px}}
+.msg-lh{{width:100%;border-collapse:collapse;margin:0;table-layout:fixed}}
+.msg-lh td{{vertical-align:middle;padding:0;border:0}}
+.msg-lh-mark{{width:52%}}
+.msg-lh-mark img{{display:block;border:0}}
+.msg-lh-meta{{text-align:right;font:8.5pt/1.6 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1A1A1A}}
+.msg-lh-meta .n{{font-weight:700;font-size:9pt;letter-spacing:.09em;text-transform:uppercase;margin-bottom:3px}}
+.msg-lh-rule{{border-top:2.5px solid #1A1A1A;height:0;font-size:0;line-height:0;margin:6px 0 9px}}
+.msg-sig{{margin-top:10px;padding-top:6px;border-top:1px solid #C9CDD4;text-align:center;
+  font:7.5pt/1.65 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#7C8492;letter-spacing:.05em}}
+.msg-sig .nm{{display:block;font-weight:700;font-size:8pt;color:#5A6472;letter-spacing:.13em;
+  text-transform:uppercase;margin-bottom:2px}}
 </style></head><body><div class="page">
 <div class="ret">{ret}</div>
+{lh_head}
 <div class="date">{today}</div>
 {body}
+{lh_sign}
 </div></body></html>"""
 
 
