@@ -7160,6 +7160,64 @@ function _docLog(caseId, key, lang){
     if(typeof save === 'function') save();
   } catch(e){}
 }
+// ---- MSG LETTERHEAD --------------------------------------------------------------------------
+// Miami Solutions Group correspondence identity, ported from MSG_Letterhead_Template.html. The brand
+// guide records this as a FINAL decision: correspondence uses the MONO BLACK mark on a white header
+// with black rules. Red is reserved for consumer marketing (door hangers, direct mail, cards) and must
+// never appear on a letter — four other treatments were tried and rejected, don't re-propose them.
+// The mark is embedded as a base64 data URI, not an <img src="file">, because this board is one
+// self-contained encrypted HTML file: any external reference renders as a broken box offline.
+// Native asset is 238x203 (aspect 1.1724). _msgHead() derives width from height so it always scales,
+// never stretches. Rules are BORDERS, not backgrounds, so they survive print without color-adjust.
+var MSG_LOGO_MONO = 'data:image/png;base64,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';
+var MSG_LH_CSS = ''
+  + '.msg-lh{width:100%;border-collapse:collapse;margin:0;table-layout:fixed}'
+  + '.msg-lh td{vertical-align:middle;padding:0;border:0}'
+  + '.msg-lh-mark{width:52%}'
+  + '.msg-lh-mark img{display:block;border:0}'
+  + '.msg-lh-meta{text-align:right;font:9.5px/1.6 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#1A1A1A}'
+  + '.msg-lh-meta .n{font-weight:700;font-size:10px;letter-spacing:.09em;text-transform:uppercase;margin-bottom:4px}'
+  + '.msg-lh-meta b{font-weight:700;letter-spacing:.04em}'
+  + '.msg-lh-rule{border-top:2.5px solid #1A1A1A;height:0;font-size:0;line-height:0;margin:7px 0 22px}'
+  + '.msg-sig{margin-top:34px;padding-top:9px;border-top:1px solid #C9CDD4;text-align:center;'
+  +   'font:8.5px/1.65 "Helvetica Neue",Helvetica,Arial,sans-serif;color:#7C8492;letter-spacing:.05em}'
+  + '.msg-sig .nm{display:block;font-weight:700;font-size:9px;color:#5A6472;letter-spacing:.13em;text-transform:uppercase;margin-bottom:2px}'
+  + '@media print{.msg-lh{page-break-inside:avoid}.msg-sig{page-break-inside:avoid}}';
+function _msgHead(opts){
+  // Logo left, contact block right, black rule under. Every field comes from `sender` so the board
+  // stays correct whoever is signed in — hardcoding a name here would put the wrong person on
+  // Carlos's paper. opts.h = mark height in px (default 74 -> 87x74).
+  opts = opts || {};
+  var s = (typeof sender === 'object' && sender) ? sender : {};
+  var h = +opts.h || 74, w = Math.round(h * 238 / 203);
+  var llc = (s.llc || 'Miami Solutions Group LLC').trim();
+  var lines = [];
+  if((s.addr||'').trim())  lines.push(esc(s.addr.trim()));
+  var pe = [];
+  if((s.phone||'').trim()) pe.push('<b>P</b> ' + esc(s.phone.trim()));
+  if((s.email||'').trim()) pe.push('<b>E</b> ' + esc(s.email.trim()));
+  if(pe.length) lines.push(pe.join('&nbsp;&nbsp;&middot;&nbsp;&nbsp;'));
+  if((s.web||'').trim())   lines.push(esc(s.web.trim()));
+  return '<table class="msg-lh" role="presentation"><tr>'
+    +  '<td class="msg-lh-mark"><img src="'+MSG_LOGO_MONO+'" width="'+w+'" height="'+h+'" alt="'+esc(llc)+'"></td>'
+    +  '<td class="msg-lh-meta"><div class="n">'+esc(llc)+'</div>'+lines.join('<br>')+'</td>'
+    + '</tr></table><div class="msg-lh-rule"></div>';
+}
+function _msgSign(){
+  // The gray name line that closes every letterheaded page. Compliance line stays attached to it —
+  // over-disclosing "not a law firm" is never the problem, under-disclosing is.
+  var s = (typeof sender === 'object' && sender) ? sender : {};
+  var nm = (s.name || '').trim(), ti = (s.title || '').trim();
+  var llc = (s.llc || 'Miami Solutions Group LLC').trim();
+  var mid = [llc];
+  if((s.phone||'').trim()) mid.push(s.phone.trim());
+  if((s.email||'').trim()) mid.push(s.email.trim());
+  return '<div class="msg-sig">'
+    + (nm ? '<span class="nm">'+esc(nm)+(ti?'&nbsp;&middot;&nbsp;'+esc(ti):'')+'</span>' : '')
+    + esc(mid.join(' \u00b7 '))
+    + '<br>Not a law firm. Not a HUD-approved housing counselor.'
+    + '</div>';
+}
 function _docShell(title, bodyHtml, opts){
   // Shared print chrome. Refactored out of genLetter/genHanger — every FIELD doc uses this.
   // The @media print rules make it look like a real form when Carlos hits Print.
@@ -7187,13 +7245,28 @@ function _docShell(title, bodyHtml, opts){
     + '.kw{display:inline-block;background:#0B1730;color:#F4E5A7;padding:4px 12px;border-radius:4px;letter-spacing:.14em;font:800 14px Arial,sans-serif}'
     + '.footer{margin-top:22px;padding-top:10px;border-top:1px solid #ddd;font-size:10.5px;color:#666;letter-spacing:.02em}'
     + '.pgb{page-break-before:always}'
+    + MSG_LH_CSS
     + '@media print{.noprint{display:none}body{background:#fff}.doc{box-shadow:none;margin:0;padding:24px 32px}}'
     + '</style></head><body>'
     + '<div class="bar noprint"><button onclick="window.print()">Print / Save as PDF</button>'
     + (opts.note ? '<span style="color:#F4E5A7;font-size:12px">'+esc(opts.note)+'</span>' : '')
     + '<span class="stamp">'+stamp+'</span></div>'
-    + bodyHtml
+    + _lhWrap(bodyHtml, opts)
     + '</body></html>';
+}
+function _lhWrap(bodyHtml, opts){
+  // OPT-IN, deliberately. Letterhead belongs on paper an owner receives; it does NOT belong on
+  // internal operator screens (morning worker, reply inbox, proof sheet) where it would burn a third
+  // of the fold for nothing, and it must NEVER go on a recording instrument — FS 695.26 reserves the
+  // top 3 inches of a deed's first page for the clerk's stamp, and a logo there gets it rejected.
+  if(!opts || !opts.letterhead) return bodyHtml;
+  var i = bodyHtml.indexOf('<div class="doc">');
+  if(i < 0) return bodyHtml;                       // convention broke — ship the doc, skip the header
+  var open = i + '<div class="doc">'.length;
+  var j = bodyHtml.lastIndexOf('</div>');
+  if(j <= open) return bodyHtml;
+  return bodyHtml.slice(0, open) + _msgHead({h:62})
+       + bodyHtml.slice(open, j) + _msgSign() + bodyHtml.slice(j);
 }
 // --- FIELD TIER ------------------------------------------------------------------------------
 // Every FIELD generator returns a full HTML string. Carlos may print and hand any of these
@@ -7245,7 +7318,7 @@ function genIdentityCard(r){
     +   '<div class="footer">Property: '+_dfHtml(f.propAddr)+' · County of '+_dfHtml(f.county)
     +     ' · Case (record locator): '+_dfHtml(f.caseNo)+' · '+esc(f.todayLong)+'</div>'
     + '</div>';
-  return _docShell('Identity — '+(f.buyerName!=='__blank__'?f.buyerName:llc), body, {key:'identity'});
+  return _docShell('Identity — '+(f.buyerName!=='__blank__'?f.buyerName:llc), body, {letterhead:true, key:'identity'});
 }
 function genResourcesCard(r){
   var f = _docFields(r);
@@ -7276,7 +7349,7 @@ function genResourcesCard(r){
     +     'Condado de '+_dfHtml(f.county)+' · Número de caso: <b>'+_dfHtml(f.caseNo)+'</b></p>'
     +   '<div class="footer">Provided as a public reference. This is not advice on your case.</div>'
     + '</div>';
-  return _docShell('Free foreclosure resources', body, {key:'resources'});
+  return _docShell('Free foreclosure resources', body, {letterhead:true, key:'resources'});
 }
 function genInfoSheet(r){
   var f = _docFields(r);
@@ -7311,7 +7384,7 @@ function genInfoSheet(r){
     +     (f.docket!=='__blank__' ? '<br>Docket: <span class="mini">'+esc(f.docket)+'</span>' : '')
     +   '</div>'
     + '</div>';
-  return _docShell('Foreclosure — general information', body, {key:'info'});
+  return _docShell('Foreclosure — general information', body, {letterhead:true, key:'info'});
 }
 function genIntakeSheet(r){
   var f = _docFields(r);
@@ -7360,7 +7433,7 @@ function genIntakeSheet(r){
     +   '<div class="footer">NO HOMEOWNER SIGNATURE ON THIS DOCUMENT · '+esc(f.todayLong)
     +     ' · '+_dfHtml(f.buyerLLC)+'</div>'
     + '</div>';
-  return _docShell('Seller information — '+(f.ownerFull!=='__blank__'?f.ownerFull:'lead'), body, {key:'intake'});
+  return _docShell('Seller information — '+(f.ownerFull!=='__blank__'?f.ownerFull:'lead'), body, {letterhead:true, key:'intake'});
 }
 function genVisitRecord(r){
   var f = _docFields(r);
@@ -7402,7 +7475,7 @@ function genVisitRecord(r){
     +     '□ Approved &nbsp; □ Issue flagged — Notes: '+_dfLine(32)+'</p>'
     +   '<div class="footer">Retained by '+_dfHtml(f.buyerLLC)+' as an internal record.</div>'
     + '</div>';
-  return _docShell('Door visit — '+(f.propAddr!=='__blank__'?f.propAddr:'record'), body, {key:'visit'});
+  return _docShell('Door visit — '+(f.propAddr!=='__blank__'?f.propAddr:'record'), body, {letterhead:true, key:'visit'});
 }
 function genConsentCard(r){
   var f = _docFields(r);
@@ -7432,7 +7505,7 @@ function genConsentCard(r){
     +   '<div class="footer">'+_dfHtml(f.buyerLLC)+' · '+_dfHtml(f.buyerPhone)
     +     (f.buyerEmail!=='__blank__'?' · '+_dfHtml(f.buyerEmail):'')+'</div>'
     + '</div>';
-  return _docShell('Contact consent card', body, {key:'consent'});
+  return _docShell('Contact consent card', body, {letterhead:true, key:'consent'});
 }
 function genDoorFolder(r){
   // One combined print — Carlos runs it once, folds it, walks up. Each doc gets its own
@@ -7443,7 +7516,7 @@ function genDoorFolder(r){
   var parts = [genIdentityCard(r), genResourcesCard(r), genInfoSheet(r),
                genIntakeSheet(r), genConsentCard(r), genVisitRecord(r)];
   var combined = parts.map(function(h,i){ return (i?'<div class="pgb"></div>':'') + _bare(h); }).join('');
-  return _docShell('Door folder — '+((r&&r.addr)||'lead'), combined, {key:'door-folder', note:'6 pages — print, fold, walk.'});
+  return _docShell('Door folder — '+((r&&r.addr)||'lead'), combined, {letterhead:true, key:'door-folder', note:'6 pages — print, fold, walk.'});
 }
 
 // --- TIER 2 — OFFICE (merge-only; print / view freely) ----------------------------------------
@@ -7470,7 +7543,7 @@ function genCancelNotice(r){
     +   '<div class="footer">Property: '+_dfHtml(f.propAddr)+' · Case '+_dfHtml(f.caseNo)
     +     ' · Own page — no other material.</div>'
     + '</div>';
-  return _docShell('Notice of Right to Cancel', body, {key:'cancel-notice', note:'OWN PAGE — print alone.'});
+  return _docShell('Notice of Right to Cancel', body, {letterhead:true, key:'cancel-notice', note:'OWN PAGE — print alone.'});
 }
 function genCancelForm(r){
   var f = _docFields(r);
@@ -7489,7 +7562,7 @@ function genCancelForm(r){
     +   '<p>Send to: '+_dfHtml(f.buyerLLC)+' · '+_dfHtml(f.buyerAddr)+' · '+_dfHtml(f.buyerPhone)+'</p>'
     +   '<div class="footer">Separate returnable form · Case '+_dfHtml(f.caseNo)+'</div>'
     + '</div>';
-  return _docShell('Cancellation Form', body, {key:'cancel-form'});
+  return _docShell('Cancellation Form', body, {letterhead:true, key:'cancel-form'});
 }
 function genThirdPartyAuth(r){
   var f = _docFields(r);
@@ -7520,7 +7593,7 @@ function genThirdPartyAuth(r){
     +   '</div>'
     +   '<div class="footer">Signed at a title company or law office — never at a door. Case '+_dfHtml(f.caseNo)+'</div>'
     + '</div>';
-  return _docShell('Third-party authorization — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {key:'tpa'});
+  return _docShell('Third-party authorization — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {letterhead:true, key:'tpa'});
 }
 
 // --- OFFICE INSTRUMENTS & PACKAGES (printable shells; never door) --------------------------
@@ -7632,7 +7705,7 @@ function genLimitedPOA(r){
     +   _docOfficeFoot(f, 'FS 709.2105 limited POA shell')
     + '</div>';
   return _docShell('Limited POA — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
-    {key:'limited-poa', note:'NEVER door — two witnesses + notary physical presence.'});
+    {letterhead:true, key:'limited-poa', note:'NEVER door — two witnesses + notary physical presence.'});
 }
 
 function genLeasebackOccupancy(r){
@@ -7690,7 +7763,7 @@ function genLeasebackOccupancy(r){
     +   _docOfficeFoot(f, 'cancel reminder page')
     + '</div>';
   return _docShell('Lease-back / occupancy — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
-    {key:'leaseback', note:'FS 501.1377 heightened — NEVER door. Cancel on own page if rescue applies.'});
+    {letterhead:true, key:'leaseback', note:'FS 501.1377 heightened — NEVER door. Cancel on own page if rescue applies.'});
 }
 
 function genSurplusAssignment(r){
@@ -7735,7 +7808,7 @@ function genSurplusAssignment(r){
     +   _docOfficeFoot(f, 'surplus assignment shell — counsel-aware')
     + '</div>';
   return _docShell('Surplus assignment — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
-    {key:'surplus-assign', note:'FS 45.031 — never invent surplus dollars.'});
+    {letterhead:true, key:'surplus-assign', note:'FS 45.031 — never invent surplus dollars.'});
 }
 
 function genEncumbranceShell(r){
@@ -7802,7 +7875,7 @@ function genEncumbranceShell(r){
     +   '<div class="sig"><div class="l"></div><div class="c">Trustee acknowledgment · date</div></div></div>');
   var combined = [p1,p2,p3,p4].map(function(h,i){ return (i?'<div class="pgb"></div>':'')+h; }).join('');
   return _docShell('Encumbrance shells — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), combined,
-    {key:'encumbrance', note:'4 pages — mortgage / note / satisfaction / land trust blanks.'});
+    {letterhead:true, key:'encumbrance', note:'4 pages — mortgage / note / satisfaction / land trust blanks.'});
 }
 
 function genStopSaleEngagement(r){
@@ -7867,7 +7940,7 @@ function genStopSaleEngagement(r){
     +   _docOfficeFoot(f, '501.1377 cancel — own page')
     + '</div>';
   return _docShell('Stop-sale engagement — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
-    {key:'stop-sale', note:'2 pages — engagement + OWN-PAGE cancel. NEVER door.'});
+    {letterhead:true, key:'stop-sale', note:'2 pages — engagement + OWN-PAGE cancel. NEVER door.'});
 }
 
 function genShortSalePack(r){
@@ -7937,7 +8010,7 @@ function genShortSalePack(r){
     + '</div>';
   var combined = [p1,p2,p3].map(function(h,i){ return (i?'<div class="pgb"></div>':'')+h; }).join('');
   return _docShell('Short-sale package — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), combined,
-    {key:'short-sale', note:'3 pages — auth · hardship blanks · acknowledgments.'});
+    {letterhead:true, key:'short-sale', note:'3 pages — auth · hardship blanks · acknowledgments.'});
 }
 
 function genSubjectToPack(r){
@@ -8015,7 +8088,7 @@ function genSubjectToPack(r){
     + '</div>';
   var combined = [p1,p2,p3].map(function(h,i){ return (i?'<div class="pgb"></div>':'')+h; }).join('');
   return _docShell('Subject-to package — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), combined,
-    {key:'subject-to', note:'3 pages — disclosures · 501.1377 occupancy · signatures.'});
+    {letterhead:true, key:'subject-to', note:'3 pages — disclosures · 501.1377 occupancy · signatures.'});
 }
 
 function genContractPrint(r){
@@ -8104,7 +8177,7 @@ function genAttyPacket(r){
     +   '</div>'
     +   '<div class="footer">DealFlow · Document 15 · BUYER_ONLY · '+esc(f.todayLong)+'</div>'
     + '</div>';
-  return _docShell('Attorney packet — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {key:'atty-packet'});
+  return _docShell('Attorney packet — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body, {letterhead:true, key:'atty-packet'});
 }
 
 // --- HUB UI ---------------------------------------------------------------------------------
@@ -9251,7 +9324,7 @@ function genAssignPackage(r){
     +     'Under contract to purchase. Right to assign to a qualified end buyer. All figures illustrative — buyer verifies title, condition, and their own numbers before EMD. Case '+esc(r.case)+' · '+esc(new Date().toLocaleDateString())+'.'
     +   '</div>'
     + '</div>';
-  return _docShell('Assignment — '+(r.addr||r.case), body, {key:'assignment'});
+  return _docShell('Assignment — '+(r.addr||r.case), body, {letterhead:true, key:'assignment'});
 }
 function openAssignPackage(caseId){
   var r = DATA.find(function(x){return x.case===caseId;});
@@ -11128,7 +11201,11 @@ function genLetter(r){
   const caseNo = esc((r.case||'').trim());
   const caseTagEN = caseNo ? (td ? ` (Certificate/Case No. ${caseNo})` : ` (Case No. ${caseNo})`) : '';
   const caseTagES = caseNo ? (td ? ` (N&uacute;m. de certificado/caso ${caseNo})` : ` (Caso N&uacute;m. ${caseNo})`) : '';
-  const sigHtml = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).map(esc).join('<br>');
+  // Sign-off is deliberately SHORT now: the letterhead above carries phone / email / address, and the
+  // body already tells the owner the number to call. Repeating the whole block under "Respectfully"
+  // is what made the old letter read like a form. CAN-SPAM governs email, not paper — the physical
+  // return address requirement is satisfied by the letterhead itself.
+  const sigHtml = [sN, sT, sL].filter(x=>x&&String(x).trim()).map(esc).join('<br>');
   const exitsEN = _pbFiveExitsHtml('en'), exitsES = _pbFiveExitsHtml('es');
   const intakeEN = _pbIntakeLine('en'), intakeES = _pbIntakeLine('es');
   // Field Manual + PLAYBOOK: buyer posture, name all five exits, Carlos intake, no rescue promises.
@@ -11160,20 +11237,39 @@ ${exitsES}
 <p>${intakeES}</p>
 <p>No hay costo ni compromiso por conversar. Ll&aacute;meme o escr&iacute;bame al <b>${esc(sP)}</b>.</p>
 <p>Respetuosamente,<br><br>${sigHtml}</p>`;
+  // MSG letterhead. The recipient block and the date live INSIDE each language div so the Spanish
+  // letter prints a Spanish date — swapping only the paragraphs left "August 5, 2026" on a Spanish
+  // page, which is the kind of seam an owner notices. Sheet padding mirrors MSG_Letterhead_Template
+  // (0.5in top / 0.75in sides) so a printed board letter and a Word letter stack identically.
+  const _dEN = new Date().toLocaleDateString('en-US',{year:'numeric',month:'long',day:'numeric'});
+  const _dES = new Date().toLocaleDateString('es-US',{year:'numeric',month:'long',day:'numeric'});
+  const _toBlock = `<div class="to">${esc(owner)}<br>${mail.replace(/, /g,'<br>')}</div>`;
+  const _reEN = `<div class="re"><span>RE:</span>${addr}</div>`;
+  const _reES = `<div class="re"><span>REF:</span>${addr}</div>`;
   const doc = `<!doctype html><html><head><meta charset="utf-8"><title>Letter - ${esc(owner)}</title>
 <style>
-body{font-family:Georgia,serif;max-width:660px;margin:0 auto;padding:40px;color:#111;line-height:1.5}
-.bar{background:#0B1730;padding:10px 14px;margin:-40px -40px 30px;display:flex;gap:8px;font-family:Arial}
+${MSG_LH_CSS}
+body{font-family:Georgia,'Times New Roman',Times,serif;color:#1A1A1A;margin:0;padding:0;background:#f4f5f7;line-height:1.55;font-size:11pt}
+.bar{background:#0B1730;padding:10px 16px;display:flex;gap:8px;font-family:Arial;flex-wrap:wrap}
 .bar button{padding:8px 14px;cursor:pointer;border:1px solid #33436A;background:#152747;color:#CDD8EF;border-radius:6px;font-size:14px}
 .bar button.on{background:#C6A14B;color:#2E2406;border-color:#C6A14B;font-weight:700}
-.addr{color:#555;font-size:13px;margin-bottom:24px}
+.sheet{max-width:7.5in;background:#fff;margin:22px auto;padding:0.5in 0.75in 0.4in;box-shadow:0 1px 5px rgba(0,0,0,.08);border-radius:6px}
+.dt{margin:0 0 20pt}
+.to{margin:0 0 20pt;page-break-inside:avoid}
+.re{margin:0 0 16pt;font-weight:700;page-break-inside:avoid}
+.re span{display:inline-block;width:34pt}
+p{margin:9pt 0}
 ul{margin:10px 0}
-@media print{.bar{display:none}body{padding:0}}
+@media print{.bar{display:none}body{background:#fff}.sheet{box-shadow:none;border-radius:0;margin:0;max-width:none;padding:0.35in 0.6in}}
+@page{size:Letter;margin:0.3in}
 </style></head><body>
 <div class="bar"><button id="en" class="on" onclick="show('en')">English</button><button id="es" onclick="show('es')">Espa&ntilde;ol</button><button onclick="window.print()">Print / Save PDF</button></div>
-<div class="addr">${esc(sN)}<br>${esc(sL)}<br><br>${new Date().toLocaleDateString()}<br><br>${esc(owner)}<br>${mail.replace(/, /g,'<br>')}</div>
-<div id="body-en">${EN}</div>
-<div id="body-es" style="display:none">${ES}</div>
+<div class="sheet">
+${_msgHead({h:88})}
+<div id="body-en"><div class="dt">${_dEN}</div>${_toBlock}${_reEN}${EN}</div>
+<div id="body-es" style="display:none"><div class="dt">${_dES}</div>${_toBlock}${_reES}${ES}</div>
+${_msgSign()}
+</div>
 <script>function show(l){document.getElementById('body-en').style.display=l==='en'?'block':'none';document.getElementById('body-es').style.display=l==='es'?'block':'none';document.getElementById('en').className=l==='en'?'on':'';document.getElementById('es').className=l==='es'?'on':'';}<\/script>
 </body></html>`;
   _openDoc(doc);   // mobile-safe: Blob URL via anchor click (window.open was popup-blocked on phones)
