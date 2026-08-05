@@ -190,27 +190,24 @@ def _sig_lines(snd):
     return [x.strip() for x in order if x and str(x).strip()]
 
 
-def _lh_header(snd, height_px=44):
+def _lh_header(snd, height_px=42):
     """MSG letterhead block — logo left, contact right, black rule under.
 
-    Byte-for-byte the same lockup genLetter() renders in the board (_msgHead), so a letter Alejandro
-    prints from the tracker and one Lob drops in the mail are the same piece of paper. Every value
-    comes from the sender profile; nothing about the operator is hardcoded here."""
+    Same lockup genLetter() renders in the board (_msgHead), but deliberately COMPACT here: a Lob letter
+    is billed per page and this one runs to 10.9in of an 11in sheet in Spanish, so the header gets one
+    contact line instead of three and a 34px mark instead of 88px. The decoration yields, never the copy
+    — the body is what converts, and these owners are often reading it in a hurry or with bad eyes.
+    Re-measure the SPANISH worst case (longest owner + plaintiff) after ANY change here.
+    Every value comes from the sender profile; nothing about the operator is hardcoded."""
     e = html.escape
     llc = (snd.get('llc') or 'Miami Solutions Group LLC').strip()
     w = msg_brand.mark_size(height_px)
-    lines = []
-    if (snd.get('addr') or '').strip():
-        lines.append(e(snd['addr'].strip()))
-    pe = []
-    if (snd.get('phone') or '').strip():
-        pe.append('<b>P</b> ' + e(snd['phone'].strip()))
-    if (snd.get('email') or '').strip():
-        pe.append('<b>E</b> ' + e(snd['email'].strip()))
-    if pe:
-        lines.append('&nbsp;&nbsp;&middot;&nbsp;&nbsp;'.join(pe))
-    if (snd.get('web') or '').strip():
-        lines.append(e(snd['web'].strip()))
+    bits = []
+    for k in ('addr', 'phone', 'email', 'web'):
+        v = (snd.get(k) or '').strip()
+        if v:
+            bits.append('<span style="white-space:nowrap">' + e(v) + '</span>')
+    lines = ['&nbsp;&middot;&nbsp;'.join(bits)] if bits else []
     return ('<table class="msg-lh" role="presentation"><tr>'
             f'<td class="msg-lh-mark"><img src="{msg_brand.MONO_B64}" width="{w}" height="{height_px}" alt="{e(llc)}"></td>'
             f'<td class="msg-lh-meta"><div class="n">{e(llc)}</div>{"<br>".join(lines)}</td>'
@@ -319,20 +316,20 @@ def build_letter_html(r, snd, lang='en'):
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @page{{margin:0}}
 html,body{{margin:0;padding:0}}
-body{{font-family:Georgia,'Times New Roman',serif;color:#111;line-height:1.36;font-size:10.5pt}}
-.page{{width:8.5in;height:11in;box-sizing:border-box;padding:2.6in 0.8in 0.35in;position:relative}}
+body{{font-family:Georgia,'Times New Roman',serif;color:#111;line-height:1.31;font-size:10.5pt}}
+.page{{width:8.5in;height:11in;box-sizing:border-box;padding:2.6in 0.8in 0.3in;position:relative}}
 .ret{{position:absolute;top:0.55in;left:0.9in;font-size:10pt;color:#333;line-height:1.35}}
 .date{{margin:0 0 10px;color:#333}}
 ul{{margin:10px 0}}
 p{{margin:0 0 6px}}
 .msg-lh{{width:100%;border-collapse:collapse;margin:0;table-layout:fixed}}
 .msg-lh td{{vertical-align:middle;padding:0;border:0}}
-.msg-lh-mark{{width:52%}}
+.msg-lh-mark{{width:1%;white-space:nowrap;padding-right:14px}}
 .msg-lh-mark img{{display:block;border:0}}
 .msg-lh-meta{{text-align:right;font:8.5pt/1.6 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1A1A1A}}
 .msg-lh-meta .n{{font-weight:700;font-size:9pt;letter-spacing:.09em;text-transform:uppercase;margin-bottom:3px}}
-.msg-lh-rule{{border-top:2.5px solid #1A1A1A;height:0;font-size:0;line-height:0;margin:6px 0 9px}}
-.msg-sig{{margin-top:10px;padding-top:6px;border-top:1px solid #C9CDD4;text-align:center;
+.msg-lh-rule{{border-top:2px solid #1A1A1A;height:0;font-size:0;line-height:0;margin:5px 0 8px}}
+.msg-sig{{margin-top:8px;padding-top:5px;border-top:1px solid #C9CDD4;text-align:center;
   font:7.5pt/1.65 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#7C8492;letter-spacing:.05em}}
 .msg-sig .nm{{display:block;font-weight:700;font-size:8pt;color:#5A6472;letter-spacing:.13em;
   text-transform:uppercase;margin-bottom:2px}}

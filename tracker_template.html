@@ -2554,7 +2554,14 @@ function _workQueue(){
 // contract's buyer line — buyer is "Alejandro Gonzalez and/or assigns" per the wholesale convention,
 // and MSG only appears on the separate Assignment and on documents where the entity itself is the
 // counterparty (deed grantee, TPA representative, cash-for-keys, servicer cover).
-const SENDER_DEFAULTS = {name:'Jose', llc:'Miami Solutions Group LLC', phone:'', addr:'', title:'', email:'', web:'', partner:''};
+// Kept in sync with sender.json (gitignored) so the board, the headless email sender and Lob mail all
+// sign the same person. These were blank for phone/addr/title/email, which the letterhead made obvious:
+// an unconfigured device printed a letterhead with an empty contact block and a letter that opened
+// "My name is Jose". A SECOND operator (Carlos) must run Sender setup on his own device — the merge
+// below keeps any saved non-empty value, so his identity wins over these defaults once he types it.
+const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Miami Solutions Group LLC', phone:'(786) 631-1823',
+                         addr:'231 NW 109th Ave, Miami, FL 33172', title:'Acquisitions',
+                         email:'agonzalez0311707@gmail.com', web:'', partner:''};
 let sender = Object.assign({}, SENDER_DEFAULTS);
 // CRITICAL: an EMPTY saved field must NOT overwrite a prefilled default. Older builds (and simply opening
 // Sender setup without typing) persisted blank strings to localStorage; a plain Object.assign let those
@@ -2564,6 +2571,10 @@ let sender = Object.assign({}, SENDER_DEFAULTS);
 try {
   const saved = JSON.parse(localStorage.getItem('fcSender')||'{}');
   if (saved.name === 'Jose') delete saved.name;
+  // A COMPANY name saved into `name` is always wrong — the letter and every email open with
+  // "My name is {name}", so it rendered "My name is Miami Solutions Group". Devices that saved the
+  // company there before this build get healed back to the person default instead of staying broken.
+  if (typeof saved.name === 'string' && /^\s*miami\s+solutions\s+group\b/i.test(saved.name)) delete saved.name;
   for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
 } catch(e) {}
 // deal-model controls (persisted)
