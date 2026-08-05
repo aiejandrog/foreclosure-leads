@@ -1108,6 +1108,11 @@ def make_tracker(leads):
             # Zillow Zestimate (AVM, listing_status.py) — advisory value cross-check, never drives
             # the math. Same MD-explicit-copy rule as zstatus; county rows re-stamp from cache.
             'zest': r.get('zest',0) or 0,
+            # Listing-agent contact (listing_status.py, added 2026-08-05) — only meaningful when
+            # zstatus is LISTED/PENDING; empty on every other status by construction upstream.
+            # Same explicit-copy rule as the rest of this block.
+            'zagent': r.get('zagent','') or '', 'zagentphone': r.get('zagentphone','') or '',
+            'zagentemail': r.get('zagentemail','') or '', 'zbroker': r.get('zbroker','') or '',
             'condo': bool(re.search(r'CONDO', str(r.get('dor_desc','') or ''), re.I)),
             # VACANT LAND (no homeowner + speculative land value) and COMPANY-OWNED — systematic
             # false-positives for the homeowner-rescue model; badged in the UI so a big-equity vacant
