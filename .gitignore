@@ -115,6 +115,7 @@ worker_notes_snapshots/
 !_nearmetest.py
 !_callmodetest.py
 !_sendbridgetest.py
+!_ledgerwritetest.py
 !_skiptracetest.py
 # BatchData shared spend ledger + cap config (local money state, not code)
 batchdata_spend.json
