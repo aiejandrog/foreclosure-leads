@@ -92,14 +92,30 @@ def _load_ledger():
 
 
 def _append_ledger(entry):
-    """Atomic write. Lock protects against two concurrent /send requests corrupting the file."""
+    """Atomic write. Lock protects against two concurrent /send requests corrupting the file.
+
+    os.replace() on Windows can throw a transient PermissionError (WinError 5) when something else
+    — antivirus, Windows Search indexing, OneDrive, a stray `open()` from an ad-hoc diagnostic
+    script — has the destination file open for a few milliseconds. POSIX rename tolerates this;
+    Windows does not. Caught live 2026-08-05: a real, already-delivered email hit this on its
+    ledger write, AFTER the SMTP send had already succeeded — the write itself has no business
+    logic to retry, it just needs to survive a momentary lock. 3 attempts with a short backoff
+    clears the overwhelming majority of these without changing behavior on a real, persistent
+    failure (permissions actually wrong, disk full, etc. still raise after the last attempt)."""
     with _LEDGER_LOCK:
         log = _load_ledger()
         log.append(entry)
         tmp = SENT_LEDGER + '.tmp'
         with open(tmp, 'w', encoding='utf-8') as f:
             json.dump(log, f, indent=2, ensure_ascii=False)
-        os.replace(tmp, SENT_LEDGER)
+        for attempt in range(3):
+            try:
+                os.replace(tmp, SENT_LEDGER)
+                return
+            except PermissionError:
+                if attempt == 2:
+                    raise
+                time.sleep(0.15 * (attempt + 1))
 
 
 def _richness(payload):
@@ -394,29 +410,48 @@ class Handler(BaseHTTPRequestHandler):
             })
             return self._json(502, {'ok': False, 'err': f'send failed: {e}'})
 
-        _append_ledger({
-            'd': dt.date.today().isoformat(),
-            'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
-            'ch': 'email',
-            # bcc is recorded because _recipients_today() meters Gmail's real limit off it.
-            # Without it every multi-address send would count as one recipient and the ceiling
-            # would never bind — the exact failure the ceiling exists to prevent.
-            'from': user, 'to': to, 'bcc': bcc,
-            'owner': meta.get('owner') or '',
-            'case': meta.get('c') or '',
-            'addr': meta.get('addr') or '',
-            'lang': meta.get('lang') or 'en',
-            'portfolio': meta.get('portfolio') or [],
-            'subj': subj, 'body_len': len(body),
-            'message_id': mid,
-            'test_mode': bool(meta.get('test')),
-        })
+        # The email is ALREADY SENT at this point (mid came back from a real SMTP transaction).
+        # Everything below is bookkeeping. If it throws — even after _append_ledger's own retries
+        # — that must never surface to the client as a send failure: the worker's catch() branch
+        # treats a broken /send response as "the bridge is down" and (correctly, for an ACTUAL
+        # outage) pauses the whole auto-run. A logging hiccup is not an outage, and pausing a
+        # healthy unattended run on one is a worse bug than the log gap it would be protecting
+        # against. Caught live 2026-08-05: exactly this ordering turned one transient ledger-write
+        # error into "the morning worker looks like it's failing" — the send had gone through fine.
+        ledger_err = ''
+        try:
+            _append_ledger({
+                'd': dt.date.today().isoformat(),
+                'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+                'ch': 'email',
+                # bcc is recorded because _recipients_today() meters Gmail's real limit off it.
+                # Without it every multi-address send would count as one recipient and the ceiling
+                # would never bind — the exact failure the ceiling exists to prevent.
+                'from': user, 'to': to, 'bcc': bcc,
+                'owner': meta.get('owner') or '',
+                'case': meta.get('c') or '',
+                'addr': meta.get('addr') or '',
+                'lang': meta.get('lang') or 'en',
+                'portfolio': meta.get('portfolio') or [],
+                'subj': subj, 'body_len': len(body),
+                'message_id': mid,
+                'test_mode': bool(meta.get('test')),
+            })
+        except Exception as e:
+            # Loud on the server side (operator can grep the log) — this is the one real gap the
+            # skipped write leaves: this send won't count toward today's cap and its 24h dedupe
+            # record is missing, so the same lead COULD be re-queued and re-emailed by a later run
+            # before the day rolls over. Worth a manual mail_sent.json check if this ever fires
+            # more than once in a row (would mean the retries above are landing on a persistent
+            # lock, not a transient one).
+            ledger_err = str(e)[:200]
+            print(f'WARNING: {to} was emailed successfully (mid={mid}) but the ledger write '
+                  f'failed — this send is UNRECORDED: {ledger_err}', file=sys.stderr)
 
-        return self._json(200, {
-            'ok': True, 'message_id': mid,
-            'sent_today': _sent_today_count(),
-            'cap': self.daily_cap,
-        })
+        resp = {'ok': True, 'message_id': mid, 'sent_today': _sent_today_count(), 'cap': self.daily_cap}
+        if ledger_err:
+            resp['ledger_warn'] = ledger_err
+        return self._json(200, resp)
 
 
 # ---------------------------------------------------------------- main
