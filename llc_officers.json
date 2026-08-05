@@ -3145,5 +3145,150 @@
    "THE STUDIO HOUSE, INC."
   ],
   "t": "2026-08-04"
+ },
+ "CACE-25-009967": {
+  "ent": "RENTAL ASSN LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": true,
+  "near": [
+   "RENTAL ASSOCIATES INCORPORATED",
+   "RENTAL ASSOCIATES, LLC",
+   "RENTAL ASSOCIATES OF NAPLES, INC."
+  ],
+  "t": "2026-08-05"
+ },
+ "CACE-26-000330": {
+  "ent": "PROGRESSIVE REALTY GROUP LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "PROGRESSIVE REALTY GROUP, LLC",
+  "typo": false,
+  "ra": "HOLBROOK, KIM",
+  "ra_addr": "3414 FORUM BLVD, #3",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "WAYLAND, TERRY R, JR",
+    "a": "PO BOX 60195, FORT MYERS, FL 33906",
+    "p": "https://www.truepeoplesearch.com/results?name=TERRY%20R%2C%20JR%20WAYLAND",
+    "cb": "https://www.cyberbackgroundchecks.com/people/terry-r-jr-wayland/fl/fort-myers"
+   }
+  ],
+  "t": "2026-08-05"
+ },
+ "CACE-25-012333": {
+  "ent": "SAHAI CAPITAL MANAGEMENT LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "SAHAI CAPITAL MANAGEMENT, LLC",
+  "typo": false,
+  "ra": "CANNADY AND ASSOCIATES, PLLC",
+  "ra_addr": "200 S Andrews Avenue, 604",
+  "officers": [
+   {
+    "t": "P",
+    "n": "GIBBS, DAMION",
+    "a": "9512 EXBURY CT, PARKLAND, FL 33076",
+    "p": "https://www.truepeoplesearch.com/results?name=DAMION%20GIBBS",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=9512%20EXBURY%20CT&citystatezip=PARKLAND%2C%20FL%2033076",
+    "cba": "https://www.cyberbackgroundchecks.com/address/9512-exbury-ct/parkland/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/damion-gibbs/fl/parkland"
+   }
+  ],
+  "t": "2026-08-05"
+ },
+ "CACE-25-012338": {
+  "ent": "MF FINISHING REFINISHING LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "MF FINISHING REFINISHING, LLC",
+  "typo": false,
+  "ra": "HAMILTON, GERALD",
+  "ra_addr": "4053 NE 8th Ave, OAKLAND PARK, FL 33334",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "HAMILTON, GERALD",
+    "a": "4053 NE 8th AVE, OAKLAND PARK, FL 33334",
+    "p": "https://www.truepeoplesearch.com/results?name=GERALD%20HAMILTON",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4053%20NE%208th%20AVE&citystatezip=OAKLAND%20PARK%2C%20FL%2033334",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4053-ne-8th-ave/oakland-park/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/gerald-hamilton/fl/oakland-park"
+   },
+   {
+    "t": "MGR",
+    "n": "Hamilton , Jennifer",
+    "a": "4053 NE 8th Ave, OAKLAND PARK, FL 33334",
+    "p": "https://www.truepeoplesearch.com/results?name=Jennifer%20Hamilton",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4053%20NE%208th%20Ave&citystatezip=OAKLAND%20PARK%2C%20FL%2033334",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4053-ne-8th-ave/oakland-park/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/jennifer-hamilton/fl/oakland-park"
+   }
+  ],
+  "t": "2026-08-05"
+ },
+ "CACE-25-015843": {
+  "ent": "MOHAN18 INVESTMENTS LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "MOHAN18 INVESTMENTS LLC",
+  "typo": false,
+  "ra": "SALAMA, MOISES",
+  "ra_addr": "19052 NE 26TH CT, AVENTURA, FL 33180",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "SALAMA, MOISES",
+    "a": "3434 SW 51 STREET, FORT LAUDERDALE, FL 33312",
+    "p": "https://www.truepeoplesearch.com/results?name=MOISES%20SALAMA",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=3434%20SW%2051%20STREET&citystatezip=FORT%20LAUDERDALE%2C%20FL%2033312",
+    "cba": "https://www.cyberbackgroundchecks.com/address/3434-sw-51-street/fort-lauderdale/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/moises-salama/fl/fort-lauderdale"
+   },
+   {
+    "t": "MGRM",
+    "n": "SALAMA, HANNA",
+    "a": "3434 SW 51 STREET, FORT LAUDERDALE, FL 33312",
+    "p": "https://www.truepeoplesearch.com/results?name=HANNA%20SALAMA",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=3434%20SW%2051%20STREET&citystatezip=FORT%20LAUDERDALE%2C%20FL%2033312",
+    "cba": "https://www.cyberbackgroundchecks.com/address/3434-sw-51-street/fort-lauderdale/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/hanna-salama/fl/fort-lauderdale"
+   }
+  ],
+  "t": "2026-08-05"
+ },
+ "CACE-26-002894": {
+  "ent": "GOLDMAN GROUP LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "GOLDMAN GROUP LLC",
+  "typo": false,
+  "ra": "Goldman, Benjamin",
+  "ra_addr": "1201 HAYS STREET, TALLAHASSEE, FL 32301",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "GOLDMAN, BENJAMIN B",
+    "a": "2491 BLACKBURN CIRCLE, CAPE CORAL, FL 33991",
+    "p": "https://www.truepeoplesearch.com/results?name=BENJAMIN%20B%20GOLDMAN",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=2491%20BLACKBURN%20CIRCLE&citystatezip=CAPE%20CORAL%2C%20FL%2033991",
+    "cba": "https://www.cyberbackgroundchecks.com/address/2491-blackburn-circle/cape-coral/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/benjamin-b-goldman/fl/cape-coral"
+   },
+   {
+    "t": "MGRM",
+    "n": "MAGLIO GOLDMAN, MARYBETH",
+    "a": "2491 BLACKBURN CIRCLE, CAPE CORAL, FL 33991",
+    "p": "https://www.truepeoplesearch.com/results?name=MARYBETH%20MAGLIO%20GOLDMAN",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=2491%20BLACKBURN%20CIRCLE&citystatezip=CAPE%20CORAL%2C%20FL%2033991",
+    "cba": "https://www.cyberbackgroundchecks.com/address/2491-blackburn-circle/cape-coral/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/marybeth-maglio-goldman/fl/cape-coral"
+   }
+  ],
+  "t": "2026-08-05"
  }
 }
