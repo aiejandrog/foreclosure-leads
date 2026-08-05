@@ -2097,5 +2097,637 @@
 "conf": "ok",
 "sqft": 2050,
 "t": 1785853032.360132
+},
+"3421020120030": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"3059240250070": {
+"v": 527984,
+"url": "https://www.redfin.com/FL/Miami/12383-SW-144th-Ter-33186/home/43201963",
+"conf": "ok",
+"sqft": 1350,
+"t": 1785941212.6241856
+},
+"0341190012811": {
+"v": 2578074,
+"url": "https://www.redfin.com/FL/Coral-Gables/4106-San-Amaro-Dr-33146/home/42810057",
+"conf": "ok",
+"sqft": 2970,
+"t": 1785941212.6241856
+},
+"3022040180960": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"3049130111040": {
+"v": 794465,
+"url": "https://www.redfin.com/FL/Miami/3100-SW-126th-Ave-33175/home/43115098",
+"conf": "ok",
+"sqft": 2542,
+"t": 1785941212.6241856
+},
+"1079160060450": {
+"v": 453024,
+"url": "https://www.redfin.com/FL/Homestead/389-NE-32nd-Ter-33033/home/43349316",
+"conf": "ok",
+"sqft": 1762,
+"t": 1785941212.6241856
+},
+"0131370393970": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"1079210290270": {
+"v": 314199,
+"url": "https://www.redfin.com/FL/Homestead/1090-SE-23rd-Ave-33035/home/176677325",
+"conf": "ok",
+"sqft": 1374,
+"t": 1785941212.6241856
+},
+"4942130140": {
+"v": 843130,
+"url": "https://www.redfin.com/FL/Fort-Lauderdale/2500-NE-48th-Ln-33308/home/179442754",
+"conf": "ok",
+"t": 1785941212.6241856
+},
+"514123120150": {
+"v": 368400,
+"url": "https://www.redfin.com/FL/Pembroke-Pines/7165-Pembroke-Rd-33023/home/41899895",
+"conf": "ok",
+"sqft": 720,
+"t": 1785941212.6241856
+},
+"514032060540": {
+"v": 817271,
+"url": "https://www.redfin.com/FL/Miramar/4942-SW-166th-Ave-33027/home/41983849",
+"conf": "ok",
+"sqft": 2180,
+"t": 1785941212.6241856
+},
+"4943300180": {
+"v": 4922458,
+"url": "https://www.redfin.com/FL/Fort-Lauderdale/2409-N-Ocean-Blvd-33305/home/191490077",
+"conf": "ok",
+"t": 1785941212.6241856
+},
+"484111040150": {
+"v": 1419424,
+"url": "https://www.redfin.com/FL/Coral-Springs/4750-W-Leitner-Dr-33067/home/41410445",
+"conf": "ok",
+"sqft": 4670,
+"t": 1785941212.6241856
+},
+"503901024370": {
+"v": 743213,
+"url": "https://www.redfin.com/FL/Weston/710-Stanton-Dr-33326/home/41720225",
+"conf": "ok",
+"sqft": 2144,
+"t": 1785941212.6241856
+},
+"484319060970": {
+"v": 1060180,
+"url": "https://www.redfin.com/FL/Lighthouse-Point/2600-NE-36th-St-33064/home/41523204",
+"conf": "ok",
+"sqft": 1974,
+"t": 1785941212.6241856
+},
+"494105050870": {
+"v": 300678,
+"url": "https://www.redfin.com/FL/Tamarac/6900-NW-92nd-Ave-33321/home/41549636",
+"conf": "ok",
+"sqft": 1366,
+"t": 1785941212.6241856
+},
+"504005120260": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"494128091450": {
+"v": 523554,
+"url": "https://www.redfin.com/FL/Sunrise/2421-NW-87th-Ave-33322/home/41604388",
+"conf": "ok",
+"sqft": 1580,
+"t": 1785941212.6241856
+},
+"504102050310": {
+"v": 671130,
+"url": "https://www.redfin.com/FL/Plantation/824-Holly-Ln-33317/home/41748271",
+"conf": "ok",
+"sqft": 3098,
+"t": 1785941212.6241856
+},
+"484115070441": {
+"v": 432655,
+"url": "https://www.redfin.com/FL/Coral-Springs/3933-NW-81st-Ter-33065/home/41416429",
+"conf": "ok",
+"sqft": 1941,
+"t": 1785941212.6241856
+},
+"514031050990": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"484224202400": {
+"v": 309924,
+"url": "https://www.redfin.com/FL/Pompano-Beach/2501-NE-8th-Ave-33064/home/41489909",
+"conf": "ok",
+"sqft": 893,
+"t": 1785941212.6241856
+},
+"514204013152": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"514214011690": {
+"v": 942435,
+"url": "https://www.redfin.com/FL/Hollywood/Undisclosed-address-33019/home/41938551",
+"conf": "addr",
+"sqft": 1868,
+"t": 1785941212.6241856
+},
+"504205150740": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"504118051430": {
+"v": 421669,
+"url": "https://www.redfin.com/FL/Davie/11104-SW-15th-Mnr-33324/home/41767455",
+"conf": "ok",
+"sqft": 1628,
+"t": 1785941212.6241856
+},
+"494133071530": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"494234023560": {
+"v": 510265,
+"url": "https://www.redfin.com/FL/Fort-Lauderdale/1432-NW-7th-Ter-33311/home/41687979",
+"conf": "ok",
+"sqft": 1141,
+"t": 1785941212.6241856
+},
+"5141175970": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"474129050320": {
+"v": 1306711,
+"url": "https://www.redfin.com/FL/Parkland/10790-Aqua-Ct-33076/home/109619613",
+"conf": "ok",
+"sqft": 3544,
+"t": 1785941212.6241856
+},
+"484222591040": {
+"v": 413884,
+"url": "https://www.redfin.com/FL/Pompano-Beach/1088-NW-33rd-Ct-33064/home/63058346",
+"conf": "ok",
+"sqft": 1420,
+"t": 1785941212.6241856
+},
+"514016130201": {
+"v": 572499,
+"url": "https://www.redfin.com/FL/Pembroke-Pines/15842-SW-10th-St-33027/home/41854019",
+"conf": "ok",
+"sqft": 1687,
+"t": 1785941212.6241856
+},
+"5142050390": {
+"v": 536081,
+"url": "https://www.redfin.com/FL/Hollywood/3326-Farragut-St-33021/home/185272223",
+"conf": "ok",
+"t": 1785941212.6241856
+},
+"504113131550": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"5142261390": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"5141070060": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"484307030140": {
+"v": 530728,
+"url": "https://www.redfin.com/FL/Pompano-Beach/4832-NE-19th-Ter-33064/home/41510849",
+"conf": "ok",
+"sqft": 1211,
+"t": 1785941212.6241856
+},
+"514216011170": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"514127110870": {
+"v": 523563,
+"url": "https://www.redfin.com/FL/Miramar/7341-Dilido-Blvd-33023/home/41910181",
+"conf": "ok",
+"sqft": 1658,
+"t": 1785941212.6241856
+},
+"494035063950": {
+"v": 586640,
+"url": "https://www.redfin.com/FL/Sunrise/12674-NW-11th-Pl-33323/home/41535064",
+"conf": "ok",
+"sqft": 1727,
+"t": 1785941212.6241856
+},
+"4941110050": {
+"v": 161615,
+"url": "https://www.redfin.com/FL/Tamarac/5940-NW-64th-Ave-33319/home/200887454",
+"conf": "ok",
+"sqft": 1070,
+"t": 1785941212.6241856
+},
+"514219182610": {
+"v": 732084,
+"url": "https://www.redfin.com/FL/Hollywood/1402-Myrtle-Oak-Ter-33021/home/145954285",
+"conf": "ok",
+"sqft": 2220,
+"t": 1785941212.6241856
+},
+"4842290130": {
+"v": 125068,
+"url": "https://www.redfin.com/FL/Coconut-Creek/2103-Lucaya-Bnd-33066/home/202390924",
+"conf": "ok",
+"sqft": 1156,
+"t": 1785941212.6241856
+},
+"504010140960": {
+"v": 618730,
+"url": "https://www.redfin.com/FL/Davie/13976-S-Cypress-Cove-Cir-33325/home/41981263",
+"conf": "ok",
+"sqft": 1611,
+"t": 1785941212.6241856
+},
+"504208110060": {
+"v": 375932,
+"url": "https://www.redfin.com/FL/Fort-Lauderdale/3020-SW-8th-St-33312/home/41797090",
+"conf": "ok",
+"sqft": 1465,
+"t": 1785941212.6241856
+},
+"484233020780": {
+"v": 396020,
+"url": "https://www.redfin.com/FL/Pompano-Beach/2111-NW-4th-St-33069/home/41503330",
+"conf": "ok",
+"sqft": 1239,
+"t": 1785941212.6241856
+},
+"4941280260": {
+"v": 118197,
+"url": "https://www.redfin.com/FL/Sunrise/8350-Sunrise-Lakes-Blvd-33322/home/194276161",
+"conf": "ok",
+"t": 1785941212.6241856
+},
+"494101160650": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"494132170260": {
+"v": 862714,
+"url": "https://www.redfin.com/FL/Plantation/9821-NW-10th-Ct-33322/home/41619464",
+"conf": "ok",
+"sqft": 2426,
+"t": 1785941212.6241856
+},
+"504232110030": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"474133053870": {
+"v": 1285165,
+"url": "https://www.redfin.com/FL/Parkland/9512-Exbury-Ct-33076/home/42030845",
+"conf": "ok",
+"sqft": 3451,
+"t": 1785941212.6241856
+},
+"484115210940": {
+"v": 828688,
+"url": "https://www.redfin.com/FL/Coral-Springs/8475-NW-39th-Ct-33065/home/109617889",
+"conf": "ok",
+"sqft": 3069,
+"t": 1785941212.6241856
+},
+"484108130280": {
+"v": 584152,
+"url": "https://www.redfin.com/FL/Coral-Springs/11405-NW-48th-Ct-33076/home/41410200",
+"conf": "ok",
+"sqft": 1796,
+"t": 1785941212.6241856
+},
+"5142270120": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"494132210030": {
+"v": 893681,
+"url": "https://www.redfin.com/FL/Plantation/1718-NW-91st-Ave-33322/home/41621631",
+"conf": "ok",
+"sqft": 2819,
+"t": 1785941212.6241856
+},
+"5042131430": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"514119080320": {
+"v": 595103,
+"url": "https://www.redfin.com/FL/Miramar/10507-SW-19th-St-33025/home/41892600",
+"conf": "ok",
+"sqft": 2211,
+"t": 1785941212.6241856
+},
+"504231200060": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"514129031000": {
+"v": 507691,
+"url": "https://www.redfin.com/FL/Miramar/2621-Buttonwood-Ave-33025/home/41914056",
+"conf": "ok",
+"sqft": 1293,
+"t": 1785941212.6241856
+},
+"494229041630": {
+"v": 466304,
+"url": "https://www.redfin.com/FL/Fort-Lauderdale/2315-NW-20th-St-33311/home/41682225",
+"conf": "ok",
+"sqft": 1448,
+"t": 1785941212.6241856
+},
+"474231250130": {
+"v": 788662,
+"url": "https://www.redfin.com/FL/Coconut-Creek/7124-NW-47th-Ln-33073/home/41993512",
+"conf": "ok",
+"sqft": 2769,
+"t": 1785941212.6241856
+},
+"4941060430": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"4842020070": {
+"v": 77198,
+"url": "https://www.redfin.com/FL/Deerfield-Beach/1007-Berkshire-a-33442/home/41458194",
+"conf": "ok",
+"sqft": 719,
+"t": 1785941212.6241856
+},
+"4842030150": {
+"v": 92057,
+"url": "https://www.redfin.com/FL/Deerfield-Beach/1087-Harwood-F-33442/home/41466251",
+"conf": "ok",
+"sqft": 719,
+"t": 1785941212.6241856
+},
+"00424632090005670": {
+"v": 2503883,
+"url": "https://www.redfin.com/FL/Boca-Raton/17197-Teton-River-Rd-33496/home/177999855",
+"conf": "ok",
+"sqft": 4484,
+"t": 1785941212.6241856
+},
+"00424516080000480": {
+"v": 290922,
+"url": "https://www.redfin.com/FL/Boynton-Beach/8800-Shoal-Creek-Ln-33472/home/42191819",
+"conf": "ok",
+"sqft": 1700,
+"t": 1785941212.6241856
+},
+"73414421040000510": {
+"v": 2546856,
+"url": "https://www.redfin.com/FL/Wellington/3950-Fieldview-Way-33414/home/42510779",
+"conf": "ok",
+"sqft": 2892,
+"t": 1785941212.6241856
+},
+"56434232090007160": {
+"v": 253149,
+"url": "https://www.redfin.com/FL/Riviera-Beach/1261-W-3rd-St-33404/home/42463780",
+"conf": "ok",
+"sqft": 900,
+"t": 1785941212.6241856
+},
+"00404226000005610": {
+"v": 567226,
+"url": "https://www.redfin.com/FL/Loxahatchee/17269-71st-Ln-N-33470/home/42091950",
+"conf": "ok",
+"sqft": 1458,
+"t": 1785941212.6241856
+},
+"00424518050001110": {
+"v": 463287,
+"url": "https://www.redfin.com/FL/Boynton-Beach/9481-Verona-Lakes-Blvd-33472/home/42549729",
+"conf": "ok",
+"sqft": 1864,
+"t": 1785941212.6241856
+},
+"00424529130003240": {
+"v": 956110,
+"url": "https://www.redfin.com/FL/Boynton-Beach/8208-Savara-Streams-Ln-33473/home/45117752",
+"conf": "ok",
+"sqft": 4840,
+"t": 1785941212.6241856
+},
+"00424526250000740": {
+"v": 337587,
+"url": "https://www.redfin.com/FL/Boynton-Beach/10075-Boynton-Place-Cir-33437/home/42203256",
+"conf": "ok",
+"sqft": 1093,
+"t": 1785941212.6241856
+},
+"502023ca011559xxxxmb": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"00424333060003270": {
+"v": 587680,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/260-Gazetta-Way-33413/home/42578935",
+"conf": "ok",
+"sqft": 3119,
+"t": 1785941212.6241856
+},
+"08434528120200110": {
+"v": 475762,
+"url": "https://www.redfin.com/FL/Boynton-Beach/902-S-Seacrest-Blvd-33435/home/42346427",
+"conf": "ok",
+"sqft": 1900,
+"t": 1785941212.6241856
+},
+"00424614082120040": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"30424033050001840": {
+"v": 1137606,
+"url": "https://www.redfin.com/FL/Jupiter/127-Porgee-Rock-Pl-33458/home/42621932",
+"conf": "ok",
+"sqft": 2972,
+"t": 1785941212.6241856
+},
+"74434307070181020": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"12434616010190260": {
+"v": 503047,
+"url": "https://www.redfin.com/FL/Delray-Beach/119-NW-6th-Ave-33444/home/42361259",
+"conf": "ok",
+"sqft": 1319,
+"t": 1785941212.6241856
+},
+"18424435130001280": {
+"v": 546494,
+"url": "https://www.redfin.com/FL/Greenacres/5066-Northern-Lights-Dr-33463/home/42547719",
+"conf": "ok",
+"sqft": 2301,
+"t": 1785941212.6241856
+},
+"00424731050054050": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"502025ca013013xxxamb": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"00424427140000180": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"74414224120000410": {
+"v": 605860,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/8456-Legend-Club-Dr-33412/home/42505230",
+"conf": "ok",
+"sqft": 2030,
+"t": 1785941212.6241856
+},
+"00424634080000080": {
+"v": 866713,
+"url": "https://www.redfin.com/FL/Boca-Raton/17189-Newport-Club-Dr-33496/home/42238174",
+"conf": "ok",
+"sqft": 1868,
+"t": 1785941212.6241856
+},
+"30424114100000430": {
+"v": 570927,
+"url": "https://www.redfin.com/FL/Jupiter/1106-Dakota-Dr-33458/home/42660695",
+"conf": "ok",
+"sqft": 1533,
+"t": 1785941212.6241856
+},
+"72414315070040370": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"00424525050003410": {
+"v": 173797,
+"url": "https://www.redfin.com/FL/Boynton-Beach/10073-44th-Ave-S-33436/home/42196588",
+"conf": "ok",
+"sqft": 1238,
+"t": 1785941212.6241856
+},
+"00424611020001240": {
+"v": 394665,
+"url": "https://www.redfin.com/FL/Delray-Beach/5196-Palm-Ridge-Blvd-33484/home/42211781",
+"conf": "ok",
+"sqft": 1641,
+"t": 1785941212.6241856
+},
+"502025ca002344xxxamb": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"40434434130005010": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"00424622070073070": {
+"v": 52114,
+"url": "https://www.redfin.com/FL/Delray-Beach/307-Brittany-G-33446/home/42225075",
+"conf": "ok",
+"sqft": 726,
+"t": 1785941212.6241856
+},
+"00434509100020330": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"00424527150000360": {
+"v": 1045963,
+"url": "https://www.redfin.com/FL/Boynton-Beach/10898-Lake-Wynds-Ct-33437/home/42564281",
+"conf": "ok",
+"sqft": 3752,
+"t": 1785941212.6241856
+},
+"41414317016430040": {
+"v": 840141,
+"url": "https://www.redfin.com/FL/Loxahatchee/13001-Marcella-Blvd-33470/home/42116662",
+"conf": "ok",
+"sqft": 2688,
+"t": 1785941212.6241856
+},
+"00404314000004060": {
+"v": 801186,
+"url": "https://www.redfin.com/FL/Loxahatchee/17928-36th-Ct-N-33470/home/42094029",
+"conf": "ok",
+"sqft": 2820,
+"t": 1785941212.6241856
+},
+"00424534180000100": {
+"v": 383231,
+"url": "https://www.redfin.com/FL/Boynton-Beach/6113-Greenspointe-Dr-33437/home/42210002",
+"conf": "ok",
+"sqft": 1820,
+"t": 1785941212.6241856
+},
+"74434321260000611": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"74434321250001170": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
+},
+"00424616030012080": {
+"v": 0,
+"conf": "nomatch",
+"t": 1785941212.6241856
 }
 }

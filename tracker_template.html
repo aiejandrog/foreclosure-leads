@@ -298,6 +298,10 @@ a.dig.resolveparcel{background:var(--gold-soft,#f4ead2)!important;border-color:v
 /* The mobile filter disclosure never appears on desktop, where all 25 controls fit fine. */
 .mfiltbtn{display:none}
 .abtn svg{width:13px;height:13px;display:block;flex:0 0 auto}
+.mcapbadge{display:none;margin-left:2px;padding:1px 7px;border-radius:999px;font:700 11px "Segoe UI",Arial,sans-serif;background:#eef1f5;color:#3a4250}
+.mcapbadge.on{display:inline-block}
+.mcapbadge.warn{background:#fff6e0;color:#8a6a00}
+.mcapbadge.blocked{background:#fdecea;color:#8a1c1c}
 /* any icon placed directly inside a button stays glyph-sized (sync, mail, etc.) */
 button>svg{width:13px;height:13px;flex:0 0 auto}
 #syncbtn,#mailbatch{display:inline-flex;align-items:center;gap:7px}
@@ -2138,7 +2142,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="nearmebtn" class="abtn near-btn" onclick="openNearMe()" title="NEAR ME — build Carlos a door run. Start from your GPS or a typed ZIP, pick how many doors (10/15/20), and export the same bilingual Carlos PDF packet. Miami-Dade ONLY (gas). Auto-excludes: active bankruptcy stays (federal violation to knock), already-sold-via-sibling-case, opted-out, and any lead whose coordinate is not a real street-level geocode."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near Me</button>
 <button id="replybtn" class="abtn" onclick="openReplyInbox()" title="REPLY INBOX — every owner who wrote back, STOP requests first, then soonest sale. A reply outranks every score and tier on this board. Fills from your own ✉ They replied flags, and automatically from replies.py once gmail.key holds a real App Password."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>Replies<span class="replyn"></span></button>
 <button id="proofbtn" class="abtn" onclick="openProofSheet('today')" title="PROOF SHEET — the receipt of what actually went out. Reprints the VERBATIM subject and body of every message sent, timestamped, with reply status beside each one, plus the full activity log. Printable. Shift-click for all-time instead of today."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M9 16h6M9 8h2"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>Proof sheet</button>
-<button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — three lanes by urgency: URGENT (sale inside 7 days), ACTIVE (8-45 days), EARLY (fresh filing, no auction date yet). All tiers, contactable leads not touched in 72 hours. One card at a time: tap Email / Text / WP-lookup to hand the lead off to the existing sender in a new tab, tap Done to log worked + auto-advance. Daily send cap warns at 40 and hard-stops at 50 to protect the sending inbox; calls are never capped. Nothing auto-sends (TCPA/FTSA rails intact); you tap send yourself. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker</button>
+<button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — three lanes by urgency: URGENT (sale inside 7 days), ACTIVE (8-45 days), EARLY (fresh filing, no auction date yet). All tiers, contactable leads not touched in 72 hours. One card at a time: tap Email / Text / WP-lookup, or press Start auto-run to walk the whole queue and send by itself through the local bridge (nothing opens a composer unless the bridge is offline). Daily send cap warns at 120 and hard-stops at 150 messages (450 recipients) to protect the sending inbox; calls are never capped. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker<span id="mcapbadge" class="mcapbadge" title="Today's send count — live from the bridge that actually enforces it, not this board's own log."></span></button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
 <button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
 <span id="funnelbar" class="funnelbar" title="THE FUNNEL — every lead sits at one rung: call the best equity first; no answer → email + text; still cold → a letter (only where mail can still land in time); everything else filters down to Carlos's door route. Tap a stage to work only that stage, best equity first."></span>
@@ -9841,10 +9845,40 @@ function openProofSheet(scope){ return _openDoc(genProofSheet(scope||'today')); 
 // and Gmail meters recipients, not messages. This board number is the message axis.
 var DAILY_WARN = 120, DAILY_MAX = 150;
 function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||0); }
+// LIVE CAP (added 2026-08-05). _capState() used to trust ONLY this board's own local activity log —
+// accurate for one continuously-used session, wrong the moment ANYTHING else sends through the same
+// bridge: a second device, a different browser profile, a test run. The bridge's real ledger climbs
+// past what this board ever recorded, _workerQueue() keeps slicing to a cap.left that looks
+// generous, and every extra lead it hands out gets a real 429 from the server — which is exactly
+// what "it says 70 done out of 150 but then says 150 is already done" was. Poll the bridge's own
+// /health, the literal number it uses to enforce the limit, and prefer it whenever it's fresh.
+var _liveCap = null, _liveCapAt = 0;
+function _pollLiveCap(){
+  var ac = (typeof AbortController!=='undefined') ? new AbortController() : null;
+  var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;
+  fetch('http://127.0.0.1:8823/health', ac?{signal:ac.signal}:{})
+    .then(function(r){ return r.json(); })
+    .then(function(j){ if(to) clearTimeout(to);
+      if(j && j.ready){ _liveCap = j; _liveCapAt = Date.now(); }
+      _renderCapBadge(); })
+    .catch(function(){ if(to) clearTimeout(to); _renderCapBadge(); });
+}
+function _renderCapBadge(){
+  var el = document.getElementById('mcapbadge'); if(!el) return;
+  if(!_liveCap || (Date.now()-_liveCapAt) >= 120000){ el.className = 'mcapbadge'; return; }
+  var cap = _capState();
+  el.className = 'mcapbadge on' + (cap.blocked ? ' blocked' : (cap.warn ? ' warn' : ''));
+  el.textContent = cap.n + ' / ' + cap.max;
+}
+try { _pollLiveCap(); setInterval(_pollLiveCap, 45000); } catch(e){}
 function _capState(){
-  var n = _sentTodayCount();
+  // A live read younger than 2 minutes IS the number the server enforces — use it. Older than
+  // that, or no bridge reachable at all, fall back to this board's own log: a worse estimate, but
+  // an offline-safe one, and the same behavior this always had before live polling existed.
+  var live = !!(_liveCap && (Date.now()-_liveCapAt) < 120000);
+  var n = live ? (_liveCap.sent_today||0) : _sentTodayCount();
   return {n:n, left:Math.max(0, DAILY_MAX-n), warn:n>=DAILY_WARN, blocked:n>=DAILY_MAX,
-          warnAt:DAILY_WARN, max:DAILY_MAX};
+          warnAt:DAILY_WARN, max:DAILY_MAX, live:live};
 }
 /* ---- FL FTSA CALL WINDOW ---------------------------------------------------------------------
    Florida FTSA (FS 501.059) restricts telephonic solicitation to 8:00 AM – 8:00 PM local time of
@@ -10338,7 +10372,19 @@ function genMorningWorker(lane, autostart){
     // CONFIRMED DELIVERY ONLY — mirrors the board's _sentTodayCount. Reading STATS.email here
     // (the old behaviour) counted composer-opens and pre-flight log lines as sends, so the meter
     // hit 50 at roughly 25 real deliveries, and could hit 50 at zero.
-    +   'function sentToday(){ return (STATS.sent||0)+(STATS.text||0); }'
+    // LIVE CAP (2026-08-05). STATS is this TAB's own tally — seeded once from the board's local
+    // log at open time, then incremented only by what THIS session itself sends. That is wrong the
+    // moment anything ELSE hits the same bridge (a second tab, a different device, a test run):
+    // this tab shows a low, stale count while the server's real ledger is already at/near cap, so
+    // the run keeps trying leads that were never really affordable and gets a real 429 on each
+    // one — "shows 70 of 150 but says 150 is already done". probeBridge()'s /health call and every
+    // real /send response ALREADY carry the server's true sent_today; cache whichever is freshest
+    // and prefer it. Falls back to the local tally only if the bridge has never answered.
+    +   'var _liveSent=null, _liveAt=0;'
+    +   'function _cacheLive(n){ if(typeof n==="number"){ _liveSent=n; _liveAt=Date.now(); renderCap(); } }'
+    +   'function sentToday(){'
+    +     'return (_liveSent!=null && (Date.now()-_liveAt)<120000) ? _liveSent : (STATS.sent||0)+(STATS.text||0);'
+    +   '}'
     /* ---- bridge health -----------------------------------------------------------------------
        One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
        resolution) so the badge reflects reality rather than a stale boot-time reading. */
@@ -10359,7 +10405,7 @@ function genMorningWorker(lane, autostart){
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
     +     'fetch("http://127.0.0.1:8823/health", ac?{signal:ac.signal}:{})'
     +       '.then(function(resp){ return resp.json(); })'
-    +       '.then(function(j){ if(to) clearTimeout(to); bridgeUp(!!(j && j.ready)); })'
+    +       '.then(function(j){ if(to) clearTimeout(to); bridgeUp(!!(j && j.ready)); _cacheLive(j&&j.sent_today); })'
     +       '.catch(function(){ if(to) clearTimeout(to); bridgeUp(false); });'
     +   '}'
     +   'function renderCap(){'
@@ -10563,7 +10609,7 @@ function genMorningWorker(lane, autostart){
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
     +         'if(x.status===200 && x.j.ok){'
-    +           'bridgeUp(true);'
+    +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
     +           'post("sent", {mid:x.j.message_id||"", via:"bridge", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
     +           'setTimeout(function(){ advance(); }, 900);'
@@ -10573,7 +10619,9 @@ function genMorningWorker(lane, autostart){
     +           'post("skip"); setTimeout(function(){ advance(); }, 700);'
     +         '} else if(x.status===429){'
     // Cap is a STOP, not a skip. Pausing surfaces it instead of silently grinding through the queue.
-    +           'bridgeUp(true);'
+    // This is the single most authoritative moment the true count exists — the server just used it
+    // to refuse — so cache it immediately rather than waiting for the next probe.
+    +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
     +           'addLog("fail", r.first||r.owner, "server daily cap reached — stopping the run: "+String(x.j.err||""), "warn");'
     +           'pause();'
     +         '} else if(x.status===401){'
