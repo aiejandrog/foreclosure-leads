@@ -7112,5 +7112,1500 @@
       "lead_backed": true
     },
     "traced": "2026-07-28"
+  },
+  "2025-016017-CA-01": {
+    "case": "2025-016017-CA-01",
+    "county": "MIAMI-DADE",
+    "addr": "5660 COLLINS AVE 21C, MIAMI BEACH, FL- 33140",
+    "folio": "0232110230880",
+    "verdict": "BUY",
+    "foreclosure_type": "HOA",
+    "plaintiff": "Fifty Six Sixty Collins Ave. Condominium Inc.",
+    "judgment": 174161.33,
+    "sale": "08/10/2026",
+    "mortgages": [
+      {
+        "party": "ANGEL OAK MORTGAGE SOLUTIONS LLC",
+        "amt": 1105000,
+        "recorded_amt": 1105000,
+        "bp": "33055/4478",
+        "date": "3/8/2022 1",
+        "st": "OPEN",
+        "heloc": false
+      }
+    ],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/0232110230880"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": false,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [],
+    "money_math": {
+      "value": 760912,
+      "judg": 174161.33,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 586751,
+      "notes": "HOA \u2014 no open mortgage found on OR cache. Soft BUY note: soft BUY \u2014 HOA/junior, no senior on OR, no title killer, taxes small (still confirm deed + estoppel)"
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/10/2026",
+        "bp": ""
+      },
+      {
+        "label": "Sale resets survived (1)",
+        "date": "",
+        "bp": ""
+      },
+      {
+        "label": "Open mtg \u2014 ANGEL OAK MORTGAGE SOLUTIONS LLC",
+        "date": "3/8/2022 1",
+        "bp": "33055/4478"
+      }
+    ],
+    "outreach_notes": "Soft BUY \u2014 still confirm deed, estoppel, and tax status before wire.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=0232110230880"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/0232110230880"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/10/2026#AITEM_1508055"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=ZzGA8m4%2FDRZralVfTRV4y89N2TykIsXMygZGHeE37J1xiyDlqgldgE9ETAQz8j6Z"
+      },
+      {
+        "label": "Mortgage ANGEL OAK MORTGAGE SOLUTIONS LLC",
+        "url_or_bp": "33055/4478"
+      }
+    ],
+    "sources": {
+      "lead": "leads_final.json",
+      "or": "records_liens.json",
+      "or_missing": false,
+      "conf": "ok",
+      "verdict_reason": "soft BUY \u2014 HOA/junior, no senior on OR, no title killer, taxes small (still confirm deed + estoppel)",
+      "lead_backed": true
+    },
+    "traced": "2026-07-28"
+  },
+  "CACE-22-009549": {
+    "case": "CACE-22-009549",
+    "county": "BROWARD",
+    "addr": "6466 NW 80 TER, PARKLAND, 33067",
+    "folio": "484102000058",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "MORTGAGE",
+    "plaintiff": "",
+    "judgment": 906428.72,
+    "sale": "08/19/2026",
+    "mortgages": [
+      {
+        "party": "6466 NW 80TH TERRACE LLC",
+        "amt": 800000,
+        "recorded_amt": 800000,
+        "bp": "",
+        "date": "2019-11-20",
+        "st": "SATISFIED",
+        "heloc": false
+      }
+    ],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://broward.county-taxes.com/public/real_estate/parcels/484102-00-0058/bills"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": false,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [],
+    "money_math": {
+      "value": 2160350,
+      "judg": 906428.72,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 1253921,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/19/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=484102000058"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/484102-00-0058/bills"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/19/2026#AITEM_1511346"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+      }
+    ],
+    "sources": {
+      "lead": "broward_leads.json",
+      "or": "broward_liens.json",
+      "or_missing": false,
+      "conf": "ok",
+      "verdict_reason": "plaintiff / foreclosure type unresolved",
+      "lead_backed": true
+    },
+    "traced": "2026-07-30"
+  },
+  "CACE-25-010119": {
+    "case": "CACE-25-010119",
+    "county": "BROWARD",
+    "addr": "15317 SW 35 ST, DAVIE, 33331",
+    "folio": "504021090820",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "MORTGAGE",
+    "plaintiff": "",
+    "judgment": 1204494.77,
+    "sale": "08/13/2026",
+    "mortgages": [
+      {
+        "party": "ELKIENBAUM,ABRAHAM",
+        "amt": 65856,
+        "recorded_amt": 65856,
+        "bp": "24799/416",
+        "date": "1996-04-26",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "CITIBANK",
+        "amt": 179550,
+        "recorded_amt": 179550,
+        "bp": "32074/816",
+        "date": "2001-09-06",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "EASTERN FINANCIAL FL CR UNION",
+        "amt": 40000,
+        "recorded_amt": 40000,
+        "bp": "32688/1641",
+        "date": "2002-01-28",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "SEC HOUSING & URBAN DEV",
+        "amt": 6422,
+        "recorded_amt": 6422,
+        "bp": "32735/1442",
+        "date": "2002-02-07",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 36725,
+        "recorded_amt": 36725,
+        "bp": "34595/991",
+        "date": "2003-02-18",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "AAMES FUNDING CORP DBA",
+        "amt": 197600,
+        "recorded_amt": 197600,
+        "bp": "36411/1631",
+        "date": "2003-11-12",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 59850,
+        "recorded_amt": 59850,
+        "bp": "37817/422",
+        "date": "2004-07-13",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "SEC HOUSING & URBAN DEV",
+        "amt": 3561,
+        "recorded_amt": 3561,
+        "bp": "38028/856",
+        "date": "2004-08-16",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 152000,
+        "recorded_amt": 152000,
+        "bp": "38676/1010",
+        "date": "2004-12-09",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "FULL SPECTRUM LENDING INC",
+        "amt": 38000,
+        "recorded_amt": 38000,
+        "bp": "38676/1025",
+        "date": "2004-12-09",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 111000,
+        "recorded_amt": 111000,
+        "bp": "40006/1247",
+        "date": "2005-07-06",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 76700,
+        "recorded_amt": 76700,
+        "bp": "40218/760",
+        "date": "2005-08-04",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 200000,
+        "recorded_amt": 200000,
+        "bp": "40968/327",
+        "date": "2005-11-28",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 400000,
+        "recorded_amt": 400000,
+        "bp": "40968/412",
+        "date": "2005-11-28",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "CHASE BANK USA",
+        "amt": 246000,
+        "recorded_amt": 246000,
+        "bp": "42451/19",
+        "date": "2006-07-24",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 244000,
+        "recorded_amt": 244000,
+        "bp": "44304/259",
+        "date": "2007-07-10",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 136000,
+        "recorded_amt": 136000,
+        "bp": "44381/1506",
+        "date": "2007-07-26",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "PALM VACATION GROUP",
+        "amt": 12181,
+        "recorded_amt": 12181,
+        "bp": "50395/1716",
+        "date": "2013-12-11",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "U S BANK NATIONAL ASSN",
+        "amt": 595000,
+        "recorded_amt": 595000,
+        "bp": "50415/1367",
+        "date": "2013-12-18",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "BANK OF AMERICA",
+        "amt": 59301,
+        "recorded_amt": 59301,
+        "bp": "51030/1224",
+        "date": "2014-08-21",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "U S BANK NATIONAL ASSN",
+        "amt": 250000,
+        "recorded_amt": 250000,
+        "bp": "",
+        "date": "2015-07-17",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "DISCOVER BANK",
+        "amt": 75000,
+        "recorded_amt": 75000,
+        "bp": "",
+        "date": "2019-10-31",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "DISCOVER BANK",
+        "amt": 111938,
+        "recorded_amt": 111938,
+        "bp": "",
+        "date": "2020-02-14",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 120000,
+        "recorded_amt": 120000,
+        "bp": "",
+        "date": "2021-01-25",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 152000,
+        "recorded_amt": 152000,
+        "bp": "",
+        "date": "2021-12-03",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 1050000,
+        "recorded_amt": 1050000,
+        "bp": "",
+        "date": "2022-11-03",
+        "st": "SATISFIED",
+        "heloc": false
+      }
+    ],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://broward.county-taxes.com/public/real_estate/parcels/504021-09-0820/bills"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": false,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [],
+    "money_math": {
+      "value": 1628410,
+      "judg": 1204494.77,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 423915,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/13/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=504021090820"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/504021-09-0820/bills"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/13/2026#AITEM_1511354"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+      }
+    ],
+    "sources": {
+      "lead": "broward_leads.json",
+      "or": "broward_liens.json",
+      "or_missing": false,
+      "conf": "low",
+      "verdict_reason": "plaintiff / foreclosure type unresolved",
+      "lead_backed": true
+    },
+    "traced": "2026-07-31"
+  },
+  "CONO-21-003572": {
+    "case": "CONO-21-003572",
+    "county": "BROWARD",
+    "addr": "5945 NW 99 WAY, PARKLAND, 33076",
+    "folio": "484104010940",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "HOA",
+    "plaintiff": "",
+    "judgment": 45424.14,
+    "sale": "08/14/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://broward.county-taxes.com/public/real_estate/parcels/484104-01-0940/bills"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": false,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [],
+    "money_math": {
+      "value": 883910,
+      "judg": 45424.14,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 838486,
+      "notes": "HOA \u2014 no open mortgage found on OR cache."
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/14/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=484104010940"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/484104-01-0940/bills"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/14/2026#AITEM_1507368"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+      }
+    ],
+    "sources": {
+      "lead": "broward_leads.json",
+      "or": "broward_liens.json",
+      "or_missing": false,
+      "conf": "ok",
+      "verdict_reason": "plaintiff / foreclosure type unresolved",
+      "lead_backed": true
+    },
+    "traced": "2026-07-31"
+  },
+  "502026CC003098XXXASB": {
+    "case": "502026CC003098XXXASB",
+    "county": "PALM BEACH",
+    "addr": "17189 NEWPORT CLUB DR, BOCA RATON, FL 33496",
+    "folio": "00424634080000080",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "HOA",
+    "plaintiff": "",
+    "judgment": 19420.8,
+    "sale": "08/10/2026",
+    "mortgages": [],
+    "liens": [
+      {
+        "label": "Lis Pendens - WALL STREET MORTGAGE BANKERS POWER EXPRESS",
+        "date": "07/03/2014",
+        "bp": "O 26893/452",
+        "amt": null
+      },
+      {
+        "label": "Lis Pendens - FEDERAL NATIONAL MORTGAGE ASSOCIATION",
+        "date": "02/08/2017",
+        "bp": "O 28881/149",
+        "amt": null
+      },
+      {
+        "label": "Judgment - FEDERAL NATIONAL MORTGAGE ASSOCIATION",
+        "date": "01/24/2018",
+        "bp": "O 29609/507",
+        "amt": null
+      },
+      {
+        "label": "Judgment - RUSHMORE LOAN MANAGEMENT SERVICES LLC",
+        "date": "05/04/2023",
+        "bp": "O 34280/1240",
+        "amt": null
+      },
+      {
+        "label": "Lien - NEWPORT BAY CLUB INC",
+        "date": "02/28/2025",
+        "bp": "O 35579/1393",
+        "amt": null
+      },
+      {
+        "label": "Lis Pendens - NEWPORT BAY CLUB INC",
+        "date": "02/20/2026",
+        "bp": "O 36328/624",
+        "amt": null
+      },
+      {
+        "label": "Judgment - NEWPORT BAY CLUB INC",
+        "date": "07/10/2026",
+        "bp": "O 36646/571",
+        "amt": null
+      }
+    ],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-46-34-08-000-0080&pg=1&g=-1&moduleId=449"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": false,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [],
+    "money_math": {
+      "value": 737447,
+      "judg": 19420.8,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 718026,
+      "notes": "HOA \u2014 no open mortgage found on OR cache."
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/10/2026",
+        "bp": ""
+      },
+      {
+        "label": "Deed - FEITAL ARNOLD",
+        "date": "01/26/1989",
+        "bp": "O 5948/1106"
+      },
+      {
+        "label": "Deed - FEITAL ARNOLD & DORENE L FEITAL DORENE L (M)",
+        "date": "07/24/1999",
+        "bp": "O 11251/1583"
+      },
+      {
+        "label": "Deed - KAVOLL ALAN KAVOLL RENAY",
+        "date": "06/13/2003",
+        "bp": "O 15369/1825"
+      },
+      {
+        "label": "Mortgage - WALL STREET MORTGAGE BANKERS LTD POWER EXPRESS",
+        "date": "06/13/2003",
+        "bp": "O 15369/1826"
+      },
+      {
+        "label": "Lis Pendens - WALL STREET MORTGAGE BANKERS POWER EXPRESS",
+        "date": "07/03/2014",
+        "bp": "O 26893/452"
+      },
+      {
+        "label": "Lis Pendens - FEDERAL NATIONAL MORTGAGE ASSOCIATION",
+        "date": "02/08/2017",
+        "bp": "O 28881/149"
+      },
+      {
+        "label": "Judgment - FEDERAL NATIONAL MORTGAGE ASSOCIATION",
+        "date": "01/24/2018",
+        "bp": "O 29609/507"
+      },
+      {
+        "label": "Deed - WALLOS ARLEEN F KAVOLL ALAN KAVOLL RENAY",
+        "date": "05/26/2022",
+        "bp": "O 33593/301"
+      },
+      {
+        "label": "Judgment - RUSHMORE LOAN MANAGEMENT SERVICES LLC",
+        "date": "05/04/2023",
+        "bp": "O 34280/1240"
+      },
+      {
+        "label": "Lien - NEWPORT BAY CLUB INC",
+        "date": "02/28/2025",
+        "bp": "O 35579/1393"
+      },
+      {
+        "label": "Lis Pendens - NEWPORT BAY CLUB INC",
+        "date": "02/20/2026",
+        "bp": "O 36328/624"
+      },
+      {
+        "label": "Judgment - NEWPORT BAY CLUB INC",
+        "date": "07/10/2026",
+        "bp": "O 36646/571"
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424634080000080"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-46-34-08-000-0080&pg=1&g=-1&moduleId=449"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/10/2026#AITEM_1510258"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+      }
+    ],
+    "sources": {
+      "lead": "palmbeach_leads.json",
+      "or": "palmbeach_liens.json",
+      "or_missing": false,
+      "conf": "ok",
+      "verdict_reason": "plaintiff / foreclosure type unresolved",
+      "lead_backed": true
+    },
+    "traced": "2026-07-31"
+  },
+  "2025-074993-CC-05": {
+    "case": "2025-074993-CC-05",
+    "county": "MIAMI-DADE",
+    "addr": "1787 NE 174 ST, NORTH MIAMI BEACH, FL- 33162",
+    "folio": "0722080020271",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "JUNIOR",
+    "plaintiff": "GREEN SOLUTIONS SOLAR  & RENOVATIONS, LLC",
+    "judgment": 19792.77,
+    "sale": "08/10/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/0722080020271"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+    ],
+    "money_math": {
+      "value": 453586,
+      "judg": 19792.77,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 433793,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/10/2026",
+        "bp": ""
+      },
+      {
+        "label": "Sale resets survived (4)",
+        "date": "",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=0722080020271"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/0722080020271"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/10/2026#AITEM_1508452"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=ZzGA8m4%2FDRZralVfTRV4y2pFsj%2B2zXcvsVm35f%2BkTAlm817OcG7kedQqm23V4Z20"
+      }
+    ],
+    "sources": {
+      "lead": "leads_final.json",
+      "or": "records_liens.json",
+      "or_missing": false,
+      "conf": "low",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-01"
+  },
+  "2026A00210": {
+    "case": "2026A00210",
+    "county": "MIAMI-DADE",
+    "addr": "348 NE 20 TER, Miami, FL- 33137-0000",
+    "folio": "0132300320220",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "TAX_DEED",
+    "plaintiff": "",
+    "judgment": 323351.15,
+    "sale": "09/03/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/0132300320220"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+    ],
+    "money_math": {
+      "value": 2756250,
+      "judg": 323351.15,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 2432899,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "09/03/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=0132300320220"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/0132300320220"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=09/03/2026#AITEM_1509983"
+      }
+    ],
+    "sources": {
+      "lead": "leads_final.json",
+      "or": "records_liens.json",
+      "or_missing": false,
+      "conf": "ok",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-01"
+  },
+  "2026A00190": {
+    "case": "2026A00190",
+    "county": "MIAMI-DADE",
+    "addr": "17831 NW 47 AVE, Miami Gardens, FL- 33055-0000",
+    "folio": "3421080105820",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "TAX_DEED",
+    "plaintiff": "",
+    "judgment": 18926.61,
+    "sale": "09/03/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/3421080105820"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+    ],
+    "money_math": {
+      "value": 200660,
+      "judg": 18926.61,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 181733,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "09/03/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=3421080105820"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/3421080105820"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=09/03/2026#AITEM_1509846"
+      }
+    ],
+    "sources": {
+      "lead": "leads_final.json",
+      "or": "records_liens.json",
+      "or_missing": false,
+      "conf": "ok",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-01"
+  },
+  "502025CA005012XXXAMB": {
+    "case": "502025CA005012XXXAMB",
+    "county": "PALM BEACH",
+    "addr": "1630 EMBASSY DR 204, WEST PALM BEACH, FL 33401",
+    "folio": "74434317160002040",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "JUNIOR",
+    "plaintiff": "",
+    "judgment": 9900.46,
+    "sale": "09/22/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A74-43-43-17-16-000-2040&pg=1&g=-1&moduleId=449"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+    ],
+    "money_math": {
+      "value": 146000,
+      "judg": 9900.46,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 136100,
+      "notes": "OR chain missing/incomplete \u2014 mortgage & deed calls are provisional."
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "09/22/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=74434317160002040"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A74-43-43-17-16-000-2040&pg=1&g=-1&moduleId=449"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://palmbeach.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=09/22/2026#AITEM_1512278"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+      }
+    ],
+    "sources": {
+      "lead": "palmbeach_leads.json",
+      "or": "palmbeach_liens + batchdata missing",
+      "or_missing": true,
+      "conf": "",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-01"
+  },
+  "2026-2853TD": {
+    "case": "2026-2853TD",
+    "county": "PALM BEACH",
+    "addr": "5635 QUEEN PALM CT G, DELRAY BEACH, FL 33484",
+    "folio": "00424611070100180",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "TAX_DEED",
+    "plaintiff": "",
+    "judgment": 71542.97,
+    "sale": "09/16/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-46-11-07-010-0180&pg=1&g=-1&moduleId=449"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+    ],
+    "money_math": {
+      "value": 143000,
+      "judg": 71542.97,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 71457,
+      "notes": "OR chain missing/incomplete \u2014 mortgage & deed calls are provisional."
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "09/16/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=00424611070100180"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A00-42-46-11-07-010-0180&pg=1&g=-1&moduleId=449"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://palmbeach.realtaxdeed.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=09/16/2026#AITEM_1508602"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+      }
+    ],
+    "sources": {
+      "lead": "palmbeach_leads.json",
+      "or": "palmbeach_liens + batchdata missing",
+      "or_missing": true,
+      "conf": "",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-01"
+  },
+  "2025-002524-CA-01": {
+    "case": "2025-002524-CA-01",
+    "county": "MIAMI-DADE",
+    "addr": "2822 PINE TREE DR, MIAMI BEACH, FL- 33140",
+    "folio": "0232270040220",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "MORTGAGE",
+    "plaintiff": "Fannie Mae",
+    "judgment": 2988211.99,
+    "sale": "08/24/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/0232270040220"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+    ],
+    "money_math": {
+      "value": 2308931,
+      "judg": 2988211.99,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": -679281,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/24/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=0232270040220"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/0232270040220"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/24/2026#AITEM_1509856"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=ZzGA8m4%2FDRZralVfTRV4y8JSq7JecgkQnohNOTGvwPsKinO18R89V%2BPzg%2FLpEpPd"
+      }
+    ],
+    "sources": {
+      "lead": "leads_final.json",
+      "or": "records_liens.json",
+      "or_missing": false,
+      "conf": "none",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-02"
+  },
+  "2026-2833TD": {
+    "case": "2026-2833TD",
+    "county": "PALM BEACH",
+    "addr": "2 N BREAKERS ROW S PH 1, PALM BEACH, FL 33480",
+    "folio": "50434323250020510",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "TAX_DEED",
+    "plaintiff": "",
+    "judgment": 603087.03,
+    "sale": "09/16/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A50-43-43-23-25-002-0510&pg=1&g=-1&moduleId=449"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+    ],
+    "money_math": {
+      "value": 11600000,
+      "judg": 603087.03,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 10996913,
+      "notes": "OR chain missing/incomplete \u2014 mortgage & deed calls are provisional."
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "09/16/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://pbcpao.gov/Property/Details?parcelId=50434323250020510"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A50-43-43-23-25-002-0510&pg=1&g=-1&moduleId=449"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://palmbeach.realtaxdeed.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=09/16/2026#AITEM_1508223"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://appsgp.mypalmbeachclerk.com/eCaseView/"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection="
+      }
+    ],
+    "sources": {
+      "lead": "palmbeach_leads.json",
+      "or": "palmbeach_liens + batchdata missing",
+      "or_missing": true,
+      "conf": "",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-02"
+  },
+  "2018-011148-CA-01": {
+    "case": "2018-011148-CA-01",
+    "county": "MIAMI-DADE",
+    "addr": "1212 NE 91 ST, MIAMI, FL- 33138",
+    "folio": "3032050040150",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "MORTGAGE",
+    "plaintiff": "US BANK NATIONAL ASSOCIATION,",
+    "judgment": 1165503.22,
+    "sale": "09/02/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/3032050040150"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring."
+    ],
+    "money_math": {
+      "value": 1765483,
+      "judg": 1165503.22,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 599980,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "09/02/2026",
+        "bp": ""
+      },
+      {
+        "label": "Sale resets survived (3)",
+        "date": "",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=3032050040150"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/3032050040150"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=09/02/2026#AITEM_1508473"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=%2F%2FW%2BKpOwGFQYtpR53PaoUzTLtoiICJ8f2b%2B4aSnB7m0Gkmlkif0Z6AOx3CFtsXIp"
+      }
+    ],
+    "sources": {
+      "lead": "leads_final.json",
+      "or": "records_liens.json",
+      "or_missing": false,
+      "conf": "low",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-02"
+  },
+  "2022-001855-CA-01": {
+    "case": "2022-001855-CA-01",
+    "county": "MIAMI-DADE",
+    "addr": "2035 NW 193 TER, MIAMI GARDENS, FL- 33056",
+    "folio": "3421030091120",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "MORTGAGE",
+    "plaintiff": "PHH MORTGAGE CORPORATION",
+    "judgment": 230803.16,
+    "sale": "08/25/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://miamidade.county-taxes.com/public/real_estate/parcels/3421030091120"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": null,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [
+      "VERIFY: Lady Bird / life estate unknown \u2014 Official Records deed text not available in cache; pull the latest deed before wiring.",
+      "ACTIVE bankruptcy stay \u2014 collection contact is a federal violation until lifted."
+    ],
+    "money_math": {
+      "value": 370351,
+      "judg": 230803.16,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 139548,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/25/2026",
+        "bp": ""
+      },
+      {
+        "label": "Sale resets survived (16)",
+        "date": "",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://apps.miamidadepa.gov/PropertySearch/#/?folio=3421030091120"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://miamidade.county-taxes.com/public/real_estate/parcels/3421030091120"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://miamidade.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/25/2026#AITEM_1508581"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www2.miamidadeclerk.gov/ocs/searchResults?qs=Z2T4bwtDUSVZVxgHjlTd6JLhWL3JeV1bzkGIiQut%2BHvW8rPYW3JHZzb8MzTBGsv5"
+      }
+    ],
+    "sources": {
+      "lead": "leads_final.json",
+      "or": "records_liens.json",
+      "or_missing": false,
+      "conf": "none",
+      "verdict_reason": "Lady Bird / life estate unknown \u2014 verify deed",
+      "lead_backed": true
+    },
+    "traced": "2026-08-02"
+  },
+  "CACE-25-014829": {
+    "case": "CACE-25-014829",
+    "county": "BROWARD",
+    "addr": "1533 W RIVER DR, MARGATE, 33063",
+    "folio": "484125050780",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "MORTGAGE",
+    "plaintiff": "",
+    "judgment": 243133.2,
+    "sale": "08/06/2026",
+    "mortgages": [],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": "https://broward.county-taxes.com/public/real_estate/parcels/484125-05-0780/bills"
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": false,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [],
+    "money_math": {
+      "value": 353920,
+      "judg": 243133.2,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 110787,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Auction sale",
+        "date": "08/06/2026",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://bcpa.net/RecInfo.asp?URL_Folio=484125050780"
+      },
+      {
+        "label": "Tax collector",
+        "url_or_bp": "https://broward.county-taxes.com/public/real_estate/parcels/484125-05-0780/bills"
+      },
+      {
+        "label": "Auction",
+        "url_or_bp": "https://broward.realforeclose.com/index.cfm?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=08/06/2026#AITEM_1509714"
+      },
+      {
+        "label": "Case docket",
+        "url_or_bp": "https://www.browardclerk.org/Web2/CaseSearchECA/"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName"
+      }
+    ],
+    "sources": {
+      "lead": "broward_leads.json",
+      "or": "broward_liens.json",
+      "or_missing": false,
+      "conf": "ok",
+      "verdict_reason": "plaintiff / foreclosure type unresolved",
+      "lead_backed": true
+    },
+    "traced": "2026-08-03"
   }
 }
