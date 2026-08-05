@@ -55,6 +55,14 @@ PAT_DOZ = re.compile(r'daysOnZillow\\*"\s*:\s*(-?\d+)')
 # The [{,] prefix anchor is load-bearing: the page also carries "rentZestimate":<num>, and an
 # unanchored zestimate pattern's tail would match it. Same guard PAT_PRC uses.
 PAT_ZEST = re.compile(r'[{,]\\*"zestimate\\*"\s*:\s*(\d+)')
+# Listing-agent contact, off the SAME page already being fetched for zstatus — Zillow's
+# attributionInfo block. Verified live 2026-08-05 against a real LISTED lead: agentName,
+# agentPhoneNumber, brokerName all present; agentEmail present on some listings, null on others
+# (agents commonly omit it so leads route through Zillow's own contact form instead).
+PAT_AGENT = re.compile(r'agentName\\*"\s*:\s*\\*"([^"\\]+)')
+PAT_AGENT_PHONE = re.compile(r'agentPhoneNumber\\*"\s*:\s*\\*"([^"\\]+)')
+PAT_AGENT_EMAIL = re.compile(r'agentEmail\\*"\s*:\s*\\*"([^"\\]+)')
+PAT_BROKER = re.compile(r'brokerName\\*"\s*:\s*\\*"([^"\\]+)')
 
 TRUE_LISTING_TYPES = ('for sale by agent', 'for sale by owner', 'new construction', 'coming soon')
 
@@ -118,27 +126,31 @@ def _blocked(text):
 
 
 def fetch_status(addr):
-    """(zstatus, zprice, zdoz, zest) for one address. '' status = TRANSIENT failure (blocked/
-    timeout), retried next run. A clean search with no property match is NOT transient — Zillow
-    indexes essentially every parcel, so no-match means no listing exists: classified OFF-MARKET so
-    every reachable property ends up with a badge instead of a permanent hole. zest is the
-    Zestimate off the same homedetails page (0 when the page carries none / on the no-match path)."""
+    """(zstatus, zprice, zdoz, zest, agent, agent_phone, agent_email, broker) for one address.
+    '' status = TRANSIENT failure (blocked/timeout), retried next run. A clean search with no
+    property match is NOT transient — Zillow indexes essentially every parcel, so no-match means
+    no listing exists: classified OFF-MARKET so every reachable property ends up with a badge
+    instead of a permanent hole. zest is the Zestimate off the same homedetails page (0 when the
+    page carries none / on the no-match path). Agent fields are '' unless status is LISTED or
+    PENDING — an off-market parcel has no active listing agent to report, and Zillow's own
+    attribution block for it is usually just the last transaction's agent, which would be stale
+    and misleading if surfaced here."""
     try:
         sess = requests.Session()
         sess.headers.update(pp._ZHDRS)
         url = 'https://www.zillow.com/homes/' + requests.utils.quote(addr) + '_rb/'
         r = sess.get(url, timeout=20)
         if r.status_code != 200 or _blocked(r.text):
-            return '', 0, 0, 0
+            return '', 0, 0, 0, '', '', '', ''
         lm = re.search(r'https://www\.zillow\.com/homedetails/[^"\'<>\s]+/(\d+)_zpid/', r.text)
         if not lm:
-            return 'OFF-MARKET', 0, 0, 0
+            return 'OFF-MARKET', 0, 0, 0, '', '', '', ''
         h2 = dict(pp._ZHDRS)
         h2['Referer'] = url
         h2['Sec-Fetch-Site'] = 'same-origin'
         r2 = sess.get(lm.group(0), headers=h2, timeout=20)
         if r2.status_code != 200 or _blocked(r2.text):
-            return '', 0, 0, 0
+            return '', 0, 0, 0, '', '', '', ''
         hs = PAT_HS.search(r2.text)
         ltd = PAT_LTD.search(r2.text)
         prc = PAT_PRC.search(r2.text)
@@ -153,13 +165,23 @@ def fetch_status(addr):
         price = int(prc.group(1)) if prc else 0
         days = max(0, int(doz.group(1))) if doz else 0
         zest = int(zst.group(1)) if zst else 0
+        agent = agent_phone = agent_email = broker = ''
+        if status in ('LISTED', 'PENDING'):
+            am = PAT_AGENT.search(r2.text)
+            apm = PAT_AGENT_PHONE.search(r2.text)
+            aem = PAT_AGENT_EMAIL.search(r2.text)
+            bm = PAT_BROKER.search(r2.text)
+            agent = (am.group(1).strip() if am else '')[:80]
+            agent_phone = (apm.group(1).strip() if apm else '')[:20]
+            agent_email = (aem.group(1).strip() if aem else '')[:120]
+            broker = (bm.group(1).strip() if bm else '')[:120]
         # Price/days only meaningful for live retail states
         if status not in ('LISTED', 'PENDING'):
             price = price if status == 'SOLD' else 0
             days = 0
-        return status, price, days, zest
+        return status, price, days, zest, agent, agent_phone, agent_email, broker
     except Exception:
-        return '', 0, 0, 0
+        return '', 0, 0, 0, '', '', '', ''
 
 
 def _load_cache():
@@ -189,12 +211,15 @@ def enrich_file(path, cache, ttl_s, limit_state):
         if ent and (now - ent.get('t', 0)) < ttl_s:
             # Re-apply cached values in place (this is ALSO how county rows get zstatus/zest without
             # a county_leads.py change — the county scrape rebuilds the file, this pass re-stamps it).
-            # ent.get('z',0): older cache entries predate zest; default 0, no forced refetch — the
-            # 7-day TTL rolls them over naturally within a week.
+            # ent.get('z',0) / ent.get('ag','') etc.: older cache entries predate these fields;
+            # default to empty, no forced refetch — the 7-day TTL rolls them over naturally.
             if (r.get('zstatus') != ent['s'] or r.get('zprice') != ent.get('p', 0)
-                    or r.get('zest', 0) != ent.get('z', 0)):
+                    or r.get('zest', 0) != ent.get('z', 0)
+                    or r.get('zagent', '') != ent.get('ag', '')):
                 r['zstatus'], r['zprice'], r['zdoz'] = ent['s'], ent.get('p', 0), ent.get('d', 0)
                 r['zest'] = ent.get('z', 0)
+                r['zagent'], r['zagentphone'] = ent.get('ag', ''), ent.get('ap', '')
+                r['zagentemail'], r['zbroker'] = ent.get('ae', ''), ent.get('br', '')
                 changed += 1
             continue
         addr = pp._addr_of(r)
@@ -210,15 +235,19 @@ def enrich_file(path, cache, ttl_s, limit_state):
                 # reads as a glitch. Cached so the row doesn't re-probe the PA daily; the 7-day
                 # TTL re-checks in case a later scrape run starts carrying the address.
                 r['zstatus'], r['zprice'], r['zdoz'], r['zest'] = 'NO-ADDR', 0, 0, 0
+                r['zagent'] = r['zagentphone'] = r['zagentemail'] = r['zbroker'] = ''
                 cache[k] = {'s': 'NO-ADDR', 'p': 0, 'd': 0, 'z': 0, 't': now}
                 changed += 1
                 continue
-        status, price, days, zest = fetch_status(addr)
+        status, price, days, zest, agent, agent_phone, agent_email, broker = fetch_status(addr)
         fetched += 1
         limit_state['n'] -= 1
         if status:
             r['zstatus'], r['zprice'], r['zdoz'], r['zest'] = status, price, days, zest
-            cache[k] = {'s': status, 'p': price, 'd': days, 'z': zest, 't': now}
+            r['zagent'], r['zagentphone'] = agent, agent_phone
+            r['zagentemail'], r['zbroker'] = agent_email, broker
+            cache[k] = {'s': status, 'p': price, 'd': days, 'z': zest, 't': now,
+                        'ag': agent, 'ap': agent_phone, 'ae': agent_email, 'br': broker}
             changed += 1
         # A failed fetch is NOT cached — retried next run.
         time.sleep(1.2)  # same pacing the photo pass uses; Zillow tolerates it

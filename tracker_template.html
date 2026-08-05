@@ -4103,6 +4103,10 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="openDealSnapshot(\''+caseEsc+'\')" title="30-Second Deal Snapshot — Ask-Jose visual. Address + urgency chip + debt stack + ARV band + best exit one-liner + auto red-flag banners. INTERNAL — Do Not Share With Homeowner banner at top so a stray forward can\'t misfile it. No bilingual — Jose reads English.">⚡ Snapshot</button>'
     + '<button type="button" class="csactbtn" onclick="openAssignPackage(\''+caseEsc+'\')" title="Assignment Package — post-contract buyer/lender pitch. Fires only when the lead is marked as UNDER CONTRACT (opens with a toggle prompt otherwise). ARV shown as a range, buyer profit as a range, amber &quot;subject to court&quot; banner on any BK case.">💼 Assignment</button>'
     + '<button type="button" class="csactbtn" onclick="openAssignmentAgreement(\''+caseEsc+'\')" title="Assignment of Contract — the actual signable instrument that transfers the contract right to an end buyer for the assignment fee. Seller is not a party; fee is Assignee-to-Assignor only. Same UNDER CONTRACT gate as the pitch sheet. Have counsel review before first real use — this is the riskiest document this board generates.">📝 Assign Agreement</button>'
+    + ((r.zstatus==='LISTED'||r.zstatus==='PENDING')
+        ? '<button type="button" class="csactbtn" onclick="openAgentPitch(\''+caseEsc+'\')" title="Listing Agent Outreach — this property is already on MLS/Zillow. The agent stands to lose their commission if it does not close before the sale; offers to be a backup buyer, never promises a postponement. '
+          + (r.zagent ? 'Agent on file: '+esc(r.zagent) : 'No agent name on file yet — will show what is available.') + '">🏷️ Agent Outreach</button>'
+        : '')
     + '<button type="button" class="csactbtn" onclick="openDocketSnapshot(\''+caseEsc+'\')" title="Court Docket Snapshot — bilingual owner leave-behind. Public-record data + FS Ch. 45 framework only. NO 5-exits menu, NO urgency chip, NO interpretation (all deleted by legal review). Disclaimer at TOP, same font size, EN+ES side-by-side.">📜 Docket</button>'
     + '<button type="button" class="csactbtn" onclick="openOwnerInfoSheet(\''+caseEsc+'\')" title="Owner Information Sheet — bilingual, statute-quote only. Reinstatement = &quot;call your servicer, this doc cannot calculate it.&quot; Surplus (FS 45.032) shown as statutory framework, not a computed number. Signed tear-off receipt.">📋 Info Sheet</button>'
     + '<button type="button" class="csactbtn csact-save'+(_isFav(r.case)?' on':'')+'" onclick="_toggleFav(\''+caseEsc+'\',event)" title="Save to your batch (drives the Carlos field packet).">'+(_isFav(r.case)?'★ Saved':'☆ Save')+'</button>'
@@ -9536,6 +9540,69 @@ function openAssignmentAgreement(caseId){
   }
   _docLog(caseId, 'assign-agreement', 'en');
   _openDoc(genAssignmentAgreement(r));
+}
+
+/* ============================================================================================
+   LISTING AGENT OUTREACH (added 2026-08-05). A property already on MLS near auction means an
+   agent stands to lose their commission if it doesn't close in time — a different, higher-
+   context audience than the owner (professional, already selling, already motivated to close
+   fast). Agent contact comes from listing_status.py's Zillow scrape (zagent/zagentphone/
+   zagentemail/zbroker), populated only when zstatus is LISTED/PENDING.
+   Deliberately NOT wired into the morning worker: that pipeline's cap/dedupe/domain-allowlist
+   machinery was built for cold homeowner outreach, and mixing a second audience into the same
+   counters would silently distort both. This stays a manual, per-lead action, same shape as the
+   Assignment Package. Never promises to get anything postponed — same "no upfront fees, no
+   guaranteed outcome" posture as every owner-facing document on this board.
+   ============================================================================================ */
+function genAgentPitch(r){
+  var sN = sender.name || '[YOUR NAME]', sL = (sender.llc||'').trim() || '[YOUR COMPANY]';
+  var sP = sender.phone || '[YOUR PHONE]', sE = (sender.email||'').trim();
+  var addr = esc(r.addr||''), dt = esc(r.auction||'');
+  var agent = esc(r.zagent||'the listing agent');
+  var price = r.zprice ? '$'+Math.round(+r.zprice).toLocaleString() : '';
+  var doz = (+r.zdoz > 0) ? (+r.zdoz) : null;
+  var caseNo = esc((r.case||'').trim());
+  var subj = 'Backup buyer — '+addr+(dt?' (sale '+dt+')':'');
+  var body = ''
+    + 'Hi '+agent+',<br><br>'
+    + 'I noticed <b>'+addr+'</b>'+(price?' (listed at '+price+')':'')+' has a foreclosure'
+    + (r.st==='TD'?' / tax deed':'')+' sale scheduled for <b>'+(dt||'a date I have on file')+'</b>'
+    + (caseNo?' (Case No. '+caseNo+')':'')+'.'+(doz?' I see it’s been on the market '+doz+' days.':'')+'<br><br>'
+    + 'I’m a local cash buyer — I’m not trying to step on your listing, and if it closes '
+    + 'through your buyer before the sale date, that’s the best outcome for everyone. I’m '
+    + 'reaching out in case it doesn’t: if you need a fast, certain backup closer to make sure '
+    + 'this doesn’t go to auction, I can move quickly and close before the deadline.<br><br>'
+    + 'No pressure either way — happy to just be a name on file if the timing gets tight.<br><br>'
+    + 'Thanks,<br>'+esc(sN)+'<br>'+esc(sL)+(sP?'<br>'+esc(sP):'')+(sE?'<br>'+esc(sE):'')+'<br><br>'
+    + '<span style="color:#8a94a8;font-size:11.5px">Reply STOP and I will not contact you again about this listing.</span>';
+  return {subj: subj, body: body, to: (r.zagentemail||'').trim()};
+}
+function openAgentPitch(caseId){
+  var r = DATA.find(function(x){return x.case===caseId;});
+  if(!r) return;
+  var live = (r.zstatus==='LISTED' || r.zstatus==='PENDING');
+  var hasContact = !!((r.zagentemail||'').trim() || (r.zagentphone||'').trim());
+  if(!live || !hasContact){
+    var why = !live
+      ? 'This lead is not currently showing as actively listed on MLS/Zillow ('+esc(r.zstatus||'unknown')+'). This outreach only makes sense for a live listing with an agent to contact.'
+      : 'This lead is listed, but no agent phone or email was found on the last check. Try the phone number on the actual MLS/Zillow listing directly.';
+    var msg = '<div class="doc"><div class="kicker">LISTING AGENT OUTREACH</div>'
+      + '<h1>No agent contact available.</h1><p>'+why+'</p></div>';
+    return _openDoc(_docShell('Agent outreach — unavailable', msg, {key:'agent-pitch-blocked'}));
+  }
+  var msg = genAgentPitch(r);
+  _docLog(caseId, 'agent-pitch', 'en');
+  var doc = '<div class="doc"><div class="kicker">LISTING AGENT OUTREACH</div>'
+    + '<h1>'+esc(r.zagent||'Listing agent')+(r.zbroker?' &middot; '+esc(r.zbroker):'')+'</h1>'
+    + '<div class="sub">'+(r.zagentphone?'Phone: <b>'+esc(r.zagentphone)+'</b>':'no phone on file')
+    +   (r.zagentemail?' &middot; Email: <b>'+esc(r.zagentemail)+'</b>':' &middot; no email on file — call instead')+'</div>'
+    + '<h2>Subject</h2><p>'+esc(msg.subj)+'</p>'
+    + '<h2>Message</h2><div class="box" style="font-family:Georgia,serif;font-size:14px;line-height:1.6">'+msg.body+'</div>'
+    + (msg.to
+        ? '<div style="margin-top:16px"><a href="mailto:'+esc(msg.to)+'?subject='+encodeURIComponent(msg.subj)+'&body='+encodeURIComponent(msg.body.replace(/<br>/g,'\n').replace(/<[^>]+>/g,''))+'" style="padding:11px 20px;background:#286c34;color:#fff;border-radius:6px;font:700 14px Arial,sans-serif;text-decoration:none;display:inline-block">&#9993; Open in email</a></div>'
+        : '<p class="mini">No agent email on file — call '+esc(r.zagentphone||'')+' or copy the message above into a text.</p>')
+    + '</div>';
+  return _openDoc(_docShell('Agent outreach — '+(r.addr||r.case), doc, {letterhead:true, key:'agent-pitch'}));
 }
 
 /* ============================================================================================
