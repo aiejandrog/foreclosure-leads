@@ -63,6 +63,11 @@ PAT_AGENT = re.compile(r'agentName\\*"\s*:\s*\\*"([^"\\]+)')
 PAT_AGENT_PHONE = re.compile(r'agentPhoneNumber\\*"\s*:\s*\\*"([^"\\]+)')
 PAT_AGENT_EMAIL = re.compile(r'agentEmail\\*"\s*:\s*\\*"([^"\\]+)')
 PAT_BROKER = re.compile(r'brokerName\\*"\s*:\s*\\*"([^"\\]+)')
+# Real-listing proof + the authoritative pre-foreclosure flag. A genuine MLS listing carries an
+# mlsid; Zillow's own pre-foreclosure/auction data pages do not, and Zillow states that fact
+# directly rather than making us infer it from listingTypeDimension. See classify().
+PAT_MLSID = re.compile(r'mlsid\\*"\s*:\s*\\*"([A-Za-z0-9\-]+)', re.I)
+PAT_PREFC = re.compile(r'isPreforeclosureAuction\\*"\s*:\s*(true|false)', re.I)
 
 TRUE_LISTING_TYPES = ('for sale by agent', 'for sale by owner', 'new construction', 'coming soon')
 
@@ -99,8 +104,11 @@ def _addr_from_folio_md(folio):
         return ''
 
 
-def classify(home_status, listing_type, price, doz):
-    """Map raw Zillow fields to our zstatus label. Empty string = signal too thin to trust."""
+def classify(home_status, listing_type, price, doz, mls_id='', agent='', prefc_auction=False):
+    """Map raw Zillow fields to our zstatus label. Empty string = signal too thin to trust.
+
+    mls_id / agent / prefc_auction added 2026-08-06 to fix a false OFF-MARKET (see below). All
+    three default to empty/False so any older call site keeps its previous behavior."""
     lt = (listing_type or '').strip().lower()
     hs = (home_status or '').strip().upper()
     if hs == 'PENDING':
@@ -110,9 +118,24 @@ def classify(home_status, listing_type, price, doz):
     if hs == 'FOR_RENT':
         return 'RENTAL'
     if hs == 'FOR_SALE':
-        # Zillow's own pre-foreclosure/auction data pages are FOR_SALE too — only a real
-        # by-agent/by-owner listing counts as LISTED.
-        return 'LISTED' if lt in TRUE_LISTING_TYPES else 'OFF-MARKET'
+        # Zillow's own pre-foreclosure/auction data pages carry homeStatus FOR_SALE as well, and
+        # those are NOT real listings — that is what this branch guards against. It used to infer
+        # that from listingTypeDimension being one of TRUE_LISTING_TYPES, which produced a silent
+        # false negative: Zillow frequently emits "Unknown Listed By" on perfectly genuine MLS
+        # listings. Caught live 2026-08-06 on 16298 90TH ST N, Loxahatchee — MLS# B26047763,
+        # BeachesMLS, real listing agent, $699,999, 35 days on market — classified OFF-MARKET, which
+        # also meant the Agent Outreach feature could never fire on it.
+        # Zillow states the pre-foreclosure fact outright (isPreforeclosureAuction), so key off that
+        # instead of guessing, and treat a real MLS id or a named listing agent as proof of a real
+        # listing. Unknown-and-unattributed still falls through to OFF-MARKET, so the original
+        # conservative default is preserved.
+        if prefc_auction:
+            return 'OFF-MARKET'
+        if lt in TRUE_LISTING_TYPES:
+            return 'LISTED'
+        if (mls_id or '').strip() or (agent or '').strip():
+            return 'LISTED'
+        return 'OFF-MARKET'
     if hs in ('OTHER', 'OFF_MARKET'):
         return 'OFF-MARKET'
     return ''
@@ -156,8 +179,24 @@ def fetch_status(addr):
         prc = PAT_PRC.search(r2.text)
         doz = PAT_DOZ.search(r2.text)
         zst = PAT_ZEST.search(r2.text)
+        # Agent/MLS are parsed BEFORE classification now: they are inputs to it, not just outputs.
+        # (Extracting them only after a LISTED verdict was circular — a genuine listing that
+        # classify rejected could never produce the very agent data that proves it is genuine.)
+        am = PAT_AGENT.search(r2.text)
+        apm = PAT_AGENT_PHONE.search(r2.text)
+        aem = PAT_AGENT_EMAIL.search(r2.text)
+        bm = PAT_BROKER.search(r2.text)
+        mlsm = PAT_MLSID.search(r2.text)
+        pfm = PAT_PREFC.search(r2.text)
+        agent = (am.group(1).strip() if am else '')[:80]
+        agent_phone = (apm.group(1).strip() if apm else '')[:20]
+        agent_email = (aem.group(1).strip() if aem else '')[:120]
+        broker = (bm.group(1).strip() if bm else '')[:120]
+        mls_id = (mlsm.group(1).strip() if mlsm else '')[:40]
+        prefc_auction = bool(pfm and pfm.group(1).lower() == 'true')
         status = classify(hs.group(1) if hs else '', ltd.group(1) if ltd else '',
-                          int(prc.group(1)) if prc else 0, int(doz.group(1)) if doz else 0)
+                          int(prc.group(1)) if prc else 0, int(doz.group(1)) if doz else 0,
+                          mls_id=mls_id, agent=agent, prefc_auction=prefc_auction)
         # Page fetched cleanly but no recognizable homeStatus: that's Zillow's bare Zestimate
         # page shape for never-listed parcels — off-market, not unknown.
         if not status:
@@ -165,16 +204,10 @@ def fetch_status(addr):
         price = int(prc.group(1)) if prc else 0
         days = max(0, int(doz.group(1))) if doz else 0
         zest = int(zst.group(1)) if zst else 0
-        agent = agent_phone = agent_email = broker = ''
-        if status in ('LISTED', 'PENDING'):
-            am = PAT_AGENT.search(r2.text)
-            apm = PAT_AGENT_PHONE.search(r2.text)
-            aem = PAT_AGENT_EMAIL.search(r2.text)
-            bm = PAT_BROKER.search(r2.text)
-            agent = (am.group(1).strip() if am else '')[:80]
-            agent_phone = (apm.group(1).strip() if apm else '')[:20]
-            agent_email = (aem.group(1).strip() if aem else '')[:120]
-            broker = (bm.group(1).strip() if bm else '')[:120]
+        # Agent contact only means something on a live listing. On anything else Zillow's
+        # attribution block is usually the LAST sale's agent, which would be stale and misleading.
+        if status not in ('LISTED', 'PENDING'):
+            agent = agent_phone = agent_email = broker = ''
         # Price/days only meaningful for live retail states
         if status not in ('LISTED', 'PENDING'):
             price = price if status == 'SOLD' else 0

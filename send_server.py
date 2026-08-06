@@ -33,6 +33,7 @@ ENDPOINTS:
 import argparse
 import datetime as dt
 import json
+import mimetypes
 import os
 import re
 import smtplib
@@ -223,7 +224,7 @@ def _recently_emailed_to(addr, hours=24):
 
 
 # ---------------------------------------------------------------- SMTP
-def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc=''):
+def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None):
     """bcc carries the owner's OTHER traced addresses.
 
     Skiptrace returns several addresses per lead and only one is usually live, so reaching all of
@@ -232,7 +233,13 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc=''):
     addresses include shamikamiley@, wanda.smiley@ and talldadman@ — household members, not her.
     A visible To: would publish six strangers' addresses to each other and disclose Deborah's
     foreclosure to five people who are not her.
-    smtplib's send_message() delivers to Bcc recipients and does NOT transmit the header."""
+    smtplib's send_message() delivers to Bcc recipients and does NOT transmit the header.
+
+    attach: list of LOCAL file paths (added 2026-08-06). Case workups — dockets, judgments, deed
+    copies — are the one thing this bridge is asked to send that is not a plain-text owner letter,
+    and mailing a partner a link to a file on Alejandro's own Desktop is useless to them. Paths are
+    resolved and read here; a missing/unreadable file raises so the caller sees a real 502 rather
+    than silently mailing a workup with nothing attached."""
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{user}>' if from_display else user
     msg['To'] = to_addr
@@ -242,8 +249,18 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc=''):
     msg['Message-ID'] = make_msgid(domain=user.split('@', 1)[-1])
     msg['Date'] = formatdate(localtime=True)
     msg.set_content(body)
+    for path in (attach or []):
+        p = os.path.abspath(os.path.expanduser(str(path)))
+        if not os.path.isfile(p):
+            raise FileNotFoundError(f'attachment not found: {p}')
+        with open(p, 'rb') as f:
+            data = f.read()
+        ctype, _ = mimetypes.guess_type(p)
+        maintype, _, subtype = (ctype or 'application/octet-stream').partition('/')
+        msg.add_attachment(data, maintype=maintype, subtype=subtype or 'octet-stream',
+                           filename=os.path.basename(p))
     ctx = ssl.create_default_context()
-    with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx, timeout=30) as s:
+    with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx, timeout=60) as s:
         s.login(user, pw)
         s.send_message(msg)
     return msg['Message-ID']
@@ -357,6 +374,12 @@ class Handler(BaseHTTPRequestHandler):
         subj = str(payload.get('subj') or '').strip()
         body = str(payload.get('body') or '')
         meta = payload.get('meta') or {}
+        # Local file paths to attach (case workups: docket PDFs, judgments, deeds). List of strings.
+        attach = payload.get('attach') or []
+        if isinstance(attach, str):
+            attach = [attach]
+        if not isinstance(attach, list) or any(not isinstance(x, str) for x in attach):
+            return self._json(400, {'ok': False, 'err': 'attach must be a string or list of file paths'})
 
         if not _EMAIL_RE.match(to):
             return self._json(400, {'ok': False, 'err': 'invalid to address'})
@@ -395,7 +418,7 @@ class Handler(BaseHTTPRequestHandler):
 
         # ---- send ----
         try:
-            mid = _smtp_send(user, pw, from_display, to, subj, body, bcc)
+            mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach)
         except smtplib.SMTPAuthenticationError as e:
             return self._json(401, {'ok': False, 'err': f'SMTP AUTH failed: {e}'})
         except Exception as e:
