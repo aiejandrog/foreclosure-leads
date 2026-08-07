@@ -2,8 +2,11 @@
 setlocal
 rem DEALFLOW nightly phones job (lean, UNATTENDED). No `pause` anywhere -- a scheduled task can't answer one.
 rem Flow: llc_officers (free Sunbiz humans) -> skiptrace (hardened, fails loud) -> rebuild -> commit -> push.
-rem If skip-trace ABORTS it stops BEFORE the rebuild, so a good board is never overwritten with a phone-poor one.
-rem   skiptrace exit codes: 0 ok | 2 key/balance dead | 3 provider down | 4 over --max-spend.
+rem If skip-trace fails the run DEGRADES, it does not stop: the board still rebuilds and publishes with
+rem the phone data already cached. Only a REBUILD failure blocks the push. (Changed 2026-08-07 -- see
+rem the note at the skiptrace step for why the old stop-everything behavior was wrong.)
+rem   skiptrace exit codes: 0 ok | 2 key/balance dead | 3 provider down | 4 over --max-spend
+rem                         | 5 shared daily budget spent mid-run (benign, rest resume tomorrow).
 rem Night one clears the backlog (~$40); every night after only pays for NEW leads (cache dedupes the rest).
 cd /d "%~dp0"
 set "LOG=%~dp0phones-run.log"
@@ -31,10 +34,22 @@ rem    ($0.15/lookup), so it makes real progress nightly instead of refusing out
 rem    ~26 nights at this rate -- raise --limit (and the bd_budget.py cap that gates it) if that's too slow.
 python skiptrace.py --all --limit 6 --max-spend 1 >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
+
+rem    FIXED 2026-08-07: a skiptrace failure used to `exit /b` here, so the board was never rebuilt
+rem    or pushed. That froze the ENTIRE refresh on an unrelated problem: on 08/07 BatchData returned
+rem    "403 Insufficient balance", skiptrace correctly stopped without spending a cent, and the board
+rem    then went stale -- no new auction dates, no new county leads, nothing -- purely because ONE
+rem    enrichment step could not run.
+rem    The original guard ("never overwrite a good board with a phone-poor one") does not actually
+rem    apply to exits 2/3/4: in every one of those cases skiptrace traced NOTHING and wrote NOTHING,
+rem    so skiptrace_results.json is untouched and a rebuild reproduces the exact same phone data it
+rem    had before, plus whatever fresh county/auction data arrived. Degrade, don't freeze.
+rem    A rebuild failure (below) still blocks the push -- that guard is the one that matters.
+rem    NOTE: no parentheses inside these set values -- an unescaped ) closes an if-block in batch.
+set "PHONESNOTE=phones refreshed"
 if not "%RC%"=="0" (
-  echo [%STAMP%] PHONES BLOCKED - skiptrace exit %RC% [2=key/balance 3=provider-down 4=over-budget]. Nothing rebuilt or pushed. See phones-run.log.> "%STATUS%"
-  echo PHONES BLOCKED - skiptrace exit %RC%, nothing rebuilt/pushed >> "%LOG%"
-  exit /b %RC%
+  echo PHONES DEGRADED - skiptrace exit %RC% [2=key/balance 3=provider-down 4=over-budget 5=daily-budget-spent]. No new phones this run; rebuilding + pushing anyway with existing data. >> "%LOG%"
+  set "PHONESNOTE=phones NOT refreshed - skiptrace exit %RC%, see phones-run.log"
 )
 
 rem 3) rebuild the ENCRYPTED board with the fresh numbers baked in
@@ -48,14 +63,16 @@ if errorlevel 1 (
 rem 4) publish. ONLY the encrypted board + public Sunbiz officers -- NEVER `git add -A`
 rem    (skiptrace_results.json / leads_final.json are gitignored PII and must stay off the public repo).
 git add docs/index.html llc_officers.json
-git commit -m "phones: nightly skip-trace refresh" >> "%LOG%" 2>&1
+git commit -m "phones: nightly refresh (%PHONESNOTE%)" >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo [%STAMP%] OK - no new numbers since last run, nothing to push.> "%STATUS%"
+  echo [%STAMP%] OK - board already current, nothing to push. %PHONESNOTE%.> "%STATUS%"
   echo no changes to commit >> "%LOG%"
   exit /b 0
 )
 git push origin main >> "%LOG%" 2>&1 || (timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1)
 
-echo [%STAMP%] OK - phones refreshed + published. Live in ~1-2 min.> "%STATUS%"
+rem The status file must state the phones outcome honestly. It previously always said "phones
+rem refreshed", which would now be a lie on any degraded run.
+echo [%STAMP%] OK - board rebuilt + published (%PHONESNOTE%). Live in ~1-2 min.> "%STATUS%"
 echo ==== done %date% %time% ==== >> "%LOG%"
 exit /b 0

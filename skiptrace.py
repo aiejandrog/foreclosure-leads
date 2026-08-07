@@ -35,6 +35,8 @@ EXIT CODES (the whole point of the 2026-08-02 hardening — automation depends o
   3  aborted after 3 consecutive transient failures (timeout / 5xx / connection) — provider likely
      down. One bad lead does NOT abort; a systemic outage does.
   4  projected spend exceeds --max-spend. Nothing was called. Raise the ceiling or narrow the run.
+  5  the SHARED daily budget (bd_budget.py) ran out mid-run. Some leads were traced, the rest
+     resume tomorrow. Benign -- not a failure, and nothing was overspent.
 """
 import glob as _glob
 import json, os, re, sys, time, argparse

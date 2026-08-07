@@ -41,6 +41,8 @@ import ssl
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -478,6 +480,25 @@ class Handler(BaseHTTPRequestHandler):
 
 
 # ---------------------------------------------------------------- main
+def _already_running(host, port, timeout=2.5):
+    """True when a HEALTHY DealFlow bridge already owns this port.
+
+    Windows lets a SECOND process bind a port that is already in use when SO_REUSEADDR is set —
+    and http.server sets it via allow_reuse_address. Verified 2026-08-07: two sockets bound
+    127.0.0.1:9977 simultaneously with no error. Two live bridges would each keep their own view of
+    mail_sent.json's daily count, so the 150/day cap would be enforced twice at half strength and a
+    lead could be mailed by both.
+
+    Autostart now fires from TWO places (the Startup folder at logon, and a scheduled task at logon
+    plus again before the 8am worker), so a duplicate launch is the EXPECTED case, not an edge one.
+    Probe /health and step aside instead of racing for the socket."""
+    try:
+        with urllib.request.urlopen(f'http://{host}:{port}/health', timeout=timeout) as r:
+            return bool(json.loads(r.read().decode()).get('ok'))
+    except Exception:
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--host', default='127.0.0.1',
@@ -492,6 +513,12 @@ def main():
     args = ap.parse_args()
 
     Handler.daily_cap = args.limit
+
+    # Idempotent start — see _already_running(). Exit 0, not an error: a duplicate launch means the
+    # bridge is up, which is the desired end state.
+    if _already_running(args.host, args.port):
+        print(f'  a healthy bridge already owns {args.host}:{args.port} — leaving it alone.')
+        return
 
     user, pw = _load_credentials()
     print()
