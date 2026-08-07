@@ -245,6 +245,13 @@ button.active{background:var(--navy);color:#fff;border-color:var(--navy)}
   border-radius:3px;cursor:help;border:1px solid}
 .taxchip.tc{background:#fff5f4;color:#8a1c1c;border-color:#e8bcbc}
 .taxchip.td{background:#fff2d7;color:#7a5a10;border-color:#eadb9f}
+/* FS 825.103 elder guardrail (Playbook §0.5). Purple, used by nothing else on the board, so it
+   never reads as "just another lien chip" — this one is a stop sign, not a pricing input. */
+.elderchip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
+  border-radius:3px;cursor:help;border:1px solid}
+.elderchip.e65{background:#f3e8ff;color:#5b21b6;border-color:#c4a7e7}
+.elderchip.e60{background:#f7f0ff;color:#6d3fc4;border-color:#d9c6f0}
+.elderchip.eq{background:#faf7ff;color:#7c5bb0;border-color:#e3d7f5}
 .codechip{display:inline-block;font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;
   border-radius:3px;cursor:help;border:1px solid}
 .codechip.cf{background:#fff5f4;color:#8a1c1c;border-color:#e8bcbc}
@@ -6832,6 +6839,53 @@ function _codeLienChip(r){
         + 'a cost the equity number does not include. ' + detail)
     + '">CODE CASE</span>';
 }
+function _elderChip(r){
+  // FS 825.103 guardrail (Playbook §0.5). This is the ONLY chip on the board that exists to stop
+  // a rep rather than to price a deal, so it is deliberately over-inclusive: a false positive
+  // costs some extra courtesy on a call, a false negative is a first-degree felony.
+  //
+  // WHY IT IS USUALLY A "?" — FS 825.103(2) creates a permissive presumption of exploitation when
+  // (a) property >$10k, (b) seller 65+, (c) nonrelative known <2 years, (d) seller did not receive
+  // reasonably equivalent value. On a cold-called foreclosure lead (a) and (c) are ALWAYS true, so
+  // the whole exposure turns on age + price. But no data source here carries age: skip trace
+  // returns no DOB, and the county PA exposes no senior exemption (FS 196.075 absent from the live
+  // Benefit array — only Homestead/Second Homestead/SOH Cap/Widow). So until r.ownerAge is
+  // populated, this fires on proxies and says so plainly rather than implying a verified age.
+  if(!r) return '';
+  var age = +r.ownerAge || 0;
+  if(age >= 65)
+    return ' <span class="elderchip e65" title="'
+      + esc('SELLER IS ' + age + ' — 65 or older. FS 825.103(2): a transfer of property worth over '
+          + '$10,000 to a nonrelative known under 2 years, where the seller does not receive '
+          + 'reasonably equivalent value, creates a PERMISSIVE PRESUMPTION OF EXPLOITATION. Three of '
+          + 'those four elements are already true on this lead. The only one you control is PRICE. '
+          + '$50k+ involved = first-degree felony; amounts across deals can be aggregated (FS '
+          + '825.101(15)(c)). Protocol: offer floor + saved comp math, "no" ends the call that day, '
+          + 'recommend independent counsel in writing, recording ON with Beat 0 disclosure. §0.5.')
+      + '">&#9888; ELDER 65+</span>';
+  if(age >= 60)
+    return ' <span class="elderchip e60" title="'
+      + esc('SELLER IS ' + age + ' — 60 to 64. Below the FS 825.103(2) presumption threshold (65), '
+          + 'but within FS 825.101(4): an "elderly person" is 60+ WHO IS suffering the infirmities '
+          + 'of aging to the extent self-care or self-protection is impaired. If this seller reads '
+          + 'confused or frail on the call, treat exactly as 65+. §0.5.')
+      + '">ELDER 60+</span>';
+  // No authoritative age. Fall back to proxies, and label them as proxies.
+  var why = [];
+  if(r.wid) why.push('a WIDOW/WIDOWER exemption (FS 196.202) is recorded on this parcel');
+  var yr = parseInt(String(r.lsd||'').slice(0,4),10);
+  var tenure = (yr && yr > 1900) ? (new Date().getFullYear() - yr) : 0;
+  if(tenure >= 30) why.push('the owner has held this property ' + tenure + ' years (since ' + yr + ')');
+  if(!why.length) return '';
+  return ' <span class="elderchip eq" title="'
+    + esc('POSSIBLE ELDERLY SELLER — NOT VERIFIED. No age or DOB exists in this pipeline (skip trace '
+        + 'returns none; the county exposes no senior exemption), so this is inferred from: '
+        + why.join(' and ') + '. Treat as 65+ until you know otherwise — that is the cheap direction '
+        + 'to be wrong in. If the seller confirms 65+, the FS 825.103(2) presumption analysis in '
+        + '§0.5 applies and PRICE is the only element you control. Confirm age on the call, politely '
+        + 'and early.')
+    + '">ELDER?</span>';
+}
 function _caseDeadChip(r){
   // Only meaningful on a lead with NO scheduled sale. Measured on this board: all 220 auction
   // leads carrying a clerk status have a FUTURE sale and 180 of them read CLOSED — because
@@ -10591,6 +10645,9 @@ function genMorningWorker(lane, autostart){
     // the worker tab regains focus, the send is finished, so advance ~1.5s later. The timer is only
     // a fallback for when he never comes back (walked away, or the composer never opened).
     +   'var i=0, auto=false, paceMs=8000, tick=null, healing=null, awaitingReturn=false, sentAt=0;'
+    +   'var autoAll=false, LANE_ORDER=["urgent","active","early"];'
+    +   'function laneCount(k){ return (LANES[k]||[]).length; }'
+    +   'function allTotal(){ var n=0; LANE_ORDER.forEach(function(k){ n+=laneCount(k); }); return n; }'
     +   'var main=document.getElementById("mwmain"), prog=document.getElementById("mwprog"),'
     +     'logEl=document.getElementById("mwlog"), statEl=document.getElementById("mwlogstats");'
     +   'function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}'
@@ -10684,7 +10741,7 @@ function genMorningWorker(lane, autostart){
     +   'function setLane(k){'
     +     'if(!LANES[k] || k===lane) return;'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
-    +     'auto=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
+    +     'auto=false; autoAll=false; awaitingReturn=false; lane=k; Q=LANES[k]||[]; i=0;'
     +     'Array.prototype.forEach.call(document.querySelectorAll(".mwlane"), function(el){'
     +       'el.classList.toggle("on", el.dataset.lane===k);'
     +     '});'
@@ -10777,13 +10834,13 @@ function genMorningWorker(lane, autostart){
     +   'var TBI=0, TBSENT=0, TBSKIP=0, tbOn=false;'
     +   'function textBatchStart(){'
     +     'if(!TEXTQ.length) return;'
-    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","&#9200; "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
+    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; textBatchStep();'
     +   '}'
     +   'function textBatchStep(){'
     +     'if(TBI>=TEXTQ.length) return textBatchDone();'
-    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","&#9200; "+g.label+" — batch stopped mid-run. Resume after 8 AM ET.","warn"); return textBatchDone(); }'
-    +     'if(sentToday()>=CAP.max){ addLog("fail","batch","&#9940; daily send cap reached ("+CAP.max+") — stop texting, keep calling.","warn"); return textBatchDone(); }'
+    +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — batch stopped mid-run. Resume after 8 AM ET.","warn"); return textBatchDone(); }'
+    +     'if(sentToday()>=CAP.max){ addLog("fail","batch","⛔ daily send cap reached ("+CAP.max+") — stop texting, keep calling.","warn"); return textBatchDone(); }'
     +     'var x=TEXTQ[TBI], body="";'
     +     'try{ var m=/[?&]body=([^&]*)/.exec(x.sms||""); if(m) body=decodeURIComponent(m[1].replace(/\\+/g," ")); }catch(e){}'
     +     'main.innerHTML="<div class=\'mwpace\'>"'
@@ -10920,7 +10977,7 @@ function genMorningWorker(lane, autostart){
     +     'if(auto){'
     +       'clearTimeout(window.__cfWatch);'
     +       'window.__cfWatch=setTimeout(function(){'
-    +         'addLog("skip", r.first||r.owner, "&#9200; unattended — nobody confirmed in 45s. NOT counted as sent; lead stays queued for tomorrow.", "warn");'
+    +         'addLog("skip", r.first||r.owner, "⏰ unattended — nobody confirmed in 45s. NOT counted as sent; lead stays queued for tomorrow.", "warn");'
     +         'try{ post("skip"); }catch(e){}'
     +         'advance();'
     +       '}, 45000);'
@@ -10972,7 +11029,7 @@ function genMorningWorker(lane, autostart){
     // FTSA is an hours rule, not a volume rule. Warn but do not block — the operator may be
     // logging a call placed earlier, and a hard stop would just teach him to work around it.
     +     'var f=_wftsa();'
-    +     'if(!f.safe) addLog("wait", r.first||r.owner, "&#9888; "+f.label+" — FL FTSA restricts calls to 8 AM-8 PM ET", "warn");'
+    +     'if(!f.safe) addLog("wait", r.first||r.owner, "⚠ "+f.label+" — FL FTSA restricts calls to 8 AM-8 PM ET", "warn");'
     // ORDER MATTERS. Render the outcome screen BEFORE dialling: `window.location.href="tel:..."`
     // navigates the document, which tore the worker tab down mid-click and the disposition bar
     // never appeared (caught in test — the queue silently lost the lead). An anchor click hands
@@ -11071,17 +11128,17 @@ function genMorningWorker(lane, autostart){
     // live conversation is the same mistake as the templated email the guard just blocked.
     +       'if(r.mailWhy==="replied"){'
     +         'callQAdd(r);'
-    +         'addLog("callq", r.first||r.owner, "&#9742; owner REPLIED — added to the Call list. Talk like a person, no templates.");'
+    +         'addLog("callq", r.first||r.owner, "☎ owner REPLIED — added to the Call list. Talk like a person, no templates.");'
     +         'return advance();'
     +       '}'
     // textable (smsHref baked, so DNC/landline/opt-out already excluded) -> TEXT BATCH; otherwise
     // dial-only. Either way NOTHING is sent here and nothing is retired.
     +       'if(r.smsHref){'
     +         'textQAdd(r);'
-    +         'addLog("callq", r.first||r.owner, "&#128241; phone only — queued to the TEXT BATCH (pre-filled, you press send at the end). Nothing sent yet.");'
+    +         'addLog("callq", r.first||r.owner, "📱 phone only — queued to the TEXT BATCH (pre-filled, you press send at the end). Nothing sent yet.");'
     +       '} else {'
     +         'callQAdd(r);'
-    +         'addLog("callq", r.first||r.owner, "&#9742; phone only, not textable (DNC/landline) — added to the Call list (never capped). Nothing was sent.");'
+    +         'addLog("callq", r.first||r.owner, "☎ phone only, not textable (DNC/landline) — added to the Call list (never capped). Nothing was sent.");'
     +       '}'
     +       'return advance();'
     +     '}'
@@ -11127,7 +11184,25 @@ function genMorningWorker(lane, autostart){
     +   '}'
     +   'window.addEventListener("focus", onBack);'
     +   'document.addEventListener("visibilitychange", function(){ if(!document.hidden) onBack(); });'
-    +   'function advance(){ i++; if(auto && i<Q.length){ setTimeout(runOne, 700); } else { render(); } }'
+    +   'function advance(){'
+    +     'i++;'
+    +     'if(auto && i<Q.length){ setTimeout(runOne, 700); return; }'
+    +     'if(auto && autoAll && i>=Q.length && hopNextLane()) return;'
+    +     'render();'
+    +   '}'
+    +   'function hopNextLane(){'
+    +     'if(sentToday() >= CAP.max) return false;'
+    +     'var prev=lane, at=LANE_ORDER.indexOf(lane), nxt="";'
+    +     'for(var x=at+1; x<LANE_ORDER.length; x++){ if(laneCount(LANE_ORDER[x])){ nxt=LANE_ORDER[x]; break; } }'
+    +     'if(!nxt) return false;'
+    +     'clearInterval(tick); if(healing) clearTimeout(healing);'
+    +     'awaitingReturn=false; lane=nxt; Q=LANES[nxt]||[]; i=0;'
+    +     'Array.prototype.forEach.call(document.querySelectorAll(".mwlane"), function(el){ el.classList.toggle("on", el.dataset.lane===nxt); });'
+    +     'var sub=document.querySelector(".mwtitle .sub");'
+    +     'if(sub) sub.textContent=LMETA[nxt].ic+" "+LMETA[nxt].t+" \u00b7 "+LMETA[nxt].d+" \u00b7 all tiers \u00b7 not touched in 72h";'
+    +     'addLog("open","ALL LANES","✓ "+LMETA[prev].t+" lane clear → moving to "+LMETA[nxt].t+" ("+Q.length+" queued)");'
+    +     'render(); setTimeout(runOne, 900); return true;'
+    +   '}'
     +   'function pause(){ auto=false; render(); }'
     +   'function runOne(){ if(i>=Q.length) return render(); var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length; attempt(r,0,0); }'
     +   'function render(){'
@@ -11193,7 +11268,8 @@ function genMorningWorker(lane, autostart){
     +         '+"<div><div class=\'k\'>Phone / Email</div><div class=\'v\'>"+ph+" · "+em+"</div></div>"'
     +       '+"</div>"'
     +       '+"<div class=\'mwacts\'>"'
-    +         '+"<button id=\'mw-auto\' class=\'mwbtn done\' data-fn=\'auto\' style=\'grid-column:1/-1\'>&#9654; Start auto-run — walk the whole queue<span class=\'sub\'>advances the moment you tab back · "+Math.round(paceMs/1000)+"s fallback · logs everything · heals past failures</span></button>"'
+    +         '+"<button id=\'mw-auto\' class=\'mwbtn done\' data-fn=\'auto\' style=\'grid-column:1/-1\'>&#9654; Auto-run THIS lane — "+LMETA[lane].t+"<span class=\'sub\'>"+Q.length+" queued · stops when this lane is clear</span></button>"'
+    +         '+"<button id=\'mw-autoall\' class=\'mwbtn done\' data-fn=\'autoall\' style=\'grid-column:1/-1;background:linear-gradient(180deg,#1d4ed8,#1e3a8a);border-color:#3b82f6\'>&#9654;&#9654; Auto-run ALL lanes<span class=\'sub\'>"+LMETA.urgent.ic+laneCount("urgent")+" &rarr; "+LMETA.active.ic+laneCount("active")+" &rarr; "+LMETA.early.ic+laneCount("early")+" · "+allTotal()+" total · one run, all logged here</span></button>"'
     // CALL FIRST — full width, above email. Calling is the highest-converting channel and the
     // only one with no daily cap, yet the worker had no call button at all: r.phones sat on the
     // card unused while `done` hardcoded the outcome "Called - no answer" whether or not anyone
@@ -11220,8 +11296,8 @@ function genMorningWorker(lane, autostart){
     +       'var xc=tb.getAttribute("data-qtext"), x=null;'
     +       'TEXTQ.forEach(function(y){ if(String(y.c)===String(xc)) x=y; });'
     +       'if(!x) return;'
-    +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "&#9200; "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
-    +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "&#9940; daily cap reached — keep calling instead.", "warn"); return; }'
+    +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
+    +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "⛔ daily cap reached — keep calling instead.", "warn"); return; }'
     +       'openHere(x.sms); post("textopen");'
     +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
     +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
@@ -11238,12 +11314,15 @@ function genMorningWorker(lane, autostart){
     // that is the exact "composer emails" experience the operator told us to stop showing him. If
     // the bridge is not confirmed up, refuse to start (same posture as the FTSA gate below) and
     // say exactly how to fix it, instead of starting a run that will beg for a click on every lead.
-    +     'if(fn==="auto"){'
+    +     'if(fn==="auto"||fn==="autoall"){'
     +       'if(BRIDGE_OK!==true){'
-    +         'addLog("fail", "auto-run", "&#9940; send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.", "warn");'
+    +         'addLog("fail", "auto-run", "⛔ send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.", "warn");'
     +         'return;'
     +       '}'
-    +       'auto=true; addLog("open", r.first||r.owner, "auto-run started — "+Q.length+" leads queued"); return runOne();'
+    +       'autoAll=(fn==="autoall"); auto=true;'
+    +       'if(autoAll){ addLog("open","ALL LANES","▶▶ auto-run ALL started — "+LMETA[lane].t+" first, then the rest. "+allTotal()+" leads across all lanes."); }'
+    +       'else { addLog("open", r.first||r.owner, "auto-run started — "+LMETA[lane].t+" ONLY, "+Q.length+" leads queued"); }'
+    +       'return runOne();'
     +     '}'
     // CALL is handled before the email/text/wp guard below — it is not one of those channels and
     // must not be filtered by their availability check.
@@ -11270,7 +11349,7 @@ function genMorningWorker(lane, autostart){
     +         'if(!r.smsHref){ addLog("fail", r.first||r.owner, "no textable number (DNC or landline) — call instead", "warn"); return; }'
     // FTSA gate: solicitation texts are legal only 8 AM-8 PM ET. Re-checked at click time so it is
     // never stale. Calling is not hour-restricted the same way, so steer to the phone outside hours.
-    +         'var _tf=_wftsa(); if(!_tf.safe){ addLog("fail", r.first||r.owner, "&#9200; "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET.", "warn"); return; }'
+    +         'var _tf=_wftsa(); if(!_tf.safe){ addLog("fail", r.first||r.owner, "⏰ "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET.", "warn"); return; }'
     +         'openHere(r.smsHref);'
     +         'post("textopen");'
     +         'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
@@ -11297,8 +11376,8 @@ function genMorningWorker(lane, autostart){
     +   'if(AUTOSTART && Q.length){'
     +     '(function(){'
     +       'var g=_wftsa();'
-    +       'if(!g.safe){ addLog("fail","auto-start","&#9200; "+g.label+" — auto-run NOT started. Open it inside calling hours.","warn"); return; }'
-    +       'if(sentToday()>=CAP.max){ addLog("fail","auto-start","&#9940; daily cap already reached — nothing to auto-run.","warn"); return; }'
+    +       'if(!g.safe){ addLog("fail","auto-start","⏰ "+g.label+" — auto-run NOT started. Open it inside calling hours.","warn"); return; }'
+    +       'if(sentToday()>=CAP.max){ addLog("fail","auto-start","⛔ daily cap already reached — nothing to auto-run.","warn"); return; }'
     +       'var left=20, box=document.createElement("div");'
     +       'box.style.cssText="position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#122048;color:#fff;padding:14px 18px;display:flex;align-items:center;gap:16px;font:14px/1.4 Segoe UI,Arial,sans-serif;box-shadow:0 -4px 18px rgba(0,0,0,.3)";'
     +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — "+Q.length+" leads queued. Emails will send automatically.</div>"'
@@ -11313,10 +11392,10 @@ function genMorningWorker(lane, autostart){
     // and a "did it send?" prompt for every single queued lead, unattended, all morning. That is
     // the exact failure the operator told us to stop producing.
     +           'if(BRIDGE_OK!==true){'
-    +             'addLog("fail","auto-start","&#9940; send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
+    +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'return;'
     +           '}'
-    +           'auto=true; addLog("open","auto-start","&#9654; auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
+    +           'auto=true; addLog("open","auto-start","▶ auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
     +           'runOne(); }'
     +       '},1000);'
     +       'document.getElementById("mwcancel").addEventListener("click",function(){'
@@ -13639,7 +13718,7 @@ function render(){
           ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
           : '<span class="clamp2 legalline">no address on the filing</span>');
     const prop = '<div class="addrline">'+_addrLine+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -13707,7 +13786,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
