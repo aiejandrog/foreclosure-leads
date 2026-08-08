@@ -191,6 +191,46 @@ def _sent_today_count():
                if e.get('ch') == 'email' and str(e.get('d') or '') == today)
 
 
+BOUNCE_WINDOW_DAYS = 7
+BOUNCE_CEILING = 0.10     # refuse bulk outreach above this trailing hard-bounce rate
+
+
+def _bounce_health():
+    """Trailing hard-bounce rate, computed from the two files this box already owns.
+
+    WHY (2026-08-08): outreach ran at a 28-33% recipient-level bounce rate for SEVEN STRAIGHT DAYS
+    -- 478 of 1,712 addresses confirmed dead -- and nothing anywhere stopped it or even said so.
+    The daily cap counts MESSAGES, which says nothing about whether they are landing. Providers
+    tolerate ~2% and start blocking near 5%; past that Gmail suppresses the account and every lead
+    on the board goes dark at once, live conversations included.
+
+    This is deliberately measured on OBSERVED bounces only. It under-reports when bounces.py has
+    not run recently, which is the safe direction for a kill switch: it can be too permissive from
+    stale data, never too strict from invented data. The error text says so.
+    """
+    try:
+        bounced = {str(k).lower() for k in json.load(open(
+            os.path.join(HERE, 'bounced_emails.json'), encoding='utf-8'))}
+    except Exception:
+        return {'rate': 0.0, 'mailed': 0, 'dead': 0, 'known': 0, 'window': BOUNCE_WINDOW_DAYS}
+    cutoff = (dt.date.today() - dt.timedelta(days=BOUNCE_WINDOW_DAYS)).isoformat()
+    mailed = dead = 0
+    for e in _load_ledger():
+        if e.get('ch') != 'email' or not e.get('message_id'):
+            continue
+        if str(e.get('d') or '') < cutoff:
+            continue
+        for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
+            a = a.strip().lower()
+            if not a:
+                continue
+            mailed += 1
+            if a in bounced:
+                dead += 1
+    return {'rate': (dead / mailed) if mailed else 0.0, 'mailed': mailed, 'dead': dead,
+            'known': len(bounced), 'window': BOUNCE_WINDOW_DAYS}
+
+
 def _recipients_today():
     """Gmail meters RECIPIENTS, not messages — and BCC fans one send out to ~2.7 of them.
 
@@ -313,6 +353,7 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.startswith('/health'):
             user, pw = _load_credentials()
+            _bh = _bounce_health()
             self._json(200, {
                 'ok': True,
                 'user': user or '(not configured)',
@@ -322,6 +363,11 @@ class Handler(BaseHTTPRequestHandler):
                 'recipients_today': _recipients_today(),
                 'recipient_cap': self.recipient_cap,
                 'ready': bool(user and pw),
+                # Surfaced so the board can show list health next to the cap. `blocked` is the
+                # same verdict /send enforces, so the worker can say WHY before it starts a run
+                # instead of discovering it 403 by 403.
+                'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
+                'bounce_blocked': _bh['rate'] > BOUNCE_CEILING,
             })
         else:
             self._json(404, {'ok': False, 'err': 'unknown path'})
@@ -403,6 +449,23 @@ class Handler(BaseHTTPRequestHandler):
                 'ok': False, 'err': f'daily cap reached ({n}/{self.daily_cap})',
                 'sent_today': n, 'cap': self.daily_cap,
             })
+
+        # ---- BOUNCE CIRCUIT BREAKER ----
+        # Hard stop on BULK outreach when the trailing bounce rate is unsafe. 1:1 replies to a
+        # human who wrote to us are exempt (meta.test) -- gagging a live conversation to protect
+        # deliverability would be the wrong trade, and one message cannot move the rate.
+        if not meta.get('test'):
+            _hb = _bounce_health()
+            if _hb['rate'] > BOUNCE_CEILING:
+                return self._json(403, {
+                    'ok': False, 'blocked': 'bounce_rate',
+                    'err': (f"BLOCKED: {_hb['dead']} of {_hb['mailed']} addresses mailed in the last "
+                            f"{_hb['window']} days are confirmed dead ({_hb['rate']*100:.0f}%). The safe "
+                            f"ceiling is {BOUNCE_CEILING*100:.0f}% and providers start blocking near 5%. "
+                            f"Sending more now risks the Gmail account itself. Fix the list first: "
+                            f"python bounces.py && python verify_emails.py && rebuild. "
+                            f"(Rate is measured on OBSERVED bounces, so it is a floor, not a ceiling.)"),
+                    'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
 
         # ---- 24h per-recipient dedupe (unless test flag set) ----
         if not meta.get('test') and _recently_emailed_to(to, hours=24):

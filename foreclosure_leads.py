@@ -1025,6 +1025,23 @@ def make_tracker(leads):
     if os.path.exists(_bf):
         try: _bounced = {str(k).lower() for k in json.load(open(_bf, encoding='utf-8'))}
         except Exception: _bounced = set()
+    # PRE-SEND VERIFICATION (verify_emails.py, gitignored). The bounce list above is REACTIVE -- it
+    # only knows an address is dead after we have already burned sender reputation proving it. The
+    # verifier is the same guard run FORWARD: role mailboxes, malformed addresses, and domains our
+    # own ledger shows are effectively purged (netscape.net, cs.com, juno.com, netzero.net and the
+    # rest of the dead-ISP tier, all 100% dead across every send). Merged into the same strip so
+    # there is exactly ONE place an address gets removed from the queue.
+    _vf = os.path.join(HERE, 'verified_emails.json')
+    _vdead = 0
+    if os.path.exists(_vf):
+        try:
+            for _a, _rec in (json.load(open(_vf, encoding='utf-8')) or {}).items():
+                if (_rec or {}).get('v') == 'dead' and str(_a).lower() not in _bounced:
+                    _bounced.add(str(_a).lower()); _vdead += 1
+        except Exception:
+            pass
+    if _vdead:
+        print(f"verifier: +{_vdead} address(es) blocked BEFORE a first send (run verify_emails.py)")
     if _bounced:
         _stripped = 0
         for _v in st.values():
