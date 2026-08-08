@@ -3290,5 +3290,83 @@
    }
   ],
   "t": "2026-08-05"
+ },
+ "2025-013835-CA-01": {
+  "ent": "D & A INVESTMENT GROUP ONE LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "D & A  INVESTMENT GROUP ONE LLC",
+  "typo": false,
+  "ra": "ALFONSO, DAMARYS",
+  "ra_addr": "10301 SW 58 ST, MIAMI, FL 33173",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "ALFONSO, DAMARYS",
+    "a": "10301 SW 58 ST, MIAMI, FL 33173",
+    "p": "https://www.truepeoplesearch.com/results?name=DAMARYS%20ALFONSO",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=10301%20SW%2058%20ST&citystatezip=MIAMI%2C%20FL%2033173",
+    "cba": "https://www.cyberbackgroundchecks.com/address/10301-sw-58-st/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/damarys-alfonso/fl/miami"
+   }
+  ],
+  "t": "2026-08-06"
+ },
+ "2025-004452-CA-01": {
+  "ent": "FLORIDA INTERNATIONAL INVESTMENT 3 LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "FLORIDA INTERNATIONAL INVESTMENT 3 LLC",
+  "typo": false,
+  "ra": "PEREZ-SALAH, NICOLAS",
+  "ra_addr": "765 CRANDON BLVD, APT 409",
+  "officers": [
+   {
+    "t": "AMBR",
+    "n": "PEREZ, EDUARDO",
+    "a": "765 CRANDON BLVD, APT 409",
+    "p": "https://www.truepeoplesearch.com/results?name=EDUARDO%20PEREZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=765%20CRANDON%20BLVD&citystatezip=APT%20409%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/765-crandon-blvd/apt-409/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/eduardo-perez/fl"
+   },
+   {
+    "t": "Authorized",
+    "n": "PEREZ, NICOLAS",
+    "a": "765 CRANDON BLVD, APT 409",
+    "p": "https://www.truepeoplesearch.com/results?name=NICOLAS%20PEREZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=765%20CRANDON%20BLVD&citystatezip=APT%20409%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/765-crandon-blvd/apt-409/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/nicolas-perez/fl"
+   },
+   {
+    "t": "Manager",
+    "n": "PEREZ, JOSE",
+    "a": "765 CRANDON BLVD, APT 409",
+    "p": "https://www.truepeoplesearch.com/results?name=JOSE%20PEREZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=765%20CRANDON%20BLVD&citystatezip=APT%20409%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/765-crandon-blvd/apt-409/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/jose-perez/fl"
+   },
+   {
+    "t": "Manager",
+    "n": "LOPEZ, CARLOS",
+    "a": "765 CRANDON BLVD, APT 409",
+    "p": "https://www.truepeoplesearch.com/results?name=CARLOS%20LOPEZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=765%20CRANDON%20BLVD&citystatezip=APT%20409%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/765-crandon-blvd/apt-409/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/carlos-lopez/fl"
+   },
+   {
+    "t": "Manager",
+    "n": "PEREZ, CARLOS",
+    "a": "4326 JACKSON ST, HOLLYWOOD, FL 33021",
+    "p": "https://www.truepeoplesearch.com/results?name=CARLOS%20PEREZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4326%20JACKSON%20ST&citystatezip=HOLLYWOOD%2C%20FL%2033021",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4326-jackson-st/hollywood/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/carlos-perez/fl/hollywood"
+   }
+  ],
+  "t": "2026-08-07"
  }
 }
