@@ -287,17 +287,32 @@ def _sent_today_count(ledger):
 _WORKER_HIST = None
 
 
-def _worker_hist():
-    """case -> {'sends': n, 'replied': bool} from worker_notes.json (the send_server backup of the
-    board's notes). The headless sender is COLD-ONLY: staged follow-ups belong to the morning
-    worker, where confirmSend keeps every send honest. Without this guard the CLI would fire the
-    same cold email at a lead the worker already emailed -- or worse, at an owner mid-conversation.
-    Missing/unreadable file degrades to empty (same posture as _load_optouts): the ledger's own
+def _worker_hist(ledger=None):
+    """case -> {'sends': n, 'replied': bool}, from the DELIVERY LEDGER first and worker_notes second.
+
+    The headless sender is COLD-ONLY: staged follow-ups belong to the morning worker, where
+    confirmSend keeps every send honest. Without this guard the CLI fires the same cold email at a
+    lead the worker already emailed -- or worse, at an owner mid-conversation.
+
+    worker_notes.json alone was NOT enough, and this is not hypothetical. It is a backup of the
+    BOARD's localStorage, so it only knows what some browser happened to tell it. On 2026-08-05
+    this script sent 91 cold emails, 74 of them to cases already emailed, because those touches had
+    never reached the file. mail_sent.json is the delivery record itself and cannot drift: a
+    message_id came back or it did not. Union both sources, take the larger count.
+    Missing/unreadable inputs degrade to empty (same posture as _load_optouts): the ledger's own
     per-address cooldown still applies."""
     global _WORKER_HIST
     if _WORKER_HIST is not None:
         return _WORKER_HIST
     out = {}
+    for e in (ledger or []):
+        # message_id gate: the ledger also records FAILURES (an 'error' row on an SMTP exception)
+        # and those share ch='email'. A failed send reached nobody and must not retire a lead.
+        if e.get('ch') != 'email' or not e.get('message_id'):
+            continue
+        c = str(e.get('case') or '').strip()
+        if c:
+            out.setdefault(c, {'sends': 0, 'replied': False})['sends'] += 1
     try:
         data = json.load(open(os.path.join(HERE, 'worker_notes.json'), encoding='utf-8'))
         for case, n in (data.get('notes') or {}).items():
@@ -310,9 +325,12 @@ def _worker_hist():
                 else:
                     sends += 1
             if sends or replied:
-                out[str(case)] = {'sends': sends, 'replied': replied}
+                # max(), not +=: a send recorded in BOTH stores is one email, not two.
+                d = out.setdefault(str(case), {'sends': 0, 'replied': False})
+                d['sends'] = max(d['sends'], sends)
+                d['replied'] = d['replied'] or replied
     except Exception:
-        out = {}
+        pass          # keep whatever the ledger already gave us — it is the better source anyway
     _WORKER_HIST = out
     return out
 
@@ -321,7 +339,7 @@ def _eligible(r, ledger, optouts, min_hours):
     """Returns (ok:bool, why:str). Mirrors the tracker's _workerEligible + a few CLI extras."""
     if not _case(r):
         return False, 'no case id'
-    w = _worker_hist().get(_case(r))
+    w = _worker_hist(ledger).get(_case(r))
     if w:
         if w['replied']:
             return False, 'owner REPLIED - live thread, human only'
