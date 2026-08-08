@@ -2260,6 +2260,25 @@ const ZIP_CENT = (function(){ try { return __ZIPCENT__; } catch(e){ return {}; }
 // Empty until gmail.key exists — and an empty table honestly renders "awaiting reply" everywhere
 // rather than inventing a status we have not observed.
 const REPLIES = (function(){ try { return __REPLIES__; } catch(e){ return {}; } })();
+/* ---- SERVER SEND LEDGER ------------------------------------------------------------------------
+   Baked from mail_sent.json — the send bridge's record of CONFIRMED SMTP deliveries.
+     MAILLOG: case  -> {n: confirmed sends, last: newest send, epoch ms}
+     MAILTO:  email -> newest send epoch ms (trimmed to 14 days; feeds the 24h recipient guard)
+
+   WHY THIS EXISTS (measured 2026-08-08). Every send-stage decision — _mailHist, the 72h cooldown,
+   the 24h recipient dedupe — read this browser's localStorage and nothing else. The board as built
+   carried touches for TWO cases while mail_sent.json held 818 confirmed sends. So any profile that
+   had not personally sent them read every lead as never-contacted and composed the COLD template
+   again:
+     08-05 12:00   91 sends, 100% cold, 74 to cases already emailed   (outreach_email.py, headless)
+     08-07 19:00  124 sends, 100% cold, 109 to cases already emailed  (a fresh automation profile)
+   33 cases ended up with 4+ emails even though the FINAL variant promises "I won't email you again
+   after this." A promise the code cannot keep across a device boundary is not a promise.
+
+   Same one-way posture as the opt-out ledger below: the server can only ever say a lead has been
+   contacted MORE than this browser knows, never less. */
+const MAILLOG = (function(){ try { return __MAILLOG__; } catch(e){ return {}; } })();
+const MAILTO  = (function(){ try { return __MAILTO__;  } catch(e){ return {}; } })();
 let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
 let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
 const LS = 'fcLeadNotes';
@@ -5316,6 +5335,16 @@ function _mailHist(r){
     if(/replied/i.test(t.out||'')){ replied=true; return; }
     sends++;
   });
+  /* MERGE THE SERVER LEDGER (see MAILLOG). max(), never sum(): a send made in THIS browser is
+     also in the bake once the board is rebuilt, so adding the two would double-count and retire a
+     lead a full stage early. Whichever side is further ahead is the truth — localStorage wins for
+     sends made since the last build, the bake wins for everything this profile never witnessed. */
+  var B = MAILLOG[r.case];
+  if(B && (B.n||0) > sends) sends = B.n;
+  /* replies.py's IMAP scan is device-independent and already baked into REPLIES. Without this a
+     fresh profile would cheerfully template someone who has written back — the single worst thing
+     this pipeline can do to a live conversation. */
+  if(!replied && _replyFor(r.case, ((r.emails||[])[0]||''))) replied = true;
   return {sends:sends, replied:replied};
 }
 /* cold (never emailed) | follow (1 send, no reply) | final (2 sends, no reply) | done (3+: the
@@ -10000,6 +10029,14 @@ function _recentlyEmailedTo(addr, hours){
     var ts = s.t || s.tsu || (s.d ? Date.parse(s.d+'T12:00:00') : 0);
     return ts >= cutoff;
   });
+  /* Server ledger (MAILTO) — same cross-device gap as MAILLOG, and this one is the spam-reputation
+     guard, so a miss means the same inbox gets hit twice in a day from two profiles. MAILTO carries
+     BCC addresses too: an owner whose primary mailbox changed between runs is still the same human
+     with the same inbox. One synthetic hit is enough — the guard is a boolean; `n` only feeds a
+     display string. */
+  var bt = MAILTO[addr] || 0;
+  if(bt >= cutoff) hits.push({ch:'email', to:addr, t:bt, src:'ledger',
+                              d:new Date(bt).toISOString().slice(0,10)});
   if(!hits.length) return null;
   hits.sort(function(a,b){ return (b.t||0) - (a.t||0); });
   return {n: hits.length, last: hits[0],
@@ -10237,6 +10274,16 @@ function WORKER_LANES_META(){
   });
   return o;
 }
+/* Newest confirmed contact for a case, epoch ms, across BOTH stores. _workerEligible and
+   _laneStats each derived this from notes alone and so drifted from reality the instant a send
+   happened in another profile (see MAILLOG). One helper means they can never disagree again. */
+function _lastTouchMs(caseId, n){
+  n = n || notes[caseId] || {};
+  var t = n.touches || [];
+  var last = t.length ? (t[t.length-1].tsu || 0) : 0;
+  var B = (MAILLOG[caseId] || {}).last || 0;
+  return B > last ? B : last;
+}
 function _workerEligible(r){
   // Shared gate for every lane. Suppression first — these are legal, not preferences.
   if(!r || !r.case) return false;
@@ -10255,8 +10302,7 @@ function _workerEligible(r){
      TOMORROW (people are reachable at different hours), while an actual conversation or a "not
      interested" deserves the full 72h of breathing room. Call mode writes notes[case].cooldownH
      when the operator logs an outcome; anything else keeps the original 72h. */
-  var touches = n.touches||[];
-  var last = touches.length ? (touches[touches.length-1].tsu || 0) : 0;
+  var last = _lastTouchMs(r.case, n);
   var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
   if(last && (Date.now() - last) < coolH*3600000) return false;
   return true;
@@ -10279,7 +10325,7 @@ function _laneStats(lane){
     if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }
     if(n.wrongown){ s.suppressed++; return; }
     // Mirrors _workerEligible's outcome-aware cooldown — see the comment there.
-    var t = n.touches||[]; var last = t.length ? (t[t.length-1].tsu||0) : 0;
+    var last = _lastTouchMs(r.case, n);
     var cH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
     if(last && (Date.now()-last) < cH*3600000){ s.touched++; return; }
     s.n++;

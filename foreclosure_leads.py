@@ -874,6 +874,50 @@ def _js_guard(tpl):
                          'feature would be dead on the live site.')
     print(f'js-guard: {len(blocks)} inline script block(s) parsed clean')
 
+def _mail_ledger(recent_days=14):
+    """mail_sent.json -> (case -> {n, last}, recipient -> last_ms). Both in epoch MILLIseconds,
+    because every consumer in the page compares them against Date.now().
+
+    ONLY rows carrying a message_id count. The same ledger also records FAILURES -- send_server
+    writes an {'error': ...} row on an SMTP exception, and that row shares ch='email'. Counting a
+    failure as contact would put a lead into cooldown, and eventually into the 'done, never email
+    again' bucket, without a single message ever having reached them.
+
+    The recipient table is trimmed to `recent_days` because its only consumer is a 24h dedupe.
+    Baking all ~800 historical rows into every board would be dead weight with no behavioural gain.
+    BCC addresses are included: they are the same owner's other traced mailboxes, and the guard
+    exists to protect a human's inbox, not a particular string.
+    """
+    log, tos = {}, {}
+    p = os.path.join(HERE, 'mail_sent.json')
+    if not os.path.exists(p):
+        return log, tos
+    try:
+        rows = json.load(open(p, encoding='utf-8')) or []
+    except Exception as e:
+        print(f'send ledger: mail_sent.json unreadable ({e}) - board falls back to localStorage only')
+        return log, tos
+    cutoff = (datetime.now() - timedelta(days=recent_days)).timestamp() * 1000
+    for e in rows:
+        if e.get('ch') != 'email' or not e.get('message_id'):
+            continue
+        try:
+            ms = int(datetime.fromisoformat(e['ts_utc']).timestamp() * 1000)
+        except Exception:
+            continue
+        case = (e.get('case') or '').strip()
+        if case:
+            d = log.setdefault(case, {'n': 0, 'last': 0})
+            d['n'] += 1
+            d['last'] = max(d['last'], ms)
+        if ms >= cutoff:
+            for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
+                a = a.strip().lower()
+                if a:
+                    tos[a] = max(tos.get(a, 0), ms)
+    return log, tos
+
+
 def _zip_centroids(slim):
     """ZIP -> {lat, lng, n, city?, county?, src} centroid table.
 
@@ -1791,6 +1835,20 @@ def make_tracker(leads):
     tpl = tpl.replace('__REPLIES__', _esc_json(_replies))
     if _replies:
         print(f'replies: {len(_replies)} owner reply/replies merged')
+
+    # ---- SERVER SEND LEDGER -------------------------------------------------------------------
+    # mail_sent.json is the bridge's record of confirmed SMTP deliveries. Until now the BOARD never
+    # opened it, so _mailHist / the 72h cooldown / the 24h recipient guard all ran on this browser's
+    # localStorage alone -- and a profile that had not personally sent an email read the lead as
+    # never-contacted and re-sent the COLD template. Measured 2026-08-08: 33 cases had received 4+
+    # emails despite the FINAL variant promising the third is the last. See MAILLOG in the template.
+    _mlog, _mto = _mail_ledger()
+    tpl = tpl.replace('__MAILLOG__', _esc_json(_mlog))
+    tpl = tpl.replace('__MAILTO__', _esc_json(_mto))
+    if _mlog:
+        _staged = sum(1 for v in _mlog.values() if v['n'] >= 3)
+        print(f'send ledger: {len(_mlog)} cases baked '
+              f'({_staged} already at 3+ sends -> no further email), {len(_mto)} recent recipients')
 
     # ---- SERVER-SIDE OPT-OUT LEDGER -----------------------------------------------------------
     # optouts.json is the WRITTEN record of who told us to stop. cadence.py writes it, replies.py
