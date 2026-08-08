@@ -125,4 +125,7 @@ bd_budget.json
 
 # hard-bounced homeowner addresses (bounces.py) — real emails, PUBLIC repo, never commit
 bounced_emails.json
+# same, forward-looking: verify_emails.py classifies every address on the board, so this file is a
+# complete roster of homeowner mailboxes. Never commit.
+verified_emails.json
 deads.json
