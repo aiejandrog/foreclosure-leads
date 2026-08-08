@@ -5309,12 +5309,24 @@ function textablePhones(r){
   if(n.phone){ const d=String(n.phone).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); }
   return out;
 }
+/* Greeting name for a text. Returns '' when there is no usable HUMAN first name — every template
+   below reads correctly without one ("Hi, Alejandro Gonzalez here..."). Two bugs this closes:
+   it used to hand back the literal 'there', which is fine in English and renders "Hola there" in
+   Spanish; and it took the first token of a COMPANY name, so an LLC-owned parcel opened with
+   "Hi TOWERS," which tells the reader in three words that this is a blast. */
 function _smsFirst(r){
+  if(!r || r.co) return '';                        // company/trust owner — nobody to greet by name
   const rawFirst = r.oname ? String(r.oname).trim().split(/\s+/)[0]
     : _ownerName((r.owners||'').split(';')[0].trim(), r).split(/\s+/)[0];
-  return (_firstName(rawFirst) || 'there').replace(/[<>&"']/g,'');
+  const f = (_firstName(rawFirst) || '').replace(/[<>&"']/g,'');
+  return (!f || f.toLowerCase() === 'there') ? '' : f;
 }
-function _smsStreet(r){ return ((r.addr||'').split(',')[0]||r.addr||'your property').trim(); }
+/* lang matters because the fallback is prose: "sobre your property" in a Spanish text is worse
+   than no personalisation at all. */
+function _smsStreet(r, lang){
+  const s = (((r||{}).addr||'').split(',')[0] || (r||{}).addr || '').trim();
+  return s || (lang === 'es' ? 'su propiedad' : 'your property');
+}
 function _defaultTextTone(r){
   const n=notes[r.case]||{}, ts=n.touches||[];
   if(ts.some(t => /text|call|spoke|talked/i.test((t.ch||'')+' '+(t.out||'')))) return 'followup';
@@ -5360,23 +5372,87 @@ function _mailStage(r){
 function smsMsg(r, lang, tone){
   // tone: cold | urgent | followup — bilingual "both" matches WhatsApp posture (EN then ES + STOP).
   const sN = (sender.name||'').trim() || 'Jose';
-  const first=_smsFirst(r), street=_smsStreet(r), dt=r.auction||'';
+  const first=_smsFirst(r), dt=r.auction||'';
+  const stEN=_smsStreet(r,'en'), stES=_smsStreet(r,'es');
   const td=(r.st==='TD'), lp=(r.st==='LP');
   const saleEN = lp ? 'a foreclosure that was just filed' : (td?'a tax-deed sale':'a foreclosure sale');
   const saleES = lp ? 'una ejecución hipotecaria recién presentada' : (td?'una subasta de tax deed':'una subasta de ejecución hipotecaria');
   const whenEN = (!lp && dt) ? (' set for '+dt) : '';
   const whenES = (!lp && dt) ? (' el '+dt) : '';
+  /* VOICE RULES for everything below — a text is not a shrunken email.
+     1. NO EM DASHES. They read as machine-written in a message thread (same reason they are banned
+        from the DM drafts). Commas and periods only.
+     2. No slashes as shorthand ("plan / options"), no parenthetical asides, no ALL-CAPS.
+     3. The old cold text asked "do you have a plan / know your options" and gave nothing first.
+        That is a stranger quizzing someone about the worst thing happening to them. Lead by
+        TELLING them something true and useful, then ask. Same trade the email makes.
+     4. Buyer posture is load-bearing: not a lender, not a rescue company, nothing to sign. Never
+        promise to stop a sale — that is the exact claim FS 501.1377 and the MARS Rule punish.
+     5. One ask per message. */
+  const nameEN = 'Hi'+(first?' '+first:'')+', '+sN+' here, a local home buyer in Miami.';
+  const nameES = 'Hola'+(first?' '+first:'')+', le escribe '+sN+', compro casas aquí en Miami.';
+  const disclEN = " Not a lender, not a rescue company, nothing to sign.";
+  const disclES = ' No soy prestamista ni compañía de rescate, y no hay nada que firmar.';
+  const stopEN = ' Reply STOP to opt out.';
+  const stopES = ' Responda STOP para no recibir más.';
   let en, es;
-  // Field Manual: buyer posture; hint at exits without rescue/"stop sale" promises.
   if(tone==='urgent'){
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' — local Miami buyer (I buy houses). '+street+' still has '+saleEN+whenEN+'. Date is close — five exits still exist (reinstate / mod / short / private sale / BK). No cost. Want the rundown? Reply STOP to opt out.';
-    es = 'Hola'+(first?' '+first:'')+', '+sN+' — comprador en Miami (compro casas). '+street+' aún tiene '+saleES+whenES+'. Fecha cerca — aún hay cinco salidas. Sin costo. ¿Se las repaso? Responda STOP para no recibir más.';
+    // Close to the date, brevity IS the message. Name only the exits that survive this late:
+    // a modification needs underwriting time it no longer has, and BK belongs to an attorney.
+    en = nameEN+' '+stEN+' still has '+saleEN+whenEN+', and that date is close.'+disclEN
+       + ' A few things still work this late: catching up what is past due, a short sale, or'
+       + ' selling privately before the auction. Which one fits depends on your numbers.'
+       + ' Want me to run through it with you? No cost.'+stopEN;
+    es = nameES+' '+stES+' todavía tiene '+saleES+whenES+', y esa fecha ya está cerca.'+disclES
+       + ' Todavía funcionan algunas salidas: ponerse al día con lo atrasado, un short sale, o'
+       + ' vender en privado antes de la subasta. Cuál le sirve depende de sus números.'
+       + ' ¿Lo repasamos? Sin costo.'+stopES;
   } else if(tone==='followup'){
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' again on '+street+' ('+saleEN+whenEN+'). Still glad to walk the five exits if useful — no pressure. Reply STOP to opt out.';
-    es = 'Hola '+first+', de nuevo '+sN+' por '+street+' ('+saleES+whenES+'). Con gusto repasamos las cinco salidas si le sirve — sin presión. Responda STOP para no recibir más.';
+    // Mirrors the email's FINAL variant: give them a graceful exit, do not re-pitch.
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' again about '+stEN+'. No pressure and no pitch. If'
+       + (dt ? (' the '+dt+' date is') : ' the case is') + " already handled, ignore this and I"
+       + " genuinely wish you the best with it. If it isn't, I'll walk you through what still"
+       + " works with the time you have left."+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', '+sN+' otra vez por '+stES+'. Sin presión y sin discurso'
+       + ' de venta. Si ya resolvió lo' + (dt ? (' del '+dt) : ' del caso') + ', ignore este mensaje'
+       + ' y le deseo lo mejor. Si no, con gusto le explico qué opciones quedan con el tiempo que'
+       + ' hay.'+stopES;
+  } else if(td){
+    // Tax deed is a different animal: no lender to negotiate with, and the SURPLUS is the fact
+    // nobody tells them. FS 197.582 — money above what was owed belongs to the owner, and people
+    // lose it to "surplus recovery" outfits precisely because they never knew it existed.
+    en = nameEN+' Public records show '+saleEN+whenEN+' on '+stEN+'.'+disclEN
+       + ' Three things still work here: pay the back taxes and it stops, sell privately before'
+       + ' the date, or if it sells for more than what is owed, claim the surplus, because that'
+       + ' money belongs to you, not the county. Want the details? No cost.'+stopEN;
+    es = nameES+' Los registros públicos muestran '+saleES+whenES+' sobre '+stES+'.'+disclES
+       + ' Aquí funcionan tres cosas: pagar los impuestos atrasados y se detiene, vender en privado'
+       + ' antes de la fecha, o si se vende por más de lo que se debe, reclamar el excedente,'
+       + ' porque ese dinero es suyo y no del condado. ¿Le doy los detalles? Sin costo.'+stopES;
+  } else if(lp){
+    // Just filed. NO urgency language — it would be a lie, and the honest fact is stronger: this
+    // is the moment they have the most room to work with. (Same reasoning as the email's B2.)
+    en = nameEN+' Public records show '+saleEN+' on '+stEN+'.'+disclEN
+       + " The reason I'm reaching out now is that you have more options at this moment than you"
+       + " will at any point after it: catching up what is past due, a loan modification, a short"
+       + " sale, selling privately, or bankruptcy. Most of them need weeks to put together."
+       + " Want me to lay them out? No cost."+stopEN;
+    es = nameES+' Los registros públicos muestran '+saleES+' sobre '+stES+'.'+disclES
+       + ' Le escribo ahora porque en este momento tiene más opciones que en cualquier momento'
+       + ' después: ponerse al día, una modificación del préstamo, un short sale, vender en'
+       + ' privado, o bancarrota. Casi todas necesitan semanas para armarse.'
+       + ' ¿Se las explico? Sin costo.'+stopES;
   } else {
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' — local Miami home buyer. I saw '+street+' on the county calendar ('+saleEN+whenEN+'). Not selling anything — just checking if you have a plan / know your options. No cost. Reply STOP to opt out.';
-    es = 'Hola'+(first?' '+first:'')+', '+sN+' — comprador de casas en Miami. Vi '+street+' en el calendario del condado ('+saleES+whenES+'). No le vengo a vender nada — ¿tiene plan / conoce sus opciones? Sin costo. Responda STOP para no recibir más.';
+    en = nameEN+' Public records show '+saleEN+whenEN+' on '+stEN+'.'+disclEN
+       + ' Most owners are never told there are still five ways out: catching up what is past due,'
+       + ' a loan modification, a short sale, selling privately before the auction, or bankruptcy.'
+       + ' Most of them take weeks to set up, not days. Want me to walk you through which'
+       + ' ones still fit? No cost.'+stopEN;
+    es = nameES+' Los registros públicos muestran '+saleES+whenES+' sobre '+stES+'.'+disclES
+       + ' A casi nadie le dicen que todavía hay cinco salidas: ponerse al día con lo atrasado, una'
+       + ' modificación del préstamo, un short sale, vender en privado antes de la subasta, o'
+       + ' bancarrota. Las que valen la pena toman semanas, no días. ¿Le explico cuáles todavía'
+       + ' le sirven? Sin costo.'+stopES;
   }
   if(lang==='en') return en;
   if(lang==='es') return es;
