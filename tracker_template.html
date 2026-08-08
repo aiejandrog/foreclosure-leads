@@ -8122,6 +8122,182 @@ function genStopSaleEngagement(r){
     {letterhead:true, key:'stop-sale', note:'2 pages — engagement + OWN-PAGE cancel. NEVER door.'});
 }
 
+/* RETAINER / ENGAGEMENT — the fee agreement, rebuilt.
+
+   ORIGIN (2026-08-08): a Word/PDF "MSG RETAINER AGREEMENT" came back from the field carrying an
+   "INITIAL DEPOSIT $____ / Payment Due Date / Payment Method: Wire · Zelle / 2ND PAYMENT" block for
+   loan-modification and foreclosure-negotiation work. That is the one fee structure that is flatly
+   prohibited, twice over:
+
+     * MARS Rule, 12 C.F.R. 1015.5(a) — a mortgage-assistance-relief provider may not REQUEST or
+       RECEIVE any fee until the consumer has executed a written agreement with the loan holder or
+       servicer incorporating the relief the provider obtained. Not a deposit, not a retainer.
+     * Fla. Stat. 501.1377 — a foreclosure-rescue consultant may not collect any fee until every
+       promised service is fully performed. Violation is a FDUTPA deceptive act.
+
+   The draft was also missing every guardrail genStopSaleEngagement already had: the 1015.4
+   disclosures, the own-page 3-day cancel notice, the no-guarantee box, the not-a-law-firm line and
+   the free-counseling referrals. And its Term 5 made the company the homeowner's EXCLUSIVE point of
+   contact with the servicer, which runs at 1015.3(b)(2) (may not advise a consumer to stop
+   communicating with their lender).
+
+   So this doc keeps the field draft's useful skeleton — services checklist, fee section, terms,
+   dual signature block — and puts the money on one of three lawful footings instead. It is a
+   TEMPLATE for every deal; open it on a lead and _docFields prefills the parties, property, case
+   and judgment. Attorney sign-off is still required before any homeowner sees it. */
+function genRetainerAgreement(r){
+  var f = _docFields(r);
+  var body = ''
+    + '<div class="doc"><div class="kicker">OFFICE ONLY · MARS 12 CFR 1015 + FS 501.1377 · ATTORNEY SIGN-OFF BEFORE ANY HOMEOWNER SEES THIS</div>'
+    +   '<h1>Retainer &amp; engagement agreement</h1>'
+    +   '<div class="sub">Fee agreement for foreclosure-related services. Two bodies of law control '
+    +     'what may be charged and, more importantly, WHEN.</div>'
+    +   _docDoorBan()
+    +   _docStatBanner('MARS Rule — 12 C.F.R. §1015.5(a)',
+      'No fee of any kind — deposit, retainer, "processing", partial payment — may be requested or '
+      + 'received for mortgage assistance relief until the homeowner has EXECUTED A WRITTEN AGREEMENT '
+      + 'WITH THE LENDER OR SERVICER incorporating the relief obtained. An up-front wire or Zelle '
+      + 'deposit is the exact conduct the rule was written to stop. Attorneys practising law in the '
+      + 'property’s state, complying with bar rules and holding advances in a client trust '
+      + 'account, are exempt (§1015.7) — the company is not.')
+    +   _docStatBanner('Florida Statutes §501.1377',
+      'A person who, for compensation, offers to stop, prevent or reverse a foreclosure may be a '
+      + '"foreclosure rescue consultant." No fee may be collected until ALL promised services are '
+      + 'fully performed, the contract must be written, and the homeowner keeps a 3-business-day '
+      + 'right to cancel. Violations are FDUTPA deceptive acts and carry civil penalties.')
+    +   _docPropBlock(f)
+    +   '<h2>Parties</h2>'
+    +   '<p><b>Borrower / homeowner:</b> '+_dfHtml(f.ownerFull)+'<br>'
+    +     '<b>Company:</b> '+_dfHtml(f.buyerLLC)+'<br>'
+    +     '<b>Representative:</b> '+_dfHtml(f.buyerName)+' &nbsp; '+_dfHtml(f.buyerTitle)+'<br>'
+    +     'Phone: '+_dfHtml(f.buyerPhone)+' &nbsp; Email: '+_dfHtml(f.buyerEmail)+'<br>'
+    +     'Address: '+_dfHtml(f.buyerAddr)+'</p>'
+    +   '<h2>Loan &amp; case</h2>'
+    +   '<p><b>Case no.:</b> '+_dfHtml(f.caseNo)+' &nbsp; <b>County:</b> '+_dfHtml(f.county)+'<br>'
+    +     '<b>Plaintiff:</b> '+_dfHtml(f.plaintiff)+'<br>'
+    +     '<b>Servicer / lender:</b> '+_dfLine(34)+' &nbsp; <b>Loan no.:</b> '+_dfLine(18)+'<br>'
+    +     '<b>Final judgment:</b> '+_dfHtml(f.judgAmt)+' &nbsp; <b>Scheduled sale:</b> '+_dfHtml(f.saleDate)+'</p>'
+    +   '<h2>Services retained (check only what will actually be done)</h2>'
+    +   '<p>□ Communicate with the lender / servicer about available options<br>'
+    +     '□ Assemble the hardship and financial package for loss mitigation<br>'
+    +     '□ Request and review reinstatement / payoff figures<br>'
+    +     '□ Coordinate with title, counsel and the plaintiff’s firm<br>'
+    +     '□ Other (describe without promising the sale will stop): '+_dfLine(40)+'</p>'
+    +   '<h2>Fees — choose ONE. The company may not take money before performance.</h2>'
+    +   '<div class="box">'
+    +     '<p><b>□ A. NO FEE FROM THE HOMEOWNER (preferred).</b> The company is acting as a BUYER. '
+    +       'It is compensated, if at all, through the purchase or resale of the property, never by '
+    +       'the homeowner. Nothing in this agreement obligates the homeowner to pay anything.</p>'
+    +     '<p><b>□ B. CONTINGENT FEE, EARNED ONLY ON A WRITTEN ACCEPTED OFFER.</b> '
+    +       'Amount: $'+_dfLine(14)+'. <b>Due at signing: $0.</b> This fee is neither requested nor '
+    +       'payable unless and until the homeowner has received, and signed, a written agreement '
+    +       'from the lender or servicer granting the relief described above. If no such written '
+    +       'agreement is signed, no fee is owed and none may be demanded.</p>'
+    +     '<p><b>□ C. THROUGH RETAINED COUNSEL.</b> Legal services are engaged separately by the '
+    +       'homeowner with '+_dfLine(28)+', Esq., who bills the homeowner directly and holds any '
+    +       'advance in the firm’s trust account under Bar rules. The company works at counsel’s '
+    +       'direction and takes no fee from the homeowner.</p>'
+    +   '</div>'
+    +   '<div class="box" style="border-color:#8a1c1c;background:#fff5f4">'
+    +     '<b>Not permitted, and struck from this agreement:</b> any initial deposit, retainer, wire '
+    +     'or Zelle payment, or "2nd payment" scheduled before the relief has been obtained and '
+    +     'signed by the homeowner. If a version of this document contains such a block, do not use it.'
+    +   '</div>'
+    +   '<h2>Required disclosures — 12 C.F.R. §1015.4</h2>'
+    +   '<ul class="chk">'
+    +     '<li>'+_dfHtml(f.buyerLLC)+' is <b>not associated with the government</b>, and its service '
+    +       'is <b>not approved by the government or by your lender</b>.</li>'
+    +     '<li>Your lender <b>may not agree</b> to change your loan. Even if it does, you may still '
+    +       'lose your home and your credit may be affected.</li>'
+    +     '<li>You <b>may stop doing business with us at any time</b>. You may accept or reject any '
+    +       'offer we obtain from your lender. If you reject it, you owe us nothing.</li>'
+    +     '<li>If any fee applies, the <b>total amount</b> is: $'+_dfLine(14)+', payable only as set '
+    +       'out in section B or C above.</li>'
+    +   '</ul>'
+    +   '<div class="box" style="border-color:#8a1c1c;background:#fff5f4">'
+    +     '<b>No guarantee of outcome.</b> Nobody can promise the court, the lender or the servicer '
+    +     'will stop, delay or reverse a sale. Auction dates move, lenders reject packages, and after '
+    +     'a final judgment any modification requires the lender to agree to cancel or vacate the sale '
+    +     '— that is a favour, not a right.'
+    +   '</div>'
+    +   '<h2>Terms</h2>'
+    +   '<p class="mini">1. <b>Engagement.</b> The homeowner retains the company for the services '
+    +     'checked above. This agreement is the entire understanding between the parties.<br>'
+    +     '2. <b>Authorization.</b> A separate signed Third-Party Authorization lets the company speak '
+    +     'with the servicer. It is revocable by the homeowner at any time, in writing.<br>'
+    +     '3. <b>Cooperation.</b> The homeowner agrees to provide documents and information promptly. '
+    +     'Without them the work cannot be done.<br>'
+    +     '4. <b>No guarantee.</b> As stated above. Results depend on the lender, investor guidelines, '
+    +     'the court, and the homeowner’s finances.<br>'
+    +     '5. <b>Communication.</b> The company may communicate with the servicer on the homeowner’s '
+    +     'behalf. <b>The homeowner is never required to route communications through the company and '
+    +     'is free to contact the lender, the court or counsel directly at any time.</b> '
+    +     '<span class="mini">(Rewritten — an "exclusive point of contact" clause runs at 12 C.F.R. '
+    +     '§1015.3(b)(2), which forbids advising a consumer to stop talking to their lender.)</span><br>'
+    +     '6. <b>Not legal advice.</b> The company is not a law firm and no attorney-client '
+    +     'relationship is created. Nothing here is legal or tax advice.<br>'
+    +     '7. <b>Free alternatives.</b> HUD-approved counseling is free: 1-888-995-HOPE. Florida Bar '
+    +     'Lawyer Referral: 1-800-342-8011. Local legal aid may represent you at no cost.<br>'
+    +     '8. <b>Termination.</b> Either party may terminate in writing at any time. Because no fee is '
+    +     'earned before relief is obtained and signed, termination before that point leaves nothing '
+    +     'owed.<br>'
+    +     '9. <b>Governing law.</b> Florida.</p>'
+    /* FS 501.1377 wants the cancel notice conspicuous and immediately above the signature. 12-pt
+       UPPERCASE — confirmed 2026-08-02, it is NOT 14-pt bold and the penalty is NOT trebled. */
+    +   '<div class="box" style="border-color:#8a1c1c;background:#fff;font-size:12pt;'
+    +     'text-transform:uppercase;font-weight:700;letter-spacing:.2px">'
+    +     'YOU MAY CANCEL THIS CONTRACT WITHOUT ANY PENALTY OR OBLIGATION AT ANY TIME BEFORE MIDNIGHT '
+    +     'OF THE THIRD BUSINESS DAY AFTER THE DATE YOU SIGN IT. SEE THE ATTACHED NOTICE OF RIGHT TO '
+    +     'CANCEL FOR AN EXPLANATION OF THIS RIGHT.'
+    +   '</div>'
+    +   '<p class="mini">Exact statutory wording to be confirmed by counsel before use — the '
+    +     'requirement is a conspicuous 12-point uppercase notice in immediate proximity to the '
+    +     'signature space.</p>'
+    +   '<h2>Acknowledgment &amp; agreement</h2>'
+    +   '<p>I/we, the undersigned homeowner(s), acknowledge that I/we have read and understood this '
+    +     'agreement, received a separate Notice of Right to Cancel on its own page, and confirm the '
+    +     'information provided is true to the best of my/our knowledge.</p>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Homeowner signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Homeowner signature · date</div></div>'
+    +   '</div>'
+    +   '<p class="mini" style="margin-top:14px"><b>'+_dfHtml(f.buyerLLC)+' — acceptance.</b> '
+    +     'The undersigned accepts this engagement and agrees to perform the services checked above '
+    +     'on the terms set out herein.</p>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Authorized signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Printed name · title</div></div>'
+    +   '</div>'
+    +   _docOfficeFoot(f, 'retainer / engagement — MARS + 501.1377 gated')
+    + '</div>'
+    // OWN PAGE cancel — statutory posture, nothing else on the sheet.
+    + '<div class="doc pgb">'
+    +   '<h1 style="text-align:center;margin:48px 0 28px">NOTICE OF RIGHT TO CANCEL</h1>'
+    +   '<p class="mini" style="text-align:center;color:#8a1c1c"><b>OWN PAGE — no other content on this sheet.</b></p>'
+    +   '<p style="font-size:15px">You may cancel this transaction, without any penalty or obligation, '
+    +     'within three (3) business days from the date of this agreement or from the date you '
+    +     'received this notice, whichever is later.</p>'
+    +   '<p>To cancel, sign and date the Notice of Cancellation below and mail or deliver it to:<br>'
+    +     _dfHtml(f.buyerLLC)+'<br>'+_dfHtml(f.buyerName)+'<br>'+_dfHtml(f.buyerAddr)+'<br>'
+    +     _dfHtml(f.buyerPhone)+'</p>'
+    +   '<p>If you cancel, any payments you have made must be returned within ten (10) business days '
+    +     'following receipt of your cancellation notice.</p>'
+    +   '<p><b>ACKNOWLEDGMENT OF RECEIPT</b> — I acknowledge I have received two copies of this Notice.</p>'
+    +   '<div class="sigrow">'
+    +     '<div class="sig"><div class="l"></div><div class="c">Homeowner signature · date</div></div>'
+    +     '<div class="sig"><div class="l"></div><div class="c">Company signature · date</div></div>'
+    +   '</div>'
+    +   '<div class="rule"></div>'
+    +   '<h2 style="text-align:center">NOTICE OF CANCELLATION</h2>'
+    +   '<p>I hereby cancel the retainer / engagement agreement for Property: '+_dfHtml(f.propAddr)+'</p>'
+    +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Homeowner signature · date</div></div></div>'
+    +   _docOfficeFoot(f, '501.1377 cancel — own page')
+    + '</div>';
+  return _docShell('Retainer & engagement — '+(f.propAddr!=='__blank__'?f.propAddr:'lead'), body,
+    {letterhead:true, key:'retainer',
+     note:'2 pages — engagement + OWN-PAGE cancel. NO up-front fee. Attorney sign-off first. NEVER door.'});
+}
+
 function genShortSalePack(r){
   var f = _docFields(r);
   var p1 = ''
@@ -8793,6 +8969,10 @@ function openDocRoom(caseId){
     + card({key:'stop-sale', t:'Stop-sale / rescue engagement',
             s:'FS 501.1377 rescue-consultant framing + OWN-PAGE cancel. Prefer no homeowner fee. NEVER door.',
             fn:'genStopSaleEngagement'})
+    + card({key:'retainer', t:'Retainer &amp; engagement agreement',
+            s:'The FEE agreement. MARS 1015.4 disclosures + OWN-PAGE cancel. NO up-front deposit — fee is '
+              + 'buyer-side, contingent on a signed lender offer, or through counsel. Attorney sign-off. NEVER door.',
+            fn:'genRetainerAgreement'})
     + '<div class="kicker" style="color:#6a4a10;margin-top:20px">PACKAGES — short-sale · subject-to</div>'
     + card({key:'short-sale', t:'Short-sale package',
             s:'3 pages: seller auth to negotiate · hardship blanks · lender-may-reject acknowledgments. No rescue-fee framing.',
@@ -9238,6 +9418,7 @@ window.addEventListener('message', function(ev){
              genLimitedPOA:genLimitedPOA, genLeasebackOccupancy:genLeasebackOccupancy,
              genSurplusAssignment:genSurplusAssignment, genEncumbranceShell:genEncumbranceShell,
              genStopSaleEngagement:genStopSaleEngagement,
+             genRetainerAgreement:genRetainerAgreement,
              genShortSalePack:genShortSalePack, genSubjectToPack:genSubjectToPack})[d.fn];
   if(!fn) return;
   var html = null, err = '';
