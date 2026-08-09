@@ -225,6 +225,10 @@ def main():
 
     budget = a.limit if a.limit > 0 else 10 ** 9
     changed = fetched = 0
+    # Rows served from a FRESH cache entry. Tracked separately from `changed` because they are the
+    # normal steady state: once the cache is warm, a run legitimately fetches nothing. They still
+    # have to be written to disk — see the write guard at the bottom.
+    applied = 0
     for r in leads:
         case = (r.get('Case #') or '').strip()
         if a.case and case != a.case:
@@ -252,6 +256,7 @@ def main():
             if ent.get('b'): r['sale_bk'] = ent['b']
             if ent.get('a'): r['sale_bk_active'] = True; r['sale_bk_date'] = ent.get('bd', '')
             if ent.get('sl'): r['sale_stay_lifted'] = ent['sl']
+            applied += 1
             continue
         if budget <= 0:
             break
@@ -284,10 +289,16 @@ def main():
             print(f'  ... {fetched} fetched, {changed} updated')
 
     json.dump(cache, open(CACHE, 'w', encoding='utf-8'))
-    if changed:
+    # WRITE WHENEVER ANY VALUE WAS APPLIED, not only when something was fetched live. Guarding this
+    # on `changed` alone silently discarded the whole in-memory merge on any day the cache was fully
+    # warm (2026-08-09: 0 fetched -> file never written -> sale_survived and sale_bk_active vanished
+    # from every row, sale-history coverage 100% -> 0%, and 93 active §362 stays stopped reaching the
+    # board). The staller count below reads the in-memory list, so the old log line reported healthy
+    # numbers for data that was never persisted — the failure was invisible in the log.
+    if changed or applied:
         json.dump(leads, open(path, 'w', encoding='utf-8'))
     stallers = sum(1 for r in leads if (r.get('sale_survived') or 0) >= 2)
-    print(f'sale_history: {changed} updated, {fetched} fetched live. '
+    print(f'sale_history: {changed} updated, {applied} applied from cache, {fetched} fetched live. '
           f'{stallers} serial stallers (survived >=2 sales) flagged.')
 
 
