@@ -11120,6 +11120,11 @@ function genMorningWorker(lane, autostart){
     + '<script>(function(){'
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
     +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
+    +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
+    +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
+    +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10)};'
+    +   'if(BOUNCE.blocked) render();'
+    +   '}}).catch(function(){});}catch(e){}'
     +   'var lane=' + JSON.stringify(lane) + ', Q=LANES[lane]||[];'
     +   'var CAP=' + JSON.stringify(cap) + ', LSTAT=' + JSON.stringify(laneStats) + ';'
     +   'var AUTOSTART=' + (autostart ? 'true' : 'false') + ';'
@@ -11516,6 +11521,7 @@ function genMorningWorker(lane, autostart){
     +     '{k:"noanswer", t:"No answer",     hrs:24,  cls:"skip"},'
     +     '{k:"voicemail",t:"Left voicemail",hrs:24,  cls:"skip"},'
     +     '{k:"talked",   t:"Talked",        hrs:72,  cls:"done"},'
+    +     '{k:"appt",     t:"APPOINTMENT SET", hrs:72, cls:"done"},'
     +     '{k:"wrong",    t:"Wrong number",  hrs:0,   cls:"warnb", sup:true},'
     +     '{k:"notint",   t:"Not interested",hrs:72,  cls:"warnb"},'
     +     '{k:"dnc",      t:"DNC — do not contact", hrs:0, cls:"dnc", sup:true}'
@@ -11705,12 +11711,12 @@ function genMorningWorker(lane, autostart){
     +   'function runOne(){ if(i>=Q.length) return render(); var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length; attempt(r,0,0); }'
     +   'function render(){'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
-    +     'if(BOUNCE && BOUNCE.blocked){'
-    +     'auto=false;'
-    +     'main.innerHTML="<div class=\'mwblocked\'><h2>&#9940; DELIVERABILITY HALT</h2>"'
-    +     '+"<p>The trailing hard-bounce rate is <b>"+Math.round((BOUNCE.rate||0)*1000)/10+"%</b> — past the "+Math.round((BOUNCE.ceiling||0.1)*100)+"% ceiling the server enforces. Bulk email is BLOCKED until the list is cleaned.</p>"'
-    +     '+"<p>Fix: run <b>bounces.py</b> then <b>verify_emails.py</b>, rebuild, reopen. <b>Calling is not affected</b> — work the Call list and the REPLIED lane; those convert better anyway.</p></div>";'
-    +     'prog.textContent="sending blocked"; renderLog(); return;'
+    +     'if(BOUNCE && BOUNCE.blocked && !document.getElementById("mwbounceban")){'
+    +     'auto=false; autoAll=false;'
+    +     'var bb=document.createElement("div"); bb.id="mwbounceban";'
+    +     'bb.style.cssText="position:sticky;top:0;z-index:99;background:#8f2b23;color:#fff;font:700 13px/1.45 Arial;padding:9px 14px;border-radius:8px;margin:0 0 12px";'
+    +     'bb.innerHTML="&#9940; EMAIL BLOCKED — trailing bounce rate "+(Math.round((BOUNCE.rate||0)*1000)/10)+"% (ceiling "+(Math.round((BOUNCE.ceiling||0.1)*100))+"%). Auto-run email is OFF; the server refuses bulk sends. <b>Calls and replies still work — that is the day now.</b> Fix: bounces.py + verify_emails.py, rebuild.";'
+    +     'main.parentNode.insertBefore(bb, main);'
     +     '}'
     // The cap is checked at RENDER time, not just at open time, so a run that crosses the ceiling
     // mid-morning stops there instead of finishing the queue it was handed.
@@ -12061,6 +12067,12 @@ window.addEventListener('message', function(ev){
       var _cq3 = _cq2.filter(function(x){ return x.c!==r.case; });
       if(_cq3.length !== _cq2.length) localStorage.setItem('fcCallQueue', JSON.stringify(_cq3));
     } catch(e){}
+    if(oc === 'appt'){
+      // The single best outcome a dial can produce. Writing the status here is what makes the
+      // scorecard's Appointments row move without leaving the worker — the exact gap Zuckerberg
+      // flagged in the 2026-08-09 re-judge.
+      n.status = 'Appointment';
+    }
     if(oc === 'dnc'){
       // An owner saying "stop" must be honoured immediately and permanently. Previously this was
       // impossible from the worker — you had to leave, find the lead, and set it by hand.
