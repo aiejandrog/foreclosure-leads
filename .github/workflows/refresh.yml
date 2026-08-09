@@ -29,7 +29,10 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    # 90 was the original budget and the pipeline outgrew it — see the step timings in the
+    # 2026-08-09 diagnosis. A cancelled job SKIPS the publish step, so an undersized window turns a
+    # 95%-complete run into a total loss. Re-measure before lowering this.
+    timeout-minutes: 180
     env:
       # Every scraper checks env FIRST, then falls back to a gitignored *.key file. On GHA
       # only env is available; on Alejandro's local machine only files are.
@@ -534,6 +537,9 @@ jobs:
       # No Twilio / SMS wiring needed; the notification path is already there for free.
       # Runs AFTER the cache save so a red report can never cost us the day's data again.
       - name: 'Health'
+        # Report, never a gate. DEGRADED is the normal steady state (lien + phone coverage warns),
+        # and a non-zero exit here used to mark a run that had already published as a failure.
+        continue-on-error: true
         run: python healthcheck.py
 
       # Always-on run summary (visible in the Actions UI without opening logs)
