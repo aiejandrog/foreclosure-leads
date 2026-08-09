@@ -123,6 +123,12 @@ rem  bounce ledger only protects the NEXT send if it is refreshed before the que
 echo [3h/5] Harvesting hard bounces from the inbox...
 python -u bounces.py >> "%LOG%" 2>&1
 
+rem  Verify addresses BEFORE they can enter a queue (Cuban re-judge 2026-08-09: reacting at the
+rem  5% banner still eats avoidable reputation damage on every fresh scrape). Free layers only
+rem  unless a provider key file exists — suppression ledger, syntax, learned dead domains.
+echo [3i/5] Verifying fresh addresses before they enter the sendable pool...
+python -u verify_emails.py >> "%LOG%" 2>&1
+
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 

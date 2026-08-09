@@ -184,6 +184,7 @@ def compute(now=None):
     m['dial_through_pct'] = (round(100.0 * m['dials_disposed_7d'] / m['callq_7d'], 1)
                              if m['callq_7d'] else None)
 
+
     # -- pipeline stages from statuses -----------------------------------------------------
     stat = {}
     for c, n in (wn.get('notes') or {}).items():
@@ -292,6 +293,14 @@ def compute(now=None):
 
     # -- suggestions (rule-ranked, top 3) --------------------------------------------------
     sug = []
+    # Cuban's red line (2026-08-09 re-judge): a measured 0.0% nobody is forced to look at becomes
+    # wallpaper in two weeks. Under 25% dial-through on a meaningful queue outranks everything
+    # except an unanswered reply — a call list nobody dials is the whole business failing quietly.
+    if m.get('callq_7d', 0) >= 10 and (m.get('dial_through_pct') or 0.0) < 25.0:
+        sug.append(('P0', f'THE CALL QUEUE IS NOT BEING DIALED: {m["callq_7d"]} leads queued in 7 days, '
+                          f'{m["dials_disposed_7d"]} disposed ({m["dial_through_pct"] or 0.0}%). '
+                          f'Every one of these asked for a phone call by having no email. Block out one '
+                          f'5:30-6:00 PM window and clear ten today.'))
     for v in sla:
         sug.append(('P0', f'CALL THE REPLY BACK: {v["email"]} (case {v["case"]}) has waited '
                           f'{v["days_waiting"]:.0f} days since writing back. A reply is the warmest '
@@ -392,6 +401,7 @@ def render(m, prev):
         ('Live conversations · 7d', m['convos_7d'], 'convos_7d'),
         ('Call queue added · 7d', m.get('callq_7d', 0), 'callq_7d'),
         ('Dials disposed · 7d', m.get('dials_disposed_7d', 0), 'dials_disposed_7d'),
+        ('Dial-through %', (str(m['dial_through_pct']) + '%') if m.get('dial_through_pct') is not None else '—', None),
         ('Replies (all-time hot)', m['replies_hot'], 'replies_hot'),
         ('Appointments', m['appointments'], 'appointments'),
         ('Offers out', m['offers'], 'offers'),
