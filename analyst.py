@@ -155,12 +155,34 @@ def compute(now=None):
         allc = [(c, t) for c, t in tch if t.get('ch') == ch]
         m[f'{ch}s_ever'] = len(allc)
         m[f'{ch}s_7d'] = sum(1 for c, t in allc if (d := _t_dt(t)) and _in_last(7, _days_ago(d, now), now))
-    m['convos_ever'] = sum(1 for c, t in tch if t.get('out') == 'talked')
+    # 'talked' exact-match missed every disposition the worker writes ("Talked", "Talked — real
+    # conversation", "Talked (queue panel)") — the scorecard said 0 conversations while dispositions
+    # sat in the ledger. Substring match on 'talk' catches all writers, past and present.
+    def _is_talk(t):
+        return 'talk' in str(t.get('out') or '').lower()
+    m['convos_ever'] = sum(1 for c, t in tch if _is_talk(t))
     m['convos_7d'] = sum(1 for c, t in tch
-                         if t.get('out') == 'talked' and (d := _t_dt(t)) and _in_last(7, _days_ago(d, now), now))
+                         if _is_talk(t) and (d := _t_dt(t)) and _in_last(7, _days_ago(d, now), now))
     dial_days = {t.get('d') for c, t in tch
                  if t.get('ch') == 'call' and (d := _t_dt(t)) and _in_last(7, _days_ago(d, now), now)}
     m['dial_days_7d'] = len(dial_days)
+
+    # -- DIAL-THROUGH: the 0.5% leak the 2026-08-09 audit found ---------------------------------
+    # 192 leads were queued to call in 6 days and one dial came out, and no number anywhere showed
+    # it. workerLog is the durable ledger: 'callq' = queued, 'callout' = a logged disposition
+    # (legacy dials wrote kind 'call' with detail 'call outcome: ...' — count those too).
+    wlog = wn.get('workerLog') or []
+    def _wl_days_ago(e):
+        try:
+            return (now.date() - dt.date.fromisoformat(str(e.get('d') or ''))).days
+        except Exception:
+            return 9999
+    _wl7 = [e for e in wlog if isinstance(e, dict) and _wl_days_ago(e) <= 7]
+    m['callq_7d'] = sum(1 for e in _wl7 if e.get('a') == 'callq')
+    m['dials_disposed_7d'] = sum(1 for e in _wl7 if e.get('a') == 'callout'
+                                 or (e.get('a') == 'call' and str(e.get('detail','')).startswith('call outcome:')))
+    m['dial_through_pct'] = (round(100.0 * m['dials_disposed_7d'] / m['callq_7d'], 1)
+                             if m['callq_7d'] else None)
 
     # -- pipeline stages from statuses -----------------------------------------------------
     stat = {}
@@ -368,6 +390,8 @@ def render(m, prev):
         ('Dials · 7d', m['calls_7d'], 'calls_7d'),
         ('Doors · 7d', m['doors_7d'], 'doors_7d'),
         ('Live conversations · 7d', m['convos_7d'], 'convos_7d'),
+        ('Call queue added · 7d', m.get('callq_7d', 0), 'callq_7d'),
+        ('Dials disposed · 7d', m.get('dials_disposed_7d', 0), 'dials_disposed_7d'),
         ('Replies (all-time hot)', m['replies_hot'], 'replies_hot'),
         ('Appointments', m['appointments'], 'appointments'),
         ('Offers out', m['offers'], 'offers'),
