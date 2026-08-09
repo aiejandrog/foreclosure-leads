@@ -42,9 +42,19 @@ except Exception:
     pass
 
 
-def L(width=280):
-    """A fill-in rule. Baseline-aligned so a filled line and an empty one sit at the same height."""
+def L(width=280, v=''):
+    """A fill-in rule. Baseline-aligned so a filled line and an empty one sit at the same height.
+
+    Pass `v` to print a merged value ON the rule. Merged fields stay visually identical to blank
+    ones — same rule, same baseline — because a homeowner signing this should see one consistent
+    form, not a mix of typed boxes and hand-written lines."""
+    if v:
+        return f'<span class="fill fv" style="min-width:{width}px">{v}</span>'
     return f'<span class="fill" style="min-width:{width}px"></span>'
+
+
+# Case merge data. Empty = blank forms. Populated by --case on the command line.
+C = {}
 
 
 CSS = """
@@ -78,6 +88,8 @@ ol.terms > li::marker { font-weight:700; color:#0B1730; }
 
 .fill { display:inline-block; border-bottom:1px solid #14181F; height:1.02em;
         vertical-align:-2px; margin:0 3px; }
+.fill.fv { height:auto; min-height:1.02em; font-weight:600; padding:0 5px 1px;
+           vertical-align:baseline; white-space:nowrap; }
 .row { margin:0 0 9px; }
 .row .lbl { font:700 9pt 'Helvetica Neue',Helvetica,Arial,sans-serif; letter-spacing:.05em;
             text-transform:uppercase; color:#3A4454; }
@@ -165,8 +177,8 @@ T = {
   't_title': 'Third-Party Authorization to Release Information',
   'folio': 'Folio / Parcel ID',
   't1': '1. Authorization',
-  't1_p1': 'I, {O} ("Owner"), the record owner (or one of the record owners) of the Property '
-           'described above, <b>DO HEREBY AUTHORIZE AND INSTRUCT ANY AND ALL</b> of the following '
+  't1_p1': 'I, {O} ("Borrower"), the borrower (or one of the borrowers) on the loan secured by the '
+           'Property described above, <b>DO HEREBY AUTHORIZE AND INSTRUCT ANY AND ALL</b> of the following '
            'parties — mortgagees, note holders, loan servicers, sub-servicers, lenders, lienholders, '
            "homeowners' or condominium associations, taxing authorities, code enforcement agencies, "
            'and their respective attorneys, trustees, assignees, employees, and agents (collectively, '
@@ -178,55 +190,42 @@ T = {
            'HOA/condominium assessments and estoppel figures, code enforcement liens, delinquent ad '
            'valorem taxes, tax certificate status, and any other matter reasonably related to the '
            'Property or the debts secured by it.',
-  't1_p2': "Information may be released, at the Owner's direction, to and at the discretion of:",
+  't1_p2': "Information may be released, at the Borrower's direction, to and at the discretion of:",
   'mm': 'Managing Member', 'fl_llc': 'a Florida limited liability company',
   'mail_addr': 'Mailing Address', 'tel': 'Telephone',
-  't1_p3': 'who has been duly authorized and instructed by the Owner to receive such information for '
-           'the purpose of assisting the Owner in evaluating options relating to the Property.',
+  't1_p3': 'who has been duly authorized and instructed by the Borrower to receive such information '
+           'for the purpose of assisting the Borrower in evaluating options relating to the Property.',
   't2': '2. Scope — Information Only',
   't2_p1': 'This authorization is <b>LIMITED</b> to the release, receipt, and review of information. '
            'It does <b>NOT</b> authorize the person or entity named above to:',
-  't2_li': ["accept or receive any payment on the Owner's behalf;",
+  't2_li': ["accept or receive any payment on the Borrower's behalf;",
             'sign, execute, or submit any loan modification, forbearance, short-sale package, '
-            "deed-in-lieu, bankruptcy filing, or other legal instrument on the Owner's behalf;",
+            "deed-in-lieu, bankruptcy filing, or other legal instrument on the Borrower's behalf;",
             'transfer, convey, encumber, or record any interest in the Property; or',
-            'provide legal advice to the Owner.'],
-  't2_p2': "The person named above is not the Owner's attorney and does not represent the Owner in "
-           'any legal capacity. The Owner remains solely responsible for all decisions concerning '
-           'the Property.',
+            'provide legal advice to the Borrower.'],
+  't2_p2': "The person named above is not the Borrower's attorney and does not represent the "
+           'Borrower in any legal capacity. The Borrower remains solely responsible for all decisions '
+           'concerning the Property.',
   't3': '3. Reference Information',
   't3_lbl': ['Loan Number', 'Last 4 of SSN', 'Lender', 'Servicer', 'HOA / Condo Assoc.',
              'Foreclosure Attorney', 'Attorney Phone'],
   't4': '4. Duration and Revocation',
   't4_p1': 'This authorization is effective as of the date signed and <b>REMAINS IN EFFECT UNTIL '
-           'REVOKED IN WRITING</b> by the Owner. Written revocation may be delivered to any '
+           'REVOKED IN WRITING</b> by the Borrower. Written revocation may be delivered to any '
            'Information Holder and to Miami Solutions Group, LLC at the email or telephone above. '
            'Absent written revocation, Information Holders may rely on this authorization for all '
            'requests made in its name.',
   't4_p2': 'A photocopy, scanned copy, facsimile copy, or emailed PDF copy of this authorization '
-           "bearing the Owner's signature and the notary's acknowledgment shall have the same force "
-           'and effect as the original.',
-  't5': '5. Owner Signature',
+           "bearing the Borrower's signature shall have the same force and effect as the original.",
+  't5': '5. Borrower Signature',
   't5_signed': 'Signed this {D} day of {M}, 20{Y}',
-  'owner_borrower': 'Owner / Borrower', 'print_name': 'Print Name', 'dob': 'Date of Birth',
+  'owner_borrower': 'Borrower', 'print_name': 'Print Name', 'dob': 'Date of Birth',
   't5_note': 'Some servicers require date of birth to release information.',
-  't6': '6. Notary Acknowledgment &mdash; Florida (FS 117.05)',
-  'state_fl': 'STATE OF FLORIDA', 'county_of': 'COUNTY OF',
-  't6_p': 'The foregoing instrument was acknowledged before me by means of &nbsp;&#9744;&nbsp; '
-          'physical presence &nbsp;or&nbsp; &#9744;&nbsp; online notarization, this {D} day of {M}, '
-          '20{Y}, by {O}, who is',
-  't6_known': 'personally known to me, <b>OR</b>',
-  't6_id': 'produced as identification: &nbsp;&#9744;&nbsp; Florida driver&rsquo;s license '
-           '&nbsp;&nbsp;&#9744;&nbsp; Florida ID card &nbsp;&nbsp;&#9744;&nbsp; U.S. passport '
-           '&nbsp;&nbsp;&#9744;&nbsp; Other:',
-  'id_no': 'ID Number', 'issue': 'Issue Date', 'expiration': 'Expiration',
-  'notary_fl': 'Notary Public &mdash; State of Florida',
-  'comm_no': 'Commission #', 'comm_exp': 'Commission Expires', 'seal': '[ NOTARY SEAL ]',
-  't7': '7. MSG Acknowledgment', 't7_p': 'Received and acknowledged by:',
+  't7': '6. MSG Acknowledgment', 't7_p': 'Received and acknowledged by:',
   't7_cap': 'Managing Member, Miami Solutions Group, LLC &mdash; authorized to act on behalf of the '
             'Company',
   't_instr_h': 'INSTRUCTIONS TO INFORMATION HOLDERS:',
-  't_instr': "This authorization is provided pursuant to the Owner's rights under 15 U.S.C. "
+  't_instr': "This authorization is provided pursuant to the Borrower's rights under 15 U.S.C. "
              '&sect; 6802 (Gramm-Leach-Bliley) and 12 C.F.R. &sect; 1024.36 (RESPA Regulation X '
              '&mdash; requests for information from a borrower&rsquo;s agent). Please direct all '
              'responses to the contact information listed in Section 1. Thank you.',
@@ -296,8 +295,8 @@ T = {
   't_title': 'Autorizaci&oacute;n a Terceros para Divulgar Informaci&oacute;n',
   'folio': 'Folio / N.&ordm; de Parcela',
   't1': '1. Autorizaci&oacute;n',
-  't1_p1': 'Yo, {O} ("Propietario"), el propietario registral (o uno de los propietarios '
-           'registrales) de la Propiedad descrita anteriormente, <b>POR EL PRESENTE AUTORIZO E '
+  't1_p1': 'Yo, {O} ("Prestatario"), el prestatario (o uno de los prestatarios) del '
+           'pr&eacute;stamo garantizado por la Propiedad descrita anteriormente, <b>POR EL PRESENTE AUTORIZO E '
            'INSTRUYO A TODAS Y CADA UNA</b> de las siguientes partes &mdash; acreedores '
            'hipotecarios, tenedores de pagar&eacute;s, administradores de pr&eacute;stamos, '
            'subadministradores, prestamistas, titulares de gravamen, asociaciones de propietarios o '
@@ -314,25 +313,25 @@ T = {
            'cumplimiento de c&oacute;digos, impuestos ad valorem morosos, estado de certificados '
            'fiscales, y cualquier otro asunto razonablemente relacionado con la Propiedad o con las '
            'deudas garantizadas por ella.',
-  't1_p2': 'La informaci&oacute;n podr&aacute; divulgarse, por instrucci&oacute;n del Propietario, '
+  't1_p2': 'La informaci&oacute;n podr&aacute; divulgarse, por instrucci&oacute;n del Prestatario, '
            'a y a discreci&oacute;n de:',
   'mm': 'Miembro Gerente', 'fl_llc': 'una compa&ntilde;&iacute;a de responsabilidad limitada de Florida',
   'mail_addr': 'Direcci&oacute;n Postal', 'tel': 'Tel&eacute;fono',
-  't1_p3': 'quien ha sido debidamente autorizado e instruido por el Propietario para recibir dicha '
-           'informaci&oacute;n con el fin de asistir al Propietario en la evaluaci&oacute;n de '
+  't1_p3': 'quien ha sido debidamente autorizado e instruido por el Prestatario para recibir dicha '
+           'informaci&oacute;n con el fin de asistir al Prestatario en la evaluaci&oacute;n de '
            'opciones relacionadas con la Propiedad.',
   't2': '2. Alcance &mdash; Solo Informaci&oacute;n',
   't2_p1': 'Esta autorizaci&oacute;n se <b>LIMITA</b> a la divulgaci&oacute;n, recepci&oacute;n y '
            'revisi&oacute;n de informaci&oacute;n. <b>NO</b> autoriza a la persona o entidad '
            'nombrada anteriormente a:',
-  't2_li': ['aceptar o recibir pago alguno en nombre del Propietario;',
+  't2_li': ['aceptar o recibir pago alguno en nombre del Prestatario;',
             'firmar, ejecutar o presentar cualquier modificaci&oacute;n de pr&eacute;stamo, '
             'indulgencia, paquete de venta corta, escritura en lugar de ejecuci&oacute;n, '
-            'solicitud de bancarrota u otro instrumento legal en nombre del Propietario;',
+            'solicitud de bancarrota u otro instrumento legal en nombre del Prestatario;',
             'transferir, ceder, gravar o registrar cualquier inter&eacute;s en la Propiedad; o',
-            'brindar asesor&iacute;a legal al Propietario.'],
-  't2_p2': 'La persona nombrada anteriormente no es el abogado del Propietario y no representa al '
-           'Propietario en ninguna capacidad legal. El Propietario sigue siendo el &uacute;nico '
+            'brindar asesor&iacute;a legal al Prestatario.'],
+  't2_p2': 'La persona nombrada anteriormente no es el abogado del Prestatario y no representa al '
+           'Prestatario en ninguna capacidad legal. El Prestatario sigue siendo el &uacute;nico '
            'responsable de todas las decisiones relativas a la Propiedad.',
   't3': '3. Informaci&oacute;n de Referencia',
   't3_lbl': ['N&uacute;mero de Pr&eacute;stamo', '&Uacute;ltimos 4 del SSN', 'Prestamista',
@@ -340,39 +339,25 @@ T = {
              'Tel&eacute;fono del Abogado'],
   't4': '4. Vigencia y Revocaci&oacute;n',
   't4_p1': 'Esta autorizaci&oacute;n entra en vigor en la fecha de su firma y <b>PERMANECE VIGENTE '
-           'HASTA SER REVOCADA POR ESCRITO</b> por el Propietario. La revocaci&oacute;n escrita '
+           'HASTA SER REVOCADA POR ESCRITO</b> por el Prestatario. La revocaci&oacute;n escrita '
            'podr&aacute; entregarse a cualquier Tenedor de Informaci&oacute;n y a Miami Solutions '
            'Group, LLC al correo electr&oacute;nico o tel&eacute;fono indicados arriba. En ausencia '
            'de revocaci&oacute;n escrita, los Tenedores de Informaci&oacute;n podr&aacute;n confiar '
            'en esta autorizaci&oacute;n para todas las solicitudes hechas en su nombre.',
   't4_p2': 'Una fotocopia, copia escaneada, copia por facs&iacute;mil o copia en PDF enviada por '
-           'correo electr&oacute;nico de esta autorizaci&oacute;n que lleve la firma del Propietario '
-           'y el reconocimiento del notario tendr&aacute; la misma fuerza y efecto que el original.',
-  't5': '5. Firma del Propietario',
+           'correo electr&oacute;nico de esta autorizaci&oacute;n que lleve la firma del Prestatario '
+           'tendr&aacute; la misma fuerza y efecto que el original.',
+  't5': '5. Firma del Prestatario',
   't5_signed': 'Firmado este d&iacute;a {D} de {M} de 20{Y}',
-  'owner_borrower': 'Propietario / Prestatario', 'print_name': 'Nombre en Letra de Molde',
+  'owner_borrower': 'Prestatario', 'print_name': 'Nombre en Letra de Molde',
   'dob': 'Fecha de Nacimiento',
   't5_note': 'Algunos administradores exigen la fecha de nacimiento para divulgar '
              'informaci&oacute;n.',
-  't6': '6. Reconocimiento Notarial &mdash; Florida (FS 117.05)',
-  'state_fl': 'ESTADO DE FLORIDA', 'county_of': 'CONDADO DE',
-  't6_p': 'El instrumento que antecede fue reconocido ante m&iacute; por medio de '
-          '&nbsp;&#9744;&nbsp; presencia f&iacute;sica &nbsp;o&nbsp; &#9744;&nbsp; '
-          'notarizaci&oacute;n en l&iacute;nea, este d&iacute;a {D} de {M} de 20{Y}, por {O}, quien',
-  't6_known': 'me es personalmente conocido/a, <b>O</b>',
-  't6_id': 'present&oacute; como identificaci&oacute;n: &nbsp;&#9744;&nbsp; licencia de conducir de '
-           'Florida &nbsp;&nbsp;&#9744;&nbsp; tarjeta de identificaci&oacute;n de Florida '
-           '&nbsp;&nbsp;&#9744;&nbsp; pasaporte de EE.&nbsp;UU. &nbsp;&nbsp;&#9744;&nbsp; Otro:',
-  'id_no': 'N.&ordm; de Identificaci&oacute;n', 'issue': 'Fecha de Emisi&oacute;n',
-  'expiration': 'Vencimiento',
-  'notary_fl': 'Notario P&uacute;blico &mdash; Estado de Florida',
-  'comm_no': 'N.&ordm; de Comisi&oacute;n', 'comm_exp': 'La Comisi&oacute;n Vence',
-  'seal': '[ SELLO NOTARIAL ]',
-  't7': '7. Reconocimiento de MSG', 't7_p': 'Recibido y reconocido por:',
+  't7': '6. Reconocimiento de MSG', 't7_p': 'Recibido y reconocido por:',
   't7_cap': 'Miembro Gerente, Miami Solutions Group, LLC &mdash; autorizado para actuar en nombre de '
             'la Compa&ntilde;&iacute;a',
   't_instr_h': 'INSTRUCCIONES PARA LOS TENEDORES DE INFORMACI&Oacute;N:',
-  't_instr': 'Esta autorizaci&oacute;n se otorga conforme a los derechos del Propietario bajo 15 '
+  't_instr': 'Esta autorizaci&oacute;n se otorga conforme a los derechos del Prestatario bajo 15 '
              'U.S.C. &sect; 6802 (Gramm-Leach-Bliley) y 12 C.F.R. &sect; 1024.36 '
              '(RESPA Reglamento X &mdash; solicitudes de informaci&oacute;n del agente de un '
              'prestatario). Por favor dirija todas las respuestas a la informaci&oacute;n de '
@@ -407,18 +392,18 @@ def retainer(lang):
     b = [f'<h1>{t["r_title"]}</h1>', f'<div class="sub">{t["r_sub"]}</div>',
          f'<div class="row"><span class="lbl">{t["date"]}</span> {L(240)}</div>',
          f'<h2>{t["borrowers"]}</h2>']
-    for _ in range(2):
-        b.append(f'<div class="row"><span class="lbl">{t["name"]}</span> {L(215)} '
+    for who in (C.get('borrower1', ''), C.get('borrower2', '')):
+        b.append(f'<div class="row"><span class="lbl">{t["name"]}</span> {L(215, who)} '
                  f'<span class="lbl">{t["ph"]}</span> {L(110)} '
                  f'<span class="lbl">{t["email"]}</span> {L(165)}</div>')
-    b += [f'<div class="row"><span class="lbl">{t["prop_addr"]}</span> {L(410)}</div>',
-          f'<div class="grid2"><div class="row"><span class="lbl">{t["county"]}</span> {L(160)}</div>'
-          f'<div class="row"><span class="lbl">{t["loan_no"]}</span> {L(160)}</div></div>',
-          f'<div class="row"><span class="lbl">{t["lender"]}</span> {L(400)}</div>',
-          f'<div class="grid2"><div class="row"><span class="lbl">{t["case_no"]}</span> {L(140)}</div>'
-          f'<div class="row"><span class="lbl">{t["sale_date"]}</span> {L(140)}</div></div>',
-          f'<div class="grid2"><div class="row"><span class="lbl">{t["debt"]}</span> $ {L(92)}</div>'
-          f'<div class="row"><span class="lbl">{t["principal"]}</span> $ {L(105)}</div></div>',
+    b += [f'<div class="row"><span class="lbl">{t["prop_addr"]}</span> {L(410, C.get("prop",""))}</div>',
+          f'<div class="grid2"><div class="row"><span class="lbl">{t["county"]}</span> {L(160, C.get("county",""))}</div>'
+          f'<div class="row"><span class="lbl">{t["loan_no"]}</span> {L(160, C.get("loan_no",""))}</div></div>',
+          f'<div class="row"><span class="lbl">{t["lender"]}</span> {L(400, C.get("lender",""))}</div>',
+          f'<div class="grid2"><div class="row"><span class="lbl">{t["case_no"]}</span> {L(140, C.get("case",""))}</div>'
+          f'<div class="row"><span class="lbl">{t["sale_date"]}</span> {L(140, C.get("sale",""))}</div></div>',
+          f'<div class="grid2"><div class="row"><span class="lbl">{t["debt"]}</span> $ {L(92, C.get("debt",""))}</div>'
+          f'<div class="row"><span class="lbl">{t["principal"]}</span> $ {L(105, C.get("principal",""))}</div></div>',
           f'<h2>{t["services"]}</h2>', '<ul class="opts">']
     b += [f'<li>&#9744;&nbsp;&nbsp;{s}</li>' for s in t['svc']]
     b += ['</ul>', f'<div class="row" style="margin-top:10px">{L(600)}</div>',
@@ -459,10 +444,11 @@ def tpa(lang):
     t = T[lang]
     b = [f'<h1>{t["t_title"]}</h1>', f'<div class="sub">{LLC}</div>',
          f'<div class="row"><span class="lbl">{t["date"]}</span> {L(200)}</div>',
-         f'<div class="row"><span class="lbl">{t["prop_addr"]}</span> {L(400)}</div>',
-         f'<div class="row"><span class="lbl">{t["folio"]}</span> {L(250)}</div>',
+         f'<div class="row"><span class="lbl">{t["prop_addr"]}</span> {L(400, C.get("prop",""))}</div>',
+         f'<div class="row"><span class="lbl">{t["folio"]}</span> {L(250, C.get("folio",""))}</div>',
 
-         f'<h2>{t["t1"]}</h2>', f'<p>{t["t1_p1"].replace("{O}", L(280))}</p>',
+         f'<h2>{t["t1"]}</h2>',
+         f'<p>{t["t1_p1"].replace("{O}", L(280, C.get("borrower1","")))}</p>',
          f'<p>{t["t1_p2"]}</p>',
          '<div class="box"><div class="mono">'
          f'{L(280)}<br><span style="color:#5A6472;font-size:8.5pt">{t["mm"]}</span><br><br>'
@@ -477,31 +463,19 @@ def tpa(lang):
          f'<p>{t["t2_p2"]}</p>',
 
          f'<h2>{t["t3"]}</h2>']
-    for lbl in t['t3_lbl']:
+    t3_keys = ('loan_no', 'ssn4', 'lender', 'servicer', 'hoa', 'atty', 'atty_phone')
+    for lbl, key in zip(t['t3_lbl'], t3_keys):
         b.append(f'<div class="row"><span class="lbl" style="display:inline-block;min-width:172px">'
-                 f'{lbl}</span> {L(300)}</div>')
+                 f'{lbl}</span> {L(300, C.get(key, ""))}</div>')
 
     b += ['<div class="pgb"></div>',
           f'<h2>{t["t4"]}</h2>', f'<p>{t["t4_p1"]}</p>', f'<p>{t["t4_p2"]}</p>',
           f'<h2>{t["t5"]}</h2>',
           f'<p>{t["t5_signed"].replace("{D}", L(55)).replace("{M}", L(190)).replace("{Y}", L(38))}</p>',
           f'<div class="sigline">{L(400)}<div class="cap">{t["owner_borrower"]}</div></div>',
-          f'<div class="row" style="margin-top:18px"><span class="lbl">{t["print_name"]}</span> {L(340)}</div>',
+          f'<div class="row" style="margin-top:18px"><span class="lbl">{t["print_name"]}</span> {L(340, C.get("borrower1",""))}</div>',
           f'<div class="row"><span class="lbl">{t["dob"]}</span> {L(58)} / {L(58)} / {L(85)}</div>',
           f'<p class="note">{t["t5_note"]}</p>',
-
-          f'<h2>{t["t6"]}</h2>',
-          f'<p class="mono">{t["state_fl"]}<br>{t["county_of"]} {L(210)}</p>',
-          f'<p>{t["t6_p"].replace("{D}", L(52)).replace("{M}", L(150)).replace("{Y}", L(38)).replace("{O}", L(190))}</p>',
-          f'<ul class="opts"><li>&#9744;&nbsp;&nbsp;{t["t6_known"]}</li>'
-          f'<li>&#9744;&nbsp;&nbsp;{t["t6_id"]} {L(110)}</li></ul>',
-          f'<div class="row" style="margin-top:8px"><span class="lbl">{t["id_no"]}</span> {L(120)} '
-          f'<span class="lbl">{t["issue"]}</span> {L(78)} <span class="lbl">{t["expiration"]}</span> {L(78)}</div>',
-          f'<div class="sigline">{L(400)}<div class="cap">{t["notary_fl"]}</div></div>',
-          f'<div class="row" style="margin-top:16px"><span class="lbl">{t["print_name"]}</span> {L(290)}</div>',
-          f'<div class="row"><span class="lbl">{t["comm_no"]}</span> {L(180)} '
-          f'<span class="lbl">{t["comm_exp"]}</span> {L(150)}</div>',
-          f'<p class="note" style="text-align:right;margin-top:-4px">{t["seal"]}</p>',
 
           f'<h2>{t["t7"]}</h2>', f'<p>{t["t7_p"]}</p>',
           f'<div class="sigline">{L(380)} <span class="lbl">{t["date"]}</span> {L(130)}'
@@ -511,14 +485,43 @@ def tpa(lang):
     return page(f'MSG Third-Party Authorization ({lang.upper()})', ''.join(b), t)
 
 
+CASES = {
+    'acosta': {
+        'label': 'Acosta',
+        'borrower1': 'Luis M. Acosta',
+        'prop': '16298 90th St N, Loxahatchee, FL 33470',
+        'county': 'Palm Beach',
+        'folio': '00-40-42-13-00-000-6120',
+        'case': '50-2025-CA-008509-XXXA-MB',
+        'sale': '08/26/2026',
+        'debt': '582,791.10',
+        'principal': '483,063.00',
+        'lender': 'A&amp;D Mortgage LLC',
+        # deliberately NOT filled - not in the record, and a wrong number on a servicer request
+        # gets the whole authorization rejected: loan_no, ssn4, servicer, hoa, atty, atty_phone,
+        # borrower2 (the roll shows "ACOSTA LUIS M &" so a co-borrower exists, unnamed).
+    },
+}
+
+
 def main():
+    global C
+    case_key = None
+    for a in sys.argv[1:]:
+        if a.startswith('--case='):
+            case_key = a.split('=', 1)[1].strip().lower()
+    if case_key:
+        if case_key not in CASES:
+            print(f'unknown case {case_key!r}; have: {", ".join(CASES)}'); return 1
+        C = dict(CASES[case_key])
     os.makedirs(OUT, exist_ok=True)
     from playwright.sync_api import sync_playwright
+    tag = f'_{C["label"]}' if C.get('label') else ''
     docs = []
     for lang in ('en', 'es'):
         sfx = lang.upper()
-        docs += [(f'MSG_Retainer_Agreement_{sfx}', retainer(lang)),
-                 (f'MSG_Third_Party_Authorization_{sfx}', tpa(lang))]
+        docs += [(f'MSG_Retainer_Agreement{tag}_{sfx}', retainer(lang)),
+                 (f'MSG_Third_Party_Authorization{tag}_{sfx}', tpa(lang))]
     made = []
     with sync_playwright() as p:
         b = p.chromium.launch()
