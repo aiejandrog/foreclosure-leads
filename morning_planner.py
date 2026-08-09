@@ -331,8 +331,36 @@ def _blockers(leads):
     return n
 
 
+def _reply_date(e):
+    """Parse a reply's 'when'. replies.py stores the RFC-2822 header date verbatim
+    ("Fri, 7 Aug 2026 18:51:40 -0400") — fromisoformat CANNOT parse that, and the old
+    except/continue swallowed the error, so the agenda said "Zero new replies" every
+    single morning while real owners waited (the oldest 13 days, with a phone number
+    in the reply text). Parse RFC-2822 first, ISO as the fallback, and NEVER silently
+    drop an entry that has any date at all — an unparseable date is still a reply."""
+    w = str(e.get('when') or e.get('date') or e.get('d') or '')
+    if not w.strip():
+        return None
+    try:
+        import email.utils
+        d = email.utils.parsedate_to_datetime(w)
+        if d:
+            return d.date()
+    except Exception:
+        pass
+    try:
+        return dt.date.fromisoformat(w[:10])
+    except Exception:
+        return None
+
+
 def _new_replies(replies_data, since_days=1):
-    """replies.json shape varies by build; this handles the two we've seen."""
+    """ALL unanswered reply threads, oldest first — not a 1-day window.
+
+    replies.json double-keys every thread ('@address' + one entry per matched case #);
+    dedupe by email address so one human is one row. since_days is kept for the
+    console summary but the agenda now shows every thread still waiting, because a
+    13-day-old reply is MORE urgent than a fresh one, not less."""
     if not replies_data:
         return []
     if isinstance(replies_data, dict):
@@ -341,18 +369,21 @@ def _new_replies(replies_data, since_days=1):
         entries = replies_data
     else:
         return []
-    cutoff = dt.date.today() - dt.timedelta(days=since_days)
-    hits = []
+    seen, hits = set(), []
+    today = dt.date.today()
     for e in entries:
         if not isinstance(e, dict):
             continue
-        w = str(e.get('when') or e.get('date') or e.get('d') or '')
-        try:
-            d = dt.date.fromisoformat(w[:10])
-        except Exception:
+        addr = str(e.get('email') or '').strip().lower()
+        if addr and addr in seen:
             continue
-        if d >= cutoff:
-            hits.append(e)
+        if addr:
+            seen.add(addr)
+        d = _reply_date(e)
+        e = dict(e)
+        e['_age_days'] = (today - d).days if d else None
+        hits.append(e)
+    hits.sort(key=lambda x: -(x['_age_days'] if x['_age_days'] is not None else 0))
     return hits
 
 
@@ -447,9 +478,11 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
         if portfolios else ""
     )
     reply_bit = (
-        f"<b>{len(new_replies)} new replies</b> since yesterday. Every reply outranks every score on the board."
+        f"<b>{len(new_replies)} owner replies are WAITING</b> — oldest "
+        f"{max((e.get('_age_days') or 0) for e in new_replies)}d. Every reply outranks every score on the board. "
+        f"These get called back before anything else on this page."
         if new_replies else
-        "Zero new replies since yesterday. If we sent emails, the worker composes — you have to click Send in Gmail. Ground truth is the Sent folder, not the Proof Sheet."
+        "Zero replies waiting. If we sent emails, the worker composes — you have to click Send in Gmail. Ground truth is the Sent folder, not the Proof Sheet."
     )
     blocker_bit = (
         f"<b>{blockers} leads sit with no traced phone AND no email</b> — that is a skip-trace TODO, "
@@ -474,13 +507,21 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
         for p in portfolios
     ) or '<tr><td colspan="4" class="empty">No portfolio owners on the current board.</td></tr>'
 
+    def _reply_age_cell(e):
+        a = e.get('_age_days')
+        if a is None:
+            return '?'
+        # 2+ days waiting renders red — a reply is the warmest signal the system produces,
+        # and the whole reason this table exists is the 13-day-old one nobody saw.
+        return (f'<b style="color:#b3372f">{a}d waiting</b>' if a >= 2
+                else ('today' if a == 0 else '1d waiting'))
     replies_rows = ''.join(
-        f'<tr><td>{_esc(e.get("when") or e.get("date") or "?")}</td>'
-        f'<td>{_esc(e.get("who") or e.get("from") or e.get("owner") or "?")}</td>'
-        f'<td>{_esc((e.get("preview") or e.get("body") or e.get("subject") or "")[:120])}</td>'
-        f'<td contenteditable="true" data-ph="Who is following up?"></td></tr>'
-        for e in new_replies[:10]
-    ) or '<tr><td colspan="4" class="empty">No new replies since yesterday. If you sent yesterday, check your Gmail Sent folder — the worker composes, YOU click Send.</td></tr>'
+        f'<tr><td>{_reply_age_cell(e)}</td>'
+        f'<td>{_esc(e.get("email") or e.get("who") or e.get("from") or e.get("owner") or "?")}</td>'
+        f'<td>{_esc((e.get("excerpt") or e.get("preview") or e.get("body") or e.get("subject") or "")[:140])}</td>'
+        f'<td contenteditable="true" data-ph="Who is calling this back TODAY?"></td></tr>'
+        for e in new_replies[:15]
+    ) or '<tr><td colspan="4" class="empty">No replies waiting. If you sent yesterday, check your Gmail Sent folder — the worker composes, YOU click Send.</td></tr>'
 
     return f'''<!doctype html>
 <html lang="en">
@@ -593,7 +634,7 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
     <div class="stat"><div class="n">{early_n}</div><div class="l">Lis pendens / early</div></div>
     <div class="stat"><div class="n">{late_n}</div><div class="l">Sale &gt; {max_days}d out</div></div>
     <div class="stat"><div class="n">{len(portfolios)}</div><div class="l">Portfolio owners</div></div>
-    <div class="stat"><div class="n">{len(new_replies)}</div><div class="l">Replies since y'day</div></div>
+    <div class="stat"><div class="n">{len(new_replies)}</div><div class="l">Replies waiting</div></div>
     <div class="stat warn"><div class="n">{blockers}</div><div class="l">No phone or email</div></div>
     <div class="stat"><div class="n">{mail_today}</div><div class="l">Emails sent today</div></div>
   </div>
@@ -666,9 +707,9 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
     <tbody>{port_rows}</tbody>
   </table>
 
-  <h2>New replies since yesterday</h2>
+  <h2>Owner replies waiting for a call back &mdash; oldest first, these ARE the day</h2>
   <table>
-    <thead><tr><th>When</th><th>Who</th><th>Preview</th><th>Assigned to</th></tr></thead>
+    <thead><tr><th>Waiting</th><th>Who</th><th>They said</th><th>Assigned to</th></tr></thead>
     <tbody>{replies_rows}</tbody>
   </table>
 

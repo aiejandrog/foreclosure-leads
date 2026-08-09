@@ -116,6 +116,13 @@ python -u sale_history.py --limit 150 >> "%LOG%" 2>&1
 
 rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phones can be pulled.
 
+rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at bake time.
+rem  This used to be a manual step a human had to remember after every send day; forgetting it
+rem  is how the account ran a 24-33% bounce rate for a week (provider tolerance ~2%) — the
+rem  bounce ledger only protects the NEXT send if it is refreshed before the queue bakes.
+echo [3h/5] Harvesting hard bounces from the inbox...
+python -u bounces.py >> "%LOG%" 2>&1
+
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 

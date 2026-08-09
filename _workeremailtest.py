@@ -36,13 +36,13 @@ def rec(n, cond, d=''):
 
 async def open_worker(ctx, pg):
     async with ctx.expect_page() as np:
-        await pg.evaluate("openMorningWorker('urgent')")
+        await pg.evaluate("openMorningWorker('active')")
     w = await np.value
     await w.wait_for_timeout(1900)
     return w
 
 
-async def to_emailable(w, tries=16):
+async def to_emailable(w, tries=60):
     for _ in range(tries):
         live = await w.evaluate(
             "() => { const b=document.getElementById('mw-email');"

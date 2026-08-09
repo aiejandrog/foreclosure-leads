@@ -10237,6 +10237,30 @@ function _isReplied(r){
                    stop:!!auto.stop, n:auto.n||1};
   return null;
 }
+/* A reply that has NOT been answered yet — the single hottest state a lead can be in, and until
+   2026-08-09 the worker had no concept of it. Returns null unless there is a reply with no
+   outbound touch after it. Parses the RFC-2822 date replies.py stores verbatim (new Date() handles
+   both RFC-2822 and ISO natively). STOP replies are excluded — those are opt-outs, not callbacks. */
+function _replyWaiting(r){
+  var rep = _isReplied(r);
+  if(!rep || rep.stop) return null;
+  var when = new Date(rep.when || 0);
+  var whenMs = isNaN(+when) ? 0 : +when;
+  // answered? any outbound touch AFTER the reply. 'OWNER REPLIED' is the reply's own marker, and
+  // 'worker'/'wait' breadcrumbs are not contact — only real channels count as an answer.
+  var n = notes[r.case]||{};
+  var OUT = {call:1, text:1, email:1, letter:1, door:1};
+  var answered = (n.touches||[]).some(function(t){
+    if(!OUT[t.ch] || String(t.out||'')==='OWNER REPLIED') return false;
+    var ts = +t.tsu || +new Date(t.ts || t.d || 0) || 0;
+    return whenMs && ts > whenMs;
+  });
+  if(answered) return null;
+  var age = whenMs ? Math.max(0, Math.floor((Date.now()-whenMs)/86400000)) : null;
+  // owners often type their number INTO the reply ("call me at 305 909 3711") — mine it.
+  var m = String(rep.note||'').replace(/[^ -~]/g,' ').match(/(\+?1[-. ]?)?\(?\d{3}\)?[-. ]?\d{3}[-. ]?\d{4}/);
+  return {when:rep.when||'', ageDays:age, note:rep.note||'', phone:(m?m[0].replace(/[^\d]/g,'').replace(/^1/,''):'')};
+}
 function _markReplied(caseId, evt){
   if(evt) evt.preventDefault();
   var n = notes[caseId] = notes[caseId]||{status:'',note:''};
@@ -10420,7 +10444,7 @@ function _wlogToday(){
      'call'  -> a dial was placed (uncapped by design — FTSA limits hours, not volume).
    The cap reads 'sent'+'text'. It must NEVER read 'email' again. */
 function _wlogStats(){
-  var t = _wlogToday(), s = {email:0, sent:0, call:0, text:0, textopen:0, wp:0, done:0, skip:0, leads:{}};
+  var t = _wlogToday(), s = {email:0, sent:0, call:0, text:0, textopen:0, wp:0, done:0, skip:0, callq:0, callout:0, leads:{}};
   t.forEach(function(e){ if(s[e.a]!=null) s[e.a]++; s.leads[e.c]=1; });
   s.uniqueLeads = Object.keys(s.leads).length;
   return s;
@@ -10552,6 +10576,26 @@ function _pollLiveCap(){
     .catch(function(){ if(to) clearTimeout(to); _renderCapBadge(); });
 }
 function _renderCapBadge(){
+  // Deliverability banner. The server has computed the trailing bounce rate on /health since
+  // 2026-08-08 and NOTHING on this page read it — a 24.5% bounce week (tolerance ~2%) was
+  // invisible unless you curled the endpoint. Red strip at >=5%, wording matches the server's.
+  try {
+    var bb = document.getElementById('bouncebanner');
+    var live = _liveCap && _liveCap.bounce && (Date.now()-_liveCapAt) < 120000;
+    if(live && (+_liveCap.bounce.rate >= 0.05 || _liveCap.bounce_blocked)){
+      if(!bb){
+        bb = document.createElement('div'); bb.id = 'bouncebanner';
+        bb.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#8f2b23;'
+          + 'color:#fff;font:700 13px/1.4 Arial,sans-serif;padding:8px 16px;text-align:center';
+        document.body.appendChild(bb);
+      }
+      bb.textContent = '⛔ DELIVERABILITY: trailing hard-bounce rate '
+        + Math.round(_liveCap.bounce.rate*1000)/10 + '% (provider tolerance ~2%'
+        + (_liveCap.bounce_blocked ? ' — BULK SENDING BLOCKED BY THE SERVER' : '')
+        + '). Run bounces.py + verify_emails.py, then rebuild.';
+      bb.style.display = 'block';
+    } else if(bb){ bb.style.display = 'none'; }
+  } catch(e){}
   var el = document.getElementById('mcapbadge'); if(!el) return;
   if(!_liveCap || (Date.now()-_liveCapAt) >= 120000){ el.className = 'mcapbadge'; return; }
   var cap = _capState();
@@ -10608,12 +10652,18 @@ function _saleDays(r){
   return _hasClock(r) ? r.days : null;
 }
 var WORKER_LANES = {
+  // REPLIED is lane ZERO by design: an owner who wrote back outranks every sale date on the board.
+  // The 2026-08-09 audit found the warmest reply waiting 13 days WITH a phone number in the text
+  // while the worker emailed 439 cold leads around it. A replied lead appears HERE and nowhere
+  // else — the day lanes exclude it so the queue can never bury it under a countdown.
+  replied:{t:'REPLIED', ic:'💬', d:'Owner WROTE BACK — call these back before anything else',
+           test:function(d,r){ return !!_replyWaiting(r); }},
   urgent: {t:'URGENT',  ic:'🔴', d:'Sale inside 7 days — call these first',
-           test:function(d,r){ return d!=null && d>=0 && d<=7; }},
+           test:function(d,r){ return d!=null && d>=0 && d<=7 && !_replyWaiting(r); }},
   active: {t:'ACTIVE',  ic:'🟡', d:'Sale 8–45 days out — the working middle',
-           test:function(d,r){ return d!=null && d>=8 && d<=45; }},
+           test:function(d,r){ return d!=null && d>=8 && d<=45 && !_replyWaiting(r); }},
   early:  {t:'EARLY',   ic:'🌱', d:'Fresh filing, no sale date yet — be the first call',
-           test:function(d,r){ return d==null || r.st==='LP'; }}
+           test:function(d,r){ return (d==null || r.st==='LP') && !_replyWaiting(r); }}
 };
 // Serializable copy for the worker tab. JSON.stringify would silently drop the `test` functions
 // anyway; doing it explicitly means a future field added to WORKER_LANES does not leak by accident.
@@ -10652,6 +10702,10 @@ function _workerEligible(r){
      TOMORROW (people are reachable at different hours), while an actual conversation or a "not
      interested" deserves the full 72h of breathing room. Call mode writes notes[case].cooldownH
      when the operator logs an outcome; anything else keeps the original 72h. */
+  // A WAITING REPLY overrides the cooldown entirely. The cooldown exists to stop us pestering
+  // someone we just contacted; a reply is the opposite situation — THEY contacted US, and hiding
+  // them for 72h because we emailed before they answered is how a callback waits 13 days.
+  if(_replyWaiting(r)) return true;
   var last = _lastTouchMs(r.case, n);
   var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
   if(last && (Date.now() - last) < coolH*3600000) return false;
@@ -10674,10 +10728,13 @@ function _laneStats(lane){
     if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD'){ s.suppressed++; return; }
     if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }
     if(n.wrongown){ s.suppressed++; return; }
-    // Mirrors _workerEligible's outcome-aware cooldown — see the comment there.
-    var last = _lastTouchMs(r.case, n);
-    var cH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
-    if(last && (Date.now()-last) < cH*3600000){ s.touched++; return; }
+    // Mirrors _workerEligible's outcome-aware cooldown — see the comment there. Reply-waiting
+    // leads bypass it there, so they must bypass it here or the lane count lies.
+    if(!_replyWaiting(r)){
+      var last = _lastTouchMs(r.case, n);
+      var cH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 72;
+      if(last && (Date.now()-last) < cH*3600000){ s.touched++; return; }
+    }
     s.n++;
   });
   return s;
@@ -10789,6 +10846,11 @@ function _cardMail(r){
 function _workerCard(r){
   var f = _docFields(r); var days = _saleDays(r); var chip = _urgencyChip(days);
   var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); }).slice(0,3);
+  // Reply state rides the card. If skiptrace never found a number but the owner TYPED one into
+  // their reply, that number becomes the card's phone — it is the freshest, most consented
+  // number the system will ever hold for this person.
+  var rw = _replyWaiting(r);
+  if(rw && rw.phone && !phList.length) phList = [rw.phone.replace(/(\d{3})(\d{3})(\d{4})/, '($1) $2-$3')];
   var emList = (r.emails||[]).slice(0,3);
   var M = _cardMail(r);
   return {
@@ -10837,23 +10899,53 @@ function _workerCard(r){
     }),
     hs: !!r.hs, condo: !!r.condo, st: r.st||'', tier: r.tier || '',
     mismatch: !!r.ownerMismatch, paOwner: String(r.paOwner||'').split(';')[0].trim(),
-    prior: _wlogContacted(r.case)   // "have I reached this person before?" — shown on the card
+    prior: _wlogContacted(r.case),  // "have I reached this person before?" — shown on the card
+    repAge: rw ? rw.ageDays : null, // days the owner's reply has waited (null = no reply)
+    repNote: rw ? String(rw.note||'').slice(0,220) : '',
+    repPhone: rw ? rw.phone : ''
   };
 }
 function genMorningWorker(lane, autostart){
-  lane = lane || 'urgent';
+  // Default to the REPLIED lane whenever anyone is waiting — replies open the day, period.
+  lane = lane || (_laneCount('replied') ? 'replied' : 'urgent');
   var cap = _capState();
   var laneMeta = WORKER_LANES[lane] || WORKER_LANES.urgent;
-  var laneStats  = {urgent:_laneStats('urgent'), active:_laneStats('active'), early:_laneStats('early')};
-  var laneCounts = {urgent:laneStats.urgent.n, active:laneStats.active.n, early:laneStats.early.n};
+  var laneStats  = {replied:_laneStats('replied'), urgent:_laneStats('urgent'), active:_laneStats('active'), early:_laneStats('early')};
+  var laneCounts = {replied:laneStats.replied.n, urgent:laneStats.urgent.n, active:laneStats.active.n, early:laneStats.early.n};
   // ALL THREE lanes are baked in, so switching lanes is instant and offline. Reopening the doc to
   // change lane would lose the in-tab activity log and the operator's place in the run — the two
   // things the worker exists to keep.
   var queues = {
-    urgent: _workerQueue('urgent').map(_workerCard),
-    active: _workerQueue('active').map(_workerCard),
-    early:  _workerQueue('early').map(_workerCard)
+    replied: _workerQueue('replied').map(_workerCard),
+    urgent:  _workerQueue('urgent').map(_workerCard),
+    active:  _workerQueue('active').map(_workerCard),
+    early:   _workerQueue('early').map(_workerCard)
   };
+  // Oldest reply first — a 13-day wait outranks a 2-day wait, the exact reverse of "newest first".
+  queues.replied.sort(function(a,b){ return (b.repAge||0) - (a.repAge||0); });
+  // THE CALL LIST SURVIVES THE TAB NOW. callq used to live only in `var CALLQ=[]` inside the Blob
+  // document — 192 leads were queued to call over six days and the list evaporated on every close,
+  // which is how the queue converted to exactly one real dial. The board persists every callq in
+  // localStorage (see the 'callq' handler) and re-bakes the undialed remainder into each new
+  // worker session here. Entries retire only on a logged call outcome.
+  var persistq = [];
+  try {
+    var pq = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
+    var byCase = {}; DATA.forEach(function(r){ byCase[r.case]=r; });
+    pq.forEach(function(x){
+      var r = byCase[x.c];
+      if(!r || !_workerEligible(r)) return;                 // dead/optout/passed leads drop off
+      persistq.push({c:x.c, name:x.nm||x.c, phone:x.ph||((r.phones||[])[0]||'')});
+    });
+  } catch(e){}
+  // Deliverability state bakes in at open. The server refuses bulk sends past the ceiling anyway
+  // (403), but the operator deserves the red screen BEFORE burning a morning, not 403-by-403.
+  var bounceBaked = null;
+  try {
+    if(_liveCap && _liveCap.bounce && (Date.now()-_liveCapAt) < 120000)
+      bounceBaked = {rate:+(_liveCap.bounce.rate||0), blocked:!!_liveCap.bounce_blocked,
+                     ceiling:+(_liveCap.bounce_ceiling||0.10)};
+  } catch(e){}
   var queue = queues[lane] || [];
   var qData = JSON.stringify(queues);
   // Seed the worker tab with today's activity so the log is populated the moment it opens,
@@ -10867,7 +10959,7 @@ function genMorningWorker(lane, autostart){
     +   '.mwtitle{font:800 22px "Segoe UI",Arial,sans-serif;margin:0;flex:1 1 260px;min-width:0}'
     +   '.mwtitle .sub{display:block;font:600 12px "Segoe UI",Arial,sans-serif;color:#5b6472;margin-top:2px;letter-spacing:.02em}'
     +   '.mwprog{background:#0B1730;color:#F4E5A7;padding:8px 14px;border-radius:6px;font:700 13px "Segoe UI",Arial,sans-serif;letter-spacing:.02em}'
-    +   '.mwcard{background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(11,23,48,.09);padding:22px 24px;margin-bottom:14px}'
+    +   '.mwcard{background:#fff;border-radius:12px;box-shadow:0 3px 16px rgba(11,23,48,.09);padding:22px 24px;margin-bottom:14px}.mwrep{background:#fdecea;border:2px solid #b3372f;border-radius:8px;padding:10px 14px;margin:0 0 12px;font:700 14px \'Segoe UI\',Arial,sans-serif;color:#8f2b23}.mwrepq{font:400 13px/1.45 \'Segoe UI\',Arial,sans-serif;color:#5b2320;margin-top:4px}'
     +   '.mwname{font:800 26px/1.1 "Segoe UI",Arial,sans-serif;margin:0 0 3px}'
     +   '.mwaddr{color:#5b6472;font:600 14px "Segoe UI",Arial,sans-serif;margin-bottom:12px}'
     +   '.mwmm{background:#fff2d7;border:1px solid #eadb9f;color:#7a5a10;border-radius:6px;'
@@ -10976,7 +11068,7 @@ function genMorningWorker(lane, autostart){
     // LANE TABS — counts are the WHOLE lane, not the truncated queue, so he can see what is waiting
     // behind today's send budget instead of thinking the lane is empty.
     +   '<div class="mwlanes">'
-    +     ['urgent','active','early'].map(function(k){
+    +     ['replied','urgent','active','early'].map(function(k){
           var L = WORKER_LANES[k], st = laneStats[k];
           // A bare "0" on a lane that holds 125 leads reads as broken. Show the workable count,
           // and when it is zero say what the pool is so the number is explainable at a glance.
@@ -11027,6 +11119,7 @@ function genMorningWorker(lane, autostart){
     + '</div>'
     + '<script>(function(){'
     +   'var LANES=' + qData + ', LMETA=' + JSON.stringify(WORKER_LANES_META()) + ';'
+    +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
     +   'var lane=' + JSON.stringify(lane) + ', Q=LANES[lane]||[];'
     +   'var CAP=' + JSON.stringify(cap) + ', LSTAT=' + JSON.stringify(laneStats) + ';'
     +   'var AUTOSTART=' + (autostart ? 'true' : 'false') + ';'
@@ -11041,7 +11134,7 @@ function genMorningWorker(lane, autostart){
     // the worker tab regains focus, the send is finished, so advance ~1.5s later. The timer is only
     // a fallback for when he never comes back (walked away, or the composer never opened).
     +   'var i=0, auto=false, paceMs=8000, tick=null, healing=null, awaitingReturn=false, sentAt=0;'
-    +   'var autoAll=false, LANE_ORDER=["urgent","active","early"];'
+    +   'var autoAll=false, LANE_ORDER=["replied","urgent","active","early"];'
     +   'function laneCount(k){ return (LANES[k]||[]).length; }'
     +   'function allTotal(){ var n=0; LANE_ORDER.forEach(function(k){ n+=laneCount(k); }); return n; }'
     +   'var main=document.getElementById("mwmain"), prog=document.getElementById("mwprog"),'
@@ -11051,7 +11144,7 @@ function genMorningWorker(lane, autostart){
     +   'function now(){return new Date().toLocaleTimeString([],{hour:"2-digit",minute:"2-digit",second:"2-digit"});}'
     // 'sent' gets its own glyph so a DELIVERED line is visually distinct from an ATTEMPT at a
     // glance — that distinction is the whole point of the rewrite.
-    +   'var ICON={call:"&#128222;",sent:"&#9989;",email:"&#128231;",text:"&#128241;",textopen:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
+    +   'var ICON={callq:"&#9742;",callout:"&#128222;",call:"&#128222;",sent:"&#9989;",email:"&#128231;",text:"&#128241;",textopen:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
     +   'function addLog(kind, who, text, cls){'
     +     'LOG.push({ts:now(), a:kind, who:who||"", detail:text||"", ok:cls!=="warn"});'
     +     'if(LOG.length>200) LOG=LOG.slice(-200);'
@@ -11067,7 +11160,7 @@ function genMorningWorker(lane, autostart){
     +         '+"<span class=\'ic\'>"+(ICON[e.a]||ICON.info)+"</span>"'
     +         '+"<span class=\'tx\'><b>"+esc(e.who||e.addr||"")+"</b> <span>"+esc(e.detail||e.a)+"</span></span></div>";'
     +     '}).join("");'
-    +     'statEl.innerHTML="calls "+(STATS.call||0)+" · <b>delivered "+(STATS.sent||0)+"</b> · texts sent "+(STATS.text||0)+" · attempts "+((STATS.email||0)+(STATS.textopen||0))+" · wp "+(STATS.wp||0)+" · skip "+(STATS.skip||0);'
+    +     'statEl.innerHTML="<b>dialed "+(STATS.callout||0)+"</b> · call list "+CALLQ.length+" · delivered "+(STATS.sent||0)+" · texts "+(STATS.text||0)+" · attempts "+((STATS.email||0)+(STATS.textopen||0))+" · skip "+(STATS.skip||0);'
     +   '}'
     // CONFIRMED DELIVERY ONLY — mirrors the board's _sentTodayCount. Reading STATS.email here
     // (the old behaviour) counted composer-opens and pre-flight log lines as sends, so the meter
@@ -11154,7 +11247,7 @@ function genMorningWorker(lane, autostart){
     // which is how a dead bridge produced healthy-looking logs. No opener = the board cannot
     // hear us = false, so the caller's heal/fail path actually fires.
     +     'if(!window.opener) return false;'
-    +     'try{window.opener.postMessage({workerAct:{c:Q[i].c,k:kind,extra:extra||null}},"*");return true;}'
+    +     'try{window.opener.postMessage({workerAct:{c:(extra&&extra.qc)||(Q[i]&&Q[i].c)||"",k:kind,extra:extra||null}},"*");return true;}'
     +     'catch(e){return false;}'
     +   '}'
     // AUTO-RUN CHANNELS. email is the only channel the machine can legally auto-send. A phone-only
@@ -11189,6 +11282,10 @@ function genMorningWorker(lane, autostart){
     +     'CALLQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||""});'
     +     'renderCallQ();'
     +   '}'
+    // Yesterday's undialed queue survives into today. PERSISTQ is baked by the board from the
+    // durable fcCallQueue ledger — before this, 192 queued calls evaporated with the tab and the
+    // week produced exactly one dial. Seeded on open so the list is never empty-by-amnesia.
+    +   'PERSISTQ.forEach(function(x){ if(!CALLQ.some(function(y){return y.c===x.c;})) CALLQ.push(x); });'
     +   'function textQAdd(r){'
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
     +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner});'
@@ -11328,6 +11425,11 @@ function genMorningWorker(lane, autostart){
     +           'bridgeUp(true);'
     +           'addLog("fail", r.first||r.owner, "SMTP auth failed — fix gmail.key, then restart send_server.py", "warn");'
     +           'pause();'
+    +         '} else if(x.status===403 && x.j.blocked){'
+    +     'bridgeUp(true); auto=false;'
+    +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10};'
+    +     'addLog("fail", r.first||r.owner, "DELIVERABILITY HALT — server refused bulk send: trailing bounce rate too high", "warn");'
+    +     'render();'
     +         '} else {'
     // A single bad lead must not end the morning. Log it and keep moving.
     +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
@@ -11603,6 +11705,13 @@ function genMorningWorker(lane, autostart){
     +   'function runOne(){ if(i>=Q.length) return render(); var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length; attempt(r,0,0); }'
     +   'function render(){'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
+    +     'if(BOUNCE && BOUNCE.blocked){'
+    +     'auto=false;'
+    +     'main.innerHTML="<div class=\'mwblocked\'><h2>&#9940; DELIVERABILITY HALT</h2>"'
+    +     '+"<p>The trailing hard-bounce rate is <b>"+Math.round((BOUNCE.rate||0)*1000)/10+"%</b> — past the "+Math.round((BOUNCE.ceiling||0.1)*100)+"% ceiling the server enforces. Bulk email is BLOCKED until the list is cleaned.</p>"'
+    +     '+"<p>Fix: run <b>bounces.py</b> then <b>verify_emails.py</b>, rebuild, reopen. <b>Calling is not affected</b> — work the Call list and the REPLIED lane; those convert better anyway.</p></div>";'
+    +     'prog.textContent="sending blocked"; renderLog(); return;'
+    +     '}'
     // The cap is checked at RENDER time, not just at open time, so a run that crosses the ceiling
     // mid-morning stops there instead of finishing the queue it was handed.
     // STATS is seeded from the SAME today-counter the cap reads, so email+text IS the live total.
@@ -11621,14 +11730,14 @@ function genMorningWorker(lane, autostart){
     +       'if(!s.pool) why="No leads match this lane on the current board at all.";'
     +       'else if(s.noContact && s.noContact>=s.pool-s.suppressed) why="<b>"+s.pool+" leads sit in this lane, and not one has a traced phone or email.</b> That is a data gap, not an empty pipeline &mdash; the outreach tools have nothing to send to. Run <code>skiptrace.py</code> against these, then rebuild the board.";'
     +       'else why="Every lead here was worked in the last 3 days, has no traced phone or email ("+(s.noContact||0)+"), or is opted-out / claimed / in an active bankruptcy stay ("+(s.suppressed||0)+").";'
-    +       'var others=["urgent","active","early"].filter(function(k){return k!==lane && (LANES[k]||[]).length;});'
+    +       'var others=["replied","urgent","active","early"].filter(function(k){return k!==lane && (LANES[k]||[]).length;});'
     +       'main.innerHTML="<div class=\'mwnone\'><b>Nothing to work in "+esc(LMETA[lane].t)+".</b><br><br>"+why'
     +         '+(others.length?"<br><br>Still open: <b>"+others.map(function(k){return LMETA[k].ic+" "+LMETA[k].t+" ("+LANES[k].length+")";}).join(" &middot; ")+"</b> &mdash; tap a lane above.":"<br><br>Come back after the next refresh.")'
     +       '+"</div>"; prog.textContent="0 of 0"; renderLog(); return; }'
     +     'if(i>=Q.length){'
     // Calls and DELIVERED emails lead the summary — those are the two numbers that mean work
     // happened. "Email" here is attempts, shown small, because an attempt is not an outcome.
-    +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'>Worked <b>"+Q.length+"</b> leads<br>&#128222; Calls <b>"+(STATS.call||0)+"</b> · &#9993; Delivered <b>"+(STATS.sent||0)+"</b> · Text <b>"+(STATS.text||0)+"</b><br><span style=\'font-size:12px;opacity:.75\'>attempts "+(STATS.email||0)+" · lookups "+(STATS.wp||0)+" · skipped "+(STATS.skip||0)+"</span></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
+    +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'><b>Dialed "+(STATS.callout||0)+"</b> &middot; replies waiting "+((LANES.replied||[]).length)+" &middot; call list "+CALLQ.length+"<br>Worked <b>"+Q.length+"</b> leads<br>&#128222; Calls <b>"+(STATS.call||0)+"</b> · &#9993; Delivered <b>"+(STATS.sent||0)+"</b> · Text <b>"+(STATS.text||0)+"</b><br><span style=\'font-size:12px;opacity:.75\'>attempts "+(STATS.email||0)+" · lookups "+(STATS.wp||0)+" · skipped "+(STATS.skip||0)+"</span></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
     // queue done → if texts were batched, offer the station right here (the panels below survive
     // this render because it only rewrites #mwmain).
     +       'if(TEXTQ.length && !tbOn){'
@@ -11641,9 +11750,11 @@ function genMorningWorker(lane, autostart){
     +     'var ph=(r.phones.length?"<b>"+esc(r.phones[0])+"</b>":"<i style=\'color:#8a1c1c\'>none traced</i>");'
     +     'var em=(r.emails.length?"<b>"+esc(r.emails[0])+"</b>":"<i style=\'color:#8a1c1c\'>none traced</i>");'
     +     'var prior=r.prior?("<span class=\'mwprior\'>contacted "+(r.prior.days!=null?r.prior.days+"d ago":"before")+" · "+r.prior.n+"x</span>"):"";'
+    +     'var repBan=(r.repAge!=null)?("<div class=\'mwrep\'>&#128172; <b>WROTE BACK "+(r.repAge===0?"TODAY":r.repAge+(r.repAge===1?" DAY":" DAYS")+" AGO")+"</b>"+(r.repPhone?" — left number <b>"+esc(r.repPhone)+"</b>":"")+(r.repNote?"<div class=\'mwrepq\'>&ldquo;"+esc(r.repNote.slice(0,180))+"&rdquo;</div>":"")+"</div>"):"";'
     +     'main.innerHTML='
     +       '"<div class=\'mwcard\'>"'
     +       '+"<div class=\'mwchip\' style=\'color:"+r.chip.c+";background:"+r.chip.bg+"\'>"+esc(r.chip.t)+"</div>"'
+    +       '+repBan'
     +       '+"<h2 class=\'mwname\'>"+esc(r.first||r.owner)+prior+"</h2>"'
     +       '+"<div class=\'mwaddr\'>"+esc(r.addr)+" · Tier "+esc(r.tier)+(r.hs?" · Homestead":"")+(r.condo?" · Condo":"")+"</div>"'
     // PORTFOLIO OWNER banner. When _workerQueue folded N leads (same primary email) into this
@@ -11701,7 +11812,17 @@ function genMorningWorker(lane, autostart){
     +     '}'
     // the panel Call links stay plain tel: anchors (calls are never capped) — just log the breadcrumb.
     +     'var qc=e.target.closest&&e.target.closest("[data-qcall]");'
-    +     'if(qc){ addLog("call", qc.getAttribute("data-qcall")||"lead", "dialer opened from the queue panel"); return; }'
+    +     'if(qc){ var cc=qc.getAttribute("data-qcall")||""; addLog("call", cc, "dialer opened from the queue panel");'
+    +     'var row=qc.closest("div");'
+    +     'if(row){ setTimeout(function(){ row.innerHTML="<div style=\'flex:1;font:600 12px Arial\'>"+_esc2(cc)+" — what happened?</div>"+CALL_OUTCOMES.map(function(o){return "<button data-qout=\'"+_esc2(cc)+"|"+o.k+"\' style=\'margin:2px;padding:6px 9px;border:1px solid #ccd;border-radius:6px;background:#f6f8fc;cursor:pointer;font-size:12px\'>"+o.t+"</button>";}).join(""); }, 700); }'
+    +     'return; }'
+    +     'var qo=e.target.closest&&e.target.closest("[data-qout]");'
+    +     'if(qo){ var pp=String(qo.getAttribute("data-qout")||"").split("|"), oc=null;'
+    +     'CALL_OUTCOMES.forEach(function(o){ if(o.k===pp[1]) oc=o; });'
+    +     'if(oc){ post("callout", {oc:oc.k, label:oc.t+" (queue panel)", hrs:oc.hrs, sup:!!oc.sup, qc:pp[0]});'
+    +     'addLog("callout", pp[0], oc.t+" — logged from the queue panel");'
+    +     'CALLQ=CALLQ.filter(function(x){return x.c!==pp[0];}); renderCallQ(); }'
+    +     'return; }'
     +   '});'
     +   'document.addEventListener("click", function(e){'
     +     'var b=e.target.closest(".mwbtn"); if(!b||b.classList.contains("disabled"))return;'
@@ -11806,7 +11927,9 @@ function genMorningWorker(lane, autostart){
 }
 function openMorningWorker(lane, autostart){
   _docLog('__batch__', 'worker-open', 'en');
-  return _openDoc(genMorningWorker(lane || 'urgent', !!autostart), {keepOpener:true});
+  // No explicit lane -> genMorningWorker decides, and it decides REPLIED-first whenever an owner
+  // is waiting. Forcing 'urgent' here was overriding that and burying the callbacks again.
+  return _openDoc(genMorningWorker(lane || '', !!autostart), {keepOpener:true});
 }
 
 // listen for outcome logging coming back from the Dial-Ready tab — the workflow's #1 pick.
@@ -11854,7 +11977,8 @@ window.addEventListener('message', function(ev){
 window.addEventListener('message', function(ev){
   if(!_msgTrusted(ev)) return;
   var d = ev && ev.data && ev.data.workerAct; if(!d || !d.c) return;
-  var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
+  var _tc = (d.extra && d.extra.qc) || d.c;
+  var r = DATA.find(function(x){return x.case===_tc;}); if(!r) return;
   // ---- 'email' = ATTEMPT ONLY (composer opened, or bridge tried and fell back) ----------------
   // This branch deliberately does almost nothing now. It used to archive the verbatim copy AND
   // call autoLog(), which wrote a CRM touch — and _workerEligible drops any lead touched inside
@@ -11921,7 +12045,9 @@ window.addEventListener('message', function(ev){
     var sup = !!(d.extra && d.extra.sup);
     var n = notes[r.case] || (notes[r.case] = {});
     _docLog(r.case, 'worker-call', 'en');
-    _wlog(r.case, 'call', 'call outcome: ' + lbl
+    // kind 'callout' (not 'call') so the durable ledger can count DIALS separately from every
+    // other phone-adjacent breadcrumb — dial-through is the number this whole audit was missing.
+    _wlog(r.case, 'callout', 'call outcome: ' + lbl
           + (sup ? ' — SUPPRESSED, will not be queued again' : ' — returns in ' + hrs + 'h'), true);
     // The touch carries the real outcome, so the funnel can finally distinguish "tried" from
     // "reached". autoLog dedupes same-day/same-channel; logTouch is the underlying writer.
@@ -11929,6 +12055,12 @@ window.addEventListener('message', function(ev){
     // COOLDOWN. _workerEligible reads a flat 72h off the newest touch. `cooldownH` lets a
     // no-answer come back tomorrow instead of in three days, which is how a call list should work.
     n.cooldownH = hrs;
+    // Any logged call outcome retires the lead from the persistent Call queue — the dial happened.
+    try {
+      var _cq2 = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
+      var _cq3 = _cq2.filter(function(x){ return x.c!==r.case; });
+      if(_cq3.length !== _cq2.length) localStorage.setItem('fcCallQueue', JSON.stringify(_cq3));
+    } catch(e){}
     if(oc === 'dnc'){
       // An owner saying "stop" must be honoured immediately and permanently. Previously this was
       // impossible from the worker — you had to leave, find the lead, and set it by hand.
@@ -11976,6 +12108,16 @@ window.addEventListener('message', function(ev){
     // outcome retires it. Just record the honest breadcrumb.
     _docLog(r.case, 'worker-callq', 'en');
     _wlog(r.case, 'callq', 'phone-only — queued to CALL (no email; nothing auto-sent, never capped)', true);
+    // DURABLE now. The in-tab Call list dies with the Blob document; this ledger does not.
+    try {
+      var _cq = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
+      if(!_cq.some(function(x){ return x.c===r.case; })){
+        _cq.push({c:r.case, nm:(r.oname||(r.owners||'').split(';')[0]||r.case),
+                  ph:((r.phones||[])[0]||''), ts:Date.now()});
+        if(_cq.length>400) _cq = _cq.slice(-400);
+        localStorage.setItem('fcCallQueue', JSON.stringify(_cq));
+      }
+    } catch(e){}
   } else if(d.k === 'wait'){
     _wlog(r.case, 'wait', d.extra ? ('paced '+d.extra+'s before advancing') : 'paced before advancing', true);
     return;
@@ -14219,8 +14361,8 @@ function render(){
   // (halves node count / memory for good, not just until the first resize). The breakpoint listener
   // rebuilds the other side the instant the width crosses 860px, so nothing is ever left blank.
   const _tb = document.getElementById('tb');
-  if(_mob){ if(cc) cc.innerHTML = cards.join(''); if(_tb) _tb.innerHTML = ''; }
-  else { if(_tb) _tb.innerHTML = trs.join(''); if(cc) cc.innerHTML = ''; }
+  if(_mob){ if(cc) cc.innerHTML = cards.join(''); if(_tb) _tb.innerHTML = ''; if(window._fxEnter) window._fxEnter(cc); }
+  else { if(_tb) _tb.innerHTML = trs.join(''); if(cc) cc.innerHTML = ''; if(window._fxEnter) window._fxEnter(_tb); }
 }
 // PERF companion to the visible-layout-only render: when the viewport crosses the 860px breakpoint,
 // the newly-shown layout was skipped on the last render and would be empty — repaint once on the
@@ -15537,4 +15679,30 @@ document.addEventListener('keydown', function(e){
   if(e.key==='?'){ var h=document.getElementById('shorthelp'); if(h) h.classList.toggle('show'); }
   if(e.key==='Escape'){ var h2=document.getElementById('shorthelp'); if(h2) h2.classList.remove('show'); }
 });
+</script>
+<!-- Motion v13 (UMD) — inlined at build time from vendor/motion.min.js by foreclosure_leads.py.
+     Inlined rather than CDN-linked because the Desktop twin is opened over file://, where a module
+     import is CORS-blocked and a network <script> fails offline. Purely additive: if the lib is
+     absent or the OS asks for reduced motion, _fxEnter() no-ops and the board renders as before. -->
+<script>__MOTIONJS__</script>
+<script>
+(function(){
+  var M = window.Motion, reduce = false;
+  try{ reduce = matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(_e){}
+  // The board can hold 800+ rows and render() replaces every node via innerHTML. Staggering all of
+  // them costs a visibly slow repaint on each filter change, so only the first screenful animates —
+  // past the fold the motion isn't seen anyway, and those rows appear instantly.
+  var CAP = 24;
+  window._fxEnter = function(host){
+    if(!host || reduce || !M || !M.animate) return;
+    try{
+      var kids = Array.prototype.slice.call(host.children, 0, CAP);
+      if(!kids.length) return;
+      M.animate(kids,
+        { opacity:[0,1], transform:['translateY(8px)','none'] },
+        { duration:.36, delay:M.stagger(.018), ease:[.22,1,.36,1] }   // --e-lux, per the design system
+      );
+    }catch(_e){}
+  };
+})();
 </script></body></html>

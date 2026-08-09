@@ -20,10 +20,12 @@ async def main():
         await w.wait_for_timeout(1200)
 
         tabs = await w.locator('.mwlane').count()
-        rec('three lane tabs render', tabs==3, f'{tabs} tabs')
+        rec('four lane tabs render (REPLIED + 3 day lanes)', tabs==4, f'{tabs} tabs')
         labels = await w.locator('.mwlane .lt').all_inner_texts()
-        rec('tabs are URGENT / ACTIVE / EARLY with counts', len(labels)==3, ' | '.join(x.replace('\n',' ') for x in labels))
-        rec('URGENT starts selected', 'on' in (await w.locator('.mwlane').nth(0).get_attribute('class')))
+        rec('tabs are REPLIED / URGENT / ACTIVE / EARLY with counts',
+            len(labels)==4 and 'REPLIED' in labels[0], ' | '.join(x.replace(chr(10),' ') for x in labels))
+        _cls = ' '.join([(await w.locator('.mwlane').nth(x).get_attribute('class')) or '' for x in range(tabs)])
+        rec('a lane starts selected', 'on' in _cls)
         # String-concat bugs in the baker surface as literal NaN/undefined in the chrome. A stray
         # unary + put "call these firstNaN" in the subtitle and every assertion above still passed.
         chrome = await w.locator('.mwtop, .mwlanes, .mwcap').all_inner_texts()
