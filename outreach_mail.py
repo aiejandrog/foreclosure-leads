@@ -190,18 +190,30 @@ def _sig_lines(snd):
     return [x.strip() for x in order if x and str(x).strip()]
 
 
-def _lh_header(snd, height_px=42):
-    """MSG letterhead block — logo left, contact right, black rule under.
+def _lh_header(snd, height_px=52):
+    """MSG letterhead block — mark left, contact right, black rule under.
+
+    The company name is NOT in this header. The shield carries MSG; `_lh_sign()` spells the entity
+    out once at the foot of the page. That is the whole point of the mark-only artwork — the old
+    lockup put the name in the header AND baked it into the image AND repeated it in the footer.
 
     Same lockup genLetter() renders in the board (_msgHead), but deliberately COMPACT here: a Lob letter
-    is billed per page and this one runs to 10.9in of an 11in sheet in Spanish, so the header gets one
-    contact line instead of three and a 34px mark instead of 88px. The decoration yields, never the copy
-    — the body is what converts, and these owners are often reading it in a hurry or with bad eyes.
-    Re-measure the SPANISH worst case (longest owner + plaintiff) after ANY change here.
+    is billed per page, so the header gets one contact line instead of three and a 52px mark instead of
+    88px. The decoration yields, never the copy — the body is what converts, and these owners are often
+    reading it in a hurry or with bad eyes. 52px was picked off a measured sweep: it costs 0.11in over
+    42px and still leaves 0.46in of an 11in sheet in the Spanish worst case, and at 42px the portrait
+    shield read lost against a full-width contact line.
+    Re-measure after ANY change here — `python _pagefittest.py` does EN and ES worst cases.
     Every value comes from the sender profile; nothing about the operator is hardcoded."""
     e = html.escape
     llc = (snd.get('llc') or 'Miami Solutions Group LLC').strip()
-    w = msg_brand.mark_size(height_px)
+    # ONE-INK rendition here, not the colour emblem: send_via_lob() submits color:'false', so Lob
+    # prints this page in black and white. A straight grayscale of navy-field/gold-letters collapses
+    # to a single mid-gray mass and the letterforms disappear. MONO_BW_B64 is the same emblem with
+    # the field forced black and the mark knocked out white, which is what survives one-ink printing
+    # and fax. Flip to msg_brand.MONO_B64 + mark_size() only if Lob is switched to colour (costs more
+    # per letter) — the two must move together or the letter prints a gray smear.
+    w = msg_brand.mono_bw_size(height_px)
     bits = []
     for k in ('addr', 'phone', 'email', 'web'):
         v = (snd.get(k) or '').strip()
@@ -209,22 +221,25 @@ def _lh_header(snd, height_px=42):
             bits.append('<span style="white-space:nowrap">' + e(v) + '</span>')
     lines = ['&nbsp;&middot;&nbsp;'.join(bits)] if bits else []
     return ('<table class="msg-lh" role="presentation"><tr>'
-            f'<td class="msg-lh-mark"><img src="{msg_brand.MONO_B64}" width="{w}" height="{height_px}" alt="{e(llc)}"></td>'
-            f'<td class="msg-lh-meta"><div class="n">{e(llc)}</div>{"<br>".join(lines)}</td>'
+            f'<td class="msg-lh-mark"><img src="{msg_brand.MONO_BW_B64}" width="{w}" height="{height_px}" alt="{e(llc)}"></td>'
+            f'<td class="msg-lh-meta">{"<br>".join(lines)}</td>'
             '</tr></table><div class="msg-lh-rule"></div>')
 
 
 def _lh_sign(snd):
-    """The gray name line that closes the page, with the compliance disclaimer attached."""
+    """The footer — the one place the company name appears on the page, plus the disclaimer.
+
+    Mirror of the board's `_msgSign()`. Entity on the letterspaced line, person and contact beneath.
+    Keep the two in sync: an owner who gets a letter and then a door folder should not be able to
+    tell they were produced by different code."""
     e = html.escape
-    nm, ti = (snd.get('name') or '').strip(), (snd.get('title') or '').strip()
-    mid = [(snd.get('llc') or 'Miami Solutions Group LLC').strip()]
-    for k in ('phone', 'email'):
-        if (snd.get(k) or '').strip():
-            mid.append(snd[k].strip())
-    name_span = f'<span class="nm">{e(nm)}{"&nbsp;&middot;&nbsp;" + e(ti) if ti else ""}</span>' if nm else ''
-    return ('<div class="msg-sig">' + name_span + e(' · '.join(mid))
-            + '<br>Not a law firm. Not a HUD-approved housing counselor.</div>')
+    llc = (snd.get('llc') or 'Miami Solutions Group LLC').strip()
+    who = [str(snd[k]).strip() for k in ('name', 'title', 'phone', 'email')
+           if (snd.get(k) or '').strip()]
+    return ('<div class="msg-sig">'
+            f'<span class="nm">{e(llc)}</span>'
+            + (e(' · '.join(who)) + '<br>' if who else '')
+            + 'Not a law firm. Not a HUD-approved housing counselor.</div>')
 
 
 def build_letter_html(r, snd, lang='en'):
@@ -327,7 +342,6 @@ p{{margin:0 0 6px}}
 .msg-lh-mark{{width:1%;white-space:nowrap;padding-right:14px}}
 .msg-lh-mark img{{display:block;border:0}}
 .msg-lh-meta{{text-align:right;font:8.5pt/1.6 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1A1A1A}}
-.msg-lh-meta .n{{font-weight:700;font-size:9pt;letter-spacing:.09em;text-transform:uppercase;margin-bottom:3px}}
 .msg-lh-rule{{border-top:2px solid #1A1A1A;height:0;font-size:0;line-height:0;margin:5px 0 8px}}
 .msg-sig{{margin-top:8px;padding-top:5px;border-top:1px solid #C9CDD4;text-align:center;
   font:7.5pt/1.65 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#7C8492;letter-spacing:.05em}}
