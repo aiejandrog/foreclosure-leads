@@ -161,7 +161,11 @@ def _write_notes(payload):
                 cur_rich = _richness(cur)
                 cur_dev = str((cur or {}).get('device') or '')
                 same_device = bool(inc_dev) and inc_dev == cur_dev
-                wins = same_device or inc_rich >= cur_rich
+                # same-device bypass removed 2026-08-10: a stale second tab on the SAME machine
+                # was the normal clobber case (the Acosta Appointment wipe on 08-09) — richer
+                # state must win regardless of device. Rejected pushes still land in
+                # rejected_*.json for audit; a deliberate shrink can add an allow_shrink flag.
+                wins = inc_rich >= cur_rich
         except Exception:
             wins = True   # unreadable/corrupt backup — a good push should be allowed to heal it
         if wins:
@@ -229,6 +233,51 @@ def _bounce_health():
                 dead += 1
     return {'rate': (dead / mailed) if mailed else 0.0, 'mailed': mailed, 'dead': dead,
             'known': len(bounced), 'window': BOUNCE_WINDOW_DAYS}
+
+
+PROVEN_MIN_AGE_DAYS = 2   # a hard bounce DSNs within minutes-to-hours; 48h of silence ≈ delivered
+
+
+def _proven_deliverable():
+    """Addresses with DIRECT evidence of deliverability: mailed >= 48h ago, never observed
+    bouncing. This is the positive class the verifier files cannot supply without a paid API
+    key (verified_emails.json currently holds ZERO 'ok' rows — only dead/risky/unknown).
+
+    WHY (2026-08-10): the bounce breaker rightly blocks bulk sends while the 7-day rate sits
+    near 28%, but it also gags follow-ups to the ~1,200 addresses that ACCEPTED mail during
+    those same sends — and re-engaging exactly those addresses is both safe (acceptance is the
+    strongest free evidence there is; it beats the domain-share 'risky' heuristic, which is
+    about UNOBSERVED addresses) and the fastest way to dilute the trailing rate back under the
+    ceiling. Dead stays dead. Never-mailed stays blocked until the rate clears or an API key
+    exists — those are the addresses that poisoned the list in the first place."""
+    try:
+        bad = {str(k).lower() for k in json.load(open(
+            os.path.join(HERE, 'bounced_emails.json'), encoding='utf-8'))}
+    except Exception:
+        bad = set()
+    ver = {}
+    try:
+        ver = json.load(open(os.path.join(HERE, 'verified_emails.json'), encoding='utf-8'))
+    except Exception:
+        pass
+    for a, x in ver.items():
+        if (x or {}).get('v') == 'dead':
+            bad.add(str(a).lower())
+    cutoff = (dt.date.today() - dt.timedelta(days=PROVEN_MIN_AGE_DAYS)).isoformat()
+    ok = set()
+    for e in _load_ledger():
+        if e.get('ch') != 'email' or not e.get('message_id'):
+            continue
+        if str(e.get('d') or '') > cutoff:      # too recent for silence to mean anything
+            continue
+        for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
+            a = a.strip().lower()
+            if a and a not in bad:
+                ok.add(a)
+    for a, x in ver.items():                     # API-verified 'ok' counts too, once a key exists
+        if (x or {}).get('v') == 'ok' and str(a).lower() not in bad:
+            ok.add(str(a).lower())
+    return ok
 
 
 def _recipients_today():
@@ -368,9 +417,35 @@ class Handler(BaseHTTPRequestHandler):
                 # instead of discovering it 403 by 403.
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
                 'bounce_blocked': _bh['rate'] > BOUNCE_CEILING,
+                # verified-only mode: while blocked, sends to proven-deliverable addresses
+                # (accepted mail >= 48h ago, never bounced) still go through. The worker
+                # banner uses this to say "N addresses still sendable" instead of "all stop".
+                'proven_pool': len(_proven_deliverable()) if _bh['rate'] > BOUNCE_CEILING else None,
             })
         else:
             self._json(404, {'ok': False, 'err': 'unknown path'})
+
+    def _handle_mark(self):
+        """POST /mark — black-box recorder for worker marks that could not reach the board tab.
+
+        The worker buffers and retries the real postMessage path; this file is the crash-proof
+        audit copy so a DNC callout can never be silently lost to a closed board tab (an owner
+        who said STOP staying dialable is FTSA exposure, not a UI bug)."""
+        ln = int(self.headers.get('Content-Length') or 0)
+        if ln <= 0 or ln > 200_000:
+            return self._json(400, {'ok': False, 'err': 'missing or oversized body'})
+        try:
+            d = json.loads(self.rfile.read(ln).decode('utf-8'))
+        except Exception:
+            return self._json(400, {'ok': False, 'err': 'bad json'})
+        rec = {'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+               'c': str(d.get('c') or ''), 'k': str(d.get('k') or ''), 'extra': d.get('extra')}
+        try:
+            with open(os.path.join(HERE, 'worker_marks.jsonl'), 'a', encoding='utf-8') as f:
+                f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+        except Exception as e:
+            return self._json(500, {'ok': False, 'err': str(e)[:120]})
+        return self._json(200, {'ok': True})
 
     def _handle_notes(self):
         """POST /notes — persist the tracker's full localStorage state to disk.
@@ -402,6 +477,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith('/notes'):
             return self._handle_notes()
+        if self.path.startswith('/mark'):
+            return self._handle_mark()
         if not self.path.startswith('/send'):
             return self._json(404, {'ok': False, 'err': 'unknown path'})
 
@@ -457,15 +534,33 @@ class Handler(BaseHTTPRequestHandler):
         if not meta.get('test'):
             _hb = _bounce_health()
             if _hb['rate'] > BOUNCE_CEILING:
-                return self._json(403, {
-                    'ok': False, 'blocked': 'bounce_rate',
-                    'err': (f"BLOCKED: {_hb['dead']} of {_hb['mailed']} addresses mailed in the last "
-                            f"{_hb['window']} days are confirmed dead ({_hb['rate']*100:.0f}%). The safe "
-                            f"ceiling is {BOUNCE_CEILING*100:.0f}% and providers start blocking near 5%. "
-                            f"Sending more now risks the Gmail account itself. Fix the list first: "
-                            f"python bounces.py && python verify_emails.py && rebuild. "
-                            f"(Rate is measured on OBSERVED bounces, so it is a floor, not a ceiling.)"),
-                    'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
+                # PROVEN-DELIVERABLE LANE: while the trailing rate is over the ceiling, a send
+                # may still go out if EVERY recipient has direct acceptance evidence (see
+                # _proven_deliverable). One unproven recipient blocks the whole send — bcc
+                # fan-out must not smuggle unverified addresses through the breaker.
+                _rcpts = [a.strip().lower()
+                          for a in [to] + str(bcc or '').split(',') if a.strip()]
+                _proven = _proven_deliverable()
+                _unproven = sorted(a for a in _rcpts if a not in _proven)
+                if _unproven:
+                    # skip:True is the machine-readable "advance, don't halt" signal — the worker
+                    # must treat a held recipient like the 24h-dedupe skip, not like an outage.
+                    # An old worker doc ignores it and halts (safe); a new worker against an old
+                    # server sees no skip field and also halts (safe).
+                    return self._json(403, {
+                        'ok': False, 'blocked': 'bounce_rate', 'skip': True,
+                        'proven_pool': len(_proven),
+                        'unproven': _unproven[:8],
+                        'err': (f"BLOCKED: {_hb['dead']} of {_hb['mailed']} addresses mailed in the last "
+                                f"{_hb['window']} days are confirmed dead ({_hb['rate']*100:.0f}%). The safe "
+                                f"ceiling is {BOUNCE_CEILING*100:.0f}% and providers start blocking near 5%. "
+                                f"Verified-only mode is ON: follow-ups to addresses that already accepted "
+                                f"mail still send; this one has {len(_unproven)} recipient(s) with no "
+                                f"acceptance evidence ({', '.join(_unproven[:3])}...). They unblock when "
+                                f"the rate clears or after API verification: "
+                                f"python bounces.py && python verify_emails.py && rebuild."),
+                        'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
+                meta['lane'] = 'proven'
 
         # ---- 24h per-recipient dedupe (unless test flag set) ----
         if not meta.get('test') and _recently_emailed_to(to, hours=24):

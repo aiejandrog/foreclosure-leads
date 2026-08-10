@@ -10591,13 +10591,22 @@ function _renderCapBadge(){
       }
       bb.textContent = '⛔ DELIVERABILITY: trailing hard-bounce rate '
         + Math.round(_liveCap.bounce.rate*1000)/10 + '% (provider tolerance ~2%'
-        + (_liveCap.bounce_blocked ? ' — BULK SENDING BLOCKED BY THE SERVER' : '')
+        + (_liveCap.bounce_blocked ? (' — VERIFIED-ONLY MODE: only previously-accepted addresses still send' + (_liveCap.proven_pool!=null ? ' ('+_liveCap.proven_pool+' sendable)' : '')) : '')
         + '). Run bounces.py + verify_emails.py, then rebuild.';
       bb.style.display = 'block';
     } else if(bb){ bb.style.display = 'none'; }
   } catch(e){}
   var el = document.getElementById('mcapbadge'); if(!el) return;
-  if(!_liveCap || (Date.now()-_liveCapAt) >= 120000){ el.className = 'mcapbadge'; return; }
+  if(!_liveCap || (Date.now()-_liveCapAt) >= 120000){
+    // bridge down/stale: show this board's own ledger dimmed instead of blanking —
+    // manual-confirmed sends were invisible here until the next 45s poll.
+    var capL = _capState();
+    el.className = 'mcapbadge on' + (capL.blocked ? ' blocked' : (capL.warn ? ' warn' : ''));
+    el.style.opacity = '.6'; el.title = 'bridge offline — local count';
+    el.textContent = capL.n + ' / ' + capL.max;
+    return;
+  }
+  el.style.opacity = ''; el.title = '';
   var cap = _capState();
   el.className = 'mcapbadge on' + (cap.blocked ? ' blocked' : (cap.warn ? ' warn' : ''));
   el.textContent = cap.n + ' / ' + cap.max;
@@ -10935,7 +10944,8 @@ function genMorningWorker(lane, autostart){
     pq.forEach(function(x){
       var r = byCase[x.c];
       if(!r || !_workerEligible(r)) return;                 // dead/optout/passed leads drop off
-      persistq.push({c:x.c, name:x.nm||x.c, phone:x.ph||((r.phones||[])[0]||'')});
+      var _psms=''; try{ var _tp=textablePhones(r); if(_tp.length) _psms=_smsHref(_tp[0], smsMsg(r,'both',_defaultTextTone(r))); }catch(e){}
+      persistq.push({c:x.c, name:x.nm||x.c, phone:x.ph||((r.phones||[])[0]||''), addr:(r.addr||''), sms:_psms});
     });
   } catch(e){}
   // Deliverability state bakes in at open. The server refuses bulk sends past the ceiling anyway
@@ -10944,13 +10954,14 @@ function genMorningWorker(lane, autostart){
   try {
     if(_liveCap && _liveCap.bounce && (Date.now()-_liveCapAt) < 120000)
       bounceBaked = {rate:+(_liveCap.bounce.rate||0), blocked:!!_liveCap.bounce_blocked,
-                     ceiling:+(_liveCap.bounce_ceiling||0.10)};
+                     ceiling:+(_liveCap.bounce_ceiling||0.10),
+                     pool:(_liveCap.proven_pool!=null? +_liveCap.proven_pool : null)};
   } catch(e){}
   var queue = queues[lane] || [];
   var qData = JSON.stringify(queues);
   // Seed the worker tab with today's activity so the log is populated the moment it opens,
   // instead of looking empty until the first click.
-  var seedLog = JSON.stringify(_wlogToday().slice(-40));
+  var seedLog = JSON.stringify(_wlogToday());
   var seedStats = JSON.stringify(_wlogStats());
   var body = ''
     + '<style>'
@@ -11109,11 +11120,11 @@ function genMorningWorker(lane, autostart){
     +     '<div id="mwtextqlist" style="max-height:280px;overflow-y:auto"></div>'
     +   '</div>'
     +   '<div class="mwcallq" id="mwcallq" style="display:none;background:#fff;border-radius:10px;margin-top:16px;box-shadow:0 2px 10px rgba(11,23,48,.06);overflow:hidden">'
-    +     '<div class="mwloghead" style="background:#0B2A17;color:#CFF3DC"><span>&#9742; Call these &mdash; phone only, no email</span><span class="mwlogstats" id="mwcallqn"></span></div>'
+    +     '<div class="mwloghead" style="background:#0B2A17;color:#CFF3DC"><span>&#9742; Call these &mdash; phone only, no email</span><span style="display:flex;gap:8px;align-items:center"><button id="mwcopycallq" style="background:transparent;border:1px solid rgba(255,255,255,.5);color:inherit;border-radius:6px;padding:3px 9px;font:700 11px Arial;cursor:pointer">&#10697; Copy list</button><span class="mwlogstats" id="mwcallqn"></span></span></div>'
     +     '<div id="mwcallqlist" style="max-height:320px;overflow-y:auto"></div>'
     +   '</div>'
     +   '<div class="mwlogwrap">'
-    +     '<div class="mwloghead"><span>&#128220; Activity log — live</span><span class="mwlogstats" id="mwlogstats"></span></div>'
+    +     '<div class="mwloghead"><span>&#128220; Activity log — live</span><span style="display:flex;gap:8px;align-items:center"><button id="mwcopylog" style="background:transparent;border:1px solid rgba(255,255,255,.5);color:inherit;border-radius:6px;padding:3px 9px;font:700 11px Arial;cursor:pointer">&#10697; Copy day</button><span class="mwlogstats" id="mwlogstats"></span></span></div>'
     +     '<div class="mwlog" id="mwlog"></div>'
     +   '</div>'
     + '</div>'
@@ -11122,7 +11133,7 @@ function genMorningWorker(lane, autostart){
     +   'var PERSISTQ=' + JSON.stringify(persistq) + ', BOUNCE=' + JSON.stringify(bounceBaked) + ';'
     +   'try{ fetch("http://127.0.0.1:8823/health").then(function(r){return r.json();}).then(function(j){'
     +   'if(j && j.bounce && (j.bounce_blocked || (+j.bounce.rate)>=0.05)){'
-    +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10)};'
+    +   'BOUNCE={blocked:!!j.bounce_blocked, rate:+(j.bounce.rate||0), ceiling:+(j.bounce_ceiling||0.10), pool:(j.proven_pool!=null? +j.proven_pool : null)};'
     +   'if(BOUNCE.blocked) render();'
     +   '}}).catch(function(){});}catch(e){}'
     +   'var lane=' + JSON.stringify(lane) + ', Q=LANES[lane]||[];'
@@ -11152,7 +11163,7 @@ function genMorningWorker(lane, autostart){
     +   'var ICON={callq:"&#9742;",callout:"&#128222;",call:"&#128222;",sent:"&#9989;",email:"&#128231;",text:"&#128241;",textopen:"&#128241;",wp:"&#128269;",done:"&#10003;",skip:"&#9197;",wait:"&#9203;",fail:"&#10060;",heal:"&#128295;",open:"&#9654;",info:"&#8505;"};'
     +   'function addLog(kind, who, text, cls){'
     +     'LOG.push({ts:now(), a:kind, who:who||"", detail:text||"", ok:cls!=="warn"});'
-    +     'if(LOG.length>200) LOG=LOG.slice(-200);'
+    +     'if(LOG.length>1000) LOG=LOG.slice(-1000);'
     +     'if(STATS[kind]!=null) STATS[kind]++;'
     +     'renderLog();'
     +   '}'
@@ -11251,10 +11262,33 @@ function genMorningWorker(lane, autostart){
     // A null opener was counted as SUCCESS here (opener&&post evaluates to undefined, no throw),
     // which is how a dead bridge produced healthy-looking logs. No opener = the board cannot
     // hear us = false, so the caller's heal/fail path actually fires.
-    +     'if(!window.opener) return false;'
-    +     'try{window.opener.postMessage({workerAct:{c:(extra&&extra.qc)||(Q[i]&&Q[i].c)||"",k:kind,extra:extra||null}},"*");return true;}'
-    +     'catch(e){return false;}'
+    +   'var m={workerAct:{c:(extra&&extra.qc)||(Q[i]&&Q[i].c)||"",k:kind,extra:extra||null}};'
+    +   'if(!window.opener || window.opener.closed){ _markBuf(m); return false; }'
+    +   'try{window.opener.postMessage(m,"*");return true;}'
+    +   'catch(e){ _markBuf(m); return false; }'
     +   '}'
+    +   'var MARKQ=[];'
+    +   'function _markBuf(m){'
+    +     'if(["sent","callout","text","callq","done","skip"].indexOf(m.workerAct.k)<0) return;'
+    +     'MARKQ.push(m);'
+    +     'try{fetch("http://127.0.0.1:8823/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m.workerAct)}).catch(function(){});}catch(e){}'
+    +     '_markBanner();'
+    +   '}'
+    +   'function _markBanner(){'
+    +     'var b=document.getElementById("mwmarkban");'
+    +     'if(!b){ b=document.createElement("div"); b.id="mwmarkban"; b.style.cssText="position:sticky;top:0;z-index:100;background:#8f2b23;color:#fff;font:700 12.5px/1.4 Arial;padding:8px 12px;border-radius:8px;margin:0 0 10px"; if(main&&main.parentNode) main.parentNode.insertBefore(b, main.parentNode.firstChild); }'
+    +     'b.innerHTML="&#9888; BOARD TAB IS CLOSED — "+MARKQ.length+" mark(s) could not reach the board (backed up to the bridge). Reopen the board and keep it open; buffered marks flush automatically.";'
+    +   '}'
+    +   'setInterval(function(){'
+    +     'if(!MARKQ.length) return;'
+    +     'if(window.opener && !window.opener.closed){'
+    +       'var q=MARKQ.splice(0,MARKQ.length), fail=[];'
+    +       'q.forEach(function(m){ try{window.opener.postMessage(m,"*");}catch(e){ fail.push(m); } });'
+    +       'fail.forEach(function(m){ MARKQ.push(m); });'
+    +       'var b=document.getElementById("mwmarkban");'
+    +       'if(b && !MARKQ.length){ b.remove(); addLog("heal","board","board tab is back — buffered marks delivered"); }'
+    +     '}'
+    +   '},5000);'
     // AUTO-RUN CHANNELS. email is the only channel the machine can legally auto-send. A phone-only
     // lead is NOT auto-texted (no browser sends SMS; auto-texting cold leads is an FTSA violation) —
     // it becomes a "callq" DEFERRAL: parked in the Call list for a human to dial/one-tap-text. wp is
@@ -11284,16 +11318,19 @@ function genMorningWorker(lane, autostart){
     +   'function _telHref(p){return "tel:+1"+String(p||"").replace(/\\D/g,"");}'
     +   'function callQAdd(r){'
     +     'if(CALLQ.some(function(x){return x.c===r.c;})) return;'
-    +     'CALLQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||""});'
+    +     'CALLQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", addr:r.addr||""});'
     +     'renderCallQ();'
     +   '}'
     // Yesterday's undialed queue survives into today. PERSISTQ is baked by the board from the
     // durable fcCallQueue ledger — before this, 192 queued calls evaporated with the tab and the
     // week produced exactly one dial. Seeded on open so the list is never empty-by-amnesia.
-    +   'PERSISTQ.forEach(function(x){ if(!CALLQ.some(function(y){return y.c===x.c;})) CALLQ.push(x); });'
+    +   'PERSISTQ.forEach(function(x){'
+    +     'if(x.sms){ if(!TEXTQ.some(function(y){return y.c===x.c;})) TEXTQ.push({c:x.c, name:x.name, phone:x.phone, addr:x.addr||"", sms:x.sms, first:x.name, owner:x.name}); }'
+    +     'else if(!CALLQ.some(function(y){return y.c===x.c;})) CALLQ.push(x);'
+    +   '});'
     +   'function textQAdd(r){'
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
-    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner});'
+    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner, addr:r.addr||""});'
     +     'renderTextQ();'
     +   '}'
     +   'function _qrow(x, btns){'
@@ -11331,7 +11368,7 @@ function genMorningWorker(lane, autostart){
        text per lead here, and _workerEligible already required 24h+ since the last touch. */
     +   'var TBI=0, TBSENT=0, TBSKIP=0, tbOn=false;'
     +   'function textBatchStart(){'
-    +     'if(!TEXTQ.length) return;'
+    +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
     +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; textBatchStep();'
     +   '}'
@@ -11351,8 +11388,8 @@ function genMorningWorker(lane, autostart){
     +     '+"</div>";'
     +     'var ob=document.getElementById("tb-open"), sb=document.getElementById("tb-skip");'
     +     'if(ob) ob.onclick=function(){'
-    +       'openHere(x.sms);'
-    +       'post("textopen");'
+    +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +       'post("textopen",{qc:x.c});'
     +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
     +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
     +     '};'
@@ -11430,6 +11467,11 @@ function genMorningWorker(lane, autostart){
     +           'bridgeUp(true);'
     +           'addLog("fail", r.first||r.owner, "SMTP auth failed — fix gmail.key, then restart send_server.py", "warn");'
     +           'pause();'
+    +   '} else if(x.status===403 && x.j.blocked && x.j.skip){'
+    +     'bridgeUp(true);'
+    +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10, pool:(x.j.proven_pool!=null? +x.j.proven_pool : (BOUNCE&&BOUNCE.pool!=null?BOUNCE.pool:null))};'
+    +     'addLog("skip", r.first||r.owner, "held — no acceptance evidence for this address yet (verified-only mode). Stays queued; unblocks when the rate clears.", "warn");'
+    +     'post("skip"); setTimeout(function(){ advance(); }, 700);'
     +         '} else if(x.status===403 && x.j.blocked){'
     +     'bridgeUp(true); auto=false;'
     +     'BOUNCE={blocked:true, rate:(x.j.bounce&&x.j.bounce.rate)||0, ceiling:(x.j.bounce_ceiling)||0.10};'
@@ -11481,7 +11523,7 @@ function genMorningWorker(lane, autostart){
     +       'clearTimeout(window.__cfWatch);'
     +       'window.__cfWatch=setTimeout(function(){'
     +         'addLog("skip", r.first||r.owner, "⏰ unattended — nobody confirmed in 45s. NOT counted as sent; lead stays queued for tomorrow.", "warn");'
-    +         'try{ post("skip"); }catch(e){}'
+    +         'try{ post("skip",{qc:r.c}); }catch(e){}'
     +         'advance();'
     +       '}, 45000);'
     +     '}'
@@ -11495,10 +11537,10 @@ function genMorningWorker(lane, autostart){
     +     'var yes=document.getElementById("mwsentyes");'
     +     'if(yes) yes.onclick=function(){ clearTimeout(window.__cfWatch);'
     +       'if(isTxt){'
-    +         'post("text", {via:"manual-confirmed"});'
+    +         'post("text", {via:"manual-confirmed", qc:r.c});'
     +         'addLog("text", r.first||r.owner, "✓ confirmed sent by hand via "+app);'
     +       '} else {'
-    +         'post("sent", {mid:"", via:"manual-confirmed", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
+    +         'post("sent", {mid:"", via:"manual-confirmed", qc:r.c, portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
     +         'addLog("sent", r.first||r.owner, "✓ confirmed sent by hand via Gmail");'
     +       '}'
     // inside the text batch the "next lead" is the next BATCH entry, not the main queue.
@@ -11712,10 +11754,9 @@ function genMorningWorker(lane, autostart){
     +   'function render(){'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
     +     'if(BOUNCE && BOUNCE.blocked && !document.getElementById("mwbounceban")){'
-    +     'auto=false; autoAll=false;'
     +     'var bb=document.createElement("div"); bb.id="mwbounceban";'
-    +     'bb.style.cssText="position:sticky;top:0;z-index:99;background:#8f2b23;color:#fff;font:700 13px/1.45 Arial;padding:9px 14px;border-radius:8px;margin:0 0 12px";'
-    +     'bb.innerHTML="&#9940; EMAIL BLOCKED — trailing bounce rate "+(Math.round((BOUNCE.rate||0)*1000)/10)+"% (ceiling "+(Math.round((BOUNCE.ceiling||0.1)*100))+"%). Auto-run email is OFF; the server refuses bulk sends. <b>Calls and replies still work — that is the day now.</b> Fix: bounces.py + verify_emails.py, rebuild.";'
+    +     'bb.style.cssText="position:sticky;top:0;z-index:99;background:#8a6d1c;color:#fff;font:700 13px/1.45 Arial;padding:9px 14px;border-radius:8px;margin:0 0 12px";'
+    +   'bb.innerHTML="&#9993; VERIFIED-ONLY MODE — trailing bounce rate "+(Math.round((BOUNCE.rate||0)*1000)/10)+"% is over the "+(Math.round((BOUNCE.ceiling||0.1)*100))+"% ceiling. Emails to addresses that already accepted mail STILL SEND"+(BOUNCE.pool!=null?" ("+BOUNCE.pool+" addresses sendable)":"")+"; new/unverified addresses are auto-held and stay queued. <b>Calls, texts and replies are unaffected.</b>";'
     +     'main.parentNode.insertBefore(bb, main);'
     +     '}'
     // The cap is checked at RENDER time, not just at open time, so a run that crosses the ceiling
@@ -11800,7 +11841,32 @@ function genMorningWorker(lane, autostart){
     // they need their own delegate. The first cut shipped the panel Text link as a bare <a href=sms:>
     // which bypassed the hours gate, the textopen log and confirmSend entirely — the one text path
     // that dodged the whole 2026-08-02 honesty rework. Everything routes through the gate now.
+    +   'function _wcopyFb(txt){ var ta=document.createElement("textarea"); ta.value=txt; ta.style.cssText="position:fixed;left:-9999px;top:0"; document.body.appendChild(ta); ta.select(); try{document.execCommand("copy");}catch(e){} document.body.removeChild(ta); }'
+    +   'function _wcopy(txt, btn){'
+    +     'var ok=function(){ if(btn){ var o=btn.innerHTML; btn.innerHTML="&#10003; Copied"; setTimeout(function(){btn.innerHTML=o;},1100); } };'
+    +     'var fb=function(){ _wcopyFb(txt); ok(); };'
+    +     'try{ if(navigator.clipboard&&navigator.clipboard.writeText){ navigator.clipboard.writeText(txt).then(ok, fb); return; } }catch(e){}'
+    +     'fb();'
+    +   '}'
+    +   'function _copyDay(btn){'
+    +     'var head="MORNING WORKER — "+new Date().toISOString().slice(0,10)+"\\n"+String((statEl&&statEl.textContent)||"")+"\\n------------------------------------------------------------";'
+    +     'var body=LOG.map(function(e){ return "["+(e.ts||"")+"] "+String(e.a||"").toUpperCase()+"  "+(e.who||e.addr||"")+(e.detail?" — "+e.detail:"")+((e.ok===false)?"  (!)":""); }).join("\\n");'
+    +     '_wcopy(head+"\\n"+body, btn);'
+    +     'addLog("info","copy","activity log copied — "+LOG.length+" line(s)");'
+    +   '}'
+    +   'function _copyCallList(btn){'
+    +     'var rows=[];'
+    +     'TEXTQ.forEach(function(x){ rows.push(x.name+"  \u00b7  "+(x.phone||"no number")+"  \u00b7  "+(x.addr||"")+"  \u00b7  TEXTABLE  \u00b7  "+x.c); });'
+    +     'CALLQ.forEach(function(x){ if(TEXTQ.some(function(y){return y.c===x.c;})) return; rows.push(x.name+"  \u00b7  "+(x.phone||"no number")+"  \u00b7  "+(x.addr||"")+"  \u00b7  call only  \u00b7  "+x.c); });'
+    +     'if(!rows.length){ addLog("fail","copy","call list is empty — nothing to copy","warn"); return; }'
+    +     '_wcopy("CALL LIST — "+new Date().toISOString().slice(0,10)+" ("+rows.length+")\\n"+rows.join("\\n"), btn);'
+    +     'addLog("info","copy","call list copied — "+rows.length+" lead(s)");'
+    +   '}'
     +   'document.addEventListener("click", function(e){'
+    +   'var cpl=e.target.closest&&e.target.closest("#mwcopylog");'
+    +   'if(cpl){ e.preventDefault(); return _copyDay(cpl); }'
+    +   'var cpq=e.target.closest&&e.target.closest("#mwcopycallq");'
+    +   'if(cpq){ e.preventDefault(); return _copyCallList(cpq); }'
     +     'var go=e.target.closest&&e.target.closest("#mwtextqgo");'
     +     'if(go){ e.preventDefault(); return textBatchStart(); }'
     +     'var tb=e.target.closest&&e.target.closest("[data-qtext]");'
@@ -11811,7 +11877,8 @@ function genMorningWorker(lane, autostart){
     +       'if(!x) return;'
     +       'var g=_wftsa(); if(!g.safe){ addLog("fail", x.name, "⏰ "+g.label+" — do NOT text now (FTSA). Call instead.", "warn"); return; }'
     +       'if(sentToday()>=CAP.max){ addLog("fail", x.name, "⛔ daily cap reached — keep calling instead.", "warn"); return; }'
-    +       'openHere(x.sms); post("textopen");'
+    +   'if(!openHere(x.sms)){ addLog("fail", x.name, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +   'post("textopen",{qc:x.c});'
     +       'addLog("textopen", x.name, "Messages opened pre-filled — press send there, then confirm");'
     +       'confirmSend({c:x.c, first:x.first, owner:x.owner, phones:[x.phone]}, "text", "text");'
     +       'return;'
@@ -11873,8 +11940,8 @@ function genMorningWorker(lane, autostart){
     // FTSA gate: solicitation texts are legal only 8 AM-8 PM ET. Re-checked at click time so it is
     // never stale. Calling is not hour-restricted the same way, so steer to the phone outside hours.
     +         'var _tf=_wftsa(); if(!_tf.safe){ addLog("fail", r.first||r.owner, "⏰ "+_tf.label+" — do NOT text now (FTSA). Call instead, or text after 8 AM ET.", "warn"); return; }'
-    +         'openHere(r.smsHref);'
-    +         'post("textopen");'
+    +   'if(!openHere(r.smsHref)){ addLog("fail", r.first||r.owner, "Messages window blocked — check the popup blocker icon, then tap again", "warn"); return; }'
+    +         'post("textopen",{qc:r.c});'
     +         'addLog("textopen", r.first||r.owner, "Messages opened with the text pre-filled — hit send there, then confirm below");'
     +         'confirmSend(r, "text");'
     +         'return;'
@@ -11884,7 +11951,7 @@ function genMorningWorker(lane, autostart){
     +     'if(fn==="skip"){ post("skip"); addLog("skip", r.first||r.owner, "skipped"); return advance(); }'
     +     'if(fn==="done"){ post("done"); addLog("done", r.first||r.owner, "marked worked"); return advance(); }'
     +   '});'
-    +   'renderBridge(); probeBridge(); renderLog(); render();'
+    +   'renderBridge(); probeBridge(); renderLog(); render(); renderCallQ(); renderTextQ();'
     /* ---- UNATTENDED START (Windows Task Scheduler opens this at 8:00 AM) ---------------------
        The 8am task opened the worker and then nothing happened until a human clicked "Start
        auto-run" — so on any morning Alejandro was driving, the queue simply sat there.
@@ -12125,7 +12192,7 @@ window.addEventListener('message', function(ev){
       var _cq = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
       if(!_cq.some(function(x){ return x.c===r.case; })){
         _cq.push({c:r.case, nm:(r.oname||(r.owners||'').split(';')[0]||r.case),
-                  ph:((r.phones||[])[0]||''), ts:Date.now()});
+                  ph:((r.phones||[])[0]||''), addr:(r.addr||''), ts:Date.now()});
         if(_cq.length>400) _cq = _cq.slice(-400);
         localStorage.setItem('fcCallQueue', JSON.stringify(_cq));
       }
@@ -12142,6 +12209,13 @@ window.addEventListener('message', function(ev){
     if(d.k==='done' && !n.status) n.status = 'Called - no answer';   // conservative default; user can flip later
     if(typeof save==='function') save();
     try{ render(); }catch(e){}
+  }
+  // Repaint on receipt (2026-08-10): 'sent'/'text'/'callq'/'textopen' wrote state without
+  // rendering — funnel strips and the cap meter showed pre-session numbers until an
+  // unrelated render. Throttled: a 40-lead auto-run must not trigger 40 full renders.
+  if(d.k==='sent'||d.k==='text'||d.k==='callq'||d.k==='textopen'){
+    clearTimeout(window.__waRepaint);
+    window.__waRepaint=setTimeout(function(){ try{render();}catch(e){} try{_renderCapBadge();}catch(e){} },300);
   }
 });
 
@@ -13154,6 +13228,16 @@ function genPortfolioEmail(r, siblings, quiet){
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
 function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); if(typeof notesBridgePushSoon==='function') notesBridgePushSoon(); }
+// TWO-TAB CLOBBER FIX (2026-08-10): `notes` is an in-memory snapshot; a second board tab's
+// save() wholesale-reverted every touch this tab wrote (that is how Acosta's Appointment
+// vanished on 08-09). The storage event fires in every OTHER same-origin tab — merge the
+// incoming state through the same safety rules as team sync (DNC one-way, newest-touch
+// wins). mergeNotes only save()s when something actually changed, so tabs converge instead
+// of ping-ponging.
+window.addEventListener('storage', function(ev){
+  if(!ev || ev.key !== LS || !ev.newValue) return;
+  try { mergeNotes(JSON.parse(ev.newValue) || {}); } catch(e){}
+});
 
 // ================= CROSS-DEVICE SYNC (serverless, file-as-transport) =================
 // The whole app is a static file with per-device localStorage, so a teammate's opt-outs, calls and
