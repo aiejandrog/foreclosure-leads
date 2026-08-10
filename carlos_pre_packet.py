@@ -169,6 +169,7 @@ h1{font-size:22px;margin:0 0 2px}
 .sub{color:#4b5563;font-size:11px;margin-bottom:12px}
 .script{background:#0B1730;color:#fff;border-radius:10px;padding:14px 16px;margin-bottom:14px;page-break-after:always}
 .script h2{color:#F4E5A7;font-size:14px;margin:0 0 8px}
+.must{background:#7f1d1d;border-radius:8px;padding:10px 13px;margin:0 0 10px;font-size:12.5px;line-height:1.5}
 .say{background:rgba(255,255,255,.09);border-left:3px solid #F4E5A7;padding:8px 11px;margin:7px 0;font-size:12px}
 .script b{color:#F4E5A7}
 .script ul{margin:6px 0 0 16px}.script li{margin:4px 0;font-size:11.5px}
@@ -184,6 +185,7 @@ td{padding:6px 8px;border-top:1px solid #eef0f5;vertical-align:top}
 .ph{font:11.5px monospace;color:#065f46;white-space:nowrap}
 .meta{font-size:10px;color:#6b7280}
 .hs{background:#dcfce7;color:#065f46;font:700 9px Arial;padding:1px 5px;border-radius:7px}
+.fl{background:#fee2e2;color:#991b1b;font:700 9px Arial;padding:1px 5px;border-radius:7px}
 .cd{background:#fef3c7;color:#92400e;font:700 9px Arial;padding:1px 5px;border-radius:7px}
 .note{border-bottom:1px dotted #9ca3af;height:13px;margin-top:4px}
 .toc td{font-size:11.5px}
@@ -191,39 +193,91 @@ td{padding:6px 8px;border-top:1px solid #eef0f5;vertical-align:top}
 
 SCRIPT = """
 <div class="script">
+<div class="must"><b>SAY THIS FIRST, WORD FOR WORD, AT EVERY DOOR:</b><br>
+&ldquo;Miami Solutions Group is not associated with the government, and we are not approved by the
+government or your lender.&rdquo;<br>
+<span style="font-size:10.5px;opacity:.9">This sentence is not optional and it is not small talk. It
+is the line that keeps this legal. Say it before anything else.</span></div>
+
 <h2>&#128172; THE SCRIPT &mdash; say it like this, every door</h2>
 <div class="say"><b>KNOCK:</b> "Good morning, are you [owner name]? My name is Carlos, I'm with Miami
-Solutions Group. I'm not selling you anything and I'm not from the bank."</div>
-<div class="say"><b>WHY YOU'RE THERE:</b> "The bank filed a foreclosure case on this house in the
-county records. There's no auction date yet, and that's actually good news, that's why I came now
-instead of later."</div>
+Solutions Group. We are not associated with the government and we are not approved by the government
+or your lender. I'm not selling you anything."</div>
+<div class="say"><b>WHY YOU'RE THERE (read the plaintiff name OFF THE CARD, don't say "the bank"):</b>
+"There's a foreclosure case filed on this address by [name printed on the card], as of the date on my
+sheet. I came now because of where the case is, not because anything is due today."</div>
 <div class="say"><b>THE ONE QUESTION:</b> "What happened with the house?" &mdash; then STOP TALKING.
 Let them answer. That answer is the whole visit.</div>
-<div class="say"><b>WHAT WE DO:</b> "There are five ways out of this: catch up what's behind, a loan
-modification, a short sale, sell it privately before it ever goes to auction, or bankruptcy. Which
-one fits depends on your numbers. Jose does this every day and it costs you nothing to talk."</div>
+<div class="say"><b>WHAT WE ACTUALLY DO (this is the whole offer &mdash; do not add to it):</b>
+"We buy houses in this situation, or we help people sell before the auction date. That's it. If you
+want to keep the house or fight the case, that's your own attorney's call, not ours &mdash; and there
+are free HUD-approved housing counselors for that, I can write the number down for you."</div>
 <div class="say"><b>CLOSE:</b> "What's the best number for Jose to call you?" &mdash; GET THE NUMBER.
-That is the win. You are not closing a deal at the door.</div>
-<h2 style="margin-top:14px">&#9888; NEVER SAY</h2>
+That is the win. You are not closing anything at the door.</div>
+<div class="say"><b>IF THEY PUSH FOR MORE:</b> "I don't want to guess and give you wrong information.
+Jose knows the details and it costs nothing to talk to him."</div>
+
+<h2 style="margin-top:14px">&#9940; NEVER SAY &mdash; these are the ones that create real liability</h2>
 <ul>
-<li><b>Never</b> "I can stop the foreclosure" or "we can save your house" &mdash; that promise is the
-one Florida law punishes (FS 501.1377 / MARS Rule).</li>
-<li><b>Never</b> ask for money. Not at the door, not ever. We charge nothing up front.</li>
+<li><b>Never</b> "I can stop the foreclosure" / "we can save your house." That promise is exactly what
+Florida law punishes (FS 501.1377) &mdash; and it is the fastest way to turn a knock into a lawsuit.</li>
+<li><b>Never</b> offer or discuss a <b>loan modification</b>, a <b>short sale</b> as our service, or
+<b>bankruptcy</b>. Negotiating those for a fee needs licenses we don't have, and telling someone to
+consider bankruptcy is legal advice from a non-lawyer. Say "that's for your attorney or a HUD
+counselor" and move on.</li>
+<li><b>Never</b> ask for money, a deposit, or a signature. We charge nothing up front, ever.</li>
 <li><b>Never</b> say we're the bank, a lawyer, the county, or a "rescue" company.</li>
-<li><b>Never</b> quote a dollar figure that isn't printed on the card. If they ask what they owe:
-"I don't want to guess, Jose will pull the exact numbers."</li>
-<li>They say <b>stop / not interested / don't come back</b> &rarr; you leave, and you text Alex so it
-gets recorded. That address never gets contacted again.</li>
-<li>Don't discuss their foreclosure with a neighbor, a tenant, or anyone who isn't the owner.</li>
+<li><b>Never</b> quote a dollar figure that isn't printed on the card.</li>
+<li><b>Never</b> say "there's no auction date." Say <i>"as of when we checked, no sale date was set."</i>
+The case can change after this book is printed.</li>
+<li>They say <b>stop / not interested / don't come back</b> &rarr; you leave, and you text Alex the
+same day. That address is done permanently.</li>
 </ul>
+
+<h2 style="margin-top:14px">&#128100; WHO ANSWERS THE DOOR</h2>
+<ul>
+<li><b>The owner on the card</b> &rarr; run the script.</li>
+<li><b>Someone else (tenant, family, roommate)</b> &rarr; do NOT mention foreclosure, a case, a bank,
+or money. Say only: "I'm looking for [name] about the property. Is there a good time or a good
+number?" Leave a card. Walk away. Saying why to the wrong person is a privacy problem.</li>
+<li><b>They say the owner died</b> &rarr; "I'm sorry, I didn't know." Do not discuss the case. Ask
+only who is handling the estate and how to reach them. Text Alex. Several cards in this book are
+marked ESTATE for exactly this reason.</li>
+<li><b>Nobody home</b> &rarr; leave the card, mark NH on the line, keep moving. Never look in windows,
+never go into a back yard.</li>
+</ul>
+
 <h2 style="margin-top:14px">&#9989; WRITE THIS DOWN AT EVERY DOOR</h2>
 <ul>
 <li>Best phone + best time to call &nbsp;|&nbsp; what happened with the house</li>
 <li>Are they still living there? Anyone else on the deed? Listed with a realtor?</li>
-<li>Nobody home &rarr; leave the card, mark NH on the line, keep moving.</li>
 </ul>
-<div style="margin-top:12px;font-size:11px;color:#F4E5A7"><b>PHONE ON THE CARD?</b> Call it on the way
+<div style="margin-top:10px;font-size:11px;color:#F4E5A7"><b>PHONE ON THE CARD?</b> Call it on the way
 &mdash; "I'm around the corner, I was going to stop by" beats a cold knock.</div>
+</div>
+
+<div class="script" style="page-break-after:always">
+<h2>&#128737; SAFETY, HOURS AND AUTHORITY &mdash; read before the first door</h2>
+<div class="must"><b>JOSE:</b> ask Alex for the cell &nbsp;&nbsp;|&nbsp;&nbsp; <b>ALEX:</b> (786) 631-1823
+&nbsp;&nbsp;|&nbsp;&nbsp; <b>Emergency: 911 first, then Alex.</b></div>
+<ul>
+<li><b>Hours:</b> 9:00 AM to 7:00 PM only. No Sundays. Never after dark.</li>
+<li><b>Carry photo ID and an MSG card.</b> If anyone asks who you are, show both, no argument.</li>
+<li><b>NO SOLICITING sign</b> &rarr; do not knock. Mark NS and move on. It is not worth the complaint.</li>
+<li><b>Never</b> open a gate, enter a yard past a closed gate, pass a dog, or knock on a door that is
+standing open. Never step inside a house, even if invited &mdash; talk on the porch.</li>
+<li><b>Hostile person:</b> "Sorry to bother you, have a good day." Turn, walk to the truck, leave. Do
+not explain, do not argue, do not go back. Mark DNC and text Alex.</li>
+<li><b>Police show up:</b> be polite, hands visible. "I'm with a private company doing door-to-door
+contact from public court records. Here's my ID and my list." If they ask you to leave, leave
+immediately. Call Alex right after.</li>
+<li><b>PERMITS:</b> several cities in this book (Homestead, Florida City, Hialeah, Hialeah Gardens,
+Miami Beach, Sunny Isles, Aventura, North Bay Village, Miami Gardens) can require a solicitor or
+canvasser permit. <b>Ask Alex before working a section in those cities.</b> A permit question at the
+door is answered with "let me check with my office" &mdash; then leave.</li>
+<li><b>Gated buildings / condos:</b> do not talk your way past a front desk or follow someone in.
+Leave a card with the desk if they take it, otherwise skip it and mark GATED.</li>
+</ul>
 </div>
 """
 
@@ -235,12 +289,14 @@ def main():
     groups.sort(key=lambda g: (-len(g), name_of(g)))
     today = datetime.date.today().isoformat()
 
+    stale = (datetime.date.today() + datetime.timedelta(days=14)).isoformat()
     doors = sum(len(g) for g in groups)
     out = ['<html><head><meta charset="utf-8"><style>%s</style></head><body>' % CSS,
            '<h1>Carlos &mdash; Pre-Foreclosure Door Book</h1>',
-           '<div class="sub">%s &middot; %d doors &middot; %d sections &middot; every case is FILED and STILL OPEN '
-           '(dismissed and closed cases are removed) &middot; no auction date on any of these, which is why '
-           'they are the best doors we have</div>' % (today, doors, len(groups)),
+           '<div class="sub"><b>Case status verified %s.</b> DO NOT USE THIS BOOK AFTER %s &mdash; ask Alex '
+           'to reprint. Cases get dismissed, reinstated and sale-dated every week, and the card in your hand '
+           'is a snapshot, not live. %d doors &middot; %d sections &middot; dismissed and closed cases were '
+           'removed at print time.</div>' % (today, stale, doors, len(groups)),
            '<table class="toc"><tr><td colspan="4"><b>THE ROUTE BOOK</b> &mdash; one section is roughly one run</td></tr>']
     for i, g in enumerate(groups, 1):
         out.append('<tr><td class="n">%d</td><td><b>%s</b></td><td>%d doors</td>'
@@ -266,12 +322,15 @@ def main():
         out.append('<table>')
         for n, r in enumerate(g, 1):
             ph = ' &middot; '.join(fmt_ph(p) for p in r['ph'][:2]) if r['ph'] else 'no number &mdash; knock'
+            # ESTATE / ABSENTEE / MULTI-UNIT come from the live-parcel verification pass. They
+            # change how the door is worked (see WHO ANSWERS THE DOOR), so they print in red.
             tags = ('<span class="hs">LIVES THERE</span> ' if r['hs'] else '') + \
-                   ('<span class="cd">CONDO</span>' if r['condo'] else '')
+                   ('<span class="cd">CONDO</span> ' if r['condo'] else '') + \
+                   ''.join('<span class="fl">%s</span> ' % H.escape(f) for f in (r.get('flags') or []))
             out.append(
                 '<tr><td class="n">%d</td><td><div class="a">%s</div>'
                 '<div class="who">%s %s</div>'
-                '<div class="meta">$%s value &middot; %s bd / %s ba &middot; %s sqft &middot; filed %s &middot; %s &middot; case %s</div>'
+                '<div class="meta">$%s value &middot; %s bd / %s ba &middot; %s sqft &middot; filed %s &middot; PLAINTIFF: %s &middot; case %s</div>'
                 '<div class="note"></div></td>'
                 '<td class="ph">%s</td></tr>'
                 % (n, H.escape(r['addr']), H.escape(r['owner'][:34]), tags,
