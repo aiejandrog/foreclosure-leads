@@ -447,6 +447,35 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(500, {'ok': False, 'err': str(e)[:120]})
         return self._json(200, {'ok': True})
 
+    def _handle_retrace(self):
+        """POST /retrace {c, ph} — the worker's bad-number button parks a case here after a
+        number proved wrong/dead. The nightly skiptrace consumes retrace_queue.json and
+        re-traces those cases even though they are cached; when a fresh number lands, the
+        next build re-queues the lead for a second message."""
+        ln = int(self.headers.get('Content-Length') or 0)
+        if ln <= 0 or ln > 10_000:
+            return self._json(400, {'ok': False, 'err': 'missing or oversized body'})
+        try:
+            d = json.loads(self.rfile.read(ln).decode('utf-8'))
+        except Exception:
+            return self._json(400, {'ok': False, 'err': 'bad json'})
+        case = str(d.get('c') or '').strip()
+        if not case:
+            return self._json(400, {'ok': False, 'err': 'no case'})
+        qp = os.path.join(HERE, 'retrace_queue.json')
+        try:
+            q = json.load(open(qp, encoding='utf-8')) if os.path.exists(qp) else []
+        except Exception:
+            q = []
+        if not any(str(x.get('c')) == case for x in q if isinstance(x, dict)):
+            q.append({'c': case, 'ph': str(d.get('ph') or ''),
+                      'd': dt.date.today().isoformat()})
+            tmp = qp + '.tmp'
+            with open(tmp, 'w', encoding='utf-8') as f:
+                json.dump(q, f, indent=1)
+            os.replace(tmp, qp)
+        return self._json(200, {'ok': True, 'queued': len(q)})
+
     def _handle_notes(self):
         """POST /notes — persist the tracker's full localStorage state to disk.
 
@@ -479,6 +508,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle_notes()
         if self.path.startswith('/mark'):
             return self._handle_mark()
+        if self.path.startswith('/retrace'):
+            return self._handle_retrace()
         if not self.path.startswith('/send'):
             return self._json(404, {'ok': False, 'err': 'unknown path'})
 

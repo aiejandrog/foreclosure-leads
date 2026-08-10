@@ -5266,12 +5266,12 @@ function _waLink(r, ph){
   const when = r.auction || 'soon';
   // BRIEF + bilingual (many owners are Spanish-dominant), with the STOP opt-out. Send-ready: fills the
   // owner's first name, the address + auction date, and the sender (defaults to Jose; override in Sender setup).
-  // Buyer posture, same voice as smsMsg — "I help owners" was the one surviving rescue-flavored
-  // line in any owner-facing channel, and FL 501.1377 is exactly about not sounding like rescue.
-  const msg = 'Hi'+(first?' '+first:'')+', '+who+co+' — I\'m a local buyer, I buy houses. I saw '+addr+' has a court auction coming up '+when
-    +'. Not here to pressure you — just making sure you know the options before that date. No cost. Worth a quick chat?'
-    +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+'. ':'')+'compro casas aquí en Miami. Vi que '+addr+' tiene una subasta el '+when
-    +'. No le vengo a presionar — solo quiero que conozca sus opciones antes de esa fecha. Sin costo. ¿Hablamos?'
+  // Same 2026-08-10 identity as smsMsg: the company, truthfully, with the "what happened"
+  // opener — and no em dashes; this is a DM and em dashes read machine-written there.
+  const msg = 'Hi'+(first?' '+first:'')+', '+who+' with Miami Solutions Group. We work with homeowners going through foreclosure, every tool under one roof. I saw '+addr+' has a court auction coming up '+when
+    +'. Not here to pressure you, I would rather hear your side. What happened with the house? No cost to talk.'
+    +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+' de Miami Solutions Group. ':'le escribe Miami Solutions Group. ')+'Trabajamos con dueños en ejecución hipotecaria, todo bajo un mismo techo. Vi que '+addr+' tiene una subasta el '+when
+    +'. No le vengo a presionar. Cuénteme, ¿qué pasó con la casa? Hablar no cuesta nada.'
     +'\n\n(Not interested / No le interesa? Reply STOP · responda STOP.)';
   return 'https://wa.me/'+_waNum(ph)+'?text='+encodeURIComponent(msg);
 }
@@ -5389,8 +5389,14 @@ function smsMsg(r, lang, tone){
      4. Buyer posture is load-bearing: not a lender, not a rescue company, nothing to sign. Never
         promise to stop a sale — that is the exact claim FS 501.1377 and the MARS Rule punish.
      5. One ask per message. */
-  const nameEN = 'Hi'+(first?' '+first:'')+', '+sN+' here, a local home buyer in Miami.';
-  const nameES = 'Hola'+(first?' '+first:'')+', le escribe '+sN+', compro casas aquí en Miami.';
+  // Identity rewrite 2026-08-10 (Alejandro's call): "local home buyer" was not true and he
+  // ordered it out. The truthful line is the company itself: MSG works foreclosure cases with
+  // every tool under one roof, and the cold ask is now the conversation starter he wanted,
+  // "what happened with the house". The rescue-claim rules are UNCHANGED: never promise to
+  // stop a sale, never a fee, STOP on every message (FS 501.1377 / MARS punish rescue claims
+  // and advance fees, not honest identity).
+  const nameEN = 'Hi'+(first?' '+first:'')+', '+sN+' here with Miami Solutions Group. We work with homeowners going through foreclosure, every tool under one roof.';
+  const nameES = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Miami Solutions Group. Trabajamos con dueños en ejecución hipotecaria, todo bajo un mismo techo.';
   const disclEN = " Not a lender, not a rescue company, nothing to sign.";
   const disclES = ' No soy prestamista ni compañía de rescate, y no hay nada que firmar.';
   const stopEN = ' Reply STOP to opt out.';
@@ -5409,11 +5415,11 @@ function smsMsg(r, lang, tone){
        + ' ¿Lo repasamos? Sin costo.'+stopES;
   } else if(tone==='followup'){
     // Mirrors the email's FINAL variant: give them a graceful exit, do not re-pitch.
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' again about '+stEN+'. No pressure and no pitch. If'
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' from Miami Solutions Group again about '+stEN+'. No pressure and no pitch. If'
        + (dt ? (' the '+dt+' date is') : ' the case is') + " already handled, ignore this and I"
        + " genuinely wish you the best with it. If it isn't, I'll walk you through what still"
        + " works with the time you have left."+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', '+sN+' otra vez por '+stES+'. Sin presión y sin discurso'
+    es = 'Hola'+(first?' '+first:'')+', '+sN+' de Miami Solutions Group otra vez por '+stES+'. Sin presión y sin discurso'
        + ' de venta. Si ya resolvió lo' + (dt ? (' del '+dt) : ' del caso') + ', ignore este mensaje'
        + ' y le deseo lo mejor. Si no, con gusto le explico qué opciones quedan con el tiempo que'
        + ' hay.'+stopES;
@@ -5436,23 +5442,22 @@ function smsMsg(r, lang, tone){
        + " The reason I'm reaching out now is that you have more options at this moment than you"
        + " will at any point after it: catching up what is past due, a loan modification, a short"
        + " sale, selling privately, or bankruptcy. Most of them need weeks to put together."
-       + " Want me to lay them out? No cost."+stopEN;
+       + " So tell me, what happened with the house? No cost to talk."+stopEN;
     es = nameES+' Los registros públicos muestran '+saleES+' sobre '+stES+'.'+disclES
        + ' Le escribo ahora porque en este momento tiene más opciones que en cualquier momento'
        + ' después: ponerse al día, una modificación del préstamo, un short sale, vender en'
        + ' privado, o bancarrota. Casi todas necesitan semanas para armarse.'
-       + ' ¿Se las explico? Sin costo.'+stopES;
+       + ' Cuénteme, ¿qué pasó con la casa? Hablar no cuesta nada.'+stopES;
   } else {
     en = nameEN+' Public records show '+saleEN+whenEN+' on '+stEN+'.'+disclEN
-       + ' Most owners are never told there are still five ways out: catching up what is past due,'
-       + ' a loan modification, a short sale, selling privately before the auction, or bankruptcy.'
-       + ' Most of them take weeks to set up, not days. Want me to walk you through which'
-       + ' ones still fit? No cost.'+stopEN;
+       + ' There are still five ways out: catching up what is past due, a loan modification,'
+       + ' a short sale, selling privately before the auction, or bankruptcy. Which one fits'
+       + ' depends on your story, so tell me, what happened with the house? No cost to talk.'+stopEN;
     es = nameES+' Los registros públicos muestran '+saleES+whenES+' sobre '+stES+'.'+disclES
-       + ' A casi nadie le dicen que todavía hay cinco salidas: ponerse al día con lo atrasado, una'
-       + ' modificación del préstamo, un short sale, vender en privado antes de la subasta, o'
-       + ' bancarrota. Las que valen la pena toman semanas, no días. ¿Le explico cuáles todavía'
-       + ' le sirven? Sin costo.'+stopES;
+       + ' Todavía hay cinco salidas: ponerse al día con lo atrasado, una modificación del'
+       + ' préstamo, un short sale, vender en privado antes de la subasta, o bancarrota. Cuál'
+       + ' le sirve depende de su historia. Cuénteme, ¿qué pasó con la casa? Hablar no cuesta'
+       + ' nada.'+stopES;
   }
   if(lang==='en') return en;
   if(lang==='es') return es;
@@ -10854,7 +10859,8 @@ function _cardMail(r){
 // of these get serialized into the document, so anything not on screen stays out.
 function _workerCard(r){
   var f = _docFields(r); var days = _saleDays(r); var chip = _urgencyChip(days);
-  var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]); }).slice(0,3);
+  var _badph = ((notes[r.case]||{}).badph||[]).map(function(b){ return String(b).replace(/\D/g,''); });
+  var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]) && _badph.indexOf(String(p).replace(/\D/g,''))<0; }).slice(0,3);
   // Reply state rides the card. If skiptrace never found a number but the owner TYPED one into
   // their reply, that number becomes the card's phone — it is the freshest, most consented
   // number the system will ever hold for this person.
@@ -10945,7 +10951,7 @@ function genMorningWorker(lane, autostart){
       var r = byCase[x.c];
       if(!r || !_workerEligible(r)) return;                 // dead/optout/passed leads drop off
       var _psms=''; try{ var _tp=textablePhones(r); if(_tp.length) _psms=_smsHref(_tp[0], smsMsg(r,'both',_defaultTextTone(r))); }catch(e){}
-      persistq.push({c:x.c, name:x.nm||x.c, phone:x.ph||((r.phones||[])[0]||''), addr:(r.addr||''), sms:_psms});
+      persistq.push({c:x.c, name:x.nm||x.c, phone:x.ph||((r.phones||[])[0]||''), addr:(r.addr||''), sms:_psms, judg:(r.judg||0), wp:(r.peopleaddr||r.people||'')});
     });
   } catch(e){}
   // Deliverability state bakes in at open. The server refuses bulk sends past the ceiling anyway
@@ -11318,26 +11324,33 @@ function genMorningWorker(lane, autostart){
     +   'function _telHref(p){return "tel:+1"+String(p||"").replace(/\\D/g,"");}'
     +   'function callQAdd(r){'
     +     'if(CALLQ.some(function(x){return x.c===r.c;})) return;'
-    +     'CALLQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", addr:r.addr||""});'
+    +     'CALLQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
     +     'renderCallQ();'
     +   '}'
     // Yesterday's undialed queue survives into today. PERSISTQ is baked by the board from the
     // durable fcCallQueue ledger — before this, 192 queued calls evaporated with the tab and the
     // week produced exactly one dial. Seeded on open so the list is never empty-by-amnesia.
     +   'PERSISTQ.forEach(function(x){'
-    +     'if(x.sms){ if(!TEXTQ.some(function(y){return y.c===x.c;})) TEXTQ.push({c:x.c, name:x.name, phone:x.phone, addr:x.addr||"", sms:x.sms, first:x.name, owner:x.name}); }'
+    +     'if(x.sms){ if(!TEXTQ.some(function(y){return y.c===x.c;})) TEXTQ.push({c:x.c, name:x.name, phone:x.phone, addr:x.addr||"", sms:x.sms, first:x.name, owner:x.name, judg:x.judg||0, wp:x.wp||""}); }'
     +     'else if(!CALLQ.some(function(y){return y.c===x.c;})) CALLQ.push(x);'
     +   '});'
     +   'function textQAdd(r){'
     +     'if(TEXTQ.some(function(x){return x.c===r.c;})) return;'
-    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner, addr:r.addr||""});'
+    +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
     +     'renderTextQ();'
     +   '}'
     +   'function _qrow(x, btns){'
+    +     'var meta = (x.judg? "$"+Math.round(+x.judg).toLocaleString() : "");'
     +     'return "<div style=\'display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid #eef0f5\'>"'
-    +       '+"<div style=\'flex:1;min-width:0\'><div style=\'font-weight:700;color:#0e1b33\'>"+_esc2(x.name)+"</div>"'
-    +         '+"<div style=\'font:12px/1.3 monospace;color:#5b6472\'>"+_esc2(x.phone||"no number — Lookup")+"</div></div>"'
-    +       '+btns+"</div>";'
+    +       '+"<div style=\'flex:1;min-width:0\'>"'
+    +         '+"<div style=\'font-weight:700;color:#0e1b33\'>"+_esc2(x.name)+(meta?" <span style=\'font:700 10.5px Arial;color:#8a6d1f;background:#fbf3dc;border-radius:8px;padding:1px 7px;vertical-align:1px\'>"+_esc2(meta)+" judgment</span>":"")+"</div>"'
+    +         '+"<div style=\'font:12px/1.3 monospace;color:#5b6472\'>"+_esc2(x.phone||"no number, use Lookup")+"</div>"'
+    +         '+(x.addr?"<div style=\'font:11.5px/1.3 Arial;color:#6b7280\'>"+_esc2(x.addr)+"</div>":"")'
+    +       '+"</div>"'
+    +       '+(x.wp?"<a href=\'"+_esc2(x.wp)+"\' target=\'_blank\' style=\'background:#f3eefc;color:#5b2d8f;border:1px solid #e2d6f5;border-radius:7px;padding:7px 10px;text-decoration:none;font-weight:700;font-size:12px\'>&#128269; WP</a>":"")'
+    +       '+btns'
+    +       '+(x.phone?"<button data-qbad=\'"+_esc2(x.c)+"|"+_esc2(x.phone)+"\' title=\'Wrong or dead number: pulls it off this lead and queues a fresh skip-trace. When a new number lands, the lead comes back for a second message.\' style=\'background:#fdecea;color:#8a1c1c;border:1px solid #f2c6c0;border-radius:7px;padding:7px 9px;font-weight:700;font-size:12px;cursor:pointer\'>&#10007;</button>":"")'
+    +     '+"</div>";'
     +   '}'
     +   'function renderCallQ(){'
     +     'var wrap=document.getElementById("mwcallq"), list=document.getElementById("mwcallqlist"), n=document.getElementById("mwcallqn");'
@@ -11856,8 +11869,8 @@ function genMorningWorker(lane, autostart){
     +   '}'
     +   'function _copyCallList(btn){'
     +     'var rows=[];'
-    +     'TEXTQ.forEach(function(x){ rows.push(x.name+"  \u00b7  "+(x.phone||"no number")+"  \u00b7  "+(x.addr||"")+"  \u00b7  TEXTABLE  \u00b7  "+x.c); });'
-    +     'CALLQ.forEach(function(x){ if(TEXTQ.some(function(y){return y.c===x.c;})) return; rows.push(x.name+"  \u00b7  "+(x.phone||"no number")+"  \u00b7  "+(x.addr||"")+"  \u00b7  call only  \u00b7  "+x.c); });'
+    +     'TEXTQ.forEach(function(x){ rows.push(x.name+"  \u00b7  "+(x.phone||"no number")+"  \u00b7  "+(x.addr||"")+(x.judg?"  \u00b7  $"+Math.round(+x.judg).toLocaleString()+" judgment":"")+"  \u00b7  TEXTABLE  \u00b7  "+x.c+(x.wp?"  \u00b7  "+x.wp:"")); });'
+    +     'CALLQ.forEach(function(x){ if(TEXTQ.some(function(y){return y.c===x.c;})) return; rows.push(x.name+"  \u00b7  "+(x.phone||"no number")+"  \u00b7  "+(x.addr||"")+(x.judg?"  \u00b7  $"+Math.round(+x.judg).toLocaleString()+" judgment":"")+"  \u00b7  call only  \u00b7  "+x.c+(x.wp?"  \u00b7  "+x.wp:"")); });'
     +     'if(!rows.length){ addLog("fail","copy","call list is empty — nothing to copy","warn"); return; }'
     +     '_wcopy("CALL LIST — "+new Date().toISOString().slice(0,10)+" ("+rows.length+")\\n"+rows.join("\\n"), btn);'
     +     'addLog("info","copy","call list copied — "+rows.length+" lead(s)");'
@@ -11867,6 +11880,16 @@ function genMorningWorker(lane, autostart){
     +   'if(cpl){ e.preventDefault(); return _copyDay(cpl); }'
     +   'var cpq=e.target.closest&&e.target.closest("#mwcopycallq");'
     +   'if(cpq){ e.preventDefault(); return _copyCallList(cpq); }'
+    +   'var qb=e.target.closest&&e.target.closest("[data-qbad]");'
+    +   'if(qb){'
+    +     'e.preventDefault();'
+    +     'var bp=String(qb.getAttribute("data-qbad")||"").split("|"), bc=bp[0], bph=bp[1]||"";'
+    +     'CALLQ=CALLQ.filter(function(x){return x.c!==bc;}); TEXTQ=TEXTQ.filter(function(x){return x.c!==bc;});'
+    +     'renderCallQ(); renderTextQ();'
+    +     'post("badnum",{qc:bc, ph:bph});'
+    +     'addLog("skip", bc, "bad number "+bph+" pulled off the lead and queued for a fresh skip-trace. It comes back with a new number for a second message.");'
+    +     'return;'
+    +   '}'
     +     'var go=e.target.closest&&e.target.closest("#mwtextqgo");'
     +     'if(go){ e.preventDefault(); return textBatchStart(); }'
     +     'var tb=e.target.closest&&e.target.closest("[data-qtext]");'
@@ -12192,11 +12215,30 @@ window.addEventListener('message', function(ev){
       var _cq = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
       if(!_cq.some(function(x){ return x.c===r.case; })){
         _cq.push({c:r.case, nm:(r.oname||(r.owners||'').split(';')[0]||r.case),
-                  ph:((r.phones||[])[0]||''), addr:(r.addr||''), ts:Date.now()});
+                  ph:((r.phones||[])[0]||''), addr:(r.addr||''), judg:(r.judg||0), wp:(r.peopleaddr||r.people||''), ts:Date.now()});
         if(_cq.length>400) _cq = _cq.slice(-400);
         localStorage.setItem('fcCallQueue', JSON.stringify(_cq));
       }
     } catch(e){}
+  } else if(d.k === 'badnum'){
+    // Wrong/dead number from the worker: remember it (the build-time card filter drops
+    // it from every future bake), retire the durable call-queue entry, and park the case
+    // on the bridge's re-trace queue so the nightly skiptrace pulls a fresh number.
+    // NOT a contact: no touch, no 72h retire — the lead re-enters when a number lands.
+    var bph = String((d.extra && d.extra.ph) || '').replace(/\D/g, '');
+    var nb = notes[r.case] = notes[r.case] || {status:'', note:''};
+    nb.badph = nb.badph || [];
+    if(bph && nb.badph.indexOf(bph) < 0) nb.badph.push(bph);
+    try {
+      var _cqB = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
+      localStorage.setItem('fcCallQueue', JSON.stringify(_cqB.filter(function(x){ return x.c!==r.case; })));
+    } catch(e){}
+    _wlog(r.case, 'skip', 'bad number '+bph+' recorded — queued for re-trace; lead re-enters when a new number lands', true);
+    try {
+      fetch('http://127.0.0.1:8823/retrace', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({c:r.case, ph:bph})}).catch(function(){});
+    } catch(e){}
+    save();
   } else if(d.k === 'wait'){
     _wlog(r.case, 'wait', d.extra ? ('paced '+d.extra+'s before advancing') : 'paced before advancing', true);
     return;

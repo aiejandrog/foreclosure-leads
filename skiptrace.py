@@ -346,6 +346,15 @@ def main():
 
     leads = load_all_leads()                                    # Miami-Dade + Broward + Palm Beach
     results = json.load(open(RESULTS, encoding='utf-8')) if os.path.exists(RESULTS) else {}
+    # Bad-number re-trace queue: the worker's "bad #" button (via the bridge's /retrace) parks a
+    # case here after a number proved wrong/dead. Those cases re-trace even though they are
+    # cached, and clear from the queue once a fresh trace lands.
+    _rq_path = os.path.join(HERE, 'retrace_queue.json')
+    try:
+        _rq = json.load(open(_rq_path, encoding='utf-8')) if os.path.exists(_rq_path) else []
+    except Exception:
+        _rq = []
+    retrace_cases = {str(x.get('c')) for x in _rq if isinstance(x, dict) and x.get('c')}
     _lof = os.path.join(HERE, 'llc_officers.json')              # the Sunbiz humans behind LLC owners
     llcs = json.load(open(_lof, encoding='utf-8')) if os.path.exists(_lof) else {}
 
@@ -364,7 +373,14 @@ def main():
             return True                                        # no/garbage traced date -> treat as stale
         return age >= args.retry_empty
 
-    todo = [r for r in picked if args.refresh or (_case(r) not in results) or _stale_empty(_case(r))]
+    # retrace cases must reach todo even when the tier/selection filter would not pick them —
+    # the operator flagged the number by hand, that outranks the tier heuristic.
+    _picked_cases = {_case(r) for r in picked}
+    for r in leads:
+        if _case(r) in retrace_cases and _case(r) not in _picked_cases:
+            picked.append(r)
+    todo = [r for r in picked if args.refresh or (_case(r) not in results)
+            or _stale_empty(_case(r)) or (_case(r) in retrace_cases)]
     if args.limit:
         todo = todo[:args.limit]
 
@@ -403,6 +419,16 @@ def main():
 
     def _save():
         json.dump(results, open(RESULTS, 'w', encoding='utf-8'), indent=1)
+        # clear re-trace entries whose case got a fresh trace this run (traced == today);
+        # a case the provider errored on stays queued for the next night.
+        if retrace_cases:
+            _today = date.today().isoformat()
+            still = [x for x in _rq
+                     if str((results.get(str(x.get('c'))) or {}).get('traced', '')) != _today]
+            if len(still) != len(_rq):
+                _tmp = _rq_path + '.tmp'
+                json.dump(still, open(_tmp, 'w', encoding='utf-8'), indent=1)
+                os.replace(_tmp, _rq_path)
 
     s = requests.Session()
     ok = 0            # leads that got at least one phone
