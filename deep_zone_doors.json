@@ -1,0 +1,620 @@
+{
+ "Tamiami": [
+  {
+   "folio": "3049010010670",
+   "addr": "15 SW 124 AVE",
+   "city": "Unincorporated County",
+   "zip": "33184-0000",
+   "owner": "Dunieski Mayea",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "9",
+    "1"
+   ],
+   "lane": "COUNTY FORECLOSING",
+   "n_cases": 4,
+   "problems": [
+    "Failure to Renew Foreclosed Property",
+    "Vacation Rental"
+   ],
+   "severity": 2,
+   "dist": 0.7,
+   "mailing": "15 SW 124 AVE, MIAMI FL",
+   "lien_bp": "",
+   "latest_lien": "",
+   "score": 186
+  },
+  {
+   "folio": "3049130110570",
+   "addr": "12535 SW 33 ST",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "Francisco Abreu",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "9"
+   ],
+   "lane": "COUNTY FORECLOSING",
+   "n_cases": 1,
+   "problems": [
+    "Construction Performed without Required Permit"
+   ],
+   "severity": 2,
+   "dist": 1.46,
+   "mailing": "12535 SW 33 ST, MIAMI FL",
+   "lien_bp": "",
+   "latest_lien": "",
+   "score": 174
+  },
+  {
+   "folio": "3049220040290",
+   "addr": "13984 SW 42 TER",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "Rosa Adela Mackay Est Of",
+   "owner_occupied": true,
+   "estate": true,
+   "statuses": [
+    "9"
+   ],
+   "lane": "COUNTY FORECLOSING",
+   "n_cases": 1,
+   "problems": [
+    "Address / House Number not Display"
+   ],
+   "severity": 0,
+   "dist": 2.42,
+   "mailing": "13984 SW 42 TERR, MIAMI FL",
+   "lien_bp": "",
+   "latest_lien": "",
+   "score": 164
+  },
+  {
+   "folio": "3040180670110",
+   "addr": "11351 SW 26 ST",
+   "city": "Unincorporated County",
+   "zip": "33165-0000",
+   "owner": "Jose Luis Fanjul Rivero",
+   "owner_occupied": false,
+   "estate": false,
+   "statuses": [
+    "9"
+   ],
+   "lane": "COUNTY FORECLOSING",
+   "n_cases": 2,
+   "problems": [
+    "Commercial Vehicle - Unauthorized",
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop"
+   ],
+   "severity": 1,
+   "dist": 1.74,
+   "mailing": "2410 SW 99 AVE, MIAMI FL",
+   "lien_bp": "",
+   "latest_lien": "",
+   "score": 123
+  },
+  {
+   "folio": "3049230280490",
+   "addr": "13211 SW 54 ST",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "John R Catala Est Of",
+   "owner_occupied": true,
+   "estate": true,
+   "statuses": [
+    "8",
+    "4",
+    "1"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 10,
+   "problems": [
+    "All Other Zoning Violations",
+    "Commercial Vehicle - Unauthorized",
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "ROW/Private Property  Abandoned Property/Vehicle"
+   ],
+   "severity": 2,
+   "dist": 2.96,
+   "mailing": "13211 SW 54 ST, MIAMI FL",
+   "lien_bp": "34119/2263",
+   "latest_lien": "",
+   "score": 110
+  },
+  {
+   "folio": "3049020290100",
+   "addr": "13264 NW 6 ST",
+   "city": "Unincorporated County",
+   "zip": "33182-0000",
+   "owner": "Asdrubal Espinosa",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "6",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 18,
+   "problems": [
+    "Boat Storage",
+    "Commercial Vehicle - Unauthorized",
+    "Construction Performed without Required Permit",
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop"
+   ],
+   "severity": 2,
+   "dist": 1.1,
+   "mailing": "13264 NW 6 ST, MIAMI FL",
+   "lien_bp": "33956/2749",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3049100380010",
+   "addr": "1814 SW 138 AVE",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "Magelys Valdes",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 6,
+   "problems": [
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Minimum Housing - OVA"
+   ],
+   "severity": 2,
+   "dist": 1.18,
+   "mailing": "1814 SW 138 AVE, MIAMI FL",
+   "lien_bp": "29998/4097",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3049100031033",
+   "addr": "14010 SW 16 ST",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "Yunior Garcia Le",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 17,
+   "problems": [
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Pool Fence Barrier",
+    "Structure Maintenance - Upkeep"
+   ],
+   "severity": 2,
+   "dist": 1.38,
+   "mailing": "14010 SW 16 ST, MIAMI FL",
+   "lien_bp": "29932/1728",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3049100520290",
+   "addr": "14228 SW 17 ST",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "Jorge Aloma",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 5,
+   "problems": [
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Structure Maintenance - Upkeep",
+    "Vehicle Advertising Violation"
+   ],
+   "severity": 2,
+   "dist": 1.54,
+   "mailing": "14228 SW 17 ST, MIAMI FL",
+   "lien_bp": "30393/1934",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3049140020216",
+   "addr": "13531 SW 34 ST",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "Jose M Gutierrez",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 9,
+   "problems": [
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Minimum Housing - OVA",
+    "Pool Fence Barrier",
+    "Structure Maintenance - Upkeep"
+   ],
+   "severity": 2,
+   "dist": 1.7,
+   "mailing": "13531 SW 34 ST, MIAMI FL",
+   "lien_bp": "28387/1026",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3049150011052",
+   "addr": "13931 SW 30 ST",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "Maricel Selva",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4",
+    "1"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 7,
+   "problems": [
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Minimum Housing Maintenance"
+   ],
+   "severity": 2,
+   "dist": 1.76,
+   "mailing": "13931 SW 30 ST, MIAMI FL",
+   "lien_bp": "30638/1130",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3049130010700",
+   "addr": "11814 SW 37 ST",
+   "city": "Unincorporated County",
+   "zip": "33175-0000",
+   "owner": "Enrique Alzate",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4",
+    "1"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 6,
+   "problems": [
+    "Construction Performed without Required Permit",
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Unauthorized Use - Residential/Business"
+   ],
+   "severity": 2,
+   "dist": 1.95,
+   "mailing": "11814 SW 37 ST, MIAMI FL",
+   "lien_bp": "30287/1492",
+   "latest_lien": "",
+   "score": 90
+  }
+ ],
+ "West Miami": [
+  {
+   "folio": "3040110150560",
+   "addr": "7160 SW 12 ST",
+   "city": "Unincorporated County",
+   "zip": "33144-0000",
+   "owner": "Gloria L Lopez",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "9",
+    "8",
+    "1"
+   ],
+   "lane": "COUNTY FORECLOSING",
+   "n_cases": 3,
+   "problems": [
+    "Fence, hedge, tower, MAST - Violations",
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "ROW/Private Property  Abandoned Property/Vehicle"
+   ],
+   "severity": 1,
+   "dist": 0.96,
+   "mailing": "7160 SW 12 ST, MIAMI FL",
+   "lien_bp": "34025/0318",
+   "latest_lien": "",
+   "score": 167
+  },
+  {
+   "folio": "3040120070800",
+   "addr": "6306 SW 22 ST",
+   "city": "Unincorporated County",
+   "zip": "33155-0000",
+   "owner": "Richard J Valcarcel &W Elsa",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "9"
+   ],
+   "lane": "COUNTY FORECLOSING",
+   "n_cases": 1,
+   "problems": [
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop"
+   ],
+   "severity": 1,
+   "dist": 0.95,
+   "mailing": "6306 SW 22 ST, MIAMI FL",
+   "lien_bp": "",
+   "latest_lien": "",
+   "score": 159
+  },
+  {
+   "folio": "3040030016270",
+   "addr": "7800 GRAND CANAL DR",
+   "city": "Unincorporated County",
+   "zip": "33144-0000",
+   "owner": "John G Hawks",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 5,
+   "problems": [
+    "Construction Performed without Required Permit",
+    "Graffiti",
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Structure Maintenance - Upkeep"
+   ],
+   "severity": 2,
+   "dist": 1.6,
+   "mailing": "7800 GRAND CANAL DR, MIAMI FL",
+   "lien_bp": "32178/2403",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3040150080560",
+   "addr": "8240 SW 32 TER",
+   "city": "Unincorporated County",
+   "zip": "33155-0000",
+   "owner": "Emilio J Raya",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 6,
+   "problems": [
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Minimum Housing - OVA",
+    "ROW/Private Property  Abandoned Property/Vehicle",
+    "Unsecured Pool"
+   ],
+   "severity": 2,
+   "dist": 2.6,
+   "mailing": "8240 SW 32 TER, MIAMI FL",
+   "lien_bp": "30502/3601",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3040150171520",
+   "addr": "8450 SW 27 ST",
+   "city": "Unincorporated County",
+   "zip": "33155-0000",
+   "owner": "Jorge Luis Martinez Jr",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "4",
+    "1"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 10,
+   "problems": [
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Right of Way - Maintenance",
+    "Structure Maintenance - Upkeep"
+   ],
+   "severity": 2,
+   "dist": 2.61,
+   "mailing": "8450 SW 27 ST, MIAMI FL",
+   "lien_bp": "31088/1476",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3040150171290",
+   "addr": "8431 SW 27 LN",
+   "city": "Unincorporated County",
+   "zip": "33155-0000",
+   "owner": "Christopher Nimeth",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4",
+    "1"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 6,
+   "problems": [
+    "Failure to Renew Foreclosed Property",
+    "ROW/Private Property  Abandoned Property/Vehicle"
+   ],
+   "severity": 2,
+   "dist": 2.62,
+   "mailing": "8431 SW 27 LN, MIAMI FL",
+   "lien_bp": "34678/3628",
+   "latest_lien": "",
+   "score": 90
+  },
+  {
+   "folio": "3040110240420",
+   "addr": "7000 SW 16 TER",
+   "city": "Unincorporated County",
+   "zip": "33155-0000",
+   "owner": "Juan Alberto Paz",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 4,
+   "problems": [
+    "Fence, hedge, tower, MAST - Violations",
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop",
+    "Multi Family Use",
+    "Structure Maintenance - Upkeep"
+   ],
+   "severity": 2,
+   "dist": 0.97,
+   "mailing": "7000 SW 16 TER, MIAMI FL",
+   "lien_bp": "30582/2899",
+   "latest_lien": "",
+   "score": 86
+  },
+  {
+   "folio": "3040020094091",
+   "addr": "7660 NW 5 ST",
+   "city": "Unincorporated County",
+   "zip": "33126-0000",
+   "owner": "Jose A Fernandez &",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 4,
+   "problems": [
+    "Construction Performed without Required Permit",
+    "Setback Violations",
+    "Unauthorized Use - Residential/Business"
+   ],
+   "severity": 2,
+   "dist": 1.64,
+   "mailing": "7660 NW 5 ST, MIAMI FL",
+   "lien_bp": "31584/2789",
+   "latest_lien": "",
+   "score": 86
+  },
+  {
+   "folio": "3040150050440",
+   "addr": "7885 SW 26 ST",
+   "city": "Unincorporated County",
+   "zip": "33155-0000",
+   "owner": "De La Calle Treasure",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "8",
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 4,
+   "problems": [
+    "Multi Family Use",
+    "Structure Maintenance - Upkeep"
+   ],
+   "severity": 2,
+   "dist": 2.05,
+   "mailing": "7885 SW 26 ST, MIAMI FL",
+   "lien_bp": "32497/3064",
+   "latest_lien": "",
+   "score": 86
+  },
+  {
+   "folio": "3040150110690",
+   "addr": "8100 SW 36 ST",
+   "city": "Unincorporated County",
+   "zip": "33155-0000",
+   "owner": "Ivonne Rodriguez",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 4,
+   "problems": [
+    "Commercial Vehicle - Unauthorized",
+    "Structure Maintenance - Upkeep"
+   ],
+   "severity": 2,
+   "dist": 2.63,
+   "mailing": "8100 SW 36 ST, MIAMI FL",
+   "lien_bp": "35121/4697",
+   "latest_lien": "",
+   "score": 86
+  },
+  {
+   "folio": "3040030060420",
+   "addr": "8675 SW 2 ST",
+   "city": "Unincorporated County",
+   "zip": "33144-0000",
+   "owner": "Jose L Alfonso",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 3,
+   "problems": [
+    "Construction Performed without Required Permit",
+    "Junk/Trash/Overgrowth on Unimproved/Improved Prop"
+   ],
+   "severity": 2,
+   "dist": 2.47,
+   "mailing": "8675 SW 2 ST, MIAMI FL",
+   "lien_bp": "",
+   "latest_lien": "",
+   "score": 82
+  },
+  {
+   "folio": "3040110041520",
+   "addr": "1000 SW 72 AVE",
+   "city": "Unincorporated County",
+   "zip": "33144-0000",
+   "owner": "Marilin Morejon &",
+   "owner_occupied": true,
+   "estate": false,
+   "statuses": [
+    "4"
+   ],
+   "lane": "RECORDED LIEN",
+   "n_cases": 2,
+   "problems": [
+    "Construction Performed without Required Permit",
+    "Multi Family Use"
+   ],
+   "severity": 2,
+   "dist": 1.0,
+   "mailing": "1000 SW 72 AVE, MIAMI FL",
+   "lien_bp": "",
+   "latest_lien": "",
+   "score": 78
+  }
+ ]
+}
