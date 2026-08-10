@@ -93,7 +93,8 @@
    "mailing": "2410 SW 99 AVE, MIAMI FL",
    "lien_bp": "",
    "latest_lien": "",
-   "score": 123
+   "score": 123,
+   "note": "owner mails to 2410 SW 99 AVE \u2014 if a tenant answers, leave it; catch the owner at the mailing address"
   },
   {
    "folio": "3049230280490",
@@ -464,7 +465,8 @@
    "mailing": "8431 SW 27 LN, MIAMI FL",
    "lien_bp": "34678/3628",
    "latest_lien": "",
-   "score": 90
+   "score": 90,
+   "note": "on the county foreclosed-property registry \u2014 may be vacant; if no answer, note it and move on"
   },
   {
    "folio": "3040110240420",
@@ -590,7 +592,8 @@
    "mailing": "8675 SW 2 ST, MIAMI FL",
    "lien_bp": "",
    "latest_lien": "",
-   "score": 82
+   "score": 82,
+   "note": "lien cases are 2000-vintage \u2014 soft door, confirm the lien still stands before quoting anything"
   },
   {
    "folio": "3040110041520",
@@ -614,7 +617,8 @@
    "mailing": "1000 SW 72 AVE, MIAMI FL",
    "lien_bp": "",
    "latest_lien": "",
-   "score": 78
+   "score": 78,
+   "note": "lien cases are 2000-vintage \u2014 soft door, confirm the lien still stands before quoting anything"
   }
  ]
 }

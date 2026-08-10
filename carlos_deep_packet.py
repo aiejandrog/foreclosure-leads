@@ -18,6 +18,28 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ORIGIN = {'Tamiami': 'Tamiami, FL', 'West Miami': 'West Miami, FL'}
 
 
+def _stop(c):
+    """Maps-friendly stop. PaGis writes 'UNINCORPORATED COUNTY' as the city and pads zips
+    with -0000 — Google wants 'MIAMI' and a bare zip."""
+    city = str(c.get('city') or 'MIAMI')
+    if 'UNINCORPORATED' in city.upper() or not city.strip():
+        city = 'MIAMI'
+    z = str(c.get('zip') or '').split('-')[0]
+    return '%s, %s, FL %s' % (c['addr'], city.title(), z)
+
+
+def _chunks(stops, n=6):
+    """Google Maps dir URLs cap at 9 waypoints and silently drop extras — 6-stop runs are
+    safe and match how the day is actually driven."""
+    return [stops[i:i + n] for i in range(0, len(stops), n)]
+
+
+def _maps(origin, chunk):
+    return ('https://www.google.com/maps/dir/?api=1&origin=' + quote_plus(origin)
+            + '&destination=' + quote_plus(chunk[-1])
+            + '&waypoints=' + quote_plus('|'.join(chunk[:-1]), safe='|'))
+
+
 def main():
     packet = json.load(open(os.path.join(HERE, 'deep_zone_doors.json'), encoding='utf-8'))
     refuted = set()
@@ -66,14 +88,23 @@ def main():
         out.append('<div class="zone">')
         out.append(f'<h2>{H.escape(zone)}</h2>')
         out.append(f'<div class="st">{len(rows)} doors · {n9} county-foreclosing · {oo} owner-occupied</div>')
+        if zone == 'West Miami':
+            # CCVIOL is COUNTY code enforcement = unincorporated areas only. The City of West
+            # Miami, Flagami (City of Miami) and Coral Gables police their own violations and
+            # never appear in this layer — a thin list here is a coverage limit, not "no distress".
+            out.append('<div style="font:12px Arial;color:#8a6d1c;margin:-4px 0 8px">Coverage note: these come '
+                       'from COUNTY code enforcement (Westchester / Coral Terrace side of the ring). West Miami '
+                       'city proper and Flagami run their own code enforcement — those doors are not in this '
+                       'file yet.</div>')
         if not rows:
             out.append('<div style="color:#8a1c1c;font-style:italic">Nothing survived verification.</div></div>')
             continue
-        stops = ['%s, %s, FL %s' % (c['addr'], c.get('city') or 'MIAMI', c.get('zip') or '') for c in rows]
-        url = ('https://www.google.com/maps/dir/?api=1&origin=' + quote_plus(ORIGIN.get(zone, zone + ', FL'))
-               + '&destination=' + quote_plus(stops[-1])
-               + '&waypoints=' + quote_plus('|'.join(stops[:-1]), safe='|'))
-        out.append(f'<a class="run" href="{H.escape(url)}">&#128663; Route all {len(rows)} stops</a>')
+        stops = [_stop(c) for c in rows]
+        for part, chunk in enumerate(_chunks(stops), 1):
+            url = _maps(ORIGIN.get(zone, zone + ', FL'), chunk)
+            lbl = (f'Route part {part} ({len(chunk)} stops)' if len(stops) > 6
+                   else f'Route all {len(chunk)} stops')
+            out.append(f'<a class="run" href="{H.escape(url)}">&#128663; {lbl}</a> ')
         for n, c in enumerate(rows, 1):
             lane = ('<span class="lane9">COUNTY IS SUING</span>' if c['lane'] == 'COUNTY FORECLOSING'
                     else '<span class="lane4">RECORDED LIEN</span>')
@@ -90,11 +121,13 @@ def main():
             det.append('%d open/lien case%s' % (c['n_cases'], 's' if c['n_cases'] != 1 else ''))
             det.append('%s mi' % c['dist'])
             probs = '; '.join(c.get('problems') or [])[:110]
+            note = (f'<span class="d" style="color:#8a1c1c">&#9888; {H.escape(c["note"])}</span>'
+                    if c.get('note') else '')
             out.append(
                 f'<div class="card"><span class="n">{n}</span>'
                 f'<span class="a">{H.escape(c["addr"])}, {H.escape(c.get("city") or "")} {H.escape(c.get("zip") or "")}</span>'
                 f'<span class="o">{H.escape(c["owner"])}</span>{badges}'
-                f'<span class="d">{H.escape(" · ".join(det))} · {H.escape(probs)}</span></div>')
+                f'<span class="d">{H.escape(" · ".join(det))} · {H.escape(probs)}</span>{note}</div>')
         out.append('</div>')
 
     out.append(f'<div class="sub">{total} doors total. Every card verified against the county\'s live '
@@ -110,11 +143,10 @@ def main():
         rows = [c for c in rows if c['addr'].upper() not in refuted]
         if not rows:
             continue
-        stops = ['%s, %s, FL %s' % (c['addr'], c.get('city') or 'MIAMI', c.get('zip') or '') for c in rows]
-        url = ('https://www.google.com/maps/dir/?api=1&origin=' + quote_plus(ORIGIN.get(zone, zone + ', FL'))
-               + '&destination=' + quote_plus(stops[-1])
-               + '&waypoints=' + quote_plus('|'.join(stops[:-1]), safe='|'))
-        print('\n[%s] %d doors\n%s' % (zone, len(rows), url))
+        stops = [_stop(c) for c in rows]
+        for part, chunk in enumerate(_chunks(stops), 1):
+            print('\n[%s part %d] %d stops\n%s'
+                  % (zone, part, len(chunk), _maps(ORIGIN.get(zone, zone + ', FL'), chunk)))
 
 
 if __name__ == '__main__':
