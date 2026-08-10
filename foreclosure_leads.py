@@ -842,7 +842,14 @@ def _js_guard(tpl):
                          'runtime, invisible to node --check):\n   ...' + ctx + '\n'
                          'Delete the second "+". See _js_guard for why.')
 
-    blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', tpl, re.S | re.I)
+    # HTML comments are not executable, so strip them BEFORE hunting for <script> blocks. A comment
+    # that merely MENTIONS "<script>" in prose otherwise opens a phantom block running to the next
+    # REAL </script>, and node --check ends up linting English. The Motion.js note does exactly
+    # that ("a network <script> dies offline"), which aborted every cloud build ("Unexpected
+    # identifier 'offline'") — the early publish still landed so the site looked fresh, while the
+    # enriched rebuild never shipped.
+    scan = re.sub(r'<!--.*?-->', '', tpl, flags=re.S)
+    blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', scan, re.S | re.I)
     if not blocks:
         return
     try:
@@ -1822,6 +1829,17 @@ def make_tracker(leads):
             print('WhitepagesPro merge skipped:', _e)
 
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
+    # Motion v13 (UMD) inlined, not CDN-linked: the Desktop twin is opened over file://, where an ESM
+    # import is CORS-blocked and a network <script> dies offline. If the vendored file ever goes
+    # missing the placeholder collapses to empty and _fxEnter() no-ops — the board still renders.
+    try:
+        _motion = open(os.path.join(HERE,'vendor','motion.min.js'), encoding='utf-8').read()
+        if '</script' in _motion:      # would terminate the inline block early and shred the page
+            raise ValueError('vendor/motion.min.js contains a </script> token — refusing to inline')
+    except Exception as _e:
+        print(f'motion.js not inlined ({_e}) — board renders without entrance animation')
+        _motion = ''
+    tpl = tpl.replace('__MOTIONJS__', _motion)
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')
 
