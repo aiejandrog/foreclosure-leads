@@ -1035,6 +1035,25 @@ def make_tracker(leads):
     if os.path.exists(RESULTS_FILE):
         try: st = json.load(open(RESULTS_FILE, encoding='utf-8'))
         except Exception: st = {}
+    # REGISTRY DNC OVERRIDE (tracerfy_mcp.py dnc lane, gitignored sidecar). The provider's dnc flag
+    # is a MODELED estimate; dnc_scrub.json holds actual federal/state registry verdicts. A registry
+    # hit flips the flag to True at THIS single seam — every bake path downstream (MD + county merge,
+    # call sheet, text gate) inherits it, so the compliance gate enforces the registry, not a model.
+    # One-way on purpose: a registry MISS never un-flags a provider True (belt stays on braces).
+    _dncreg = {}
+    try:
+        _dncreg = json.load(open(os.path.join(HERE, 'dnc_scrub.json'), encoding='utf-8'))
+    except Exception:
+        pass
+    if _dncreg:
+        _n = 0
+        for _e in st.values():
+            for _p in (_e.get('phones') or []):
+                _v = _dncreg.get(str(_p.get('number') or ''))
+                if _v and (_v.get('national_dnc') or _v.get('state_dnc')) and not _p.get('dnc'):
+                    _p['dnc'] = True; _n += 1
+        if _n:
+            print(f"DNC registry override: {_n} phone(s) the modeled flag called safe are registry-listed -> flagged")
     # HARD-BOUNCED ADDRESSES (produced by bounces.py, gitignored). The first real outreach run on
     # 2026-08-02 sent 41 emails and 13 came back "mailbox disabled" — a 32% hard-bounce rate,
     # because skip-trace returns whatever address it holds including decade-dead AOL / EarthLink /
