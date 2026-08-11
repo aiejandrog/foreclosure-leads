@@ -26,7 +26,11 @@ ONELINE = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress'
 
 def _leads():
     out = []
-    for fn, ck in (('leads_final.json', 'Case #'), ('broward_leads.json', 'case'), ('palmbeach_leads.json', 'case')):
+    # lp_leads.json added 2026-08-11: the LP lane shipped without it, so no FRESH-FILING row ever
+    # got a lat/lng — invisible on the map and impossible to route into a door book. Advisory rows
+    # (addr='') skip themselves; only high-confidence resolved addresses geocode.
+    for fn, ck in (('leads_final.json', 'Case #'), ('broward_leads.json', 'case'),
+                   ('palmbeach_leads.json', 'case'), ('lp_leads.json', 'case')):
         p = os.path.join(HERE, fn)
         if os.path.exists(p):
             for r in json.load(open(p, encoding='utf-8')):
