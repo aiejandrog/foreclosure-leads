@@ -44,9 +44,14 @@ def main():
     a = ap.parse_args()
 
     if not a.no_sweep:
-        run('SWEEP (lis_pendens)', ['lis_pendens.py', '--days', str(a.days)])
+        run('SWEEP (lis_pendens, all 3 counties)',
+            ['lis_pendens.py', '--days', str(a.days), '--county', 'all'])
     run('RESOLVE (lp_resolve)', ['lp_resolve.py'])
     run('RESOLVE PASS 2 (lp_resolve2)', ['lp_resolve2.py'])
+    # Broward rows carry no legal description, so the MD ladder above skips them — the BCPA
+    # name ladder is their only path to an address. Runs before lp_values on purpose: it writes
+    # its own value/homestead from the cadastral, and lp_values' MD cache would skip them anyway.
+    run('RESOLVE BROWARD (BCPA name ladder)', [os.path.join('fl_lp', 'broward_resolve.py')])
     run('VALUE (lp_values)', ['lp_values.py'])
     run('CASE STATUS (lp_status)', ['lp_status.py'])
     run('BOARD ROWS (lp_leads)', ['lp_leads.py'])

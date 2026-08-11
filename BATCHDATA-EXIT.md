@@ -214,3 +214,54 @@ without anyone noticing — the missing piece is not scraping muscle, it is the 
 "LP sweep returned 0 records for a county on a weekday" must FAIL, and the board must print the
 sweep's as-of date, because stale-data-presented-as-current is the one failure mode this
 pipeline has now demonstrated twice.
+
+---
+
+# Execution log — Phases 1-5 (2026-08-11)
+
+## Phase 1 — sweeper fixed + multi-county (DONE, commits 03a8987/283c5d9/d7f22b5 + tonight)
+- lis_pendens.py import break fixed (lazy legacy resolution); MD re-swept +78 filings.
+- fl_lp/broward.py: AcclaimWeb doctype-158 date sweep, no captcha — 460 Broward filings.
+- fl_lp/palmbeach.py: built + wired (`--county all` dispatch). Portal verified DOWN (HTTP 500 on
+  its own root — down for everyone). sweep() returns None (≠ empty) and self-heals: first nightly
+  after recovery lands data with zero further work.
+- `--county` default flipped to **all** so the bare calls in refresh-dealflow.bat / refresh.yml
+  are multi-county without edits. Sweep MERGES prev-wins by (county, instrument) — never overwrites.
+
+## Phase 2 — Broward LP address resolution (DONE)
+- fl_lp/broward_resolve.py: BCPA JSON name search (folio + site address), broad-to-narrow query
+  ladder for RECALL, owner_agrees full-token-subset as the PRECISION gate, exactly-one-parcel rule,
+  FL cadastral homestead as the second signal -> 'high'. Condo-format folios (letters — cadastral's
+  digit-strip join can't check them) cap at 'medium'. Wired into lp_refresh.py between resolve2 and
+  values. lp_leads' high-confidence gate unchanged: only homestead-corroborated rows get outreach.
+
+## Phase 3 — provenance honesty (DONE, display-only by design)
+- 'bd' badges rewritten everywhere: "≈ PARTIAL — mortgages only (BatchData)" +
+  "juniors/HOA not checked". The 'bd' key itself is KEPT (no data migration — zero merge risk);
+  nonMortConf still excludes it, so hardcoded $0 ≠ verified none stays true.
+- _seniorsmathtest.py: 8-check regression guard on _senior_surviving + orsurvsen (the $811,577 and
+  $458,777 bugs). _lpcountytest.py: import-survival + merge-key + query-ladder + wrong-Garcia guard.
+- 168 bd-row county re-trace: Broward book already 100% county-traced ("0 to trace"); MD catch-up
+  ran tonight (records_liens --all --limit 60); PB rows land via the new nightly palmbeach_liens
+  line when the portal recovers. The frozen bd cache keeps merging meanwhile — publish_guard safe.
+
+## Phase 4 — skip-trace (BLOCKED ON OPERATOR, by design)
+- skiptrace.py already prefers Tracerfy; the moment a funded `tracerfy.key` exists, BatchData
+  skip-trace stops with zero code changes. Until then BD skip-trace stays, governed by the shared
+  $1.50/day ledger. **Operator task: Tracerfy signup.** TPS stays a manual supplement (§4 verdict).
+
+## Phase 5 — kill the rails (DONE)
+- refresh-dealflow.bat: batchdata_liens line DELETED; palmbeach_liens.py --all --limit 6 added.
+- refresh.yml: BATCHDATA_API_KEY env removed entirely, key materialization + echo removed, cloud
+  batchdata_liens step removed, skip-trace gate = Tracerfy-only.
+- batchdata_liens.json (bought data) COMMITTED to the repo (.gitignore exception); removed from both
+  actions/cache path lists; cache namespace bumped v11 -> v12 (one deliberate cold run expected).
+- whitepages_lookup.py folded into the shared bd_budget ledger ($0.10 est/call, charged on 200 AND
+  404, never on 429/network) — the last spender outside the daily dollar ceiling is now inside it.
+- Task Scheduler audited: "DEALFLOW Daily Scrape" disabled (the old double-biller), everything else
+  routes through the governed bats. No out-of-repo BatchData lien caller remains anywhere.
+
+## Still open (operator)
+- Tracerfy signup (funds Phase 4's zero-code flip). ~$99 BatchData invoice reconcile.
+- Broward FTP bulk-feed terms: your click, not the tooling's.
+- `BATCHDATA_DAILY_CAP=0` is the instant full kill once Tracerfy is live.

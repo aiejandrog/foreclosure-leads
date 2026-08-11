@@ -254,6 +254,20 @@ def _has_homestead(benefits):
             return True
     return False
 
+def _has_widow(benefits):
+    """Widow/widower exemption (FS 196.202). NOT an age determination — it is the only
+    age-correlated signal the PA actually exposes today (verified 2026-08: the live Benefit array
+    carries only Homestead / Second Homestead / Save Our Homes Cap / Widow — Florida's senior
+    exemption FS 196.075 does NOT appear). Feeds the board's ELDER? chip, which is deliberately
+    over-inclusive: a false positive costs a rep some extra courtesy, a false negative costs a
+    first-degree felony under FS 825.103. See Playbook §0.5."""
+    for b in (benefits or []):
+        desc = (b.get('Description', '') or '').lower()
+        typ = (b.get('Type', '') or '').strip().lower()
+        if typ == 'exemption' and ('widow' in desc):
+            return True
+    return False
+
 def _valid_folio(s):
     """A real Miami-Dade folio is exactly 13 digits. Multi-parcel or blank entries (e.g. the county's
     'MULTIPLE PARCELS' placeholder) strip down to junk like '20' — reject those so we never fire a
@@ -288,6 +302,7 @@ def enrich(leads):
                 'beds': pi.get('BedroomCount',0), 'baths': pi.get('BathroomCount',0),
                 'living_area': pi.get('BuildingHeatedArea',0), 'year_folio': pi.get('FolioNumber',''),
                 'homestead': _has_homestead(benefits),
+                'widow': _has_widow(benefits),
                 'last_sale_price': last_sale.get('SalePrice',0), 'last_sale_date': last_sale.get('DateOfSale',''),
             })
         except Exception as e:
@@ -755,7 +770,8 @@ def _senior_surviving(h):
     The three chain engines disagree about what `surv` contains, and the browser could not tell:
       records_liens.py:305 / broward_liens.py:325 -> surv = sum(all opens except the foreclosing one)
                                                           = seniors + juniors   (subtract juniors_post)
-      batchdata_liens.py:113                      -> surv = sum(seniors)         (already seniors-only)
+      batchdata_liens.py (seniors-only sum — match by content, its line drifts)
+                                                  -> surv = sum(seniors)         (already seniors-only)
 
     The board applied the records-style subtraction to BOTH, so on every BatchData-sourced lead the
     junior balance came out of the SENIOR figure a second time — and Math.max(0, ...) then silently
@@ -845,9 +861,8 @@ def _js_guard(tpl):
     # HTML comments are not executable, so strip them BEFORE hunting for <script> blocks. A comment
     # that merely MENTIONS "<script>" in prose otherwise opens a phantom block running to the next
     # REAL </script>, and node --check ends up linting English. The Motion.js note does exactly
-    # that ("a network <script> dies offline"), which aborted every cloud build ("Unexpected
-    # identifier 'offline'") — the early publish still landed so the site looked fresh, while the
-    # enriched rebuild never shipped.
+    # that ("a network <script> fails offline"), which aborted every build on 2026-08-09 — the
+    # early publish still landed so the site looked fresh, while the enriched rebuild never shipped.
     scan = re.sub(r'<!--.*?-->', '', tpl, flags=re.S)
     blocks = re.findall(r'<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>', scan, re.S | re.I)
     if not blocks:
@@ -1158,6 +1173,16 @@ def make_tracker(leads):
             'assessed_value': _money(r.get('assessed_value') or r.get('Assessed Value')),
             'judg': r.get('judgment',0) or 0,
             'eq': r.get('equity_pct',0), 'eqfake': bool(r.get('eq_fake')), 'hs': bool(r.get('homestead')),
+            # --- FS 825.103 elder guardrail (Playbook §0.5) -------------------------------------
+            # ownerAge is the ONLY authoritative field and is empty today: skip trace returns no
+            # age/DOB (BatchData confirmed; see notes at L99/L502). When a provider that DOES carry
+            # DOB lands (PropStream migration), populate 'ownerAge' here and the board's chip
+            # upgrades itself from ELDER? to ELDER-65 with no template change.
+            # Until then the chip runs on two weak, clearly-labelled proxies: the widow exemption
+            # and ownership tenure (lsd). Over-inclusive on purpose — see _has_widow().
+            'ownerAge': r.get('owner_age') or 0,
+            'wid': bool(r.get('widow')),
+            'lsd': (r.get('last_sale_date') or '')[:10],
             # condo -> the displayed equity is a GROSS upper bound: a special assessment (40-yr recert) or a
             # 2nd mortgage can erase it and neither is in public data. Drives the "verify equity" caveat + a
             # MARGINAL cap until the association estoppel is entered. (Lesson from the Hondroulis condo deal.)

@@ -80,6 +80,9 @@ captcha.key
 broward_leads.json
 *_leads.json
 *_liens.json
+# EXCEPTION (BATCHDATA-EXIT 2026-08-11): the BatchData lien cache is bought data, frozen at
+# exit and COMMITTED so cloud builds read it from the repo, not the fragile actions/cache.
+!batchdata_liens.json
 streetview.key
 sv_blocked.json
 design-system/
