@@ -144,8 +144,9 @@ def build():
         elif lp_closed:
             nclosed += 1
 
+        _cty = (lp.get('county') or 'MIAMI-DADE').upper()
         out.append({
-            'county': 'MIAMI-DADE', 'st': 'LP', 'stage': 'LP',   # 'LP' -> _isLP()/lpOnly Fresh-filings lane
+            'county': _cty, 'st': 'LP', 'stage': 'LP',   # 'LP' -> _isLP()/lpOnly Fresh-filings lane
             'case': case or ('LP-' + re.sub(r'\W', '', owner)[:16]),
             'owners': owner, 'oname': C._rec_name(owner), 'rname': C._rec_name(owner),
             'addr': addr, 'mail': '', 'value': value, 'folio': folio,
@@ -168,11 +169,19 @@ def build():
             'lpkind': lp.get('kind', ''), 'legal': lp.get('legal', ''),
             'cstatus': lp_status, 'lpDismissed': lp_dismissed, 'lpClosed': lp_closed,
             'bookpage': lp.get('bookpage', ''),
-            'zillow': '', 'pa': 'https://apps.miamidadepa.gov/PropertySearch/#/',
+            'zillow': '',
+            # deep links are per-recorder — a Broward owner deep-linked into Miami-Dade's PA
+            # search is worse than no link. BCPA/Broward clerk links land with the Phase-2 adapter.
+            'pa': ('https://apps.miamidadepa.gov/PropertySearch/#/' if _cty == 'MIAMI-DADE'
+                   else 'https://web.bcpa.net/BcpaClient/#/Record-Search' if _cty == 'BROWARD' else ''),
             'people': people, 'peopleaddr': '', 'cyberbg': F.cyberbg_url(nm, '') if (nm and not is_co and not ent) else '',
             'cyberbgaddr': '',
-            'records': 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch',
-            'cases': 'https://www2.miamidadeclerk.gov/ocs/Search.aspx', 'docket': docket,
+            'records': ('https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch'
+                        if _cty == 'MIAMI-DADE'
+                        else 'https://officialrecords.broward.org/AcclaimWeb/' if _cty == 'BROWARD' else ''),
+            'cases': ('https://www2.miamidadeclerk.gov/ocs/Search.aspx' if _cty == 'MIAMI-DADE'
+                      else 'https://www.browardclerk.org/Web2' if _cty == 'BROWARD' else ''),
+            'docket': (docket if _cty == 'MIAMI-DADE' else ''),
             'ctype': 'Bank/Mortgage', 'ftype': 'MORTGAGE',
         })
     json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)

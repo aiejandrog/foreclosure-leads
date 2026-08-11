@@ -62,7 +62,19 @@ async (args) => {
   const arr=(gj && gj.recordingModels) || [];
   return {success:true, qs:j.qs, count:Array.isArray(arr)?arr.length:0, sample:arr.slice(0,60)};
 }
-""".replace('SITEKEY', G.SITE_KEY)
+"""
+# NOTE (2026-08-11): this template is only consumed by the LEGACY reCAPTCHA-v3 browser probe.
+# The substitution used to run at MODULE level against G.SITE_KEY — an attribute the rewritten
+# gen_records_qs no longer defines — so `import lis_pendens` raised AttributeError and the LP
+# sweep silently stopped at the Turnstile migration (newest filing sat at 7/9 for 33 days).
+# The key is now resolved lazily inside _mint_search, and the LIVE path (lp_sweep) never
+# touches it. A dead legacy helper must never be able to kill the import of the live one.
+
+
+def _legacy_search_js():
+    import records_liens as R
+    key = getattr(G, 'SITE_KEY', '') or R.TS_SITE_KEY
+    return SEARCH_JS.replace('SITEKEY', key)
 
 
 def _mint_search(doc_type, d_from, d_to, stype='Name/Document', attempts=25):
@@ -70,12 +82,15 @@ def _mint_search(doc_type, d_from, d_to, stype='Name/Document', attempts=25):
     from playwright.sync_api import sync_playwright
     for attempt in range(1, attempts + 1):
         try:
+            import records_liens as R
+            _ua = getattr(G, 'UA', '') or getattr(R, 'UA', 'Mozilla/5.0')
+            _base = getattr(G, 'BASE', '') or R.OR_BASE
             with sync_playwright() as p:
                 b = p.chromium.launch(headless=True)
-                pg = b.new_context(user_agent=G.UA, viewport={'width': 1400, 'height': 1000}).new_page()
-                pg.goto(G.BASE, timeout=40000, wait_until='domcontentloaded')
+                pg = b.new_context(user_agent=_ua, viewport={'width': 1400, 'height': 1000}).new_page()
+                pg.goto(_base, timeout=40000, wait_until='domcontentloaded')
                 pg.wait_for_timeout(4000 + attempt * 400)
-                res = pg.evaluate(SEARCH_JS, [doc_type, d_from, d_to, stype])
+                res = pg.evaluate(_legacy_search_js(), [doc_type, d_from, d_to, stype])
                 b.close()
             if res and res.get('success'):
                 print(f'  mint OK on attempt {attempt}: {res.get("count")} records')
@@ -214,21 +229,60 @@ def lp_sweep(days=30, tries=3):
     return list(out.values())
 
 
+def _merge_key(x):
+    """(county, instrument-or-case) — the cross-county dedupe key. MD rows predate the county
+    field, so absence means MIAMI-DADE; MD rows also predate `instrument`, so case/bookpage
+    stays their identity."""
+    return ((x.get('county') or 'MIAMI-DADE'),
+            x.get('instrument') or x.get('case') or x.get('bookpage') or str(x.get('parties'))[:50])
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--probe', action='store_true', help='(legacy reCAPTCHA-v3 browser probe)')
     ap.add_argument('--days', type=int, default=30)
+    ap.add_argument('--county', default='miami-dade',
+                    choices=['miami-dade', 'broward', 'all'],
+                    help='which recorder(s) to sweep (palm-beach pending its adapter)')
     a = ap.parse_args()
     if a.probe:
         probe(); return
-    out = lp_sweep(days=a.days)
+    out = []
+    if a.county in ('miami-dade', 'all'):
+        out += lp_sweep(days=a.days) or []
+    if a.county in ('broward', 'all'):
+        from fl_lp import broward as _bw
+        bw = _bw.sweep(days=a.days)
+        if bw is None:
+            print('BROWARD sweep blocked — Miami-Dade results (if any) still merge.')
+        else:
+            out += bw
     if not out:
-        print('\nno LP filings — every plaintiff search blocked (captcha) or empty window. Retry.'); return
+        print('\nno LP filings — every search blocked (captcha) or empty window. Retry.'); return
+    # MERGE, never overwrite (2026-08-11). The sweep only sees its own date window; the file
+    # holds every filing being worked. Overwriting made a 30-day sweep silently delete every
+    # older LP lead — the resolved, valued, on-the-board ones included. Union by the same
+    # dedupe key the sweep uses; existing rows win so downstream enrichment is never clobbered.
+    prev = []
+    try:
+        prev = json.load(open(OUT, encoding='utf-8'))
+    except Exception:
+        pass
+    merged = {}
+    for x in prev:
+        merged[_merge_key(x)] = x
+    fresh = 0
+    for x in out:
+        k = _merge_key(x)
+        if k not in merged:
+            merged[k] = x
+            fresh += 1
+    out = list(merged.values())
     from collections import Counter
     kinds = Counter(x['kind'] for x in out)
     out.sort(key=lambda x: str(x.get('date') or ''), reverse=True)
     json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
-    print(f"\nDONE: {len(out)} fresh LIS PENDENS ({dict(kinds)}) -> lis_pendens.json")
+    print(f"\nDONE: {fresh} NEW filing(s) this sweep, {len(out)} total ({dict(kinds)}) -> lis_pendens.json")
     print("Front of the funnel — the owner the day their foreclosure was filed. Board play = LP-EARLY (be first).")
 
 

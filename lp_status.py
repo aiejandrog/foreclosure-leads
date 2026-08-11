@@ -97,6 +97,9 @@ def main():
         print('no lis_pendens.json — nothing to check'); return
     cache = {} if refresh else _load(CACHE, {})
 
+    # OCS is a Miami-Dade system (sibling_cases.py:14) — a BROWARD case number queried against
+    # it returns junk, not a docket. Non-MD rows wait for their county's case-status client.
+    feed = [r for r in feed if (r.get('county') or 'MIAMI-DADE') == 'MIAMI-DADE']
     cases = [str(r.get('case') or '').strip() for r in feed]
     cases = [c for c in cases if c and '-' in c]          # skip synthesized LP-XXXX keys
     todo = [c for c in cases if c not in cache]
