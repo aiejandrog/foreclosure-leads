@@ -129,3 +129,4 @@ bounced_emails.json
 # complete roster of homeowner mailboxes. Never commit.
 verified_emails.json
 deads.json
+zerobounce.key
