@@ -695,6 +695,14 @@ def main():
     _dry[0] = args.dry_run
 
     recs = json.load(open(SRC, encoding='utf-8'))
+    # Multi-county file since 2026-08-11: this resolver's parcel layer, column schema and
+    # legal-text dialect are all Miami-Dade — running a BROWARD row through it burns PaGis
+    # queries to produce a confident wrong answer. Non-MD rows wait for their county adapter.
+    _skip = [r for r in recs if (r.get('county') or 'MIAMI-DADE') != 'MIAMI-DADE']
+    if _skip:
+        print('skipping %d non-Miami-Dade row(s) (no resolver adapter for their county yet)'
+              % len(_skip))
+    recs = [r for r in recs if (r.get('county') or 'MIAMI-DADE') == 'MIAMI-DADE']
     if args.case:
         recs = [r for r in recs if r.get('case') == args.case]
         if not recs:

@@ -69,12 +69,15 @@ else:
 # a row (a conf='none' entry means the search failed/was blocked, so it's an UNCHECKED lead the caller
 # would still have to pull by hand). Coverage is measured per county across all three feeds:
 #   Miami-Dade -> records_liens.py (2Captcha/Turnstile)   Broward -> broward_liens.py (AcclaimWeb)
-#   Palm Beach -> batchdata_liens.py ONLY (no captcha path; blocked when the BatchData balance runs out)
+#   Palm Beach -> palmbeach_liens.py (Landmark, 2Captcha v2) + batchdata_liens.py legacy cache
+# (2026-08-11: palmbeach_liens.json was never in this load list, so PB coverage was understated
+# and the old "Palm Beach has no free path" FAIL exemption below outlived its truth.)
 _md   = load('records_liens.json') or {}
 _bro  = load('broward_liens.json') or {}
+_pb   = load('palmbeach_liens.json') or {}
 _bd   = load('batchdata_liens.json') or {}
 def _checked(d): return {c for c, v in d.items() if v.get('conf') in ('ok', 'low', 'bd')}
-_chk = _checked(_md) | _checked(_bro) | _checked(_bd)
+_chk = _checked(_md) | _checked(_bro) | _checked(_pb) | _checked(_bd)
 _cty_tot, _cty_cov = {}, {}
 for _fn, _ck in (('leads_final.json', 'Case #'), ('broward_leads.json', 'case'), ('palmbeach_leads.json', 'case')):
     for _r in (load(_fn) or []):
@@ -100,13 +103,41 @@ if _cty_tot:
     for _cy in sorted(_cty_tot):
         _t, _c = _cty_tot[_cy], _cty_cov.get(_cy, 0)
         _pct = round(100 * _c / _t) if _t else 0
-        # Palm Beach has no free path — a low % there is a funding/scope call, not a broken scraper.
-        _lvl = 'PASS' if _pct >= 60 else ('WARN' if _pct >= 25 or _cy == 'PALM' or _cold else 'FAIL')
-        _tail = ' — BatchData-only (top up balance to lift)' if _cy == 'PALM' and _pct < 60 else ''
+        # PALM's old FAIL exemption is retired: palmbeach_liens.py exists, so a low % there is a
+        # scraper/coverage problem like any other county, not a funding call.
+        _lvl = 'PASS' if _pct >= 60 else ('WARN' if _pct >= 25 or _cold else 'FAIL')
+        _tail = ' — run palmbeach_liens.py to lift' if _cy == 'PALM' and _pct < 60 else ''
         if _cold: _tail = ' — cold cache, not a coverage regression'
         add(_lvl, f'lien coverage · {_cy}', f'{_c}/{_t} checked ({_pct}%){_tail}')
     _surv2 = sum(1 for v in list(_md.values()) + list(_bro.values()) if v.get('open_count', 0) >= 2)
     add('PASS', 'surviving-2nd flags', f'{len(_chk)} leads checked total, {_surv2} with a possible surviving 2nd')
+
+# ---- 2b. LIS PENDENS FRESHNESS (the alarm that was missing twice) ------------------------------
+# The LP sweeper died silently at the Turnstile migration and NOTHING noticed for 33 days — the
+# "just filed" lane ran on month-old filings, printed as present-tense fact in door books. New
+# filings land every business day in a county this size, so a stale newest-date is never normal:
+#   > 7 days  -> FAIL (sweeper is dead or blocked; the pre-foreclosure lane is lying about itself)
+#   > 3 days  -> WARN (long weekend tolerance)
+# Weekends don't excuse 7 days. If lis_pendens.json is missing entirely that's the same FAIL.
+try:
+    import datetime as _dt
+    _lp = load('lis_pendens.json') or []
+    _lpd = []
+    for _x in (_lp if isinstance(_lp, list) else []):
+        try:
+            _m, _d2, _y = str(_x.get('date') or '').split('/')
+            _lpd.append(_dt.date(int(_y), int(_m), int(_d2)))
+        except Exception:
+            pass
+    if not _lpd:
+        add('FAIL', 'LP freshness', 'lis_pendens.json missing/empty/undated — sweep never ran')
+    else:
+        _age = (_dt.date.today() - max(_lpd)).days
+        _lvl = 'FAIL' if _age > 7 else ('WARN' if _age > 3 else 'PASS')
+        add(_lvl, 'LP freshness', f'newest filing {max(_lpd).isoformat()} ({_age}d old, {len(_lp)} records)'
+            + (' — run lis_pendens.py, the sweeper is stale' if _lvl != 'PASS' else ''))
+except Exception as _e:
+    add('WARN', 'LP freshness', f'check errored: {str(_e)[:80]}')
 else:
     add('WARN', 'recorded-lien coverage', 'none yet — run records_liens.py / broward_liens.py')
 # ---- callable-contact coverage: is there a PERSON + a number on every property? -----------------
