@@ -68,6 +68,8 @@ propstream_leads.json
 tps_cookies.txt
 site.codes
 tracerfy.key
+tracerfy_mcp.url
+dnc_scrub.json
 cases_qs.json
 records_qs.json
 full.json
