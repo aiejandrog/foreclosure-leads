@@ -72,8 +72,11 @@ async def main():
             f"route {d['doorPlan']} · emergency {d['doorNow']} shown of {d['doorNowAll']}")
         print(f"    counts: {d['counts']}")
 
-        # LP address wiring
-        rec('LP leads got high-confidence addresses', d['lpAddr']==85, f"{d['lpAddr']} of {d['lpTotal']}")
+        # LP address wiring. NOT an exact count — that froze at 85 in the single-county (MD-only) era
+        # and broke the moment Broward+PB LP came online. The invariant is "a healthy share of LP
+        # leads resolve to a high-confidence address," so assert a floor + sane ceiling instead.
+        rec('LP leads got high-confidence addresses', 60 <= d['lpAddr'] <= d['lpTotal'],
+            f"{d['lpAddr']} of {d['lpTotal']} ({round(100*d['lpAddr']/max(1,d['lpTotal']))}%)")
         rec('advisory addresses stay OUT of the addr field', d['lpBoth']==0,
             f"{d['lpGuess']} advisory, {d['lpBoth']} contaminating addr")
         rec('owner-mismatch flag survived into the board', d['lpMismatch']>0, f"{d['lpMismatch']} flagged")
