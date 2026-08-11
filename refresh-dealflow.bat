@@ -60,9 +60,11 @@ rem  60 caps a single run at ~$0.18 so a bad day can never run the 2Captcha bala
 python -u records_liens.py --all --limit 60 >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
 if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
-rem  BatchData property API = the second lien feed + the ONLY automated path for Palm Beach (no captcha).
-rem  Fails fast + skips itself when the balance is exhausted, so it's safe to leave wired.
-if exist batchdata.key python -u batchdata_liens.py --all --limit 4 >> "%LOG%" 2>&1
+rem  Palm Beach chains via the county's OWN Landmark portal (2Captcha v2 - slow but first-party).
+rem  Replaces the BatchData lien feed (BATCHDATA-EXIT, 2026-08-11): old bd chains keep merging from
+rem  the committed batchdata_liens.json cache; only NEW purchases stopped. --limit 6 bounds a run
+rem  to ~6-18 min of captcha solving so a bad portal day can't hang the nightly.
+if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 6 >> "%LOG%" 2>&1
 
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who

@@ -149,22 +149,41 @@ def _first_owner_name(owners_str):
     return None
 
 
+WP_EST_COST = 0.10   # est. $/call — same figure the .bat comment uses
+
+
 def _http_get(url, key, retries=3):
     """One HTTP GET with X-Api-Key header. Returns parsed JSON on 200, {'_http':N} on 404, None on
     other errors. Retries on 429 with exponential backoff (WP Pro trial keys rate-limit hard).
-    Exits on 401/403 (bad key). After retries exhausted, sets _stop_run so the batch exits cleanly."""
+    Exits on 401/403 (bad key). After retries exhausted, sets _stop_run so the batch exits cleanly.
+
+    Every call runs through bd_budget's SHARED daily-dollar ledger. Whitepages used to escape the
+    ceiling entirely (per-run cap only) — which is the exact multi-spender hole the ledger was built
+    to close. A request that REACHED the provider is charged (200 and 404 alike — a miss still
+    bills); 429s and network errors never reached billing and are not charged."""
+    import bd_budget
     for attempt in range(retries + 1):
         if _stop_run.is_set():
+            return None
+        try:
+            bd_budget.require(WP_EST_COST, 'whitepages_lookup')
+        except bd_budget.BudgetExhausted as e:
+            _log(f'  BUDGET: {e}')
+            _stop_run.set()
             return None
         req = urllib.request.Request(url, headers={'X-Api-Key': key, 'User-Agent': UA})
         try:
             with urllib.request.urlopen(req, timeout=25) as r:
-                return json.loads(r.read().decode('utf-8'))
+                out = json.loads(r.read().decode('utf-8'))
+                bd_budget.charge(WP_EST_COST, 'wp')
+                return out
         except urllib.error.HTTPError as e:
             body = ''
             try: body = e.read().decode('utf-8', 'replace')[:200]
             except Exception: pass
-            if e.code == 404: return {'_http': 404, 'result': None}
+            if e.code == 404:
+                bd_budget.charge(WP_EST_COST, 'wp-miss')
+                return {'_http': 404, 'result': None}
             if e.code == 429:
                 wait = min(120, 20 * (2 ** attempt))          # 20, 40, 80, 120
                 _log(f'  RATE LIMIT (429) sleeping {wait}s (attempt {attempt + 1}/{retries + 1})')

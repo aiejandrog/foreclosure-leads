@@ -241,9 +241,11 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--probe', action='store_true', help='(legacy reCAPTCHA-v3 browser probe)')
     ap.add_argument('--days', type=int, default=30)
-    ap.add_argument('--county', default='miami-dade',
-                    choices=['miami-dade', 'broward', 'all'],
-                    help='which recorder(s) to sweep (palm-beach pending its adapter)')
+    ap.add_argument('--county', default='all',
+                    choices=['miami-dade', 'broward', 'palm-beach', 'all'],
+                    help="which recorder(s) to sweep. Default 'all' ON PURPOSE: the nightly bat and "
+                         "refresh.yml call this script bare, and a miami-dade default silently made "
+                         "them single-county. Down/blocked counties skip themselves (sweep()->None).")
     a = ap.parse_args()
     if a.probe:
         probe(); return
@@ -254,9 +256,16 @@ def main():
         from fl_lp import broward as _bw
         bw = _bw.sweep(days=a.days)
         if bw is None:
-            print('BROWARD sweep blocked — Miami-Dade results (if any) still merge.')
+            print('BROWARD sweep blocked — other counties (if any) still merge.')
         else:
             out += bw
+    if a.county in ('palm-beach', 'all'):
+        from fl_lp import palmbeach as _pb
+        pb = _pb.sweep(days=a.days)
+        if pb is None:
+            print('PALM BEACH sweep blocked/portal down — other counties (if any) still merge.')
+        else:
+            out += pb
     if not out:
         print('\nno LP filings — every search blocked (captcha) or empty window. Retry.'); return
     # MERGE, never overwrite (2026-08-11). The sweep only sees its own date window; the file

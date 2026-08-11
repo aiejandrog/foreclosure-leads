@@ -2697,7 +2697,8 @@ function recompute(){
     // (conf 'ok' or 'low'); the deal-modal input always wins over the chain's number.
     const chainConf = (r.orconf==='ok' || r.orconf==='low' || r.orconf==='bd');   // 'bd' = BatchData property source
     // BatchData's aggregate does mortgages only — HOA / code-enforcement / IRS liens are hardcoded to
-    // $0 in the parser (batchdata_liens.py:124), NOT actually checked. Confidence for those buckets
+    // $0 in its parser (the hardcoded-$0 block in batchdata_liens.py — match by content, lines drift),
+    // NOT actually checked. Confidence for those buckets
     // must exclude 'bd' so a $0 there is treated as "not checked" (surfaces the manual-check nudge)
     // instead of "verified none" (which fakes an estoppel/code surprise away at closing).
     const nonMortConf = (r.orconf==='ok' || r.orconf==='low');
@@ -2892,7 +2893,7 @@ function flagChips(r){ let o='';
 function verifyChip(r){
   if(r.orconf==='ok') return '<span class="chip vok" title="A recorded mortgage/lien chain was pulled and isolated with confidence for this property. The surviving-mortgage and TAKEN/2ND-FORECLOSURE flags above (if any) are records-verified, not a guess.">&#10003;&nbsp;Records verified</span>';
   if(r.orconf==='low') return '<span class="chip vlow" title="A lien chain was pulled, but the owner\'s name was too common to isolate with confidence &mdash; these records may include a stranger\'s mortgages. Verify manually in Official Records before relying on the equity or flags shown.">~&nbsp;Low-confidence check</span>';
-  if(r.orconf==='bd') return '<span class="chip vlow" title="Lien stack from the BatchData property database (public-record aggregate) &mdash; used where the county Official Records could not be pulled. Open-lien positions and a current ESTIMATED balance; confirm the exact payoff before wiring.">≈&nbsp;BatchData estimate</span>';
+  if(r.orconf==='bd') return '<span class="chip vlow" title="PARTIAL lien stack from the BatchData property database (frozen 2026-08-11 &mdash; feed exited, cache kept). MORTGAGES ONLY, seniors-side: juniors filed after, HOA, code-enforcement and IRS liens were NEVER checked by this feed. Balances are modeled estimates; confirm the exact payoff before wiring.">≈&nbsp;PARTIAL &mdash; mortgages only (BatchData)</span>';
   return '<span class="chip vnone" title="No recorded mortgage/lien chain has been pulled for this property yet. The equity % shown is a RAW estimate (value minus the foreclosure judgment only) and has NOT been checked for a hidden surviving mortgage, an already-recorded sale, or a second foreclosure. Verify in Official Records before contacting or making an offer.">&#9711;&nbsp;Not yet verified</span>';
 }
 // surviving-first-mortgage line for HOA/junior cases (replaces the generic "mortgage risk").
@@ -3243,7 +3244,7 @@ function _debtSheetBody(r){
   const survTyped = _dTyped(nn.slien);
   const trust = survTyped ? (surv>0?'YOU ENTERED THIS':'YOU VERIFIED: none survives')
               : r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify'
-              : r.orconf==='bd' ? 'BATCHDATA ESTIMATE — confirm payoff'
+              : r.orconf==='bd' ? 'PARTIAL (BatchData) — juniors/HOA not checked, confirm payoff'
               : '⚠ NOT CHECKED — pull it';
   const row = (k, v) => '<div class="csrow"><span class="csk">'+k+'</span><span class="csvv">'+v+'</span></div>';
   let h='<div class="csbody">';
@@ -3341,7 +3342,7 @@ function _csScriptBody(r){
   const _bp = r.orsrc === 'batchdata' ? '~ BatchData (verify)' :
               r.orconf === 'ok' ? 'records-verified' :
               r.orconf === 'low' ? 'LOW-confidence chain' :
-              r.orconf === 'bd' ? '~ BatchData estimate' : 'not pulled';
+              r.orconf === 'bd' ? '~ PARTIAL — BatchData, juniors unchecked' : 'not pulled';
   const basis = typeof _basisOf === 'function' ? _basisOf(r) : (r.arv || r.value || 0);
   const basisTag = r._valsrc === 'arv' ? 'ARV, ' + (r.arvn || '?') + ' comps' : 'county roll';
   const surv = r._slien != null ? +r._slien : (+r._chainSurv || 0);
@@ -3993,7 +3994,7 @@ function _debtStack(r){
       '<i>(Real example: on 525 W 79 Pl the 2005 loan was assigned to Chase in 2015 — the $142,500 "survivor" was the foreclosure itself.)</i></div>';
   }
   h += '<div class="dscav">⚠ These are the <b>original recorded amounts</b> (doc-stamp/consideration), not today\'s payoff — a 2005 loan may be half paid down or bigger with arrears. Confirm every figure with a payoff letter before you wire anything. Chain confidence: <b>'+
-    (r.orconf==='ok'?'records-verified':r.orconf==='low'?'LOW — a common name may pull a stranger\'s loans':r.orconf==='bd'?'BatchData estimate — balances are modeled, confirm with a payoff letter':'not checked')+'</b>.</div>';
+    (r.orconf==='ok'?'records-verified':r.orconf==='low'?'LOW — a common name may pull a stranger\'s loans':r.orconf==='bd'?'PARTIAL (BatchData, feed exited) — mortgages only, juniors/HOA/code/IRS never checked; balances modeled, confirm with a payoff letter':'not checked')+'</b>.</div>';
   return h + '</div>';
 }
 function _talkTo(r){ const n = notes[r.case]||{}; return n.talkTo && n.talkTo.name ? n.talkTo : null; }
@@ -4216,7 +4217,7 @@ function _callSheet(r){
   const survChecked = survTyped || r.orconf==='ok' || r.orconf==='low' || r.orconf==='bd';
   const trust = survTyped ? (surv>0?'YOU ENTERED THIS':'YOU VERIFIED: none survives')
               : r.orconf==='ok' ? 'RECORDS-VERIFIED' : r.orconf==='low' ? 'LOW CONFIDENCE — verify'
-              : r.orconf==='bd' ? 'BATCHDATA ESTIMATE — confirm payoff'
+              : r.orconf==='bd' ? 'PARTIAL (BatchData) — juniors/HOA not checked, confirm payoff'
               : '⚠ NOT CHECKED — pull it';
   const netEq = _netEqOf(r);                          // includes btax + assess + mlien, matches DA + Jose SMS
   const clean = _cleanPhones(r), dnc = _dncPhones(r);
@@ -4745,7 +4746,7 @@ function _copyCallSheet(c){
   const survLabel = survTyped ? (surv>0?'you entered this':'you verified: none survives')
                     : r.orconf==='ok' ? 'records-verified'
                     : r.orconf==='low' ? 'LOW CONF — verify'
-                    : r.orconf==='bd' ? 'BATCHDATA estimate — confirm payoff'
+                    : r.orconf==='bd' ? 'PARTIAL (BatchData) — juniors/HOA not checked'
                     : 'NOT CHECKED — pull it';
   const tt=_talkTo(r), clean=_cleanPhones(r);
   const txt = [
@@ -12723,7 +12724,7 @@ function genScript(r){
   const _bp  = r.orsrc === 'batchdata' ? '~ BatchData (verify)' :
                r.orconf === 'ok' ? 'records-verified' :
                r.orconf === 'low' ? 'LOW-confidence chain' :
-               r.orconf === 'bd' ? '~ BatchData estimate' : 'not pulled';
+               r.orconf === 'bd' ? '~ PARTIAL — BatchData, juniors unchecked' : 'not pulled';
   const _basis = typeof _basisOf==='function' ? _basisOf(r) : (r.arv||r.value||0);
   const _basisTag = r._valsrc==='arv' ? 'ARV, '+(r.arvn||'?')+' comps '+(r.arvconf==='ok'?'ok':'low') : 'county roll';
   const _survRes = r._slienSet ? +r._slien : (r._slien!=null ? +r._slien : (+r._chainSurv||0));

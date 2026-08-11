@@ -71,41 +71,66 @@ def leads_hit(folio):
 
 # ---- 4. Official Records chain (best-effort; captcha-walled) -------------------------------
 OR_BASE = 'https://onlineservices.miamidadeclerk.gov/officialrecords/'
-def or_chain(owner_last_first, budget_sec=75):
-    """Returns (models, None) on success, (None, reason) when the county bot-wall wins."""
+QS_CACHE = os.path.join(HERE, 'records_qs.json')
+
+def or_chain(owner_clean, budget_sec=75):
+    """Owner's recorded doc chain, via the CACHED search token only.
+
+    History: this used to mint its own token by running a reCAPTCHA-v3 browser snippet lifted out of
+    gen_records_qs.py (regex for `JS = r\"\"\"...\"\"\"` + `SITE_KEY = '...'`). The clerk then migrated
+    Official Records to a Turnstile-gated SPA and gen_records_qs.py was rewritten to mint via
+    records_liens.fetch_via_turnstile(). Neither the JS block nor SITE_KEY exists in that file any
+    more, so the old regex returned None and this function died with AttributeError on EVERY lookup.
+
+    What makes the fix cheap: the qs is a STATELESS token and
+    `getStandardRecords?qs=<qs>` is UNGATED (per gen_records_qs.py's own docstring). So any token
+    already in records_qs.json keeps working indefinitely — no solving, no browser, no spend.
+
+    This deliberately does NOT mint a new token. Minting goes through Cloudflare Turnstile, and the
+    only tool for that is `python gen_records_qs.py`, run knowingly by the operator. A miss here is
+    reported as a miss so the report never silently shows an empty lien chain as "no liens found".
+    """
     try:
-        from playwright.sync_api import sync_playwright
-        import foreclosure_leads  # noqa: F401  (not required, but keeps env parity)
+        import records_liens as R
     except Exception as e:
-        return None, f'playwright unavailable ({e})'
-    src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()
-    m = re.search(r'JS = r"""(.*?)"""', src, re.S)
-    key = re.search(r"SITE_KEY = '([^']+)'", src).group(1)
-    js = m.group(1).replace('SITEKEY', key)
+        return None, f'records_liens unavailable ({e})'
+
+    # Accept both shapes: the legacy call site passes [GIVEN, SURNAME]; a plain owner string also
+    # works. Then drop fiduciary/estate suffixes — PA prints "LYDIA I GOMEZ TRS" and without this
+    # split_owner() would treat "TRS" as the surname and match nothing.
+    if isinstance(owner_clean, (list, tuple)):
+        owner_clean = ' '.join(str(x) for x in owner_clean if x)
+    _SUFFIX = {'TRS','TR','TRUST','TRUSTEE','EST','ESTATE','LE','REV','JR','SR','II','III','IV','ETAL'}
+    owner_clean = ' '.join(t for t in str(owner_clean or '').split()
+                           if t.strip('.,').upper() not in _SUFFIX)
     try:
-        from playwright.sync_api import sync_playwright
-        with sync_playwright() as p:
-            b = p.chromium.launch(headless=True)
-            pg = b.new_context(user_agent=UA, viewport={'width':1400,'height':1000}).new_page()
-            t0 = time.time()
-            res = None
-            for _ in range(3):
-                if time.time() - t0 > budget_sec: break
-                try:
-                    pg.goto(OR_BASE, timeout=40000, wait_until='domcontentloaded')
-                    pg.wait_for_timeout(3000)
-                    res = pg.evaluate(js, owner_last_first)
-                    if res and res.get('success') and res.get('qs'): break
-                except Exception:
-                    pg.wait_for_timeout(2500)
-            b.close()
-        if not (res and res.get('success') and res.get('qs')):
-            return None, 'county bot-check blocked the automated search'
-        g = requests.get(OR_BASE + 'api/SearchResults/getStandardRecords?qs=' + res['qs'],
-                         headers={'User-Agent': UA, 'Accept': 'application/json', 'Referer': OR_BASE}, timeout=30).json()
-        return g.get('recordingModels', []), None
+        cache = json.load(open(QS_CACHE, encoding='utf-8')) if os.path.exists(QS_CACHE) else {}
     except Exception as e:
-        return None, str(e)[:80]
+        return None, f'records_qs.json unreadable ({e})'
+    if not cache:
+        return None, 'no records_qs.json cache yet — run: python gen_records_qs.py'
+
+    # Cache is keyed by owner_clean as it appears on the lead. Match exactly first, then fall back to
+    # a surname+given match so PA spellings like "LYDIA I GOMEZ TRS" still find "LYDIA GOMEZ".
+    want = (owner_clean or '').strip().upper()
+    qs = cache.get(want) or cache.get(owner_clean)
+    if not qs:
+        sp = R.split_owner(want)
+        if sp:
+            surname, given = sp
+            first_given = (given.split()[0] if given else '')
+            for k, v in cache.items():
+                ku = k.upper()
+                if surname and surname in ku and (not first_given or first_given in ku):
+                    qs, want = v, k
+                    break
+    if not qs:
+        return None, ('no cached Records token for this owner — run: '
+                      'python gen_records_qs.py  (mints via Turnstile/2Captcha; operator-run only)')
+    models = R.records_by_qs(qs)
+    if models is None:
+        return None, 'cached token rejected by the clerk (likely expired) — re-run gen_records_qs.py'
+    return models, None
 
 def mortgage_table(models, folio):
     """Sorted doc chain + satisfied-matching: an SMO whose orig book/page equals a MOR's book/page closes it."""
