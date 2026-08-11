@@ -46,10 +46,26 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 MCP_URL_F = os.path.join(HERE, 'tracerfy_mcp.url')
 DNC_F = os.path.join(HERE, 'dnc_scrub.json')          # gitignored sidecar {phone: verdict}
 CR = 0.02                                             # dollars per credit
-COST = {'dnc': 1 * CR, 'parcel': 5 * CR, 'trace_instant': 5 * CR, 'trace_batch': 1 * CR}
+# dnc: measured live 2026-08-11 — the MCP per-call check bills FIVE credits (credits_deducted:5),
+# not the 1cr the pricing page quotes for the web BATCH scrub product. Per-call is for small urgent
+# sets only; route bulk scrubs through `dnccsv` + the web upload at the real 1cr/phone.
+COST = {'dnc': 5 * CR, 'dnc_batch': 1 * CR, 'parcel': 5 * CR,
+        'trace_instant': 5 * CR, 'trace_batch': 1 * CR}
 DNC_TTL_DAYS = 30                                     # registry status is re-checkable after this
 
 COUNTY_OF = {'MIAMI-DADE': 'Miami-Dade', 'BROWARD': 'Broward', 'PALM BEACH': 'Palm Beach'}
+
+
+def _fmt_folio(folio, county):
+    """Tracerfy's parcel_lookup 500s on undashed folios (verified live 2026-08-11: 3220240340060
+    -> empty server error AND a mystery balance hit; 32-2024-034-0060 -> clean miss, 0 deducted).
+    Dash per county convention; unknown shapes pass through untouched."""
+    f = re.sub(r'[^0-9A-Za-z]', '', str(folio or ''))
+    if county == 'Miami-Dade' and len(f) == 13 and f.isdigit():
+        return '%s-%s-%s-%s' % (f[0:2], f[2:6], f[6:9], f[9:13])
+    if county in ('Broward', 'Palm Beach') and len(f) == 12 and f.isdigit():
+        return '%s-%s-%s-%s' % (f[0:4], f[4:6], f[6:8], f[8:12])
+    return str(folio or '')
 
 
 def _url():
@@ -115,9 +131,19 @@ def _dnc_scrubbed():
 
 def _dnc_targets():
     """Phones the modeled flag currently ALLOWS (dnc:false) and the registry hasn't confirmed
-    inside the TTL. These are exactly the numbers the operator might dial today."""
+    inside the TTL — ordered most-urgent lead first (days to auction), so a budget-capped run
+    covers the numbers the operator will actually dial this month before the long tail."""
     cache, done = _cache(), _dnc_scrubbed()
     cutoff = (datetime.date.today() - datetime.timedelta(days=DNC_TTL_DAYS)).isoformat()
+    days_of = {}
+    for r in _board():
+        c = SK._case(r)
+        try:
+            d = int(r.get('days_to_auction') if r.get('days_to_auction') is not None else r.get('days'))
+        except (TypeError, ValueError):
+            d = 9999
+        if c and (c not in days_of or d < days_of[c]):
+            days_of[c] = d
     out = []
     for case, e in cache.items():
         for p in (e.get('phones') or []):
@@ -128,6 +154,7 @@ def _dnc_targets():
             if d and (d.get('checked') or '') >= cutoff:
                 continue
             out.append((case, n))
+    out.sort(key=lambda cn: days_of.get(cn[0], 9999))
     seen, uniq = set(), []
     for case, n in out:
         if n not in seen:
@@ -177,10 +204,19 @@ def run_dnc(limit, live):
         print('balance %d credits < %d needed — running what fits' % (bal, len(targets)))
         targets = targets[:bal]
     done = _dnc_scrubbed()
-    flagged = 0
+    flagged = errs = 0
     for i, (case, n) in enumerate(targets, 1):
         bd_budget.require(COST['dnc'], 'tracerfy dnc')
-        v = call('dnc_check', {'phone': n})
+        try:
+            v = call('dnc_check', {'phone': n})
+        except Exception as e:
+            errs += 1
+            print('  ERR %s: %s' % (n, str(e)[:100]))
+            if errs >= 5:
+                print('ABORT: 5 provider errors — stopping.')
+                break
+            time.sleep(1.0)
+            continue
         bd_budget.charge(COST['dnc'], 'tracerfy-dnc')
         rec = {'national_dnc': bool(v.get('national_dnc')), 'state_dnc': bool(v.get('state_dnc')),
                'states': v.get('state_dnc_list') or [], 'case': case,
@@ -188,17 +224,32 @@ def run_dnc(limit, live):
         done[n] = rec
         if rec['national_dnc'] or rec['state_dnc']:
             flagged += 1
+        # checkpoint EVERY result — billed-but-unsaved is money lost (learned at 12 results, 08-11)
+        tmp = DNC_F + '.tmp'
+        json.dump(done, open(tmp, 'w', encoding='utf-8'), indent=1)
+        os.replace(tmp, DNC_F)
         if i % 20 == 0 or i == len(targets):
-            tmp = DNC_F + '.tmp'
-            json.dump(done, open(tmp, 'w', encoding='utf-8'), indent=1)
-            os.replace(tmp, DNC_F)
-            print('  [%d/%d] %d registry-listed so far' % (i, len(targets), flagged))
+            print('  [%d/%d] %d registry-listed, %d error(s)' % (i, len(targets), flagged, errs))
         time.sleep(0.3)
-    tmp = DNC_F + '.tmp'
-    json.dump(done, open(tmp, 'w', encoding='utf-8'), indent=1)
-    os.replace(tmp, DNC_F)
-    print('DONE: %d scrubbed, %d ON a registry (modeled flag said safe) -> dnc_scrub.json; '
-          'rebuild the board to enforce.' % (len(targets), flagged))
+    print('DONE: %d scrubbed, %d ON a registry (modeled flag said safe), %d errors -> dnc_scrub.json; '
+          'rebuild the board to enforce.' % (len(done), flagged, errs))
+
+
+def run_dnccsv():
+    """CSV of every still-unscrubbed dnc:false phone for the web BATCH DNC scrub (1 cr/phone —
+    5x cheaper than the per-call MCP check). Upload click is the operator's."""
+    targets = _dnc_targets()
+    out = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop',
+                       'Tracerfy_DNC_%s.csv' % datetime.date.today().isoformat())
+    import csv
+    with open(out, 'w', newline='', encoding='utf-8') as f:
+        w = csv.writer(f)
+        w.writerow(['phone', 'case'])
+        w.writerows([(n, case) for case, n in targets])
+    print('%d unscrubbed phone(s) -> %s' % (len(targets), out))
+    print('web batch scrub: %d cr (~$%.2f); the MCP per-call route would be %d cr (~$%.2f)'
+          % (len(targets), len(targets) * COST['dnc_batch'],
+             len(targets) * 5, len(targets) * COST['dnc']))
 
 
 def run_parcel(limit, live):
@@ -216,10 +267,20 @@ def run_parcel(limit, live):
         print('(dry run — pass --live to spend)')
         return
     cache = _cache()
-    hits = 0
+    hits = errs = 0
     for i, t in enumerate(targets, 1):
         bd_budget.require(COST['parcel'], 'tracerfy parcel')
-        v = call('parcel_lookup', {'parcel_id': t['folio'], 'county': t['county'], 'state': 'FL'})
+        try:
+            v = call('parcel_lookup', {'parcel_id': _fmt_folio(t['folio'], t['county']),
+                                       'county': t['county'], 'state': 'FL'})
+        except Exception as e:
+            errs += 1
+            print('  ERR %s (%s): %s' % (t['folio'], t['county'], str(e)[:100]))
+            if errs >= 5:
+                print('ABORT: 5 provider errors — stopping before more mystery deductions.')
+                break
+            time.sleep(1.0)
+            continue
         persons = (v or {}).get('persons') or []
         phones, emails = SK._collect(persons, phone_field='phones',
                                      order=lambda p: (p.get('rank') or 9999))
@@ -236,14 +297,15 @@ def run_parcel(limit, live):
                                          'emails': [],
                                          'traced': datetime.date.today().isoformat(),
                                          'source': 'tracerfy-parcel'})
+        # checkpoint EVERY result — a billed hit that dies before a batched save is money lost
+        tmp = os.path.join(HERE, 'skiptrace_results.json.tmp')
+        json.dump(cache, open(tmp, 'w', encoding='utf-8'), indent=1)
+        os.replace(tmp, os.path.join(HERE, 'skiptrace_results.json'))
         if i % 10 == 0 or i == len(targets):
-            tmp = os.path.join(HERE, 'skiptrace_results.json.tmp')
-            json.dump(cache, open(tmp, 'w', encoding='utf-8'), indent=1)
-            os.replace(tmp, os.path.join(HERE, 'skiptrace_results.json'))
-            print('  [%d/%d] %d hit(s)' % (i, len(targets), hits))
+            print('  [%d/%d] %d hit(s), %d error(s)' % (i, len(targets), hits, errs))
         time.sleep(0.4)
-    print('DONE: %d/%d parcels resolved to a human -> skiptrace_results.json; rebuild to bake.'
-          % (hits, len(targets)))
+    print('DONE: %d/%d parcels resolved to a human (%d errors) -> skiptrace_results.json; rebuild to bake.'
+          % (hits, len(targets), errs))
 
 
 def _addr_str(r):
@@ -310,7 +372,7 @@ def run_plan():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('cmd', choices=['balance', 'plan', 'dnc', 'parcel', 'batchcsv'])
+    ap.add_argument('cmd', choices=['balance', 'plan', 'dnc', 'dnccsv', 'parcel', 'batchcsv'])
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--live', action='store_true', help='actually spend credits (default: dry run)')
     a = ap.parse_args()
@@ -320,6 +382,8 @@ def main():
         run_plan()
     elif a.cmd == 'dnc':
         run_dnc(a.limit, a.live)
+    elif a.cmd == 'dnccsv':
+        run_dnccsv()
     elif a.cmd == 'parcel':
         run_parcel(a.limit, a.live)
     elif a.cmd == 'batchcsv':
