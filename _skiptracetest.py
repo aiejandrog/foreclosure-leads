@@ -82,6 +82,13 @@ def run(leads, actions, argv, seed=None, ledger=None):
     ST.requests.Session = lambda: sess                   # main() calls requests.Session()
     # llc_officers.json read is harmless (leads aren't companies); leave it.
     old_argv = sys.argv
+    # Pin the provider the MOCKS are shaped for (BatchData: results.persons[].phoneNumbers). Without
+    # this the run relies on pick_provider() auto-detect, which now returns 'tracerfy' whenever a
+    # tracerfy.key exists on disk (it does, since 2026-08-11) — and _extract_tracerfy reads a
+    # different shape (persons[].phones), so every phone extracted empty. The extraction logic is
+    # fine in production; the test just must not depend on which key files happen to exist.
+    if '--provider' not in argv:
+        argv = argv + ['--provider', 'batchdata']
     sys.argv = ['skiptrace.py'] + argv
     code = 0
     try:
