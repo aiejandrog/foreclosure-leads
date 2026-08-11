@@ -236,6 +236,22 @@ def _bounce_health():
 
 
 PROVEN_MIN_AGE_DAYS = 2   # a hard bounce DSNs within minutes-to-hours; 48h of silence ≈ delivered
+PROBE_DAILY_CAP = 10      # see _probe_quota_left — the free verification trickle
+
+
+def _probe_quota_left():
+    """PROBE LANE (2026-08-11): the only free way to verify the ~850 'unknown' addresses is to
+    mail them and watch. Doing that in bulk is what poisoned the account in the first place, so
+    this lane is a TRICKLE: at most PROBE_DAILY_CAP never-mailed, not-dead, not-risky recipients
+    per day while the breaker is engaged. Worst case (33% of probes dead) adds ~3 bounces a day
+    against ~150 clean proven sends — the trailing rate keeps FALLING even while probing. Every
+    probe that stays quiet 48h graduates into the proven pool automatically via
+    _proven_deliverable(), so the unknown pile self-verifies at ~70 addresses a week for $0."""
+    today = dt.date.today().isoformat()
+    used = sum(1 for e in _load_ledger()
+               if e.get('ch') == 'email' and str(e.get('d') or '') == today
+               and e.get('lane') == 'probe')
+    return max(0, PROBE_DAILY_CAP - used)
 
 
 def _proven_deliverable():
@@ -421,6 +437,7 @@ class Handler(BaseHTTPRequestHandler):
                 # (accepted mail >= 48h ago, never bounced) still go through. The worker
                 # banner uses this to say "N addresses still sendable" instead of "all stop".
                 'proven_pool': len(_proven_deliverable()) if _bh['rate'] > BOUNCE_CEILING else None,
+                'probe_quota_left': _probe_quota_left() if _bh['rate'] > BOUNCE_CEILING else None,
             })
         else:
             self._json(404, {'ok': False, 'err': 'unknown path'})
@@ -573,6 +590,31 @@ class Handler(BaseHTTPRequestHandler):
                           for a in [to] + str(bcc or '').split(',') if a.strip()]
                 _proven = _proven_deliverable()
                 _unproven = sorted(a for a in _rcpts if a not in _proven)
+                # PROBE LANE: unproven recipients may still go if every one of them is merely
+                # UNKNOWN (never observed bouncing, not flagged risky) and today's probe quota
+                # has room. Risky/dead never probe — those classes already have evidence.
+                if _unproven:
+                    _bad = set()
+                    try:
+                        _bad = {str(k).lower() for k in json.load(open(
+                            os.path.join(HERE, 'bounced_emails.json'), encoding='utf-8'))}
+                    except Exception:
+                        pass
+                    _ver = {}
+                    try:
+                        _ver = json.load(open(os.path.join(HERE, 'verified_emails.json'),
+                                              encoding='utf-8'))
+                    except Exception:
+                        pass
+                    def _cls(a):
+                        v = (_ver.get(a) or {}).get('v')
+                        if a in _bad or v == 'dead':
+                            return 'dead'
+                        return v or 'unknown'
+                    if (all(_cls(a) == 'unknown' for a in _unproven)
+                            and len(_unproven) <= _probe_quota_left()):
+                        meta['lane'] = 'probe'
+                        _unproven = []
                 if _unproven:
                     # skip:True is the machine-readable "advance, don't halt" signal — the worker
                     # must treat a held recipient like the 24h-dedupe skip, not like an outage.
@@ -650,6 +692,9 @@ class Handler(BaseHTTPRequestHandler):
                 'subj': subj, 'body_len': len(body),
                 'message_id': mid,
                 'test_mode': bool(meta.get('test')),
+                # 'proven' = passed the breaker on acceptance evidence; 'probe' = one of
+                # today's quota of unknown-address verification sends. Absent on normal sends.
+                'lane': meta.get('lane') or '',
             })
         except Exception as e:
             # Loud on the server side (operator can grep the log) — this is the one real gap the
