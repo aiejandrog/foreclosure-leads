@@ -26,9 +26,9 @@ import sys
 from urllib.parse import quote_plus
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, '_carlos_pre_rows.json')
+SRC = os.path.join(HERE, os.environ.get('CARLOS_SRC', '_carlos_pre_rows.json'))
 MERGE_MI = 4.2          # two clusters merge when their centroids are this close
-MAX_SECTION = 14        # a section bigger than this is a day's work by itself; split it
+MAX_SECTION = 16        # a section bigger than this is a day's work by itself; split it
 ORPHAN_MI = 9.0         # a lone door still joins its nearest section if it is within this far —
                         # a one-door "section" is not a route, it is a detour
 
@@ -185,6 +185,7 @@ td{padding:6px 8px;border-top:1px solid #eef0f5;vertical-align:top}
 .ph{font:11.5px monospace;color:#065f46;white-space:nowrap}
 .meta{font-size:10px;color:#6b7280}
 .hs{background:#dcfce7;color:#065f46;font:700 9px Arial;padding:1px 5px;border-radius:7px}
+.ln{background:#0B1730;color:#F4E5A7;font:700 9px Arial;padding:1px 6px;border-radius:7px}
 .fl{background:#fee2e2;color:#991b1b;font:700 9px Arial;padding:1px 5px;border-radius:7px}
 .cd{background:#fef3c7;color:#92400e;font:700 9px Arial;padding:1px 5px;border-radius:7px}
 .note{border-bottom:1px dotted #9ca3af;height:13px;margin-top:4px}
@@ -326,14 +327,16 @@ def main():
             # change how the door is worked (see WHO ANSWERS THE DOOR), so they print in red.
             tags = ('<span class="hs">LIVES THERE</span> ' if r['hs'] else '') + \
                    ('<span class="cd">CONDO</span> ' if r['condo'] else '') + \
-                   ''.join('<span class="fl">%s</span> ' % H.escape(f) for f in (r.get('flags') or []))
+                   ''.join('<span class="fl">%s</span> ' % H.escape(f) for f in (r.get('flags') or [])) + \
+                   ('<span class="ln">%s</span> ' % H.escape(r.get('lane', '')) if r.get('lane') else '')
             out.append(
                 '<tr><td class="n">%d</td><td><div class="a">%s</div>'
                 '<div class="who">%s %s</div>'
-                '<div class="meta">$%s value &middot; %s bd / %s ba &middot; %s sqft &middot; filed %s &middot; PLAINTIFF: %s &middot; case %s</div>'
+                '<div class="meta">%s$%s value &middot; %s bd / %s ba &middot; %s sqft &middot; filed %s &middot; PLAINTIFF: %s &middot; case %s</div>'
                 '<div class="note"></div></td>'
                 '<td class="ph">%s</td></tr>'
                 % (n, H.escape(r['addr']), H.escape(r['owner'][:34]), tags,
+                   (('<b style="color:#991b1b">SALE %s</b> &middot; ' % H.escape(str(r['auction']))) if r.get('auction') else ('<b>%s</b> &middot; ' % H.escape(r['lien']) if r.get('lien') else '')),
                    format(r['val'], ',d') if r['val'] else '?', r['beds'] or '?', r['baths'] or '?',
                    format(int(r['sqft']), ',d') if r.get('sqft') else '?',
                    H.escape(str(r['filed'])), H.escape(r['pl']), H.escape(str(r['c'])), ph))
