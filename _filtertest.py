@@ -31,7 +31,10 @@ def state(pg):
     return pg.evaluate("""() => ({
       tier: typeof tier!=='undefined' ? tier : null,
       county: typeof county!=='undefined' ? county : null,
-      rows: document.querySelectorAll('#tb tr[data-case]').length,
+      // The table is WINDOWED (2026-08-12 perf work): the DOM holds the first screenful and
+      // streams the rest as you scroll. Row COUNT assertions must read the data the board is
+      // showing (view()), not how much of it has been painted yet.
+      rows: (typeof view==='function' ? view().length : document.querySelectorAll('#tb tr[data-case]').length),
       tierActive: (document.querySelector('.tf.active')||{}).dataset?.t || null,
       cfActive: (document.querySelector('.cf.active')||{}).dataset?.cty || null
     })""")

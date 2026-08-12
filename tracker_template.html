@@ -14191,6 +14191,119 @@ function _firstMoverScore(r){
   if(typeof _isNewLead==='function' && _isNewLead(r)) s += 6;   // new on the board this build
   return s;
 }
+// ===== LAZY LINK ROWS (perf, 2026-08-12) =====================================================
+// MEASURED: the per-lead links sub-row is ~9.7KB of HTML each — 13.4MB across 1,380 leads, 65% of
+// the ENTIRE table string. Every filter/sort/search rebuilt and re-parsed all of it, even though
+// ~10 rows are ever on screen. That is what made boot block the main thread for seconds and made
+// typing in the search box feel dead. view() itself is fine (17ms); the cost was DOM parse+layout.
+//
+// The links are presentational only — nothing reads .lwrap content (grep-verified) — so the row
+// SHELL still renders (layout, hover, pinfire, row counts all unchanged) and the contents are
+// injected when the row is about to reach the viewport. Everything already built stays in the map,
+// so re-filling on a later render is free.
+// ===== CHUNKED TABLE WRITE (perf, 2026-08-12) ================================================
+// Assigning 1,380 rows of innerHTML in one go is a single un-interruptible parse+layout task —
+// measured at 1.9-6.4s, during which clicks, typing and scrolling do nothing. Nothing in the app
+// counts DOM rows (the only consumer is a delegated closest() click handler), so the first
+// screenful is painted synchronously and the remainder streams in slices. The board is usable in
+// ~40ms instead of seconds, and a new render cancels any pending stream so a fast typist never
+// stacks work.
+let _pendRows = null, _pendIdx = 0, _rowObs = null;
+const _ROWS_FIRST = 120, _ROWS_SLICE = 160;
+// Append the next slice when a 1px SENTINEL row at the end of the table comes into view. A sentinel
+// + IntersectionObserver works no matter which ancestor actually scrolls (window, .tblwrap, or a
+// future wrapper) — reading scrollTop meant guessing, and guessing wrong shipped a board that
+// stopped at 60 rows (caught in functional test, 2026-08-12).
+function _rowSentinel(tb){
+  let s = document.getElementById('rowsentinel');
+  if(!s){
+    s = document.createElement('tr');
+    s.id = 'rowsentinel';
+    s.innerHTML = '<td colspan="12" style="height:1px;padding:0;border:0"></td>';
+  }
+  tb.appendChild(s);                    // always last
+  return s;
+}
+function _pumpRows(){
+  if(!_pendRows) return;
+  const tb = document.getElementById('tb'); if(!tb) return;
+  if(_pendIdx >= _pendRows.length){
+    _pendRows = null;
+    const s = document.getElementById('rowsentinel'); if(s) s.remove();
+    if(_rowObs){ _rowObs.disconnect(); _rowObs = null; }
+    return;
+  }
+  const slice = _pendRows.slice(_pendIdx, _pendIdx + _ROWS_SLICE).join('');
+  _pendIdx += _ROWS_SLICE;
+  const sent = document.getElementById('rowsentinel');
+  if(sent) sent.insertAdjacentHTML('beforebegin', slice);
+  else tb.insertAdjacentHTML('beforeend', slice);
+  _lzArm(tb);
+  _armRowObs(tb);                        // re-observe: the sentinel moved down
+}
+function _armRowObs(tb){
+  const s = _rowSentinel(tb);
+  if(!('IntersectionObserver' in window)){   // no IO -> just finish the table
+    while(_pendRows && _pendIdx < _pendRows.length) _pumpRows();
+    return;
+  }
+  if(_rowObs) _rowObs.disconnect();
+  _rowObs = new IntersectionObserver(function(en){
+    for(const e of en){ if(e.isIntersecting){ _pumpRows(); break; } }
+  }, {root:null, rootMargin:'1200px 0px', threshold:0});
+  _rowObs.observe(s);
+}
+function _writeRows(tb, trs){
+  if(_lzObs){ _lzObs.disconnect(); _lzObs = null; }   // previous rows are about to be destroyed
+  if(_rowObs){ _rowObs.disconnect(); _rowObs = null; }
+  _pendRows = null; _pendIdx = 0;
+  const sOld = document.getElementById('rowsentinel'); if(sOld) sOld.remove();
+  tb.innerHTML = trs.slice(0, _ROWS_FIRST).join('');
+  _lzArm(tb);
+  if(trs.length > _ROWS_FIRST){ _pendRows = trs; _pendIdx = _ROWS_FIRST; _armRowObs(tb); }
+}
+// Anything that needs the WHOLE table present (print, select-all copy) forces the rest in.
+function _rowsFillAll(){
+  if(!_pendRows) return;
+  const tb = document.getElementById('tb');
+  const sent = document.getElementById('rowsentinel');
+  const rest = _pendRows.slice(_pendIdx).join('');
+  if(sent){ sent.insertAdjacentHTML('beforebegin', rest); sent.remove(); }
+  else if(tb) tb.insertAdjacentHTML('beforeend', rest);
+  _pendRows = null;
+  if(_rowObs){ _rowObs.disconnect(); _rowObs = null; }
+  if(tb) _lzArm(tb);
+}
+const _lzLinks = new Map();
+let _lzObs = null;
+function _lzFill(tr){
+  if(!tr || tr.dataset.lzDone) return;
+  const w = tr.querySelector('.lwrap'); if(!w) return;
+  const html = _lzLinks.get(tr.dataset.lz);
+  if(html == null) return;
+  w.innerHTML = html;
+  tr.dataset.lzDone = '1';
+}
+function _lzArm(root){
+  try{
+    if(!('IntersectionObserver' in window)){            // no IO -> fill everything, old behaviour
+      (root||document).querySelectorAll('tr.lrow[data-lz]').forEach(_lzFill); return;
+    }
+    if(!_lzObs) _lzObs = new IntersectionObserver(function(entries){
+      for(const e of entries){ if(e.isIntersecting){ _lzFill(e.target); _lzObs.unobserve(e.target); } }
+    }, {root:null, rootMargin:'900px 0px', threshold:0});   // 900px = fill just before he scrolls to it
+    // Arm ONLY rows not already armed. Re-scanning the whole tbody after every streamed chunk was
+    // O(n^2) and put 5.3s of avoidable work back on the main thread (measured 2026-08-12).
+    (root||document).querySelectorAll('tr.lrow[data-lz]:not([data-lz-armed])').forEach(function(tr){
+      tr.dataset.lzArmed = '1'; _lzObs.observe(tr);
+    });
+  }catch(_e){
+    (root||document).querySelectorAll('tr.lrow[data-lz]').forEach(_lzFill);
+  }
+}
+// Anything that needs EVERY link present (print, select-all copy) calls this first.
+function _lzFillAll(){ document.querySelectorAll('tr.lrow[data-lz]').forEach(_lzFill); }
+window.addEventListener('beforeprint', function(){ if(typeof _rowsFillAll==='function') _rowsFillAll(); _lzFillAll(); });
 function view(){
   // Smart auto-recovery (2026-07-20): a filter that depends on a set which is now empty drops
   // itself instead of stranding you on a blank board. Remove your last saved lead while the
@@ -14681,7 +14794,8 @@ function render(){
     // natural height and the five groups get room to sit on one line. No data-case attribute here on
     // purpose — row counts, fire-lock and the door-route all key off tr[data-case] and must not
     // double-count this presentational row.
-    trs.push('<tr class="lrow'+(pinnedCase===r.case?' pinfire':'')+'"><td class="links lcell" colspan="11"><div class="lwrap">'+linksHtml+'</div></td></tr>');
+    _lzLinks.set(r.case, linksHtml);   // built here (cheap string work), injected on approach
+    trs.push('<tr class="lrow'+(pinnedCase===r.case?' pinfire':'')+'" data-lz="'+esc(r.case)+'"><td class="links lcell" colspan="11"><div class="lwrap"></div></td></tr>');
     }
     // mobile card
     if(_mob){
@@ -14746,7 +14860,7 @@ function render(){
   // rebuilds the other side the instant the width crosses 860px, so nothing is ever left blank.
   const _tb = document.getElementById('tb');
   if(_mob){ if(cc) cc.innerHTML = cards.join(''); if(_tb) _tb.innerHTML = ''; if(window._fxEnter) window._fxEnter(cc); }
-  else { if(_tb) _tb.innerHTML = trs.join(''); if(cc) cc.innerHTML = ''; if(window._fxEnter) window._fxEnter(_tb); }
+  else { if(_tb) _writeRows(_tb, trs); if(cc) cc.innerHTML = ''; if(window._fxEnter) window._fxEnter(_tb); }
 }
 // PERF companion to the visible-layout-only render: when the viewport crosses the 860px breakpoint,
 // the newly-shown layout was skipped on the last render and would be empty — repaint once on the
