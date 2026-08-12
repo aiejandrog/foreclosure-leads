@@ -132,10 +132,30 @@ def main():
                     'agent_ph': human.get('ph') or '', 'agent_addr': human.get('a') or '',
                 })
 
-    # dedupe by (case, lender, origin)
+    # COUNTYWIDE SWEEP (fl_lp/broward_mortgages.py) — the volume unlock. These are hard-money-to-LLC
+    # mortgages pulled straight from the recorder index, NOT scoped to the foreclosure book, so they
+    # are the pre-balloon universe Jesse actually wants. No case number, no Sunbiz human yet (that's
+    # a follow-up llc_officers pull keyed on the borrower name); the LLC + lender + amount + age are
+    # the actionable core.
+    for m in _rows(_load('broward_mortgages.json', [])):
+        if not isinstance(m, dict):
+            continue
+        iso = str(m.get('origin') or '')[:10]
+        if not re.match(r'\d{4}-\d{2}-\d{2}', iso) or iso < lo or iso > hi:
+            continue
+        hits.append({
+            'case': '', 'county': m.get('county') or 'BROWARD', 'owner': str(m.get('borrower') or '').strip(),
+            'addr': '', 'value': 0, 'lender': str(m.get('lender') or '').strip(),
+            'amt': m.get('amt') or 0, 'origin': iso,
+            'age_mo': round((today - datetime.date.fromisoformat(iso)).days / 30.4, 1),
+            'agent': '', 'agent_ph': '', 'agent_addr': '', 'source': 'countywide',
+            'parcel': str(m.get('parcel') or '').strip(),
+        })
+
+    # dedupe by (case, lender, origin) / (borrower, lender, origin) for swept rows
     seen, uniq = set(), []
     for h in sorted(hits, key=lambda x: x['origin'], reverse=True):
-        k = (h['case'], h['lender'], h['origin'])
+        k = (h['case'] or h['owner'], h['lender'], h['origin'])
         if k not in seen:
             seen.add(k)
             uniq.append(h)
@@ -149,14 +169,23 @@ def main():
     lenders = {}
     for h in uniq:
         lenders[h['lender']] = lenders.get(h['lender'], 0) + 1
-    _write_report(uniq, lenders, lo, hi, a.months)
+    # THE BALLOON ZONE is 8-24 months old: past the 1-yr balloon, at or approaching the 2-yr. Those
+    # are the loans coming due NOW — the actionable book. The table shows them, biggest loan first
+    # (biggest loan = biggest refi commission), capped so the sheet stays a sheet; the KPIs still
+    # count the whole universe.
+    zone = [h for h in uniq if 8 <= h['age_mo'] <= 24]
+    zone.sort(key=lambda h: h['amt'], reverse=True)
+    _write_report(uniq, zone[:150], lenders, lo, hi, a.months)
     return uniq
 
 
-def _write_report(hits, lenders, lo, hi, months):
-    n = len(hits)
-    with_human = sum(1 for h in hits if h['agent'])
-    total = sum(int(h['amt'] or 0) for h in hits)
+def _write_report(full, hits, lenders, lo, hi, months):
+    # KPIs count the WHOLE universe; the table shows the balloon-zone display slice (`hits`).
+    swept = [h for h in full if h.get('source') == 'countywide']
+    zone_all = [h for h in full if 8 <= h['age_mo'] <= 24]
+    n = len(full)
+    zone_n = len(zone_all)
+    total = sum(int(h['amt'] or 0) for h in zone_all)
     rows = ''
     for h in hits:
         rows += ('<tr><td>%s</td><td class="r">%s mo</td><td>%s</td><td class="r">$%s</td>'
@@ -186,30 +215,27 @@ ul{{margin:6px 0 0 18px;columns:2}}
 <div class="sub">Miami Solutions Group &middot; built {date} from public mortgage records + Sunbiz &middot;
 origin window {lo} to {hi} ({months} months)</div>
 <div class="kpis">
-  <div class="kpi"><div class="n">{n}</div><div class="l">Balloon candidates</div></div>
-  <div class="kpi"><div class="n">${totalM}M</div><div class="l">Loan volume in view</div></div>
-  <div class="kpi"><div class="n">{human}</div><div class="l">With a Sunbiz human already</div></div>
+  <div class="kpi"><div class="n">{zone_n}</div><div class="l">In the balloon zone (8&ndash;24mo, due now)</div></div>
+  <div class="kpi"><div class="n">${totalM}M</div><div class="l">Loan volume in that zone</div></div>
+  <div class="kpi"><div class="n">{n}</div><div class="l">Total hard-money-to-LLC loans found</div></div>
   <div class="kpi"><div class="n">{nlend}</div><div class="l">Distinct private lenders</div></div>
 </div>
-<div class="box"><h3>What the system CAN do today (thumbs up)</h3>
-<div class="yes">&#10003; Owner is an LLC &nbsp; &#10003; Lender name matches a hard-money signature (excludes Wells/BofA/Chase &amp; every big bank)
-&nbsp; &#10003; Mortgage is OPEN, not satisfied &nbsp; &#10003; Origin date inside the balloon window &nbsp; &#10003; Sunbiz officer/agent behind the LLC (name + phone where pulled)</div></div>
-<div class="box"><h3>What it CANNOT do from the record alone (the honest limit)</h3>
+<div class="box"><h3>This is the COUNTYWIDE sweep &mdash; not just the foreclosure book</h3>
+<p style="margin:0">{swept_n} of these came from a direct sweep of the Broward recorder&rsquo;s mortgage index
+(document type = MORTGAGE) over {months} months &mdash; <b>every</b> hard-money loan to an LLC, not only the ones
+already in foreclosure. These are the balloons <b>about to pop, not the ones that already did</b>. Same scraper
+rails as the lis-pendens sweeps.</p></div>
+<div class="box"><h3>What each row gives you (thumbs up)</h3>
+<div class="yes">&#10003; Borrower is an LLC &nbsp; &#10003; Lender is a private / hard-money lender (Kiavi, Lima One, Alto Capital, RBI, Velocity &mdash; every big bank + credit union filtered out)
+&nbsp; &#10003; The exact loan amount &nbsp; &#10003; Origin date &rarr; age &rarr; balloon window &nbsp; &#10003; Parcel to pull the address &amp; the Sunbiz human behind the LLC</div></div>
+<div class="box"><h3>The one honest limit</h3>
 <div class="no">&times; The exact MATURITY / balloon date is not in the recorded index &mdash; it lives inside the mortgage
-document image and needs a per-doc read. We use the ORIGIN date as the proxy (hard-money = 1&ndash;2 yr balloon), which is exactly the tell Jesse described.</div></div>
-<div class="box"><h3>Why this list is small &mdash; and how it gets big</h3>
-<p style="margin:0">This proof runs on the mortgages we already pull, which are scoped to properties <b>already in
-foreclosure</b>. Those are the balloons that <b>already blew</b> &mdash; the borrower couldn&rsquo;t refi in time.
-The real money is catching them <b>8&ndash;24 months in, before the balloon hits</b>, and those loans are not in
-the foreclosure file. Reaching them is a <b>countywide recorder sweep by lender name + document type = MORTGAGE +
-date range</b> &mdash; the exact same scraper machinery that already sweeps lis pendens by date (Broward
-AcclaimWeb, Miami-Dade official records). It is a build, not a maybe: ~1 day to wire the mortgage-doctype sweep,
-then this same filter runs against the whole county instead of just the foreclosure book.</p></div>
-<div class="box"><h3>Private lenders showing up in your data</h3><ul>{lend_rows}</ul></div>
+document image. Origin date is the proxy (hard-money = 1&ndash;2 yr balloon, exactly Jesse&rsquo;s tell). Next enrichment: a Sunbiz pull on each LLC borrower for the human + phone, and a parcel&rarr;address resolve.</div></div>
+<div class="box"><h3>Private lenders in the book (by volume of loans)</h3><ul>{lend_rows}</ul></div>
 <table><thead><tr><th>Originated</th><th>Age</th><th>Lender</th><th>Loan</th><th>Owner (LLC)</th><th>Property</th><th>Human behind the LLC</th></tr></thead>
 <tbody>{rows}</tbody></table>
 </body></html>""".format(date=datetime.date.today().isoformat(), lo=lo, hi=hi, months=months,
-                         n=n, totalM=round(total / 1e6, 1), human=with_human, nlend=len(lenders),
+                         n=n, zone_n=zone_n, swept_n=len(swept), totalM=round(total / 1e6, 1), nlend=len(lenders),
                          lend_rows=lend_rows or '<li class="mut">none in this window</li>', rows=rows)
     outs = [os.path.join(HERE, 'HardMoney_Balloon_Book.html'),
             os.path.expanduser(os.path.join('~', 'OneDrive', 'Desktop',
