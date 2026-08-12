@@ -2131,10 +2131,12 @@ body.compact .dg-v{font-size:14.5px}
 <button id="mfilt" class="mfiltbtn" type="button" aria-expanded="false"
   title="Show the tier, county, and mode filters plus the export / sync / mail tools">⚙ Filters <span class="mfiltn"></span></button>
 <span class="fgroup" role="group" aria-label="Tier"><span class="flbl">Tier</span>
-<button class="tf active" data-t="A">A</button>
+<!-- Default is ALL (2026-08-11): the landing view is the First-mover sort, and every fresh LP
+     filing is tier C — a Tier-A default hid the exact leads the default sort exists to surface. -->
+<button class="tf" data-t="A">A</button>
 <button class="tf" data-t="B">B</button>
 <button class="tf" data-t="C">C</button>
-<button class="tf" data-t="ALL">All</button>
+<button class="tf active" data-t="ALL">All</button>
 </span>
 <span class="fgroup" id="ctygroup" role="group" aria-label="County"></span>
 <span class="fgroup" role="group" aria-label="FC Type"><span class="flbl">FC Type</span>
@@ -2173,6 +2175,7 @@ body.compact .dg-v{font-size:14.5px}
 <select id="nearrad" class="tf" title="Radius from your home base — expand to broaden the net" style="display:none;padding:5px 8px"><option value="1">1&nbsp;mi</option><option value="2">2&nbsp;mi</option><option value="3">3&nbsp;mi</option><option value="5" selected>5&nbsp;mi</option><option value="10">10&nbsp;mi</option><option value="15">15&nbsp;mi</option><option value="25">25&nbsp;mi</option><option value="50">50&nbsp;mi</option></select>
 <span class="qwrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list."><kbd>/</kbd></span>
 <label style="font-size:12px">Sort <select id="sortby">
+<option value="_fresh" selected title="Freshest filings the competition can't see yet — pre-auction court filings first, picked-over auction-week leads last">🔥 First-mover (fresh &amp; uncontested)</option>
 <option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
 <option value="eq">Equity %</option><option value="value">Value</option><option value="days">Days to auction</option><option value="_cash">Cash needed</option><option value="next">Follow-up due</option>
 </select></label>
@@ -2390,7 +2393,7 @@ const SERVER_DEADS = __DEADS__;
   } catch(e){}
 })();
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
-let tier = 'A', q = '', sortK = '_profit', sortD = -1;
+let tier = 'ALL', q = '', sortK = '_fresh', sortD = -1;   // default = ALL + First-mover (2026-08-11): freshest uncontested leads land on top (fresh LP is tier C — an A default hid it)
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
 let weekOnly = false, hideDead = false, hideViewed = true, hideFlagged = false, ncOnly = false, dueOnly = false, county = '', eq30Only = false, closersOnly = false, lpOnly = false, newOnly = false;
 // NEW SINCE LAST VISIT. The other filters answer "which of these leads matter"; this one answers
@@ -13963,6 +13966,40 @@ document.getElementById('syncfile').onchange = (e) => {
   rd.readAsText(f);
 };
 // ================= /CROSS-DEVICE SYNC =================
+// ===================== FIRST-MOVER SCORE (2026-08-11, Alejandro's leverage ask) =====================
+// "The first properties I see should be the ones nobody else knows about yet." The structural edge:
+// every list-buyer in Miami works the AUCTION calendar (RealForeclose is public; PropStream/BatchLeads
+// resell it) — but a lis pendens filed THIS WEEK with no sale date exists only for people reading
+// court records. That's this board. So the default sort ranks: fresh filing × invisible-to-the-
+// competition × can-he-act-today. An auction 10 days out is the most picked-over inventory there is —
+// it sinks, no matter how pretty the equity.
+function _firstMoverScore(r){
+  // NOTE: no _nodata kill here — a filing from last week is data-thin BY NATURE (no AVM, no chain
+  // yet). Thin data on a fresh lead is the signature of an uncontested lead, not junk.
+  if(typeof isFlaggedDead==='function' && isFlaggedDead(r)) return -Infinity;
+  if(r.saleBkAct) return -Infinity;                       // §362 stay — not workable at any freshness
+  const n = notes[r.case]||{};
+  if(n.status==='Dead'||n.status==='DO NOT CONTACT') return -Infinity;
+  // FRESHNESS — days since the case hit the courthouse. r.filed is '8/7/2026' on LP rows but a
+  // bare YEAR (2018) on auction rows — handle both; unparseable = old.
+  let ageD = 9999;
+  if(typeof r.filed==='string' && r.filed){ const t = new Date(r.filed).getTime(); if(isFinite(t)) ageD = Math.max(0,(Date.now()-t)/864e5); }
+  else if(typeof r.filed==='number' && r.filed>1900){ ageD = Math.max(0,(Date.now()-new Date(r.filed,6,1).getTime())/864e5); }
+  if(!isFinite(ageD)) ageD = 9999;
+  let s = Math.max(0, 90 - ageD);                         // filed yesterday ≈ 89 … 3 months ≈ 0
+  // COMPETITION — who else can see this lead? (days 9999 = no auction scheduled)
+  if(r.st==='LP' || r.days==null || r.days>=9999) s *= 2.2;  // pre-auction: not on any list the competition buys
+  else if(r.days<=14) s *= 0.25;                          // auction imminent: everyone's mailer landed already
+  else if(r.days<=45) s *= 0.55;
+  if(r.zstatus==='LISTED'||r.zstatus==='PENDING') s *= 0.5;  // on the MLS — an agent is already in the deal
+  // WORKABILITY — can he actually be first through the door?
+  if(r.addr) s += 12;
+  if(r.hs) s += 10;                                       // owner lives there → knockable today
+  if((r.phones||[]).length || (r.emails||[]).length) s += 8;
+  if(!r.eqfake && (r.eq||0) >= 30) s += 10;
+  if(typeof _isNewLead==='function' && _isNewLead(r)) s += 6;   // new on the board this build
+  return s;
+}
 function view(){
   // Smart auto-recovery (2026-07-20): a filter that depends on a set which is now empty drops
   // itself instead of stranding you on a blank board. Remove your last saved lead while the
@@ -14017,7 +14054,11 @@ function view(){
   } else {
     // the default board is the AUCTION funnel — properties with a sale date. LP (freshly-filed) leads
     // live in their own Fresh-filings lane, so they never clutter the countdown board.
-    rows = DATA.filter(r => !_isLP(r) && (tier==='ALL' || r.tier===tier));
+    // First-mover sort (2026-08-11) pulls from BOTH pools: fresh LP filings were architecturally
+    // excluded from the main table (they had their own lane), which meant the freshest, least-
+    // contested leads could never be "the first properties he sees." Under _fresh they merge in;
+    // every other sort keeps the original auction-only main table.
+    rows = DATA.filter(r => (sortK==='_fresh' ? true : !_isLP(r)) && (tier==='ALL' || r.tier===tier));
     if(county) rows = rows.filter(r => (r.county||'MIAMI-DADE')===county);
     if(fy1) rows = rows.filter(r => r.filed && r.filed >= +fy1);
     if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
@@ -14060,6 +14101,7 @@ function view(){
   const sortVal = r => {
     // Auction column must sort CHRONOLOGICALLY, not lexicographically on MM/DD/YYYY
     // (else "12/01/2025" would sort after "07/01/2026"). Use the ISO yyyymmdd number.
+    if(sortK==='_fresh') return _firstMoverScore(r);
     if(sortK==='next'){ const nx=(notes[r.case]||{}).next; return nx ? +nx.replace(/-/g,'') : Infinity; }   // soonest follow-up first; no follow-up sinks
     if(sortK==='auction'){ const n = +toISO(r.auction).replace(/-/g,''); return n || -Infinity; }
     // gross/unverified equity stays rankable but muted; only a TINY junior lien (<8% of value) reading
