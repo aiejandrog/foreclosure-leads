@@ -246,17 +246,31 @@ def main():
     print(f'provider API: {prov[0] or "NONE -- free layers only, yahoo/aol stay unverified"}')
     res, counts, api_used = _load(OUT, {}), {}, 0
     today = date.today().isoformat()
+    # PAID VERDICTS ARE NEVER OVERWRITTEN BY A FREE GUESS (fixed 2026-08-12).
+    # The old "never re-bill" guard only skipped the API call -- it still fell through to
+    # classify(use_api=False), which returns a HEURISTIC verdict and wrote it over the paid one.
+    # So a plain `python verify_emails.py` (no --api) silently destroyed every settled result:
+    # 1,006 'ok' rows bought with 1,394 ZeroBounce credits were downgraded to unknown/risky on
+    # 2026-08-11, which halved send_server's proven_pool (1,058 -> 639) and starved the
+    # verified-only send lane. A paid verdict is EVIDENCE; a heuristic is a guess. Evidence wins.
+    #
+    # Exception: an observed hard bounce always wins, even over a paid 'ok' -- the mailbox
+    # demonstrably rejected real mail after the check, and reality outranks a stale API opinion.
+    kept = 0
     for addr in todo:
-        use_api = bool(a.api and prov[0] and (not a.limit or api_used < a.limit))
-        # Never re-bill for an address a paid check already settled.
         prior = res.get(addr) or {}
-        if use_api and str(prior.get('why', '')).startswith((prov[0] or '') + ':'):
-            use_api = False
+        paid = str(prior.get('why', '')).startswith((prov[0] or '~none~') + ':')
+        if paid and addr not in bounced:
+            kept += 1
+            continue                      # settled by a paid check -- leave it exactly as it is
+        use_api = bool(a.api and prov[0] and (not a.limit or api_used < a.limit))
         v, why = classify(addr, bounced, dead_doms, risky_doms, prov, use_api)
         if use_api and why.startswith((prov[0] or '') + ':'):
             api_used += 1
         res[addr] = {'v': v, 'why': why, 'd': today}
         counts[v] = counts.get(v, 0) + 1
+    if kept:
+        print(f'{kept} address(es) left untouched -- already settled by a paid check')
 
     tmp = OUT + '.tmp'
     json.dump(res, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
