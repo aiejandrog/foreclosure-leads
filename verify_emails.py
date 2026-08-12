@@ -217,6 +217,8 @@ def main():
     ap.add_argument('--api', action='store_true',
                     help='use the provider API for addresses no free layer settles (costs money)')
     ap.add_argument('--limit', type=int, default=0, help='cap API calls this run')
+    ap.add_argument('--only', help='file with one address per line — verify ONLY these (spend the '
+                                   'budget where it unlocks sends instead of alphabetically)')
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -242,6 +244,14 @@ def main():
         return
 
     todo = sorted(board_addresses())
+    if a.only:
+        # Budget is finite and alphabetical order is not a priority. --only restricts the run to a
+        # caller-computed list (see _verify_targets.py), so credits land on addresses that actually
+        # unlock a send today rather than on whatever starts with 'a'.
+        with open(a.only, encoding='utf-8') as fh:
+            want = {ln.strip().lower() for ln in fh if ln.strip()}
+        todo = [x for x in todo if x in want]
+        print(f'--only: restricted to {len(todo)} of {len(want)} requested address(es)')
     print(f'{len(todo)} address(es) attached to board leads')
     print(f'provider API: {prov[0] or "NONE -- free layers only, yahoo/aol stay unverified"}')
     res, counts, api_used = _load(OUT, {}), {}, 0
