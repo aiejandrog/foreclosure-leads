@@ -27,9 +27,16 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
-def run(label, args_):
+def run(label, args_, ok=(0,)):
+    """Run one chain step. `ok` lists exit codes that are NOT failures — the LP phone step exits 5
+    when the shared daily spend cap is used up, which is the budget working as designed, not a
+    broken chain: the board must still rebuild with the leads it already has."""
     print(f'\n===== {label} =====', flush=True)
     r = subprocess.run([sys.executable, '-u'] + args_, cwd=HERE)
+    if r.returncode in ok:
+        if r.returncode:
+            print(f'({label} exited {r.returncode} — benign, chain continues)', flush=True)
+        return
     if r.returncode != 0:
         print(f'\nCHAIN STOPPED at {label} (exit {r.returncode}) — nothing after it ran, '
               f'the board was NOT touched.', file=sys.stderr)
@@ -55,6 +62,12 @@ def main():
     run('VALUE (lp_values)', ['lp_values.py'])
     run('CASE STATUS (lp_status)', ['lp_status.py'])
     run('BOARD ROWS (lp_leads)', ['lp_leads.py'])
+    # FAST-LANE PHONES. A fresh filing with no phone is a lead you cannot be first to — the worker's
+    # EARLY lane ("be the first call") has nothing to dial and the funnel dumps it into 'trace'.
+    # Runs AFTER lp_leads so it only sees rows that actually resolved to a high-confidence address,
+    # and it is bounded twice: --limit here and bd_budget's shared daily dollar cap inside skiptrace
+    # (a spent budget exits 5, which run() treats as benign). ~$0.10/hit on Tracerfy.
+    run('PHONES (LP fast lane)', ['skiptrace.py', '--lp-fresh', '45', '--limit', '25'], ok=(0, 5))
     if a.rebuild:
         run('REBUILD (make_tracker)', ['-c',
             "import json, foreclosure_leads as F; "

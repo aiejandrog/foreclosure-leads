@@ -145,6 +145,33 @@ def name_of(g):
     return ' / '.join(parts[:2])
 
 
+def _datebit(r):
+    """The red slot on a door card. An auction lead gets a COUNTDOWN ('SALE 09/02'). A fresh lis
+    pendens has no sale date at all, and printing nothing wasted the single most persuasive fact
+    Carlos owns on that door: the case was filed days ago and NOBODY has contacted this owner yet.
+    Same slot, opposite pitch."""
+    if r.get('auction'):
+        return '<b style="color:#991b1b">SALE %s</b> &middot; ' % H.escape(str(r['auction']))
+    if (r.get('lane') or '') == 'FRESH FILING':
+        age = _filed_age(r.get('filed'))
+        if age is not None:
+            return ('<b style="color:#0b5d1e">JUST FILED &mdash; %d day%s ago &middot; FIRST CONTACT</b> &middot; '
+                    % (age, '' if age == 1 else 's'))
+        return '<b style="color:#0b5d1e">JUST FILED &middot; FIRST CONTACT</b> &middot; '
+    if r.get('lien'):
+        return '<b>%s</b> &middot; ' % H.escape(r['lien'])
+    return ''
+
+
+def _filed_age(filed):
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d'):
+        try:
+            return (datetime.date.today() - datetime.datetime.strptime(str(filed).strip(), fmt).date()).days
+        except Exception:
+            pass
+    return None
+
+
 def stop(r):
     a = r['addr'].split(',')[0].strip()
     z = str(r.get('zip') or '')[:5]
@@ -336,7 +363,7 @@ def main():
                 '<div class="note"></div></td>'
                 '<td class="ph">%s</td></tr>'
                 % (n, H.escape(r['addr']), H.escape(r['owner'][:34]), tags,
-                   (('<b style="color:#991b1b">SALE %s</b> &middot; ' % H.escape(str(r['auction']))) if r.get('auction') else ('<b>%s</b> &middot; ' % H.escape(r['lien']) if r.get('lien') else '')),
+                   _datebit(r),
                    format(r['val'], ',d') if r['val'] else '?', r['beds'] or '?', r['baths'] or '?',
                    format(int(r['sqft']), ',d') if r.get('sqft') else '?',
                    H.escape(str(r['filed'])), H.escape(r['pl']), H.escape(str(r['c'])), ph))

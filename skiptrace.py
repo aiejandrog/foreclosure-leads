@@ -184,6 +184,18 @@ def parse_addr(s):
         return None
     return {'street': street, 'city': city, 'state': state, 'zip': zc}
 
+def _lp_age_days(filed):
+    """Days since the lis pendens was filed. LP rows carry 'M/D/YYYY'; anything unparseable is
+    treated as ancient so a bad date can never sneak into the fresh lane."""
+    import datetime as _dt
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d'):
+        try:
+            return (_dt.date.today() - _dt.datetime.strptime(str(filed).strip(), fmt).date()).days
+        except Exception:
+            pass
+    return 10 ** 6
+
+
 def address_for(lead):
     # prefer the mailing address (where the owner actually is, incl. absentee owners), fall back to the property
     return parse_addr(_mailaddr(lead)) or parse_addr(_propaddr(lead))
@@ -211,8 +223,21 @@ def select(leads, args, llcs=None):
     company owners trace the Sunbiz officer/agent behind the LLC (r['_trace_*']), so a company-owned
     deal is a callable person, not a dead end."""
     out = []
+    lp_days = getattr(args, 'lp_fresh', 0) or 0
     for r in leads:
-        if args.case:
+        if lp_days:
+            # FRESH-FILING FAST LANE. A lis pendens is the one moment the owner has heard from
+            # nobody — the whole edge is reaching them first, and that dies if their phone shows up
+            # a week later. Safety is INHERITED, not re-implemented: lp_leads.py only sets `addr` on
+            # conf=='high' rows (advisory guesses live in addrGuess and never reach outreach), so a
+            # row with an address here has already cleared the wrong-Garcia gate.
+            if (r.get('st') or '') != 'LP' or not (r.get('addr') or '').strip():
+                continue
+            if r.get('lpDismissed') or r.get('lpClosed') or r.get('ownerMismatch'):
+                continue
+            if _lp_age_days(r.get('filed')) > lp_days:
+                continue
+        elif args.case:
             if _case(r) != args.case:
                 continue
         elif not args.all:
@@ -316,6 +341,11 @@ def main():
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--case', default='')
     ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--lp-fresh', type=int, default=0, metavar='DAYS',
+                    help='FAST LANE: trace ONLY fresh lis pendens filings (st=LP) with a resolved '
+                         'address, filed within DAYS. This is the "be the first call" lane — a plain '
+                         '--all run buries fresh filings behind 800 auction leads and --limit cuts '
+                         'them off before they are ever reached.')
     ap.add_argument('--dry-run', action='store_true')
     ap.add_argument('--refresh', action='store_true')
     ap.add_argument('--raw', action='store_true')

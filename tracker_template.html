@@ -14439,11 +14439,25 @@ function _haversine(la1,lo1,la2,lo2){ var R=3958.8, tr=Math.PI/180, dLa=(la2-la1
   var s=Math.sin(dLa/2)*Math.sin(dLa/2)+Math.cos(la1*tr)*Math.cos(la2*tr)*Math.sin(dLo/2)*Math.sin(dLo/2);
   return 2*R*Math.asin(Math.sqrt(s)); }                                       // miles
 function _buildRoute(o){
-  var cand=(window._curRows||[]).filter(function(r){ return r.addr && r.lat && r.lng && r.st!=='LP'; });
+  // FRESH FILINGS BELONG ON THE ROUTE (2026-08-12). This excluded st==='LP' outright, from back when
+  // no LP row had an address. They do now: lp_leads sets `addr` ONLY on conf=='high' rows (advisory
+  // guesses live in addrGuess and never reach here) and geo_enrich geocodes lp_leads.json. So the
+  // best door in the county — filed days ago, county-verified address, owner living there, no
+  // competitor's mailer yet — was the one door the route could never produce. A wrong door is the
+  // worst failure in this business, so this trusts the SAME high-confidence gate the letters and
+  // texts already use, plus the dead/mismatch kills; it is never widened to addrGuess.
+  var cand=(window._curRows||[]).filter(function(r){
+    return r.addr && r.lat && r.lng && !r.ownerMismatch && !r.lpDismissed && !r.lpClosed;
+  });
   if(!cand.length){ alert('No geocoded properties in this view to route.\nLP filings have no address yet; some views are address-free. Broaden the filter or pick a county with properties.'); return; }
   cand.forEach(function(r){ r._dist=_haversine(o.lat,o.lng,r.lat,r.lng); });
   cand.sort(function(a,b){ return a._dist-b._dist; });                        // nearest to origin = EXPAND OUTWARD
-  var pool=cand.slice(0,10), route=[], cur={lat:o.lat,lng:o.lng}, left=pool.slice();
+  // ANCHOR THE DRIVE ON THE FRESHEST DOORS: reserve up to 4 of the 10 stops for nearby fresh
+  // filings where the owner actually lives there (the knock nobody else is making), then fill the
+  // rest by pure distance as before. Without this, 1,300 auction leads bury them by sheer count.
+  var _fresh=cand.filter(function(r){ return r.st==='LP' && r.hs; }).slice(0,4);
+  var _rest=cand.filter(function(r){ return _fresh.indexOf(r)<0; });
+  var pool=_fresh.concat(_rest).slice(0,10), route=[], cur={lat:o.lat,lng:o.lng}, left=pool.slice();
   while(left.length){ var bi=0,bd=1e9; for(var i=0;i<left.length;i++){ var d=_haversine(cur.lat,cur.lng,left[i].lat,left[i].lng); if(d<bd){bd=d;bi=i;} } cur=left[bi]; route.push(left.splice(bi,1)[0]); }
   var clean=function(r){ return encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')); };
   var wp=route.slice(0,-1).map(clean).join('|');
