@@ -171,6 +171,14 @@ def parse_addr(s):
     last = parts[-1]
     zm = re.search(r'(\d{5})(?:-\d{4})?$', last)
     if not zm:
+        # NO ZIP -> 'Street, City, FL'. Broward lis pendens addresses come from the BCPA name ladder
+        # (fl_lp/broward_resolve.py), whose site-address field frequently carries no ZIP — 87 fresh
+        # filings with a county-VERIFIED address were silently unroutable to skip-trace because this
+        # returned None (found 2026-08-12). Street+city+state is a valid lookup: Tracerfy's API marks
+        # zip_code optional, and a Florida city name is not ambiguous within the state.
+        if re.fullmatch(r'[A-Za-z]{2}', last) and len(parts) >= 3:
+            street, city, state = ', '.join(parts[:-2]), parts[-2], last.upper()
+            return {'street': street, 'city': city, 'state': state, 'zip': ''} if (street and city) else None
         return None
     zc = zm.group(1)
     sm = re.search(r'\b([A-Za-z]{2})\b\s+\d{5}', last)                     # "FL 33401" in the last part
