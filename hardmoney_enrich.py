@@ -119,7 +119,9 @@ def main():
 
     rows = json.load(open(SRC, encoding='utf-8'))
     if not a.all:
-        rows = [r for r in rows if 8 <= _age_mo(r.get('origin')) <= 24]
+        # 8-30mo: a 1yr balloon blows at 12, a 2yr at 24. The 20-30mo tier is the most
+        # urgent of all and an 8-24 window silently excluded it (fixed 2026-08-12).
+        rows = [r for r in rows if 8 <= _age_mo(r.get('origin')) <= 30]
     rows = [r for r in rows if a.min_amt <= (r.get('amt') or 0) <= a.max_amt]
     # biggest loan first = biggest refi commission first
     rows.sort(key=lambda r: r.get('amt') or 0, reverse=True)

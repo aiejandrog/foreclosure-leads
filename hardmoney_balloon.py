@@ -195,8 +195,9 @@ def main():
     # are the loans coming due NOW — the actionable book. The table shows them, biggest loan first
     # (biggest loan = biggest refi commission), capped so the sheet stays a sheet; the KPIs still
     # count the whole universe.
-    zone = [h for h in uniq if 8 <= h['age_mo'] <= 24]
-    zone.sort(key=lambda h: h['amt'], reverse=True)
+    zone = [h for h in uniq if 8 <= h['age_mo'] <= 30]
+    # Most urgent FIRST: past/at the 2-year wall, then by loan size within that.
+    zone.sort(key=lambda h: ((20 <= h['age_mo'] <= 30), h['amt']), reverse=True)
     _write_report(uniq, zone[:150], lenders, lo, hi, a.months)
     return uniq
 
@@ -204,7 +205,7 @@ def main():
 def _write_report(full, hits, lenders, lo, hi, months):
     # KPIs count the WHOLE universe; the table shows the balloon-zone display slice (`hits`).
     swept = [h for h in full if h.get('source') == 'countywide']
-    zone_all = [h for h in full if 8 <= h['age_mo'] <= 24]
+    zone_all = [h for h in full if 8 <= h['age_mo'] <= 30]
     n = len(full)
     zone_n = len(zone_all)
     total = sum(int(h['amt'] or 0) for h in zone_all)
@@ -237,7 +238,7 @@ ul{{margin:6px 0 0 18px;columns:2}}
 <div class="sub">Miami Solutions Group &middot; built {date} from public mortgage records + Sunbiz &middot;
 origin window {lo} to {hi} ({months} months)</div>
 <div class="kpis">
-  <div class="kpi"><div class="n">{zone_n}</div><div class="l">In the balloon zone (8&ndash;24mo, due now)</div></div>
+  <div class="kpi"><div class="n">{zone_n}</div><div class="l">In the balloon zone (8&ndash;30mo)</div></div>
   <div class="kpi"><div class="n">${totalM}M</div><div class="l">Loan volume in that zone</div></div>
   <div class="kpi"><div class="n">{n}</div><div class="l">Total hard-money-to-LLC loans found</div></div>
   <div class="kpi"><div class="n">{human_n}</div><div class="l">With a named human (Sunbiz)</div></div>

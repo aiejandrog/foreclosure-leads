@@ -152,7 +152,7 @@ def _sweep_window(sess, code, d_from, d_to):
     return out, scanned
 
 
-def sweep(months=18, chunk_days=30):
+def sweep(months=18, chunk_days=30, skip_recent=0):
     """-> list of hard-money-to-LLC mortgage rows, or None when the portal blocked us."""
     sess = B.start_session()
     if not sess:
@@ -160,14 +160,15 @@ def sweep(months=18, chunk_days=30):
         return None
     code = _mtg_code()
     today = datetime.date.today()
+    end = today - datetime.timedelta(days=int(skip_recent * 30.4))
     start = today - datetime.timedelta(days=int(months * 30.4))
     all_hits, total_scanned = [], 0
     # Sweep in date CHUNKS. AcclaimWeb caps a single grid at what it will page, and a year+ of
     # mortgages is ~50k rows; monthly chunks keep each search returnable and let a mid-sweep block
     # keep the chunks already collected.
     cur = start
-    while cur < today:
-        nxt = min(cur + datetime.timedelta(days=chunk_days), today)
+    while cur < end:
+        nxt = min(cur + datetime.timedelta(days=chunk_days), end)
         r = _sweep_window(sess, code, cur.strftime('%m/%d/%Y'), nxt.strftime('%m/%d/%Y'))
         if r is None:
             break
@@ -193,12 +194,30 @@ def sweep(months=18, chunk_days=30):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--months', type=int, default=18)
+    # SWEEP AN OLDER SLICE without re-scanning what's already collected. An 18-month sweep leaves
+    # the 2-YEAR balloons (18-30mo old) — the ones coming due RIGHT NOW — completely missing from
+    # the file, which is exactly the tier the play targets. `--skip-recent 18 --months 30` sweeps
+    # only the 18-to-30-month band and merges into the existing rows.
+    ap.add_argument('--skip-recent', type=int, default=0, metavar='MONTHS',
+                    help='do not sweep the most recent N months (merge an older band in)')
     ap.add_argument('--chunk', type=int, default=30, help='date chunk size in days')
     ap.add_argument('--dry', action='store_true', help='sweep + print, do not write the file')
     a = ap.parse_args()
-    rows = sweep(months=a.months, chunk_days=a.chunk)
+    rows = sweep(months=a.months, chunk_days=a.chunk, skip_recent=a.skip_recent)
     if rows is None:
         sys.exit(2)
+    # MERGE with what's already on disk (an older-band sweep must not delete the recent band)
+    try:
+        prior = json.load(open(OUT, encoding='utf-8'))
+    except Exception:
+        prior = []
+    if prior:
+        seen = {(r.get('instrument') or (r.get('borrower'), r.get('lender'), r.get('origin')))
+                for r in rows}
+        merged = rows + [p for p in prior
+                         if (p.get('instrument') or (p.get('borrower'), p.get('lender'), p.get('origin'))) not in seen]
+        print('merged with %d existing rows -> %d total' % (len(prior), len(merged)))
+        rows = sorted(merged, key=lambda r: str(r.get('origin') or ''), reverse=True)
     for h in rows[:25]:
         print('  %s | $%9s | %-30s <- %s' % (h['origin'], format(h['amt'], ','),
                                              h['borrower'][:30], h['lender'][:34]))
