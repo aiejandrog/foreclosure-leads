@@ -152,6 +152,28 @@ def main():
             'parcel': str(m.get('parcel') or '').strip(),
         })
 
+    # FOLD IN THE FREE ENRICHMENT (hardmoney_enrich.py): Sunbiz human + BCPA address, keyed by the
+    # LLC borrower name. Loans in the institutional band are dropped from the book entirely — a
+    # $100M+ private-equity borrower is not refinancing through a local broker, and leaving them in
+    # buries the actual clients under paper nobody can work.
+    enr = _load('hardmoney_enriched.json', {})
+    for h in hits:
+        e = enr.get(h['owner']) or {}
+        sb, bc = (e.get('sunbiz') or {}), (e.get('bcpa') or {})
+        if sb.get('officer'):
+            h['agent'] = sb['officer']
+            h['agent_addr'] = sb.get('officer_addr') or ''
+            h['agent_title'] = sb.get('title') or ''
+        elif sb.get('agent'):
+            h['agent'] = sb['agent'] + ' (reg. agent)'
+            h['agent_addr'] = sb.get('agent_addr') or ''
+        if bc.get('addr'):
+            h['addr'] = ', '.join(x for x in (bc.get('addr'), bc.get('city')) if x)
+            h['folio'] = bc.get('folio') or ''
+        elif bc.get('parcels'):
+            h['addr'] = '(%d parcels — verify which)' % bc['parcels']
+    hits = [h for h in hits if 75000 <= int(h.get('amt') or 0) <= 5000000]
+
     # dedupe by (case, lender, origin) / (borrower, lender, origin) for swept rows
     seen, uniq = set(), []
     for h in sorted(hits, key=lambda x: x['origin'], reverse=True):
@@ -192,7 +214,7 @@ def _write_report(full, hits, lenders, lo, hi, months):
                  '<td>%s</td><td>%s</td><td>%s%s</td></tr>' % (
                      H.escape(h['origin']), h['age_mo'], H.escape(h['lender']),
                      format(int(h['amt'] or 0), ','), H.escape(h['owner'][:34]),
-                     H.escape((h['addr'] or '').split(',')[0][:26] or '—'),
+                     H.escape((h.get('addr') or '').split(',')[0][:26] or '—'),
                      H.escape(h['agent'] or '<span class="mut">Sunbiz pull pending</span>'),
                      (' &middot; ' + H.escape(h['agent_ph'])) if h['agent_ph'] else ''))
     lend_rows = ''.join('<li><b>%s</b> &times;%d</li>' % (H.escape(k), v)
@@ -218,7 +240,7 @@ origin window {lo} to {hi} ({months} months)</div>
   <div class="kpi"><div class="n">{zone_n}</div><div class="l">In the balloon zone (8&ndash;24mo, due now)</div></div>
   <div class="kpi"><div class="n">${totalM}M</div><div class="l">Loan volume in that zone</div></div>
   <div class="kpi"><div class="n">{n}</div><div class="l">Total hard-money-to-LLC loans found</div></div>
-  <div class="kpi"><div class="n">{nlend}</div><div class="l">Distinct private lenders</div></div>
+  <div class="kpi"><div class="n">{human_n}</div><div class="l">With a named human (Sunbiz)</div></div>
 </div>
 <div class="box"><h3>This is the COUNTYWIDE sweep &mdash; not just the foreclosure book</h3>
 <p style="margin:0">{swept_n} of these came from a direct sweep of the Broward recorder&rsquo;s mortgage index
@@ -235,7 +257,8 @@ document image. Origin date is the proxy (hard-money = 1&ndash;2 yr balloon, exa
 <table><thead><tr><th>Originated</th><th>Age</th><th>Lender</th><th>Loan</th><th>Owner (LLC)</th><th>Property</th><th>Human behind the LLC</th></tr></thead>
 <tbody>{rows}</tbody></table>
 </body></html>""".format(date=datetime.date.today().isoformat(), lo=lo, hi=hi, months=months,
-                         n=n, zone_n=zone_n, swept_n=len(swept), totalM=round(total / 1e6, 1), nlend=len(lenders),
+                         n=n, zone_n=zone_n, swept_n=len(swept), totalM=round(total / 1e6, 1),
+                         nlend=len(lenders), human_n=sum(1 for h in zone_all if h.get('agent')),
                          lend_rows=lend_rows or '<li class="mut">none in this window</li>', rows=rows)
     outs = [os.path.join(HERE, 'HardMoney_Balloon_Book.html'),
             os.path.expanduser(os.path.join('~', 'OneDrive', 'Desktop',
