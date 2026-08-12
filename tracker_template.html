@@ -2164,7 +2164,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="hv" class="active" title="Hide deals you've marked Seen. ON by default so you don't re-see the same properties when you hop back on. Tap Seen on any deal to file it here. Turn this off to browse viewed deals again.">Hide viewed</button>
 <button id="newonly" title="Only leads that appeared on the board since your last visit — the shortlist of what's actually new to you. Composes with every other filter.">🆕 New only</button>
 <button id="hf" title="Hide leads that don't fit the homeowner-rescue model: already deeded to another investor, HOA case hiding a mortgage bigger than the equity (underwater), or VACANT LAND (no homeowner, speculative land value). Off by default so nothing disappears silently.">Hide flagged</button>
-<button id="eq30" title="Only leads with 30%+ REAL equity: nets out a chain-verified surviving mortgage where we have one (an HOA case with a small judgment can show 90%+ gross while a real first mortgage eats most of it), excludes gross/unverified equity, and excludes anything the records already flagged dead (already sold, or underwater once the real mortgage is counted).">30%+ equity</button>
+<button id="eq30" title="Only leads with 30%+ REAL owner equity: value minus the full payoff (judgment PLUS accrued FS 55.03 interest) and every lien we know about — surviving mortgage, juniors, assessments, municipal liens, back taxes. Excludes gross/unverified equity and anything the records flagged dead. ON A FORECLOSURE this is the same number printed on the row. ON A TAX DEED the row prints your PROFIT MARGIN instead (capped near 20% by the bid model), so a tax deed can read &quot;19% margin&quot; and still belong here — the owner&rsquo;s equity is what got it in.">30%+ equity</button>
 <button id="td" title="Only tax-deed sales (Jose's business)">Tax deeds</button>
 <button id="nc" title="Only leads you haven't contacted yet (no calls/emails/letters logged)">Not contacted</button>
 <button id="plan" class="abtn" title="Today's action sheet — which leads to mail, knock, or follow up right now, keyed to each auction date. Channel + timing only; the words are your script."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 5.5h.01M4 11.5h.01M4 17.5h.01"/></svg>Plan today</button>
@@ -6184,7 +6184,15 @@ function _basisOf(r){
 // deed the owner may sit on $2.5M of equity while owing only the delinquent taxes, and it is THIS
 // number — not our auction profit — that decides whether they can be refinanced out of trouble.
 function _ownerOwedOf(r){
-  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : (+r.judg||0);
+  // FORECLOSURE: _payoffOf, not the frozen r.judg (fixed 2026-08-12). r.judg is the judgment AS
+  // ENTERED; FS 55.03 interest accrues on it daily. _netEqOf already switched to _payoffOf, and the
+  // ROW renders netEqPct — so leaving the frozen figure here made the "30%+ equity" FILTER answer a
+  // different question than the number printed on the row it filters. Measured on the live board:
+  // 122 leads showed one equity on the row and another to the filter, and on 44 of them the two
+  // disagreed about whether the lead even clears 30%. Same formula on both sides now.
+  // TAX DEED is deliberately NOT the same quantity: the row prints a PROFIT MARGIN (capped ~20% by
+  // the TD bid model) while this asks "does the owner have equity" — see the eq30 filter comment.
+  var owed = (r.st === 'TD') ? (+r.obid||+r.judg||0) : _payoffOf(r);
   // FS 197.502(6)(c): on a HOMESTEAD tax deed the opening bid = delinquent taxes + HALF the
   // ASSESSED value on the tax roll. My first pass wrote `r.value / 2` — `r.value` is JV (just /
   // market) value; on any homestead with a Save Our Homes differential (which is most of them)
