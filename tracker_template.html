@@ -464,7 +464,13 @@ input[type=number]{-moz-appearance:textfield;appearance:textfield}
   opacity:0;transform:translateX(8px);transition:opacity .45s var(--e-lux),transform .45s var(--e-lux)}
 .scrollnudge.on{opacity:.97;transform:translateX(0);animation:nudgeBob 1.5s ease-in-out infinite}
 @keyframes nudgeBob{0%,100%{transform:translateX(0)}50%{transform:translateX(6px)}}
-table{border-collapse:collapse;width:100%;font-size:12.5px;min-width:1770px;table-layout:fixed}
+/* min-width SCOPED to the board table 2026-08-11 (deep sweep). As a GLOBAL rule it leaked into
+   every nested table and forced 1770px inside modals a few hundred px wide: the Call Sheet
+   DILIGENCE table showed labels with every value pushed off-screen, the Dispo Pack print sheet
+   lost both dollar columns, the Playbook WIPED-vs-SURVIVES table hid the SURVIVES column, and
+   the Mail history table hid its status columns. The board table keeps the width via its id. */
+table{border-collapse:collapse;width:100%;font-size:12.5px;table-layout:fixed}
+#tbl{min-width:1770px}
 th{position:sticky;top:0;z-index:2;background:var(--bg);padding:11px 12px;text-align:left;cursor:pointer;
   white-space:nowrap;user-select:none;border-bottom:1px solid var(--line);
   font-family:var(--f-label);font-size:9.5px;font-weight:600;letter-spacing:.1em;
@@ -3157,6 +3163,23 @@ function _textContactBlocked(r){
   if(r.saleBkAct) return 'bk';
   return '';
 }
+// ANY-CHANNEL contact gate (2026-08-11 deep sweep). _textContactBlocked was enforced on the text
+// and WhatsApp paths only, so an owner who opted out, was marked DO NOT CONTACT / wrong person, or
+// sat under an ACTIVE §362 bankruptcy stay could still have a letter, a door hanger and a cold
+// EMAIL generated for them in one click. A §362 violation is federal contempt; an opt-out ignored
+// is the FTSA/TCPA fact pattern a plaintiff's lawyer prints out. Same verdict, every channel.
+function _composerBlockedDoc(r, why, what){
+  var msg = why==='optout' ? 'This owner OPTED OUT (or is marked DO NOT CONTACT). Every channel is suppressed — email, letter, hanger, text and calls.'
+          : why==='wrong'  ? 'This lead is flagged WRONG PERSON. Re-verify identity before any contact goes out; mail to a stranger is its own problem.'
+          : 'This lead is under an ACTIVE BANKRUPTCY STAY (11 U.S.C. §362). Contacting the debtor about the debt is a stay violation — federal contempt, sanctions payable to them.';
+  var body = '<div class="doc"><h1>Contact suppressed — no ' + esc(what) + ' generated</h1>'
+    + '<p style="font-size:15px"><b>' + esc(msg) + '</b></p>'
+    + '<p class="mini">Lead: ' + esc((r&&r.addr)||'') + (r&&r.case?(' &middot; case '+esc(r.case)):'') + '</p>'
+    + '<p class="mini">If this flag is wrong, clear it on the lead (Status / notes) and generate again. '
+    + 'The board suppresses on purpose rather than trusting the operator to remember mid-session.</p>'
+    + '<div class="footer">DealFlow &middot; contact suppressed</div></div>';
+  return _docShell('Contact suppressed', body, {key:'blocked-'+why});
+}
 // One structured contact line: number + Call + Text (Phone Link / Messages) + WA.
 // size: 'board' | 'sheet' — same verbs everywhere so the board and call sheet read as one system.
 function _contactLineHtml(r, ph, opts){
@@ -3177,8 +3200,14 @@ function _contactLineHtml(r, ph, opts){
   const text = canTxt
     ? '<a href="#" class="ctact ctact-text textgen" data-c="'+esc(r.case)+'" data-ph="'+esc(digits)+'" title="Text via Phone Link / Messages — bilingual SMS you copy or open with sms: pre-filled">Text</a>'
     : '';
+  // WA is a RAW external link — it never passed through textCardHtml's _withinTextHours() gate, so
+  // at 11pm one click opened WhatsApp with a prefilled message ready to send. FL FTSA statutory
+  // damages are $500-$1,500 PER message and the send window is 8am-8pm ET (fixed 2026-08-11).
+  const _waOK = (typeof _withinTextHours!=='function') || _withinTextHours();
   const wa = (canTxt && isMob)
-    ? '<a class="ctact ctact-wa" href="'+esc(_waLink(r, digits))+'" target="_blank" rel="noopener" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
+    ? (_waOK
+        ? '<a class="ctact ctact-wa" href="'+esc(_waLink(r, digits))+'" target="_blank" rel="noopener" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
+        : '<span class="ctact ctact-wa" style="opacity:.45;cursor:not-allowed" title="Outside the FL FTSA texting window (8am-8pm ET'+((typeof _flClock==='function')?', now '+esc(_flClock()):'')+'). WhatsApp is a text — $500-$1,500 statutory damages per message sent outside the window. Call instead, or queue it for the morning.">'+_waSvg()+' WA &middot; after 8am</span>')
     : '';
   return '<div class="ctline"><span class="ctnum">'+esc(fmtPhone(digits))+tag+'</span><span class="ctacts">'+call+text+wa+'</span></div>';
 }
@@ -4226,7 +4255,10 @@ function _callSheet(r){
   // deal analyzer, the copy-CS clipboard, the Jose SMS, the live-call brief, and the profit-paths
   // panel can never disagree on the number for the same lead. Was: 5 different formulas across
   // surfaces (max divergence $43K/lead, $6.3M misstated across the current board in Copy CS alone).
-  const arv = +r.arv||0, val = +r.value||0, basis = _basisOf(r), judg = +r.judg||0;
+  // PAYOFF, not the frozen entered judgment — the DEBT section of this same sheet already accrues
+  // FS 55.03 interest via _payoffOf, so reading r.judg here printed two different numbers for the
+  // same debt on one screen (fixed 2026-08-11 deep sweep).
+  const arv = +r.arv||0, val = +r.value||0, basis = _basisOf(r), judg = _payoffOf(r);
   // WHAT SURVIVES = the effective senior used in the deal math (r._slien): the user's RESEARCHED
   // number wins, else the auto-traced chain, else nothing. So the second Jose pulls the chain and
   // types it into Deal analysis, this fills in — the site can't scrape it live (the county captcha
@@ -4305,7 +4337,7 @@ function _callSheet(r){
     // that sets the auction floor. Homestead parcels have half the assessed value added to it.
     (r.st==='TD'
       ? big('OPENING BID — auction floor', fm(+r.obid||judg), (r.hs?'incl. ½ assessed value (homestead, FS 197.502) · ':'')+'delinquent taxes + fees'+(r.plaintiff?' · '+esc(r.plaintiff):''), 'hot')
-      : big('FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn'))+
+      : big(_isAccrued(r)?'PAYOFF — what they owe today':'FINAL JUDGMENT — what they owe', fm(judg), r.ju?'⚠ NOT POSTED YET — verify on the docket':(_isAccrued(r)?_accrNote(r,false)+' · ':'')+'entered · '+esc(r.plaintiff||'lender on the case'), judg?'hot':'warn'))+
     big('WORTH TODAY', fm(basis), arv?('ARV from '+r.arvn+' comps'+(r.arvconf==='ok'?' (verified)':' (low conf)')):'county roll — no comps', 'good')+
     survBox+
     big(_netEqLabel(r,1), fm(netEq), (r.st==='TD'||survChecked)?_netEqSub(r):'⚠ assumes nothing survives — pull the chain', 'good')+
@@ -4760,7 +4792,7 @@ function _copyCallSheet(c){
   // surv = raw r._chainSurv (ignored user override), NET EQUITY dropped junior lien + btax entirely.
   // Latest audit found this drift caused $6.3M misstated equity across the live board on Copy CS
   // alone (worst single-lead case: CACE-26-002995 pasted $944,918 when actual net was $0).
-  const basis = _basisOf(r), judg = +r.judg||0, surv = +r._slien||0, jr = +r._jlien||0;
+  const basis = _basisOf(r), judg = _payoffOf(r), surv = +r._slien||0, jr = +r._jlien||0;
   const arv = +r.arv||0, val = +r.value||0;
   const arvUsed = (r._valsrc==='arv' && arv > 0);
   const nnS = notes[r.case]||{}, survTyped = _dTyped(nnS.slien);
@@ -5764,11 +5796,14 @@ function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
 // "Dig deeper" links so a Broward/Palm Beach property never gets Miami-Dade URLs. pa() takes the folio.
 const CTY_LINKS = {
   'MIAMI-DADE': { pa:f=>'https://apps.miamidadepa.gov/PropertySearch/#/?folio='+f, tax:f=>'https://miamidade.county-taxes.com/public/real_estate/parcels/'+f,
-    records:'https://onlineservices.miamidadeclerk.gov/officialrecords/', cases:'https://www2.miamidadeclerk.gov/ocs/', place:'MIAMI FL' },
+    records:'https://onlineservices.miamidadeclerk.gov/officialrecords/', cases:'https://www2.miamidadeclerk.gov/ocs/', place:'MIAMI FL',
+    ownerSearch:o=>'https://apps.miamidadepa.gov/PropertySearch/#/?tab=os&owner='+encodeURIComponent(o) },
   'BROWARD': { pa:f=>'https://bcpa.net/RecInfo.asp?URL_Folio='+f, tax:f=>(f&&f.length>=12?'https://broward.county-taxes.com/public/real_estate/parcels/'+f.slice(0,6)+'-'+f.slice(6,8)+'-'+f.slice(8,12)+'/bills':'https://broward.county-taxes.com/public/real_estate/search'),
-    records:'https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName', cases:'https://www.browardclerk.org/Web2/CaseSearchECA/', place:'BROWARD COUNTY FL' },
+    records:'https://officialrecords.broward.org/AcclaimWeb/search/SearchTypeName', cases:'https://www.browardclerk.org/Web2/CaseSearchECA/', place:'BROWARD COUNTY FL',
+    ownerSearch:o=>'https://web.bcpa.net/BcpaClient/#/Record-Search' },
   'PALM BEACH': { pa:f=>'https://pbcpao.gov/Property/Details?parcelId='+f, tax:f=>(f&&f.length>=17?'https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A'+f.slice(0,2)+'-'+f.slice(2,4)+'-'+f.slice(4,6)+'-'+f.slice(6,8)+'-'+f.slice(8,10)+'-'+f.slice(10,13)+'-'+f.slice(13,17)+'&pg=1&g=-1&moduleId=449':'https://pbctax.publicaccessnow.com/'),
-    records:'https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection=', cases:'https://appsgp.mypalmbeachclerk.com/eCaseView/', place:'PALM BEACH COUNTY FL' },
+    records:'https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection=', cases:'https://appsgp.mypalmbeachclerk.com/eCaseView/', place:'PALM BEACH COUNTY FL',
+    ownerSearch:o=>'https://pbcpao.gov/Property/SearchByOwner?ownerName='+encodeURIComponent(o) },
 };
 const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">'+COPY_SVG+'</button>';
@@ -6184,7 +6219,13 @@ function _netEqOf(r){
   // market) and nets quiet title, carry and surviving municipal liens — so use that number here and
   // let every surface, message and export quote the same honest figure.
   if(r && r.st === 'TD') return (r._profit == null) ? 0 : Math.max(0, +r._profit);
-  var stack = (+r.judg||0)+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
+  // _payoffOf, NOT r.judg (fixed 2026-08-11 deep sweep). r.judg is the judgment AS ENTERED and is
+  // frozen at entry; FS 55.03 interest accrues on it every day after. This function is the source of
+  // truth behind the 30%+ equity filter, netEqPct, the Closers cockpit and every "net equity" the
+  // board prints — reading the frozen figure overstated net equity by $3.58M across the board on the
+  // day it was measured. _payoffOf falls back to r.judg when no verified entry date exists, so rows
+  // without accrual are unaffected.
+  var stack = _payoffOf(r)+(+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0);
   return Math.max(0, v - stack);
 }
 // The number _netEqOf() returns means two different things by sale type, so it must never wear one
@@ -7987,6 +8028,80 @@ function genThirdPartyAuth(r){
     + (f.propAddr !== '__blank__' ? f.propAddr : 'lead'), body,
     {letterhead:true, client:true, key:'tpa', note:'EN + ES — borrower signs, no notary required.'});
 }
+// --- RESTORED 2026-08-11 (deep sweep): commit 03cfef1 over-deleted this whole helper block
+// while rewriting genThirdPartyAuth. The seven office instruments below call these 30+ times,
+// so EVERY one of them (POA, encumbrance shell, stop-sale engagement...) threw a ReferenceError
+// and produced nothing when clicked. Do not delete again without grepping the callers.
+// --- OFFICE INSTRUMENTS & PACKAGES (printable shells; never door) --------------------------
+// Court-safe = engineering discipline: statutory banners, door bans, merge blanks only,
+// Florida witness/notary blocks where the instrument needs them. Not legal advice. Not
+// "attorney approved" / "court approved." Verify with counsel before execution.
+function _docBareBody(html){
+  return String(html||'').replace(/^[\s\S]*?<body>/, '').replace(/<\/body>[\s\S]*$/, '');
+}
+function _docDoorBan(){
+  return '<div class="box" style="border-color:#8a1c1c;background:#fff5f4;margin:0 0 14px">'
+    + '<b style="color:#8a1c1c;letter-spacing:.04em">NOT FOR DOOR PRESENTATION</b><br>'
+    + '<span class="mini">Title company / law office only. Do not hand this form at a door, kitchen table, '
+    + 'or any signing outside a title company or law office with a disinterested notary in physical presence.</span>'
+    + '</div>';
+}
+function _docStatBanner(cite, text){
+  return '<div class="box" style="border-color:#0B1730;background:#f4f6fb;margin:0 0 12px">'
+    + (cite ? '<b>'+cite+'</b><br>' : '')
+    + '<span class="mini">'+text+'</span></div>';
+}
+function _docOfficeFoot(f, extra){
+  return '<div class="footer">OFFICE TEMPLATE · merge blanks only · verify with counsel before execution'
+    + (extra ? ' · '+extra : '')
+    + ' · Property '+_dfHtml(f.propAddr)+' · Case '+_dfHtml(f.caseNo)+' · '+esc(f.todayLong)
+    + ' · '+_dfHtml(f.buyerLLC)+'</div>';
+}
+function _docNotaryBlockFL(f){
+  var cty = (f.county !== '__blank__' ? f.county : '');
+  return '<div class="box"><b>Notary acknowledgment — physical presence required (FS 117.05 / FS 709.2105)</b><br>'
+    + 'State of Florida &nbsp;·&nbsp; County of '+(cty ? esc(cty) : _dfLine(18))+'<br><br>'
+    + 'The foregoing instrument was acknowledged before me by means of □ physical presence '
+    + '□ online notarization this '+_dfLine(8)+' day of '+_dfLine(16)+', 20'+_dfLine(4)
+    + ', by '+_dfLine(36)+', who is □ personally known to me □ produced '
+    + _dfLine(24)+' as identification.<br><br>'
+    + '<div class="sigrow">'
+    +   '<div class="sig"><div class="l"></div><div class="c">Notary Public signature</div></div>'
+    +   '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Printed name · commission # · expires</div></div>'
+    + '</div>'
+    + '<p class="mini" style="margin:8px 0 0">Notary must be disinterested (FS 117.107). Nobody on the buying / engagement side notarizes.</p>'
+    + '</div>';
+}
+function _docWitnessPrincipal(principalLabel){
+  return '<p><b>Signed, sealed and delivered in the physical presence of two subscribing witnesses:</b></p>'
+    + '<div class="sigrow">'
+    +   '<div class="sig">'
+    +     '<div class="l"></div><div class="c">Witness 1 — signature</div>'
+    +     '<div class="l" style="height:.35in"></div><div class="c">Witness 1 — printed name</div>'
+    +     '<div class="l" style="height:.35in"></div><div class="c">Witness 1 — address</div>'
+    +   '</div>'
+    +   '<div class="sig">'
+    +     '<div class="l"></div><div class="c">Witness 2 — signature</div>'
+    +     '<div class="l" style="height:.35in"></div><div class="c">Witness 2 — printed name</div>'
+    +     '<div class="l" style="height:.35in"></div><div class="c">Witness 2 — address</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="sigrow">'
+    +   '<div class="sig"><div class="l"></div><div class="c">'+(principalLabel||'Principal')+' — signature · date</div></div>'
+    +   '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Printed name</div></div>'
+    + '</div>';
+}
+function _docPropBlock(f){
+  return '<p><b>Property address:</b> '+_dfHtml(f.propAddr)+'<br>'
+    + '<b>Folio / parcel:</b> '+_dfHtml(f.folio)+' &nbsp;·&nbsp; <b>County:</b> '+_dfHtml(f.county)+'<br>'
+    + '<b>Legal description (from roll — verify against title commitment):</b><br>'
+    + (f.legalDesc !== '__blank__'
+        ? '<span style="white-space:pre-wrap">'+esc(f.legalDesc)+'</span>'
+        : _dfLine(56)+'<br>'+_dfLine(56)+'<br>'+_dfLine(56))
+    + '<br><b>Case (record locator):</b> '+_dfHtml(f.caseNo)
+    + ' &nbsp;·&nbsp; <b>Plaintiff (if any):</b> '+_dfHtml(f.plaintiff)+'</p>';
+}
+
 function genLimitedPOA(r){
   var f = _docFields(r);
   var agent = (f.buyerName !== '__blank__' ? f.buyerName : '') || '';
@@ -8291,7 +8406,21 @@ function genRetainerAgreement(r){
   // CLIENT-FACING. Same template as the standalone MSG_Retainer_Agreement PDFs, wired to merge from
   // the open lead. This is the copy a homeowner receives, so it carries no OFFICE ONLY kicker, no
   // statute banners and no door bans — those live on the internal sheets, not on the client's paper.
-  // Terms 1-8 are reproduced verbatim from the source agreement; do not reword them here.
+  // LOCKED pending counsel (2026-08-11 deep sweep) — see ATTY_APPROVALS.retainer for the why.
+  // The gate lives HERE so no print path can route around it.
+  if(!_docApproved('retainer', _retainerSrc())){
+    return _docLockedPage('retainer', 'Retainer &amp; engagement agreement',
+      '<p><b>Why this one is locked:</b> the draft collects an <b>up-front deposit</b>. Under the federal '
+      + 'MARS rule (12 CFR 1015.5(a)) and <b>FS 501.1377</b>, a fee for foreclosure-related relief cannot be '
+      + 'collected before the promised result is delivered — Florida attaches a <b>$15,000 civil penalty per '
+      + 'violation</b>. The draft also names MSG the exclusive contact (1015.3(b)(2)) and promises '
+      + '&ldquo;Foreclosure Auction Prevention,&rdquo; while omitting the 1015.4 disclosures, the own-page '
+      + '3-day cancel notice and the HUD referral that this document&rsquo;s own Doc Room card advertises.</p>'
+      + '<p class="mini">Counsel should land the fee on one of three lawful footings: buyer-side (paid at '
+      + 'closing out of the purchase), contingent on an <i>executed</i> lender agreement, or billed through '
+      + 'counsel. Until then the stop-sale engagement sheet is the safe client-facing form.</p>',
+      _retainerSrc());
+  }
   var f = _docFields(r), m = _fmFirstOpen(r);
   var bal = m.bal ? ('$' + (+m.bal).toLocaleString()) : '';
   function page(L){
@@ -8597,12 +8726,19 @@ function genAttyPacket(r){
       }).join('<br>')
     : _dfLine(56);
   // Speculative equity ONLY on attorney packet, with verify disclaimer — never on FIELD docs.
+  // r.eq is a PERCENT (75.7), not dollars — printing '$'+r.eq put "Speculative equity: $76" on an
+  // attorney referral packet for a house with ~$400k of equity (fixed 2026-08-11 deep sweep).
+  // Dollars come from _netEqOf (the reconciled stack: payoff incl. accrued interest, surviving
+  // seniors, juniors, assessments, municipal liens, back taxes), percent from netEqPct.
   var eqSpec = '';
-  if(r && (r.eq != null || r.equity != null || (r.value && r.judg))){
-    var eqv = r.eq != null ? r.eq : (r.equity != null ? r.equity : (+r.value - +r.judg));
-    if(typeof eqv === 'number' && isFinite(eqv))
-      eqSpec = '$'+Math.round(eqv).toLocaleString()+' <span class="mini">(HIGHLY SPECULATIVE — ATTORNEY TO VERIFY)</span>';
-    else if(eqv) eqSpec = esc(String(eqv))+' <span class="mini">(ATTORNEY TO VERIFY)</span>';
+  if(r && _basisOf(r)){
+    var eqd = _netEqOf(r), eqp = netEqPct(r);
+    if(isFinite(eqd) && eqd > 0){
+      eqSpec = fmtMoney(eqd) + (isFinite(eqp) ? ' <span class="mini">(~'+Math.round(eqp)+'% of value)</span>' : '')
+             + ' <span class="mini">(HIGHLY SPECULATIVE — ATTORNEY TO VERIFY)</span>';
+    } else if(isFinite(eqd)){
+      eqSpec = '$0 <span class="mini">(debt stack meets or exceeds value — ATTORNEY TO VERIFY)</span>';
+    }
   }
   if(!eqSpec) eqSpec = _dfLine(20)+' <span class="mini">(HIGHLY SPECULATIVE — ATTORNEY TO VERIFY)</span>';
   var body = ''
@@ -8677,7 +8813,16 @@ function genAttyPacket(r){
    drafts to send are on Desktop/MSG-Legal-Pack-Drafts.)
    ═══════════════════════════════════════════════════════════════════════════════════════════ */
 var ATTY_APPROVALS = {
-  quitclaim: {by:'', date:'', fingerprint:''}
+  quitclaim: {by:'', date:'', fingerprint:''},
+  // LOCKED 2026-08-11 (deep sweep). The retainer was transcribed verbatim from the field PDF and
+  // shipped client-facing with ONE CLICK carrying: an up-front deposit grid (12 CFR 1015.5(a) and
+  // FS 501.1377 both forbid collecting a fee before the promised result is delivered — FL adds a
+  // $15,000 civil penalty per violation), an exclusive-contact term (1015.3(b)(2)), and
+  // "Foreclosure Auction Prevention" rescue-promise framing — while omitting the 1015.4
+  // disclosures, the own-page 3-day cancel notice and the HUD referral its own Doc Room card
+  // advertises. Fee language is not something this tool should author: it stays locked until a FL
+  // attorney reviews THIS template and fills the record below.
+  retainer:  {by:'', date:'', fingerprint:''}
 };
 function _docFingerprint(src){
   // FNV-1a 32-bit over the template source string
@@ -8693,6 +8838,7 @@ function _docApproved(key, src){
   if(!rec || !rec.by || !rec.date || !rec.fingerprint) return false;
   return String(rec.fingerprint) === _docFingerprint(src);
 }
+function _retainerSrc(){ return String(genRetainerAgreement); }
 function _qcSrc(){
   // Fingerprint the deed generator's SOURCE, not a rendered instance — stable across leads,
   // voided by any template edit. _grantors is included because who signs is template behaviour.
@@ -8723,6 +8869,31 @@ function _qcBlockedPage(r){
     +     (f.todayLong && f.todayLong !== '__blank__' ? ' · '+esc(f.todayLong) : '')+'</div>'
     + '</div>';
   return _docShell('Quit Claim Deed — awaiting attorney approval', body, {key:'quitclaim-blocked'});
+}
+
+// GENERIC counsel lock (2026-08-11). Same machinery as the deed gate, for any client-facing
+// instrument whose TEXT carries legal exposure. The gate lives INSIDE the generator so every
+// print path (board button, Doc Room postMessage, future caller) hits it.
+function _docLockedPage(key, title, whyHtml, src){
+  var fp = _docFingerprint(src);
+  var body = ''
+    + '<div class="doc">'
+    +   '<h1>Awaiting attorney approval</h1>'
+    +   '<p><b>This document will not print</b> until a Florida attorney has reviewed <b>this exact '
+    +     'template</b> and <code>ATTY_APPROVALS.' + esc(key) + '</code> carries their name, the date, '
+    +     'and the fingerprint below.</p>'
+    +   '<div style="border:1px dashed #8a1c1c;border-radius:8px;padding:14px 16px;margin:14px 0;background:#fff5f4">'
+    +     '<div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:#8a1c1c;text-transform:uppercase">Template fingerprint</div>'
+    +     '<div style="font:700 22px Consolas,monospace;margin-top:4px">' + esc(fp) + '</div>'
+    +     '<div class="mini" style="margin-top:6px">Any edit to this template changes the value and revokes a prior approval automatically.</div>'
+    +   '</div>'
+    +   whyHtml
+    +   '<p class="mini"><b>To unlock:</b> send this draft to a FL real-estate attorney ($400&ndash;800, '
+    +     'one-time). On sign-off, enter <code>{by, date, fingerprint:&nbsp;' + esc(fp) + '}</code> in '
+    +     '<code>tracker_template.html &rarr; ATTY_APPROVALS.' + esc(key) + '</code> and rebuild the board.</p>'
+    +   '<div class="footer">DealFlow &middot; locked pending counsel</div>'
+    + '</div>';
+  return _docShell(title + ' — awaiting attorney approval', body, {key: key + '-blocked'});
 }
 
 /* ══════════════════════ QUIT CLAIM DEED — individual and multi-grantor ══════════════════════
@@ -9088,8 +9259,9 @@ function openDocRoom(caseId){
             s:'FS 501.1377 rescue-consultant framing + OWN-PAGE cancel. Prefer no homeowner fee. NEVER door.',
             fn:'genStopSaleEngagement'})
     + card({key:'retainer', t:'Retainer &amp; engagement agreement',
-            s:'The FEE agreement. MARS 1015.4 disclosures + OWN-PAGE cancel. NO up-front deposit — fee is '
-              + 'buyer-side, contingent on a signed lender offer, or through counsel. Attorney sign-off. NEVER door.',
+            s:'🔒 LOCKED pending attorney review — the draft still carries an up-front deposit '
+              + '(MARS 1015.5(a) / FS 501.1377) and lacks the 1015.4 disclosures. Print opens the '
+              + 'approval page. Use the stop-sale engagement sheet meanwhile. NEVER door.',
             fn:'genRetainerAgreement'})
     + '<div class="kicker" style="color:#6a4a10;margin-top:20px">PACKAGES — short-sale · subject-to</div>'
     + card({key:'short-sale', t:'Short-sale package',
@@ -9184,7 +9356,7 @@ function genFieldSheet(r){
   var days = _hasClock(r) ? r.days : null;
   var chip = _urgencyChip(days);
   var deadline = (days!=null && days>=3) ? (days-3) : null;   // deal must close ~3 days before the gavel
-  var basis = _basisOf(r), judg = +r.judg||0, netEq = _netEqOf(r), surv = +r._slien||0;
+  var basis = _basisOf(r), judg = _payoffOf(r), netEq = _netEqOf(r), surv = +r._slien||0;
   var tt = _talkTo(r);
   var codeNote = r.codeConcern === 'foreclosing' ? 'County is ALSO foreclosing on a code lien — separate track'
                : r.codeConcern === 'lien' ? 'Recorded CODE LIEN on this parcel — not in the equity above'
@@ -9675,11 +9847,16 @@ function genDealSnapshot(r){
   var chip = _urgencyChip(days);
   function fm(n){ if(!n) return '—'; return '$'+Math.round(+n).toLocaleString(); }
   function fmk(n){ if(!n) return '—'; if(Math.abs(n)>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; return '$'+Math.round(n/1000)+'k'; }
-  var judg = +r.judg||0, val = +r.value||0, arv = +r.arv||0;
+  // SOURCE-OF-TRUTH MATH (fixed 2026-08-11 deep sweep). This is the sheet Alejandro sends Jose to
+  // ask "is this a deal?", and it used to roll its own numbers: raw ARV with no confidence gate,
+  // the frozen r.judg with no accrued FS 55.03 interest, and a hand-rolled owed stack that missed
+  // assessments/municipal liens/back taxes. It could disagree with the board row for the same lead.
+  // Every figure now comes from the same resolvers the row and the deal analyzer use.
+  var judg = _payoffOf(r), val = +r.value||0, arv = +r.arv||0;
   var surv = (r._slien!=null?+r._slien:(+r._chainSurv||0));
-  var basis = arv>0 ? arv : val;
-  var owed = judg + surv + (+r.orhoa||0) + (+r.orcode||0) + (+r.orirs||0);
-  var spread = basis>0 ? Math.max(0, basis - owed) : 0;
+  var basis = _basisOf(r) || (arv>0 ? arv : val);
+  var spread = _netEqOf(r);
+  var owed = basis>0 ? Math.max(0, basis - spread) : 0;
   var flags = [];
   if(r.sibclaimed) flags.push({t:'CLAIMED — sibling case already sold', c:'#8a1c1c'});
   if(r.saleBkAct) flags.push({t:'ACTIVE BK STAY — no contact permitted', c:'#8a1c1c'});
@@ -12308,6 +12485,8 @@ function _pbIntakeLine(lang){
   return 'I take information, not your time. I bring it to the people who put every option on the table. If you want that conversation at no charge, the only courtesy I ask is that you answer when we call. If you are not interested, tell me — nobody\'s feelings get hurt.';
 }
 function genLetter(r){
+  var _blk = _textContactBlocked(r);
+  if(_blk) return _openDoc(_composerBlockedDoc(r, _blk, 'letter'));
   const sN = sender.name || '[YOUR NAME]', sL = sender.llc || '[YOUR COMPANY]', sP = sender.phone || '[YOUR PHONE]';
   const sT=(sender.title||'').trim(), sE=(sender.email||'').trim(), sA=(sender.addr||'').trim(), sW=(sender.web||'').trim();
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
@@ -12392,6 +12571,8 @@ ${_msgSign()}
 // denial-stage owners bin anything that says it). The message + auction date live INSIDE the fold.
 // Prints one hanger per page (fold in half on the dashed line) + a field cheat-card the visitor keeps.
 function genHanger(r){
+  var _blk = _textContactBlocked(r);
+  if(_blk) return _openDoc(_composerBlockedDoc(r, _blk, 'door hanger'));
   // JOSE'S DOOR HANGER — rebuilt to his 2026-07-21 spec, and the spec is opinionated for a reason:
   //  * Z-FOLD in three so NOTHING inside is readable while it hangs on the door.
   //  * The "I came by / nobody answered" line is HANDWRITTEN on the OUTSIDE panel, signed with a
@@ -12997,6 +13178,11 @@ function _mailable(addr){
 function _mailableList(r){ return ((r&&r.emails)||[]).filter(_mailable); }
 
 function genEmail(r, quiet){
+  // Contact gate BEFORE composing (2026-08-11 deep sweep). quiet=true is the worker/batch path that
+  // stages a send — returning null there means "no email for this lead", which every caller already
+  // handles. Non-quiet opens the suppression page instead of a composer.
+  var _blk = _textContactBlocked(r);
+  if(_blk){ return quiet ? null : _openDoc(_composerBlockedDoc(r, _blk, 'email')); }
   const sN = sender.name||'[YOUR NAME]', sL = sender.llc||'[YOUR COMPANY]', sP = sender.phone||'[YOUR PHONE]';
   const sA = (sender.addr||'').trim(), sT = (sender.title||'').trim(), sE = (sender.email||'').trim(), sW = (sender.web||'').trim();
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
@@ -13978,6 +14164,11 @@ function _firstMoverScore(r){
   // yet). Thin data on a fresh lead is the signature of an uncontested lead, not junk.
   if(typeof isFlaggedDead==='function' && isFlaggedDead(r)) return -Infinity;
   if(r.saleBkAct) return -Infinity;                       // §362 stay — not workable at any freshness
+  // A DISMISSED case is not a fresh opportunity — it is a closed one. The funnel already routes
+  // these to 'out' (line ~3676) and the worker refuses them, but the first-mover sort ranked two of
+  // them at #2 and #15 on the landing view, pitching a homeowner whose case is over (2026-08-11).
+  if(r.lpDismissed) return -Infinity;
+  if(r.lpClosed) return -Infinity;
   const n = notes[r.case]||{};
   if(n.status==='Dead'||n.status==='DO NOT CONTACT') return -Infinity;
   // FRESHNESS — days since the case hit the courthouse. r.filed is '8/7/2026' on LP rows but a
@@ -14058,7 +14249,12 @@ function view(){
     // excluded from the main table (they had their own lane), which meant the freshest, least-
     // contested leads could never be "the first properties he sees." Under _fresh they merge in;
     // every other sort keeps the original auction-only main table.
-    rows = DATA.filter(r => (sortK==='_fresh' ? true : !_isLP(r)) && (tier==='ALL' || r.tier===tier));
+    // Fresh LP filings live in the MAIN pool under every sort (2026-08-11). They were historically
+    // excluded here (own lane), and the First-mover ship briefly let them in only under _fresh —
+    // which meant changing the sort silently deleted 645 leads from the board and made the
+    // FC-type "Other" pill a guaranteed empty state. They rank honestly on their own merits now:
+    // sorts they have no data for (Est. Profit, Days to auction) sink them via the null path below.
+    rows = DATA.filter(r => (tier==='ALL' || r.tier===tier));
     if(county) rows = rows.filter(r => (r.county||'MIAMI-DADE')===county);
     if(fy1) rows = rows.filter(r => r.filed && r.filed >= +fy1);
     if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
@@ -14329,7 +14525,13 @@ function render(){
     // value/photo/comps/taxes all follow. Put it FIRST so the row leads with what it needs.
     if(_unresolved(r)){
       var _ownQ = String(r.oname || r.owners || '').split(';')[0].replace(/,/g,' ').trim();
-      gProp.push('<a class="dig resolveparcel" href="https://apps.miamidadepa.gov/PropertySearch/#/?tab=os&owner='+encodeURIComponent(_ownQ)+'" target="_blank" rel="noopener noreferrer" title="RESOLVE THIS PARCEL — opens the Miami-Dade appraiser owner search pre-filled with '+esc(_ownQ)+'. Match it against the legal description on the row, then paste the folio into the search box here to link it up. Everything else on this lead (value, photo, comps, taxes) is blocked until this is done.">🔗 Resolve parcel</a>');
+      // PER-COUNTY appraiser (fixed 2026-08-11 deep sweep): this was hardcoded to the Miami-Dade
+      // appraiser, so 326 Broward/Palm Beach rows sent the operator to a county that has never
+      // heard of their owner — a guaranteed dead end on the one action that unblocks the lead.
+      var _rpC = (r.county||'MIAMI-DADE').toUpperCase();
+      var _rpL = (CTY_LINKS[_rpC] && CTY_LINKS[_rpC].ownerSearch) ? CTY_LINKS[_rpC].ownerSearch(_ownQ) : CTY_LINKS['MIAMI-DADE'].ownerSearch(_ownQ);
+      var _rpN = _rpC==='BROWARD' ? 'Broward (BCPA)' : _rpC==='PALM BEACH' ? 'Palm Beach (PBCPAO)' : 'Miami-Dade';
+      gProp.push('<a class="dig resolveparcel" href="'+esc(_rpL)+'" target="_blank" rel="noopener noreferrer" title="RESOLVE THIS PARCEL — opens the '+esc(_rpN)+' appraiser owner search'+(_rpC==='BROWARD'?' (BCPA has no pre-filled owner URL — paste the owner name into the Name box)':' pre-filled with '+esc(_ownQ))+'. Match it against the legal description on the row, then paste the folio into the search box here to link it up. Everything else on this lead (value, photo, comps, taxes) is blocked until this is done.">🔗 Resolve parcel</a>');
       if(String(r.legal||'').trim())
         gProp.push('<a class="dig" href="https://www.google.com/search?q='+encodeURIComponent(String(r.legal)+' '+ctyName(r.county)+' folio')+'" target="_blank" rel="noopener noreferrer" title="Search the legal description — plat/lot/block often surfaces the folio or the street address directly.">⌕ Legal → folio</a>');
     }
@@ -14575,7 +14777,12 @@ document.addEventListener('click', e => {
   togglePin(row.dataset.case);
 });
 function resetFilters(){
-  tier='A'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=nearOnly=false;
+  // newOnly + eq30Only were MISSING here (fixed 2026-08-11 deep sweep): both the empty-state
+  // "Clear all filters" button and the active-bar "Clear all" route through this function, so a
+  // user who hit 0 rows via 🆕 New only or 30%+ equity clicked reset and stayed stranded at 0.
+  // tier resets to ALL, not 'A' — ALL became the boot default when the First-mover sort shipped,
+  // and resetting to a NARROWER board than you started with is its own trap.
+  tier='ALL'; q=''; fy1=fy2=ad1=ad2=''; weekOnly=hideDead=hideFlagged=ncOnly=dueOnly=favOnly=closersOnly=lpOnly=nearOnly=newOnly=eq30Only=false;
   funnelStage=''; try{ localStorage.setItem('fcFunnel',''); }catch(_e){}
   fcType=''; propKind=''; _saveTypeFilters(); _syncFcTypePills(); _syncPropPills();
   // hideViewed stays as the user left it (default ON) — clearing filters shouldn't dump Seen deals back on the board
@@ -14584,8 +14791,8 @@ function resetFilters(){
   const g=id=>document.getElementById(id);
   if(g('q')) g('q').value='';
   ['fy1','fy2','ad1','ad2'].forEach(id=>{ if(g(id)) g(id).value=''; });
-  ['wk','hd','hf','td','nc','due','freshlp'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
-  document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='A'));
+  ['wk','hd','hf','td','nc','due','freshlp','newonly','eq30'].forEach(id=>{ if(g(id)) g(id).classList.remove('active'); });
+  document.querySelectorAll('.tf').forEach(x=>x.classList.toggle('active', x.dataset.t==='ALL'));
   county=''; _resetCountyPills();
   render();
 }
