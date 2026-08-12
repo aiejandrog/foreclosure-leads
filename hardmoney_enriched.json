@@ -30406,5 +30406,6443 @@
    "zip": "33305",
    "paOwner": "311 NE 22 ST LLC"
   }
+ },
+ "GH PARKINSON MEMBER LLC": {
+  "borrower": "GH PARKINSON MEMBER LLC",
+  "amt": 258750,
+  "lender": "SHARP EDGE CAPITAL LLC",
+  "origin": "2024-03-21",
+  "age_mo": 28.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "G&H PARKSIDE PL, LLC",
+    "GH PARRA CORP",
+    "G H PARRISH LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "504201GJ1670",
+     "addr": "505 N FT LAUDERDALE BCH BLVD #1604"
+    },
+    {
+     "folio": "504201GJ2590",
+     "addr": "505 N FT LAUDERDALE BCH BLVD #2106"
+    },
+    {
+     "folio": "504201GJ3120",
+     "addr": "505 N FT LAUDERDALE BCH BLVD #2406"
+    }
+   ]
+  }
+ },
+ "PMF INVESTMENTS LLC": {
+  "borrower": "PMF INVESTMENTS LLC",
+  "amt": 258550,
+  "lender": "A&S CAPITAL LLC",
+  "origin": "2024-08-15",
+  "age_mo": 23.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "JADALLAH, NAJI A",
+   "title": "AMBR",
+   "officer_addr": "100 NE 96 ST, MIAMI SHORES, FL 33138",
+   "agent": "JADALLAH, NAJI A",
+   "agent_addr": "100 NE 96 ST, MIAMI SHORES, FL 33138",
+   "status": "ACTIVE",
+   "matched": "PMF INVESTMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "1930 NW 152 ST LLC": {
+  "borrower": "1930 NW 152 ST LLC",
+  "amt": 256000,
+  "lender": "SOUTH COAST LENDERS INC",
+  "origin": "2024-11-25",
+  "age_mo": 20.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "JOSEPH, JAMES",
+   "title": "Manager, P",
+   "officer_addr": "5389 SW 133 AVE, MIRAMAR, FL 33027",
+   "agent": "JOSEPH, JAMES",
+   "agent_addr": "5389 SW 133 AVE, MIRAMAR, FL 33027",
+   "status": "ACTIVE",
+   "matched": "1930 NW 152 ST LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "TOWER BRIDGE REALTY GROUP LLC": {
+  "borrower": "TOWER BRIDGE REALTY GROUP LLC",
+  "amt": 254900,
+  "lender": "ARIES CAPITAL GROUP LLC",
+  "origin": "2024-02-22",
+  "age_mo": 29.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LOPEZ, TONY",
+   "title": "MGR",
+   "officer_addr": "2170 Bellcrest Circle, Royal Palm Beach, FL 33411",
+   "agent": "LOPEZ, TONY",
+   "agent_addr": "2170 Bellcrest Circle, Royal Palm Beach, FL 33411",
+   "status": "ACTIVE",
+   "matched": "TOWER BRIDGE REALTY GROUP, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "494101370130",
+     "addr": "205 S SANTA CATALINA CIR"
+    },
+    {
+     "folio": "494101371240",
+     "addr": "1414 S SANTA CATALINA CIR"
+    }
+   ]
+  }
+ },
+ "UPB CENTER LLC": {
+  "borrower": "UPB CENTER LLC",
+  "amt": 254250,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2024-04-19",
+  "age_mo": 27.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VINCENT, YANITHE L",
+   "title": "AMBR",
+   "officer_addr": "1957 S. JOHN YOUNG PARKWAY, KISSIMMEE, FL 34741",
+   "agent": "VINCENT, YANITHE L",
+   "agent_addr": "1957 S. JOHN YOUNG PARKWAY, KISSIMMEE, FL 34741",
+   "status": "ACTIVE",
+   "matched": "UPB CENTER, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504104AK0030",
+   "addr": "836 NW 81 AVE #3",
+   "city": "Plantation",
+   "zip": "33324",
+   "paOwner": "UPB CENTER LLC"
+  }
+ },
+ "416 NW 24 ST LLC": {
+  "borrower": "416 NW 24 ST LLC",
+  "amt": 252000,
+  "lender": "CCHC FUND V LP",
+  "origin": "2024-12-02",
+  "age_mo": 20.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "AZIZ, MUHAMMAD A",
+   "title": "AMBR",
+   "officer_addr": "508 FLAMINGO DR, FORT LAUDERDALE, FL 33301",
+   "agent": "SANSONE, JOSEPH",
+   "agent_addr": "508 FLAMINGO DR, FORT LAUDERDALE, FL 33301",
+   "status": "ACTIVE",
+   "matched": "416 NW 24 ST, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "LORD PROPERTIES II LLC": {
+  "borrower": "LORD PROPERTIES II LLC",
+  "amt": 250000,
+  "lender": "MOBILIZATION FUNDING II LLC",
+  "origin": "2024-10-24",
+  "age_mo": 21.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LORD, KENNETH JUSTIN",
+   "title": "MGR",
+   "officer_addr": "931 N.W. 53RD COURT, FORT LAUDERDALE, FL 33309",
+   "agent": "MACLEAN AND EMA, P.A.",
+   "agent_addr": "2600 N.E. 14 ST CAUSEWAY, POMPANO BEACH, FL 33062",
+   "status": "ACTIVE",
+   "matched": "LORD PROPERTIES II, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "494216010110",
+     "addr": "931 NW 53 CT"
+    },
+    {
+     "folio": "494216010120",
+     "addr": "931 NW 53 CT"
+    },
+    {
+     "folio": "494216010240",
+     "addr": "931 NW 53 CT"
+    }
+   ]
+  }
+ },
+ "KGS FLORIDA LLC": {
+  "borrower": "KGS FLORIDA LLC",
+  "amt": 250000,
+  "lender": "CHANGE LENDING LLC",
+  "origin": "2024-09-20",
+  "age_mo": 22.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DRISCOLL, SEAN",
+   "title": "MGR",
+   "officer_addr": "3781 WEST STATE ROAD 84 APT 102, DAVIE, FL 33312",
+   "agent": "DRISCOLL, SEAN M",
+   "agent_addr": "3781 WEST STATE ROAD 84, 102",
+   "status": "INACTIVE",
+   "matched": "KGS FLORIDA LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504229230230",
+   "addr": "2740 SW 46 ST #1-2",
+   "city": "Dania Beach",
+   "zip": "33312",
+   "paOwner": "KGS FLORIDA LLC"
+  }
+ },
+ "J Z INVESTMENT SERV INC": {
+  "borrower": "J Z INVESTMENT SERV INC",
+  "amt": 250000,
+  "lender": "FOUR C'S FUNDING LLC",
+  "origin": "2024-07-17",
+  "age_mo": 24.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "JOSEPH, ZORAIDA",
+   "title": "President",
+   "officer_addr": "3025 nw 26th st, Fort Lauderdale, FL 33311",
+   "agent": "JOSEPH, ZORAIDA",
+   "agent_addr": "3025 nw 26th st, Fort Lauderdale, FL 33311",
+   "status": "ACTIVE",
+   "matched": "J  Z INVESTMENT SERV. INC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484201040460",
+   "addr": "176 SW 5 CT",
+   "city": "Deerfield Beach",
+   "zip": "33441",
+   "paOwner": "J Z INVESTMENT SERV INC"
+  }
+ },
+ "260 191 TER LLC": {
+  "borrower": "260 191 TER LLC",
+  "amt": 250000,
+  "lender": "CRC FUNDING LLC",
+  "origin": "2024-05-30",
+  "age_mo": 26.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ABRAMCHAEV, ARTHUR",
+   "title": "AMBR",
+   "officer_addr": "260 191ST TER, SUNNY ISLES BEACH, FL 33160",
+   "agent": "ABRAMCHAEV, ARTHUR",
+   "agent_addr": "260 191ST TER, SUNNY ISLES BEACH, FL 33160",
+   "status": "ACTIVE",
+   "matched": "260 191 TER LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "THIRD AVE PORTO FINO FLA LLC": {
+  "borrower": "THIRD AVE PORTO FINO FLA LLC",
+  "amt": 250000,
+  "lender": "ZRM CAPITAL VENTURES LLC",
+  "origin": "2024-05-21",
+  "age_mo": 26.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "JLM PROPERTY VENTURES LLC",
+   "title": "MGR",
+   "officer_addr": "2248 MERIDIAN BLVD.,STE. H, MINDEN, NV 89423",
+   "agent": "PENNELL, DAVID",
+   "agent_addr": "4701 NORTH FEDERAL HWY, STE 311",
+   "status": "ACTIVE",
+   "matched": "THIRD AVE PORTO FINO FLA, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "484213090780",
+     "addr": "3788-3790 NE 3 AVE"
+    },
+    {
+     "folio": "484307AG0280",
+     "addr": "1100 SE 4 AVE #28"
+    }
+   ]
+  }
+ },
+ "BERRIOS & FLORIN LLC": {
+  "borrower": "BERRIOS & FLORIN LLC",
+  "amt": 250000,
+  "lender": "DK LENDING LLC",
+  "origin": "2024-04-19",
+  "age_mo": 27.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BERRIOS, ANA Z",
+   "title": "AP",
+   "officer_addr": "1511 Garfield Streer, Hollywood, FL 33020",
+   "agent": "BERRIOS, ANA Z",
+   "agent_addr": "1511 Garfield Street, Hollywood, FL 33020",
+   "status": "ACTIVE",
+   "matched": "BERRIOS & FLORIN LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514210170060",
+   "addr": "1511 GARFIELD ST",
+   "city": "Hollywood",
+   "zip": "33020",
+   "paOwner": "BERRIOS & FLORIN LLC"
+  }
+ },
+ "MK 5882 LLC": {
+  "borrower": "MK 5882 LLC",
+  "amt": 250000,
+  "lender": "WORLD BUSINESS LENDERS LLC",
+  "origin": "2024-03-04",
+  "age_mo": 29.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Montana, Armando",
+   "title": "MGR",
+   "officer_addr": "1000 W Pembroke Rd. Suite 322, Suite 322",
+   "agent": "MONTANA, ARMANDO",
+   "agent_addr": "1000 W Pembroke Rd. Suite 322, Suite 322",
+   "status": "ACTIVE",
+   "matched": "MK5882 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514215016370",
+   "addr": "1918 ADAMS ST",
+   "city": "Hollywood",
+   "zip": "33020",
+   "paOwner": "MK 5882 LLC"
+  }
+ },
+ "MODERN GLOW FLOORS INC": {
+  "borrower": "MODERN GLOW FLOORS INC",
+  "amt": 250000,
+  "lender": "TAYLOR MADE LENDING LLC",
+  "origin": "2024-02-28",
+  "age_mo": 29.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "MODERN GLOW MIAMI CORP",
+    "MODERN GLOW TAN CO LLC",
+    "MODERN GLOW TANS LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "FAMILY HOLDINGS TRUST LLC": {
+  "borrower": "FAMILY HOLDINGS TRUST LLC",
+  "amt": 250000,
+  "lender": "MILO LENDING INC",
+  "origin": "2024-02-13",
+  "age_mo": 30.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RODRIGUEZ, CLAUDIO",
+   "title": "MGR",
+   "officer_addr": "19900 E COUNTRY CLUB DR. # 312, AVENTURA, FL 33180 UN",
+   "agent": "RODRIGUEZ, CLAUDIO",
+   "agent_addr": "19900 E COUNTRY CLUB DR, 312",
+   "status": "ACTIVE",
+   "matched": "FAMILY HOLDINGS TRUST, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "AMERITRIN PROPERTY SOLUTIONS LLC": {
+  "borrower": "AMERITRIN PROPERTY SOLUTIONS LLC",
+  "amt": 249800,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-09-09",
+  "age_mo": 23.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SOHAN, DOLERAM",
+   "title": "Manager",
+   "officer_addr": "1101 NW 45TH TER, LAUDERHILL, FL 33313",
+   "agent": "SOHAN, SURAGDAI",
+   "agent_addr": "1101 NW 45TH TER, LAUDERHILL, FL 33313",
+   "status": "ACTIVE",
+   "matched": "AMERITRIN PROPERTY SOLUTIONS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494103030760",
+   "addr": "7005 NW 66 TER",
+   "city": "Tamarac",
+   "zip": "33321",
+   "paOwner": "AMERITRIN PROPERTY SOLUTIONS LLC"
+  }
+ },
+ "JRA INVESTMENT GROUP LLC": {
+  "borrower": "JRA INVESTMENT GROUP LLC",
+  "amt": 249000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2024-09-04",
+  "age_mo": 23.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "JENNIFFER, RICARVETT M, SRA",
+   "title": "MGR",
+   "officer_addr": "140 S DIXIE HWY, 601, HOLLYWOOD, FL 33020",
+   "agent": "JENNIFFER, RICARVETT M, SRA",
+   "agent_addr": "140 S DIXIE HWY, 601",
+   "status": "ACTIVE",
+   "matched": "JRA INVESTMENT GROUP LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "AESTHETIC 201 LLC": {
+  "borrower": "AESTHETIC 201 LLC",
+  "amt": 249000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2024-02-26",
+  "age_mo": 29.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PRIMON, LEONARDO J",
+   "title": "MGR",
+   "officer_addr": "2730 SW 3rd Ave, Ste 202",
+   "agent": "Glades Business Services LLC",
+   "agent_addr": "12280 MIRAMAR BLVD STE 4, MIRAMAR, FL 33025",
+   "status": "INACTIVE",
+   "matched": "AESTHETIC 201 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "TRIANGLE RESTAURANT INC": {
+  "borrower": "TRIANGLE RESTAURANT INC",
+  "amt": 245000,
+  "lender": "SILVER HILL FUNDING LLC",
+  "origin": "2024-12-06",
+  "age_mo": 20.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RARIG, LAMAR C.",
+   "title": "P",
+   "officer_addr": "ST. ROAD 17 NORTH, SEBRING, FL",
+   "agent": "RARIG, LAMAR C.",
+   "agent_addr": "2710 KENILWORTH BLVD., SEBRING, FL 33870",
+   "status": "INACTIVE",
+   "matched": "TRIANGLE RESTAURANT, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514221020160",
+   "addr": "888 FOSTER RD",
+   "city": "Hallandale Beach",
+   "zip": "33009",
+   "paOwner": "TRIANGLE RESTAURANT INC"
+  }
+ },
+ "JETMX INC": {
+  "borrower": "JETMX INC",
+  "amt": 245000,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2024-07-22",
+  "age_mo": 24.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "KHAN, JAMAAL J",
+   "title": "CEO",
+   "officer_addr": "11833 NW 11th Ct, CORAL SPRINGS, FL 33071",
+   "agent": "KHAN, JAMAAL J",
+   "agent_addr": "5415 NW 15TH STREET, UNIT 25",
+   "status": "ACTIVE",
+   "matched": "JETMX, INC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484230BD0250",
+   "addr": "5415 NW 15 ST #25",
+   "city": "Margate",
+   "zip": "33063",
+   "paOwner": "JETMX INC"
+  }
+ },
+ "BEULA USA LLC": {
+  "borrower": "BEULA USA LLC",
+  "amt": 245000,
+  "lender": "DOT FUND LLC",
+  "origin": "2024-07-01",
+  "age_mo": 25.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "HIUNITTO D PALACIOS MOSQUERA",
+   "title": "MGR",
+   "officer_addr": "9900 W SAMPLE RD, 321",
+   "agent": "PALACIOS, HIUNITTO",
+   "agent_addr": "9900 WEST SAMPLE RD, SUITE 321",
+   "status": "INACTIVE",
+   "matched": "BEULA USA LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "CKG LLC": {
+  "borrower": "CKG LLC",
+  "amt": 242000,
+  "lender": "EMIGRANT FUNDING CORP",
+  "origin": "2024-10-07",
+  "age_mo": 22.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GRIFFIN, CLARENCE",
+   "title": "AMBR",
+   "officer_addr": "1423 S Lakeshore Dr, SARASOTA, FL 34231",
+   "agent": "SABA, RICHARD D, ESQ.",
+   "agent_addr": "RICHARD D. SABA, P.A., 2033 MAIN ST, STE. 303",
+   "status": "INACTIVE",
+   "matched": "C & KG, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494118AH0101",
+   "addr": "10279 NW 46 ST #7E",
+   "city": "Sunrise",
+   "zip": "33351",
+   "paOwner": "CKG LLC"
+  }
+ },
+ "MARTIN LUTHER PROPERTIES LLC": {
+  "borrower": "MARTIN LUTHER PROPERTIES LLC",
+  "amt": 241500,
+  "lender": "LIMA ONE CAPITAL LLC",
+  "origin": "2024-06-04",
+  "age_mo": 26.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "AR2 REAL ESTATE HOLDINGS LLC",
+   "title": "MGR",
+   "officer_addr": "C/O HARVARD BUS SERV 16192 COASTAL HWAY, LEWES, DE 19958",
+   "agent": "HAGEN, MICHAEL",
+   "agent_addr": "5290 SUMMERLIN COMMONS WAY, STE 1003",
+   "status": "ACTIVE",
+   "matched": "MARTIN LUTHER PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484233060280",
+   "addr": "2200 NW 10 CT",
+   "city": "Pompano Beach",
+   "zip": "33069",
+   "paOwner": "MARTIN LUTHER PROPERTIES LLC"
+  }
+ },
+ "ICON REDEVELOPMENT GROUP LLC": {
+  "borrower": "ICON REDEVELOPMENT GROUP LLC",
+  "amt": 240000,
+  "lender": "PRINCIPAL LENDERS GROUP INC",
+  "origin": "2024-12-09",
+  "age_mo": 20.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ZALDUA, EDGARD J",
+   "title": "MGR",
+   "officer_addr": "5300 washington st, T121",
+   "agent": "ZALDUA, EDGARD J",
+   "agent_addr": "5300 washington st, T121",
+   "status": "ACTIVE",
+   "matched": "ICON REDEVELOPMENT GROUP LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "FALL GROUP LLC": {
+  "borrower": "FALL GROUP LLC",
+  "amt": 240000,
+  "lender": "PALERMO LENDER LLC",
+  "origin": "2024-07-11",
+  "age_mo": 25.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VAZQUEZ, NESTOR MARTIN",
+   "title": "MGRM",
+   "officer_addr": "5110 JEFFERSON ST, HOLLYWOOD, FL 33021",
+   "agent": "SILVAS FINANCIAL SERVICES, LLC",
+   "agent_addr": "5220 S UNIVERSITY DR, STE C-102",
+   "status": "ACTIVE",
+   "matched": "FALL GROUP LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 4 parcels — cannot pin the mortgaged one by name",
+   "parcels": 4,
+   "candidates": [
+    {
+     "folio": "494125GG0900",
+     "addr": "2029 NW 46 AVE #202E"
+    },
+    {
+     "folio": "494230BA0520",
+     "addr": "3700 NW 21 ST #410"
+    },
+    {
+     "folio": "494230BA1400",
+     "addr": "3600 NW 21 ST #301"
+    },
+    {
+     "folio": "514210170380",
+     "addr": "1231 N 16 CT"
+    }
+   ]
+  }
+ },
+ "SUZANNE DEPASQUALE LCSW LLC": {
+  "borrower": "SUZANNE DEPASQUALE LCSW LLC",
+  "amt": 240000,
+  "lender": "JETT KING FUNDING LLC",
+  "origin": "2024-07-08",
+  "age_mo": 25.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "SUZANNE DE SANTIS, INC.",
+    "SUZANNE DESIGNS, INC.",
+    "SUZANNE DEVELOPMENT CORP."
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "RCX TILT UP CONSTRUCTION INC": {
+  "borrower": "RCX TILT UP CONSTRUCTION INC",
+  "amt": 240000,
+  "lender": "AMES CAPITAL LLC",
+  "origin": "2024-05-16",
+  "age_mo": 26.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Viera, BRENDA L",
+   "title": "P",
+   "officer_addr": "4820 Pembroke Road, HOLLYWOOD, FL 33021",
+   "agent": "Viera, BRENDA",
+   "agent_addr": "4820 Pembroke Road, HOLLYWOOD, FL 33021",
+   "status": "ACTIVE",
+   "matched": "RCX TILT UP CONSTRUCTION, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "514113160130",
+     "addr": "524 N 60 TER"
+    },
+    {
+     "folio": "514219017050",
+     "addr": "4820 PEMBROKE RD"
+    },
+    {
+     "folio": "514219017060",
+     "addr": "4906 PEMBROKE RD"
+    }
+   ]
+  }
+ },
+ "SENOR FROG'S HOLLYWOOD LLC": {
+  "borrower": "SENOR FROG'S HOLLYWOOD LLC",
+  "amt": 240000,
+  "lender": "LPC FUND LLC",
+  "origin": "2024-05-07",
+  "age_mo": 27.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LICON, OMAR",
+   "title": "MGR",
+   "officer_addr": "8747 INTERNATIONAL DR., #103, ORLANDO, FL 32819",
+   "agent": "CORPORATION SERVICE COMPANY",
+   "agent_addr": "1201 HAYS STREET, TALLAHASSEE, FL 32301",
+   "status": "ACTIVE",
+   "matched": "SENOR FROG'S HOLLYWOOD, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "AM DYNAMIC PROPERTIES LLC": {
+  "borrower": "AM DYNAMIC PROPERTIES LLC",
+  "amt": 237500,
+  "lender": "ICE LENDER HOLDINGS LLC",
+  "origin": "2024-10-11",
+  "age_mo": 22.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LAMANAUSKAS, MILTON F",
+   "title": "MGR",
+   "officer_addr": "4154 FOREST DR, WESTON, FL 33332",
+   "agent": "CORPORATE MAINTENANCE SERVICES, LLC",
+   "agent_addr": "1000 BRICKELL AVENUE, SUITE 400, MIAMI, FL 33131",
+   "status": "ACTIVE",
+   "matched": "AM DYNAMIC PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484106100133",
+   "addr": "12673 NW 56 ST",
+   "city": "Coral Springs",
+   "zip": "33076",
+   "paOwner": "AM DYNAMIC PROPERTIES LLC"
+  }
+ },
+ "ROMLON PROPERTIES LLC": {
+  "borrower": "ROMLON PROPERTIES LLC",
+  "amt": 236700,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-05-17",
+  "age_mo": 26.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ROMERO, PAULA A",
+   "title": "AMBR",
+   "officer_addr": "10931 SW 31st St, Davie, FL 33328",
+   "agent": "ROMERO, PAULA A",
+   "agent_addr": "10931 SW 31st St, Davie, FL 33328",
+   "status": "ACTIVE",
+   "matched": "ROMLON PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "DIMIZA 55 LLC": {
+  "borrower": "DIMIZA 55 LLC",
+  "amt": 234000,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2024-08-14",
+  "age_mo": 23.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TRONCONE, MONIQUE",
+   "title": "MGR",
+   "officer_addr": "55 NE 5TH AVENUE SUITE 501, BOCA RATON, FL 33432",
+   "agent": "MONIQUE TRONCONE CPA PA",
+   "agent_addr": "55 NE 5TH AVENUE, SUITE 501",
+   "status": "ACTIVE",
+   "matched": "DIMIZA 55 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494234039010",
+   "addr": "1118-1120 NW 2 AVE",
+   "city": "Fort Lauderdale",
+   "zip": "33311",
+   "paOwner": "DIMIZA 55 LLC"
+  }
+ },
+ "COINDRE INVESTORS CORP": {
+  "borrower": "COINDRE INVESTORS CORP",
+  "amt": 232500,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-06-06",
+  "age_mo": 26.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "AGUDELO, MARIA",
+   "title": "P",
+   "officer_addr": "2225 NE 16th Ave, Wilton Manors, FL 33026",
+   "agent": "AGUDELO, MARIA",
+   "agent_addr": "2225 NE 16th Ave, Wilton Manors, FL 33305",
+   "status": "ACTIVE",
+   "matched": "COINDRE INVESTORS CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514113020370",
+   "addr": "5845 LINCOLN ST",
+   "city": "Hollywood",
+   "zip": "33021",
+   "paOwner": "COINDRE INVESTORS CORP"
+  }
+ },
+ "NOBIL ESTETIC CORP": {
+  "borrower": "NOBIL ESTETIC CORP",
+  "amt": 231750,
+  "lender": "SILVER HILL FUNDING LLC",
+  "origin": "2024-05-21",
+  "age_mo": 26.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BURUIAN, DANIEL",
+   "title": "P",
+   "officer_addr": "250 N Federal Hwy, Hollywood, FL 33020",
+   "agent": "BURUIAN, DANIEL",
+   "agent_addr": "250 N Federal Hwy, Hollywood, FL 33020",
+   "status": "ACTIVE",
+   "matched": "NOBIL ESTETIC CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "494330AL0010",
+     "addr": "3020 NE 32 AVE #RU 1"
+    },
+    {
+     "folio": "494330AL0020",
+     "addr": "3020 NE 32 AVE #RU 2"
+    },
+    {
+     "folio": "494330AL0030",
+     "addr": "3020 NE 32 AVE #RU 3"
+    }
+   ]
+  }
+ },
+ "ARCELAYS FUNERAL SERVICES LLC": {
+  "borrower": "ARCELAYS FUNERAL SERVICES LLC",
+  "amt": 230993,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2024-07-08",
+  "age_mo": 25.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ARCELAY, ANDRES J",
+   "title": "President",
+   "officer_addr": "13700 NW 19TH AVENUE, UNIT 8",
+   "agent": "ARCELAY, ANDRES J",
+   "agent_addr": "13700 NW 19th Avenue, UNIT 8",
+   "status": "ACTIVE",
+   "matched": "ARCELAYS FUNERAL SERVICES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "AOTEAROA FORTRESS LLC": {
+  "borrower": "AOTEAROA FORTRESS LLC",
+  "amt": 230000,
+  "lender": "E MORTGAGE CAPITAL INC",
+  "origin": "2024-04-23",
+  "age_mo": 27.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ORR, GEOFFREY K",
+   "title": "MGR",
+   "officer_addr": "1115 SW 8TH TERR, FORT LAUDERDALE, FL 33315",
+   "agent": "ORR, GEOFFREY K",
+   "agent_addr": "1115 SW 8TH TERR, FORT LAUDERDALE, FL 33315",
+   "status": "INACTIVE",
+   "matched": "AOTEAROA FORTRESS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504215015850",
+   "addr": "320 SW 21 ST",
+   "city": "Fort Lauderdale",
+   "zip": "33315",
+   "paOwner": "AOTEAROA FORTRESS LLC"
+  }
+ },
+ "J J & C INVESTMENTS & SERVICES LLC": {
+  "borrower": "J J & C INVESTMENTS & SERVICES LLC",
+  "amt": 228420,
+  "lender": "LIMA ONE CAPITAL LLC",
+  "origin": "2024-10-04",
+  "age_mo": 22.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FLEUZEMA, JEAN",
+   "title": "AMBR",
+   "officer_addr": "3611 NW 35 WAY, LAUDERDALE LAKES, FL 33309",
+   "agent": "Fleuzema, Jean",
+   "agent_addr": "3380 NW 34TH ST, LAUDERDALE LALES, FL 33309",
+   "status": "ACTIVE",
+   "matched": "J J & C INVESTMENTS & SERVICES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "UNIDOS SJ INVESTMENT LLC": {
+  "borrower": "UNIDOS SJ INVESTMENT LLC",
+  "amt": 228200,
+  "lender": "CB CAPITAL LLC",
+  "origin": "2024-11-22",
+  "age_mo": 20.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GRANADOS ORTEZ, FRANCISCO",
+   "title": "AMBR",
+   "officer_addr": "1500 NW 42ND STREET, FORT LAUDERDALE, FL 33309",
+   "agent": "PEREZ ACCOUNTING SERVICES",
+   "agent_addr": "3107 STIRLING ROAD, SUITE 205",
+   "status": "ACTIVE",
+   "matched": "UNIDOS SJ INVESTMENT LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "484213032220",
+     "addr": "3660 NE 12 AVE"
+    },
+    {
+     "folio": "484224100780",
+     "addr": "3060 NE 12 AVE"
+    },
+    {
+     "folio": "484307021470",
+     "addr": "1724 NE 50 CT"
+    }
+   ]
+  }
+ },
+ "WE R BETTER INC": {
+  "borrower": "WE R BETTER INC",
+  "amt": 227400,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-09-16",
+  "age_mo": 22.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RUELA, NIVAL",
+   "title": "P",
+   "officer_addr": "4280 NW 3rd Ave, DEERFIELD BEACH, FL 33064",
+   "agent": "RUELA, NIVAL",
+   "agent_addr": "4280 NW 3rd Ave, DEERFIELD BEACH, FL 33064",
+   "status": "ACTIVE",
+   "matched": "WE R BETTER, INC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MCELHANEY INVESTMENTS INC": {
+  "borrower": "MCELHANEY INVESTMENTS INC",
+  "amt": 227000,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-03-14",
+  "age_mo": 29.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MCELHANEY, WALTER, JR",
+   "title": "P",
+   "officer_addr": "1531 SW 63RD TERRACE, N. LAUDERDALE, FL 33068",
+   "agent": "MCELHANEY, WALTER, JR",
+   "agent_addr": "1531 SW 63RD TERRACE, POMPANO BEACH, FL 33068",
+   "status": "ACTIVE",
+   "matched": "MCELHANEY INVESTMENTS, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 8 parcels — cannot pin the mortgaged one by name",
+   "parcels": 8,
+   "candidates": [
+    {
+     "folio": "484214031360",
+     "addr": "3931 NW 3 AVE"
+    },
+    {
+     "folio": "484226060030",
+     "addr": "1631 NW 2 TER"
+    },
+    {
+     "folio": "484226080190",
+     "addr": "2001 NE 1 TER"
+    },
+    {
+     "folio": "484226170250",
+     "addr": "750 NW 17 CT"
+    },
+    {
+     "folio": "484233040850",
+     "addr": "2438 NW 5 ST"
+    },
+    {
+     "folio": "484233043660",
+     "addr": "2750 NW 7 ST"
+    }
+   ]
+  }
+ },
+ "SW 18 STREET LLC": {
+  "borrower": "SW 18 STREET LLC",
+  "amt": 225000,
+  "lender": "RCN CAPITAL,LLC",
+  "origin": "2024-04-22",
+  "age_mo": 27.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FLORENCE, DOROTHY M",
+   "title": "MGRM",
+   "officer_addr": "5736 SW 27 STREET, UNIT B",
+   "agent": "FLORENCE, DOROTHY M",
+   "agent_addr": "5736 SW 27 STREET, UNIT B",
+   "status": "ACTIVE",
+   "matched": "SW 18 STREET, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 5 parcels — cannot pin the mortgaged one by name",
+   "parcels": 5,
+   "candidates": [
+    {
+     "folio": "514125021400",
+     "addr": "5736 SW 27 ST #A-B"
+    },
+    {
+     "folio": "514216HB0120",
+     "addr": "2901 JACKSON ST #12"
+    },
+    {
+     "folio": "514219016920",
+     "addr": "4891 SW 18 ST"
+    },
+    {
+     "folio": "514219016930",
+     "addr": "4851 SW 18 ST"
+    },
+    {
+     "folio": "514219030010",
+     "addr": "PEMBROKE RD"
+    }
+   ]
+  }
+ },
+ "GREAT ESCAPES CORP": {
+  "borrower": "GREAT ESCAPES CORP",
+  "amt": 224250,
+  "lender": "LIMA ONE CAPITAL LLC",
+  "origin": "2024-05-20",
+  "age_mo": 26.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BONILLA, ALEXANDER N",
+   "title": "P",
+   "officer_addr": "5606 lake osborne drive, lake worth, FL 33461",
+   "agent": "Bonilla, Alexander",
+   "agent_addr": "5606 lake osborne drive, lake worth, FL 33461",
+   "status": "ACTIVE",
+   "matched": "GREAT ESCAPES CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "EFRAIN DAZA HOMES GROUP LLC": {
+  "borrower": "EFRAIN DAZA HOMES GROUP LLC",
+  "amt": 224000,
+  "lender": "NQM FUNDING LLC",
+  "origin": "2024-06-25",
+  "age_mo": 25.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DAZA, EFRAIN A",
+   "title": "MGR",
+   "officer_addr": "4740 NW 84 CT, DORAL, FL 33166",
+   "agent": "DAZA, EFRAIN A",
+   "agent_addr": "4740 NW 84 CT, UNIT 34",
+   "status": "ACTIVE",
+   "matched": "EFRAIN DAZA HOMES GROUP LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504109AE0830",
+   "addr": "455 S PINE ISLAND RD #307C",
+   "city": "Plantation",
+   "zip": "33324",
+   "paOwner": "EFRAIN DAZA HOMES GROUP LLC"
+  }
+ },
+ "BLUE OCEAN LEASING GROUP LLC": {
+  "borrower": "BLUE OCEAN LEASING GROUP LLC",
+  "amt": 220000,
+  "lender": "3KD CAPITAL GROUP LLC",
+  "origin": "2024-10-29",
+  "age_mo": 21.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "AMARAL, CRISTIANE",
+   "title": "MGR",
+   "officer_addr": "12806 HYLAND CIR, BOCA RATON, FL 33428",
+   "agent": "amaral, cristiane",
+   "agent_addr": "12806 HYLAND CIR, BOCA RATON, FL 33428",
+   "status": "ACTIVE",
+   "matched": "BLUE OCEAN LEASING GROUP LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "484207120020",
+     "addr": "5181 NW 50 TER"
+    },
+    {
+     "folio": "484306790150",
+     "addr": "168 SE 5 CT"
+    }
+   ]
+  }
+ },
+ "TOWER BRIDGE REALTY GROUPLLC": {
+  "borrower": "TOWER BRIDGE REALTY GROUPLLC",
+  "amt": 220000,
+  "lender": "ARIES CAPITAL GROUP LLC",
+  "origin": "2024-06-11",
+  "age_mo": 26.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "TOWER BRIDGE TRADE SERVICES S.A., INC.",
+    "TOWERBRIGHT LLC",
+    "TOWER BROKERAGE,INC."
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "VALE INVESTMENTS PROPERTIES LLC": {
+  "borrower": "VALE INVESTMENTS PROPERTIES LLC",
+  "amt": 218750,
+  "lender": "101 TERM FUNDING LLC",
+  "origin": "2024-06-13",
+  "age_mo": 26.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GUTIERREZ, LORENA D",
+   "title": "MGR",
+   "officer_addr": "7381 SW 8 ST, MIAMI, FL 33144",
+   "agent": "GUTIERREZ, LORENA D",
+   "agent_addr": "7381 SW 8 ST, MIAMI, FL 33144",
+   "status": "ACTIVE",
+   "matched": "VALE INVESTMENTS PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "GK PROPERTY RENTALS LLC": {
+  "borrower": "GK PROPERTY RENTALS LLC",
+  "amt": 216825,
+  "lender": "ALLIANCE COMMERCIAL LENDING LLC",
+  "origin": "2024-10-23",
+  "age_mo": 21.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VELEZ, GIOVANNI",
+   "title": "MGR",
+   "officer_addr": "8050 N UNIVERSITY DR, TAMARAC, FL 33321",
+   "agent": "VELEZ, GIOVANNI",
+   "agent_addr": "8050 N UNIVERSITY DR STE 202, TAMARAC, FL 33321",
+   "status": "ACTIVE",
+   "matched": "GK PROPERTY RENTALS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "494103AD0060",
+     "addr": "8050 N UNIVERSITY DR #202"
+    },
+    {
+     "folio": "494103AD0070",
+     "addr": "8050 N UNIVERSITY DR #203"
+    }
+   ]
+  }
+ },
+ "RBL HOLDINGS GROUP LLC": {
+  "borrower": "RBL HOLDINGS GROUP LLC",
+  "amt": 215000,
+  "lender": "CLEAREDGE LENDING LLC",
+  "origin": "2024-10-23",
+  "age_mo": 21.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BLAKE, RICHARD W",
+   "title": "MGR",
+   "officer_addr": "13783 NW 11 COURT, PEMBROKE PINES, FL 33028",
+   "agent": "BLAKE, RICHARD W",
+   "agent_addr": "13783 NW 11 COURT, PEMBROKE PINES, FL 33028",
+   "status": "ACTIVE",
+   "matched": "RBL HOLDINGS GROUP, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 5 parcels — cannot pin the mortgaged one by name",
+   "parcels": 5,
+   "candidates": [
+    {
+     "folio": "494135210500",
+     "addr": "5301 NW 16 ST"
+    },
+    {
+     "folio": "494135210510",
+     "addr": "5225 NW 16 ST"
+    },
+    {
+     "folio": "494135210790",
+     "addr": "5410-5414 NW 17 CT"
+    },
+    {
+     "folio": "494135211330",
+     "addr": "1701-1705 NW 54 TER"
+    },
+    {
+     "folio": "494217070022",
+     "addr": "2341-2345 NW 52 CT"
+    }
+   ]
+  }
+ },
+ "MIW TEAM BUILDERS LLC": {
+  "borrower": "MIW TEAM BUILDERS LLC",
+  "amt": 215000,
+  "lender": "CENTRAL FLORIDA INCOME FUND LLC",
+  "origin": "2024-04-22",
+  "age_mo": 27.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CASTRO-MUNOZ, JOSHUA MANUEL",
+   "title": "MGR",
+   "officer_addr": "5661 NE 6 AVE, OAKLAND PARK, FL 33334",
+   "agent": "CASTRO-MUNOZ, JOSHUA MANUEL",
+   "agent_addr": "5661 NE 6 AVE, OAKLAND PARK, FL 33334",
+   "status": "ACTIVE",
+   "matched": "MIW TEAM BUILDERS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "494210090760",
+     "addr": "5931 NE 1 AVE"
+    },
+    {
+     "folio": "494211031080",
+     "addr": "830 NE 58 CT"
+    }
+   ]
+  }
+ },
+ "NEO-DY INVESTMENTS LLC": {
+  "borrower": "NEO-DY INVESTMENTS LLC",
+  "amt": 214500,
+  "lender": "EASY STREET CAPITAL LLC",
+  "origin": "2024-09-26",
+  "age_mo": 22.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "OLAYA, YOVANY",
+   "title": "MGR",
+   "officer_addr": "9517 NW 33rd Pl, Sunrise, FL 33351",
+   "agent": "DIAZ, JUAN NICOLAS",
+   "agent_addr": "9517 NW 33rd Pl, Sunrise, FL 33351",
+   "status": "ACTIVE",
+   "matched": "NEO-DY INVESTMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ORIGINAL EDITORES LLC": {
+  "borrower": "ORIGINAL EDITORES LLC",
+  "amt": 212510,
+  "lender": "LENDING CLUB MIAMI LLC",
+  "origin": "2024-06-06",
+  "age_mo": 26.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MURCIA, JAIME",
+   "title": "MGR",
+   "officer_addr": "4534 MONARCH WAY, COCONUT CREEK, FL 33063",
+   "agent": "E &amp; F LATIN ACCOUNTING",
+   "agent_addr": "1820 N CORPORATE LAKES BLVD, SUITE 109",
+   "status": "ACTIVE",
+   "matched": "ORIGINAL EDITORES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "474133051520",
+   "addr": "8161 CANOPY TER",
+   "city": "Parkland",
+   "zip": "33076",
+   "paOwner": "ORIGINAL EDITORES LLC"
+  }
+ },
+ "M & M PROPERTY DEVELOPMENT CORP": {
+  "borrower": "M & M PROPERTY DEVELOPMENT CORP",
+  "amt": 212100,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-09-24",
+  "age_mo": 22.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MORILLO, JUAN BAUTISTA",
+   "title": "President",
+   "officer_addr": "11243 NW 58 TER, DORAL, FL 33178",
+   "agent": "MORILLO, JUAN",
+   "agent_addr": "11243 NW 58 TER, DORAL, FL 33178",
+   "status": "ACTIVE",
+   "matched": "M & M PROPERTY DEVELOPMENT CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "840 SW 9 ST LLC": {
+  "borrower": "840 SW 9 ST LLC",
+  "amt": 210000,
+  "lender": "DKC LENDING FL LLC",
+  "origin": "2024-12-12",
+  "age_mo": 20.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "840 SW 9TH ST LLC",
+    "840 TERRACE, LLC",
+    "840 UNIVERSITY BOULEVARD,  LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "LONG LIVE MAMA CHOUTE LLC": {
+  "borrower": "LONG LIVE MAMA CHOUTE LLC",
+  "amt": 210000,
+  "lender": "REDBRIDGE CAPITAL LLC",
+  "origin": "2024-03-26",
+  "age_mo": 28.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DUTARI, IRINA",
+   "title": "Manager",
+   "officer_addr": "290 NW 165th Street, Suite P800B9",
+   "agent": "Dutari, Irina",
+   "agent_addr": "290 NW 165th Street, Suite P800B9",
+   "status": "ACTIVE",
+   "matched": "LONG LIVE MAMA CHOUTE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494219131150",
+   "addr": "3391 NW 43 ST",
+   "city": "Lauderdale Lakes",
+   "zip": "33309",
+   "paOwner": "LONG LIVE MAMA CHOUTE LLC"
+  }
+ },
+ "KLM FLORIDA PROPERTIES LLC": {
+  "borrower": "KLM FLORIDA PROPERTIES LLC",
+  "amt": 209600,
+  "lender": "CLEAREDGE LENDING LLC",
+  "origin": "2024-08-07",
+  "age_mo": 24.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "OBRIST, KENDRA",
+   "title": "MGR",
+   "officer_addr": "428 W PALM AIRE DR, POMPANO BEACH, FL 33069",
+   "agent": "OBRIST, KENDRA",
+   "agent_addr": "428 W PALM AIRE DRIVE, POMPANO BEACH, FL 33069",
+   "status": "ACTIVE",
+   "matched": "KLM FLORIDA PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494220AM0850",
+   "addr": "2700 S OAKLAND FOREST DR #606",
+   "city": "Oakland Park",
+   "zip": "33309",
+   "paOwner": "KLM FLORIDA PROPERTIES LLC"
+  }
+ },
+ "B & L REMODELING SERVICES LLC": {
+  "borrower": "B & L REMODELING SERVICES LLC",
+  "amt": 208000,
+  "lender": "BRIDGEWELL CAPITAL LLC",
+  "origin": "2024-11-25",
+  "age_mo": 20.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BONILLA LEON, ULISES",
+   "title": "MGR",
+   "officer_addr": "7005 CONTINENTAL DR, TAMPA, FL 33614",
+   "agent": "BONILLA LEON, ULISES",
+   "agent_addr": "7005 CONTINENTAL DR, TAMPA, FL 33614",
+   "status": "INACTIVE",
+   "matched": "BL REMODELING SERVICES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "PROPERTY RESQ BRW LLC": {
+  "borrower": "PROPERTY RESQ BRW LLC",
+  "amt": 206250,
+  "lender": "AMWEST FUNDING CORP",
+  "origin": "2024-07-17",
+  "age_mo": 24.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DEPASS, LORI",
+   "title": "MGRM",
+   "officer_addr": "7852 BEECHFERN CIRCLE, TAMARAC, FL 33321",
+   "agent": "Depass, Michael A",
+   "agent_addr": "7852 Beechfern Circle, Tamarac, FL 33321",
+   "status": "ACTIVE",
+   "matched": "PROPERTY RESQ BRW LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "RY ASSETS LLC": {
+  "borrower": "RY ASSETS LLC",
+  "amt": 205000,
+  "lender": "SKYLINE LENDING & INVESTMENTS INC",
+  "origin": "2024-04-19",
+  "age_mo": 27.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CRUZ, YOAN R",
+   "title": "MGR",
+   "officer_addr": "470 SUMTER AVENUE, DAVIE, FL 33325",
+   "agent": "CRUZ, YOAN R",
+   "agent_addr": "470 SUMTER AVENUE, DAVIE, FL 33325",
+   "status": "ACTIVE",
+   "matched": "RY ASSETS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494124JH0210",
+   "addr": "3141 NW 47 TER #121",
+   "city": "Lauderdale Lakes",
+   "zip": "33319",
+   "paOwner": "RY ASSETS LLC"
+  }
+ },
+ "SATORI 15830 LLC": {
+  "borrower": "SATORI 15830 LLC",
+  "amt": 200900,
+  "lender": "RBI PRIVATE LENDING LLC",
+  "origin": "2024-12-05",
+  "age_mo": 20.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RAMOS, WILSON A",
+   "title": "MGR",
+   "officer_addr": "10071 LAKE VISTA CT, PARKLAND, FL 33076",
+   "agent": "RAMOS, WILSON A",
+   "agent_addr": "10071 LAKE VISTA CT, PARKLAND, FL 33076",
+   "status": "ACTIVE",
+   "matched": "SATORI 15830 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514108BC0970",
+   "addr": "1881 NW 96 TER #7C",
+   "city": "Pembroke Pines",
+   "zip": "33024",
+   "paOwner": "SATORI 15830 LLC"
+  }
+ },
+ "MATHEW INVESTMENTS LLC": {
+  "borrower": "MATHEW INVESTMENTS LLC",
+  "amt": 200000,
+  "lender": "CORE RESERVE FUNDING LLC",
+  "origin": "2024-11-18",
+  "age_mo": 20.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MATHEW, MATHAI",
+   "title": "MGR",
+   "officer_addr": "1550 SW 190TH AVE, PEMBROKE PINES, FL 33029 UN",
+   "agent": "MATHEW, MATHAI",
+   "agent_addr": "1550 SW 190TH AVE, PEMBROKE PINES, FL 33029",
+   "status": "ACTIVE",
+   "matched": "MATHEW INVESTMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514203102110",
+   "addr": "230 SW 11 ST",
+   "city": "Dania Beach",
+   "zip": "33004",
+   "paOwner": "MATHEW INVESTMENTS LLC"
+  }
+ },
+ "BEROCA FAMILY HOLDINGS LLC": {
+  "borrower": "BEROCA FAMILY HOLDINGS LLC",
+  "amt": 200000,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2024-11-12",
+  "age_mo": 21.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DE JESUS BERMUDEZ, MAURICIO",
+   "title": "MGR",
+   "officer_addr": "1525 N PARK DR, SUITE 104",
+   "agent": "AV ACCOUNTING ASSOCIATES CORP",
+   "agent_addr": "1525 N PARK DR, SUITE 104",
+   "status": "ACTIVE",
+   "matched": "BEROCA FAMILY HOLDINGS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514008092420",
+   "addr": "17039 NW 11 ST",
+   "city": "Pembroke Pines",
+   "zip": "33028",
+   "paOwner": "BEROCA FAMILY HOLDINGS LLC"
+  }
+ },
+ "HOUSE GROUP ASSETS LLC": {
+  "borrower": "HOUSE GROUP ASSETS LLC",
+  "amt": 200000,
+  "lender": "HOME SAVINGS NATIONAL LENDING LLC",
+  "origin": "2024-10-21",
+  "age_mo": 21.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SOLANO, WILLIAM J",
+   "title": "MGR",
+   "officer_addr": "1027 S 21 AVE, HOLLYWOOD, FL 33020",
+   "agent": "SOLANO, WILLIAM J",
+   "agent_addr": "1027 S 21 AVE, HOLLYWOOD, FL 33020",
+   "status": "ACTIVE",
+   "matched": "HOUSE GROUP ASSETS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "M B ENTERTAIMENT INC": {
+  "borrower": "M B ENTERTAIMENT INC",
+  "amt": 200000,
+  "lender": "DY2M LENDING GROUP CORP",
+  "origin": "2024-10-01",
+  "age_mo": 22.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BRICENO, MARIELY",
+   "title": "PD",
+   "officer_addr": "14950 NW 44th CT, Suite #2",
+   "agent": "BRICENO, MARIELY",
+   "agent_addr": "14950 NW 44th CT, Suite #2",
+   "status": "ACTIVE",
+   "matched": "M.B. ENTERTAINMENT, INC.",
+   "typo": true
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MEGA D INVESTMENTS LLC": {
+  "borrower": "MEGA D INVESTMENTS LLC",
+  "amt": 200000,
+  "lender": "HARMONEY CAPITAL LLC",
+  "origin": "2024-09-06",
+  "age_mo": 23.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DELGADO, JOSE A",
+   "title": "MGR",
+   "officer_addr": "221 SW 3rd Ave, Hallandale Beach, FL 33009",
+   "agent": "DELGADO, JOSE A",
+   "agent_addr": "221 SW 3rd Ave, Hallandale Beach, FL 33009",
+   "status": "ACTIVE",
+   "matched": "MEGA D INVESTMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514228022770",
+   "addr": "221 SW 3 AVE",
+   "city": "Hallandale Beach",
+   "zip": "33009",
+   "paOwner": "MEGA D INVESTMENTS LLC"
+  }
+ },
+ "OTAA FL 1 LLC": {
+  "borrower": "OTAA FL 1 LLC",
+  "amt": 200000,
+  "lender": "MILO LENDING INC",
+  "origin": "2024-08-05",
+  "age_mo": 24.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MARTORANO, STEVEN R",
+   "title": "MGR",
+   "officer_addr": "871 W MCNAB ROAD, Pompano Beach, FL 33060",
+   "agent": "MARTORANO, STEVEN R",
+   "agent_addr": "871 W MCNAB ROAD, Pompano Beach, FL 33060",
+   "status": "ACTIVE",
+   "matched": "OTAA FL 1 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494319AM0730",
+   "addr": "4280 GALT OCEAN DR #7C",
+   "city": "Fort Lauderdale",
+   "zip": "33308",
+   "paOwner": "OTAA FL 1 LLC"
+  }
+ },
+ "P&J INVESTMENT HOMES LLC": {
+  "borrower": "P&J INVESTMENT HOMES LLC",
+  "amt": 200000,
+  "lender": "DKC LENDING V LLC",
+  "origin": "2024-07-11",
+  "age_mo": 25.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "WARD-LOUIS, Patrecia",
+   "title": "AMBR",
+   "officer_addr": "2200 N. Commerce Parkway, 200",
+   "agent": "WARD-LOUIS , Patrecia",
+   "agent_addr": "2200 N. Commerce Parkway, 200",
+   "status": "ACTIVE",
+   "matched": "P&J INVESTMENT HOMES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 4 parcels — cannot pin the mortgaged one by name",
+   "parcels": 4,
+   "candidates": [
+    {
+     "folio": "484233021200",
+     "addr": "2140 NW 4 ST"
+    },
+    {
+     "folio": "494126070180",
+     "addr": "2767-2771 NW 58 TER"
+    },
+    {
+     "folio": "494126070190",
+     "addr": "2761-2765 NW 58 TER"
+    },
+    {
+     "folio": "494232420010",
+     "addr": "2860-2862 NW 11 ST"
+    }
+   ]
+  }
+ },
+ "CL WRIGHT LLC": {
+  "borrower": "CL WRIGHT LLC",
+  "amt": 200000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2024-04-15",
+  "age_mo": 27.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "WRIGHT, CAMILLE L",
+   "title": "AMBR",
+   "officer_addr": "4710 W PARK RD, HOLLYWOOD, FL 33021",
+   "agent": "WRIGHT, CAMILLE L",
+   "agent_addr": "4710 W PARK RD, HOLLYWOOD, FL 33021",
+   "status": "INACTIVE",
+   "matched": "CL WRIGHT, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "LL2 157 LLC": {
+  "borrower": "LL2 157 LLC",
+  "amt": 200000,
+  "lender": "REDBRIDGE CAPITAL LLC",
+  "origin": "2024-04-08",
+  "age_mo": 28.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MORALES BOHORQUEZ, LOURDES",
+   "title": "MGR",
+   "officer_addr": "2324 NW 157 AVE, PEMBROKE PINES, FL 33028",
+   "agent": "BOHORQUEZ, LOURDES",
+   "agent_addr": "2324 NW 157 AVE, PEMBROKE PINES, FL 33028",
+   "status": "INACTIVE",
+   "matched": "LL2 157, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514009210440",
+   "addr": "2324 NW 157 AVE",
+   "city": "Pembroke Pines",
+   "zip": "33028",
+   "paOwner": "LL2 157 LLC"
+  }
+ },
+ "2540 DEWEY ST LLC": {
+  "borrower": "2540 DEWEY ST LLC",
+  "amt": 200000,
+  "lender": "STAGE POINT FUND LLC",
+  "origin": "2024-04-05",
+  "age_mo": 28.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DIANA, MICHAEL J",
+   "title": "MGR",
+   "officer_addr": "3050 SW 139TH TERRACE, DAVIE, FL 33330",
+   "agent": "DIANA, MICHAEL J",
+   "agent_addr": "3050 SW 139TH TER., DAVIE, FL 33330",
+   "status": "INACTIVE",
+   "matched": "2540 DEWEY ST LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "GABLES PROPERTIES & INVESTMENTS LLC": {
+  "borrower": "GABLES PROPERTIES & INVESTMENTS LLC",
+  "amt": 200000,
+  "lender": "LAMB CAPITAL LLC",
+  "origin": "2024-03-08",
+  "age_mo": 29.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "GABLES PROPERTY, LLC",
+    "GABLES PROPERTY & CASUALTY INC.",
+    "GABLES PROPERTY & CASUALTY UNDERWRITERS, INC."
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "800 ON THE TRAX LLC": {
+  "borrower": "800 ON THE TRAX LLC",
+  "amt": 200000,
+  "lender": "JAZZ LENDING LLC",
+  "origin": "2024-02-23",
+  "age_mo": 29.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ZIGANN, BARBARA E",
+   "title": "MGR",
+   "officer_addr": "PO BOX 30042, FORT LAUDERDALE, FL 33303",
+   "agent": "Venice Marine Services LLC",
+   "agent_addr": "1524 SE 2nd Street, Apt 5",
+   "status": "ACTIVE",
+   "matched": "800 ON THE TRAX, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "I N C NL 14 LLC": {
+  "borrower": "I N C NL 14 LLC",
+  "amt": 193800,
+  "lender": "B&B CAPITAL GROUP 26 LLC",
+  "origin": "2024-10-25",
+  "age_mo": 21.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "I.N.C. CAPITAL GROUP LLC",
+   "title": "MGR",
+   "officer_addr": "P.O. BOX 630306, MIAMI, FL 33063",
+   "agent": "I.N.C. CAPITAL GROUP LLC",
+   "agent_addr": "2699 STIRLING RD, A-306",
+   "status": "ACTIVE",
+   "matched": "I.N.C. NL 14 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 14 parcels — cannot pin the mortgaged one by name",
+   "parcels": 14,
+   "candidates": [
+    {
+     "folio": "494102AG0010",
+     "addr": "921 SW 74 TER #101A"
+    },
+    {
+     "folio": "494102AG0020",
+     "addr": "921 SW 74 TER #102A"
+    },
+    {
+     "folio": "494102AG0030",
+     "addr": "921 SW 74 TER #201A"
+    },
+    {
+     "folio": "494102AG0050",
+     "addr": "901 SW 74 TER #101B"
+    },
+    {
+     "folio": "494102AG0060",
+     "addr": "901 SW 74 TER #102B"
+    },
+    {
+     "folio": "494102AG0080",
+     "addr": "901 SW 74 TER #202B"
+    }
+   ]
+  }
+ },
+ "BART & LISA FLORIDA LLC": {
+  "borrower": "BART & LISA FLORIDA LLC",
+  "amt": 190400,
+  "lender": "AMWEST FUNDING CORP",
+  "origin": "2024-10-25",
+  "age_mo": 21.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RESINO, RICARDO",
+   "title": "AMBR",
+   "officer_addr": "8004 NW 154 STREET SUITE 117, MIAMI LAKES, FL 33016",
+   "agent": "RESINO, RICARDO",
+   "agent_addr": "8004 NW 154 STREET, 117",
+   "status": "ACTIVE",
+   "matched": "BART AND LISA FLORIDA LLC",
+   "typo": true
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "484120CC0040",
+     "addr": "10789 ROYAL PALM BLVD #4"
+    },
+    {
+     "folio": "504209210150",
+     "addr": "204 SW 19 AVE"
+    },
+    {
+     "folio": "514102050142",
+     "addr": "6761 SHERIDAN ST"
+    }
+   ]
+  }
+ },
+ "STIRLING STAR CAP LLC": {
+  "borrower": "STIRLING STAR CAP LLC",
+  "amt": 188833,
+  "lender": "BSD CAPITAL LLC",
+  "origin": "2024-10-29",
+  "age_mo": 21.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Alofoki Holdings, LLC",
+   "title": "AMBR",
+   "officer_addr": "1718 Capitol Ave., Cheyenne, WY 82001",
+   "agent": "ANDERSON REGISTERED AGENTS, INC.",
+   "agent_addr": "625 E. Twiggs Street, Suite 110, Tampa, FL 33602",
+   "status": "ACTIVE",
+   "matched": "STIRLING STAR CAP LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ZASHAAM LLC": {
+  "borrower": "ZASHAAM LLC",
+  "amt": 188500,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2024-06-04",
+  "age_mo": 26.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Bonycast, Zasha P",
+   "title": "Authiorize",
+   "officer_addr": "19300 W DIXIE HIGHWAY, Suite 11",
+   "agent": "Ross-Shaw, Diana",
+   "agent_addr": "19300 W Dixie Highway, 11",
+   "status": "ACTIVE",
+   "matched": "ZASHAAM LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SF FORT LAUDERDALE LLC": {
+  "borrower": "SF FORT LAUDERDALE LLC",
+  "amt": 188000,
+  "lender": "LPC FUND LLC",
+  "origin": "2024-07-18",
+  "age_mo": 24.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Mora, Jorge",
+   "title": "Manager",
+   "officer_addr": "8747 International Dr., #103, Orlando, FL 32819",
+   "agent": "CORPORATION SERVICE COMPANY",
+   "agent_addr": "1201 HAYS STREET, TALLAHASSEE, FL 32301",
+   "status": "ACTIVE",
+   "matched": "SF FORT LAUDERDALE, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "GM HOLDINGS LLC": {
+  "borrower": "GM HOLDINGS LLC",
+  "amt": 187500,
+  "lender": "MORTGAGE FUNDING 05 LLC",
+  "origin": "2024-11-06",
+  "age_mo": 21.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "THE GEORGE W LACKEY CO",
+   "title": "MGRM",
+   "officer_addr": "8377 GUNN HIGHWAY, TAMPA, FL 33626",
+   "agent": "LACKEY, GEORGE W",
+   "agent_addr": "8377 GUNN HIGHWAY, TAMPA, FL 33626",
+   "status": "INACTIVE",
+   "matched": "G&M HOLDINGS, L.L.C.",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514222DA0560",
+   "addr": "900 NE 12 AVE #708",
+   "city": "Hallandale Beach",
+   "zip": "33009",
+   "paOwner": "GM HOLDINGS LLC"
+  }
+ },
+ "VALIATTI HOLDING LLC": {
+  "borrower": "VALIATTI HOLDING LLC",
+  "amt": 187500,
+  "lender": "STAR FUND LLC",
+  "origin": "2024-07-29",
+  "age_mo": 24.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VALIATTI, PAULO R",
+   "title": "AP",
+   "officer_addr": "23274 ALORA DRIVE, BOCA RATON, FL 33433",
+   "agent": "VALIATTI, PAULO R",
+   "agent_addr": "23274 ALORA DRIVE, BOCA RATON, FL 33433",
+   "status": "INACTIVE",
+   "matched": "VALIATTI HOLDING LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484306CB0240",
+   "addr": "731 SE 1 WAY #C24",
+   "city": "Deerfield Beach",
+   "zip": "33441",
+   "paOwner": "VALIATTI HOLDING LLC"
+  }
+ },
+ "BASSETT PROPERTY UNLIMITED LLC": {
+  "borrower": "BASSETT PROPERTY UNLIMITED LLC",
+  "amt": 185000,
+  "lender": "LPC FUND LLC",
+  "origin": "2024-06-20",
+  "age_mo": 25.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BASSETT, MARCELE",
+   "title": "MGR",
+   "officer_addr": "110 N F STREET UNIT B-1, LAKE WORTH BEACH, FL 33460",
+   "agent": "BASSETT, MARCELE",
+   "agent_addr": "110 N F STREET UNIT B-1, LAKE WORTH BEACH, FL 33460",
+   "status": "ACTIVE",
+   "matched": "BASSETT PROPERTY UNLIMITED LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "J S FLORIDA INVESTMENT LLC": {
+  "borrower": "J S FLORIDA INVESTMENT LLC",
+  "amt": 180000,
+  "lender": "PRINCIPAL LENDERS GROUP INC",
+  "origin": "2024-05-03",
+  "age_mo": 27.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SANCHEZ, JHON",
+   "title": "MMBR",
+   "officer_addr": "15800 Pines BLVD, Suite 352",
+   "agent": "SANCHEZ, JHON",
+   "agent_addr": "15800 Pines BLVD, Suite 352",
+   "status": "ACTIVE",
+   "matched": "J.S FLORIDA INVESTMENT LLC.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MORE THAN HOMES LLC": {
+  "borrower": "MORE THAN HOMES LLC",
+  "amt": 178500,
+  "lender": "CLEAREDGE LENDING LLC",
+  "origin": "2024-04-09",
+  "age_mo": 28.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "QUINTANA, MONICA",
+   "title": "AMBR",
+   "officer_addr": "1492 SW 47 AVE, FORT LAUDERDALE, FL 33317",
+   "agent": "QUINTANA, MONICA",
+   "agent_addr": "1492 SW 47 AVE, FORT LAUDERDALE, FL 33317",
+   "status": "ACTIVE",
+   "matched": "MORE THAN HOMES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504206241780",
+   "addr": "921 NW 33 DR",
+   "city": "Lauderhill",
+   "zip": "33311",
+   "paOwner": "MORE THAN HOMES LLC"
+  }
+ },
+ "MIZ BEACH LLC": {
+  "borrower": "MIZ BEACH LLC",
+  "amt": 176250,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2024-05-16",
+  "age_mo": 26.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "REDLICH, JONATHAN C",
+   "title": "MGR",
+   "officer_addr": "4201 COLLINS AVE APT 2103, MIAMI BEACH, FL 33140",
+   "agent": "REDLICH, RON M",
+   "agent_addr": "4201 COLLINS AVE APT 2103, MIAMI BEACH, FL 33140",
+   "status": "ACTIVE",
+   "matched": "MIZ BEACH LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514101AC2320",
+   "addr": "3690 N 56 AVE #916",
+   "city": "Hollywood",
+   "zip": "33021",
+   "paOwner": "MIZ BEACH LLC"
+  }
+ },
+ "THALASSA HOLDINGS LLC": {
+  "borrower": "THALASSA HOLDINGS LLC",
+  "amt": 175000,
+  "lender": "VICTORY CAPITAL GROUP LLC",
+  "origin": "2024-10-24",
+  "age_mo": 21.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "THALASSA INVESTMENT  INC",
+    "THALASSA JOURNEYS LLC",
+    "THALASSA MARINE LLC"
+   ]
+  },
+  "bcpa": {
+   "folio": "484107040420",
+   "addr": "4932 NW 119 TER",
+   "city": "Coral Springs",
+   "zip": "33076",
+   "paOwner": "THALASSA HOLDINGS LLC"
+  }
+ },
+ "MOSERI PROPERTY LLC": {
+  "borrower": "MOSERI PROPERTY LLC",
+  "amt": 175000,
+  "lender": "VELOCITY COMMERCIAL CAPITAL,LLC",
+  "origin": "2024-07-08",
+  "age_mo": 25.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TOPAZ, LILIAN",
+   "title": "P",
+   "officer_addr": "251 174ST, SUNY ISLES, FL 33160",
+   "agent": "TOPAZ, LILIAN",
+   "agent_addr": "251 174 ST, 716",
+   "status": "ACTIVE",
+   "matched": "MOSERI PROPERTY LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "514101AC0540",
+     "addr": "3630 N 56 AVE #302"
+    },
+    {
+     "folio": "514101AC1300",
+     "addr": "3660 N 56 AVE #606"
+    },
+    {
+     "folio": "514101AC1310",
+     "addr": "3660 N 56 AVE #607"
+    }
+   ]
+  }
+ },
+ "221 NW 28 AVE LLC": {
+  "borrower": "221 NW 28 AVE LLC",
+  "amt": 175000,
+  "lender": "TAYLOR MADE LENDING LLC",
+  "origin": "2024-06-13",
+  "age_mo": 26.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "O&#39;BEA, NICHOLAS",
+   "title": "MGR",
+   "officer_addr": "1710 SW 22 AVENUE, FORT LAUDERDALE, FL 33312",
+   "agent": "GORDON, CLINT",
+   "agent_addr": "1710 SW 22 AVENUE, FORT LAUDERDALE, FL 33312",
+   "status": "INACTIVE",
+   "matched": "221 NW 28 AVE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504205130580",
+   "addr": "221 NW 28 AVE",
+   "city": "Unincorporated",
+   "zip": "33311",
+   "paOwner": "221 NW 28 AVE LLC"
+  }
+ },
+ "SMITH PROPERTIES OF PALM BEACH LLC": {
+  "borrower": "SMITH PROPERTIES OF PALM BEACH LLC",
+  "amt": 175000,
+  "lender": "ALLISON LENDING LLC",
+  "origin": "2024-04-16",
+  "age_mo": 27.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SMITH, STEPHEN",
+   "title": "MGR",
+   "officer_addr": "102 NE 2ND STREET, SUITE 201",
+   "agent": "SMITH, STEPHEN",
+   "agent_addr": "5547 N. MILITARY TRAIL, APT 2409",
+   "status": "ACTIVE",
+   "matched": "SMITH PROPERTIES OF PALM BEACH LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "LI & PA LLC": {
+  "borrower": "LI & PA LLC",
+  "amt": 170000,
+  "lender": "M & M PRIVATE LENDING GROUP LLC",
+  "origin": "2024-02-27",
+  "age_mo": 29.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SAINT LOUIS, LIHLENZ J",
+   "title": "MGRM",
+   "officer_addr": "440 CATALINA AVENUE NW, PALM BAY, FL 32907",
+   "agent": "SAINT LOUIS, LIHLENZ J",
+   "agent_addr": "440 CATALINA AVENUE NW, PALM BAY, FL 32907",
+   "status": "INACTIVE",
+   "matched": "LIPA, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ELIZABETH REALTY LLC": {
+  "borrower": "ELIZABETH REALTY LLC",
+  "amt": 168000,
+  "lender": "AMWEST FUNDING CORP",
+  "origin": "2024-05-28",
+  "age_mo": 26.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "KUAN, NANCY",
+   "title": "MGR",
+   "officer_addr": "28 WINGED FOOT DR., MANALAPAN, NJ 07726 UN",
+   "agent": "KUAN, NANCY",
+   "agent_addr": "812 BAPTIST LANE, APT 2",
+   "status": "ACTIVE",
+   "matched": "ELIZABETH REALTY LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514223AC3870",
+   "addr": "851 THREE ISLANDS BLVD #208",
+   "city": "Hallandale Beach",
+   "zip": "33009",
+   "paOwner": "ELIZABETH REALTY LLC"
+  }
+ },
+ "AVITAL MANAGEMENT LLC": {
+  "borrower": "AVITAL MANAGEMENT LLC",
+  "amt": 165000,
+  "lender": "PFN LENDING GROUP INC",
+  "origin": "2024-02-28",
+  "age_mo": 29.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "AVITALNET SUPPLY CORP.",
+    "A-VITAL NUTRITION GROUP, LLC",
+    "AVITAL REAL ESTATE, L.L.C."
+   ]
+  },
+  "bcpa": {
+   "err": "owns 5 parcels — cannot pin the mortgaged one by name",
+   "parcels": 5,
+   "candidates": [
+    {
+     "folio": "484109201050",
+     "addr": "9931 NW 56 PL"
+    },
+    {
+     "folio": "494108DA1460",
+     "addr": "9065 PRESTON PL"
+    },
+    {
+     "folio": "494123HH8250",
+     "addr": "3700 INVERRARY DR #1C"
+    },
+    {
+     "folio": "494202490820",
+     "addr": "609 SW 2 DR"
+    },
+    {
+     "folio": "504231240910",
+     "addr": "3818 SW 50 CT"
+    }
+   ]
+  }
+ },
+ "PARADISE AT 16 SEASIDE LLC": {
+  "borrower": "PARADISE AT 16 SEASIDE LLC",
+  "amt": 160000,
+  "lender": "CAPITAL FUNDING FINANCIAL LLC",
+  "origin": "2024-03-01",
+  "age_mo": 29.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CORREA, DR THOMAS C",
+   "title": "PRES",
+   "officer_addr": "151 N. NOB HILL ROAD, SUITE 399, PLANTATION, FL 33324",
+   "agent": "COD FUNDING, INC",
+   "agent_addr": "151 N. NOB HILL ROAD, SUITE 399",
+   "status": "ACTIVE",
+   "matched": "PARADISE AT 16 SEASIDE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514107AG1360",
+   "addr": "1100 SAINT CHARLES PL #708",
+   "city": "Pembroke Pines",
+   "zip": "33026",
+   "paOwner": "PARADISE AT 16 SEASIDE LLC"
+  }
+ },
+ "MIDAS OPERATIONS LLC": {
+  "borrower": "MIDAS OPERATIONS LLC",
+  "amt": 157500,
+  "lender": "NQM FUNDING LLC",
+  "origin": "2024-10-23",
+  "age_mo": 21.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PARDO, JOSE D",
+   "title": "AMBR",
+   "officer_addr": "1672 SPARROW LN, WESTON, FL 33327",
+   "agent": "MIRENSKY, RICARDO ARIEL",
+   "agent_addr": "1712 ASPEN LN, WESTON, FL 33327",
+   "status": "ACTIVE",
+   "matched": "MIDAS OPERATIONS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494129AE1130",
+   "addr": "9999 SUMMERBREEZE DR #601",
+   "city": "Sunrise",
+   "zip": "33322",
+   "paOwner": "MIDAS OPERATIONS LLC"
+  }
+ },
+ "LAM FINANCIAL CONSULTING LLC": {
+  "borrower": "LAM FINANCIAL CONSULTING LLC",
+  "amt": 154000,
+  "lender": "AMWEST FUNDING CORP",
+  "origin": "2024-03-14",
+  "age_mo": 29.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ALEGRIA, LUIS A",
+   "title": "MGR",
+   "officer_addr": "11501 LAKESIDE DRIVE, UNIT 6205, FL 33178",
+   "agent": "ALEGRIA, LUIS A",
+   "agent_addr": "11501 LAKESIDE DRIVE, UNIT 6205",
+   "status": "ACTIVE",
+   "matched": "LAM FINANCIAL CONSULTING LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "NAMA PROPERTIES LLC": {
+  "borrower": "NAMA PROPERTIES LLC",
+  "amt": 152000,
+  "lender": "PERFECTO MORTGAGE INCOME FUND LLC",
+  "origin": "2024-08-28",
+  "age_mo": 23.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MONDESIR, ALSHINE",
+   "title": "MGR",
+   "officer_addr": "5341 W BROWARD BLVD, PLANTATION, FL 33317",
+   "agent": "SMALLBIZ AGENTS, LLC",
+   "agent_addr": "75 N. WOODWARD AVE, #10000",
+   "status": "ACTIVE",
+   "matched": "NAMA PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494119AG0070",
+   "addr": "10020 WINDING LAKE RD #203",
+   "city": "Sunrise",
+   "zip": "33351",
+   "paOwner": "NAMA PROPERTIES LLC"
+  }
+ },
+ "AZW HOLDINGS LLC": {
+  "borrower": "AZW HOLDINGS LLC",
+  "amt": 152000,
+  "lender": "PERFECTO MORTGAGE INCOME FUND LLC",
+  "origin": "2024-05-03",
+  "age_mo": 27.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "WOODARD, MATTHEW C",
+   "title": "MGR",
+   "officer_addr": "PO BOX 3910, SPRING HILL, FL 34611",
+   "agent": "WOODARD, CYNTHIA M",
+   "agent_addr": "7341 SPRING HILL DRIVE, SPRING HILL, FL 34611",
+   "status": "ACTIVE",
+   "matched": "AZW HOLDINGS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514112040850",
+   "addr": "5724-5726 GRANT ST",
+   "city": "Hollywood",
+   "zip": "33021",
+   "paOwner": "AZW HOLDINGS LLC"
+  }
+ },
+ "NEW COVENANT HOUSE LLC": {
+  "borrower": "NEW COVENANT HOUSE LLC",
+  "amt": 150000,
+  "lender": "INTERSTATE LENDING LLC",
+  "origin": "2024-12-04",
+  "age_mo": 20.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FLOYD, DONNA",
+   "title": "AMBR",
+   "officer_addr": "736 SW 102ND WAY, PEMBROKE PINES, FL 33025",
+   "agent": "JK CLOSING ATTORNEYS, PLLC",
+   "agent_addr": "5489 WILES ROAD, SUITE 304",
+   "status": "INACTIVE",
+   "matched": "NEW COVENANT HOUSE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514117AB5210",
+   "addr": "8901 S HOLLYBROOK BLVD #101",
+   "city": "Pembroke Pines",
+   "zip": "33025",
+   "paOwner": "NEW COVENANT HOUSE LLC"
+  }
+ },
+ "TAHAAN KHALED INC": {
+  "borrower": "TAHAAN KHALED INC",
+  "amt": 150000,
+  "lender": "CORE RESERVE FUNDING LLC",
+  "origin": "2024-11-14",
+  "age_mo": 20.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RAHMAN, MASUM",
+   "title": "P",
+   "officer_addr": "9320 SW 6TH CT, PEMBROKE PINES, FL 33025",
+   "agent": "RAHMAN, MASUM",
+   "agent_addr": "9320 SW 6TH CT, PEMBROKE PINES, FL 33025",
+   "status": "ACTIVE",
+   "matched": "TAHAAN KHALED INC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SKYLINE WAY LLC": {
+  "borrower": "SKYLINE WAY LLC",
+  "amt": 150000,
+  "lender": "FOUR C'S FUNDING LLC",
+  "origin": "2024-10-14",
+  "age_mo": 21.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MORITZ, RUSSELL",
+   "title": "Manager",
+   "officer_addr": "7901 4th St N Ste 300, St Petersburg, FL 33702",
+   "agent": "REGISTERED AGENTS INC.",
+   "agent_addr": "7901 4TH ST N STE 300, ST. PETERSBURG, FL 33702",
+   "status": "ACTIVE",
+   "matched": "SKYLINE WAY LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SPECS HOME REMODELING CORP": {
+  "borrower": "SPECS HOME REMODELING CORP",
+  "amt": 150000,
+  "lender": "ALC LENDING LLC",
+  "origin": "2024-09-11",
+  "age_mo": 23.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ACO, JORGE",
+   "title": "P",
+   "officer_addr": "841 NORTH 70TH TER., HOLLYWOOD, FL 33024",
+   "agent": "ACO, SCARLET",
+   "agent_addr": "841 N. 70 TERRACE, HOLLYWOOD, FL 33024",
+   "status": "ACTIVE",
+   "matched": "SPECS HOME REMODELING CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514114070660",
+   "addr": "841 N 70 TER",
+   "city": "Hollywood",
+   "zip": "33024",
+   "paOwner": "SPECS HOME REMODELING CORP"
+  }
+ },
+ "DBL REAL ESTATE INVESTMENTS LLC": {
+  "borrower": "DBL REAL ESTATE INVESTMENTS LLC",
+  "amt": 150000,
+  "lender": "M & M PRIVATE LENDING GROUP LLC",
+  "origin": "2024-09-09",
+  "age_mo": 23.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DUCKETT, WILLIAM F",
+   "title": "MGR",
+   "officer_addr": "251 NE 28TH RD, BOCA RATON, FL 33431",
+   "agent": "DUCKETT, WILLIAM F",
+   "agent_addr": "251 NE 28TH RD, BOCA RATON, FL 33431",
+   "status": "ACTIVE",
+   "matched": "DBL REAL ESTATE INVESTMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494204BK0490",
+   "addr": "2691 S COURSE DR #509",
+   "city": "Pompano Beach",
+   "zip": "33069",
+   "paOwner": "DBL REAL ESTATE INVESTMENTS LLC"
+  }
+ },
+ "OLE 26 LLC": {
+  "borrower": "OLE 26 LLC",
+  "amt": 150000,
+  "lender": "CENTER STREET LENDING VIII SPE LLC",
+  "origin": "2024-06-24",
+  "age_mo": 25.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "THOMAS, SONIA",
+   "title": "AMBR",
+   "officer_addr": "2239 Sheridan Street, Hollywood, FL 33020",
+   "agent": "Thomas, Sonia",
+   "agent_addr": "2239 Sheridan Street, Hollywood, FL 33020",
+   "status": "ACTIVE",
+   "matched": "OLE 26 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514204010090",
+   "addr": "2239 SHERIDAN ST",
+   "city": "Hollywood",
+   "zip": "33020",
+   "paOwner": "OLE 26 LLC"
+  }
+ },
+ "UR DEVELOPMENTS LLC": {
+  "borrower": "UR DEVELOPMENTS LLC",
+  "amt": 150000,
+  "lender": "CLEAREDGE LENDING LLC",
+  "origin": "2024-05-22",
+  "age_mo": 26.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "IMTIAZ, USAYEED",
+   "title": "President",
+   "officer_addr": "10791 NW 18th Dr, Plantation, FL 33322",
+   "agent": "IMTIAZ, SHARIF",
+   "agent_addr": "10791 NW 18th Dr, Plantation, FL 33322",
+   "status": "ACTIVE",
+   "matched": "UR DEVELOPMENTS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494126AB1040",
+   "addr": "5714 NW 21 ST #36-E",
+   "city": "Lauderhill",
+   "zip": "33313",
+   "paOwner": "UR DEVELOPMENTS LLC"
+  }
+ },
+ "1745 ROSENBERG LLC": {
+  "borrower": "1745 ROSENBERG LLC",
+  "amt": 150000,
+  "lender": "TAYLOR MADE LENDING LLC",
+  "origin": "2024-05-22",
+  "age_mo": 26.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ROSENBERG, SONIA BENATAR",
+   "title": "MGRM",
+   "officer_addr": "789 WEST YAMATO RD, 801",
+   "agent": "ROSENBERG, SONIA BENATAR",
+   "agent_addr": "789 WEST YAMATO RD, APT 801",
+   "status": "ACTIVE",
+   "matched": "1745 ROSENBERG, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "DUGA INVESTMENT LLC": {
+  "borrower": "DUGA INVESTMENT LLC",
+  "amt": 150000,
+  "lender": "MEGA CAPITAL FUNDING INC",
+  "origin": "2024-05-02",
+  "age_mo": 27.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DUARTE ROMERO, ADRIANA",
+   "title": "MGR",
+   "officer_addr": "304 Indian Trace #127, WESTON, FL 33327",
+   "agent": "Duarte Team PM LLC",
+   "agent_addr": "304 Indian Trace #127, WESTON, FL 33326",
+   "status": "ACTIVE",
+   "matched": "DUGA INVESTMENT LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514117AL0030",
+   "addr": "9645 NW 1 CT #1103",
+   "city": "Pembroke Pines",
+   "zip": "33024",
+   "paOwner": "DUGA INVESTMENT LLC"
+  }
+ },
+ "7554 LLC": {
+  "borrower": "7554 LLC",
+  "amt": 150000,
+  "lender": "INVESTORS PRIME LENDING INC",
+  "origin": "2024-04-30",
+  "age_mo": 27.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MAZOR, GALIT",
+   "title": "Manager",
+   "officer_addr": "5555 SW 61st Ave, DAVIE, FL 33314",
+   "agent": "MAZOR, GALIT",
+   "agent_addr": "5555 SW 61st Ave, DAVIE, FL 33314",
+   "status": "ACTIVE",
+   "matched": "7554, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 4 parcels — cannot pin the mortgaged one by name",
+   "parcels": 4,
+   "candidates": [
+    {
+     "folio": "514103BD0080",
+     "addr": "7554 STIRLING RD #201"
+    },
+    {
+     "folio": "514103BD0290",
+     "addr": "7552 STIRLING RD #213"
+    },
+    {
+     "folio": "514103BD0330",
+     "addr": "7556 STIRLING RD #117"
+    },
+    {
+     "folio": "514103BD0420",
+     "addr": "7556 STIRLING RD #217"
+    }
+   ]
+  }
+ },
+ "5605 TAYLOR ST LLC": {
+  "borrower": "5605 TAYLOR ST LLC",
+  "amt": 150000,
+  "lender": "MILO LENDING INC",
+  "origin": "2024-04-04",
+  "age_mo": 28.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "KHANDWALLA, ZULFIQAR",
+   "title": "MGR",
+   "officer_addr": "3714 SAN SIMEON CR.,, WESTON, FL 33311 UN",
+   "agent": "KHANDWALLA, ZULFIQAR",
+   "agent_addr": "3714 SAN SIMEON CR, WESTON, FL 33331",
+   "status": "INACTIVE",
+   "matched": "5605 TAYLOR ST. LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "TONER VENTURES LLC": {
+  "borrower": "TONER VENTURES LLC",
+  "amt": 150000,
+  "lender": "INVESTORS PRIME LENDING INC",
+  "origin": "2024-03-29",
+  "age_mo": 28.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TONER, EAMON",
+   "title": "PRES",
+   "officer_addr": "2208 N 20 Ave, HOLLYWOOD, FL 33019",
+   "agent": "TONER, EAMON",
+   "agent_addr": "2208 N 20 Ave, HOLLYWOOD, FL 33020",
+   "status": "ACTIVE",
+   "matched": "TONER VENTURES, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "514203101050",
+     "addr": "2208 N 20 AVE"
+    },
+    {
+     "folio": "514222101310",
+     "addr": "1922 FUNSTON ST"
+    }
+   ]
+  }
+ },
+ "391 NE 42 STREET LLC": {
+  "borrower": "391 NE 42 STREET LLC",
+  "amt": 150000,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2024-03-11",
+  "age_mo": 29.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GREATOREX, ALAN",
+   "title": "Authorized",
+   "officer_addr": "7901 4th St N STE 300, St. Petersburg, FL 33702",
+   "agent": "NORTHWEST REGISTERED AGENT LLC",
+   "agent_addr": "7901 4th St N, STE 300",
+   "status": "ACTIVE",
+   "matched": "391 NE 42 STREET LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494222170510",
+   "addr": "391 NE 42 ST #1-2",
+   "city": "Oakland Park",
+   "zip": "33334",
+   "paOwner": "391 NE 42 STREET LLC"
+  }
+ },
+ "IAD HOLDINGS LLC": {
+  "borrower": "IAD HOLDINGS LLC",
+  "amt": 147000,
+  "lender": "VISIONARY LENDERS",
+  "origin": "2024-11-19",
+  "age_mo": 20.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DABAKAROFF, Amnon",
+   "title": "MGR",
+   "officer_addr": "955 S. Federal Hwy, 335",
+   "agent": "Dabakaroff, Amnon",
+   "agent_addr": "955 S. Federal Hwy, 335",
+   "status": "ACTIVE",
+   "matched": "IAD HOLDINGS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 6 parcels — cannot pin the mortgaged one by name",
+   "parcels": 6,
+   "candidates": [
+    {
+     "folio": "494126AB1020",
+     "addr": "5710 NW 21 ST #36-B"
+    },
+    {
+     "folio": "494126BD0060",
+     "addr": "5323 NW 27 ST #B4"
+    },
+    {
+     "folio": "494233250760",
+     "addr": "1139 NW 9 AVE"
+    },
+    {
+     "folio": "504126180380",
+     "addr": "5611 SW 37 ST"
+    },
+    {
+     "folio": "504132181020",
+     "addr": "5806 SW 89 WAY"
+    },
+    {
+     "folio": "514106060141",
+     "addr": "2927 BOGOTA AVE"
+    }
+   ]
+  }
+ },
+ "PROSOFT INVESTMENTS LLC": {
+  "borrower": "PROSOFT INVESTMENTS LLC",
+  "amt": 139930,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2024-11-08",
+  "age_mo": 21.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GARCIA, CARLOS, MGR",
+   "title": "MGR",
+   "officer_addr": "4890 SW 153RD TERRACE, MIRAMAR, FL 33027",
+   "agent": "GARCIA, CARLOS",
+   "agent_addr": "4890 SW 153RD TERRACE, MIRAMAR, FL 33027",
+   "status": "ACTIVE",
+   "matched": "PROSOFT INVESTMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "494123GD0350",
+     "addr": "4166 INVERRARY DR #401"
+    },
+    {
+     "folio": "494126AB0680",
+     "addr": "5706 NW 22 CT #28-E"
+    }
+   ]
+  }
+ },
+ "INMOBEST LLC": {
+  "borrower": "INMOBEST LLC",
+  "amt": 139000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2024-07-23",
+  "age_mo": 24.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SUASTEGUI, CAROLINA",
+   "title": "Manager",
+   "officer_addr": "6324 NW 97TH AVE, DORAL, FL 33178",
+   "agent": "MILAGROS GOMEZ MUNOZ PA",
+   "agent_addr": "15751 SHERIDAN STREET, #228",
+   "status": "ACTIVE",
+   "matched": "INMOBEST LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "2001 NW 37 LLC": {
+  "borrower": "2001 NW 37 LLC",
+  "amt": 135000,
+  "lender": "PERFECTO MORTGAGE INCOME FUND LLC",
+  "origin": "2024-07-01",
+  "age_mo": 25.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "",
+   "title": "",
+   "officer_addr": "",
+   "agent": "LEWIS, LATOYA",
+   "agent_addr": "2001 NW 37TH TERRACE, LAUDERDALE LAKES, FL 33311",
+   "status": "INACTIVE",
+   "matched": "2001 NW 37 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ATL DREAM PROPERTIES LLC": {
+  "borrower": "ATL DREAM PROPERTIES LLC",
+  "amt": 135000,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2024-03-29",
+  "age_mo": 28.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "AZOR, SOFIA",
+   "title": "MGRM",
+   "officer_addr": "11003 ROYAL PALM BLVD, CORAL SPRINGS, FL 33065",
+   "agent": "AZOR, SOFIA",
+   "agent_addr": "11003 ROYAL PALM BLVD, CORAL SPRINGS, FL 33065",
+   "status": "ACTIVE",
+   "matched": "ATL DREAM PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494330CB2161",
+   "addr": "3015 N OCEAN BLVD #C116A",
+   "city": "Fort Lauderdale",
+   "zip": "33308",
+   "paOwner": "ATL DREAM PROPERTIES LLC"
+  }
+ },
+ "HIGH QUALITY POOLS & SPAS INC": {
+  "borrower": "HIGH QUALITY POOLS & SPAS INC",
+  "amt": 130000,
+  "lender": "TAYLOR MADE LENDING LLC",
+  "origin": "2024-06-03",
+  "age_mo": 26.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VINICIUS SANTOS, JOSE",
+   "title": "P",
+   "officer_addr": "1060 nw 80th ave, 201",
+   "agent": "VINICIUS SANTOS, JOSE",
+   "agent_addr": "1060 nw 80th ave, 201",
+   "status": "ACTIVE",
+   "matched": "HIGH QUALITY POOLS & SPAS INC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "KASSSIL LLC": {
+  "borrower": "KASSSIL LLC",
+  "amt": 130000,
+  "lender": "MORTGAGE FUNDING 04 LLC",
+  "origin": "2024-04-05",
+  "age_mo": 28.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "KASSAUAT, JORGE",
+   "title": "MANAGER",
+   "officer_addr": "21854 CYPRESS CIR, 30D",
+   "agent": "KASSAUAT, JORGE",
+   "agent_addr": "21854 CYPRESS CIR, 30D",
+   "status": "ACTIVE",
+   "matched": "KASSSIL LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "484214AD2980",
+     "addr": "4384 NW 9 AVE #18-3G"
+    },
+    {
+     "folio": "494136BF0010",
+     "addr": "4730 NW 10 CT #102"
+    }
+   ]
+  }
+ },
+ "EL TIESTO CAFE CORP": {
+  "borrower": "EL TIESTO CAFE CORP",
+  "amt": 129000,
+  "lender": "LPC FUND LLC",
+  "origin": "2024-03-08",
+  "age_mo": 29.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Castillo, Wilkins E",
+   "title": "P",
+   "officer_addr": "3023 Biscayne Blvd., Miami, FL 33137",
+   "agent": "CASTILLO, WILKINS E",
+   "agent_addr": "7908 PINES BLVD, PEMBROKE PINES, FL 33024",
+   "status": "ACTIVE",
+   "matched": "EL TIESTO CAFE CORP.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "1000 SE 4TH ST LLC": {
+  "borrower": "1000 SE 4TH ST LLC",
+  "amt": 125000,
+  "lender": "CCHC FUND V LP",
+  "origin": "2024-03-26",
+  "age_mo": 28.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FAMIGLIA HOLDINGS, LLC",
+   "title": "MGR",
+   "officer_addr": "401 E LAS OLAS BLVD #130-281, FT LAUDERDALE, FL 33301",
+   "agent": "REGISTERED AGENTS, INC",
+   "agent_addr": "7901 4TH ST N, STE 300",
+   "status": "ACTIVE",
+   "matched": "1000 SE 4TH ST, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504211AK0290",
+   "addr": "1000 SE 4 ST #205",
+   "city": "Fort Lauderdale",
+   "zip": "33301",
+   "paOwner": "1000 SE 4TH ST LLC"
+  }
+ },
+ "GKG MAINTENANCE & MANAGEMENT LLC": {
+  "borrower": "GKG MAINTENANCE & MANAGEMENT LLC",
+  "amt": 124950,
+  "lender": "IDEAL LENDING LLC",
+  "origin": "2024-05-09",
+  "age_mo": 27.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GRANT, GEMAR K",
+   "title": "MGR",
+   "officer_addr": "1007 N Federal Highway, 82",
+   "agent": "GRANT, KATE",
+   "agent_addr": "7444 SW 14TH PLACE, NORTH LAUDERDALE, FL 33068",
+   "status": "ACTIVE",
+   "matched": "GKG MAINTENANCE AND MANAGEMENT LLC",
+   "typo": true
+  },
+  "bcpa": {
+   "folio": "504201BA0300",
+   "addr": "2670 E SUNRISE BLVD #415",
+   "city": "Fort Lauderdale",
+   "zip": "33304",
+   "paOwner": "GKG MAINTENANCE & MANAGEMENT LLC"
+  }
+ },
+ "WILLCO PROPERTY HOLDINGS LLC": {
+  "borrower": "WILLCO PROPERTY HOLDINGS LLC",
+  "amt": 122500,
+  "lender": "IMPERIUM LENDING LLC",
+  "origin": "2024-08-21",
+  "age_mo": 23.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "WILLIAMS, MARLENE",
+   "title": "MGRM",
+   "officer_addr": "1651 NW 189 TERRACE, MIAMI, FL 33169",
+   "agent": "WILLIAMS, MARLENE",
+   "agent_addr": "1651 NW 189 TERRACE, MIAMI, FL 33169",
+   "status": "ACTIVE",
+   "matched": "WILLCO PROPERTY HOLDINGS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ENJOY DISPATCH LLC": {
+  "borrower": "ENJOY DISPATCH LLC",
+  "amt": 122000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2024-06-12",
+  "age_mo": 26.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "JOSEPH, JANESEN",
+   "title": "AMBR",
+   "officer_addr": "206 SOUTH CYPRESS ROAD, APT 106",
+   "agent": "JOSEPH, JANESEN",
+   "agent_addr": "206 SOUTH CYPRESS ROAD, APT 106",
+   "status": "ACTIVE",
+   "matched": "ENJOY DISPATCH LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494201AM0060",
+   "addr": "260 S CYPRESS RD #106",
+   "city": "Pompano Beach",
+   "zip": "33060",
+   "paOwner": "ENJOY DISPATCH LLC"
+  }
+ },
+ "J&G CONSTRUCTION & REMODELING LLC": {
+  "borrower": "J&G CONSTRUCTION & REMODELING LLC",
+  "amt": 121700,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-05-07",
+  "age_mo": 27.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CORREA, ESTEPHANI",
+   "title": "MGR",
+   "officer_addr": "6412 Grant Ct, Hollywood, FL 33024",
+   "agent": "CORREA, ESTEPHANI",
+   "agent_addr": "6412 Grant Ct, Hollywood, FL 33024",
+   "status": "ACTIVE",
+   "matched": "J&G CONSTRUCTION AND REMODELING, LLC",
+   "typo": true
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "A TO Z KITCHEN & BATH DESIGNS CORP": {
+  "borrower": "A TO Z KITCHEN & BATH DESIGNS CORP",
+  "amt": 117000,
+  "lender": "CLEAREDGE LENDING LLC",
+  "origin": "2024-08-02",
+  "age_mo": 24.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Petersen, Waldo R",
+   "title": "P",
+   "officer_addr": "18331 Pines Blvd., 210",
+   "agent": "PETERSEN, WALDO",
+   "agent_addr": "18331 Pines Blvd., 210",
+   "status": "ACTIVE",
+   "matched": "A TO Z KITCHEN & BATH DESIGNS CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "VMW INVESTMENTS LLC": {
+  "borrower": "VMW INVESTMENTS LLC",
+  "amt": 116250,
+  "lender": "IMPERIUM LENDING LLC",
+  "origin": "2024-08-16",
+  "age_mo": 23.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Williams, Volton Michael",
+   "title": "CEO, Owner",
+   "officer_addr": "10616 CYPRESS LAKES PRESERVE DR, WELLINGTON, FL 33449",
+   "agent": "SPIEGEL &amp; UTRERA, P.A.",
+   "agent_addr": "1840 SW 22ND ST., 4TH FLOOR",
+   "status": "ACTIVE",
+   "matched": "VMW INVESTMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "BASILIATO SOLUTIONS LLC": {
+  "borrower": "BASILIATO SOLUTIONS LLC",
+  "amt": 115000,
+  "lender": "CREATIVE CLOSING CAPITAL LLC",
+  "origin": "2024-02-14",
+  "age_mo": 29.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BASILIATO, LUCIMAR",
+   "title": "MGRM",
+   "officer_addr": "460 DURHAM P, DEERFIELD BEACH, FL 33442",
+   "agent": "BASILIATO, LUCIMAR",
+   "agent_addr": "460 DURHAM P, DEERFIELD BEACH, FL 33442",
+   "status": "INACTIVE",
+   "matched": "BASILIATO SOLUTIONS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "D A PINNACLE LLC": {
+  "borrower": "D A PINNACLE LLC",
+  "amt": 110000,
+  "lender": "TAYLOR MADE LENDING LLC",
+  "origin": "2024-08-21",
+  "age_mo": 23.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Low, Alfred",
+   "title": "MGR",
+   "officer_addr": "3300 NE 191 St, 1416",
+   "agent": "LOW, ALFRED",
+   "agent_addr": "3300 NE 191 St, 1416",
+   "status": "ACTIVE",
+   "matched": "D & A PINNACLE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514221290470",
+   "addr": "1030 NW 8 ST",
+   "city": "Hallandale Beach",
+   "zip": "33009",
+   "paOwner": "D & A PINNACLE LLC"
+  }
+ },
+ "SOMEDAY PROPERTY SOLUTIONS LLC": {
+  "borrower": "SOMEDAY PROPERTY SOLUTIONS LLC",
+  "amt": 105000,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-10-09",
+  "age_mo": 22.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SOMEDAY CAPITAL INVESTMENTS LLC",
+   "title": "MBR",
+   "officer_addr": "30 NORTH GOULD STREET STE R, SHERDIAN, WY 82801",
+   "agent": "REPUBLIC REGISTERED AGENT LLC",
+   "agent_addr": "476 RIVERSIDE AVE,, SUITE 4",
+   "status": "INACTIVE",
+   "matched": "SOMEDAY PROPERTY SOLUTIONS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "OMG INVESTORS LLC": {
+  "borrower": "OMG INVESTORS LLC",
+  "amt": 102800,
+  "lender": "NATIONAL LOAN FUNDING LLC",
+  "origin": "2024-09-20",
+  "age_mo": 22.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "QUINTERO, OSWALDO E",
+   "title": "MGR",
+   "officer_addr": "4400 NW 107TH AVE #104, DORAL, FL 33178",
+   "agent": "QUINTERO, MARIAN V, ESQ.",
+   "agent_addr": "4400 NW 107TH AVE, #104",
+   "status": "INACTIVE",
+   "matched": "OMG INVESTORS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "BID GROUP 3 LLC": {
+  "borrower": "BID GROUP 3 LLC",
+  "amt": 100659,
+  "lender": "DYNAMO CAPITAL LLC",
+  "origin": "2024-03-27",
+  "age_mo": 28.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SCHWARTZ, LOUIS",
+   "title": "MBR",
+   "officer_addr": "5005 COLLINS AVE #225, MIAMI BEACH, FL 33140",
+   "agent": "SCHWARTZ, LOUIS",
+   "agent_addr": "5005 COLLINS AVE #225, MIAMI BEACH, FL 33140",
+   "status": "ACTIVE",
+   "matched": "BID GROUP 3 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "CONNOR INVESTMENT PROPERTIES LLC": {
+  "borrower": "CONNOR INVESTMENT PROPERTIES LLC",
+  "amt": 100000,
+  "lender": "HOMEINC FUNDING LLC",
+  "origin": "2024-12-10",
+  "age_mo": 20.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Connor, Carolina Beatrice",
+   "title": "MGR",
+   "officer_addr": "324 SE 10th Ct, Deerfield Beach, FL 33441",
+   "agent": "CONNOR, THOMAS D",
+   "agent_addr": "324 SE 10th Ct, Deerfield Beach, FL 33441",
+   "status": "ACTIVE",
+   "matched": "CONNOR INVESTMENT PROPERTIES, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484214AD1600",
+   "addr": "4344 NW 9 AVE #10-2A",
+   "city": "Deerfield Beach",
+   "zip": "33064",
+   "paOwner": "CONNOR INVESTMENT PROPERTIES LLC"
+  }
+ },
+ "VAST INVESTMENTS SOUTH LLC": {
+  "borrower": "VAST INVESTMENTS SOUTH LLC",
+  "amt": 100000,
+  "lender": "BAYSHORE MORTGAGE FUNDING LLC",
+  "origin": "2024-11-25",
+  "age_mo": 20.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "VASTIO LLC",
+    "VASTION CAPITAL INVESTMENTS LLC",
+    "VASTIQUE LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "owns 4 parcels — cannot pin the mortgaged one by name",
+   "parcels": 4,
+   "candidates": [
+    {
+     "folio": "514213BC5640",
+     "addr": "1201 S OCEAN DR #2508S"
+    },
+    {
+     "folio": "514213BC5650",
+     "addr": "1201 S OCEAN DR #2509S"
+    },
+    {
+     "folio": "514213BC5660",
+     "addr": "1201 S OCEAN DR #2510S"
+    },
+    {
+     "folio": "514224BB2620",
+     "addr": "2751 S OCEAN DR #S1PH"
+    }
+   ]
+  }
+ },
+ "SERAJUL ISLAM INVESTMENTS LLC": {
+  "borrower": "SERAJUL ISLAM INVESTMENTS LLC",
+  "amt": 100000,
+  "lender": "REDBRIDGE CAPITAL LLC",
+  "origin": "2024-10-07",
+  "age_mo": 22.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ISLAM, SERAJUL",
+   "title": "MGR",
+   "officer_addr": "238 SE 3RD TERRACE, POMPANO BEACH, FL 33060",
+   "agent": "ISLAM, SERAJUL",
+   "agent_addr": "238 SE 3RD TERRACE, POMPANO BEACH, FL 33060",
+   "status": "ACTIVE",
+   "matched": "SERAJUL ISLAM INVESTMENTS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494202350470",
+   "addr": "47 SW 3 ST",
+   "city": "Pompano Beach",
+   "zip": "33060",
+   "paOwner": "SERAJUL ISLAM INVESTMENTS LLC"
+  }
+ },
+ "BCL GROUP1.LLC": {
+  "borrower": "BCL GROUP1.LLC",
+  "amt": 100000,
+  "lender": "VGM CAPITAL HOLDINGS LLC",
+  "origin": "2024-09-09",
+  "age_mo": 23.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BOCCARDO, DIANA",
+   "title": "MGRM",
+   "officer_addr": "4550 NW 9TH STREET 303E, MIAMI, FL 33126",
+   "agent": "LORENZO, JOSE E",
+   "agent_addr": "335 S BISCAYNE BLVD, APT 2605",
+   "status": "ACTIVE",
+   "matched": "BCL GROUP1.LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "DLUCKMAN ENTERPRISE LLC": {
+  "borrower": "DLUCKMAN ENTERPRISE LLC",
+  "amt": 100000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2024-09-05",
+  "age_mo": 23.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LUCKMAN, DONNA",
+   "title": "AMBR",
+   "officer_addr": "2144 NE 61 COURT, FT LAUDERDALE, FL 33308",
+   "agent": "LUCKMAN, DONNA",
+   "agent_addr": "2144 NE 61 COURT, FT LAUDERDALE, FL 33308",
+   "status": "INACTIVE",
+   "matched": "DLUCKMAN ENTERPRISES LLC",
+   "typo": true
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "COSMO BEAUTY ENTERPRISES LLC": {
+  "borrower": "COSMO BEAUTY ENTERPRISES LLC",
+  "amt": 100000,
+  "lender": "PRINCIPAL LENDERS GROUP INC",
+  "origin": "2024-07-18",
+  "age_mo": 24.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MATHE, CARLETTRE, MS",
+   "title": "MGR",
+   "officer_addr": "16939 SW 54TH COURT, MIRAMAR, FL 33027",
+   "agent": "MATHE, CARLETTRE, MS",
+   "agent_addr": "16939 SW 54TH COURT, MIRAMAR, FL 33027",
+   "status": "ACTIVE",
+   "matched": "COSMO BEAUTY ENTERPRISES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "2500 PARKVIEW LAND TRUST": {
+  "borrower": "2500 PARKVIEW LAND TRUST",
+  "amt": 100000,
+  "lender": "SELL WHOLESALE FUNDING LLC",
+  "origin": "2024-06-26",
+  "age_mo": 25.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "2500 PARKVIEW REALTY LLC",
+    "2500 PARKVIEW RENTAL CORP",
+    "2500 PLAZA, INC"
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "QUEEN INTERNATIONAL SERVICES LLC": {
+  "borrower": "QUEEN INTERNATIONAL SERVICES LLC",
+  "amt": 100000,
+  "lender": "REDBRIDGE CAPITAL LLC",
+  "origin": "2024-06-10",
+  "age_mo": 26.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LAMAS, LULY",
+   "title": "Manager",
+   "officer_addr": "777 N OCEAN DR, N218",
+   "agent": "LAMAS, LULY",
+   "agent_addr": "777 N OCEAN DR, N218",
+   "status": "ACTIVE",
+   "matched": "QUEEN INTERNATIONAL SERVICES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514213AN0180",
+   "addr": "777 N OCEAN DR #N218",
+   "city": "Hollywood",
+   "zip": "33019",
+   "paOwner": "QUEEN INTERNATIONAL SERVICES LLC"
+  }
+ },
+ "GOON LLC": {
+  "borrower": "GOON LLC",
+  "amt": 100000,
+  "lender": "VIRGINIA CAPITAL INVESTMENT GROUP LLC",
+  "origin": "2024-04-17",
+  "age_mo": 27.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "KODOUSEK, VIT",
+   "title": "MGRM",
+   "officer_addr": "ALENY SANTAROVE 1450, PRAHA, CZ 156 0-0",
+   "agent": "LINDEN CAPITAL, LC",
+   "agent_addr": "5053 OCEAN BLVD, SARASOTA, FL 34242",
+   "status": "INACTIVE",
+   "matched": "GO ON, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "G F B MANAGEMENT GROUP INC": {
+  "borrower": "G F B MANAGEMENT GROUP INC",
+  "amt": 100000,
+  "lender": "NQM FUNDING LLC",
+  "origin": "2024-04-15",
+  "age_mo": 27.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CORADO, Cindy D",
+   "title": "PTD",
+   "officer_addr": "6644 Hidden Cove Drive, Davie, FL 33314",
+   "agent": "CORADO, CINDY D",
+   "agent_addr": "6644 Hidden Cove Drive, Davie, FL 33314",
+   "status": "ACTIVE",
+   "matched": "G.F.B. MANAGEMENT GROUP, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "TEOREMA INVESTMENT LLC": {
+  "borrower": "TEOREMA INVESTMENT LLC",
+  "amt": 100000,
+  "lender": "CAPITAL FL 305 LLC",
+  "origin": "2024-03-19",
+  "age_mo": 28.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "TEOR ENTERPRISES LLC",
+    "TEO RESTORATIONS LLC",
+    "TEOREZIS, CORP."
+   ]
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "484122GM2260",
+     "addr": "3226 CORAL LAKE LN"
+    },
+    {
+     "folio": "494205KA0700",
+     "addr": "3995 W MCNAB RD #310B"
+    },
+    {
+     "folio": "514226EA0750",
+     "addr": "4001 S OCEAN DR #6R"
+    }
+   ]
+  }
+ },
+ "MODERN GRAPHICS INC": {
+  "borrower": "MODERN GRAPHICS INC",
+  "amt": 100000,
+  "lender": "BSD CAPITAL LLC",
+  "origin": "2024-02-16",
+  "age_mo": 29.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ROTENSTEIN, MOSHE",
+   "title": "P",
+   "officer_addr": "200 Diplomat Parkway, Apartment 534",
+   "agent": "ROTENSTEIN, Moshe",
+   "agent_addr": "200 Diplomat Parkway, Apartment 534",
+   "status": "ACTIVE",
+   "matched": "MODERN GRAPHICS, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "WJB PROPERTY INVESTMENT LLC": {
+  "borrower": "WJB PROPERTY INVESTMENT LLC",
+  "amt": 96000,
+  "lender": "INTERSTATE CAPITAL LLC",
+  "origin": "2024-05-15",
+  "age_mo": 26.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BARBALHO, BRENDA, Authorized Member",
+   "title": "Authorized",
+   "officer_addr": "4857 NW 72ND PLACE, COCONUT CREEK, FL 33073",
+   "agent": "BATISTA MARQUES, JULIANNA",
+   "agent_addr": "4857 NW 72ND PLACE, COCONUT CREEK, FL 33073",
+   "status": "ACTIVE",
+   "matched": "WJB PROPERTY INVESTMENT LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "484224AG0190",
+     "addr": "3300 NE 10 TER #19"
+    },
+    {
+     "folio": "484231AF1930",
+     "addr": "701 LYONS RD #13101"
+    },
+    {
+     "folio": "484306DC0270",
+     "addr": "540 SE 2 AVE #J26"
+    }
+   ]
+  }
+ },
+ "HODGES INVESTMENTS PLUS LLC": {
+  "borrower": "HODGES INVESTMENTS PLUS LLC",
+  "amt": 95275,
+  "lender": "COMMERCIAL LENDER LLC",
+  "origin": "2024-05-16",
+  "age_mo": 26.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "HODGES, TONY D",
+   "title": "MGR",
+   "officer_addr": "3322 MONTEREY SQUARE LN, UNIT 101, FORT PIERCE, FL 34982 UN",
+   "agent": "HODGES, TONY D",
+   "agent_addr": "3322 MONTEREY SQUARE LN, UNIT 101",
+   "status": "INACTIVE",
+   "matched": "HODGES INVESTMENTS PLUS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494136AK0020",
+   "addr": "1701 NW 46 AVE #102",
+   "city": "Lauderhill",
+   "zip": "33313",
+   "paOwner": "HODGES INVESTMENTS PLUS LLC"
+  }
+ },
+ "LIMA 7620 LLC": {
+  "borrower": "LIMA 7620 LLC",
+  "amt": 90000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2024-12-11",
+  "age_mo": 20.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LIMA, DELIA C",
+   "title": "MGR",
+   "officer_addr": "7620 NE 18 ST APT 301, MARGATE, FL 33063",
+   "agent": "LIMA, DELIA C",
+   "agent_addr": "7620 NW 18 ST, # 301",
+   "status": "INACTIVE",
+   "matched": "LIMA 7620 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SSR-JJJ'S REALTY LLC": {
+  "borrower": "SSR-JJJ'S REALTY LLC",
+  "amt": 87000,
+  "lender": "LEGIONS CAPITAL INC",
+  "origin": "2024-08-15",
+  "age_mo": 23.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "SSRK, LLC",
+    "SSRK, LLC",
+    "SSRK INVESTMENTS LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MOVILTEK CORP": {
+  "borrower": "MOVILTEK CORP",
+  "amt": 85000,
+  "lender": "COTTONSWIFT CAPITAL LTD",
+  "origin": "2024-09-19",
+  "age_mo": 22.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ATTUNITY LLC",
+   "title": "PRESIDENT",
+   "officer_addr": "6505 WATERFORD DISTRICT DR, SUITE 460",
+   "agent": "MLP FINANCIAL GROUP INC",
+   "agent_addr": "6505 WATERFORD DISTRICT DR, SUITE 460",
+   "status": "ACTIVE",
+   "matched": "MOVILTEK CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "484129020430",
+     "addr": "11580 NW 20 DR"
+    },
+    {
+     "folio": "504105150990",
+     "addr": "9936 NW 2 CT"
+    },
+    {
+     "folio": "504108AC0150",
+     "addr": "200 JACARANDA COUNTRY CLUB DR #3C"
+    }
+   ]
+  }
+ },
+ "SOUTH HF LLC": {
+  "borrower": "SOUTH HF LLC",
+  "amt": 85000,
+  "lender": "CAPITAL FL 305 LLC",
+  "origin": "2024-04-26",
+  "age_mo": 27.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FICOVICH, VICTOR ESTEBAN",
+   "title": "MGRM",
+   "officer_addr": "CALLE 73 &amp; 29 MANZANA 278 LOTE, GUTIERREZ AR",
+   "agent": "FICOVICH , VICTOR E",
+   "agent_addr": "2222 QUAIL ROOST DR, WESTON, FL 33327",
+   "status": "ACTIVE",
+   "matched": "SOUTH HF, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484123BC2120",
+   "addr": "3380 PINEWALK DR N #1128",
+   "city": "Margate",
+   "zip": "33063",
+   "paOwner": "SOUTH HF LLC"
+  }
+ },
+ "FRANCA ROMA LLC": {
+  "borrower": "FRANCA ROMA LLC",
+  "amt": 80000,
+  "lender": "EASY LENDING LLC",
+  "origin": "2024-10-03",
+  "age_mo": 22.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MARCON, BEATRIZ ANDREA",
+   "title": "MANAGER",
+   "officer_addr": "6175 NW 153rd. St, Suite # 201",
+   "agent": "GLADES COMPANY SERVICES CORP",
+   "agent_addr": "1940 Wilson Street, Hollywood, FL 33020",
+   "status": "ACTIVE",
+   "matched": "FRANCA ROMA LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514222101940",
+   "addr": "1820-1824 FUNSTON ST #1-4",
+   "city": "Hollywood",
+   "zip": "33020",
+   "paOwner": "FRANCA ROMA LLC"
+  }
+ },
+ "INVERRARY GROUP 4172 & 4152 LLC": {
+  "borrower": "INVERRARY GROUP 4172 & 4152 LLC",
+  "amt": 75000,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2024-10-23",
+  "age_mo": 21.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "JEANTY, DOLYNE",
+   "title": "MGR",
+   "officer_addr": "7932 DILDO BLVD, MIRAMAR, FL 33023 UN",
+   "agent": "MAYARD, DUDLEY",
+   "agent_addr": "7932 DILDO BLVD, MIRAMAR, FL 33023",
+   "status": "INACTIVE",
+   "matched": "INVERRARY GROUP 4172 & 4152, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MVPS SERVICES LLC": {
+  "borrower": "MVPS SERVICES LLC",
+  "amt": 75000,
+  "lender": "PRINCIPAL LENDERS GROUP INC",
+  "origin": "2024-09-17",
+  "age_mo": 22.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VILLA VELEZ, MARIANA",
+   "title": "MGR",
+   "officer_addr": "6222 NW 38TH DR, CORAL SPRINGS, FL 33067",
+   "agent": "VILLA JARAMILLO, ANDRES FELIPE",
+   "agent_addr": "7436 WILES RD, Cora Springs, FL 33067",
+   "status": "ACTIVE",
+   "matched": "MVPS SERVICES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484115AK3130",
+   "addr": "4129 NW 88 AVE #101",
+   "city": "Coral Springs",
+   "zip": "33065",
+   "paOwner": "MVPS SERVICES LLC"
+  }
+ },
+ "SPIU SAINT PAUL INTERNACIONAL UNIVERSITY LLC": {
+  "borrower": "SPIU SAINT PAUL INTERNACIONAL UNIVERSITY LLC",
+  "amt": 75000,
+  "lender": "PRINCIPAL LENDERS GROUP INC",
+  "origin": "2024-08-15",
+  "age_mo": 23.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PERILLA, HAIVER E",
+   "title": "MGR",
+   "officer_addr": "1700 S Dixie Highway #501, 501",
+   "agent": "PERILLA, HAIVER E",
+   "agent_addr": "1700 S Dixie Highway, 501",
+   "status": "ACTIVE",
+   "matched": "SPIU SAINT PAUL INTERNACIONAL UNIVERSITY LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "K & M ENTERPRISES LLC": {
+  "borrower": "K & M ENTERPRISES LLC",
+  "amt": 75000,
+  "lender": "CCHC FUND V LP",
+  "origin": "2024-05-09",
+  "age_mo": 27.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ZURBRIGGEN, MARK",
+   "title": "MGRM",
+   "officer_addr": "1660 SOUTH BETTY LN, CLEARWATER, FL 33756",
+   "agent": "FINLEY, MYRON G",
+   "agent_addr": "FINLEY, FLETCHER &amp; KNAPMEYER, LLP, 413 CLEVELAND STREET",
+   "status": "INACTIVE",
+   "matched": "K & M ENTERPRISES, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504233AA0320",
+   "addr": "35 SW 12 AVE #108-3",
+   "city": "Dania Beach",
+   "zip": "33004",
+   "paOwner": "K & M ENTERPRISES LLC"
+  }
+ },
+ "5500 DAVIE LAND LLC": {
+  "borrower": "5500 DAVIE LAND LLC",
+  "amt": 75000,
+  "lender": "CCHC FUND III LP",
+  "origin": "2024-05-08",
+  "age_mo": 27.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TOURET, SACHA",
+   "title": "MGR",
+   "officer_addr": "2611 HOLLYWOOD BLVD, HOLLYWOOD, FL 33020",
+   "agent": "SMOLER, BRUCE J",
+   "agent_addr": "2611 HOLLYWOOD BOULEVARD, HOLLYWOOD, FL 33020",
+   "status": "INACTIVE",
+   "matched": "5500 DAVIE LAND, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ARYX LLC": {
+  "borrower": "ARYX LLC",
+  "amt": 75000,
+  "lender": "CAPITAL HOMES MANAGEMENT LLC",
+  "origin": "2024-02-27",
+  "age_mo": 29.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LIMARE, ERIC",
+   "title": "MGR",
+   "officer_addr": "L1300010679, 4318 - 53RD ST. #8",
+   "agent": "LIMARE, ERIC",
+   "agent_addr": "1049 Woodfall Court, Weston, FL 33326",
+   "status": "ACTIVE",
+   "matched": "ARYX LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 5 parcels — cannot pin the mortgaged one by name",
+   "parcels": 5,
+   "candidates": [
+    {
+     "folio": "494126250330",
+     "addr": "2237 NW 55 TER"
+    },
+    {
+     "folio": "494126AA0140",
+     "addr": "5970 NW 28 ST #146"
+    },
+    {
+     "folio": "494126AA0220",
+     "addr": "5971 NW 27 PL #154"
+    },
+    {
+     "folio": "494126BJ0200",
+     "addr": "2610 NW 60 WAY #184"
+    },
+    {
+     "folio": "494126BK0170",
+     "addr": "5974 NW 25 CT #222"
+    }
+   ]
+  }
+ },
+ "7922 EAST DR LLC": {
+  "borrower": "7922 EAST DR LLC",
+  "amt": 4590000,
+  "lender": "CCHC FUND V LP",
+  "origin": "2025-02-03",
+  "age_mo": 18.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "NAVAS, LUIS H",
+   "title": "MGR",
+   "officer_addr": "P.O. BOX 96702, Maple, Ontario L6A 0A2 CA",
+   "agent": "LORIUM PLLC",
+   "agent_addr": "101 NE 3 AVENUE SUITE 1800, FORT LAUDERDALE, FL 33301",
+   "status": "ACTIVE",
+   "matched": "7922 EAST DR LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "GME ALLIANCE LLC": {
+  "borrower": "GME ALLIANCE LLC",
+  "amt": 3600000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2025-02-03",
+  "age_mo": 18.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MARTIN, TATUM",
+   "title": "AMBR",
+   "officer_addr": "924 NW 1ST STREET, SUITE 100",
+   "agent": "HERNANDEZ, JULIANA",
+   "agent_addr": "924 NW 1ST STREET, SUITE 100",
+   "status": "ACTIVE",
+   "matched": "GME ALLIANCE, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484308070160",
+   "addr": "1555 SE 14 CT",
+   "city": "Deerfield Beach",
+   "zip": "33441",
+   "paOwner": "GME ALLIANCE LLC"
+  }
+ },
+ "ALL STAR LOCAL LLC": {
+  "borrower": "ALL STAR LOCAL LLC",
+  "amt": 2863077,
+  "lender": "AMERICA'S CAPITAL PROVIDER LLC",
+  "origin": "2025-01-27",
+  "age_mo": 18.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RUDDIE, RICHART",
+   "title": "MGR",
+   "officer_addr": "15 SE 15th Ave, FORT LAUDERDALE, FL 33301",
+   "agent": "RAJCHEL, ERIC",
+   "agent_addr": "5400 NW 36th Ave, Suite A",
+   "status": "ACTIVE",
+   "matched": "ALL STAR LOCAL LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504211250242",
+   "addr": "1702 E BROWARD BLVD",
+   "city": "Fort Lauderdale",
+   "zip": "33301",
+   "paOwner": "ALL STAR LOCAL LLC"
+  }
+ },
+ "22 TERRACE FTL LLC": {
+  "borrower": "22 TERRACE FTL LLC",
+  "amt": 2408249,
+  "lender": "RBI PRIVATE LENDING LLC",
+  "origin": "2025-01-30",
+  "age_mo": 18.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "22 TERRACE REALLY LLC",
+    "22TH AVENUE CARAF INC",
+    "THE 22 THINGS PROJECT INCORPORATED"
+   ]
+  },
+  "bcpa": {
+   "folio": "494225210280",
+   "addr": "2540 NE 22 TER",
+   "city": "Fort Lauderdale",
+   "zip": "33305",
+   "paOwner": "22 TERRACE FTL LLC"
+  }
+ },
+ "TEEHOMES LLC": {
+  "borrower": "TEEHOMES LLC",
+  "amt": 2340000,
+  "lender": "TVC FUNDING VI LLC",
+  "origin": "2025-02-06",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "YOUNG, TAMARA",
+   "title": "MGR",
+   "officer_addr": "2649 WOLF LAKE DR SW, ATLANTA, GA 30349",
+   "agent": "GOLDMAN &amp; ROSA, P.A.",
+   "agent_addr": "320 SE 18 ST, FORT LAUDERDALE, FL 33316",
+   "status": "ACTIVE",
+   "matched": "TEEHOMES, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514235030150",
+   "addr": "207 HOLIDAY DR",
+   "city": "Hallandale Beach",
+   "zip": "33009",
+   "paOwner": "TEEHOMES LLC"
+  }
+ },
+ "1000 MARINA MILE PARTNERS LLC": {
+  "borrower": "1000 MARINA MILE PARTNERS LLC",
+  "amt": 2200000,
+  "lender": "S3 RE FUNDING III LLC",
+  "origin": "2024-12-27",
+  "age_mo": 19.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "100/0 MARKETING, LLC",
+    "1000 MEDIA INC.",
+    "1000 MENDEL DREAM LLC."
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "E3 LIVING LLC": {
+  "borrower": "E3 LIVING LLC",
+  "amt": 2180600,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2025-01-27",
+  "age_mo": 18.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BLANCO, LAURA",
+   "title": "MGR",
+   "officer_addr": "8211 W BROWARD BLVD, PH4",
+   "agent": "CAPITOL CORPORATE SERVICES, INC.",
+   "agent_addr": "515 EAST PARK AVENUE, 2ND FL, TALLAHASSEE, FL 32301",
+   "status": "ACTIVE",
+   "matched": "E3 LIVING LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 4 parcels — cannot pin the mortgaged one by name",
+   "parcels": 4,
+   "candidates": [
+    {
+     "folio": "494129040550",
+     "addr": "9531 NW 24 CT"
+    },
+    {
+     "folio": "504037000120",
+     "addr": "4977 SW 111 TER"
+    },
+    {
+     "folio": "514014BM0470",
+     "addr": "1151 SW 128 TER #405D"
+    },
+    {
+     "folio": "514209060190",
+     "addr": "2508 MCKINLEY ST"
+    }
+   ]
+  }
+ },
+ "SUNNY SIDE IN FLORIDA VI LLC": {
+  "borrower": "SUNNY SIDE IN FLORIDA VI LLC",
+  "amt": 2036000,
+  "lender": "CBRE CAPITAL MARKETS INC",
+  "origin": "2025-02-04",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GRANSATER, PATRIK",
+   "title": "MGRM",
+   "officer_addr": "1907 NE 2 Street, Deerfield Beach, FL 33441",
+   "agent": "GRANSATER, PATRIK",
+   "agent_addr": "1907 NE 2 Street, Deerfield Beach, FL 33441",
+   "status": "ACTIVE",
+   "matched": "SUNNY SIDE  IN FLORIDA VI, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514216026271",
+   "addr": "2842 FILLMORE ST",
+   "city": "Hollywood",
+   "zip": "33020",
+   "paOwner": "SUNNY SIDE IN FLORIDA VI LLC"
+  }
+ },
+ "520 SAN MARCO LLC": {
+  "borrower": "520 SAN MARCO LLC",
+  "amt": 2000000,
+  "lender": "MERIDIAN CAPITAL GROUP LLC",
+  "origin": "2025-02-06",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LEONARD, FRED",
+   "title": "MGR",
+   "officer_addr": "1580 championship blvd, Franklin, TN 37064",
+   "agent": "Leonard, Fred",
+   "agent_addr": "7901 4TH ST. N STE 300, ST. PETERSBURG, FL 33702",
+   "status": "ACTIVE",
+   "matched": "520 SAN MARCO LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504212180130",
+   "addr": "520 SAN MARCO DR",
+   "city": "Fort Lauderdale",
+   "zip": "33301",
+   "paOwner": "520 SAN MARCO LLC"
+  }
+ },
+ "744 ANDREWS LLC": {
+  "borrower": "744 ANDREWS LLC",
+  "amt": 2000000,
+  "lender": "NASO CRE BRIDGE LOAN FUND LP",
+  "origin": "2025-01-02",
+  "age_mo": 19.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RANCIC, EMILIO R",
+   "title": "MGR",
+   "officer_addr": "14 Fargo Lane, Irvington, NY 10533",
+   "agent": "RANCIC, EMILIO R",
+   "agent_addr": "744 NORTH ANDREWS AVENUE, FORT LAUDERDALE, FL 33311",
+   "status": "ACTIVE",
+   "matched": "744 ANDREWS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "494234071430",
+     "addr": "N ANDREWS AVE"
+    },
+    {
+     "folio": "494234071450",
+     "addr": "744 N ANDREWS AVE"
+    }
+   ]
+  }
+ },
+ "19501 PROJECT CORP": {
+  "borrower": "19501 PROJECT CORP",
+  "amt": 1999999,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-01-15",
+  "age_mo": 18.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "INNOVAX CAPITAL CORP",
+   "title": "P",
+   "officer_addr": "55 SE 6TH ST, SUITE 205",
+   "agent": "WILCHES, JOAN S",
+   "agent_addr": "55 SE 6TH ST, SUITE 205",
+   "status": "ACTIVE",
+   "matched": "19501 PROJECT CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "504216280630",
+     "addr": "1205 TANGELO ISLE"
+    },
+    {
+     "folio": "504216281110",
+     "addr": "1313 ORANGE ISLE"
+    }
+   ]
+  }
+ },
+ "DKM-FL LLC": {
+  "borrower": "DKM-FL LLC",
+  "amt": 1997600,
+  "lender": "AMERICAN HERITAGE LENDING LLC",
+  "origin": "2025-01-23",
+  "age_mo": 18.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "DKM FLORIDA INVESTMENTS, LP",
+    "DKM FLORIDA INVESTMENTS, LP",
+    "DKM FREIGHT LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "808 NE 17TH TERR LLC": {
+  "borrower": "808 NE 17TH TERR LLC",
+  "amt": 1895500,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-01-27",
+  "age_mo": 18.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TEITLER, NIR",
+   "title": "MGR",
+   "officer_addr": "4201 W SAILBOAT DR, COOPER CITY, FL 33026 UN",
+   "agent": "LEVY, OREN",
+   "agent_addr": "11675 STRAND WAY, HOLLYWOOD, FL 33026",
+   "status": "INACTIVE",
+   "matched": "808 NE 17TH TERR LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "1902 WATERS EDGE LLC": {
+  "borrower": "1902 WATERS EDGE LLC",
+  "amt": 1860000,
+  "lender": "TLOA LENDING LLC",
+  "origin": "2024-12-23",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "HAND, MICHAEL",
+   "title": "MGR",
+   "officer_addr": "17175 BRULEE BREEZE WAY, BOCA RATON, FL 33496",
+   "agent": "SETH HUBERMAN PA",
+   "agent_addr": "6001 BROKEN SOUND PARKWAY, SUITE 610",
+   "status": "ACTIVE",
+   "matched": "1902 WATERS EDGE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494307040180",
+   "addr": "1902 WATERS EDGE",
+   "city": "Lauderdale By The Sea",
+   "zip": "33062",
+   "paOwner": "1902 WATERS EDGE LLC"
+  }
+ },
+ "1113 AVOCADO LLC": {
+  "borrower": "1113 AVOCADO LLC",
+  "amt": 1856869,
+  "lender": "BD CAPITAL SE LLC",
+  "origin": "2025-01-08",
+  "age_mo": 19.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MUJKO, ZHERIN, MGR",
+   "title": "MGR",
+   "officer_addr": "2683 E 26 ST, BROOKLYN, NY 11235",
+   "agent": "MUJKO, ZHERIN",
+   "agent_addr": "1200 BRICKELL BAY DR, 2008",
+   "status": "ACTIVE",
+   "matched": "1113 AVOCADO LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "NADERI DEVELOPMENTS LLC": {
+  "borrower": "NADERI DEVELOPMENTS LLC",
+  "amt": 1774000,
+  "lender": "NEW SILVER LENDING LLC",
+  "origin": "2024-12-27",
+  "age_mo": 19.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "NADERI, SAHBA",
+   "title": "MGR",
+   "officer_addr": "2010 NE 31st CT, LIGHTHOUSE POINT, FL 33064",
+   "agent": "NADERI, SEAN",
+   "agent_addr": "2010 NE 31st CT, LIGHTHOUSE POINT, FL 33064",
+   "status": "ACTIVE",
+   "matched": "NADERI DEVELOPMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "484319010910",
+     "addr": "2643 NE 26 TER"
+    },
+    {
+     "folio": "484319111050",
+     "addr": "2780 NE 22 AVE"
+    }
+   ]
+  }
+ },
+ "2330 NORTHEAST 9TH STREET,LLC": {
+  "borrower": "2330 NORTHEAST 9TH STREET,LLC",
+  "amt": 1660000,
+  "lender": "CAPITAL ONE",
+  "origin": "2024-12-26",
+  "age_mo": 19.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "NDH REIT OP (Sub One), LLC",
+   "title": "Member",
+   "officer_addr": "230 W Monroe St, Suite 2105",
+   "agent": "CORPORATION SERVICE COMPANY",
+   "agent_addr": "1201 HAYS STREET, TALLAHASSEE, FL 32301-2525",
+   "status": "ACTIVE",
+   "matched": "2330 NORTHEAST 9TH STREET, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "FIGGERS FOUNDATION INC": {
+  "borrower": "FIGGERS FOUNDATION INC",
+  "amt": 1590000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2024-12-26",
+  "age_mo": 19.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FIGGERS, FREDDIE",
+   "title": "Board Chai",
+   "officer_addr": "451 N. State Rd. 7, Plantation, FL 33317",
+   "agent": "The Law Office of Natlie G. Figgers, PLLC",
+   "agent_addr": "10100 WEST SAMPLE ROAD, Suite 300",
+   "status": "ACTIVE",
+   "matched": "FIGGERS FOUNDATION INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504101330010",
+   "addr": "451 N STATE ROAD 7",
+   "city": "Plantation",
+   "zip": "33317",
+   "paOwner": "FIGGERS FOUNDATION INC"
+  }
+ },
+ "BERMUDA RIVIERA 3212 LLC": {
+  "borrower": "BERMUDA RIVIERA 3212 LLC",
+  "amt": 1406250,
+  "lender": "OAKTREE FUNDING CORP",
+  "origin": "2025-01-23",
+  "age_mo": 18.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ANDREA L. JAKOB, PA",
+   "title": "AR",
+   "officer_addr": "12401 ORANGE DRIVE, DAVIE, FL 33330",
+   "agent": "ANDREA L. JAKOB, PA",
+   "agent_addr": "12401 ORANGE DRIVE, SUITE 219",
+   "status": "ACTIVE",
+   "matched": "BERMUDA RIVIERA 3212, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494319040240",
+   "addr": "3212 NE 40 ST",
+   "city": "Fort Lauderdale",
+   "zip": "33308",
+   "paOwner": "BERMUDA RIVIERA 3212 LLC"
+  }
+ },
+ "SELL MY HOUSE MIAMI LLC": {
+  "borrower": "SELL MY HOUSE MIAMI LLC",
+  "amt": 1344455,
+  "lender": "GENESIS CAPITAL LLC",
+  "origin": "2025-01-28",
+  "age_mo": 18.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VAN VEEN, ANDRE W",
+   "title": "MGR",
+   "officer_addr": "3813 E WOODSCAPE DR, MIRAMAR, FL 33023",
+   "agent": "VAN VEEN, ANDRE W",
+   "agent_addr": "3813 E WOODSCAPE DR, MIRAMAR, FL 33023",
+   "status": "ACTIVE",
+   "matched": "SELL MY HOUSE MIAMI LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494235200130",
+   "addr": "1533 NE 16 AVE",
+   "city": "Fort Lauderdale",
+   "zip": "33304",
+   "paOwner": "SELL MY HOUSE MIAMI LLC"
+  }
+ },
+ "HALLANDALE 713 LLC": {
+  "borrower": "HALLANDALE 713 LLC",
+  "amt": 1191750,
+  "lender": "NQM FUNDING LLC",
+  "origin": "2024-12-23",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MOSTER, CHAIM",
+   "title": "MGR",
+   "officer_addr": "1395 NE 179TH STREET, NORTH MIAMI BEACH, FL 33162",
+   "agent": "MOSTER, CHAIM",
+   "agent_addr": "2719 HOLLYWOOD BLVD, SUITE 253, HOLLYWOOD, FL 33020",
+   "status": "INACTIVE",
+   "matched": "HALLANDALE 713 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514222130120",
+   "addr": "705-713 NE 3 ST #1-9",
+   "city": "Hallandale Beach",
+   "zip": "33009",
+   "paOwner": "HALLANDALE 713 LLC"
+  }
+ },
+ "ALOHA INVESTMENT PROPERTIES LLC": {
+  "borrower": "ALOHA INVESTMENT PROPERTIES LLC",
+  "amt": 1060000,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2025-01-23",
+  "age_mo": 18.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SILVA, IVAN B, SR.",
+   "title": "MGR",
+   "officer_addr": "PO Box 75271, KAPOLEI, HI 96707",
+   "agent": "SILVA, IVAN B, SR.",
+   "agent_addr": "22379 General Street, Boca Raton, FL 33428",
+   "status": "ACTIVE",
+   "matched": "ALOHA INVESTMENT PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484115021350",
+   "addr": "8303 W SAMPLE RD",
+   "city": "Coral Springs",
+   "zip": "33065",
+   "paOwner": "ALOHA INVESTMENT PROPERTIES LLC"
+  }
+ },
+ "S C BERENSON & CO LLC": {
+  "borrower": "S C BERENSON & CO LLC",
+  "amt": 1026800,
+  "lender": "HARVEST COMMERCIAL CAPITAL LLC",
+  "origin": "2024-12-30",
+  "age_mo": 19.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "S C BERENSON AND CO LLC",
+    "S.C.BERNAL & ASSOCIATES GROUP CORP",
+    "SC BEST CARE LLC"
+   ]
+  },
+  "bcpa": {
+   "folio": "484213290023",
+   "addr": "4020 NE 10 WAY",
+   "city": "Pompano Beach",
+   "zip": "33064",
+   "paOwner": "S C BERENSON & CO LLC"
+  }
+ },
+ "SYLVESTER BRAITHWAITE REVOCABLE TRUST": {
+  "borrower": "SYLVESTER BRAITHWAITE REVOCABLE TRUST",
+  "amt": 1000000,
+  "lender": "CHAMPIONS FUNDING LLC",
+  "origin": "2025-02-03",
+  "age_mo": 18.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "SYLVESTER BROWN ETC, LLC",
+    "SYLVESTER BUFORD, PA",
+    "SYLVESTER-CAMERON, INC."
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "245TRADEWINDS LLC": {
+  "borrower": "245TRADEWINDS LLC",
+  "amt": 924000,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-12-24",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GILLESPIE, TAILA M",
+   "title": "AMBR",
+   "officer_addr": "382 NE 191ST ST #834715, MIAMI, FL 33179",
+   "agent": "UNITED STATES CORPORATION AGENTS, INC.",
+   "agent_addr": "476 RIVERSIDE AVE., JACKSONVILLE, FL 32202",
+   "status": "ACTIVE",
+   "matched": "245TRADEWINDS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494318072610",
+   "addr": "245 N TRADEWINDS AVE",
+   "city": "Lauderdale By The Sea",
+   "zip": "33308",
+   "paOwner": "245TRADEWINDS LLC"
+  }
+ },
+ "GRECO LUXURY HOMES LLC": {
+  "borrower": "GRECO LUXURY HOMES LLC",
+  "amt": 911500,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2025-02-05",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "COE, GREGORY S",
+   "title": "MGR",
+   "officer_addr": "1919 SE 10TH AVE #1130, FORT LAUDERDALE, FL 33316",
+   "agent": "COE, GREGORY S",
+   "agent_addr": "1919 SE 10TH AVE, 1130",
+   "status": "ACTIVE",
+   "matched": "GRECO LUXURY HOMES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "S&R-4820NE29AVE LLC": {
+  "borrower": "S&R-4820NE29AVE LLC",
+  "amt": 825000,
+  "lender": "CENTER STREET LENDING VIII SPE LLC",
+  "origin": "2025-01-14",
+  "age_mo": 18.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "S&amp;R ESTATE DEVELOPERS LLC",
+   "title": "MGR",
+   "officer_addr": "450 W HILLSBORO BLVD, DEERFIELD BEACH, FL 33441",
+   "agent": "S&amp;R ESTATE DEVELOPERS LLC",
+   "agent_addr": "450 W HILLSBORO BLVD, DEERFIELD BEACH, FL 33441",
+   "status": "ACTIVE",
+   "matched": "S&R - 4820NE29AVE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484307101010",
+   "addr": "4820 NE 29 AVE",
+   "city": "Lighthouse Point",
+   "zip": "33064",
+   "paOwner": "S&R-4820NE29AVE LLC"
+  }
+ },
+ "RENE REALTY LLC": {
+  "borrower": "RENE REALTY LLC",
+  "amt": 805000,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2025-02-03",
+  "age_mo": 18.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RENE, RONALD",
+   "title": "MGR",
+   "officer_addr": "19 HARRIS STREET, RANDOLPH, MA 02368",
+   "agent": "BUSINESS FILINGS INCORPORATED",
+   "agent_addr": "1200 SOUTH PINE ISLAND ROAD, PLANTATION, FL 33324",
+   "status": "ACTIVE",
+   "matched": "RENE REALTY LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514021100560",
+   "addr": "2241 SW 164 AVE",
+   "city": "Miramar",
+   "zip": "33027",
+   "paOwner": "RENE REALTY LLC"
+  }
+ },
+ "MS 56 CORP": {
+  "borrower": "MS 56 CORP",
+  "amt": 800220,
+  "lender": "A&S RESIDENTIAL LENDING LLC",
+  "origin": "2024-12-20",
+  "age_mo": 19.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SALAZAR, DALER",
+   "title": "DIRECTOR",
+   "officer_addr": "135 Weston Rd # 189, Weston, FL 33326",
+   "agent": "SALAZAR, DALER",
+   "agent_addr": "135 Weston Rd # 189, Weston, FL 33326",
+   "status": "ACTIVE",
+   "matched": "MS 56 CORPORATION",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "1141 NE 23 PROPERTY OWNER LLC": {
+  "borrower": "1141 NE 23 PROPERTY OWNER LLC",
+  "amt": 775000,
+  "lender": "MP SOUTH CAPITAL CORP",
+  "origin": "2025-02-05",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "NEUMAN, MARK",
+   "title": "MGR",
+   "officer_addr": "888 E. LAS OLAS BLVD STE 502, FORT LAUDERDALE, FL 33301",
+   "agent": "JONATHAN LEDER PLLC",
+   "agent_addr": "888 E. LAS OLAS BLVD STE 502, FORT LAUDERDALE, FL 33301",
+   "status": "ACTIVE",
+   "matched": "1141 NE 23 PROPERTY OWNER, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484331300070",
+   "addr": "1141 NE 23 TER #1-6",
+   "city": "Pompano Beach",
+   "zip": "33062",
+   "paOwner": "1141 NE 23 PROPERTY OWNER LLC"
+  }
+ },
+ "PERFECT CHOICE PROPERTIES LLC": {
+  "borrower": "PERFECT CHOICE PROPERTIES LLC",
+  "amt": 700000,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2024-12-24",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VARGAS, PETER I",
+   "title": "MGR",
+   "officer_addr": "13120 SW 33RD CT, DAVIE, FL 33330",
+   "agent": "VARGAS, PETER I",
+   "agent_addr": "13120 SW 33RD CT, DAVIE, FL 33330",
+   "status": "INACTIVE",
+   "matched": "PERFECT CHOICE PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "DBR GROUP PROPERTIES LLC": {
+  "borrower": "DBR GROUP PROPERTIES LLC",
+  "amt": 665800,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-12-16",
+  "age_mo": 19.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DALAL, DEBORAH",
+   "title": "AMBR",
+   "officer_addr": "5660 COLLINS AVENUE, 4C",
+   "agent": "DALAL, DEBORAH",
+   "agent_addr": "5660 Collins Ave 4C, 4C",
+   "status": "ACTIVE",
+   "matched": "DBR GROUP PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "484213052510",
+   "addr": "4280 NE 16 AVE",
+   "city": "Pompano Beach",
+   "zip": "33064",
+   "paOwner": "DBR GROUP PROPERTIES LLC"
+  }
+ },
+ "LEGACY DEVELOPMENT GROUP LLC": {
+  "borrower": "LEGACY DEVELOPMENT GROUP LLC",
+  "amt": 612500,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2025-01-06",
+  "age_mo": 19.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "VILLANUEVA, MICHAEL",
+   "title": "MGR",
+   "officer_addr": "2601 S BAYSHORE DR, STE 600, MIAMI, FL 33133",
+   "agent": "ATER REGISTERED AGENTS, LLC",
+   "agent_addr": "2601 SOUTH BAYSHORE DRIVE, SUITE 600",
+   "status": "INACTIVE",
+   "matched": "LEGACY DEVELOPMENT GROUP, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "99 DEALS LLC": {
+  "borrower": "99 DEALS LLC",
+  "amt": 606810,
+  "lender": "CENTER STREET LENDING VIII SPE LLC",
+  "origin": "2025-01-14",
+  "age_mo": 18.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BARADAUKA, VALIANTSIN",
+   "title": "AMBR",
+   "officer_addr": "5500 N MILITARY TRL, BOCA RATON, FL 33496 FL",
+   "agent": "BARADAUKA, VALIANTSIN",
+   "agent_addr": "5500 N MILITARY TRL, 410",
+   "status": "ACTIVE",
+   "matched": "99 DEALS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "HALLANDALE 615 LLC": {
+  "borrower": "HALLANDALE 615 LLC",
+  "amt": 600000,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-12-23",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MOSTER, CHAIM",
+   "title": "MGR",
+   "officer_addr": "1395 NE 179TH ST, NORTH MIAMI BEACH, FL 33162",
+   "agent": "MOSTER, CHAIM",
+   "agent_addr": "2719 HOLLYWOOD BLVD, STE 253, HOLLYWOOD, FL 33020",
+   "status": "INACTIVE",
+   "matched": "HALLANDALE 615 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SHOPS OF 19TH STREET LLC": {
+  "borrower": "SHOPS OF 19TH STREET LLC",
+  "amt": 600000,
+  "lender": "COMMERCIAL MONEY LENDERS INC",
+  "origin": "2024-12-17",
+  "age_mo": 19.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "NELSON, JAMES M",
+   "title": "MGR",
+   "officer_addr": "1856 N NOB HILL RD #319, PLANTATION, FL 33322",
+   "agent": "Nelson, James M",
+   "agent_addr": "1856 N NOB HILL ROAD, 319",
+   "status": "ACTIVE",
+   "matched": "THE SHOPS OF 19TH STREET 'LLC'",
+   "typo": true
+  },
+  "bcpa": {
+   "folio": "494232120400",
+   "addr": "2620 NW 19 ST",
+   "city": "Fort Lauderdale",
+   "zip": "33311",
+   "paOwner": "SHOPS OF 19TH STREET LLC"
+  }
+ },
+ "1045 HOLLYWOOD BLVD LLC": {
+  "borrower": "1045 HOLLYWOOD BLVD LLC",
+  "amt": 590000,
+  "lender": "CLEAREDGE LENDING LLC",
+  "origin": "2024-12-16",
+  "age_mo": 19.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ARANBAEV, ROMA",
+   "title": "MGRM",
+   "officer_addr": "231 174TH STREET, #1512, SUNNY ISLES BEACH, FL 33160",
+   "agent": "LAW OFFICES OF IRINA NEMTSEV, PA",
+   "agent_addr": "7777 GLADES ROAD, SUITE 100",
+   "status": "ACTIVE",
+   "matched": "1045 HOLLYWOOD BLVD, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "NAUTICAL INNOVATIONS LLC": {
+  "borrower": "NAUTICAL INNOVATIONS LLC",
+  "amt": 577500,
+  "lender": "CLEAREDGE LENDING LLC",
+  "origin": "2025-01-24",
+  "age_mo": 18.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DUNNE, LEIGH",
+   "title": "MGR",
+   "officer_addr": "205 SW 28TH STREET, FORT LAUDERDALE, FL 33315",
+   "agent": "leigh, dunne",
+   "agent_addr": "1915 SW 9th Ave, Fort Lauderdale, FL 33315",
+   "status": "ACTIVE",
+   "matched": "NAUTICAL INNOVATIONS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "504216110130",
+     "addr": "1915 SW 9 AVE"
+    },
+    {
+     "folio": "504220300050",
+     "addr": "2365 SW 34 ST #5"
+    }
+   ]
+  }
+ },
+ "FULLY MANAGEMENT ENTREPRENEUR LLC": {
+  "borrower": "FULLY MANAGEMENT ENTREPRENEUR LLC",
+  "amt": 552500,
+  "lender": "CAPITAL FUNDING FINANCIAL LLC",
+  "origin": "2025-01-24",
+  "age_mo": 18.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BROWN, JERMAINE L",
+   "title": "MGR",
+   "officer_addr": "PO BOX 101808, FORT LAUDERDALE, FL 33310",
+   "agent": "BROWN, LASHONDA",
+   "agent_addr": "2720 NW 23RD ST, FT LAUDERDALE, FL 33311",
+   "status": "ACTIVE",
+   "matched": "FULLY MANAGEMENT ENTREPRENEUR LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "HALLANDALE 619 LLC": {
+  "borrower": "HALLANDALE 619 LLC",
+  "amt": 552500,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-12-23",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MOSTER, CHAIM",
+   "title": "MGR",
+   "officer_addr": "1395 NE 179TH ST, NORTH MIAMI BEACH, FL 33162",
+   "agent": "MOSTER, CHAIM",
+   "agent_addr": "2719 HOLLYWOOD BLVD, SUITE 253, HOLLYWOOD, FL 33020",
+   "status": "INACTIVE",
+   "matched": "HALLANDALE 619 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "48 SE 7TH ST DANIA LLC": {
+  "borrower": "48 SE 7TH ST DANIA LLC",
+  "amt": 551250,
+  "lender": "CHANGE LENDING LLC",
+  "origin": "2024-12-20",
+  "age_mo": 19.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PERLMAN, BENJAMIN A",
+   "title": "MGR",
+   "officer_addr": "1271 HAYES ST, HOLLYWOOD, FL 33019 UN",
+   "agent": "PERLMAN, BENJAMIN A",
+   "agent_addr": "1271 HAYES ST, HOLLYWOOD, FL 33019",
+   "status": "ACTIVE",
+   "matched": "48 SE 7TH ST DANIA LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SERENITY ROAD ENTERPRISES LLC": {
+  "borrower": "SERENITY ROAD ENTERPRISES LLC",
+  "amt": 550000,
+  "lender": "BRIDGECAP EQUITIES 2.0 LLC",
+  "origin": "2025-01-31",
+  "age_mo": 18.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "SERENITY ROAD SERVICES & SOLUTIONS, INC.",
+    "SERENITY ROADSIDE SERVICES LLC",
+    "SERENITY ROCK, LLC"
+   ]
+  },
+  "bcpa": {
+   "folio": "504201GJ0550",
+   "addr": "505 N FT LAUDERDALE BCH BLVD #818",
+   "city": "Fort Lauderdale",
+   "zip": "33304",
+   "paOwner": "SERENITY ROAD ENTERPRISES LLC"
+  }
+ },
+ "HUSEBOE'S HOLDINGS INC": {
+  "borrower": "HUSEBOE'S HOLDINGS INC",
+  "amt": 535000,
+  "lender": "CCHC FUND VI LP",
+  "origin": "2024-12-17",
+  "age_mo": 19.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "HUSEBOE, LISA K, Dr.",
+   "title": "Director",
+   "officer_addr": "10650 W. STATE ROAD 84, SUITE 208, DAVIE, FL 33324",
+   "agent": "HUSEBOE, LISA",
+   "agent_addr": "10650 W. STATE ROAD 84, SUITE 208",
+   "status": "ACTIVE",
+   "matched": "HUSEBOE'S HOLDINGS, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 3 parcels — cannot pin the mortgaged one by name",
+   "parcels": 3,
+   "candidates": [
+    {
+     "folio": "504107AA0230",
+     "addr": "10650 W STATE ROAD 84 #207"
+    },
+    {
+     "folio": "504107AA0240",
+     "addr": "10650 W STATE ROAD 84 #208"
+    },
+    {
+     "folio": "504107AA0250",
+     "addr": "10650 W STATE ROAD 84 #209"
+    }
+   ]
+  }
+ },
+ "6881 W LONGBOW CORP": {
+  "borrower": "6881 W LONGBOW CORP",
+  "amt": 510000,
+  "lender": "B&B CAPITAL GROUP 18 LLC",
+  "origin": "2025-01-17",
+  "age_mo": 18.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SEGUI, MAYKEL",
+   "title": "P",
+   "officer_addr": "12727 N WINNERS CIRCLE, DAVIE, FL 33330",
+   "agent": "SEGUI, MAYKEL",
+   "agent_addr": "12727 N WINNERS CIRCLE, DAVIE, FL 33330",
+   "status": "INACTIVE",
+   "matched": "6881 W LONGBOW CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514004080650",
+   "addr": "6881 W LONGBOW BND",
+   "city": "Davie",
+   "zip": "33331",
+   "paOwner": "6881 W LONGBOW CORP"
+  }
+ },
+ "LA BELLA REMODEL LLC": {
+  "borrower": "LA BELLA REMODEL LLC",
+  "amt": 500000,
+  "lender": "BULLPATH CAPITAL CORP",
+  "origin": "2025-01-06",
+  "age_mo": 19.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ASSOULINE, ANABELL",
+   "title": "MGR",
+   "officer_addr": "17550 COLLINS AVE APT 1605, SUNNY ISLES, FL 33160",
+   "agent": "ASSOULINE, ANABELL",
+   "agent_addr": "17550 COLLINS AVE APT 1605, SUNNY ISLES, FL 33160",
+   "status": "ACTIVE",
+   "matched": "LA BELLA REMODEL LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494213061590",
+   "addr": "2101 NE 54 CT",
+   "city": "Fort Lauderdale",
+   "zip": "33308",
+   "paOwner": "LA BELLA REMODEL LLC"
+  }
+ },
+ "DAJANI HOLDINGS LLC": {
+  "borrower": "DAJANI HOLDINGS LLC",
+  "amt": 500000,
+  "lender": "SCOTT FREE CAPITAL LLC",
+  "origin": "2024-12-20",
+  "age_mo": 19.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DAJANI, MAHER J",
+   "title": "MGRM",
+   "officer_addr": "5611 NW 55 LANE, TAMARAC, FL 33319",
+   "agent": "DAJANI, MAHER J",
+   "agent_addr": "1249 W SUNRISE BLVD, FORT LAUDERDALE, FL 33311",
+   "status": "ACTIVE",
+   "matched": "DAJANI HOLDINGS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "494233230140",
+     "addr": "1249 W SUNRISE BLVD"
+    },
+    {
+     "folio": "494233230141",
+     "addr": "NW 10 PL"
+    }
+   ]
+  }
+ },
+ "GENERATE REALTY GROUP LLC": {
+  "borrower": "GENERATE REALTY GROUP LLC",
+  "amt": 496000,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2025-02-05",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PEREZ, ISAAC",
+   "title": "MGR",
+   "officer_addr": "12410 Nw 33rd St, Sunrise, FL 33323",
+   "agent": "PEREZ, SAUL",
+   "agent_addr": "12410 Nw 33rd St, Sunrise, FL 33323",
+   "status": "ACTIVE",
+   "matched": "GENERATE REALTY GROUP LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ADVANCE & ARISE LLC": {
+  "borrower": "ADVANCE & ARISE LLC",
+  "amt": 480000,
+  "lender": "ANCHOR ACQUISITIONS & FUNDING INC",
+  "origin": "2025-01-17",
+  "age_mo": 18.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TERCIER, Deborah",
+   "title": "Manager",
+   "officer_addr": "131 NW 58TH STREET, MIAMI, FL 33127",
+   "agent": "TERCIER, Deborah",
+   "agent_addr": "131 NW 58TH STREET, MIAMI, FL 33127",
+   "status": "ACTIVE",
+   "matched": "ADVANCE & ARISE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504205071140",
+   "addr": "512 NW 23 AVE",
+   "city": "Fort Lauderdale",
+   "zip": "33311",
+   "paOwner": "ADVANCE & ARISE LLC"
+  }
+ },
+ "1090 S56 LLC": {
+  "borrower": "1090 S56 LLC",
+  "amt": 475000,
+  "lender": "FOUR C'S FUNDING LLC",
+  "origin": "2025-01-29",
+  "age_mo": 18.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "saghbini, charbel",
+   "title": "MGR",
+   "officer_addr": "8 stonemeadow dr, westwood, MA 02090",
+   "agent": "SAGHBINI, CHARBEL",
+   "agent_addr": "8 stonemeadow dr, westwood, FL 02090",
+   "status": "ACTIVE",
+   "matched": "1090 S56 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "QI MANAGEMENT LLC": {
+  "borrower": "QI MANAGEMENT LLC",
+  "amt": 472500,
+  "lender": "FUNDED CAPITAL LLC",
+  "origin": "2024-12-23",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BUSTILLO, MICHAEL",
+   "title": "MGR",
+   "officer_addr": "8004 NW 154 ST, SUITE 241",
+   "agent": "BUSTILLO, MICHAEL",
+   "agent_addr": "8004 NW 154 ST, 8004 NW 154 ST",
+   "status": "ACTIVE",
+   "matched": "QI MANAGEMENT  LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SWAANNE HOLDINGS LLC": {
+  "borrower": "SWAANNE HOLDINGS LLC",
+  "amt": 457600,
+  "lender": "HIGHLAND CAPITAL GROUP LLC",
+  "origin": "2025-01-13",
+  "age_mo": 18.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CLARKE, ANEITA",
+   "title": "MGRM",
+   "officer_addr": "9250 NW 42ND COURT, CORAL SPRINGS, FL 33065",
+   "agent": "CLARKE, ANEITA",
+   "agent_addr": "9250 NW 42ND COURT, CORAL SPRINGS, FL 33065",
+   "status": "ACTIVE",
+   "matched": "SWAANNE HOLDINGS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MOONLIGHT DVDL CORP": {
+  "borrower": "MOONLIGHT DVDL CORP",
+  "amt": 454350,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2025-01-02",
+  "age_mo": 19.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DIAZ LANDAETA, DANIELA V",
+   "title": "P",
+   "officer_addr": "2048 NW 135 AVE, MIAMI, FL 33182",
+   "agent": "DIAZ LANDAETA, DANIELA V",
+   "agent_addr": "2048 NW 135 AVE, MIAMI, FL 33182",
+   "status": "INACTIVE",
+   "matched": "MOONLIGHT DVDL CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514017110850",
+   "addr": "181 SW 170 AVE",
+   "city": "Pembroke Pines",
+   "zip": "33027",
+   "paOwner": "MOONLIGHT DVDL CORP"
+  }
+ },
+ "2650 N ANDREWS AVE LLC": {
+  "borrower": "2650 N ANDREWS AVE LLC",
+  "amt": 451500,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2025-02-06",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CASTILLO, TRACEY V",
+   "title": "MGR",
+   "officer_addr": "872 NW 35 ST, OAKLAND PARK, FL 33309",
+   "agent": "CASTILLO, TRACEY V",
+   "agent_addr": "872 NW 35 ST, OAKLAND PARK, FL 33309",
+   "status": "ACTIVE",
+   "matched": "2650 N ANDREWS AVE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494227121240",
+   "addr": "2650 N ANDREWS AVE",
+   "city": "Wilton Manors",
+   "zip": "33334",
+   "paOwner": "2650 N ANDREWS AVE LLC"
+  }
+ },
+ "KZ PARTNERS LLC": {
+  "borrower": "KZ PARTNERS LLC",
+  "amt": 450000,
+  "lender": "PRINCIPAL LENDERS GROUP INC",
+  "origin": "2025-02-07",
+  "age_mo": 18.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "KRINICKAS, WILLIAM H",
+   "title": "Manager",
+   "officer_addr": "2875 NE 191th St, Ste 406",
+   "agent": "FL INTERNATIONAL TAX ADVISORS, INC.",
+   "agent_addr": "2875 NE 191th St, Ste 406",
+   "status": "ACTIVE",
+   "matched": "KZ PARTNERS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "5639 LINCOLN LLC": {
+  "borrower": "5639 LINCOLN LLC",
+  "amt": 450000,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-12-26",
+  "age_mo": 19.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "YANKS, RON",
+   "title": "MM",
+   "officer_addr": "31 SE 5 ST, 3414",
+   "agent": "YANKS, RON",
+   "agent_addr": "2121 SW 3 AV, 300",
+   "status": "ACTIVE",
+   "matched": "5639 LINCOLN LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514113020131",
+   "addr": "5639-5641 LINCOLN ST",
+   "city": "Hollywood",
+   "zip": "33021",
+   "paOwner": "5639 LINCOLN LLC"
+  }
+ },
+ "LNMT MANAGEMENT LLC": {
+  "borrower": "LNMT MANAGEMENT LLC",
+  "amt": 440000,
+  "lender": "J&L CAPITAL SOLUTIONS LLC",
+  "origin": "2025-01-07",
+  "age_mo": 19.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TAM, LIOR",
+   "title": "MGR",
+   "officer_addr": "936 LENOX AVE, MIAMI BEACH, FL 33139",
+   "agent": "TAM, LIOR",
+   "agent_addr": "936 LENOX AVE, MIAMI BEACH, FL 33139",
+   "status": "ACTIVE",
+   "matched": "LNMT MANAGEMENT LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MD INVESTMENT SERVICES LLC": {
+  "borrower": "MD INVESTMENT SERVICES LLC",
+  "amt": 437500,
+  "lender": "FUNDED CAPITAL LLC",
+  "origin": "2024-12-23",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Jimenez, Heydy",
+   "title": "MGRM",
+   "officer_addr": "2101 nw 77 ave, Sunrise, FL 33322",
+   "agent": "JIMENEZ, HEYDY",
+   "agent_addr": "2101 nw 77 ave, Sunrise, FL 33322",
+   "status": "ACTIVE",
+   "matched": "MD INVESTMENT SERVICES, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SEVEN NINE 86 LLC": {
+  "borrower": "SEVEN NINE 86 LLC",
+  "amt": 424150,
+  "lender": "NATIONAL LOAN FUNDING LLC",
+  "origin": "2025-02-05",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "DAMIAN FULLER",
+   "title": "AMBR",
+   "officer_addr": "4460 NW 55TH DR., COCONUT CREEK, FL 33073",
+   "agent": "FULLER, DAMIAN",
+   "agent_addr": "4460 NW 55TH DR, COCONUT CREEK, FL 33073",
+   "status": "ACTIVE",
+   "matched": "SEVEN NINE 86 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504215260830",
+   "addr": "609 SW 20 ST",
+   "city": "Fort Lauderdale",
+   "zip": "33315",
+   "paOwner": "SEVEN NINE 86 LLC"
+  }
+ },
+ "RENA BUSINESS LLC": {
+  "borrower": "RENA BUSINESS LLC",
+  "amt": 419686,
+  "lender": "AMWEST FUNDING CORP",
+  "origin": "2025-02-05",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RENDON NAVARRETE, FERNANDO",
+   "title": "MGR",
+   "officer_addr": "1313 PONCE DE LEON BLVD, SUITE 201, CORAL GABLES, FL 33134",
+   "agent": "ML RIVERO &amp; ASSOCIATES, LLC",
+   "agent_addr": "1313 PONCE DE LEON BLVD, SUITE 201",
+   "status": "ACTIVE",
+   "matched": "RENA BUSINESS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "513913210220",
+     "addr": "102 SW 184 PL"
+    },
+    {
+     "folio": "513913210230",
+     "addr": "125 SW 184 PL"
+    }
+   ]
+  }
+ },
+ "4381 NW 116 TERR LLC": {
+  "borrower": "4381 NW 116 TERR LLC",
+  "amt": 412000,
+  "lender": "DOT FUND LLC",
+  "origin": "2024-12-24",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GARRAWAY, RHONDA N",
+   "title": "AP",
+   "officer_addr": "4381 NORTHWEST 116TH TERRACE, SUNRISE, FL 33323",
+   "agent": "GARRAWAY, RHONDA N",
+   "agent_addr": "4381 NORTHWEST 116TH TERRACE, SUNRISE, FL 33323",
+   "status": "INACTIVE",
+   "matched": "4381 NW 116 TERR LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "1825 HARDING ST LLC": {
+  "borrower": "1825 HARDING ST LLC",
+  "amt": 400000,
+  "lender": "LENDING CLUB MIAMI LLC",
+  "origin": "2024-12-18",
+  "age_mo": 19.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PROTOSENIA, MAKSIM",
+   "title": "AMBR",
+   "officer_addr": "382 NE 191ST ST, 586810, MIAMI, FL 33180",
+   "agent": "UNITED STATES CORPORATION AGENTS, INC.",
+   "agent_addr": "476 RIVERSIDE AVE., JACKSONVILLE, FL 32202",
+   "status": "ACTIVE",
+   "matched": "1825 HARDING ST LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514210300500",
+   "addr": "1825 HARDING ST #1-4",
+   "city": "Hollywood",
+   "zip": "33020",
+   "paOwner": "1825 HARDING ST LLC"
+  }
+ },
+ "MADDEX INVESTMENTS LLC": {
+  "borrower": "MADDEX INVESTMENTS LLC",
+  "amt": 399000,
+  "lender": "SILVER HILL FUNDING LLC",
+  "origin": "2024-12-16",
+  "age_mo": 19.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FRANCESE, PAULA",
+   "title": "Authorized",
+   "officer_addr": "4060 FARADAY WAY, PALM BEACH GARDENS, FL 33418",
+   "agent": "FRANCESE, PAULA, ESQ.",
+   "agent_addr": "4060 FARADAY WAY, PALM BEACH GARDENS, FL 33418",
+   "status": "ACTIVE",
+   "matched": "MADDEX INVESTMENTS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "RISE HOME BUYERS LLC": {
+  "borrower": "RISE HOME BUYERS LLC",
+  "amt": 393700,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2024-12-23",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "Iacovelli, Marc",
+   "title": "Authorized",
+   "officer_addr": "239 Ridgedale Ave, Florham Park, NJ 07932",
+   "agent": "REGISTERED AGENTS INC",
+   "agent_addr": "7901 4th St N, STE 300",
+   "status": "ACTIVE",
+   "matched": "RISE HOME BUYERS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "LLX2 LLC": {
+  "borrower": "LLX2 LLC",
+  "amt": 382882,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-02-06",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CRUZ, LEONARDO",
+   "title": "MGR",
+   "officer_addr": "11761 SW 226 TER, MIAMI, FL 33170",
+   "agent": "Ruiz Legal, PLLC",
+   "agent_addr": "4950 SW 72nd AVE, Suite 214",
+   "status": "ACTIVE",
+   "matched": "LLX2, LLC.",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514125060550",
+   "addr": "35 ALLEN RD",
+   "city": "West Park",
+   "zip": "33023",
+   "paOwner": "LLX2 LLC"
+  }
+ },
+ "MIRINVO LLC": {
+  "borrower": "MIRINVO LLC",
+  "amt": 380000,
+  "lender": "ADDISON VAILE FUNDING LLC",
+  "origin": "2024-12-27",
+  "age_mo": 19.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SMOLIYANINOV, YURY",
+   "title": "AMBR",
+   "officer_addr": "1720 HARRISON ST, SUITE 5A",
+   "agent": "SMOLIYANINOV, YURY",
+   "agent_addr": "1720 HARRISON ST, SUITE 5A",
+   "status": "ACTIVE",
+   "matched": "MIRINVO LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514215AA0050",
+   "addr": "1720 HARRISON ST #5A",
+   "city": "Hollywood",
+   "zip": "33020",
+   "paOwner": "MIRINVO LLC"
+  }
+ },
+ "OCEAN TEAM INVESTMENTS LLC": {
+  "borrower": "OCEAN TEAM INVESTMENTS LLC",
+  "amt": 379500,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-02-04",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MOLINA, MARIA DEL P",
+   "title": "AMBR, 100%",
+   "officer_addr": "2561 NE 193RD ST, UNIT 1208",
+   "agent": "OSORIO, MARIA L",
+   "agent_addr": "2561 NE 193RD ST, UNIT 1208",
+   "status": "ACTIVE",
+   "matched": "OCEAN TEAM INVESTMENTS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494230080070",
+   "addr": "2568 NW 34 TER",
+   "city": "Lauderdale Lakes",
+   "zip": "33311",
+   "paOwner": "OCEAN TEAM INVESTMENTS LLC"
+  }
+ },
+ "CL-LM RESI PURCHERS TRUST 1": {
+  "borrower": "CL-LM RESI PURCHERS TRUST 1",
+  "amt": 361410,
+  "lender": "DUEX CAPITAL GROUP LLC",
+  "origin": "2024-12-16",
+  "age_mo": 19.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "CLLM TRUCKING, LLC",
+    "C & L LOCK & GUNSMITHING, INC.",
+    "CL LOFTIN PLACE LP"
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MRN HOMES INVESTMENTS CORP": {
+  "borrower": "MRN HOMES INVESTMENTS CORP",
+  "amt": 357250,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-02-05",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ROMERO CORTIJO, MAURICIO",
+   "title": "P",
+   "officer_addr": "13348 SW 31ST ST, MIRAMAR, FL 33027",
+   "agent": "ROMERO CORTIJO, MAURICIO",
+   "agent_addr": "13348 SW 31ST ST, MIRAMAR, FL 33027",
+   "status": "ACTIVE",
+   "matched": "MRN HOMES INVESTMENTS CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "GOLDKEY 100 LLC": {
+  "borrower": "GOLDKEY 100 LLC",
+  "amt": 356490,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-01-15",
+  "age_mo": 18.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CARDINALE, ALEJANDRO",
+   "title": "MGR",
+   "officer_addr": "1999 N UNIVERSITY DR #300, CORAL SPRINGS, FL 33071",
+   "agent": "GOLDKEY ENTERPRISES LLC",
+   "agent_addr": "1999 N UNIVERSITY DR #300, CORAL SPRINGS, FL 33071",
+   "status": "ACTIVE",
+   "matched": "GOLDKEY 100 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "J & A TAX & INVESTMENT INC": {
+  "borrower": "J & A TAX & INVESTMENT INC",
+  "amt": 350000,
+  "lender": "VELOCITY COMMERCIAL CAPITAL LLC",
+  "origin": "2025-01-29",
+  "age_mo": 18.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ALFRED, JUSLIN",
+   "title": "D",
+   "officer_addr": "4855 W HILLSBORO, B- 1",
+   "agent": "ALFRED, JUSLIN",
+   "agent_addr": "4855 W Hillsboro, B-1",
+   "status": "ACTIVE",
+   "matched": "J & A TAX AND INVESTMENT INC",
+   "typo": true
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "484203011170",
+     "addr": "170 SW 32 AVE"
+    },
+    {
+     "folio": "494123BA0030",
+     "addr": "3280 SPANISH MOSS TER #103"
+    }
+   ]
+  }
+ },
+ "GRAND PRESERVATION LLC": {
+  "borrower": "GRAND PRESERVATION LLC",
+  "amt": 337000,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2025-01-15",
+  "age_mo": 18.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TYLER, CHRISTOPHER",
+   "title": "AMBR",
+   "officer_addr": "6720 north west 34, Fort Lauderdale, FL 33309",
+   "agent": "Tyler, Christopher",
+   "agent_addr": "6720 NORTHWEST 34 AVENUE, FORT LAUDERDALE, FL 33309",
+   "status": "ACTIVE",
+   "matched": "GRAND PRESERVATION, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "513915080680",
+   "addr": "20873 NW 3 LN",
+   "city": "Pembroke Pines",
+   "zip": "33029",
+   "paOwner": "GRAND PRESERVATION LLC"
+  }
+ },
+ "240 NW 33 STREET LLC": {
+  "borrower": "240 NW 33 STREET LLC",
+  "amt": 325000,
+  "lender": "YALE MORTGAGE FUNDING LLC",
+  "origin": "2025-01-10",
+  "age_mo": 19.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BAUMAN, DAVID M",
+   "title": "MGR",
+   "officer_addr": "6550 N FEDERAL HIGHWAY SUITE 220, FT. LAUDERDALE, FL 33308",
+   "agent": "THE LAW OFFICES OF DAVID M. BAUMAN PLLC",
+   "agent_addr": "6550 N FEDERAL HIGHWAY SUITE 220, FT. LAUDERDALE, FL 33308",
+   "status": "INACTIVE",
+   "matched": "240 NW 33 STREET, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "GUECH INC": {
+  "borrower": "GUECH INC",
+  "amt": 317200,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2025-02-07",
+  "age_mo": 18.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "GUERRA, WALTER H",
+   "title": "P",
+   "officer_addr": "4001 S Ocean Drive, 5J",
+   "agent": "M &amp; L ACCOUNTING SERVICES INC",
+   "agent_addr": "16969 NW 67TH AVE, SUITE 208",
+   "status": "ACTIVE",
+   "matched": "GUECH INC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514226EA0540",
+   "addr": "4001 S OCEAN DR #5J",
+   "city": "Hollywood",
+   "zip": "33019",
+   "paOwner": "GUECH INC"
+  }
+ },
+ "REAL SF INVESTORS LLC": {
+  "borrower": "REAL SF INVESTORS LLC",
+  "amt": 315000,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-01-23",
+  "age_mo": 18.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "OHANA PALM BEACH CORP",
+   "title": "MGR",
+   "officer_addr": "16343 SW 46TH TER, MIAMI, FL 33185",
+   "agent": "ERICK L. DEEB, P.A.",
+   "agent_addr": "2350 CORAL WAY, SUITE 401",
+   "status": "ACTIVE",
+   "matched": "REAL SF INVESTORS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MAYAN INC": {
+  "borrower": "MAYAN INC",
+  "amt": 315000,
+  "lender": "DK LENDING LLC",
+  "origin": "2024-12-31",
+  "age_mo": 19.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "NOVOA, LILLIAN ANNE",
+   "title": "DPS",
+   "officer_addr": "901 US HWY. 1, STE. 1, JUNO, FL",
+   "agent": "WHITE, CHARLES R.L.",
+   "agent_addr": "535 EAST INDIANTOWN ROAD, JUPITER, FL 33458",
+   "status": "INACTIVE",
+   "matched": "MAYAN, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "504203AE0040",
+   "addr": "435 N ANDREWS AVE #204",
+   "city": "Fort Lauderdale",
+   "zip": "33301",
+   "paOwner": "MAYAN INC"
+  }
+ },
+ "SALCEDO INVESTMENT PROPERTIES LLC": {
+  "borrower": "SALCEDO INVESTMENT PROPERTIES LLC",
+  "amt": 312480,
+  "lender": "IFP FUND I LLC",
+  "origin": "2025-02-03",
+  "age_mo": 18.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SALCEDO, JOHN A",
+   "title": "MGR",
+   "officer_addr": "5600 Davie, DAVIE, FL 33314",
+   "agent": "SALCEDO, JOHN A",
+   "agent_addr": "5600 Davie Road, DAVIE, FL 33314",
+   "status": "ACTIVE",
+   "matched": "SALCEDO INVESTMENT PROPERTIES, L.L.C.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "NPR LEGACY LLC": {
+  "borrower": "NPR LEGACY LLC",
+  "amt": 311200,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2025-01-31",
+  "age_mo": 18.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PIERRE, NICHOLAS",
+   "title": "MGR",
+   "officer_addr": "21016 NE 2ND CT, MIAMI, FL 33179",
+   "agent": "TRUST ADVISORS CORPORATION",
+   "agent_addr": "5781 B NW 151 ST STREET, MIAMI LAKES, FL 33014",
+   "status": "ACTIVE",
+   "matched": "NPR LEGACY LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SARDONA DEVELOPMENT GROUP": {
+  "borrower": "SARDONA DEVELOPMENT GROUP",
+  "amt": 300000,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2025-01-30",
+  "age_mo": 18.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "SARDONA GLOBAL ADVISORS LLC",
+    "SARDONA MB LLC",
+    "SARDONA MORTGAGE LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "owns 21 parcels — cannot pin the mortgaged one by name",
+   "parcels": 21,
+   "candidates": [
+    {
+     "folio": "494230360170",
+     "addr": "3632 NW 30 CT #10F"
+    },
+    {
+     "folio": "504113150750",
+     "addr": "4430 SW 23 ST"
+    },
+    {
+     "folio": "514113210060",
+     "addr": "6117 JACKSON ST"
+    },
+    {
+     "folio": "514122054280",
+     "addr": "2331 LARGO DR"
+    },
+    {
+     "folio": "514123071240",
+     "addr": "6505 SW 22 CT"
+    },
+    {
+     "folio": "514123071850",
+     "addr": "6525 SW 25 ST"
+    }
+   ]
+  }
+ },
+ "CLARKSON-BERGMAN FAMILY PARTNERSHIP LTD": {
+  "borrower": "CLARKSON-BERGMAN FAMILY PARTNERSHIP LTD",
+  "amt": 300000,
+  "lender": "GADDIS CAPITAL CORP",
+  "origin": "2024-12-24",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "",
+   "title": "",
+   "officer_addr": "",
+   "agent": "CLARKSON, CAROL GROSS",
+   "agent_addr": "3100 N. COURSE LANE, #310, POMPANO BEACH, FL 33069-5407",
+   "status": "ACTIVE",
+   "matched": "CLARKSON-BERGMAN FAMILY PARTNERSHIP, LTD.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "26BUILDERS LLC": {
+  "borrower": "26BUILDERS LLC",
+  "amt": 300000,
+  "lender": "MANDALA CAPITAL TRUST",
+  "origin": "2024-12-23",
+  "age_mo": 19.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "AYZENCOT, YOSEF",
+   "title": "AMBR",
+   "officer_addr": "1830 NE 193RD ST, MIAMI, FL 33179",
+   "agent": "Yosef , Ayzencot",
+   "agent_addr": "1830 ne 193rd st, Miami, FL 33179",
+   "status": "ACTIVE",
+   "matched": "26BUILDERS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "NEIRA'S INVESTMENT LLC": {
+  "borrower": "NEIRA'S INVESTMENT LLC",
+  "amt": 295200,
+  "lender": "RBI PRIVATE LENDING LLC",
+  "origin": "2025-02-06",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "NEIRA, PAULA C, MRS",
+   "title": "MGR",
+   "officer_addr": "12474 WORLD CUP LN, WELLINGTON, FL 33414",
+   "agent": "NEIRA, MAURICIO F",
+   "agent_addr": "12474 WORLD CUP LN, WELLINGTON, FL 33414",
+   "status": "ACTIVE",
+   "matched": "NEIRA'S INVESTMENT LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "RINCON DUARTE LLC": {
+  "borrower": "RINCON DUARTE LLC",
+  "amt": 278750,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-01-31",
+  "age_mo": 18.4,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "RINCON-DUARTE, JUAN",
+   "title": "MGR",
+   "officer_addr": "1731 NORTHWEST 66TH STREET, MIAMI, FL 33147",
+   "agent": "RINCON-DUARTE, JUAN L",
+   "agent_addr": "1731 Northwest 66th Street, MAIMI, FL 33147",
+   "status": "ACTIVE",
+   "matched": "RINCON-DUARTE, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "PREMIER PROPERTY TRANSFORMATIONS LLC": {
+  "borrower": "PREMIER PROPERTY TRANSFORMATIONS LLC",
+  "amt": 265500,
+  "lender": "CENTER STREET LENDING VIII SPE LLC",
+  "origin": "2024-12-26",
+  "age_mo": 19.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "De Armas, Roberto",
+   "title": "CEO",
+   "officer_addr": "7901 4TH ST N, STE 300",
+   "agent": "NORTHWEST REGISTERED AGENT LLC",
+   "agent_addr": "7901 4TH ST N, STE 300",
+   "status": "ACTIVE",
+   "matched": "PREMIER PROPERTY TRANSFORMATIONS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "J&F CROWN SOLUTIONS LLC": {
+  "borrower": "J&F CROWN SOLUTIONS LLC",
+  "amt": 257468,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-01-22",
+  "age_mo": 18.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FERNANDEZ, ANA C",
+   "title": "AMBR",
+   "officer_addr": "2723 SW 156TH AVE, MIAMI, FL 33185",
+   "agent": "JORDAN, ROBERTO C",
+   "agent_addr": "2723 SW 156TH AVE, MIAMI, FL 33185",
+   "status": "ACTIVE",
+   "matched": "J&F CROWN SOLUTIONS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "1403 N FEDERAL LLC": {
+  "borrower": "1403 N FEDERAL LLC",
+  "amt": 250000,
+  "lender": "BANKERS MORTGAGE LENDING INC",
+  "origin": "2024-12-17",
+  "age_mo": 19.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "1403 NORTH OCEAN DRIVE ASSOCIATES, LLC",
+    "1403 OAK FOREST DRIVE HOME, LLC",
+    "1403 OCEAN LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ALTO DEVELOPMENT LLC": {
+  "borrower": "ALTO DEVELOPMENT LLC",
+  "amt": 240000,
+  "lender": "LENDZ FINANCIAL",
+  "origin": "2025-01-16",
+  "age_mo": 18.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BOULANGER, ALEJANDRO",
+   "title": "PD",
+   "officer_addr": "14531 SW 155TH ST., MIAMI, FL 33177",
+   "agent": "BOULANGER, ALEJANDRO",
+   "agent_addr": "14531 SW 155TH ST., MIAMI, FL 33177",
+   "status": "INACTIVE",
+   "matched": "ALTO DEVELOPMENT, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514213AN1450",
+   "addr": "777 N OCEAN DR #N411",
+   "city": "Hollywood",
+   "zip": "33019",
+   "paOwner": "ALTO DEVELOPMENT LLC"
+  }
+ },
+ "SOUL PROPERTIES LLC": {
+  "borrower": "SOUL PROPERTIES LLC",
+  "amt": 236000,
+  "lender": "PIA LENDING LP",
+  "origin": "2025-01-23",
+  "age_mo": 18.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "QUINTANA, MONICA",
+   "title": "Manager",
+   "officer_addr": "1492 SW 47 AVENUE, FORT LAUDERDALE, FL 33317",
+   "agent": "QUINTANA, MONICA",
+   "agent_addr": "1492 SW 47 AVENUE, FORT LAUDERDALE, FL 33317",
+   "status": "ACTIVE",
+   "matched": "SOUL PROPERTIES LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "2315 MONROE ST LLC": {
+  "borrower": "2315 MONROE ST LLC",
+  "amt": 234000,
+  "lender": "RBI PRIVATE LENDING LLC",
+  "origin": "2025-01-08",
+  "age_mo": 19.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "POZZAN, FACUNDO",
+   "title": "MGR",
+   "officer_addr": "2315 monroe st, hollywood, FL 33020",
+   "agent": "SELTZER MAYBERG, LLC",
+   "agent_addr": "10750 NW 6TH COURT, MIAMI, FL 33168",
+   "status": "ACTIVE",
+   "matched": "2315 MONROE ST, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ECL INDUSTRIES LLC": {
+  "borrower": "ECL INDUSTRIES LLC",
+  "amt": 230000,
+  "lender": "PRINCIPAL LENDERS GROUP INC",
+  "origin": "2025-02-06",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CAMERON, STEPHEN",
+   "title": "MGRM",
+   "officer_addr": "8010 N University Dr Fl 2, tamarac, FL 33321-2151",
+   "agent": "CAMERON, STEPHEN",
+   "agent_addr": "8010 N University Dr Fl 2, tamarac, FL 33321-2151",
+   "status": "ACTIVE",
+   "matched": "ECL INDUSTRIES, L.L.C.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 2 parcels — cannot pin the mortgaged one by name",
+   "parcels": 2,
+   "candidates": [
+    {
+     "folio": "494103150100",
+     "addr": "8010 N UNIVERSITY DR"
+    },
+    {
+     "folio": "494231070290",
+     "addr": "3290 NW 14 CT"
+    }
+   ]
+  }
+ },
+ "SWAYCAPITAL LLC": {
+  "borrower": "SWAYCAPITAL LLC",
+  "amt": 224000,
+  "lender": "COMPASS CAPITAL INVESTMENTS LLC",
+  "origin": "2025-01-13",
+  "age_mo": 18.9,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "FRANCO, LUISA",
+   "title": "MGR",
+   "officer_addr": "18890 NW 57 AVE, 309, HIALEAH, FL 33015",
+   "agent": "FRANCO, LUISA",
+   "agent_addr": "18890 NW 57 AVE, 309",
+   "status": "ACTIVE",
+   "matched": "SWAY CAPITAL LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "SELECTIVE REALTY LLC": {
+  "borrower": "SELECTIVE REALTY LLC",
+  "amt": 220000,
+  "lender": "B D FUNDING INC",
+  "origin": "2025-02-06",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "LACY, JOHN T",
+   "title": "MGRM",
+   "officer_addr": "19570 Highland Oaks Drive, Apt 204",
+   "agent": "LACY, JOHN T",
+   "agent_addr": "19570 Highland Oaks Drive, Apt 204",
+   "status": "INACTIVE",
+   "matched": "SELECTIVE REALTY, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514226BE1000",
+   "addr": "2030 S OCEAN DR #522",
+   "city": "Hallandale Beach",
+   "zip": "33009",
+   "paOwner": "SELECTIVE REALTY LLC"
+  }
+ },
+ "MH HOLDING GROUP": {
+  "borrower": "MH HOLDING GROUP",
+  "amt": 220000,
+  "lender": "ATLANTIS FUNDING LLC",
+  "origin": "2025-01-27",
+  "age_mo": 18.5,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "MH HOLDING GROUP, LLC",
+    "M & H HOLDINGS, LLC",
+    "MH HOLDINGS, L.L.C."
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "LZJ PROPERTIES LLC": {
+  "borrower": "LZJ PROPERTIES LLC",
+  "amt": 220000,
+  "lender": "TAG LENDING GROUP LLC",
+  "origin": "2025-01-23",
+  "age_mo": 18.6,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SASSER, LONA R",
+   "title": "MGR",
+   "officer_addr": "12761 NW 75TH STREET, PARKLAND, FL 33076",
+   "agent": "Mofsen, Howard J",
+   "agent_addr": "5541 N University Dr, 103",
+   "status": "ACTIVE",
+   "matched": "LZJ PROPERTIES, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514209010360",
+   "addr": "1214 N 22 AVE #1-3",
+   "city": "Hollywood",
+   "zip": "33020",
+   "paOwner": "LZJ PROPERTIES LLC"
+  }
+ },
+ "ADAMS LAKE LLC": {
+  "borrower": "ADAMS LAKE LLC",
+  "amt": 220000,
+  "lender": "M & M PRIVATE LENDING GROUP LLC",
+  "origin": "2025-01-07",
+  "age_mo": 19.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "THE COLLINS GROUP, INC.",
+   "title": "MGR",
+   "officer_addr": "3840 CROWN POINT ROAD, SUITE A, JACKSONVILLE, FL 32225-7",
+   "agent": "COLLINS, JOSEPH D",
+   "agent_addr": "3430 CROWN POINT ROAD, SUITE A",
+   "status": "INACTIVE",
+   "matched": "ADAMS LAKE, L.L.C.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ANFRENPE LLC": {
+  "borrower": "ANFRENPE LLC",
+  "amt": 215000,
+  "lender": "REAL CAPITAL FINANCE LLC",
+  "origin": "2025-02-05",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "ANF RESTAURANTS FRANCHISING, LLC",
+    "ANFRE TECHNOLOGIES LLC",
+    "ANFREY PAINTING LLC"
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "27 TWENTY SEVEN BAR & LOUNGE LLC": {
+  "borrower": "27 TWENTY SEVEN BAR & LOUNGE LLC",
+  "amt": 203420,
+  "lender": "LPC FUND LLC",
+  "origin": "2025-01-17",
+  "age_mo": 18.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "SCHARG, TAYLER",
+   "title": "MGR",
+   "officer_addr": "835 NE 3RD AVENUVE, FORT LAUDERDALE, FL 33304",
+   "agent": "WARD DAMON BUSINESS SERVICES, LLC",
+   "agent_addr": "4420 BEACON CIRCLE, WEST PALM BEACH, FL 33407",
+   "status": "INACTIVE",
+   "matched": "27 TWENTY SEVEN BAR & LOUNGE LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "GFC PROPERTIES INC": {
+  "borrower": "GFC PROPERTIES INC",
+  "amt": 200000,
+  "lender": "DOT FUND LLC",
+  "origin": "2024-12-20",
+  "age_mo": 19.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "CLAUDE, GINETTE",
+   "title": "President",
+   "officer_addr": "10441 S.W. 9TH LANE, PEMBROKE PINES, FL 33025",
+   "agent": "CLAUDE, GINETTE",
+   "agent_addr": "1530 NE 180 St, N. Miami Beach, FL 33162",
+   "status": "ACTIVE",
+   "matched": "GFC PROPERTIES, INC.",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "ZAGAFAM GROUP LLC": {
+  "borrower": "ZAGAFAM GROUP LLC",
+  "amt": 190000,
+  "lender": "TAYLOR MADE LENDING LLC",
+  "origin": "2024-12-20",
+  "age_mo": 19.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "ZAGAGLIA, JORGE R",
+   "title": "MGRM",
+   "officer_addr": "3801 S. OCEAN DRIVE APT 1B, HOLLYWOOD, FL 33019",
+   "agent": "ND CONSULTING GROUP",
+   "agent_addr": "10540 NW 26TH ST, SUITE G302",
+   "status": "ACTIVE",
+   "matched": "ZAGAFAM GROUP, L.L.C.",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514226HF3670",
+   "addr": "3801 S OCEAN DR #1B",
+   "city": "Hollywood",
+   "zip": "33019",
+   "paOwner": "ZAGAFAM GROUP LLC"
+  }
+ },
+ "MC 365 LLC": {
+  "borrower": "MC 365 LLC",
+  "amt": 187850,
+  "lender": "LIMA ONE CAPITAL LLC",
+  "origin": "2025-01-08",
+  "age_mo": 19.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MARTINEZ, MARLON",
+   "title": "Authorized",
+   "officer_addr": "22911 BEAR RIVER, SAN ANTONIO, TX 78528",
+   "agent": "MARTINEZ, MARLON",
+   "agent_addr": "2240 N CYPRESS BEND DR, UNIT 203",
+   "status": "ACTIVE",
+   "matched": "MC 365 LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494203BK0110",
+   "addr": "2240 N CYPRESS BEND DR #203",
+   "city": "Pompano Beach",
+   "zip": "33069",
+   "paOwner": "MC 365 LLC"
+  }
+ },
+ "ALTALOANS LLC": {
+  "borrower": "ALTALOANS LLC",
+  "amt": 183750,
+  "lender": "SEACOAST CAPITAL LLC",
+  "origin": "2024-12-20",
+  "age_mo": 19.7,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "TESENIN, DANIL",
+   "title": "MBR",
+   "officer_addr": "20200 W. DIXIE HWY., STE. 1104, AVENTURA, FL 33180",
+   "agent": "TESENIN, DANIL",
+   "agent_addr": "20200 W. DIXIE HWY., STE. 1104, AVENTURA, FL 33180",
+   "status": "ACTIVE",
+   "matched": "ALTALOANS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "MARINE PROPERTY MANAGEMENT INC": {
+  "borrower": "MARINE PROPERTY MANAGEMENT INC",
+  "amt": 170000,
+  "lender": "ABG CAPITAL LLC",
+  "origin": "2025-01-10",
+  "age_mo": 19.0,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "THOMSON, GRAHAM",
+   "title": "AMBR",
+   "officer_addr": "1041 S.E. 17TH STREET, SUITE 100, FORT LAUDERDALE, FL 33316",
+   "agent": "ANDREWS, JIMMY",
+   "agent_addr": "8566 N.W. 19TH STREET, CORAL SPRINGS, FL 33071",
+   "status": "INACTIVE",
+   "matched": "MARINE & PROPERTY MANAGEMENT, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "655 INVESTMENTS LLC": {
+  "borrower": "655 INVESTMENTS LLC",
+  "amt": 159000,
+  "lender": "BENWORTH CAPITAL PARTNERS PR LLC",
+  "origin": "2025-01-03",
+  "age_mo": 19.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PINA HOLDINGS, LLC",
+   "title": "MGR",
+   "officer_addr": "5190 NW 167TH ST SUITE 108, MIAMI, FL 33014",
+   "agent": "ALBERTO &amp; COMPANY, LLC",
+   "agent_addr": "6600 COW PEN ROAD, 260",
+   "status": "ACTIVE",
+   "matched": "655 INVESTMENTS, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514118BT1060",
+   "addr": "655 SW 111 WAY #306",
+   "city": "Pembroke Pines",
+   "zip": "33025",
+   "paOwner": "655 INVESTMENTS LLC"
+  }
+ },
+ "ALEJANDRO ITKIN REVOCABLE TRUST": {
+  "borrower": "ALEJANDRO ITKIN REVOCABLE TRUST",
+  "amt": 150000,
+  "lender": "1549 NE CAPITAL INVESTMENTS LLC",
+  "origin": "2025-02-05",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "err": "no exact Sunbiz match",
+   "near": [
+    "ALEJANDRO AND IVAN CORP",
+    "ALEJANDRO JAAR, CORP.",
+    "ALEJANDRO J. AGUIRRE, P.A."
+   ]
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "M&M PROPERTY DEVELOPMENT CORP": {
+  "borrower": "M&M PROPERTY DEVELOPMENT CORP",
+  "amt": 129700,
+  "lender": "KIAVI FUNDING INC",
+  "origin": "2025-02-06",
+  "age_mo": 18.2,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "MORILLO, JUAN BAUTISTA",
+   "title": "President",
+   "officer_addr": "11243 NW 58 TER, DORAL, FL 33178",
+   "agent": "MORILLO, JUAN",
+   "agent_addr": "11243 NW 58 TER, DORAL, FL 33178",
+   "status": "ACTIVE",
+   "matched": "M & M PROPERTY DEVELOPMENT CORP",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "WF DESIGN BUILD & REMODELING LLC": {
+  "borrower": "WF DESIGN BUILD & REMODELING LLC",
+  "amt": 110000,
+  "lender": "INTERSTATE LENDING LLC",
+  "origin": "2025-01-08",
+  "age_mo": 19.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BATISTA MARQUES, JULIANNA",
+   "title": "Authorized",
+   "officer_addr": "4857 NW 72 ND PLACE, COCONUT CREEK, FL 33073",
+   "agent": "PRIME INCOME TAX AND ACCOUNTING LLC",
+   "agent_addr": "23269 STATE ROAD 7, SUITE 119",
+   "status": "ACTIVE",
+   "matched": "WF DESIGN BUILD & REMODELING LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "owns 4 parcels — cannot pin the mortgaged one by name",
+   "parcels": 4,
+   "candidates": [
+    {
+     "folio": "484203BR0460",
+     "addr": "41 DEER CREEK RD #G104"
+    },
+    {
+     "folio": "484203BR0490",
+     "addr": "41 DEER CREEK RD #G107"
+    },
+    {
+     "folio": "484214122340",
+     "addr": "4337 NW 5 AVE"
+    },
+    {
+     "folio": "484224AF0100",
+     "addr": "1480 E SAMPLE RD #110"
+    }
+   ]
+  }
+ },
+ "G&S 2024 LLC": {
+  "borrower": "G&S 2024 LLC",
+  "amt": 100000,
+  "lender": "ALTO CAPITAL HOLDINGS LLC",
+  "origin": "2025-02-03",
+  "age_mo": 18.3,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BEN-DAVID, GAL",
+   "title": "MGR",
+   "officer_addr": "2035 HARDING STREET #100, HOLLYWOOD, FL 33020",
+   "agent": "CORPORATE CREATIONS NETWORK INC.",
+   "agent_addr": "801 US HIGHWAY 1, NORTH PALM BEACH, FL 33408",
+   "status": "INACTIVE",
+   "matched": "GS2024, LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "514121AA2960",
+   "addr": "8610 N SHERMAN CIR #208",
+   "city": "Miramar",
+   "zip": "33025",
+   "paOwner": "G&S 2024 LLC"
+  }
+ },
+ "PRHL SOLUTIONS LLC": {
+  "borrower": "PRHL SOLUTIONS LLC",
+  "amt": 100000,
+  "lender": "BM FUND LLC",
+  "origin": "2025-01-17",
+  "age_mo": 18.8,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "PALMER, DWAYNE A, MGR",
+   "title": "MGR",
+   "officer_addr": "20531 NW 6 STREET, PEMBROKE PINES, FL 33029",
+   "agent": "JOHNS, ANDREW A",
+   "agent_addr": "7971 RIVIERA BLVD, 323",
+   "status": "ACTIVE",
+   "matched": "PRHL SOLUTIONS LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "err": "no BCPA parcel under that exact name"
+  }
+ },
+ "BBAMT INVESTMENT LLC": {
+  "borrower": "BBAMT INVESTMENT LLC",
+  "amt": 90000,
+  "lender": "CENTER STREET LENDING VIII SPE LLC",
+  "origin": "2025-01-07",
+  "age_mo": 19.1,
+  "enriched": "2026-08-12",
+  "sunbiz": {
+   "officer": "BOYLE, Berthold",
+   "title": "Authorized",
+   "officer_addr": "1410 SW 29 Avenue Ste.200, Pompano Beach, FL 33069",
+   "agent": "TAYLOR, ANN M",
+   "agent_addr": "1410 SW 29 Avenue Ste. 200, Pompano Beach, FL 33069",
+   "status": "ACTIVE",
+   "matched": "BBAMT INVESTMENT LLC",
+   "typo": false
+  },
+  "bcpa": {
+   "folio": "494111AJ0940",
+   "addr": "5901 NW 61 AVE #210",
+   "city": "Tamarac",
+   "zip": "33319",
+   "paOwner": "BBAMT INVESTMENT LLC"
+  }
  }
 }
