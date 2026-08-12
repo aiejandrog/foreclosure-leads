@@ -102,8 +102,9 @@ header.scrolled{box-shadow:0 1px 0 rgba(255,255,255,.65) inset,0 12px 32px rgba(
 .brand .wm{font-family:var(--f-display);font-weight:600;font-size:23px;letter-spacing:.005em;
   color:var(--ink);line-height:1.04;transition:font-size .25s var(--e-lux)}
 .brand .wm b{font-weight:600;color:var(--gold-d);
-  background-image:var(--gold-shine);background-size:200% auto;background-repeat:repeat;
-  -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;color:transparent;
+  /* cosmetic audit 2026-08-11: the sliding 200% gold-shine gradient could park a light stop
+     mid-glyph at desktop widths, splitting the F so the mark read "DEAL LOW". Header wordmark is
+     solid gold now; the intro splash keeps its animated shine (#intro .wm rules are separate). */
   filter:drop-shadow(0 0 7px rgba(198,161,75,.28));animation:wmShine 5s linear infinite;transition:filter .45s var(--e-lux)}
 .brand .wm:hover b{filter:drop-shadow(0 0 14px rgba(198,161,75,.55)) brightness(1.07)}
 .brand .tag{font-family:var(--f-label);font-size:11px;font-weight:700;letter-spacing:.1em;
@@ -792,6 +793,22 @@ a.ctact:hover{text-decoration:none;filter:none}
 .ctact-text:hover{background:#1F6FEB!important;color:#fff!important;border-color:#1F6FEB}
 .ctact-wa{background:#128C7E;border-color:#128C7E}
 .ctact-wa:hover{background:#0E7A6E!important;color:#fff!important}
+/* cosmetic audit 2026-08-11: a contact pill with nothing in it must not render as a blank oval */
+.ctline:empty,.csmsgbar:empty{display:none}
+/* replies count: was inline dark-red on the dark navy pill (~2:1). Real badge now. */
+.replyn:not(:empty){display:inline-flex;align-items:center;justify-content:center;min-width:17px;height:17px;
+  margin-left:6px;padding:0 5px;border-radius:9px;background:var(--gold-d,#C6A14B);color:#241C05;
+  font-size:11px;font-weight:800;line-height:1}
+.replyn.stop:not(:empty){background:#B3261E;color:#fff}
+/* deliverability banner: sits UNDER modal backdrops (they're 120/121) and collapses to one
+   tappable line on phones — it was z-index 9999 and 6 lines tall, covering modal buttons. */
+#bouncebanner{position:fixed;left:0;right:0;bottom:0;z-index:110;background:#8f2b23;color:#fff;
+  font:700 13px/1.4 Arial,sans-serif;padding:8px 16px;text-align:center;cursor:pointer}
+@media (max-width:640px){
+  #bouncebanner:not(.open){white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:7px 12px}
+}
+/* search placeholder: ellipsize instead of chopping mid-word under the "/" hint */
+#q{text-overflow:ellipsis}
 .ctact-wa svg{width:13px;height:13px;display:block;stroke:#fff;color:#fff}
 .cttag{font-size:10px;font-weight:700;color:var(--muted,#6b7280);margin-left:2px}
 .cttag.dnc{color:#c0392b}
@@ -3204,12 +3221,13 @@ function _contactBlockHtml(r){
   if(block==='bk') return '<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
   const lines = [];
   (r.phones||[]).slice(0,4).forEach((ph,i)=>{
+    if(String(ph||'').replace(/\D/g,'').length < 10) return;   // a blank/garbage entry rendered as an empty white pill
     lines.push(_contactLineHtml(r, ph, {
       dnc: !!((r.phdnc||[])[i]),
       mobile: (((r.phtype||[])[i])||'mobile')==='mobile'
     }));
   });
-  if(nn.phone) lines.push(_contactLineHtml(r, nn.phone, { dnc:false, mobile:true }));
+  if(String(nn.phone||'').replace(/\D/g,'').length >= 10) lines.push(_contactLineHtml(r, nn.phone, { dnc:false, mobile:true }));
   if(lines.length) h += '<div class="csphones">'+lines.join('')+'</div>';
   else h += '<div class="csmut">No phone yet — use Find a number below, then Text.</div>';
   h += _messagesBarHtml(r);
@@ -10588,9 +10606,9 @@ function _renderCapBadge(){
     var live = _liveCap && _liveCap.bounce && (Date.now()-_liveCapAt) < 120000;
     if(live && (+_liveCap.bounce.rate >= 0.05 || _liveCap.bounce_blocked)){
       if(!bb){
-        bb = document.createElement('div'); bb.id = 'bouncebanner';
-        bb.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#8f2b23;'
-          + 'color:#fff;font:700 13px/1.4 Arial,sans-serif;padding:8px 16px;text-align:center';
+        bb = document.createElement('div'); bb.id = 'bouncebanner';   // styled by the #bouncebanner CSS rule
+        bb.title = 'Tap to expand / collapse';
+        bb.addEventListener('click', function(){ bb.classList.toggle('open'); });
         document.body.appendChild(bb);
       }
       bb.textContent = '⛔ DELIVERABILITY: trailing hard-bounce rate '
@@ -14180,8 +14198,8 @@ function render(){
   try {
     const _rb = document.querySelector('#replybtn .replyn');
     if(_rb){ const _rl = _replyList(); const _st = _rl.filter(function(x){return x.rep.stop;}).length;
-      _rb.textContent = _rl.length ? ' '+_rl.length : '';
-      _rb.style.color = _st ? '#8a1c1c' : '';
+      _rb.textContent = _rl.length ? String(_rl.length) : '';
+      _rb.classList.toggle('stop', !!_st);              // badge colors live in the .replyn CSS rule
       const _btn = document.getElementById('replybtn');
       if(_btn) _btn.classList.toggle('active', _rl.length > 0);
     }
