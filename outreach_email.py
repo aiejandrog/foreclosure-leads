@@ -417,90 +417,65 @@ def _compose_single(r, snd, lang='en'):
     subj_en = f'Regarding your property at {street}'
     subj_es = f'Referente a su propiedad en {street}'
 
-    # Humanized voice (2026-08-03) -- mirrors tracker genEmail exactly (its ASCII conventions:
-    # -- for em dash, stripped accents). Educational core: one plain-English line per exit.
-    exits_en = (
-        "1. Reinstate -- catch up what's past due and the case ends.\n"
-        '2. Loan modification -- the bank reworks the loan so the payment fits again.\n'
-        "3. Short sale -- sell with the bank's okay if you owe more than the house is worth.\n"
-        "4. Private cash sale before the auction -- that's where a buyer like me comes in. "
-        "You pick the price and keep the equity that's yours, instead of letting an auction decide.\n"
-        "5. Bankruptcy -- pauses everything while you regroup (that one's for an attorney, not me)."
-    )
-    exits_es = (
-        '1. Reinstalar -- se pone al dia con lo atrasado y el caso termina.\n'
-        '2. Modificacion del prestamo -- el banco ajusta el prestamo para que el pago vuelva a ser posible.\n'
-        '3. Short sale -- vende con el visto bueno del banco si debe mas de lo que vale la casa.\n'
-        '4. Venta privada en efectivo antes de la subasta -- ahi entro yo como comprador. '
-        'Usted fija el precio y se queda con el capital que es suyo, en vez de dejar que una subasta decida.\n'
-        '5. Bancarrota -- pausa todo mientras se reorganiza (eso es con un abogado, no conmigo).'
-    )
-    intro_en = (f"My name is {sN} -- I'm a local Miami home buyer. I buy houses. I'm not a "
-                f'lender, not a "foreclosure rescue" company, and not an attorney.')
-    intro_es = (f'Mi nombre es {sN} -- compro casas aqui en Miami. No soy prestamista, no soy '
-                f'empresa de "rescate de ejecuciones", y no soy abogado.')
+    # 2026-08-11 rewrite (Alejandro) -- mirrors tracker genEmail exactly (ASCII conventions:
+    # -- for em dash, stripped accents). MSG identity everywhere ("local home buyer" is out),
+    # the five-exits listicle is gone (options live in ONE flowing sentence), bodies ~40% shorter.
+    # Kept: real case number, STOP line verbatim, sig, no rescue promises.
+    sL = snd.get('llc') or '[YOUR COMPANY]'
+    intro_en = (f"I'm {sN} with {sL}. I'm not your lender, not the government, and not a lawyer.")
+    intro_es = (f'Soy {sN}, de {sL}. No soy su prestamista, no soy del gobierno, y no soy abogado.')
     early = (not td) and (not dt)
     if early:
         # LP / no auction date. Without this branch the FC body rendered "a sale date of ." --
         # a blank where the date should be (the tracker grew this branch first; now mirrored).
         body_en = (
             f'Hi {first},\n\n{intro_en}\n\n'
-            f"I'm reaching out because a foreclosure case was recently filed against {addr}"
-            f'{" by " + plaintiff if plaintiff else ""}{case_tag_en}. There\'s no auction date '
-            f"yet -- and honestly, that's the whole point of this note: right now you have the "
-            f"most options you'll ever have, and the fewest people pressuring you.\n\n"
-            f"Here's what normally happens next. You have 20 days from being served to respond "
-            f'to the court, and a typical Florida case runs months -- often more than a year -- '
-            f'before any sale is scheduled. In that window, all five ways out are still open:\n\n'
-            f"{exits_en}\n\nI'm not asking you to sell. I'm telling you the clock started, so "
-            f"you can decide on your terms instead of in the last two weeks. If it'd help to "
-            f'talk it through, call or text me -- no cost, no obligation.\n\n{sig}\n\n'
+            f'A foreclosure case was just filed against {addr}'
+            f'{" by " + plaintiff if plaintiff else ""}{case_tag_en}. No auction date yet -- '
+            f'which means right now you have the most options and the least pressure '
+            f"you'll ever have.\n\n"
+            f'Catch up the loan, rework it, sell on your terms, or fight the case -- they all '
+            f"work better with time on the clock. That's the whole reason for this note.\n\n"
+            f'If you want a straight rundown of where you stand, call or text me. No cost, '
+            f'no obligation.\n\n{sig}\n\n'
             f'Reply STOP or ask me not to contact you again and I will honor it.'
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
-            f'Le escribo porque recientemente se presento un caso de ejecucion hipotecaria '
-            f'contra {addr}{" por parte de " + plaintiff if plaintiff else ""}{case_tag_es}. '
-            f'Todavia no hay fecha de subasta -- y sinceramente, ese es el punto de esta nota: '
-            f'ahora mismo usted tiene mas opciones que nunca, y menos gente presionandolo.\n\n'
-            f'Lo que normalmente sigue: tiene 20 dias desde que le entregaron los papeles para '
-            f'responder a la corte, y un caso tipico en Florida toma meses -- a veces mas de un '
-            f'ano -- antes de que se fije una subasta. En esa ventana, las cinco salidas siguen '
-            f'abiertas:\n\n{exits_es}\n\nNo le pido que venda. Le aviso que el reloj empezo, '
-            f'para que decida en sus terminos y no en las ultimas dos semanas. Si le sirve '
-            f'hablarlo, llameme o mandeme un texto -- sin costo, sin compromiso.\n\n{sig}\n\n'
+            f'Se acaba de presentar un caso de ejecucion hipotecaria contra {addr}'
+            f'{" por parte de " + plaintiff if plaintiff else ""}{case_tag_es}. Todavia no hay '
+            f'fecha de subasta -- o sea que ahora mismo usted tiene mas opciones y menos '
+            f'presion que nunca.\n\n'
+            f'Ponerse al dia con el prestamo, ajustarlo, vender en sus terminos, o pelear el '
+            f'caso -- todo funciona mejor con tiempo en el reloj. Ese es el unico punto de '
+            f'esta nota.\n\n'
+            f'Si quiere un repaso directo de donde esta parado, llameme o mandeme un texto. '
+            f'Sin costo, sin compromiso.\n\n{sig}\n\n'
             f'Responda STOP o pidame no contactarlo y lo respeto.'
         )
     elif td:
         body_en = (
             f'Hi {first},\n\n{intro_en}\n\n'
-            f"I'm reaching out because county records show your property at {addr} is scheduled "
-            f'for a tax deed sale on {dt}{case_tag_en}. You can verify that yourself on the '
-            f"county's site -- I include the number so you know this isn't a mass mailer.\n\n"
-            f'Before that date, owners in your spot usually have three real paths:\n\n'
-            f'1. Pay the back taxes -- the sale gets cancelled and you keep the property.\n'
-            f"2. Sell privately for cash before the date -- that's where a buyer like me comes "
-            f'in. I can buy as-is and close before the deadline.\n'
-            f'3. Claim the surplus -- if it sells at auction for more than what\'s owed, the law '
-            f'may let you claim the difference.\n\n'
-            f"If it'd help to talk through which one fits, call or text me -- no cost, no "
-            f"obligation, and if another path is better for you, I'll say so.\n\n{sig}\n\n"
+            f'County records show {addr} has a tax deed sale set for {dt}{case_tag_en} -- you '
+            f"can verify that number yourself on the county's site.\n\n"
+            f'Before that date you have three real paths: pay the back taxes and keep it, sell '
+            f"before the date (we can buy as-is and close fast if that's the fit), or claim "
+            f"the surplus if it sells for more than what's owed.\n\n"
+            f'Want to know which one fits? Call or text me. No cost, and if another path beats '
+            f"selling, I'll say so.\n\n{sig}\n\n"
             f'Reply STOP or ask me not to contact you again and I will honor it.'
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
-            f'Le escribo porque los registros del condado muestran que su propiedad en {addr} '
-            f'tiene subasta de tax deed el {dt}{case_tag_es}. Usted mismo puede verificarlo en '
-            f'el sitio del condado -- incluyo el numero para que sepa que esto no es correo '
-            f'masivo.\n\nAntes de esa fecha, los duenos en su situacion normalmente tienen tres '
-            f'caminos reales:\n\n'
-            f'1. Pagar los impuestos atrasados -- la subasta se cancela y usted se queda con la propiedad.\n'
-            f'2. Vender en privado en efectivo antes de la fecha -- ahi entro yo como comprador. '
-            f'Puedo comprar tal cual y cerrar antes del plazo.\n'
-            f'3. Reclamar el excedente -- si se vende en subasta por mas de lo que se debe, la '
-            f'ley puede permitirle reclamar la diferencia.\n\n'
-            f'Si le sirve hablar de cual le conviene, llameme o mandeme un texto -- sin costo, '
-            f'sin compromiso, y si otro camino es mejor para usted, se lo digo.\n\n{sig}\n\n'
+            f'Los registros del condado muestran que {addr} tiene subasta de tax deed el '
+            f'{dt}{case_tag_es} -- usted mismo puede verificar ese numero en el sitio del '
+            f'condado.\n\n'
+            f'Antes de esa fecha tiene tres caminos reales: pagar los impuestos atrasados y '
+            f'quedarse con la propiedad, vender antes de la fecha (podemos comprar tal cual y '
+            f'cerrar rapido si eso le sirve), o reclamar el excedente si se vende por mas de '
+            f'lo que se debe.\n\n'
+            f'Quiere saber cual le conviene? Llameme o mandeme un texto. Sin costo, y si otro '
+            f'camino es mejor que vender, se lo digo.\n\n{sig}\n\n'
             f'Responda STOP o pidame no contactarlo y lo respeto.'
         )
     else:
@@ -508,29 +483,30 @@ def _compose_single(r, snd, lang='en'):
         plaint_bit_es = f' por parte de {plaintiff}' if plaintiff else ''
         body_en = (
             f'Hi {first},\n\n{intro_en}\n\n'
-            f"I'm reaching out because public records show {addr} is in foreclosure"
-            f'{plaint_bit_en}{case_tag_en}, with a sale date of {dt}. That case number is real '
-            f"-- you can look it up yourself on the county clerk's site. I include it so you "
-            f"know this isn't a mass mailer.\n\n"
-            f"I'm not writing to talk you into anything. It's just that most owners are never "
-            f'actually told they have five ways out, and every single one works better with '
-            f'time left on the clock:\n\n{exits_en}\n\n'
-            f"If it'd help to talk any of this through, call or text me -- no cost, no "
-            f"obligation, and if selling isn't your best move I'll tell you that straight.\n\n"
+            f'Public records show {addr} is in foreclosure{plaint_bit_en}{case_tag_en}, with a '
+            f'sale date of {dt}. That case number is real -- look it up on the county '
+            f"clerk's site. I include it so you know this isn't a mass mailer.\n\n"
+            f'Most owners are never told they have real ways out: catch up the loan, rework it '
+            f'with the bank, sell before the auction and keep your equity, or have an attorney '
+            f'fight or pause the case. Every one of them works better with time left on the '
+            f'clock.\n\n'
+            f'If you want a straight rundown, call or text me. No cost, no obligation -- and '
+            f"if selling isn't your best move, I'll tell you that straight.\n\n"
             f'{sig}\n\nReply STOP or ask me not to contact you again and I will honor it.'
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
-            f'Le escribo porque los registros publicos muestran que {addr} esta en ejecucion '
-            f'hipotecaria{plaint_bit_es}{case_tag_es}, con fecha de subasta el {dt}. Ese numero '
-            f'de caso es real -- usted mismo puede verificarlo en el sitio del clerk del '
-            f'condado. Lo incluyo para que sepa que esto no es correo masivo.\n\n'
-            f'No le escribo para convencerlo de nada. Es que a la mayoria de los duenos nunca '
-            f'les explican que tienen cinco salidas, y todas funcionan mejor con tiempo en el '
-            f'reloj:\n\n{exits_es}\n\n'
-            f'Si le sirve hablar de cualquiera de estas opciones, llameme o mandeme un texto -- '
-            f'sin costo, sin compromiso, y si vender no es su mejor opcion, se lo digo tal '
-            f'cual.\n\n{sig}\n\nResponda STOP o pidame no contactarlo y lo respeto.'
+            f'Los registros publicos muestran que {addr} esta en ejecucion hipotecaria'
+            f'{plaint_bit_es}{case_tag_es}, con fecha de subasta el {dt}. Ese numero de caso '
+            f'es real -- puede verificarlo en el sitio del clerk del condado. Lo incluyo para '
+            f'que sepa que esto no es correo masivo.\n\n'
+            f'A la mayoria de los duenos nunca les explican que tienen salidas reales: ponerse '
+            f'al dia con el prestamo, ajustarlo con el banco, vender antes de la subasta y '
+            f'quedarse con su capital, o que un abogado pelee o pause el caso. Todas funcionan '
+            f'mejor con tiempo en el reloj.\n\n'
+            f'Si quiere un repaso directo, llameme o mandeme un texto. Sin costo, sin '
+            f'compromiso -- y si vender no es su mejor opcion, se lo digo tal cual.\n\n'
+            f'{sig}\n\nResponda STOP o pidame no contactarlo y lo respeto.'
         )
     return {
         'en': {'subj': subj_en, 'body': body_en},
@@ -569,39 +545,34 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
 
     subj_en = f'Regarding {n} properties in your name'
     subj_es = f'Referente a {n} propiedades a su nombre'
-    # Humanized voice (2026-08-03) -- mirrors tracker genPortfolioEmail. Cold-only by design.
+    # 2026-08-11 rewrite -- mirrors tracker genPortfolioEmail (MSG identity, no listicle, shorter).
+    sL = snd.get('llc') or '[YOUR COMPANY]'
     body_en = (
-        f"Hi {first},\n\nMy name is {sN} -- I'm a local Miami home buyer. I buy houses. I'm not "
-        f'a lender, not a "foreclosure rescue" company, and not an attorney.\n\n'
-        f"I'm reaching out because public records show {n} properties in your name are in "
-        f'foreclosure right now. Every case number below is real -- you can look each one up on '
-        f"the county clerk's site:\n\n" +
+        f"Hi {first},\n\nI'm {sN} with Miami Solutions Group. I'm not your lender, not the "
+        f'government, and not a lawyer.\n\n'
+        f'Public records show {n} properties in your name are in foreclosure right now. Every '
+        f"case number below is real -- you can look each one up on the county clerk's site:\n\n" +
         '\n'.join(_line_en(r) for r in all_leads) + '\n\n'
-        f"I'm writing you once instead of once per property -- less noise for you, and honestly "
-        f'a portfolio works best as one conversation: same buyer, same title company, one '
-        f"sit-down. I'm not asking you to sell any of them. The five ways out (reinstate, "
-        f'modification, short sale, private cash sale before auction, bankruptcy) apply to each '
-        f'property on its own -- you could keep one, sell another, and let a third go.\n\n'
-        f"If it'd help, I can walk the numbers on any one of them, or all of them. No cost, no "
-        f"obligation -- and if selling isn't your best move on a given property, I'll tell you "
-        f'that straight.\n\n{sig}\n\n'
+        f"I'm writing you once instead of once per property. Each one has its own way out -- "
+        f'keep one, sell another, let a third go -- and it all works best as one '
+        f'conversation.\n\n'
+        f"If it'd help, I can walk the numbers on any of them. No cost, no obligation -- and "
+        f"if selling isn't your best move on a given property, I'll tell you that "
+        f'straight.\n\n{sig}\n\n'
         f'Reply STOP or ask me not to contact you again and I will honor it for every property above.'
     )
     body_es = (
-        f'Hola {first},\n\nMi nombre es {sN} -- compro casas aqui en Miami. No soy prestamista, '
-        f'no soy empresa de "rescate de ejecuciones", y no soy abogado.\n\n'
-        f'Le escribo porque los registros publicos muestran {n} propiedades a su nombre en '
-        f'ejecucion hipotecaria ahora mismo. Cada numero de caso abajo es real -- puede '
-        f'verificarlos usted mismo en el sitio del clerk del condado:\n\n' +
+        f'Hola {first},\n\nSoy {sN}, de Miami Solutions Group. No soy su prestamista, no soy '
+        f'del gobierno, y no soy abogado.\n\n'
+        f'Los registros publicos muestran {n} propiedades a su nombre en ejecucion hipotecaria '
+        f'ahora mismo. Cada numero de caso abajo es real -- puede verificarlos usted mismo en '
+        f'el sitio del clerk del condado:\n\n' +
         '\n'.join(_line_es(r) for r in all_leads) + '\n\n'
-        f'Le escribo una sola vez y no por cada propiedad -- menos ruido para usted, y '
-        f'sinceramente una cartera se trabaja mejor en una sola conversacion: el mismo '
-        f'comprador, la misma compania de titulo, una sola reunion. No le pido vender ninguna. '
-        f'Las cinco salidas (reinstalar, modificacion, short sale, venta privada en efectivo '
-        f'antes de la subasta, bancarrota) aplican a cada propiedad por separado -- podria '
-        f'quedarse con una, vender otra, y dejar ir una tercera.\n\n'
-        f'Si le sirve, puedo repasar los numeros de cualquiera de ellas, o de todas. Sin costo, '
-        f'sin compromiso -- y si vender no es su mejor opcion en alguna, se lo digo tal '
+        f'Le escribo una sola vez y no por cada propiedad. Cada una tiene su propia salida -- '
+        f'quedarse con una, vender otra, dejar ir una tercera -- y todo se trabaja mejor en '
+        f'una sola conversacion.\n\n'
+        f'Si le sirve, puedo repasar los numeros de cualquiera de ellas. Sin costo, sin '
+        f'compromiso -- y si vender no es su mejor opcion en alguna, se lo digo tal '
         f'cual.\n\n{sig}\n\n'
         f'Responda STOP o pidame no contactarlo y lo respetare para cada una de las propiedades arriba.'
     )
