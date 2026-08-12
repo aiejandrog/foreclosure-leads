@@ -376,8 +376,14 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None)
 # ---------------------------------------------------------------- HTTP handler
 class Handler(BaseHTTPRequestHandler):
     server_version = 'DealFlowSend/1.0'
-    daily_cap = 150          # messages/day (operator-set 2026-08-04)
-    recipient_cap = 450      # addresses/day — safety margin under Gmail's 500
+    daily_cap = 300          # messages/day (operator-set 2026-08-12, was 150 — the 08-12 run hit it)
+    # RECIPIENTS, NOT MESSAGES, ARE THE REAL CEILING. Gmail's free-tier SMTP limit is ~500
+    # RECIPIENTS/day, and this board averages 1.92 recipients per message (each send BCCs the
+    # owner's alternate addresses). So 300 messages would be ~576 recipients — over the line, and
+    # blowing Gmail's limit locks the account the whole business runs on. Keep this at 450: it binds
+    # first, at ~234 messages/day, which is still a 56% lift over the old 150 cap. Do NOT raise it
+    # toward 500 to chase the message number; cut BCCs instead if more volume is needed.
+    recipient_cap = 450      # addresses/day — safety margin under Gmail's ~500
 
     def log_message(self, fmt, *args):
         """Terse one-line per request in the terminal, no HTTP boilerplate.
