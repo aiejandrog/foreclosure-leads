@@ -123,8 +123,9 @@ def main():
         # urgent of all and an 8-24 window silently excluded it (fixed 2026-08-12).
         rows = [r for r in rows if 8 <= _age_mo(r.get('origin')) <= 30]
     rows = [r for r in rows if a.min_amt <= (r.get('amt') or 0) <= a.max_amt]
-    # biggest loan first = biggest refi commission first
-    rows.sort(key=lambda r: r.get('amt') or 0, reverse=True)
+    # URGENT FIRST, then biggest loan. A borrower at/past the 2-year wall is the one whose balloon
+    # is due now — enriching a fat 9-month loan ahead of him wastes the head start (2026-08-12).
+    rows.sort(key=lambda r: ((20 <= _age_mo(r.get('origin')) <= 30), r.get('amt') or 0), reverse=True)
 
     cache = {}
     if os.path.exists(OUT) and not a.refresh:

@@ -216,8 +216,9 @@ def _write_report(full, hits, lenders, lo, hi, months):
                      H.escape(h['origin']), h['age_mo'], H.escape(h['lender']),
                      format(int(h['amt'] or 0), ','), H.escape(h['owner'][:34]),
                      H.escape((h.get('addr') or '').split(',')[0][:26] or '—'),
-                     H.escape(h['agent'] or '<span class="mut">Sunbiz pull pending</span>'),
-                     (' &middot; ' + H.escape(h['agent_ph'])) if h['agent_ph'] else ''))
+                     (H.escape(h['agent']) if h.get('agent')
+                      else '<span class="mut">Sunbiz pull pending</span>'),   # markup, do NOT escape
+                     (' &middot; ' + H.escape(h['agent_ph'])) if h.get('agent_ph') else ''))
     lend_rows = ''.join('<li><b>%s</b> &times;%d</li>' % (H.escape(k), v)
                         for k, v in sorted(lenders.items(), key=lambda x: -x[1]))
     doc = """<!doctype html><html><head><meta charset="utf-8"><title>Hard-Money Balloon Book</title>
