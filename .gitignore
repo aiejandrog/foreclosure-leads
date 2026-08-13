@@ -135,3 +135,15 @@ bounced_emails.json
 verified_emails.json
 deads.json
 zerobounce.key
+
+# Hard-money value cache — carries parcel values joined to named LLC borrowers. This repo is
+# PUBLIC (raw.githubusercontent serves its data files), so this is cached, never committed.
+hardmoney_values.json
+_hm_phones.json
+
+# HOMEOWNER PII — NEVER PUBLISH. This repo is PUBLIC and docs/ is the GitHub Pages root, so
+# anything here is world-downloadable; the obscure folder name is not access control (verified
+# 2026-08-13: four door books with names + home addresses + phone numbers were serving HTTP 200).
+# Door books and letter packets are hand-delivered or emailed, never committed.
+docs/c-doors-k4m81/
+docs/f-acosta-x7q92/

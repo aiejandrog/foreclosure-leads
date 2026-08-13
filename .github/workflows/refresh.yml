@@ -137,6 +137,7 @@ jobs:
             property_types_cache.json
             listing_status_cache.json
             redfin_cache.json
+            hardmoney_values.json
             health.json
             full.json
           # v8 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
@@ -145,6 +146,9 @@ jobs:
           # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
           # dealflow-state cache sat right there in the repo. Bump this suffix ON PURPOSE whenever the
           # path list changes, so the invalidation is deliberate and greppable instead of a mystery.
+          # v12 -> v13 (2026-08-12): added hardmoney_values.json — the balloon book's parcel-value
+          # cache. It is gitignored (public repo) so the cache is its ONLY persistence; without
+          # this line every nightly run would re-query ~1,500 parcels from scratch.
           # v11 -> v12 (2026-08-11): REMOVED batchdata_liens.json — BatchData exit froze the file and it
           # is now COMMITTED to the repo (like sale_history_cache.json), so the checkout is its one
           # source of truth and the cache must not shadow it with a stale runner copy.
@@ -156,8 +160,8 @@ jobs:
           # new reply keeps yesterday's rather than blanking the Reply Inbox.
           # v8 -> v9 (2026-08-02): added redfin_cache.json (Redfin Estimate sidecar).
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v12-${{ github.run_id }}
-          restore-keys: dealflow-state-v12-
+          key: dealflow-state-v13-${{ github.run_id }}
+          restore-keys: dealflow-state-v13-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -419,7 +423,12 @@ jobs:
         continue-on-error: true
         run: |
           python replies.py --days 30
-          python -c "import json,os; d=json.load(open('replies.json',encoding='utf-8')) if os.path.exists('replies.json') else {}; a=[k for k in d if k.startswith('@')]; s=[k for k in a if (d[k] or {}).get('stop')]; print('::notice::replies: %d address(es) replied, %d with a STOP word' % (len(a), len(s))); print('::warning::STOP words in replies — add them to optouts.json before any further contact' if s else '')"
+          # DETECTION IS NOT SUPPRESSION. replies.py only writes stop:true into replies.json; until
+          # 2026-08-13 nothing carried that into optouts.json, so a detected opt-out stayed armed
+          # (gil_sosa asked us to stop on 08-08 and was still mailable on 08-13 — five days). This
+          # step is what makes the detection binding. It only ever ADDS; re-running is a no-op.
+          python optout_sync.py
+          python -c "import json,os; d=json.load(open('replies.json',encoding='utf-8')) if os.path.exists('replies.json') else {}; a=[k for k in d if k.startswith('@')]; s=[k for k in a if str((d[k] or {}).get('stop')).lower() in ('true','1','yes')]; print('::notice::replies: %d address(es) replied, %d with a STOP word (auto-ledgered by optout_sync)' % (len(a), len(s)))"
 
       # ---- [4/5] Final rebuild with everything baked in -----------------------------------
       - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
@@ -442,6 +451,52 @@ jobs:
         run: |
           python auction_archive.py
           python cash_buyers.py --days 120 --limit 60
+
+      # ---- [4c/5] Hard-money balloon book (Jesse's refi play) ---------------------------------
+      # Jesse's son funds DSCR refis (70-80 LTV, 6-8%, 30yr fixed). This chain finds Broward
+      # investors sitting on 10-12% hard-money paper with a 1-2 year balloon coming due, prices
+      # each one against the county roll, and publishes only the ones that fit his box.
+      #
+      # Why each piece is capped the way it is:
+      #  * sweep --months 2 --- the FULL 30-month sweep is ~73k mortgages and is a one-off run
+      #    (already committed in broward_mortgages.json). Nightly only needs the NEW recordings,
+      #    and the sweeper MERGES rather than replaces, so a short window never truncates history.
+      #  * enrich --limit 120 - Sunbiz + BCPA are free but rate-limited and slow (~0.7s/LLC).
+      #    Chipping away 120/night compounds; a full pass would eat the job window.
+      #  * values ------------- free ArcGIS, 40 parcels per POST, cached per folio in
+      #    hardmoney_values.json. A warm cache is a no-op; only brand-new folios cost anything.
+      # continue-on-error throughout: this book is an ADJACENT product. Nothing here may ever
+      # block the foreclosure board's publish, which is the revenue-critical artifact.
+      - name: '[4c/5] Hard-money balloon book (sweep -> enrich -> price -> publish)'
+        continue-on-error: true
+        run: |
+          set +e
+          python fl_lp/broward_mortgages.py --months 2
+          python hardmoney_enrich.py --limit 120
+          python hardmoney_values.py
+          python hardmoney_balloon.py --months 30
+          # COMMITS ITSELF, on purpose, instead of riding along in [5/5]. That step aborts with
+          # `exit 0` whenever publish_guard blocks a thin board build — which would silently take
+          # this book down with it on exactly the days the board had a bad scrape. The book's data
+          # is independent of the board's, so it publishes independently.
+          # ONLY the redacted docs/ copy is staged. hardmoney_values.json is gitignored on purpose
+          # (this repo is public; that file joins parcel values to named LLC borrowers) and rides
+          # the actions/cache instead. broward_mortgages.json + hardmoney_enriched.json are already
+          # tracked from earlier commits — see the exposure note in BATCHDATA-EXIT.md; untracking
+          # them is a separate call because a cold cache would lose every Sunbiz human.
+          git add docs/hm-balloon-q7v3n8
+          if git diff --staged --quiet; then
+            echo "hard-money book unchanged"
+          else
+            git commit -m "refresh: hard-money balloon book (auto)"
+            for i in 1 2 3; do
+              git pull --rebase --autostash -X theirs origin main && git push origin HEAD:main && break
+              [ "$i" = 3 ] && break
+              sleep 10
+            done
+          fi
+          python -c "import hardmoney_values as HV; r=HV.priced(zone_only=True); f=[x for x in r if x['fits']]; v=sum(x['amt'] for x in f); print('::notice::hard-money book: %d of %d zone loans fit the DSCR box (\$%.1fM)'%(len(f),len(r),v/1e6))"
+          exit 0
 
       # ---- [5/5] Publish final ------------------------------------------------------------
       - name: '[5/5] Publish final docs/index.html'
@@ -523,9 +578,10 @@ jobs:
             property_types_cache.json
             listing_status_cache.json
             redfin_cache.json
+            hardmoney_values.json
             health.json
             full.json
-          key: dealflow-state-v12-${{ github.run_id }}
+          key: dealflow-state-v13-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the

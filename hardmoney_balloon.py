@@ -174,6 +174,30 @@ def main():
             h['addr'] = '(%d parcels — verify which)' % bc['parcels']
     hits = [h for h in hits if 75000 <= int(h.get('amt') or 0) <= 5000000]
 
+    # FOLD IN THE LTV + PROGRAM VERDICT (hardmoney_values.py). This is what turns the book from a
+    # list of names into a QUALIFIED list: Jesse's son underwrites on LTV, so a row without one
+    # cannot be pitched, and sorting by loan size alone ranks by commission rather than by who can
+    # actually close. Keyed on (borrower, lender, origin, amount) — the same tuple the sweep dedupes
+    # on. Fail-soft: no hardmoney_values.json yet just leaves every row unscored, exactly as before.
+    try:
+        import hardmoney_values as HV
+        vmap = {}
+        for p in HV.priced(zone_only=False):
+            vmap[(p['borrower'], p['lender'], p['origin'], p['amt'])] = p
+        for h in hits:
+            p = vmap.get((h['owner'], h['lender'], h['origin'], int(h.get('amt') or 0)))
+            if not p:
+                continue
+            h['ltv'] = p.get('ltv') or 0
+            h['verdict'] = p.get('verdict') or ''
+            h['verdict_why'] = p.get('verdict_why') or ''
+            h['fits'] = bool(p.get('fits'))
+            h['jv'] = p.get('jv') or 0
+            if p.get('addr') and not h.get('addr'):
+                h['addr'] = ', '.join(x for x in (p.get('addr'), p.get('city')) if x)
+    except Exception as e:                                   # never let pricing break the book
+        print('  (LTV pass skipped: %s)' % str(e)[:70])
+
     # dedupe by (case, lender, origin) / (borrower, lender, origin) for swept rows
     seen, uniq = set(), []
     for h in sorted(hits, key=lambda x: x['origin'], reverse=True):
@@ -196,8 +220,9 @@ def main():
     # (biggest loan = biggest refi commission), capped so the sheet stays a sheet; the KPIs still
     # count the whole universe.
     zone = [h for h in uniq if 8 <= h['age_mo'] <= 30]
-    # Most urgent FIRST: past/at the 2-year wall, then by loan size within that.
-    zone.sort(key=lambda h: ((20 <= h['age_mo'] <= 30), h['amt']), reverse=True)
+    # FUNDABLE FIRST, then urgency, then size. Ordering by size alone put a $2M loan at 140% LTV —
+    # which nobody can refinance — above a $300k loan at 61% that closes. The verdict has to lead.
+    zone.sort(key=lambda h: (bool(h.get('fits')), (20 <= h['age_mo'] <= 30), h['amt']), reverse=True)
     _write_report(uniq, zone[:150], lenders, lo, hi, a.months)
     return uniq
 
@@ -209,12 +234,27 @@ def _write_report(full, hits, lenders, lo, hi, months):
     n = len(full)
     zone_n = len(zone_all)
     total = sum(int(h['amt'] or 0) for h in zone_all)
+    fits = [h for h in zone_all if h.get('fits')]
+    fits_vol = sum(int(h['amt'] or 0) for h in fits)
+    scored_n = sum(1 for h in zone_all if h.get('verdict'))
+    # Verdict -> chip colour. Green = fundable today, amber = needs a look, grey = not scoreable.
+    CHIP = {'DSCR-STRONG': 'g', 'DSCR-EDGE': 'g', 'DSCR-ANY': 'g', 'TIGHT': 'a', 'MULTI': 'a',
+            'OVER': 'r', 'ARV': 'm', 'SOLD?': 'm', 'NOVALUE': 'm', 'NOFOLIO': 'm'}
     rows = ''
     for h in hits:
+        v = h.get('verdict') or ''
+        chip = ('<span class="v %s" title="%s">%s</span>'
+                % (CHIP.get(v, 'm'), H.escape(h.get('verdict_why') or ''), H.escape(v))) if v \
+            else '<span class="mut">unscored</span>'
+        ltv = ('%.0f%%' % h['ltv']) if h.get('ltv') else '<span class="mut">&mdash;</span>'
         rows += ('<tr><td>%s</td><td class="r">%s mo</td><td>%s</td><td class="r">$%s</td>'
+                 '<td class="r">%s</td><td>%s</td>'
                  '<td>%s</td><td>%s</td><td>%s%s</td></tr>' % (
                      H.escape(h['origin']), h['age_mo'], H.escape(h['lender']),
-                     format(int(h['amt'] or 0), ','), H.escape(h['owner'][:34]),
+                     format(int(h['amt'] or 0), ','),
+                     ltv,                                              # markup, do NOT escape
+                     chip,                                             # markup, do NOT escape
+                     H.escape(h['owner'][:34]),
                      H.escape((h.get('addr') or '').split(',')[0][:26] or '—'),
                      (H.escape(h['agent']) if h.get('agent')
                       else '<span class="mut">Sunbiz pull pending</span>'),   # markup, do NOT escape
@@ -231,6 +271,9 @@ h1{{font-size:23px;margin:0 0 3px}} .sub{{color:#5a6577;margin-bottom:18px}}
 table{{width:100%;border-collapse:collapse;font-size:12.5px}} th,td{{padding:7px 9px;border-bottom:1px solid #e4e8f0;text-align:left}}
 th{{background:#0B1730;color:#F4E5A7;position:sticky;top:0}} td.r{{text-align:right;font-variant-numeric:tabular-nums}}
 tr:nth-child(even){{background:#fafcff}} .mut{{color:#9aa4b6}}
+.v{{display:inline-block;padding:2px 7px;border-radius:99px;font-size:11px;font-weight:700;white-space:nowrap;cursor:help}}
+.v.g{{background:#dff5e3;color:#0b5d1e}} .v.a{{background:#fdf1d6;color:#7a5406}}
+.v.r{{background:#fbe0e0;color:#8a1c1c}} .v.m{{background:#eef1f6;color:#69748a}}
 .box{{background:#f3f6fb;border:1px solid #dbe3ef;border-radius:10px;padding:14px 16px;margin:18px 0}}
 .box h3{{margin:0 0 8px;font-size:14px}} .yes{{color:#0b5d1e;font-weight:700}} .no{{color:#8a1c1c;font-weight:700}}
 ul{{margin:6px 0 0 18px;columns:2}}
@@ -239,11 +282,25 @@ ul{{margin:6px 0 0 18px;columns:2}}
 <div class="sub">Miami Solutions Group &middot; built {date} from public mortgage records + Sunbiz &middot;
 origin window {lo} to {hi} ({months} months)</div>
 <div class="kpis">
+  <div class="kpi"><div class="n">{fits_n}</div><div class="l">Fit his DSCR box (&le;80% LTV)</div></div>
+  <div class="kpi"><div class="n">${fitsM}M</div><div class="l">Fundable loan volume</div></div>
+  <div class="kpi"><div class="n">${saveM}M</div><div class="l">Interest saved / yr at 11%&rarr;7%</div></div>
   <div class="kpi"><div class="n">{zone_n}</div><div class="l">In the balloon zone (8&ndash;30mo)</div></div>
-  <div class="kpi"><div class="n">${totalM}M</div><div class="l">Loan volume in that zone</div></div>
-  <div class="kpi"><div class="n">{n}</div><div class="l">Total hard-money-to-LLC loans found</div></div>
   <div class="kpi"><div class="n">{human_n}</div><div class="l">With a named human (Sunbiz)</div></div>
 </div>
+<div class="box"><h3>Priced against Jesse&rsquo;s program sheet &mdash; the column that decides the call</h3>
+<p style="margin:0 0 8px">Every row carries an LTV computed from the loan amount against the county&rsquo;s
+certified roll value, then graded against the ladder on his sheet
+(<b>DSCR 70&ndash;80</b> &middot; hard equity 60&ndash;70 &middot; foreclosure bailout 50&ndash;60):</p>
+<div><span class="v g">DSCR-STRONG</span> &le;70% &mdash; fits with cushion &nbsp;
+<span class="v g">DSCR-EDGE</span> 70&ndash;80% &mdash; fits, no cushion &nbsp;
+<span class="v g">DSCR-ANY</span> multi-parcel, clears every one &nbsp;
+<span class="v a">TIGHT</span> 80&ndash;90% &mdash; roll lags market, appraisal may fit &nbsp;
+<span class="v a">MULTI</span> which parcel secures it decides &nbsp;
+<span class="v r">OVER</span> exceeds roll value &nbsp;
+<span class="v m">ARV</span> vacant &mdash; construction paper</div>
+<p style="margin:8px 0 0"><b>The table is sorted fundable-first</b>, then by balloon urgency, then by size.
+A $2M loan at 140% LTV is not a lead; a $300k at 61% closes.</p></div>
 <div class="box"><h3>This is the COUNTYWIDE sweep &mdash; not just the foreclosure book</h3>
 <p style="margin:0">{swept_n} of these came from a direct sweep of the Broward recorder&rsquo;s mortgage index
 (document type = MORTGAGE) over {months} months &mdash; <b>every</b> hard-money loan to an LLC, not only the ones
@@ -252,23 +309,58 @@ rails as the lis-pendens sweeps.</p></div>
 <div class="box"><h3>What each row gives you (thumbs up)</h3>
 <div class="yes">&#10003; Borrower is an LLC &nbsp; &#10003; Lender is a private / hard-money lender (Kiavi, Lima One, Alto Capital, RBI, Velocity &mdash; every big bank + credit union filtered out)
 &nbsp; &#10003; The exact loan amount &nbsp; &#10003; Origin date &rarr; age &rarr; balloon window &nbsp; &#10003; Parcel to pull the address &amp; the Sunbiz human behind the LLC</div></div>
-<div class="box"><h3>The one honest limit</h3>
-<div class="no">&times; The exact MATURITY / balloon date is not in the recorded index &mdash; it lives inside the mortgage
-document image. Origin date is the proxy (hard-money = 1&ndash;2 yr balloon, exactly Jesse&rsquo;s tell). Next enrichment: a Sunbiz pull on each LLC borrower for the human + phone, and a parcel&rarr;address resolve.</div></div>
+<div class="box"><h3>The honest limits &mdash; read before quoting anyone</h3>
+<div class="no">&times; <b>The exact MATURITY / balloon date is not in the recorded index.</b> It lives inside the
+mortgage document image. Origin date is the proxy (hard-money = 1&ndash;2 yr balloon, exactly Jesse&rsquo;s tell).<br>
+&times; <b>LTV is against the county&rsquo;s certified roll, not an appraisal.</b> The roll is annual and trails the
+market, so these LTVs run CONSERVATIVE &mdash; a row at 85% may appraise inside the box. That is why 80&ndash;90%
+is labelled TIGHT rather than dead.<br>
+&times; <b>{unpriced} of the {zone_n} zone loans carry no usable LTV.</b> Either the LLC owns several parcels and
+the recorded index does not say which one secures the loan (read the mortgage), or no parcel sits in that
+LLC&rsquo;s name today &mdash; usually because it already sold, which means they are not a refi client at all.<br>
+&times; <b>Vacant-land rows are never scored.</b> A ground-up construction loan is written against finished value;
+calling it &ldquo;upside down&rdquo; against dirt would be wrong on the first call.</div></div>
 <div class="box"><h3>Private lenders in the book (by volume of loans)</h3><ul>{lend_rows}</ul></div>
-<table><thead><tr><th>Originated</th><th>Age</th><th>Lender</th><th>Loan</th><th>Owner (LLC)</th><th>Property</th><th>Human behind the LLC</th></tr></thead>
+<table><thead><tr><th>Originated</th><th>Age</th><th>Lender</th><th>Loan</th><th>LTV</th><th>Verdict</th><th>Owner (LLC)</th><th>Property</th><th>Human behind the LLC</th></tr></thead>
 <tbody>{rows}</tbody></table>
 </body></html>""".format(date=datetime.date.today().isoformat(), lo=lo, hi=hi, months=months,
                          n=n, zone_n=zone_n, swept_n=len(swept), totalM=round(total / 1e6, 1),
+                         fits_n=len(fits), fitsM=round(fits_vol / 1e6, 1),
+                         saveM=round(fits_vol * 0.04 / 1e6, 1), scored_n=scored_n,
+                         unpriced=zone_n - scored_n + sum(1 for h in zone_all
+                                                          if h.get('verdict') in ('MULTI', 'SOLD?',
+                                                                                  'NOFOLIO', 'NOVALUE')),
                          nlend=len(lenders), human_n=sum(1 for h in zone_all if h.get('agent')),
                          lend_rows=lend_rows or '<li class="mut">none in this window</li>', rows=rows)
+    # THE PUBLISHED COPY IS REDACTED. This repo is PUBLIC (verified 2026-08-12: raw.githubusercontent
+    # serves its data files with HTTP 200), and GitHub Pages serves docs/ to the world, so the
+    # "unguessable folder" convention borrowed from Carlos's door books is obscurity with a public
+    # file tree behind it — i.e. no protection at all. docs/index.html solves this by ENCRYPTING its
+    # payload; this book has no such gate.
+    # So the site copy carries only corporate public record — LLC, lender, loan, LTV, verdict — and
+    # the "Human behind the LLC" column (Sunbiz officer names and phones) is stripped. That column is
+    # the calling detail; it stays on Alejandro's machine and out of a search index. The local and
+    # Desktop copies below are the FULL book.
+    pub = re.sub(r'<th>Human behind the LLC</th>', '<th>Human</th>', doc)
+    pub = re.sub(r'(<tr>(?:<td[^>]*>.*?</td>){8})<td>.*?</td></tr>',
+                 r'\1<td><span class="mut">on file</span></td></tr>', pub)
+    pub = pub.replace('<div class="kpi"><div class="n">{human_n}</div>'.format(human_n=''), '')
+    docs_out = os.path.join(HERE, 'docs', 'hm-balloon-q7v3n8', 'index.html')
+    os.makedirs(os.path.dirname(docs_out), exist_ok=True)
+    open(docs_out, 'w', encoding='utf-8').write(pub)
+
     outs = [os.path.join(HERE, 'HardMoney_Balloon_Book.html'),
-            os.path.expanduser(os.path.join('~', 'OneDrive', 'Desktop',
-                               'HardMoney_Balloon_Book_%s.html' % datetime.date.today()))]
+            ]
+    # DEALFLOW_NO_DESKTOP is set on the GitHub runner (the OneDrive path only exists on Alejandro's
+    # machine); without this guard the cloud run creates a junk ~/OneDrive/Desktop tree every night.
+    if not os.environ.get('DEALFLOW_NO_DESKTOP'):
+        outs.append(os.path.expanduser(os.path.join(
+            '~', 'OneDrive', 'Desktop', 'HardMoney_Balloon_Book_%s.html' % datetime.date.today())))
     for o in outs:
         os.makedirs(os.path.dirname(o), exist_ok=True)
         open(o, 'w', encoding='utf-8').write(doc)
     print('\n-> %s' % outs[-1])
+    print('-> LIVE: https://<pages-host>/hm-balloon-q7v3n8/  (rebuilt nightly)')
 
 
 if __name__ == '__main__':

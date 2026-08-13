@@ -2127,6 +2127,12 @@ body.compact .dg-v{font-size:14.5px}
 <span class="upd" id="upd">Updated <b id="upddate">__UPDATED__</b><span id="stalemark"></span> · auto-refreshes daily 9am · notes saved on this device</span>
 <button id="playbookbtn" class="lockbtn" style="display:inline-block" title="Open the Playbook — the survival rule, 5 exits, door script, FL 501.1377 lines, deal math, felony bucket. Everything you need at the door. Keyboard: ? or P.">📖 Playbook</button>
 <button id="refreshbtn" class="lockbtn" style="display:inline-block" title="Refresh the deal data now — fires the cloud pipeline (GitHub Actions). Checks freshness first; 60-min cooldown per device.">&#8635; Refresh</button>
+<!-- Balloon Book — the refi play, a SEPARATE product from the foreclosure board. Relative link so it
+     works on Pages; the Desktop plaintext twin has no sibling folder, so it simply 404s there.
+     Rebuilt nightly by refresh.yml step [4c/5]. -->
+<a id="hmbtn" class="lockbtn" href="hm-balloon-q7v3n8/" target="_blank" rel="noopener"
+   style="display:inline-block;text-decoration:none"
+   title="Hard-Money Balloon Book — Broward investors on 10-12% hard-money paper with a 1-2yr balloon coming due, priced against the county roll and graded for Jesse's son's DSCR program (70-80% LTV, 6-8%, 30yr fixed). Sorted fundable-first.">💰 Balloon Book</a>
 <button id="lockbtn" class="lockbtn" title="Lock this device — the access code will be required again">Lock</button>
 </div>
 <div class="controls mcol">
@@ -10762,10 +10768,18 @@ function openProofSheet(scope){ return _openDoc(genProofSheet(scope||'today')); 
    composer-opens and even pre-flight "trying bridge..." log lines. A single real send burned two
    of the fifty, and fifty opened-but-unsent composers announced "you have sent 50 today" having
    sent none. 'sent' is written only on a bridge 200 or an explicit operator confirmation. --- */
-// Operator-set 2026-08-04: 150 messages/day. send_server enforces the real ceiling on BOTH
-// axes — 150 messages AND 450 recipients — because BCC fans one send out to ~2.7 addresses
-// and Gmail meters recipients, not messages. This board number is the message axis.
-var DAILY_WARN = 120, DAILY_MAX = 150;
+// Operator-set 2026-08-12: 300 messages/day (was 150 — the 08-12 run hit the old ceiling).
+// THIS NUMBER MUST TRACK send_server.py's `daily_cap`. It drifted once already: the server was
+// raised to 300 on 08-12 and this constant was left at 150, so the board warned and hard-stopped
+// at half the real allowance and the operator thought the lift never landed. If you change one,
+// change both.
+//
+// 300 IS NOT WHAT YOU ACTUALLY GET. send_server enforces BOTH axes — 300 messages AND 450
+// recipients — and the recipient cap binds FIRST, at roughly 234 messages/day, because BCC fans
+// one send out to ~2.7 addresses and Gmail meters recipients, not messages. Do NOT raise the 450:
+// it sits under Gmail's ~500/day ceiling, and blowing that locks the account the whole business
+// runs on. This board number is the message axis only.
+var DAILY_WARN = 240, DAILY_MAX = 300;
 function _sentTodayCount(){ var s = _wlogStats(); return (s.sent||0) + (s.text||0); }
 // LIVE CAP (added 2026-08-05). _capState() used to trust ONLY this board's own local activity log —
 // accurate for one continuously-used session, wrong the moment ANYTHING else sends through the same
@@ -12009,7 +12023,11 @@ function genMorningWorker(lane, autostart){
     +         'main.innerHTML+="<div style=\'text-align:center;margin-top:6px\'><button id=\'mwdonetext\' class=\'mwbtn text\' style=\'width:100%\'>&#128241; Start text batch ("+TEXTQ.length+")<span class=\'sub\'>pre-filled &middot; you press send &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</span></button></div>";'
     +         'var dtb=document.getElementById("mwdonetext"); if(dtb) dtb.onclick=textBatchStart;'
     +       '}'
-    +       'prog.textContent=Q.length+" of "+Q.length+" &#x2713;"; renderLog(); return;'
+    // textContent does NOT decode HTML entities — writing "&#x2713;" here printed the raw
+    // seven characters on screen ("34 of 34 &#x2713;") instead of a checkmark. Every OTHER
+    // prog write on this element is textContent too, so switching this one to innerHTML would
+    // make the element's contract inconsistent; use the literal Unicode glyph instead.
+    +       'prog.textContent=Q.length+" of "+Q.length+" \\u2713"; renderLog(); return;'
     +     '}'
     +     'var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length;'
     +     'var ph=(r.phones.length?"<b>"+esc(r.phones[0])+"</b>":"<i style=\'color:#8a1c1c\'>none traced</i>");'

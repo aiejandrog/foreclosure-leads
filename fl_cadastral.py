@@ -84,9 +84,21 @@ def _norm(a):
 def enrich(parcel_id=None, county=None, address=None):
     """Return a normalized property dict (or None). Match by parcel id, else by county + address."""
     if parcel_id:
-        pid = re.sub(r'\D', '', str(parcel_id))
-        rows = _q("PARCEL_ID='%s'" % pid, 1)
-        if rows: return _norm(rows[0])
+        # RAW FIRST, digits-only as the fallback. Broward CONDO folios carry letters
+        # ('484214AD1600', '504005BD0130') and the cadastral stores them WITH the letters — so
+        # stripping non-digits first turned every condo into a lookup for a parcel that does not
+        # exist, and returned None. Verified live 2026-08-12: 4/4 condo folios MISS digits-only,
+        # 4/4 HIT raw. That silently capped condos at 'medium' confidence in broward_resolve (its
+        # "condo folio — no cadastral cross-check possible" branch) and left them value-less here.
+        # Numeric folios are unaffected: raw == digits, so it is the same single query as before.
+        raw = str(parcel_id).strip().upper()
+        digits = re.sub(r'\D', '', raw)
+        for pid in ([raw, digits] if raw != digits else [raw]):
+            if not pid:
+                continue
+            rows = _q("PARCEL_ID='%s'" % pid.replace("'", "''"), 1)
+            if rows:
+                return _norm(rows[0])
         return None
     if county and address:
         cn = COUNTY_NO.get(re.sub(r'[^A-Z ]', '', county.upper()).strip())
