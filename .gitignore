@@ -147,3 +147,25 @@ _hm_phones.json
 # Door books and letter packets are hand-delivered or emailed, never committed.
 docs/c-doors-k4m81/
 docs/f-acosta-x7q92/
+
+# GENERATED OUTREACH ARTIFACTS — HOMEOWNER PII, NEVER COMMIT (2026-08-13)
+# These land in the repo ROOT, which the docs/ rules above do not cover. Verified live: one
+# Carlos_PreForeclosure_Book carries 305 phone numbers and 269 street addresses of families in
+# foreclosure. This repo is PUBLIC. They are printed, hand-carried, or emailed — never tracked.
+# (The REDACTED balloon book under docs/hm-balloon-q7v3n8/ is the only outreach artifact that
+# may be published; it is stripped of every Sunbiz officer name before it is written.)
+Carlos_*.html
+Carlos_*.pdf
+Refi_Call_Sheet_*.html
+Refi_Call_Sheet_*.pdf
+HardMoney_Balloon_Book.html
+HardMoney_Balloon_Book.pdf
+HardMoney_Balloon_Book_*.html
+diligence/
+# runtime logs / queues — carry lead emails, phones and addresses in plain text
+send_server_run.log
+phones-run.log
+scrape_all.log
+worker_marks.jsonl
+retrace_queue.json
+email_preview.html
