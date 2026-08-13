@@ -3411,5 +3411,86 @@
   "nf": true,
   "near": [],
   "t": "2026-08-12"
+ },
+ "2025-008162-CA-01": {
+  "ent": "MALAGA 2329 LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "MALAGA 2329, LLC",
+  "typo": false,
+  "ra": "FERNANDEZ, ENRIQUE",
+  "ra_addr": "2630 SW 28 STREET, SUITE 61",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "FERNANDEZ, ENRIQUE",
+    "a": "12237 SW 129 COURT, MIAMI, FL 33186",
+    "p": "https://www.truepeoplesearch.com/results?name=ENRIQUE%20FERNANDEZ",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=12237%20SW%20129%20COURT&citystatezip=MIAMI%2C%20FL%2033186",
+    "cba": "https://www.cyberbackgroundchecks.com/address/12237-sw-129-court/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/enrique-fernandez/fl/miami"
+   }
+  ],
+  "t": "2026-08-12"
+ },
+ "2020-001649-CA-01": {
+  "ent": "TARPON IV, LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "TARPON IV LLC",
+  "typo": false,
+  "ra": "USA-RA LLC",
+  "ra_addr": "841 PRUDENTIAL DRIVE 12TH FLOOR, JACKSONVILLE, FL 32207",
+  "officers": [
+   {
+    "t": "MGRM",
+    "n": "LEDBETTER, MARK",
+    "a": "8345 NW 66ST #4987, MIAMI, FL 33166",
+    "p": "https://www.truepeoplesearch.com/results?name=MARK%20LEDBETTER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=8345%20NW%2066ST%20%234987&citystatezip=MIAMI%2C%20FL%2033166",
+    "cba": "https://www.cyberbackgroundchecks.com/address/8345-nw-66st-4987/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/mark-ledbetter/fl/miami"
+   },
+   {
+    "t": "MGRM",
+    "n": "LEDBETTER, LEAH",
+    "a": "8345 NW 66ST #4987, MIAMI, FL 33166",
+    "p": "https://www.truepeoplesearch.com/results?name=LEAH%20LEDBETTER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=8345%20NW%2066ST%20%234987&citystatezip=MIAMI%2C%20FL%2033166",
+    "cba": "https://www.cyberbackgroundchecks.com/address/8345-nw-66st-4987/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/leah-ledbetter/fl/miami"
+   },
+   {
+    "t": "MGRM",
+    "n": "LEDBETTER, MAGNOLIA",
+    "a": "8345 NW 66ST #4987, MIAMI, FL 33166",
+    "p": "https://www.truepeoplesearch.com/results?name=MAGNOLIA%20LEDBETTER",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=8345%20NW%2066ST%20%234987&citystatezip=MIAMI%2C%20FL%2033166",
+    "cba": "https://www.cyberbackgroundchecks.com/address/8345-nw-66st-4987/miami/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/magnolia-ledbetter/fl/miami"
+   }
+  ],
+  "t": "2026-08-12"
+ },
+ "502025CA008239XXXAMB": {
+  "ent": "TRUST FINANCIAL LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "TRUST FINANCIAL, LLC",
+  "typo": false,
+  "ra": "GLAUDE, SALOMON",
+  "ra_addr": "211 NW 17th Street, Delray Beach, FL 33444",
+  "officers": [
+   {
+    "t": "Manager",
+    "n": "GLAUDE, SALOMON",
+    "a": "211 NW 17th Street, Delray Beach, FL 33444",
+    "p": "https://www.truepeoplesearch.com/results?name=SALOMON%20GLAUDE",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=211%20NW%2017th%20Street&citystatezip=Delray%20Beach%2C%20FL%2033444",
+    "cba": "https://www.cyberbackgroundchecks.com/address/211-nw-17th-street/delray-beach/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/salomon-glaude/fl/delray-beach"
+   }
+  ],
+  "t": "2026-08-12"
  }
 }
