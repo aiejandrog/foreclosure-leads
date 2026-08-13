@@ -314,12 +314,21 @@ def _recipients_today():
 
 
 def _recently_emailed_to(addr, hours=24):
+    """True if this address was on ANY email in the window — as `to` OR inside `bcc`.
+
+    Checking only `to` (the original behaviour) missed every BCC'd address, and the board fans one
+    send out to ~2.7 recipients via BCC. So a person who is the `to` of one lead and a BCC of
+    another could legitimately be mailed twice in a minute and the dedupe would never see it.
+    """
     if not addr:
         return False
     addr = addr.strip().lower()
     cutoff = dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=hours)
     for e in _load_ledger():
-        if e.get('ch') != 'email' or str(e.get('to') or '').lower().strip() != addr:
+        if e.get('ch') != 'email':
+            continue
+        every = [str(e.get('to') or '')] + str(e.get('bcc') or '').split(',')
+        if addr not in {a.strip().lower() for a in every if a.strip()}:
             continue
         try:
             ts = dt.datetime.fromisoformat(e.get('ts_utc') or '')
@@ -328,6 +337,53 @@ def _recently_emailed_to(addr, hours=24):
         if ts >= cutoff:
             return True
     return False
+
+
+# ---- ATOMIC RECIPIENT CLAIM -----------------------------------------------------------------
+# WHY (2026-08-13): the 24h dedupe was a bare check followed later by an unlocked SMTP send and a
+# locked ledger write. Two concurrent /send requests therefore both read "not recently emailed",
+# both sent, and only then did either one appear in the ledger — a textbook check-then-act race.
+# It fired for real: the morning worker's auto-run was started twice, and 146 sends reached only
+# 200 unique recipients because 51 people got the SAME email twice, several inside the same second
+# (message ids ...1323213 and ...1049364 for one lead at 12:07:45).
+#
+# The client now refuses a second auto-run, but the client is not the choke point — a second TAB,
+# a stale tab, or a script would still race. This is: reserve every recipient (to + bcc) under one
+# lock, and hold the reservation until the send resolves. A racing request sees the reservation and
+# gets the same 409 'skip' it would get from the ledger, so the caller's existing skip path handles
+# it with no new client code.
+_INFLIGHT = set()
+_INFLIGHT_LOCK = threading.Lock()
+
+
+def _norm_addrs(*groups):
+    out = []
+    for g in groups:
+        if not g:
+            continue
+        for a in (g.split(',') if isinstance(g, str) else g):
+            a = (a or '').strip().lower()
+            if a:
+                out.append(a)
+    return out
+
+
+def _claim_recipients(addrs, hours=24):
+    """Reserve every address for this send. Returns (ok, blocking_address, reason)."""
+    with _INFLIGHT_LOCK:
+        for a in addrs:
+            if a in _INFLIGHT:
+                return False, a, 'a send to this address is already in flight'
+        for a in addrs:
+            if _recently_emailed_to(a, hours=hours):
+                return False, a, f'was emailed inside the last {hours}h'
+        _INFLIGHT.update(addrs)
+    return True, '', ''
+
+
+def _release_recipients(addrs):
+    with _INFLIGHT_LOCK:
+        _INFLIGHT.difference_update(addrs)
 
 
 # ---------------------------------------------------------------- SMTP
@@ -641,16 +697,24 @@ class Handler(BaseHTTPRequestHandler):
                         'bounce': _hb, 'sent_today': n, 'cap': self.daily_cap})
                 meta['lane'] = 'proven'
 
-        # ---- 24h per-recipient dedupe (unless test flag set) ----
-        if not meta.get('test') and _recently_emailed_to(to, hours=24):
-            return self._json(409, {
-                'ok': False, 'err': f'{to} was emailed inside the last 24h',
-                'skip': True,
-            })
+        # ---- 24h per-recipient dedupe + in-flight claim (unless test flag set) ----
+        # Covers `to` AND every BCC, and reserves them atomically so a concurrent request cannot
+        # slip between the check and the ledger write. See _claim_recipients.
+        _claimed = []
+        if not meta.get('test'):
+            _want = _norm_addrs(to, bcc)
+            ok_claim, blocker, why = _claim_recipients(_want, hours=24)
+            if not ok_claim:
+                return self._json(409, {
+                    'ok': False, 'err': f'{blocker} {why}',
+                    'skip': True,
+                })
+            _claimed = _want
 
         # ---- credentials ----
         user, pw = _load_credentials()
         if not (user and pw):
+            _release_recipients(_claimed)
             return self._json(500, {'ok': False, 'err': 'no gmail.key credentials'})
         snd = _load_sender()
         from_display = (snd.get('name') or '').strip()
@@ -659,8 +723,13 @@ class Handler(BaseHTTPRequestHandler):
         try:
             mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach)
         except smtplib.SMTPAuthenticationError as e:
+            _release_recipients(_claimed)
             return self._json(401, {'ok': False, 'err': f'SMTP AUTH failed: {e}'})
         except Exception as e:
+            # NOTE: the claim is deliberately NOT released on a generic send failure — the SMTP
+            # exception can arrive after Gmail already accepted the message, and re-sending on a
+            # maybe-delivered address is exactly the duplicate this guard exists to prevent. The
+            # 24h ledger entry written just below keeps it blocked; a real retry is tomorrow.
             _append_ledger({
                 'd': dt.date.today().isoformat(),
                 'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),

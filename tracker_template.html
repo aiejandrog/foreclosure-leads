@@ -12155,6 +12155,14 @@ function genMorningWorker(lane, autostart){
     +         'addLog("fail", "auto-run", "⛔ send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.", "warn");'
     +         'return;'
     +       '}'
+    // RE-ENTRANCY GATE. Without this, a second click — a double-tap, an impatient second press, or
+    // one click with this listener bound twice — started a SECOND loop over the same Q with the same
+    // shared index. Both loops then sent to the same lead. Measured live 2026-08-13: two "auto-run
+    // ALL started" lines one second apart, then 146 sends that reached only 200 unique recipients
+    // because 51 people were emailed the SAME message twice. A duplicate to a homeowner in
+    // foreclosure reads as a bot, and it burns the daily cap at double rate for zero extra coverage.
+    // One run at a time, always. `auto` is cleared by stop/lane-switch/queue-end, so this cannot wedge.
+    +       'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
     +       'autoAll=(fn==="autoall"); auto=true;'
     +       'if(autoAll){ addLog("open","ALL LANES","▶▶ auto-run ALL started — "+LMETA[lane].t+" first, then the rest. "+allTotal()+" leads across all lanes."); }'
     +       'else { addLog("open", r.first||r.owner, "auto-run started — "+LMETA[lane].t+" ONLY, "+Q.length+" leads queued"); }'
