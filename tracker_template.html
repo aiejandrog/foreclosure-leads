@@ -15935,10 +15935,14 @@ async function boot(){
             // is simply out of date, and if so heal it instead of arguing.
             err.textContent = 'Checking…';
             const fresher = await (async () => {
-              // Heal AT MOST ONCE per session. If a CDN keeps serving the stale copy, a second attempt
-              // would reload into the same old file and bounce forever — better to fall through to the
-              // honest error than to trap someone in a refresh loop minutes before an auction.
-              if(sessionStorage.getItem('dfHealed')) return null;
+              // Guard the LOOP, not the session. The danger is a CDN that keeps serving the same
+              // stale copy: reloading for a signature we already reloaded for would bounce forever,
+              // and trapping someone in that minutes before an auction is worse than an honest
+              // error. But bailing on ANY previous heal (the old behaviour) meant the second new
+              // build of a session could never unlock — the exact "new code doesn't work on a
+              // cached page" trap this block exists to prevent. So remember which signature we
+              // healed to and only refuse to chase that same one twice; see _freshCheck.
+              const _healedGate = sessionStorage.getItem('dfHealed');
               // an unsubstituted placeholder (running the raw template in dev) must never look "stale"
               if(!/^[0-9a-f]{12}$/.test(BUILT)) return null;
               try {
@@ -15951,7 +15955,9 @@ async function boot(){
                 const m = (await res.text()).match(/DEALFLOW-COVERAGE\s+(\{[^}]*\})/);
                 if(!m) return null;
                 const b = (JSON.parse(m[1])||{}).sig;
-                return (b && b !== BUILT) ? b : null;
+                if(!b || b === BUILT) return null;               // already on the newest build
+                if(b === _healedGate) return null;               // chased this one already — don't loop
+                return b;
               } catch(e){ return null; }
             })();
             if(fresher){
@@ -16027,14 +16033,22 @@ async function _freshCheck(unlocked){
   try{
     if(!unlocked) return;
     if(!/^[0-9a-f]{12}$/.test(BUILT)) return;                    // raw template in dev — never "stale"
-    if(sessionStorage.getItem('dfHealed')) return;               // one heal per session, shared with the gate
+    // LOOP GUARD, NOT A ONE-SHOT. This used to be `if(sessionStorage.getItem('dfHealed')) return;`
+    // — any previous heal disabled the check for the WHOLE session. First update of the day landed;
+    // every one after it was silently ignored, so pressing Refresh rebuilt in the cloud and the tab
+    // sat on old data until it was closed. That is the "refresh doesn't sync" report.
+    // What we actually need to prevent is a RELOAD LOOP: reloading for a signature that, after the
+    // reload, still isn't the one we're running. So remember WHICH signature we healed to and only
+    // bail when the server offers that same one again — a genuinely newer build still heals.
+    const _healed = sessionStorage.getItem('dfHealed');
     const res = await fetch(location.pathname + '?cb=' + Date.now(),
                             {cache:'no-store', headers:{'Range':'bytes=0-400'}});
     if(!res.ok && res.status !== 206) return;
     const m = (await res.text()).match(/DEALFLOW-COVERAGE\s+(\{[^}]*\})/);
     if(!m) return;
     const sig = (JSON.parse(m[1])||{}).sig;
-    if(!sig || sig === BUILT) return;
+    if(!sig || sig === BUILT) return;                            // already on the newest build
+    if(sig === _healed) return;                                  // tried this one and it didn't take
     try{ sessionStorage.setItem('dfHealed', sig); }catch(e){}
     if(!_userTouched){ location.replace(location.pathname + '?v=' + encodeURIComponent(sig)); return; }
     const p = document.createElement('button');
