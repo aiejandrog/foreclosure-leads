@@ -46,13 +46,29 @@ COLORS = {  # loud enough to find in a drawer, light enough that black text stay
 }
 
 
+# TRUTH GATE (same rule as msg_letter._company + msg-web): never print an " LLC" entity claim
+# until an entity we own is filed. "Miami Solutions Group LLC" (L22000200556) is registered to
+# another Florida company, so asserting it to a distressed homeowner is a MARS 1015.3 / FDUTPA
+# misrepresentation. Strip the suffix at display; the canonical entity string stays in sender.json
+# for the legal pack, which is attorney-gated and used only once the entity actually exists.
+UNOWNED = ('miami solutions group',)
+
+
+def _display_llc(raw):
+    raw = (raw or '').strip()
+    bare = raw.lower().replace(',', '').replace('llc', '').strip()
+    if bare in UNOWNED:
+        return raw.replace(' LLC', '').replace(', LLC', '').strip()
+    return raw
+
+
 def sender():
     try:
         s = json.load(open(os.path.join(HERE, 'sender.json'), encoding='utf-8'))
         return s.get('name') or 'Alejandro Gonzalez', s.get('phone') or '', \
-            s.get('llc') or 'Miami Solutions Group LLC'
+            _display_llc(s.get('llc') or 'Miami Solutions Group')
     except Exception:
-        return 'Alejandro Gonzalez', '', 'Miami Solutions Group LLC'
+        return 'Alejandro Gonzalez', '', 'Miami Solutions Group'
 
 
 def card_en(name, phone):
