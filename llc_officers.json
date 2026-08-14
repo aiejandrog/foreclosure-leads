@@ -3492,5 +3492,109 @@
    }
   ],
   "t": "2026-08-12"
+ },
+ "2025-013365-CA-01": {
+  "ent": "INVESTMENT LLC",
+  "status": "",
+  "officers": [],
+  "ra": "",
+  "ra_addr": "",
+  "exact": false,
+  "nf": false,
+  "near": [],
+  "t": "2026-08-14"
+ },
+ "CACE-26-003829": {
+  "ent": "OCON RE ACQUISITIONS LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "OCON RE ACQUISITIONS, LLC",
+  "typo": false,
+  "ra": "FIORELLA LASA, P.A.",
+  "ra_addr": "2525 PONCE DE LEON BLVD, STE 300",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "Ocon, David",
+    "a": "3375 NE 20 Ave, Fort Lauderdale, FL 33306",
+    "p": "https://www.truepeoplesearch.com/results?name=David%20Ocon",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=3375%20NE%2020%20Ave&citystatezip=Fort%20Lauderdale%2C%20FL%2033306",
+    "cba": "https://www.cyberbackgroundchecks.com/address/3375-ne-20-ave/fort-lauderdale/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/david-ocon/fl/fort-lauderdale"
+   }
+  ],
+  "t": "2026-08-14"
+ },
+ "CACE-25-000582": {
+  "ent": "VANGEL LLC",
+  "status": "INACTIVE",
+  "exact": true,
+  "matched": "VANGEL LLC",
+  "typo": false,
+  "ra": "VALLEJO, MARIA, MRS",
+  "ra_addr": "4600 SW 152 AVE, MIRAMAR, FL 33027",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "VALLEJO, MARIA, MRS",
+    "a": "4600 SW 152 AVE, MIRAMAR, FL 33027",
+    "p": "https://www.truepeoplesearch.com/results?name=MARIA%2C%20MRS%20VALLEJO",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=4600%20SW%20152%20AVE&citystatezip=MIRAMAR%2C%20FL%2033027",
+    "cba": "https://www.cyberbackgroundchecks.com/address/4600-sw-152-ave/miramar/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/maria-mrs-vallejo/fl/miramar"
+   }
+  ],
+  "t": "2026-08-14"
+ },
+ "CACE-25-018569": {
+  "ent": "4 U PROPERTIES INVESTOR LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "4U PROPERTIES INVESTOR, LLC",
+  "typo": false,
+  "ra": "Zamora, John F",
+  "ra_addr": "7005 NW 94TH AVE, TAMARAC, FL 33321-3044",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "ZAMORA, JOHN",
+    "a": "7005 NW 94TH AVE, TAMARAC, FL 33321",
+    "p": "https://www.truepeoplesearch.com/results?name=JOHN%20ZAMORA",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=7005%20NW%2094TH%20AVE&citystatezip=TAMARAC%2C%20FL%2033321",
+    "cba": "https://www.cyberbackgroundchecks.com/address/7005-nw-94th-ave/tamarac/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/john-zamora/fl/tamarac"
+   }
+  ],
+  "t": "2026-08-14"
+ },
+ "CACE-25-019694": {
+  "ent": "1930 NW 9 STREET LLC",
+  "status": "ACTIVE",
+  "exact": true,
+  "matched": "1930 NW 9 STREET LLC",
+  "typo": false,
+  "ra": "HYPPOLITE, ANTONIO",
+  "ra_addr": "1560 SAWGRASS CORPORATE PKWY, STE 400",
+  "officers": [
+   {
+    "t": "MGR",
+    "n": "HYPPOLITE, ANTONIO",
+    "a": "1560 SAWGRASS CORPORATE PKWY, STE 400",
+    "p": "https://www.truepeoplesearch.com/results?name=ANTONIO%20HYPPOLITE",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1560%20SAWGRASS%20CORPORATE%20PKWY&citystatezip=STE%20400%2C%20FL",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1560-sawgrass-corporate-pkwy/ste-400/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/antonio-hyppolite/fl"
+   },
+   {
+    "t": "AMBR",
+    "n": "TELFORT, FRANTZ",
+    "a": "1560 SAWGRASS CORPORATE PKWY STE 400, SUNRISE, FL 33323 UN",
+    "p": "https://www.truepeoplesearch.com/results?name=FRANTZ%20TELFORT",
+    "pa": "https://www.truepeoplesearch.com/resultaddress?streetaddress=1560%20SAWGRASS%20CORPORATE%20PKWY%20STE%20400&citystatezip=SUNRISE%20FL%2033323%2C%20UN",
+    "cba": "https://www.cyberbackgroundchecks.com/address/1560-sawgrass-corporate-pkwy-ste-400/sunrise-fl-33323/fl",
+    "cb": "https://www.cyberbackgroundchecks.com/people/frantz-telfort/fl/sunrise"
+   }
+  ],
+  "t": "2026-08-14"
  }
 }
