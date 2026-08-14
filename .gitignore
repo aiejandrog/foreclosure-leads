@@ -170,3 +170,8 @@ worker_marks.jsonl
 retrace_queue.json
 email_preview.html
 badnum_quarantine.json
+
+# PII caches — moved to actions/cache (refresh.yml v14). NEVER commit: 1,442 LLCs + Sunbiz
+# officers with home/agent addresses. See v13->v14 note in refresh.yml.
+hardmoney_enriched.json
+llc_officers.json

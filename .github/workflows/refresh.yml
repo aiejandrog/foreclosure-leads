@@ -138,6 +138,8 @@ jobs:
             listing_status_cache.json
             redfin_cache.json
             hardmoney_values.json
+            hardmoney_enriched.json
+            llc_officers.json
             health.json
             full.json
           # v8 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
@@ -160,8 +162,15 @@ jobs:
           # new reply keeps yesterday's rather than blanking the Reply Inbox.
           # v8 -> v9 (2026-08-02): added redfin_cache.json (Redfin Estimate sidecar).
           # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          key: dealflow-state-v13-${{ github.run_id }}
-          restore-keys: dealflow-state-v13-
+          # v13 -> v14 (2026-08-14): added hardmoney_enriched.json + llc_officers.json. These are the
+          # two PII caches (1,442 LLCs + Sunbiz officers, with home/agent addresses) that were being
+          # COMMITTED to this PUBLIC repo as warm-state. Moved to cache-only persistence like
+          # hardmoney_values.json above, and UNTRACKED from git. EXPECT ONE COLD RUN — enrich/officers
+          # rebuild under their --limit caps over a few nights (Sunbiz + BCPA are free; no BatchData).
+          # Do NOT re-add either file to any `git add` line: naming an ignored file in `git add`
+          # force-adds it and re-publishes the PII.
+          key: dealflow-state-v14-${{ github.run_id }}
+          restore-keys: dealflow-state-v14-
       # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
       # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
       # fresh committed copy with a stale runner copy — which could ship the site with partial
@@ -517,7 +526,7 @@ jobs:
           # docs/img/ also picks up new photos this run — stage them too. sale_history_cache.json
           # is committed as well: it is the SINGLE SOURCE for stay-compliance (no actions/cache
           # copy anymore), so the daily [3e] refresh must flow back into the repo.
-          git add docs/index.html docs/img sale_history_cache.json llc_officers.json judgment_dates.json auction_archive.json cash_buyers.json
+          git add docs/index.html docs/img sale_history_cache.json judgment_dates.json auction_archive.json cash_buyers.json
           if git diff --staged --quiet; then
             echo "nothing changed — site already current"
           else
@@ -579,9 +588,11 @@ jobs:
             listing_status_cache.json
             redfin_cache.json
             hardmoney_values.json
+            hardmoney_enriched.json
+            llc_officers.json
             health.json
             full.json
-          key: dealflow-state-v13-${{ github.run_id }}
+          key: dealflow-state-v14-${{ github.run_id }}
 
       # ---- Health ------------------------------------------------------------------------
       # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
