@@ -202,6 +202,33 @@ def _selftest():
     return 0 if ok else 1
 
 
+# ---- COUNTY DETECTION -----------------------------------------------------------------------
+# This puller reaches the MIAMI-DADE clerk's OCS docket and NOTHING ELSE. That was survivable while
+# --all filtered to '-(CA|CC)-', but --case never filtered: handing it a Broward or Palm Beach case
+# queried OCS, got nothing back (correctly — wrong county), and then CACHED A MISS. A cached miss is
+# indistinguishable from "this docket genuinely has no final judgment", and since the next run skips
+# anything already cached, the false negative is PERMANENT.
+#
+# Measured 2026-08-13: `--case CACE-24-006635` printed "no final-judgment entry found" for a BROWARD
+# case five days from its foreclosure sale. It never looked. Across the board that is ~452 of 725
+# tracked cases (Broward + Palm Beach) carrying no accrued interest with no signal as to why.
+# NO DATE -> NO ACCRUAL is the correct rail; silently manufacturing the date's absence is not.
+MD_CASE = re.compile(r'-(CA|CC)-', re.I)                            # 2024-000848-CA-01
+BROWARD_CASE = re.compile(r'^(CACE|COCE|COWE|CONO|COSO)-', re.I)    # CACE-24-006635
+PB_CASE = re.compile(r'^50\d{4}(CA|CC)', re.I)                      # 502025CA007842XXXAMB
+
+
+def county_of(case):
+    c = str(case or '').strip().upper()
+    if BROWARD_CASE.search(c):
+        return 'BROWARD'
+    if PB_CASE.search(c):
+        return 'PALM BEACH'
+    if MD_CASE.search(c):
+        return 'MIAMI-DADE'
+    return 'UNKNOWN'
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--case', default='')
@@ -223,6 +250,25 @@ def main():
             by_case[c] = r
 
     if a.case:
+        # REFUSE rather than cache a false negative. See county_of().
+        cty = county_of(a.case)
+        if cty != 'MIAMI-DADE':
+            print('%s is a %s case. This puller only reads the MIAMI-DADE clerk docket (OCS),'
+                  % (a.case, cty))
+            print('so it cannot see this case and will NOT record a miss for it.')
+            print('')
+            print('Get the entry date from one of these instead:')
+            if cty == 'BROWARD':
+                print('  * the homeowner\'s own final judgment paperwork — fastest, and it also')
+                print('    carries the rate the judgment recites, which OCS never gives us')
+                print('  * browardclerk.org/Web2/CaseSearchECA (reCAPTCHA-gated; broward_plaintiff.py')
+                print('    already solves that flow and could be extended to read the docket)')
+            elif cty == 'PALM BEACH':
+                print('  * the homeowner\'s own final judgment paperwork')
+                print('  * appsgp.mypalmbeachclerk.com case search')
+            else:
+                print('  * unrecognised case-number format — check it before assuming a county')
+            return 2
         targets = [a.case]
     elif a.all:
         # Miami-Dade circuit/county cases only — the OCS API is county-specific.
@@ -236,6 +282,25 @@ def main():
         targets = [c for c in targets if c not in cache]
     if a.limit:
         targets = targets[:a.limit]
+
+    # NAME THE BLIND SPOT OUT LOUD. --all silently drops every non-Miami-Dade case, which reads as
+    # "nothing left to do" when it actually means "most of the board is unreachable by this tool".
+    if a.all:
+        skipped = {}
+        for c, r in by_case.items():
+            if float(r.get('judgment') or 0) <= 0:
+                continue
+            cty = county_of(c)
+            if cty != 'MIAMI-DADE':
+                skipped[cty] = skipped.get(cty, 0) + 1
+        if skipped:
+            tot = sum(skipped.values())
+            print('NOT COVERED: %d case(s) with a judgment are outside Miami-Dade and this puller '
+                  'cannot reach them (%s).'
+                  % (tot, ', '.join('%s %d' % kv for kv in sorted(skipped.items()))))
+            print('             They have no accrued-interest number. That is a data gap, not a '
+                  'finding of "no judgment".')
+
     print(f'{len(targets)} case(s) to pull')
 
     s = requests.Session()

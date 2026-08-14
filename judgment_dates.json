@@ -97,6 +97,13 @@
   "rate": null,
   "src": "mdc-ocs-docket"
  },
+ "2018-025121-CA-01": {
+  "checked": "2026-08-14",
+  "d": "2019-05-03",
+  "label": "Final Judgment by Non Jury Trial",
+  "rate": null,
+  "src": "mdc-ocs-docket"
+ },
  "2018-026417-CA-01": {
   "checked": "2026-08-04",
   "d": "2019-08-28",
