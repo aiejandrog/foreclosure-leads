@@ -169,3 +169,4 @@ scrape_all.log
 worker_marks.jsonl
 retrace_queue.json
 email_preview.html
+badnum_quarantine.json

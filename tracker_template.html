@@ -12107,6 +12107,25 @@ function genMorningWorker(lane, autostart){
     +   'if(qb){'
     +     'e.preventDefault();'
     +     'var bp=String(qb.getAttribute("data-qbad")||"").split("|"), bc=bp[0], bph=bp[1]||"";'
+    // CONFIRM, BECAUSE THIS IS PERMANENT AND IT SITS IN THE TAP PATH. Marking a number bad appends
+    // to worker_notes[case].badph, drops the durable call-queue entry, and the build-time card
+    // filter then removes that number from EVERY FUTURE BAKE. There was no confirmation and no undo.
+    // On 2026-08-13 it fired 61 times in one day -- 20 inside the 08:09 minute alone, a click every
+    // ~3 seconds -- i.e. it was being used as "next". One of those was (954) 245-5005, whose owner
+    // texted in that evening asking to sell a house with ~$56k of equity and six days to auction.
+    // The cost of a confirmation is one tap. The cost of skipping it was nearly that lead.
+    // RATE GUARD. A confirmation dialog does not survive a person in a rhythm -- they will tap
+    // through it. Establishing that a number is dead requires actually trying it, so marks arriving
+    // faster than a human could dial are not decisions. Three inside five minutes stops the run and
+    // says so, which is exactly the pattern that killed 61 numbers on 2026-08-13.
+    +     'window.__badTimes=(window.__badTimes||[]).filter(function(t){return Date.now()-t<300000;});'
+    +     'if(window.__badTimes.length>=3){'
+    +       'alert("STOP -- you have marked 3 numbers bad in the last 5 minutes.\\n\\nThat is faster than anyone can actually test a phone number, and this action is permanent. On 08/13 this pattern killed 61 working numbers, including one owner who was 6 days from auction with equity in her house.\\n\\nIf you are just advancing the queue, use SKIP. Reload this tab to reset the guard.");'
+    +       'addLog("fail","bad-number","rate guard tripped -- 3 marks in 5 minutes. Nothing was marked. Use Skip to advance without killing the number.","warn");'
+    +       'return;'
+    +     '}'
+    +     'if(!confirm("Mark "+bph+" as a BAD NUMBER?\\n\\nThis is permanent: the number is pulled off this lead and removed from every future build. Only do this if you actually tried it and it failed (disconnected, wrong person, not in service).\\n\\nTo just move on without killing the number, press Cancel and use Skip.")) return;'
+    +     'window.__badTimes.push(Date.now());'
     +     'CALLQ=CALLQ.filter(function(x){return x.c!==bc;}); TEXTQ=TEXTQ.filter(function(x){return x.c!==bc;});'
     +     'renderCallQ(); renderTextQ();'
     +     'post("badnum",{qc:bc, ph:bph});'
