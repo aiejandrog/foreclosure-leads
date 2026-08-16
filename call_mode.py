@@ -380,6 +380,36 @@ def extract_sync_js(tracker_src):
     return opt_block + '\n' + block
 
 
+_COMPANY_RE = re.compile(r'\b(LLC|INC|CORP|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|EST)\b', re.I)
+
+
+def _greet_name(d):
+    """The name the page may greet with, in FIRST-name-first order — per COUNTY, measured not guessed.
+
+    Three counties, three roll conventions (every count from real cached data):
+      - Broward: "LAST,FIRST" with a comma (1,295/4,009) — owner_clean flips it. Fine.
+      - Miami-Dade comma-less: already "FIRST LAST" ("PAUL GREEN", "EDDIE SQUIRE"). Fine.
+      - Palm Beach: comma-less "LAST FIRST" — 340 of 340 sampled, zero commas. owner_clean has no
+        comma to key on, so it ships unflipped and firstName() took token[0] — the SURNAME. The
+        page asked "How did it go with White?" about SHUROD White, and would have texted "Hi White,".
+        Caught from a live screenshot; only PB leads carry a (561) number.
+
+    PB is identified by its case format (502025CA... — always '50', vs MD's '20XX-' and Broward's
+    'CACE-'). Companies are left untouched: flipping "XPRESS ASSET MANAGEMENT LLC" helps nobody and
+    firstName() ignores company rows anyway. Trailing '&' co-owner markers are already stripped by
+    owner_clean upstream ("COTTO JOSE J &" -> "COTTO JOSE J" -> flips to "JOSE J COTTO").
+    """
+    on = (d.get('oname') or '').strip()
+    case = str(d.get('case') or '')
+    owners_first = (d.get('owners') or '').split(';')[0]
+    if (case.startswith('50') and on and ',' not in owners_first
+            and not _COMPANY_RE.search(on)):
+        toks = on.split()
+        if len(toks) >= 2:
+            on = ' '.join(toks[1:] + [toks[0]])   # LAST FIRST [M] -> FIRST [M] LAST
+    return on[:40]
+
+
 def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
 
@@ -486,7 +516,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # to Steve Gordon and "Hi Joseph" to Milouse Joseph, on the call AND in every text.
             # The pipeline already fixes this: owner_clean flips "Last, First" to "First Last"
             # (foreclosure_leads.py:536-539) and ships as `oname`. Ship it and use it. ~14 B/lead.
-            'on': (d.get('oname') or '').strip()[:40],
+            'on': _greet_name(d),
             'a': (d.get('addr') or '')[:60],
             'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
             'd': days,
@@ -719,6 +749,11 @@ a.dial,button.big{display:block;width:100%;min-height:58px;margin-top:12px;borde
      border:0;font-size:19px;font-weight:700;text-align:center;line-height:58px;text-decoration:none;
      touch-action:manipulation}
 a.dial{background:var(--ok);color:#fff}
+/* Redial: same tel: mechanics as the main dial button, styled as the secondary action it is —
+   outlined, not filled, so the outcome buttons stay the visual priority on the screen. */
+a.redial{display:block;width:100%;min-height:50px;line-height:50px;margin-top:10px;border-radius:12px;
+     border:1px solid var(--ok);color:var(--ok);background:transparent;font-size:16px;font-weight:700;
+     text-align:center;text-decoration:none;touch-action:manipulation}
 button.big{background:#1d4ed8;color:#fff}
 .oc button{display:block;width:100%;min-height:56px;margin-top:9px;border-radius:12px;border:1px solid #2a3f6b;
      background:#0f1d3a;color:var(--ink);font-size:17px;font-weight:600;touch-action:manipulation}
@@ -1404,8 +1439,23 @@ function screenOutcome(){
   // Use the resolved first name, not the raw roll string — `(r.o).split(' ')[0]` on the county's
   // "GORDON,STEVE" has no space to split on, so the question read "How did it go with GORDON,STEVE?"
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
-    +'<div class="own">'+fmt(d)+'</div><div class="oc" style="margin-top:10px">'+btns+'</div>'
+    +'<div class="own">'+fmt(d)+'</div>'
+    /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
+       hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
+       the proven path (the main dial button), and returning from the dialer lands right back on
+       this screen because the SCREEN guard defers any sync repaint. */
+    +'<a class="redial" href="tel:+1'+d+'" id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>'
+    +'<div class="oc" style="margin-top:10px">'+btns+'</div>'
     +'<div class="vm" id="vm" style="display:none"></div></div><div class="sheetpad"></div>';
+  /* A redial IS a dial — record it, or the dial-through count undercounts the actual work (the
+     exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
+     outcome he eventually taps logs its own entry for that attempt. */
+  $('redial').addEventListener('click', function(){
+    var n=notes[r.c]=notes[r.c]||{status:'',note:''};
+    n.dials=n.dials||[];
+    n.dials.push({d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'redial'});
+    touched=true; saveNotes(); queueSync();
+  });
   Array.prototype.forEach.call(document.querySelectorAll('.oc button'), function(b){
     b.onclick=function(){
       Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=true;});
