@@ -772,13 +772,21 @@ button.big{background:#1d4ed8;color:#fff}
 .cb:disabled{opacity:.45}
 .txconf{font-size:14px;color:var(--gold);font-weight:600;margin-top:10px}
 .supn{font-size:11px;color:var(--mut);text-align:center;padding:5px 8px 0}
+/* language chips: small but still thumb-safe; .on = the active language */
+.lchips{display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle}
+.lchip{min-width:44px;min-height:30px;padding:2px 8px;border-radius:8px;border:1px solid #2a3f6b;
+     background:#0f1d3a;color:var(--mut);font-size:12px;font-weight:800;touch-action:manipulation}
+.lchip.on{border-color:var(--gold);color:var(--gold)}
+.errchip{color:#ff8a80;font-weight:700;cursor:pointer;text-decoration:underline}
 .sub{font-size:12px;color:var(--mut);margin-top:6px;text-align:center}
 .vm{background:#0f1d3a;border:1px solid #2a3f6b;border-radius:10px;padding:12px;margin-top:10px;font-size:17px;line-height:1.5}
 .vmlang{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin:12px 0 3px}
 /* z-60 — above the sheet (40), the #sync chip (45) and the pill (50). With no z-index the sheet
    painted over every toast: the one piece of feedback confirming an outcome was logged was
-   invisible on exactly the screens where he needed it. */
-.toast{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--ok);color:#fff;padding:16px;
+   invisible on exactly the screens where he needed it.
+   pointer-events:none — a bottom-fixed z-60 overlay that CATCHES taps steals the bottom strip of
+   the next screen for 1.4s after every logged outcome. Feedback must never eat input. */
+.toast{position:fixed;left:0;right:0;bottom:0;z-index:60;pointer-events:none;background:var(--ok);color:#fff;padding:16px;
      font-weight:700;text-align:center;transform:translateY(100%);transition:transform .18s}
 .toast.on{transform:none}
 .gate{padding:28px 18px;max-width:420px;margin:0 auto}
@@ -1185,8 +1193,18 @@ function head(){
        nowhere, so a phone serving last week's list had no visible tell — the operator's only signal
        was leads that felt stale. The bottom of the screen belongs to the sheet (fixed, z-40), which
        covers anything placed there; the top bar is the one strip nothing ever overlays. */
-    +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+'</div>'
+    +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+'</div>'
     +'</div>';
+}
+function errChip(){
+  var n=0; try{ n=(JSON.parse(localStorage.getItem('fcErrLog')||'[]')).length; }catch(e){}
+  return n ? (' &middot; <span class="errchip" onclick="showErrs()">'+n+' error'+(n===1?'':'s')+' logged &mdash; tap</span>') : '';
+}
+function showErrs(){
+  var log=[]; try{ log=JSON.parse(localStorage.getItem('fcErrLog')||'[]'); }catch(e){}
+  // alert() so it can be screenshotted whole, then offer to clear
+  alert(log.map(function(e){ return e.t+' ['+e.w+'] '+e.m+'\n'+e.s; }).join('\n\n') || 'empty');
+  if(confirm('Clear the error log?')){ try{ localStorage.removeItem('fcErrLog'); }catch(e){} render(); }
 }
 /* FTSA calling window, 8am-8pm EASTERN. WARN, never block — same call the board makes: a hard block
    would stop him documenting a callback the homeowner themselves asked for, and the statute governs
@@ -1323,7 +1341,13 @@ function screenLead(){
     + '<div class="sheetpad"></div>';
   // Render the outcome screen SYNCHRONOUSLY on tap and let the tel: navigation proceed. iOS
   // backgrounds the tab the instant the dialer opens; painting after would never happen.
-  $('dial').addEventListener('click', function(){ setTimeout(screenOutcome,0); });
+  $('dial').addEventListener('click', function(){
+    // A dial IS work in progress. `touched` used to be set only on the first LOGGED outcome, so a
+    // deploy landing during the first call of a session made freshCheck location.reload() the page
+    // he was mid-call on. Three deploys shipped today while he was dialing.
+    touched = true;
+    setTimeout(screenOutcome,0);
+  });
   /* Skip was the last raw i++ in the file — the same bug class already fixed for advance(), and
      reachable without any teammate involvement: in the worker lane retireFromWorkerQ() shrinks the
      pool on the first logged number, so i++ from there lands one past the next person. Skipping is
@@ -1445,9 +1469,11 @@ function screenOutcome(){
      Florida you do not know which language you need until they pick up. The full apparatus — CIOC,
      objections, MARS — stays one tap away in the sheet below. */
   var named=!!firstName(r);
-  var talk = '<div class="ltag" style="margin-top:12px">WHEN THEY PICK UP</div>'
+  var talk = '<div class="ltag" style="margin-top:12px">WHEN THEY PICK UP '+langChips()+'</div>'
     + say(named?SCRIPT.op.en:SCRIPT.op.aen, named?SCRIPT.op.es:SCRIPT.op.aes, r)
-    + '<div class="mut" style="font-size:12px;margin-top:4px">Close with: <b>That&rsquo;s fair, right?</b> &middot; CIOC + objections in the script drawer below.</div>';
+    + '<div class="mut" style="font-size:12px;margin-top:4px">Close with: <b>'
+    + (lang()==='es' ? '&iquest;Verdad que s&iacute;?' : 'That&rsquo;s fair, right?')
+    + '</b> &middot; CIOC + objections in the script drawer below.</div>';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
     /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
@@ -1470,27 +1496,39 @@ function screenOutcome(){
   Array.prototype.forEach.call(document.querySelectorAll('.oc button'), function(b){
     b.onclick=function(){
       Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=true;});
+      /* EVERYTHING inside try/catch, and the catch RE-ENABLES the buttons. The handler's first act
+         is disabling all seven buttons; any throw after that left a screen of dead buttons with no
+         message — "sometimes those buttons do not work at all", reported from the field. A dead
+         screen is now impossible: on any error the buttons come back, the error is toasted, and
+         the details land in the error log (top bar) for a screenshot. */
+      try{
       var o=OUTCOMES.filter(function(z){return z.k===b.dataset.oc;})[0];
       /* The voicemail script must SURVIVE for him to read it. It renders into #vm, which lives
          inside #app — and on a single-phone lead the flow fell straight through to afterCall(),
          whose first statement replaces #app.innerHTML. The script he was told to read aloud was
          destroyed in the same synchronous handler that created it, before the browser ever painted.
-         So: show it, and wait for him to say he is done. */
-      if(o.k==='voicemail'){
-        /* EN and ES stacked — the board's proven pattern (genScript, genHanger, textLang default
-           'both'): South Florida means you do not know which language you will need until they pick
-           up, and hunting a tab mid-call is the thing this page exists to eliminate.
-           VMES used to be baked and never rendered; the Spanish voicemail had never once appeared. */
+         So: show it, and wait for him to say he is done. ONE language at a time (fcLang) — the
+         stacked EN+ES block was part of the "too many transcripts" pile-up. */
+      var go;
+      /* The vm block repaints ITSELF on a language toggle — going through setLang() would rebuild
+         the whole outcome screen and wipe the script he is mid-way through reading aloud. */
+      function paintVM(){
         $('vm').style.display='block';
-        $('vm').innerHTML='<b>Read this. Do not use a recording.</b>'
-          + '<div class="vmlang">EN</div><div>'+esc(fillScript(VMEN, r))+'</div>'
-          + '<div class="vmlang">ES</div><div>'+esc(fillScript(VMES, r))+'</div>';
+        $('vm').innerHTML='<b>Read this. Do not use a recording. '+langChips()+'</b>'
+          + say(VMEN, VMES, r)
+          + (go ? '<button id="vmdone" style="margin-top:14px">Done reading &rarr;</button>' : '');
+        if(go && $('vmdone')) $('vmdone').onclick = go;
+        Array.prototype.forEach.call($('vm').querySelectorAll('.lchip'), function(c){
+          c.onclick=function(ev){ ev.stopPropagation();
+            try{ localStorage.setItem('fcLang', c.dataset.lang); }catch(e){}
+            paintVM(); };
+        });
       }
+      if(o.k==='voicemail') paintVM();
       if(o.k==='dnc' && !confirm('They asked to stop. This closes every channel, permanently, on every device. Continue?')){
         Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); return;
       }
       logOutcome(r,o,d);
-      var go;
       if((o.k==='noanswer'||o.k==='voicemail') && phIdx+1 < r.p.length){
         go = function(){ phIdx++; toast('Logged · next number'); screenLead(); };
       } else if(o.k==='dnc'||o.k==='wrong'||o.k==='notint'){
@@ -1501,15 +1539,20 @@ function screenOutcome(){
         go = function(){ toast('✓ '+o.t+' — logged'); afterCall(r,o,nextC); };
       }
       // A voicemail script he has not finished reading must not be replaced out from under him.
-      if(o.k==='voicemail'){
-        $('vm').innerHTML += '<button id="vmdone" style="margin-top:14px">Done reading &rarr;</button>';
-        $('vmdone').onclick = go;
-      } else go();
+      // paintVM re-runs now that `go` exists, adding the Done button (and keeping it across
+      // language toggles).
+      if(o.k==='voicemail'){ paintVM(); } else go();
       /* go() runs IMMEDIATELY now. The 650ms hold showed a screen of disabled buttons between every
          outcome and the next action — pure dead time, times a hundred dials a day. The toast (now
          z-60, above the sheet) is the confirmation, and it overlaps the next screen harmlessly. */
+      }catch(err){
+        Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;});
+        logErr(err, 'outcome:'+(b.dataset.oc||''));
+        toast('Error logging that — buttons re-enabled, try again');
+      }
     };
   });
+  wireLang($('app'));
 }
 /* MAKE THE CONFIRM TRUE. The do-not-contact dialog promises "this closes every channel, permanently,
    on every device" — and the code behind it wrote optout+status to ONE case and nothing else.
@@ -1683,6 +1726,28 @@ function toast(t){
   clearTimeout(_toastT);
   _toastT=setTimeout(function(){el.classList.remove('on');},1400);
 }
+
+/* ON-DEVICE ERROR LOG. I cannot see his phone; "sometimes the buttons do not work" is a symptom
+   with no traceback. Every caught error and every uncaught one lands in a small ring buffer
+   (fcErrLog, last 20), and when any exist the top bar shows a red chip — tapping it shows the log
+   for a screenshot. Field reports become tracebacks. */
+function logErr(err, where){
+  try{
+    var log = JSON.parse(localStorage.getItem('fcErrLog')||'[]');
+    log.push({t: nowTS(), w: where||'', m: String(err && err.message || err).slice(0,200),
+              s: String(err && err.stack || '').slice(0,300)});
+    localStorage.setItem('fcErrLog', JSON.stringify(log.slice(-20)));
+  }catch(e){}
+}
+window.addEventListener('error', function(ev){ logErr(ev.error||ev.message, 'window'); });
+/* Tap OUTSIDE an open sheet closes it. An open drawer covers most of the card; taps on covered
+   buttons hit the drawer body and did nothing visible — one of the shapes behind "sometimes the
+   buttons do not work at all". Tap-outside-to-close is the behaviour every sheet UI trains. */
+document.addEventListener('click', function(ev){
+  var sh = document.getElementById('sheet');
+  if(sh && sh.classList.contains('open') && !sh.contains(ev.target)) sh.classList.remove('open');
+}, true);
+window.addEventListener('unhandledrejection', function(ev){ logErr(ev.reason, 'promise'); });
 function wire(){
   Array.prototype.forEach.call(document.querySelectorAll('.lane button'), function(b){
     b.onclick=function(){ lane=b.dataset.l; i=0; render(); };
@@ -1711,10 +1776,36 @@ async function freshCheck(){
 var SCRIPT=__SCRIPT__, ciocIdx=-1, objIdx=-1;
 function sheetToggle(){ $('sheet').classList.toggle('open'); }
 
+/* ONE LANGUAGE AT A TIME. Every script block used to render EN and ES stacked — on the call screen
+   that stacked the opener twice, the close cue, the drawer peek and (on voicemail) two more blocks:
+   his words, "too many transcripts, keep one on the screen." The board's both-languages instinct
+   was right for a LIST you scan; on a phone mid-call it is double the reading at the worst moment.
+   The chosen language persists (fcLang); the other is ONE tap away on the EN|ES chips. */
+function lang(){ try{ return localStorage.getItem('fcLang')==='es' ? 'es' : 'en'; }catch(e){ return 'en'; } }
+function setLang(v){
+  try{ localStorage.setItem('fcLang', v); }catch(e){}
+  // repaint whichever script surfaces are up, without touching flow state.
+  // NOT while a voicemail script is visible: that block repaints itself, and a full rebuild here
+  // would wipe the script mid-read and re-enable buttons for an outcome already logged.
+  var vmUp = $('vm') && $('vm').style.display === 'block';
+  if(SCREEN==='outcome' && cur && !vmUp){ screenOutcome(); }
+  else if(SCREEN==='lead' && cur){ screenLead(); }
+  if(cur) renderSheet(cur);
+}
+function langChips(){
+  var L=lang();
+  return '<span class="lchips"><button class="lchip'+(L==='en'?' on':'')+'" data-lang="en">EN</button>'
+       + '<button class="lchip'+(L==='es'?' on':'')+'" data-lang="es">ES</button></span>';
+}
+function wireLang(root){
+  Array.prototype.forEach.call((root||document).querySelectorAll('.lchip'), function(b){
+    b.onclick=function(ev){ ev.stopPropagation(); setLang(b.dataset.lang); };
+  });
+}
 function say(en, es, r){
-  var h = '<div class="ltag">EN</div><div class="say">'+esc(fillScript(en, r))+'</div>';
-  if(es) h += '<div class="ltag es">ES</div><div class="say es">'+esc(fillScript(es, r))+'</div>';
-  return h;
+  if(lang()==='es' && es) return '<div class="say es">'+esc(fillScript(es, r))+'</div>';
+  return '<div class="say">'+esc(fillScript(en, r))+'</div>'
+       + (lang()==='es' && !es ? '<div class="noes">No Spanish version of this line yet.</div>' : '');
 }
 
 function renderSheet(r){
@@ -1729,7 +1820,7 @@ function renderSheet(r){
     + '<span class="mut">&hellip; tap for the full script</span>'
     + '<div class="mut" style="margin-top:4px">Close with: <b>That&rsquo;s fair, right?</b></div>';
 
-  var b = '<div class="ltag">THE OPENER &mdash; name, two nots, the reason, a tiny ask, a fairness close</div>'
+  var b = '<div class="ltag">THE OPENER '+langChips()+'</div>'
         + say(opEN, opES, r)
         + (named ? '' : '<div class="noes">No usable first name on this lead &mdash; ask for the owner rather than guessing at one.</div>');
 
@@ -1785,6 +1876,7 @@ function renderSheet(r){
   Array.prototype.forEach.call($('sbody').querySelectorAll('[data-obj]'), function(el){
     el.onclick=function(){ objIdx = (objIdx===+el.dataset.obj) ? -1 : +el.dataset.obj; renderSheet(cur); };
   });
+  wireLang($('sbody'));
 }
 $('grip').onclick=sheetToggle;
 $('peek').onclick=sheetToggle;
