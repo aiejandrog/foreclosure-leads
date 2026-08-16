@@ -1422,12 +1422,13 @@ function setCallback(r, hours, label){
 
 function screenOutcome(){
   SCREEN='outcome';
-  /* Hide the script sheet while LOGGING. On the call screen it earns its place; here it was a
-     tap-thief — collapsed it still stood ~122-156px tall while the spacer under the buttons was
-     76px and only existed on the lead screen, so "Do not contact" (the LAST button) sat underneath
-     it and a tap opened the script instead of logging. That is the "overwhelming overlay, faulty
-     buttons" report, verbatim. The voicemail script renders inside the card, so nothing is lost. */
-  document.getElementById('sheet').classList.add('hid');
+  /* THE SHEET STAYS. This screen is not "the logging screen" — it paints the instant he taps dial
+     and is what he looks at for the WHOLE call, so hiding the script here stripped the dialogue
+     from the exact minutes it exists for ("you forgot to put the whole dialogue up on that screen
+     when I'm dialing" — correct, I had misread the workflow). The burial bug the hiding was meant
+     to fix is already solved by the full-size sheetpad on every screen; collapsed, the sheet no
+     longer steals taps. afterCall still hides it — there the call is genuinely over. */
+  document.getElementById('sheet').classList.remove('hid');
   var r=cur, d=r.p[phIdx];
   // Captured BEFORE any outcome is written — see advance(). Once logOutcome runs, pool() may no
   // longer contain either this lead or the same neighbours, so there is nothing left to read it from.
@@ -1438,6 +1439,15 @@ function screenOutcome(){
   }).join('');
   // Use the resolved first name, not the raw roll string — `(r.o).split(' ')[0]` on the county's
   // "GORDON,STEVE" has no space to split on, so the question read "How did it go with GORDON,STEVE?"
+  /* THE DIALOGUE, ON the screen he stares at for the whole call — not behind a tap. Same named/
+     anonymous opener choice as the sheet (greeting a company or a name the card said not to use is
+     worse than asking for the owner). EN with ES stacked, the board's proven pattern: in South
+     Florida you do not know which language you need until they pick up. The full apparatus — CIOC,
+     objections, MARS — stays one tap away in the sheet below. */
+  var named=!!firstName(r);
+  var talk = '<div class="ltag" style="margin-top:12px">WHEN THEY PICK UP</div>'
+    + say(named?SCRIPT.op.en:SCRIPT.op.aen, named?SCRIPT.op.es:SCRIPT.op.aes, r)
+    + '<div class="mut" style="font-size:12px;margin-top:4px">Close with: <b>That&rsquo;s fair, right?</b> &middot; CIOC + objections in the script drawer below.</div>';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
     /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
@@ -1445,6 +1455,7 @@ function screenOutcome(){
        the proven path (the main dial button), and returning from the dialer lands right back on
        this screen because the SCREEN guard defers any sync repaint. */
     +'<a class="redial" href="tel:+1'+d+'" id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>'
+    + talk
     +'<div class="oc" style="margin-top:10px">'+btns+'</div>'
     +'<div class="vm" id="vm" style="display:none"></div></div><div class="sheetpad"></div>';
   /* A redial IS a dial — record it, or the dial-through count undercounts the actual work (the
