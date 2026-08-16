@@ -161,18 +161,65 @@ CAL_JS = """
 }
 """
 
-def discover_dates(page, base=BASE):
+AUCTION_HORIZON_DAYS = int(os.environ.get('DEALFLOW_AUCTION_HORIZON_DAYS', '120'))
+
+
+def _month_starts(start, horizon_days):
+    """First-of-month for every calendar month overlapping [start, start+horizon_days]."""
+    end = start + timedelta(days=horizon_days)
+    out, cur = [], start.replace(day=1)
+    while cur <= end:
+        out.append(cur)
+        cur = (cur + timedelta(days=32)).replace(day=1)
+    return out
+
+
+def discover_dates(page, base=BASE, horizon_days=None):
+    """Auction dates from today out to a ROLLING horizon (default 120 days).
+
+    WHY THIS IS NOT TWO CALENDAR MONTHS ANY MORE (fixed 2026-08-15). It used to fetch exactly
+    [this month, next month], which is a SAWTOOTH, not a window: the front edge advances a day at a
+    time while the back edge stays pinned to the last day of next month, then jumps a whole month on
+    the 1st. Measured effect on the Miami-Dade board — 318 leads on 08/02 down to 270 on 08/15, an
+    almost monotone decline, with 67% of the board being the same cases as eleven days earlier. That
+    is the single biggest mechanical reason the operator kept seeing the same people: the pool was
+    shrinking daily and only refilled once a month.
+
+    A day-based horizon makes the back edge move every day like the front one does.
+    Tune without a code change via DEALFLOW_AUCTION_HORIZON_DAYS.
+    """
     today = date.today()
-    next_month = (today.replace(day=1) + timedelta(days=32)).replace(day=1)
-    dates = []
-    for cal in [today, next_month]:
+    horizon = int(horizon_days or AUCTION_HORIZON_DAYS)
+    last = today + timedelta(days=horizon)
+    dates, seen = [], set()
+    for idx, cal in enumerate(_month_starts(today, horizon)):
         page.goto(f"{base}?zaction=USER&zmethod=CALENDAR&selCalDate={cal:%m/%d/%Y}", timeout=45000)
-        page.wait_for_selector('.CALBOX', timeout=20000)
+        try:
+            page.wait_for_selector('.CALBOX', timeout=20000)
+        except Exception:
+            # Months beyond what the county has published render no calendar at all. That is the
+            # normal end of the horizon, not a failure — the old two-month loop never reached far
+            # enough to hit it, so an unguarded wait here would abort the whole nightly scrape.
+            #
+            # But the CURRENT month always exists. If even that has no calendar we are blocked,
+            # pointed at a bad host, or the markup changed — and returning [] there would make the
+            # caller scrape zero dates and publish an EMPTY board while reporting success. Fail loud
+            # instead: county_leads.py catches this per-platform and logs "calendar failed", and a
+            # single-county run aborts rather than silently shipping nothing.
+            if idx == 0:
+                raise RuntimeError(
+                    f"no auction calendar at {base} for the CURRENT month ({cal:%Y-%m}) — "
+                    f"blocked, wrong host, or .CALBOX markup changed")
+            print(f"  no calendar published for {cal:%Y-%m} — stopping horizon scan")
+            break
         for d in json.loads(page.evaluate(CAL_JS)):
             dt = datetime.strptime(d['date'], '%m/%d/%Y').date()
-            if dt >= today and d['remaining'] > 0 and d['date'] not in [x[0] for x in dates]:
+            if today <= dt <= last and d['remaining'] > 0 and d['date'] not in seen:
+                seen.add(d['date'])
                 dates.append((d['date'], d['saletype']))
-    print(f"auction dates found: {[f'{d} [{st}]' for d, st in dates]}")
+    dates.sort(key=lambda x: datetime.strptime(x[0], '%m/%d/%Y').date())
+    print(f"auction dates found ({horizon}d horizon, {len(dates)} dates): "
+          f"{[f'{d} [{st}]' for d, st in dates]}")
     return dates   # list of (date, saletype)
 
 def scrape_date(page, d, saletype='FC', attempt=1, base=BASE):
@@ -896,6 +943,53 @@ def _js_guard(tpl):
                          'feature would be dead on the live site.')
     print(f'js-guard: {len(blocks)} inline script block(s) parsed clean')
 
+def _text_ledger():
+    """text_sent.json -> (case -> {n, opens, last}, pkey -> {n, opens, last}).
+
+    The SMS mirror of _mail_ledger, and it exists for the same measured reason: before it, text
+    history lived ONLY in one browser's localStorage, so a new profile / second device / cleared
+    cache read every owner as never-texted and restarted the 3-touch ladder at touch 1. That is a
+    strictly worse version of the 2026-08-08 email incident (33 owners got 4+ emails).
+
+    ONLY `confirmed` rows count as sends — the exact analogue of requiring message_id above. The
+    worker's `textopen` branch posts confirmed:false because opening a composer is not a delivery;
+    those are surfaced separately as `opens` so an opened-but-never-sent lead is visible without
+    being treated as contacted.
+
+    The PERSON table is the one that matters. Cases fall off the board when their auction passes,
+    but the human keeps their phone — a per-case count silently forgets the two messages already
+    sent about a property that sold, and the ladder restarts on the next property they own.
+    """
+    log, per = {}, {}
+    p = os.path.join(HERE, 'text_sent.json')
+    if not os.path.exists(p):
+        return log, per
+    try:
+        rows = json.load(open(p, encoding='utf-8')) or []
+    except Exception as e:
+        print(f'text ledger: text_sent.json unreadable ({e}) - cadence falls back to localStorage only')
+        return log, per
+    for e in rows:
+        if not isinstance(e, dict) or e.get('ch') != 'text':
+            continue
+        try:
+            ms = int(datetime.fromisoformat(e['ts_utc']).timestamp() * 1000)
+        except Exception:
+            ms = 0
+        ok = bool(e.get('confirmed'))
+        for key, table in ((str(e.get('case') or '').strip(), log),
+                           (str(e.get('pkey') or '').strip(), per)):
+            if not key:
+                continue
+            d = table.setdefault(key, {'n': 0, 'opens': 0, 'last': 0})
+            if ok:
+                d['n'] += 1
+            else:
+                d['opens'] += 1
+            d['last'] = max(d['last'], ms)
+    return log, per
+
+
 def _mail_ledger(recent_days=14):
     """mail_sent.json -> (case -> {n, last}, recipient -> last_ms). Both in epoch MILLIseconds,
     because every consumer in the page compares them against Date.now().
@@ -1027,6 +1121,105 @@ def _money(v):
         return int(float(re.sub(r'[^0-9.\-]', '', str(v)) or 0))
     except Exception:
         return 0
+
+
+def _person_keys(rows):
+    """Group cases that belong to the SAME HUMAN, so a contact budget can be shared across them.
+
+    Everything in this system is case-keyed. One owner with three properties therefore gets three
+    independent text budgets and receives three times the messages — while experiencing one phone
+    buzzing. This is the grouping that fixes that.
+
+    EDGES (an edge unions two cases; a single uncorroborated signal never does):
+      * shared primary EMAIL — strong on its own. Mirrors the `byEmail` grouping the worker queue
+        already uses to consolidate portfolio email, so there is one grouping idiom, not two.
+      * shared 10-digit PHONE **and** a shared name token of >= 3 chars.
+    Name alone NEVER unions: "MARIA GARCIA" in Miami-Dade is a demographic, not a person.
+
+    🔴 THE INSTITUTIONAL GUARD IS THE LOAD-BEARING PART. A lender's, law firm's, or HOA management
+    company's number is attached to hundreds of leads. Union on it unguarded and every one of those
+    homeowners collapses into a single "person" with a single 3-text budget — the whole board would
+    go silent after three messages. Any phone or email shared by more than _MAX_SHARED cases is not
+    a person; it is an institution, and it is skipped entirely.
+
+    BIAS, deliberately toward UNDER-contacting: a wrongly MERGED person costs a lead; a wrongly
+    SPLIT person costs an extra unwanted message, which is the FTSA exposure. When in doubt, merge.
+
+    Returns {case: (pkey, group_size)}. Singletons get 'C'+case — i.e. exactly today's per-case
+    behaviour — so a lead with no phone and no email degrades to current semantics rather than into
+    a shared bucket with strangers.
+    ⚠️ pkey is a HASH, never the phone itself: the public build strips phones/emails from the payload
+    (see `nophone`), and a raw-phone key would put homeowner numbers straight back into it.
+    """
+    import hashlib
+    _MAX_SHARED = 8
+    NOISE = {'THE', 'AND', 'LLC', 'INC', 'CORP', 'TRUST', 'ESTATE', 'ETAL', 'JR', 'SR', 'III',
+             'LIVING', 'FAMILY', 'REVOCABLE', 'TRUSTEE', 'HEIRS', 'UNKNOWN', 'TENANT', 'OWNER',
+             'HUSBAND', 'WIFE', 'AKA', 'FKA', 'DECEASED'}
+
+    def _toks(s):
+        return {t for t in re.split(r'[^A-Za-z]+', str(s or '').upper())
+                if len(t) >= 3 and t not in NOISE}
+
+    parent = {}
+
+    def find(x):
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent[x], parent[x])
+            x = parent[x]
+        return x
+
+    def union(a, b):
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
+
+    by_email, by_phone, tok_of = {}, {}, {}
+    for r in rows:
+        c = r.get('case') or ''
+        if not c:
+            continue
+        parent.setdefault(c, c)
+        tok_of[c] = _toks(r.get('owners'))
+        for e in (r.get('emails') or []):
+            e = str(e or '').strip().lower()
+            if e:
+                by_email.setdefault(e, set()).add(c)
+        for p in (r.get('phones') or []):
+            d = re.sub(r'\D', '', str(p or ''))
+            if len(d) == 10:
+                by_phone.setdefault(d, set()).add(c)
+
+    skipped = 0
+    for cs in by_email.values():
+        cs = sorted(cs)
+        if len(cs) > _MAX_SHARED:
+            skipped += 1
+            continue
+        for c in cs[1:]:
+            union(cs[0], c)
+    for cs in by_phone.values():
+        cs = sorted(cs)
+        if len(cs) > _MAX_SHARED:
+            skipped += 1
+            continue
+        for i in range(len(cs)):
+            for j in range(i + 1, len(cs)):
+                if tok_of.get(cs[i], set()) & tok_of.get(cs[j], set()):
+                    union(cs[i], cs[j])
+
+    groups = {}
+    for c in list(parent):
+        groups.setdefault(find(c), []).append(c)
+    out = {}
+    for members in groups.values():
+        if len(members) == 1:
+            out[members[0]] = ('C' + members[0], 1)
+            continue
+        h = 'P' + hashlib.sha1('|'.join(sorted(members)).encode('utf-8')).hexdigest()[:10]
+        for c in members:
+            out[c] = (h, len(members))
+    return out, skipped
 
 
 def make_tracker(leads):
@@ -1174,6 +1367,49 @@ def make_tracker(leads):
     if os.path.exists(_lof):
         try: llcs = json.load(open(_lof, encoding='utf-8'))
         except Exception: llcs = {}
+    # OWNERSHIP-FLIP GATE (ownership_scan.py -> ownership.json): for auction-window leads, a LIVE
+    # county-appraiser check of "does the defendant still own this house?" (the Milouse miss —
+    # foreclosed out by a SEPARATE HOA case, Certificate of Title to a third party, still scored
+    # ~$56k equity). STAMP-ONLY for now: the row carries the verdict; isFlaggedDead does NOT yet
+    # auto-drop on it, so a flipped lead is surfaced for a human, never silently dropped.
+    ownership = {}
+    _ogf = os.path.join(HERE, 'ownership.json')
+    if os.path.exists(_ogf):
+        try: ownership = json.load(open(_ogf, encoding='utf-8'))
+        except Exception: ownership = {}
+
+    # §362 STAY FLAGS MUST NOT DEPEND ON THE PIPELINE REACHING STEP [3e/5].
+    # sale_history.py stamps sale_bk_active onto the LEAD rows, but the nightly scrape REWRITES
+    # leads_final.json every morning — so the stamp only exists if sale_history.py runs again after
+    # it. It sits late in the bat, which is exactly where the 2h Task Scheduler kill was landing, so
+    # the flags silently vanished: cache held 97 active stays while the published board carried 0.
+    # healthcheck caught the identical hole on 2026-07-21 (67 stays) — it is a RECURRING regression,
+    # and the site hard-gates outreach on this flag, so a miss means soliciting someone under a
+    # federal automatic stay. sale_history_cache.json is DURABLE, so read it here as the floor.
+    # Field mapping is sale_history.py:246-250 verbatim — do not re-derive it.
+    _shc = {}
+    _shf = os.path.join(HERE, 'sale_history_cache.json')
+    if os.path.exists(_shf):
+        try: _shc = json.load(open(_shf, encoding='utf-8'))
+        except Exception: _shc = {}
+    if _shc:
+        _restored = 0
+        for r in leads:
+            ent = _shc.get(r.get('Case #') or '')
+            if not isinstance(ent, dict):
+                continue
+            if r.get('sale_survived') is None and ent.get('s') is not None:
+                r['sale_survived'] = ent['s']; r['sale_scheduled'] = ent.get('n', 0)
+            if ent.get('w') and not r.get('sale_who'):     r['sale_who'] = ent['w']
+            if ent.get('b') and not r.get('sale_bk'):      r['sale_bk'] = ent['b']
+            if ent.get('sl') and not r.get('sale_stay_lifted'): r['sale_stay_lifted'] = ent['sl']
+            if ent.get('a') and not r.get('sale_bk_active'):
+                r['sale_bk_active'] = True
+                r['sale_bk_date'] = ent.get('bd', '')
+                _restored += 1
+        if _restored:
+            print('sale-history cache: restored %d ACTIVE 362 stay flag(s) the scrape had wiped '
+                  '-> outreach stays gated' % _restored)
     slim = []
     for r in leads:
         _ft = _fc_type(r.get('Case #', ''))          # HOA (whole 1st mortgage survives) vs MORTGAGE foreclosure
@@ -1316,6 +1552,24 @@ def make_tracker(leads):
             d['phones'] = [p.get('number') for p in _phs]
             d['phdnc'] = [bool(p.get('dnc')) for p in _phs]
             d['phtype'] = ['mobile' if (p.get('type') or '').lower().startswith('mob') else 'landline' for p in _phs]
+            # WHICH number to dial first. Every signal is already here (type/carrier/dnc) — it was just
+            # never ranked, so the first dial was a coin flip between the owner's cell, a dead landline
+            # and a number the registry says never to call. phrank[i] labels each number; phbest is the
+            # index of the one to try first (None when every number is DNC-flagged — 67 leads are in
+            # exactly that state, and on those the correct number of dials is ZERO).
+            try:
+                import phone_rank as _PR
+                _ranked, _blocked = _PR.rank(_phs)
+                _lbl = {}
+                for _r in _ranked + _blocked:
+                    _lbl[str(_r.get('number'))] = _r.get('label')
+                d['phrank'] = [_lbl.get(str(p.get('number')), '') for p in _phs]
+                _top = _ranked[0]['number'] if _ranked else None
+                d['phbest'] = next((i for i, p in enumerate(_phs)
+                                    if str(p.get('number')) == str(_top)), None) if _top else None
+            except Exception:
+                d['phrank'] = []
+                d['phbest'] = None
             d['emails'] = (hit.get('emails') or [])[:3]
         # Radius comps (comps.py MD path via the county's own MD_ComparableSales layer) — same
         # merge the BW/PB loop below does; without this, MD rows never showed an ARV.
@@ -1484,8 +1738,14 @@ def make_tracker(leads):
                 # skip-traced phones/emails for this county lead (skiptrace.py now covers all counties)
                 _ph = st.get(_d.get('case', ''))
                 if _ph and _ph.get('phones'):
-                    _d['phones'] = [p.get('number') for p in _ph['phones'] if p.get('number')][:4]
-                    _d['phdnc'] = [bool(p.get('dnc')) for p in _ph['phones']][:4]
+                    # ONE filtered sequence, three arrays. `phones` used to filter `if p.get('number')`
+                    # while `phdnc`/`phtype` did not — so a single empty-number row in the skiptrace
+                    # output shifted every flag after it onto the WRONG number: a DNC-flagged phone
+                    # read as clean and dialable, a clean one as DNC. Parallel arrays must be drawn
+                    # from the same list or they are not parallel.
+                    _sph = [p for p in _ph['phones'] if p.get('number')][:4]
+                    _d['phones'] = [p.get('number') for p in _sph]
+                    _d['phdnc'] = [bool(p.get('dnc')) for p in _sph]
                     # phtype was dropped here while the Miami-Dade merge above (line ~1110) kept it.
                     # skiptrace.py stores a per-phone type and 447 of the Broward/Palm Beach numbers
                     # come back 'Land Line' — but with the array missing, both consumers
@@ -1494,7 +1754,7 @@ def make_tracker(leads):
                     # the operator reads the silence as "they ignored me" instead of "that was a
                     # landline". Same expression as the MD path so the two cannot drift again.
                     _d['phtype'] = ['mobile' if (p.get('type') or '').lower().startswith('mob') else 'landline'
-                                    for p in _ph['phones']][:4]
+                                    for p in _sph]
                     _d['emails'] = (_ph.get('emails') or [])[:3]
             slim.extend(xl)
             _nl = sum(1 for _d in xl if _d.get('orliens'))
@@ -1872,6 +2132,60 @@ def make_tracker(leads):
         except Exception as _e:
             print('WhitepagesPro merge skipped:', _e)
 
+    # ---- PHONE RANKING, after every phone mutation is done ---------------------------------------
+    # "Put the ranked-best number first" was a silent no-op for most of the board. Only the
+    # Miami-Dade enrichment path set phrank/phbest (line ~1560); the Broward / Palm Beach county
+    # merge sets phones/phdnc/phtype and never ranks, so `phbest` was None and the first dial on
+    # those leads was whatever order the county happened to return — a coin flip between a cell, a
+    # dead landline, and a number the registry says never to call. The Whitepages merge above then
+    # APPENDS numbers without extending phrank, leaving even MD rows with labels shorter than their
+    # phone list.
+    #
+    # Runs here because this is the first point at which no code will touch `phones` again. It only
+    # FILLS IN what is missing or stale — never overwrites a rank that already covers every number —
+    # so it cannot disturb a lead that was already ranked correctly. Per-lead try/except: a ranking
+    # failure must cost the ordering on one lead, never the build.
+    try:
+        import phone_rank as _PR
+        _rk = _fx = 0
+        for _r in slim:
+            _ph = [str(p) for p in (_r.get('phones') or []) if p]
+            if not _ph:
+                continue
+            _rank, _best = _r.get('phrank') or [], _r.get('phbest')
+            if len(_rank) >= len(_ph) and _best is not None:
+                continue                      # already ranked, and the labels cover every number
+            _fx += 1
+            try:
+                _pd = list(_r.get('phdnc') or [])
+                _pt = list(_r.get('phtype') or [])
+                _objs = [{'number': n,
+                          'dnc': bool(_pd[i]) if i < len(_pd) else False,
+                          'type': _pt[i] if i < len(_pt) else ''} for i, n in enumerate(_ph)]
+                _ranked, _blocked = _PR.rank(_objs)
+                _lbl = {}
+                for _x in _ranked + _blocked:
+                    _lbl[str(_x.get('number'))] = _x.get('label')
+                _r['phrank'] = [_lbl.get(n, '') for n in _ph]
+                _top = _ranked[0]['number'] if _ranked else None
+                # None when every number is DNC-flagged. On those leads the correct number of
+                # dials is ZERO, and Call Mode drops them entirely.
+                _r['phbest'] = next((i for i, n in enumerate(_ph) if n == str(_top)), None) if _top else None
+                _rk += 1
+            except Exception:
+                _r.setdefault('phrank', [])
+                _r.setdefault('phbest', None)
+        # ALWAYS print. The first version of this pass iterated `leads` — but phones live on
+        # the SLIM dicts (the WP merge iterates `for _r in slim:`), so it scanned dicts with no
+        # phones key, found zero work, and printed nothing. A pass that only speaks when it finds
+        # work makes "broken" and "nothing to do" the same silence — the exact defect it was
+        # built to fix. Now the zero case says so out loud, with the denominator.
+        _withph = sum(1 for _r in slim if _r.get('phones'))
+        print('phone rank: %d of %d phone-bearing lead(s) needed ranking, %d ranked'
+              % (_fx, _withph, _rk))
+    except Exception as _e:
+        print('phone rank: SKIPPED (%s) — first-number order falls back to county order' % str(_e)[:80])
+
     tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
     # Motion v13 (UMD) inlined, not CDN-linked: the Desktop twin is opened over file://, where an ESM
     # import is CORS-blocked and a network <script> dies offline. If the vendored file ever goes
@@ -1901,6 +2215,36 @@ def make_tracker(leads):
     # gate explicitly tolerates an unsubstituted value; `const ZIP_CENT = __ZIPCENT__` is a BARE
     # identifier, so the Desktop copy threw ReferenceError at parse time and the whole board
     # failed to boot. Both new placeholders are resolved here, before either copy is written.
+    # Bake the ownership-flip verdict onto every row by case (stamp-only — additive fields; if
+    # ownership.json is absent this no-ops and the board is unchanged).
+    for _d in slim:
+        _og = ownership.get(_d.get('case', ''))
+        if _og:
+            _d['title_status'] = _og.get('title_status', '')
+            _d['title_flag'] = _og.get('title_flag', '')
+            _d['title_owner'] = _og.get('title_owner', '')
+            _d['title_evidence'] = _og.get('title_evidence', '')
+
+    # ---- PERSON KEYS (cross-case contact identity) ---------------------------------------------
+    # Computed at BUILD time, not in the browser: a client-side pass would be O(n^2) inside render
+    # loops over ~1,500 leads, and it would only ever see the cases in THIS build — a person whose
+    # first case already went to auction and dropped off the board still spent that budget.
+    _pk, _pk_skipped = _person_keys(slim)
+    for _d in slim:
+        _kp = _pk.get(_d.get('case', ''))
+        if _kp:
+            _d['pkey'], _d['pkn'] = _kp
+    _multi = {v[0]: v[1] for v in _pk.values() if v[1] > 1}
+    if _multi:
+        print('person keys: %d owner(s) span %d cases (largest %d)%s'
+              % (len(_multi), sum(_multi.values()), max(_multi.values()),
+                 (' · %d shared phone/email(s) skipped as institutional' % _pk_skipped) if _pk_skipped else ''))
+    # A raw phone number must never become the key — the public build strips phones/emails below and
+    # a digit key would smuggle them back in. Assert it rather than trust the comment.
+    _leak = [d['pkey'] for d in slim if re.fullmatch(r'\d{10}', str(d.get('pkey') or ''))]
+    if _leak:
+        raise SystemExit('person keys: %d raw-phone pkey(s) — would leak PII into the public build' % len(_leak))
+
     tpl = tpl.replace('__BUILTAT__', datetime.now().strftime('%Y-%m-%dT%H:%M'))
     tpl = tpl.replace('__ZIPCENT__', _esc_json(_zip_centroids(slim)))
     # Owner replies detected by replies.py (gitignored replies.json, written from IMAP). Absent
@@ -1924,6 +2268,15 @@ def make_tracker(leads):
     _mlog, _mto = _mail_ledger()
     tpl = tpl.replace('__MAILLOG__', _esc_json(_mlog))
     tpl = tpl.replace('__MAILTO__', _esc_json(_mto))
+    # SMS counterpart. __TEXTPERSON__ is the authoritative one — it survives a case dropping off the
+    # board after its auction, which a per-case count does not (the human keeps their phone).
+    _tlog, _tper = _text_ledger()
+    tpl = tpl.replace('__TEXTLOG__', _esc_json(_tlog))
+    tpl = tpl.replace('__TEXTPERSON__', _esc_json(_tper))
+    if _tlog or _tper:
+        _ret = sum(1 for v in _tper.values() if v.get('n', 0) >= 3)
+        print(f'text ledger: {len(_tlog)} case(s) / {len(_tper)} person(s) baked '
+              f'({_ret} already at 3 sends -> retired from the cadence)')
     if _mlog:
         _staged = sum(1 for v in _mlog.values() if v['n'] >= 3)
         print(f'send ledger: {len(_mlog)} cases baked '
@@ -2079,6 +2432,25 @@ def make_tracker(leads):
     # would poison the very centroid meant to locate it.
     tpl = tpl.replace('__ZIPCENT__', _esc_json(_zip_centroids(slim)))
     open(docs,'w',encoding='utf-8').write(_marker + tpl.replace('__DATA__', _payload))
+    # ---- CALL MODE (docs/call/) ----------------------------------------------------------------
+    # The phone-first calling page. Wrapped in try/except ON PURPOSE: this is an additive artifact,
+    # and a failure building it must cost the phone page, never the board the business runs on.
+    # ⚠️ call_mode raises CallModeError (a plain Exception) for exactly this reason. It used to raise
+    # SystemExit, which derives from BaseException and sails straight through this handler — so any
+    # one of its nine build guards would have killed the whole refresh. If you add a guard there,
+    # raise CallModeError, never SystemExit.
+    try:
+        import call_mode
+        _cm_rows, _cm_total = call_mode.make_callmode(
+            slim, codes, _encrypt_multi,
+            datetime.now().strftime('%Y-%m-%dT%H:%M'), _cov.get('sig', ''),
+            optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper)
+        if _cm_rows:
+            print('call mode: %d dialable lead(s) of %d qualifying -> docs/call/  (%s)'
+                  % (_cm_rows, _cm_total, 'encrypted' if codes else 'STUB — no site.codes'))
+    except Exception as _cme:
+        print('call mode: SKIPPED (%s) — board is unaffected' % str(_cme)[:120])
+
     if codes:
         print(f'tracker written: docs/index.html (ENCRYPTED · {len(codes)} access code(s)){_dst}')
     else:

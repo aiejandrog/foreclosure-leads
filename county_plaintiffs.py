@@ -83,8 +83,15 @@ def resolve_broward(cases, verbose=False):
         try:
             d = B.resolve(c, verbose=verbose)
             if d.get('ok') or d.get('plaintiff'):
+                # 'defendant' was being THROWN AWAY here. broward_plaintiff.classify() has always
+                # returned it (parsed out of the case style between "vs." and the Defendant label),
+                # but only plaintiff/is_bank_first/case_type were persisted — so broward_leads.json
+                # shipped defs='' forever. That is the reason the HOA that foreclosed Milouse Joseph
+                # (CONO-23-008222) never appeared in ANY field we had, and why the association-as-
+                # co-defendant tell can only screen Miami-Dade today. Keep it.
                 out[c] = {'plaintiff': d.get('plaintiff', ''), 'is_bank_first': bool(d.get('isBankForeclosingFirst')),
-                          'case_type': d.get('caseType', '') or d.get('case_type', '')}
+                          'case_type': d.get('caseType', '') or d.get('case_type', ''),
+                          'defendant': d.get('defendant', '')}
                 print(f"  BRO ok  {c:20} bank1st={out[c]['is_bank_first']}  {out[c]['plaintiff'][:40]}")
             else:
                 print(f"  BRO --  {c:20} ({d.get('error') or 'no plaintiff'})")
@@ -174,6 +181,12 @@ def main():
             d = cache.get(str(r.get('case') or ''))
             if d and d.get('plaintiff'):
                 reclassify(r, d['plaintiff'], d['is_bank_first'], d.get('case_type', ''))
+                # Carry the parsed defendant onto the lead so Broward/PB finally have party data.
+                # This is what lets diligence_list.py screen those counties for an association
+                # co-defendant — the tell that would have caught the Milouse lead before anyone
+                # worked it. Semicolon-delimited to match the Miami-Dade 'defs' shape exactly.
+                if d.get('defendant') and not r.get('defs'):
+                    r['defs'] = str(d['defendant']).replace(' and ', '; ')
                 changed = True; patched += 1
         if changed:
             json.dump(leads, open(os.path.join(HERE, fn), 'w', encoding='utf-8'), indent=1)

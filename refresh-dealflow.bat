@@ -25,10 +25,16 @@ if errorlevel 1 (
 rem  Publish the fresh leads NOW, before the slower cases/records/phones steps -- so even if a
 rem  later step is slow or fails, the newest leads are already live on the site.
 echo [1b/5] Publishing fresh leads immediately...
-git add docs/index.html >> "%LOG%" 2>&1
+git add docs/index.html docs/call >> "%LOG%" 2>&1
 git commit -m "refresh: fresh leads" >> "%LOG%" 2>&1
 if not errorlevel 1 (
-  git push origin main >> "%LOG%" 2>&1
+  rem  PULL BEFORE PUSH. Without this the push is rejected non-fast-forward the moment GitHub
+rem  Actions pushes anything (it publishes the balloon book on its own schedule), and the
+rem  "retry" below is the SAME push 6s later, which fails identically. Measured 2026-08-16:
+rem  4 commits stacked and the LIVE SITE SAT FROZEN AT 08-14 for two days while every local
+rem  run still reported success. -X theirs mirrors .github/workflows/refresh.yml exactly.
+git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
+git push origin main >> "%LOG%" 2>&1
   if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
   echo     fresh leads pushed - enrichment continues below.>> "%LOG%"
 )
@@ -73,6 +79,17 @@ rem  their case is filed. lp_leads.py shapes them into st='LP' board leads (the 
 if exist captcha.key python -u lis_pendens.py --days 30 >> "%LOG%" 2>&1
 if exist lis_pendens.json python -u lp_leads.py >> "%LOG%" 2>&1
 
+rem  ADDED 2026-08-15 - these three exist in refresh.yml but were NEVER in this bat, and this bat has
+rem  been the only thing actually running since the cloud workflow stopped publishing on 07-27. The
+rem  consequence: only 355 of 758 fresh filings carried a usable ADDRESS, and the newest filings were
+rem  the least likely to have one - exactly backwards, since freshness is the whole edge on this lane.
+rem  A lis pendens names a defendant and a legal description, not a street address; lp_resolve derives
+rem  it from the parcel roll, lp_values prices it, lp_status catches dismissals so we stop working a
+rem  case that already ended.
+if exist lp_leads.json python -u lp_resolve.py >> "%LOG%" 2>&1
+if exist lp_leads.json python -u lp_values.py >> "%LOG%" 2>&1
+if exist lp_leads.json python -u lp_status.py >> "%LOG%" 2>&1
+
 echo [2d/5] Geocoding new leads (keyless US Census) -> lat/lng for the origin-anchored door route...
 python -u geo_enrich.py >> "%LOG%" 2>&1
 
@@ -91,8 +108,17 @@ goto :rebuild
 
 :phones
 rem  --all = every human owner + (via the code) every resolved LLC officer, not just Tier A.
-rem  --limit 120 caps a single run's spend; already-cached leads are skipped so it stays incremental.
-python -u skiptrace.py --all --limit 6 >> "%LOG%" 2>&1
+rem  --limit caps a single run's spend; already-cached leads are skipped so it stays incremental.
+rem
+rem  RAISED 6 -> 100 (2026-08-15). The 6 came from a $1/day emergency budget cap and then stayed,
+rem  while the comment above it still claimed 120. Measured consequence: ~21 NEW cases land on the
+rem  board every day, so tracing only 6 of them meant the DIALABLE pool fell further behind every
+rem  single night no matter how many leads arrived - 263 of 696 board leads had no phone at all, and
+rem  the in-repo estimate to clear that backlog was ~26 nights. That is a real reason the same names
+rem  kept coming back: only 291 leads were ever workable and 82.5% of those had already been worked.
+rem  skiptrace.py still enforces its own --max-spend and the shared bd_budget daily dollar cap, so
+rem  this raises the throughput ceiling without removing the spend guard.
+python -u skiptrace.py --all --limit 100 >> "%LOG%" 2>&1
 
 rem [3a-2] Whitepages Pro API - one paid /v2/property call returns EVERY owner + resident + all
 rem typed phones (mobile/landline unmasked) + emails per lead. ~$0.10/call est.; --limit 30 caps
@@ -137,15 +163,30 @@ python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('l
 echo [4b/5] Refreshing the Deals-on-the-Clock auction forecast (reads the freshly-built board)...
 python -u auction_forecast.py >> "%LOG%" 2>&1
 
+echo [4c/5] Archiving today's auction calendar (churn + cash-buyer history)...
+rem  ADDED 2026-08-15. This step lives in refresh.yml but was never in this bat, and the cloud
+rem  workflow stopped publishing on 07-27 - so auction_archive.json holds 722 records ALL stamped
+rem  2026-08-04. It ran exactly once, ever. The consequence is that NOTHING in this repo tracks the
+rem  same case across two points in time, so reschedule rate, drop-off rate and "is the board
+rem  actually churning" were unanswerable - which is precisely the question that started this
+rem  restructure. Each nightly append makes churn measurable from here on.
+python -u auction_archive.py >> "%LOG%" 2>&1
+
 :publish
 echo [5/5] Publishing to the live site...
-git add docs/index.html >> "%LOG%" 2>&1
+git add docs/index.html docs/call >> "%LOG%" 2>&1
 git commit -m "refresh: auto lead + phone update" >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo     nothing changed - site already current.>> "%LOG%"
   echo     Already current - nothing to push.
   goto :end
 )
+rem  PULL BEFORE PUSH. Without this the push is rejected non-fast-forward the moment GitHub
+rem  Actions pushes anything (it publishes the balloon book on its own schedule), and the
+rem  "retry" below is the SAME push 6s later, which fails identically. Measured 2026-08-16:
+rem  4 commits stacked and the LIVE SITE SAT FROZEN AT 08-14 for two days while every local
+rem  run still reported success. -X theirs mirrors .github/workflows/refresh.yml exactly.
+git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
 git push origin main >> "%LOG%" 2>&1
 if errorlevel 1 (
   timeout /t 6 /nobreak >nul

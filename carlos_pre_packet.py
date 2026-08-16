@@ -217,6 +217,21 @@ td{padding:6px 8px;border-top:1px solid #eef0f5;vertical-align:top}
 .cd{background:#fef3c7;color:#92400e;font:700 9px Arial;padding:1px 5px;border-radius:7px}
 .note{border-bottom:1px dotted #9ca3af;height:13px;margin-top:4px}
 .toc td{font-size:11.5px}
+/* check-off: a big empty box under each door number Carlos ticks when the door is done */
+.done{width:30px;text-align:center;vertical-align:top;padding-top:7px}
+.box{display:inline-block;width:17px;height:17px;border:2px solid #0B1730;border-radius:4px;margin-top:5px}
+/* the result strip — tick what happened, no writing needed for the common cases */
+.tick{margin-top:6px;font:700 10px Arial;color:#374151}
+.tick .opt{display:inline-block;margin:0 9px 3px 0;white-space:nowrap}
+.tick .opt i{display:inline-block;width:11px;height:11px;border:1.5px solid #6b7280;border-radius:2px;margin-right:4px;vertical-align:-1px}
+.tick .win i{border-color:#065f46;border-width:2px}
+.tick .win{color:#065f46}
+.tick .dead i{border-color:#991b1b}
+.tick .dead{color:#991b1b}
+/* one write line for the phone/answer, and the buying data demoted to a dim footnote */
+.wl{border-bottom:1px solid #cbd5e1;height:15px;margin-top:5px}
+.wl.lbl{border:0;height:auto;font:600 9.5px Arial;color:#6b7280;margin-top:6px}
+.dim{font-size:9.5px;color:#9aa3af;margin-top:4px}
 """
 
 SCRIPT = """
@@ -346,7 +361,7 @@ def main():
             if len(ch) > 1:
                 out.append('<a class="run" href="%s">&#128663; Google Maps route%s: %s</a>'
                            % (H.escape(maps(ch)), (' part %d' % (k // 8 + 1)) if len(stops) > 8 else '',
-                              H.escape(' &rarr; '.join(s.split(',')[0] for s in ch))))
+                              ' &rarr; '.join(H.escape(s.split(',')[0]) for s in ch)))
         out.append('<table>')
         for n, r in enumerate(g, 1):
             ph = ' &middot; '.join(fmt_ph(p) for p in r['ph'][:2]) if r['ph'] else 'no number &mdash; knock'
@@ -357,16 +372,26 @@ def main():
                    ''.join('<span class="fl">%s</span> ' % H.escape(f) for f in (r.get('flags') or [])) + \
                    ('<span class="ln">%s</span> ' % H.escape(r.get('lane', '')) if r.get('lane') else '')
             out.append(
-                '<tr><td class="n">%d</td><td><div class="a">%s</div>'
+                '<tr><td class="done"><div class="n">%d</div><div class="box"></div></td>'
+                '<td><div class="a">%s</div>'
                 '<div class="who">%s %s</div>'
-                '<div class="meta">%s$%s value &middot; %s bd / %s ba &middot; %s sqft &middot; filed %s &middot; PLAINTIFF: %s &middot; case %s</div>'
-                '<div class="note"></div></td>'
+                '<div class="meta">%sPLAINTIFF: %s &middot; case %s</div>'
+                '<div class="tick">'
+                '<span class="opt"><i></i>Nobody home</span>'
+                '<span class="opt"><i></i>Talked</span>'
+                '<span class="opt"><i></i>Left letter</span>'
+                '<span class="opt win"><i></i>GOT NUMBER</span>'
+                '<span class="opt dead"><i></i>Not interested</span>'
+                '</div>'
+                '<div class="wl lbl">Best # &amp; time to call, or what they said:</div>'
+                '<div class="wl"></div>'
+                '<div class="dim">$%s value &middot; %s bd / %s ba &middot; %s sqft &middot; filed %s</div></td>'
                 '<td class="ph">%s</td></tr>'
                 % (n, H.escape(r['addr']), H.escape(r['owner'][:34]), tags,
-                   _datebit(r),
+                   _datebit(r), H.escape(r['pl']), H.escape(str(r['c'])),
                    format(r['val'], ',d') if r['val'] else '?', r['beds'] or '?', r['baths'] or '?',
                    format(int(r['sqft']), ',d') if r.get('sqft') else '?',
-                   H.escape(str(r['filed'])), H.escape(r['pl']), H.escape(str(r['c'])), ph))
+                   H.escape(str(r['filed'])), ph))
         out.append('</table></div>')
 
     out.append('<div class="sub" style="margin-top:10px">%d doors total. Anything you learn goes on '

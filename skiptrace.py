@@ -419,6 +419,29 @@ def main():
             picked.append(r)
     todo = [r for r in picked if args.refresh or (_case(r) not in results)
             or _stale_empty(_case(r)) or (_case(r) in retrace_cases)]
+
+    def _urgency(r):
+        """Auction-dated leads first, soonest sale leading; then LP by freshest filing.
+
+        WHY THIS SORT EXISTS. `todo[:limit]` used to cap in FILE order (leads_final.json, then each
+        *_leads.json alphabetically), which is unrelated to how soon anyone loses their house. With
+        the old --limit 6 that was nearly harmless; the nightly cap is now 100, so an unsorted cap
+        spends real money on ~100 arbitrary leads a night while a lead 2 days from auction can sit
+        untraced behind a Palm Beach lead months out. Cost is identical either way — only the order
+        changes — so this is free. Same defect and same fix as the DNC lane in tracerfy_mcp.py.
+        LP rows carry days=9999 by design, so they must NOT be compared on days: they sort in their
+        own bucket by filing recency, which is the entire edge on a fresh filing."""
+        try:
+            d = int(r.get('days_to_auction') if r.get('days_to_auction') is not None
+                    else r.get('days'))
+        except (TypeError, ValueError):
+            d = 9999
+        if d < 9999:
+            return (0, d, 0)
+        age = _lp_age_days(r.get('filed'))
+        return (1, 0, age if isinstance(age, int) else 10 ** 6)
+
+    todo.sort(key=_urgency)
     if args.limit:
         todo = todo[:args.limit]
 

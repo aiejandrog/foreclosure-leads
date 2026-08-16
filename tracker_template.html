@@ -2039,6 +2039,11 @@ body.compact .dg-v{font-size:14.5px}
   padding:9px 14px;font-size:13.5px;font-weight:700;cursor:pointer}
 #textmodal .txcopy:hover{background:#C6A14B;border-color:#C6A14B;color:#0B1730}
 #textmodal .txcopy.ok{background:var(--green-ink,#166534);border-color:var(--green-ink,#166534)}
+/* Outlined, not filled: it must be findable in one glance but must never be mistaken for the send
+   button sitting next to it. Red reads as "this ends something", which is exactly right. */
+#textmodal .txstop{background:var(--surface,#fff);color:#B42318;border:1px solid #B42318;border-radius:8px;
+  padding:9px 14px;font-size:13.5px;font-weight:800;cursor:pointer;margin-left:8px}
+#textmodal .txstop:hover{background:#B42318;color:#fff}
 #textmodal .txfoot{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
 #textmodal .txmark{background:var(--gold-grad,#C6A14B);color:var(--gold-ink,#241C05);border:1px solid var(--gold-d,#6F5514);border-radius:8px;padding:9px 14px;font-weight:800;font-size:13.5px;cursor:pointer}
 #textmodal .txskip{background:transparent;color:var(--muted,#6b7280);border:1px solid var(--line,#E2E6EE);border-radius:8px;padding:9px 14px;font-size:13.5px;cursor:pointer}
@@ -2311,6 +2316,13 @@ const REPLIES = (function(){ try { return __REPLIES__; } catch(e){ return {}; } 
    contacted MORE than this browser knows, never less. */
 const MAILLOG = (function(){ try { return __MAILLOG__; } catch(e){ return {}; } })();
 const MAILTO  = (function(){ try { return __MAILTO__;  } catch(e){ return {}; } })();
+/* SMS ledgers — same purpose as MAILLOG, built because text history was per-browser-profile and a
+   fresh profile restarted the 3-touch ladder at touch 1 on someone already messaged three times.
+   TEXTPERSON is authoritative: it is keyed by pkey, so it survives a case dropping off the board
+   after its auction while the human keeps their phone. Both default to {} so a board built before
+   the ledger existed simply behaves as it did. */
+const TEXTLOG    = (function(){ try { return __TEXTLOG__;    } catch(e){ return {}; } })();
+const TEXTPERSON = (function(){ try { return __TEXTPERSON__; } catch(e){ return {}; } })();
 let DATA = Array.isArray(RAW) ? RAW : [];   // encrypted payloads start empty until unlocked
 let unlockName = '';   // name sealed in the matching access-code blob (for the welcome toast)
 const LS = 'fcLeadNotes';
@@ -2480,6 +2492,14 @@ function _syncPropPills(){
 // a lead the records already flagged as dead: high-confidence deed to an investor, or an HOA case whose
 // surviving first mortgage exceeds the equity above the judgment (underwater).
 function isFlaggedDead(r){
+  // OWNERSHIP FLIP (ownership_scan.py -> ownership.json, baked by make_tracker). A LIVE county-appraiser
+  // read said the current owner of record is NOT the person this case is against — the house already
+  // sold out from under them, usually through a SEPARATE case (an HOA foreclosure whose Certificate of
+  // Title never touches our docket). Jesse's 2026-08-14 critique: this burned us TWICE — a closer pitched
+  // equity to a non-owner and a field rep nearly drove to a stranger's door. sibclaimed/ordeeded below
+  // both missed it because neither is a cross-case signal. This one is, so it kills the lead outright.
+  // Only 'transferred' kills; 'unverified' must NOT — an appraiser outage is not evidence of a sale.
+  if(r.title_status === 'transferred') return true;
   if(r.sibclaimed) return true;      // sibling case already sold + title issued — property is gone
   if(r.ordeeded && r.ordeedconf==='ok') return true;
   // SOURCE OF TRUTH. This predicate hard-kills a lead — it feeds "Hide flagged", the 30%+ equity
@@ -2906,6 +2926,19 @@ function verdictBadge(r){ return r._verdict==='VERIFY' ? '<span class="vb vbv">V
 // deal-killer chips: 🔴 TAKEN (already deeded to an investor) · 🟠 2ND FORECLOSURE (a separate mortgage case).
 // Conservative: solid red only when high-confidence; low-confidence shows amber "MAYBE SOLD / verify".
 function flagChips(r){ let o='';
+  // SOLD — the strongest of these: a LIVE county-appraiser read says the current owner of record is not
+  // the person this case is against. Catches the cross-case transfer (an HOA foreclosure's Certificate of
+  // Title) that CLAIMED/TAKEN both miss because neither looks outside our own docket. Renders the actual
+  // new owner so nobody has to take it on faith. 'unverified' gets an amber CHECK TITLE chip instead —
+  // an appraiser outage is not evidence of a sale, and it must never masquerade as one.
+  if(r.title_status === 'transferred'){
+    o+='<span class="chip tax" title="ALREADY SOLD. A live county property-appraiser lookup shows the current owner of record is '+
+      esc(r.title_owner||'someone else')+' &mdash; NOT the party this foreclosure is against. The transfer usually happened in a '+
+      'SEPARATE case (an HOA foreclosure whose Certificate of Title never touches this docket). Do not knock, call, or mail: '+
+      'this person has nothing to sell. Verify in Official Records before spending any more time.">SOLD &mdash; NOT OWNER</span>'; }
+  else if(r.title_status === 'unverified' && r.title_flag){
+    o+='<span class="chip hoa" title="'+esc(r.title_evidence||'The live owner-of-record check did not complete for this parcel.')+
+      ' Confirm the current owner in the county appraiser + Official Records BEFORE contacting anyone.">CHECK TITLE</span>'; }
   // CLAIMED — the docket-side twin of TAKEN: a sibling foreclosure case on this property already
   // produced a Certificate of Title to an outside bidder. Verified from the clerk's own docket.
   if(r.sibclaimed){ const s=(r.sib||[]).find(x=>x.sold)||{};
@@ -3162,9 +3195,47 @@ function _daClockHtml(r){
   return '<div class="dm-sec">The clock — same as call sheet</div><div class="csbody" style="margin:0 0 12px">'+_clockBodyHtml(r)+'</div>';
 }
 // Hard blocks for Text/Phone Link entry points (row DO, CS, DA). Modal still refuses send/copy if reached.
+/* PERSON-LEVEL opt-out, keyed by the identity the owner actually gave us.
+
+   Some opt-outs are recorded against an EMAIL or a PHONE rather than a case — `optout_sync.py`
+   writes them as '@address' keys, and the STOP-reply loop already skips '@'-prefixed keys when it
+   walks notes. The result is a note attached to no case, which suppresses NOTHING: the person is
+   marked DO NOT CONTACT and stays fully reachable through any lead keyed differently.
+
+   Measured 2026-08-16: 2 such orphans exist (@gil_sosa@hotmail.com, @norma1940hendy@gmail.com), and
+   only ONE maps to a live lead (CACE-25-005200, Norma Hendy) which is already suppressed on its own
+   case — so there is no active leak right now. This is prophylactic: the moment skiptrace attaches
+   one of those addresses to a different lead, nothing else would stop it.
+
+   Memoized on the notes object identity so a 1,477-lead render does not rescan the keys each row. */
+let _OOP = null, _OOPsrc = null;
+function _optedOutIdentities(){
+  if(_OOP && _OOPsrc === notes) return _OOP;
+  const em = new Set(), ph = new Set();
+  Object.keys(notes || {}).forEach(function(k){
+    const c = String(k).charAt(0);
+    if(c !== '@' && c !== '#') return;
+    const n = notes[k] || {};
+    if(!(n.optout || n.status === 'DO NOT CONTACT')) return;
+    if(c === '@') em.add(String(k).slice(1).trim().toLowerCase());
+    else ph.add(String(k).slice(1).replace(/\D/g,''));
+  });
+  _OOP = {em: em, ph: ph}; _OOPsrc = notes;
+  return _OOP;
+}
+function _isOptedOutPerson(r){
+  const S = _optedOutIdentities();
+  if(!S.em.size && !S.ph.size) return false;
+  if((r.emails||[]).some(function(e){ return S.em.has(String(e||'').trim().toLowerCase()); })) return true;
+  return (r.phones||[]).some(function(p){ return S.ph.has(String(p||'').replace(/\D/g,'')); });
+}
+
 function _textContactBlocked(r){
   const n=notes[r.case]||{};
   if(_isOptedOut(n) || n.status==='DO NOT CONTACT') return 'optout';
+  // one edit, every channel: per the 2026-08-11 sweep this single function gates text, WhatsApp,
+  // email, letter, hanger and door, so the person-level check belongs here and nowhere else
+  if(_isOptedOutPerson(r)) return 'optout';
   if(_isWrongOwner(n)) return 'wrong';
   if(r.saleBkAct) return 'bk';
   return '';
@@ -3643,7 +3714,32 @@ function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=note
   // change and syncs to every teammate's device (nobody re-dials what someone else disproved).
   if(opt.wrongOwner && !n.wrongown){ n.wrongown = _today(); _optLog(n, 'wrong-owner'); }
   if(opt.status){ n.status=opt.status; if(opt.status==='DO NOT CONTACT' && !n.optout){ n.optout=_today(); _optLog(n, 'set-local'); } } if(opt.next!==undefined) n.next=opt.next; else if(opt.nextDays) _setNext(n, opt.nextDays); save(); return true; }
-function autoLog(r, ch, out, opt){ const n=notes[r.case]; const ts=n&&n.touches; if(ts&&ts.length){ const l=ts[ts.length-1]; if(l.d===_today() && l.ch===ch) return; } logTouch(r.case, ch, out, opt); }
+/* Same-day dedupe, fixed 2026-08-16. Two bugs in the old one-liner, both under-counting:
+
+   1. It inspected ONLY ts[ts.length-1]. So text -> email -> text on one day wrote TWO text
+      touches, while text -> text wrote one. Same-day dedupe has to be order-independent or the
+      count depends on what else the operator happened to do in between.
+   2. It collapsed on (day, channel), ignoring the OUTCOME. A cadence sends deliberately different
+      messages; a call day produces "No answer" then "Talked". Collapsing those loses the second
+      contact entirely — which is how a 3-text ladder lets a 4th message go out while the counter
+      still reads 3, and how a real conversation vanishes behind an earlier no-answer.
+
+   Now: scan every touch logged today on this channel and collapse only a genuine repeat of the
+   SAME outcome. Every consumer moves in the safe direction — _recentTeleCount hits the FTSA cap
+   sooner, _mailHist retires sooner. Nothing is made more permissive.
+   NOTE this still collapses a repeated identical outcome (two "No answer" in one morning). That is
+   correct for a CONTACT record and wrong for a DIAL count — dial-through is counted separately in
+   n.dials, which is additive and never deduped. Do not "fix" this by removing the dedupe. */
+function autoLog(r, ch, out, opt){
+  const n = notes[r.case]; const ts = (n && n.touches) || []; const today = _today();
+  for(let i = ts.length - 1; i >= 0; i--){
+    const t = ts[i];
+    if((t.d || '') !== today) break;                 // touches are append-ordered; stop at yesterday
+    if((t.ch || '') !== ch) continue;
+    if((t.out || '') === (out || '')) return;        // genuine repeat — collapse
+  }
+  logTouch(r.case, ch, out, opt);
+}
 /* ══════════════════ THE FUNNEL — one stage per lead, worked best-equity-first ══════════════════
    Alejandro's ladder, in his words: call the best equity first; if they don't pick up, email and
    text; then a letter; and whoever is still cold gets filtered down to a door knock, which is
@@ -5351,7 +5447,24 @@ const DNT_LS='fcDNT';
 let dnt=(function(){ try{ return new Set(JSON.parse(localStorage.getItem(DNT_LS)||'[]')); }catch(e){ return new Set(); } })();
 function _saveDNT(){ try{ localStorage.setItem(DNT_LS, JSON.stringify([...dnt])); }catch(e){} }
 function _isDNT(d){ return dnt.has(String(d||'').replace(/\D/g,'')); }
-function _addDNT(d){ const x=String(d||'').replace(/\D/g,''); if(x){ dnt.add(x); _saveDNT(); } }
+/* DNT USED TO DIE ON ONE DEVICE. `dnt` is a localStorage Set and is NOT in _notesBridgePayload, so a
+   number marked Do-Not-Text on the laptop was still fully textable from the phone — and the phone is
+   where texts are actually sent from. Rather than invent a second transport, mirror the mark onto
+   the lead's NOTE (`n.dntph`), which already rides both the /notes bridge and the encrypted team
+   sync. One write, two durable paths, no blob-shape change for mergeNotes to learn.
+   The local Set stays as the fast path and as the cross-case block for numbers whose lead is not on
+   this build. */
+function _addDNT(d, caseId){
+  const x=String(d||'').replace(/\D/g,'');
+  if(!x) return;
+  dnt.add(x); _saveDNT();
+  if(caseId){
+    const n=notes[caseId]=notes[caseId]||{status:'',note:''};
+    n.dntph=n.dntph||[];
+    if(n.dntph.indexOf(x)<0) n.dntph.push(x);
+    try{ if(typeof save==='function') save(); }catch(e){}
+  }
+}
 function textablePhones(r){
   if(_textContactBlocked(r)) return [];
   const n=notes[r.case]||{}, out=[];
@@ -5364,9 +5477,13 @@ function textablePhones(r){
   (r.phones||[]).slice(0,4).forEach((ph,i)=>{
     if((r.phdnc||[])[i]) return;
     if(String((r.phtype||[])[i]||'').toLowerCase().indexOf('land') > -1) return;
-    const d=String(ph).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d);
+    // check BOTH the device Set and the synced per-lead list — a teammate's (or this owner's own
+    // phone-side) DNT arrives in n.dntph long before it could ever reach this device's localStorage
+    const d=String(ph).replace(/\D/g,'');
+    if(d && !_isDNT(d) && (n.dntph||[]).indexOf(d)<0 && out.indexOf(d)<0) out.push(d);
   });
-  if(n.phone){ const d=String(n.phone).replace(/\D/g,''); if(d && !_isDNT(d) && out.indexOf(d)<0) out.push(d); }
+  if(n.phone){ const d=String(n.phone).replace(/\D/g,'');
+    if(d && !_isDNT(d) && (n.dntph||[]).indexOf(d)<0 && out.indexOf(d)<0) out.push(d); }
   return out;
 }
 /* Greeting name for a text. Returns '' when there is no usable HUMAN first name — every template
@@ -5387,11 +5504,18 @@ function _smsStreet(r, lang){
   const s = (((r||{}).addr||'').split(',')[0] || (r||{}).addr || '').trim();
   return s || (lang === 'es' ? 'su propiedad' : 'your property');
 }
+/* Ladder-aware tone. The old version was BINARY — any single prior call or text flipped it to
+   'followup' forever, so touch 2 and touch 3 sent the identical body. "Three texts, all of them
+   different" requires the tone to track the STAGE, so it now reads _textStage (person-level).
+   'final' maps to the t3 body, which is written as a genuine last message; the retire ledger is
+   what lets that promise be true rather than a line of copy. */
 function _defaultTextTone(r){
-  const n=notes[r.case]||{}, ts=n.touches||[];
-  if(ts.some(t => /text|call|spoke|talked/i.test((t.ch||'')+' '+(t.out||'')))) return 'followup';
+  const st=_textStage(r);
+  if(st==='follow') return 'followup';                      // touch 2
+  if(st==='final')  return 't3';                            // touch 3 — the last one
+  if(st==='retired'||st==='replied') return st;             // callers must refuse to compose
   if(typeof r.days==='number' && r.days>=0 && r.days<=14 && r.st!=='LP') return 'urgent';
-  return 'cold';
+  return 'cold';                                            // touch 1
 }
 /* Email retargeting counterpart of _defaultTextTone. Counts confirmed OUTBOUND email touches and
    spots an inbound reply (the OWNER REPLIED marker shares ch:'email' — it is inbound, not a send).
@@ -5429,6 +5553,129 @@ function _mailStage(r){
   if(H.sends===1) return 'follow';
   return 'cold';
 }
+/* ══════════════════ TEXT CADENCE — 3 touches, then a silent retire ══════════════════
+   Email has had staging since day one (_mailStage above). Text had NOTHING: the only ceiling was
+   FTSA_MAX_24H, a ROLLING 24h window that mixes calls and texts and resets every night — so the
+   same owner could be texted every day forever and no counter ever said stop.
+
+   TWO CAPS, TWO JOBS. Never conflate them, never let one call the other:
+     FTSA_MAX_24H   rolling 24h burst limit, call+text, per CASE   (unchanged, above)
+     TEXT_MAX_TOTAL lifetime ladder, text-only, per PERSON         (this block)
+
+   The budget is keyed to the PERSON, not the case. One owner with three properties experiences one
+   phone buzzing, so three properties must share one budget of three messages — not nine. `pkey` is
+   baked per lead by _person_keys() in foreclosure_leads.py; a lead with no phone and no email gets
+   a singleton key and behaves exactly as the old per-case code did.
+
+   'retired' is deliberately NOT named 'done' like email's terminal stage, because it must behave
+   differently: email's `done` still composes for manual judgement, whereas a silent retire has to
+   close the Copy button too. A retire with a live side door is not a retire. */
+const TEXT_MAX_TOTAL = 3;
+let _PGROUP = null;
+function _pgroup(){
+  if(_PGROUP) return _PGROUP;
+  _PGROUP = {};
+  (typeof DATA !== 'undefined' ? DATA : []).forEach(function(x){
+    if(!x || !x.case) return;
+    const k = x.pkey || ('C' + x.case);
+    (_PGROUP[k] = _PGROUP[k] || []).push(x.case);
+  });
+  return _PGROUP;
+}
+function _personKey(r){ return (r && r.pkey) || ('C' + ((r && r.case) || '')); }
+function _personCases(r){ return _pgroup()[_personKey(r)] || [(r && r.case) || '']; }
+
+function _textHist(r, caseId){
+  const c = caseId || (r && r.case) || '';
+  const n = notes[c] || {}, ts = n.touches || [];
+  let sends = 0, opens = 0, replied = false;
+  ts.forEach(function(t){
+    if((t.ch || '') !== 'text') return;
+    // an inbound marker is not a send — and it ends the ladder
+    if(/replied|inbound|answered|said stop/i.test(t.out || '')){ replied = true; return; }
+    sends++;
+  });
+  /* Server ledger, same max()-never-sum() reasoning as _mailHist: a send made in THIS browser is
+     also in the next bake, so summing would retire a person a stage early. (TEXTLOG is not baked
+     yet — guarded so this is correct now and simply gets better when the ledger lands.) */
+  const B = (typeof TEXTLOG !== 'undefined' && TEXTLOG) ? TEXTLOG[c] : null;
+  if(B){ if((B.n || 0) > sends) sends = B.n; opens = B.opens || 0; }
+  return {sends: sends, opens: opens, replied: replied};
+}
+
+function _textPersonHist(r){
+  const cases = _personCases(r);
+  let sends = 0, opens = 0, replied = false;
+  cases.forEach(function(c){
+    const H = _textHist(null, c);
+    // ACROSS cases we SUM — 3 texts about property A plus 3 about property B is six messages to
+    // one phone. (WITHIN a case it is max(), above.) The two rules are not in conflict; they
+    // answer different questions.
+    sends += H.sends; opens += H.opens;
+    if(H.replied) replied = true;   // a live conversation on ANY property stops the cold ladder
+  });
+  const P = (typeof TEXTPERSON !== 'undefined' && TEXTPERSON) ? TEXTPERSON[_personKey(r)] : null;
+  if(P && (P.n || 0) > sends) sends = P.n;   // authoritative: includes cases off the board
+  return {sends: sends, opens: opens, replied: replied, cases: cases};
+}
+
+/* cold (0 sent) | follow (1) | final (2) | retired (3+, no reply — silent stop) | replied */
+function _textStage(r){
+  const H = _textPersonHist(r);
+  if(H.replied) return 'replied';
+  if(H.sends >= TEXT_MAX_TOTAL) return 'retired';
+  if(H.sends === 2) return 'final';
+  if(H.sends === 1) return 'follow';
+  return 'cold';
+}
+
+/* Post one row to the durable text ledger (send_server POST /text -> text_sent.json).
+
+   FAIL-SILENT ON PURPOSE, exactly like notesBridgePush: the bridge is a local 127.0.0.1 process and
+   is frequently not running. A ledger write that could block or error out of a send would trade a
+   real message for a bookkeeping detail. The localStorage touch is still written either way, and
+   _textHist takes max(local, ledger) — so a missed post costs durability, never correctness.
+
+   `confirmed` distinguishes a SEND from an OPEN. Opening the composer is not a delivery (the board
+   learned this the hard way with email — see the textopen/text split in the worker), so an open
+   posts confirmed:false: visible as an attempt, never counted against the 3-touch ladder. */
+function _textLedgerPost(r, digits, confirmed){
+  try{
+    var body = {case:(r&&r.case)||'', pkey:_personKey(r), to:String(digits||''),
+                owner:((r&&r.owners)||'').split(';')[0].trim(),
+                stage:_textStage(r), tone:textTone, lang:textLang,
+                body_len:(smsMsg(r, textLang, textTone)||'').length,
+                confirmed:!!confirmed,
+                device:(localStorage.getItem('fcDevice')||'')};
+    fetch('http://127.0.0.1:8823/text', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(body)}).catch(function(){});
+  }catch(e){}
+}
+
+/* Record a STOP across everything it must reach, in one call.
+
+   Why it is not just `logTouch(status:'DO NOT CONTACT')`: that suppresses ONE CASE. The person who
+   texted STOP said it about themselves, not about a case number — so if they own two properties the
+   second one stays textable and the next batch reaches them again, which is exactly the complaint
+   they just made. It also has to hit every NUMBER, because textablePhones filters on the DNT list
+   and a number we hold but did not mark stays sendable.
+
+   Deliberately writes through logTouch rather than setting n.optout directly: logTouch owns the
+   _optLog audit ledger, and _effOptout reads THAT ledger, not the scalar. Bypassing it produces a
+   lead that looks opted out locally and silently is not after the next merge. */
+function _stopEverywhere(r){
+  const cases = _personCases(r);
+  cases.forEach(function(c){
+    const rr = (typeof DATA !== 'undefined') ? DATA.find(function(x){ return x.case === c; }) : null;
+    // opt.status==='DO NOT CONTACT' is what lets this past logTouch's own opted-out guard — this
+    // touch IS the record of the opt-out, not a contact made after one.
+    try{ logTouch(c, 'text', 'OWNER SAID STOP', {status:'DO NOT CONTACT', next:''}); }catch(e){}
+    ((rr && rr.phones) || []).forEach(function(p){ try{ _addDNT(p, c); }catch(e){} });
+  });
+  try{ if(typeof save === 'function') save(); }catch(e){}
+  try{ if(typeof render === 'function') render(); }catch(e){}
+}
+
 function smsMsg(r, lang, tone){
   // tone: cold | urgent | followup — bilingual "both" matches WhatsApp posture (EN then ES + STOP).
   const sN = (sender.name||'').trim() || 'Jose';
@@ -5473,6 +5720,28 @@ function smsMsg(r, lang, tone){
        + ' Todavía funcionan algunas salidas: ponerse al día con lo atrasado, un short sale, o'
        + ' vender en privado antes de la subasta. Cuál le sirve depende de sus números.'
        + ' ¿Lo repasamos? Sin costo.'+stopES;
+  } else if(tone==='t3'){
+    /* TOUCH 3 — the last one. Copy Pack §3 (FINAL EMAIL), compressed to SMS.
+       "This is my last message" is a PROMISE, and _textStage's retire at TEXT_MAX_TOTAL is the only
+       reason it is true rather than a line of copy. If that ladder is ever weakened, delete this
+       body in the same commit — a broken promise here is worse than never having sent it.
+       LANGUAGE LAW: "30+ years" attaches to the senior advisor, NEVER to the company. */
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' again, and this is my last message about '+stEN+'.'
+       + " I don't want to be one more thing on your phone."
+       + (dt ? (' The '+dt+' date is close.') : '')
+       + ' Whatever you have set up, I hope it lands exactly the way you planned. A lot of families'
+       + ' came to us in the final days because the handled thing stopped being handled, and by then'
+       + ' half their options had expired. If anything wobbles, one call gets you a free case review'
+       + ' with our senior advisor, who has spent 30+ years on exactly this. Keep this number even'
+       + ' if you delete the message.'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', soy '+sN+' otra vez, y este es mi último mensaje sobre '+stES+'.'
+       + ' No quiero ser una cosa más en su teléfono.'
+       + (dt ? (' La fecha del '+dt+' ya está cerca.') : '')
+       + ' Sea lo que sea que tenga arreglado, ojalá salga tal como lo planeó. Muchas familias'
+       + ' llegaron a nosotros en los últimos días porque lo que estaba resuelto dejó de estarlo, y'
+       + ' para entonces la mitad de sus opciones ya había vencido. Si algo se tambalea, una llamada'
+       + ' le da una revisión gratis de su caso con nuestro asesor principal, que lleva más de 30'
+       + ' años en esto. Guarde este número aunque borre el mensaje.'+stopES;
   } else if(tone==='followup'){
     // Mirrors the email's FINAL variant: give them a graceful exit, do not re-pitch.
     en = 'Hi'+(first?' '+first:'')+', '+sN+' from Miami Solutions Group again about '+stEN+'. No pressure and no pitch. If'
@@ -5542,13 +5811,27 @@ function textCardHtml(r){
   const hoursOK=_withinTextHours();
   const recent=_recentTeleCount(r);
   const capped=recent>=FTSA_MAX_24H;
-  const canSend=!hardBlock && phones.length && hoursOK && !capped;
-  const canCopy=!hardBlock; // Copy is for hours/cap only — never for BK / opt-out / wrong-owner
+  /* LIFETIME LADDER (TEXT_MAX_TOTAL) — distinct from `capped`, which is the rolling 24h burst limit.
+     Both are enforced; neither replaces the other.
+     `retired` must also close COPY. Email's terminal stage leaves Copy open for manual judgement,
+     but a SILENT retire with a live Copy button is not a retire, it is a side door. */
+  const PH=_textPersonHist(r);
+  const TS=_textStage(r);
+  const retired=(TS==='retired');
+  const canSend=!hardBlock && phones.length && hoursOK && !capped && !retired;
+  const canCopy=!hardBlock && !retired; // never for BK / opt-out / wrong-owner / retired
   const pos=textQ.length>1 ? '<div class="mut" style="font-size:12px;margin-top:3px">Lead '+(textIdx+1)+' of '+textQ.length+'</div>' : '';
-  const toneBtns=['cold','urgent','followup'].map(t=>{
-    const lbl=t==='cold'?'Cold open':t==='urgent'?'Urgent (sale soon)':'Follow-up';
-    return '<button class="txtone'+(textTone===t?' on':'')+'" data-t="'+t+'" type="button">'+lbl+'</button>';
-  }).join('');
+  /* The tone buttons ARE the ladder now. A later touch stays disabled until the earlier ones have
+     actually been sent — otherwise touch 3's "this is my last message" body can be fired first,
+     which burns the strongest copy and turns the promise into a lie on message one. */
+  const _tstep={cold:0,urgent:0,followup:1,t3:2};
+  const toneBtns=[['cold','1 · Cold open'],['urgent','1 · Urgent'],['followup','2 · Follow-up'],['t3','3 · Last message']].map(function(p){
+    const t=p[0], dis=_tstep[t]>PH.sends;
+    return '<button class="txtone'+(textTone===t?' on':'')+'" data-t="'+t+'" type="button"'
+         + (dis?' disabled title="Touch '+(_tstep[t]+1)+' not reached — '+PH.sends+' of '+TEXT_MAX_TOTAL+' sent to this owner"':'')
+         + '>'+p[1]+'</button>';
+  }).join('')
+   + (PH.cases.length>1 ? '<div class="mut" style="font-size:11px;margin-top:4px">Same owner on '+PH.cases.length+' properties · budget shared: '+PH.sends+' of '+TEXT_MAX_TOTAL+' used</div>' : '');
   const langBtns=[['both','EN + ES'],['en','English'],['es','Español']].map(([l,lbl])=>
     '<button class="txlang'+(textLang===l?' on':'')+'" data-l="'+l+'" type="button">'+lbl+'</button>').join('');
   let gate='';
@@ -5556,6 +5839,8 @@ function textCardHtml(r){
   else if(hardBlock==='optout') gate='<div class="txblock">⛔ OPTED OUT — all outreach suppressed. Do not text or copy a solicitation.</div>';
   else if(hardBlock==='wrong') gate='<div class="txblock">🚫 WRONG PERSON — these numbers are not the owner. Re-verify before any outreach.</div>';
   else if(!hoursOK) gate='<div class="txblock">⛔ Outside Florida texting hours. FTSA allows solicitation texts only 8:00 AM–8:00 PM ET (now '+esc(_flClock())+' ET). Copy still works; Phone Link / WhatsApp send stays disabled until the window opens.</div>';
+  else if(retired) gate='<div class="txblock">⛔ '+PH.sends+' of '+TEXT_MAX_TOTAL+' texts already sent to this owner, no reply — RETIRED from the text cadence.'+(PH.cases.length>1?' This budget is shared across '+PH.cases.length+' properties for the same owner.':'')+' Call, mail or knock instead.</div>';
+  else if(TS==='replied') gate='<div class="txblock" style="border-color:#2e7d32;color:#1b5e20">💬 This owner has REPLIED — the cold ladder is off. Answer in the existing thread; a reply does not spend the 3.</div>';
   else if(capped) gate='<div class="txblock">⛔ FTSA cap: '+recent+' call/text touches logged for this owner in the last 24h (max '+FTSA_MAX_24H+'). Skip for today.</div>';
   let phBtns;
   if(hardBlock){
@@ -5589,6 +5874,14 @@ function textCardHtml(r){
     +'<div class="txmsg">'+esc(msg)+'</div>'))
     +'<div class="txbtns">'+phBtns+'</div>'
     +(canCopy && msg?'<button class="txcopy" type="button">📋 Copy message</button>':'')
+    /* ONE-TAP STOP CAPTURE. There is no inbound SMS channel — replies.py's STOP_WORDS scan is
+       IMAP/email only — so a STOP sent by text arrives on Alejandro's personal phone and enters the
+       system ONLY if he records it here. Every second it goes unrecorded the owner stays dialable
+       and textable on every device, which is per-contact FTSA exposure. One tap has to do all of
+       it: opt-out ledger, status, DNT every number, and the whole person group. Always available —
+       never gated on hours, cap, or retire, because "they told me to stop" outranks every other
+       state this card can be in. */
+    +'<button class="txstop" type="button" title="Record that this owner told us to stop. Suppresses every channel, on every device, permanently.">🛑 They replied STOP</button>'
     +dncNote
     +'<div class="txfoot">'
       +(phones.length && !hardBlock?'<button class="txmark" data-c="'+esc(r.case)+'" type="button">✓ Mark texted'+(textQ.length>1?' → next':'')+'</button>':'')
@@ -5613,10 +5906,23 @@ function openBulkText(){
     if(_textContactBlocked(r) || n.status==='Dead') return false;
     if(typeof isFlaggedDead==='function' && isFlaggedDead(r)) return false;
     if(_recentTeleCount(r)>=FTSA_MAX_24H) return false;
+    const _ts=_textStage(r);
+    if(_ts==='retired' || _ts==='replied') return false;   // lifetime ladder + live conversations
     return textablePhones(r).length>0;
   });
   elig.sort((a,b)=>(a.days??9999)-(b.days??9999));
-  textQ=elig.map(r=>r.case); textIdx=0;
+  /* COLLAPSE THE QUEUE BY PERSON, not by case. _textStage is correct, but it only advances once a
+     touch is LOGGED — so an owner with three properties would still get three consecutive queue
+     slots and the operator would spend the entire 3-message budget on them in one sitting before
+     the stage ever caught up. Keep the soonest-sale case (elig is already sorted that way) and hang
+     the rest off it. Structurally the same move _workerQueue makes with byEmail for portfolio mail. */
+  const _seenP=new Set(), _byPerson=[];
+  elig.forEach(function(r){
+    const k=_personKey(r);
+    if(_seenP.has(k)){ const h=_byPerson.find(x=>_personKey(x)===k); if(h){ (h._alsoCases=h._alsoCases||[]).push(r.case); } return; }
+    _seenP.add(k); _byPerson.push(r);
+  });
+  textQ=_byPerson.map(r=>r.case); textIdx=0;
   if(elig[0]) textTone=_defaultTextTone(elig[0]);
   openTextModal();
 }
@@ -12023,6 +12329,14 @@ function genMorningWorker(lane, autostart){
     +         'main.innerHTML+="<div style=\'text-align:center;margin-top:6px\'><button id=\'mwdonetext\' class=\'mwbtn text\' style=\'width:100%\'>&#128241; Start text batch ("+TEXTQ.length+")<span class=\'sub\'>pre-filled &middot; you press send &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</span></button></div>";'
     +         'var dtb=document.getElementById("mwdonetext"); if(dtb) dtb.onclick=textBatchStart;'
     +       '}'
+    // CALL MODE HAND-OFF. The worker's whole output for a phone-only lead is a CALLQ entry, and
+    // until now there was nowhere to take it — this morning it queued 40 and produced 0 dials.
+    // A real <a target=_blank> clicked by the OPERATOR, never window.open on a timer: an open that
+    // is not inside a user gesture is popup-blocked, which is exactly what stalled this worker three
+    // times on 2026-08-16 (see the blocked-popup rescue above and _openDoc's reason for existing).
+    +       'if(CALLQ.length){'
+    +         'main.innerHTML+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'https://aiejandrog.github.io/foreclosure-leads/call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
+    +       '}'
     // textContent does NOT decode HTML entities — writing "&#x2713;" here printed the raw
     // seven characters on screen ("34 of 34 &#x2713;") instead of a checkmark. Every OTHER
     // prog write on this element is textContent too, so switching this one to innerHTML would
@@ -12498,7 +12812,17 @@ window.addEventListener('message', function(ev){
     var n = notes[r.case] = notes[r.case]||{status:'',note:''};
     n.touches = n.touches||[];
     n.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'worker', out:d.k==='done'?'worked (morning batch)':'skipped'});
-    if(d.k==='done' && !n.status) n.status = 'Called - no answer';   // conservative default; user can flip later
+    // DO NOT stamp a call outcome here. 'done' means "I finished looking at this lead and am moving
+    // on" — it is NOT evidence anyone dialled. This line used to set status='Called - no answer',
+    // which was described as a conservative default but is the opposite: it ASSERTS a contact
+    // attempt that never happened. Measured 2026-08-15: of 48 leads carrying 'Called - no answer',
+    // only 5 had a real call touch — 38 were auto-stamped by this line and never dialled. That
+    // fabricated 38 phantom attempts, inflated the only conversion metric the business has (true
+    // dials file-wide: 6, not 53), and put invented "we called them" records into the same ledger
+    // that is the FTSA/TCPA defence.
+    // A real dial now goes through the 'callout' branch above (six explicit operator-chosen
+    // outcomes) — which the comment there already says was meant to replace this line. The worker
+    // touch pushed just above is the honest record of a 'done': the lead was worked, not called.
     if(typeof save==='function') save();
     try{ render(); }catch(e){}
   }
@@ -13773,6 +14097,29 @@ function _mergeLead(local, remote){
   const _wasDNC = _DNC(local.status);
   // opt-out is STICKY and never cleared by a merge; earliest date wins
   if(remote.optout && (!out.optout || remote.optout < out.optout)){ ch.optout = !local.optout; out.optout = remote.optout; }
+  /* WRONG-OWNER is sticky exactly like opt-out, earliest wins. It gates logTouch (the wrong-person
+     confirm) and _workerEligible, so a "wrong number" established on one device MUST suppress on
+     every other one. Before this clause it did not merge at all: the touch synced, the suppression
+     did not, and the teammate kept dialling a stranger who had already said so. */
+  if(remote.wrongown && (!out.wrongown || String(remote.wrongown) < String(out.wrongown))) out.wrongown = remote.wrongown;
+  /* COOLDOWN follows whichever side touched the lead last. A call outcome carries its own cooldown
+     (24h no-answer, 72h talked) and that number decides when the lead re-enters the queue. Without
+     merging it, an outcome logged on the phone hands the laptop the touch but leaves the laptop's
+     stale cooldown in place — the lead reappears (or fails to) on the wrong schedule, and the log
+     looks like it worked. This is the clause that makes phone logging actually mean something. */
+  if(remote.cooldownH != null && _lastTouchD(remote) >= _lastTouchD(local)) out.cooldownH = remote.cooldownH;
+  /* DIALS: union, dedupe by (timestamp | last-4). Additive attempt record, NOT a contact record —
+     autoLog deliberately collapses repeat same-outcome touches, so this is the only place a second
+     "No answer" on the same lead the same morning survives. Dial-through is the number the whole
+     logging problem exists to recover; it must merge or the phone's count stays on the phone. */
+  const _dseen = new Set(), _dl = [];
+  (local.dials||[]).concat(remote.dials||[]).forEach(v => { const k=(v.ts||'')+'|'+(v.ph4||''); if(!_dseen.has(k)){ _dseen.add(k); _dl.push(v); } });
+  if(_dl.length){ _dl.sort((a,b)=>(a.ts||'').localeCompare(b.ts||'')); out.dials = _dl; }
+  /* DO-NOT-TEXT numbers: UNION, never intersect. This is a suppression list — the only safe merge
+     direction is "more suppressed". The device Set (fcDNT) still cannot sync on its own; this is
+     what carries a DNT from the laptop to the phone, where the texts are actually sent. */
+  const _nt = (local.dntph||[]).concat(remote.dntph||[]).filter((v,ix,a) => a.indexOf(v)===ix);
+  if(_nt.length) out.dntph = _nt;
   // status: DO NOT CONTACT wins over everything, then Dead, else the side with the more recent touch
   if(_DNC(local.status) || _DNC(remote.status)){ if(out.status !== 'DO NOT CONTACT'){ out.status = 'DO NOT CONTACT'; ch.status = true; } if(!out.optout){ out.optout = remote.optout || local.optout || _today(); ch.optout = ch.optout || !local.optout; }
     // teammate's opt-out just started suppressing on THIS device — stamp when, for the paper trail
@@ -15272,11 +15619,22 @@ document.addEventListener('click', e => {
   const cp = e.target.closest && e.target.closest('.txcopy');
   if(cp){ e.preventDefault(); const r=cur(); if(r) _copyTextMsg(smsMsg(r, textLang, textTone), cp); return; }
   const dn = e.target.closest && e.target.closest('.txdnt');
-  if(dn){ e.preventDefault(); _addDNT(dn.dataset.d); renderTextModal(); return; }
+  if(dn){ e.preventDefault(); const _r=cur(); _addDNT(dn.dataset.d, _r && _r.case); renderTextModal(); return; }
+  const sp = e.target.closest && e.target.closest('.txstop');
+  if(sp){ e.preventDefault(); const r=cur(); if(!r) return;
+    const who=((r.owners||'').split(';')[0]||'this owner').trim();
+    const grp=_personCases(r).length;
+    if(!confirm('Record that '+who+' told us to STOP?\n\nThis permanently suppresses EVERY channel — text, call, email, letter, door'
+        +(grp>1?(' — across all '+grp+' properties for this owner'):'')+', on every device.\n\nIt cannot be undone from here.')) return;
+    _stopEverywhere(r); renderTextModal(); return; }
   const sd = e.target.closest && e.target.closest('.txsend');
-  if(sd && sd.tagName==='A'){ const r=cur(); if(r) autoLog(r, 'text', 'texted', {nextDays:3}); return; }
+  if(sd && sd.tagName==='A'){ const r=cur(); if(r){ autoLog(r, 'text', 'texted', {nextDays:3});
+    // the anchor's href is sms:+1<digits>?body=... — recover the number for the ledger row
+    _textLedgerPost(r, String(sd.getAttribute('href')||'').replace(/^sms:\+?1?/,'').split('?')[0], true); }
+    return; }
   const mk = e.target.closest && e.target.closest('.txmark');
-  if(mk){ e.preventDefault(); const r=cur(); if(r) autoLog(r, 'text', 'texted', {nextDays:3}); textAdvance(); return; }
+  if(mk){ e.preventDefault(); const r=cur(); if(r){ autoLog(r, 'text', 'texted', {nextDays:3});
+    _textLedgerPost(r, (textablePhones(r)||[])[0]||'', true); } textAdvance(); return; }
   const sk = e.target.closest && e.target.closest('.txskip');
   if(sk){ e.preventDefault(); textAdvance(); return; }
 });

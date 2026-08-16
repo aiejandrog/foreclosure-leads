@@ -23,8 +23,15 @@ import broward_liens as BL   # reuse the plaintiff -> MORTGAGE/HOA classifier (_
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = 'https://www.browardclerk.org/Web2/CaseSearchECA'
 LANDING = BASE + '/'
-POST_URL = 'https://www.browardclerk.org//Web2/CaseSearchECA/CaseNumberSearchResultsCAPTCHA'
-SITE_KEY = '6LeomjoqAAAAANqUs56ZxerFIcoUS1qL14rTH4aF'   # reCAPTCHA v2 site key on the case search page
+# 2026-08-15: Broward changed BOTH the endpoint and the captcha vendor. Old values are kept here
+# because the failure they caused was silent and cost weeks (see fetch_case_html's guard note):
+#   POST_URL was  .../CaseNumberSearchResultsCAPTCHA   -> that route now 404s
+#   SITE_KEY was  6LeomjoqAAAAANqUs56ZxerFIcoUS1qL14rTH4aF (Google reCAPTCHA v2)
+# The live caseSearchForm posts to the un-suffixed route, and the page now loads
+# challenges.cloudflare.com/turnstile/v0/api.js. The old Google key appears ZERO times in the
+# landing HTML — verify with:  grep -c 6Leomjoq  on a fresh fetch of LANDING.
+POST_URL = 'https://www.browardclerk.org//Web2/CaseSearchECA/CaseNumberSearchResults'
+SITE_KEY = '0x4AAAAAAD3XKK8DxzWwYii7'   # Cloudflare TURNSTILE sitekey (data-sitekey on caseSearchForm)
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 CURL = r'C:\Windows\System32\curl.exe' if os.name == 'nt' and os.path.exists(r'C:\Windows\System32\curl.exe') else 'curl'
 
@@ -63,9 +70,9 @@ def fetch_case_html(case, verbose=True):
         if verbose: print('  could not find anti-forgery token')
         return ''
     token = m.group(1)
-    if verbose: print(f'  session up, token {len(token)}c — solving reCAPTCHA v2...')
+    if verbose: print(f'  session up, token {len(token)}c — solving Turnstile...')
     t0 = time.time()
-    cap = captcha_solver.solve_recaptcha_v2(SITE_KEY, LANDING)
+    cap = captcha_solver.solve_turnstile(SITE_KEY, LANDING)
     if not cap:
         if verbose: print('  captcha solve failed')
         return ''
@@ -74,7 +81,8 @@ def fetch_case_html(case, verbose=True):
         ('__RequestVerificationToken', token),
         ('CaseNumber', case),
         ('AccessLevel', 'ANONYMOUS'),
-        ('g-recaptcha-response', cap),
+        ('cf-turnstile-response', cap),      # Turnstile field name, NOT g-recaptcha-response
+        ('CaseNumberSearchResults', ''),     # the submit button is NAMED; MVC expects it in the body
     ], headers=[
         'Referer: ' + LANDING,
         'Origin: https://www.browardclerk.org',
@@ -85,8 +93,15 @@ def fetch_case_html(case, verbose=True):
         if verbose: print('  no redirect Location on POST (rejected?)')
         return ''
     loc = m.group(1).strip()
-    if 'Results' not in loc:
-        if verbose: print(f'  POST redirected to {loc[:60]} (not Results — captcha/token rejected)')
+    # Match the SUCCESS route explicitly. The old test was `'Results' not in loc`, which a dead
+    # endpoint defeats: ASP.NET 404s to
+    #   /Web2/Error/Error404?aspxerrorpath=/Web2/CaseSearchECA/CaseNumberSearchResultsCAPTCHA
+    # and that string CONTAINS "Results". So the guard passed, the 404 page was fetched and parsed,
+    # parse_results returned None, and every case reported "case not found / not public" — a dead
+    # route disguised as a data problem for weeks. Never substring-match a path that the error page
+    # echoes back to you.
+    if 'Error404' in loc or 'CaseSearchECA/Results' not in loc:
+        if verbose: print(f'  POST redirected to {loc[:70]} (not the Results route — captcha/token/endpoint rejected)')
         return ''
     if loc.startswith('/'):
         loc = 'https://www.browardclerk.org' + loc

@@ -92,6 +92,9 @@ tracker_light_template.html
 lob.key
 sender.json
 mail_sent.json
+# text_sent.json is mail_sent.json's counterpart for SMS. It holds homeowner PHONE NUMBERS in
+# plaintext, and this repo is PUBLIC — ignored here BEFORE the file can ever exist.
+text_sent.json
 mail_suppress.txt
 mail_preview.html
 tax_links.json
@@ -175,3 +178,4 @@ badnum_quarantine.json
 # officers with home/agent addresses. See v13->v14 note in refresh.yml.
 hardmoney_enriched.json
 llc_officers.json
+judgment_dates_misses.json

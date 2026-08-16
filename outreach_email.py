@@ -220,6 +220,28 @@ def _load_leads():
                 r['emails'] = list(hit.get('emails') or [])[:3]
             if not (r.get('phones') or []):
                 r['phones'] = list(hit.get('phones') or [])[:3]
+
+    # §362 ACTIVE-STAY MERGE — without this the stay gate below is DEAD CODE.
+    # _eligible() tests r['saleBkAct'], which is the BAKED board field name. These rows come
+    # straight off leads_final.json / *_leads.json, where sale_history.py writes the snake_case
+    # 'sale_bk_active' instead — and the nightly scrape rewrites those files, so even that is
+    # usually absent. Measured 2026-08-15 across all 1,456 loaded leads: saleBkAct on 0,
+    # sale_bk_active on 0 — the gate could never fire even once, while the cache held 97 active
+    # stays. Emailing someone under an automatic stay is a collection-contact violation, so this
+    # reads the DURABLE cache and stamps BOTH spellings. Mapping is sale_history.py:246-250.
+    try:
+        _shc = json.load(open(os.path.join(HERE, 'sale_history_cache.json'), encoding='utf-8'))
+    except Exception:
+        _shc = {}
+    if _shc:
+        for r in leads:
+            ent = _shc.get(_case(r) or '')
+            if isinstance(ent, dict) and ent.get('a'):
+                r['sale_bk_active'] = True
+                r['saleBkAct'] = True
+                r.setdefault('sale_bk_date', ent.get('bd', ''))
+            if isinstance(ent, dict) and ent.get('sl') and not r.get('saleLift'):
+                r['saleLift'] = ent['sl']
     return leads
 
 
@@ -347,7 +369,9 @@ def _eligible(r, ledger, optouts, min_hours):
             return False, 'worker already emailed - follow-ups are the worker\'s job'
     if _is_company_owner(r):
         return False, 'company-owner'
-    if r.get('saleBkAct') and not r.get('saleLift'):
+    # Check BOTH spellings. Board-baked rows carry 'saleBkAct'; raw lead files and sale_history.py
+    # carry 'sale_bk_active'. Testing only one silently disables the gate for the other source.
+    if (r.get('saleBkAct') or r.get('sale_bk_active')) and not r.get('saleLift'):
         return False, 'active bankruptcy stay'
     if r.get('sibclaimed'):
         return False, 'sibling case sold'

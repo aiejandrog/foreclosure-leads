@@ -226,7 +226,7 @@ jobs:
             echo "::warning::Early publish SKIPPED — build lacks enrichment vs the live board. Site left untouched; the final publish will retry after enrichment."
             exit 0
           fi
-          git add docs/index.html
+          git add docs/index.html docs/call
           if git diff --staged --quiet; then
             echo "no change — nothing to publish yet"
           else
@@ -526,7 +526,7 @@ jobs:
           # docs/img/ also picks up new photos this run — stage them too. sale_history_cache.json
           # is committed as well: it is the SINGLE SOURCE for stay-compliance (no actions/cache
           # copy anymore), so the daily [3e] refresh must flow back into the repo.
-          git add docs/index.html docs/img sale_history_cache.json judgment_dates.json auction_archive.json cash_buyers.json
+          git add docs/index.html docs/call docs/img sale_history_cache.json judgment_dates.json auction_archive.json cash_buyers.json
           if git diff --staged --quiet; then
             echo "nothing changed — site already current"
           else

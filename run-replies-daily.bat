@@ -19,9 +19,10 @@ if errorlevel 1 (
   echo REBUILD FAILED - board not published, replies still on disk only >> "%TEMP%\dealflow_replies_last.txt"
   goto :end
 )
-git add docs/index.html >> "%TEMP%\dealflow_replies_last.txt" 2>&1
+git add docs/index.html docs/call >> "%TEMP%\dealflow_replies_last.txt" 2>&1
 git commit -m "replies: morning scan baked into board (auto)" >> "%TEMP%\dealflow_replies_last.txt" 2>&1
 if not errorlevel 1 (
+  git pull --rebase --autostash -X theirs origin main >> "%TEMP%\dealflow_replies_last.txt" 2>&1
   git push origin main >> "%TEMP%\dealflow_replies_last.txt" 2>&1
   if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%TEMP%\dealflow_replies_last.txt" 2>&1 )
 )

@@ -100,8 +100,15 @@ def _surname_first(nm):
 
 def _lead_parties(lead):
     """Token-set per named human on the lead (owners + defendants)."""
+    # 'defendants' is a SEMICOLON-DELIMITED STRING (foreclosure_leads.enrich_clerk:357), not a list.
+    # This used to be ';'.join(str(x) for x in defendants) — iterating a string yields CHARACTERS, so it
+    # built "S;m;i;t;h;,; ;J;o;h;n" and every single-char token was dropped by _surname_first's len>1
+    # filter. Net effect: the co-defendant half of the sibling-name match NEVER contributed, which is
+    # part of why a second case on the same owner (the Milouse pattern) went unlinked. Accept either shape.
+    _defs = lead.get('defendants') or ''
+    _defs = '; '.join(str(x) for x in _defs) if isinstance(_defs, (list, tuple)) else str(_defs)
     people = []
-    for src in (lead.get('owners') or '', ';'.join(str(x) for x in (lead.get('defendants') or []))):
+    for src in (lead.get('owners') or '', _defs):
         for nm in re.split(r'[;|]', src):
             nm = re.sub(r'&W\.?|ET UX|ET AL|A/K/A.*', '', nm, flags=re.I).strip()
             if nm and not re.search(r'ASSOCIATION|LLC|BANK|MORTGAGE|TENANT|UNKNOWN|CORP|INC\b', nm, re.I):

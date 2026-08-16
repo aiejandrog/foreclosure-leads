@@ -526,6 +526,63 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(500, {'ok': False, 'err': str(e)[:120]})
         return self._json(200, {'ok': True})
 
+    def _handle_text(self):
+        """POST /text — the SMS counterpart of mail_sent.json.
+
+        WHY THIS EXISTS. Email history has been server-side since the 2026-08-08 incident (33 owners
+        received 4+ emails because _mailHist read only this browser's localStorage). Text history had
+        no such ledger at all, so the 3-touch cadence was correct only WITHIN one browser profile: a
+        new profile, a second device, or a cleared cache read every owner as never-texted and
+        restarted the ladder at touch 1. This closes that.
+
+        `confirmed` is the exact analogue of mail_sent.json's message_id — ONLY confirmed rows count
+        as sends. The worker's `textopen` branch deliberately logs no touch (opening a composer is
+        not a delivery), so it posts confirmed:false: the attempt stops being invisible without
+        becoming a contact.
+
+        Append is read-modify-write under the shared lock, writing the same LIST shape as
+        mail_sent.json so _text_ledger() can mirror _mail_ledger() instead of inventing a parser."""
+        ln = int(self.headers.get('Content-Length') or 0)
+        if ln <= 0 or ln > 200_000:
+            return self._json(400, {'ok': False, 'err': 'missing or oversized body'})
+        try:
+            d = json.loads(self.rfile.read(ln).decode('utf-8'))
+        except Exception:
+            return self._json(400, {'ok': False, 'err': 'bad json'})
+        case = str(d.get('case') or '').strip()
+        if not case:
+            return self._json(400, {'ok': False, 'err': 'no case'})
+        rec = {'d': dt.date.today().isoformat(),
+               'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
+               'ch': 'text', 'case': case,
+               'pkey': str(d.get('pkey') or ''),
+               'to': re.sub(r'\D', '', str(d.get('to') or '')),
+               'owner': str(d.get('owner') or '')[:60],
+               'stage': str(d.get('stage') or ''), 'tone': str(d.get('tone') or ''),
+               'lang': str(d.get('lang') or ''),
+               'body_len': int(d.get('body_len') or 0),
+               'confirmed': bool(d.get('confirmed')),
+               'device': str(d.get('device') or '')[:40]}
+        path = os.path.join(HERE, 'text_sent.json')
+        try:
+            with _NOTES_LOCK:
+                rows = []
+                if os.path.exists(path):
+                    try:
+                        rows = json.load(open(path, encoding='utf-8')) or []
+                    except Exception:
+                        rows = []          # a corrupt ledger must never block recording a send
+                if not isinstance(rows, list):
+                    rows = []
+                rows.append(rec)
+                tmp = path + '.tmp'
+                with open(tmp, 'w', encoding='utf-8') as f:
+                    json.dump(rows, f, ensure_ascii=False, indent=1)
+                os.replace(tmp, path)      # atomic — a half-written ledger is worse than none
+        except Exception as e:
+            return self._json(500, {'ok': False, 'err': str(e)[:120]})
+        return self._json(200, {'ok': True, 'n': len(rows)})
+
     def _handle_retrace(self):
         """POST /retrace {c, ph} — the worker's bad-number button parks a case here after a
         number proved wrong/dead. The nightly skiptrace consumes retrace_queue.json and
@@ -589,6 +646,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._handle_mark()
         if self.path.startswith('/retrace'):
             return self._handle_retrace()
+        if self.path.startswith('/text'):
+            return self._handle_text()
         if not self.path.startswith('/send'):
             return self._json(404, {'ok': False, 'err': 'unknown path'})
 

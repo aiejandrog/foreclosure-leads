@@ -34,11 +34,40 @@ OR_API = 'https://onlineservices.miamidadeclerk.gov'
 # Plaintiff type no longer DROPS a filing — every fresh LP is kept and TAGGED (Jose: no deal is dead).
 # lender/bank = a 1st-mortgage foreclosure (buy/wholesale); HOA/association = a senior mortgage survives
 # (short-sale/negotiate the survivor); individual/other = verify. All three are money, different plays.
-LENDER_RE = re.compile(r'\b(BANK|MORTG|LOAN|LENDING|FINANC|CAPITAL|FED(ERAL)?|CREDIT UNION|N\.?A\.?|'
-                       r'FSB|TRUST|SERVICING|FUND(ING)?|HOLDINGS|WILMINGTON|DEUTSCHE|WELLS FARGO|'
+# ⚠️ BOUNDARY BUG, fixed 2026-08-15. Both patterns used to end in `)\b`, a trailing word boundary on
+# the WHOLE alternation — which silently defeated every token written as a PREFIX. `MORTG` could never
+# match "MORTGAGE"; `ASSOC` could never match "ASSOCIATION"; `HOMEOWNER` could never match the plural
+# "HOMEOWNERS"; `CONDO` could never match "CONDOMINIUM". Those are the most common real forms in
+# Florida, so the classifier was blind to them. Measured over 955 lis-pendens rows, fixing it moves:
+#   plaintiff  LENDER 506 -> 590 (+84)   HOA 198 -> 263 (+65)
+#   owner      LENDER   0 ->  60 (+60)   HOA  15 -> 113 (+98)   <- these are FLIPPED-orientation rows
+# The HOA half matters most: HOA-as-co-defendant is the tell that a SECOND case exists (the Milouse
+# miss), and that screen was missing names like "FALLS OF INVERRARY CONDOMINIUMS INC".
+# Tokens meant as prefixes now have NO trailing \b; genuinely-short/ambiguous ones keep it (COA would
+# otherwise match "COAST", which is everywhere in FL names).
+LENDER_RE = re.compile(r'\b(BANK|MORTG|LOAN|LENDING|FINANC|CAPITAL|FED(ERAL)?|CREDIT UNION|N\.?A\.?\b|'
+                       r'FSB\b|TRUST|SERVICING|FUND|HOLDING|WILMINGTON|DEUTSCHE|WELLS FARGO|'
                        r'CHASE|CITI|US BANK|NATIONSTAR|CARRINGTON|SELENE|RUSHMORE|FREEDOM|PENNYMAC|'
-                       r'PHH|SHELLPOINT|NEWREZ|LAKEVIEW|FANNIE|FREDDIE|HUD|SECRETARY)\b', re.I)
-HOA_RE = re.compile(r'\b(HOA|CONDO|ASSOC|ASSN|HOMEOWNER|MASTER|COMMUNITY|VILLAS?|TOWERS?|COA|POA)\b', re.I)
+                       r'PHH\b|SHELLPOINT|NEWREZ|LAKEVIEW|FANNIE|FREDDIE|HUD\b|SECRETARY)', re.I)
+# "NATIONAL ASSOCIATION" is BANK nomenclature (the spelled-out N.A.), not a homeowners association —
+# without this guard "US BANK TRUST NATIONAL ASSOCIATION" reads as an HOA. Callers classify LENDER
+# first so order already saves the common case, but any standalone HOA test needs this.
+_NOT_HOA_RE = re.compile(r'\bNATIONAL\s+ASSOC', re.I)
+_HOA_CORE = re.compile(r'\b(HOA\b|COA\b|POA\b|CONDO|ASSOC|ASSN|HOMEOWNER|MASTER\b|COMMUNIT|'
+                       r'VILLAS?\b|TOWERS?\b)', re.I)
+
+
+class _HoaRe:
+    """Drop-in for the old compiled HOA_RE (callers use .search) with the NATIONAL ASSOCIATION guard."""
+
+    def search(self, s):
+        s = s or ''
+        if _NOT_HOA_RE.search(s):
+            return None
+        return _HOA_CORE.search(s)
+
+
+HOA_RE = _HoaRe()
 
 # the search JS: same mint, parameterized query. Left name blank + doc-type + date range.
 SEARCH_JS = r"""

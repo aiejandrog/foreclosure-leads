@@ -149,7 +149,12 @@ def _first_owner_name(owners_str):
     return None
 
 
-WP_EST_COST = 0.10   # est. $/call — same figure the .bat comment uses
+# $/call. NOT an estimate: whitepages.com/pro-api/pricing lists Essentials at $0.22/query
+# ($220/mo for 1,000, overages at $0.22). Verified 2026-08-15. The old 0.10 was copied from a .bat
+# comment and understated the true cost by 2.2x, so bd_budget's shared daily ceiling was letting
+# Whitepages spend roughly double its charged amount. Higher-volume tiers reach $0.15 at 2,500+/mo —
+# raise this only against a plan we actually hold.
+WP_EST_COST = 0.22
 
 
 def _http_get(url, key, retries=3):

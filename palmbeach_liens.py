@@ -101,6 +101,16 @@ def search(payload, token=''):
     body = _curl(BASE + '/Search/' + payload[0], post=payload[1] + [('g-recaptcha-response', token)])
     if 'Invalid Captcha' in body:
         return None
+    # A FAILED search returns an ASP.NET error page (~880 chars, "<title>Error</title>"), NOT an empty
+    # result. Only 'Invalid Captcha' used to be checked, so that error page was returned as success —
+    # and because get_search_results() pulls the grid in a SEPARATE request bound to session state, the
+    # caller then received the rows from the PREVIOUS successful search. That is worse than a zero: the
+    # sweep silently attributes one search's documents to another's parameters. It is what made four
+    # different doctype values and two different endpoints all look "byte-identical" during the
+    # 2026-08-15 Palm Beach investigation — those were stale reads, not proof the filter was ignored.
+    # A real results shell always carries the DataTables container.
+    if 'resultsTable' not in body:
+        return None
     return body
 
 

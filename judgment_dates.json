@@ -2084,5 +2084,709 @@
   "label": "Default Final Judgment",
   "rate": null,
   "src": "mdc-ocs-docket"
+ },
+ "CACE-25-006419": {
+  "d": "2025-10-22",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120505935",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-23-013997": {
+  "d": "2026-04-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120813598",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-018041": {
+  "d": "2026-07-10",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120977070",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-019053": {
+  "d": "2026-06-12",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120922021",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-17-015398": {
+  "d": "2024-08-27",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119762568",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-09-033060": {
+  "d": "2013-12-04",
+  "label": "Final Judgment (recorded)",
+  "instrument": "111965874",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-012938": {
+  "d": "2026-03-13",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120748614",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-22-009549": {
+  "d": "2022-11-17",
+  "label": "Final Judgment (recorded)",
+  "instrument": "118522162",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-26-000191": {
+  "d": "2026-07-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120986784",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-014553": {
+  "d": "2026-07-21",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120994891",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-007824": {
+  "d": "2026-04-22",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120823061",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-015235": {
+  "d": "2026-06-25",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120947257",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-22-016620": {
+  "d": "2025-01-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120001724",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-23-019709": {
+  "d": "2024-10-29",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119873801",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-000615": {
+  "d": "2026-02-24",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120713339",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-26-002022": {
+  "d": "2026-07-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120987494",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "COSO-24-065322": {
+  "d": "2025-12-17",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120601770",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "COCE-26-012190": {
+  "d": "2026-07-02",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120960793",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-005564": {
+  "d": "2026-03-25",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120769021",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-16-021143": {
+  "d": "2026-02-24",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120713948",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-17-011954": {
+  "d": "2019-01-24",
+  "label": "Final Judgment (recorded)",
+  "instrument": "115573380",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-009227": {
+  "d": "2026-01-08",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120632810",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-22-015767": {
+  "d": "2024-01-10",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119326190",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-010180": {
+  "d": "2026-03-02",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120725183",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-22-009172": {
+  "d": "2026-03-12",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120745157",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-23-018639": {
+  "d": "2024-03-01",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119426820",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-012392": {
+  "d": "2025-12-18",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120604511",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-001321": {
+  "d": "2025-05-28",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120241033",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-22-013422": {
+  "d": "2024-10-11",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119842703",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-017115": {
+  "d": "2026-04-20",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120817641",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-21-016346": {
+  "d": "2022-06-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "118217675",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-006826": {
+  "d": "2026-04-28",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120834224",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-019136": {
+  "d": "2026-07-14",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120981314",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-014450": {
+  "d": "2026-07-02",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120961509",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-002709": {
+  "d": "2025-07-17",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120329639",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-018141": {
+  "d": "2026-03-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120749977",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-011630": {
+  "d": "2026-07-09",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120973671",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-001801": {
+  "d": "2026-03-26",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120771602",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-08-048893": {
+  "d": "2014-05-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "112293685",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-26-001399": {
+  "d": "2026-05-28",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120890495",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-005324": {
+  "d": "2025-05-15",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120220973",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-23-015220": {
+  "d": "2024-09-13",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119795850",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-20-016936": {
+  "d": "2024-04-03",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119487331",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-14-015481": {
+  "d": "2015-04-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "112929449",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-006667": {
+  "d": "2026-06-04",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120905435",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-26-004593": {
+  "d": "2026-07-10",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120976298",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-17-015320": {
+  "d": "2023-10-16",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119167957",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-003569": {
+  "d": "2026-07-24",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121004838",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-014595": {
+  "d": "2026-06-30",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120955001",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-016176": {
+  "d": "2025-08-19",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120388109",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-016105": {
+  "d": "2026-07-10",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120975477",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CONO-26-020632": {
+  "d": "2026-07-15",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120985725",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-012333": {
+  "d": "2026-03-03",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120728210",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-012338": {
+  "d": "2026-03-03",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120728230",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-013582": {
+  "d": "2025-09-08",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120421979",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-018445": {
+  "d": "2026-04-14",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120807337",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-000980": {
+  "d": "2026-07-01",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120958402",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-009405": {
+  "d": "2025-07-02",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120304039",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-013711": {
+  "d": "2026-07-01",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120958276",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-22-009441": {
+  "d": "2022-10-24",
+  "label": "Final Judgment (recorded)",
+  "instrument": "118478010",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-18-014899": {
+  "d": "2022-05-31",
+  "label": "Final Judgment (recorded)",
+  "instrument": "118177633",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-016727": {
+  "d": "2026-07-21",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120995181",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-017722": {
+  "d": "2026-07-21",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120995216",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-018800": {
+  "d": "2026-07-20",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120993042",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-015843": {
+  "d": "2026-08-04",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121021699",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-26-003829": {
+  "d": "2026-08-07",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121029301",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-26-002894": {
+  "d": "2026-07-30",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121014482",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-22-018878": {
+  "d": "2024-12-09",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119942660",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-011310": {
+  "d": "2026-06-12",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120922008",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-007986": {
+  "d": "2026-07-01",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120958672",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-24-002137": {
+  "d": "2024-08-27",
+  "label": "Final Judgment (recorded)",
+  "instrument": "119762168",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-010229": {
+  "d": "2026-06-09",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120914072",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-000582": {
+  "d": "2026-08-04",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121023293",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-011571": {
+  "d": "2026-06-12",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120922329",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-015921": {
+  "d": "2026-07-06",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120966182",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-010782": {
+  "d": "2026-05-14",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120867831",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-015415": {
+  "d": "2026-05-28",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120890639",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-012593": {
+  "d": "2026-08-07",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121029870",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-010474": {
+  "d": "2026-08-10",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121030775",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-006953": {
+  "d": "2026-05-28",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120890473",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-19-009401": {
+  "d": "2021-09-01",
+  "label": "Final Judgment (recorded)",
+  "instrument": "117555597",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-019694": {
+  "d": "2026-07-29",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121010479",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-013087": {
+  "d": "2026-06-15",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120925380",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-011038": {
+  "d": "2026-06-12",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120923604",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CACE-25-017774": {
+  "d": "2026-05-28",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120891158",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CONO-25-078184": {
+  "d": "2026-07-29",
+  "label": "Final Judgment (recorded)",
+  "instrument": "121011911",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "CONO-25-091124": {
+  "d": "2026-06-09",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120914610",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
+ },
+ "COWE-26-021926": {
+  "d": "2026-06-24",
+  "label": "Final Judgment (recorded)",
+  "instrument": "120945328",
+  "rate": null,
+  "src": "broward-official-records",
+  "checked": "2026-08-15"
  }
 }

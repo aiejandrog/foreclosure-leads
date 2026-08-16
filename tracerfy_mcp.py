@@ -235,10 +235,20 @@ def run_dnc(limit, live):
           'rebuild the board to enforce.' % (len(done), flagged, errs))
 
 
-def run_dnccsv():
-    """CSV of every still-unscrubbed dnc:false phone for the web BATCH DNC scrub (1 cr/phone —
-    5x cheaper than the per-call MCP check). Upload click is the operator's."""
+def run_dnccsv(limit=0):
+    """CSV of still-unscrubbed dnc:false phones for the web BATCH DNC scrub (1 cr/phone — 5x cheaper
+    than the per-call MCP check). Upload click is the operator's.
+
+    --limit MATTERS HERE and used to be silently ignored. The full unscrubbed set is ~3,640 phones
+    (~$72.80) against a balance that has been sitting near 1,076 credits, so an unbounded CSV is a
+    file the operator cannot actually upload — and one they may upload PARTIALLY, in provider order,
+    which is not the order that matters. _dnc_targets() already sorts most-urgent-first by days to
+    auction, so a capped slice is exactly the numbers that get dialled soonest. Cap it and say plainly
+    what was left out, rather than shipping an unaffordable file that looks complete."""
     targets = _dnc_targets()
+    total = len(targets)
+    if limit:
+        targets = targets[:limit]
     out = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop',
                        'Tracerfy_DNC_%s.csv' % datetime.date.today().isoformat())
     import csv
@@ -247,9 +257,14 @@ def run_dnccsv():
         w.writerow(['phone', 'case'])
         w.writerows([(n, case) for case, n in targets])
     print('%d unscrubbed phone(s) -> %s' % (len(targets), out))
+    if limit and total > len(targets):
+        print('CAPPED: %d of %d written (most-urgent-first by days to auction). '
+              '%d NOT in this file and still unscrubbed.' % (len(targets), total, total - len(targets)))
     print('web batch scrub: %d cr (~$%.2f); the MCP per-call route would be %d cr (~$%.2f)'
           % (len(targets), len(targets) * COST['dnc_batch'],
              len(targets) * 5, len(targets) * COST['dnc']))
+    if limit and total > len(targets):
+        print('full set would be %d cr (~$%.2f) via batch.' % (total, total * COST['dnc_batch']))
 
 
 def run_parcel(limit, live):
@@ -383,7 +398,7 @@ def main():
     elif a.cmd == 'dnc':
         run_dnc(a.limit, a.live)
     elif a.cmd == 'dnccsv':
-        run_dnccsv()
+        run_dnccsv(a.limit)
     elif a.cmd == 'parcel':
         run_parcel(a.limit, a.live)
     elif a.cmd == 'batchcsv':

@@ -273,6 +273,27 @@ def main():
     from photo_carry import carry_photos
     _carried = carry_photos(slim, out)
     if _carried: print(f"carried photos forward for {_carried} returning {key} leads")
+    # Carry the RESOLVED COURT PARTIES forward too. county_plaintiffs.py costs ~$0.003/case (2Captcha)
+    # to resolve a plaintiff + defendant and patches them into this file — and this full overwrite then
+    # wiped them on the next scrape. county_plaintiffs.json holds 147 resolved cases while the live
+    # file showed 0/219 populated, which is exactly that bug. Photos were the only field ever carried.
+    # These are the fields the association-co-defendant screen depends on, so losing them is what keeps
+    # Broward/PB blind to a second case on the same owner.
+    _pcarry = 0
+    try:
+        _prev = {str(r.get('case')): r for r in json.load(open(out, encoding='utf-8'))
+                 if isinstance(r, dict) and r.get('case')}
+        for _r in slim:
+            _p = _prev.get(str(_r.get('case') or ''))
+            if not _p:
+                continue
+            for _k in ('defs', 'plaintiff', 'named', 'ftype', 'ctype'):
+                if _p.get(_k) and not _r.get(_k):
+                    _r[_k] = _p[_k]
+                    _pcarry += 1
+    except Exception:
+        pass
+    if _pcarry: print(f"carried resolved court parties forward on {_pcarry} field(s)")
     json.dump(slim, open(out, 'w', encoding='utf-8'), indent=1)
     print(f"DONE: {len(slim)} {key} leads ({got} enriched, {aN} Tier A) -> {os.path.basename(out)}")
 

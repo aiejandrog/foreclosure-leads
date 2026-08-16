@@ -62,13 +62,19 @@ if errorlevel 1 (
 
 rem 4) publish. ONLY the encrypted board + public Sunbiz officers -- NEVER `git add -A`
 rem    (skiptrace_results.json / leads_final.json are gitignored PII and must stay off the public repo).
-git add docs/index.html llc_officers.json
+git add docs/index.html docs/call llc_officers.json
 git commit -m "phones: nightly refresh (%PHONESNOTE%)" >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo [%STAMP%] OK - board already current, nothing to push. %PHONESNOTE%.> "%STATUS%"
   echo no changes to commit >> "%LOG%"
   exit /b 0
 )
+rem  PULL BEFORE PUSH. Without this a local push is rejected non-fast-forward the moment
+rem  GitHub Actions pushes anything (it publishes the balloon book independently), and the
+rem  "retry" below is the SAME push 6s later, which fails identically. Measured 2026-08-16:
+rem  4 commits stacked up and the live site sat frozen at 08-14 for two days while every
+rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
+git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
 git push origin main >> "%LOG%" 2>&1 || (timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1)
 
 rem The status file must state the phones outcome honestly. It previously always said "phones
