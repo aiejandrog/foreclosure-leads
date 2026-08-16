@@ -293,6 +293,32 @@ _PAGE_PROVIDES = ('save', '_nowTS', '_today', 'render', 'esc', 'toast', '$',
                   'syncFreshness', 'syncStatus', 'loadNotes', 'saveNotes')
 
 
+def _assert_no_dead_overrides(page, block):
+    """Any function declared in BOTH the page and the extracted block must be declared AFTER the
+    __SYNCJS__ injection point in the page — otherwise the block's copy is the later declaration,
+    it silently wins, and the page's version is dead code.
+
+    Found the hard way: the page's syncStatus bridge (writes #sync) sat above the injection point
+    while the extracted block shipped its own syncStatus (targets a #syncstat that does not exist
+    here). The block's no-op won; every sync status message was silently swallowed. Same override
+    class as _dialedAfter — invisible to node --check, only a position check catches it.
+    """
+    inj = page.find('__SYNCJS__')
+    if inj < 0:
+        raise CallModeError('call_mode: __SYNCJS__ placeholder missing from _PAGE')
+    block_fns = set(re.findall(r'\bfunction\s+([A-Za-z_$][\w$]*)', _strip_js(block)))
+    dead = []
+    for name in block_fns:
+        m = re.search(r'\bfunction\s+%s\b' % re.escape(name), page)
+        if m and m.start() < inj:
+            dead.append(name)
+    if dead:
+        raise CallModeError(
+            'call_mode: %s declared in the page ABOVE __SYNCJS__ but also declared inside the '
+            'extracted block — the block\'s copy wins and the page\'s is dead. Move the page\'s '
+            'declaration below the injection point.' % ', '.join(sorted(dead)))
+
+
 def _assert_page_provides(page):
     """Every name in _PAGE_PROVIDES must genuinely be defined in the page template."""
     # NB: \b does not work around `$` — it is a non-word char to Python's re but a legal JS
@@ -525,6 +551,21 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
 
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None):
     """The page. Deliberately one file, no framework, no external fetch."""
+    # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
+    # placeholder token mentioned in a comment gets the full replacement value injected into the
+    # middle of that comment (this happened: an 18KB sync block landed inside a /* */ about itself,
+    # and the comment's closing */ turned the block's tail into live, unbalanced code).
+    # __SIG__ is 2 BY DESIGN: the byte-42 head marker freshCheck range-reads, plus the JS var.
+    # Both must receive the same value, so replace-all is correct there — the guard just pins the
+    # exact expected count so a third copy (e.g. in a comment) still fails the build.
+    for _ph, _want in (('__SYNCJS__', 1), ('__SCRIPT__', 1), ('__OUTCOMES__', 1), ('__PAYLOAD__', 1),
+                       ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
+                       ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1)):
+        _n_ph = _PAGE.count(_ph)
+        if _n_ph != _want:
+            raise CallModeError('call_mode: placeholder %s occurs %d times in _PAGE (expected %d — '
+                                'str.replace hits every copy, including ones in comments)'
+                                % (_ph, _n_ph, _want))
     oc = json.dumps([{'k': k, 't': t, 'h': h, 's': s} for k, t, h, s in CALL_OUTCOMES])
     script = {
         'op': {'en': PHONE_OPENER_EN, 'es': PHONE_OPENER_ES,
@@ -620,6 +661,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_page_provides(_PAGE)
     sync_js = extract_sync_js(open(os.path.join(HERE, 'tracker_template.html'),
                                    encoding='utf-8').read())
+    _assert_no_dead_overrides(_PAGE, sync_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson)
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
@@ -698,7 +740,10 @@ button.big{background:#1d4ed8;color:#fff}
 .sub{font-size:12px;color:var(--mut);margin-top:6px;text-align:center}
 .vm{background:#0f1d3a;border:1px solid #2a3f6b;border-radius:10px;padding:12px;margin-top:10px;font-size:17px;line-height:1.5}
 .vmlang{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin:12px 0 3px}
-.toast{position:fixed;left:0;right:0;bottom:0;background:var(--ok);color:#fff;padding:16px;
+/* z-60 — above the sheet (40), the #sync chip (45) and the pill (50). With no z-index the sheet
+   painted over every toast: the one piece of feedback confirming an outcome was logged was
+   invisible on exactly the screens where he needed it. */
+.toast{position:fixed;left:0;right:0;bottom:0;z-index:60;background:var(--ok);color:#fff;padding:16px;
      font-weight:700;text-align:center;transform:translateY(100%);transition:transform .18s}
 .toast.on{transform:none}
 .gate{padding:28px 18px;max-width:420px;margin:0 auto}
@@ -767,7 +812,14 @@ button.big{background:#1d4ed8;color:#fff}
 .never{background:#3a1512;border:1px solid var(--bad);color:#ff9d94;border-radius:9px;padding:9px 11px;
   font-size:12px;line-height:1.45;margin-top:12px}
 .noes{font-size:12px;color:#8fa9d8;font-style:italic;margin-top:6px}
-.sheetpad{height:76px}
+/* Clearance for the fixed bottom sheet, sized to the MEASURED collapsed height, not the guessed
+   one: 1px border + 46px grip + ~75px of wrapped peek + safe-area inset ≈ 122-156px. It was 76px —
+   and only on the lead screen — so the last button of every other screen sat under the sheet and a
+   tap opened the script instead. Every #app paint appends this now. */
+.sheetpad{height:calc(130px + env(safe-area-inset-bottom))}
+/* Logging screens hide the sheet entirely (screenOutcome / afterCall add .hid; screenLead removes
+   it). The script belongs to the CALL; while logging, the sheet was only a tap-thief. */
+.sheet.hid{display:none}
 </style></head><body>
 <div id="app" class="wrap"><div class="gate"><h2>Call Mode</h2>
 <p class="mut" id="gmsg">Enter your access code.</p>
@@ -868,11 +920,6 @@ function _today(){ return today(); }
    that loses behaviour, it IS the behaviour. It must still EXIST: mergeNotes calls it unconditionally
    as its last statement, so an undefined name threw even when there was nothing to merge. */
 function syncFreshness(){}
-/* syncStatus writes a one-line status into the page. The board targets its own element; here it goes
-   to the same #sync line the gate and queueSync already use, so a sync failure is VISIBLE rather than
-   swallowed. Guarded because syncPull calls it before #sync exists on the very first paint. */
-function syncStatus(msg){ var el=$('sync'); if(el && msg) el.textContent=msg; }
-
 /* ══════ MERGE + TEAM SYNC — extracted VERBATIM from tracker_template.html at build time ══════
    Not copied. Copying would drift: the phone would merge by last year's rules while the board moved
    on, and the divergence would surface as outcomes that quietly fail to reconcile — precisely the
@@ -880,6 +927,18 @@ function syncStatus(msg){ var el=$('sync'); if(el && msg) el.textContent=msg; }
    Storage key is the board's own `fcLeadNotes` on the same origin, so there is one store, not two. */
 __SYNCJS__
 /* ══════════════════════════════════════════════════════════════════════════════════════════ */
+/* syncStatus writes a one-line status into the page. The board targets its own element; here it goes
+   to the same #sync line the gate and queueSync already use, so a sync failure is VISIBLE rather than
+   swallowed. Guarded because syncPull calls it before #sync exists on the very first paint.
+   🔴 DECLARED AFTER the extracted block ON PURPOSE. The block ships its OWN syncStatus (targeting a
+   #syncstat element this page does not have), and with two same-name function declarations in one
+   script the LATER one wins — this bridge sat above the injection point and was silently dead, the
+   same override class as _dialedAfter. Moving it back above the injection point kills it again
+   (and _assert_no_dead_overrides now fails the build if anyone tries).
+   NB: never write the literal injection placeholder token inside a comment here — Python's
+   str.replace substitutes EVERY occurrence, so the whole 18KB block got injected into the middle
+   of this very comment once, shredding the page's syntax. */
+function syncStatus(msg){ var el=$('sync'); if(el && msg) el.textContent=msg; }
 
 /* ---- gate: same code, same envelope as the board. fcPw is SHARED (same origin) so a phone that
    already unlocked the board never sees this screen. ---- */
@@ -1033,12 +1092,22 @@ function start(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
+  SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
   for(k=0;k<P.length;k++) if(P[k].c===workedC){ i=k+1; return render(); }
   render();
 }
+/* WHICH SCREEN IS UP. The board's extracted mergeNotes ends with `render()` — harmless on the
+   board, where render repaints a static list, and CATASTROPHIC here, where the page is a wizard.
+   Returning from the tel: dialer or sms: composer fires visibilitychange -> syncPull -> mergeNotes
+   -> render(), which replaced the outcome screen / after-call panel / "did it send?" confirm 1-2s
+   after he got back, and reset phIdx to 0. That is why the FIRST call of a session worked (nothing
+   to merge yet) and everything after it "went faulty": his own first push guaranteed every later
+   return had a change to merge. The data must land; the REPAINT must wait. */
+var SCREEN='lead';
 function render(){
+  if(SCREEN!=='lead'){ return; }   // never stomp an interactive screen — advance() repaints fresh
   var P=pool();
   /* An emptied lane and a never-populated lane are NOT the same event, and until now they printed the
      same words. Work every lead and the pool drains to zero, so a finished session was reporting
@@ -1048,15 +1117,20 @@ function render(){
     var done = _WORKED.length
       ? '<b>Lane cleared.</b><div class="sub">'+_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked. Switch lanes above, or reopen tomorrow.</div>'
       : '<b>Nothing in this lane.</b><div class="sub">Switch lanes above.</div>';
-    $('app').innerHTML=head()+'<div class="card">'+done+'</div>'; wire(); return;
+    $('app').innerHTML=head()+'<div class="card">'+done+'</div><div class="sheetpad"></div>'; wire(); return;
   }
   /* Count what was ACTUALLY worked, not what is left in the pool. `P.length` was standing in for it,
      but the two diverge the moment an outcome removes a lead: log 5 do-not-contacts and the pool is
      empty, so it reported "0 worked" for a full session. A number on screen that is not the thing it
      is labelled is the same defect class as the "0% equity" and "$0 owed" bugs. */
   if(i>=P.length){ $('app').innerHTML=head()+'<div class="card"><b>Queue clear.</b><div class="sub">'
-      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div></div>'; wire(); return; }
-  cur=P[i]; phIdx=0; screenLead();
+      +_WORKED.length+' lead'+(_WORKED.length===1?'':'s')+' worked this session. Reopen tomorrow.</div></div>'
+      +'<div class="sheetpad"></div>'; wire(); return; }
+  /* Keep the NUMBER position when the lead is unchanged. A legitimate lead-screen render (sync merge
+     landing while he reads the card on number 2) must not snap him back to number 1. */
+  var pc=cur&&cur.c, pp=phIdx;
+  cur=P[i]; phIdx=(cur&&cur.c===pc&&pp<cur.p.length)?pp:0;
+  screenLead();
 }
 function head(){
   var wq = workerQ().length;
@@ -1110,6 +1184,8 @@ function histLine(r){
 }
 
 function screenLead(){
+  SCREEN='lead';
+  document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
   var r=cur, d=r.p[phIdx], rk=r.r[phIdx]||'';
   var when = r.lp ? ('lis pendens filed '+esc(r.x||''))
                   : ((r.d===0?'auction TODAY':(r.d===1?'auction TOMORROW':'auction in '+r.d+' days'))+(r.x?' &middot; '+esc(r.x):''));
@@ -1310,6 +1386,13 @@ function setCallback(r, hours, label){
 }
 
 function screenOutcome(){
+  SCREEN='outcome';
+  /* Hide the script sheet while LOGGING. On the call screen it earns its place; here it was a
+     tap-thief — collapsed it still stood ~122-156px tall while the spacer under the buttons was
+     76px and only existed on the lead screen, so "Do not contact" (the LAST button) sat underneath
+     it and a tap opened the script instead of logging. That is the "overwhelming overlay, faulty
+     buttons" report, verbatim. The voicemail script renders inside the card, so nothing is lost. */
+  document.getElementById('sheet').classList.add('hid');
   var r=cur, d=r.p[phIdx];
   // Captured BEFORE any outcome is written — see advance(). Once logOutcome runs, pool() may no
   // longer contain either this lead or the same neighbours, so there is nothing left to read it from.
@@ -1322,7 +1405,7 @@ function screenOutcome(){
   // "GORDON,STEVE" has no space to split on, so the question read "How did it go with GORDON,STEVE?"
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div><div class="oc" style="margin-top:10px">'+btns+'</div>'
-    +'<div class="vm" id="vm" style="display:none"></div></div>';
+    +'<div class="vm" id="vm" style="display:none"></div></div><div class="sheetpad"></div>';
   Array.prototype.forEach.call(document.querySelectorAll('.oc button'), function(b){
     b.onclick=function(){
       Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=true;});
@@ -1360,7 +1443,10 @@ function screenOutcome(){
       if(o.k==='voicemail'){
         $('vm').innerHTML += '<button id="vmdone" style="margin-top:14px">Done reading &rarr;</button>';
         $('vmdone').onclick = go;
-      } else setTimeout(go, 650);
+      } else go();
+      /* go() runs IMMEDIATELY now. The 650ms hold showed a screen of disabled buttons between every
+         outcome and the next action — pure dead time, times a hundred dials a day. The toast (now
+         z-60, above the sheet) is the confirmation, and it overlaps the next screen harmlessly. */
     };
   });
 }
@@ -1409,6 +1495,8 @@ function stopEverywhere(r, digits){
    screen that exists because he dials from the phone, writes the number on paper, and never comes
    back to the laptop to log it. Everything here writes to the SAME notes the board reads. */
 function afterCall(r, o, nextC){
+  SCREEN='after';
+  document.getElementById('sheet').classList.add('hid');   // same tap-thief reasoning as screenOutcome
   var st = textStage(r), miss = (o.k==='noanswer'||o.k==='voicemail');
   var num = r.p[phIdx];
   /* THREE GATES, all of which were missing. The text button shipped with only the ladder check.
@@ -1448,7 +1536,7 @@ function afterCall(r, o, nextC){
     +   '<button class="cb" data-h="72">In 3 days</button>'
     + '</div>'
     + '<button id="nx" style="margin-top:14px">Next lead &rarr;</button>'
-    + '</div>';
+    + '</div><div class="sheetpad"></div>';
   var go = function(){ advance(r.c, nextC); };
   $('nx').onclick = go;
   Array.prototype.forEach.call(document.querySelectorAll('.cb'), function(b){
@@ -1456,6 +1544,12 @@ function afterCall(r, o, nextC){
       setCallback(r, +b.dataset.h, b.textContent.toLowerCase());
       Array.prototype.forEach.call(document.querySelectorAll('.cb'),function(x){x.disabled=true;});
       b.classList.add('on');
+      /* Setting a callback IS choosing what happens next — making him also tap "Next lead" was one
+         more mandatory tap in a flow he runs a hundred times a day. Brief hold so the chip's
+         confirmation state is visible, then advance. EXCEPT while the "did it actually send?"
+         confirm is up — auto-advancing there would destroy the unanswered confirm and the text
+         send would never be logged. He answers that first; Next lead is still one tap away. */
+      if(!$('txy')) setTimeout(go, 450);
     };
   });
   if($('tx')) $('tx').onclick = function(){
@@ -1519,7 +1613,15 @@ function queueSync(){
   if(!k){ $('sync').textContent='Logged to this phone only — team sync is off'; return; }
   try{ syncPush(); }catch(e){}
 }
-function toast(t){ var el=$('toast'); el.textContent=t; el.classList.add('on'); setTimeout(function(){el.classList.remove('on');},1400); }
+/* One shared dismissal timer, cleared on every show. Without this, back-to-back toasts (the norm
+   now that the 650ms screen-holds are gone) let the FIRST toast's 1400ms timer strip the class off
+   the SECOND — the confirmation he most needs flashes for a few ms and dies. */
+var _toastT=null;
+function toast(t){
+  var el=$('toast'); el.textContent=t; el.classList.add('on');
+  clearTimeout(_toastT);
+  _toastT=setTimeout(function(){el.classList.remove('on');},1400);
+}
 function wire(){
   Array.prototype.forEach.call(document.querySelectorAll('.lane button'), function(b){
     b.onclick=function(){ lane=b.dataset.l; i=0; render(); };
