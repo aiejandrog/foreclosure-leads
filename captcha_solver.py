@@ -56,6 +56,14 @@ def _poll(key, cid, timeout, poll, label='2captcha'):
         except Exception:
             continue
         if g.get('status') == 1:
+            # Record the solve on the shared ledger (~$0.003/Turnstile per county_leads.py:276).
+            # REPORT ONLY, never require() — gating the solver on the daily cap would silently
+            # break the lien/LP unlocks mid-run for tenths of a cent. Visibility, not a gate.
+            try:
+                import bd_budget
+                bd_budget.charge(0.003, '2captcha')
+            except Exception:
+                pass
             return g['request']
         if g.get('request') != 'CAPCHA_NOT_READY':  # 2captcha's (sic) not-ready sentinel
             print(f'  [{label}] solve failed: {g.get("request")}')

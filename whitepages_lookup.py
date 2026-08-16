@@ -64,7 +64,8 @@ COUNTY_CITY = {
 _cache_lock = threading.Lock()
 _progress_lock = threading.Lock()
 _stats = {'ok': 0, 'miss': 0, 'err': 0, 'person': 0, 'person_miss': 0, 'phones_added': 0, 'rate_limited': 0}
-_stop_run = threading.Event()   # set on sustained 429 wall so the batch exits cleanly
+_stop_run = threading.Event()   # set on sustained 429 wall OR budget exhaustion
+_stop_why = {'why': ''}         # which one - the operator decision differs (top up WP vs raise the cap)
 
 
 def _load_key():
@@ -174,6 +175,7 @@ def _http_get(url, key, retries=3):
             bd_budget.require(WP_EST_COST, 'whitepages_lookup')
         except bd_budget.BudgetExhausted as e:
             _log(f'  BUDGET: {e}')
+            _stop_why['why'] = _stop_why['why'] or 'daily budget reached'
             _stop_run.set()
             return None
         req = urllib.request.Request(url, headers={'X-Api-Key': key, 'User-Agent': UA})
@@ -191,7 +193,12 @@ def _http_get(url, key, retries=3):
                 return {'_http': 404, 'result': None}
             if e.code == 429:
                 wait = min(120, 20 * (2 ** attempt))          # 20, 40, 80, 120
-                _log(f'  RATE LIMIT (429) sleeping {wait}s (attempt {attempt + 1}/{retries + 1})')
+                # LOG THE BODY. It was read and then discarded on this one branch — nine straight
+                # nights of first-call 429s produced zero evidence of whether WP meant "throttled"
+                # (wait it out) or "quota exceeded" (dead plan, stop paying the retry tax). That
+                # distinction is the entire top-up decision, and it was in the discarded bytes.
+                _log(f'  RATE LIMIT (429) sleeping {wait}s (attempt {attempt + 1}/{retries + 1})'
+                     + (f'  provider said: {body}' if body else ''))
                 _stats['rate_limited'] += 1
                 time.sleep(wait); continue
             if e.code in (401, 403):
@@ -204,6 +211,7 @@ def _http_get(url, key, retries=3):
             return None
     _log('  RATE LIMIT: exhausted retries — pausing run (resume-safe; cache untouched for this lead)')
     _stats['rate_limited'] += 1
+    _stop_why['why'] = _stop_why['why'] or '429 wall'
     _stop_run.set()
     return None
 
@@ -581,14 +589,15 @@ def main():
     if not todo: print('nothing to do.'); return
 
     est_calls = len(todo) * (2 if args.deep else 1)                  # rough (Person may not fire on some)
-    print(f'{len(todo)} lookup(s) queued (concurrency={CONCURRENCY}, throttle={THROTTLE_S}s, deep={args.deep}, ~{est_calls} API calls, est ${est_calls*0.10:.2f})', flush=True)
+    # est at WP_EST_COST, not the retired $0.10 - the banner understated real exposure 2.2x
+    print(f'{len(todo)} lookup(s) queued (concurrency={CONCURRENCY}, throttle={THROTTLE_S}s, deep={args.deep}, ~{est_calls} API calls, est ${est_calls*WP_EST_COST:.2f})', flush=True)
 
     t0 = time.time()
     # Serial when CONCURRENCY=1 (default) — ThreadPool still works but sequential is clearer for 429s
     if CONCURRENCY <= 1:
         for lead in todo:
             if _stop_run.is_set():
-                _log('  stopping early — 429 wall (rerun --gap to resume)')
+                _log(f"  stopping early — {_stop_why['why'] or 'stop requested'} (rerun --gap to resume)")
                 break
             enrich_one(lead, key, args.deep, cache)
     else:

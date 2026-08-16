@@ -101,7 +101,9 @@ python -u llc_officers.py --limit 60 >> "%LOG%" 2>&1
 
 echo [3b/5] Skip-tracing owner + LLC-officer phones (ALL tiers, capped so a run can't overspend)...
 if exist tracerfy.key goto :phones
-if exist batchdata.key goto :phones
+rem BatchData RETIRED 2026-08-16: the provider was exited 08-11 (see BATCHDATA-EXIT.md) but this
+rem gate still treated its key as a reason to enter the phones stage - meaning a Tracerfy key
+rem problem would silently fail over to the $0.15/hit provider we left. Tracerfy key only now.
 echo     no phone key present - skipping phones ^(names + People links still publish^).>> "%LOG%"
 echo     (no phone key - names/People links only)
 goto :rebuild
@@ -120,11 +122,13 @@ rem  skiptrace.py still enforces its own --max-spend and the shared bd_budget da
 rem  this raises the throughput ceiling without removing the spend guard.
 python -u skiptrace.py --all --limit 100 >> "%LOG%" 2>&1
 
-rem [3a-2] Whitepages Pro API - one paid /v2/property call returns EVERY owner + resident + all
-rem typed phones (mobile/landline unmasked) + emails per lead. ~$0.10/call est.; --limit 30 caps
-rem a single run so a trial key can't blow up. Cached in whitepages_lookup.json (gitignored); skips
-rem already-cached leads. Also flags absentee-owner scenarios (Velima's Jacob = Lewisville TX).
-if exist whitepages.key python -u whitepages_lookup.py --all --limit 30 >> "%LOG%" 2>&1
+rem [3a-2] Whitepages Pro - DISABLED 2026-08-16 by Alejandro's call. The plan quota has been
+rem exhausted since 08-08 (nine straight nights of first-call 429s, zero results, last success
+rem 08-07 09:51) while still consuming a slot of the shared daily budget. Real cost when live was
+rem $0.22/call, not the $0.10 this comment used to claim. Cached results still bake into the board.
+rem To RE-ENABLE after renewing the plan, restore this line:
+rem   if exist whitepages.key python -u whitepages_lookup.py --all --limit 30 >> "%LOG%" 2>&1
+rem Manual gap runs still work anytime: python whitepages_lookup.py --gap --limit N
 
 :rebuild
 echo [3b/5] Property photos (Zillow listings all tiers + Street View when keyed + satellite aerials -^> docs/img)...

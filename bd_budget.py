@@ -56,8 +56,22 @@ def _load():
         return {}
 
 
+def _day_total(entry):
+    """A day's total dollars, whichever ledger format the day was written in.
+
+    Two formats coexist on purpose:
+      old  {'2026-08-15': 10.0}                                   (plain float)
+      new  {'2026-08-16': {'total': 10.0, 'by': {'wp': 6.6, ...}}} (attributed)
+    The old days must keep loading forever — a ledger that forgets history the day its schema
+    improves is a ledger that cannot be audited, which is the exact failure this fixes.
+    """
+    if isinstance(entry, dict):
+        return float(entry.get('total', 0.0))
+    return float(entry or 0.0)
+
+
 def spent_today():
-    return round(float(_load().get(str(date.today()), 0.0)), 4)
+    return round(_day_total(_load().get(str(date.today()))), 4)
 
 
 def remaining():
@@ -72,23 +86,44 @@ def can_spend(dollars):
 def charge(dollars, note=''):
     """Record a spend. Called AFTER a billable request goes out — a call that reached the provider
     costs money whether or not it returned data, so misses are charged too (that is the honest
-    accounting; assuming misses are free is how a budget silently overruns)."""
+    accounting; assuming misses are free is how a budget silently overruns).
+
+    The `note` is STORED now. It was accepted and discarded for the ledger's whole life, so a
+    $10.00 cap-out day could not say who spent it — on 08-16 attributing $6.30 of pre-6AM spend
+    took cross-referencing three logs. Every caller already passes a meaningful note ('wp',
+    'wp-miss', 'tracerfy-dnc', ...); now it lands in the ledger."""
     led = _load()
     k = str(date.today())
-    led[k] = round(float(led.get(k, 0.0)) + float(dollars), 4)
+    day = led.get(k)
+    if not isinstance(day, dict):
+        day = {'total': _day_total(day), 'by': {}}
+    day['total'] = round(day['total'] + float(dollars), 4)
+    nk = note or 'unattributed'
+    day['by'][nk] = round(float(day['by'].get(nk, 0.0)) + float(dollars), 4)
+    led[k] = day
     tmp = LEDGER + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(led, f, indent=1)
     os.replace(tmp, LEDGER)                              # atomic: concurrent runs can't corrupt it
-    return led[k]
+    return day['total']
+
+
+def breakdown_today():
+    """'wp $6.60 · skiptrace $3.40' — empty string for old-format days with no attribution."""
+    day = _load().get(str(date.today()))
+    if not isinstance(day, dict) or not day.get('by'):
+        return ''
+    by = sorted(day['by'].items(), key=lambda kv: -kv[1])
+    return ' · '.join(f"{k} ${v:.2f}" for k, v in by)
 
 
 def require(dollars, script=''):
     """Gate one billable call. Raises BudgetExhausted when today's shared cap is used up."""
     if not can_spend(dollars):
+        bd = breakdown_today()
         raise BudgetExhausted(
             f"BatchData daily budget spent: ${spent_today():.2f} of ${cap():.2f} "
-            f"(today, all scripts combined). {script} stopping.")
+            f"(today, all scripts combined{': ' + bd if bd else ''}). {script} stopping.")
 
 
 def banner(script, per_call):
@@ -106,6 +141,11 @@ if __name__ == '__main__':
     led = _load()
     print(f"BatchData spend ledger ({LEDGER})")
     for d in sorted(led)[-14:]:
-        print(f"  {d}  ${led[d]:.2f}")
+        e = led[d]
+        if isinstance(e, dict) and e.get('by'):
+            by = ' · '.join(f"{k} ${v:.2f}" for k, v in sorted(e['by'].items(), key=lambda kv: -kv[1]))
+            print(f"  {d}  ${_day_total(e):.2f}   ({by})")
+        else:
+            print(f"  {d}  ${_day_total(e):.2f}")
     print(f"\ntoday: ${spent_today():.2f} of ${cap():.2f} cap -> ${remaining():.2f} left")
     print(f"worst case at this cap: ${cap()*30:.0f}/month")

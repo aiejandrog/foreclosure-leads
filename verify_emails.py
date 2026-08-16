@@ -136,6 +136,13 @@ def provider_check(addr, name, key, timeout=20):
     import urllib.parse
     import urllib.request
     try:
+        # Record the check on the shared ledger — report only, never gate (see captcha_solver).
+        # ZeroBounce ~$0.008/credit at their $16/2,000 tier; NeverBounce comparable.
+        try:
+            import bd_budget
+            bd_budget.charge(0.008, name)
+        except Exception:
+            pass
         if name == 'zerobounce':
             q = urllib.parse.urlencode({'api_key': key, 'email': addr, 'ip_address': ''})
             url = f'https://api.zerobounce.net/v2/validate?{q}'

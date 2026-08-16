@@ -478,6 +478,24 @@ def main():
         print(f"NO API KEY for '{provider}'. Put your key in {kf} or set {PROVIDERS[provider]['env']}. Aborting.")
         sys.exit(1)
 
+    # BALANCE PRE-FLIGHT (Tracerfy only, via the MCP's check_balance). The REST rail has no balance
+    # endpoint, so before this the account state was discovered only by BURNING a call — both credit
+    # outages (08-12, 08-13) killed the nightly mid-run with zero warning the night before. This
+    # prints the state every run so "do I need a top-off" is answered by yesterday's log.
+    # NON-FATAL BY DESIGN: a balance probe must never block a trace run — the MCP url file is
+    # optional and the MCP service being down is not a reason to skip tracing.
+    if provider == 'tracerfy':
+        try:
+            import tracerfy_mcp as _TM
+            _cr = _TM.balance()
+            _need = len(todo) * 5                       # Instant trace = 5 credits/lookup
+            print(f"  Tracerfy balance: {_cr} credits (~${_cr * 0.02:.2f})"
+                  + (f"  — NOT enough for this run ({len(todo)} leads need ~{_need}cr); "
+                     f"it will stop when credits run out. TOP UP: https://tracerfy.com"
+                     if _cr < _need else ''))
+        except Exception:
+            pass                                        # no MCP url / MCP down — trace anyway
+
     def _save():
         json.dump(results, open(RESULTS, 'w', encoding='utf-8'), indent=1)
         # clear re-trace entries whose case got a fresh trace this run (traced == today);
@@ -507,7 +525,13 @@ def main():
                 print(f"\n  [{i}/{len(todo)}] {case}: {e}")
                 print(f"      provider said: {e.body[:300]}")
                 if e.balance:
-                    print("\n  >>> TOP UP BATCHDATA: https://batchdata.com  (skip-trace balance is exhausted)")
+                    # Name the provider that ACTUALLY ran dry. This line was hardcoded to BatchData,
+                    # so both real Tracerfy credit outages (08-12, 08-13) told the operator to top
+                    # up the wrong vendor while the right account sat empty.
+                    _topup = {'tracerfy': 'https://tracerfy.com  (Instant trace needs 5 credits/lookup)',
+                              'batchdata': 'https://batchdata.com  ($50 minimum)'}
+                    print(f"\n  >>> TOP UP {provider.upper()}: {_topup.get(provider, provider)}"
+                          "  (skip-trace balance is exhausted)")
                 else:
                     print("\n  >>> KEY REJECTED — the API key is bad/expired or your plan doesn't include "
                           "this endpoint. Fix the key, then re-run.")

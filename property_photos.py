@@ -225,6 +225,13 @@ def _download_streetview(addr, fname, key, sess, target=None):
             params['heading'] = round(_bearing(pl['lat'], pl['lng'], target[0], target[1]), 1)
         else:
             params['location'] = loc
+        # Record on the shared ledger (Street View Static: $7/1,000 = $0.007/image). Report
+        # only, never gate — photos must not be the reason a lien unlock has no budget words.
+        try:
+            import bd_budget
+            bd_budget.charge(0.007, 'streetview')
+        except Exception:
+            pass
         r = sess.get(SV_IMG, params=params, timeout=25)
         if r.status_code == 200 and 'image' in (r.headers.get('content-type') or '') and len(r.content) > 3000:
             tmp = f"{path}.{os.getpid()}.{threading.get_ident()}.tmp"

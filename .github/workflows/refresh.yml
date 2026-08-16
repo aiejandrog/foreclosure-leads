@@ -359,17 +359,17 @@ jobs:
           python llc_officers.py --limit 60
           python skiptrace.py --all --limit 120
 
-      # ---- [3a2/5] Whitepages Pro API — one paid /v2/property call returns EVERY owner + resident
-      # with typed phones (mobile/landline UNMASKED) + emails + current mailing city. Absentee-owner
-      # detection is the killer feature (Velima: her co-owner Jacob is in Lewisville TX → call, don't
-      # knock). --limit 30 caps a single run; already-cached leads are skipped so it stays incremental.
-      # Est ~$0.10/call. Only runs when the WHITEPAGES_KEY secret is set.
-      - name: '[3a2/5] Whitepages Pro household lookups'
-        if: env.WHITEPAGES_KEY != ''
-        continue-on-error: true
-        run: |
-          echo -n "${WHITEPAGES_KEY}" > whitepages.key
-          python whitepages_lookup.py --all --limit 30
+      # ---- [3a2/5] Whitepages Pro — DISABLED 2026-08-16 (operator decision). The plan quota has
+      # been exhausted since 08-08: nine consecutive runs produced first-call 429s and zero results
+      # (last success 2026-08-07 09:51) while still consuming a slot of the shared bd_budget daily
+      # cap. Real cost when live: $0.22/call, not the $0.10 the old comment claimed. Cached results
+      # keep baking into the board. To RE-ENABLE after renewing the plan, restore the step:
+      #   - name: '[3a2/5] Whitepages Pro household lookups'
+      #     if: env.WHITEPAGES_KEY != ''
+      #     continue-on-error: true
+      #     run: |
+      #       echo -n "${WHITEPAGES_KEY}" > whitepages.key
+      #       python whitepages_lookup.py --all --limit 30
 
       # ---- [3b/5] Property photos (Zillow + Street View + aerials) ------------------------
       - name: '[3b/5] Property photos'
