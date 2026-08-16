@@ -82,8 +82,10 @@ _OPEN_BODY_ES = ("Mi nombre es {sender}. No le vengo a vender nada, ni a comprar
 # "do NOT open with this name" because the roll owner has changed. The script contradicted the card.
 PHONE_OPENER_EN = "Hi, is this {first}? " + _OPEN_BODY_EN
 PHONE_OPENER_ES = "Hola, ¿hablo con {first}? " + _OPEN_BODY_ES
-PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {street}? " + _OPEN_BODY_EN
-PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {street}? " + _OPEN_BODY_ES
+# {st1} — the STREET LINE, not the full "…, WEST PALM BEACH, FL 33401". The full address got read
+# aloud on a live call (2026-08-16, Evernia St) and sounds like a process server. Street only.
+PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? " + _OPEN_BODY_EN
+PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? " + _OPEN_BODY_ES
 
 CIOC = [
     ('CUSHION', 'Agree, normalize, include them in the majority. Never argue.',
@@ -436,6 +438,19 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
             continue
         if d.get('title_status') == 'transferred':          # ownership gate — they no longer own it
+            continue
+        # EQUITY FLOOR. A KNOWN, deeply underwater lead is a call with no possible win: no equity to
+        # protect, no surplus at sale (hammer < judgment), no service to offer anyone. The sort puts
+        # imminent auctions FIRST, so the 08-16 live session opened on a -71% corporate condo
+        # ($698k judgment / $409k value, sale next day) — a lead no outcome could have salvaged.
+        # KNOWN is the load-bearing word: eq=None means NOT CHECKED and always ships (the not-
+        # checked-is-not-zero rule). -25 keeps thin-but-arguable deals; override via env.
+        _eqf = d.get('eq')
+        try:
+            _eqf = float(_eqf)
+        except (TypeError, ValueError):
+            _eqf = None
+        if _eqf is not None and _eqf <= float(os.environ.get('CALLMODE_EQ_FLOOR', '-25')):
             continue
         phones, phdnc = (d.get('phones') or []), (d.get('phdnc') or [])
         # DROP DNC NUMBERS FROM THE RECORD, do not flag them. `phbest is None` means every number
