@@ -963,7 +963,12 @@ function fillScript(t, r){
 }
 
 function loadNotes(){try{notes=JSON.parse(localStorage.getItem(LS)||'{}');}catch(e){notes={};}}
-function saveNotes(){try{localStorage.setItem(LS,JSON.stringify(notes));}catch(e){}}
+function saveNotes(){try{localStorage.setItem(LS,JSON.stringify(notes));}catch(e){
+  /* A swallowed setItem failure (private mode, quota) lost every log while the UI kept stamping
+     green checks. Say it, loudly, and put it in the error chip. */
+  logErr(e,'saveNotes');
+  try{ toast('⚠ NOT SAVED — phone storage is full or blocked'); }catch(_e){}
+}}
 /* NAME BRIDGE for the extracted board code. The block below is lifted verbatim from
    tracker_template.html and calls the board's helper names — `save()`, `_nowTS()`, `_today()`. This
    page had its own `nowTS`/`today`, so without these aliases `_mergeLead` throws ReferenceError the
@@ -1543,15 +1548,20 @@ function screenOutcome(){
       if(o.k==='dnc' && !confirm('They asked to stop. This closes every channel, permanently, on every device. Continue?')){
         Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); return;
       }
-      logOutcome(r,o,d);
+      var _fresh = logOutcome(r,o,d);
+      var _okmsg = _fresh ? ('✓ '+o.t+' — logged') : ('✓ dial counted — '+o.t+' already logged today');
+      /* The shield arms INSIDE go() — at the actual screen swap — not at outcome-tap time. On the
+         voicemail path the swap happens seconds later (the Done-reading button), and arming early
+         both missed that swap and ate legitimate taps on the just-painted voicemail block. */
+      var _shield = function(){ window._tapShieldUntil = Date.now() + 400; };
       if((o.k==='noanswer'||o.k==='voicemail') && phIdx+1 < r.p.length){
-        go = function(){ phIdx++; toast('Logged · next number'); screenLead(); };
+        go = function(){ _shield(); phIdx++; toast(_fresh?'Logged · next number':'Dial counted · next number'); screenLead(); };
       } else if(o.k==='dnc'||o.k==='wrong'||o.k==='notint'){
         /* An outcome that ENDS the relationship gets no follow-up offer — showing a Text button
            after someone says do-not-contact is how a compliance breach happens by muscle memory. */
-        go = function(){ toast('✓ '+o.t+' — logged'); advance(r.c,nextC); };
+        go = function(){ _shield(); toast(_okmsg); advance(r.c,nextC); };
       } else {
-        go = function(){ toast('✓ '+o.t+' — logged'); afterCall(r,o,nextC); };
+        go = function(){ _shield(); toast(_okmsg); afterCall(r,o,nextC); };
       }
       // A voicemail script he has not finished reading must not be replaced out from under him.
       // paintVM re-runs now that `go` exists, adding the Done button (and keeping it across
@@ -1699,7 +1709,11 @@ function logOutcome(r,o,digits){
   var n=notes[r.c]=notes[r.c]||{status:'',note:''};
   n.touches=n.touches||[];
   var last=n.touches[n.touches.length-1];
-  if(!(last && last.d===today() && last.ch==='call' && last.out===o.t))
+  /* Returns whether a NEW touch was written. The same-day dedupe is correct (cooldown math), but
+     silently collapsing the second identical tap while stamping "✓ logged" read as a broken
+     button — the caller now tells the truth: "dial counted, already logged today". */
+  var fresh = !(last && last.d===today() && last.ch==='call' && last.out===o.t);
+  if(fresh)
     n.touches.push({d:today(),ts:nowTS(),tsu:Date.now(),ch:'call',out:o.t});
   n.dials=n.dials||[];
   n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k});
@@ -1721,16 +1735,34 @@ function logOutcome(r,o,digits){
   touched = true;
   saveNotes();
   queueSync();
+  return fresh;
 }
 /* Write-back rides the board's existing Supabase team sync.
    PUSH IMMEDIATELY — do NOT use the board's 1.5s syncPushSoon debounce. iOS backgrounds this tab the
    instant the dialer opens, and a debounced push scheduled at tap time simply never fires. The cost
    of pushing on every outcome is one small request; the cost of missing one is the logged call.
    If fcTeamKey is absent we still log LOCALLY and say so — never block dialing on sync setup. */
+var _pushRetryT=null, _pushRetryN=0;
 function queueSync(){
   var k=null; try{k=localStorage.getItem('fcTeamKey');}catch(e){}
   if(!k){ $('sync').textContent='Logged to this phone only — team sync is off'; return; }
-  try{ syncPush(); }catch(e){}
+  /* RETRY. The push fired right before tel:/sms: navigation dies when iOS backgrounds the tab,
+     and a failed push used to be simply gone — the outcome lived on this phone only.
+     syncPush() NEVER rejects (it swallows failures internally and stamps fcLastPush only on a
+     real 2xx), so a .catch-based retry is dead code — success is detected by the stamp moving. */
+  var _before=null; try{ _before=localStorage.getItem('fcLastPush'); }catch(e){}
+  var _resched=function(){
+    if(_pushRetryN>=4) return;
+    clearTimeout(_pushRetryT); _pushRetryN++;
+    _pushRetryT=setTimeout(queueSync, 4000*_pushRetryN);
+  };
+  try{
+    syncPush().then(function(){
+      var _after=null; try{ _after=localStorage.getItem('fcLastPush'); }catch(e){}
+      if(_after && _after!==_before){ clearTimeout(_pushRetryT); _pushRetryT=null; _pushRetryN=0; return; }
+      _resched();
+    }).catch(_resched);
+  }catch(e){ _resched(); }
 }
 /* One shared dismissal timer, cleared on every show. Without this, back-to-back toasts (the norm
    now that the 650ms screen-holds are gone) let the FIRST toast's 1400ms timer strip the class off
@@ -1758,6 +1790,16 @@ window.addEventListener('error', function(ev){ logErr(ev.error||ev.message, 'win
 /* Tap OUTSIDE an open sheet closes it. An open drawer covers most of the card; taps on covered
    buttons hit the drawer body and did nothing visible — one of the shapes behind "sometimes the
    buttons do not work at all". Tap-outside-to-close is the behaviour every sheet UI trains. */
+/* Post-swap tap shield (see the outcome handler): a click arriving <400ms after a screen swap is
+   the tail of a double-tap aimed at the OLD screen — swallow it before any handler sees it. */
+document.addEventListener('click', function(ev){
+  if(window._tapShieldUntil && Date.now() < window._tapShieldUntil){
+    /* stopImmediatePropagation, not stopPropagation: the sheet-close listener below is on the
+       SAME node (document, capture) and would otherwise still run — a shielded ghost tap could
+       close the script sheet mid-call. */
+    ev.stopImmediatePropagation(); ev.preventDefault();
+  }
+}, true);
 document.addEventListener('click', function(ev){
   var sh = document.getElementById('sheet');
   if(sh && sh.classList.contains('open') && !sh.contains(ev.target)) sh.classList.remove('open');
@@ -1896,14 +1938,21 @@ function renderSheet(r){
 $('grip').onclick=sheetToggle;
 $('peek').onclick=sheetToggle;
 
-$('pill').onclick=function(){ location.reload(); };
+$('pill').onclick=function(){
+  /* The pill sits above the sheet grip and used to reload INSTANTLY — mid-call, unconfirmed.
+     Off the lead screen (call in progress), reloading needs a deliberate yes. */
+  if(SCREEN!=='lead' && !confirm('Load the newer list now? Your logs are saved, but the screen resets to the top of the queue.')) return;
+  location.reload();
+};
 /* Returning to the page means he just finished a call. Pull then (teammate opt-outs matter before
    the next dial) and re-check freshness. Do NOT poll on a 45s timer here — 200k-iteration PBKDF2
    every 45s on a backgrounded phone is pure battery burn for a page used in bursts. */
 document.addEventListener('visibilitychange',function(){
   if(document.hidden) return;
   freshCheck();
-  try{ if(localStorage.getItem('fcTeamKey')){ syncPull().then(function(){ loadNotes(); }); } }catch(e){}
+  /* Pull first (teammate opt-outs before the next dial), then PUSH: the push fired just before
+     the dialer opened may have died when the tab backgrounded — returning is the retry moment. */
+  try{ if(localStorage.getItem('fcTeamKey')){ syncPull().then(function(){ loadNotes(); if(touched) return syncPush(); }).catch(function(){}); } }catch(e){}
 });
 boot();
 </script></body></html>

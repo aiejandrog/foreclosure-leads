@@ -7401,7 +7401,11 @@ function _openHashDeal(){
 // Filing year: the `filed` field when the scraper carried it (MD), else derived from the case
 // number itself — MD `2025-021847-CA-01`, PB `502024CA012300…`, BW `CACE-24-009886` all encode it.
 function _filedYear(r){
-  var y = +((r && r.filed) || 0);
+  var v = (r && r.filed);
+  // county rows carry a bare year number; LP rows carry '8/7/2026' — +string is NaN, so pull the
+  // trailing 4-digit year out of a date string instead of silently falling through
+  var y = (typeof v === 'number') ? v : 0;
+  if(!y && typeof v === 'string'){ var dm = v.match(/(\d{4})\s*$/); if(dm) y = +dm[1]; }
   if(y > 1990) return y;
   var c = String((r && r.case) || '');
   var m = c.match(/^(\d{4})-/) || c.match(/^\d{2}(\d{4})[A-Z]/) || c.match(/^[A-Z]{4}-?(\d{2})-/);
@@ -10086,10 +10090,15 @@ function genDialReady(r){
       + '<span class="doen">'+esc(o.en)+'</span><span class="does">'+esc(o.es)+'</span></button>';
   }).join('');
   var outcomeScript = '<script>document.addEventListener("click",function(e){var b=e.target.closest(".droutbtn");if(!b||b.classList.contains("done"))return;'
-    + 'try{window.opener&&window.opener.postMessage({dialoutcome:{c:'+JSON.stringify(r.case)+',out:+b.dataset.out}},"*");}catch(_e){}'
+    // HONEST stamp: the old version stamped "✓ logged" unconditionally — with the board tab closed
+    // or reloading, the postMessage vanished and the outcome was never recorded anywhere. Now a
+    // missing opener falls back to the local bridge and SAYS so instead of claiming success.
+    + 'var ok=false;'
+    + 'try{if(window.opener&&!window.opener.closed){window.opener.postMessage({dialoutcome:{c:'+JSON.stringify(r.case)+',out:+b.dataset.out}},"*");ok=true;}}catch(_e){}'
+    + 'if(!ok){try{fetch("http://127.0.0.1:8823/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({c:'+JSON.stringify(r.case)+',k:"dialoutcome",extra:{out:+b.dataset.out}})}).catch(function(){});}catch(_e){}}'
     + 'b.classList.add("done");'
-    + 'var was=b.querySelector(".doen").textContent;b.querySelector(".doen").textContent="✓ "+was+" — logged";'
-    + 'var wasES=b.querySelector(".does").textContent;b.querySelector(".does").textContent="✓ "+wasES+" — registrado";'
+    + 'var was=b.querySelector(".doen").textContent;b.querySelector(".doen").textContent=(ok?"✓ "+was+" — logged":"⚠ "+was+" — board tab closed, sent to bridge");'
+    + 'var wasES=b.querySelector(".does").textContent;b.querySelector(".does").textContent=(ok?"✓ "+wasES+" — registrado":"⚠ "+wasES+" — tablero cerrado");'
     + 'b.parentNode.querySelectorAll(".droutbtn").forEach(function(x){if(x!==b)x.style.opacity=.35;});'
     + '});<\/script>';
   var outcomeBar = outcomeCss
@@ -10967,6 +10976,12 @@ function _replyWaiting(r){
     var ts = +t.tsu || +new Date(t.ts || t.d || 0) || 0;
     return whenMs && ts > whenMs;
   });
+  // MAILLOG too: a bridge send from ANOTHER device answers the reply even though this browser's
+  // notes never saw a touch — without this the REPLIED lane froze on multi-device days.
+  if(!answered && whenMs && typeof MAILLOG === 'object'){
+    var _bl = (MAILLOG[r.case] || {}).last || 0;
+    if(+_bl > whenMs) answered = true;
+  }
   if(answered) return null;
   var age = whenMs ? Math.max(0, Math.floor((Date.now()-whenMs)/86400000)) : null;
   // owners often type their number INTO the reply ("call me at 305 909 3711") — mine it.
@@ -11378,6 +11393,16 @@ function _ftsaHours(){
 // returns the NUMBER (or null) rather than a boolean, which is what the lane tests need.
 function _saleDays(r){
   if(!r || !String(r.auction||'').trim()) return null;
+  // LIVE recompute from the auction date, not the baked r.days. r.days is frozen at build time,
+  // so a tab left open for N days made every countdown N days optimistic: leads that crossed into
+  // URGENT still sat in ACTIVE, and already-held auctions kept queueing for outreach. Falls back
+  // to the baked integer only when the date string doesn't parse.
+  var m = String(r.auction).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m){
+    var t = new Date(+m[3], +m[1]-1, +m[2]);
+    var td = new Date(); td.setHours(0,0,0,0);
+    return Math.round((t - td)/864e5);
+  }
   return _hasClock(r) ? r.days : null;
 }
 var WORKER_LANES = {
@@ -11468,6 +11493,20 @@ function _laneStats(lane){
   });
   return s;
 }
+/* Filing recency as comparable ms. County rows carry `filed` as a bare YEAR (2018, 2026); LP rows
+   carry a DATE STRING ('8/7/2026'). The old sort did (+filed||0): every LP string coerced to NaN->0,
+   so the whole EARLY lane tied at zero and kept scrape order — a filing from last night sorted
+   BEHIND month-old ones forever. "Fresh filing, be the first call" showed the same stale list
+   every day (operator report 2026-08-17: "feels stale, no new information going into it"). */
+function _filedMs(r){
+  var v = (r && (r.filedDate || r.filed));
+  if(v == null) return 0;
+  if(typeof v === 'number') return v > 1e12 ? v : Date.UTC(v, 0, 1);   // epoch passthrough; bare year -> Jan 1
+  var m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(m) return Date.UTC(+m[3], +m[1]-1, +m[2]);
+  var t = Date.parse(v);
+  return isNaN(t) ? 0 : t;
+}
 function _workerQueue(lane){
   lane = lane || 'urgent';
   var L = WORKER_LANES[lane] || WORKER_LANES.urgent;
@@ -11485,7 +11524,7 @@ function _workerQueue(lane){
       if(da!==db) return da-db;
       var ta=TR[a.tier]!=null?TR[a.tier]:3, tb=TR[b.tier]!=null?TR[b.tier]:3;
       if(ta!==tb) return ta-tb;
-      return (+b.filed||0) - (+a.filed||0);
+      return _filedMs(b) - _filedMs(a);
     });
   }
 
@@ -11521,10 +11560,27 @@ function _workerQueue(lane){
   deduped = deduped.concat(noEmail);
 
   _qsort(deduped);
-  // Never hand him more than the day's remaining send budget. Portfolio consolidation now means
-  // each queue slot = at most one Gmail send even when it represents N properties, so the cap
-  // finally maps 1:1 to inbox hits.
-  return deduped.slice(0, Math.max(0, cap.left));
+  // NEVER-TOUCHED FIRST within the sorted order. The sort is fully deterministic (days, tier,
+  // filed) and the survivors are the same every 72h, so the queue head was the same faces on a
+  // 3-day carousel while leads deeper than the daily budget never surfaced at all. A lead with
+  // zero lifetime touches now outranks a recycled one in the same day band — new blood surfaces.
+  deduped.sort(function(a, b){
+    var da = _saleDays(a); da = (da == null) ? 99999 : da;
+    var db = _saleDays(b); db = (db == null) ? 99999 : db;
+    var ba = (da >= 0 && da <= 7) ? 0 : (da >= 8 && da <= 45 ? 1 : 2);   // urgency band, never crossed; passed (<0) sinks
+    var bb = (db >= 0 && db <= 7) ? 0 : (db >= 8 && db <= 45 ? 1 : 2);
+    if(ba !== bb) return ba - bb;
+    var wa = ((notes[a.case] || {}).touches || []).length ? 1 : 0;
+    var wb = ((notes[b.case] || {}).touches || []).length ? 1 : 0;
+    return wa - wb;                                        // untouched first; ties keep _qsort order
+  });
+  // Never hand him more than the day's remaining send budget — but the cap slices EMAILABLE
+  // entries only. Phone-only leads consume no send budget (their venue is the un-capped CALL
+  // queue), yet they used to occupy cap.left slots at the head of every morning, starving the
+  // email queue of fresh leads while producing nothing but callq breadcrumbs.
+  var _em = deduped.filter(function(r){ return (r.emails || []).length; });
+  var _ph = deduped.filter(function(r){ return !(r.emails || []).length; });
+  return _em.slice(0, Math.max(0, cap.left)).concat(_ph.slice(0, 60));
 }
 /* COMPOSE THE MESSAGE ON THE BOARD — the worker tab cannot do it. --------------------------------
    The worker is a Blob document with its own global scope: DATA, genEmail, genPortfolioEmail and
@@ -11794,9 +11850,25 @@ function genMorningWorker(lane, autostart){
     +   '<div class="mwtop">'
     +     '<h1 class="mwtitle">Morning outreach worker'
     +       '<span class="sub">' + esc(laneMeta.ic + ' ' + laneMeta.t) + ' · ' + esc(laneMeta.d)
-    +       ' · all tiers · not touched in 72h</span></h1>'
+    +       ' · all tiers · not touched in 72h · ' + (function(){
+              // DATA PROVENANCE. The Carlos paper packet got a red "DATA IS N DAYS OLD" banner in
+              // July because "Carlos cannot tell stale paper from fresh paper" — the operator's own
+              // daily tool never got one, and he worked days-old queues with total confidence.
+              var a = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
+              if(a == null) return 'board age unknown';
+              return a === 0 ? 'board data from TODAY' : ('board data ' + a + ' day(s) old');
+            })() + '</span></h1>'
     +     '<div class="mwprog" id="mwprog">0 of ' + queue.length + '</div>'
     +   '</div>'
+    +   (function(){
+          var a = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
+          if(a == null || a < 1) return '';
+          var red = a >= 3;
+          return '<div style="margin:0 0 12px;padding:10px 14px;border-radius:9px;font:700 13px \'Segoe UI\',Arial,sans-serif;'
+            + (red ? 'background:#7c1d1d;color:#fff' : 'background:#F6E9C8;color:#6B4A08;border:1.5px solid #A8720C')
+            + '">&#9888; This queue was built from board data <b>' + a + ' day(s) old</b> — countdowns, statuses and new filings have moved since. '
+            + 'Reload the board tab, then reopen the worker.</div>';
+        })()
     // LANE TABS — counts are the WHOLE lane, not the truncated queue, so he can see what is waiting
     // behind today's send budget instead of thinking the lane is empty.
     +   '<div class="mwlanes">'
@@ -11979,18 +12051,49 @@ function genMorningWorker(lane, autostart){
     +   'document.addEventListener("click", function(e){'
     +     'var t=e.target.closest(".mwlane"); if(t) setLane(t.dataset.lane);'
     +   '});'
+    // ACK PROTOCOL. postMessage into window.opener cannot fail visibly when the board tab was
+    // RELOADED (nightly refresh, self-heal): the WindowProxy stays live, closed stays false, the
+    // message lands in a navigating/gated document and evaporates. Every mark now carries an id;
+    // the board replies {workerAck:id} on receipt; unacked marks are re-posted with backoff and
+    // finally buffered to the bridge with an honest warn line instead of a healthy-looking log.
+    +   'var MSEQ=0; var PENDACK={};'
+    +   'window.addEventListener("message",function(ev){'
+    // acks are only ever sent by the board — reject any other window so a page opened via
+    // openHere() (which keeps window.opener) cannot spoof-suppress a retry
+    +     'if(ev.source !== window.opener) return;'
+    +     'var a=ev&&ev.data&&ev.data.workerAck; if(!a||!PENDACK[a]) return;'
+    +     'clearTimeout(PENDACK[a]); delete PENDACK[a];'
+    +   '});'
+    +   'function _pendWatch(m, tries){'
+    +     'tries=tries||0;'
+    +     'PENDACK[m._mid]=setTimeout(function(){'
+    +       'delete PENDACK[m._mid];'
+    +       'if(tries>=4){'
+    +         'var _buf=["sent","callout","text","callq","done","skip","badnum"].indexOf(m.workerAct.k)>=0;'
+    +         '_markBuf(m);'
+    +         'addLog("fail", m.workerAct.c, "board never acknowledged this mark — "+(_buf?"buffered to the bridge, NOT yet on the board":"NOT logged (breadcrumb kind, not buffered)"), "warn");'
+    +         'return;'
+    +       '}'
+    +       'if(!window.opener || window.opener.closed){ _markBuf(m); return; }'
+    +       'try{ window.opener.postMessage(m,"*"); }catch(e){ _markBuf(m); return; }'
+    +       '_pendWatch(m, tries+1);'
+    +     '}, 1500 + tries*1500);'
+    +   '}'
     +   'function post(kind, extra){'
     // A null opener was counted as SUCCESS here (opener&&post evaluates to undefined, no throw),
     // which is how a dead bridge produced healthy-looking logs. No opener = the board cannot
     // hear us = false, so the caller's heal/fail path actually fires.
-    +   'var m={workerAct:{c:(extra&&extra.qc)||(Q[i]&&Q[i].c)||"",k:kind,extra:extra||null}};'
+    +   'var m={workerAct:{c:(extra&&extra.qc)||(Q[i]&&Q[i].c)||"",k:kind,extra:extra||null},_mid:(++MSEQ)+"-"+Date.now()};'
     +   'if(!window.opener || window.opener.closed){ _markBuf(m); return false; }'
-    +   'try{window.opener.postMessage(m,"*");return true;}'
+    +   'try{window.opener.postMessage(m,"*");}'
     +   'catch(e){ _markBuf(m); return false; }'
+    +   '_pendWatch(m, 0); return true;'
     +   '}'
     +   'var MARKQ=[];'
     +   'function _markBuf(m){'
-    +     'if(["sent","callout","text","callq","done","skip"].indexOf(m.workerAct.k)<0) return;'
+    // badnum is in the durable set: its board branch mutates real state (bad-phone flag, call-queue
+    // retirement, /retrace request) — losing it silently re-dials dead numbers forever.
+    +     'if(["sent","callout","text","callq","done","skip","badnum"].indexOf(m.workerAct.k)<0) return;'
     +     'MARKQ.push(m);'
     +     'try{fetch("http://127.0.0.1:8823/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(m.workerAct)}).catch(function(){});}catch(e){}'
     +     '_markBanner();'
@@ -12000,14 +12103,17 @@ function genMorningWorker(lane, autostart){
     +     'if(!b){ b=document.createElement("div"); b.id="mwmarkban"; b.style.cssText="position:sticky;top:0;z-index:100;background:#8f2b23;color:#fff;font:700 12.5px/1.4 Arial;padding:8px 12px;border-radius:8px;margin:0 0 10px"; if(main&&main.parentNode) main.parentNode.insertBefore(b, main.parentNode.firstChild); }'
     +     'b.innerHTML="&#9888; BOARD TAB IS CLOSED — "+MARKQ.length+" mark(s) could not reach the board (backed up to the bridge). Reopen the board and keep it open; buffered marks flush automatically.";'
     +   '}'
+    // The flush rides the ACK path, not splice-and-forget. The old version blind-posted into
+    // whatever window.opener pointed at — a reloaded board sitting at the access gate swallowed
+    // every mark pre-ack while this logged "delivered". Now each re-post goes through _pendWatch:
+    // unacked marks cycle back into MARKQ (and the bridge) until the board actually confirms.
     +   'setInterval(function(){'
     +     'if(!MARKQ.length) return;'
     +     'if(window.opener && !window.opener.closed){'
-    +       'var q=MARKQ.splice(0,MARKQ.length), fail=[];'
-    +       'q.forEach(function(m){ try{window.opener.postMessage(m,"*");}catch(e){ fail.push(m); } });'
-    +       'fail.forEach(function(m){ MARKQ.push(m); });'
+    +       'var q=MARKQ.splice(0,MARKQ.length);'
+    +       'q.forEach(function(m){ try{window.opener.postMessage(m,"*"); _pendWatch(m,3);}catch(e){ MARKQ.push(m); } });'
     +       'var b=document.getElementById("mwmarkban");'
-    +       'if(b && !MARKQ.length){ b.remove(); addLog("heal","board","board tab is back — buffered marks delivered"); }'
+    +       'if(b && !MARKQ.length){ b.remove(); addLog("heal","board","board tab is back — re-posted buffered marks, awaiting its confirmation"); }'
     +     '}'
     +   '},5000);'
     // AUTO-RUN CHANNELS. email is the only channel the machine can legally auto-send. A phone-only
@@ -12790,7 +12896,28 @@ function openMorningWorker(lane, autostart){
 window.addEventListener('message', function(ev){
   if(!_msgTrusted(ev)) return;
   var d = ev && ev.data && ev.data.dialoutcome; if(!d) return;
-  var r = DATA.find(function(x){return x.case===d.c;}); if(!r) return;
+  // Mid-boot / access-gated board: DATA is still empty. Stay SILENT (no ack) so the child keeps
+  // retrying instead of dropping the outcome into a page that cannot record it yet.
+  if(!DATA || !DATA.length) return;
+  if(ev.data._mid){
+    window.__seenMids = window.__seenMids || {};
+    var _dup2 = !!window.__seenMids[ev.data._mid];
+    window.__seenMids[ev.data._mid] = 1;
+    try{ if(ev.source) ev.source.postMessage({workerAck:ev.data._mid}, '*'); }catch(e){}
+    if(_dup2) return;
+  }
+  var r = DATA.find(function(x){return x.case===d.c;});
+  if(!r){
+    // rebaked-away lead: notes is case-keyed and independent of DATA — record there, never drop
+    try{
+      var _nx = notes[d.c] = notes[d.c] || {status:'', note:''};
+      _nx.touches = _nx.touches || [];
+      _nx.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'call', out:'dial outcome (lead no longer on this board build)'});
+      save();
+    }catch(e){}
+    if(typeof _shareToast==='function') _shareToast('Lead not on this board build — outcome recorded to notes.');
+    return;
+  }
   var spec = (typeof QUICKLOG !== 'undefined') ? QUICKLOG[+d.out] : null;
   if(!spec) return;
   try { if(typeof logTouch === 'function') logTouch(r.case, spec.ch, spec.out, spec); } catch(e){}
@@ -12827,8 +12954,48 @@ window.addEventListener('message', function(ev){
 window.addEventListener('message', function(ev){
   if(!_msgTrusted(ev)) return;
   var d = ev && ev.data && ev.data.workerAct; if(!d || !d.c) return;
+  // Mid-boot / access-gated board: DATA is empty and notes may not be loaded. Stay SILENT (no
+  // ack) — the worker's retry loop rides out the boot window instead of losing the action.
+  if(!DATA || !DATA.length) return;
+  // ACK on receipt. A reloaded board is a live-looking WindowProxy that silently ate messages —
+  // the child cannot tell "logged" from "vanished" without this reply; it retries until acked.
+  // A retried mark that already landed is re-acked and dropped so it can never double-process.
+  if(ev.data._mid){
+    window.__seenMids = window.__seenMids || {};
+    var _dup = !!window.__seenMids[ev.data._mid];
+    window.__seenMids[ev.data._mid] = 1;
+    try{ if(ev.source) ev.source.postMessage({workerAck:ev.data._mid}, '*'); }catch(e){}
+    if(_dup) return;
+  }
   var _tc = (d.extra && d.extra.qc) || d.c;
-  var r = DATA.find(function(x){return x.case===_tc;}); if(!r) return;
+  var r = DATA.find(function(x){return x.case===_tc;});
+  if(!r){
+    // rebaked-away lead (retired/sold/ownership-flip overnight): notes is case-keyed and
+    // independent of DATA — record the action there instead of dropping it on the floor.
+    // COMPLIANCE SEMANTICS SURVIVE THE REBAKE: a DNC or wrong-number outcome must set its flags
+    // even off-board, or the owner re-enters a future build fully dialable.
+    try{
+      var _nw = notes[_tc] = notes[_tc] || {status:'', note:''};
+      _nw.touches = _nw.touches || [];
+      var _oc0 = (d.k==='callout' && d.extra && d.extra.oc) || '';
+      if(_oc0 === 'dnc'){
+        _nw.optout = true; _nw.status = 'DO NOT CONTACT';
+        _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'call', out:'DNC — do not contact (logged off-board)'});
+        try{ if(typeof _optLog==='function') _optLog(_nw, 'set-local', 'worker-offboard'); }catch(_e){}
+      } else if(_oc0 === 'wrong'){
+        _nw.wrongown = _nw.wrongown || _today(); _nw.status = _nw.status || 'Wrong number';
+        _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'call', out:'Wrong number (logged off-board)'});
+      } else if(d.k === 'callout'){
+        _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'call', out:((d.extra&&d.extra.label)||_oc0||'call outcome')+' (logged off-board)'});
+        if(d.extra && typeof d.extra.hrs === 'number') _nw.cooldownH = d.extra.hrs;
+      } else {
+        _nw.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'worker', out:'worker '+(d.k||'action')+' — lead no longer on this board build; recorded to notes only'});
+      }
+      save();
+    }catch(e){}
+    if(typeof _shareToast==='function') _shareToast('Lead not on this board build — action recorded to notes.');
+    return;
+  }
   // ---- 'email' = ATTEMPT ONLY (composer opened, or bridge tried and fell back) ----------------
   // This branch deliberately does almost nothing now. It used to archive the verbatim copy AND
   // call autoLog(), which wrote a CRM touch — and _workerEligible drops any lead touched inside
@@ -12882,6 +13049,9 @@ window.addEventListener('message', function(ev){
     // NOW the CRM touch is honest — someone really was contacted. autoLog dedupes same-day /
     // same-channel, so a double-tap cannot double-count.
     try { autoLog(r, 'email', 'emailed (morning batch)'); } catch(e){}
+    // A delivered email restores the full 72h pacing even if an earlier skip shortened the
+    // lead's cooldown to 24h — skips govern skips, sends govern sends.
+    try { (notes[r.case] = notes[r.case] || {}).cooldownH = 72; } catch(e){}
 
   /* ---- 'callout' = a real call outcome -------------------------------------------------------
      Replaces the old behaviour where `done` blind-stamped every lead 'Called - no answer' whether
@@ -13002,6 +13172,10 @@ window.addEventListener('message', function(ev){
     var n = notes[r.case] = notes[r.case]||{status:'',note:''};
     n.touches = n.touches||[];
     n.touches.push({ts:_nowTS(), tsu:Date.now(), ch:'worker', out:d.k==='done'?'worked (morning batch)':'skipped'});
+    // A SKIP is "not today", not "leave me alone for 3 days". The default 72h cooldown buried
+    // every skipped lead until Thursday, which is one of the ways the queue read as the same
+    // stale faces on a 3-day loop. Skips come back tomorrow; real outcomes keep their own hours.
+    if(d.k === 'skip' && !(typeof n.cooldownH === 'number' && n.cooldownH >= 0)) n.cooldownH = 24;
     // DO NOT stamp a call outcome here. 'done' means "I finished looking at this lead and am moving
     // on" — it is NOT evidence anyone dialled. This line used to set status='Called - no answer',
     // which was described as a conservative default but is the opposite: it ASSERTS a contact
@@ -13414,8 +13588,11 @@ function genScript(r){
   const nn = notes[r.case] || {};
   const verify = !!(r.ju || (!td && r.mr) || r._verdict === 'VERIFY');   // debt unknown / senior lien likely -> discover, don't promise
   const vb = r._verdict || '';
-  const daysEN = r.days >= 0 ? ('in ' + r.days + ' day' + (r.days===1?'':'s')) : 'already past';
-  const daysES = r.days >= 0 ? ('en ' + r.days + ' día' + (r.days===1?'':'s')) : 'ya pasó';
+  // LIVE days, not baked r.days: this line is read ALOUD to the owner — on a tab open N days it
+  // overstated the runway by N. _saleDays recomputes from the auction date.
+  const _dLive = (typeof _saleDays === 'function' ? _saleDays(r) : r.days);
+  const daysEN = _dLive != null && _dLive >= 0 ? ('in ' + _dLive + ' day' + (_dLive===1?'':'s')) : 'already past';
+  const daysES = _dLive != null && _dLive >= 0 ? ('en ' + _dLive + ' día' + (_dLive===1?'':'s')) : 'ya pasó';
   const phones = (r.phones||[]).map((p,i)=>({num:p, dnc:(r.phdnc||[])[i]}));
   const phBlock = lang => phones.length
     ? '<ul class="ph">' + phones.map(p=>'<li><b>'+esc(fmtPhone(p.num))+'</b>'+(p.dnc?' <span class="dnc">'+(lang==='en'?'(DO NOT CALL, on the Do-Not-Call list)':'(NO LLAMAR, lista Do-Not-Call)')+'</span>':'')+'</li>').join('') + '</ul>'
@@ -14213,7 +14390,10 @@ function mailableLeads(){
     if(r.vac) return false;                          // vacant land: no homeowner to help
     if(_MAIL_CO_RE.test(r.owners||'')) return false; // LLC/company owner, not a distressed homeowner
     if(!_mailAddrOK(r)) return false;                // needs a deliverable mailing address
-    if((+r.days||0) < 5) return false;               // a letter must still arrive before the auction
+    // LIVE days: the baked integer overstated the mail runway on a stale tab — a letter approved
+    // with 2 real days left arrives at a foreclosed house.
+    var _dL = (typeof _saleDays === 'function' ? _saleDays(r) : r.days);
+    if((+_dL||0) < 5) return false;                  // a letter must still arrive before the auction
     const n = notes[r.case]||{};
     if(_isOptedOut(n)) return false;                 // FTSA: never mail an opted-out owner
     if((n.status||'')==='Dead') return false;        // you already killed this lead
@@ -14959,8 +15139,10 @@ function view(){
     // sorts they have no data for (Est. Profit, Days to auction) sink them via the null path below.
     rows = DATA.filter(r => (tier==='ALL' || r.tier===tier));
     if(county) rows = rows.filter(r => (r.county||'MIAMI-DADE')===county);
-    if(fy1) rows = rows.filter(r => r.filed && r.filed >= +fy1);
-    if(fy2) rows = rows.filter(r => r.filed && r.filed <= +fy2);
+    // _filedYear, not raw r.filed: LP rows carry '8/7/2026' and a string-vs-number >= is NaN-false,
+    // so setting any filed-year filter used to silently delete every Lis Pendens row from the board
+    if(fy1) rows = rows.filter(r => _filedYear(r) && _filedYear(r) >= +fy1);
+    if(fy2) rows = rows.filter(r => _filedYear(r) && _filedYear(r) <= +fy2);
     if(ad1) rows = rows.filter(r => toISO(r.auction) >= ad1);
     if(ad2) rows = rows.filter(r => toISO(r.auction) <= ad2);
     if(weekOnly) rows = rows.filter(r => r.days >= 0 && r.days <= 7);
@@ -16585,7 +16767,18 @@ async function boot(){
       try { console.info('[dealflow] auto-run already ran today — worker opened in MANUAL mode.'); } catch(e){}
     } else {
       try { localStorage.setItem(_asKey, String(Date.now())); } catch(e){}
-      setTimeout(function(){ try{ openMorningWorker('urgent', true); }catch(e){} }, 500);
+      // NEVER auto-send from a stale build. The 8 AM scheduled open used to fire on whatever this
+      // tab had — on refresh-kill days that meant machine-sending from data 2-3 days old. If the
+      // board wasn't built today, open in MANUAL mode and say why; the operator decides.
+      setTimeout(function(){
+        try{
+          var _age = (typeof _boardAgeDays === 'function') ? _boardAgeDays() : null;
+          var _stale = (_age != null && _age >= 1);
+          openMorningWorker('urgent', !_stale);
+          if(_stale && typeof _shareToast === 'function')
+            _shareToast('AUTO-RUN BLOCKED: board data is ' + _age + ' day(s) old. Reload the board (or run the refresh), then start the worker by hand.');
+        }catch(e){}
+      }, 500);
     }
   }
   if(_teamKey()) startTeamSync();   // resume team auto-sync if this device is connected
@@ -16602,6 +16795,16 @@ async function boot(){
   // untouched page within 15s -> swap silently (nothing to lose); already in use -> a tap-to-reload
   // pill, because yanking the board out from under someone mid-call is worse than being stale.
   _freshCheck(autoUnlocked || manual);
+  // NOT once-per-boot. A tab that simply never reloads (phone tab restored from memory, desktop
+  // Chrome left open across days) used to drift forever: freshness was probed exactly once at
+  // boot, so the operator worked days-old data with no pill and no warning ("feels stale, no new
+  // information going into it" — 2026-08-17). Re-probe every 15 min and on every return to the
+  // tab; stampFreshness restamps the header age at the same time.
+  var _fcArg = (autoUnlocked || manual);
+  setInterval(function(){ try{ _freshCheck(_fcArg); stampFreshness(); }catch(e){} }, 15*60*1000);
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible'){ try{ _freshCheck(_fcArg); stampFreshness(); }catch(e){} }
+  });
 }
 boot();
 async function _freshCheck(unlocked){
