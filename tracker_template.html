@@ -6030,7 +6030,26 @@ document.addEventListener('click', e => {
   const open=e.target.closest && e.target.closest('.logbtn, .cxwrap');
   if(open){ e.preventDefault(); if(open.dataset.c) openLogModal(open.dataset.c); return; }
   const q=e.target.closest && e.target.closest('.qlog');
-  if(q){ e.preventDefault(); const spec=QUICKLOG[+q.dataset.i]; if(spec){ logTouch(q.dataset.c, spec.ch, spec.out, spec); refreshLogModal(); render(); } return; }
+  if(q){ e.preventDefault(); const spec=QUICKLOG[+q.dataset.i]; if(spec){
+    logTouch(q.dataset.c, spec.ch, spec.out, spec);
+    // JOSE'S RULE (2026-08-16): "Carlos should make a point to get everybody's phone number when
+    // he goes out." The door-spoke log is the exact moment that number exists and is about to be
+    // forgotten — so ask for it right here. Optional (Enter skips); writes n.phone, which
+    // _mergeLead already carries device-to-device fill-if-missing.
+    if(spec.ch==='door' && /spoke/.test(spec.out)){
+      try{
+        var _gp = prompt('Phone number they gave you? (Enter to skip)');
+        var _gd = String(_gp||'').replace(/\D/g,'');
+        if(_gd.length===11 && _gd.charAt(0)==='1') _gd=_gd.slice(1);
+        if(_gd.length===10){
+          var _gn = notes[q.dataset.c]=notes[q.dataset.c]||{status:'',note:''};
+          if(!_gn.phone) _gn.phone=_gd;
+          else if(_gn.phone!==_gd) _gn.note=((_gn.note?_gn.note+'\n':'')+_today()+' door phone: '+_gd);
+          save();
+        } else if(_gp && _gd) alert('That is not a 10-digit number — not saved. Log it in the note if partial.');
+      }catch(e2){}
+    }
+    refreshLogModal(); render(); } return; }
   const fs=e.target.closest && e.target.closest('.fuset');
   if(fs){ e.preventDefault(); const n=notes[fs.dataset.c]=notes[fs.dataset.c]||{status:'',note:''}; _setNext(n, +fs.dataset.d); save(); refreshLogModal(); render(); return; }
   const un=e.target.closest && e.target.closest('.lundo');
@@ -6739,6 +6758,51 @@ function _knockEligible(r){
   if(n.wrongown) return {ok:false, why:'WRONG OWNER confirmed — re-verify title first'};
   return {ok:true, why:''};
 }
+// DOOR VERIFICATION — Jose's 2026-08-16 rule, verbatim: "double and triple check our work
+// before we send Carlos out on a wild turkey hunt on a property we assume has equity."
+// _knockEligible answers "is it LEGAL to knock"; this answers "is the DRIVE worth it" — equity
+// real, ownership current, value trustworthy. Failures pull a lead from the anchor roster (with
+// the reason printed, never silently); warnings ride along on the packet for the Jose review.
+var DOOR_MIN_EQ = 30000;   // net dollars that justify burning Carlos's gas on a dedicated stop
+function _doorVerified(r){
+  var fails = [], warns = [];
+  var n = (typeof notes!=='undefined' && notes[r.case]) || {};
+  // ownership: the Milouse class — drove to a door the owner had already lost
+  if(r.title_status === 'transferred') fails.push('OWNER FLIPPED — appraiser shows a new owner; they no longer own it');
+  else if(r.title_status !== 'clear') warns.push('ownership not re-verified against the live roll (gate has not scanned this one)');
+  if(_isWrongOwner(n)) fails.push('WRONG PERSON confirmed on this lead — re-verify the owner first');
+  // value: the assv-leak class — a number nobody actually looked up
+  if(r.warn) fails.push('VALUE UNVERIFIED — ' + r.warn);
+  // equity: the Acosta lesson — "we started off thinking he had $100k of equity; he had nothing"
+  if(r.ju) fails.push('JUDGMENT UNKNOWN — the equity number is a guess, not a fact');
+  else if((r.eqfake || r.mr) && !(r.orconf === 'ok' || r.orconf === 'low'))
+    fails.push('JUNIOR-LIEN equity (gross) — recorded chain not resolved; the shown % is fake');
+  else {
+    var ne = (typeof _netEqOf === 'function') ? _netEqOf(r) : null;
+    if(ne != null && ne < DOOR_MIN_EQ) fails.push('NET EQUITY ' + (typeof fmt === 'function' ? fmt(ne) : ('$' + Math.round(ne))) + ' — under the $' + Math.round(DOOR_MIN_EQ/1000) + 'k anchor floor (flyer route, not a dedicated stop)');
+  }
+  if(typeof _bestPhones === 'function' && !_bestPhones(r).length)
+    warns.push('no phone on file — Carlos: GET A NUMBER at this door');
+  return { ok: fails.length === 0, fails: fails, warns: warns };
+}
+// FLYER STOPS — "if you can find four or five more properties within a mile or two... take
+// advantage of the fact I'm already here." Legal-to-knock is the ONLY bar (flyers go to any
+// eligible door, equity or not); verification is NOT required — that is the whole point.
+function _flyerStops(anchor, excludeSet, withinMi, cap){
+  withinMi = withinMi || 1.5; cap = cap || 5;
+  var b = _ll(anchor); if(!b) return [];
+  var R = 3958.8, t = Math.PI/180;
+  return _nearby(anchor, withinMi)
+    .filter(function(x){ return !excludeSet[x.case] && _knockEligible(x).ok && /^\s*\d+\s+\S/.test(String(x.addr||'')); })
+    .map(function(x){
+      var c = _ll(x);
+      var dLa=(c.lat-b.lat)*t, dLo=(c.lon-b.lon)*t;
+      var h = Math.sin(dLa/2)*Math.sin(dLa/2) + Math.cos(b.lat*t)*Math.cos(c.lat*t)*Math.sin(dLo/2)*Math.sin(dLo/2);
+      return { r: x, mi: R*2*Math.asin(Math.sqrt(h)) };
+    })
+    .sort(function(a,bb){ return a.mi - bb.mi; })
+    .slice(0, cap);
+}
 // ROUTABILITY. Three conditions, and the third is the one that matters most.
 function _routable(r){
   if(!r || !r.lat || !r.lng) return {ok:false, why:'no coordinates — cannot be distance-ranked'};
@@ -7062,11 +7126,36 @@ function _carlosPacket(list, meta){
     if(!k.ok){ pulled.push({r:r, why:k.why}); return false; }
     return true;
   });
+  // JOSE'S GATE (2026-08-16): after the legal pulls, the VERIFICATION pulls — equity real,
+  // ownership current, value trustworthy. "We'll only give out the cream of the crop." Pulled
+  // leads are LISTED with reasons (the operator fixes the data instead of assuming the tool ate
+  // them); warnings stay on the sheet for the Jose review.
+  var pulledVerify = [], verifyWarns = {};
+  list = list.filter(function(r){
+    var v = _doorVerified(r);
+    if(!v.ok){ pulledVerify.push({r:r, why:v.fails.join(' · ')}); return false; }
+    if(v.warns.length) verifyWarns[r.case] = v.warns;
+    return true;
+  });
   if(!list.length){
-    _shareToast('Every lead in this batch is a do-not-knock (BK stay / sold / opted out).');
+    _shareToast(pulledVerify.length
+      ? 'No lead in this batch passes verification — see the pulled list in the packet.'
+      : 'Every lead in this batch is a do-not-knock (BK stay / sold / opted out).');
   }
   meta = meta || {};
   meta._pulled = pulled;
+  meta._pulledVerify = pulledVerify;
+  meta._verifyWarns = verifyWarns;
+  // FLYER STOPS per anchor — doors within ~1.5mi that are legal to knock. Computed AFTER the
+  // gate so anchors are final; each stop appears once even if near two anchors.
+  var _inRoster = {}; list.forEach(function(r){ _inRoster[r.case] = 1; });
+  var _stopSeen = {};
+  meta._flyerStops = {};
+  list.forEach(function(r){
+    var st = _flyerStops(r, Object.assign({}, _inRoster, _stopSeen), 1.5, 5);
+    st.forEach(function(x){ _stopSeen[x.r.case] = 1; });
+    if(st.length) meta._flyerStops[r.case] = st;
+  });
   var sN = (sender&&sender.name)||'', sL=(sender&&sender.llc)||'', sP=(sender&&sender.phone)||'[SET YOUR PHONE IN SENDER SETUP]';
   var initial = ((sN||'C').trim()[0]||'C').toUpperCase();   // the single hand-signed initial on the outside panel
   var today = new Date().toLocaleDateString();
@@ -7174,7 +7263,37 @@ function _carlosPacket(list, meta){
             }).join('')
           + '</ul></div>';
       })()
+    + (function(){
+        // Jose's gate: pulled-for-VERIFICATION list. Different color and different meaning from
+        // do-not-knock — these are fixable data gaps, and listing them is the assignment: verify,
+        // then they rejoin the roster. "Never silently dropped" applies double here, because a
+        // silently shrinking roster is exactly how trust in the tool dies.
+        var p = meta._pulledVerify||[];
+        if(!p.length) return '';
+        return '<div class="pulled" style="background:#fffaf0;border-color:#9a6b00"><h3 style="color:#9a6b00">&#9888;&#65039; Pulled — VERIFY BEFORE DRIVING ('+p.length+')</h3><ul>'
+          + p.map(function(x){
+              return '<li style="color:#5a4200"><b>'+esc((x.r.addr||x.r.case||'').split(',')[0])+'</b> — '+esc(x.why)+'</li>';
+            }).join('')
+          + '</ul></div>';
+      })()
     + '<table><thead><tr><th>#</th><th>Owner</th><th>Address</th><th>Phone</th><th>Auction</th><th>&nbsp;</th><th>&nbsp;</th><th>&nbsp;</th><th>&nbsp;</th></tr></thead><tbody>'+rowsHtml+'</tbody></table>'
+    + (function(){
+        // FLYER STOPS — the "I'm already here" doors. Address-only, quarter-page flyer in the
+        // door, no pitch, no per-lead prep. Grouped under their anchor so the route reads as
+        // one trip. Verification NOT required (that is the point); legality always is.
+        var fs = meta._flyerStops||{}, keys = Object.keys(fs);
+        if(!keys.length) return '';
+        var out = '<div class="pulled" style="background:#f0f7f0;border-color:#1e6b2e"><h3 style="color:#1e6b2e">&#128230; Flyer drops on the way ('
+          + keys.reduce(function(n,k){ return n + fs[k].length; }, 0) + ') — leave a card, no pitch needed</h3>';
+        keys.forEach(function(k){
+          var a = list.find(function(r){ return r.case === k; }) || {};
+          out += '<div style="margin:5px 0 2px;font-weight:700;font-size:12px">Near '+esc((a.addr||k).split(',')[0])+':</div><ul>'
+            + fs[k].map(function(x){
+                return '<li style="color:#173d1f">'+esc((x.r.addr||'').split(',')[0])+' <span style="opacity:.7">('+x.mi.toFixed(1)+' mi &middot; sale '+esc(x.r.auction||'?')+')</span></li>';
+              }).join('') + '</ul>';
+        });
+        return out + '</div>';
+      })()
     + '<div class="pgb"></div><h1>Door hangers</h1><div class="sub">One per property — fold on the line, hang on the door if no answer.</div>'+hangers
     + '</body></html>';
   _openDoc(doc);   // mobile-safe (Blob URL) — window.open was popup-blocked on phones
