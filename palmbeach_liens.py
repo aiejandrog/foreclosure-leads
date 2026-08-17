@@ -277,6 +277,62 @@ def gsr_rows_to_docs(rows):
     return docs
 
 
+def pb_chain_truth(res, docs):
+    """Palm Beach chains are UNPRICED — say so instead of letting them read as clean.
+
+    🔴 THE BUG THIS FIXES (measured 2026-08-17). Landmark's search grid has no consideration
+    column, so gsr_rows_to_docs emits Consideration='' on every doc. broward_liens.analyze counts
+    only mortgages with `_num(Consideration) > 0`, so it drops EVERY Palm Beach mortgage: liens[]
+    comes back empty and junior/surv/surv_first/first_est all default to 0. Meanwhile conf stays
+    'ok', because its guards (anchored + <=4 opens + <=45 records) all pass trivially on an empty
+    set. Result: 0 of 109 PB scans had ever itemized a lien, and 80 of them displayed as a
+    verified-clean chain. On Guzman (147 Kings Way, ~$235k of equity riding on it) that zero was
+    reported as "0 open juniors" when nothing had been priced at all.
+
+    We cannot invent amounts the county does not publish. What we CAN do is report the instruments
+    honestly: how many mortgages are recorded against this owner, how many carry a matching
+    satisfaction/release, and therefore how many are UNACCOUNTED FOR. An unaccounted mortgage is
+    the operator's question to ask the owner — not a silent zero.
+    """
+    def _dt(d):
+        return (d.get('DocTypeDescription') or '').upper()
+    seen_m, seen_s = {}, []
+    for d in docs or []:
+        t, bp = _dt(d), (d.get('BookPage') or '').strip()
+        if t.startswith('MORTGAGE'):
+            if bp:
+                seen_m[bp] = d
+        elif re.match(r'^(SATISFACTION|SATIS|RELEASE|CANCELLATION|DISCHARGE)', t):
+            seen_s.append(d)
+    # A satisfaction names the instrument it kills in its own text. Match on the mortgage's
+    # book/page digits appearing in the satisfaction's legal/case/instrument/cross-party fields.
+    killed = set()
+    for s in seen_s:
+        blob = ' '.join(str(s.get(k) or '') for k in
+                        ('DocLegalDescription', 'CaseNumber', 'InstrumentNumber', 'CrossPartyName'))
+        blob_d = re.sub(r'\D', '', blob)
+        for bp in seen_m:
+            b = re.sub(r'\D', '', bp)
+            if b and len(b) >= 6 and b in blob_d:
+                killed.add(bp)
+    res['mtg_recorded'] = len(seen_m)
+    res['mtg_released'] = len(killed)
+    res['mtg_open_unpriced'] = max(0, len(seen_m) - len(killed))
+    # CONFIDENCE, HONESTLY. 'unpriced' is NOT 'ok' and is NOT 'none': we reached the records and we
+    # know what instruments exist — we just cannot price them. Render as a question, never as clean.
+    if seen_m and not (res.get('liens') or []):
+        res['conf'] = 'unpriced'
+        res['chain_note'] = ('%d mortgage(s) recorded / %d released / %d UNACCOUNTED. Palm Beach '
+                             'records publish no dollar amounts, so no balance was computed. Ask '
+                             'the owner what they still owe and to whom.'
+                             % (len(seen_m), len(killed), res['mtg_open_unpriced']))
+    elif not seen_m and not (res.get('liens') or []):
+        res['conf'] = 'none'
+        res['chain_note'] = ('No mortgage instrument found for this owner in the Palm Beach index '
+                             '- the chain was NOT established. Do not read this as clear title.')
+    return res
+
+
 def parse_results(html_or_ignored=None):
     """Fetch + parse GetSearchResults for the active Landmark session.
 
@@ -582,6 +638,9 @@ def main():
             continue
         ftype = r.get('ftype') or _fc_type_plaintiff(r.get('plaintiff', '')) or ''
         res = analyze(docs, owner, _num(r.get('judg')), ftype=ftype, lead_case=case)
+        # Landmark publishes no dollar amounts -> analyze() drops every PB mortgage and its zeros
+        # read as a clean chain. Restate what we actually know. See pb_chain_truth.
+        res = pb_chain_truth(res, docs)
         res['traced'] = time.strftime('%Y-%m-%d'); res['owner'] = owner
         res['or_events'] = _or_events(docs, lead_case=case)
         res['n_raw'] = len(docs)

@@ -772,6 +772,10 @@ td.num .dealtog:hover{border-color:var(--gold);background:var(--gold-soft);box-s
 .csk{color:var(--muted,#6b7280);flex:0 0 auto}
 .csvv{color:var(--ink,#101C33);text-align:right}
 .csmut{color:var(--muted,#4A5670);font-size:12.5px}
+/* MONEY TO CURE callouts — the post-judgment rail and the get-it-in-writing nudge. Loud enough to
+   read mid-call without hunting, quiet enough not to fight the numbers above them. */
+.cswarn{margin:8px 0 0;padding:8px 11px;border:1.5px solid #B42318;background:#fdf2f1;border-radius:7px;
+  font-size:12.5px;line-height:1.42;color:#5a1010}
 .csdays{font-family:var(--f-label,inherit);font-size:10px;font-weight:800;letter-spacing:.06em;background:var(--navy,#0B1730);
   color:#fff;border-radius:4px;padding:2px 7px;margin-left:6px}
 .csdays.urg{background:#B42318}
@@ -3353,6 +3357,71 @@ function _daContactHtml(r){
   return h+'</div>';
 }
 // Shared debt body for CS + DA (LP skipped on both; TD kept — tax deed still has taxes / named parties).
+/* MONEY TO CURE — the first question every distressed owner asks, answered on the sheet instead of
+   in a county lookup. Built 2026-08-17 from a live call: Guzman said "I need $25,000" and nothing
+   on the board could say whether that was the reinstatement, the payoff, or a number he'd invented.
+
+   Two very different numbers, and the difference is the whole conversation:
+     PAYOFF        = judgment + FS 55.03 interest to the sale date. Always available, always exact-ish.
+     REINSTATEMENT = only the ARREARS (missed payments + fees). Far smaller — but in Florida the
+                     RIGHT to reinstate generally ENDS at final judgment (FS 702.10 / the mortgage's
+                     own acceleration clause). Post-judgment it is the servicer's discretion, not
+                     the borrower's right. Saying "just reinstate" after judgment sets up a promise
+                     nobody can keep, so the block says so out loud.
+
+   The arrears figure is an ESTIMATE from public facts (no servicer data exists in our pipeline):
+   months since the lis pendens was filed, times an estimated PITI. Every input is shown so the
+   operator can see what it assumed — and the ONLY authoritative number is a written servicer quote,
+   which the block tells him to go get. Never presented as fact. */
+function _cureMath(r){
+  var payoff = _payoffOf(r);
+  if(!payoff) return null;
+  var val = +r.value||0;
+  // Estimated PITI. Principal+interest off the judgment at a 6.5% 30-yr proxy (most FL foreclosure
+  // paper is 2004-2008 origination), plus escrow: real annual tax when we have it, else ~1.8% of
+  // value, plus FL homeowners insurance ~0.9% of value (post-2023 market, not the old 0.5%).
+  var pi = payoff * 0.0065;                       // ~monthly P&I proxy on the accelerated balance
+  var taxYr = (+r.etax||0) || (val*0.018);
+  var insYr = val * 0.009;
+  var piti = pi + (taxYr+insYr)/12;
+  // Months in arrears: FL servicers file the lis pendens after ~4 months of default, so months
+  // behind ~= (today - LP filed) + 4. Fall back to the judgment date when no LP date exists.
+  var start = r.filedDate || r.lpFiled || r.jdate || '';
+  var mo = null;
+  if(start){
+    var t = Date.parse(String(start).replace(/-/g,'/'));
+    if(!isNaN(t)) mo = Math.max(1, Math.round((Date.now()-t)/2629800000) + 4);
+  }
+  var arrears = (mo!=null) ? piti*mo : null;
+  var fees = 4500;                                 // FL uncontested foreclosure attorney fees + costs
+  return {payoff: payoff, piti: piti, months: mo,
+          reinstate: (arrears!=null) ? arrears+fees : null,
+          postJudgment: !!r.jdate,
+          equityAfter: val ? val - payoff : null};
+}
+function _cureBlock(r){
+  var c = _cureMath(r);
+  if(!c) return '';
+  var fm = function(n){ return (n||n===0) ? '$'+Math.round(n).toLocaleString() : '—'; };
+  var h = '<div class="cssec">MONEY TO CURE — what stops the sale</div><div class="csbody">';
+  h += '<div class="csrow"><span class="csk">Pay it off (exact)</span><span class="csvv"><b>'+fm(c.payoff)+'</b>'
+     + (_isAccrued(r)?' <span class="csmut">judgment + FS 55.03 interest</span>':' <span class="csmut">judgment as entered</span>')+'</span></div>';
+  if(c.reinstate!=null){
+    h += '<div class="csrow"><span class="csk">Reinstate (ESTIMATE)</span><span class="csvv"><b>'+fm(c.reinstate)+'</b>'
+       + ' <span class="csmut">~'+c.months+' mo &times; '+fm(c.piti)+' PITI + $4,500 fees</span></span></div>';
+  } else {
+    h += '<div class="csrow"><span class="csk">Reinstate</span><span class="csvv"><span class="csmut">no filing date — cannot estimate arrears</span></span></div>';
+  }
+  if(c.equityAfter!=null)
+    h += '<div class="csrow"><span class="csk">His equity if sold</span><span class="csvv"><b>'+fm(c.equityAfter)+'</b> <span class="csmut">value − payoff, before costs</span></span></div>';
+  if(c.postJudgment)
+    h += '<div class="cswarn">⚠ <b>FINAL JUDGMENT ENTERED '+esc(r.jdate||'')+'.</b> In Florida the RIGHT to reinstate '
+       + 'generally ends at judgment — after that it is the servicer&rsquo;s discretion, not his. Do not promise a '
+       + 'reinstatement. With real equity the faster exits are <b>sell before the sale</b> or <b>refinance/hard-money payoff</b>.</div>';
+  h += '<div class="cswarn" style="background:#fff8e6;border-color:#c9a227">📞 <b>The only real number is a WRITTEN payoff/reinstatement '
+     + 'quote from the servicer.</b> Have the owner request it — it is his loan, he can get it in one call; we cannot.</div>';
+  return h + '</div>';
+}
 function _debtSheetBody(r){
   if(r.st==='LP') return '';
   const nn=notes[r.case]||{};
@@ -4448,7 +4517,9 @@ function _callSheet(r){
   // THE CLOCK + DEBT — shared bodies with Deal analysis so the two screens cannot drift.
   const clock = '<div class="cssec">THE CLOCK</div><div class="csbody">'+_clockBodyHtml(r)+'</div>';
   const _debtBody = _debtSheetBody(r);
-  const stack = _debtBody ? ('<div class="cssec">THE DEBT — who is owed what</div>'+_debtBody) : '';
+  // MONEY TO CURE sits directly above the debt stack: "what do I have to pay to stop this" is the
+  // owner's first question on every call, and it used to require a county trip mid-conversation.
+  const stack = _cureBlock(r) + (_debtBody ? ('<div class="cssec">THE DEBT — who is owed what</div>'+_debtBody) : '');
 
   // THE PROPERTY
   const prop = '<div class="cssec">THE PROPERTY</div><div class="csbody">'+
