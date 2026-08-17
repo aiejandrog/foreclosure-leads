@@ -270,8 +270,16 @@ def main():
             blocked_count += 1
             print(f"  [{i}/{len(todo)}] {case}: BLOCKED ({block_reason})")
             if blocked_count >= 2:
-                print("\n  *** Hit captcha twice — cookies are stale. Re-export and try again. ***")
-                break
+                # FAIL LOUD (exit 4), not break-and-exit-0. The silent break made a fully-walled
+                # run look like success — TPS has produced 0 results in this system's entire life
+                # (checked 2026-08-17: no source:'tps' rows in skiptrace_results.json) and nothing
+                # ever said so. Untraced leads stay uncached, so the paid tracerfy pass picks them
+                # up automatically on its next run — nothing is lost, but the operator must KNOW.
+                print("\n  *** WALLED: hit the block twice — cookies are stale or the free path is dead. ***")
+                print("  *** To retry free: open truepeoplesearch.com in Chrome, do ONE manual search,")
+                print("  *** re-export cookies.txt, run again. Otherwise tracerfy covers these leads")
+                print("  *** on its next run (prepaid credits). (exit 4)")
+                sys.exit(4)
             # one-off block might be a fluke, wait longer and retry next lead
             time.sleep(random.uniform(20, 35))
             continue

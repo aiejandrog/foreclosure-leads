@@ -44,6 +44,27 @@ from datetime import date
 import requests
 import bd_budget                      # SHARED daily $ cap across every BatchData script
 
+# Tracerfy is PREPAID CREDITS, not pay-as-you-go — its real balance check is the credit preflight.
+# Gating it on the BatchData cap is what stopped the 2026-08-17 run at 95/100 with $70 of credits
+# sitting unused ("DAILY BUDGET REACHED ... unattributed $9.50"). Tracerfy gets its own, higher
+# daily cap (runaway-loop backstop only) and every charge is attributed so the ledger can never
+# show an anonymous $9.50 again.
+TRACERFY_DAILY_CAP = float(os.environ.get('TRACERFY_DAILY_CAP', '25') or 25)
+
+def _tracerfy_spent_today():
+    day = bd_budget._load().get(str(date.today()))
+    if not isinstance(day, dict):
+        return 0.0
+    return sum(v for k, v in (day.get('by') or {}).items() if str(k).startswith('skiptrace-tracerfy'))
+
+def _require_tracerfy(cost):
+    s = _tracerfy_spent_today()
+    if s + cost > TRACERFY_DAILY_CAP:
+        raise bd_budget.BudgetExhausted(
+            f"Tracerfy daily cap ${TRACERFY_DAILY_CAP:.2f} reached (${s:.2f} spent today). "
+            f"This cap is a runaway backstop, not the balance — credits are prepaid. "
+            f"Raise with env TRACERFY_DAILY_CAP. skiptrace stopping.")
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'leads_final.json')
 RESULTS = os.path.join(HERE, 'skiptrace_results.json')
@@ -300,15 +321,19 @@ def trace_one(session, prov, key, lead, raw=False):
     headers = {'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json', 'User-Agent': UA}
 
     for attempt in range(4):                               # 1 try + up to 3 backoff retries for 429
-        # Ask the SHARED ledger before every billable call. A retry is a second billable call, so
-        # it is gated too — that is why this sits inside the loop, not above it.
-        bd_budget.require(p['cost'], script='skiptrace')
+        # Gate before every billable call (a retry is a second billable call, so this sits inside
+        # the loop). BatchData gates on the SHARED pay-as-you-go cap; Tracerfy on its own backstop
+        # cap — prepaid credits are its real balance and must never starve behind BatchData's.
+        if prov == 'batchdata':
+            bd_budget.require(p['cost'], script='skiptrace')
+        else:
+            _require_tracerfy(p['cost'])
         try:
             r = session.post(p['url'], json=p['body'](addr), timeout=30, headers=headers)
         except requests.exceptions.RequestException as e:  # timeout, connection reset, DNS, etc.
-            bd_budget.charge(p['cost'])                    # it left the machine; assume it billed
+            bd_budget.charge(p['cost'], note='skiptrace-' + prov)  # it left the machine; assume it billed
             raise TraceTransient(f"{type(e).__name__}: {str(e)[:120]}")
-        bd_budget.charge(p['cost'])                        # a miss still costs — charge on response
+        bd_budget.charge(p['cost'], note='skiptrace-' + prov)      # a miss still costs — charge on response
 
         if raw:
             print('--- RAW', lead.get('Case #', ''), r.status_code, '---')
@@ -555,7 +580,10 @@ def main():
             except bd_budget.BudgetExhausted as e:
                 _save()
                 print(f"\n  >>> DAILY BUDGET REACHED — {e}")
-                print(f"      {done} traced today. Raise it with: python bd_budget.py --cap 3")
+                if provider == 'batchdata':
+                    print(f"      {done} traced today. Raise it with: python bd_budget.py --cap 3")
+                else:
+                    print(f"      {done} traced today. Raise it with: set TRACERFY_DAILY_CAP=50")
                 print(f"      (nothing was overspent; the rest resume tomorrow.) (exit 5)")
                 sys.exit(5)
 

@@ -111,6 +111,10 @@ if _cty_tot:
         add(_lvl, f'lien coverage · {_cy}', f'{_c}/{_t} checked ({_pct}%){_tail}')
     _surv2 = sum(1 for v in list(_md.values()) + list(_bro.values()) if v.get('open_count', 0) >= 2)
     add('PASS', 'surviving-2nd flags', f'{len(_chk)} leads checked total, {_surv2} with a possible surviving 2nd')
+else:
+    # No lead files at all — nothing was checkable. (This clause sat orphaned on the LP-freshness
+    # try/except below for a while, firing a bogus WARN on every CLEAN run instead.)
+    add('WARN', 'recorded-lien coverage', 'none yet — run records_liens.py / broward_liens.py')
 
 # ---- 2b. LIS PENDENS FRESHNESS (the alarm that was missing twice) ------------------------------
 # The LP sweeper died silently at the Turnstile migration and NOTHING noticed for 33 days — the
@@ -138,8 +142,40 @@ try:
             + (' — run lis_pendens.py, the sweeper is stale' if _lvl != 'PASS' else ''))
 except Exception as _e:
     add('WARN', 'LP freshness', f'check errored: {str(_e)[:80]}')
-else:
-    add('WARN', 'recorded-lien coverage', 'none yet — run records_liens.py / broward_liens.py')
+
+# ---- 2c. SKIPTRACE PIPELINE (caught late on 2026-08-17: the run stopped at 95/100 on the wrong
+# budget cap and only the operator noticed, days of "feels stale" later). Two silent failure modes:
+# the nightly stops running at all, or it stops EARLY mid-run (budget/wall) while still exiting
+# in a way the bat ignores. Both must surface here, not in a 1MB log. --------------------------------
+try:
+    import datetime as _dt2
+    _str = load('skiptrace_results.json') or {}
+    _tds = []
+    for _v in _str.values():
+        try:
+            _tds.append(_dt2.date.fromisoformat(str(_v.get('traced') or '')))
+        except Exception:
+            pass
+    if _tds:
+        _sage = (_dt2.date.today() - max(_tds)).days
+        _slvl = 'FAIL' if _sage > 4 else ('WARN' if _sage > 2 else 'PASS')
+        add(_slvl, 'skiptrace freshness', f'newest trace {max(_tds).isoformat()} ({_sage}d old, {len(_str)} cached)'
+            + (' — the nightly skiptrace is not running' if _slvl != 'PASS' else ''))
+    else:
+        add('WARN', 'skiptrace freshness', 'no dated traces in skiptrace_results.json')
+    _rl = os.path.join(HERE, 'leads-run.log')
+    if os.path.exists(_rl):
+        _log = open(_rl, encoding='utf-8', errors='replace').read()
+        _cut = _log.rfind('REFRESH ')                     # most recent run only — old stops are history
+        _tail = _log[_cut:] if _cut >= 0 else _log[-120000:]
+        if 'DAILY BUDGET REACHED' in _tail:
+            add('WARN', 'skiptrace early stop', 'last run stopped mid-queue on a budget cap — '
+                'leads left untraced today. Tracerfy is prepaid; raise TRACERFY_DAILY_CAP if this repeats.')
+        if 'WALLED: hit the block twice' in _tail:
+            add('WARN', 'TPS free path', 'truepeoplesearch is walled (stale cookies) — tracerfy covers '
+                'the gap on its next run, but the free path needs a manual cookie re-export to revive.')
+except Exception as _e:
+    add('WARN', 'skiptrace pipeline', f'check errored: {str(_e)[:80]}')
 # ---- callable-contact coverage: is there a PERSON + a number on every property? -----------------
 # Two metrics: an auto-filled PHONE (the ideal), and at minimum a named PERSON to call (a human owner
 # always is one; an LLC counts only once llc_officers.py resolves its Sunbiz officer — otherwise the
