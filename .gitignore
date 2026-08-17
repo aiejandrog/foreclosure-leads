@@ -182,3 +182,6 @@ judgment_dates_misses.json
 # county-PA value fallback cache: resolved folios + owner names for people in foreclosure —
 # public repo, keep it out (same reason as skiptrace_results.json / lp_addresses.json)
 pa_values_cache.json
+
+rem Google Sheets CRM webhook (Apps Script deployment URL) - the URL is the secret
+sheets_crm_webhook.url

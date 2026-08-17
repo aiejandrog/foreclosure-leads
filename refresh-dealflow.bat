@@ -176,6 +176,10 @@ rem  actually churning" were unanswerable - which is precisely the question that
 rem  restructure. Each nightly append makes churn measurable from here on.
 python -u auction_archive.py >> "%LOG%" 2>&1
 
+echo [4d/5] Team CRM (Desktop CSV always; Google Sheets when sheets_crm_webhook.url exists)...
+rem  Reads the Desktop twin's RAW payload, so it MUST run after the [4/5] rebuild above.
+python -u sheets_crm.py >> "%LOG%" 2>&1
+
 :publish
 echo [5/5] Publishing to the live site...
 git add docs/index.html docs/call >> "%LOG%" 2>&1
