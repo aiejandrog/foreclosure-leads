@@ -12,6 +12,7 @@ from datetime import date, datetime
 from playwright.sync_api import sync_playwright
 import foreclosure_leads as F
 import fl_cadastral
+import pa_values
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|USA|COUNTY|CITY OF|CHURCH|MINISTR)\b', re.I)
@@ -100,6 +101,66 @@ def _owner_partial(raw):
     return bool(re.search(r'&\s*$', o)) or len(o) >= 30
 
 
+def _value_metrics(st, judg, val, hs, days, addr, plaintiff, ftype):
+    """Everything derived from the VALUE, in one place — to_slim and the county-PA backfill
+    (pa_values.py --backfill) must produce byte-identical rows, so neither may re-implement this."""
+    eqp = round((val - judg) / val * 100) if val else 0
+    # FANTASY-EQUITY GUARD — plaintiff-free mirror of foreclosure_leads.py suspect_equity (line ~543).
+    # County scrapes rarely carry a plaintiff, so MD's plaintiff-gated guard can't fire here, which
+    # let $29k-judgment / $1.2M-value HOA cases render as "98% equity STRONG bank deals". A judgment
+    # that is a small fraction of value is the signature of a JUNIOR lien (HOA/COA/junior note) with a
+    # senior 1st mortgage surviving unshown -> the shown equity is gross/fake. Exempt a confirmed bank
+    # plaintiff (its judgment IS the senior debt) and tax deeds (no mortgage survives a tax sale).
+    _bank_pl = F._fc_type_plaintiff(plaintiff or '') == 'MORTGAGE'
+    suspect_equity = (st != 'TD') and (not _bank_pl) and bool(val) and judg > 0 and (judg / val) < 0.20 and eqp >= 40
+    mr = (ftype == 'HOA') or suspect_equity
+    eqfake = mr
+    # Fake equity must NOT rank a junior-lien lead as a 98%-equity Tier-A deal. Zero it for score/tier
+    # (mirrors MD, which awards equity points only when 'not is_hoa'); the gross % still shows in the
+    # cell, muted, and the UI verdict engine forces VERIFY off mr=True.
+    # A MISSING judgment ($0 from an unposted 'Final Judgment Amount') is NOT $0 owed — it makes
+    # eqp read a fantasy 100%. The suspect-equity guard needs judg>0, so it can't catch this; mirror
+    # Miami-Dade's judgment_unknown handling and never credit equity when the debt is unknown.
+    judg_unknown = (st != 'TD') and (judg <= 0)
+    eff_eq = 0 if (eqfake or judg_unknown) else eqp
+    score = max(0, min(100, round(eff_eq) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
+    tier = 'A' if (val and eff_eq >= 40 and 0 <= days <= 45) else ('B' if val and eff_eq >= 15 else 'C')
+    if judg_unknown:
+        tier = 'C'; score = min(score, 40)
+    # city-only address — can't be mailed/driven/knocked; cap at C (mirrors the MD disqualifier)
+    no_street = not re.match(r'^\s*(?:\d[\d-]*|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s+\S', addr or '', re.I)
+    if no_street:
+        tier = 'C'; score = min(score, 40)
+    warn = (('no street address - verify parcel first' if no_street else '') if val
+            else 'no cadastral match - verify parcel + value')
+    return {'eq': eqp, 'eqfake': eqfake, 'mr': mr, 'ju': judg_unknown,
+            'score': score, 'tier': tier, 'warn': warn}
+
+
+def _people_links(owner, addr, mail):
+    """People/CyberBG search links for an owner — shared by to_slim and the backfill so a
+    fallback-recovered owner ships with the same skip-trace links a scraped one gets."""
+    is_co = bool(COMPANY_RE.search(owner or ''))
+    # People NAME search — TruePeopleSearch wants "First Last". FDOR owner names are "LAST FIRST[,] MIDDLE",
+    # so build the query with _people_name() (handles both comma + space forms). zip is at the END of the
+    # address (not the street number). Skip companies/trusts and address-named entities ("...LAND TR").
+    zip5 = (re.search(r'(\d{5})(?:-\d{4})?\s*$', addr) or [None, ''])[1] if addr else ''
+    _nm = _people_name(owner)
+    _ent = bool(re.search(r'\b(TR|TRS|EST|ESTATE|FUND|PROPERT|REALTY|HOMES|GROUP|INVEST|ENTERPRISE|LAND|ASSN|ASSOC)\b', owner, re.I))
+    if _nm and not is_co and not _ent and not re.match(r'^\s*\d', owner or ''):
+        people = 'https://www.truepeoplesearch.com/results?name=' + urllib.parse.quote(_nm) + ('&citystatezip=' + zip5 if zip5 else '')
+    else:
+        people = ''
+    # People-by-ADDRESS (pinpoints the owner among same-name strangers) — reuse the Miami-Dade builder.
+    peopleaddr = F.people_addr_url(mail, addr, is_co or _ent)
+    # CyberBackgroundChecks NAME search (free detail page: phones w/ last-reported date, emails,
+    # relatives+associates — verified 2026-07-17 to out-return BatchData on both a Broward and a
+    # Sunrise lead). Same gate as the TPS name search: skip companies/trusts/address-named entities.
+    cyberbg = F.cyberbg_url(_nm, addr) if (_nm and not is_co and not _ent) else ''
+    cyberbgaddr = F.cyberbg_addr_url(mail, addr, is_co or _ent)
+    return {'people': people, 'peopleaddr': peopleaddr, 'cyberbg': cyberbg, 'cyberbgaddr': cyberbgaddr}
+
+
 def scrape_county(cfg, max_dates=0):
     """Scrape BOTH RealAuction platforms this county runs on: <sub>.realforeclose.com (mortgage
     foreclosures) AND <sub>.realtaxdeed.com (tax-deed sales — Jose's lane). Same DOM, same scraper;
@@ -150,24 +211,38 @@ def to_slim(county, cfg, base, items):
         # the entire county scrape: 8 silent aborts 08/01-08/13 that kept stale files while the
         # refresh reported success.
         val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''; vac = False; opart = False; assv = 0
+        info = None; vsrc = ''
         if folio:
             try: info = fl_cadastral.enrich(parcel_id=folio)
             except Exception: info = None
+        # FALLBACK — county PA resolver (pa_values). The cadastral misses three ways (measured
+        # 2026-08-17): the auction listing carried NO folio at all, the \D-strip above crippled a
+        # lettered Broward condo folio, or the parcel is newer than the annual roll. The county's
+        # own search endpoint recovers the TRUE folio from the address (digit-corroborated for the
+        # crippled condos), the cadastral answers on the recovered id, and only a genuinely-new
+        # parcel falls through to the PA page itself. Cache-first + throttled; never raises.
+        if not info and (folio or addr):
+            info = pa_values.lookup(county, folio, addr)
             if info:
-                val, owner, hs = info['market_value'], info['owner'], info['homestead']
-                # ASSESSED value (Save Our Homes-capped) carried alongside JV so the JS homestead
-                # tax-deed floor can subtract HALF the assessed value per FS 197.502(6)(c) — not
-                # half the market value, which over-subtracts on every SOH-differentiated homestead.
-                assv = info.get('assessed_value') or 0
-                mail, bprice, bought = info['mail_addr'], info['last_sale_price'], info['last_sale_year']
-                condo = bool(re.search(r'CONDO', info.get('legal', ''), re.I)) or str(info.get('use_code', '')) in ('0400', '400', '04')
-                # VACANT LAND: FDOR use code 0 = vacant residential (e.g. '000'/'0000'), 10 vacant
-                # commercial, 40 vacant industrial, 70 vacant institutional. No homeowner + speculative
-                # land value = a systematic false-positive for the homeowner-rescue model.
-                _uc = str(info.get('use_code', '') or '').strip()
-                vac = (_uc.lstrip('0') == '') and _uc != '' or _uc in ('10', '1000', '40', '4000', '70', '7000')
-                oname = _clean_owner(owner)
-                opart = _owner_partial(owner)   # co-owner dropped / 30-char roll clip -> never treat as a full name
+                vsrc = info.get('src', '')
+                _rf = str(info.get('parcel_id') or '').strip()
+                if _rf and len(folio) < pa_values._FULL_LEN[county]:
+                    folio = _rf   # adopt the RESOLVED folio (letters intact) so pa/tax deep-links work
+        if info:
+            val, owner, hs = info['market_value'], info['owner'], info['homestead']
+            # ASSESSED value (Save Our Homes-capped) carried alongside JV so the JS homestead
+            # tax-deed floor can subtract HALF the assessed value per FS 197.502(6)(c) — not
+            # half the market value, which over-subtracts on every SOH-differentiated homestead.
+            assv = info.get('assessed_value') or 0
+            mail, bprice, bought = info['mail_addr'], info['last_sale_price'], info['last_sale_year']
+            condo = bool(re.search(r'CONDO', info.get('legal', ''), re.I)) or str(info.get('use_code', '')) in ('0400', '400', '04')
+            # VACANT LAND: FDOR use code 0 = vacant residential (e.g. '000'/'0000'), 10 vacant
+            # commercial, 40 vacant industrial, 70 vacant institutional. No homeowner + speculative
+            # land value = a systematic false-positive for the homeowner-rescue model.
+            _uc = str(info.get('use_code', '') or '').strip()
+            vac = (_uc.lstrip('0') == '') and _uc != '' or _uc in ('10', '1000', '40', '4000', '70', '7000')
+            oname = _clean_owner(owner)
+            opart = _owner_partial(owner)   # co-owner dropped / 30-char roll clip -> never treat as a full name
         try:
             days = (datetime.strptime(r.get('AuctionDate', ''), '%m/%d/%Y').date() - today).days
         except Exception:
@@ -180,72 +255,31 @@ def to_slim(county, cfg, base, items):
         obid_val = F.money(r.get('Opening Bid', '')) if st == 'TD' else 0
         if st == 'TD' and obid_val:
             judg = obid_val
-        eqp = round((val - judg) / val * 100) if val else 0
-        is_co = bool(COMPANY_RE.search(owner))
-        # FANTASY-EQUITY GUARD — plaintiff-free mirror of foreclosure_leads.py suspect_equity (line ~543).
-        # County scrapes rarely carry a plaintiff, so MD's plaintiff-gated guard can't fire here, which
-        # let $29k-judgment / $1.2M-value HOA cases render as "98% equity STRONG bank deals". A judgment
-        # that is a small fraction of value is the signature of a JUNIOR lien (HOA/COA/junior note) with a
-        # senior 1st mortgage surviving unshown -> the shown equity is gross/fake. Exempt a confirmed bank
-        # plaintiff (its judgment IS the senior debt) and tax deeds (no mortgage survives a tax sale).
-        _bank_pl = F._fc_type_plaintiff(r.get('Plaintiff', '')) == 'MORTGAGE'
-        suspect_equity = (st != 'TD') and (not _bank_pl) and bool(val) and judg > 0 and (judg / val) < 0.20 and eqp >= 40
-        mr = (ftype == 'HOA') or suspect_equity
-        eqfake = mr
-        # Fake equity must NOT rank a junior-lien lead as a 98%-equity Tier-A deal. Zero it for score/tier
-        # (mirrors MD, which awards equity points only when 'not is_hoa'); the gross % still shows in the
-        # cell, muted, and the UI verdict engine forces VERIFY off mr=True.
-        # A MISSING judgment ($0 from an unposted 'Final Judgment Amount') is NOT $0 owed — it makes
-        # eqp read a fantasy 100%. The suspect-equity guard needs judg>0, so it can't catch this; mirror
-        # Miami-Dade's judgment_unknown handling and never credit equity when the debt is unknown.
-        judg_unknown = (st != 'TD') and (judg <= 0)
-        eff_eq = 0 if (eqfake or judg_unknown) else eqp
-        score = max(0, min(100, round(eff_eq) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
-        tier = 'A' if (val and eff_eq >= 40 and 0 <= days <= 45) else ('B' if val and eff_eq >= 15 else 'C')
-        if judg_unknown:
-            tier = 'C'; score = min(score, 40)
-        # city-only address — can't be mailed/driven/knocked; cap at C (mirrors the MD disqualifier)
-        no_street = not re.match(r'^\s*(?:\d[\d-]*|ONE|TWO|THREE|FOUR|FIVE|SIX|SEVEN|EIGHT|NINE|TEN)\s+\S', addr or '', re.I)
-        if no_street:
-            tier = 'C'; score = min(score, 40)
+        # Everything the value implies (equity %, fantasy-equity guard, judgment-unknown, score,
+        # tier, warn) computes in _value_metrics — shared verbatim with the pa_values backfill.
+        m = _value_metrics(st, judg, val, hs, days, addr, r.get('Plaintiff', ''), ftype)
         z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio) + ' FL') + '_rb/'
         # deep-link to the platform this item actually came from (realforeclose vs realtaxdeed)
         _ab = r.get('_base', base)
         auc = _ab + '?zaction=AUCTION&Zmethod=PREVIEW&AUCTIONDATE=' + r.get('AuctionDate', '') + ('#AITEM_' + r['AID'] if r.get('AID') else '')
-        # People NAME search — TruePeopleSearch wants "First Last". FDOR owner names are "LAST FIRST[,] MIDDLE",
-        # so build the query with _people_name() (handles both comma + space forms). zip is at the END of the
-        # address (not the street number). Skip companies/trusts and address-named entities ("...LAND TR").
-        zip5 = (re.search(r'(\d{5})(?:-\d{4})?\s*$', addr) or [None, ''])[1] if addr else ''
-        _nm = _people_name(owner)
-        _ent = bool(re.search(r'\b(TR|TRS|EST|ESTATE|FUND|PROPERT|REALTY|HOMES|GROUP|INVEST|ENTERPRISE|LAND|ASSN|ASSOC)\b', owner, re.I))
-        if _nm and not is_co and not _ent and not re.match(r'^\s*\d', owner or ''):
-            people = 'https://www.truepeoplesearch.com/results?name=' + urllib.parse.quote(_nm) + ('&citystatezip=' + zip5 if zip5 else '')
-        else:
-            people = ''
-        # People-by-ADDRESS (pinpoints the owner among same-name strangers) — reuse the Miami-Dade builder.
-        peopleaddr = F.people_addr_url(mail, addr, is_co or _ent)
-        # CyberBackgroundChecks NAME search (free detail page: phones w/ last-reported date, emails,
-        # relatives+associates — verified 2026-07-17 to out-return BatchData on both a Broward and a
-        # Sunrise lead). Same gate as the TPS name search: skip companies/trusts/address-named entities.
-        cyberbg = F.cyberbg_url(_nm, addr) if (_nm and not is_co and not _ent) else ''
-        cyberbgaddr = F.cyberbg_addr_url(mail, addr, is_co or _ent)
+        links = _people_links(owner, addr, mail)
         slim.append({
-            'county': county, 'tier': tier, 'score': score, 'auction': r.get('AuctionDate', ''), 'days': days,
+            'county': county, 'tier': m['tier'], 'score': m['score'], 'auction': r.get('AuctionDate', ''), 'days': days,
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
-            'addr': addr, 'mail': mail, 'value': val, 'assessed_value': assv, 'judg': judg, 'eq': eqp, 'eqfake': eqfake, 'hs': hs, 'condo': condo,
-            'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')), 'opart': opart,
+            'addr': addr, 'mail': mail, 'value': val, 'assessed_value': assv, 'judg': judg, 'eq': m['eq'], 'eqfake': m['eqfake'], 'hs': hs, 'condo': condo,
+            'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')), 'opart': opart, 'vsrc': vsrc,
             # TAX DEED: the opening bid (certs + fees) and certificate number are the deal inputs —
             # map them so the TD branch of the deal model (winbid off obid) and the row's Certificate #
             # both work for BW/PB just like Miami-Dade. FC leads have neither and stay 0/''.
             'st': st, 'obid': obid_val, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
-            'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': people, 'peopleaddr': peopleaddr, 'cyberbg': cyberbg, 'cyberbgaddr': cyberbgaddr,
+            'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': links['people'], 'peopleaddr': links['peopleaddr'], 'cyberbg': links['cyberbg'], 'cyberbgaddr': links['cyberbgaddr'],
             'ctype': ('HOA' if ftype == 'HOA' else 'Bank/Mortgage'), 'ftype': ftype, 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
             # No per-case deep-link token (clerk CAPTCHA), but Docket MUST still show: same clerk Case
             # search as Cases — UI copies the case # so the operator lands on THIS foreclosure's filings.
             'docket': cfg['cases'], 'records': cfg['records'], 'cases': cfg['cases'],
-            'cstatus': '', 'mr': mr, 'ip': False, 'ju': judg_unknown,
+            'cstatus': '', 'mr': m['mr'], 'ip': False, 'ju': m['ju'],
             'bought': bought, 'bprice': bprice, 'filed': 0, 'etax': 0,
-            'warn': (('no street address - verify parcel first' if no_street else '') if val else 'no cadastral match - verify parcel + value'), 'recqs': '', 'ocsqs': '', 'cert': r.get('Certificate #', ''),
+            'warn': m['warn'], 'recqs': '', 'ocsqs': '', 'cert': r.get('Certificate #', ''),
         })
     return slim
 
