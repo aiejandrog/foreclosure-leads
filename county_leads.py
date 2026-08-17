@@ -142,7 +142,14 @@ def to_slim(county, cfg, base, items):
         # this in make_tracker() for any lead we actually trace (broward_liens).
         ftype = F._fc_type_plaintiff(r.get('Plaintiff', '')) or F._fc_type(r.get('Case #', ''))
         addr = F._clean_addr(r.get('Address', ''))
-        val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''; vac = False; opart = False
+        # EVERY per-lead variable resets here, no exceptions. `assv` was added later (the FS
+        # 197.502(6)(c) tax-deed floor) and skipped this line — so on a lead with no cadastral
+        # match it either LEAKED the previous lead's assessed value (all 176 no-match rows across
+        # BW+PB carried some other property's number, one value smeared across three consecutive
+        # leads) or, when the run's FIRST lead had no match, raised UnboundLocalError and killed
+        # the entire county scrape: 8 silent aborts 08/01-08/13 that kept stale files while the
+        # refresh reported success.
+        val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''; vac = False; opart = False; assv = 0
         if folio:
             try: info = fl_cadastral.enrich(parcel_id=folio)
             except Exception: info = None
