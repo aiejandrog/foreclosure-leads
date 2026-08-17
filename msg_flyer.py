@@ -90,6 +90,47 @@ business with us at any time. Consultations are always free.</div>
 </div>"""
 
 
+def card_missed_en(name, phone):
+    return """<div class="card">
+<div class="tag">FREE FORECLOSURE CONSULTATION &middot; 5 MINUTES &middot; NO FEE &middot; NO COMMITMENT</div>
+<div class="hook">Sorry I missed you today.</div>
+<div class="body">I came by to visit with you about a <b>time-sensitive matter concerning this
+property</b>. When an owner does nothing, the bank wins and the owner loses &mdash; and there are
+usually <b>3, 4, sometimes 5 options</b> nobody has shown you. One free call and our senior
+advisor &mdash; <b>over 30 years in mortgages and foreclosure workouts</b> &mdash; walks you
+through every one of them.</div>
+<div class="who"><div class="nm">%s</div>
+<div class="tel">%s</div>
+<div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
+<div class="fill">Important date: <span class="line"></span></div>
+<div class="fine">%s &middot; We are not a law firm and do not give legal advice. We are not
+associated with the government, and our service is not approved by the government or your lender.
+Even if you use our service, your lender may not agree to change your loan. You may stop doing
+business with us at any time. Consultations are always free.</div>
+</div>"""
+
+
+def card_missed_es(name, phone):
+    return """<div class="card">
+<div class="tag">CONSULTA GRATIS SOBRE SU CASO DE FORECLOSURE &middot; 5 MINUTOS &middot; SIN COSTO</div>
+<div class="hook">Lamento no haberlo encontrado hoy.</div>
+<div class="body">Pas&eacute; a visitarlo por un <b>asunto urgente relacionado con esta
+propiedad</b>. Cuando un due&ntilde;o no hace nada, el banco gana y el due&ntilde;o pierde &mdash;
+y casi siempre hay <b>3, 4, hasta 5 opciones</b> que nadie le ha mostrado. Una llamada gratis y
+nuestro asesor principal &mdash; <b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de
+foreclosure</b> &mdash; le explica cada una.</div>
+<div class="who"><div class="nm">%s</div>
+<div class="tel">%s</div>
+<div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
+<div class="fill">Fecha importante: <span class="line"></span></div>
+<div class="fine">%s &middot; No somos un bufete de abogados y no damos consejos legales. No
+estamos asociados con el gobierno, y nuestro servicio no est&aacute; aprobado por el gobierno ni
+por su banco. Aunque use nuestro servicio, es posible que su banco no acepte modificar su
+pr&eacute;stamo. Puede dejar de trabajar con nosotros en cualquier momento. Las consultas siempre
+son gratis.</div>
+</div>"""
+
+
 def card_es(name, phone):
     return """<div class="card">
 <div class="tag">CONSULTA GRATIS SOBRE SU CASO DE FORECLOSURE &middot; 5 MINUTOS &middot; SIN COSTO</div>
@@ -139,6 +180,13 @@ def main():
     ap.add_argument('--color', default='yellow', choices=sorted(COLORS))
     ap.add_argument('--name', default='')
     ap.add_argument('--phone', default='')
+    # 'keep' = Jesse's keep-this-anyway card (2026-08-12). 'missedyou' = Jose's door leave-behind
+    # (2026-08-16 meeting): Carlos drops it when nobody answers. Jose's spoken line named the
+    # recipient's foreclosure sale outright; ON PAPER that is a third-party disclosure (anyone at
+    # the door reads it), the exact exposure the 8/12 legal pass closed - so the printed card says
+    # "time-sensitive matter concerning this property" and keeps his bank-wins-you-lose frame as a
+    # general statement. The sale-date line stays hand-filled, OWNER'S PRESENCE ONLY.
+    ap.add_argument('--variant', default='keep', choices=('keep', 'missedyou'))
     a = ap.parse_args()
 
     dn, dp, llc = sender()
@@ -146,22 +194,23 @@ def main():
     if not phone:
         raise SystemExit('no phone: set sender.json or pass --phone')
 
-    en = card_en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
-    es = card_es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
+    _en, _es = (card_missed_en, card_missed_es) if a.variant == 'missedyou' else (card_en, card_es)
+    en = _en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
+    es = _es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
     doc = ('<!doctype html><html><head><meta charset="utf-8"><title>MSG Leave-Behind</title>'
            '<style>%s</style></head><body>'
            '<div class="sheet">%s</div><div class="sheet">%s</div>'
            '</body></html>') % (CSS % {'bg': COLORS[a.color]}, en * 4, es * 4)
 
     today = datetime.date.today().isoformat()
-    html_out = os.path.join(HERE, 'MSG_Flyer_%s_%s.html' % (a.color, today))
+    html_out = os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.html' % (a.variant, a.color, today))
     open(html_out, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    pdfs = [os.path.join(HERE, 'MSG_Flyer_%s_%s.pdf' % (a.color, today))]
+    pdfs = [os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
         pdfs.append(os.path.expanduser(os.path.join(
-            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Flyer_%s_%s.pdf' % (a.color, today))))
+            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()
