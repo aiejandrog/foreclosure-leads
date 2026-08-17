@@ -478,6 +478,8 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self):
+        if self.path.startswith('/marks'):
+            return self._handle_marks_get()
         if self.path.startswith('/health'):
             user, pw = _load_credentials()
             _bh = _bounce_health()
@@ -504,6 +506,60 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._json(404, {'ok': False, 'err': 'unknown path'})
 
+    def _handle_marks_get(self):
+        """GET /marks — the board's boot-time replay feed.
+
+        worker_marks.jsonl was a write-only black box: /mark appended, nothing ever read it, so a
+        mark that survived a closed worker tab was safe on disk and useless forever. The board now
+        fetches this at boot, re-injects each mark through its own workerAct listener (identical
+        semantics, zero duplicated logic), then POSTs /marks/consumed with the offset it processed.
+        Offset-based so marks appended DURING the replay are never lost or double-consumed."""
+        p = os.path.join(HERE, 'worker_marks.jsonl')
+        if not os.path.exists(p):
+            return self._json(200, {'ok': True, 'marks': [], 'offset': 0})
+        try:
+            raw = open(p, 'rb').read()
+            marks = []
+            for line in raw.decode('utf-8', 'replace').splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    marks.append(json.loads(line))
+                except Exception:
+                    pass                                   # a torn line is audit noise, not a reason to 500
+            return self._json(200, {'ok': True, 'marks': marks, 'offset': len(raw)})
+        except Exception as e:
+            return self._json(500, {'ok': False, 'err': str(e)[:120]})
+
+    def _handle_marks_consumed(self):
+        """POST /marks/consumed {offset} — move the replayed prefix to the applied archive."""
+        ln = int(self.headers.get('Content-Length') or 0)
+        try:
+            off = int((json.loads(self.rfile.read(ln).decode('utf-8')) or {}).get('offset') or 0)
+        except Exception:
+            return self._json(400, {'ok': False, 'err': 'bad json'})
+        p = os.path.join(HERE, 'worker_marks.jsonl')
+        if off <= 0 or not os.path.exists(p):
+            return self._json(200, {'ok': True, 'consumed': 0})
+        try:
+            # LOCKED: this is a threaded server, and read->truncate->replace with a concurrent
+            # /mark append in the gap OBLITERATES that mark — the flagship race is a worker tab's
+            # pagehide beacon landing while a freshly reloaded board consumes. A destroyed mark
+            # can be a DNC.
+            with _NOTES_LOCK:
+                raw = open(p, 'rb').read()
+                off = min(off, len(raw))
+                with open(os.path.join(HERE, 'worker_marks.applied.jsonl'), 'ab') as f:
+                    f.write(raw[:off])
+                tmp = p + '.tmp'
+                with open(tmp, 'wb') as f:
+                    f.write(raw[off:])
+                os.replace(tmp, p)
+            return self._json(200, {'ok': True, 'consumed': off})
+        except Exception as e:
+            return self._json(500, {'ok': False, 'err': str(e)[:120]})
+
     def _handle_mark(self):
         """POST /mark — black-box recorder for worker marks that could not reach the board tab.
 
@@ -520,8 +576,9 @@ class Handler(BaseHTTPRequestHandler):
         rec = {'ts_utc': dt.datetime.now(dt.timezone.utc).isoformat(),
                'c': str(d.get('c') or ''), 'k': str(d.get('k') or ''), 'extra': d.get('extra')}
         try:
-            with open(os.path.join(HERE, 'worker_marks.jsonl'), 'a', encoding='utf-8') as f:
-                f.write(json.dumps(rec, ensure_ascii=False) + '\n')
+            with _NOTES_LOCK:      # serialized against /marks/consumed's read->truncate->replace
+                with open(os.path.join(HERE, 'worker_marks.jsonl'), 'a', encoding='utf-8') as f:
+                    f.write(json.dumps(rec, ensure_ascii=False) + '\n')
         except Exception as e:
             return self._json(500, {'ok': False, 'err': str(e)[:120]})
         return self._json(200, {'ok': True})
@@ -642,6 +699,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith('/notes'):
             return self._handle_notes()
+        if self.path.startswith('/marks/consumed'):   # BEFORE /mark — startswith('/mark') shadows it
+            return self._handle_marks_consumed()
         if self.path.startswith('/mark'):
             return self._handle_mark()
         if self.path.startswith('/retrace'):

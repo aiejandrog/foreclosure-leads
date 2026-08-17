@@ -3763,20 +3763,20 @@ function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=note
   // — stop"). If they proceed anyway (to document a genuine mistake for the cure trail), it's allowed
   // and _dialedAfter still flags it.
   if(_isOptedOut(n) && _OUTREACH_CH[ch] && opt.status !== 'DO NOT CONTACT'){
-    if(typeof confirm === 'function' && !confirm('⚠ STOP — this owner opted out on '+n.optout+'.\n\nLogging a '+ch+' is an FTSA violation (~$500+ per contact). Only proceed to DOCUMENT a contact that already happened by mistake — it will be flagged for your cure records.\n\nLog this '+ch+' anyway?')) return false;
+    if(typeof confirm === 'function' && !window.__replaying && !confirm('⚠ STOP — this owner opted out on '+n.optout+'.\n\nLogging a '+ch+' is an FTSA violation (~$500+ per contact). Only proceed to DOCUMENT a contact that already happened by mistake — it will be flagged for your cure records.\n\nLog this '+ch+' anyway?')) return false;
   }
   // kimi: ACTIVE bankruptcy-stay guard — 11 U.S.C. §362 bars ALL collection contact while a stay
   // is live (federal sanctions, not an FTSA fine). Same preventive pattern as the opt-out guard:
   // blocked by default; proceeding only documents an already-happened contact for the record.
   const _st = (typeof DATA !== 'undefined') && DATA.find(x => x.case === caseId);
   if(_st && _st.saleBkAct && _OUTREACH_CH[ch]){
-    if(typeof confirm === 'function' && !confirm('⛔ ACTIVE BANKRUPTCY STAY'+(_st.saleBkD?' (filed '+_st.saleBkD+')':'')+'.\n\nThe automatic stay (11 U.S.C. §362) prohibits ALL collection contact right now — calls, letters, door-knocks, WhatsApp. A violation carries federal sanctions. Only proceed to DOCUMENT a contact that already happened — it will be logged for the record.\n\nLog this '+ch+' anyway?')) return false;
+    if(typeof confirm === 'function' && !window.__replaying && !confirm('⛔ ACTIVE BANKRUPTCY STAY'+(_st.saleBkD?' (filed '+_st.saleBkD+')':'')+'.\n\nThe automatic stay (11 U.S.C. §362) prohibits ALL collection contact right now — calls, letters, door-knocks, WhatsApp. A violation carries federal sanctions. Only proceed to DOCUMENT a contact that already happened — it will be logged for the record.\n\nLog this '+ch+' anyway?')) return false;
   }
   // WRONG-PERSON guard: once someone has told us "that isn't my property", every number we hold for
   // this lead is suspect. Block further outreach the same preventive way — the identity has to be
   // re-established first, or we are just another one of the ten people calling a stranger daily.
   if(_isWrongOwner(n) && _OUTREACH_CH[ch] && !opt.wrongOwner){
-    if(typeof confirm === 'function' && !confirm('🚫 WRONG PERSON was reported on this lead ('+(n.wrongown||'')+').\n\nThe numbers/name on file do NOT belong to the owner. Contacting them again is harassment of an uninvolved person — and it is how an innocent party ends up with ten investors calling daily.\n\nRe-verify the owner (appraiser + deed) before contacting anyone. Log this '+ch+' anyway?')) return false;
+    if(typeof confirm === 'function' && !window.__replaying && !confirm('🚫 WRONG PERSON was reported on this lead ('+(n.wrongown||'')+').\n\nThe numbers/name on file do NOT belong to the owner. Contacting them again is harassment of an uninvolved person — and it is how an innocent party ends up with ten investors calling daily.\n\nRe-verify the owner (appraiser + deed) before contacting anyone. Log this '+ch+' anyway?')) return false;
   }
   n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), tsu:Date.now(), ch:ch, out:out});
   // record the identity failure in the same audit ledger the opt-out uses, so it survives a status
@@ -10089,17 +10089,45 @@ function genDialReady(r){
     return '<button type="button" class="droutbtn" data-out="'+o.i+'" style="border-left:4px solid '+o.bg+'">'
       + '<span class="doen">'+esc(o.en)+'</span><span class="does">'+esc(o.es)+'</span></button>';
   }).join('');
-  var outcomeScript = '<script>document.addEventListener("click",function(e){var b=e.target.closest(".droutbtn");if(!b||b.classList.contains("done"))return;'
-    // HONEST stamp: the old version stamped "✓ logged" unconditionally — with the board tab closed
-    // or reloading, the postMessage vanished and the outcome was never recorded anywhere. Now a
-    // missing opener falls back to the local bridge and SAYS so instead of claiming success.
-    + 'var ok=false;'
-    + 'try{if(window.opener&&!window.opener.closed){window.opener.postMessage({dialoutcome:{c:'+JSON.stringify(r.case)+',out:+b.dataset.out}},"*");ok=true;}}catch(_e){}'
-    + 'if(!ok){try{fetch("http://127.0.0.1:8823/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({c:'+JSON.stringify(r.case)+',k:"dialoutcome",extra:{out:+b.dataset.out}})}).catch(function(){});}catch(_e){}}'
+  // FULL ACK LOOP, same contract as the Morning Worker's post(): "✓ logged" paints only after the
+  // board acknowledges. The old honest-stamp version still trusted a live-looking opener — a
+  // RELOADED board (nightly refresh) kept closed===false while eating the message. Now: ⏳ on tap,
+  // ✓ on ack, two silent re-posts, then the bridge fallback with the truthful ⚠/✗ label.
+  var outcomeScript = '<script>var _PEND={},_SEQ=0;'
+    + 'window.addEventListener("message",function(ev){'
+    +   'if(ev.source!==window.opener)return;'
+    +   'var a=ev&&ev.data&&ev.data.workerAck;if(!a||!_PEND[a])return;'
+    +   'var p=_PEND[a];clearTimeout(p.t);delete _PEND[a];'
+    +   'p.b.querySelector(".doen").textContent="✓ "+p.en+" — logged";'
+    +   'p.b.querySelector(".does").textContent="✓ "+p.es+" — registrado";'
+    + '});'
+    + 'function _bridge(m,b,en,es){'
+    +   'try{fetch("http://127.0.0.1:8823/mark",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({c:m.dialoutcome.c,k:"dialoutcome",extra:{out:m.dialoutcome.out}})})'
+    +   '.then(function(r){var g=r&&r.ok;'
+    +     'b.querySelector(".doen").textContent=(g?"⚠ "+en+" — board did not confirm; sent to bridge":"✗ "+en+" — NOT logged");'
+    +     'b.querySelector(".does").textContent=(g?"⚠ "+es+" — al puente":"✗ "+es+" — NO registrado");'
+    +   '}).catch(function(){'
+    +     'b.querySelector(".doen").textContent="✗ "+en+" — NOT logged (board and bridge unreachable)";'
+    +     'b.querySelector(".does").textContent="✗ "+es+" — NO registrado";'
+    +   '});}catch(_e){b.querySelector(".doen").textContent="✗ "+en+" — NOT logged";}'
+    + '}'
+    + 'function _post(m,b,en,es,tries){'
+    +   'var ok=false;'
+    +   'try{if(window.opener&&!window.opener.closed){window.opener.postMessage(m,"*");ok=true;}}catch(_e){}'
+    +   'if(!ok){_bridge(m,b,en,es);return;}'
+    +   '_PEND[m._mid]={b:b,en:en,es:es,t:setTimeout(function(){'
+    +     'delete _PEND[m._mid];'
+    +     'if((tries||0)<2){_post(m,b,en,es,(tries||0)+1);}else{_bridge(m,b,en,es);}'
+    +   '},1800)};'
+    + '}'
+    + 'document.addEventListener("click",function(e){var b=e.target.closest(".droutbtn");if(!b||b.classList.contains("done"))return;'
+    + 'var m={dialoutcome:{c:'+JSON.stringify(r.case)+',out:+b.dataset.out},_mid:"dr"+(++_SEQ)+"-"+Date.now()};'
+    + 'var en=b.querySelector(".doen").textContent,es=b.querySelector(".does").textContent;'
     + 'b.classList.add("done");'
-    + 'var was=b.querySelector(".doen").textContent;b.querySelector(".doen").textContent=(ok?"✓ "+was+" — logged":"⚠ "+was+" — board tab closed, sent to bridge");'
-    + 'var wasES=b.querySelector(".does").textContent;b.querySelector(".does").textContent=(ok?"✓ "+wasES+" — registrado":"⚠ "+wasES+" — tablero cerrado");'
+    + 'b.querySelector(".doen").textContent="⏳ "+en+" — logging…";'
+    + 'b.querySelector(".does").textContent="⏳ "+es+" — registrando…";'
     + 'b.parentNode.querySelectorAll(".droutbtn").forEach(function(x){if(x!==b)x.style.opacity=.35;});'
+    + '_post(m,b,en,es,0);'
     + '});<\/script>';
   var outcomeBar = outcomeCss
     + '<div class="drout" id="drout">'
@@ -11417,7 +11445,9 @@ var WORKER_LANES = {
   active: {t:'ACTIVE',  ic:'🟡', d:'Sale 8–45 days out — the working middle',
            test:function(d,r){ return d!=null && d>=8 && d<=45 && !_replyWaiting(r); }},
   early:  {t:'EARLY',   ic:'🌱', d:'Fresh filing, no sale date yet — be the first call',
-           test:function(d,r){ return (d==null || r.st==='LP') && !_replyWaiting(r); }}
+           // d<0 exclusion: an LP row that GAINS a sale date which then passes must not sit in
+           // "be the first call" — with live _saleDays a stale tab can now produce negative d here
+           test:function(d,r){ return (d==null || r.st==='LP') && !(d!=null && d<0) && !_replyWaiting(r); }}
 };
 // Serializable copy for the worker tab. JSON.stringify would silently drop the `test` functions
 // anyway; doing it explicitly means a future field added to WORKER_LANES does not leak by accident.
@@ -11574,12 +11604,24 @@ function _workerQueue(lane){
     var wb = ((notes[b.case] || {}).touches || []).length ? 1 : 0;
     return wa - wb;                                        // untouched first; ties keep _qsort order
   });
-  // Never hand him more than the day's remaining send budget — but the cap slices EMAILABLE
+  // Never hand him more than the day's remaining send budget — but the cap slices SENDABLE
   // entries only. Phone-only leads consume no send budget (their venue is the un-capped CALL
   // queue), yet they used to occupy cap.left slots at the head of every morning, starving the
-  // email queue of fresh leads while producing nothing but callq breadcrumbs.
-  var _em = deduped.filter(function(r){ return (r.emails || []).length; });
-  var _ph = deduped.filter(function(r){ return !(r.emails || []).length; });
+  // email queue of fresh leads while producing nothing but callq breadcrumbs. Same logic one
+  // level up: a lead with an email but a 'replied' or 'done' mail stage can NEVER produce a
+  // send either (its baked mail is empty by design) — it belongs in the call bucket too.
+  var _em = [], _ph = [];
+  deduped.forEach(function(r){
+    var MS = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
+    var sendable = (r.emails || []).length && MS !== 'replied' && MS !== 'done';
+    (sendable ? _em : _ph).push(r);
+  });
+  // Rotate the call-bucket window daily: callq parking writes no touch (by design), so a fixed
+  // head meant leads 61+ NEVER surfaced. A day-keyed rotation walks the whole bucket over time.
+  if(_ph.length > 60){
+    var _rot = (new Date().getDate() * 7) % _ph.length;
+    _ph = _ph.slice(_rot).concat(_ph.slice(0, _rot));
+  }
   return _em.slice(0, Math.max(0, cap.left)).concat(_ph.slice(0, 60));
 }
 /* COMPOSE THE MESSAGE ON THE BOARD — the worker tab cannot do it. --------------------------------
@@ -12056,17 +12098,19 @@ function genMorningWorker(lane, autostart){
     // message lands in a navigating/gated document and evaporates. Every mark now carries an id;
     // the board replies {workerAck:id} on receipt; unacked marks are re-posted with backoff and
     // finally buffered to the bridge with an honest warn line instead of a healthy-looking log.
+    // PENDACK stores {t: timeout, m: mark} — the mark object must be recoverable so pagehide can
+    // beacon still-unacked marks to the bridge (closing the tab mid-retry used to lose them).
     +   'var MSEQ=0; var PENDACK={};'
     +   'window.addEventListener("message",function(ev){'
     // acks are only ever sent by the board — reject any other window so a page opened via
     // openHere() (which keeps window.opener) cannot spoof-suppress a retry
     +     'if(ev.source !== window.opener) return;'
     +     'var a=ev&&ev.data&&ev.data.workerAck; if(!a||!PENDACK[a]) return;'
-    +     'clearTimeout(PENDACK[a]); delete PENDACK[a];'
+    +     'clearTimeout(PENDACK[a].t); delete PENDACK[a];'
     +   '});'
     +   'function _pendWatch(m, tries){'
     +     'tries=tries||0;'
-    +     'PENDACK[m._mid]=setTimeout(function(){'
+    +     'PENDACK[m._mid]={m:m, t:setTimeout(function(){'
     +       'delete PENDACK[m._mid];'
     +       'if(tries>=4){'
     +         'var _buf=["sent","callout","text","callq","done","skip","badnum"].indexOf(m.workerAct.k)>=0;'
@@ -12077,8 +12121,23 @@ function genMorningWorker(lane, autostart){
     +       'if(!window.opener || window.opener.closed){ _markBuf(m); return; }'
     +       'try{ window.opener.postMessage(m,"*"); }catch(e){ _markBuf(m); return; }'
     +       '_pendWatch(m, tries+1);'
-    +     '}, 1500 + tries*1500);'
+    +     '}, 1500 + tries*1500)};'
     +   '}'
+    // LAST-GASP FLUSH. The end-of-run gesture is "tap the last outcome, close the tab" — anything
+    // still in the retry window or MARKQ dies with the document unless it goes out NOW. sendBeacon
+    // survives tab teardown; text/plain keeps it a simple request (no preflight, which sendBeacon
+    // cannot perform); the bridge json-parses the body regardless of content type.
+    +   'window.addEventListener("pagehide",function(){'
+    +     'try{'
+    +       'var out=[];'
+    +       'Object.keys(PENDACK).forEach(function(k){ var p=PENDACK[k]; try{clearTimeout(p.t);}catch(e){} if(p.m&&p.m.workerAct) out.push(p.m.workerAct); });'
+    +       'MARKQ.forEach(function(m){ if(m&&m.workerAct) out.push(m.workerAct); });'
+    +       'out.forEach(function(w){ try{ navigator.sendBeacon("http://127.0.0.1:8823/mark", new Blob([JSON.stringify(w)],{type:"text/plain"})); }catch(e){} });'
+    // ownership handed to the bridge: clearing both stops a bfcache restore from double-beaconing
+    // the same marks on the next pagehide
+    +       'MARKQ.length=0; PENDACK={};'
+    +     '}catch(e){}'
+    +   '});'
     +   'function post(kind, extra){'
     // A null opener was counted as SUCCESS here (opener&&post evaluates to undefined, no throw),
     // which is how a dead bridge produced healthy-looking logs. No opener = the board cannot
@@ -12442,6 +12501,13 @@ function genMorningWorker(lane, autostart){
     +       'b.onclick=function(){'
     +         'var o = CALL_OUTCOMES.filter(function(x){return x.k===b.dataset.oc;})[0]; if(!o) return;'
     +         'post("callout", {oc:o.k, label:o.t, hrs:o.hrs, sup:!!o.sup});'
+    // The strip's "dialed" tally reads STATS.callout — dial-through, the number the whole audit
+    // was missing — but the local log line below stays kind 'call'/'skip' (its icon and wording,
+    // and a wrong/DNC still counts into the skip tally). addLog only bumps STATS[kind], so bump
+    // the dial tally here explicitly or it sits frozen at its boot seed all session: four logged
+    // outcomes were showing "dialed 0". Every logged outcome IS a dial — sup ones included —
+    // which is exactly what the board's durable ledger counts under 'callout'.
+    +         'STATS.callout=(STATS.callout||0)+1;'
     +         'addLog(o.sup?"skip":"call", r.first||r.owner,'
     +           '"outcome: "+o.t+(o.sup?" — suppressed, will not be queued again":" — back in "+o.hrs+"h"),'
     +           'o.sup?"warn":undefined);'
@@ -16736,6 +16802,7 @@ async function boot(){
     if(lb){ lb.style.display='inline-block'; lb.onclick = () => { try { localStorage.removeItem('fcPw'); } catch(e){} location.reload(); }; }
   }
   syncDealUI();
+  _refreshDays();      // BEFORE first paint — else the initial render shows baked countdowns
   recompute();
   render();
   syncFreshness();
@@ -16794,17 +16861,77 @@ async function boot(){
   // running last week's page). Same 400-byte marker probe as the gate; behavior depends on timing:
   // untouched page within 15s -> swap silently (nothing to lose); already in use -> a tap-to-reload
   // pill, because yanking the board out from under someone mid-call is worse than being stale.
+  _refreshDays();
   _freshCheck(autoUnlocked || manual);
   // NOT once-per-boot. A tab that simply never reloads (phone tab restored from memory, desktop
   // Chrome left open across days) used to drift forever: freshness was probed exactly once at
   // boot, so the operator worked days-old data with no pill and no warning ("feels stale, no new
   // information going into it" — 2026-08-17). Re-probe every 15 min and on every return to the
-  // tab; stampFreshness restamps the header age at the same time.
+  // tab; stampFreshness restamps the header age, _refreshDays re-syncs every baked countdown.
   var _fcArg = (autoUnlocked || manual);
-  setInterval(function(){ try{ _freshCheck(_fcArg); stampFreshness(); }catch(e){} }, 15*60*1000);
+  // repaint when a countdown actually moved — patching DATA without render() leaves the visible
+  // table on yesterday's numbers while the lanes silently disagree with the paint
+  var _dayTick = function(){
+    try{
+      if(_refreshDays()){ try{ recompute(); }catch(e){} try{ render(); }catch(e){} }
+      _freshCheck(_fcArg); stampFreshness();
+    }catch(e){}
+  };
+  setInterval(_dayTick, 15*60*1000);
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'visible'){ try{ _freshCheck(_fcArg); stampFreshness(); }catch(e){} }
+    if(document.visibilityState === 'visible') _dayTick();
   });
+  // REPLAY bridge-buffered marks. worker_marks.jsonl was write-only — a mark that outlived its
+  // worker tab was safe on disk and useless forever. Fetch it from the local bridge and re-inject
+  // each mark through this page's OWN message listeners (self-postMessage = byte-identical
+  // semantics, zero duplicated branch logic), then tell the bridge how far we consumed.
+  setTimeout(function(){
+    try{
+      fetch('http://127.0.0.1:8823/marks').then(function(r){ return r.json(); }).then(function(j){
+        if(!j || !j.ok || !(j.marks||[]).length) return;
+        // __replaying bypasses logTouch's confirm() guards: a replayed mark documents a contact
+        // that ALREADY happened — the guards' own "proceed = document it" semantics — and a
+        // blocking modal at boot+5s (suppressed in background tabs) silently dropped exactly the
+        // compliance-weight marks. _dialedAfter still flags any post-opt-out contact for cure.
+        window.__replaying = true;
+        j.marks.forEach(function(m, i){
+          if(!m || !m.c || !m.k) return;
+          var mid = 'replay-' + i + '-' + (m.ts_utc || '');
+          try{
+            if(m.k === 'dialoutcome'){
+              window.postMessage({dialoutcome:{c:m.c, out:(m.extra && m.extra.out)}, _mid:mid}, '*');
+            } else {
+              window.postMessage({workerAct:{c:m.c, k:m.k, extra:m.extra || null}, _mid:mid}, '*');
+            }
+          }catch(e){}
+        });
+        setTimeout(function(){
+          window.__replaying = false;
+          try{
+            fetch('http://127.0.0.1:8823/marks/consumed', {method:'POST',
+              headers:{'Content-Type':'application/json'}, body:JSON.stringify({offset:j.offset})});
+          }catch(e){}
+          if(typeof _shareToast === 'function')
+            _shareToast('Recovered ' + j.marks.length + ' buffered mark(s) from the bridge.');
+        }, 1000);
+      }).catch(function(){});                              // no bridge = silent no-op, like every bridge call
+    }catch(e){}
+  }, 4000);
+}
+/* Re-sync every baked r.days integer with the live _saleDays value. The live recompute fixed the
+   lanes and gates, but dozens of consumers (main-table sort, weekOnly, dashboard tiles, first-mover
+   scoring, callq urgency) read r.days directly — patching the field in place fixes them ALL and
+   removes the stale-tab split-brain in one move. Rows whose auction string doesn't parse keep
+   their baked value (_saleDays returns the fallback for those anyway). */
+function _refreshDays(){
+  var changed = 0;
+  try{
+    (DATA || []).forEach(function(r){
+      var d = _saleDays(r);
+      if(d != null && r.days !== d){ r.days = d; changed++; }
+    });
+  }catch(e){}
+  return changed;
 }
 boot();
 async function _freshCheck(unlocked){
