@@ -12517,10 +12517,12 @@ function genMorningWorker(lane, autostart){
     +   '}'
     +   'function tapToOpen(r, kind, url, after){'
     +     'addLog("wait", r.first||r.owner, kind+" popup was blocked — tap the gold button to open it", "warn");'
+    // header names WHAT was blocked — this screen's only current caller is the people search, and
+    // a hardcoded "Composer blocked" headline over an "Open people search" button read as a bug
     +     'main.innerHTML="<div class=\'mwpace\'>"'
-    +       '+"<div class=\'h\'>&#9993; Composer blocked by the browser</div>"'
+    +       '+"<div class=\'h\'>&#9888; "+kind.charAt(0).toUpperCase()+kind.slice(1)+" blocked by the browser</div>"'
     +       '+"<div class=\'s\'>Auto-opens need popup permission. Your tap does not — one tap opens the prefilled "+kind+".</div>"'
-    +       '+"<button id=\'mwtapopen\' class=\'mwbtn done\' style=\'margin-top:14px\'>&#9993; Open "+kind+" now</button>"'
+    +       '+"<button id=\'mwtapopen\' class=\'mwbtn done\' style=\'margin-top:14px\'>&#128269; Open "+kind+" now</button>"'
     +       '+"<button id=\'mwtapskip\' class=\'mwbtn skip\' style=\'margin-top:8px\'>Skip this lead &rarr;</button>"'
     +     '+"</div>";'
     +     'var b=document.getElementById("mwtapopen");'
@@ -12554,6 +12556,15 @@ function genMorningWorker(lane, autostart){
     +     'if(step.k==="email"){ return doSend(r); }'
     // people-search opens from THIS tab; the log says WHERE it opened rather than implying here.
     +     'if(step.k==="wp"){'
+    // AUTO-RUN never begs for a tap here. A machine-triggered window.open is popup-blocked by
+    // definition, so every lookup-needed lead froze the run on a rescue screen for 20s. The
+    // nightly Tracerfy skiptrace traces exactly these leads by itself (2026-08-17: cap fixed,
+    // backlog zero) — park an honest breadcrumb and keep moving. Manual mode keeps tap-to-open:
+    // a human tap is a real user gesture and the popup opens.
+    +       'if(auto || autoAll){'
+    +         'addLog("wait", r.first||r.owner, "needs a number — left for tonight’s automatic skip-trace; moving on");'
+    +         'return advance();'
+    +       '}'
     +       'var url = r.wpUrl;'
     +       'var done = function(){'
     +         'post("wp");'
