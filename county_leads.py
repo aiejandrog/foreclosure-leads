@@ -258,6 +258,22 @@ def to_slim(county, cfg, base, items):
         # Everything the value implies (equity %, fantasy-equity guard, judgment-unknown, score,
         # tier, warn) computes in _value_metrics — shared verbatim with the pa_values backfill.
         m = _value_metrics(st, judg, val, hs, days, addr, r.get('Plaintiff', ''), ftype)
+        # WARN TAXONOMY for a value-less lead, off the RAW auction fields (mirrors the Miami-Dade
+        # split at foreclosure_leads.py ~513). Swept all 107 blank county stubs live (2026-08-17):
+        # RealAuction genuinely publishes NOTHING for them — no address, no folio, not even in the
+        # appraiser link's href — so 'no cadastral match' was flatly wrong: there was no parcel to
+        # match. Naming the real class keeps the census honest ('no cadastral match' = had a key,
+        # could not verify) and stops the PA backfill from re-fetching the hopeless ones forever.
+        if not val and m['warn'].startswith('no cadastral match'):
+            _pf = (str(r.get('Folio', '')) + ' ' + str(r.get('Parcel ID', ''))).upper()
+            if 'TIMESHARE' in _pf:
+                m['warn'] = 'timeshare interest - not a rescuable home'
+            elif re.search(r'LICENSE|VEHICLE|VESSEL', _pf):
+                m['warn'] = 'non-realty auction (license) - no parcel exists'
+            elif 'MULTIPLE' in _pf:
+                m['warn'] = 'multiple parcels - open the case / auction to view all properties'
+            elif not folio and not (addr or '').strip():
+                m['warn'] = 'parcel not linked - verify property & value via the docket'
         z = 'https://www.zillow.com/homes/' + urllib.parse.quote((addr or folio) + ' FL') + '_rb/'
         # deep-link to the platform this item actually came from (realforeclose vs realtaxdeed)
         _ab = r.get('_base', base)
