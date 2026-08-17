@@ -12303,7 +12303,22 @@ function genMorningWorker(lane, autostart){
     // tap carries real user activation, which always succeeds) and the log tells the truth.
     +   'function openHere(url){'
     +     'if(!url) return false;'
-    +     'try { var w = window.open(url, "_blank"); return !!w; } catch(e){ return false; }'
+    // window.open from a Blob-URL tab is the popup blocker's least-favorite caller — on the
+    // file:// twin (blob:null origin) there is not even a site to grant permission TO, so every
+    // open failed and "the composer and true people search is not working at all" (2026-08-17).
+    // Fallback: a synthesized ANCHOR click. Under real user activation the browser treats it as
+    // a link tap, not a popup — it cannot be blocked. Without activation (auto-run timers) the
+    // anchor is ignored too, so we return false and callers park/rescue honestly.
+    +     'try { var w = window.open(url, "_blank"); if(w) return true; } catch(e){}'
+    +     'try {'
+    +       'var act = !navigator.userActivation || navigator.userActivation.isActive;'
+    +       'if(!act) return false;'
+    +       'var a = document.createElement("a");'
+    +       'a.href = url; a.target = "_blank"; a.rel = "noopener";'
+    +       'a.style.display = "none"; document.body.appendChild(a);'
+    +       'a.click(); document.body.removeChild(a);'
+    +       'return true;'
+    +     '} catch(e){ return false; }'
     +   '}'
     /* ---- doSend: the ONE email path ---------------------------------------------------------
        Called by the manual Email button AND by auto-run's attempt(). Three outcomes:
@@ -12522,7 +12537,9 @@ function genMorningWorker(lane, autostart){
     +     'main.innerHTML="<div class=\'mwpace\'>"'
     +       '+"<div class=\'h\'>&#9888; "+kind.charAt(0).toUpperCase()+kind.slice(1)+" blocked by the browser</div>"'
     +       '+"<div class=\'s\'>Auto-opens need popup permission. Your tap does not — one tap opens the prefilled "+kind+".</div>"'
-    +       '+"<button id=\'mwtapopen\' class=\'mwbtn done\' style=\'margin-top:14px\'>&#128269; Open "+kind+" now</button>"'
+    // a REAL <a href target=_blank> — an actual link tap is navigation, not a popup; the blocker
+    // has no say. The button version could still be swallowed on blob:/file: pages.
+    +       '+"<a id=\'mwtapopen\' class=\'mwbtn done\' style=\'margin-top:14px;display:block;text-align:center;text-decoration:none\' href=\'"+url.replace(/\'/g,"%27")+"\' target=\'_blank\' rel=\'noopener\'>&#128269; Open "+kind+" now</a>"'
     +       '+"<button id=\'mwtapskip\' class=\'mwbtn skip\' style=\'margin-top:8px\'>Skip this lead &rarr;</button>"'
     +     '+"</div>";'
     +     'var b=document.getElementById("mwtapopen");'
@@ -12534,7 +12551,10 @@ function genMorningWorker(lane, autostart){
     +       'addLog("skip", r.first||r.owner, "blocked-popup rescue untouched for 20s — moving on", "warn");'
     +       'post("skip"); advance();'
     +     '}, 20000);'
-    +     'if(b) b.onclick=function(){ clearTimeout(bail); if(openHere(url)){ after(); } };'
+    // the anchor navigates by itself — the handler only stops the bail timer and advances the run.
+    // (The old version re-ran openHere and did NOTHING on failure: a blocked tap gave zero
+    // feedback, which read as "the button is dead".)
+    +     'if(b) b.onclick=function(){ clearTimeout(bail); setTimeout(after, 150); };'
     +     'var sk=document.getElementById("mwtapskip");'
     +     'if(sk) sk.onclick=function(){ clearTimeout(bail); post("skip"); addLog("skip", r.first||r.owner, "skipped at blocked popup"); advance(); };'
     +   '}'
