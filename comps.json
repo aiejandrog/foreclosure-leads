@@ -25246,5 +25246,395 @@
 "psf": 353
 }
 ]
+},
+"502026CA003735XXXAMB": {
+"arv": 97955,
+"psf": 137.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "15 SUFFOLK A",
+"price": 115000,
+"yr": 2025,
+"sqft": 835,
+"psf": 138
+},
+{
+"addr": "4065 AINSLIE D",
+"price": 120000,
+"yr": 2025,
+"sqft": 880,
+"psf": 136
+},
+{
+"addr": "4049 AINSLIE D",
+"price": 124900,
+"yr": 2025,
+"sqft": 880,
+"psf": 142
+}
+]
+},
+"502026CC004965XXXASB": {
+"arv": 154525,
+"psf": 175.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "6839 MOONLIT DR",
+"price": 205000,
+"yr": 2025,
+"sqft": 1148,
+"psf": 179
+},
+{
+"addr": "24 ABBEY LN 207",
+"price": 172000,
+"yr": 2025,
+"sqft": 1006,
+"psf": 171
+},
+{
+"addr": "6844 MOONLIT DR",
+"price": 215000,
+"yr": 2025,
+"sqft": 1148,
+"psf": 187
+}
+]
+},
+"502025CA001430XXXAMB": {
+"arv": 370140,
+"psf": 298.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "131 N LAKESHORE DR",
+"price": 455000,
+"yr": 2025,
+"sqft": 1488,
+"psf": 306
+},
+{
+"addr": "201 OCEAN PKWY",
+"price": 233000,
+"yr": 2025,
+"sqft": 800,
+"psf": 291
+},
+{
+"addr": "281 NW 28TH AVE",
+"price": 400000,
+"yr": 2025,
+"sqft": 1296,
+"psf": 309
+}
+]
+},
+"502025CA007162XXXAMB": {
+"arv": 353067,
+"psf": 214.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "6503 65TH WAY",
+"price": 267000,
+"yr": 2025,
+"sqft": 1236,
+"psf": 216
+},
+{
+"addr": "6321 63RD WAY",
+"price": 263000,
+"yr": 2025,
+"sqft": 1236,
+"psf": 213
+},
+{
+"addr": "219 CHARTER WAY",
+"price": 278000,
+"yr": 2025,
+"sqft": 1236,
+"psf": 225
+}
+]
+},
+"502025CA010517XXXAMB": {
+"arv": 241087,
+"psf": 217.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1919 STRATFORD WAY",
+"price": 296000,
+"yr": 2025,
+"sqft": 1362,
+"psf": 217
+},
+{
+"addr": "3849 BERESFORD RD W",
+"price": 265000,
+"yr": 2025,
+"sqft": 1220,
+"psf": 217
+},
+{
+"addr": "4954 MARBELLA RD N",
+"price": 324100,
+"yr": 2025,
+"sqft": 1556,
+"psf": 208
+}
+]
+},
+"2026-2854TD": {
+"arv": 337064,
+"psf": 231.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "163 DABOU LOOP",
+"price": 332990,
+"yr": 2024,
+"sqft": 1431,
+"psf": 233
+},
+{
+"addr": "174 DABOU LOOP",
+"price": 329565,
+"yr": 2024,
+"sqft": 1431,
+"psf": 230
+},
+{
+"addr": "172 DABOU LOOP",
+"price": 312580,
+"yr": 2024,
+"sqft": 1292,
+"psf": 242
+}
+]
+},
+"2026-2857TD": {
+"arv": 176839,
+"psf": 111.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "561 SW 10TH ST",
+"price": 137500,
+"yr": 2025,
+"sqft": 1302,
+"psf": 106
+},
+{
+"addr": "932 SW AVENUE H",
+"price": 155000,
+"yr": 2025,
+"sqft": 1328,
+"psf": 117
+},
+{
+"addr": "908 W AVENUE A A",
+"price": 170000,
+"yr": 2024,
+"sqft": 1599,
+"psf": 106
+}
+]
+},
+"2026-2859TD": {
+"arv": 293746,
+"psf": 193.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "79 SAUSALITO DR",
+"price": 320000,
+"yr": 2025,
+"sqft": 1448,
+"psf": 221
+},
+{
+"addr": "4457 SANDPINE CIR",
+"price": 190000,
+"yr": 2025,
+"sqft": 1152,
+"psf": 165
+},
+{
+"addr": "4306 BOBWHITE DR",
+"price": 235000,
+"yr": 2025,
+"sqft": 1456,
+"psf": 161
+}
+]
+},
+"2026-2864TD": {
+"arv": 114048,
+"psf": 108.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "314 CARISSA DR",
+"price": 110700,
+"yr": 2024,
+"sqft": 1139,
+"psf": 97
+},
+{
+"addr": "303 AMARYLLIS CT",
+"price": 145000,
+"yr": 2024,
+"sqft": 1215,
+"psf": 119
+},
+{
+"addr": "529 PAHOKEE CIR",
+"price": 94000,
+"yr": 2025,
+"sqft": 1000,
+"psf": 94
+}
+]
+},
+"2026-2866TD": {
+"arv": 437184,
+"psf": 297.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "9818 KAMENA CIR",
+"price": 350000,
+"yr": 2025,
+"sqft": 1199,
+"psf": 292
+},
+{
+"addr": "3597 IVANHOE AVE",
+"price": 430000,
+"yr": 2025,
+"sqft": 1424,
+"psf": 302
+},
+{
+"addr": "1754 BANYAN CREEK CT",
+"price": 395000,
+"yr": 2025,
+"sqft": 1359,
+"psf": 291
+}
+]
+},
+"2026-2868TD": {
+"arv": 314090,
+"psf": 320.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "107 OAKWOOD DR",
+"price": 320000,
+"yr": 2025,
+"sqft": 994,
+"psf": 322
+},
+{
+"addr": "134 OAKWOOD DR",
+"price": 320000,
+"yr": 2025,
+"sqft": 994,
+"psf": 322
+},
+{
+"addr": "170 PINEWOOD CT",
+"price": 335000,
+"yr": 2025,
+"sqft": 1049,
+"psf": 319
+}
+]
+},
+"2026-2870TD": {
+"arv": 402456,
+"psf": 409,
+"n": 5,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "4900 122ND DR N",
+"price": 550000,
+"yr": 2025,
+"sqft": 1345,
+"psf": 409
+},
+{
+"addr": "4511 ROYAL PALM BEACH BLVD",
+"price": 560000,
+"yr": 2025,
+"sqft": 1404,
+"psf": 399
+},
+{
+"addr": "11158 51ST CT N",
+"price": 500000,
+"yr": 2024,
+"sqft": 1260,
+"psf": 397
+}
+]
+},
+"2026-2871TD": {
+"arv": 520516,
+"psf": 278.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "12455 PLEASANT GREEN WAY",
+"price": 540000,
+"yr": 2025,
+"sqft": 1937,
+"psf": 279
+},
+{
+"addr": "12553 CORAL LAKES DR",
+"price": 480000,
+"yr": 2025,
+"sqft": 1724,
+"psf": 278
+},
+{
+"addr": "12421 SAND WEDGE DR",
+"price": 550000,
+"yr": 2025,
+"sqft": 1887,
+"psf": 291
+}
+]
 }
 }

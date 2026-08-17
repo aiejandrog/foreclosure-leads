@@ -5337,5 +5337,280 @@
 "conf": "ok",
 "sqft": 570,
 "t": 1786880357.266907
+},
+"00434509140000470": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"74434305190030050": {
+"v": 507924,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/4214-Waverly-Dr-33407/home/42510854",
+"conf": "ok",
+"sqft": 1646,
+"t": 1786966543.503565
+},
+"00424525110001040": {
+"v": 388738,
+"url": "https://www.redfin.com/FL/Boynton-Beach/10960-Stafford-Cir-S-33436/home/42199542",
+"conf": "ok",
+"sqft": 1647,
+"t": 1786966543.503565
+},
+"12434618640031040": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424329220170010": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424323220062110": {
+"v": 113746,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/211-Wellington-F-33417/home/42142853",
+"conf": "ok",
+"sqft": 862,
+"t": 1786966543.503565
+},
+"00424323220092600": {
+"v": 144123,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/260-Wellington-J-33417/home/42156290",
+"conf": "ok",
+"sqft": 1152,
+"t": 1786966543.503565
+},
+"00424328240052250": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424401060020040": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424224010000632": {
+"v": 961835,
+"url": "https://www.redfin.com/FL/Palm-Beach-Gardens/8438-Square-Lake-Dr-33418/home/42145689",
+"conf": "ok",
+"sqft": 2296,
+"t": 1786966543.503565
+},
+"00424425140060012": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424335160000440": {
+"v": 75790,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/63-W-Trail-Dr-33415/home/42168126",
+"conf": "ok",
+"t": 1786966543.503565
+},
+"00414219000006070": {
+"v": 1750325,
+"url": "https://www.redfin.com/FL/Loxahatchee/15090-Temple-Blvd-33470/home/42107000",
+"conf": "ok",
+"sqft": 3126,
+"t": 1786966543.503565
+},
+"00374133030470101": {
+"v": 121044,
+"url": "https://www.redfin.com/FL/Canal-Point/12255-Lakeshore-Dr-33438/home/42098778",
+"conf": "ok",
+"sqft": 942,
+"t": 1786966543.503565
+},
+"00424323350101960": {
+"v": 87339,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/196-Northampton-J-33417/home/42143001",
+"conf": "ok",
+"sqft": 798,
+"t": 1786966543.503565
+},
+"00424526320023010": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424708040072860": {
+"v": 73263,
+"url": "https://www.redfin.com/FL/Boca-Raton/286-Brighton-G-33434/home/42630676",
+"conf": "ok",
+"sqft": 715,
+"t": 1786966543.503565
+},
+"00424414010110060": {
+"v": 333847,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/2202-Pepper-Rd-33415/home/42162399",
+"conf": "ok",
+"sqft": 1025,
+"t": 1786966543.503565
+},
+"00424325030000750": {
+"v": 685675,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/4601-Vilma-Ln-33417/home/42144821",
+"conf": "ok",
+"sqft": 2893,
+"t": 1786966543.503565
+},
+"00424428040001680": {
+"v": 541603,
+"url": "https://www.redfin.com/FL/Lake-Worth/7-W-Palm-Ave-33467/home/42173798",
+"conf": "ok",
+"sqft": 1933,
+"t": 1786966543.503565
+},
+"12434618640031010": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"12434618640031030": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424401080020200": {
+"v": 266530,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/154-Crane-Ln-33415/home/42153833",
+"conf": "ok",
+"sqft": 1176,
+"t": 1786966543.503565
+},
+"00424442030030000": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424422240053080": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424524190083032": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424535070000330": {
+"v": 364596,
+"url": "https://www.redfin.com/FL/Boynton-Beach/5339-Stonybrook-Dr-33437/home/42626248",
+"conf": "ok",
+"sqft": 2081,
+"t": 1786966543.503565
+},
+"00424708050072830": {
+"v": 70921,
+"url": "https://www.redfin.com/FL/Boca-Raton/283-Fanshaw-G-33434/home/42245959",
+"conf": "ok",
+"sqft": 806,
+"t": 1786966543.503565
+},
+"00424708130052000": {
+"v": 104570,
+"url": "https://www.redfin.com/FL/Boca-Raton/200-Preston-E-33434/home/42244458",
+"conf": "ok",
+"sqft": 835,
+"t": 1786966543.503565
+},
+"00424708190033049": {
+"v": 178344,
+"url": "https://www.redfin.com/FL/Boca-Raton/3049-Yarmouth-C-33434/home/42243151",
+"conf": "ok",
+"sqft": 896,
+"t": 1786966543.503565
+},
+"00424717050393360": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424717010003870": {
+"v": 188282,
+"url": "https://www.redfin.com/FL/Boca-Raton/20927-Sedgewick-Dr-33433/home/42251577",
+"conf": "ok",
+"sqft": 908,
+"t": 1786966543.503565
+},
+"00424615210044070": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424615210093030": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424616200036050": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424708080083020": {
+"v": 59582,
+"url": "https://www.redfin.com/FL/Boca-Raton/302-Dorset-H-33434/home/42629130",
+"conf": "ok",
+"sqft": 600,
+"t": 1786966543.503565
+},
+"00424622060010010": {
+"v": 62756,
+"url": "https://www.redfin.com/FL/Delray-Beach/1-Valencia-a-33446/home/42630341",
+"conf": "ok",
+"sqft": 883,
+"t": 1786966543.503565
+},
+"00424720030004506": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00424708100072720": {
+"v": 71408,
+"url": "https://www.redfin.com/FL/Boca-Raton/272-Mansfield-G-33434/home/42632174",
+"conf": "ok",
+"sqft": 720,
+"t": 1786966543.503565
+},
+"00424731150000403": {
+"v": 0,
+"conf": "nomatch",
+"t": 1786966543.503565
+},
+"00434204230000310": {
+"v": 180718,
+"url": "https://www.redfin.com/FL/North-Palm-Beach/1982-Windsor-Dr-33408/home/42279364",
+"conf": "ok",
+"sqft": 660,
+"t": 1786966543.503565
+},
+"00424721230001380": {
+"v": 367356,
+"url": "https://www.redfin.com/FL/Boca-Raton/7695-Courtyard-Run-W-33433/home/42256151",
+"conf": "ok",
+"sqft": 1449,
+"t": 1786966543.503565
+},
+"00414311000004320": {
+"v": 238703,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/11684-46th-Pl-N-33411/home/42114270",
+"conf": "addr",
+"t": 1786966543.503565
+},
+"00424326030000110": {
+"v": 127905,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/5115-Norma-Elaine-Rd-33417/home/42146856",
+"conf": "ok",
+"t": 1786966543.503565
+},
+"00424327050051130": {
+"v": 204061,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/427-67th-Ter-N-33413/home/42163521",
+"conf": "ok",
+"t": 1786966543.503565
 }
 }
