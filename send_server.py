@@ -724,6 +724,22 @@ class Handler(BaseHTTPRequestHandler):
         # malformed skiptrace result cannot poison the whole send.
         bcc = ', '.join(a for a in (x.strip().lower() for x in
                         str(payload.get('bcc') or '').split(',')) if _EMAIL_RE.match(a))
+        # ---- FOLLOW-UP TRIM: fan out on FIRST contact only ------------------------------------
+        # BCC carries the owner's other traced inboxes so touch #1 lands wherever they actually
+        # read mail (~2.7 recipients per send). Spending that fan-out on touches #2-3 tripled
+        # recipient burn for people we already reached — it is why 2026-08-17 stopped at 451/450
+        # recipients with ~200 emailable leads still queued. If the primary address has EVER been
+        # mailed by this system, this send is a follow-up: To-only. Coverage was already spent
+        # where it counts, and the reclaimed budget nearly triples cadence-day capacity.
+        if bcc:
+            _tl = to
+            for _e in _load_ledger():
+                if _e.get('ch') != 'email' or not _e.get('message_id'):
+                    continue
+                _all = [str(_e.get('to') or '')] + str(_e.get('bcc') or '').split(',')
+                if _tl in {a.strip().lower() for a in _all if a.strip()}:
+                    bcc = ''
+                    break
         subj = str(payload.get('subj') or '').strip()
         body = str(payload.get('body') or '')
         meta = payload.get('meta') or {}

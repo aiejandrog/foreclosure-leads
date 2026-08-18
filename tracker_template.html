@@ -12369,7 +12369,9 @@ function genMorningWorker(lane, autostart){
     // This is the single most authoritative moment the true count exists — the server just used it
     // to refuse — so cache it immediately rather than waiting for the next probe.
     +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
-    +           'addLog("fail", r.first||r.owner, "server daily cap reached — stopping the run: "+String(x.j.err||""), "warn");'
+    // say what REMAINS and that nothing is lost — "stopped" without a resume story reads as broken
+    +           'var _left=Q.slice(i).filter(function(x2){return x2 && x2.mailTo;}).length;'
+    +           'addLog("fail", r.first||r.owner, "Gmail daily ceiling reached — stopping the run: "+String(x.j.err||"")+" · "+_left+" emailable lead(s) still queued — they resume AUTOMATICALLY at tomorrow\'s 8 AM run (nothing is lost, the cap resets at midnight)", "warn");'
     +           'pause();'
     +         '} else if(x.status===401){'
     +           'bridgeUp(true);'
