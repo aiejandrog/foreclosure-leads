@@ -1889,6 +1889,15 @@ body.compact .dg-v{font-size:14.5px}
      Alejandro can open the day's list without digging through Filters at the door. Same #plan
      button + openPlanModal(); no duplicated control. */
   .controls.mcol > #plan{display:inline-flex !important;order:-1}
+  /* CALL MODE survives the collapse too — and leads it. This is the phone page; hiding it on the
+     phone was exactly backwards (2026-08-18: the button shipped, then vanished under 430px with
+     the rest of the cluster). order:-2 puts it ahead of Filters and Plan today, because at a door
+     or in the car the first thing he wants is the dialer, not a filter. */
+  .controls.mcol > #callmodebtn{display:inline-flex !important;order:-2;
+    min-height:46px;padding:11px 16px;touch-action:manipulation;
+    background:#286c34;color:#fff;border-color:#286c34;font-weight:800;
+    -webkit-tap-highlight-color:rgba(40,108,52,.25)}
+  .controls.mcol > #callmodebtn svg{stroke:#fff}
   .mfiltbtn{display:inline-flex;align-items:center;gap:6px;order:-1;
     min-height:44px;padding:10px 14px;touch-action:manipulation}
   #plan.abtn{min-height:44px;padding:10px 14px;touch-action:manipulation;
