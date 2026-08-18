@@ -184,3 +184,84 @@ ES = {
                'aviso en la puerta.',
     },
 }
+
+# ---- ROUND TWO: the 8/17 live-call masterclass (cards 11-14) --------------------------------
+# Same rules as above: usted, Miami register, language law, CIOC shape. NEW COPY, not canon.
+ES.update({
+    11: {
+        'say': 'Sinceramente estoy agotado. No puedo con esto ni aunque bajara un milagro del cielo. '
+               'Mejor lo dejo todo.',
+        'reb': [
+            'Lo entiendo, y la mayoria de las personas con las que hablamos llegan a ese mismo punto '
+            '— quieren alejarse de todos los problemas, y es justo. Dejeme preguntarle una sola cosa: '
+            'que es lo que usted VERDADERAMENTE quiere hacer con esta propiedad?',
+            'Si de verdad ya no puede mas, en vez de que el banco se quede con la casa Y con su '
+            'plusvalia, mejor salga con dinero en el bolsillo, en su propia fecha, con dignidad — y '
+            'no con el sheriff poniendo sus cosas en la calle un dia que usted no controla. Tenemos '
+            'un programa exactamente para esto — Cash for Keys. Acordamos una cifra; le damos la '
+            'MITAD por adelantado al firmar, y usted escoge su plazo: 30, 60 o 90 dias. Al final '
+            'entrega las llaves, la casa queda libre de sus cosas personales, y recibe la otra mitad '
+            'ese mismo dia. Usted escoge la fecha. Usted manda.',
+            'Deme quince o veinte minutos para revisar el expediente — lo que se debe, lo que vale — '
+            'y regreso con una cifra real. Si nos hace sentido a los dos, hoy mismo movemos el dinero.',
+        ],
+        'one': 'Salga con dinero y una fecha que USTED escogio — o deje que el sheriff la escoja.',
+    },
+    12: {
+        'say': 'El agente lo tiene listado en $429 mil, a diez dias de la subasta, sin visitas — y '
+               'no deja pasar ninguna llamada al dueno.',
+        'reb': [
+            'No vengo a senalar culpables — si el precio fue idea suya o de su cliente, sinceramente '
+            'no me importa. Vengo a detener una ejecucion, a que esto funcione para su cliente, para '
+            'usted, y quizas para uno de mis inversionistas. Pero lo primero es aceptar la realidad '
+            'de ese precio con una subasta a diez dias.',
+            'Y esto es lo bueno para usted: si trabajamos juntos y mi inversionista compra, usted se '
+            'queda con la comision COMPLETA de esta venta — yo le cedo mi parte. Y cuando la '
+            'revendamos despues del trabajo, usted vuelve a tener el listing. La misma propiedad le '
+            'paga dos veces, y nadie mas en este expediente le esta ofreciendo eso. Ahora — su '
+            'cliente necesita oir la verdad del numero. Si quiere respaldo, lo hago con usted en la '
+            'linea; si prefiere, lo llamo yo aparte; o lo maneja usted solo. Cualquiera de las tres '
+            'funciona, pero una de las tres pasa esta semana.',
+        ],
+        'one': 'La misma propiedad, dos comisiones — si el precio acepta la realidad esta semana.',
+    },
+    13: {
+        'say': 'Ya lo tengo resuelto — el banco esta revisando mi modificacion / el dinero me llega '
+               'manana / mi primo me lo manda.',
+        'reb': [
+            'Lo felicito — hizo lo correcto, y le aplaudo que haya puesto la bola en movimiento. '
+            'Siga haciendo exactamente lo que esta haciendo. Una pregunta nada mas: tiene la '
+            'aprobacion por escrito? Porque muchos bancos alargan la revision y niegan dos o tres '
+            'dias antes de la subasta — y la negacion puede irse directo a sus abogados sin que '
+            'usted la vea. Por mucho que no queramos mirarlo, usted estaria de acuerdo en que esa '
+            'posibilidad existe, verdad?',
+            'Entonces esto es lo que le propongo — yo no quiero ser su banco, ni su intermediario. '
+            'Quiero ser su paracaidas. Usted esta apostando su casa a que ese plan llegue a tiempo; '
+            'dejenos trabajar el aplazamiento de la venta en paralelo, para que si el dinero o la '
+            'aprobacion llega un dia tarde, la subasta ya este detenida y su plan todavia salve la '
+            'casa. Si su plan funciona, perfecto — le hice un favor y me debe uno. Y la version sin '
+            'costo: deme una autorizacion de tercero — solo permiso para hablar con su banco, nada '
+            'mas, sin honorarios — hago una llamada de cortesia y le traigo la verdad de donde esta '
+            'su expediente. Con eso decidimos si trabajamos juntos o no. Justo?',
+        ],
+        'one': 'Usted esta apostando su casa al calendario — quedese con su plan, y dejeme ser el paracaidas.',
+    },
+    14: {
+        'say': 'Nada — este es SU movimiento al final de toda llamada que fue bien, antes de colgar.',
+        'reb': [
+            'Hagame un favor antes de colgar. Yo he invertido mi tiempo y voy a seguir '
+            'invirtiendolo despues de esta llamada — asi que guarde mi numero ahora mismo. Mi nombre '
+            'es Jesse. La compania es Miami Solutions Group — pongale MSG, asi le sale en el '
+            'identificador. Este es mi celular personal, y le doy tambien el de la oficina. Ahora '
+            'leamelo todo de vuelta — quiero asegurarme de que lo tiene bien.',
+            'Si lo lee de vuelta completo, esta DENTRO. Si "se le acabo la tinta" o le pide que se '
+            'lo repita, esta tibio — apriete el seguimiento y no cuente el negocio. El mismo musculo '
+            'en tamano grande: el cierre de papeleria. "Dejeme preparar los papeles — se los mando '
+            'por correo, los repasamos, y si estamos de acuerdo nos damos la mano. Si no, perdi '
+            'quince minutos de mi tiempo y quedamos como amigos. Usted no arriesga nada. Le parece '
+            'justo?" Y cuando estan tibios pero necesitan autoridad: "Pongase al telefono con '
+            'nuestro asesor principal cinco minutos y le encontramos una solucion a esta propiedad."',
+        ],
+        'one': 'Si lo lee de vuelta completo esta dentro — si "se acabo la tinta", no lo esta.',
+    },
+})

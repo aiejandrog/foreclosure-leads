@@ -88,15 +88,26 @@ PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? " + _OPEN_BOD
 PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? " + _OPEN_BODY_ES
 
 CIOC = [
-    ('CUSHION', 'Agree, normalize, include them in the majority. Never argue.',
-     'I can understand that. A lot of the homeowners our senior advisor has helped said the same thing.'),
-    ('ISOLATE', 'Make the objection the ONLY thing in the way. Force open-or-closed.',
-     'If I could show you an option that gets you what you truly wanted with this property, would you '
-     'consider it, or are you dead set against anything but what you have committed to?'),
-    ('OVERCOME', 'One reframe + one analogy + one what-if. Not three. ONE.',
-     'But what if in five minutes we point out something nobody else caught?'),
-    ('CLOSE', 'Fairness and logic micro-agreements.',
-     "That's fair, right?  ·  That makes sense, right?  ·  I think you'd agree."),
+    # Round two (8/17 masterclass) folded into each beat. The structure never changes; the canon
+    # under each beat grows.
+    ('CUSHION', 'Agree, normalize, include them in the majority. Never argue — and never make them '
+     'feel stupid for the plan they already have (the mod, the lawyer, the realtor, the check).',
+     'I can understand that — the majority of people we speak to feel exactly the same way. '
+     'Everybody hits that wall at some point, and that\'s fair.'),
+    ('ISOLATE', 'Make the objection the ONLY thing in the way. Force open-or-closed. The 8/17 '
+     'scalpel: ask what they TRULY want — the answer tells you which program to pitch.',
+     'What is it that you truly want to do with this property?  ·  If talking to me couldn\'t '
+     'interfere with your plan at all, is there any other reason not to spend ten minutes?'),
+    ('OVERCOME', 'One reframe + one analogy + one what-if. Not three. ONE. When they have a plan '
+     'they believe in: INSURE the hope, never fight it — you are the parachute, not the enemy.',
+     'I don\'t want to be your bank or your middleman — I want to be your parachute. You\'re '
+     'betting your house on the timing; keep your plan, and let us stop the sale in parallel. '
+     'If it works, I did you a favor and you owe me one.'),
+    ('CLOSE', 'Fairness micro-agreements, then MEASURE what they DID, not what they said: the '
+     'paperwork trial close, the read-back test, the five-minute advisor handoff.',
+     "That's fair, right?  ·  'Let me get the paperwork together — if we agree we shake hands, "
+     "if not I wasted fifteen minutes and we part friends.'  ·  'Save my number right now… now "
+     "read it all back to me.' Clean read-back = in; 'pen ran out of ink' = don't count the deal."),
 ]
 
 # The default. The full skeleton is ONLY if they are still talking.

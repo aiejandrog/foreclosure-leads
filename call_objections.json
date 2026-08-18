@@ -178,5 +178,79 @@
    ],
    "one": "Ella se va a enterar — lo único que queda por decidir es si lo escucha de usted con un plan, o de un aviso en la puerta."
   }
+ },
+ {
+  "n": 11,
+  "t": "Worn Out — \"Just take it, I'm done\"",
+  "say": "“Honestly I'm fed up. I'm worn out. I don't think I can afford this even if a miracle came down from heaven. I'd be better off walking away from all this stress.”",
+  "reb": [
+   "I hear you, and the majority of people we speak to hit that exact wall — they just want to get away from all the problems, and that's fair. Everybody gets there at some point. Let me ask you one thing: what is it that you TRULY want to do with this property?",
+   "If you've truly had it, then rather than the bank taking the house AND whatever equity you have, I'm sure you'd rather walk out with cash in your pocket, on your own timeline, with dignity — instead of a sheriff putting your things on the street on a date you don't control. We have a program for exactly this — Cash for Keys. We agree on a set figure; you get half the money up front when we sign, and you pick your exit window: 30, 60 or 90 days. The longer you stay the number adjusts a little — not a lot — because our money sits parked. At the end you hand over the keys, the house is clear of your personal things, and you receive the other half that same day. You pick the date. You pick the time. You run the show.",
+   "Let me review the file — what's owed, what it's worth, what condition it's in — and give me fifteen, twenty minutes. I'll come back with a real figure, and if it makes sense to both of us I'll have one of our people at your door and cash moving today."
+  ],
+  "one": "Walk out with cash and a date YOU picked — or let the sheriff pick it for you.",
+  "es": {
+   "say": "Sinceramente estoy agotado. No puedo con esto ni aunque bajara un milagro del cielo. Mejor lo dejo todo.",
+   "reb": [
+    "Lo entiendo, y la mayoria de las personas con las que hablamos llegan a ese mismo punto — quieren alejarse de todos los problemas, y es justo. Dejeme preguntarle una sola cosa: que es lo que usted VERDADERAMENTE quiere hacer con esta propiedad?",
+    "Si de verdad ya no puede mas, en vez de que el banco se quede con la casa Y con su plusvalia, mejor salga con dinero en el bolsillo, en su propia fecha, con dignidad — y no con el sheriff poniendo sus cosas en la calle un dia que usted no controla. Tenemos un programa exactamente para esto — Cash for Keys. Acordamos una cifra; le damos la MITAD por adelantado al firmar, y usted escoge su plazo: 30, 60 o 90 dias. Al final entrega las llaves, la casa queda libre de sus cosas personales, y recibe la otra mitad ese mismo dia. Usted escoge la fecha. Usted manda.",
+    "Deme quince o veinte minutos para revisar el expediente — lo que se debe, lo que vale — y regreso con una cifra real. Si nos hace sentido a los dos, hoy mismo movemos el dinero."
+   ],
+   "one": "Salga con dinero y una fecha que USTED escogio — o deje que el sheriff la escoja."
+  }
+ },
+ {
+  "n": 12,
+  "t": "The Overpriced Listing (Realtor gatekeeper)",
+  "say": "The agent has it listed at $429k with ten days to the sale, zero showings — and shields the owner from every call.",
+  "reb": [
+   "I'm not here to point fingers — whether the 429 was your idea or your client's, I honestly don't care. I'm here to stop a foreclosure, make this work for your client, make it work for you, and maybe for one of my investors. But the first thing we all have to do is take a big bite of reality pie on that price with a sale date ten days out.",
+   "Here's the good part for you: if we work together and my investor buys it, you keep the FULL commission on this sale — I'll hand my side to you. And when we resell it after the work, you get the listing AGAIN. The same property pays you twice, and nobody else calling on this file is offering you that. Now — your client needs to hear the truth about the number. If you want backup, I'll do it with you on the line. If you'd rather I call him independently, I will. Or you handle it yourself. Any of the three works, but one of them happens this week."
+  ],
+  "one": "Same property, two commissions — but only if the price meets reality this week.",
+  "es": {
+   "say": "El agente lo tiene listado en $429 mil, a diez dias de la subasta, sin visitas — y no deja pasar ninguna llamada al dueno.",
+   "reb": [
+    "No vengo a senalar culpables — si el precio fue idea suya o de su cliente, sinceramente no me importa. Vengo a detener una ejecucion, a que esto funcione para su cliente, para usted, y quizas para uno de mis inversionistas. Pero lo primero es aceptar la realidad de ese precio con una subasta a diez dias.",
+    "Y esto es lo bueno para usted: si trabajamos juntos y mi inversionista compra, usted se queda con la comision COMPLETA de esta venta — yo le cedo mi parte. Y cuando la revendamos despues del trabajo, usted vuelve a tener el listing. La misma propiedad le paga dos veces, y nadie mas en este expediente le esta ofreciendo eso. Ahora — su cliente necesita oir la verdad del numero. Si quiere respaldo, lo hago con usted en la linea; si prefiere, lo llamo yo aparte; o lo maneja usted solo. Cualquiera de las tres funciona, pero una de las tres pasa esta semana."
+   ],
+   "one": "La misma propiedad, dos comisiones — si el precio acepta la realidad esta semana."
+  }
+ },
+ {
+  "n": 13,
+  "t": "The Parachute Frame (universal — any rescue plan they believe in)",
+  "say": "“I've got it handled — the bank's reviewing my modification / my money arrives tomorrow / my cousin is wiring it.” Any plan they're emotionally invested in, 7–10 days out.",
+  "reb": [
+   "I'm applauding you — you did the right thing, and I commend you for getting the ball rolling. Keep doing exactly what you're doing. One question, though: do you have the approval in writing? Because a lot of banks drag the review out and deny two or three days before the sale — and the denial can go straight to their attorneys without you ever seeing it. As much as neither of us wants to look at it, you'd agree that's a real possibility, right?",
+   "So here's what I'm proposing — I don't want to be your bank, and I don't want to be your middleman. I want to be your parachute. You're betting your house on that plan landing on time; let us work on postponing the sale in parallel, so if the money or the approval comes a day late, the sale is already stopped and your plan still saves the house. If your plan works, beautiful — I did you a favor and you owe me one. And the no-cost version: give me a third-party authorization — just permission to speak to your bank, nothing else, no fees — I'll make one courtesy call and get the bottom line on where your file really is. Based on that, we decide if we work together at all. Fair?"
+  ],
+  "one": "You're betting your house on the timing — keep the plan, and let me be the parachute.",
+  "es": {
+   "say": "Ya lo tengo resuelto — el banco esta revisando mi modificacion / el dinero me llega manana / mi primo me lo manda.",
+   "reb": [
+    "Lo felicito — hizo lo correcto, y le aplaudo que haya puesto la bola en movimiento. Siga haciendo exactamente lo que esta haciendo. Una pregunta nada mas: tiene la aprobacion por escrito? Porque muchos bancos alargan la revision y niegan dos o tres dias antes de la subasta — y la negacion puede irse directo a sus abogados sin que usted la vea. Por mucho que no queramos mirarlo, usted estaria de acuerdo en que esa posibilidad existe, verdad?",
+    "Entonces esto es lo que le propongo — yo no quiero ser su banco, ni su intermediario. Quiero ser su paracaidas. Usted esta apostando su casa a que ese plan llegue a tiempo; dejenos trabajar el aplazamiento de la venta en paralelo, para que si el dinero o la aprobacion llega un dia tarde, la subasta ya este detenida y su plan todavia salve la casa. Si su plan funciona, perfecto — le hice un favor y me debe uno. Y la version sin costo: deme una autorizacion de tercero — solo permiso para hablar con su banco, nada mas, sin honorarios — hago una llamada de cortesia y le traigo la verdad de donde esta su expediente. Con eso decidimos si trabajamos juntos o no. Justo?"
+   ],
+   "one": "Usted esta apostando su casa al calendario — quedese con su plan, y dejeme ser el paracaidas."
+  }
+ },
+ {
+  "n": 14,
+  "t": "CLOSE — Save My Number (the read-back test)",
+  "say": "Nothing — this is YOUR move at the end of any call that went well, before you hang up.",
+  "reb": [
+   "Do me one favor before we hang up. I've invested my time, and I'm going to keep investing it after this call — so save my number right now. My name is Jesse. The company is Miami Solutions Group — just put MSG, that's how it shows on your caller ID. This is my personal cell, and let me give you the office number too. Now read it all back to me — I want to make sure you got everything right.",
+   "If they read it back clean, they're in. If \"my pen ran out of ink\" or they ask you to repeat it, they're tepid — tighten the follow-up and don't count the deal. Same muscle, bigger size: the paperwork trial close. \"Let me get the paperwork together — I'll email it, we go over it, and if we agree we shake hands. If not, I wasted fifteen minutes of my time and we part friends. Nothing gambled on your part. Sound fair?\" Their reaction to concrete paperwork IS the temperature reading. And when they're warm but need authority: \"Just get on the phone with our senior advisor for five minutes and we'll find a solution for this property.\""
+  ],
+  "one": "If they read it back clean they're in — if the pen 'ran out of ink,' they're not.",
+  "es": {
+   "say": "Nada — este es SU movimiento al final de toda llamada que fue bien, antes de colgar.",
+   "reb": [
+    "Hagame un favor antes de colgar. Yo he invertido mi tiempo y voy a seguir invirtiendolo despues de esta llamada — asi que guarde mi numero ahora mismo. Mi nombre es Jesse. La compania es Miami Solutions Group — pongale MSG, asi le sale en el identificador. Este es mi celular personal, y le doy tambien el de la oficina. Ahora leamelo todo de vuelta — quiero asegurarme de que lo tiene bien.",
+    "Si lo lee de vuelta completo, esta DENTRO. Si \"se le acabo la tinta\" o le pide que se lo repita, esta tibio — apriete el seguimiento y no cuente el negocio. El mismo musculo en tamano grande: el cierre de papeleria. \"Dejeme preparar los papeles — se los mando por correo, los repasamos, y si estamos de acuerdo nos damos la mano. Si no, perdi quince minutos de mi tiempo y quedamos como amigos. Usted no arriesga nada. Le parece justo?\" Y cuando estan tibios pero necesitan autoridad: \"Pongase al telefono con nuestro asesor principal cinco minutos y le encontramos una solucion a esta propiedad.\""
+   ],
+   "one": "Si lo lee de vuelta completo esta dentro — si \"se acabo la tinta\", no lo esta."
+  }
  }
 ]
