@@ -6010,14 +6010,23 @@ function openBulkText(){
 /* CALL MODE URL, one definition for every surface. Served from GitHub Pages the sibling folder is
    right there; opened as the Desktop plaintext twin (file://) there is no ./call/ next to it, so
    fall back to the live site. Anything else (localhost preview) also gets the live site. */
+var _CALL_FALLBACK = 'https://aiejandrog.github.io/foreclosure-leads/call/';
 function _callModeUrl(){
   try{
-    if(location.protocol === 'http:' || location.protocol === 'https:'){
-      if(/github\.io$/i.test(location.hostname) || /\/docs\/?$/.test(location.pathname)) return 'call/';
-      return 'call/';
-    }
+    if(location.protocol === 'http:' || location.protocol === 'https:') return 'call/';
   }catch(e){}
-  return 'https://aiejandrog.github.io/foreclosure-leads/call/';
+  return _CALL_FALLBACK;
+}
+/* ABSOLUTE form — REQUIRED for anything baked into a child Blob document. A blob: document's base
+   is the opaque blob URL, so a relative 'call/' inside the Morning Worker resolves to
+   blob:https://host/call/ and dead-ends. Caught by opening the built worker in a browser, not by
+   any guard. Board-scope buttons may use the relative form; baked docs must use this one. */
+function _callModeUrlAbs(){
+  try{
+    if(location.protocol === 'http:' || location.protocol === 'https:')
+      return new URL('call/', location.href).href;
+  }catch(e){}
+  return _CALL_FALLBACK;
 }
 function openCallMode(){
   var w = null;
@@ -11996,7 +12005,7 @@ function genMorningWorker(lane, autostart){
     // CALL MODE, always reachable — it used to appear only after a whole auto-run finished, so the
     // one surface that starts real conversations was buried behind the email queue. A real anchor
     // (not window.open) so the popup blocker has no say.
-    +   '<a href="' + esc(_callModeUrl()) + '" target="_blank" rel="noopener" '
+    +   '<a href="' + esc(_callModeUrlAbs()) + '" target="_blank" rel="noopener" '
     +     'style="display:block;text-align:center;text-decoration:none;margin:0 0 14px;padding:11px 14px;'
     +     'border-radius:8px;background:#286c34;color:#fff;font:800 13.5px \'Segoe UI\',Arial,sans-serif">'
     +     '&#128222; OPEN CALL MODE'
