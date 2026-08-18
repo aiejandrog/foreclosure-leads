@@ -76,7 +76,20 @@ _md   = load('records_liens.json') or {}
 _bro  = load('broward_liens.json') or {}
 _pb   = load('palmbeach_liens.json') or {}
 _bd   = load('batchdata_liens.json') or {}
-def _checked(d): return {c for c, v in d.items() if v.get('conf') in ('ok', 'low', 'bd')}
+def _checked(d):
+    # ok/low/bd = priced chains. Since the 2026-08-17 PB restatement, 'unpriced' (mortgages counted,
+    # amounts unpublished by Landmark) and RESTATED 'none' (searched, genuinely no mortgage found —
+    # carries chain_note/mtg_recorded) are also COMPLETED checks: the records were read and the
+    # caller does not need to hand-pull the county. Bare legacy 'none' (no restatement marks) still
+    # means failed/blocked and stays unchecked.
+    out = set()
+    for c, v in d.items():
+        conf = v.get('conf')
+        if conf in ('ok', 'low', 'bd', 'unpriced'):
+            out.add(c)
+        elif conf == 'none' and ('chain_note' in v or 'mtg_recorded' in v):
+            out.add(c)
+    return out
 _chk = _checked(_md) | _checked(_bro) | _checked(_pb) | _checked(_bd)
 _cty_tot, _cty_cov = {}, {}
 for _fn, _ck in (('leads_final.json', 'Case #'), ('broward_leads.json', 'case'), ('palmbeach_leads.json', 'case')):

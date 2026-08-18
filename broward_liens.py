@@ -432,7 +432,7 @@ def main():
     leads = json.load(open(LEADS, encoding='utf-8'))
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
 
-    picked = []
+    picked, retries = [], []
     for r in leads:
         case = r.get('case', '') or ''
         if a.case and case != a.case: continue
@@ -443,9 +443,20 @@ def main():
         # manual-only fields because the old COMPANY_RE skip left every LLC/Corp lead with no
         # chain at all). Exact-name isolation works BETTER on companies than on people, and the
         # conf guards (common-name over-match, open-count sanity) catch multi-property blenders.
-        if case in out and not (a.refresh or a.case): continue
+        if case in out and not (a.refresh or a.case):
+            # A FAILED search (conf 'none') is not a result — it used to be cached forever, which
+            # is how the tracer reported '0 to trace' while coverage sat at 20% (266 of 406 cached
+            # entries were failures, 2026-08-18 audit). Retry a capped batch of them each run;
+            # AcclaimWeb is captcha-free, so retries cost only seconds.
+            if (out[case] or {}).get('conf') == 'none':
+                retries.append(r)
+            continue
         picked.append(r)
+    n_fresh = len(picked)
+    picked = picked + retries[:40]
     if a.limit: picked = picked[:a.limit]
+    if len(picked) > n_fresh:
+        print(f"(+{len(picked) - n_fresh} retry of previously-failed searches, capped 40/run)")
 
     print(f"{len(picked)} Broward lead(s) to trace via AcclaimWeb (no captcha, curl session)")
     if not picked:
