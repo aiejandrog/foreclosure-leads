@@ -816,6 +816,16 @@ button.big{background:#1d4ed8;color:#fff}
      color:var(--ink);font-size:14px;font-weight:600;touch-action:manipulation}
 .cb.on{border-color:var(--ok);color:var(--ok)}
 .cb:disabled{opacity:.45}
+/* THE CALL LOG (registry) */
+.regsum{font-size:15px;color:var(--ink)}
+.regsum b{color:var(--gold);font-size:19px}
+.reglist{margin-top:12px;max-height:62vh;overflow:auto}
+.regrow{padding:11px 2px;border-bottom:1px solid #1c2b4d}
+.regtop{display:flex;justify-content:space-between;gap:10px;align-items:baseline;font-size:15px}
+.regago{color:var(--mut);font-size:12.5px;white-space:nowrap}
+.regsub{color:var(--mut);font-size:12.5px;line-height:1.5;margin-top:2px}
+.regby{display:inline-block;margin-left:8px;padding:1px 8px;border-radius:999px;
+  background:#1c2b4d;color:var(--ink);font:700 10.5px "Segoe UI",Arial,sans-serif}
 .txconf{font-size:14px;color:var(--gold);font-weight:600;margin-top:10px}
 /* THE OUTPUT — the exact text that went to the composer, shown back so he can see what was sent
    (and read it aloud on the follow-up call). Selectable so he can copy it into another app. */
@@ -1064,6 +1074,11 @@ async function unwrap(code){
         km,{name:'AES-GCM',length:256},false,['decrypt']);
       var blob=await crypto.subtle.decrypt({name:'AES-GCM',iv:b2u(w.iv)},wk,b2u(w.ct));
       var meta=JSON.parse(new TextDecoder().decode(blob));      // {mk, name}
+      /* WHO IS CALLING. Each teammate has their OWN access code, and the code's blob carries their
+         name — so the page already knows whether this is Alejandro, Jose or Carlos without asking.
+         Stamped onto every call/text this device logs, which is what makes the shared registry
+         able to say "Carlos called this one 2h ago" instead of an anonymous timestamp. */
+      try{ if(meta.name) localStorage.setItem('fcCaller', meta.name); }catch(e){}
       var mk=await crypto.subtle.importKey('raw',b2u(meta.mk),{name:'AES-GCM'},false,['decrypt']);
       var pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b2u(ENC.iv)},mk,b2u(ENC.ct));
       return JSON.parse(new TextDecoder().decode(pt));
@@ -1129,6 +1144,34 @@ function optPhones(force){
   _OPTPH = s;
   return s;
 }
+/* Who is on this phone — set from the access-code blob at unlock (each teammate has their own
+   code). Falls back to a neutral label so a touch is never stamped with the wrong person. */
+function caller(){
+  try{ return localStorage.getItem('fcCaller') || ''; }catch(e){ return ''; }
+}
+/* THE SHARED REGISTRY, read side. Newest CALL touch on this lead from ANY device, with who made
+   it. Team sync merges teammates' notes into the same store, so this sees Carlos's dials too. */
+function lastCall(n){
+  var best = null;
+  ((n && n.touches) || []).forEach(function(t){
+    if((t.ch||'') !== 'call') return;
+    var ts = +t.tsu || +new Date(t.ts || t.d || 0) || 0;
+    if(!ts) return;
+    if(!best || ts > best.ts) best = {ts: ts, out: t.out || '', by: t.by || ''};
+  });
+  ((n && n.dials) || []).forEach(function(d){
+    var ts = +d.tsu || 0;
+    if(ts && (!best || ts > best.ts)) best = {ts: ts, out: d.oc || '', by: d.by || ''};
+  });
+  return best;
+}
+function agoTxt(ms){
+  var m = Math.max(0, Math.round((Date.now() - ms) / 60000));
+  if(m < 60) return m + 'm ago';
+  var h = Math.round(m / 60);
+  if(h < 36) return h + 'h ago';
+  return Math.round(h / 24) + 'd ago';
+}
 function suppressed(r){
   var n = notes[r.c] || {};
   if(n.wrongown) return 'wrong number reported';
@@ -1136,6 +1179,19 @@ function suppressed(r){
   if(n.status === 'Dead') return 'dead';
   var ph = optPhones(), p = r.p || [];
   for(var j=0;j<p.length;j++) if(ph[p[j]]) return 'this number opted out';
+  /* ALREADY WORKED — by me OR by a teammate. Without this, Carlos logs a call, the note syncs to
+     this phone, and the lead still sits in the queue waiting to be dialled a second time by the
+     other guy. The cooldown is the SAME outcome-aware one the board honours (logOutcome writes
+     n.cooldownH: no-answer comes back tomorrow, a real conversation waits longer), so the two
+     surfaces can never disagree about whether a lead is due. */
+  var lc = lastCall(n);
+  if(lc){
+    var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 24;
+    if((Date.now() - lc.ts) < coolH * 3600000){
+      return 'called ' + agoTxt(lc.ts) + (lc.by ? ' by ' + lc.by : '')
+           + (lc.out ? ' · ' + lc.out : '');
+    }
+  }
   return '';
 }
 /* Do-Not-Text is text-only and must NOT hide a lead from CALLING — but a number on it should not be
@@ -1247,7 +1303,8 @@ function head(){
     +'<button data-l="soon" class="'+(lane==='soon'?'on':'')+'">Sale soon</button>'
     +'<button data-l="lp" class="'+(lane==='lp'?'on':'')+'">Fresh filings</button>'
     +'</div>'
-    +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, or dead</div>'):'')
+    +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
+          +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')
     /* The build stamp, in the TOP bar on purpose. BUILT was baked into the page and rendered
        nowhere, so a phone serving last week's list had no visible tell — the operator's only signal
        was leads that felt stale. The bottom of the screen belongs to the sheet (fixed, z-40), which
@@ -1295,6 +1352,55 @@ function histLine(r){
                                           : 'No contact logged yet.')+'</div>';
 }
 
+/* ===== THE CALL REGISTRY =========================================================================
+   Every call this team has logged, newest first, across every device — because the touches live in
+   notes and team sync merges teammates' notes into the same store. Durable by construction: it is
+   the same data the queue reads to decide what to skip, so the log and the skipping can never
+   disagree. Reachable from the hidden-count line in the top bar. */
+function screenRegistry(){
+  SCREEN='reg';
+  var rows = [];
+  Object.keys(notes || {}).forEach(function(c){
+    var n = notes[c] || {};
+    var lc = lastCall(n);
+    if(!lc) return;
+    var row = ROWS.filter(function(x){ return x.c === c; })[0] || null;
+    rows.push({
+      c: c, ts: lc.ts, by: lc.by, out: lc.out,
+      who: (row && (row.o || row.f)) || (n.owner || ''),
+      addr: (row && row.a) || '',
+      n: (((n.dials||[]).length) || ((n.touches||[]).filter(function(t){return t.ch==='call';}).length) || 1),
+      status: n.status || ''
+    });
+  });
+  rows.sort(function(a,b){ return b.ts - a.ts; });
+  var mine = 0, team = 0, me = caller();
+  rows.forEach(function(x){ if(x.by && me && x.by !== me) team++; else mine++; });
+  var list = rows.length ? rows.slice(0, 300).map(function(x){
+    return '<div class="regrow">'
+      + '<div class="regtop"><b>' + esc(x.who || x.c) + '</b>'
+      + '<span class="regago">' + agoTxt(x.ts) + '</span></div>'
+      + (x.addr ? '<div class="regsub">' + esc(x.addr) + '</div>' : '')
+      + '<div class="regsub">' + esc(x.out || 'called')
+      + (x.n > 1 ? ' &middot; ' + x.n + ' dials' : '')
+      + (x.status ? ' &middot; ' + esc(x.status) : '')
+      + '<span class="regby">' + esc(x.by || 'this phone') + '</span></div>'
+      + '</div>';
+  }).join('') : '<div class="regsub" style="padding:14px 2px">No calls logged yet. Every outcome you '
+      + 'tap lands here, and so does every call your teammates log on their phones.</div>';
+  $('app').innerHTML = head()
+    + '<div class="card">'
+    +   '<div class="band"><div class="bl">THE CALL LOG</div>'
+    +     '<div class="regsum"><b>' + rows.length + '</b> people called &middot; '
+    +       mine + ' by you &middot; ' + team + ' by teammates</div>'
+    +     '<div class="regsub" style="margin-top:6px">Anyone on this list inside their cooldown is '
+    +       'skipped in the queue &mdash; that is how two people never dial the same owner.</div>'
+    +   '</div>'
+    +   '<div class="reglist">' + list + '</div>'
+    +   '<button class="big" id="regback" style="margin-top:14px">&larr; Back to the queue</button>'
+    + '</div><div class="sheetpad"></div>';
+  $('regback').onclick = function(){ SCREEN='lead'; render(); };
+}
 function screenLead(){
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
@@ -1762,7 +1868,7 @@ function afterCall(r, o, nextC){
     $('txy').onclick = function(){
       var nn = notes[r.c] = notes[r.c] || {status:'',note:''};
       nn.touches = nn.touches || [];
-      nn.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text', out:'Text sent — ' + st});
+      nn.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text', out:'Text sent — ' + st, by:caller()});
       saveNotes(); queueSync(); toast('Text logged'); go();
     };
     /* RESEND. Same body, same number — re-fires the composer. Does NOT log anything: a second open
@@ -1791,10 +1897,12 @@ function logOutcome(r,o,digits){
      silently collapsing the second identical tap while stamping "✓ logged" read as a broken
      button — the caller now tells the truth: "dial counted, already logged today". */
   var fresh = !(last && last.d===today() && last.ch==='call' && last.out===o.t);
+  // `by` = who made this call (from their access code). It is what lets the other phone say
+  // "called 2h ago by Carlos" instead of skipping a lead for no visible reason.
   if(fresh)
-    n.touches.push({d:today(),ts:nowTS(),tsu:Date.now(),ch:'call',out:o.t});
+    n.touches.push({d:today(),ts:nowTS(),tsu:Date.now(),ch:'call',out:o.t,by:caller()});
   n.dials=n.dials||[];
-  n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k});
+  n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()});
   n.cooldownH=o.h;
   if(o.k==='appt') n.status='Appointment';
   else if(o.k==='dnc'){ stopEverywhere(r, digits); }
@@ -1887,6 +1995,9 @@ function wire(){
   Array.prototype.forEach.call(document.querySelectorAll('.lane button'), function(b){
     b.onclick=function(){ lane=b.dataset.l; i=0; render(); };
   });
+  // "see the call log" on the hidden-count line — the registry of who has been called, by whom
+  var rl = $('reglink');
+  if(rl) rl.onclick = function(e){ e.preventDefault(); screenRegistry(); };
 }
 /* Stale-cache heal. iPhone Safari is the named worst offender and a phone quietly serving last
    week's list is the failure most likely to go unnoticed. Never auto-reload once an outcome has
