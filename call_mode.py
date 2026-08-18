@@ -586,6 +586,16 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'ab': 1 if (_m1 and _a1 and _m1 != _a1) else None,
             'dd': _s('dor_desc', 30), 'bd': _n('beds'), 'ba': _n('baths'), 'sf': _n('sqft'),
             'zs': _s('zstatus', 12),
+            # HIS FILE — the research links. Ship the two SEEDS (folio + county), not five long
+            # URLs: 400 rows x ~450 chars of URL is ~180 KB on a page that has to open on a phone
+            # at a door. The page rebuilds appraiser/tax/docket/people from these (see fileLinks).
+            # ALPHANUMERIC, not digits-only: Broward folios carry letters (494213BA0140) and
+            # stripping them produced a wrong parcel on 261 Broward leads (caught by diffing every
+            # derived URL against the board's real ones before shipping).
+            'fo': re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
+            'ct': (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2] or None),
+            'z': (re.search(r'(\d{5})\s*$', (d.get('addr') or '')).group(1)
+                  if re.search(r'(\d{5})\s*$', (d.get('addr') or '')) else None),
             'po': _s('paOwner', 34) if d.get('ownerMismatch') else None,
             # MISCALCULATED DEAL (8/17 masterclass): actively listed/pending with the sale ≤21 days
             # out — the realtor-flip lane. Ship the agent's contact so the CALL can go to the
@@ -816,6 +826,13 @@ button.big{background:#1d4ed8;color:#fff}
      color:var(--ink);font-size:14px;font-weight:600;touch-action:manipulation}
 .cb.on{border-color:var(--ok);color:var(--ok)}
 .cb:disabled{opacity:.45}
+/* HIS FILE — research links, thumb-sized so they are usable one-handed on a call */
+.flinks{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
+.flinks a{display:inline-flex;align-items:center;min-height:44px;padding:10px 14px;border-radius:10px;
+  background:#12213f;border:1px solid #2a3f6b;color:var(--ink);font-size:13.5px;font-weight:600;
+  text-decoration:none;touch-action:manipulation;-webkit-tap-highlight-color:rgba(198,161,75,.25)}
+.flinks a:active{background:#1b2c50}
+.fcase{margin-top:8px;color:var(--mut);font-size:11.5px;-webkit-user-select:text;user-select:text}
 /* THE CALL LOG (registry) */
 .regsum{font-size:15px;color:var(--ink)}
 .regsum b{color:var(--gold);font-size:19px}
@@ -1401,6 +1418,57 @@ function screenRegistry(){
     + '</div><div class="sheetpad"></div>';
   $('regback').onclick = function(){ SCREEN='lead'; render(); };
 }
+/* ===== HIS FILE — the research links, built on the page ==========================================
+   Call Mode shipped with ZERO links to a lead's records: standing on a call you had to leave the
+   page and hunt the county sites by hand (2026-08-18 field report: "I have to struggle to find
+   this guy"). Every URL below is DERIVED from two seed fields (folio + county) instead of shipping
+   five long strings per lead — 400 rows x ~450 chars of URL is ~180 KB on a page that has to open
+   on a phone at a door. Deep docket links can't be derived (the MD clerk uses an opaque token), so
+   those go to the county's case-search page, which is one paste away. */
+function fileLinks(r){
+  // alphanumeric — Broward parcel ids contain letters (494213BA0140)
+  var fo = String(r.fo || '').replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  var ct = String(r.ct || 'MI').toUpperCase().slice(0, 2);
+  var L = [];
+  var dash = function(s, groups){                    // 40434504140060130 -> 40-43-45-04-14-006-0130
+    var out = [], p = 0;
+    for(var i = 0; i < groups.length && p < s.length; i++){ out.push(s.substr(p, groups[i])); p += groups[i]; }
+    if(p < s.length) out.push(s.substr(p));
+    return out.join('-');
+  };
+  if(fo){
+    if(ct === 'PA'){                                  // PALM BEACH
+      L.push(['Appraiser', 'https://pbcpao.gov/Property/Details?parcelId=' + fo]);
+      L.push(['Taxes', 'https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A'
+        + encodeURIComponent(dash(fo, [2,2,2,2,2,3,4])) + '&pg=1&g=-1&moduleId=449']);
+    } else if(ct === 'BR'){                           // BROWARD
+      L.push(['Appraiser', 'https://bcpa.net/RecInfo.asp?URL_Folio=' + fo]);
+      L.push(['Taxes', 'https://broward.county-taxes.com/public/real_estate/parcels/'
+        + dash(fo, [6,2,4]) + '/bills']);
+    } else {                                          // MIAMI-DADE
+      L.push(['Appraiser', 'https://apps.miamidadepa.gov/PropertySearch/#/?folio=' + fo]);
+      L.push(['Taxes', 'https://miamidade.county-taxes.com/public/real_estate/parcels/' + fo]);
+    }
+  }
+  L.push(['Court docket', ct === 'PA' ? 'https://appsgp.mypalmbeachclerk.com/eCaseView/'
+        : ct === 'BR' ? 'https://www.browardclerk.org/Web2/CaseSearchECA/'
+        : 'https://www2.miamidadeclerk.gov/ocs/Search.aspx']);
+  var nm = String(r.o || '').replace(/[,&]/g, ' ').replace(/\s+/g, ' ').trim();
+  if(nm) L.push(['People search', 'https://www.truepeoplesearch.com/results?name='
+        + encodeURIComponent(nm) + (r.z ? '&citystatezip=' + encodeURIComponent(r.z) : '')]);
+  if(r.a) L.push(['Map', 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a)]);
+  return L;
+}
+function fileBand(r){
+  var L = fileLinks(r);
+  if(!L.length) return '';
+  return '<div class="band"><div class="bl">HIS FILE</div><div class="flinks">'
+    + L.map(function(x){
+        return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>';
+      }).join('')
+    + '</div><div class="fcase">case ' + esc(r.c || '') + (r.fo ? ' &middot; folio ' + esc(r.fo) : '')
+    + '</div></div>';
+}
 function screenLead(){
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
@@ -1510,6 +1578,7 @@ function screenLead(){
     +   band('THE CLOCK', clock)
     +   band('THE MONEY', mny)
     +   band('WHO IS FORECLOSING', whoFc + prop + histLine(r))
+    +   fileBand(r)
     +   '<a class="dial" href="tel:+1'+d+'" id="dial">'+fmt(d)+'</a>'
     +   '<div class="sub">number '+(phIdx+1)+' of '+r.p.length
     +     (rk?(' &middot; '+(rk==='C'?'call first':rk==='O'?'ok':'last resort')):'')
