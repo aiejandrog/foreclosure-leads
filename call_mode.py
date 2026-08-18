@@ -46,15 +46,17 @@ CALL_OUTCOMES = [
 # 15-second voicemail, Copy Pack §5. He READS it — no prerecorded or ringless drop, which would
 # need prior express written consent under the TCPA and is the one part of "auto-dial everything"
 # that stays off the table.
-VOICEMAIL_EN = ("Hi {first}, this is {sender} with Miami Solutions Group, about your property on "
-                "{street}. You may have it handled, and that is fine. Our senior advisor has done "
-                "this for more than thirty years, and a free five minute call gets you every "
-                "option, not just one. No cost, no commitment. Any hour. Thanks.")
-VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Miami Solutions Group, por su propiedad en "
-                "{street}. Puede que ya lo tenga resuelto y está bien. Nuestro asesor principal "
-                "lleva más de treinta años en esto, y una llamada gratis de cinco minutos le da "
-                "todas sus opciones, no solo una. Sin costo y sin compromiso. A cualquier hora. "
-                "Gracias.")
+# 8/17 masterclass voice. {st1} not {street}: the full address read aloud sounds like a process
+# server (Evernia St lesson, 2026-08-16). {phone} is the explicit callback slot — fillScript
+# resolves it from SENDER.phone. Numbers written as words because he READS this live.
+VOICEMAIL_EN = ("Hi {first}, this is {sender} with Miami Solutions Group, about {st1}. "
+                "You may have a plan. Keep it. A plan can land a day late, and here a day is "
+                "everything. Our senior advisor, thirty plus years, maps your free backup in five "
+                "minutes. Call me any hour at {phone}. Thanks.")
+VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Miami Solutions Group, por {st1}. "
+                "Si tiene un plan, sígalo. Un plan puede llegar un día tarde, y aquí un día lo es "
+                "todo. Nuestro asesor principal, más de treinta años, le arma su respaldo gratis "
+                "en cinco minutos. Llámeme a cualquier hora al {phone}. Gracias.")
 
 
 # ── THE SCRIPT ───────────────────────────────────────────────────────────────────────────────────
@@ -1460,16 +1462,20 @@ function textStage(r){
    OBJECT — a raw `+ SENDER +` renders "this is [object Object] with Miami Solutions Group", which is
    the same failure as the {sender} bug that already reached a live read-aloud script. Going through
    fillScript also inherits the Jose heal and the company-name heal for free. */
+/* 8/17 masterclass voice (overnight 2026-08-18): cushion + parachute, one ask, no em dashes
+   (reads as AI in a text), 'save this number' = drill card 14's read-back close at SMS size.
+   ES drafts exist (workflow wf_50663fa7) but TEXT_T is EN-only until a language path lands. */
 var TEXT_T = {
-  cold:   'Hi{first}, this is {sender} with Miami Solutions Group. I am not calling to buy your house. '
-        + 'There is a court date on {st1} and most people do not know what options they still have. '
-        + 'Can our senior advisor give you 5 minutes? Reply YES, or STOP to opt out.',
-  follow: 'Hi{first}, following up — this is {sender} with Miami Solutions Group about {st1}. '
-        + 'Worth 5 minutes with our senior advisor to go over what you can still do? '
+  cold:   'Hi{first}, this is {sender} with Miami Solutions Group. I just tried calling about {st1}. '
+        + 'I am not selling anything and not trying to buy the house. If you have a plan, keep it. '
+        + 'A free 5 minutes with our senior advisor, 30 plus years, gets you every option. '
         + 'Reply YES, or STOP to opt out.',
-  final:  'Hi{first}, last note from me — this is {sender} with Miami Solutions Group. {st1} has a '
-        + 'sale date coming. If you want a free 5-minute call with our senior advisor to hear your '
-        + 'options, reply YES. If not I will stop reaching out. Reply STOP to opt out.'
+  follow: 'Hi{first}, {sender} with Miami Solutions Group again about {st1}. If your plan is moving, '
+        + 'good, keep it. One question. Do you have it in writing yet? If not, our senior advisor '
+        + 'can be the backup, free, 5 minutes. Reply YES, or STOP to opt out.',
+  final:  'Hi{first}, last text from me, {sender} with Miami Solutions Group about {st1}. I hope your '
+        + 'plan lands on time. If anything slips, one free call with our senior advisor maps what '
+        + 'still works. Save this number even if you delete this text. Reply YES, or STOP to opt out.'
 };
 function textBody(r, stage){
   return fillScript(TEXT_T[stage] || TEXT_T.cold, r);

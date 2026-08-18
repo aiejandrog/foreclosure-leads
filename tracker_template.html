@@ -5501,10 +5501,12 @@ function _waLink(r, ph){
   // owner's first name, the address + auction date, and the sender (defaults to Jose; override in Sender setup).
   // Same 2026-08-10 identity as smsMsg: the company, truthfully, with the "what happened"
   // opener — and no em dashes; this is a DM and em dashes read machine-written there.
-  const msg = 'Hi'+(first?' '+first:'')+', '+who+' with Miami Solutions Group. We work with homeowners going through foreclosure, every tool under one roof. I saw '+addr+' has a court auction coming up '+when
-    +'. Not here to pressure you, I would rather hear your side. What happened with the house? No cost to talk.'
-    +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+' de Miami Solutions Group. ':'le escribe Miami Solutions Group. ')+'Trabajamos con dueños en ejecución hipotecaria, todo bajo un mismo techo. Vi que '+addr+' tiene una subasta el '+when
-    +'. No le vengo a presionar. Cuénteme, ¿qué pasó con la casa? Hablar no cuesta nada.'
+  // 8/17 canon: cushion + majority ('you may have it handled, most people do'), the what-happened
+  // opener kept, 'foreclosure' removed (a DM can be read by someone not on title). No em dashes.
+  const msg = 'Hi'+(first?' '+first:'')+', '+who+' with Miami Solutions Group. I saw '+addr+' has a court auction coming up '+when
+    +'. You may have it handled, and that is fine, most people do. I would rather hear your side than give a pitch. What happened with the house? No cost to talk.'
+    +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+' de Miami Solutions Group. ':'le escribe Miami Solutions Group. ')+'Vi que '+addr+' tiene una subasta en la corte el '+when
+    +'. Puede que ya lo tenga resuelto, y está bien. Prefiero escuchar su lado. ¿Qué pasó con la casa? Hablar no cuesta nada.'
     +'\n\n(Not interested / No le interesa? Reply STOP · responda STOP.)';
   return 'https://wa.me/'+_waNum(ph)+'?text='+encodeURIComponent(msg);
 }
@@ -5786,84 +5788,66 @@ function smsMsg(r, lang, tone){
   const stopEN = ' Reply STOP to opt out.';
   const stopES = ' Responda STOP para no recibir más.';
   let en, es;
+  /* 8/17 masterclass rewrite (overnight run 2026-08-18). Every body: cushion first, INSURE the
+     plan (parachute) never fight it, one ask per message, senior advisor + 30 years on the
+     ADVISOR, "ask the court for more time" = the plain-language rendering of petition-to-postpone
+     (never "we will stop the sale"), the word "foreclosure" removed from every body (third-party
+     protocol: a text can be read by someone not on title), ID + STOP on every message, no em
+     dashes (reads as AI). nameEN/disclEN stay defined above for any other caller. */
   if(tone==='urgent'){
-    // Close to the date, brevity IS the message. Name only the exits that survive this late:
-    // a modification needs underwriting time it no longer has, and BK belongs to an attorney.
-    en = nameEN+' '+stEN+' still has '+saleEN+whenEN+', and that date is close.'+disclEN
-       + ' A few things still work this late: catching up what is past due, a short sale, or'
-       + ' selling privately before the auction. Which one fits depends on your numbers.'
-       + ' Want me to run through it with you? No cost.'+stopEN;
-    es = nameES+' '+stES+' todavía tiene '+saleES+whenES+', y esa fecha ya está cerca.'+disclES
-       + ' Todavía funcionan algunas salidas: ponerse al día con lo atrasado, un short sale, o'
-       + ' vender en privado antes de la subasta. Cuál le sirve depende de sus números.'
-       + ' ¿Lo repasamos? Sin costo.'+stopES;
+    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Miami Solutions Group. The sale date on '+stEN+' is close.'
+       + ' If you have a plan, keep it. Let us be the parachute if it lands late. Free 5 minutes'
+       + ' with our senior advisor, and we can ask the court for more time. No fees ever.'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Miami Solutions Group. La subasta de '+stES+' está cerca.'
+       + ' Si tiene un plan, sígalo. Nosotros somos el paracaídas si llega tarde. 5 minutos gratis'
+       + ' con nuestro asesor principal, y se puede pedir más tiempo a la corte.'+stopES;
   } else if(tone==='t3'){
-    /* TOUCH 3 — the last one. Copy Pack §3 (FINAL EMAIL), compressed to SMS.
-       "This is my last message" is a PROMISE, and _textStage's retire at TEXT_MAX_TOTAL is the only
-       reason it is true rather than a line of copy. If that ladder is ever weakened, delete this
-       body in the same commit — a broken promise here is worse than never having sent it.
-       LANGUAGE LAW: "30+ years" attaches to the senior advisor, NEVER to the company. */
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' again, and this is my last message about '+stEN+'.'
-       + " I don't want to be one more thing on your phone."
-       + (dt ? (' The '+dt+' date is close.') : '')
-       + ' Whatever you have set up, I hope it lands exactly the way you planned. A lot of families'
-       + ' came to us in the final days because the handled thing stopped being handled, and by then'
-       + ' half their options had expired. If anything wobbles, one call gets you a free case review'
-       + ' with our senior advisor, who has spent 30+ years on exactly this. Keep this number even'
-       + ' if you delete the message.'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', soy '+sN+' otra vez, y este es mi último mensaje sobre '+stES+'.'
-       + ' No quiero ser una cosa más en su teléfono.'
-       + (dt ? (' La fecha del '+dt+' ya está cerca.') : '')
-       + ' Sea lo que sea que tenga arreglado, ojalá salga tal como lo planeó. Muchas familias'
-       + ' llegaron a nosotros en los últimos días porque lo que estaba resuelto dejó de estarlo, y'
-       + ' para entonces la mitad de sus opciones ya había vencido. Si algo se tambalea, una llamada'
-       + ' le da una revisión gratis de su caso con nuestro asesor principal, que lleva más de 30'
-       + ' años en esto. Guarde este número aunque borre el mensaje.'+stopES;
+    /* TOUCH 3 — the last one. "My last text" is a PROMISE, and _textStage's retire at
+       TEXT_MAX_TOTAL is the only reason it is true rather than a line of copy. If that ladder is
+       ever weakened, delete this body in the same commit. "Save this number" is drill card 14
+       (the read-back close) compressed to SMS — the save action is the thermometer. */
+    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Miami Solutions Group, my last text about '+stEN+'.'
+       + ' I hope your plan lands right on time. If anything slips, one free call with our senior'
+       + ' advisor, 30 plus years, maps what still works. Save this number even if you delete'
+       + ' this text.'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', soy '+sN+' de Miami Solutions Group, mi último mensaje sobre '+stES+'.'
+       + ' Ojalá su plan salga a tiempo. Si algo falla, una llamada gratis con nuestro asesor'
+       + ' principal, más de 30 años, le da opciones. Guarde este número aunque borre el'
+       + ' mensaje.'+stopES;
   } else if(tone==='followup'){
-    // Mirrors the email's FINAL variant: give them a graceful exit, do not re-pitch.
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' from Miami Solutions Group again about '+stEN+'. No pressure and no pitch. If'
-       + (dt ? (' the '+dt+' date is') : ' the case is') + " already handled, ignore this and I"
-       + " genuinely wish you the best with it. If it isn't, I'll walk you through what still"
-       + " works with the time you have left."+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', '+sN+' de Miami Solutions Group otra vez por '+stES+'. Sin presión y sin discurso'
-       + ' de venta. Si ya resolvió lo' + (dt ? (' del '+dt) : ' del caso') + ', ignore este mensaje'
-       + ' y le deseo lo mejor. Si no, con gusto le explico qué opciones quedan con el tiempo que'
-       + ' hay.'+stopES;
+    // The parachute card's scalpel: ONE question that tests the plan without attacking it.
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' with Miami Solutions Group again about '+stEN+'. If your plan is set,'
+       + ' ignore this and I truly wish you the best. One question first. Is it in writing yet?'
+       + ' If not, a free 5 minutes with our senior advisor gives you a backup.'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', '+sN+' de Miami Solutions Group otra vez, por '+stES+'. Si su plan está en'
+       + ' marcha, ignore esto y le deseo lo mejor. Una pregunta. ¿Ya lo tiene por escrito? Si no,'
+       + ' 5 minutos gratis con nuestro asesor principal le dan un respaldo.'+stopES;
   } else if(td){
-    // Tax deed is a different animal: no lender to negotiate with, and the SURPLUS is the fact
-    // nobody tells them. FS 197.582 — money above what was owed belongs to the owner, and people
-    // lose it to "surplus recovery" outfits precisely because they never knew it existed.
-    en = nameEN+' Public records show '+saleEN+whenEN+' on '+stEN+'.'+disclEN
-       + ' Three things still work here: pay the back taxes and it stops, sell privately before'
-       + ' the date, or if it sells for more than what is owed, claim the surplus, because that'
-       + ' money belongs to you, not the county. Want the details? No cost.'+stopEN;
-    es = nameES+' Los registros públicos muestran '+saleES+whenES+' sobre '+stES+'.'+disclES
-       + ' Aquí funcionan tres cosas: pagar los impuestos atrasados y se detiene, vender en privado'
-       + ' antes de la fecha, o si se vende por más de lo que se debe, reclamar el excedente,'
-       + ' porque ese dinero es suyo y no del condado. ¿Le doy los detalles? Sin costo.'+stopES;
+    // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
+    // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
+    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Miami Solutions Group. There is a tax deed sale on '+stEN+'.'
+       + ' Two things most owners never hear: paying the back taxes stops it, and if it sells for'
+       + ' more than what is owed, the extra money is yours. Free 5 minutes covers both.'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Miami Solutions Group. Hay una subasta por impuestos'
+       + ' sobre '+stES+'. Dos cosas que pocos saben: pagar lo atrasado la detiene, y si se vende'
+       + ' por más de lo que se debe, lo extra es suyo. 5 minutos gratis y se lo explico.'+stopES;
   } else if(lp){
-    // Just filed. NO urgency language — it would be a lie, and the honest fact is stronger: this
-    // is the moment they have the most room to work with. (Same reasoning as the email's B2.)
-    en = nameEN+' Public records show '+saleEN+' on '+stEN+'.'+disclEN
-       + " The reason I'm reaching out now is that you have more options at this moment than you"
-       + " will at any point after it: catching up what is past due, a loan modification, a short"
-       + " sale, selling privately, or bankruptcy. Most of them need weeks to put together."
-       + " So tell me, what happened with the house? No cost to talk."+stopEN;
-    es = nameES+' Los registros públicos muestran '+saleES+' sobre '+stES+'.'+disclES
-       + ' Le escribo ahora porque en este momento tiene más opciones que en cualquier momento'
-       + ' después: ponerse al día, una modificación del préstamo, un short sale, vender en'
-       + ' privado, o bancarrota. Casi todas necesitan semanas para armarse.'
-       + ' Cuénteme, ¿qué pasó con la casa? Hablar no cuesta nada.'+stopES;
+    // Just filed. NO urgency language — the honest fact is stronger: most choices exist NOW.
+    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Miami Solutions Group. A case was just filed at the'
+       + ' courthouse on '+stEN+'. Right now you have the most choices, and most take weeks to set'
+       + ' up. Our senior advisor maps them free in 5 minutes. What do you want to do with the'
+       + ' house?'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Miami Solutions Group. Acaban de abrir un caso en la'
+       + ' corte sobre '+stES+'. Hoy es cuando más opciones tiene, y toman semanas. Nuestro asesor'
+       + ' principal se las explica gratis en 5 minutos. ¿Qué quiere hacer con la casa?'+stopES;
   } else {
-    en = nameEN+' Public records show '+saleEN+whenEN+' on '+stEN+'.'+disclEN
-       + ' There are still five ways out: catching up what is past due, a loan modification,'
-       + ' a short sale, selling privately before the auction, or bankruptcy. Which one fits'
-       + ' depends on your story, so tell me, what happened with the house? No cost to talk.'+stopEN;
-    es = nameES+' Los registros públicos muestran '+saleES+whenES+' sobre '+stES+'.'+disclES
-       + ' Todavía hay cinco salidas: ponerse al día con lo atrasado, una modificación del'
-       + ' préstamo, un short sale, vender en privado antes de la subasta, o bancarrota. Cuál'
-       + ' le sirve depende de su historia. Cuénteme, ¿qué pasó con la casa? Hablar no cuesta'
-       + ' nada.'+stopES;
+    en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Miami Solutions Group. There is a court sale date on '+stEN+'.'
+       + ' Not a lender, nothing to sign. If you have a plan, keep it. Our senior advisor, 30 plus'
+       + ' years, maps every option free in 5 minutes. What do you want to do with the house?'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', soy '+sN+' de Miami Solutions Group. Hay fecha de subasta para '+stES+'.'
+       + ' No presto dinero, nada que firmar. Si tiene un plan, sígalo. Nuestro asesor principal,'
+       + ' más de 30 años, le da opciones gratis en 5 minutos. ¿Qué quiere hacer con la'
+       + ' casa?'+stopES;
   }
   if(lang==='en') return en;
   if(lang==='es') return es;
