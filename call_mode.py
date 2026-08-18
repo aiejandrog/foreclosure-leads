@@ -817,6 +817,14 @@ button.big{background:#1d4ed8;color:#fff}
 .cb.on{border-color:var(--ok);color:var(--ok)}
 .cb:disabled{opacity:.45}
 .txconf{font-size:14px;color:var(--gold);font-weight:600;margin-top:10px}
+/* THE OUTPUT — the exact text that went to the composer, shown back so he can see what was sent
+   (and read it aloud on the follow-up call). Selectable so he can copy it into another app. */
+.txbody{margin-top:8px;padding:11px 13px;border-radius:10px;background:#0f1d3a;border:1px solid #2a3f6b;
+  color:var(--ink);font-size:13.5px;line-height:1.55;white-space:pre-wrap;word-break:break-word;
+  -webkit-user-select:text;user-select:text;max-height:220px;overflow:auto}
+.txbody .lbl{display:block;font:800 10px "Segoe UI",Arial,sans-serif;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--mut);margin-bottom:5px}
+#txr{background:#3d2c08;border-color:#A8720C;color:#F6E9C8}
 .supn{font-size:11px;color:var(--mut);text-align:center;padding:5px 8px 0}
 /* language chips: small but still thumb-safe; .on = the active language */
 .lchips{display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle}
@@ -1737,10 +1745,19 @@ function afterCall(r, o, nextC){
        touch on a message that was never sent. He confirms below once it is actually gone. */
     var n = notes[r.c] = notes[r.c] || {status:'',note:''};
     n.textopen = today(); saveNotes(); queueSync();
-    location.href = 'sms:' + r.p[phIdx] + (/iPhone|iPad|Mac/.test(navigator.userAgent) ? '&' : '?')
-      + 'body=' + encodeURIComponent(body);
-    $('tx').outerHTML = '<div class="txconf">Composer opened. Did it actually send?</div>'
-      + '<button id="txy">Yes, it sent</button>'
+    var openComposer = function(){
+      location.href = 'sms:' + r.p[phIdx] + (/iPhone|iPad|Mac/.test(navigator.userAgent) ? '&' : '?')
+        + 'body=' + encodeURIComponent(body);
+    };
+    openComposer();
+    /* THE PANEL. Before: "did it send?" with Yes / No — and No just toasted and DEAD-ENDED, so a
+       message that failed to send had no way back except leaving the lead. Now it shows the exact
+       text that went out (the output) and keeps a RESEND button alive on every path. */
+    $('tx').outerHTML = '<div class="txconf" id="txconf0">Composer opened. Did it actually send?</div>'
+      + '<div class="txbody" id="txbody"><span class="lbl">what was sent &middot; ' + esc(st) + '</span>'
+      + esc(body) + '</div>'
+      + '<button id="txy">&#10003; Yes, it sent</button>'
+      + '<button id="txr" class="ghost">&#8635; Re-open composer (send again)</button>'
       + '<button id="txn" class="ghost">No, I did not send it</button>';
     $('txy').onclick = function(){
       var nn = notes[r.c] = notes[r.c] || {status:'',note:''};
@@ -1748,7 +1765,19 @@ function afterCall(r, o, nextC){
       nn.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text', out:'Text sent — ' + st});
       saveNotes(); queueSync(); toast('Text logged'); go();
     };
-    $('txn').onclick = function(){ toast('Not logged as sent'); };
+    /* RESEND. Same body, same number — re-fires the composer. Does NOT log anything: a second open
+       is still not a delivery, and the Yes button remains the only thing that writes the touch. */
+    $('txr').onclick = function(){
+      openComposer();
+      toast('Composer re-opened — press send in Messages');
+      var c = $('txconf0'); if(c) c.textContent = 'Re-opened. Did it send this time?';
+    };
+    $('txn').onclick = function(){
+      toast('Not logged as sent');
+      var c = $('txconf0');
+      if(c) c.innerHTML = 'Not logged. Tap <b>Re-open composer</b> to try again, or move on '
+        + '&mdash; this lead stays in the queue.';
+    };
   };
 }
 /* Mirrors tracker_template.html's `callout` dispatcher so the phone and the laptop write the SAME

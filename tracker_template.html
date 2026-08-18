@@ -1870,6 +1870,13 @@ body.compact .dg-v{font-size:14.5px}
   @media(max-width:430px){ .brand .tag{display:none} }
   .brand .upd{display:none}
   .brand .upd.stale{display:inline-block}
+  /* SIDEWAYS SCROLL FIX (2026-08-18): .brand is a non-wrapping flex row, so the wordmark plus the
+     three lockbtns (Playbook / Refresh / Balloon Book / Lock, each margin-left:12px) overflowed a
+     360px phone by ~27px — the whole page scrolled left-right. Let the row wrap and drop the
+     left margins; gap handles the spacing. */
+  .brand{flex-wrap:wrap;row-gap:8px;column-gap:8px}
+  .brand .spacer{flex:1 1 100%;height:0}
+  .lockbtn{margin-left:0}
   .controls{gap:6px}
   .flbl{display:none}.fdiv{display:none}
   .qwrap{flex:1 1 100%}
