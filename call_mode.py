@@ -575,7 +575,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'dd': _s('dor_desc', 30), 'bd': _n('beds'), 'ba': _n('baths'), 'sf': _n('sqft'),
             'zs': _s('zstatus', 12),
             'po': _s('paOwner', 34) if d.get('ownerMismatch') else None,
+            # MISCALCULATED DEAL (8/17 masterclass): actively listed/pending with the sale ≤21 days
+            # out — the realtor-flip lane. Ship the agent's contact so the CALL can go to the
+            # gatekeeper (drill card 12) instead of dying at a shielded owner.
+            'ml': (1 if (str(d.get('zstatus') or '').upper() in ('LISTED', 'PENDING')
+                         and isinstance(d.get('days'), (int, float)) and 0 <= d['days'] <= 21) else None),
         }
+        if row.get('ml'):
+            row['zag'] = _s('zagent', 30) or None
+            row['zap'] = _digits(d.get('zagentphone'))[:11] or None
         # `lp` and `k` follow the same rule; `d` (days) must NOT — 0 means the auction is TODAY.
         if not row['lp']:
             row.pop('lp')
@@ -1345,6 +1353,19 @@ function screenLead(){
   if(has(r,'D')) fc += '<span class="chip">condo &middot; estoppel</span>';
   if(fc) whoFc += '<div class="chips">'+fc+'</div>';
 
+  /* MISCALCULATED DEAL banner (8/17 masterclass): actively listed with the sale weeks out — the
+     agent is burning the client's clock protecting a fantasy price. This call may be a GATEKEEPER
+     call: drill card 12 (same property pays the agent twice). Agent's number dials from here. */
+  var mlBan = '';
+  if(r.ml){
+    mlBan = '<div style="margin:8px 0;padding:9px 12px;border-radius:8px;background:#3d2c08;border:1px solid #A8720C;color:#F6E9C8;font:700 12.5px/1.5 -apple-system,Segoe UI,Arial">'
+      + '🏷 LISTED with the sale '+(r.d!=null?r.d+'d':'weeks')+' out — MISCALCULATED DEAL. '
+      + 'Gatekeeper play: <b>card 12</b> — full commission on the buy + the re-listing. Same property pays the agent twice.'
+      + (r.zag ? '<br>Agent: <b>'+esc(r.zag)+'</b>' : '')
+      + (r.zap ? ' &middot; <a style="color:#F4E5A7;font-weight:800" href="tel:+1'+String(r.zap).replace(/^1/,'')+'">&#128222; call the agent</a>' : '')
+      + '</div>';
+  }
+
   var prop = (r.dd||r.bd||r.sf||r.zs) ? ('<div class="hist">'+(r.dd?esc(r.dd):'')
       + (r.bd?(' &middot; '+r.bd+'bd'):'') + (r.ba?('/'+r.ba+'ba'):'')
       + (r.sf?(' &middot; '+Number(r.sf).toLocaleString()+' sqft'):'')
@@ -1358,6 +1379,7 @@ function screenLead(){
   $('app').innerHTML = head()
     + '<div class="card">'
     +   ftsaBar
+    +   mlBan
     +   band('WHO', who)
     +   band('THE CLOCK', clock)
     +   band('THE MONEY', mny)
