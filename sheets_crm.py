@@ -215,6 +215,10 @@ def build_prospects(rows_src, notes, st, pbl):
 
 
 def _doorish(r):
+    if r.get('title_status') == 'transferred':   # ownership flip: never send a rep to a stranger's door
+        return False
+    if r.get('vac'):                             # vacant land: no homeowner to help
+        return False
     if r.get('cert'):                       # cert of title recorded = already sold
         return False
     if r.get('saleBkAct') or r.get('sale_bk_active'):
@@ -248,7 +252,22 @@ def _chain_note(r, pbl):
     return ' | '.join(bits)
 
 
+def _closed_cases():
+    """Cases the ledgers closed: server opt-outs + dead ledger. A CRM must never resurface these
+    (2026-08-18 audit: the sheet Jose dials from was carrying opted-out and dead leads)."""
+    closed = set()
+    for fn in ('optouts.json', 'deads.json'):
+        d = _load(fn, {})
+        inner = d.get('notes') if isinstance(d.get('notes'), dict) else d
+        for k, v in (inner or {}).items():
+            if k.startswith('_') or not isinstance(v, dict):
+                continue
+            closed.add(k)
+    return closed
+
+
 def build_rows(rows_src, notes, st, pbl):
+    closed = _closed_cases()
     rows = []
     for r in rows_src:
         case = r.get('case') or ''
@@ -257,6 +276,10 @@ def build_rows(rows_src, notes, st, pbl):
         n = notes.get(case) or {}
         status = str(n.get('status') or '').strip()
         if status.upper() in ('DEAD', 'DO NOT CONTACT'):
+            continue
+        if case in closed or n.get('optout') or n.get('wrongown'):
+            continue
+        if r.get('title_status') == 'transferred':      # live appraiser: no longer their house
             continue
         if r.get('saleBkAct') or r.get('sale_bk_active'):
             continue
@@ -271,8 +294,10 @@ def build_rows(rows_src, notes, st, pbl):
         last = human[-1] if human else None
         last_s = ('%s %s: %s' % (last.get('d') or (last.get('ts') or '')[:10],
                                  last.get('ch'), last.get('out') or '')).strip() if last else ''
+        _d = r.get('days')
+        _passed = isinstance(_d, (int, float)) and _d < 0
         rows.append([
-            status or ('Door-ready' if _doorish(r) else 'Worked'),
+            ('AUCTION PASSED - surplus only' if _passed else '') or status or ('Door-ready' if _doorish(r) else 'Worked'),
             r.get('addr') or '',
             (r.get('owners') or '').split(';')[0].strip(),
             _fmt_phone(phones[0]) if phones else '',
@@ -291,9 +316,13 @@ def build_rows(rows_src, notes, st, pbl):
             n.get('next') or '',
             str(n.get('note') or '').replace('\n', ' | ')[:300],
         ])
-    # hottest first: fewest days to auction, then biggest equity
-    rows.sort(key=lambda x: (x[8] if isinstance(x[8], (int, float)) else 9999,
-                             -(x[11] if isinstance(x[11], (int, float)) else 0)))
+    # hottest first: fewest days to auction, then biggest equity. PASSED auctions (days < 0) sort
+    # LAST, not first — a held sale is a surplus conversation, never the top of the call sheet.
+    def _key(x):
+        d = x[8] if isinstance(x[8], (int, float)) else 9999
+        return (1 if d < 0 else 0, d if d >= 0 else -d,
+                -(x[11] if isinstance(x[11], (int, float)) else 0))
+    rows.sort(key=_key)
     return rows
 
 

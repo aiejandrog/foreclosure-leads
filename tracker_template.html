@@ -2650,7 +2650,10 @@ function _workQueue(){
 // an unconfigured device printed a letterhead with an empty contact block and a letter that opened
 // "My name is Jose". A SECOND operator (Carlos) must run Sender setup on his own device — the merge
 // below keeps any saved non-empty value, so his identity wins over these defaults once he types it.
-const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Miami Solutions Group LLC', phone:'(786) 631-1823',
+// TRUTH-GATE: 'Miami Solutions Group LLC' is REGISTERED TO ANOTHER COMPANY (L22000200556). Every
+// Python generator strips the suffix; the board was the one surface still asserting it on every
+// email signature and client doc. No LLC until we file our own.
+const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Miami Solutions Group', phone:'(786) 631-1823',
                          addr:'231 NW 109th Ave, Miami, FL 33172', title:'Acquisitions',
                          email:'agonzalez0311707@gmail.com', web:'', partner:''};
 let sender = Object.assign({}, SENDER_DEFAULTS);
@@ -2666,6 +2669,8 @@ try {
   // "My name is {name}", so it rendered "My name is Miami Solutions Group". Devices that saved the
   // company there before this build get healed back to the person default instead of staying broken.
   if (typeof saved.name === 'string' && /^\s*miami\s+solutions\s+group\b/i.test(saved.name)) delete saved.name;
+  // truth-gate heal: a saved 'Miami Solutions Group LLC' (old default) drops its unowned suffix
+  if (typeof saved.llc === 'string' && /^\s*miami\s+solutions\s+group\s+ll?c\.?\s*$/i.test(saved.llc)) saved.llc = 'Miami Solutions Group';
   for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
 } catch(e) {}
 // deal-model controls (persisted)
@@ -5146,15 +5151,18 @@ function _pbRender(){
     +   '<div class="pbscript"><span class="pbtag">3</span>"I\'ll be straight with you — your case came up on the county records I work through, date of [sale date]. I\'m not the bank, not a lawyer — I\'m with Miami Solutions Group. My job is you knowing every option before that date. Got 60 seconds?"</div>'
     +   '<div class="pbcallout"><b>Never in the first 30 seconds:</b> "foreclosure" · "auction" · "I want to help you" · "I\'m an investor". After a hang-up: text at +24h, door-drop at +3d, one re-call at +7d with a different opener, then log no-reach and move on. Every per-lead Call script now opens with these three beats automatically.</div>'
     + '</section>'
-    // ---- 4) OBJECTIONS ----
+    // ---- 4) OBJECTIONS (CIOC canon — the FULL 14-card drill deck lives in Call Mode's script
+    //         drawer; this section carries the structure + the four fast answers so the board
+    //         never contradicts the phone. Stale pre-CIOC copy replaced 2026-08-18 audit.) ----
     + '<section id="pb-objections" class="pbsec">'
-    +   '<h3>Objection Handling</h3>'
+    +   '<h3>Objection Handling — CIOC</h3>'
+    +   '<div class="pbcallout"><b>The structure, every time:</b> CUSHION (agree, normalize, majority — never argue, never shame their existing plan) → ISOLATE ("What do you truly want to do with this property?") → OVERCOME (one reframe + one analogy + one what-if; if they have a plan, INSURE it — "I want to be your parachute") → CLOSE (measure what they DID: paperwork trial close, "save my number… read it back to me"). The full 14-card drill deck with Spanish is in <b>Call Mode → script drawer</b>. Drill it: tell Claude "throw me a scenario".</div>'
     +   '<h4>"I already have a lawyer."</h4>'
-    +   '<div class="pbscript">Good — that puts you ahead of most people I talk to. What I\'ve seen sometimes is a lawyer handling the case doesn\'t always walk you through the options OUTSIDE the courtroom, like a private sale or a short sale. Would it help if I gave you a quick rundown on what those look like, no cost?</div>'
+    +   '<div class="pbscript">Keep your attorney — that puts you ahead of most people I talk to. Your lawyer is playing defense. Has anyone shown you what happens to your equity while the meter runs? Ten free minutes with our senior advisor, coordinated with your lawyer. If counsel says we\'re not needed, we shake hands and part friends.</div>'
     +   '<h4>"How did you get my address?"</h4>'
-    +   '<div class="pbscript">Everything is public. When a foreclosure is filed the county puts the case on a public calendar with the address, sale date, and case number. It\'s how title companies find these too. If you don\'t want to hear from me again just say so — I\'ll take you off the list.</div>'
-    +   '<h4>"I don\'t want to sell."</h4>'
-    +   '<div class="pbscript">Totally fair. Selling is one of five things you can do — reinstate the loan, modify it, do a short sale, sell privately, or file bankruptcy. My job isn\'t to talk you into anything, it\'s to make sure you know all five are on the table so the sale date doesn\'t sneak up on you. Which have you looked at?</div>'
+    +   '<div class="pbscript">Everything is public. When a case is filed the county puts it on a public calendar with the address, sale date, and case number. It\'s how title companies find these too. If you don\'t want to hear from me again just say so — I\'ll take you off the list.</div>'
+    +   '<h4>"I don\'t want to sell." / "I have a plan."</h4>'
+    +   '<div class="pbscript">Good — keep it. Most people we talk to have one, and I\'m not asking you to change anything. One question: is it in writing yet? Plans can land late, and late can cost the house. I don\'t want to be your bank or your middleman — I want to be your parachute. If your plan works, I did you a favor and you owe me one.</div>'
     +   '<h4>"How much would you pay?"</h4>'
     +   '<div class="pbcallout bad"><b>NEVER quote a number at the door.</b> The answer is:</div>'
     +   '<div class="pbscript">I\'d want to walk the property first and pull the numbers on your loan before I disrespect you with a lowball. Can I set 20 minutes tomorrow?</div>'
@@ -5757,7 +5765,7 @@ function _stopEverywhere(r){
 
 function smsMsg(r, lang, tone){
   // tone: cold | urgent | followup — bilingual "both" matches WhatsApp posture (EN then ES + STOP).
-  const sN = (sender.name||'').trim() || 'Jose';
+  const sN = (sender.name||'').trim() || SENDER_DEFAULTS.name;
   const first=_smsFirst(r), dt=r.auction||'';
   const stEN=_smsStreet(r,'en'), stES=_smsStreet(r,'es');
   const td=(r.st==='TD'), lp=(r.st==='LP');
@@ -8310,7 +8318,7 @@ function genVisitRecord(r){
     +     '□ Do not return — why: '+_dfLine(28)+'</p>'
     +   '<div class="sigrow"><div class="sig"><div class="l"></div><div class="c">Visitor signature (Carlos) — not the homeowner</div></div>'
     +     '<div class="sig"><div class="l" style="height:.35in"></div><div class="c">Printed name · date / time signed</div></div></div>'
-    +   '<h2>Supervisor review</h2>'
+    +   '<h2>Senior advisor review</h2>'
     +   '<p>Reviewed by: '+_dfLine(24)+' &nbsp; Date: '+_dfLine(16)+'<br>'
     +     '□ Approved &nbsp; □ Issue flagged — Notes: '+_dfLine(32)+'</p>'
     +   '<div class="footer">Retained by '+_dfHtml(f.buyerLLC)+' as an internal record.</div>'
@@ -9731,7 +9739,7 @@ function openDocRoom(caseId){
     {key:'info',      t:'General information sheet', s:'Five exits (reinstate / mod / short / private / BK) — static, no advice.', fn:'genInfoSheet'},
     {key:'intake',    t:'Seller information sheet',  s:'Carlos WRITES; owner speaks. Expanded intake. No owner signature.', fn:'genIntakeSheet'},
     {key:'consent',   t:'Contact consent card',      s:'Text DEALFLOW or return card later. No signature at the door.', fn:'genConsentCard'},
-    {key:'visit',     t:'Visitor door record',       s:'5 tripwire questions. Carlos signs. Supervisor review blanks.', fn:'genVisitRecord'},
+    {key:'visit',     t:'Visitor door record',       s:'5 tripwire questions. Carlos signs. Senior-advisor review blanks.', fn:'genVisitRecord'},
   ];
   function card(x){
     return '<div style="border:1px solid #ddd;border-radius:8px;padding:12px 14px;margin:8px 0;background:#fbfaf6">'
@@ -11490,6 +11498,14 @@ function _workerEligible(r){
   // Shared gate for every lane. Suppression first — these are legal, not preferences.
   if(!r || !r.case) return false;
   if(r.sibclaimed || r.saleBkAct || r.lpDismissed) return false;
+  // OWNERSHIP FLIP: the live appraiser says this person no longer owns the property. Every other
+  // surface (board chips, Closers, Call Mode) already kills these; the worker was the one place
+  // still emailing/texting/queueing calls to non-owners (2026-08-18 congruence audit).
+  if(typeof isFlaggedDead === 'function' && isFlaggedDead(r)) return false;
+  // NON-BUSINESS classes: timeshares / unlinked parcels / vacant land are not rescuable homes —
+  // the operator was dialing them blind because neither warn nor vac shipped to the worker.
+  if(r.vac) return false;
+  if(/timeshare|parcel not linked/i.test(String(r.warn || ''))) return false;
   // Auction already held → surplus conversation, never outreach. Without this, a passed auction
   // fell through _saleDays()'s null into the EARLY lane as "fresh filing, be the first call".
   if(_aucPassed(r)) return false;
@@ -11526,6 +11542,9 @@ function _laneStats(lane){
     if(!r || !r.case || !L.test(_saleDays(r), r)) return;
     s.pool++;
     if(r.sibclaimed || r.saleBkAct || _aucPassed(r)){ s.suppressed++; return; }
+    // mirror _workerEligible's ownership-flip + non-business gates or the lane counts lie
+    if((typeof isFlaggedDead === 'function' && isFlaggedDead(r)) || r.vac
+       || /timeshare|parcel not linked/i.test(String(r.warn || ''))){ s.suppressed++; return; }
     var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
     if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD'){ s.suppressed++; return; }
     if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }

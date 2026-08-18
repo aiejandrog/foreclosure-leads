@@ -103,7 +103,7 @@ CIOC = [
     ('OVERCOME', 'One reframe + one analogy + one what-if. Not three. ONE. When they have a plan '
      'they believe in: INSURE the hope, never fight it — you are the parachute, not the enemy.',
      'I don\'t want to be your bank or your middleman — I want to be your parachute. You\'re '
-     'betting your house on the timing; keep your plan, and let us stop the sale in parallel. '
+     'betting your house on the timing; keep your plan, and let us work on postponing the sale in parallel. '
      'If it works, I did you a favor and you owe me one.'),
     ('CLOSE', 'Fairness micro-agreements, then MEASURE what they DID, not what they said: the '
      'paperwork trial close, the read-back test, the five-minute advisor handoff.',
@@ -499,6 +499,16 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             days = 9999
         is_lp = (d.get('st') == 'LP')
         if not is_lp and (days < 0 or days > max_days):     # auction already passed, or too far out
+            continue
+        # An LP row that GAINED a sale date which then passed is a sold property, not a fresh
+        # filing — the board's EARLY lane closed this exact hole; mirror it here (audit 2026-08-18).
+        if is_lp and d.get('auction') and days < 0:
+            continue
+        # Non-business classes never reach the dialer: vacant land and timeshares/unlinked parcels
+        # are not rescuable homes, and neither warn nor vac used to ship to this page.
+        if d.get('vac'):
+            continue
+        if re.search(r'timeshare|parcel not linked', str(d.get('warn') or ''), re.I):
             continue
         rank = d.get('phrank') or []
         best = d.get('phbest')

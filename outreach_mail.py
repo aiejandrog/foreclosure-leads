@@ -206,7 +206,7 @@ def _lh_header(snd, height_px=52):
     Re-measure after ANY change here — `python _pagefittest.py` does EN and ES worst cases.
     Every value comes from the sender profile; nothing about the operator is hardcoded."""
     e = html.escape
-    llc = (snd.get('llc') or 'Miami Solutions Group LLC').strip()
+    llc = _safe_llc(snd)
     # ONE-INK rendition here, not the colour emblem: send_via_lob() submits color:'false', so Lob
     # prints this page in black and white. A straight grayscale of navy-field/gold-letters collapses
     # to a single mid-gray mass and the letterforms disappear. MONO_BW_B64 is the same emblem with
@@ -226,6 +226,15 @@ def _lh_header(snd, height_px=52):
             '</tr></table><div class="msg-lh-rule"></div>')
 
 
+
+def _safe_llc(snd):
+    """Truth-gate: 'Miami Solutions Group LLC' is registered to ANOTHER Florida company
+    (L22000200556). Every generator strips the unowned suffix until MSG files its own entity."""
+    v = (snd.get('llc') or 'Miami Solutions Group').strip()
+    if re.match(r'^\s*miami\s+solutions\s+group\s+ll?c\.?\s*$', v, re.I):
+        v = 'Miami Solutions Group'
+    return v
+
 def _lh_sign(snd):
     """The footer — the one place the company name appears on the page, plus the disclaimer.
 
@@ -233,7 +242,7 @@ def _lh_sign(snd):
     Keep the two in sync: an owner who gets a letter and then a door folder should not be able to
     tell they were produced by different code."""
     e = html.escape
-    llc = (snd.get('llc') or 'Miami Solutions Group LLC').strip()
+    llc = _safe_llc(snd)
     who = [str(snd[k]).strip() for k in ('name', 'title', 'phone', 'email')
            if (snd.get(k) or '').strip()]
     return ('<div class="msg-sig">'
@@ -285,44 +294,44 @@ def build_letter_html(r, snd, lang='en'):
     if lang == 'es':
         if td:
             body = f"""<p>Estimado/a {e(first)},</p>
-<p>Mi nombre es {sN}. Soy inversionista de bienes raíces aquí en Miami — <b>compro casas</b>. No soy prestamista, no soy una compañía de “rescate” de ejecuciones, y no soy abogado. Los registros del condado muestran que su propiedad en <b>{addr}</b> tiene una <b>subasta de tax deed el {dt}</b>{case_es} por impuestos sin pagar.</p>
+<p>Mi nombre es {sN}, de Miami Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. No soy prestamista, no soy una compañía de “rescate” de ejecuciones, y no soy abogado. Los registros del condado muestran que su propiedad en <b>{addr}</b> tiene una <b>subasta de tax deed el {dt}</b>{case_es} por impuestos sin pagar.</p>
 <p>Antes de esa fecha, los dueños suelen mirar tres caminos: pagar los impuestos atrasados y conservarla; vender en privado en efectivo antes de la subasta; o, si se vende por más de lo adeudado, reclamar el excedente que la ley permita. Con gusto repasamos cuál aún le sirve — sin costo ni compromiso.</p>
-<p>Compro propiedades tal cual, en efectivo, y puedo cerrar antes de la fecha límite cuando una venta privada es lo correcto. Si no lo es, se lo diré con honestidad.</p>
+<p>Si una venta privada resulta ser lo correcto, comprar tal cual y en efectivo antes de la fecha es una de las cosas que podemos hacer. Si otro camino es mejor, se lo diré con honestidad.</p>
 <p>{intake_es}</p>
 <p>Puede comunicarse conmigo al <b>{sP}</b>. Aunque la subasta esté cerca, todavía puede haber tiempo para hablar.</p>
 <p>Respetuosamente,<br><br>{sig}</p>"""
         else:
             byp = f" por parte de {plaintiff}" if plaintiff else ''
             body = f"""<p>Estimado/a {e(first)},</p>
-<p>Mi nombre es {sN}. Soy inversionista de bienes raíces aquí en Miami — <b>compro casas</b>. No soy prestamista, no soy una compañía de “rescate” de ejecuciones, y no soy abogado. Los registros públicos muestran que su propiedad en <b>{addr}</b> está en ejecución hipotecaria{byp}{case_es}, con subasta el <b>{dt}</b>.</p>
+<p>Mi nombre es {sN}, de Miami Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. No soy prestamista, no soy una compañía de “rescate” de ejecuciones, y no soy abogado. Los registros públicos muestran que su propiedad en <b>{addr}</b> está en ejecución hipotecaria{byp}{case_es}, con subasta el <b>{dt}</b>.</p>
 <p>No le escribo para convencerlo de nada. Cuando un dueño pregunta qué opciones tiene, estas son las <b>cinco salidas</b> de todo propietario en ejecución en Florida (de nuestro manual de campo):</p>
 {exits_es}
-<p>Mi trabajo es asegurarme de que sepa que las cinco están sobre la mesa para que la fecha de subasta no lo tome por sorpresa. Si una venta privada en efectivo es el camino, puedo comprar tal cual y cerrar antes de la fecha. Si otra salida le conviene más, se lo diré — aunque no me incluya.</p>
+<p>Mi trabajo es asegurarme de que sepa que las cinco están sobre la mesa para que la fecha de subasta no lo tome por sorpresa. Si una venta privada en efectivo es el camino, comprar tal cual antes de la fecha es una de las herramientas sobre la mesa. Si otra salida le conviene más, se lo diré, aunque no me incluya.</p>
 <p>{intake_es}</p>
 <p>No hay costo ni compromiso por conversar. Llámeme o escríbame al <b>{sP}</b>.</p>
 <p>Respetuosamente,<br><br>{sig}</p>"""
     else:
         if td:
             body = f"""<p>Dear {e(owner)},</p>
-<p>My name is {sN}. I am a local real estate investor here in Miami — <b>I buy houses</b>. I am not a lender, not a foreclosure-rescue company, and not an attorney. County records show your property at <b>{addr}</b> is scheduled for a <b>tax deed sale on {dt}</b>{case_en} due to unpaid property taxes.</p>
+<p>My name is {sN}, with Miami Solutions Group. We work with homeowners in exactly this situation, every option on one table. I am not a lender, not a foreclosure-rescue company, and not an attorney. County records show your property at <b>{addr}</b> is scheduled for a <b>tax deed sale on {dt}</b>{case_en} due to unpaid property taxes.</p>
 <p>Before that date, owners usually look at three paths: pay the back taxes and keep it; sell privately for cash before the sale; or, if it sells for more than the taxes owed, claim any surplus the law allows. I am glad to walk through which of those still fits — at no cost and no obligation.</p>
-<p>I purchase properties as-is, with cash, and can close before the deadline when a private sale is the right move. If it is not, I will tell you honestly.</p>
+<p>If a private sale turns out to be the right move, buying as-is for cash before the deadline is one of the things we can do. If another path is better, I will tell you honestly.</p>
 <p>{intake_en}</p>
 <p>You can reach me at <b>{sP}</b>. Even if the sale is close, there may still be time to talk.</p>
 <p>Respectfully,<br><br>{sig}</p>"""
         else:
             byp = f" by {plaintiff}" if plaintiff else ''
             body = f"""<p>Dear {e(owner)},</p>
-<p>My name is {sN}. I am a local real estate investor here in Miami — <b>I buy houses</b>. I am not a lender, not a foreclosure-rescue company, and not an attorney. Public records show your property at <b>{addr}</b> is in foreclosure{byp}{case_en}, with a sale scheduled for <b>{dt}</b>.</p>
+<p>My name is {sN}, with Miami Solutions Group. We work with homeowners in exactly this situation, every option on one table. I am not a lender, not a foreclosure-rescue company, and not an attorney. Public records show your property at <b>{addr}</b> is in foreclosure{byp}{case_en}, with a sale scheduled for <b>{dt}</b>.</p>
 <p>I am not writing to talk you into anything. When owners ask what their options are, these are the <b>five exits</b> every Florida foreclosure homeowner has (from our field manual):</p>
 {exits_en}
-<p>My job is to make sure you know all five are on the table so the sale date does not sneak up. If a private cash sale is the path that fits, I can buy as-is and close before the deadline. If another exit is better for you, I will say so — even when it does not involve me.</p>
+<p>My job is to make sure you know all five are on the table so the sale date does not sneak up. If a private cash sale is the path that fits, buying as-is before the deadline is one of the tools on the table. If another exit is better for you, I will say so, even when it does not involve me.</p>
 <p>{intake_en}</p>
 <p>There is no cost and no obligation to talk. Call or text me at <b>{sP}</b>.</p>
 <p>Respectfully,<br><br>{sig}</p>"""
 
     today = datetime.date.today().strftime('%B %d, %Y')
-    ret = '<br>'.join(e(x) for x in [snd.get('name'), snd.get('llc'), snd.get('addr')] if x and str(x).strip())
+    ret = '<br>'.join(e(x) for x in [snd.get('name'), _safe_llc(snd), snd.get('addr')] if x and str(x).strip())
     lh_head, lh_sign = _lh_header(snd), _lh_sign(snd)
     # 2.6in top pad reserves the #10 window zone for Lob's stamped recipient address (address_placement).
     # The MSG letterhead therefore goes BELOW that reserve, as the first thing in the content area — a
@@ -563,7 +572,7 @@ def main():
     if not (snd and from_parsed):
         print("\nABORT: --send requires a complete sender.json with a parseable return address (name + addr).")
         sys.exit(1)
-    from_addr = dict(from_parsed, name=(snd.get('llc') or snd.get('name') or 'Return')[:40])
+    from_addr = dict(from_parsed, name=(snd.get('name') or _safe_llc(snd))[:40])
     live = key.startswith('live_')
     print(f"\nSending {len(queue)} letters via Lob ({'LIVE — real mail + real charges' if live else 'TEST key — no real mail'})...")
 
