@@ -1717,13 +1717,19 @@ function screenOutcome(){
          voicemail path the swap happens seconds later (the Done-reading button), and arming early
          both missed that swap and ate legitimate taps on the just-painted voicemail block. */
       var _shield = function(){ window._tapShieldUntil = Date.now() + 400; };
-      if((o.k==='noanswer'||o.k==='voicemail') && phIdx+1 < r.p.length){
-        go = function(){ _shield(); phIdx++; toast(_fresh?'Logged · next number':'Dial counted · next number'); screenLead(); };
-      } else if(o.k==='dnc'||o.k==='wrong'||o.k==='notint'){
+      if(o.k==='dnc'||o.k==='wrong'||o.k==='notint'){
         /* An outcome that ENDS the relationship gets no follow-up offer — showing a Text button
            after someone says do-not-contact is how a compliance breach happens by muscle memory. */
         go = function(){ _shield(); toast(_okmsg); advance(r.c,nextC); };
       } else {
+        /* EVERY other outcome — including NO ANSWER and VOICEMAIL — lands on the after-call panel,
+           which is where the follow-up text lives.
+           THE BUG THIS FIXES (2026-08-18, reported from the field): no-answer/voicemail used to
+           jump straight to the lead's NEXT number and skip afterCall entirely. Skiptrace returns
+           3-4 numbers on most leads and no-answer is far and away the most common outcome, so the
+           follow-up text was effectively unreachable — the one moment a text matters most (they
+           just saw a missed call from you) was the one moment the button never appeared.
+           Cycling numbers is not lost: afterCall now carries a "try the next number" button. */
         go = function(){ _shield(); toast(_okmsg); afterCall(r,o,nextC); };
       }
       // A voicemail script he has not finished reading must not be replaced out from under him.
@@ -1827,10 +1833,20 @@ function afterCall(r, o, nextC){
     +   '<button class="cb" data-h="20">Tomorrow</button>'
     +   '<button class="cb" data-h="72">In 3 days</button>'
     + '</div>'
+    /* THE OTHER NUMBERS. no-answer/voicemail used to auto-jump here; now it is a deliberate tap,
+       so the text offer above is never skipped past. Only shown when a number is actually left. */
+    + ((miss && phIdx + 1 < (r.p||[]).length)
+        ? '<button id="nph" class="ghost" style="margin-top:14px">&#128222; Try their next number ('
+          + (phIdx + 2) + ' of ' + r.p.length + ')</button>'
+        : '')
     + '<button id="nx" style="margin-top:14px">Next lead &rarr;</button>'
     + '</div><div class="sheetpad"></div>';
   var go = function(){ advance(r.c, nextC); };
   $('nx').onclick = go;
+  if($('nph')) $('nph').onclick = function(){
+    window._tapShieldUntil = Date.now() + 400;
+    phIdx++; toast('Next number'); screenLead();
+  };
   Array.prototype.forEach.call(document.querySelectorAll('.cb'), function(b){
     b.onclick = function(){
       setCallback(r, +b.dataset.h, b.textContent.toLowerCase());

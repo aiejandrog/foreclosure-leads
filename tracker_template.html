@@ -13122,6 +13122,17 @@ window.addEventListener('message', function(ev){
   var spec = (typeof QUICKLOG !== 'undefined') ? QUICKLOG[+d.out] : null;
   if(!spec) return;
   try { if(typeof logTouch === 'function') logTouch(r.case, spec.ch, spec.out, spec); } catch(e){}
+  /* THE MISSED-CALL TEXT, board side. Same gap the phone had: logging "no answer" wrote the touch
+     and stopped, so the single best moment to text (they just saw a missed call from you) offered
+     nothing. Now a no-answer/left-message outcome opens the text composer for that lead —
+     pre-filled, cadence-staged, still one manual send. Never for spoke/STOP/appointment. */
+  try{
+    var _missed = (spec.ch === 'call') && /no answer|left message/i.test(spec.out || '');
+    var _textable = (typeof _cleanPhones === 'function') ? _cleanPhones(r).length : 0;
+    if(_missed && _textable && typeof openTextSingle === 'function'){
+      setTimeout(function(){ try{ openTextSingle(r); }catch(e){} }, 350);
+    }
+  }catch(e){}
   try { if(typeof render === 'function') render(); } catch(e){}
   if(typeof _shareToast === 'function')
     _shareToast('Logged: '+spec.lbl+' — '+(r.oname||r.owners||r.case).split(';')[0]);
