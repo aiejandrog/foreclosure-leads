@@ -194,6 +194,16 @@ def _variants(street, unit):
     abbr = re.sub(r'\b(NORTH|SOUTH|EAST|WEST)$', lambda m: m.group(1)[0], abbr)
     if abbr not in forms:
         forms.append(abbr)
+    # WRONG-SUFFIX CLASS (71 SAUSALITO PL, 2026-08-19): the court caption said "SAUSALITO PL";
+    # the county's sitename is "Sausalito Dr". Autocomplete matches literally, so every variant
+    # carrying the wrong suffix returned 0 and the lead sat value-less. Add a suffix-STRIPPED form —
+    # number + street name only — as the LAST variant: less specific, so the earlier exact forms
+    # still win when they can, and the number+unit corroboration downstream keeps a stripped query
+    # from grabbing a wrong parcel.
+    stripped = re.sub(r'\s+(CIR|AVE|ST|RD|DR|BLVD|PL|TER|CT|LN|WAY|PKWY|TRL|HWY)'
+                      r'(\s+[NSEW])?$', '', abbr)
+    if stripped not in forms:
+        forms.append(stripped)
     out = []
     for f in forms:
         for base in ((f + ' ' + unit).strip(), f) if unit else (f,):
@@ -245,6 +255,36 @@ def _bw_resolve(addr, crippled=''):
                   if re.search(r'(?:#|\b)%s\b' % re.escape(unit), c.get('siteAddress1', '').upper())]
             if len(uu) == 1:
                 return uu[0]['folioNumber'].strip()
+            if not uu:
+                # DIGIT-1 / LETTER-L MANGLE (CACE-25-003554, 2026-08-19). The court caption said
+                # unit "107"; BCPA's building had NO 107 — every unit there is letter-prefixed
+                # (#L1..#L9, #PH..). The real unit was #L7: somewhere between the pleading and the
+                # scrape, "L7" became "107". That single character produced a $0-value lead, a
+                # skiptrace of the WRONG HUMAN (unit 201), and a Zillow attach of a THIRD unit.
+                # When the literal unit matches nothing, try the 1<->L transforms — and accept a
+                # transform ONLY when it matches exactly one unit. Ambiguity stays unresolved:
+                # a wrong parcel is worse than no parcel.
+                alts = set()
+                if re.fullmatch(r'1\d+', unit):
+                    alts.add('L' + unit[1:])                       # 107 -> L07
+                    if len(unit) > 2 and unit[1] == '0':
+                        alts.add('L' + unit[2:])                   # 107 -> L7
+                if unit.startswith('L') and unit[1:].isdigit():
+                    alts.add('1' + unit[1:])                       # L7 -> 17 (reverse direction)
+                    alts.add('10' + unit[1:])                      # L7 -> 107
+                # ONE decision across ALL transforms, not first-single-match-wins: iterating a
+                # set and returning on the first hit makes the parcel depend on set ORDER when
+                # two transforms each match a different unit (a building holding both #L7 and
+                # #L07). Union the matches; accept only when they collapse to a single folio —
+                # the same "wrong parcel is worse than no parcel" bar, actually enforced.
+                found = {}
+                for alt in alts:
+                    for c in cands:
+                        if re.search(r'(?:#|\b)%s\b' % re.escape(alt),
+                                     c.get('siteAddress1', '').upper()):
+                            found[c['folioNumber'].strip()] = True
+                if len(found) == 1:
+                    return next(iter(found))
     return ''
 
 
