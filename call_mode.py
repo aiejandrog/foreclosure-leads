@@ -1195,18 +1195,32 @@ function agoTxt(ms){
   if(h < 36) return h + 'h ago';
   return Math.round(h / 24) + 'd ago';
 }
-function suppressed(r){
+/* HARD suppression — relationship-ending reasons ONLY (opt-out, DNC, wrong number, dead lead,
+   opted-out phone). These block EVERYTHING, including the after-call text. Kept separate from
+   the queue cooldown below because the two answer different questions: "may we contact this
+   person at all?" versus "is this lead due to be dialled again?". */
+function hardSuppressed(r){
   var n = notes[r.c] || {};
   if(n.wrongown) return 'wrong number reported';
   if(n.optout || n.status === 'DO NOT CONTACT') return 'opted out';
   if(n.status === 'Dead') return 'dead';
   var ph = optPhones(), p = r.p || [];
   for(var j=0;j<p.length;j++) if(ph[p[j]]) return 'this number opted out';
+  return '';
+}
+function suppressed(r){
+  var h = hardSuppressed(r);
+  if(h) return h;
+  var n = notes[r.c] || {};
   /* ALREADY WORKED — by me OR by a teammate. Without this, Carlos logs a call, the note syncs to
      this phone, and the lead still sits in the queue waiting to be dialled a second time by the
      other guy. The cooldown is the SAME outcome-aware one the board honours (logOutcome writes
      n.cooldownH: no-answer comes back tomorrow, a real conversation waits longer), so the two
-     surfaces can never disagree about whether a lead is due. */
+     surfaces can never disagree about whether a lead is due.
+     QUEUE-ONLY. This branch must never gate the after-call text: the call HE JUST LOGGED is
+     inside its own cooldown by definition, so using suppressed() there read back "called 0m ago
+     by Alejandro · Do not text" — his own dial blocking the missed-call text, the single best
+     moment to send one (2026-08-19 field report). afterCall gates on hardSuppressed(). */
   var lc = lastCall(n);
   if(lc){
     var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 24;
@@ -1932,7 +1946,7 @@ function afterCall(r, o, nextC){
   if(!dnt) dnt = ((notes[r.c]||{}).dntph||[]).indexOf(num) >= 0;
   var fl = flClock();
   var txt = '';
-  if(suppressed(r))         txt = '<div class="nc">This lead is suppressed ('+esc(suppressed(r))+'). Do not text.</div>';
+  if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
   else if(st === 'retired') txt = '<div class="nc">Three messages already sent to this person. The ladder is closed — call only.</div>';
   else if(st === 'replied') txt = '<div class="nc">They have replied before. Do not send a cold-ladder text; talk to them.</div>';
