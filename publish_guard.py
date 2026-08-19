@@ -41,6 +41,40 @@ FIELDS = {
 }
 
 
+CONFLICT = re.compile(r'^(<<<<<<< |=======$|>>>>>>> )', re.M)
+
+
+def integrity(path):
+    """Structural sanity of a built page. Returns a list of fatal problems (empty = fine).
+
+    WHY (2026-08-19, the board went dark): docs/index.html was published beginning with the literal
+    bytes `<<<<<<< Updated upstream` — git stash-pop conflict markers, 12 of them, with two whole
+    builds glued together (12.34MB vs a normal 7.5MB). The browser got garbage before <!DOCTYPE and
+    two documents' worth of markup, so the site simply did not load.
+
+    The enrichment guard below did NOT stop it, and the reason is worth keeping: cov_of_text ran
+    `MARK.search()` over the first 4000 chars, so on a conflicted file it locked onto the FIRST
+    stamp — the `Updated upstream` half, i.e. the live board's own census. It compared the live
+    build against itself, found no regression, and cheerfully approved the corrupt file.
+
+    A census comparison can only judge CONTENT. Something has to judge the FILE. That is this.
+    """
+    problems = []
+    try:
+        s = open(path, encoding='utf-8', errors='replace').read()
+    except Exception as e:
+        return [f'{path}: unreadable ({str(e)[:60]})']
+    n_conf = len(CONFLICT.findall(s))
+    if n_conf:
+        problems.append(f'{path}: {n_conf} git CONFLICT MARKER line(s) — a merge was committed raw')
+    n_cov = len(re.findall(r'DEALFLOW-COVERAGE\s*\{', s))
+    if n_cov > 1:
+        problems.append(f'{path}: {n_cov} coverage stamps — more than one build is inside this file')
+    if '<!DOCTYPE' not in s[:5000] and '<!doctype' not in s[:5000]:
+        problems.append(f'{path}: no <!DOCTYPE in the first 5KB — head is not a document')
+    return problems
+
+
 def cov_of_text(txt):
     m = MARK.search(txt[:4000])
     if not m:
@@ -71,6 +105,25 @@ def main():
 
     if not os.path.exists(DOCS):
         print('publish-guard: docs/index.html missing — nothing to check'); return 0
+
+    # INTEGRITY FIRST. A structurally broken page must never reach the site, no matter how good its
+    # census looks — and a conflicted file's census looks perfect, because it still carries the live
+    # board's own stamp. Checked on every built page, not just the board.
+    bad = []
+    for p in (DOCS, os.path.join(HERE, 'docs', 'call', 'index.html')):
+        if os.path.exists(p):
+            bad += integrity(p)
+    if bad:
+        print('publish-guard: BLOCKED — the built page is CORRUPT, not merely poorer:')
+        for b in bad:
+            print('   ' + b)
+        print('')
+        print('  Do NOT hand-edit the markers out. The file is a build artifact: rebuild it')
+        print('  (make_tracker) so the payload and the census are regenerated together.')
+        print('  Root cause to check: `git pull --rebase --autostash` — -X theirs applies to the')
+        print('  REBASE, never to the stash pop, so a conflicted pop writes markers into the')
+        print('  working tree and the next `git add docs/index.html` commits them.')
+        return 2
     new = cov_of_text(open(DOCS, encoding='utf-8', errors='replace').read(4000))
     if not new:
         # An unmarked build predates the marker. Never block on that — just say so.

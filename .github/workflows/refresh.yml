@@ -498,11 +498,25 @@ jobs:
             echo "hard-money book unchanged"
           else
             git commit -m "refresh: hard-money balloon book (auto)"
+            # POISON ORIGIN of the 2026-08-19 outage. This step commits only the balloon book, but
+            # the pull below AUTOSTASHES the already-rebuilt docs/index.html. `-X theirs` applies to
+            # the REBASE and never to the stash pop, so a conflicted pop writes
+            # `<<<<<<< Updated upstream` markers straight into docs/index.html; the final publish
+            # then committed them and the site shipped 12.34MB of two glued builds that would not
+            # load. publish_guard.py now refuses any page carrying conflict markers or >1 coverage
+            # stamp, so the worst case is a skipped publish (board stays on its last good build).
             for i in 1 2 3; do
               git pull --rebase --autostash -X theirs origin main && git push origin HEAD:main && break
               [ "$i" = 3 ] && break
               sleep 10
             done
+            # Fail loud AT THE ORIGIN rather than 30 minutes later at publish: if the pop poisoned
+            # the board artifact, restore it from the commit we just made. It is a build artifact —
+            # the committed copy is authoritative and the final step rebuilds anyway.
+            if grep -qE '^(<<<<<<< |>>>>>>> )' docs/index.html 2>/dev/null; then
+              echo "::warning::stash-pop poisoned docs/index.html with conflict markers — restoring from HEAD"
+              git checkout HEAD -- docs/index.html || true
+            fi
           fi
           python -c "import hardmoney_values as HV; r=HV.priced(zone_only=True); f=[x for x in r if x['fits']]; v=sum(x['amt'] for x in f); print('::notice::hard-money book: %d of %d zone loans fit the DSCR box (\$%.1fM)'%(len(f),len(r),v/1e6))"
           exit 0
