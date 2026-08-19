@@ -45,13 +45,13 @@
   "value": 587820
  },
  "2013-021892-CA-01": {
-  "addr": "2831 NW 94 ST, MIAMI, FL- 33147",
+  "addr": "2831 NW 94 ST, MIAMI, FL 33147",
   "auction": "2026-09-08",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 1034222.56,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 513435
  },
  "2014-013898-CA-01": {
   "addr": "37260 SW 207 AVE, HOMESTEAD, FL 33034",
@@ -83,10 +83,10 @@
  "2016-002336-CA-01": {
   "addr": "",
   "auction": "2026-10-28",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 738942.26,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2016-020220-CA-01": {
@@ -137,10 +137,10 @@
  "2018-010724-CA-01": {
   "addr": "",
   "auction": "2026-10-06",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 561861.73,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2018-011148-CA-01": {
@@ -153,21 +153,21 @@
   "value": 1765483
  },
  "2018-025121-CA-01": {
-  "addr": "251 W 33 ST, HIALEAH, FL- 33012",
+  "addr": "251 W 33 ST, HIALEAH, FL 33012",
   "auction": "2026-09-08",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 162094.06,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 547274
  },
  "2018-026274-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 519799.94,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2018-026417-CA-01": {
@@ -209,10 +209,10 @@
  "2019-005488-CA-01": {
   "addr": "",
   "auction": "2026-11-30",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 430189.55,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2019-013056-CA-01": {
@@ -335,10 +335,10 @@
  "2021-021632-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 360283.72,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2021-024188-CA-01": {
@@ -371,10 +371,10 @@
  "2022-008023-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 747383.95,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2022-012065-CA-01": {
@@ -389,19 +389,19 @@
  "2022-015058-CA-01": {
   "addr": "",
   "auction": "2026-10-19",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 518505.27,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2022-017322-CA-01": {
   "addr": "",
   "auction": "2026-10-19",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 187938.54,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2022-018176-CA-01": {
@@ -416,10 +416,10 @@
  "2022-018799-CA-01": {
   "addr": "",
   "auction": "2026-11-09",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 891360.48,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2022-021281-CA-01": {
@@ -450,13 +450,13 @@
   "value": 697186
  },
  "2022-023210-CA-01": {
-  "addr": "10601 SW 128 ST, MIAMI, FL- 33176",
+  "addr": "10601 SW 128 ST, MIAMI, FL 33176",
   "auction": "2026-09-08",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 611016.72,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 1046527
  },
  "2022-024528-CA-01": {
   "addr": "17230 NW 16 AVE, MIAMI, FL 33169",
@@ -531,13 +531,13 @@
   "value": 945710
  },
  "2023-017359-CA-01": {
-  "addr": "134 SE 33 TER, HOMESTEAD, FL- 33033",
+  "addr": "134 SE 33 TER, HOMESTEAD, FL 33033",
   "auction": "2026-09-01",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 426998.73,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 270000
  },
  "2023-019601-CA-01": {
   "addr": "20155 NE 38 CT 1802, AVENTURA, FL 33180",
@@ -552,19 +552,19 @@
  "2023-019732-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 642523.29,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2023-020247-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 305151.92,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2023-020489-CA-01": {
@@ -679,10 +679,10 @@
  "2023-026351-CA-01": {
   "addr": "",
   "auction": "2026-10-07",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 200358.91,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2023-026861-CA-01": {
@@ -715,28 +715,28 @@
  "2023-027264-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 317783.43,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2023-027713-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 256130.2,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2023-028512-CA-01": {
   "addr": "",
   "auction": "2026-10-27",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 130508.17,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2023-028634-CA-01": {
@@ -751,10 +751,10 @@
  "2023-028757-CA-01": {
   "addr": "",
   "auction": "2026-10-19",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 71368.85,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2023-028915-CA-01": {
@@ -833,10 +833,10 @@
  "2024-002768-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 214404.25,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-003527-CA-01": {
@@ -851,10 +851,10 @@
  "2024-003632-CA-01": {
   "addr": "",
   "auction": "2026-11-30",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 175658.67,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-003696-CA-01": {
@@ -879,10 +879,10 @@
  "2024-004408-CA-01": {
   "addr": "",
   "auction": "2026-11-30",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 198843.46,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-004688-CA-01": {
@@ -943,19 +943,19 @@
  "2024-007043-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 281134.84,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-008002-CA-01": {
   "addr": "",
   "auction": "2026-10-19",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 3231346.96,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-008113-CA-01": {
@@ -1043,10 +1043,10 @@
  "2024-009860-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 1086113.31,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-009959-CA-01": {
@@ -1061,19 +1061,19 @@
  "2024-010205-CA-01": {
   "addr": "",
   "auction": "2026-11-02",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 247198.29,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-010610-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 0,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-010684-CA-01": {
@@ -1088,19 +1088,19 @@
  "2024-010877-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 556843.8,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-011072-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 562632.0,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-011180-CA-01": {
@@ -1133,20 +1133,20 @@
  "2024-013135-CA-01": {
   "addr": "",
   "auction": "2026-10-27",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 257499.31,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-013517-CA-01": {
-  "addr": "1635 W 44 PL 302, HIALEAH, FL- 33012",
+  "addr": "1635 W 44 PL 302, HIALEAH, FL 33012",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 529992.33,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 173153
  },
  "2024-013556-CA-01": {
   "addr": "389 NE 32 TER, HOMESTEAD, FL- 33033",
@@ -1160,19 +1160,19 @@
  "2024-013858-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 775206.27,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-014334-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 117284.46,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-014493-CA-01": {
@@ -1196,19 +1196,19 @@
  "2024-015227-CA-01": {
   "addr": "",
   "auction": "2026-10-07",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 479836.94,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-015712-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 68509.95,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-015967-CA-01": {
@@ -1223,10 +1223,10 @@
  "2024-016217-CA-01": {
   "addr": "",
   "auction": "2026-11-04",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 359089.6,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-016268-CA-01": {
@@ -1257,13 +1257,13 @@
   "value": 0
  },
  "2024-016521-CA-01": {
-  "addr": "16815 SW 301 ST, HOMESTEAD, FL- 33030",
+  "addr": "16815 SW 301 ST, HOMESTEAD, FL 33030",
   "auction": "2026-09-16",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 198385.06,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 320747
  },
  "2024-016654-CA-01": {
   "addr": "26149 SW 137 AVE, HOMESTEAD, FL 33032",
@@ -1275,13 +1275,13 @@
   "value": 387079
  },
  "2024-016738-CA-01": {
-  "addr": "9851 SW 12 TER, MIAMI, FL- 33174",
+  "addr": "9851 SW 12 TER, MIAMI, FL 33174",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 350658.51,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 699820
  },
  "2024-017006-CA-01": {
   "addr": "9381 E BAY HARBOR DR 701N, BAY HARBOR ISLANDS, FL- 33154",
@@ -1304,10 +1304,10 @@
  "2024-017049-CA-01": {
   "addr": "",
   "auction": "2026-09-16",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 65747591.43,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-017395-CA-01": {
@@ -1332,28 +1332,28 @@
  "2024-017613-CA-01": {
   "addr": "",
   "auction": "2026-10-26",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 542106.98,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-017800-CA-01": {
   "addr": "",
   "auction": "2026-10-26",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 189800.87,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-018289-CA-01": {
   "addr": "",
   "auction": "2026-11-02",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 12749.16,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-018502-CA-01": {
@@ -1386,19 +1386,19 @@
  "2024-018984-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 530022.26,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-019329-CA-01": {
   "addr": "",
   "auction": "2026-11-04",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 409150.84,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-019400-CA-01": {
@@ -1413,10 +1413,10 @@
  "2024-019464-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 1285079.96,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-019582-CA-01": {
@@ -1431,19 +1431,19 @@
  "2024-019627-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 308144.46,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-019820-CA-01": {
   "addr": "",
   "auction": "2026-10-19",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 2162197.39,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-019864-CA-01": {
@@ -1458,10 +1458,10 @@
  "2024-020611-CA-01": {
   "addr": "",
   "auction": "2026-11-09",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 8869.92,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-020679-CA-01": {
@@ -1514,19 +1514,19 @@
  "2024-021064-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 279440.76,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-021226-CA-01": {
   "addr": "",
   "auction": "2026-11-02",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 692740.89,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-021227-CA-01": {
@@ -1595,10 +1595,10 @@
  "2024-023378-CA-01": {
   "addr": "",
   "auction": "2026-11-03",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 340539.95,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-023701-CA-01": {
@@ -1631,10 +1631,10 @@
  "2024-024235-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 552316.0,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2024-024487-CA-01": {
@@ -1692,13 +1692,13 @@
   "value": 0
  },
  "2025-000133-CA-01": {
-  "addr": "13925 OLD CUTLER RD, PALMETTO BAY, FL- 33158",
+  "addr": "13925 OLD CUTLER RD, PALMETTO BAY, FL 33158",
   "auction": "2026-09-01",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 4070662.67,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 2510577
  },
  "2025-000229-CA-01": {
   "addr": "18061 BISCAYNE BLVD 1102-2, AVENTURA, FL 33160",
@@ -1713,10 +1713,10 @@
  "2025-000483-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 193576.73,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-000486-CA-01": {
@@ -1750,10 +1750,10 @@
  "2025-001532-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 470780.12,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-001577-CA-01": {
@@ -1814,10 +1814,10 @@
  "2025-002567-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 91699.42,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-002765-CA-01": {
@@ -1830,13 +1830,13 @@
   "value": 0
  },
  "2025-002770-CA-01": {
-  "addr": "10867 NW 59 ST, DORAL, FL- 33178",
+  "addr": "10867 NW 59 ST, DORAL, FL 33178",
   "auction": "2026-09-08",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 393258.73,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 988681
  },
  "2025-002992-CA-01": {
   "addr": "15206 NE 8 AVE, MIAMI, FL 33162",
@@ -1887,10 +1887,10 @@
  "2025-003952-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 103499.75,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-003962-CA-01": {
@@ -1905,20 +1905,20 @@
  "2025-004382-CA-01": {
   "addr": "",
   "auction": "2026-10-21",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 254142.2,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-004452-CA-01": {
-  "addr": "2455 NW 57 ST, MIAMI, FL- 33142",
+  "addr": "2455 NW 57 ST, MIAMI, FL 33142",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 370000.0,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 337648
  },
  "2025-004475-CA-01": {
   "addr": "",
@@ -1987,10 +1987,10 @@
  "2025-005697-CA-01": {
   "addr": "",
   "auction": "2026-10-28",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 258786.09,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-005786-CA-01": {
@@ -2023,10 +2023,10 @@
  "2025-007261-CA-01": {
   "addr": "",
   "auction": "2026-11-10",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 546669.36,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-007384-CA-01": {
@@ -2051,19 +2051,19 @@
  "2025-007696-CA-01": {
   "addr": "",
   "auction": "2026-09-29",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 6821863.64,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-007937-CA-01": {
   "addr": "",
   "auction": "2026-10-28",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 120450.52,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-007971-CA-01": {
@@ -2105,10 +2105,10 @@
  "2025-008534-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 700280.73,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-008657-CA-01": {
@@ -2123,10 +2123,10 @@
  "2025-008666-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 150616.01,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-008710-CA-01": {
@@ -2177,10 +2177,10 @@
  "2025-009056-CA-01": {
   "addr": "",
   "auction": "2026-10-06",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 1504314.12,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-009236-CA-01": {
@@ -2258,10 +2258,10 @@
  "2025-009610-CA-01": {
   "addr": "",
   "auction": "2026-10-28",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 283129.51,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-009664-CA-01": {
@@ -2312,10 +2312,10 @@
  "2025-010400-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 37980.18,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-010449-CA-01": {
@@ -2339,10 +2339,10 @@
  "2025-010544-CA-01": {
   "addr": "",
   "auction": "2026-10-19",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 402678.37,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-010654-CA-01": {
@@ -2366,28 +2366,28 @@
  "2025-011062-CA-01": {
   "addr": "",
   "auction": "2026-10-26",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 0,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-011142-CA-01": {
   "addr": "",
   "auction": "2026-10-26",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 559794.65,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-011422-CA-01": {
   "addr": "",
   "auction": "2026-09-29",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 556308.01,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-011701-CA-01": {
@@ -2402,10 +2402,10 @@
  "2025-011890-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 15535.22,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-011984-CA-01": {
@@ -2420,28 +2420,28 @@
  "2025-012212-CA-01": {
   "addr": "",
   "auction": "2026-10-06",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 444682.38,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-012229-CA-01": {
   "addr": "",
   "auction": "2026-11-02",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 380672.62,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-012246-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 1801601.69,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-012596-CA-01": {
@@ -2517,12 +2517,12 @@
   "value": 0
  },
  "2025-013373-CA-01": {
-  "addr": "4265 NW 18TH ST #1-301, MIAMI, FL- 33126",
+  "addr": "4265 NW 18TH ST #1-301, MIAMI, FL 33126",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 108470.33,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-013585-CA-01": {
@@ -2535,13 +2535,13 @@
   "value": 164533
  },
  "2025-013835-CA-01": {
-  "addr": "10301 SW 58 ST, MIAMI, FL- 33173",
+  "addr": "10301 SW 58 ST, MIAMI, FL 33173",
   "auction": "2026-09-08",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 1395751.71,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 1757840
  },
  "2025-013836-CA-01": {
   "addr": "",
@@ -2582,19 +2582,19 @@
  "2025-014045-CA-01": {
   "addr": "",
   "auction": "2026-11-10",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 382911.97,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-014104-CA-01": {
   "addr": "",
   "auction": "2026-10-26",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 267735.71,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-014301-CA-01": {
@@ -2618,28 +2618,28 @@
  "2025-014549-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 510884.67,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-014804-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 788053.03,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-015152-CA-01": {
   "addr": "",
   "auction": "2026-10-19",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 392220.33,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-015181-CA-01": {
@@ -2672,10 +2672,10 @@
  "2025-015661-CA-01": {
   "addr": "",
   "auction": "2026-11-16",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 621724.78,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-015939-CA-01": {
@@ -2743,13 +2743,13 @@
   "value": 0
  },
  "2025-017182-CA-01": {
-  "addr": "290 NW 125 AVE, MIAMI, FL- 33182",
+  "addr": "290 NW 125 AVE, MIAMI, FL 33182",
   "auction": "2026-09-08",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 1159970.88,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 1604747
  },
  "2025-017186-CA-01": {
   "addr": "",
@@ -2770,13 +2770,13 @@
   "value": 0
  },
  "2025-017337-CA-01": {
-  "addr": "1290 NE 162 ST, NORTH MIAMI BEACH, FL- 33162",
+  "addr": "1290 NE 162 ST, NORTH MIAMI BEACH, FL 33162",
   "auction": "2026-09-16",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 543869.37,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 428998
  },
  "2025-017447-CA-01": {
   "addr": "",
@@ -2818,20 +2818,20 @@
  "2025-018046-CA-01": {
   "addr": "",
   "auction": "2026-11-16",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 371266.92,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-018063-CA-01": {
-  "addr": "5555 COLLINS AVE 4N, MIAMI BEACH, FL- 33140",
+  "addr": "5555 COLLINS AVE 4N, MIAMI BEACH, FL 33140",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 63308.28,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 563620
  },
  "2025-018229-CA-01": {
   "addr": "19001 NE 14 AVE 121, MIAMI, FL 33179",
@@ -2854,10 +2854,10 @@
  "2025-018311-CA-01": {
   "addr": "",
   "auction": "2026-11-09",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 329935.42,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-018364-CA-01": {
@@ -2873,10 +2873,10 @@
  "2025-018660-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 270322.07,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-018678-CA-01": {
@@ -2907,13 +2907,13 @@
   "value": 760912
  },
  "2025-019128-CA-01": {
-  "addr": "21125 NW 14 PL 6, MIAMI GARDENS, FL- 33169",
+  "addr": "21125 NW 14 PL 6, MIAMI GARDENS, FL 33169",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 23924.84,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 290272
  },
  "2025-019697-CA-01": {
   "addr": "394 NE 35 TER, HOMESTEAD, FL 33033",
@@ -2954,10 +2954,10 @@
  "2025-019952-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 413218.95,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-019956-CA-01": {
@@ -2988,21 +2988,21 @@
   "value": 134178
  },
  "2025-020414-CA-01": {
-  "addr": "19201 COLLINS AVE 209, SUNNY ISLES BEACH, FL- 33160",
+  "addr": "19201 COLLINS AVE 209, SUNNY ISLES BEACH, FL 33160",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 195184.99,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 93588
  },
  "2025-020477-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 466440.99,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-020672-CA-01": {
@@ -3024,13 +3024,13 @@
   "value": 198403
  },
  "2025-020778-CA-01": {
-  "addr": "8020 SW 132 ST, PINECREST, FL- 33156",
+  "addr": "8020 SW 132 ST, PINECREST, FL 33156",
   "auction": "2026-09-09",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 3952147.43,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 735000
  },
  "2025-020866-CA-01": {
   "addr": "",
@@ -3053,10 +3053,10 @@
  "2025-020996-CA-01": {
   "addr": "",
   "auction": "2026-11-09",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 606038.6,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-021129-CA-01": {
@@ -3080,37 +3080,37 @@
  "2025-021329-CA-01": {
   "addr": "",
   "auction": "2026-11-02",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 21623.64,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-021349-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 367726.2,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-021558-CA-01": {
   "addr": "",
   "auction": "2026-10-26",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 94312.05,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-021595-CA-01": {
   "addr": "",
   "auction": "2026-10-26",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 429296.52,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-021626-CA-01": {
@@ -3123,13 +3123,13 @@
   "value": 0
  },
  "2025-021770-CA-01": {
-  "addr": "1401 NE MIAMI GARDENS DR 193, MIAMI, FL- 33179",
+  "addr": "1401 NE MIAMI GARDENS DR 193, MIAMI, FL 33179",
   "auction": "2026-09-16",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 95212.04,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 111825
  },
  "2025-021836-CA-01": {
   "addr": "1880 S TREASURE DR 2H, NORTH BAY VILLAGE, FL 33141",
@@ -3170,19 +3170,19 @@
  "2025-022046-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 425987.0,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-022121-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 251882.63,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-022144-CA-01": {
@@ -3197,10 +3197,10 @@
  "2025-022209-CA-01": {
   "addr": "",
   "auction": "2026-11-10",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 444690.67,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-022229-CA-01": {
@@ -3213,13 +3213,13 @@
   "value": 1586835
  },
  "2025-022289-CA-01": {
-  "addr": "14913 SW 302 TER, MIAMI, FL- 33033",
+  "addr": "14913 SW 302 TER, MIAMI, FL 33033",
   "auction": "2026-09-08",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 588638.0,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 450562
  },
  "2025-022333-CA-01": {
   "addr": "2106 NW 70 ST, MIAMI, FL 33147",
@@ -3233,10 +3233,10 @@
  "2025-022346-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 700354.64,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-022404-CA-01": {
@@ -3251,10 +3251,10 @@
  "2025-022433-CA-01": {
   "addr": "",
   "auction": "2026-10-06",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 300000.0,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-022544-CA-01": {
@@ -3269,10 +3269,10 @@
  "2025-022625-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 87941.32,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-022642-CA-01": {
@@ -3306,10 +3306,10 @@
  "2025-023051-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 395117.69,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-023434-CA-01": {
@@ -3360,10 +3360,10 @@
  "2025-024079-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 980666.51,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-024086-CA-01": {
@@ -3387,19 +3387,19 @@
  "2025-024180-CA-01": {
   "addr": "",
   "auction": "2026-09-29",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 199222.3,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-024399-CA-01": {
   "addr": "",
   "auction": "2026-11-04",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 289125.63,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-024501-CA-01": {
@@ -3432,10 +3432,10 @@
  "2025-024737-CA-01": {
   "addr": "",
   "auction": "2026-11-18",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 831421.13,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-025065-CA-01": {
@@ -3457,12 +3457,12 @@
   "value": 491067
  },
  "2025-025567-CA-01": {
-  "addr": "13250 SW 58 TER 401, MIAMI, FL- 33186",
+  "addr": "13250 SW 58 TER 401, MIAMI, FL 33186",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 249083.15,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2025-074993-CC-05": {
@@ -3475,13 +3475,13 @@
   "value": 453586
  },
  "2025-085123-CC-25": {
-  "addr": "14929 SW 132 AVE, MIAMI, FL- 33186",
+  "addr": "14929 SW 132 AVE, MIAMI, FL 33186",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 13360.73,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 556424
  },
  "2025-099724-CC-05": {
   "addr": "3317 WEST 98TH PLACE, HIALEAH, FL 33018",
@@ -3538,13 +3538,13 @@
   "value": 453141
  },
  "2025-176496-CC-05": {
-  "addr": "20350 NW 6 PL, MIAMI GARDENS, FL- 33169",
+  "addr": "20350 NW 6 PL, MIAMI GARDENS, FL 33169",
   "auction": "2026-09-16",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-18",
   "judg": 18835.69,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 397400
  },
  "2025-2304TD": {
   "addr": "77 DORSET B, BOCA RATON, FL 33434",
@@ -3576,10 +3576,10 @@
  "2026-000215-CA-01": {
   "addr": "",
   "auction": "2026-10-26",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 598072.95,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-000304-CA-01": {
@@ -3648,10 +3648,10 @@
  "2026-001641-CA-01": {
   "addr": "",
   "auction": "2026-11-25",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 99584.98,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-001698-CA-01": {
@@ -3675,10 +3675,10 @@
  "2026-001901-CA-01": {
   "addr": "",
   "auction": "2026-10-07",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 20608.94,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-002023-CA-01": {
@@ -3763,13 +3763,13 @@
   "value": 537764
  },
  "2026-003300-CA-01": {
-  "addr": "761 SE 19 ST, HOMESTEAD, FL- 33034",
+  "addr": "761 SE 19 ST, HOMESTEAD, FL 33034",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 461213.66,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 348000
  },
  "2026-003389-CA-01": {
   "addr": "4600 SW 67 AVE 239, MIAMI, FL 33155",
@@ -3801,55 +3801,55 @@
  "2026-003631-CA-01": {
   "addr": "",
   "auction": "2026-11-02",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 117658.66,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-003928-CA-01": {
   "addr": "",
   "auction": "2026-09-22",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 220475.52,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-004423-CA-01": {
   "addr": "",
   "auction": "2026-10-05",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 9712.98,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-004507-CA-01": {
   "addr": "",
   "auction": "2026-10-28",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 312516.99,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-004537-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 150907.12,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-004920-CA-01": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 595104.71,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-004941-CA-01": {
@@ -3864,10 +3864,10 @@
  "2026-005277-CA-01": {
   "addr": "",
   "auction": "2026-09-29",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 67261.43,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-005645-CA-01": {
@@ -3945,10 +3945,10 @@
  "2026-007613-CA-01": {
   "addr": "",
   "auction": "2026-11-09",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 165660.94,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-007818-CA-01": {
@@ -3972,10 +3972,10 @@
  "2026-008470-CA-01": {
   "addr": "",
   "auction": "2026-10-21",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 231452.08,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-008821-CA-01": {
@@ -3997,21 +3997,21 @@
   "value": 805684
  },
  "2026-010706-CA-01": {
-  "addr": "21031 NE 8 AVE, MIAMI, FL- 33179",
+  "addr": "21031 NE 8 AVE, MIAMI, FL 33179",
   "auction": "2026-09-14",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 469953.32,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 354842
  },
  "2026-011174-CA-01": {
   "addr": "",
   "auction": "2026-09-28",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 13334.34,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-021475-CC-23": {
@@ -4044,19 +4044,19 @@
  "2026-060625-CC-25": {
   "addr": "",
   "auction": "2026-09-30",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 6567.63,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-069783-CC-21": {
   "addr": "",
   "auction": "2026-10-13",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 0,
-  "last_seen": "2026-08-19",
+  "last_seen": "2026-08-18",
   "value": 0
  },
  "2026-2655TD": {
@@ -5167,22 +5167,22 @@
   "value": 412794
  },
  "2026A00097": {
-  "addr": "14776 SW 23 ST, MIAMI, FL- 33185-0000",
+  "addr": "14776 SW 23 ST, MIAMI, FL 33185-0000",
   "auction": "2026-08-20",
-  "county": "",
-  "first_seen": "2026-08-15",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 2144.47,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 25634
  },
  "2026A00138": {
-  "addr": "628 NE 71 ST, Miami, FL- 33138-0000",
+  "addr": "628 NE 71 ST, Miami, FL 33138-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 1866.41,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 268
  },
  "2026A00186": {
   "addr": "MIAMI GARDENS, FL 33056",
@@ -5329,67 +5329,67 @@
   "value": 128705
  },
  "2026A00212": {
-  "addr": "1300 S MIAMI AVE, Miami, FL- 33130-0000",
+  "addr": "1300 S MIAMI AVE, Miami, FL 33130-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 77160.29,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 837000
  },
  "2026A00213": {
-  "addr": "645 MICHIGAN AVE, Miami Beach, FL- 33139-0000",
+  "addr": "645 MICHIGAN AVE, Miami Beach, FL 33139-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 22775.58,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 309447
  },
  "2026A00215": {
-  "addr": "321 83 ST, Miami Beach, FL- 33141-0000",
+  "addr": "321 83 ST, Miami Beach, FL 33141-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 225854.6,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 2550000
  },
  "2026A00216": {
-  "addr": "1489 NW 40 ST, Miami, FL- 33142-0000",
+  "addr": "1489 NW 40 ST, Miami, FL 33142-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 32091.07,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 176365
  },
  "2026A00217": {
-  "addr": "1395 BRICKELL AVE, Miami, FL- 33131-0000",
+  "addr": "1395 BRICKELL AVE, Miami, FL 33131-0000",
   "auction": "2026-10-08",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 26967.91,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 477250
  },
  "2026A00218": {
-  "addr": "18671 COLLINS AVE, Sunny Isles Beach, FL- 33160-0000",
+  "addr": "18671 COLLINS AVE, Sunny Isles Beach, FL 33160-0000",
   "auction": "2026-10-08",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 364930.34,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 1486266
  },
  "2026A00219": {
-  "addr": "19370 COLLINS AVE, Sunny Isles Beach, FL- 33160-0000",
+  "addr": "19370 COLLINS AVE, Sunny Isles Beach, FL 33160-0000",
   "auction": "2026-10-08",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 25744.41,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 322324
  },
  "2026A00220": {
   "addr": "231 174 ST, Sunny Isles Beach, FL- 33160-0000",
@@ -5419,94 +5419,94 @@
   "value": 0
  },
  "2026A00245": {
-  "addr": "999 SW 1 AVE, Miami, FL- 33130-0000",
+  "addr": "999 SW 1 AVE, Miami, FL 33130-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 31972.18,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 426447
  },
  "2026A00246": {
-  "addr": "19201 COLLINS AVE, Sunny Isles Beach, FL- 33160-0000",
+  "addr": "19201 COLLINS AVE, Sunny Isles Beach, FL 33160-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 7939.44,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 83564
  },
  "2026A00248": {
   "addr": "",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 217687.95,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 7155000
  },
  "2026A00249": {
-  "addr": "17315 COLLINS AVE, Sunny Isles Beach, FL- 33160-0000",
+  "addr": "17315 COLLINS AVE, Sunny Isles Beach, FL 33160-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 40267.01,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 724539
  },
  "2026A00250": {
-  "addr": "18201 COLLINS AVE, Sunny Isles Beach, FL- 33160-0000",
+  "addr": "18201 COLLINS AVE, Sunny Isles Beach, FL 33160-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 53892.93,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 885081
  },
  "2026A00251": {
-  "addr": "1437 COLLINS AVE, Miami Beach, FL- 33139-0000",
+  "addr": "1437 COLLINS AVE, Miami Beach, FL 33139-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 17449.66,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 242550
  },
  "2026A00252": {
-  "addr": "1437 COLLINS AVE, Miami Beach, FL- 33139-0000",
+  "addr": "1437 COLLINS AVE, Miami Beach, FL 33139-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 17449.66,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 242550
  },
  "2026A00253": {
-  "addr": "19201 COLLINS AVE, Sunny Isles Beach, FL- 33160-0000",
+  "addr": "19201 COLLINS AVE, Sunny Isles Beach, FL 33160-0000",
   "auction": "2026-10-08",
-  "county": "",
-  "first_seen": "2026-08-17",
+  "county": "MIAMI-DADE",
+  "first_seen": "2026-08-16",
   "judg": 9046.34,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 92306
  },
  "2026A00254": {
-  "addr": "2460 SW 18 AVE, Miami, FL- 33145-0000",
+  "addr": "2460 SW 18 AVE, Miami, FL 33145-0000",
   "auction": "2026-10-15",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 15351.38,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 203375
  },
  "2026A00255": {
-  "addr": "4041 SW 4 ST, Miami, FL- 33134-0000",
+  "addr": "4041 SW 4 ST, Miami, FL 33134-0000",
   "auction": "2026-10-15",
-  "county": "",
+  "county": "MIAMI-DADE",
   "first_seen": "2026-08-18",
   "judg": 2334.01,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 880110
  },
  "2026A00256": {
   "addr": "",
@@ -5709,11 +5709,12 @@
  },
  "502023CA014746XXXAMB": {
   "addr": "400 HIBISCUS TREE DR, LAKE WORTH, FL 33462",
-  "auction": "2026-08-17",
+  "auction": "2026-10-08",
   "county": "PALM BEACH",
   "first_seen": "2026-08-04",
   "judg": 0,
   "last_seen": "2026-08-17",
+  "reset_from": "2026-08-17",
   "value": 252963
  },
  "502023CA015898XXXAMB": {
@@ -6117,11 +6118,12 @@
  },
  "502025CA001761XXXAMB": {
   "addr": "6113 GREENSPOINTE DR, BOYNTON BEACH, FL 33437",
-  "auction": "2026-08-17",
+  "auction": "2026-10-08",
   "county": "PALM BEACH",
   "first_seen": "2026-08-04",
   "judg": 90779.37,
   "last_seen": "2026-08-17",
+  "reset_from": "2026-08-17",
   "value": 320000
  },
  "502025CA001782XXXAMB": {
@@ -6443,10 +6445,10 @@
   "addr": "7209 PROMENADE DR 801, BOCA RATON, FL 33433",
   "auction": "2026-09-14",
   "county": "PALM BEACH",
-  "first_seen": "2026-08-17",
+  "first_seen": "2026-08-18",
   "judg": 602971.19,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 532125
  },
  "502025CA006887XXXAMB": {
   "addr": "16789 E AQUADUCT DR, LOXAHATCHEE, FL 33470",
@@ -6597,11 +6599,12 @@
  },
  "502025CA008123XXXAMB": {
   "addr": "410 EVERNIA ST 117, WEST PALM BEACH, FL 33401",
-  "auction": "2026-08-17",
+  "auction": "2026-10-08",
   "county": "PALM BEACH",
   "first_seen": "2026-08-04",
   "judg": 698486.14,
   "last_seen": "2026-08-17",
+  "reset_from": "2026-08-17",
   "value": 409319
  },
  "502025CA008124XXXAMB": {
@@ -7049,11 +7052,12 @@
  },
  "502025CA010955XXXAMB": {
   "addr": "14701 CUMBERLAND DR 2080, DELRAY BEACH, FL 33446",
-  "auction": "2026-08-17",
+  "auction": "2026-10-08",
   "county": "PALM BEACH",
   "first_seen": "2026-08-04",
   "judg": 52930.18,
   "last_seen": "2026-08-17",
+  "reset_from": "2026-08-17",
   "value": 110000
  },
  "502025CA010966XXXAMB": {
@@ -7176,11 +7180,12 @@
  },
  "502025CA011840XXXAMB": {
   "addr": "2401 NW 7TH ST, BOYNTON BEACH, FL 33426",
-  "auction": "2026-08-17",
+  "auction": "2026-10-08",
   "county": "PALM BEACH",
   "first_seen": "2026-08-04",
   "judg": 434167.35,
   "last_seen": "2026-08-17",
+  "reset_from": "2026-08-17",
   "value": 336286
  },
  "502025CA011911XXXAMB": {
@@ -7600,11 +7605,12 @@
  },
  "502025CC016197XXXAMB": {
   "addr": "343 CAPRI H, DELRAY BEACH, FL 33484",
-  "auction": "2026-08-17",
+  "auction": "2026-10-08",
   "county": "PALM BEACH",
   "first_seen": "2026-08-04",
   "judg": 15320.86,
   "last_seen": "2026-08-17",
+  "reset_from": "2026-08-17",
   "value": 66407
  },
  "502025CC016419XXXAMB": {
@@ -7771,11 +7777,12 @@
  },
  "502026CA000789XXXAMB": {
   "addr": "2504 BRIDGEWOOD DR, BOCA RATON, FL 33434",
-  "auction": "2026-08-17",
+  "auction": "2026-10-08",
   "county": "PALM BEACH",
   "first_seen": "2026-08-04",
   "judg": 34109.45,
   "last_seen": "2026-08-17",
+  "reset_from": "2026-08-17",
   "value": 100000
  },
  "502026CA000863XXXAMB": {
@@ -7870,11 +7877,12 @@
  },
  "502026CA002421XXXAMB": {
   "addr": "158 ALCAZAR ST, ROYAL PALM BEACH, FL 33411",
-  "auction": "2026-08-17",
+  "auction": "2026-10-08",
   "county": "PALM BEACH",
   "first_seen": "2026-08-04",
   "judg": 157167.0,
   "last_seen": "2026-08-17",
+  "reset_from": "2026-08-17",
   "value": 433888
  },
  "502026CA002550XXXAMB": {
@@ -8043,10 +8051,10 @@
   "addr": "245 MAIN BLVD A, BOYNTON BEACH, FL 33435",
   "auction": "2026-09-23",
   "county": "PALM BEACH",
-  "first_seen": "2026-08-17",
+  "first_seen": "2026-08-18",
   "judg": 42330.73,
-  "last_seen": "2026-08-19",
-  "value": 0
+  "last_seen": "2026-08-18",
+  "value": 150894
  },
  "502026CC002068XXXAMB": {
   "addr": "6172 PLAINS DR, LAKE WORTH, FL 33463",
