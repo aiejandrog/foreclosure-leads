@@ -826,6 +826,12 @@ button.big{background:#1d4ed8;color:#fff}
      color:var(--ink);font-size:14px;font-weight:600;touch-action:manipulation}
 .cb.on{border-color:var(--ok);color:var(--ok)}
 .cb:disabled{opacity:.45}
+/* THE FILE — the reference block on the outcome screen, up for the whole call */
+.refbox{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0f1d3a;border:1px solid #2a3f6b}
+.reft{width:100%;border-collapse:collapse;font-size:13px;line-height:1.5}
+.reft td{padding:2.5px 0;vertical-align:top;-webkit-user-select:text;user-select:text}
+.reft td.rk{color:var(--mut);font:700 10.5px "Segoe UI",Arial,sans-serif;letter-spacing:.06em;
+  text-transform:uppercase;white-space:nowrap;padding-right:10px;width:96px}
 /* HIS FILE — research links, thumb-sized so they are usable one-handed on a call */
 .flinks{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
 .flinks a{display:inline-flex;align-items:center;min-height:44px;padding:10px 14px;border-radius:10px;
@@ -1726,8 +1732,54 @@ function screenOutcome(){
     + '<div class="mut" style="font-size:12px;margin-top:4px">Close with: <b>'
     + (lang()==='es' ? '&iquest;Verdad que s&iacute;?' : 'That&rsquo;s fair, right?')
     + '</b> &middot; CIOC + objections in the script drawer below.</div>';
+  /* THE REFERENCE BLOCK. This screen is up for the WHOLE call and carried only a first name and
+     the number he dialled — so mid-conversation he could not see the address, the owner, what is
+     owed, or when the sale is, and had to leave the page to look it up (2026-08-18: "add all of
+     the information about the address etc so i can have the reference"). Everything below is
+     already on the row; none of it costs a byte more of payload. */
+  var _money = function(v){
+    v = +v || 0;
+    return v >= 1e6 ? '$' + (v/1e6).toFixed(2) + 'M' : v ? '$' + Math.round(v/1000) + 'k' : '';
+  };
+  var refRows = '';
+  var addRef = function(k, v){ if(v) refRows += '<tr><td class="rk">'+k+'</td><td>'+v+'</td></tr>'; };
+  addRef('Property', esc(r.a || ''));
+  addRef('Owner', esc(r.o || ''));
+  if(r.v || r.jg || r.py){
+    var eqv = (r.v && (r.py || r.jg)) ? (+r.v - (+r.py || +r.jg)) : 0;
+    /* UNDERWATER MUST SHOW. Showing equity only when positive quietly hid the single fact that
+       changes the whole call: BARBOSA BRADS is owed $537k on a $473k house with the sale TODAY —
+       there is no equity to protect, so cash-for-keys and surplus are off the table and the
+       honest conversation is a short sale or the bank's own workout. Silence there reads as
+       "fine". */
+    addRef('Money', (r.v ? 'worth <b>' + _money(r.v) + '</b>' : '')
+      + ((r.py || r.jg) ? ' &middot; owed ' + _money(r.py || r.jg) : ' &middot; owed <b>not posted</b>')
+      + (eqv > 0 ? ' &middot; equity <b style="color:#7ad48f">' + _money(eqv) + '</b>'
+         : (eqv < 0 ? ' &middot; <b style="color:#ff8a80">UNDERWATER ' + _money(-eqv)
+                      + '</b> <span class="mut">(no equity &mdash; short sale / lender workout, not cash-for-keys)</span>'
+            : '')));
+  }
+  if(r.x) addRef(r.d != null && r.d >= 0 ? 'SALE' : 'Filed',
+    esc(r.x) + (r.d != null && r.d >= 0
+      ? ' <b style="color:' + (r.d <= 7 ? '#ff8a80' : '#F4E5A7') + '">in ' + r.d + ' day' + (r.d===1?'':'s') + '</b>'
+      : ''));
+  if(r.dd || r.bd || r.sf) addRef('Property type', esc([r.dd || '', (r.bd ? r.bd + 'BR' : ''),
+      (r.ba ? r.ba + 'BA' : ''), (r.sf ? r.sf + ' sf' : '')].filter(Boolean).join(' &middot; ')));
+  if(r.pl) addRef('Foreclosing', esc(r.pl));
+  addRef('Case', esc(r.c || '') + (r.fo ? ' &middot; folio ' + esc(r.fo) : ''));
+  if(r.p && r.p.length > 1) addRef('Their numbers',
+    r.p.map(function(x, i){ return (i === phIdx ? '<b>' + fmt(x) + ' (dialing)</b>' : fmt(x)); }).join(' &middot; '));
+  var refBlock = refRows
+    ? '<div class="refbox"><div class="ltag" style="margin:0 0 6px">THE FILE &mdash; for reference on this call</div>'
+      + '<table class="reft">' + refRows + '</table>'
+      + '<div class="flinks" style="margin-top:9px">'
+      + fileLinks(r).map(function(x){
+          return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
+      + '</div></div>'
+    : '';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
+    + refBlock
     /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
        hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
        the proven path (the main dial button), and returning from the dialer lands right back on
