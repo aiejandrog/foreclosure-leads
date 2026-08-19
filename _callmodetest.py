@@ -7,16 +7,21 @@ So "the phone isn't hitting" was an untestable feeling: nothing recorded what ha
 These checks defend the properties that make call outcomes trustworthy:
   * the Call button exists, is FIRST (it is the highest-converting, uncapped channel), and is
     disabled only when no phone is traced
-  * tapping it renders the six-outcome disposition bar -- and does NOT navigate the tab away
+  * tapping it renders the seven-outcome disposition bar -- and does NOT navigate the tab away
     (an early build set window.location.href='tel:...', which tore the worker down mid-click
      and silently lost the lead)
   * each outcome writes a real touch with the real label, not a hardcoded default
   * DNC suppresses the owner immediately and permanently -- _workerEligible must go false
   * a wrong number suppresses too (it is a data problem, not a lead)
-  * cooldowns are outcome-aware: no-answer/voicemail 24h, talked/not-interested 72h
+  * cooldowns are outcome-aware: no-answer/voicemail 24h, talked/not-interested/appt 72h
   * calls NEVER touch the email/text daily cap
+
+Ledger vocabulary (2026-08 rename): a logged dial writes kind 'callout' to the durable worker
+ledger -- NOT 'call' -- so dial-through counts separately from every other phone-adjacent
+breadcrumb. The probes below must filter on 'callout' or they read nothing and every board-side
+assertion silently checks an empty object.
 """
-import asyncio, os, pathlib, sys
+import asyncio, os, pathlib, re, sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from playwright.async_api import async_playwright
 
@@ -54,7 +59,7 @@ async def outcome_run(w, pg, oc):
     await w.click(f'.mwoc[data-oc="{oc}"]')
     await w.wait_for_timeout(800)
     return await pg.evaluate("""() => {
-      const calls = _wlogToday().filter(e => e.a === 'call');
+      const calls = _wlogToday().filter(e => e.a === 'callout');
       const last  = calls[calls.length - 1] || {};
       const n     = notes[last.c] || {};
       const row   = DATA.find(x => x.case === last.c);
@@ -121,8 +126,9 @@ async def main():
         })""")
         rec('tapping Call renders the disposition bar', 'How did the call go' in disp['header'],
             disp['header'][:50])
-        rec('all six outcomes render',
-            disp['oc'] == ['noanswer','voicemail','talked','wrong','notint','dnc'], disp['oc'])
+        rec('all seven outcomes render (incl. appt + dnc)',
+            disp['oc'] == ['noanswer','voicemail','talked','appt','wrong','notint','dnc'],
+            disp['oc'])
         # REGRESSION: window.location.href='tel:' used to navigate the tab away before the bar
         # could render. The anchor-click dial must leave the document alone.
         rec('dialing does NOT navigate the worker tab away', w.url == url_before,
@@ -133,8 +139,9 @@ async def main():
         # ---------- talked -> 72h, status Contacted ------------------------------------------
         await w.click('.mwoc[data-oc="talked"]')
         await w.wait_for_timeout(800)
+        dialed_n = 1   # outcomes logged this session; the strip's live "dialed" must match
         r = await pg.evaluate("""() => {
-          const c = _wlogToday().filter(e => e.a === 'call');
+          const c = _wlogToday().filter(e => e.a === 'callout');
           const last = c[c.length-1] || {}; const n = notes[last.c] || {};
           const t = n.touches || [];
           return {detail:last.detail||'', cool:n.cooldownH, status:n.status||'',
@@ -153,6 +160,7 @@ async def main():
         # ---------- no answer -> 24h ---------------------------------------------------------
         na = await outcome_run(w, pg, 'noanswer')
         if na and not na.get('err'):
+            dialed_n += 1
             rec('NO ANSWER comes back in 24h, not 72h', na['cooldownH'] == 24, na['cooldownH'])
             rec('NO ANSWER still logs a call touch', na['lastTouchCh'] == 'call', na['lastTouchCh'])
         else:
@@ -161,6 +169,7 @@ async def main():
         # ---------- wrong number -> suppressed ------------------------------------------------
         wr = await outcome_run(w, pg, 'wrong')
         if wr and not wr.get('err'):
+            dialed_n += 1
             rec('WRONG NUMBER flags wrongown', wr['wrongown'], wr)
             rec('WRONG NUMBER drops the lead from the queue', wr['eligible'] is False,
                 wr['eligible'])
@@ -170,6 +179,7 @@ async def main():
         # ---------- DNC -> hard, permanent suppression ---------------------------------------
         dn = await outcome_run(w, pg, 'dnc')
         if dn and not dn.get('err'):
+            dialed_n += 1
             rec('DNC writes the opt-out flag', dn['optout'], dn)
             rec('DNC sets status DO NOT CONTACT', dn['status'] == 'DO NOT CONTACT', dn['status'])
             rec('DNC makes the lead permanently ineligible', dn['eligible'] is False, dn['eligible'])
@@ -179,9 +189,14 @@ async def main():
             rec('DNC writes the opt-out flag', False, dn)
 
         # ---------- stats strip surfaces calls -----------------------------------------------
+        # LIVE, not just labeled: the "dialed" tally must equal the outcomes logged this session.
+        # It read STATS.callout while the disposition click only bumped STATS.call, so it sat
+        # frozen at its boot seed ("dialed 0" after four logged outcomes) — caught 2026-08-17.
         strip = await w.evaluate("() => (document.getElementById('mwlogstats')||{}).textContent||''")
-        rec('log strip counts calls separately from sends',
-            'calls' in strip.lower() and 'delivered' in strip.lower(), strip[:70])
+        m = re.search(r'dialed\s+(\d+)', strip.lower())
+        rec('log strip counts dials separately from sends — and live-updates',
+            m is not None and int(m.group(1)) == dialed_n and 'delivered' in strip.lower(),
+            {'strip': strip[:70], 'expected dialed': dialed_n})
 
         rec('no JS errors in the worker tab', not werr, werr[:2] if werr else '')
         rec('no JS errors on the board', not berr, berr[:2] if berr else '')
