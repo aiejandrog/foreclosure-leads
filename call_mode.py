@@ -1792,10 +1792,23 @@ function screenOutcome(){
                       + '</b> <span class="mut">(no equity &mdash; short sale / lender workout, not cash-for-keys)</span>'
             : '')));
   }
-  if(r.x) addRef(r.d != null && r.d >= 0 ? 'SALE' : 'Filed',
-    esc(r.x) + (r.d != null && r.d >= 0
-      ? ' <b style="color:' + (r.d <= 7 ? '#ff8a80' : '#F4E5A7') + '">in ' + r.d + ' day' + (r.d===1?'':'s') + '</b>'
-      : ''));
+  /* THE DATE LINE — three honest states, because r.x and r.d don't mean one thing. r.x is
+     auction OR filed date; r.d uses 9999 as the NO-AUCTION sentinel. The first version tested
+     only d>=0 and rendered "SALE 8/7/2026 in 9999 days" on AMLONG's LP — the FILED date wearing
+     a SALE label with the sentinel as a countdown, live, mid-call (2026-08-19). Same class as
+     the worker's old 9999 burn: a sentinel must never cross a rendering boundary unlabeled. */
+  if(r.x){
+    var hasSale = (r.d != null && r.d < 9000);   // 9999 = no-auction sentinel, never a countdown
+    if(!hasSale){
+      addRef('Filed', esc(r.x) + ' <span class="mut">&middot; no auction date yet &mdash; months of runway</span>');
+    } else if(r.d < 0){
+      addRef('SALE', esc(r.x) + ' <b style="color:#ff8a80">PASSED ' + (-r.d) + ' day' + (r.d===-1?'':'s')
+        + ' ago</b> <span class="mut">(surplus talk only)</span>');
+    } else {
+      addRef('SALE', esc(r.x) + ' <b style="color:' + (r.d <= 7 ? '#ff8a80' : '#F4E5A7') + '">in '
+        + r.d + ' day' + (r.d===1?'':'s') + '</b>');
+    }
+  }
   if(r.dd || r.bd || r.sf) addRef('Property type', esc([r.dd || '', (r.bd ? r.bd + 'BR' : ''),
       (r.ba ? r.ba + 'BA' : ''), (r.sf ? r.sf + ' sf' : '')].filter(Boolean).join(' &middot; ')));
   if(r.pl) addRef('Foreclosing', esc(r.pl));
