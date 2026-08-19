@@ -1,0 +1,306 @@
+{
+ "CACE-17-015320": {
+  "parcel": "514016130201",
+  "addr": "15842 SW 10 ST",
+  "judg": "654,365.27",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-24-002238": {
+  "parcel": "514205AA0390",
+  "addr": "3326 FARRAGUT ST",
+  "judg": "383,590.10",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-24-006101": {
+  "parcel": "Property Appraiser",
+  "addr": null,
+  "judg": "0.00",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-24-016176": {
+  "parcel": "504113131550",
+  "addr": "4914 SW 20 ST",
+  "judg": "331,003.10",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-24-018441": {
+  "parcel": "514226BH1390",
+  "addr": "1950 S OCEAN DR",
+  "judg": "514,944.83",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-25-001932": {
+  "parcel": "494135040290",
+  "addr": "5320 NW 12 ST",
+  "judg": "37,952.99",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-25-003554": {
+  "parcel": "Property Appraiser",
+  "addr": "1400 SAINT CHARLES PL 107",
+  "judg": "115,575.68",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-25-003569": {
+  "parcel": "484307030140",
+  "addr": "4832 NE 19 TER",
+  "judg": "527,667.25",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-25-006667": {
+  "parcel": "514216011170",
+  "addr": "814 S DIXIE HWY",
+  "judg": "1,016,596.31",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "CACE-25-014595": {
+  "parcel": "514127110870",
+  "addr": "7341 DILIDO BLVD",
+  "judg": "348,663.01",
+  "status": "SCHEDULED",
+  "county": "BROWARD",
+  "date": "08/27/2026"
+ },
+ "502023CA008578XXXXMB": {
+  "parcel": "30434105120030103",
+  "addr": "300 OCEAN TRAIL WAY 103",
+  "judg": "445,376.63",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502024CC007094XXXAMB": {
+  "parcel": "68434216090000380",
+  "addr": "120 LEHANE TER 301",
+  "judg": "26,135.71",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502025CA000480XXXAMB": {
+  "parcel": "00424622090020930",
+  "addr": "93 SAXONY B",
+  "judg": "35,603.95",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502025CA002931XXXAMB": {
+  "parcel": "00414725170000420",
+  "addr": "22261 FESTIVAL WAY",
+  "judg": "416,095.83",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502025CA007657XXXAMB": {
+  "parcel": "73414404010050150",
+  "addr": "769 DAFFODIL DR",
+  "judg": "278,250.56",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502025CA008509XXXAMB": {
+  "parcel": "00404213000006120",
+  "addr": "16298 90TH ST N",
+  "judg": "582,791.10",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502025CC007487XXXAMB": {
+  "parcel": "00424706081380030",
+  "addr": "9082 BOCA GARDENS PKWY C",
+  "judg": "10,940.60",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502026CC006284XXXAMB": {
+  "parcel": "Property Appraiser",
+  "addr": "6917 41ST AVE N # 863",
+  "judg": "43,572.67",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502026CC006965XXXAMB": {
+  "parcel": "52424210040001123",
+  "addr": "1123 11TH TER",
+  "judg": "13,895.47",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "08/26/2026"
+ },
+ "502022CA012458XXXXMB": {
+  "parcel": "Property Appraiser",
+  "addr": "71 SAUSALITO PL",
+  "judg": "36,628.96",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/03/2026"
+ },
+ "502023CA013120XXXXMB": {
+  "parcel": "00434506020360040",
+  "addr": "3464 ARTESIAN DR",
+  "judg": "370,758.96",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/03/2026"
+ },
+ "502025CA009596XXXAMB": {
+  "parcel": "18424403090000820",
+  "addr": "6606 WINDMILL WAY",
+  "judg": "68,673.81",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/03/2026"
+ },
+ "502025CA009790XXXAMB": {
+  "parcel": "38434427010910040",
+  "addr": "1610 S PALMWAY",
+  "judg": "570,591.28",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/03/2026"
+ },
+ "502025CA009901XXXAMB": {
+  "parcel": "56424225230001290",
+  "addr": "1014 VIA JARDIN",
+  "judg": "214,550.01",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/03/2026"
+ },
+ "502025CA010805XXXAMB": {
+  "parcel": "72414314030100230",
+  "addr": "128 SEVILLA AVE",
+  "judg": "505,315.06",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/03/2026"
+ },
+ "502025CA012845XXXAMB": {
+  "parcel": "00414102000003490",
+  "addr": "17695 HAYNIE LN",
+  "judg": "350,351.27",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/03/2026"
+ },
+ "502024CA000122XXXAMB": {
+  "parcel": "74434319020010220",
+  "addr": "430 N WARE DR",
+  "judg": "135,980.04",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502024CA002976XXXAMB": {
+  "parcel": "00424705240001670",
+  "addr": "8261 VIA DI VENETO",
+  "judg": "9,300.54",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502024CA007179XXXAMB": {
+  "parcel": "00424314020003740",
+  "addr": "5138 MICHAEL DR",
+  "judg": "233,834.18",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502024CA009313XXXAMB": {
+  "parcel": "73414426050001610",
+  "addr": "4490 ISLAND REEF DR",
+  "judg": "1,415,527.42",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502025CA001630XXXAMB": {
+  "parcel": "00414714020000020",
+  "addr": "11386 SHILOH WAY",
+  "judg": "391,440.00",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502025CA006426XXXAMB": {
+  "parcel": "00424616310000110",
+  "addr": "7882 SUNSTONE ST",
+  "judg": "869,709.32",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502025CA006795XXXAMB": {
+  "parcel": "00424733080034801",
+  "addr": "7209 PROMENADE DR 801",
+  "judg": "602,971.19",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502025CA007842XXXAMB": {
+  "parcel": "74434307070181020",
+  "addr": "2441 VILLAGE BLVD 102",
+  "judg": "246,114.07",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502025CA010240XXXAMB": {
+  "parcel": "00414636020000250",
+  "addr": "10209 SPYGLASS WAY",
+  "judg": "422,991.62",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502025CA011563XXXAMB": {
+  "parcel": "12434619060000020",
+  "addr": "648 WEST DR",
+  "judg": "271,804.69",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502025CA009456XXXAMB": {
+  "parcel": "Property Appraiser",
+  "addr": null,
+  "judg": "130,018.37",
+  "status": "RESCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ },
+ "502026CA004596XXXAMB": {
+  "parcel": "12424624050032110",
+  "addr": "3001 W LINTON BLVD C-211",
+  "judg": "8,609.95",
+  "status": "SCHEDULED",
+  "county": "PALM BEACH",
+  "date": "09/14/2026"
+ }
+}
