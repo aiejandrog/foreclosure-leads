@@ -312,6 +312,16 @@ def _pb_resolve(addr):
                   if re.search(r'\b%s0?$' % re.escape(unit), c.get('text', '').upper().strip())]
             if len(uu) == 1:
                 pick = uu[0]
+            elif unit.isdigit():
+                # PCN-TAIL corroboration (2796 EAGLE ROCK #703, 2026-08-19): the sitename renders
+                # the unit as "Cir 3" but the PCN's lot segment carries the court's full unit —
+                # '...220070703' for '#703'. When the sitename text cannot disambiguate, accept
+                # the candidate whose PCN digits END with the court's unit — only when exactly
+                # one does (same wrong-parcel-is-worse-than-no-parcel bar).
+                pt = [c for c in cands
+                      if re.sub(r'\D', '', c.get('pcn', '')).endswith(unit)]
+                if len(pt) == 1:
+                    pick = pt[0]
         if pick:
             pcn = re.sub(r'^P:', '', pick['pcn'].strip())
             if len(re.sub(r'\D', '', pcn)) >= 17:
