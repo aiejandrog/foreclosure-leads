@@ -628,10 +628,29 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         if fl:
             row['f'] = fl
         out.append({k: v for k, v in row.items() if v is not None and v != '' and v != []})
-    # soonest sale first, then known equity high-to-low, then unknowns — call_list.py's key
-    # .get() not [] — null/empty fields are stripped from the row above, so `e` is often absent.
-    # Known-equity still sorts ahead of unknown; unknown must never masquerade as 0.
-    out.sort(key=lambda r: (r.get('d', 9999), 0 if r.get('e') is not None else 1, -(r.get('e') or 0)))
+    # HIGHEST-CONVERTING FIRST (2026-08-19, his words: "I don't want clients whose auction date is
+    # today or two-three days out. I need the highest converting leads.") The old key was
+    # soonest-sale-first, which opened every session on the exact leads nothing can save — a sale
+    # tomorrow leaves no time to reinstate, list, or petition anything. Convertibility is equity
+    # to protect TIMES runway to act:
+    #   band 0: sale 7-45 days out — a real clock AND real time to work it (the prime window)
+    #   band 1: 46-120 days out, or a fresh LP with no date — pure runway, first-mover ground
+    #   band 2: 5-6 days — very tight; worth a dial only when the equity is real
+    #   band 3: 0-4 days (or already passed) — too late to convert; surplus-only talk, parked LAST
+    # Within a band: KNOWN equity high-to-low first, then sooner sale. .get() not [] — null/empty
+    # fields are stripped above, so `e` is often absent; unknown equity sorts after known and must
+    # never masquerade as 0 (the not-checked-is-not-zero rule).
+    def _band(r):
+        d = r.get('d', 9999)
+        if d <= 4:
+            return 3
+        if d <= 6:
+            return 2
+        if d <= 45:
+            return 0
+        return 1
+    out.sort(key=lambda r: (_band(r), 0 if r.get('e') is not None else 1, -(r.get('e') or 0),
+                            r.get('d', 9999)))
     return out[:cap], len(out)
 
 
