@@ -731,6 +731,52 @@ def _tp_slim(tp):
     return out
 
 
+def phone_index(slim):
+    """EVERY lead that has a phone -> the minimum needed to answer "who just texted me?".
+
+    WHY THIS IS NOT JUST THE DIALABLE 400 (2026-08-19): a lead texted 305-801-1800 and there was no
+    way to identify her. Measured on the live payload, only 1,202 of the 3,638 numbers we hold sit on
+    the call page — so 67% of possible texters were unresolvable no matter how long he scrolled. The
+    morning worker emails and texts far more people than the 400 it will dial, and any of them can
+    reply. She turned out to be a lead we had emailed three times.
+
+    Shape is deliberately two tables, not a fat map: several numbers share one lead, so
+      t: [[owner, street, case, days, equity, folio, countyCode], ...]   (each lead once)
+      d: {"3058011800": <index into t>, ...}
+    Naive one-record-per-number was 253KB; this is materially smaller and the page has to open on a
+    phone at a door. Rides INSIDE the encrypted payload — these are phone numbers and the repo is
+    public.
+    """
+    def _num(v):                       # _n() is a closure inside call_rows, not module scope
+        try:
+            return float(str(v).replace(',', '').replace('$', ''))
+        except Exception:
+            return 0.0
+    seen, table, digits = {}, [], {}
+    for d in slim:
+        case = (d.get('case') or '').strip()
+        phones = [re.sub(r'\D', '', str(p))[-10:] for p in (d.get('phones') or [])]
+        phones = [p for p in phones if len(p) == 10]
+        if not case or not phones:
+            continue
+        if case not in seen:
+            val = _num(d.get('value'))
+            judg = _num(d.get('judg'))
+            seen[case] = len(table)
+            table.append([
+                (d.get('oname') or d.get('owners') or '')[:30],
+                (d.get('addr') or '').split(',')[0][:32],
+                case,
+                d.get('days') if isinstance(d.get('days'), (int, float)) else None,
+                int(val - judg) if (val and judg) else None,
+                re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
+                (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2]),
+            ])
+        for p in phones:
+            digits.setdefault(p, seen[case])       # first lead wins; a number is one person
+    return {'t': table, 'd': digits}
+
+
 def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=None, guard=None,
                   textperson=None):
     """Write docs/call/index.html. `encrypt` is foreclosure_leads._encrypt_multi and `guard` is its
@@ -760,7 +806,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
               'until a build runs with access codes present.')
         return 0, 0
     rows, total = call_rows(slim, optouts, deads)
-    payload = encrypt(json.dumps(rows), codes)
+    payload = encrypt(json.dumps({'r': rows, 'x': phone_index(slim)}), codes)
     import hashlib
     sig = hashlib.sha256(json.dumps(payload, sort_keys=True).encode('utf-8')).hexdigest()[:12]
     _assert_page_provides(_PAGE)
@@ -845,6 +891,12 @@ button.big{background:#1d4ed8;color:#fff}
      color:var(--ink);font-size:14px;font-weight:600;touch-action:manipulation}
 .cb.on{border-color:var(--ok);color:var(--ok)}
 .cb:disabled{opacity:.45}
+/* WHO TEXTED ME — always reachable, thumb-sized, out of the way of the call buttons */
+.lkfab{position:fixed;right:10px;bottom:12px;z-index:52;min-height:44px;padding:11px 15px;
+  border-radius:999px;border:1px solid #2a3f6b;background:#12213f;color:var(--ink);
+  font:700 13px "Segoe UI",Arial,sans-serif;box-shadow:0 4px 14px rgba(0,0,0,.45);
+  touch-action:manipulation;-webkit-tap-highlight-color:rgba(198,161,75,.25)}
+.lkfab:active{background:#1b2c50}
 /* THE FILE — the reference block on the outcome screen, up for the whole call */
 .refbox{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0f1d3a;border:1px solid #2a3f6b}
 .reft{width:100%;border-collapse:collapse;font-size:13px;line-height:1.5}
@@ -974,6 +1026,10 @@ button.big{background:#1d4ed8;color:#fff}
 <p class="mut" id="gmsg">Enter your access code.</p>
 <input id="code" type="password" inputmode="text" autocomplete="one-time-code" placeholder="DEALFLOW-XXXXXXXX">
 <button class="big" id="go">Unlock</button></div></div>
+<!-- WHO TEXTED ME. Lives OUTSIDE #app for the same reason the sheet does: every screen replaces
+     #app wholesale, and a lookup you can only reach from one screen is a lookup you will not reach
+     when a text lands mid-call. Hidden until the payload is unlocked. -->
+<button id="lkbtn" class="lkfab" style="display:none" title="Identify an inbound number">&#128269; Who texted me?</button>
 <div class="toast" id="toast"></div>
 <!-- z-index 45: above the sheet (40), below the pill (50). This line carries "logged to this phone
      only — team sync is off", which matters exactly when he is working the queue with the sheet up;
@@ -992,7 +1048,7 @@ var ENC=__PAYLOAD__, OUTCOMES=__OUTCOMES__, BUILT="__BUILT__", SIG="__SIG__", BS
    restarts the 3-touch ladder at touch 1, which is exactly the shape of the August email incident. */
 var TEXTPERSON=__TEXTPERSON__;
 var SHOWN=__SHOWN__, TOTAL=__TOTAL__, VMEN=__VMEN__, VMES=__VMES__;
-var LS='fcLeadNotes', ROWS=[], lane='soon', i=0, cur=null, phIdx=0, notes={};
+var LS='fcLeadNotes', ROWS=[], PHIDX=null, lane='soon', i=0, cur=null, phIdx=0, notes={};
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6):d;}
@@ -1132,15 +1188,21 @@ function b2u(b64){var s=atob(b64),a=new Uint8Array(s.length);for(var i=0;i<s.len
 
 async function boot(){
   loadNotes();
+  /* PAYLOAD SHAPE. It used to be a bare rows array; it is now {r:rows, x:phoneIndex} so the lookup
+     can resolve numbers that are NOT among the dialable rows (67% of them). Accept BOTH shapes —
+     an older decrypted copy can still be sitting in this device's cache. */
+  var take=function(p){ if(!p) return null;
+    if(Array.isArray(p)){ ROWS=p; PHIDX=null; return p; }
+    ROWS=p.r||[]; PHIDX=p.x||null; return ROWS; };
   var saved=null; try{saved=localStorage.getItem('fcPw');}catch(e){}
-  if(saved){ var r=await unwrap(saved); if(r){ ROWS=r; return start(); } }
+  if(saved){ var r=await unwrap(saved); if(take(r)){ return start(); } }
   $('go').onclick=async function(){
     var c=$('code').value.trim(); if(!c) return;
     $('gmsg').textContent='Checking…';
     var r=await unwrap(c);
     if(!r){ $('gmsg').textContent='That code did not open this page. If it is new, the page may be cached — close the tab fully and reopen.'; return; }
     try{localStorage.setItem('fcPw',c);}catch(e){}   // unlocking either page unlocks both
-    ROWS=r; start();
+    take(r); start();
   };
 }
 /* THE MORNING WORKER'S QUEUE. `fcCallQueue` is a durable localStorage ledger the worker fills when a
@@ -1287,6 +1349,11 @@ function start(){
      highest-intent list on the device. Sale-soon and Fresh-filings stay one tap away. */
   var _wq = workerQ();
   if(_wq.length && ROWS.some(function(r){ return _wq.indexOf(r.c) >= 0; })) lane = 'wq';
+  // the lookup only exists once the payload is open — show it here, not in the gate
+  try{
+    var _lk = $('lkbtn');
+    if(_lk){ _lk.style.display = 'block'; _lk.onclick = function(){ screenLookup(); }; }
+  }catch(e){}
   i=0; render(); freshCheck();
   var k=null; try{k=localStorage.getItem('fcTeamKey');}catch(e){}
   if(!k){ $('sync').textContent='Team sync is off — outcomes log to this phone only. Turn it on in the board to reach the laptop.'; }
@@ -1456,6 +1523,128 @@ function screenRegistry(){
     +   '<button class="big" id="regback" style="margin-top:14px">&larr; Back to the queue</button>'
     + '</div><div class="sheetpad"></div>';
   $('regback').onclick = function(){ SCREEN='lead'; render(); };
+}
+/* ===== WHO TEXTED ME? ===========================================================================
+   An inbound text is the highest-value event in this business — a reply outranks every score and
+   tier — and it arrives as an anonymous number. Before this, the only way to identify it was to
+   scroll the 400-lead queue hoping to spot it, which could not work: only 1,202 of our 3,638
+   numbers are on this page at all. PHIDX carries every lead that has a phone (inside the encrypted
+   payload — these are phone numbers and the repo is public).                                   */
+function digitsOf(s){ return String(s == null ? '' : s).replace(/\D/g, ''); }
+function phLookup(q){
+  var d = digitsOf(q);
+  if(!PHIDX || !PHIDX.d || d.length < 4) return [];
+  var t = PHIDX.t || [], map = PHIDX.d, hits = [], seenIdx = {};
+  var push = function(num, idx){
+    if(idx == null || seenIdx[idx + '|' + num]) return;
+    seenIdx[idx + '|' + num] = 1;
+    var row = t[idx] || [];
+    hits.push({num:num, owner:row[0]||'', street:row[1]||'', c:row[2]||'',
+               d:row[3], eq:row[4], fo:row[5], ct:row[6]});
+  };
+  var ten = d.slice(-10);
+  if(d.length >= 10 && map[ten] != null){ push(ten, map[ten]); return hits; }
+  // 4-9 digits: suffix match, because he often only has the tail of a number in front of him
+  for(var k in map){ if(k.slice(-d.length) === d) push(k, map[k]); if(hits.length >= 12) break; }
+  return hits;
+}
+/* What we already sent this person. He should never call back blind — three emails and a text in
+   the last two weeks changes the opening line completely. Reads the same notes the board writes. */
+function contactHistory(caseId){
+  var n = notes[caseId] || {}, out = [];
+  (n.doclog || []).forEach(function(e){
+    out.push({t:e.ts || '', w:({'worker-email':'email sent','worker-text':'text sent',
+      'worker-callq':'queued to call','worker-letter':'letter'}[e.key] || e.key || 'contact')});
+  });
+  (n.touches || []).forEach(function(e){
+    out.push({t:e.ts || e.d || '', w:(e.ch || '') + (e.out ? ' — ' + e.out : '')});
+  });
+  out.sort(function(a,b){ return String(b.t).localeCompare(String(a.t)); });
+  return out.slice(0, 6);
+}
+function screenLookup(prefill){
+  SCREEN = 'lookup';
+  try{ document.getElementById('sheet').classList.add('hid'); }catch(e){}
+  $('app').innerHTML = '<div class="card">'
+    + '<div class="addr" style="font-size:18px">&#128269; Who texted me?</div>'
+    + '<div class="mut" style="font-size:12.5px;margin-top:4px">Paste the number, or just the last 4 digits.</div>'
+    + '<input id="lkq" inputmode="tel" autocomplete="off" placeholder="305-801-1800  or  1800" '
+    +   'style="width:100%;margin-top:12px;padding:14px;border-radius:12px;border:1px solid #2a3f6b;'
+    +   'background:#0f1d3a;color:var(--ink);font-size:17px;-webkit-user-select:text;user-select:text">'
+    + '<div id="lkout" style="margin-top:14px"></div>'
+    + '<button id="lkback" class="ghost" style="margin-top:14px">&larr; Back to the queue</button>'
+    + '</div><div class="sheetpad"></div>';
+  $('lkback').onclick = function(){ SCREEN='lead'; render(); };
+  var run = function(){
+    var q = $('lkq').value, hits = phLookup(q), box = $('lkout');
+    if(digitsOf(q).length < 4){ box.innerHTML = ''; return; }
+    if(!hits.length){
+      box.innerHTML = '<div class="nc">No lead in the database has this number.<br>'
+        + 'It may be a wrong number, a new person, or someone we have not traced yet.</div>'
+        + '<a class="flinks" style="display:block;margin-top:10px" href="https://www.truepeoplesearch.com/resultphone?phoneno='
+        + esc(digitsOf(q).slice(-10)) + '" target="_blank" rel="noopener">'
+        + '<span style="display:inline-flex;min-height:44px;align-items:center;padding:10px 14px;'
+        + 'border-radius:10px;background:#12213f;border:1px solid #2a3f6b;color:var(--ink);font-weight:600">'
+        + 'Reverse-search this number &rarr;</span></a>';
+      return;
+    }
+    box.innerHTML = hits.map(function(h){
+      var r = null;
+      for(var j=0;j<ROWS.length;j++){ if(ROWS[j].c === h.c){ r = ROWS[j]; break; } }
+      var hist = contactHistory(h.c);
+      var money = (h.eq != null)
+        ? ('equity <b style="color:' + (h.eq > 0 ? '#7ad48f' : '#ff8a80') + '">$'
+           + Math.abs(Math.round(h.eq/1000)) + 'k' + (h.eq < 0 ? ' UNDERWATER' : '') + '</b>')
+        : '';
+      var clock = (h.d != null && h.d < 9000)
+        ? (h.d < 0 ? '<b style="color:#ff8a80">sale PASSED</b>'
+                   : '<b style="color:' + (h.d <= 7 ? '#ff8a80' : '#F4E5A7') + '">sale in ' + h.d + ' day' + (h.d===1?'':'s') + '</b>')
+        : '<span class="mut">no auction date yet</span>';
+      return '<div class="refbox" style="margin-top:10px">'
+        + '<div class="ltag" style="margin:0 0 6px">' + fmt(h.num) + '</div>'
+        + '<div style="font:800 16px \'Segoe UI\',Arial;color:var(--ink)">' + esc(h.owner || 'name unknown') + '</div>'
+        + '<div style="margin-top:3px">' + esc(h.street) + '</div>'
+        + '<div style="margin-top:6px">' + clock + (money ? ' &middot; ' + money : '') + '</div>'
+        + (hist.length
+            ? '<div class="ltag" style="margin:10px 0 4px">WHAT WE ALREADY SENT THEM</div>'
+              + hist.map(function(e){ return '<div class="mut" style="font-size:12px">'
+                  + esc(String(e.t).slice(0,16)) + ' &middot; ' + esc(e.w) + '</div>'; }).join('')
+            : '<div class="mut" style="margin-top:8px;font-size:12px">no contact logged yet</div>')
+        + '<div class="flinks" style="margin-top:10px">'
+        +   '<a href="tel:+1' + esc(h.num) + '">&#128222; Call back</a>'
+        +   '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'
+        +   fileLinks({fo:h.fo, ct:h.ct, o:h.owner, a:h.street, c:h.c}).map(function(x){
+              return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
+        + '</div>'
+        + '<button class="lkrep" data-c="' + esc(h.c) + '" style="margin-top:10px;background:#286c34;'
+        +   'border-color:#286c34;color:#fff">&#10003; They REPLIED — flag it</button>'
+        + (r ? '<button class="lkgo" data-c="' + esc(h.c) + '" class="ghost" style="margin-top:8px">Open the full card &rarr;</button>' : '')
+        + '<div class="fcase">case ' + esc(h.c) + '</div></div>';
+    }).join('');
+    /* DELIBERATE TAP, never automatic on lookup: a reply retires the cold ladder and changes the
+       cadence, so merely looking someone up must not do it. */
+    Array.prototype.forEach.call(box.querySelectorAll('.lkrep'), function(b){
+      b.onclick = function(){
+        var c = b.dataset.c, n = notes[c] = notes[c] || {status:'',note:''};
+        n.replied = today(); n.status = n.status || 'Contacted';
+        n.touches = n.touches || [];
+        n.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text', out:'THEY REPLIED (inbound)'});
+        touched = true; saveNotes(); queueSync();
+        b.textContent = '✓ flagged as replied'; b.disabled = true;
+        toast('Flagged — they jump the queue now');
+      };
+    });
+    Array.prototype.forEach.call(box.querySelectorAll('.lkgo'), function(b){
+      b.onclick = function(){
+        var c = b.dataset.c;
+        for(var j=0;j<ROWS.length;j++){ if(ROWS[j].c === c){ cur = ROWS[j]; phIdx = 0; SCREEN='lead'; return screenLead(); } }
+        toast('That lead is not in this page’s call list');
+      };
+    });
+  };
+  $('lkq').oninput = run;
+  if(prefill){ $('lkq').value = prefill; run(); }
+  try{ $('lkq').focus(); }catch(e){}
 }
 /* ===== HIS FILE — the research links, built on the page ==========================================
    Call Mode shipped with ZERO links to a lead's records: standing on a call you had to leave the

@@ -2219,7 +2219,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="nearhome" class="abtn near-btn" title="NEAR HOME — only properties within the chosen radius of your home base (10839 NW 7th St), nearest first. Expand the radius to cast a wider net. Composes with tier/county/every other filter."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.3-7-11a7 7 0 0 1 14 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>Near home</button>
 <span id="funnelbar" class="funnelbar" title="THE FUNNEL — every lead sits at one rung: call the best equity first; no answer → email + text; still cold → a letter (only where mail can still land in time); everything else filters down to Carlos's door route. Tap a stage to work only that stage, best equity first."></span>
 <select id="nearrad" class="tf" title="Radius from your home base — expand to broaden the net" style="display:none;padding:5px 8px"><option value="1">1&nbsp;mi</option><option value="2">2&nbsp;mi</option><option value="3">3&nbsp;mi</option><option value="5" selected>5&nbsp;mi</option><option value="10">10&nbsp;mi</option><option value="15">15&nbsp;mi</option><option value="25">25&nbsp;mi</option><option value="50">50&nbsp;mi</option></select>
-<span class="qwrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><input id="q" placeholder="Filter leads… or type any address / folio and press Enter for a full county report" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list."><kbd>/</kbd></span>
+<span class="qwrap"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg><input id="q" placeholder="Filter leads… name, address, case, or a PHONE NUMBER that just texted you" title="Type to filter your leads. Press Enter to pull a full county workup on any Miami-Dade property (address, 13-digit folio, or owner name) — even ones not on this list."><kbd>/</kbd></span>
 <label style="font-size:12px">Sort <select id="sortby">
 <option value="_fresh" selected title="Freshest filings the competition can't see yet — pre-auction court filings first, picked-over auction-week leads last">🔥 First-mover (fresh &amp; uncontested)</option>
 <option value="_profit">Est. Profit</option><option value="_vrank">Worth-it verdict</option><option value="_roi">ROI %</option><option value="score">Lead Score</option>
@@ -15302,7 +15302,17 @@ function view(){
     // the lead — but stays inside an actively-selected county scope. Matches owner, address,
     // case #, mailing address, plaintiff and co-defendants.
     const s = q.toLowerCase();
-    rows = _cscope(DATA.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail+' '+(r.plaintiff||'')+' '+(r.defs||'')+' '+(r.oname||'')).toLowerCase().includes(s)));
+    /* PHONE NUMBERS TOO (2026-08-19). A lead texted and there was no way to find out who: the
+       haystack below covers owner/address/case/mail/plaintiff but never the numbers we hold, so
+       typing the number that just texted him returned nothing. Any query that reduces to 4+ digits
+       also suffix-matches every phone on the lead — 4 digits because a text notification often
+       leaves him holding only the tail. Address/folio search is untouched: the digit test is an
+       ADDITIONAL way to match, never a replacement. */
+    const _qd = q.replace(/\D/g, '');
+    const _phHit = (_qd.length >= 4)
+      ? (r => (r.phones||[]).some(p => String(p||'').replace(/\D/g,'').slice(-_qd.length) === _qd))
+      : (() => false);
+    rows = _cscope(DATA.filter(r => (r.owners+' '+r.addr+' '+r.case+' '+r.mail+' '+(r.plaintiff||'')+' '+(r.defs||'')+' '+(r.oname||'')).toLowerCase().includes(s) || _phHit(r)));
   } else if(favOnly){
     // Saved view is its own MODE (like search): shows every saved deal regardless of tier or any
     // other filter (county scope excepted), and leaves those filters untouched. Turn it off (or
