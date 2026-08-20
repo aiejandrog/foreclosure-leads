@@ -1616,11 +1616,25 @@ function screenLookup(prefill){
         +   fileLinks({fo:h.fo, ct:h.ct, o:h.owner, a:h.street, c:h.c}).map(function(x){
               return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
         + '</div>'
+        + '<div class="brhost" data-c="' + esc(h.c) + '"></div>'
         + '<button class="lkrep" data-c="' + esc(h.c) + '" style="margin-top:10px;background:#286c34;'
         +   'border-color:#286c34;color:#fff">&#10003; They REPLIED — flag it</button>'
         + (r ? '<button class="lkgo" data-c="' + esc(h.c) + '" class="ghost" style="margin-top:8px">Open the full card &rarr;</button>' : '')
         + '<div class="fcase">case ' + esc(h.c) + '</div></div>';
     }).join('');
+    /* Brief buttons per hit — use the FULL row when the lead is on this page (money, flags,
+       plaintiff all present); fall back to the index's slice, whose brief states its unknowns. */
+    Array.prototype.forEach.call(box.querySelectorAll('.brhost'), function(host){
+      var c = host.dataset.c, full = null;
+      for(var j=0;j<ROWS.length;j++){ if(ROWS[j].c === c){ full = ROWS[j]; break; } }
+      var hh = null;
+      hits.forEach(function(x){ if(x.c === c) hh = x; });
+      var rr = full || {a: (hh && hh.street) || '', o: (hh && hh.owner) || '', c: c,
+                        d: hh && hh.d, fo: hh && hh.fo, ct: hh && hh.ct,
+                        p: hh ? [hh.num] : []};
+      host.innerHTML = briefButtons(rr);
+      wireBrief(host, rr);
+    });
     /* DELIBERATE TAP, never automatic on lookup: a reply retires the cold ladder and changes the
        cadence, so merely looking someone up must not do it. */
     Array.prototype.forEach.call(box.querySelectorAll('.lkrep'), function(b){
@@ -1694,8 +1708,97 @@ function fileBand(r){
     + L.map(function(x){
         return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>';
       }).join('')
-    + '</div><div class="fcase">case ' + esc(r.c || '') + (r.fo ? ' &middot; folio ' + esc(r.fo) : '')
+    + '</div>'
+    + briefButtons(r)
+    + '<div class="fcase">case ' + esc(r.c || '') + (r.fo ? ' &middot; folio ' + esc(r.fo) : '')
     + '</div></div>';
+}
+/* ===== BRIEF JESSE — one tap mid-call ============================================================
+   The live-call flow: owner on the line, Jesse joining, and he fires his standard questions —
+   plaintiff? bank or HOA? what's owed? sale when? listed? — while Alejandro scrambles. Every answer
+   is ALREADY on the row; this assembles them IN JESSE'S ORDER and hands them off. mailto: keeps a
+   human on the send button (a page can't verify delivery, so it must not pretend to send).
+   Recipient is HARDCODED — this can never mail an owner. */
+var JESSE = 'celusa13@gmail.com';
+function advisorBrief(r){
+  var L = [];
+  var money = function(v){ v = +v || 0;
+    return v >= 1e6 ? '$' + (v/1e6).toFixed(2) + 'M' : '$' + Math.round(v).toLocaleString(); };
+  var fl = String(r.f || '');
+  L.push('LIVE CALL BRIEF — ' + (r.a || 'address unknown'));
+  L.push('Owner: ' + (r.o || 'unknown')
+    + (r.hs ? ' — lives there (homestead)' : (r.ab ? ' — ABSENTEE (mails elsewhere)' : ''))
+    + (fl.indexOf('C') >= 0 ? ' [company/trust]' : ''));
+  var hasSale = (r.d != null && r.d < 9000);
+  L.push('Sale: ' + (!hasSale
+      ? ((r.x || 'n/a') + ' filed — NO auction date yet (months of runway)')
+      : (r.d < 0 ? (r.x + ' — PASSED ' + (-r.d) + 'd ago (surplus talk only)')
+                 : (r.x + ' — in ' + r.d + ' day' + (r.d === 1 ? '' : 's'))))
+    + (r.sv ? ' | survived ' + r.sv + ' prior sale date' + (r.sv === 1 ? '' : 's') + ' (staller)' : ''));
+  /* ja = TOTAL interest accrued (FS 55.03), not per-day — and a payoff already CONTAINS it, so
+     it only prints beside a bare judgment (first draft said "+$X/day": a 384%/yr absurdity). */
+  var owed = (r.py || r.jg);
+  L.push('Money: value ' + (r.v ? money(r.v) + ' (county)' : 'UNKNOWN')
+    + ' | owed ' + (owed ? money(owed)
+                            + (r.py ? ' payoff (incl. interest' + (r.jd ? ', as of ' + r.jd : '') + ')'
+                                    : ' judgment' + (r.jd ? ' (' + r.jd + ')' : '')
+                                      + (r.ja ? ' + ' + money(r.ja) + ' interest accrued' : ''))
+                  : (fl.indexOf('J') >= 0 ? 'NOT POSTED yet' : 'unknown')));
+  if(r.v && owed){
+    var eq = r.v - owed;
+    L.push('  -> equity ~' + money(Math.abs(eq)) + (eq < 0 ? ' UNDERWATER' : '')
+      + (fl.indexOf('E') >= 0 ? ' (gross upper bound — liens unverified)' : ''));
+  }
+  L.push('Foreclosing: ' + (r.pl || 'plaintiff not on file') + (r.ft ? ' [' + r.ft + ']' : ''));
+  if(fl.indexOf('H') >= 0) L.push('HOA co-defendant: YES — check for a second case');
+  if(fl.indexOf('S') >= 0) L.push('SECOND CASE EXISTS on this person — pull it before advising');
+  if(fl.indexOf('M') >= 0) L.push('A FIRST MORTGAGE SURVIVES this sale');
+  if(r.ss) L.push('Surviving senior lien: ' + money(r.ss));
+  if(fl.indexOf('T') >= 0) L.push('Tax certificate sold — second clock running');
+  if(r.td) L.push('Back taxes due: ' + money(r.td));
+  L.push(r.zs ? ('Listing: ' + r.zs + (r.zap ? ' — agent ' + (r.zag || '') + ' ' + fmt(r.zap) : (r.zag ? ' — agent ' + r.zag : '')))
+              : 'Listing: not listed');
+  if(fl.indexOf('D') >= 0) L.push('Condo — estoppel letter needed');
+  L.push('Case ' + (r.c || '?') + (r.ct ? ' (' + (r.ct === 'BR' ? 'BROWARD' : r.ct === 'PA' ? 'PALM BEACH' : 'MIAMI-DADE') + ')' : '')
+    + (r.fo ? ' | folio ' + r.fo : ''));
+  fileLinks(r).forEach(function(x){ if(x[0] !== 'Map' && x[0] !== 'People search') L.push(x[0] + ': ' + x[1]); });
+  if(r.p && r.p.length) L.push('Phones: ' + r.p.map(fmt).join(' | '));
+  return L.join('\n').slice(0, 1500);
+}
+function briefButtons(r){
+  return '<div class="flinks" style="margin-top:10px">'
+    + '<a href="#" class="briefjesse" style="background:#3d2c08;border-color:#A8720C;color:#F6E9C8;font-weight:800">&#9889; Brief Jesse</a>'
+    + '<a href="#" class="briefcopy">&#128203; Copy brief</a></div>';
+}
+function wireBrief(root, r){
+  var mark = function(){
+    var n = notes[r.c] = notes[r.c] || {status:'',note:''};
+    n.doclog = n.doclog || [];
+    n.doclog.push({ts: nowTS(), tsu: Date.now(), key: 'advisor-brief', src: 'call-mode'});
+    touched = true; saveNotes(); queueSync();
+  };
+  Array.prototype.forEach.call(root.querySelectorAll('.briefjesse'), function(b){
+    b.onclick = function(ev){
+      ev.preventDefault();
+      var body = advisorBrief(r);
+      var url = 'mailto:' + JESSE + '?subject=' + encodeURIComponent((r.a || r.c || 'lead') + ' — live call brief')
+              + '&body=' + encodeURIComponent(body);
+      var a = document.createElement('a');
+      a.href = url; a.style.display = 'none';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      mark(); toast('Gmail opened — hit Send and keep talking');
+    };
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('.briefcopy'), function(b){
+    b.onclick = function(ev){
+      ev.preventDefault();
+      var body = advisorBrief(r);
+      var done = function(){ mark(); toast('Brief copied — paste to Jose'); };
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(body).then(done, function(){ prompt('Copy this:', body); done(); });
+      } else { prompt('Copy this:', body); done(); }
+    };
+  });
 }
 function screenLead(){
   SCREEN='lead';
@@ -1829,6 +1932,7 @@ function screenLead(){
      pool on the first logged number, so i++ from there lands one past the next person. Skipping is
      also the one action that must NOT count as work, so it does not touch _WORKED. */
   $('skip').onclick=function(){ advance(cur.c, null); };
+  wireBrief(document, cur);
   wire();
   // Refresh the sheet for THIS lead. It is not re-created — it lives outside #app — so its
   // open/closed state and the chosen CIOC beat survive advancing to the next person.
@@ -2010,7 +2114,9 @@ function screenOutcome(){
       + '<div class="flinks" style="margin-top:9px">'
       + fileLinks(r).map(function(x){
           return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
-      + '</div></div>'
+      + '</div>'
+      + briefButtons(r)
+      + '</div>'
     : '';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
@@ -2026,6 +2132,7 @@ function screenOutcome(){
   /* A redial IS a dial — record it, or the dial-through count undercounts the actual work (the
      exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
      outcome he eventually taps logs its own entry for that attempt. */
+  wireBrief(document, r);
   $('redial').addEventListener('click', function(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];

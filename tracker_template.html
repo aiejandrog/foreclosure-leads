@@ -4363,6 +4363,84 @@ function _csPlay(r){ const p=r&&r._play; if(!p) return '';
 // 3000-line sheet on 07/28 — that is a placement bug, not a missing feature.
 // Suppressed on a CLAIMED lead: the sib banner already reads "do not knock, call, or mail",
 // and an action strip beneath it would send exactly the opposite signal.
+/* ===== BRIEF JESSE (board side) ==================================================================
+   Owner on the phone, Jesse joining, and he asks his standard questions — plaintiff? bank or HOA?
+   owed? sale when? listed? staller? — while Alejandro scrambles. Every answer is already on the
+   row. One click emails Jesse the whole file through the local bridge; bridge down -> Gmail opens
+   pre-filled instead. Recipient HARDCODED — this can never email an owner. NOT logged as a touch
+   (briefing your own advisor is not contact with the lead); doclog only. */
+var _JESSE = 'celusa13@gmail.com';
+function _advisorBrief(r){
+  var money = function(v){ v = +v || 0;
+    return v >= 1e6 ? '$' + (v/1e6).toFixed(2) + 'M' : '$' + Math.round(v).toLocaleString(); };
+  var L = [];
+  var d = (typeof _saleDays === 'function') ? _saleDays(r) : r.days;
+  L.push('LIVE CALL BRIEF — ' + (r.addr || 'address unknown'));
+  L.push('Owner: ' + (r.oname || r.owners || 'unknown')
+    + (r.hs ? ' — lives there (homestead)' : '')
+    + ((r.mail && r.addr && r.mail.split(',')[0].trim().toUpperCase() !== r.addr.split(',')[0].trim().toUpperCase())
+        ? ' — ABSENTEE (mail: ' + r.mail + ')' : '')
+    + (r.co ? ' [company/trust]' : ''));
+  L.push('Sale: ' + ((d == null || d >= 9000)
+      ? ((r.filedDate || r.filed || 'n/a') + ' filed — NO auction date yet (months of runway)')
+      : (d < 0 ? (r.auction + ' — PASSED ' + (-d) + 'd ago (surplus talk only)')
+               : (r.auction + ' — in ' + d + ' day' + (d === 1 ? '' : 's'))))
+    + (r.saleSurv ? ' | survived ' + r.saleSurv + ' prior sale date' + (r.saleSurv === 1 ? '' : 's') + ' (staller)' : ''));
+  /* jaccr = TOTAL interest accrued (FS 55.03), not per-day — and payoff already CONTAINS it, so
+     it only prints beside a bare judgment. */
+  var owed = _payoffOf(r);
+  L.push('Money: value ' + (r.value ? money(r.value) + ' (county)' : 'UNKNOWN')
+    + ' | owed ' + (owed ? money(owed)
+                            + ((+r.payoff > 0) ? ' payoff (incl. interest' + (r.jdate ? ', as of ' + r.jdate : '') + ')'
+                                               : ' judgment' + (r.jdate ? ' (' + r.jdate + ')' : '')
+                                                 + (r.jaccr ? ' + ' + money(r.jaccr) + ' interest accrued' : ''))
+                  : (r.ju ? 'NOT POSTED yet' : 'unknown')));
+  if(r.value && owed){
+    var eq = r.value - owed;
+    L.push('  -> equity ~' + money(Math.abs(eq)) + (eq < 0 ? ' UNDERWATER' : '')
+      + (r.eqfake ? ' (gross upper bound — liens unverified)' : ''));
+  }
+  L.push('Foreclosing: ' + (r.plaintiff || 'plaintiff not on file') + (r.ftype ? ' [' + r.ftype + ']' : ''));
+  if(r.orhoa) L.push('HOA co-defendant: YES — check for a second case');
+  if(r.sib || r.orsecond) L.push('SECOND CASE EXISTS on this person — pull it before advising');
+  if(r.mr) L.push('A FIRST MORTGAGE SURVIVES this sale');
+  if(r.orsurvsen) L.push('Surviving senior lien: ' + money(r.orsurvsen));
+  if(r.taxCert) L.push('Tax certificate sold — second clock running');
+  if(r.taxDue) L.push('Back taxes due: ' + money(r.taxDue));
+  L.push(r.zstatus ? ('Listing: ' + r.zstatus
+      + (r.zagent ? ' — agent ' + r.zagent + (r.zagentphone ? ' ' + r.zagentphone : '') : '')
+      + (r.zprice ? ' at ' + money(r.zprice) : ''))
+    : 'Listing: not listed');
+  if(r.condo) L.push('Condo — estoppel letter needed');
+  L.push('Case ' + (r.case || '?') + (r.county ? ' (' + r.county + ')' : '') + (r.folio ? ' | folio ' + r.folio : ''));
+  if(r.pa) L.push('Appraiser: ' + r.pa);
+  if(r.tax) L.push('Taxes: ' + r.tax);
+  if(r.docket) L.push('Docket: ' + r.docket);
+  if(r.phones && r.phones.length) L.push('Phones: ' + r.phones.slice(0, 4).join(' | '));
+  return L.join('\n').slice(0, 2500);
+}
+function briefJesse(caseId){
+  var r = DATA.find(function(y){ return y.case === caseId; });
+  if(!r){ if(typeof _shareToast === 'function') _shareToast('Lead not on this board build'); return; }
+  var body = _advisorBrief(r);
+  var subj = (r.addr || r.case) + ' — live call brief';
+  var mailtoFallback = function(){
+    var a = document.createElement('a');
+    a.href = 'mailto:' + _JESSE + '?subject=' + encodeURIComponent(subj) + '&body=' + encodeURIComponent(body.slice(0, 1500));
+    a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    if(typeof _shareToast === 'function') _shareToast('Bridge down — Gmail opened pre-filled, hit Send');
+  };
+  fetch('http://127.0.0.1:8823/send', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({to: _JESSE, subj: subj, body: body,
+                          meta: {c: r.case, owner: r.oname || r.owners || '', addr: r.addr || '', test: true}})
+  }).then(function(resp){ return resp.json(); }).then(function(j){
+    if(j && j.ok){
+      _docLog(r.case, 'advisor-brief', 'en');
+      if(typeof _shareToast === 'function') _shareToast('✓ Brief SENT to Jesse — keep talking');
+    } else { mailtoFallback(); }
+  }).catch(mailtoFallback);
+}
 function _csTakeAction(r){
   if(r.sibclaimed) return '';
   var caseEsc = esc(r.case);
@@ -4373,6 +4451,7 @@ function _csTakeAction(r){
     + '<button type="button" class="csactbtn" onclick="(function(){var x=DATA.find(function(y){return y.case===\''+caseEsc+'\';}); if(x) genScript(x);})()" title="Bilingual phone script for THIS lead — new 4-second opener (Beat 1: are you the owner at [street]? Beat 2: do you still own it? Beat 3: honest reveal).">📞 Call script</button>'
     + '<button type="button" class="csactbtn" onclick="openDocRoom(\''+caseEsc+'\')" title="Doc Room — door folder + office forms + deed cards. Forms print directly; the quit claim deed is locked pending attorney review.">📁 Doc Room</button>'
     + '<button type="button" class="csactbtn" onclick="openDialReady(\''+caseEsc+'\')" title="Dial-Ready Card — the 5-second briefing you read WHILE dialing. Bilingual EN/ES toggle, 3-beat opener in big type, five facts you must not stumble on, tap-to-dial buttons for every non-DNC number. Same gate as Doc Room.">🎯 Dial-Ready</button>'
+    + '<button type="button" class="csactbtn csact-field" onclick="briefJesse(\''+caseEsc+'\')" title="BRIEF JESSE — one click, mid-call. Emails Jesse (celusa13@gmail.com) everything he always asks: plaintiff, bank vs HOA, owed + accrual, equity, sale date, staller count, surviving liens, listing + agent, case + folio + links. Sends through the local bridge; if the bridge is down it opens Gmail pre-filled instead. Recipient is hardcoded — this can never email an owner.">⚡ Brief Jesse <span class="csactsub">live call</span></button>'
     + (function(){ var rep=_isReplied(r);
         return '<button type="button" class="csactbtn'+(rep?' csact-save on':'')+'" onclick="_markReplied(\''+caseEsc+'\',event)" '
           + 'title="Flag that this owner WROTE BACK. A reply is the warmest signal on the board — it jumps them to the top of the Reply inbox, ahead of every score and tier. Works with no setup; replies.py fills this in automatically once gmail.key holds a real App Password.">'
