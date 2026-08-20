@@ -51,6 +51,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 KEY_FILE = os.path.join(HERE, 'gmail.key')
 SENDER_FILE = os.path.join(HERE, 'sender.json')
 SENT_LEDGER = os.path.join(HERE, 'mail_sent.json')
+OPTOUT_FILE = os.path.join(HERE, 'optouts.json')
 NOTES_FILE = os.path.join(HERE, 'worker_notes.json')
 NOTES_SNAP_DIR = os.path.join(HERE, 'worker_notes_snapshots')
 
@@ -82,6 +83,35 @@ def _load_sender():
         return json.load(open(SENDER_FILE, encoding='utf-8'))
     except Exception:
         return {}
+
+
+def _optout_set():
+    """The DO-NOT-CONTACT ledger, correctly UNWRAPPED. optouts.json is an envelope
+    {_dealflow_notes, exported, device, notes:{...}} whose `notes` dict is keyed by EITHER a case
+    number OR '@'+email. Returns two lowercased sets: (cases, emails). 2026-08-19 stress test: the
+    bridge /send — the live auto-email chokepoint — consulted this ledger NOWHERE, so a server-side
+    or second-entry send to an owner who filed a written STOP had no backstop at all. The client
+    worker gates are the primary defense; this is the one that cannot be bypassed."""
+    cases, emails = set(), set()
+    try:
+        d = json.load(open(OPTOUT_FILE, encoding='utf-8'))
+    except Exception:
+        return cases, emails
+    notes = d.get('notes') if isinstance(d, dict) else (d if isinstance(d, dict) else {})
+    if isinstance(d, list):                       # tolerate a bare-list legacy shape
+        for x in d:
+            s = str(x).strip().lower()
+            (emails if '@' in s else cases).add(s.lstrip('@'))
+        return cases, emails
+    for k, v in (notes or {}).items():
+        if not v:
+            continue
+        s = str(k).strip().lower()
+        if s.startswith('@') or '@' in s:
+            emails.add(s.lstrip('@'))
+        else:
+            cases.add(s)
+    return cases, emails
 
 
 def _load_ledger():
@@ -754,6 +784,23 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(400, {'ok': False, 'err': 'invalid to address'})
         if not subj or not body:
             return self._json(400, {'ok': False, 'err': 'subj and body required'})
+
+        # ---- OPT-OUT BACKSTOP (2026-08-19 stress-test CRITICAL) --------------------------------
+        # Refuse to email anyone on the DO-NOT-CONTACT ledger, matched by recipient email OR by the
+        # meta.c case. meta.test sends are 1:1 to the advisor/operator (Brief Jesse, case workups),
+        # never to an owner — those bypass the CASE check, but the EMAIL check still applies so even
+        # a test can't reach an opted-out address. A written STOP followed by another email is the
+        # exact FTSA/FDUTPA fact pattern that ends this business.
+        _oo_cases, _oo_emails = _optout_set()
+        _every = [to] + [a.strip().lower() for a in bcc.split(',') if a.strip()]
+        _hit_email = next((a for a in _every if a in _oo_emails), None)
+        _case = str((meta or {}).get('c') or '').strip().lower()
+        _is_test = bool((meta or {}).get('test'))
+        if _hit_email or (_case and _case in _oo_cases and not _is_test):
+            return self._json(200, {
+                'ok': False, 'blocked': 'optout',
+                'err': ('recipient is on the DO-NOT-CONTACT ledger (%s) — send refused'
+                        % ('email ' + _hit_email if _hit_email else 'case ' + _case))})
 
         # ---- daily cap ----
         rcpt = _recipients_today()

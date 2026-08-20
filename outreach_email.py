@@ -246,16 +246,23 @@ def _load_leads():
 
 
 def _load_optouts():
+    """DO-NOT-CONTACT ledger, correctly UNWRAPPED. 2026-08-19 stress test CONFIRMED this was DEAD
+    CODE: optouts.json is the envelope {_dealflow_notes, exported, device, notes:{...}} and this
+    returned its TOP-LEVEL keys ({_dealflow_notes, exported, device, notes}) — never a case or an
+    email — so `em in optouts` and `_case(r) in optouts` could never match, and a written STOP was
+    followed by a fresh cold email. Every other consumer (foreclosure_leads.py:~2304) unwraps the
+    envelope; this one did not. The `notes` dict is keyed by EITHER a case number OR '@'+email."""
     if not os.path.exists(OPTOUT_FILE):
         return set()
     try:
         data = json.load(open(OPTOUT_FILE, encoding='utf-8'))
-        if isinstance(data, list):
-            return {str(x).strip().lower() for x in data}
-        if isinstance(data, dict):
-            return {str(k).strip().lower() for k, v in data.items() if v}
     except Exception:
         return set()
+    if isinstance(data, list):
+        return {str(x).strip().lower().lstrip('@') for x in data}
+    notes = data.get('notes') if isinstance(data, dict) else None
+    if isinstance(notes, dict):
+        return {str(k).strip().lower().lstrip('@') for k, v in notes.items() if v}
     return set()
 
 
@@ -375,10 +382,14 @@ def _eligible(r, ledger, optouts, min_hours):
         return False, 'active bankruptcy stay'
     if r.get('sibclaimed'):
         return False, 'sibling case sold'
+    # opt-out is keyed by CASE or EMAIL in the ledger — check both (the case catches an owner who
+    # opted out by phone/text with no email on the STOP record).
+    if _case(r).strip().lower() in optouts:
+        return False, 'opted out (case on DNC ledger)'
     em = _primary_email(r)
     if not em:
         return False, 'no primary email'
-    if em in optouts:
+    if em.strip().lower() in optouts:
         return False, 'opted out'
     if _recently_emailed_hours(ledger, em, min_hours):
         return False, f'emailed within {min_hours}h'

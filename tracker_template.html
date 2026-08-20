@@ -13049,7 +13049,14 @@ function genMorningWorker(lane, autostart){
     +     'CALL_OUTCOMES.forEach(function(o){ if(o.k===pp[1]) oc=o; });'
     +     'if(oc){ post("callout", {oc:oc.k, label:oc.t+" (queue panel)", hrs:oc.hrs, sup:!!oc.sup, qc:pp[0]});'
     +     'addLog("callout", pp[0], oc.t+" — logged from the queue panel");'
-    +     'CALLQ=CALLQ.filter(function(x){return x.c!==pp[0];}); renderCallQ(); }'
+    // SUPPRESSING OUTCOME (DNC "Said STOP") must close EVERY channel on THIS device too. The post()
+    // above routes to the parent, which sets optout on a dnc — but the blob also holds TEXTQ, and
+    // before this it scrubbed only CALLQ, so a STOP logged from the queue panel left the owner in
+    // the text batch and the batch would text a person who just said stop (2026-08-19 stress test,
+    // CONFIRMED — an FTSA/FDUTPA violation our own UI manufactured). oc.sup marks the STOP outcome.
+    +     'CALLQ=CALLQ.filter(function(x){return x.c!==pp[0];});'
+    +     'if(oc.sup){ TEXTQ=TEXTQ.filter(function(x){return x.c!==pp[0];}); renderTextQ(); }'
+    +     'renderCallQ(); }'
     +     'return; }'
     +   '});'
     +   'document.addEventListener("click", function(e){'
