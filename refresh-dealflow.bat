@@ -25,6 +25,14 @@ if errorlevel 1 (
 rem  Publish the fresh leads NOW, before the slower cases/records/phones steps -- so even if a
 rem  later step is slow or fails, the newest leads are already live on the site.
 echo [1b/5] Publishing fresh leads immediately...
+rem  GUARDED 2026-08-19: same corrupt-page + enrichment gate as the final publish. This early push
+rem  is the exact block whose autostash pull can write conflict markers into docs/index.html (the
+rem  08-19 outage class) - never push a build the guard refuses.
+python -u publish_guard.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     ^!^! GATE: publish_guard blocked the early publish - continuing enrichment unpublished.>> "%LOG%"
+  goto :afterearly
+)
 git add docs/index.html docs/call >> "%LOG%" 2>&1
 git commit -m "refresh: fresh leads" >> "%LOG%" 2>&1
 if not errorlevel 1 (
@@ -38,6 +46,7 @@ git push origin main >> "%LOG%" 2>&1
   if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
   echo     fresh leads pushed - enrichment continues below.>> "%LOG%"
 )
+:afterearly
 
 rem  Re-scrape the OTHER counties too (Miami-Dade was done above by foreclosure_leads.py). county_leads.py
 rem  has its own thin-scrape guard, so a blocked county keeps its last good file. The fresh county leads
@@ -76,19 +85,14 @@ echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO da
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
 rem  file most foreclosures over a rolling window, keep the LIS PENDENS, dedupe -> the owner the DAY
 rem  their case is filed. lp_leads.py shapes them into st='LP' board leads (the Fresh-filings lane).
-if exist captcha.key python -u lis_pendens.py --days 30 >> "%LOG%" 2>&1
-if exist lis_pendens.json python -u lp_leads.py >> "%LOG%" 2>&1
-
-rem  ADDED 2026-08-15 - these three exist in refresh.yml but were NEVER in this bat, and this bat has
-rem  been the only thing actually running since the cloud workflow stopped publishing on 07-27. The
-rem  consequence: only 355 of 758 fresh filings carried a usable ADDRESS, and the newest filings were
-rem  the least likely to have one - exactly backwards, since freshness is the whole edge on this lane.
-rem  A lis pendens names a defendant and a legal description, not a street address; lp_resolve derives
-rem  it from the parcel roll, lp_values prices it, lp_status catches dismissals so we stop working a
-rem  case that already ended.
-if exist lp_leads.json python -u lp_resolve.py >> "%LOG%" 2>&1
-if exist lp_leads.json python -u lp_values.py >> "%LOG%" 2>&1
-if exist lp_leads.json python -u lp_status.py >> "%LOG%" 2>&1
+rem  ORDER FIX 2026-08-19: this bat used to run lp_leads.py FIRST and then
+rem  lp_resolve/lp_values/lp_status - the exact inversion lp_refresh.py's docstring calls out:
+rem  lp_resolve's whole-row merge strips everything lp_values wrote, so every LP lead shipped with
+rem  value=0 / hs=False and equity ranking was silently dead for the freshest lane on the board.
+rem  It also never ran lp_resolve2 or fl_lp/broward_resolve at all. lp_refresh.py IS the canonical
+rem  chain (sweep -> resolve -> resolve2 -> broward_resolve -> values -> status -> leads -> phones),
+rem  fail-fast, and stamps lp_meta.json so healthcheck can age it. One line replaces five.
+if exist captcha.key python -u lp_refresh.py --days 30 >> "%LOG%" 2>&1
 
 echo [2d/5] Geocoding new leads (keyless US Census) -> lat/lng for the origin-anchored door route...
 python -u geo_enrich.py >> "%LOG%" 2>&1
@@ -146,6 +150,13 @@ python -u redfin_value.py --limit 100 >> "%LOG%" 2>&1
 echo [3e/5] Sale-history survival counts (MD docket, 7-day cache - the STALLER signal)...
 python -u sale_history.py --limit 150 >> "%LOG%" 2>&1
 
+echo [3f/5] Ownership flip gate (live appraiser owner vs defendant; budget-capped)...
+rem  ADDED 2026-08-19: ownership_scan.py was called by NOTHING - not this bat, not refresh.yml -
+rem  so the title-flip truth on the board was only as fresh as the last time a human remembered
+rem  to run it (it had been stamped 08-14 for five days). A lead whose title already transferred
+rem  is a WRONG-PERSON conversation waiting to happen. Free, and --budget bounds it to 3 minutes.
+python -u ownership_scan.py --days 45 --max 80 --budget 180 >> "%LOG%" 2>&1
+
 rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phones can be pulled.
 
 rem  Harvest hard bounces BEFORE the rebuild so dead addresses are excluded at bake time.
@@ -181,6 +192,24 @@ rem  Reads the Desktop twin's RAW payload, so it MUST run after the [4/5] rebuil
 python -u sheets_crm.py >> "%LOG%" 2>&1
 
 :publish
+rem  GATE BEFORE PUBLISH (2026-08-19). healthcheck used to run only at :end - AFTER the push - so a
+rem  FAIL could never stop a bad board from going live from this machine; and publish_guard (the
+rem  corrupt-page + enrichment-regression check that stopped the conflict-marker outage in CI) was
+rem  never in this bat at all. Same gates as the cloud workflow now: either one failing skips the
+rem  push, the board stays on its last good build, and the run still writes its report.
+echo [gate] healthcheck + publish guard before anything goes live...
+python -u healthcheck.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     ^!^! GATE: healthcheck FAILED - publish SKIPPED, board stays on last good build.>> "%LOG%"
+  echo     ^!^! GATE: healthcheck FAILED - publish SKIPPED. See leads-run.log.
+  goto :end
+)
+python -u publish_guard.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     ^!^! GATE: publish_guard BLOCKED the build - publish SKIPPED.>> "%LOG%"
+  echo     ^!^! GATE: publish_guard BLOCKED the build - publish SKIPPED. See leads-run.log.
+  goto :end
+)
 echo [5/5] Publishing to the live site...
 git add docs/index.html docs/call >> "%LOG%" 2>&1
 git commit -m "refresh: auto lead + phone update" >> "%LOG%" 2>&1
