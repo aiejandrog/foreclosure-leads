@@ -42,7 +42,13 @@ import msg_brand
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOB_KEY_FILE = os.path.join(HERE, 'lob.key')
 SENDER_FILE = os.path.join(HERE, 'sender.json')
-SENT_LEDGER = os.path.join(HERE, 'mail_sent.json')
+# DEDICATED LETTER LEDGER (2026-08-19 stress-test CRITICAL). This used to be mail_sent.json — the
+# SHARED EMAIL ledger, which send_server.py writes as a LIST of 1,600+ rows. Reading that list as a
+# case-keyed dict made the already-mailed dedupe always-False (re-mailing everyone) and the first
+# paid Lob send crash on `sent[case]=...` AFTER Lob charged, with json.dump then OVERWRITING the
+# email ledger with a stale copy — wiping the email dedupe + daily caps. Letters get their own
+# case-keyed dict; the email ledger is never touched by this tool again.
+SENT_LEDGER = os.path.join(HERE, 'mail_letters_sent.json')
 PREVIEW_FILE = os.path.join(HERE, 'mail_preview.html')
 
 # Approximate all-in cost of one first-class, single-page B&W letter (print + postage + windowed envelope).
@@ -403,6 +409,16 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust
                 continue
         if _case(r) in suppress:
             skips['suppressed(DNC/opt-out)'] += 1
+            continue
+        # §362 STAY GATE (2026-08-19 stress-test CRITICAL) — a HARD backstop, applied even in
+        # trust_selection mode. Mailing a "sell before the auction" letter to a debtor under an
+        # active bankruptcy stay is a federal stay violation with sanctions payable to the debtor,
+        # and physical mail is the one channel that leaves a paper exhibit. Every OTHER channel
+        # blocks this (worker _workerEligible, text gate, door gate, outreach_email:374); the letter
+        # path was the only one left open. Both spellings: board bakes saleBkAct, raw files carry
+        # sale_bk_active; saleLift clears it.
+        if (_g(r, 'saleBkAct') or _g(r, 'sale_bk_active')) and not _g(r, 'saleLift'):
+            skips['active-bankruptcy-stay'] += 1
             continue
         if not remail and _case(r) in sent:
             skips['already-mailed'] += 1

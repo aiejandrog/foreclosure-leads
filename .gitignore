@@ -92,6 +92,7 @@ tracker_light_template.html
 lob.key
 sender.json
 mail_sent.json
+mail_letters_sent.json
 # text_sent.json is mail_sent.json's counterpart for SMS. It holds homeowner PHONE NUMBERS in
 # plaintext, and this repo is PUBLIC — ignored here BEFORE the file can ever exist.
 text_sent.json
