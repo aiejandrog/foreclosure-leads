@@ -165,6 +165,37 @@ HardMoney_Balloon_Book.html
 HardMoney_Balloon_Book.pdf
 HardMoney_Balloon_Book_*.html
 diligence/
+# 2026-08-19 stress-test finding: the .gitignore covered Carlos_*/Refi_* but NOT the whole MSG_*/
+# Acosta_* deliverable generation — dozens of files at repo root (MSG_Call_List = 305 phones,
+# Acosta_Position_Report, workups, courthouse sheets, pitch cards, buy-boxes). run-leads.bat did
+# `git add -A`, so any one of them was one bat-run from the public repo. Belt: catch every client
+# artifact by prefix AND by kind. The only publishable outreach artifact is the REDACTED balloon
+# book under docs/hm-balloon-q7v3n8/, which these root-level rules do not touch.
+MSG_*.html
+MSG_*.pdf
+MSG_*.csv
+Acosta_*.html
+Acosta_*.pdf
+Tradervert_*.pdf
+*_Call_List_*.pdf
+*_Call_List_*.html
+*_Position_Report_*
+*_Strategy_Workup_*
+*_Courthouse_Run_*
+*_BuyBox_*
+*Buy_Box*
+Auction_Day_Worked_*
+Subscription_Audit_*
+*_Pitch_Cards_*
+IRS_147C_*
+*_Field_Kit_*
+*_Door_Log_*
+*_Door_Letter_*
+# credentials: catch every variant, not just the bare `<provider>.key` names above
+*.key
+*.key.*
+*.retired
+site.codes
 # runtime logs / queues — carry lead emails, phones and addresses in plain text
 send_server_run.log
 phones-run.log
