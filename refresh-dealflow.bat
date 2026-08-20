@@ -198,15 +198,23 @@ rem  corrupt-page + enrichment-regression check that stopped the conflict-marker
 rem  never in this bat at all. Same gates as the cloud workflow now: either one failing skips the
 rem  push, the board stays on its last good build, and the run still writes its report.
 echo [gate] healthcheck + publish guard before anything goes live...
+rem  TIERED GATE (2026-08-20). healthcheck exit 2 = COMPLIANCE/systemic fail (lost §362 stay flags,
+rem  or >=2 upstream sources down) -> HARD block. exit 1 = coverage-floor fail only (value/lien %) ->
+rem  ADVISORY: a fresh-filing-heavy day dips below the value floor because new MD leads have no folio
+rem  to price, and blocking a build publish_guard already proved is RICHER than live just leaves the
+rem  board stale. `if errorlevel 2` matches exit>=2, so it must be tested BEFORE `if errorlevel 1`.
 python -u healthcheck.py >> "%LOG%" 2>&1
-if errorlevel 1 (
-  echo     ^!^! GATE: healthcheck FAILED - publish SKIPPED, board stays on last good build.>> "%LOG%"
-  echo     ^!^! GATE: healthcheck FAILED - publish SKIPPED. See leads-run.log.
+if errorlevel 2 (
+  echo     ^!^! GATE: healthcheck COMPLIANCE fail (^&sect;362 stays / sources down) - publish SKIPPED.>> "%LOG%"
+  echo     ^!^! GATE: healthcheck COMPLIANCE fail - publish SKIPPED. See leads-run.log.
   goto :end
+)
+if errorlevel 1 (
+  echo     ^!^! GATE: healthcheck coverage below floor - ADVISORY, publish_guard decides.>> "%LOG%"
 )
 python -u publish_guard.py >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo     ^!^! GATE: publish_guard BLOCKED the build - publish SKIPPED.>> "%LOG%"
+  echo     ^!^! GATE: publish_guard BLOCKED the build (regression or corruption) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: publish_guard BLOCKED the build - publish SKIPPED. See leads-run.log.
   goto :end
 )

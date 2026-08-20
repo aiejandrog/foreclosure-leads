@@ -354,4 +354,18 @@ json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
            'sources_ok': sum(1 for l, n, d in R if n.startswith('source') and l == 'PASS'),
            'sources_total': sum(1 for l, n, d in R if n.startswith('source'))},
           open(os.path.join(HERE, 'health.json'), 'w', encoding='utf-8'), indent=1)
-sys.exit(1 if fails else 0)
+
+# TIERED EXIT (2026-08-20). A FAIL is not one thing. COMPLIANCE/systemic fails must HARD-BLOCK the
+# publish — a board that lost its §362 stay flags, or built while ≥2 upstream sources were down, is
+# dangerous or unreliable. COVERAGE-floor fails (value/lien/rule %) are quality metrics that a
+# fresh-filing-heavy day legitimately dips below (185 of 385 MD leads had no folio on 08-20, so they
+# can't be priced) — those should NOT block a build that publish_guard already proved is richer than
+# live and not corrupt, or the automatic pipeline goes stale every busy day.
+#   exit 2 = compliance/systemic FAIL -> caller MUST skip publish
+#   exit 1 = coverage-floor FAIL only -> advisory; caller may publish if publish_guard is clean
+#   exit 0 = healthy
+_CRITICAL_FAIL = {'RULE: §362 stay flags reach the build', 'upstream sources'}
+_crit = [n for l, n, d in R if l == 'FAIL' and n in _CRITICAL_FAIL]
+if _crit:
+    print(f"  !! COMPLIANCE FAIL (blocks publish): {', '.join(_crit)}")
+sys.exit(2 if _crit else (1 if fails else 0))
