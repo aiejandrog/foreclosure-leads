@@ -26,9 +26,25 @@ COMPLIANCE, BAKED IN, NOT OPTIONAL (hardened by the 2026-08-12 legal adversarial
  * The sale-date blank is filled ONLY when handing to the titled owner — never a third party
    (third-party foreclosure disclosure is the lawsuit; the playbook's card 8 owns this rule).
 
+TWO PRINT PATHS — WHY --stock EXISTS (2026-08-21, the print-counter problem)
+The colored PDF paints #FFE818 edge-to-edge, and that file cannot be printed as designed:
+letter printers (home and FedEx/Office Depot alike) do not print borderless, so the sheet
+comes back with white strips on all four edges — after the two cuts, EVERY card wears white
+stripes on its outer edges, on a card whose whole doctrine is a solid loud color. It also
+bills as full-coverage color duplex (~5x the B&W meter) to lay down toner-yellow, which is
+the wrong yellow: the doctrine is loud PAPER ("like a turd in a punch bowl"), not loud ink.
+`--stock` renders the artwork the way a print shop actually does this: BLACK INK ONLY on a
+white background, printed B&W duplex onto loud colored stock (Astrobrights "Solar Yellow"
+65 lb cover or similar). Unprinted area IS the paper, so the color runs truly edge-to-edge
+and the un-printable margin becomes invisible. The black tag box keeps its knockout text by
+setting the letters WHITE — white is simply not printed, so the letters show the paper.
+The colored PDF stays for screens: it is the swatch you match the paper against, never the
+file you hand the counter.
+
 Run:  python msg_flyer.py                        # safety-yellow, sender.json identity
       python msg_flyer.py --color pink           # hot pink stock look
       python msg_flyer.py --name X --phone Y     # someone else's paper
+      python msg_flyer.py --stock                # ink-only file: print B&W on colored stock
 """
 import argparse
 import datetime
@@ -161,7 +177,7 @@ body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;color:#111}
 .sheet:last-child{page-break-after:auto}
 .card{width:4.25in;height:5.5in;background:%(bg)s;padding:.28in .3in;position:relative;
       display:flex;flex-direction:column;outline:.5pt dashed rgba(0,0,0,.28);outline-offset:-.5pt}
-.tag{font-size:7.2pt;font-weight:800;letter-spacing:.06em;background:#111;color:%(bg)s;
+.tag{font-size:7.2pt;font-weight:800;letter-spacing:.06em;background:#111;color:%(tagink)s;
      padding:3pt 6pt;border-radius:3pt;align-self:flex-start;margin-bottom:8pt}
 .hook{font-size:16.5pt;line-height:1.06;font-weight:900;margin-bottom:6pt}
 .body{font-size:8.2pt;line-height:1.32;margin-bottom:auto}
@@ -187,6 +203,10 @@ def main():
     # "time-sensitive matter concerning this property" and keeps his bank-wins-you-lose frame as a
     # general statement. The sale-date line stays hand-filled, OWNER'S PRESENCE ONLY.
     ap.add_argument('--variant', default='keep', choices=('keep', 'missedyou'))
+    # Ink-only artwork for printing on loud colored paper stock (see the docstring's print-path
+    # section). White background = unprinted = the paper's own color; the tag letters go white
+    # for the same reason - a B&W printer leaves them as paper showing through the black box.
+    ap.add_argument('--stock', action='store_true')
     a = ap.parse_args()
 
     dn, dp, llc = sender()
@@ -197,20 +217,23 @@ def main():
     _en, _es = (card_missed_en, card_missed_es) if a.variant == 'missedyou' else (card_en, card_es)
     en = _en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
     es = _es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
+    palette = ({'bg': '#ffffff', 'tagink': '#ffffff'} if a.stock
+               else {'bg': COLORS[a.color], 'tagink': COLORS[a.color]})
     doc = ('<!doctype html><html><head><meta charset="utf-8"><title>MSG Leave-Behind</title>'
            '<style>%s</style></head><body>'
            '<div class="sheet">%s</div><div class="sheet">%s</div>'
-           '</body></html>') % (CSS % {'bg': COLORS[a.color]}, en * 4, es * 4)
+           '</body></html>') % (CSS % palette, en * 4, es * 4)
 
     today = datetime.date.today().isoformat()
-    html_out = os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.html' % (a.variant, a.color, today))
+    colorname = 'stock' if a.stock else a.color
+    html_out = os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.html' % (a.variant, colorname, today))
     open(html_out, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    pdfs = [os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))]
+    pdfs = [os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, colorname, today))]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
         pdfs.append(os.path.expanduser(os.path.join(
-            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))))
+            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, colorname, today))))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()
@@ -223,7 +246,11 @@ def main():
         os.makedirs(os.path.dirname(o), exist_ok=True)
         open(o, 'wb').write(pdf)
         print('wrote %s (%.0f KB)' % (o, len(pdf) / 1024))
-    print('Duplex print (flip on LONG edge), cut twice -> 4 bilingual cards/sheet.')
+    if a.stock:
+        print('B&W duplex (flip on LONG edge) on LOUD COLORED STOCK (Astrobrights 65lb cover), '
+              'cut twice -> 4 bilingual cards/sheet. The colored PDF is the paper swatch, not a print file.')
+    else:
+        print('Duplex print (flip on LONG edge), cut twice -> 4 bilingual cards/sheet.')
 
 
 if __name__ == '__main__':
