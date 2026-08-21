@@ -217,3 +217,33 @@ pa_values_cache.json
 
 rem Google Sheets CRM webhook (Apps Script deployment URL) - the URL is the secret
 sheets_crm_webhook.url
+
+# 2026-08-20: the SAME gap as the 2026-08-19 MSG_*/Acosta_* finding, one class wider. Two new
+# artifact families landed at repo root and NEITHER matched an existing prefix rule:
+#   - Amlong_Appointment_Brief_*.pdf  — a homeowner brief: both owners' names, mobile numbers,
+#     personal + firm email, ~$600k equity position, and their pending litigation.
+#   - Rozo_Deutsche_Satisfaction_*.pdf — a private individual's recorded foreclosure instrument,
+#     pulled from the county recorder, carrying her name, unit address and case history.
+# refresh-dealflow.bat / run-leads.bat stage broadly, so each was one bat-run from a PUBLIC repo.
+# Prefix-by-prefix has now failed twice. Switch to blocking BY KIND: `git ls-files "*.pdf"` returns
+# ZERO — no PDF has ever belonged in this repo, so a blanket rule costs nothing and cannot be
+# out-run by the next new filename. The one publishable artifact (the REDACTED balloon book) is
+# HTML under docs/hm-balloon-q7v3n8/ and is untouched by this.
+*.pdf
+*_Appointment_Brief_*.html
+*_Position_Report_*.html
+# recorded-instrument pulls + page renders from the county recorder (homeowner PII by definition)
+_sat_p*.png
+_probe_*.bin
+# local operator tool: hardcodes a teammate's personal email; public repo, keep it local
+jesse_watch.py
+
+# ⚠️ THE PII IS ALSO IN THE GENERATORS, not just their output. Blocking *.pdf above would have
+# looked like a complete fix and was not: these one-off per-client scripts carry the homeowner's
+# details INLINE in their templates — amlong_brief.py alone holds both owners' full names, four
+# phone numbers, two email addresses and the equity figure. A blanket source rule would block real
+# tooling, so per-client scripts are listed by name. RULE: any new one-off <client>_*.py generator
+# gets added here in the same commit that creates it.
+amlong_brief.py
+rozo_mtg.py
+acosta_report.py
