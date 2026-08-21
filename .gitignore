@@ -249,3 +249,7 @@ rozo_mtg.py
 rozo_pull7.py
 rozo_send8.py
 acosta_report.py
+
+# Exported scheduled-task XMLs embed this machine's principal SID and user paths. The installer
+# script beside them is generic and IS tracked; the XMLs travel only in the transfer bundle.
+desktop-setup/tasks/

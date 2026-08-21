@@ -83,6 +83,21 @@ def main():
             for f in sorted(os.listdir(MEMDIR)):
                 if f.endswith('.md'):
                     z.write(os.path.join(MEMDIR, f), 'claude/memory/' + f); n += 1
+        # scheduled tasks: the exported XMLs carry hardening (PT6H limit, battery/wake settings)
+        # that must not be retyped from memory, plus the installer that repoints and re-principals
+        # them. Kept OUT of git (they embed this machine's SID) so they travel only in this bundle.
+        tdir = os.path.join(HERE, 'desktop-setup')
+        for root, _dirs, fs in os.walk(tdir):
+            for f in fs:
+                p = os.path.join(root, f)
+                z.write(p, 'desktop-setup/' + os.path.relpath(p, tdir).replace('\\', '/')); n += 1
+        # DealflowSendServerDaily launches this from the Startup folder — it lives OUTSIDE the repo,
+        # so a git clone alone leaves that task pointing at a file that is not there.
+        vbs = os.path.expanduser(os.path.join(
+            '~', 'AppData', 'Roaming', 'Microsoft', 'Windows', 'Start Menu', 'Programs',
+            'Startup', 'DealflowSendServer.vbs'))
+        if os.path.exists(vbs):
+            z.write(vbs, 'startup/DealflowSendServer.vbs'); n += 1
 
     print('WROTE %s' % OUT)
     print('  %.1f MB, %d files' % (os.path.getsize(OUT) / 1048576, n))
@@ -92,6 +107,8 @@ def main():
     print('  data/     %2d  files' % len(data))
     print('  claude/       CLAUDE.md + agents + quality-framework + %d memory files'
           % (len(os.listdir(MEMDIR)) if os.path.isdir(MEMDIR) else 0))
+    print('  desktop-setup/  8 exported task XMLs + install-tasks.ps1')
+    print('  startup/        DealflowSendServer.vbs (lives outside the repo)')
     print()
     if not ledgers:
         print('  !! NO LEDGER FILE MATCHED. Do not run outreach on the second PC until you')
