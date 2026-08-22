@@ -457,8 +457,15 @@ def _compose_single(r, snd, lang='en'):
     # the five-exits listicle is gone (options live in ONE flowing sentence), bodies ~40% shorter.
     # Kept: real case number, STOP line verbatim, sig, no rescue promises.
     sL = snd.get('llc') or '[YOUR COMPANY]'
-    intro_en = (f"I'm {sN} with {sL}. I'm not your lender, not the government, and not a lawyer.")
-    intro_es = (f'Soy {sN}, de {sL}. No soy su prestamista, no soy del gobierno, y no soy abogado.')
+    # "not a foreclosure-rescue company" is NOT optional padding — it is the affirmative disclaimer
+    # the letters and the Lob mail have always carried and this module silently did not (added
+    # 2026-08-22). FS 501.1377 turns on whether you hold yourself out as offering a service to
+    # stop/delay/reverse a foreclosure for a fee; email is the highest-volume channel, so it was the
+    # one surface making the denial only by omission. Keep this clause in both languages.
+    intro_en = (f"I'm {sN} with {sL}. I'm not your lender, not the government, not a "
+                f"foreclosure-rescue company, and not a lawyer.")
+    intro_es = (f'Soy {sN}, de {sL}. No soy su prestamista, no soy del gobierno, no soy una '
+                f'empresa de rescate de ejecuciones, y no soy abogado.')
     early = (not td) and (not dt)
     if early:
         # LP / no auction date. Without this branch the FC body rendered "a sale date of ." --
@@ -584,7 +591,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
     sL = snd.get('llc') or '[YOUR COMPANY]'
     body_en = (
         f"Hi {first},\n\nI'm {sN} with Miami Solutions Group. I'm not your lender, not the "
-        f'government, and not a lawyer.\n\n'
+        f'government, not a foreclosure-rescue company, and not a lawyer.\n\n'
         f'Public records show {n} properties in your name are in foreclosure right now. Every '
         f"case number below is real -- you can look each one up on the county clerk's site:\n\n" +
         '\n'.join(_line_en(r) for r in all_leads) + '\n\n'
@@ -598,7 +605,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
     )
     body_es = (
         f'Hola {first},\n\nSoy {sN}, de Miami Solutions Group. No soy su prestamista, no soy '
-        f'del gobierno, y no soy abogado.\n\n'
+        f'del gobierno, no soy una empresa de rescate de ejecuciones, y no soy abogado.\n\n'
         f'Los registros publicos muestran {n} propiedades a su nombre en ejecucion hipotecaria '
         f'ahora mismo. Cada numero de caso abajo es real -- puede verificarlos usted mismo en '
         f'el sitio del clerk del condado:\n\n' +
