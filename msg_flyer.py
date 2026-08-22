@@ -175,20 +175,68 @@ body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;color:#111}
 .sheet{width:8.5in;height:11in;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
        page-break-after:always;position:relative}
 .sheet:last-child{page-break-after:auto}
+/* TYPE SCALE — two things were wrong on the 8/21 proof and they were the same bug.
+   `.fine` was 8.2pt, the SAME size as `.body`, so the MARS/Reg O disclosure rendered as five
+   lines of full-size body copy and read as if the disclaimer were the message — on a card whose
+   entire doctrine is "name and phone huge". Fine print that is not fine is not fine print.
+   And because every block was undersized for a 4.25x5.5in card, `margin-bottom:auto` dumped ALL
+   the leftover space into one ~1.2in dead void in the middle, which reads as a broken template
+   rather than as breathing room.
+   Fix: the disclosure drops to true microprint and the pitch/contact type grows to fill the card,
+   with `justify-content:space-between` distributing what slack remains as several small gaps
+   instead of one hole.
+   DO NOT take `.fine` below 6pt. MARS (12 CFR 1015) requires these disclosures be clear and
+   prominent — noticeable and readable to an ordinary consumer. 6pt black on loud stock, held in
+   the hand, clears that; 5pt starts arguing the other side of it for us. Shrink the copy, never
+   the point size. */
+/* NOTE: deliberately NOT `overflow:hidden`. Clipping would silently truncate the MARS disclosure
+   on the longer Spanish side and ship a card that looks fine and is not. Overflow stays visible so
+   a human proofing the PDF sees the bleed, and _assert_fits() below fails the build outright. */
 .card{width:4.25in;height:5.5in;background:%(bg)s;padding:.28in .3in;position:relative;
-      display:flex;flex-direction:column;outline:.5pt dashed rgba(0,0,0,.28);outline-offset:-.5pt}
-.tag{font-size:7.2pt;font-weight:800;letter-spacing:.06em;background:#111;color:%(tagink)s;
-     padding:3pt 6pt;border-radius:3pt;align-self:flex-start;margin-bottom:8pt}
-.hook{font-size:16.5pt;line-height:1.06;font-weight:900;margin-bottom:6pt}
-.body{font-size:8.2pt;line-height:1.32;margin-bottom:auto}
-.who{margin:8pt 0 6pt;border-top:1.6pt solid #111;padding-top:6pt}
-.nm{font-size:13pt;font-weight:900;letter-spacing:.01em}
-.tel{font-size:19pt;font-weight:900;letter-spacing:.01em;margin:1pt 0}
+      display:flex;flex-direction:column;justify-content:space-between;
+      outline:.5pt dashed rgba(0,0,0,.28);outline-offset:-.5pt}
+/* text-wrap:balance - the tag is too long for one line in both languages, and left to itself it
+   orphans the last word ("...NO FEE - NO / COMMITMENT"). Balanced, it breaks into two even lines. */
+.tag{font-size:7pt;font-weight:800;letter-spacing:.04em;background:#111;color:%(tagink)s;
+     padding:3pt 6pt;border-radius:3pt;align-self:flex-start;text-wrap:balance}
+.hook{font-size:19pt;line-height:1.06;font-weight:900}
+.body{font-size:9pt;line-height:1.34}
+.who{border-top:1.6pt solid #111;padding-top:6pt}
+.nm{font-size:14pt;font-weight:900;letter-spacing:.01em}
+.tel{font-size:21pt;font-weight:900;letter-spacing:.01em;margin:1pt 0}
 .always{font-size:7.6pt;font-weight:800;letter-spacing:.1em}
-.fill{font-size:8.6pt;font-weight:700;margin:5pt 0 6pt}
+.fill{font-size:8.6pt;font-weight:700}
 .line{display:inline-block;width:1.7in;border-bottom:1pt solid #111;height:9pt;vertical-align:bottom}
-.fine{font-size:8.2pt;line-height:1.22;color:#111}
+.fine{font-size:6pt;line-height:1.28;color:#111}
 """
+
+
+class FlyerError(Exception):
+    pass
+
+
+# Measured in the live page, before the PDF is written. A card whose content exceeds its 4.25x5.5in
+# box bleeds into the neighbouring card and across the cut line, and the block that overruns is
+# always the LAST one - the MARS/Reg O disclosure. That is the one element on this card that may
+# never be quietly lost, and the Spanish copy runs ~15% longer than the English, so the side that
+# breaks first is the side nobody proofreads. Refuse to write the PDF instead.
+_FIT_JS = """() => Array.from(document.querySelectorAll('.card')).map((c, i) => {
+  const last = c.querySelector('.fine');
+  return {i, over: Math.round(c.scrollHeight - c.clientHeight),
+          fineBottom: Math.round(last.getBoundingClientRect().bottom
+                                 - c.getBoundingClientRect().bottom)};
+}).filter(r => r.over > 1 || r.fineBottom > -1)"""
+
+
+def _assert_fits(pg):
+    bad = pg.evaluate(_FIT_JS)
+    if bad:
+        w = '; '.join('card %d overflows by %dpx (fine print %dpx past the cut)'
+                      % (r['i'], r['over'], r['fineBottom']) for r in bad[:4])
+        raise FlyerError(
+            'card content does not fit its 4.25x5.5in box - %d card(s): %s. The disclosure is the '
+            'block that runs over, so this PDF would ship a truncated MARS notice. Shorten the copy '
+            'or reduce .hook/.body - do NOT reduce .fine below 6pt.' % (len(bad), w))
 
 
 def main():
@@ -239,9 +287,12 @@ def main():
         pg = b.new_page()
         pg.goto('file:///' + html_out.replace(os.sep, '/'))
         pg.wait_for_timeout(400)
-        pdf = pg.pdf(format='Letter', print_background=True, prefer_css_page_size=True,
-                     margin={'top': '0', 'bottom': '0', 'left': '0', 'right': '0'})
-        b.close()
+        try:
+            _assert_fits(pg)          # never write a PDF with a clipped disclosure
+            pdf = pg.pdf(format='Letter', print_background=True, prefer_css_page_size=True,
+                         margin={'top': '0', 'bottom': '0', 'left': '0', 'right': '0'})
+        finally:
+            b.close()
     for o in pdfs:
         os.makedirs(os.path.dirname(o), exist_ok=True)
         open(o, 'wb').write(pdf)
