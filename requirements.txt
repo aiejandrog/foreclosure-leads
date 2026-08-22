@@ -7,3 +7,12 @@ playwright>=1.47
 beautifulsoup4>=4.12
 Pillow>=10.4
 cryptography>=42
+
+# LOCAL ONLY — deliberately not installed by GitHub Actions.
+#   camoufox[geoip]
+# tax_status.py imports it (broward.county-taxes.com 403s plain requests, the native curl session
+# and the in-app browser alike). Left out of the CI set on purpose: camoufox hard-pins
+# playwright==1.60.0, and forcing that on a workflow that never calls tax_status.py buys nothing.
+# The import is function-local, so every other module still imports fine without it.
+# Install locally with:  pip install "camoufox[geoip]" && python -m camoufox fetch
+# The browser is ~500 MB and lands in %LOCALAPPDATA%\camoufox, shared across venvs on that user.

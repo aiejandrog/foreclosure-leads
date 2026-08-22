@@ -27,7 +27,11 @@ import paths as P
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TODAY = datetime.date(2026, 8, 20)
+# Was hardcoded to date(2026, 8, 20) — the day the first bundle was cut. Every later run rebuilt a
+# zip named DEALFLOW_TRANSFER_2026-08-20.zip with TODAY's contents, so the filename said one thing
+# and the ledgers inside said another. On a transfer whose entire point is "which copy of
+# optouts.json is current", that is the worst possible thing for the name to lie about.
+TODAY = datetime.date.today()
 # The bundle carries 8 live API keys, the ledgers and 174 data files. It used to be written to the
 # SYNCED Desktop, which is how a copy ended up replicated to consumer OneDrive and had to be
 # evacuated by hand on 2026-08-22. It builds outside any sync root now.
@@ -96,6 +100,22 @@ def main():
             for f in fs:
                 p = os.path.join(root, f)
                 z.write(p, 'desktop-setup/' + os.path.relpath(p, tdir).replace('\\', '/')); n += 1
+        # browser-profile/ — the RealForeclose login jars for ALL THREE counties. ignored_files()
+        # only walks repo-root FILES (os.path.isfile), so this DIRECTORY was silently never bundled:
+        # the 2026-08-20 transfer landed on the second PC with an empty browser-profile/, and the
+        # auction-results scraper is login-gated in all three counties, so it skips them without
+        # saying why. The only other way to recreate these is login-setup.py, which needs a human to
+        # type three sets of credentials into a headed browser.
+        bprof = os.path.join(HERE, 'browser-profile')
+        nprof = 0
+        if os.path.isdir(bprof):
+            for root, _dirs, fs in os.walk(bprof):
+                for f in fs:
+                    p = os.path.join(root, f)
+                    z.write(p, 'browser-profile/' + os.path.relpath(p, bprof).replace('\\', '/'))
+                    n += 1
+                    nprof += 1
+
         # DealflowSendServerDaily launches this from the Startup folder — it lives OUTSIDE the repo,
         # so a git clone alone leaves that task pointing at a file that is not there.
         vbs = os.path.expanduser(os.path.join(
@@ -113,6 +133,9 @@ def main():
     print('  claude/       CLAUDE.md + agents + quality-framework + %d memory files'
           % (len(os.listdir(MEMDIR)) if os.path.isdir(MEMDIR) else 0))
     print('  desktop-setup/  8 exported task XMLs + install-tasks.ps1')
+    print('  browser-profile/ %d files  %s' % (
+        nprof, 'RealForeclose logins, all 3 counties'
+        if nprof else '!! EMPTY — auction results will silently skip every county'))
     print('  startup/        DealflowSendServer.vbs (lives outside the repo)')
     print()
     if not ledgers:
