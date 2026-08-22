@@ -26,15 +26,43 @@ COMPLIANCE, BAKED IN, NOT OPTIONAL (hardened by the 2026-08-12 legal adversarial
  * The sale-date blank is filled ONLY when handing to the titled owner — never a third party
    (third-party foreclosure disclosure is the lawsuit; the playbook's card 8 owns this rule).
 
+TWO PRINT PATHS — WHY --stock EXISTS (2026-08-21, the print-counter problem)
+The colored PDF paints #FFE818 edge-to-edge, and that file cannot be printed as designed:
+letter printers (home and FedEx/Office Depot alike) do not print borderless, so the sheet
+comes back with white strips on all four edges — after the two cuts, EVERY card wears white
+stripes on its outer edges, on a card whose whole doctrine is a solid loud color. It also
+bills as full-coverage color duplex (~5x the B&W meter) to lay down toner-yellow, which is
+the wrong yellow: the doctrine is loud PAPER ("like a turd in a punch bowl"), not loud ink.
+`--stock` renders the artwork the way a print shop actually does this: BLACK INK ONLY on a
+white background, printed B&W duplex onto loud colored stock (Astrobrights "Solar Yellow"
+65 lb cover or similar). Unprinted area IS the paper, so the color runs truly edge-to-edge
+and the un-printable margin becomes invisible. The black tag box keeps its knockout text by
+setting the letters WHITE — white is simply not printed, so the letters show the paper.
+The colored PDF stays for screens: it is the swatch you match the paper against, never the
+file you hand the counter.
+
+THREE CARDS, TWO LEGAL POSTURES (2026-08-22)
+ keep / missedyou  offer to review the case and work out options. That is mortgage assistance
+                   relief, so the FTC MARS Rule dictates the long disclosure block on them. It is
+                   the price of that pitch and it does not come off while the pitch stays.
+ offer             offers MONEY instead: we buy it, or (with a licence) we fund it. Not a MARS
+                   service, so the mandated sentences fall away and the legal block is three
+                   lines. Read the note above card_offer_en before touching its copy - the short
+                   disclaimer is load-bearing on the words the card does NOT say.
+
 Run:  python msg_flyer.py                        # safety-yellow, sender.json identity
       python msg_flyer.py --color pink           # hot pink stock look
       python msg_flyer.py --name X --phone Y     # someone else's paper
+      python msg_flyer.py --stock                # ink-only file: print B&W on colored stock
+      python msg_flyer.py --variant offer        # cash-offer card, short legal block
+      python msg_flyer.py --variant offer --lending --nmls 1234567   # adds refi/reinstate lines
 """
 import argparse
 import datetime
 import html as H
 import json
 import os
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -71,19 +99,107 @@ def sender():
         return 'Alejandro Gonzalez', '', 'Miami Solutions Group'
 
 
+# ---------------------------------------------------------------------------------------------
+# THE 'offer' VARIANT (2026-08-22) — WHY IT EXISTS AND WHY ITS DISCLAIMER IS SHORT
+#
+# The keep/missedyou cards sell MORTGAGE ASSISTANCE RELIEF: review your case, work out options,
+# stop the sale. That offer is what drags in the FTC MARS Rule (12 CFR 1015), and 1015.4(b)
+# then DICTATES the disclosure sentences almost verbatim - not associated with the government,
+# service not approved by your lender, lender may not agree to change your loan, you may stop
+# doing business at any time. The wall of fine print is not caution, it is the price of that
+# specific pitch. It cannot be trimmed while the card makes that pitch.
+#
+# This variant makes a different offer: we BUY, or we FUND. Buying a house and lending money are
+# not "mortgage assistance relief services" (no representation that we will obtain anything FROM
+# the consumer's lender ON their behalf), so 1015.4's mandated sentences are not triggered and the
+# legal block collapses to what is actually true and required. Same reason the copy here never
+# says modification, workout, negotiate, or "stop your foreclosure" - those words put the MARS
+# posture straight back on the card no matter what the rest of it says.
+#
+# WHAT REPLACES MARS HERE - and it is not nothing:
+#  * Advertising CREDIT ("we'll lend you the money to reinstate", "refinance") is mortgage
+#    lending. Florida licenses that under Ch. 494, and a licensed originator's ads must carry the
+#    NMLS ID. Hence --lending is gated on --nmls: no ID, no lending card. See main().
+#  * Never state a rate, payment, or term in the copy. Under TILA/Reg Z 1026.24 a single specific
+#    credit term is a "trigger term" that drags a full disclosure block onto the card - the exact
+#    wall this variant exists to avoid. Keep the offers qualitative.
+#  * BUYING from an owner in foreclosure is its own regime: Fla. Stat. 501.1377 (foreclosure-
+#    rescue transactions) wants a written contract, specific notices and a 3-business-day right to
+#    cancel, especially on any leaseback or repurchase-option deal. That lands at contract time,
+#    not on the card, but it is why the card promises a conversation and not a closing.
+# ---------------------------------------------------------------------------------------------
+
+# Base offers require no lending licence to advertise: buying property and paying cash for it.
+OFFERS_EN = ['A cash offer on your house, any condition, closed in days',
+             'Walk away with the equity you built instead of losing it at the auction',
+             'A sale on your timeline, not the bank&rsquo;s']
+# These advertise CREDIT. Gated behind --lending + --nmls.
+OFFERS_LEND_EN = ['Refinance the whole loan, even on short notice',
+                  'Pull cash out of the equity you already have',
+                  'The money to bring the loan current and keep the house']
+
+OFFERS_ES = ['Una oferta en efectivo por su casa, en cualquier condici&oacute;n, cerramos en d&iacute;as',
+             'Qu&eacute;dese con el equity que usted construy&oacute; en vez de perderlo en la subasta',
+             'Una venta a su ritmo, no al del banco']
+OFFERS_LEND_ES = ['Refinanciar el pr&eacute;stamo completo, incluso con poco tiempo',
+                  'Sacar efectivo del equity que ya tiene',
+                  'El dinero para poner el pr&eacute;stamo al d&iacute;a y quedarse con la casa']
+
+
+def _lis(items):
+    return ''.join('<li>%s</li>' % x for x in items)
+
+
+def card_offer_en(offers, nmls):
+    return """<div class="card">
+<div class="tag">WE PUT UP THE MONEY &middot; 5 MINUTES &middot; NO FEE TO YOU</div>
+<div class="hook">Your equity is still yours.<br>Until the auction.</div>
+<div class="body">Nobody at the bank is going to mention this, so here it is. There is more than
+one way out of a foreclosure, and most of them end with <b>you keeping your money</b>:</div>
+<ul class="offers">""" + _lis(offers) + """</ul>
+<div class="body b2">One free call, no paperwork, no obligation. Worst case you hang up knowing
+exactly what your house is worth and how long you have.</div>
+<div class="who"><div class="nm">%s</div>
+<div class="tel">%s</div>
+<div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
+<div class="fill">Important date: <span class="line"></span></div>
+<div class="fine">%s. Not a law firm, not a government agency, not your lender, and nothing here
+is legal advice. Any offer follows title and inspection.""" + nmls + """</div>
+</div>"""
+
+
+def card_offer_es(offers, nmls):
+    return """<div class="card">
+<div class="tag">NOSOTROS PONEMOS EL DINERO &middot; 5 MINUTOS &middot; SIN COSTO</div>
+<div class="hook">El equity es suyo.<br>Hasta la subasta.</div>
+<div class="body">En el banco nadie se lo va a decir, as&iacute; que se lo decimos nosotros. Hay
+m&aacute;s de una salida a un foreclosure, y casi todas terminan con <b>el dinero en su
+bolsillo</b>:</div>
+<ul class="offers">""" + _lis(offers) + """</ul>
+<div class="body b2">Una llamada gratis, sin papeleo y sin compromiso. En el peor de los casos
+cuelga sabiendo cu&aacute;nto vale su casa y cu&aacute;nto tiempo le queda.</div>
+<div class="who"><div class="nm">%s</div>
+<div class="tel">%s</div>
+<div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
+<div class="fill">Fecha importante: <span class="line"></span></div>
+<div class="fine">%s. No somos bufete de abogados, ni agencia del gobierno, ni su banco, y nada
+aqu&iacute; es consejo legal. Toda oferta queda sujeta a t&iacute;tulo e inspecci&oacute;n.""" + nmls + """</div>
+</div>"""
+
+
 def card_en(name, phone):
     return """<div class="card">
 <div class="tag">FREE FORECLOSURE CONSULTATION &middot; 5 MINUTES &middot; NO FEE &middot; NO COMMITMENT</div>
 <div class="hook">Think it&rsquo;s handled?<br>Keep this anyway.</div>
-<div class="body">Many homeowners think it&rsquo;s handled &mdash; until the week of the sale.
-Keep this number, just in case. One free call and our senior advisor &mdash; <b>over 30 years in
-mortgages and foreclosure workouts</b> &mdash; personally reviews your case and lays out
+<div class="body">Many homeowners think it&rsquo;s handled, right up until the week of the
+sale. Keep this number, just in case. One free call and our senior advisor, with <b>over 30 years
+in mortgages and foreclosure workouts</b>, personally reviews your case and lays out
 <b>3, 4, sometimes 5 options</b>. Most people are only ever shown one.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
 <div class="fill">Important date: <span class="line"></span></div>
-<div class="fine">%s &middot; We are not a law firm and do not give legal advice. We are not
+<div class="fine">%s. We are not a law firm and do not give legal advice. We are not
 associated with the government, and our service is not approved by the government or your lender.
 Even if you use our service, your lender may not agree to change your loan. You may stop doing
 business with us at any time. Consultations are always free.</div>
@@ -95,15 +211,15 @@ def card_missed_en(name, phone):
 <div class="tag">FREE FORECLOSURE CONSULTATION &middot; 5 MINUTES &middot; NO FEE &middot; NO COMMITMENT</div>
 <div class="hook">Sorry I missed you today.</div>
 <div class="body">I came by to visit with you about a <b>time-sensitive matter concerning this
-property</b>. When an owner does nothing, the bank wins and the owner loses &mdash; and there are
-usually <b>3, 4, sometimes 5 options</b> nobody has shown you. One free call and our senior
-advisor &mdash; <b>over 30 years in mortgages and foreclosure workouts</b> &mdash; walks you
-through every one of them.</div>
+property</b>. When an owner does nothing, the bank wins and the owner loses. There are usually
+<b>3, 4, sometimes 5 options</b> nobody has shown you. One free call and our senior advisor, with
+<b>over 30 years in mortgages and foreclosure workouts</b>, walks you through every one of
+them.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
 <div class="fill">Important date: <span class="line"></span></div>
-<div class="fine">%s &middot; We are not a law firm and do not give legal advice. We are not
+<div class="fine">%s. We are not a law firm and do not give legal advice. We are not
 associated with the government, and our service is not approved by the government or your lender.
 Even if you use our service, your lender may not agree to change your loan. You may stop doing
 business with us at any time. Consultations are always free.</div>
@@ -115,15 +231,15 @@ def card_missed_es(name, phone):
 <div class="tag">CONSULTA GRATIS SOBRE SU CASO DE FORECLOSURE &middot; 5 MINUTOS &middot; SIN COSTO</div>
 <div class="hook">Lamento no haberlo encontrado hoy.</div>
 <div class="body">Pas&eacute; a visitarlo por un <b>asunto urgente relacionado con esta
-propiedad</b>. Cuando un due&ntilde;o no hace nada, el banco gana y el due&ntilde;o pierde &mdash;
-y casi siempre hay <b>3, 4, hasta 5 opciones</b> que nadie le ha mostrado. Una llamada gratis y
-nuestro asesor principal &mdash; <b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de
-foreclosure</b> &mdash; le explica cada una.</div>
+propiedad</b>. Cuando un due&ntilde;o no hace nada, el banco gana y el due&ntilde;o pierde. Casi
+siempre hay <b>3, 4, hasta 5 opciones</b> que nadie le ha mostrado. Una llamada gratis y nuestro
+asesor principal, <b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de
+foreclosure</b>, le explica cada una.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
 <div class="fill">Fecha importante: <span class="line"></span></div>
-<div class="fine">%s &middot; No somos un bufete de abogados y no damos consejos legales. No
+<div class="fine">%s. No somos un bufete de abogados y no damos consejos legales. No
 estamos asociados con el gobierno, y nuestro servicio no est&aacute; aprobado por el gobierno ni
 por su banco. Aunque use nuestro servicio, es posible que su banco no acepte modificar su
 pr&eacute;stamo. Puede dejar de trabajar con nosotros en cualquier momento. Las consultas siempre
@@ -135,16 +251,16 @@ def card_es(name, phone):
     return """<div class="card">
 <div class="tag">CONSULTA GRATIS SOBRE SU CASO DE FORECLOSURE &middot; 5 MINUTOS &middot; SIN COSTO</div>
 <div class="hook">&iquest;Cree que ya lo tiene resuelto?<br>Guarde esto de todos modos.</div>
-<div class="body">Muchos due&ntilde;os creen que ya est&aacute; resuelto &mdash; hasta la semana
-de la subasta. Guarde este n&uacute;mero, por si acaso. Una llamada gratis y nuestro asesor
-principal &mdash; <b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de foreclosure</b>
-&mdash; revisa su caso personalmente y le presenta <b>3, 4, hasta 5 opciones</b>. A la
-mayor&iacute;a solo le muestran una.</div>
+<div class="body">Muchos due&ntilde;os creen que ya est&aacute; resuelto, hasta la semana de la
+subasta. Guarde este n&uacute;mero, por si acaso. Una llamada gratis y nuestro asesor principal,
+<b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de foreclosure</b>, revisa su caso
+personalmente y le presenta <b>3, 4, hasta 5 opciones</b>. A la mayor&iacute;a solo le muestran
+una.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
 <div class="fill">Fecha importante: <span class="line"></span></div>
-<div class="fine">%s &middot; No somos un bufete de abogados y no damos consejos legales. No
+<div class="fine">%s. No somos un bufete de abogados y no damos consejos legales. No
 estamos asociados con el gobierno, y nuestro servicio no est&aacute; aprobado por el gobierno ni
 por su banco. Aunque use nuestro servicio, es posible que su banco no acepte modificar su
 pr&eacute;stamo. Puede dejar de trabajar con nosotros en cualquier momento. Las consultas siempre
@@ -159,20 +275,75 @@ body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;color:#111}
 .sheet{width:8.5in;height:11in;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;
        page-break-after:always;position:relative}
 .sheet:last-child{page-break-after:auto}
+/* TYPE SCALE — two things were wrong on the 8/21 proof and they were the same bug.
+   `.fine` was 8.2pt, the SAME size as `.body`, so the MARS/Reg O disclosure rendered as five
+   lines of full-size body copy and read as if the disclaimer were the message — on a card whose
+   entire doctrine is "name and phone huge". Fine print that is not fine is not fine print.
+   And because every block was undersized for a 4.25x5.5in card, `margin-bottom:auto` dumped ALL
+   the leftover space into one ~1.2in dead void in the middle, which reads as a broken template
+   rather than as breathing room.
+   Fix: the disclosure drops to true microprint and the pitch/contact type grows to fill the card,
+   with `justify-content:space-between` distributing what slack remains as several small gaps
+   instead of one hole.
+   DO NOT take `.fine` below 6pt. MARS (12 CFR 1015) requires these disclosures be clear and
+   prominent — noticeable and readable to an ordinary consumer. 6pt black on loud stock, held in
+   the hand, clears that; 5pt starts arguing the other side of it for us. Shrink the copy, never
+   the point size. */
+/* NOTE: deliberately NOT `overflow:hidden`. Clipping would silently truncate the MARS disclosure
+   on the longer Spanish side and ship a card that looks fine and is not. Overflow stays visible so
+   a human proofing the PDF sees the bleed, and _assert_fits() below fails the build outright. */
 .card{width:4.25in;height:5.5in;background:%(bg)s;padding:.28in .3in;position:relative;
-      display:flex;flex-direction:column;outline:.5pt dashed rgba(0,0,0,.28);outline-offset:-.5pt}
-.tag{font-size:7.2pt;font-weight:800;letter-spacing:.06em;background:#111;color:%(bg)s;
-     padding:3pt 6pt;border-radius:3pt;align-self:flex-start;margin-bottom:8pt}
-.hook{font-size:16.5pt;line-height:1.06;font-weight:900;margin-bottom:6pt}
-.body{font-size:8.2pt;line-height:1.32;margin-bottom:auto}
-.who{margin:8pt 0 6pt;border-top:1.6pt solid #111;padding-top:6pt}
-.nm{font-size:13pt;font-weight:900;letter-spacing:.01em}
-.tel{font-size:19pt;font-weight:900;letter-spacing:.01em;margin:1pt 0}
+      display:flex;flex-direction:column;justify-content:space-between;
+      outline:.5pt dashed rgba(0,0,0,.28);outline-offset:-.5pt}
+/* text-wrap:balance - the tag is too long for one line in both languages, and left to itself it
+   orphans the last word ("...NO FEE - NO / COMMITMENT"). Balanced, it breaks into two even lines. */
+.tag{font-size:7pt;font-weight:800;letter-spacing:.04em;background:#111;color:%(tagink)s;
+     padding:3pt 6pt;border-radius:3pt;align-self:flex-start;text-wrap:balance}
+.hook{font-size:19pt;line-height:1.06;font-weight:900}
+.body{font-size:9pt;line-height:1.34}
+.b2{font-size:8.4pt}
+/* Offers read as a scannable list, not a paragraph: this is the part a homeowner is meant to
+   take in at arm's length in a doorway. Square bullets sit tighter than discs at this size. */
+.offers{list-style:none;font-size:9pt;line-height:1.24;font-weight:700}
+.offers li{position:relative;padding-left:11pt;margin:4.5pt 0}
+.offers li:before{content:"";position:absolute;left:0;top:3.4pt;width:5pt;height:5pt;
+                  background:#111}
+.who{border-top:1.6pt solid #111;padding-top:6pt}
+.nm{font-size:14pt;font-weight:900;letter-spacing:.01em}
+.tel{font-size:21pt;font-weight:900;letter-spacing:.01em;margin:1pt 0}
 .always{font-size:7.6pt;font-weight:800;letter-spacing:.1em}
-.fill{font-size:8.6pt;font-weight:700;margin:5pt 0 6pt}
+.fill{font-size:8.6pt;font-weight:700}
 .line{display:inline-block;width:1.7in;border-bottom:1pt solid #111;height:9pt;vertical-align:bottom}
-.fine{font-size:8.2pt;line-height:1.22;color:#111}
+.fine{font-size:6pt;line-height:1.28;color:#111}
 """
+
+
+class FlyerError(Exception):
+    pass
+
+
+# Measured in the live page, before the PDF is written. A card whose content exceeds its 4.25x5.5in
+# box bleeds into the neighbouring card and across the cut line, and the block that overruns is
+# always the LAST one - the MARS/Reg O disclosure. That is the one element on this card that may
+# never be quietly lost, and the Spanish copy runs ~15% longer than the English, so the side that
+# breaks first is the side nobody proofreads. Refuse to write the PDF instead.
+_FIT_JS = """() => Array.from(document.querySelectorAll('.card')).map((c, i) => {
+  const last = c.querySelector('.fine');
+  return {i, over: Math.round(c.scrollHeight - c.clientHeight),
+          fineBottom: Math.round(last.getBoundingClientRect().bottom
+                                 - c.getBoundingClientRect().bottom)};
+}).filter(r => r.over > 1 || r.fineBottom > -1)"""
+
+
+def _assert_fits(pg):
+    bad = pg.evaluate(_FIT_JS)
+    if bad:
+        w = '; '.join('card %d overflows by %dpx (fine print %dpx past the cut)'
+                      % (r['i'], r['over'], r['fineBottom']) for r in bad[:4])
+        raise FlyerError(
+            'card content does not fit its 4.25x5.5in box - %d card(s): %s. The disclosure is the '
+            'block that runs over, so this PDF would ship a truncated MARS notice. Shorten the copy '
+            'or reduce .hook/.body - do NOT reduce .fine below 6pt.' % (len(bad), w))
 
 
 def main():
@@ -186,7 +357,18 @@ def main():
     # the door reads it), the exact exposure the 8/12 legal pass closed - so the printed card says
     # "time-sensitive matter concerning this property" and keeps his bank-wins-you-lose frame as a
     # general statement. The sale-date line stays hand-filled, OWNER'S PRESENCE ONLY.
-    ap.add_argument('--variant', default='keep', choices=('keep', 'missedyou'))
+    # 'offer' = the money posture (2026-08-22): we buy or we fund, no MARS pitch, short legal
+    # block. See the long note above card_offer_en for why its disclaimer is legitimately small.
+    ap.add_argument('--variant', default='keep', choices=('keep', 'missedyou', 'offer'))
+    # Adds the refinance / cash-out / reinstatement-money lines to the offer card. These advertise
+    # CREDIT, so they are gated on a real NMLS ID (below) - an unlicensed lending ad is a far worse
+    # problem than a long disclaimer, and it is the one failure this script must not help ship.
+    ap.add_argument('--lending', action='store_true')
+    ap.add_argument('--nmls', default='')
+    # Ink-only artwork for printing on loud colored paper stock (see the docstring's print-path
+    # section). White background = unprinted = the paper's own color; the tag letters go white
+    # for the same reason - a B&W printer leaves them as paper showing through the black box.
+    ap.add_argument('--stock', action='store_true')
     a = ap.parse_args()
 
     dn, dp, llc = sender()
@@ -194,36 +376,71 @@ def main():
     if not phone:
         raise SystemExit('no phone: set sender.json or pass --phone')
 
-    _en, _es = (card_missed_en, card_missed_es) if a.variant == 'missedyou' else (card_en, card_es)
-    en = _en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
-    es = _es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
+    if a.lending and a.variant != 'offer':
+        raise SystemExit('--lending only applies to --variant offer')
+    if a.variant == 'offer':
+        # THE LICENCE GATE. "We can lend you the money to reinstate" and "refinance the whole
+        # loan" are advertisements for mortgage credit. In Florida that is licensed activity
+        # (Ch. 494), and a licensed originator's advertising carries the NMLS ID. Refusing here is
+        # the point: the base offer card (buy / cash / equity) prints for anyone, and the lending
+        # lines only exist on paper that can name the licence behind them.
+        if a.lending and not re.fullmatch(r'\d{4,10}', a.nmls.strip()):
+            raise SystemExit(
+                '--lending advertises mortgage credit, so it needs the NMLS ID of the licensed\n'
+                'lender or originator behind it: --lending --nmls 1234567\n'
+                'No licence yet? Drop --lending. The base offer card (cash offer, keep your\n'
+                'equity, sale on your timeline) advertises buying property, not credit, and\n'
+                'needs no lending licence.')
+        offers_en, offers_es = list(OFFERS_EN), list(OFFERS_ES)
+        if a.lending:
+            offers_en = OFFERS_LEND_EN + offers_en
+            offers_es = OFFERS_LEND_ES + offers_es
+        nmls = (' Financing by a licensed lender, NMLS #%s. Not a commitment to lend; all loans '
+                'subject to underwriting and approval.' % H.escape(a.nmls.strip())) if a.lending else ''
+        en = card_offer_en(offers_en, nmls) % (H.escape(name), H.escape(phone), H.escape(llc))
+        es = card_offer_es(offers_es, nmls) % (H.escape(name), H.escape(phone), H.escape(llc))
+    else:
+        _en, _es = ((card_missed_en, card_missed_es) if a.variant == 'missedyou'
+                    else (card_en, card_es))
+        en = _en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
+        es = _es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
+    palette = ({'bg': '#ffffff', 'tagink': '#ffffff'} if a.stock
+               else {'bg': COLORS[a.color], 'tagink': COLORS[a.color]})
     doc = ('<!doctype html><html><head><meta charset="utf-8"><title>MSG Leave-Behind</title>'
            '<style>%s</style></head><body>'
            '<div class="sheet">%s</div><div class="sheet">%s</div>'
-           '</body></html>') % (CSS % {'bg': COLORS[a.color]}, en * 4, es * 4)
+           '</body></html>') % (CSS % palette, en * 4, es * 4)
 
     today = datetime.date.today().isoformat()
-    html_out = os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.html' % (a.variant, a.color, today))
+    colorname = 'stock' if a.stock else a.color
+    html_out = os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.html' % (a.variant, colorname, today))
     open(html_out, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    pdfs = [os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))]
+    pdfs = [os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, colorname, today))]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
         pdfs.append(os.path.expanduser(os.path.join(
-            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))))
+            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, colorname, today))))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()
         pg.goto('file:///' + html_out.replace(os.sep, '/'))
         pg.wait_for_timeout(400)
-        pdf = pg.pdf(format='Letter', print_background=True, prefer_css_page_size=True,
-                     margin={'top': '0', 'bottom': '0', 'left': '0', 'right': '0'})
-        b.close()
+        try:
+            _assert_fits(pg)          # never write a PDF with a clipped disclosure
+            pdf = pg.pdf(format='Letter', print_background=True, prefer_css_page_size=True,
+                         margin={'top': '0', 'bottom': '0', 'left': '0', 'right': '0'})
+        finally:
+            b.close()
     for o in pdfs:
         os.makedirs(os.path.dirname(o), exist_ok=True)
         open(o, 'wb').write(pdf)
         print('wrote %s (%.0f KB)' % (o, len(pdf) / 1024))
-    print('Duplex print (flip on LONG edge), cut twice -> 4 bilingual cards/sheet.')
+    if a.stock:
+        print('B&W duplex (flip on LONG edge) on LOUD COLORED STOCK (Astrobrights 65lb cover), '
+              'cut twice -> 4 bilingual cards/sheet. The colored PDF is the paper swatch, not a print file.')
+    else:
+        print('Duplex print (flip on LONG edge), cut twice -> 4 bilingual cards/sheet.')
 
 
 if __name__ == '__main__':
