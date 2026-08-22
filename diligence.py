@@ -201,6 +201,16 @@ def find_lead(case: str):
         for r in rows:
             if _lead_case_key(r) == case:
                 return r, 'MIAMI-DADE', 'leads_final.json'
+    # LIS PENDENS leads (2026-08-22). lp_leads.json was NOT searched, so every fresh filing —
+    # the whole first-mover front of the funnel, the leads nobody else is calling yet — returned
+    # "case not found" and could never be deep-dug. Found on CACE-26-004416 (Amlong, $1.59M
+    # Fort Lauderdale). Carries its own county on the row, so honour that rather than assume.
+    path = os.path.join(HERE, 'lp_leads.json')
+    rows = _load_json(path, [])
+    if isinstance(rows, list):
+        for r in rows:
+            if _lead_case_key(r) == case:
+                return r, (str(r.get('county') or 'BROWARD').strip().upper() or 'BROWARD'), 'lp_leads.json'
     return None, '', ''
 
 
@@ -382,8 +392,24 @@ def apply_lead_backed_numbers(d: dict, lead) -> dict:
         _tc = mm.get('tax_certs')
         tax_known = _tc is not None and str(_tc) != ''
         tax = float(_tc or 0) if tax_known else 0.0
-        mm['net_equity_est'] = int(round(mm_value - mm_judg - senior - tax))
+        # AN OPEN MORTGAGE IS NOT A ZERO EITHER (2026-08-22). On a fresh LIS PENDENS no final
+        # judgment exists yet, so mm_judg is 0 — and this line then printed net equity = the FULL
+        # value while the brief directly above it listed "First mortgage: $981,500 PNC". Every LP
+        # brief was quoting fantasy equity, on the leads that matter most (CACE-26-004416: net
+        # printed $1,486,370 against a house with a $981,500 first). When there is no judgment to
+        # subtract, subtract the largest OPEN first mortgage instead — the recorded principal is a
+        # floor on the debt, never a payoff, so it is labelled provisional.
+        _mtg = 0.0
+        if not mm_judg:
+            for _m in (d.get('mortgages') or []):
+                if str(_m.get('status') or 'open').lower().startswith('open'):
+                    _mtg = max(_mtg, float(_m.get('amt') or _m.get('amount') or 0) or 0)
+        mm['net_equity_est'] = int(round(mm_value - mm_judg - _mtg - senior - tax))
         mm['tax_checked'] = bool(tax_known)
+        if _mtg:
+            mm['debt_basis'] = 'recorded first-mortgage principal (no final judgment yet)'
+            mm['mortgage_subtracted'] = int(round(_mtg))
+            mm['net_provisional'] = True
         # what we DO know even when certificates were never pulled: the annual bill off the tax roll.
         _ann = float(lead.get('est_annual_tax') or 0) or 0
         if _ann:
@@ -872,8 +898,21 @@ def build_diligence(lead_raw, county, source_file, headed=False, seed=None, forc
     list_price = lead['zprice'] or None
     judg = lead['judgment']
     net = None
+    _mtg_floor = 0.0
+    if not judg:
+        # A FRESH LIS PENDENS HAS NO JUDGMENT YET — and this used to make `judg` 0, so net equity
+        # came out as the FULL value on a house with an open first mortgage. CACE-26-004416
+        # (Amlong) printed "Net equity est $1,486,370" one line under "First mortgage: $981,500
+        # PNC BANK". Every LP brief quoted fantasy equity, on exactly the first-mover leads this
+        # pipeline exists to find. With no judgment, the largest OPEN mortgage's recorded
+        # principal is the honest debt floor (a floor, never a payoff — arrears and fees ride on
+        # top, so the result is provisional and labelled that way downstream).
+        # 'st' is this module's status key (see open_mtgs above) — not 'status'.
+        for _m in (open_mtgs or []):
+            _mtg_floor = max(_mtg_floor, float((_m or {}).get('amt')
+                                               or (_m or {}).get('amount') or 0) or 0)
     if value:
-        net = int(round(value - judg - surviving - (tax_certs or 0)))
+        net = int(round(value - judg - _mtg_floor - surviving - (tax_certs or 0)))
     notes = ''
     if ftype == 'HOA' and surviving:
         notes = f'HOA sale — senior mortgage stack ~${surviving:,.0f} survives.'
@@ -1129,7 +1168,7 @@ def run(case: str, headed: bool = False, force_live: bool = False) -> dict:
     lead, county, src = find_lead(case)
     if not lead:
         raise ValueError(
-            f'case not found in palmbeach_leads.json / broward_leads.json / leads_final.json: {case}'
+            f'case not found in palmbeach_leads.json / broward_leads.json / leads_final.json / lp_leads.json: {case}'
         )
 
     is_capri = case == CAPRI_CASE

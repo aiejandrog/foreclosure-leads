@@ -430,6 +430,22 @@ def main():
     a = ap.parse_args()
 
     leads = json.load(open(LEADS, encoding='utf-8'))
+    # LIS PENDENS leads live in their own file and were NEVER traced (2026-08-22). Broward fresh
+    # filings — the first-mover front of the funnel, months before anyone else calls — therefore
+    # had no lien chain at all, which is why a $1.59M Fort Lauderdale house (CACE-26-004416,
+    # Amlong) sat on the board as "owed $0" and ranked as junk. The same blind spot existed in
+    # diligence.py's find_lead. Dedupe by case: a lead promoted from LP into the county file must
+    # not be traced twice.
+    _lp = os.path.join(HERE, 'lp_leads.json')
+    if os.path.exists(_lp):
+        try:
+            _seen = {(r.get('case') or '') for r in leads}
+            for _r in json.load(open(_lp, encoding='utf-8')):
+                if (str(_r.get('county') or '').strip().upper().startswith('BROW')
+                        and (_r.get('case') or '') not in _seen):
+                    leads.append(_r)
+        except Exception:
+            pass
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
 
     picked, retries = [], []
