@@ -2403,6 +2403,28 @@ def make_tracker(leads):
     if _deads:
         print(f'dead ledger: {len(_deads)} case(s) baked in (retired on EVERY device)')
 
+    # FINAL BOUNCE SWEEP — must run before ANY output is written, twin included.
+    # The strip at the skiptrace merge is correct but not sufficient: emails are re-merged from more
+    # than one source afterwards (the person/portfolio union among them), so a blacklisted address
+    # can reappear on the finished card even though the send queue never had it. Measured
+    # 2026-08-22: 11 known-dead addresses on 8 cards. That is exactly how a dead address gets
+    # emailed BY HAND — wamlong@gmail.com sat on the Amlong card, got typed into a send, and
+    # hard-bounced 550. Placed here rather than beside the payload because the DESKTOP TWIN is
+    # written first; running it later cleaned the live board and left the local copy dirty.
+    if _bounced:
+        _late = 0
+        for _d in slim:
+            _em = _d.get('emails') or []
+            if not _em:
+                continue
+            _keep = [e for e in _em if str(e).lower().strip() not in _bounced]
+            if len(_keep) != len(_em):
+                _late += len(_em) - len(_keep)
+                _d['emails'] = _keep
+        if _late:
+            print(f"bounce guard (final sweep): {_late} dead address(es) removed from finished cards "
+                  f"— they had been re-merged after the queue strip")
+
     # Desktop copy: always PLAINTEXT with phones (local machine, Alejandro's own use).
     # Skipped in CI (DEALFLOW_NO_DESKTOP=1): the OneDrive path is meaningless on a runner and would
     # just pollute the checkout with a junk "C:\Users\..." directory + duplicate photo copies.
@@ -2456,6 +2478,7 @@ def make_tracker(leads):
         'zest':   sum(1 for d in slim if d.get('zest')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
+    # (the final bounce sweep runs ABOVE, before the Desktop twin is written — one sweep, not two)
     if codes:
         _payload = json.dumps(_encrypt_multi(json.dumps(slim), codes))
     else:
