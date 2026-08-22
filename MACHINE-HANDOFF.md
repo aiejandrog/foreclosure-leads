@@ -89,6 +89,42 @@ Moving the runner means moving these. They are gitignored on purpose.
 
 ---
 
+## 3b. Working parity vs. arming — two different things
+
+**Both machines may EDIT at the same time.** Clone, pull, branch, build, push — that is just git and
+it is safe. Only the *schedule* is exclusive (§1).
+
+To bring a second machine to full editing parity:
+
+```
+git pull                                        # code
+pip install -r requirements.txt                 # deps
+pip install "camoufox[geoip]"                   # LOCAL-ONLY dep, see requirements.txt
+python -m camoufox fetch                        # ~500 MB browser
+python -m playwright install chromium           # must re-run after camoufox pins playwright 1.60
+git config --get user.email                     # must return something (§6.4)
+```
+
+Then the gitignored half, which git cannot carry — on the **source** machine run:
+
+```
+python prep_desktop.py
+```
+
+It writes `DEALFLOW_TRANSFER_<today>.zip` to `~/secure` (outside OneDrive). Carry it by USB or a
+private folder — it holds 8 live API keys and homeowner PII. Unzip `secrets/`, `ledgers/`, `data/`
+and `browser-profile/` into the repo root on the target.
+
+**DESKTOP-35NNMFL status, 2026-08-22:** code current, all deps installed, all 8 secrets and
+`site.codes` present, playwright 1.60 + camoufox both verified against live county portals. It can
+develop and push today. Three gaps remain, all needing a copy from the laptop:
+
+| Gap | Consequence |
+|---|---|
+| `browser-profile/` is **empty** | auction-results scraper is login-gated in all 3 counties and skips them silently |
+| ledgers are **08-13 / 08-20** vintage | do NOT run outreach from here until refreshed — `optouts.json` is 9 days stale |
+| `lob.key` absent | no physical mail send (may simply be unconfigured everywhere) |
+
 ## 4. Scheduled tasks (identical on both machines)
 
 | Task | Time | Cadence |
