@@ -91,15 +91,15 @@ def card_en(name, phone):
     return """<div class="card">
 <div class="tag">FREE FORECLOSURE CONSULTATION &middot; 5 MINUTES &middot; NO FEE &middot; NO COMMITMENT</div>
 <div class="hook">Think it&rsquo;s handled?<br>Keep this anyway.</div>
-<div class="body">Many homeowners think it&rsquo;s handled &mdash; until the week of the sale.
-Keep this number, just in case. One free call and our senior advisor &mdash; <b>over 30 years in
-mortgages and foreclosure workouts</b> &mdash; personally reviews your case and lays out
+<div class="body">Many homeowners think it&rsquo;s handled, right up until the week of the
+sale. Keep this number, just in case. One free call and our senior advisor, with <b>over 30 years
+in mortgages and foreclosure workouts</b>, personally reviews your case and lays out
 <b>3, 4, sometimes 5 options</b>. Most people are only ever shown one.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
 <div class="fill">Important date: <span class="line"></span></div>
-<div class="fine">%s &middot; We are not a law firm and do not give legal advice. We are not
+<div class="fine">%s. We are not a law firm and do not give legal advice. We are not
 associated with the government, and our service is not approved by the government or your lender.
 Even if you use our service, your lender may not agree to change your loan. You may stop doing
 business with us at any time. Consultations are always free.</div>
@@ -111,15 +111,15 @@ def card_missed_en(name, phone):
 <div class="tag">FREE FORECLOSURE CONSULTATION &middot; 5 MINUTES &middot; NO FEE &middot; NO COMMITMENT</div>
 <div class="hook">Sorry I missed you today.</div>
 <div class="body">I came by to visit with you about a <b>time-sensitive matter concerning this
-property</b>. When an owner does nothing, the bank wins and the owner loses &mdash; and there are
-usually <b>3, 4, sometimes 5 options</b> nobody has shown you. One free call and our senior
-advisor &mdash; <b>over 30 years in mortgages and foreclosure workouts</b> &mdash; walks you
-through every one of them.</div>
+property</b>. When an owner does nothing, the bank wins and the owner loses. There are usually
+<b>3, 4, sometimes 5 options</b> nobody has shown you. One free call and our senior advisor, with
+<b>over 30 years in mortgages and foreclosure workouts</b>, walks you through every one of
+them.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
 <div class="fill">Important date: <span class="line"></span></div>
-<div class="fine">%s &middot; We are not a law firm and do not give legal advice. We are not
+<div class="fine">%s. We are not a law firm and do not give legal advice. We are not
 associated with the government, and our service is not approved by the government or your lender.
 Even if you use our service, your lender may not agree to change your loan. You may stop doing
 business with us at any time. Consultations are always free.</div>
@@ -131,15 +131,15 @@ def card_missed_es(name, phone):
 <div class="tag">CONSULTA GRATIS SOBRE SU CASO DE FORECLOSURE &middot; 5 MINUTOS &middot; SIN COSTO</div>
 <div class="hook">Lamento no haberlo encontrado hoy.</div>
 <div class="body">Pas&eacute; a visitarlo por un <b>asunto urgente relacionado con esta
-propiedad</b>. Cuando un due&ntilde;o no hace nada, el banco gana y el due&ntilde;o pierde &mdash;
-y casi siempre hay <b>3, 4, hasta 5 opciones</b> que nadie le ha mostrado. Una llamada gratis y
-nuestro asesor principal &mdash; <b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de
-foreclosure</b> &mdash; le explica cada una.</div>
+propiedad</b>. Cuando un due&ntilde;o no hace nada, el banco gana y el due&ntilde;o pierde. Casi
+siempre hay <b>3, 4, hasta 5 opciones</b> que nadie le ha mostrado. Una llamada gratis y nuestro
+asesor principal, <b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de
+foreclosure</b>, le explica cada una.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
 <div class="fill">Fecha importante: <span class="line"></span></div>
-<div class="fine">%s &middot; No somos un bufete de abogados y no damos consejos legales. No
+<div class="fine">%s. No somos un bufete de abogados y no damos consejos legales. No
 estamos asociados con el gobierno, y nuestro servicio no est&aacute; aprobado por el gobierno ni
 por su banco. Aunque use nuestro servicio, es posible que su banco no acepte modificar su
 pr&eacute;stamo. Puede dejar de trabajar con nosotros en cualquier momento. Las consultas siempre
@@ -151,16 +151,16 @@ def card_es(name, phone):
     return """<div class="card">
 <div class="tag">CONSULTA GRATIS SOBRE SU CASO DE FORECLOSURE &middot; 5 MINUTOS &middot; SIN COSTO</div>
 <div class="hook">&iquest;Cree que ya lo tiene resuelto?<br>Guarde esto de todos modos.</div>
-<div class="body">Muchos due&ntilde;os creen que ya est&aacute; resuelto &mdash; hasta la semana
-de la subasta. Guarde este n&uacute;mero, por si acaso. Una llamada gratis y nuestro asesor
-principal &mdash; <b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de foreclosure</b>
-&mdash; revisa su caso personalmente y le presenta <b>3, 4, hasta 5 opciones</b>. A la
-mayor&iacute;a solo le muestran una.</div>
+<div class="body">Muchos due&ntilde;os creen que ya est&aacute; resuelto, hasta la semana de la
+subasta. Guarde este n&uacute;mero, por si acaso. Una llamada gratis y nuestro asesor principal,
+<b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de foreclosure</b>, revisa su caso
+personalmente y le presenta <b>3, 4, hasta 5 opciones</b>. A la mayor&iacute;a solo le muestran
+una.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
 <div class="fill">Fecha importante: <span class="line"></span></div>
-<div class="fine">%s &middot; No somos un bufete de abogados y no damos consejos legales. No
+<div class="fine">%s. No somos un bufete de abogados y no damos consejos legales. No
 estamos asociados con el gobierno, y nuestro servicio no est&aacute; aprobado por el gobierno ni
 por su banco. Aunque use nuestro servicio, es posible que su banco no acepte modificar su
 pr&eacute;stamo. Puede dejar de trabajar con nosotros en cualquier momento. Las consultas siempre
