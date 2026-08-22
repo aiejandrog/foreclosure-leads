@@ -37,6 +37,8 @@ import argparse
 import datetime
 import glob
 import json
+
+import disclaimer as D
 import os
 import random
 import re
@@ -462,10 +464,8 @@ def _compose_single(r, snd, lang='en'):
     # 2026-08-22). FS 501.1377 turns on whether you hold yourself out as offering a service to
     # stop/delay/reverse a foreclosure for a fee; email is the highest-volume channel, so it was the
     # one surface making the denial only by omission. Keep this clause in both languages.
-    intro_en = (f"I'm {sN} with {sL}. I'm not your lender, not the government, not a "
-                f"foreclosure-rescue company, and not a lawyer.")
-    intro_es = (f'Soy {sN}, de {sL}. No soy su prestamista, no soy del gobierno, no soy una '
-                f'empresa de rescate de ejecuciones, y no soy abogado.')
+    intro_en = f"I'm {sN} with {sL}. {D.identity('en', as_html=False)}"
+    intro_es = f"Soy {sN}, de {sL}. {D.identity('es', as_html=False)}"
     early = (not td) and (not dt)
     if early:
         # LP / no auction date. Without this branch the FC body rendered "a sale date of ." --
@@ -590,8 +590,8 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
     # 2026-08-11 rewrite -- mirrors tracker genPortfolioEmail (MSG identity, no listicle, shorter).
     sL = snd.get('llc') or '[YOUR COMPANY]'
     body_en = (
-        f"Hi {first},\n\nI'm {sN} with Miami Solutions Group. I'm not your lender, not the "
-        f'government, not a foreclosure-rescue company, and not a lawyer.\n\n'
+        f"Hi {first},\n\nI'm {sN} with Miami Solutions Group. "
+        f"{D.identity('en', as_html=False)}\n\n"
         f'Public records show {n} properties in your name are in foreclosure right now. Every '
         f"case number below is real -- you can look each one up on the county clerk's site:\n\n" +
         '\n'.join(_line_en(r) for r in all_leads) + '\n\n'
@@ -604,8 +604,8 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
         f'Reply STOP or ask me not to contact you again and I will honor it for every property above.'
     )
     body_es = (
-        f'Hola {first},\n\nSoy {sN}, de Miami Solutions Group. No soy su prestamista, no soy '
-        f'del gobierno, no soy una empresa de rescate de ejecuciones, y no soy abogado.\n\n'
+        f"Hola {first},\n\nSoy {sN}, de Miami Solutions Group. "
+        f"{D.identity('es', as_html=False)}\n\n"
         f'Los registros publicos muestran {n} propiedades a su nombre en ejecucion hipotecaria '
         f'ahora mismo. Cada numero de caso abajo es real -- puede verificarlos usted mismo en '
         f'el sitio del clerk del condado:\n\n' +

@@ -36,6 +36,8 @@ import html as H
 import json
 import os
 
+import disclaimer as D
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 COLORS = {  # loud enough to find in a drawer, light enough that black text stays clean
@@ -83,10 +85,7 @@ mortgages and foreclosure workouts</b> &mdash; personally reviews your case and 
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
 <div class="fill">Important date: <span class="line"></span></div>
-<div class="fine">%s &middot; We are not a law firm and do not give legal advice. We are not
-associated with the government, and our service is not approved by the government or your lender.
-Even if you use our service, your lender may not agree to change your loan. You may stop doing
-business with us at any time. Consultations are always free.</div>
+<div class="fine">""" + D.mars('%s', 'en') + """</div>
 </div>"""
 
 
@@ -103,10 +102,7 @@ through every one of them.</div>
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
 <div class="fill">Important date: <span class="line"></span></div>
-<div class="fine">%s &middot; We are not a law firm and do not give legal advice. We are not
-associated with the government, and our service is not approved by the government or your lender.
-Even if you use our service, your lender may not agree to change your loan. You may stop doing
-business with us at any time. Consultations are always free.</div>
+<div class="fine">""" + D.mars('%s', 'en') + """</div>
 </div>"""
 
 
@@ -123,11 +119,7 @@ foreclosure</b> &mdash; le explica cada una.</div>
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
 <div class="fill">Fecha importante: <span class="line"></span></div>
-<div class="fine">%s &middot; No somos un bufete de abogados y no damos consejos legales. No
-estamos asociados con el gobierno, y nuestro servicio no est&aacute; aprobado por el gobierno ni
-por su banco. Aunque use nuestro servicio, es posible que su banco no acepte modificar su
-pr&eacute;stamo. Puede dejar de trabajar con nosotros en cualquier momento. Las consultas siempre
-son gratis.</div>
+<div class="fine">""" + D.mars('%s', 'es') + """</div>
 </div>"""
 
 
@@ -144,11 +136,7 @@ mayor&iacute;a solo le muestran una.</div>
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
 <div class="fill">Fecha importante: <span class="line"></span></div>
-<div class="fine">%s &middot; No somos un bufete de abogados y no damos consejos legales. No
-estamos asociados con el gobierno, y nuestro servicio no est&aacute; aprobado por el gobierno ni
-por su banco. Aunque use nuestro servicio, es posible que su banco no acepte modificar su
-pr&eacute;stamo. Puede dejar de trabajar con nosotros en cualquier momento. Las consultas siempre
-son gratis.</div>
+<div class="fine">""" + D.mars('%s', 'es') + """</div>
 </div>"""
 
 

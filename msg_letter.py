@@ -45,6 +45,8 @@ import html as H
 import json
 import os
 
+import disclaimer as D
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # The registered name of the company. Until an entity is actually formed and the name is one we own,
@@ -166,18 +168,12 @@ ES = """<div class="pg">
   <div class="fine">@@FINE_ES@@</div>
 </div>"""
 
-FINE_EN = ("@@CO@@ is not associated with the government, and our service is not approved by the "
-           "government or your lender. Even if you use our service, your lender may not agree to "
-           "change your loan. You may stop doing business with us at any time. We are not a law "
-           "firm and do not give legal advice. We are not a lender or mortgage broker and we do not "
-           "quote loan rates or terms. Consultations are always free.")
-
-FINE_ES = ("@@CO@@ no est&aacute; asociado con el gobierno, y nuestro servicio no est&aacute; "
-           "aprobado por el gobierno ni por su banco. Aunque use nuestro servicio, es posible que su "
-           "banco no acepte modificar su pr&eacute;stamo. Puede dejar de trabajar con nosotros en "
-           "cualquier momento. No somos un bufete de abogados y no damos consejos legales. No somos "
-           "prestamista ni corredor hipotecario y no cotizamos tasas ni t&eacute;rminos. Las "
-           "consultas siempre son gratis.")
+# The MARS/Reg O fine print now comes from disclaimer.py — the single source shared with the
+# flyer, the Lob mail and the outreach email. It used to be hand-copied here, which is how the
+# flyer ended up missing the "not a lender or mortgage broker" sentence this file has always
+# carried. @@CO@@ is this module's company token; mars() just drops it in where the name goes.
+FINE_EN = D.mars('@@CO@@', 'en')
+FINE_ES = D.mars('@@CO@@', 'es')
 
 CSS = """
 @page{size:Letter;margin:0}
