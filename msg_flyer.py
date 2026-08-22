@@ -41,16 +41,28 @@ setting the letters WHITE — white is simply not printed, so the letters show t
 The colored PDF stays for screens: it is the swatch you match the paper against, never the
 file you hand the counter.
 
+THREE CARDS, TWO LEGAL POSTURES (2026-08-22)
+ keep / missedyou  offer to review the case and work out options. That is mortgage assistance
+                   relief, so the FTC MARS Rule dictates the long disclosure block on them. It is
+                   the price of that pitch and it does not come off while the pitch stays.
+ offer             offers MONEY instead: we buy it, or (with a licence) we fund it. Not a MARS
+                   service, so the mandated sentences fall away and the legal block is three
+                   lines. Read the note above card_offer_en before touching its copy - the short
+                   disclaimer is load-bearing on the words the card does NOT say.
+
 Run:  python msg_flyer.py                        # safety-yellow, sender.json identity
       python msg_flyer.py --color pink           # hot pink stock look
       python msg_flyer.py --name X --phone Y     # someone else's paper
       python msg_flyer.py --stock                # ink-only file: print B&W on colored stock
+      python msg_flyer.py --variant offer        # cash-offer card, short legal block
+      python msg_flyer.py --variant offer --lending --nmls 1234567   # adds refi/reinstate lines
 """
 import argparse
 import datetime
 import html as H
 import json
 import os
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -85,6 +97,94 @@ def sender():
             _display_llc(s.get('llc') or 'Miami Solutions Group')
     except Exception:
         return 'Alejandro Gonzalez', '', 'Miami Solutions Group'
+
+
+# ---------------------------------------------------------------------------------------------
+# THE 'offer' VARIANT (2026-08-22) — WHY IT EXISTS AND WHY ITS DISCLAIMER IS SHORT
+#
+# The keep/missedyou cards sell MORTGAGE ASSISTANCE RELIEF: review your case, work out options,
+# stop the sale. That offer is what drags in the FTC MARS Rule (12 CFR 1015), and 1015.4(b)
+# then DICTATES the disclosure sentences almost verbatim - not associated with the government,
+# service not approved by your lender, lender may not agree to change your loan, you may stop
+# doing business at any time. The wall of fine print is not caution, it is the price of that
+# specific pitch. It cannot be trimmed while the card makes that pitch.
+#
+# This variant makes a different offer: we BUY, or we FUND. Buying a house and lending money are
+# not "mortgage assistance relief services" (no representation that we will obtain anything FROM
+# the consumer's lender ON their behalf), so 1015.4's mandated sentences are not triggered and the
+# legal block collapses to what is actually true and required. Same reason the copy here never
+# says modification, workout, negotiate, or "stop your foreclosure" - those words put the MARS
+# posture straight back on the card no matter what the rest of it says.
+#
+# WHAT REPLACES MARS HERE - and it is not nothing:
+#  * Advertising CREDIT ("we'll lend you the money to reinstate", "refinance") is mortgage
+#    lending. Florida licenses that under Ch. 494, and a licensed originator's ads must carry the
+#    NMLS ID. Hence --lending is gated on --nmls: no ID, no lending card. See main().
+#  * Never state a rate, payment, or term in the copy. Under TILA/Reg Z 1026.24 a single specific
+#    credit term is a "trigger term" that drags a full disclosure block onto the card - the exact
+#    wall this variant exists to avoid. Keep the offers qualitative.
+#  * BUYING from an owner in foreclosure is its own regime: Fla. Stat. 501.1377 (foreclosure-
+#    rescue transactions) wants a written contract, specific notices and a 3-business-day right to
+#    cancel, especially on any leaseback or repurchase-option deal. That lands at contract time,
+#    not on the card, but it is why the card promises a conversation and not a closing.
+# ---------------------------------------------------------------------------------------------
+
+# Base offers require no lending licence to advertise: buying property and paying cash for it.
+OFFERS_EN = ['A cash offer on your house, any condition, closed in days',
+             'Walk away with the equity you built instead of losing it at the auction',
+             'A sale on your timeline, not the bank&rsquo;s']
+# These advertise CREDIT. Gated behind --lending + --nmls.
+OFFERS_LEND_EN = ['Refinance the whole loan, even on short notice',
+                  'Pull cash out of the equity you already have',
+                  'The money to bring the loan current and keep the house']
+
+OFFERS_ES = ['Una oferta en efectivo por su casa, en cualquier condici&oacute;n, cerramos en d&iacute;as',
+             'Qu&eacute;dese con el equity que usted construy&oacute; en vez de perderlo en la subasta',
+             'Una venta a su ritmo, no al del banco']
+OFFERS_LEND_ES = ['Refinanciar el pr&eacute;stamo completo, incluso con poco tiempo',
+                  'Sacar efectivo del equity que ya tiene',
+                  'El dinero para poner el pr&eacute;stamo al d&iacute;a y quedarse con la casa']
+
+
+def _lis(items):
+    return ''.join('<li>%s</li>' % x for x in items)
+
+
+def card_offer_en(offers, nmls):
+    return """<div class="card">
+<div class="tag">WE PUT UP THE MONEY &middot; 5 MINUTES &middot; NO FEE TO YOU</div>
+<div class="hook">Your equity is still yours.<br>Until the auction.</div>
+<div class="body">Nobody at the bank is going to mention this, so here it is. There is more than
+one way out of a foreclosure, and most of them end with <b>you keeping your money</b>:</div>
+<ul class="offers">""" + _lis(offers) + """</ul>
+<div class="body b2">One free call, no paperwork, no obligation. Worst case you hang up knowing
+exactly what your house is worth and how long you have.</div>
+<div class="who"><div class="nm">%s</div>
+<div class="tel">%s</div>
+<div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
+<div class="fill">Important date: <span class="line"></span></div>
+<div class="fine">%s. Not a law firm, not a government agency, not your lender, and nothing here
+is legal advice. Any offer follows title and inspection.""" + nmls + """</div>
+</div>"""
+
+
+def card_offer_es(offers, nmls):
+    return """<div class="card">
+<div class="tag">NOSOTROS PONEMOS EL DINERO &middot; 5 MINUTOS &middot; SIN COSTO</div>
+<div class="hook">El equity es suyo.<br>Hasta la subasta.</div>
+<div class="body">En el banco nadie se lo va a decir, as&iacute; que se lo decimos nosotros. Hay
+m&aacute;s de una salida a un foreclosure, y casi todas terminan con <b>el dinero en su
+bolsillo</b>:</div>
+<ul class="offers">""" + _lis(offers) + """</ul>
+<div class="body b2">Una llamada gratis, sin papeleo y sin compromiso. En el peor de los casos
+cuelga sabiendo cu&aacute;nto vale su casa y cu&aacute;nto tiempo le queda.</div>
+<div class="who"><div class="nm">%s</div>
+<div class="tel">%s</div>
+<div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
+<div class="fill">Fecha importante: <span class="line"></span></div>
+<div class="fine">%s. No somos bufete de abogados, ni agencia del gobierno, ni su banco, y nada
+aqu&iacute; es consejo legal. Toda oferta queda sujeta a t&iacute;tulo e inspecci&oacute;n.""" + nmls + """</div>
+</div>"""
 
 
 def card_en(name, phone):
@@ -201,6 +301,13 @@ body{font-family:-apple-system,'Segoe UI',Arial,sans-serif;color:#111}
      padding:3pt 6pt;border-radius:3pt;align-self:flex-start;text-wrap:balance}
 .hook{font-size:19pt;line-height:1.06;font-weight:900}
 .body{font-size:9pt;line-height:1.34}
+.b2{font-size:8.4pt}
+/* Offers read as a scannable list, not a paragraph: this is the part a homeowner is meant to
+   take in at arm's length in a doorway. Square bullets sit tighter than discs at this size. */
+.offers{list-style:none;font-size:9pt;line-height:1.24;font-weight:700}
+.offers li{position:relative;padding-left:11pt;margin:4.5pt 0}
+.offers li:before{content:"";position:absolute;left:0;top:3.4pt;width:5pt;height:5pt;
+                  background:#111}
 .who{border-top:1.6pt solid #111;padding-top:6pt}
 .nm{font-size:14pt;font-weight:900;letter-spacing:.01em}
 .tel{font-size:21pt;font-weight:900;letter-spacing:.01em;margin:1pt 0}
@@ -250,7 +357,14 @@ def main():
     # the door reads it), the exact exposure the 8/12 legal pass closed - so the printed card says
     # "time-sensitive matter concerning this property" and keeps his bank-wins-you-lose frame as a
     # general statement. The sale-date line stays hand-filled, OWNER'S PRESENCE ONLY.
-    ap.add_argument('--variant', default='keep', choices=('keep', 'missedyou'))
+    # 'offer' = the money posture (2026-08-22): we buy or we fund, no MARS pitch, short legal
+    # block. See the long note above card_offer_en for why its disclaimer is legitimately small.
+    ap.add_argument('--variant', default='keep', choices=('keep', 'missedyou', 'offer'))
+    # Adds the refinance / cash-out / reinstatement-money lines to the offer card. These advertise
+    # CREDIT, so they are gated on a real NMLS ID (below) - an unlicensed lending ad is a far worse
+    # problem than a long disclaimer, and it is the one failure this script must not help ship.
+    ap.add_argument('--lending', action='store_true')
+    ap.add_argument('--nmls', default='')
     # Ink-only artwork for printing on loud colored paper stock (see the docstring's print-path
     # section). White background = unprinted = the paper's own color; the tag letters go white
     # for the same reason - a B&W printer leaves them as paper showing through the black box.
@@ -262,9 +376,34 @@ def main():
     if not phone:
         raise SystemExit('no phone: set sender.json or pass --phone')
 
-    _en, _es = (card_missed_en, card_missed_es) if a.variant == 'missedyou' else (card_en, card_es)
-    en = _en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
-    es = _es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
+    if a.lending and a.variant != 'offer':
+        raise SystemExit('--lending only applies to --variant offer')
+    if a.variant == 'offer':
+        # THE LICENCE GATE. "We can lend you the money to reinstate" and "refinance the whole
+        # loan" are advertisements for mortgage credit. In Florida that is licensed activity
+        # (Ch. 494), and a licensed originator's advertising carries the NMLS ID. Refusing here is
+        # the point: the base offer card (buy / cash / equity) prints for anyone, and the lending
+        # lines only exist on paper that can name the licence behind them.
+        if a.lending and not re.fullmatch(r'\d{4,10}', a.nmls.strip()):
+            raise SystemExit(
+                '--lending advertises mortgage credit, so it needs the NMLS ID of the licensed\n'
+                'lender or originator behind it: --lending --nmls 1234567\n'
+                'No licence yet? Drop --lending. The base offer card (cash offer, keep your\n'
+                'equity, sale on your timeline) advertises buying property, not credit, and\n'
+                'needs no lending licence.')
+        offers_en, offers_es = list(OFFERS_EN), list(OFFERS_ES)
+        if a.lending:
+            offers_en = OFFERS_LEND_EN + offers_en
+            offers_es = OFFERS_LEND_ES + offers_es
+        nmls = (' Financing by a licensed lender, NMLS #%s. Not a commitment to lend; all loans '
+                'subject to underwriting and approval.' % H.escape(a.nmls.strip())) if a.lending else ''
+        en = card_offer_en(offers_en, nmls) % (H.escape(name), H.escape(phone), H.escape(llc))
+        es = card_offer_es(offers_es, nmls) % (H.escape(name), H.escape(phone), H.escape(llc))
+    else:
+        _en, _es = ((card_missed_en, card_missed_es) if a.variant == 'missedyou'
+                    else (card_en, card_es))
+        en = _en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
+        es = _es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
     palette = ({'bg': '#ffffff', 'tagink': '#ffffff'} if a.stock
                else {'bg': COLORS[a.color], 'tagink': COLORS[a.color]})
     doc = ('<!doctype html><html><head><meta charset="utf-8"><title>MSG Leave-Behind</title>'
