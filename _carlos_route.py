@@ -24,6 +24,7 @@ OUTPUT:
   drop-and-drive from his phone.
 """
 import json, os, math, html, datetime, sys
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -333,7 +334,7 @@ def main():
     out_repo = os.path.join(HERE, f'Carlos_Door_Route_{today}.html')
     with open(out_repo, 'w', encoding='utf-8') as f: f.write(doc)
     # also drop on the Desktop for quick print
-    desk = os.path.join(os.environ.get('USERPROFILE',''), 'OneDrive', 'Desktop', 'DEALFLOW', f'Carlos_Door_Route_{today}.html')
+    desk = P.out(f'Carlos_Door_Route_{today}.html')
     try:
         os.makedirs(os.path.dirname(desk), exist_ok=True)
         with open(desk, 'w', encoding='utf-8') as f: f.write(doc)

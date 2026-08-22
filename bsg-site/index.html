@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Biscayne Solutions Group — Pre-Foreclosure Help for Florida Homeowners</title>
+<meta name="description" content="Miami-based. We read the actual county records on your property and tell you where you really stand. Free, confidential, no upfront fees.">
+<style>
+/* ── tokens ─────────────────────────────────────────────────────────────────
+   Sampled off the BSG shield: deep navy base, teal wave, white break.        */
+:root{
+  --navy-900:#0C2E4A; --navy-800:#123F63; --navy-700:#17527F;
+  --teal-600:#2189A8; --teal-500:#2E9CBD; --teal-300:#7FCADE;
+  --ink:#12212E; --muted:#5B6B7A; --line:#E3E9EE;
+  --bg:#FFFFFF; --bg-soft:#F5F8FA;
+  --ok-bg:#EAF6EF; --ok-fg:#1B6B45;
+  --warn-bg:#FFF8E8; --warn-fg:#7A5A12;
+  --r:12px; --shadow:0 1px 3px rgba(12,46,74,.08), 0 8px 24px rgba(12,46,74,.06);
+  --wrap:1120px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  color:var(--ink);background:var(--bg)}
+.wrap{max-width:var(--wrap);margin:0 auto;padding:0 20px}
+a{color:var(--teal-600)}
+h1,h2,h3{line-height:1.2;letter-spacing:-.015em}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+header{background:var(--navy-900);color:#fff;position:sticky;top:0;z-index:50}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0}
+.brand{display:flex;align-items:center;gap:11px;text-decoration:none;color:#fff}
+.brand svg{width:34px;height:34px;flex:none}
+.brand b{font-size:17px;font-weight:700;letter-spacing:-.01em;display:block;line-height:1.1}
+.brand span{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--teal-300)}
+.hnav{display:flex;align-items:center;gap:22px}
+.hnav a{color:#DCE8F0;text-decoration:none;font-size:14.5px}
+.hnav a:hover{color:#fff}
+.callbtn{background:var(--teal-500);color:#fff !important;padding:9px 16px;border-radius:8px;
+  font-weight:650;font-size:14.5px;text-decoration:none;white-space:nowrap}
+.callbtn:hover{background:var(--teal-600)}
+@media(max-width:820px){ .hnav a:not(.callbtn){display:none} }
+
+/* ── hero ───────────────────────────────────────────────────────────────── */
+.hero{background:linear-gradient(160deg,var(--navy-900) 0%,var(--navy-700) 62%,var(--teal-600) 140%);
+  color:#fff;padding:64px 0 58px}
+.hero h1{font-size:clamp(28px,4.6vw,46px);font-weight:750;max-width:16ch}
+.hero .sub{margin-top:16px;font-size:clamp(16px,2vw,19px);color:#CFE2EE;max-width:52ch}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:28px}
+.btn{display:inline-block;padding:14px 24px;border-radius:10px;font-weight:680;font-size:16px;
+  text-decoration:none;border:2px solid transparent}
+.btn-primary{background:#fff;color:var(--navy-900)}
+.btn-primary:hover{background:#EAF3F8}
+.btn-ghost{border-color:rgba(255,255,255,.45);color:#fff}
+.btn-ghost:hover{border-color:#fff;background:rgba(255,255,255,.08)}
+.hero .reassure{margin-top:18px;font-size:14px;color:#A9C8DA}
+
+/* ── sections ───────────────────────────────────────────────────────────── */
+section{padding:56px 0}
+.soft{background:var(--bg-soft)}
+.eyebrow{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal-600);font-weight:700}
+h2{font-size:clamp(23px,3vw,31px);font-weight:730;margin-top:8px}
+.lead{color:var(--muted);margin-top:10px;max-width:62ch}
+
+.grid{display:grid;gap:16px;margin-top:28px}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+@media(max-width:900px){ .g4{grid-template-columns:repeat(2,1fr)} .g3{grid-template-columns:1fr} }
+@media(max-width:560px){ .g4{grid-template-columns:1fr} }
+
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:20px;box-shadow:var(--shadow)}
+.card h3{font-size:16.5px;font-weight:700}
+.card p{color:var(--muted);font-size:14.5px;margin-top:7px}
+.ico{width:38px;height:38px;border-radius:9px;background:var(--bg-soft);display:grid;place-items:center;
+  margin-bottom:12px;border:1px solid var(--line)}
+.ico svg{width:19px;height:19px;stroke:var(--teal-600);fill:none;stroke-width:1.9;
+  stroke-linecap:round;stroke-linejoin:round}
+
+/* ── the differentiator ─────────────────────────────────────────────────── */
+.proof{background:var(--navy-900);color:#fff;border-radius:16px;padding:34px;margin-top:8px}
+.proof h2{color:#fff}
+.proof .lead{color:#BBD4E4}
+.proof ul{list-style:none;margin-top:20px;display:grid;gap:12px}
+.proof li{display:flex;gap:11px;align-items:flex-start;font-size:15px;color:#E4EFF6}
+.proof li svg{width:19px;height:19px;flex:none;margin-top:2px;stroke:var(--teal-300);fill:none;
+  stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+
+/* ── honesty block ──────────────────────────────────────────────────────── */
+.honest{border:1px solid var(--line);border-left:4px solid var(--teal-500);border-radius:var(--r);
+  padding:22px;background:#fff}
+.honest h3{font-size:17px}
+.honest ul{margin:12px 0 0 18px;color:var(--muted);font-size:14.5px}
+.honest li{margin:6px 0}
+
+/* ── contact ────────────────────────────────────────────────────────────── */
+.contact{display:grid;grid-template-columns:1fr 1fr;gap:32px;align-items:start}
+@media(max-width:860px){ .contact{grid-template-columns:1fr} }
+form{display:grid;gap:13px;margin-top:20px}
+label{font-size:13.5px;font-weight:640;color:var(--ink)}
+input,textarea,select{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:9px;
+  font:inherit;font-size:15px;background:#fff}
+input:focus,textarea:focus,select:focus{outline:2px solid var(--teal-500);outline-offset:1px;border-color:transparent}
+.sub-note{font-size:12.5px;color:var(--muted)}
+button[type=submit]{background:var(--navy-800);color:#fff;border:0;padding:14px;border-radius:10px;
+  font:inherit;font-weight:700;font-size:16px;cursor:pointer}
+button[type=submit]:hover{background:var(--navy-900)}
+
+.callbox{background:var(--bg-soft);border:1px solid var(--line);border-radius:var(--r);padding:22px}
+.callbox .num{font-size:26px;font-weight:750;color:var(--navy-900);letter-spacing:-.02em;
+  text-decoration:none;display:inline-block;margin-top:4px}
+
+/* ── mandatory disclosure ───────────────────────────────────────────────── */
+.mars{background:var(--warn-bg);border:1px solid #E8D9A8;border-radius:var(--r);padding:18px;
+  margin-top:26px;font-size:14px;color:var(--warn-fg);line-height:1.55}
+.mars b{display:block;margin-bottom:5px;font-size:14px}
+
+footer{background:var(--navy-900);color:#9FBDD1;padding:34px 0 30px;font-size:13.5px;line-height:1.6}
+footer a{color:var(--teal-300)}
+.foot-top{display:flex;flex-wrap:wrap;gap:20px;justify-content:space-between;align-items:flex-start}
+.legal{margin-top:20px;padding-top:18px;border-top:1px solid rgba(255,255,255,.13);font-size:12.5px;color:#88A6BC}
+</style>
+</head>
+<body>
+
+<!-- ══ HEADER ══ -->
+<header>
+  <div class="wrap bar">
+    <a class="brand" href="/">
+      <!-- BSG shield: palms over wave, drawn inline so it stays crisp and needs no asset -->
+      <svg viewBox="0 0 64 72" aria-hidden="true">
+        <defs><linearGradient id="sh" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#3BB0CC"/><stop offset="1" stop-color="#0C2E4A"/></linearGradient></defs>
+        <path d="M32 2 60 10v28c0 18-13 27-28 32C17 65 4 56 4 38V10z" fill="url(#sh)"/>
+        <path d="M6 44c8-5 14 3 22-1s14-6 30 0" stroke="#fff" stroke-width="4.5" fill="none" opacity=".95"/>
+        <path d="M6 53c8-5 14 3 22-1s14-6 30 0" stroke="#fff" stroke-width="3.2" fill="none" opacity=".6"/>
+        <g fill="#fff"><path d="M24 34v-9"/><ellipse cx="24" cy="24" rx="7" ry="2.6"/>
+          <ellipse cx="24" cy="24" rx="2.6" ry="6" opacity=".85"/></g>
+        <g fill="#fff" opacity=".9"><path d="M35 35v-7"/><ellipse cx="35" cy="27" rx="5.5" ry="2.1"/></g>
+      </svg>
+      <span><b>Biscayne</b><span>Solutions Group</span></span>
+    </a>
+    <nav class="hnav">
+      <a href="#help">What We Do</a>
+      <a href="#different">Why Us</a>
+      <a href="#limits">What We Don't Do</a>
+      <a class="callbtn" href="tel:+17866311823">(786) 631-1823</a>
+    </nav>
+  </div>
+</header>
+
+<!-- ══ HERO ══ -->
+<div class="hero">
+  <div class="wrap">
+    <h1>Behind on your mortgage or HOA? Find out where you actually stand.</h1>
+    <p class="sub">We pull the real recorded documents on your property &mdash; the lien, the case file,
+       the payoff &mdash; and walk you through what they say. Free, confidential, and yours to keep
+       whether you work with us or not.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="#contact">Get a free records review</a>
+      <a class="btn btn-ghost" href="tel:+17866311823">Call (786) 631-1823</a>
+    </div>
+    <p class="reassure">No upfront fees &middot; No obligation &middot; Se habla espa&ntilde;ol</p>
+  </div>
+</div>
+
+<!-- ══ SERVICES ══ -->
+<section id="help">
+  <div class="wrap">
+    <div class="eyebrow">How we can help</div>
+    <h2>Four paths, depending on what the records say</h2>
+    <p class="lead">Which one fits depends on numbers most homeowners have never been shown &mdash; what
+      is actually owed, who actually holds the note, and how much time the court file really gives you.</p>
+
+    <div class="grid g4">
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 12h4l3 8 4-16 3 8h4"/></svg></div>
+        <h3>Reinstatement</h3>
+        <p>Find the real number to bring the loan or HOA current &mdash; including fees most payoff
+           letters bury &mdash; and the deadline it has to be paid by.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 10l9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1z"/></svg></div>
+        <h3>Sell with time to spare</h3>
+        <p>If keeping it doesn't pencil out, selling before a judgment protects your equity. We'll
+           make a cash offer or refer you to an agent &mdash; whichever nets you more.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10"/></svg></div>
+        <h3>Short sale support</h3>
+        <p>When the debt is larger than the value, we assemble the package the servicer asks for and
+           keep the file moving.</p>
+      </div>
+      <div class="card">
+        <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3l8 4v6c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7z"/></svg></div>
+        <h3>Attorney referral</h3>
+        <p>Bankruptcy and litigation are legal work and we don't do legal work. When that's the right
+           answer, we say so and connect you with a Florida attorney.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ DIFFERENTIATOR — the one true claim ══ -->
+<section class="soft" id="different">
+  <div class="wrap">
+    <div class="proof">
+      <div class="eyebrow" style="color:var(--teal-300)">What actually makes us different</div>
+      <h2>We read the file before we say a word</h2>
+      <p class="lead">Most companies that mail you got your address off a list and know nothing else
+        about your situation. Before we ever give you an opinion, we pull the recorded instruments
+        from the county and read them. It costs you nothing and it is the whole difference.</p>
+      <ul>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+          <span><b>The lien itself</b> &mdash; not the index summary. County indexes routinely mislabel
+          what a document does; the paper says something different more often than you'd think.</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+          <span><b>Who really holds the note today</b> &mdash; loans get sold and reassigned, and the
+          company mailing you is often not the one you'd have to deal with.</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+          <span><b>The real clock</b> &mdash; whether you've been served, how long the plaintiff has,
+          and what deadline actually applies to you.</span></li>
+        <li><svg viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
+          <span><b>What it would truly cost to fix</b> &mdash; the payoff figure with fees and interest,
+          not the number printed on the first notice.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ══ HONESTY BLOCK ══ -->
+<section id="limits">
+  <div class="wrap">
+    <div class="eyebrow">Straight answers</div>
+    <h2>What we don't do</h2>
+    <p class="lead">If you're behind on a house, people are going to promise you things. Here is what
+      we will not tell you.</p>
+    <div class="grid g3" style="margin-top:22px">
+      <div class="honest">
+        <h3>We are not attorneys</h3>
+        <ul><li>We don't give legal advice</li>
+            <li>We don't file court papers for you</li>
+            <li>We don't advise on bankruptcy &mdash; we refer you to someone who can</li></ul>
+      </div>
+      <div class="honest">
+        <h3>We can't promise an outcome</h3>
+        <ul><li>No one can guarantee your lender agrees to anything</li>
+            <li>No one can guarantee a case is stopped</li>
+            <li>Anyone who tells you otherwise is selling you something</li></ul>
+      </div>
+      <div class="honest">
+        <h3>We don't take money up front</h3>
+        <ul><li>The records review is free</li>
+            <li>You are never asked to pay to be told where you stand</li>
+            <li>If we can't help, we'll tell you that too</li></ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ CONTACT ══ -->
+<section class="soft" id="contact">
+  <div class="wrap contact">
+    <div>
+      <div class="eyebrow">Free &amp; confidential</div>
+      <h2>Tell us the address. We'll pull the file.</h2>
+      <p class="lead">You'll get a plain-English summary of what's recorded against the property and
+        what your actual options are. No cost, no obligation, and we don't need your Social Security
+        number or bank information to do it.</p>
+
+      <div class="callbox" style="margin-top:22px">
+        <div style="font-size:13px;color:var(--muted);font-weight:650">Rather just talk?</div>
+        <a class="num" href="tel:+17866311823">(786) 631-1823</a>
+        <div style="font-size:13.5px;color:var(--muted);margin-top:6px">
+          Mon&ndash;Sat, 9am&ndash;7pm &middot; Se habla espa&ntilde;ol</div>
+      </div>
+    </div>
+
+    <div>
+      <form id="lead" method="post" action="#" novalidate>
+        <div>
+          <label for="nm">Your name</label>
+          <input id="nm" name="name" autocomplete="name" required>
+        </div>
+        <div>
+          <label for="ph">Phone</label>
+          <input id="ph" name="phone" type="tel" autocomplete="tel" required>
+        </div>
+        <div>
+          <label for="em">Email <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+          <input id="em" name="email" type="email" autocomplete="email">
+        </div>
+        <div>
+          <label for="ad">Property address</label>
+          <input id="ad" name="address" autocomplete="street-address" required
+                 placeholder="Street, city, ZIP">
+        </div>
+        <div>
+          <label for="st">What's going on?</label>
+          <select id="st" name="situation">
+            <option value="">Select one…</option>
+            <option>Behind on mortgage payments</option>
+            <option>Behind on HOA or condo dues</option>
+            <option>I received court papers</option>
+            <option>I got a letter and don't understand it</option>
+            <option>Behind on property taxes</option>
+            <option>Something else</option>
+          </select>
+        </div>
+        <button type="submit">Send &mdash; get my free records review</button>
+        <p class="sub-note">By sending this you agree we may contact you about your property. We do not
+          sell your information. Message and data rates may apply. You can ask us to stop at any time.</p>
+      </form>
+    </div>
+  </div>
+</section>
+
+<!-- ══ FOOTER + MANDATORY DISCLOSURES ══ -->
+<footer>
+  <div class="wrap">
+    <div class="foot-top">
+      <div style="max-width:38ch">
+        <div style="color:#fff;font-weight:700;font-size:16px">Biscayne Solutions Group</div>
+        <div style="margin-top:6px">Miami, Florida<br>
+          <a href="tel:+17866311823">(786) 631-1823</a></div>
+      </div>
+      <div>
+        <div style="color:#fff;font-weight:650;margin-bottom:6px">Pages</div>
+        <div><a href="#help">What we do</a><br><a href="#different">Why us</a><br>
+             <a href="#limits">What we don't do</a><br><a href="#contact">Contact</a></div>
+      </div>
+    </div>
+
+    <!-- ⚠️ REQUIRED BY 12 CFR 1015.4 (MARS Rule). Do not delete, do not shrink, do not move
+         below the fold on mobile. This exact sentence is mandatory in every general
+         commercial communication for mortgage-assistance relief services. -->
+    <div class="mars">
+      <b>Important notice</b>
+      Biscayne Solutions Group is not associated with the government, and our service is not approved
+      by the government or your lender. Even if you accept an offer of assistance and use our service,
+      your lender may not agree to change your loan. We are not attorneys and do not provide legal
+      advice. We do not provide credit repair, tax, or financial advisory services. You may stop doing
+      business with us at any time and are encouraged to consult a qualified attorney or a
+      HUD-approved housing counselor about your situation.
+    </div>
+
+    <div class="legal">
+      &copy; 2026 Biscayne Solutions Group. All rights reserved. &middot;
+      Serving homeowners throughout South Florida. &middot;
+      Free HUD-approved housing counseling is available at
+      <a href="https://www.hud.gov/findacounselor" rel="noopener">hud.gov/findacounselor</a>
+      or by calling 800-569-4287.
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

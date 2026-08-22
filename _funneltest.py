@@ -2,7 +2,8 @@
 import asyncio, os, pathlib, sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from playwright.async_api import async_playwright
-SRC = pathlib.Path(os.path.expanduser('~/OneDrive/Desktop/DEALFLOW/Foreclosure Lead Tracker.html'))
+import paths as P
+SRC = pathlib.Path(P.TWIN)
 SHOTS = pathlib.Path(os.environ.get('TEMP','.'))/'dealflow_shots'; SHOTS.mkdir(exist_ok=True)
 ok=[];bad=[]
 def rec(n,c,d=''):

@@ -24,8 +24,9 @@ assertion silently checks an empty object.
 import asyncio, os, pathlib, re, sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from playwright.async_api import async_playwright
+import paths as P
 
-SRC = pathlib.Path(os.path.expanduser('~/OneDrive/Desktop/DEALFLOW/Foreclosure Lead Tracker.html'))
+SRC = pathlib.Path(P.TWIN)
 ok, bad = [], []
 def rec(n, cond, d=''):
     (ok if cond else bad).append(n)

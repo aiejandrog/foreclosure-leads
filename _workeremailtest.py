@@ -25,8 +25,9 @@ or retire a lead. Three paths reach the send:
 import asyncio, json, os, pathlib, sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from playwright.async_api import async_playwright
+import paths as P
 
-SRC = pathlib.Path(os.path.expanduser('~/OneDrive/Desktop/DEALFLOW/Foreclosure Lead Tracker.html'))
+SRC = pathlib.Path(P.TWIN)
 BRIDGE = 'http://127.0.0.1:8823/**'
 ok, bad = [], []
 def rec(n, cond, d=''):

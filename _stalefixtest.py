@@ -2,7 +2,8 @@
 import asyncio, os, pathlib, sys
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 from playwright.async_api import async_playwright
-SRC = pathlib.Path(os.path.expanduser('~/OneDrive/Desktop/DEALFLOW/Foreclosure Lead Tracker.html'))
+import paths as P
+SRC = pathlib.Path(P.TWIN)
 ok=[];bad=[]
 def rec(n,c,d=''):
     (ok if c else bad).append(n); print(('  PASS ' if c else '  FAIL ')+n+((' | '+str(d)) if d else ''))

@@ -1,8 +1,9 @@
 """Verify the three-lane worker + daily cap against the real board data."""
 import asyncio, json, os, pathlib
 from playwright.async_api import async_playwright
+import paths as P
 
-SRC = pathlib.Path(os.path.expanduser('~/OneDrive/Desktop/DEALFLOW/Foreclosure Lead Tracker.html'))
+SRC = pathlib.Path(P.TWIN)
 
 JS = r"""() => {
   const out = {};
