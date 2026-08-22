@@ -4,17 +4,33 @@ For each lead's owner, pull the Miami-Dade Official Records chain, match SATISFA
 MORTGAGE, and surface the OPEN (unsatisfied) mortgages on the subject folio — i.e. the hidden 2nd that
 made Hondroulis's "$655k equity" a fantasy. Output -> records_liens.json (gitignored), keyed by Case #.
 
-Reliability trick: the reCAPTCHA-gated part is only the *search* (standardsearch POST). The RESULTS fetch
-(getStandardRecords GET) is NOT gated. gen_records_qs.py already cached a valid search token (qs) per owner
-in records_qs.json (158 owners). So for a cached owner we pull the chain with PLAIN REQUESTS — fast, no
-bot-wall. Uncached owners fall back to a Playwright token-mint (best-effort; the county walls it ~half the
-time headless).
+Reliability trick: the gated part is only the *search* (standardsearch POST). The RESULTS fetch
+(getStandardRecords GET) is NOT gated, so a valid search token (qs) is the entire cost of an owner.
+
+TOKEN SOURCES, in the order tried (2026-08-22):
+
+  1. CACHED qs      records_qs.json — plain requests, no browser, free and instant.
+  2. CAMOUFOX       drives the real search UI; Turnstile runs invisible/managed here and hands an
+                    anti-detect browser a token unprompted. FREE. Measured 4/4 (CAMOUFOX-EVAL.md);
+                    vanilla headless chromium gets nothing on the identical flow, so this is not
+                    "any browser works". ~17s per owner. The captured qs is written back to
+                    records_qs.json, so each owner costs that once and lands on path 1 afterwards.
+  3. 2CAPTCHA       fetch_via_turnstile — ~$0.003 and ~6s per solve. Faster than Camoufox but not
+                    free. Kept as the fallback for the day the county stops being generous, and
+                    reachable directly with --no-camoufox.
+  4. mint_and_fetch legacy Playwright reCAPTCHA-v3 mint. Effectively dead — the site migrated off
+                    the sitekey it was built for — and skipped silently when its JS template is gone.
+
+So the trade is time for money: Camoufox is ~3x slower per uncached owner than a 2Captcha solve, but
+costs nothing and compounds into the cache. On a backlog that matters; once records_qs.json is warm,
+most owners never reach step 2 at all.
 
 Usage:
   python records_liens.py --case 2024-023366-CA-01     # one lead (prove it)
   python records_liens.py --tier A                      # a tier
   python records_liens.py --all --cached-only           # everyone we already have a token for (fast, no browser)
-  python records_liens.py --all                         # everyone; mint tokens for the rest (slow, flaky)
+  python records_liens.py --all                         # everyone; free Camoufox tokens for the rest
+  python records_liens.py --all --no-camoufox           # skip Camoufox, buy tokens from 2Captcha
 """
 import argparse, datetime, json, os, re, time, urllib.parse
 
@@ -126,6 +142,113 @@ def fetch_via_turnstile(owner_lf, tries=3):
         # isValidSearch:false with a fresh token = a bad solve; loop and re-solve
         time.sleep(1)
     return None
+
+# ---- Camoufox: let the browser mint its own Turnstile token, for free ------------------------
+# Measured 2026-08-22 (CAMOUFOX-EVAL.md): Turnstile runs invisible/managed on this site, so it hands
+# a browser it considers legitimate a token with no interaction. Camoufox got one on 4/4 trials
+# (666-688 chars) and pulled 42 records for HONDROULIS. Vanilla headless chromium got NOTHING on the
+# same flow — twice the challenges.cloudflare.com traffic and an empty x-recaptcha-token — so this is
+# specific to the anti-detect build, not "any browser works now".
+#
+# It has to drive the real UI. POSTing api/home/standardsearch cold does not work: Turnstile only
+# executes as part of a search interaction, so on a freshly loaded page there is no widget and no
+# token. The search box itself lives behind the sidebar's Standard Search -> Name/Document.
+#
+# We do not read the rendered results. We capture the `qs` off the app's OWN getStandardRecords
+# request and hand it to records_by_qs(), so every existing parser downstream is untouched — and the
+# qs gets cached, which puts the next run on the free plain-requests path.
+
+CF_UNAVAILABLE = None          # set to a reason string once, so we do not retry a missing import
+
+
+def camoufox_session():
+    """One browser for a whole batch. Launching per-owner would dominate the runtime at --limit 60."""
+    global CF_UNAVAILABLE
+    if CF_UNAVAILABLE:
+        return None, None
+    try:
+        from camoufox.sync_api import Camoufox
+    except Exception as e:
+        CF_UNAVAILABLE = 'camoufox not installed (%s)' % type(e).__name__
+        return None, None
+    try:
+        cm = Camoufox(headless=True, geoip=True, humanize=True)
+        return cm, cm.__enter__()
+    except Exception as e:
+        CF_UNAVAILABLE = 'camoufox failed to launch: %s' % str(e)[:90]
+        return None, None
+
+
+def camoufox_qs(browser, party, settle=9000):
+    """Run one search in the real UI and return the `qs` the county issued, or None.
+
+    party is the LAST NAME ONLY — same rule fetch_via_turnstile documents: the clerk answers
+    isValidSearch:false for anything with a space or comma in it.
+    """
+    page = browser.new_page()
+    grabbed = {}
+
+    def on_req(r):
+        if 'getStandardRecords' in r.url and 'qs=' in r.url:
+            grabbed.setdefault('qs', urllib.parse.unquote(r.url.split('qs=', 1)[1].split('&')[0]))
+
+    page.on('request', on_req)
+    try:
+        page.goto(OR_BASE, wait_until='domcontentloaded', timeout=60000)
+        try:
+            page.wait_for_load_state('networkidle', timeout=25000)
+        except Exception:
+            pass
+        page.wait_for_timeout(2500)
+
+        for sel in ('text=Name/Document', 'a:has-text("Name/Document")'):
+            try:
+                loc = page.locator(sel).first
+                if loc.count():
+                    loc.click(timeout=8000)
+                    break
+            except Exception:
+                continue
+        page.wait_for_timeout(2500)
+
+        box = None
+        for sel in ('#lastName', 'input[name="lastName"]', 'input[placeholder*="Last" i]'):
+            try:
+                if page.locator(sel).count():
+                    box = page.locator(sel).first
+                    break
+            except Exception:
+                continue
+        if box is None:
+            return None
+        box.fill(party)
+        page.wait_for_timeout(600)
+
+        for sel in ('button[type="submit"]', 'button:has-text("SEARCH")', 'button:has-text("Search")'):
+            try:
+                loc = page.locator(sel).first
+                if loc.count():
+                    loc.click(timeout=8000)
+                    break
+            except Exception:
+                continue
+
+        # Poll rather than one long sleep — the qs usually lands in 3-5s and there is no reason to
+        # pay the worst case on every owner.
+        for _ in range(int(settle / 750)):
+            if grabbed.get('qs'):
+                break
+            page.wait_for_timeout(750)
+        return grabbed.get('qs')
+    except Exception:
+        return None
+    finally:
+        try:
+            page.remove_listener('request', on_req)
+            page.close()
+        except Exception:
+            pass
+
 
 def mint_and_fetch(owner_lf, budget=70, persist=False):
     """Mint a fresh reCAPTCHA token in a browser, then fetch. Defaults to a bounded 3-try attempt.
@@ -390,6 +513,9 @@ def main():
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--cached-only', action='store_true', help="only owners with a cached search token (fast, no browser)")
+    ap.add_argument('--no-camoufox', action='store_true',
+                    help="skip the free Camoufox token mint and go straight to 2Captcha "
+                         "(escape hatch for the day the county stops issuing tokens to it)")
     ap.add_argument('--persist', action='store_true', help="never give up on the captcha — keep minting with back-off until it yields (per-lead cap via MINT_ATTEMPTS env, default 25). This is how we FIGURE OUT the surviving-senior for every lead no matter how hostile the wall is.")
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
@@ -418,41 +544,86 @@ def main():
             print(f"  {r.get('Case #',''):22} {oc:26} {'cached' if oc in qs_cache else 'MINT'}")
         return
 
-    done = hits = 0
-    for r in picked:
-        case = r.get('Case #', ''); oc = (r.get('owner_clean', '') or '').strip()
-        folio = r.get('Folio', '') or r.get('year_folio', '')
-        judg = num(r.get('judgment'))
-        models = None
-        if oc in qs_cache:
-            models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
-        if models is None and not a.cached_only:
-            sp = split_owner(oc)
-            if sp:
-                # PRIMARY path (2026-07-21): solve Turnstile via 2Captcha, no browser. This is what
-                # took the wall from ~15% coverage to near-total. Browser mint is the last resort —
-                # skip it silently when the JS template is missing (site migrated away from the old
-                # reCAPTCHA v3 the mint code was built for), so a broken fallback never masks a real
-                # Turnstile failure. `--persist` on the batch is a no-op when the fallback is dead.
-                models = fetch_via_turnstile(sp)
-                if models is None:
-                    src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()
-                    if 'JS = r"""' in src:
-                        models = mint_and_fetch(sp, persist=a.persist)
-        if models is None:
-            print(f"  --  {case:22} {oc:26} (no records / blocked)")
-            continue
-        res = analyze(models, folio, judg, ftype=_fc_type(case))
-        res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
-        out[case] = res
-        done += 1
-        flag = ''
-        if res['open_count'] >= 2:
-            hits += 1; flag = f"  <-- OPEN 2ND ~${res['junior']:,} (of {res['open_count']} open mtgs)"
-        print(f"  ok  {case:22} {oc:26} {res['open_count']} open mtg{flag}")
-        json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
-        time.sleep(0.4)
+    # One Camoufox for the whole batch, opened only when there is actually something to mint.
+    cf_cm = cf_browser = None
+    need_mint = any((r.get('owner_clean', '') or '').strip() not in qs_cache for r in picked)
+    if need_mint and not a.cached_only and not a.no_camoufox:
+        cf_cm, cf_browser = camoufox_session()
+        print('  camoufox: %s' % ('ready (free Turnstile tokens)' if cf_browser
+                                  else 'UNAVAILABLE — %s; using 2Captcha' % CF_UNAVAILABLE))
+
+    done = hits = cf_free = paid = 0
+    try:
+        for r in picked:
+            case = r.get('Case #', ''); oc = (r.get('owner_clean', '') or '').strip()
+            folio = r.get('Folio', '') or r.get('year_folio', '')
+            judg = num(r.get('judgment'))
+            models = None
+            if oc in qs_cache:
+                models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
+            if models is None and not a.cached_only:
+                sp = split_owner(oc)
+                if sp:
+                    # 1) CAMOUFOX (2026-08-22): the browser mints its own Turnstile token, so this costs
+                    #    nothing. Tried before 2Captcha for exactly that reason. A captured qs is written
+                    #    back to records_qs.json, which puts the NEXT run for this owner on the free
+                    #    plain-requests path above — the saving compounds instead of repeating.
+                    #    Any failure just falls through to the paid path below; it never ends the run.
+                    if cf_browser is not None:
+                        try:
+                            qs = camoufox_qs(cf_browser, sp[0].strip())
+                        except Exception as e:
+                            qs = None
+                            print(f'  camoufox errored ({str(e)[:70]}) — falling back to 2Captcha')
+                        if qs:
+                            models = records_by_qs(qs)
+                            if models is not None:
+                                cf_free += 1
+                                qs_cache[oc] = qs
+                                try:
+                                    json.dump(qs_cache, open(QS_CACHE, 'w', encoding='utf-8'), indent=1)
+                                except Exception:
+                                    pass
+
+                    # 2) 2CAPTCHA (2026-07-21): solve Turnstile for ~$0.003, no browser. This is what
+                    # took the wall from ~15% coverage to near-total, and it stays as the fallback for
+                    # the day Turnstile stops handing out free tokens. Browser mint is the last resort —
+                    # skip it silently when the JS template is missing (site migrated away from the old
+                    # reCAPTCHA v3 the mint code was built for), so a broken fallback never masks a real
+                    # Turnstile failure. `--persist` on the batch is a no-op when the fallback is dead.
+                    if models is None:
+                        paid += 1
+                        models = fetch_via_turnstile(sp)
+                    if models is None:
+                        src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()
+                        if 'JS = r"""' in src:
+                            models = mint_and_fetch(sp, persist=a.persist)
+            if models is None:
+                print(f"  --  {case:22} {oc:26} (no records / blocked)")
+                continue
+            res = analyze(models, folio, judg, ftype=_fc_type(case))
+            res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
+            out[case] = res
+            done += 1
+            flag = ''
+            if res['open_count'] >= 2:
+                hits += 1; flag = f"  <-- OPEN 2ND ~${res['junior']:,} (of {res['open_count']} open mtgs)"
+            print(f"  ok  {case:22} {oc:26} {res['open_count']} open mtg{flag}")
+            json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+            time.sleep(0.4)
+    finally:
+        if cf_cm is not None:
+            try:
+                cf_cm.__exit__(None, None, None)
+            except Exception:
+                pass
+
     print(f"\nDONE: {done} traced, {hits} with a surviving 2nd mortgage. -> records_liens.json")
+    if cf_free or paid:
+        # paid counts owners that reached fetch_via_turnstile; each of those is a 2Captcha solve
+        # (~$0.003) that a free Camoufox token would have avoided.
+        print(f"     token source: {cf_free} free (camoufox) / {paid} paid (2captcha)"
+              f"  ~${paid * 0.003:.3f} spent, ~${cf_free * 0.003:.3f} avoided")
 
 
 if __name__ == '__main__':
