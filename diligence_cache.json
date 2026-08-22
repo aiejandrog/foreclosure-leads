@@ -8607,5 +8607,213 @@
       "lead_backed": true
     },
     "traced": "2026-08-03"
+  },
+  "CACE-26-004416": {
+    "case": "CACE-26-004416",
+    "county": "BROWARD",
+    "addr": "1343 PONCE DE LEON DR, Fort Lauderdale, FL 33316",
+    "folio": "504211182170",
+    "verdict": "CONDITIONAL",
+    "foreclosure_type": "MORTGAGE",
+    "plaintiff": "PNC BANK",
+    "judgment": 0,
+    "sale": "",
+    "mortgages": [
+      {
+        "party": "INTERCONTINENTAL BANK",
+        "amt": 675000,
+        "recorded_amt": 675000,
+        "bp": "20911/779",
+        "date": "1993-07-27",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "FLORIDA BUSINESS DEV CORP",
+        "amt": 312000,
+        "recorded_amt": 312000,
+        "bp": "21086/17",
+        "date": "1993-09-07",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "EISBERG,KIMBERLY S",
+        "amt": 50000,
+        "recorded_amt": 50000,
+        "bp": "25613/980",
+        "date": "1996-11-05",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "FIRST UNION NATIONAL BANK",
+        "amt": 250000,
+        "recorded_amt": 250000,
+        "bp": "30854/1341",
+        "date": "2000-09-18",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "BANKATLANTIC",
+        "amt": 750000,
+        "recorded_amt": 750000,
+        "bp": "35276/535",
+        "date": "2003-05-30",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "BANKATLANTIC",
+        "amt": 200000,
+        "recorded_amt": 200000,
+        "bp": "35276/645",
+        "date": "2003-05-30",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 288000,
+        "recorded_amt": 288000,
+        "bp": "36171/638",
+        "date": "2003-10-03",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "BANKATLANTIC",
+        "amt": 380000,
+        "recorded_amt": 380000,
+        "bp": "36984/287",
+        "date": "2004-03-01",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 919000,
+        "recorded_amt": 919000,
+        "bp": "42615/685",
+        "date": "2006-08-17",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "BANKATLANTIC",
+        "amt": 303278,
+        "recorded_amt": 303278,
+        "bp": "45087/66",
+        "date": "2008-02-11",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "BANKATLANTIC",
+        "amt": 300000,
+        "recorded_amt": 300000,
+        "bp": "48061/672",
+        "date": "2011-07-25",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 552346,
+        "recorded_amt": 552346,
+        "bp": "50202/1595",
+        "date": "2013-09-25",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 552346,
+        "recorded_amt": 552346,
+        "bp": "50202/1595",
+        "date": "2013-09-25",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "BANKUNITED",
+        "amt": 1000000,
+        "recorded_amt": 1000000,
+        "bp": "50392/558",
+        "date": "2013-12-10",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "MORTGAGE ELECTRONIC REGISTRATION SYSTEMS",
+        "amt": 656250,
+        "recorded_amt": 656250,
+        "bp": "",
+        "date": "2015-08-26",
+        "st": "SATISFIED",
+        "heloc": false
+      },
+      {
+        "party": "PNC BANK",
+        "amt": 981500,
+        "recorded_amt": 981500,
+        "bp": "",
+        "date": "2022-12-19",
+        "st": "OPEN",
+        "heloc": false
+      }
+    ],
+    "liens": [],
+    "taxes": {
+      "status": "unknown",
+      "certs": 0,
+      "due": null,
+      "url": ""
+    },
+    "title": {
+      "deed_type": "",
+      "lady_bird": false,
+      "life_estate_holder": "",
+      "remainder": "",
+      "bp": ""
+    },
+    "killer_issues": [],
+    "money_math": {
+      "value": 1486370,
+      "judg": 0,
+      "surviving_senior": 0,
+      "tax_certs": 0,
+      "list_price": null,
+      "net_equity_est": 504870,
+      "notes": ""
+    },
+    "timeline": [
+      {
+        "label": "Open mtg \u2014 PNC BANK",
+        "date": "2022-12-19",
+        "bp": ""
+      }
+    ],
+    "outreach_notes": "CONDITIONAL \u2014 outreach OK as options talk; do not treat title as clear until killers cleared.",
+    "citations": [
+      {
+        "label": "Property appraiser",
+        "url_or_bp": "https://web.bcpa.net/BcpaClient/#/Record-Search"
+      },
+      {
+        "label": "Official Records",
+        "url_or_bp": "https://officialrecords.broward.org/AcclaimWeb/"
+      }
+    ],
+    "sources": {
+      "lead": "lp_leads.json",
+      "or": "broward_liens.json",
+      "or_missing": false,
+      "conf": "low",
+      "verdict_reason": "mortgage FC \u2014 confirm payoff / surplus math",
+      "lead_backed": true
+    },
+    "traced": "2026-08-21"
   }
 }

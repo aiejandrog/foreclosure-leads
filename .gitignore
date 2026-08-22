@@ -253,3 +253,7 @@ acosta_report.py
 # Exported scheduled-task XMLs embed this machine's principal SID and user paths. The installer
 # script beside them is generic and IS tracked; the XMLs travel only in the transfer bundle.
 desktop-setup/tasks/
+rozo_send_mtg.py
+markey_pull.py
+markey_brief.py
+markey_call_recap.py

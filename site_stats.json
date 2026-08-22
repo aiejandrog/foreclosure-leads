@@ -1,0 +1,23 @@
+{
+ "generated": "2026-08-13",
+ "cases_tracked": 725,
+ "counties": 3,
+ "county_split": {
+  "miami_dade": 275,
+  "broward": 229,
+  "palm_beach": 221
+ },
+ "fresh_filings": 702,
+ "sales_next_60": 445,
+ "median_judgment": 208266,
+ "judgment_n": 398,
+ "mortgages_swept": 3084,
+ "investor_notes": 2814,
+ "investor_principal_b": 1.92,
+ "method": {
+  "cases_tracked": "Open foreclosure cases scraped from the Miami-Dade, Broward and Palm Beach clerk and recorder systems, deduplicated by case number.",
+  "median_judgment": "Median final-judgment amount across cases where the judgment is recorded.",
+  "sales_next_60": "Count of scheduled foreclosure sale dates falling within 60 days of the build date.",
+  "investor_notes": "Open mortgages recorded to LLC borrowers by private/hard-money lenders in the $75k-$5M band, from the Broward recorder mortgage index."
+ }
+}
