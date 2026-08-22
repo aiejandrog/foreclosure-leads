@@ -1264,70 +1264,70 @@
   "current_owner": "BRUNELO INC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "514119082100|FREDRICKSAMPSON|": {
   "title_status": "clear",
   "current_owner": "SAMPSON, FREDRICK A H/E SAMPSON, ICYLIN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "494231420890|JOSEPHINENJIE|": {
   "title_status": "clear",
   "current_owner": "NJIE, JOSEPHINE H/E NJIE, CECILIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "484224202400|GOYCOHECTOR|": {
   "title_status": "clear",
   "current_owner": "GOYCO, HECTOR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "514204013152|EDWARDSMARY|": {
   "title_status": "clear",
   "current_owner": "EDWARDS, MARY J",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "514214011690|BIASIELLOMARLETH|": {
   "title_status": "clear",
   "current_owner": "BIASIELLO, MARLETH",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "504205150740|SAULSBYTRACY|": {
   "title_status": "clear",
   "current_owner": "SAULSBY, TRACY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "504118051430|BUSTAMANTELUISA|": {
   "title_status": "clear",
   "current_owner": "BUSTAMANTE, LUISA MARTINEZ, ALEJANDRO ETAL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "494133071530|WEATHERSWILLIAMS|": {
   "title_status": "clear",
   "current_owner": "WEATHERS, WILLIAMS R JR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "494234023560|BIJELONICBOJAN|": {
   "title_status": "clear",
   "current_owner": "BIJELONIC, BOJAN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "5141175970|OWNERSEARCHTITLEVIA|": {
   "title_status": "unverified",
@@ -1341,14 +1341,14 @@
   "current_owner": "LLOYD, KARLA A",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'LLOYD, KARLA A' is not the foreclosure defendant 'CARIBBEAN ISLAND DEALS LLC'",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "484222591040|DARRICKKIMBROUGH|": {
   "title_status": "unverified",
   "current_owner": "KIMBROUGH, CHRISTIAN DALE",
   "flip_date": "",
   "evidence": "live owner 'KIMBROUGH, CHRISTIAN DALE' shares only a surname with the defendant 'DARRICK L KIMBROUGH' — verify it is the same household",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "30434105120030103|BRENTROBERTSON|": {
   "title_status": "clear",
@@ -1411,7 +1411,7 @@
   "current_owner": "PAGE, TERRI",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "5142050390|OWNERSEARCHTITLEVIA|": {
   "title_status": "unverified",
@@ -1425,7 +1425,7 @@
   "current_owner": "HALL, WILLIAM ALPHONSO III",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-22"
  },
  "5142261390|OWNERSEARCHTITLEVIA|": {
   "title_status": "unverified",
@@ -1811,5 +1811,40 @@
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
   "ts": "2026-08-20"
+ },
+ "494227370070|ELEGANCEPURE|": {
+  "title_status": "clear",
+  "current_owner": "PURE ELEGANCE LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-22"
+ },
+ "484306200260|ELEGANCEPURE|": {
+  "title_status": "clear",
+  "current_owner": "PURE ELEGANCE LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-22"
+ },
+ "514117AA5970|GLICKSUE|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-08-22"
+ },
+ "514205AA0390|FINEJEFFREY|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-08-22"
+ },
+ "494103091150|MARCUMRUTHSTEVEN|": {
+  "title_status": "clear",
+  "current_owner": "MARCUM, STEVEN H & RUTH A",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-22"
  }
 }
