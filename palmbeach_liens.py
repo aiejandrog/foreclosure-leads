@@ -618,8 +618,10 @@ def main():
             token = ''
             # Do not spend a captcha on a name that cannot match anything. _name_query does not
             # filter — it would turn '11750 SAINT ANDREWS PL APT 208' into a search for
-            # '11750 SAINT'. In this county a wasted solve is not just ~$0.003, it is one of only
-            # --limit 6 slots and 1-3 minutes of Landmark's v2 checkbox. The parcel result stands.
+            # '11750 SAINT'. Tokens here are ONE-SHOT, so on a parcel+name lead this is the SECOND
+            # solve of the same lead: measured 2026-08-22 on 502025CC018497XXXAWB, one v2 solve took
+            # 67s, and the parcel leg still returned 18 raw / 9 events on its own. So the skip buys
+            # back a full solve and ~a minute per affected lead, against a --limit 6 nightly.
             _junk = untraceable_owner(owner)
             if _junk:
                 print(f"  ..  {case:24} name supplement skipped ({_junk}; parcel kept)")
