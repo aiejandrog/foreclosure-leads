@@ -96,6 +96,46 @@ def split_owner(clean):
     return (toks[-1], ' '.join(toks[:-1]))   # (SURNAME, GIVEN)
 
 
+# A government body or a bare street address is not a party whose mortgage chain means anything.
+# Both still cost a mint attempt every run and both come back empty — measured on this board:
+# CITY OF NORTH MIAMI BEACH FLORIDA, STATE OF FLORIDA'S DEPARTMENT OF REVENUE and
+# UNITED STATES OF AMERICA - DEPARTMENT OF HOUSING all traced to 0 open mtg / conf=None, and
+# '10867 NW 59TH ST DORAL FL 33178' never resolved at all.
+#
+# THE TRAP, and why this is deliberately narrow: most address-shaped owners on this board are REAL
+# entities named after their address — 5838 ALTON ROAD LLC, 13925 OLD CUTLER ROAD LLC,
+# 6828 NW 3 AVE LLC — and every one of the 20 owners containing digits is a live company. Companies
+# are worth tracing: 63 of them have been traced and 8 came back carrying an open mortgage. So a
+# company suffix ALWAYS wins; the address rule only fires on a name that has no entity marker at all.
+COMPANY_SUFFIX_RE = re.compile(
+    r'\b(LLC|L\.L\.C|CORP|INC|TRUST|ASSOC|ASSN|COMPANY|HOLDINGS|GROUP|PARTNERS|VENTURES'
+    r'|INVESTMENTS|PROPERTIES|REALTY|MANAGEMENT|LP|LLP|LTD|PA|PLLC)\b', re.I)
+GOV_RE = re.compile(
+    r'(\bCITY OF\b|\bSTATE OF\b|\bCOUNTY OF\b|\bUNITED STATES\b|\bDEPARTMENT OF\b|\bDEPT OF\b'
+    r'|\bCOUNTY\s*$|\bTAX COLLECTOR\b|\bCLERK OF\b|\bSHERIFF\b)', re.I)
+STREET_RE = re.compile(
+    r'\b(ST|STREET|AVE|AVENUE|RD|ROAD|DR|DRIVE|BLVD|CT|COURT|LN|LANE|WAY|TER|TERR|PL|PLACE'
+    r'|HWY|CIR|CIRCLE|PKWY|APT|UNIT|STE)\b', re.I)
+
+
+def untraceable_owner(clean):
+    """Reason string when this owner_clean is not worth a search token, else ''.
+
+    Checked BEFORE a lead is picked, so junk never reaches a mint — free or paid.
+    """
+    s = (clean or '').strip()
+    if not s:
+        return 'empty'
+    if COMPANY_SUFFIX_RE.search(s):
+        return ''                                   # a company is a real party — always trace it
+    if GOV_RE.search(s):
+        return 'government body'
+    # bare street address: starts with a house number AND carries a street word, no entity marker
+    if re.match(r'^\d', s) and STREET_RE.search(s):
+        return 'street address, not a name'
+    return ''
+
+
 # ---- fetch the owner's recorded documents -----------------------------------------------------
 def records_by_qs(qs):
     try:
@@ -525,12 +565,20 @@ def main():
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
 
     picked = []
+    skipped = {}
     for r in leads:
         case = r.get('Case #', '') or ''
         if a.case and case != a.case: continue
         if a.tier and (r.get('tier', '') or '') != a.tier: continue
         oc = (r.get('owner_clean', '') or '').strip()
         if not oc: continue                                        # kimi: companies traced too (folio-isolated)
+        # Government bodies and bare street addresses cost a mint every run and return nothing.
+        # --case overrides, so a human can still force one if they have a reason.
+        if not a.case:
+            why = untraceable_owner(oc)
+            if why:
+                skipped.setdefault(why, []).append(oc)
+                continue
         if a.cached_only and oc not in qs_cache: continue
         if case in out and not a.case: continue                      # already traced (unless targeting it)
         picked.append(r)
@@ -538,6 +586,11 @@ def main():
 
     cached = sum(1 for r in picked if (r.get('owner_clean','') or '').strip() in qs_cache)
     print(f"{len(picked)} lead(s) to pull ({cached} via cached token / requests, {len(picked)-cached} need a mint)")
+    # Say what was dropped and why. A silent filter reads as "there was nothing there".
+    for why, names in sorted(skipped.items()):
+        uniq = sorted(set(names))
+        print(f"  skipped {len(names)} lead(s) — {why}: "
+              + ', '.join(n[:34] for n in uniq[:3]) + (' ...' if len(uniq) > 3 else ''))
     if a.dry_run or not picked:
         for r in picked[:20]:
             oc=(r.get('owner_clean','') or '').strip()
