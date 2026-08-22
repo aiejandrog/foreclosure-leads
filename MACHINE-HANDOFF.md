@@ -151,9 +151,23 @@ its last good build — that is the intended behaviour, not a failure.
 
 ## 7. Housekeeping
 
-- The WeTransfer bundle at `OneDrive\Desktop\wetransfer_dealflow_transfer_2026-08-20-zip_2026-08-21_1537`
-  holds **8 live API keys and homeowner PII** and is syncing to consumer OneDrive. Move it off once
-  the handoff is confirmed.
+- **The WeTransfer bundle has been moved off OneDrive** (2026-08-22). It now lives at
+  `C:\Users\olqbb\secure\dealflow-transfer-2026-08-20` on DESKTOP-35NNMFL — outside OneDrive, ACL
+  restricted to `DESKTOP-35NNMFL\olqbb`. All 318 files were SHA256-verified at the destination
+  before the OneDrive copy was deleted. It still holds the 8 live API keys and the 08-20 worker
+  state, so it is the fallback if a re-arm needs the original ledgers.
+  Two things that move did **not** do, both still open:
+  1. Deleting from a synced folder puts the cloud copy in the **OneDrive recycle bin for 30 days**.
+     Empty it at onedrive.live.com or the keys are still in Microsoft's cloud.
+  2. Those 8 keys sat in consumer cloud storage for two days. Rotating them is the only thing that
+     actually closes that exposure; moving the file does not.
+- **The Desktop board twin is plaintext and it is inside OneDrive.** Every refresh writes
+  `OneDrive\Desktop\DEALFLOW\Foreclosure Lead Tracker.html` — the ungated copy, **with phone
+  numbers** — plus all the property photos. That is ~1,800 owners and ~1,000 phones syncing to
+  consumer OneDrive continuously, which is a larger standing exposure than the one-time bundle
+  ever was. It is deliberate (it is the investor-facing file, and `sheets_crm.py` reads its RAW
+  payload), so it has not been changed. `DEALFLOW_NO_DESKTOP=1` disables it — but that also breaks
+  the Sheets CRM step, so do not set it without moving that dependency first.
 - `OneDrive\Documents\DEALFLOW` is a **website-work hub only** — notes, launchers, design
   references. No code, no data, no keys. The code lives here in git.
 - Origin has a stray Claude cloud branch `claude/phone-number-lookup-u4gvzm`. Merge or delete it;
