@@ -24,6 +24,7 @@ Usage:
   python broward_liens.py --all --limit 20             # cap the run
 """
 import argparse, json, os, re, subprocess, tempfile, time
+from records_liens import untraceable_owner   # shared junk-owner rule
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'broward_leads.json')
@@ -448,13 +449,24 @@ def main():
             pass
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
 
-    picked, retries = [], []
+    picked, retries, skipped = [], [], {}
     for r in leads:
         case = r.get('case', '') or ''
         if a.case and case != a.case: continue
         if a.tier and (r.get('tier', '') or '') != a.tier: continue
         owner = r.get('owners', '') or ''
         if not owner: continue
+        # AcclaimWeb is searched by NAME only, so a government body or a bare street address has
+        # nothing to search on. Shared with records_liens so the rule lives in one place; it is
+        # deliberately narrow and never fires on a company suffix (see its docstring — most
+        # address-shaped owners here are real LLCs named after their address). Zero of Broward's
+        # 164 distinct owners match today; this is insurance for what the scrape brings in next.
+        # --case overrides.
+        if not a.case:
+            why = untraceable_owner(owner)
+            if why:
+                skipped.setdefault(why, []).append(owner)
+                continue
         # kimi: companies ARE traced now (Alejandro 2026-07-20 — OCEAN BREEZE 777 LLC showed
         # manual-only fields because the old COMPANY_RE skip left every LLC/Corp lead with no
         # chain at all). Exact-name isolation works BETTER on companies than on people, and the
@@ -475,6 +487,10 @@ def main():
         print(f"(+{len(picked) - n_fresh} retry of previously-failed searches, capped 40/run)")
 
     print(f"{len(picked)} Broward lead(s) to trace via AcclaimWeb (no captcha, curl session)")
+    for why, names in sorted(skipped.items()):
+        uniq = sorted(set(names))
+        print(f"  skipped {len(names)} lead(s) — {why}: "
+              + ', '.join(n[:34] for n in uniq[:3]) + (' ...' if len(uniq) > 3 else ''))
     if not picked:
         return
     # kimi: Cloudflare's block here is probabilistic and sticky for minutes once tripped — a single

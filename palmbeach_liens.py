@@ -26,6 +26,7 @@ import argparse, json, os, re, subprocess, sys, tempfile, time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from broward_liens import analyze, _fc_type_plaintiff, _num   # the shared chain engine
+from records_liens import untraceable_owner            # shared junk-owner rule
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'palmbeach_leads.json')
@@ -552,15 +553,31 @@ def main():
     leads = json.load(open(LEADS, encoding='utf-8'))
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
     picked = []
+    skipped = {}
     for r in leads:
         case = r.get('case', '') or ''
         if a.case and case != a.case: continue
         if not (r.get('folio') or '').strip() and not (r.get('owners') or '').strip(): continue
         if '(owner via title search)' in (r.get('owners') or ''): continue
+        # A junk owner name is NOT a reason to drop a Palm Beach lead. Landmark is searched by
+        # PARCEL first and the 17-digit PCN isolates the property exactly, so a lead like
+        # '11750 SAINT ANDREWS PL APT 208' (PCN 73414414460052080) is fully traceable despite the
+        # name being an address. Only skip when there is no usable PCN to fall back on — i.e. the
+        # unusable name really was the only way in. Dropping it on the name alone would lose a
+        # real lead, which is the trap the Miami-Dade version does not have to worry about.
+        if not a.case:
+            why = untraceable_owner(r.get('owners') or '')
+            if why and len(re.sub(r'\D', '', r.get('folio', '') or '')) < 14:
+                skipped.setdefault(why + ' and no PCN', []).append(r.get('owners') or '')
+                continue
         if case in out and not (a.refresh or a.case): continue
         picked.append(r)
     if a.limit: picked = picked[:a.limit]
     print(f"{len(picked)} Palm Beach lead(s) to trace via Landmark Web (v2-captcha gated)")
+    for why, names in sorted(skipped.items()):
+        uniq = sorted(set(names))
+        print(f"  skipped {len(names)} lead(s) — {why}: "
+              + ', '.join(n[:34] for n in uniq[:3]) + (' ...' if len(uniq) > 3 else ''))
     if not picked:
         return
 
@@ -599,7 +616,16 @@ def main():
             # Parcel alone misses LP/FJ/Lady Bird not indexed on PCN — supplement owner name.
             # Tokens are one-shot; re-solve when ShowCaptcha flips back on.
             token = ''
-            nq = _name_query(owner)
+            # Do not spend a captcha on a name that cannot match anything. _name_query does not
+            # filter — it would turn '11750 SAINT ANDREWS PL APT 208' into a search for
+            # '11750 SAINT'. In this county a wasted solve is not just ~$0.003, it is one of only
+            # --limit 6 slots and 1-3 minutes of Landmark's v2 checkbox. The parcel result stands.
+            _junk = untraceable_owner(owner)
+            if _junk:
+                print(f"  ..  {case:24} name supplement skipped ({_junk}; parcel kept)")
+                nq = ''
+            else:
+                nq = _name_query(owner)
             if nq:
                 if show_captcha():
                     token, token_src = _obtain_token(headed=a.headed, use_2captcha=use_2c)
