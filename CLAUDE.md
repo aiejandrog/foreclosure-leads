@@ -20,6 +20,16 @@ Live: https://aiejandrog.github.io/foreclosure-leads/ (GitHub Pages from `docs/`
   encrypted against `site.codes`, and line 1 is a `DEALFLOW-COVERAGE` census the publish guard
   reads. Manual edits are destroyed on the next refresh and can freeze the live site.
 
+## Disclaimers
+
+All homeowner-facing compliance language comes from **`disclaimer.py`** — `mars()` (12 CFR 1015.4(a)
+MARS/Reg O), `identity()` ("I am not your lender / the government / a rescue company / an attorney"),
+`sig_tag()`. Every surface imports it: `msg_letter`, `msg_flyer`, `outreach_mail`, `outreach_email`.
+
+**Never re-type this text into a new module.** It was hand-copied across four files once already and
+drifted into five versions, each weaker than the last in a different way. Add a caller, not a copy.
+Changing the wording is a legal decision — raise it, don't just edit it.
+
 ## Never commit
 
 Homeowner PII, `leads_*.json`, `worker_notes.json`, `optouts.json`, `mail_sent.json`, and any
