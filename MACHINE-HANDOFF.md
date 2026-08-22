@@ -25,9 +25,12 @@ overwrites the other's board on push.
 ### Arming sequence (strict order, never both)
 
 ```
+0.  ON THE NEW BOX:   git config --get user.email     <- MUST return something, or every
+                                                         refresh commit fails silently (§6.4)
 1.  ON THE LAPTOP:    pwsh .\desktop-setup\install-tasks.ps1 -DisableLocal
 2.  Copy live state   (see §3) laptop -> new runner
 3.  ON THE NEW BOX:   pwsh .\desktop-setup\install-tasks.ps1 -Enable
+4.  Next morning:     confirm a commit landed on origin/main from the new box
 ```
 
 Use **`pwsh`**, never `powershell`. `install-tasks.ps1` is UTF-8 with no BOM, so Windows
@@ -136,6 +139,13 @@ its last good build — that is the intended behaviour, not a failure.
    was done: `%APPDATA%\...\Startup\DealflowSendServer.vbs` written with REPO_PATH baked in.
 3. Never sleeps (standby idle = 0 on AC and DC). No battery, so no ride-through on a power cut —
    a mid-run outage loses that run.
+4. **Git identity was unset until 2026-08-22** — `user.name` / `user.email` were empty in both the
+   local and global config, so every `git commit` on this box failed with *"Author identity
+   unknown"*. Had the desktop been armed in that state, each refresh would have scraped, enriched,
+   rebuilt the board — and then failed silently at the commit step, publishing nothing while
+   `leads-run.log` filled with fatal errors. Now set to
+   `Alejandro Gonzalez <agonzalez0311707@gmail.com>`, matching the laptop's commits.
+   **Check this on any new machine before arming it:** `git config --get user.email`
 
 ---
 
