@@ -13,9 +13,10 @@ import json
 import os
 import re
 import sys
+import paths as P
 
 BASE = os.path.dirname(os.path.abspath(__file__))
-TRACKER = r'C:\Users\olqbb\OneDrive\Desktop\DEALFLOW\Foreclosure Lead Tracker.html'
+TRACKER = P.TWIN
 VALID = {'LISTED', 'PENDING', 'SOLD', 'RENTAL', 'OFF-MARKET', 'NO-ADDR'}
 
 

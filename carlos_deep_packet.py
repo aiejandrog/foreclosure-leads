@@ -13,6 +13,7 @@ import html as H
 import json
 import os
 from urllib.parse import quote_plus
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ORIGIN = {'Tamiami': 'Tamiami, FL', 'West Miami': 'West Miami, FL'}
@@ -135,7 +136,7 @@ def main():
     html = '\n'.join(out)
     stamp = datetime.date.today().isoformat()
     for dest in (os.path.join(HERE, f'Carlos_Deep_Zone_Doors_{stamp}.html'),
-                 os.path.expanduser(rf'~\OneDrive\Desktop\DEALFLOW\Carlos_Deep_Zone_Doors_{stamp}.html')):
+                 P.out(f'Carlos_Deep_Zone_Doors_{stamp}.html')):
         open(dest, 'w', encoding='utf-8').write(html)
         print('wrote', dest)
     # per-zone Maps links for WhatsApp

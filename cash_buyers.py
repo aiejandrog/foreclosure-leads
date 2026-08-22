@@ -31,10 +31,10 @@ import sys
 import time
 
 import requests
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BOARD = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop', 'DEALFLOW',
-                     'Foreclosure Lead Tracker.html')
+BOARD = os.path.join(P.DEALFLOW_DIR, 'Foreclosure Lead Tracker.html')
 CACHE = os.path.join(HERE, 'cash_buyers.json')
 OCS = 'https://www2.miamidadeclerk.gov/ocs/'
 UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '

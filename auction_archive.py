@@ -29,11 +29,11 @@ import json
 import os
 import re
 import sys
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ARCHIVE = os.path.join(HERE, 'auction_archive.json')
-DESKTOP_BOARD = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop', 'DEALFLOW',
-                             'Foreclosure Lead Tracker.html')
+DESKTOP_BOARD = os.path.join(P.DEALFLOW_DIR, 'Foreclosure Lead Tracker.html')
 DOCS_BOARD = os.path.join(HERE, 'docs', 'index.html')
 # Source lead files — used on CI, where no Desktop board exists.
 LEAD_FILES = ('leads_final.json', 'broward_leads.json', 'palmbeach_leads.json')

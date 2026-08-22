@@ -34,11 +34,11 @@ import os
 import re
 import subprocess
 import sys
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BOARD = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop', 'DEALFLOW',
-                     'Foreclosure Lead Tracker.html')
-OUT_DIR = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop', 'DEALFLOW', 'Auction-Briefs')
+BOARD = os.path.join(P.DEALFLOW_DIR, 'Foreclosure Lead Tracker.html')
+OUT_DIR = os.path.join(P.DEALFLOW_DIR, 'Auction-Briefs')
 EDGE = r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe'
 
 

@@ -28,10 +28,10 @@ import sys
 import time
 
 import requests
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-TWIN = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop', 'DEALFLOW',
-                    'Foreclosure Lead Tracker.html')
+TWIN = os.path.join(P.DEALFLOW_DIR, 'Foreclosure Lead Tracker.html')
 CACHE = os.path.join(HERE, 'pa_property_cache.json')
 PA = 'https://www.miamidade.gov/Apps/PA/PApublicServiceProxy/PaServicesProxy.ashx'
 ZIPS = ('33014', '33015', '33016', '33018')

@@ -27,6 +27,7 @@ from urllib.parse import quote_plus
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import _carlos_route as CR  # noqa: E402  (helpers: _live_lead, _condo_ish, _hav_mi, loaders)
+import paths as P
 
 RADIUS = 3.0
 CITIES = [   # weekday order = the order Alejandro listed them
@@ -177,7 +178,7 @@ def main():
     html = '\n'.join(out)
     stamp = datetime.date.today().isoformat()
     for dest in (os.path.join(HERE, f'Carlos_Week_Routes_{stamp}.html'),
-                 os.path.expanduser(rf'~\OneDrive\Desktop\DEALFLOW\Carlos_Week_Routes_{stamp}.html')):
+                 P.out(f'Carlos_Week_Routes_{stamp}.html')):
         open(dest, 'w', encoding='utf-8').write(html)
         print('wrote', dest)
     for name, _, _ in CITIES:

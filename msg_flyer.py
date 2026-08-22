@@ -37,6 +37,7 @@ import json
 import os
 
 import disclaimer as D
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -197,8 +198,7 @@ def main():
     from playwright.sync_api import sync_playwright
     pdfs = [os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        pdfs.append(os.path.expanduser(os.path.join(
-            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))))
+        pdfs.append(P.out('MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today)))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()

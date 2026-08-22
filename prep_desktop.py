@@ -22,12 +22,17 @@ import os
 import subprocess
 import sys
 import zipfile
+import paths as P
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TODAY = datetime.date(2026, 8, 20)
-DESK = os.path.expanduser(os.path.join('~', 'OneDrive', 'Desktop'))
+# The bundle carries 8 live API keys, the ledgers and 174 data files. It used to be written to the
+# SYNCED Desktop, which is how a copy ended up replicated to consumer OneDrive and had to be
+# evacuated by hand on 2026-08-22. It builds outside any sync root now.
+DESK = P.TRANSFER_DIR
+os.makedirs(DESK, exist_ok=True)
 OUT = os.path.join(DESK, 'DEALFLOW_TRANSFER_%s.zip' % TODAY.isoformat())
 
 # files whose ABSENCE on the second PC causes a compliance failure, not just a slower run

@@ -16,10 +16,11 @@ Usage:
 """
 import argparse, json, os, re, sys, time, urllib.parse, webbrowser
 import requests
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DESKTOP = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop')
-OUTDIR = os.path.join(DESKTOP, 'DEALFLOW', 'Lookups')
+DESKTOP = P.DESKTOP
+OUTDIR = os.path.join(P.DEALFLOW_DIR, 'Lookups')
 PA = "https://apps.miamidadepa.gov/PApublicServiceProxy/PaServicesProxy.ashx"
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 COMPANY_RE = re.compile(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD)\b', re.I)

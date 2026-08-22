@@ -30,6 +30,7 @@ from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import broward_liens as B   # reuse the AcclaimWeb session + curl + date parsing
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, 'balloon_refi.json')
@@ -187,7 +188,7 @@ def main():
         print(f"  {r['est_maturity']} ({when:>9}) ${r['amount']:>9,}  {r['borrower'][:30]:30} <- {r['lender'][:20]}")
 
     # readable report to Desktop
-    desk = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop', 'DEALFLOW')
+    desk = P.DEALFLOW_DIR
     if os.path.isdir(desk):
         try:
             with open(os.path.join(desk, 'Balloon-Refi Hit List.txt'), 'w', encoding='utf-8') as f:

@@ -41,6 +41,7 @@ import requests
 
 import bd_budget
 import skiptrace as SK
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MCP_URL_F = os.path.join(HERE, 'tracerfy_mcp.url')
@@ -249,8 +250,7 @@ def run_dnccsv(limit=0):
     total = len(targets)
     if limit:
         targets = targets[:limit]
-    out = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop',
-                       'Tracerfy_DNC_%s.csv' % datetime.date.today().isoformat())
+    out = P.out('Tracerfy_DNC_%s.csv' % datetime.date.today().isoformat())
     import csv
     with open(out, 'w', newline='', encoding='utf-8') as f:
         w = csv.writer(f)
@@ -350,8 +350,7 @@ def run_batchcsv():
                      'city': (a.get('city') or '') if isinstance(a, dict) else '',
                      'state': (a.get('state') or 'FL') if isinstance(a, dict) else 'FL',
                      'zip': (a.get('zip') or '') if isinstance(a, dict) else ''})
-    out = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop',
-                       'Tracerfy_Batch_%s.csv' % datetime.date.today().isoformat())
+    out = P.out('Tracerfy_Batch_%s.csv' % datetime.date.today().isoformat())
     import csv
     with open(out, 'w', newline='', encoding='utf-8') as f:
         w = csv.DictWriter(f, fieldnames=['case', 'name', 'street', 'city', 'state', 'zip'])

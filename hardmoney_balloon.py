@@ -24,6 +24,7 @@ import html as H
 import json
 import os
 import re
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -354,8 +355,9 @@ calling it &ldquo;upside down&rdquo; against dirt would be wrong on the first ca
     # DEALFLOW_NO_DESKTOP is set on the GitHub runner (the OneDrive path only exists on Alejandro's
     # machine); without this guard the cloud run creates a junk ~/OneDrive/Desktop tree every night.
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(os.path.expanduser(os.path.join(
-            '~', 'OneDrive', 'Desktop', 'HardMoney_Balloon_Book_%s.html' % datetime.date.today())))
+        # Was the synced Desktop ROOT. The balloon book is built from lead data (owner names and
+        # addresses), so it belongs in the off-OneDrive output folder with everything else.
+        outs.append(P.out('HardMoney_Balloon_Book_%s.html' % datetime.date.today()))
     for o in outs:
         os.makedirs(os.path.dirname(o), exist_ok=True)
         open(o, 'w', encoding='utf-8').write(doc)

@@ -14,8 +14,8 @@ Reads (all repo root):
                            reporting zero dials as if that were measured truth.
 
 Writes:
-    ~/OneDrive/Desktop/DealFlow-Scorecard/YYYY-MM-DD_scorecard.html   (the judge's verdict)
-    ~/OneDrive/Desktop/DealFlow-Scorecard/YYYY-MM-DD_scorecard.json   (machine-readable; the
+    ~/DEALFLOW/DealFlow-Scorecard/YYYY-MM-DD_scorecard.html   (the judge's verdict)
+    ~/DEALFLOW/DealFlow-Scorecard/YYYY-MM-DD_scorecard.json   (machine-readable; the
                            next run reads the previous file for week-over-week deltas)
 
 Run:    python analyst.py            # writes + opens the scorecard
@@ -32,9 +32,10 @@ import webbrowser
 from email.utils import parsedate_to_datetime
 
 import morning_planner as MP
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-OUT_DIR = os.path.expanduser('~/OneDrive/Desktop/DealFlow-Scorecard')
+OUT_DIR = os.path.join(P.DEALFLOW_DIR, 'DealFlow-Scorecard')
 
 # ---------------------------------------------------------------- model assumptions (EDIT HERE)
 # Revenue model B = attorney-routed stop-sale fees (FS 501.1377 exemption). Chosen by the

@@ -13,6 +13,7 @@ Run:  python msg_actionplan.py
 """
 import datetime
 import os
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TODAY = datetime.date(2026, 8, 14)
@@ -188,8 +189,7 @@ def main():
     from playwright.sync_api import sync_playwright
     outs = [os.path.join(HERE, 'MSG_Action_Plan_%s.pdf' % TODAY.isoformat())]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(os.path.expanduser(os.path.join(
-            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Action_Plan_%s.pdf' % TODAY.isoformat())))
+        outs.append(P.out('MSG_Action_Plan_%s.pdf' % TODAY.isoformat()))
     with sync_playwright() as p:
         b = p.chromium.launch(); pg = b.new_page()
         pg.goto('file:///' + hp.replace(os.sep, '/')); pg.wait_for_timeout(350)

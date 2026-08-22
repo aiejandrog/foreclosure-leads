@@ -25,8 +25,9 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import msg_brand  # noqa: E402
+import paths as P
 
-OUT = os.path.expanduser(r'~\OneDrive\Desktop\DEALFLOW\MSG-Client-Forms')
+OUT = P.out('MSG-Client-Forms')
 MARK_H = 74
 LLC = 'Miami Solutions Group, LLC'
 

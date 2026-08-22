@@ -37,9 +37,10 @@ import os
 import re
 import urllib.request
 from datetime import datetime
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DESK = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop', 'DEALFLOW')
+DESK = P.DEALFLOW_DIR
 TWIN = os.path.join(DESK, 'Foreclosure Lead Tracker.html')
 WEBHOOK_F = os.path.join(HERE, 'sheets_crm_webhook.url')
 DOOR_MIN_EQ = 30000

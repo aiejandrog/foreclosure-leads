@@ -26,6 +26,7 @@ Run:  python msg_calllog.py
 import argparse
 import datetime
 import os
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROWS = 20
@@ -126,8 +127,7 @@ def main():
     from playwright.sync_api import sync_playwright
     outs = [os.path.join(HERE, 'MSG_Call_Log_%s.pdf' % today)]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(os.path.expanduser(os.path.join(
-            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Call_Log_%s.pdf' % today)))
+        outs.append(P.out('MSG_Call_Log_%s.pdf' % today))
     with sync_playwright() as p:
         b = p.chromium.launch(); pg = b.new_page()
         pg.goto('file:///' + hp.replace(os.sep, '/')); pg.wait_for_timeout(300)

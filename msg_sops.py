@@ -24,6 +24,7 @@ Run:  python msg_sops.py
 """
 import datetime
 import os
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -168,8 +169,7 @@ def main():
     from playwright.sync_api import sync_playwright
     outs = [os.path.join(HERE, 'MSG_Operating_Rules_%s.pdf' % today.isoformat())]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(os.path.expanduser(os.path.join(
-            '~', 'OneDrive', 'Desktop', 'DEALFLOW', 'MSG_Operating_Rules_%s.pdf' % today.isoformat())))
+        outs.append(P.out('MSG_Operating_Rules_%s.pdf' % today.isoformat()))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()

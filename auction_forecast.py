@@ -32,10 +32,11 @@ import json
 import os
 import re
 import sys
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-BOARD = os.path.expanduser('~/OneDrive/Desktop/DEALFLOW/Foreclosure Lead Tracker.html')
-OUT = os.path.expanduser('~/OneDrive/Desktop/DEALFLOW/DEALS-ON-THE-CLOCK.md')
+BOARD = P.TWIN
+OUT = os.path.join(P.DEALFLOW_DIR, 'DEALS-ON-THE-CLOCK.md')
 _COMPANY_RE = re.compile(
     r'\b(LLC|INC|CORP|TRUST|BANK|COMPANY|HOLDINGS|LP|LTD|ASSOC|ASSN|PROPERT|REALTY|CAPITAL|GROUP|'
     r'INVEST|CHURCH|CONDOMINIUM)\b', re.I)

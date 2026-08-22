@@ -21,7 +21,7 @@ Usage:
     python morning_planner.py --focus "closing prep"      # pre-fill Today's Focus box
     python morning_planner.py --out X.html                # override output path
 
-Output default: ~/OneDrive/Desktop/MSG-Meeting-Agendas/YYYY-MM-DD_standup.html
+Output default: ~/DEALFLOW/MSG-Meeting-Agendas/YYYY-MM-DD_standup.html
 
 Cron-friendly: add to Windows Task Scheduler at 6:45 AM ET on weekdays; every morning the
 day's agenda is on Alejandro's Desktop before he opens the laptop.
@@ -36,9 +36,10 @@ import re
 import sys
 import webbrowser
 from collections import Counter, defaultdict
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_OUT_DIR = os.path.expanduser('~/OneDrive/Desktop/MSG-Meeting-Agendas')
+DEFAULT_OUT_DIR = os.path.join(P.DEALFLOW_DIR, 'MSG-Meeting-Agendas')
 
 _COMPANY_RE = re.compile(
     r'\b(LLC|L\.?L\.?C|INC|CORP|CORPORATION|TRUST|LP|LLP|COMPANY|CO\.|ASSOC|ASSOCIATION|BANK|'

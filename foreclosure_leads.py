@@ -14,13 +14,16 @@ import json, re, time, csv, os, sys, shutil, hashlib, math, urllib.parse
 from datetime import datetime, date, timedelta
 import requests
 from playwright.sync_api import sync_playwright
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DESKTOP = r"C:\Users\olqbb\OneDrive\Desktop"
-# Where the plaintext Desktop tracker + daily CSV land. Local runs write to Alejandro's Desktop;
-# GitHub Actions overrides DEALFLOW_DIR to a throwaway tmp path (the Linux runner has no Desktop,
-# and the img copy would otherwise create a literal 'C:\\Users\\...' directory in the workspace).
-DEALFLOW_DIR = os.environ.get('DEALFLOW_DIR') or os.path.join(DESKTOP, "DEALFLOW")
+DESKTOP = P.DESKTOP
+# Where the plaintext tracker + daily CSV land. MOVED OFF ONEDRIVE 2026-08-22 -- this file is the
+# ungated board WITH phone numbers, and it was being replicated to consumer cloud storage on every
+# refresh. paths.py owns the location now; GitHub Actions still overrides DEALFLOW_DIR to a
+# throwaway tmp path (the Linux runner has no Desktop, and the img copy would otherwise create a
+# literal 'C:\\Users\\...' directory in the workspace).
+DEALFLOW_DIR = P.DEALFLOW_DIR
 RESULTS_FILE = os.path.join(HERE, 'skiptrace_results.json')   # local phone cache (gitignored)
 PASS_FILE = os.path.join(HERE, 'site.pass')                    # shared-site password (gitignored)
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
