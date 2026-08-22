@@ -161,13 +161,25 @@ its last good build — that is the intended behaviour, not a failure.
      Empty it at onedrive.live.com or the keys are still in Microsoft's cloud.
   2. Those 8 keys sat in consumer cloud storage for two days. Rotating them is the only thing that
      actually closes that exposure; moving the file does not.
-- **The Desktop board twin is plaintext and it is inside OneDrive.** Every refresh writes
-  `OneDrive\Desktop\DEALFLOW\Foreclosure Lead Tracker.html` — the ungated copy, **with phone
-  numbers** — plus all the property photos. That is ~1,800 owners and ~1,000 phones syncing to
-  consumer OneDrive continuously, which is a larger standing exposure than the one-time bundle
-  ever was. It is deliberate (it is the investor-facing file, and `sheets_crm.py` reads its RAW
-  payload), so it has not been changed. `DEALFLOW_NO_DESKTOP=1` disables it — but that also breaks
-  the Sheets CRM step, so do not set it without moving that dependency first.
+- **All DealFlow output moved off OneDrive** (2026-08-22, commit `1638d9a`). Twenty modules each
+  hardcoded `~\OneDrive\Desktop\DEALFLOW`; `paths.py` owns it now and it resolves to **`~\DEALFLOW`**,
+  outside every sync root. A Desktop shortcut (`DEALFLOW.lnk`, 865 bytes) keeps the double-click
+  workflow. `DEALFLOW_DIR` env override still wins, so the cloud runner's tmp path is unchanged.
+
+  **On the laptop, pulling that commit is not the whole job.** Three things need doing there:
+  1. The existing `OneDrive\Desktop\DEALFLOW` folder is **not** evacuated by the pull. The next
+     refresh writes to the new location and leaves the old one sitting in OneDrive full of PII.
+     Move it to `~\DEALFLOW`, delete the original, then **empty the OneDrive recycle bin**.
+  2. Check the synced Desktop root for `Tracerfy_*.csv` (case + name + street + city + zip),
+     `HardMoney_Balloon_Book_*.html`, `DealFlow-Scorecard\`, `MSG-Meeting-Agendas\` and any
+     `DEALFLOW_TRANSFER_*.zip`. All of those used to land there and all now go to `~\DEALFLOW`.
+  3. `acosta_report.py` and `amlong_brief.py` are **gitignored** (they carry PII inline), so the
+     fix did not travel. Change `os.path.expanduser(os.path.join('~','OneDrive','Desktop','DEALFLOW', …))`
+     to `P.out(…)` with `import paths as P` in the laptop's copies by hand.
+
+  Two files stay on the synced Desktop deliberately: `DEALFLOW-STATUS.txt` (`run_report.py` — counts
+  only, no names, and the point is that it is visible after an unattended run) and
+  `make_msg_emblem.py`'s brand artwork (no homeowner data, and it has its own `MSG_BRAND_OUT`).
 - `OneDrive\Documents\DEALFLOW` is a **website-work hub only** — notes, launchers, design
   references. No code, no data, no keys. The code lives here in git.
 - Origin has a stray Claude cloud branch `claude/phone-number-lookup-u4gvzm`. Merge or delete it;

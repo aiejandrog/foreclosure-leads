@@ -20,6 +20,17 @@ Live: https://aiejandrog.github.io/foreclosure-leads/ (GitHub Pages from `docs/`
   encrypted against `site.codes`, and line 1 is a `DEALFLOW-COVERAGE` census the publish guard
   reads. Manual edits are destroyed on the next refresh and can freeze the live site.
 
+## Output paths
+
+Anything written outside the repo goes through **`paths.py`** — `P.out(name)`, `P.DEALFLOW_DIR`,
+`P.TWIN`, `P.TRANSFER_DIR`. It resolves to `~\DEALFLOW`, **outside OneDrive**.
+
+**Never write homeowner data to `~\OneDrive\Desktop`.** Known Folder Move puts the Desktop inside
+OneDrive on this account, so anything landing there is replicated to consumer cloud storage. Twenty
+modules did exactly that until 2026-08-22 — the plaintext board with phone numbers, skip-trace CSVs,
+call lists, the transfer bundle. `P.DESKTOP` exists for shortcuts and count-only status files; check
+`P.DESKTOP_IS_SYNCED` before putting anything else there.
+
 ## Disclaimers
 
 All homeowner-facing compliance language comes from **`disclaimer.py`** — `mars()` (12 CFR 1015.4(a)
