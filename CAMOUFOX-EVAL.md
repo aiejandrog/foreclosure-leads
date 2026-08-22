@@ -56,11 +56,55 @@ sessions return `True` on both transports.)
   `C:\Users\olqbb\tools\camoufox\.venv` precisely so nothing shared changed. Adopting it in the
   repo means resolving that pin — see that folder's README.
 
+## Miami-Dade — Camoufox mints its own Turnstile token. This is the one that pays.
+
+Tested 2026-08-22 with `md_probe_ui.py`. **No 2Captcha calls were made**, so the test cost nothing
+either way.
+
+| Transport | own token minted | standardsearch | getStandardRecords | outcome |
+|---|---|---|---|---|
+| `requests`, no token | — | 200 `isValidSearch=false` | — | walled |
+| vanilla headless Chromium | **0 chars** | 200, no `qs` | never fired | walled |
+| **Camoufox** | **666–688 chars** | **200 + `qs`** | **200** | **42 records for HONDROULIS** |
+
+**4/4 trials.** Turnstile is in invisible/managed mode here, so it silently hands a legitimate-looking
+browser a token — and it judged Camoufox legitimate every time. Vanilla headless got *twice* the
+`challenges.cloudflare.com` traffic (28 events vs 14) and still never passed: it was being
+re-challenged and failing, then posting the search with an empty `x-recaptcha-token`.
+
+This is the structural difference from Palm Beach. PB is reCAPTCHA v2 **checkbox** — it cannot
+auto-pass, so no fingerprint work opens it. Miami-Dade is **Turnstile**, which can and does.
+
+### What it's worth
+
+Two things, and the second is the bigger one:
+
+1. **The 2Captcha line for MD goes away.** ~$0.003/solve, `--limit 60` ≈ $0.18/run.
+2. **The `--limit 60` cap exists to bound that spend.** With the token free, the cap is no longer
+   protecting anything — so the ceiling on how many new leads get a lien chain per night is set by
+   time, not by budget. `refresh-dealflow.bat` notes ~21 new cases land daily; the spend cap is part
+   of why coverage sits where it does.
+
+It also replaces the existing fallback. `records_liens.mint_and_fetch` drives Playwright to mint a
+token and its own docstring says the county "walls it ~half the time headless". Camoufox went 4/4.
+
+### Getting there
+
+Three probes, because the first two tested the wrong thing and said so:
+
+1. POSTed `api/home/standardsearch` cold — Turnstile's script was present but no widget had
+   rendered and no token existed. Testing an API path the app never uses cold is not a fair test.
+2. Looked for a search box on the landing page — it is behind the sidebar's
+   Standard Search → Name/Document, so nothing was found.
+3. Clicked through, filled `#lastName`, submitted, and read the app's own request. That is where
+   the answer was.
+
+Search quirk confirmed along the way, matching `fetch_via_turnstile`'s comment: the clerk takes
+**one word**. `HONDROULIS` works.
+
 ## Not done
 
-Nothing in the repo was rewired. This was an evaluation.
-
-The obvious untested target is **Miami-Dade Official Records** — that is where the money actually
-goes (~$0.003/solve through 2Captcha, `records_liens.py --limit 60` ≈ $0.18/run, capped so a bad day
-cannot run the balance away). It is Cloudflare Turnstile rather than reCAPTCHA v2, which is closer
-to what Camoufox is built for than PB's checkbox is. Same harness would answer it.
+Nothing in the repo was rewired — `records_liens.py` still buys tokens from 2Captcha. Switching it
+to a Camoufox-minted token is a real change to the nightly's critical path and wants its own pass,
+including what happens when Turnstile stops being generous. The measurement is in; the migration is
+not.
