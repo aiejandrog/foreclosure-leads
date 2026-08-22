@@ -6352,6 +6352,31 @@ function _ownerName(raw, r){
   return titleCase(s);
 }
 function ctyName(c){ return titleCase(c || 'MIAMI-DADE'); }
+/* COUNTY SEARCH FALLBACK — where a parcel link goes when we never resolved a folio.
+   It used to be a GOOGLE SEARCH for "<address> <county> tax collector property tax", which is
+   exactly as useless as it sounds: it dumps you on a results page and you still have to find the
+   county site yourself, on a phone, mid-call (2026-08-22, reported from the field). Send him to
+   the COUNTY'S OWN search instead, pre-filled with the street address where the site accepts it.
+   Every URL below was opened in a real browser and confirmed to load a working search page —
+   miamidade/broward county-taxes return 403 to a script but 200 to a human, so curl alone would
+   have "proved" the wrong thing. A folio-less parcel is a data gap; it must never become a
+   dead-end link. */
+function _countySearchURL(r, kind){
+  var ct = String((r && r.county) || 'MIAMI-DADE').toUpperCase();
+  // street number + street only: unit designators are exactly what the county roll disagrees with
+  // (court "#107" vs county "#L7"), so including one turns a working search into zero results.
+  var street = String((r && r.addr) || '').split(',')[0]
+                 .replace(/\s+(?:APT|UNIT|STE|#)\s*[\w-]+\s*$/i, '').trim();
+  var q = encodeURIComponent(street);
+  if(kind === 'tax'){
+    if(ct.indexOf('PALM') === 0) return 'https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=' + q;
+    if(ct.indexOf('BROW') === 0) return 'https://broward.county-taxes.com/public/search?search_query=' + q;
+    return 'https://miamidade.county-taxes.com/public/search?search_query=' + q;
+  }
+  if(ct.indexOf('PALM') === 0) return 'https://pbcpao.gov/';                       // PB has no deep address-search URL
+  if(ct.indexOf('BROW') === 0) return 'https://web.bcpa.net/BcpaClient/#/Record-Search';
+  return 'https://apps.miamidadepa.gov/propertysearch/#/?address=' + q;
+}
 // Per-county DIRECT deep-links, verified against real parcels (2026-07-16). Drives the lookup report's
 // "Dig deeper" links so a Broward/Palm Beach property never gets Miami-Dade URLs. pa() takes the folio.
 const CTY_LINKS = {
@@ -15731,9 +15756,9 @@ function render(){
     if(r.docket) gEval.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
     else if(r.cases && r.case) gEval.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ case # copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' clerk — no deep-link docket for this county. Case # '+r.case+' copied: open Case Number search → paste → Enter to pull THIS foreclosure\'s filings / final judgment.')+'">Docket</a>');
     if(r.pa) gEval.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
-    else if(r.addr) gEval.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' property appraiser')+'" target="_blank" rel="noopener" title="No direct appraiser record link for this parcel — opens a Google search for the address on the county appraiser instead.">Appraiser&nbsp;⌕</a>');
+    else if(r.addr) gEval.push('<a href="'+esc(_countySearchURL(r, 'appraiser'))+'" target="_blank" rel="noopener" title="No folio resolved for this parcel — opens the COUNTY APPRAISER\'S OWN address search (not a web search). Type or paste the street number and it will find the parcel.">Appraiser&nbsp;⌕</a>');
     if(r.tax) gEval.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="Opens this parcel\'s live tax bill + any delinquent taxes / certificates — the same page the county appraiser\'s Tax Collector link goes to.">Taxes</a>');
-    else if(r.addr) gEval.push('<a href="https://www.google.com/search?q='+encodeURIComponent(r.addr+' '+ctyName(r.county)+' tax collector property tax')+'" target="_blank" rel="noopener" title="No folio for this parcel — opens a Google search for the address on the county tax collector instead.">Taxes&nbsp;⌕</a>');
+    else if(r.addr) gEval.push('<a href="'+esc(_countySearchURL(r, 'tax'))+'" target="_blank" rel="noopener" title="No folio resolved for this parcel — opens the COUNTY TAX COLLECTOR\'S OWN search, pre-filled with the street address where the site supports it. Never a web search.">Taxes&nbsp;⌕</a>');
     // Auction: live RealForeclose sale page for this date (all parcels + bidding).
     if(r.auc) gEval.push('<a href="'+esc(r.auc)+'" target="_blank" rel="noopener" title="Live RealForeclose auction for this sale date — every parcel selling that day, plus bidding. Opens best from a US browser; may ask for a free RealForeclose login for bid details.">Auction</a>');
     // UNRESOLVED PARCEL — the whole reason this row is empty. A lis pendens gives us a case, an owner
@@ -16407,11 +16432,16 @@ document.querySelectorAll('.lkb[data-s]').forEach(b => b.onclick = () => {
   const v = document.getElementById('lk').value.trim();
   if(!v) return;
   const e2 = encodeURIComponent(v);
+  /* SEND HIM TO THE SOURCE, NOT TO GOOGLE (2026-08-22). These three punted to a web search, so
+     typing an address and pressing "Appraiser" produced a results page instead of the record —
+     the same complaint as the Taxes link. This widget is Miami-Dade-scoped (the GIS query right
+     below it is MD_ComparableSales), so the county is known and the deep links are safe.
+     All three opened and rendered a working search page in a real browser before shipping. */
   const urls = {
     zillow: 'https://www.zillow.com/homes/' + e2 + '_rb/',
-    appr:   'https://www.google.com/search?q=' + e2 + '+county+property+appraiser',
-    clerk:  'https://www.google.com/search?q=' + e2 + '+clerk+of+courts+foreclosure+case',
-    sunbiz: 'https://www.google.com/search?q=' + e2 + '+site%3Asearch.sunbiz.org'
+    appr:   'https://apps.miamidadepa.gov/propertysearch/#/?address=' + e2,
+    clerk:  'https://www2.miamidadeclerk.gov/ocs/',
+    sunbiz: 'https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?inquiryType=EntityName&searchTerm=' + e2
   };
   window.open(urls[b.dataset.s], '_blank', 'noopener');
 });

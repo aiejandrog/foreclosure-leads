@@ -172,8 +172,18 @@ def build():
             'zillow': '',
             # deep links are per-recorder — a Broward owner deep-linked into Miami-Dade's PA
             # search is worse than no link. BCPA/Broward clerk links land with the Phase-2 adapter.
-            'pa': ('https://apps.miamidadepa.gov/PropertySearch/#/' if _cty == 'MIAMI-DADE'
-                   else 'https://web.bcpa.net/BcpaClient/#/Record-Search' if _cty == 'BROWARD' else ''),
+            # DEEP-LINK WHEN WE HAVE THE FOLIO (2026-08-22). This emitted the county's generic
+            # search page even on rows that carry a resolved folio, and emitted NO 'tax' key at
+            # all — so 483 leads with a perfectly good parcel id fell through to the board's
+            # search-engine fallback ("the tax link only takes me to a Google search"). Both URLs
+            # are pure functions of folio + county; derive them here rather than throw the folio
+            # away. The generic search page stays as the honest fallback when folio is empty.
+            'pa': (F._pa_url_from_folio({'folio': folio, 'county': _cty})
+                   or ('https://apps.miamidadepa.gov/PropertySearch/#/' if _cty == 'MIAMI-DADE'
+                       else 'https://web.bcpa.net/BcpaClient/#/Record-Search' if _cty == 'BROWARD' else '')),
+            # 'tax' — the SLIM board key. lp_leads emits already-slim rows (note 'pa'/'people'/
+            # 'cases' beside it), so the fat-shape name 'tax_url' would be silently ignored.
+            'tax': F._tax_url_from_folio({'folio': folio, 'county': _cty}),
             'people': people, 'peopleaddr': '', 'cyberbg': F.cyberbg_url(nm, '') if (nm and not is_co and not ent) else '',
             'cyberbgaddr': '',
             'records': ('https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch'

@@ -1691,6 +1691,27 @@ function fileLinks(r){
       L.push(['Appraiser', 'https://apps.miamidadepa.gov/PropertySearch/#/?folio=' + fo]);
       L.push(['Taxes', 'https://miamidade.county-taxes.com/public/real_estate/parcels/' + fo]);
     }
+  } else {
+    /* NO FOLIO RESOLVED. These two links used to simply VANISH — so on a folio-less lead (the
+       'no cadastral match' class) he had no way to check taxes at all, mid-call, with nothing on
+       screen explaining why. Fall back to the county's OWN address search, pre-filled where the
+       site accepts it. Never a web search: the board's old Google punt is exactly the complaint
+       that started this (2026-08-22). Street number + street only — a unit designator is the very
+       thing the county roll disagrees with (court '#107' vs county '#L7'), so including one turns
+       a working search into zero results. */
+    var st = String(r.a || '').split(',')[0]
+               .replace(/\s+(?:APT|UNIT|STE|#)\s*[\w-]+\s*$/i, '').trim();
+    var qs = encodeURIComponent(st);
+    if(ct === 'PA'){
+      L.push(['Appraiser (search)', 'https://pbcpao.gov/']);
+      L.push(['Taxes (search)', 'https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=' + qs]);
+    } else if(ct === 'BR'){
+      L.push(['Appraiser (search)', 'https://web.bcpa.net/BcpaClient/#/Record-Search']);
+      L.push(['Taxes (search)', 'https://broward.county-taxes.com/public/search?search_query=' + qs]);
+    } else {
+      L.push(['Appraiser (search)', 'https://apps.miamidadepa.gov/propertysearch/#/?address=' + qs]);
+      L.push(['Taxes (search)', 'https://miamidade.county-taxes.com/public/search?search_query=' + qs]);
+    }
   }
   L.push(['Court docket', ct === 'PA' ? 'https://appsgp.mypalmbeachclerk.com/eCaseView/'
         : ct === 'BR' ? 'https://www.browardclerk.org/Web2/CaseSearchECA/'

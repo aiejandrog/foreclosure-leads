@@ -1225,6 +1225,57 @@ def _person_keys(rows):
     return out, skipped
 
 
+def _pa_url_from_folio(r):
+    """Property-appraiser DEEP link from folio, or '' when there is no folio to deep-link with.
+    Same reason as _tax_url_from_folio: a resolved parcel deserves the record, not a search box."""
+    folio = re.sub(r'[^0-9A-Za-z]', '', str(r.get('folio') or '')).upper()
+    if not folio:
+        return ''
+    ct = str(r.get('county') or 'MIAMI-DADE').strip().upper()
+    if ct.startswith('PALM'):
+        return 'https://pbcpao.gov/Property/Details?parcelId=' + folio
+    if ct.startswith('BROW'):
+        return 'https://bcpa.net/RecInfo.asp?URL_Folio=' + folio
+    return 'https://apps.miamidadepa.gov/PropertySearch/#/?folio=' + folio
+
+
+def _tax_url_from_folio(r):
+    """Build the county tax-bill URL from the folio when the enricher never set tax_url.
+
+    WHY (2026-08-22, reported from the field as "the tax link only takes me to a Google search"):
+    483 of 1,887 leads carried a REAL folio and still had no tax link, so the board fell through to
+    its search-engine fallback on parcels it could identify perfectly well. The URL is a pure
+    function of folio + county — the same three formulas Call Mode uses, diffed against every one of
+    the 1,035 folio-bearing leads at the time they were written (Palm Beach needs 2-2-2-2-2-3-4
+    dashing, Broward 6-2-4, Miami-Dade plain digits) — so there was never a reason to leave it empty.
+    Broward folios can contain LETTERS (494213BA0140); strip punctuation, not alphanumerics.
+    """
+    folio = re.sub(r'[^0-9A-Za-z]', '', str(r.get('folio') or '')).upper()
+    if not folio:
+        return ''
+    ct = str(r.get('county') or 'MIAMI-DADE').strip().upper()
+
+    def dash(s, groups):
+        out, p = [], 0
+        for g in groups:
+            if p >= len(s):
+                break
+            out.append(s[p:p + g])
+            p += g
+        if p < len(s):
+            out.append(s[p:])
+        return '-'.join(out)
+
+    if ct.startswith('PALM'):
+        return ('https://pbctax.publicaccessnow.com/PropertyTax.aspx?s=ParcelID%3A'
+                + urllib.parse.quote(dash(folio, [2, 2, 2, 2, 2, 3, 4]), safe='')
+                + '&pg=1&g=-1&moduleId=449')
+    if ct.startswith('BROW'):
+        return ('https://broward.county-taxes.com/public/real_estate/parcels/'
+                + dash(folio, [6, 2, 4]) + '/bills')
+    return 'https://miamidade.county-taxes.com/public/real_estate/parcels/' + folio
+
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -1515,7 +1566,7 @@ def make_tracker(leads):
             'people': r.get('people_url',''), 'peopleaddr': r.get('people_addr_url',''), 'cyberbg': r.get('cyberbg_url',''), 'cyberbgaddr': r.get('cyberbg_addr_url',''), 'ctype': r.get('case_type',''),
             'plaintiff': r.get('plaintiff',''), 'defs': r.get('defendants',''),
             'named': r.get('named', []),   # [{name,url}] co-parties: humans get a People-search URL, companies ''
-            'docket': r.get('docket_url',''), 'tax': r.get('tax_url',''),
+            'docket': r.get('docket_url',''), 'tax': r.get('tax_url','') or _tax_url_from_folio(r),
             'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')) or _ft == 'HOA', 'ftype': _ft,
             'ip': bool(r.get('indiv_plaintiff')), 'oname': r.get('owner_clean',''),
             'ocsqs': cq.get(r.get('owner_clean',''), ''), 'recqs': rq.get(r.get('owner_clean',''), ''),
