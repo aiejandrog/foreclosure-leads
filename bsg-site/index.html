@@ -128,14 +128,31 @@ footer a{color:var(--teal-300)}
     <a class="brand" href="/">
       <!-- BSG shield: palms over wave, drawn inline so it stays crisp and needs no asset -->
       <svg viewBox="0 0 64 72" aria-hidden="true">
+        <!-- Kept byte-compatible with bsg_emblem_source.svg, which make_bsg_emblem.py
+             rasterises for the letterhead. The palms were an ellipse on a stem here
+             originally: fine at 34px, unmistakably a MUSHROOM at letterhead size. One
+             mark across every surface -- update the .svg, then mirror it here. -->
         <defs><linearGradient id="sh" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#3BB0CC"/><stop offset="1" stop-color="#0C2E4A"/></linearGradient></defs>
+        <!-- shield -->
         <path d="M32 2 60 10v28c0 18-13 27-28 32C17 65 4 56 4 38V10z" fill="url(#sh)"/>
         <path d="M6 44c8-5 14 3 22-1s14-6 30 0" stroke="#fff" stroke-width="4.5" fill="none" opacity=".95"/>
         <path d="M6 53c8-5 14 3 22-1s14-6 30 0" stroke="#fff" stroke-width="3.2" fill="none" opacity=".6"/>
-        <g fill="#fff"><path d="M24 34v-9"/><ellipse cx="24" cy="24" rx="7" ry="2.6"/>
-          <ellipse cx="24" cy="24" rx="2.6" ry="6" opacity=".85"/></g>
-        <g fill="#fff" opacity=".9"><path d="M35 35v-7"/><ellipse cx="35" cy="27" rx="5.5" ry="2.1"/></g>
+        <g stroke="#fff" fill="none" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M23.4 43.5c-.8-5.5-.5-9.5.9-13.2" stroke-width="1.7"/>
+        <path d="M24.3 30.3c-3.6-2.6-7.4-2.7-10.3-.6" stroke-width="1.45"/>
+        <path d="M24.3 30.3c-2.6-3.7-6-5.6-9.4-5.5" stroke-width="1.45"/>
+        <path d="M24.3 30.3c.2-3.9 1.5-7 3.6-9" stroke-width="1.45"/>
+        <path d="M24.3 30.3c3.4-2.9 7.2-3.4 10.4-1.7" stroke-width="1.45"/>
+        <path d="M24.3 30.3c2.4-3.6 5.7-5.7 9-6" stroke-width="1.45"/>
+        </g>
+        <g stroke="#fff" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".82">
+        <path d="M39.6 44.2c-.6-4.2-.4-7.2.7-10" stroke-width="1.35"/>
+        <path d="M40.3 34.2c-2.7-2-5.6-2-7.8-.4" stroke-width="1.2"/>
+        <path d="M40.3 34.2c-1.9-2.8-4.5-4.2-7.1-4.1" stroke-width="1.2"/>
+        <path d="M40.3 34.2c.2-2.9 1.1-5.3 2.7-6.8" stroke-width="1.2"/>
+        <path d="M40.3 34.2c2.6-2.2 5.5-2.6 7.9-1.3" stroke-width="1.2"/>
+        </g>
       </svg>
       <span><b>Biscayne</b><span>Solutions Group</span></span>
     </a>
