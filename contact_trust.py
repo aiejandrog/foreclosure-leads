@@ -161,10 +161,23 @@ def main():
     ap.add_argument('--write', action='store_true', help='stamp suspect leads in skiptrace_results.json')
     a = ap.parse_args()
 
+    # NO TWIN IS A SKIP, NOT A CRASH. The cloud runner points DEALFLOW_DIR at a throwaway tmp path
+    # and never writes a Desktop twin, so raising here would print a traceback into the nightly log
+    # every single run and exit non-zero on a step that is purely advisory. Say what is missing and
+    # leave with 0 — an absent input must never read as a broken check.
+    if not os.path.exists(TWIN):
+        print('contact_trust: no board twin at %s — nothing to audit (skipping, not an error)' % TWIN)
+        return 0
+    stp = os.path.join(HERE, 'skiptrace_results.json')
+    if not os.path.exists(stp):
+        print('contact_trust: no skiptrace_results.json — nothing to audit (skipping)')
+        return 0
     h = open(TWIN, encoding='utf-8').read()
     i = h.find('RAW = ')
+    if i < 0:
+        print('contact_trust: twin carries no RAW payload — skipping')
+        return 0
     rows, _ = json.JSONDecoder().raw_decode(h, i + len('RAW = '))
-    stp = os.path.join(HERE, 'skiptrace_results.json')
     st = json.load(open(stp, encoding='utf-8'))
 
     suspect, checked, unver = audit(rows, st)

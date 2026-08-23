@@ -191,6 +191,25 @@ echo [4d/5] Team CRM (Desktop CSV always; Google Sheets when sheets_crm_webhook.
 rem  Reads the Desktop twin's RAW payload, so it MUST run after the [4/5] rebuild above.
 python -u sheets_crm.py >> "%LOG%" 2>&1
 
+echo [4e/5] Contact trust — do the traced phones/emails belong to the OWNER?
+rem  WHY THIS RUNS EVERY NIGHT (2026-08-23). Twice in one week a stranger was one dial away from
+rem  being told his home was in foreclosure. 1400 Saint Charles Pl "#107" does not exist on the
+rem  county roll (that building is lettered L1-L8; the real unit is #L7), so the address-keyed
+rem  trace returned JOHN CARDENAS of #201 onto a card owned by the ESTATE OF BARBARA COONEY. And
+rem  1343 Ponce De Leon carried wamlong@gmail.com, an address that has never existed. Skip-trace
+rem  data drifts every night, so this is a nightly check, not a one-time cleanup.
+rem
+rem  Reads the twin (merged owner + phones) so it MUST follow the [4/5] rebuild, same as sheets_crm.
+rem  It stamps contact_trust into skiptrace_results.json, which the NEXT build reads — so a lead
+rem  flagged tonight shows its warning on tomorrow's board. That one-day lag is deliberate: the
+rem  alternative is re-running the whole build, and nothing here is urgent enough to pay for that.
+rem
+rem  NON-FATAL BY DESIGN. This is an advisory flag. It must never be the reason a publish does not
+rem  happen — the board being live matters more than the annotation being current, and `|| true`
+rem  semantics here mirror the auction/CRM steps above.
+python -u contact_trust.py --write >> "%LOG%" 2>&1
+if errorlevel 1 echo    (contact_trust exited non-zero - advisory only, continuing) >> "%LOG%" 2>&1
+
 :publish
 rem  GATE BEFORE PUBLISH (2026-08-19). healthcheck used to run only at :end - AFTER the push - so a
 rem  FAIL could never stop a bad board from going live from this machine; and publish_guard (the
