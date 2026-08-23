@@ -39,6 +39,7 @@ import sys
 
 import disclaimer as D
 import bsg_brand
+import entity
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOB_KEY_FILE = os.path.join(HERE, 'lob.key')
@@ -235,19 +236,15 @@ def _lh_header(snd, height_px=52):
 
 
 def _safe_llc(snd):
-    """Truth-gate + legacy-identity upgrade, in that order.
+    """Company name as it may legally be shown, plus the pre-rename identity upgrade.
 
-    Any pre-rename profile still carrying 'Miami Solutions Group' maps forward to the current
-    company. Then the ENTITY CLAIM is stripped: a Sunbiz lookup on 2026-08-23 found no
-    'Biscayne Solutions Group' (see bsg_letter.UNOWNED for the evidence), so the " LLC" does not
-    print until the filing indexes. sender.json keeps the canonical entity string for the legal
-    pack -- stripping happens at DISPLAY only, and entity_check.py lifts it automatically."""
-    v = (snd.get('llc') or 'Biscayne Solutions Group').strip()
+    A sender profile written before 2026-08-23 still says 'Miami Solutions Group'; map it forward
+    first, then let entity.display_llc() decide whether the " LLC" suffix may print at all."""
+    v = (snd.get('llc') or '').strip()
     if re.match(r'^\s*miami\s+solutions\s+group(\s+ll?c\.?)?\s*$', v, re.I):
-        v = 'Biscayne Solutions Group'
-    if re.match(r'^\s*biscayne\s+solutions\s+group\s+ll?c\.?\s*$', v, re.I):
-        v = 'Biscayne Solutions Group'
-    return v
+        v = 'Biscayne Solutions Group LLC'
+    return entity.display_llc(v)[0]
+
 
 def _lh_sign(snd, lang='en'):
     """The footer — the one place the company name appears on the page, plus the disclaimer.

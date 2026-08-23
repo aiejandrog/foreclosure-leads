@@ -172,6 +172,13 @@ rem  unless a provider key file exists — suppression ledger, syntax, learned d
 echo [3i/5] Verifying fresh addresses before they enter the sendable pool...
 python -u verify_emails.py >> "%LOG%" 2>&1
 
+rem  ENTITY GATE. Re-verify the company against Sunbiz BEFORE the board is built, so a filing
+rem  that has just indexed starts printing its " LLC" on this run instead of the next one --
+rem  and so a name that stops being ACTIVE stops being claimed. Exit 1 = "not verified",
+rem  which is the guard working, NOT a pipeline failure: never gate the build on it.
+echo [3j/5] Verifying the company entity against Sunbiz...
+python -u entity_check.py --quiet >> "%LOG%" 2>&1
+
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 

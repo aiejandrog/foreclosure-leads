@@ -2659,7 +2659,7 @@ function _workQueue(){
 // the first name is hard-coded here; llc/phone/email/addr are blank ON PURPOSE so the tracker
 // bans a mailing until Jose fills them in via Filters & setup. See the incomplete-sender banner
 // wired below (looks for the same 4 required fields and warns if any are still missing).
-// Entity is Biscayne Solutions Group LLC (the joint foreclosure-side entity — distinct from
+// Entity is Biscayne Solutions Group (the joint foreclosure-side entity — distinct from
 // Alejandro's personal Tradervert). BSG has two managing members; either can sign for the company.
 // Do NOT surface ownership percentages in any generated doc; do NOT put BSG on an initial purchase
 // contract's buyer line — buyer is "Alejandro Gonzalez and/or assigns" per the wholesale convention,
@@ -2672,8 +2672,9 @@ function _workQueue(){
 // below keeps any saved non-empty value, so his identity wins over these defaults once he types it.
 // 2026-08-23 RENAME + UN-GATE. The old name 'Miami Solutions Group LLC' was registered to another
 // company (L22000200556), so every generator stripped the suffix and this board printed the bare
-// name. Biscayne Solutions Group LLC is filed and owned, so the full entity name ships everywhere.
-const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Biscayne Solutions Group LLC', phone:'(786) 631-1823',
+// name. The rename to Biscayne Solutions Group kept that posture: see bsg_letter.UNOWNED for why
+// the suffix is still withheld, and entity_check.py for what lifts it.
+const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Biscayne Solutions Group', phone:'(786) 631-1823',
                          addr:'231 NW 109th Ave, Miami, FL 33172', title:'Acquisitions',
                          email:'agonzalez0311707@gmail.com', web:'', partner:''};
 let sender = Object.assign({}, SENDER_DEFAULTS);
@@ -2689,11 +2690,16 @@ try {
   // "My name is {name}", so it rendered "My name is Biscayne Solutions Group". Devices that saved the
   // company there before this build get healed back to the person default instead of staying broken.
   if (typeof saved.name === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group\b/i.test(saved.name)) delete saved.name;
-  // RENAME MIGRATION (2026-08-23), one-way. Carlos's and Jose's devices hold an fcSender in
-  // localStorage carrying 'Miami Solutions Group' -- gated or not. Without this, their saved
-  // identity wins the merge below and they keep printing the OLD company name on their paper
-  // indefinitely while every other surface says Biscayne. Upgrade instead of healing downward.
-  if (typeof saved.llc === 'string' && /^\s*miami\s+solutions\s+group(\s+ll?c\.?)?\s*$/i.test(saved.llc)) saved.llc = 'Biscayne Solutions Group LLC';
+  // IDENTITY NORMALIZER (2026-08-23). Two jobs at once, and both are needed:
+  //   1. RENAME. Carlos's and Jose's devices hold an fcSender saved under 'Miami Solutions Group'.
+  //      A saved non-empty value wins the merge below, so without this they keep printing the OLD
+  //      company on their paper forever while every other surface says Biscayne.
+  //   2. TRUTH-GATE HEAL. A device that saved the suffixed company string during the few hours
+  //      the un-gated build was live must drop the suffix again -- Sunbiz cannot substantiate the
+  //      entity yet, and a stale localStorage value would keep asserting it on that one operator's
+  //      documents long after every other surface stopped.
+  // Both collapse to: any recognised company string becomes the current build-time display value.
+  if (typeof saved.llc === 'string' && /^\s*(miami|biscayne)\s+solutions\s+group(\s+ll?c\.?)?\s*$/i.test(saved.llc)) saved.llc = SENDER_DEFAULTS.llc;
   for (const k in saved) { if (saved[k] !== '' && saved[k] != null) sender[k] = saved[k]; }
 } catch(e) {}
 // deal-model controls (persisted)
@@ -8177,12 +8183,12 @@ function _bsgHead(opts){
   // name here would put the wrong person on Carlos's paper. opts.h = mark height (default 74 -> 65x74).
   opts = opts || {};
   var s = (typeof sender === 'object' && sender) ? sender : {};
-  // Aspect comes from the emblem itself (bsg_brand.NATIVE_W/NATIVE_H). The 2026-08-23 BSG shield
-  // is 341x384; the old MSG wordmark was 285x384. Leaving the old ratio here stretched the mark
-  // on every letterhead. If you replace bsg_emblem_source.svg, re-run make_bsg_emblem.py and
-  // update these two numbers to the aspect it prints.
+  // Aspect is INJECTED AT BUILD TIME from bsg_brand.NATIVE_W/NATIVE_H -- never hardcoded here.
+  // It was hardcoded once (285/384, the old MSG wordmark) and survived a mark swap to 341/384,
+  // which would have stretched the shield on every letterhead. Replacing bsg_emblem_source.svg and
+  // re-running make_bsg_emblem.py is now sufficient; this line follows by itself.
   var h = +opts.h || 74, w = Math.round(h * 341 / 384);
-  var llc = (s.llc || 'Biscayne Solutions Group LLC').trim();
+  var llc = (s.llc || SENDER_DEFAULTS.llc).trim();   // gated display value, never a raw entity claim
   // opts.client = a document the homeowner/servicer/counsel keeps. Those carry the company inbox
   // and NO street address — the only address on file is the operator's apartment.
   var cl = !!opts.client;
@@ -8206,7 +8212,7 @@ function _msgSign(client){
   // — the reverse of the old order, which buried the LLC mid-sentence between a phone and an
   // email. Compliance line stays attached: over-disclosing "not a law firm" is never the problem.
   var s = (typeof sender === 'object' && sender) ? sender : {};
-  var llc = (s.llc || 'Biscayne Solutions Group LLC').trim();
+  var llc = (s.llc || SENDER_DEFAULTS.llc).trim();   // gated display value, never a raw entity claim
   var who = [];
   if((s.name ||'').trim()) who.push(s.name.trim());
   if((s.title||'').trim()) who.push(s.title.trim());
@@ -8293,7 +8299,10 @@ function _lhWrap(bodyHtml, opts){
 // over. Only the Visit Record gets a signature — HIS signature, not the owner's.
 function genIdentityCard(r){
   var f = _docFields(r);
-  var llc = (f.buyerLLC!=='__blank__' ? f.buyerLLC : 'DealFlow Investments LLC');
+  // 'DealFlow Investments LLC' used to be the fallback here -- it is NOT a registered Florida
+  // entity (verified 2026-08-23), and Carlos hands this card to homeowners at the door. Fall
+  // back to the gated company display value instead of inventing a second one.
+  var llc = (f.buyerLLC!=='__blank__' ? f.buyerLLC : SENDER_DEFAULTS.llc);
   var body = ''
     + '<div class="doc"><div class="kicker">WHO I AM · QUIÉN SOY</div>'
     +   '<h1>'+esc(llc)+'</h1>'
@@ -9668,7 +9677,12 @@ function genQuitClaim(r, opts){
   // late-added party), opts.extraBlank appends one more empty grantor row.
   var n = (multi ? Math.max(2, owners.length) : 1) + (opts.extraBlank ? 1 : 0);
   var countyName = (f.county !== '__blank__' ? f.county : 'MIAMI-DADE').toUpperCase();
-  var grantee = (f.buyerLLC !== '__blank__') ? f.buyerLLC : 'Biscayne Solutions Group LLC';
+  // GRANTEE. Deliberately NOT defaulted to the company while the entity is unverified: a deed
+  // naming a grantee that does not exist on Sunbiz cannot take title, and a deed is RECORDED --
+  // the one document class where a wrong value is worse than a blank the operator must fill.
+  // Restore the default here once entity_check.py reports the filing ACTIVE.
+  var granteeSet = (f.buyerLLC !== '__blank__');
+  var grantee = granteeSet ? f.buyerLLC : '';
   var isHS = !!(r && r.hs);
   var B = function(w){ return _dfLine(w); };
 
@@ -9687,7 +9701,7 @@ function genQuitClaim(r, opts){
     +   '<p>THIS QUIT CLAIM DEED, Executed this '+B(8)+' day of '+B(22)+', 20'+B(6)+', by, '
     +     '<b>'+(owners.length ? esc(owners.slice(0,n).join(' and ')) : _dfHtml('__blank__'))+'</b>, '
     +     'a '+B(20)+', whose address is '+_dfHtml(r && (r.mail || r.addr))+', <b>(Grantor)</b>, '
-    +     'and <b>'+esc(grantee)+'</b>, a '+B(20)+', whose primary address is '
+    +     'and '+(granteeSet ? '<b>'+esc(grantee)+'</b>' : B(34))+', a '+B(20)+', whose primary address is '
     +     _dfHtml(f.buyerAddr)+', <b>(Grantee)</b>.</p>'
 
     // CONSIDERATION — a real field, not a hardcoded $10. See the header note.

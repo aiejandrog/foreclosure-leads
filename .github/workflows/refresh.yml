@@ -440,6 +440,14 @@ jobs:
           python -c "import json,os; d=json.load(open('replies.json',encoding='utf-8')) if os.path.exists('replies.json') else {}; a=[k for k in d if k.startswith('@')]; s=[k for k in a if str((d[k] or {}).get('stop')).lower() in ('true','1','yes')]; print('::notice::replies: %d address(es) replied, %d with a STOP word (auto-ledgered by optout_sync)' % (len(a), len(s)))"
 
       # ---- [4/5] Final rebuild with everything baked in -----------------------------------
+      # ENTITY GATE. Re-verify the company against the Florida register BEFORE the board is
+      # built, so a filing that has just indexed starts printing its " LLC" on this run.
+      # `|| true`: exit 1 means NOT VERIFIED, which is the guard working as designed and
+      # must never fail the workflow. entity.py fails closed either way.
+      - name: '[3j/5] Verify company entity against Sunbiz'
+        run: python entity_check.py --quiet || true
+        continue-on-error: true
+
       - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
         run: |
           python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))"

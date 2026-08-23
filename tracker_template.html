@@ -2674,7 +2674,7 @@ function _workQueue(){
 // company (L22000200556), so every generator stripped the suffix and this board printed the bare
 // name. The rename to Biscayne Solutions Group kept that posture: see bsg_letter.UNOWNED for why
 // the suffix is still withheld, and entity_check.py for what lifts it.
-const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Biscayne Solutions Group', phone:'(786) 631-1823',
+const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'__ENTITY_LLC__', phone:'(786) 631-1823',
                          addr:'231 NW 109th Ave, Miami, FL 33172', title:'Acquisitions',
                          email:'agonzalez0311707@gmail.com', web:'', partner:''};
 let sender = Object.assign({}, SENDER_DEFAULTS);
@@ -8183,11 +8183,11 @@ function _bsgHead(opts){
   // name here would put the wrong person on Carlos's paper. opts.h = mark height (default 74 -> 65x74).
   opts = opts || {};
   var s = (typeof sender === 'object' && sender) ? sender : {};
-  // Aspect comes from the emblem itself (bsg_brand.NATIVE_W/NATIVE_H). The 2026-08-23 BSG shield
-  // is 341x384; the old MSG wordmark was 285x384. Leaving the old ratio here stretched the mark
-  // on every letterhead. If you replace bsg_emblem_source.svg, re-run make_bsg_emblem.py and
-  // update these two numbers to the aspect it prints.
-  var h = +opts.h || 74, w = Math.round(h * 341 / 384);
+  // Aspect is INJECTED AT BUILD TIME from bsg_brand.NATIVE_W/NATIVE_H -- never hardcoded here.
+  // It was hardcoded once (285/384, the old MSG wordmark) and survived a mark swap to 341/384,
+  // which would have stretched the shield on every letterhead. Replacing bsg_emblem_source.svg and
+  // re-running make_bsg_emblem.py is now sufficient; this line follows by itself.
+  var h = +opts.h || 74, w = Math.round(h * __EMBLEM_W__ / __EMBLEM_H__);
   var llc = (s.llc || SENDER_DEFAULTS.llc).trim();   // gated display value, never a raw entity claim
   // opts.client = a document the homeowner/servicer/counsel keeps. Those carry the company inbox
   // and NO street address — the only address on file is the operator's apartment.

@@ -72,7 +72,15 @@ def _flat(html):
 
 def _parse_detail(html):
     t = re.sub(r'\s+', ' ', html)
-    out = {'status': '', 'ra': '', 'ra_addr': '', 'officers': []}
+    out = {'status': '', 'ra': '', 'ra_addr': '', 'officers': [], 'doc': '', 'filed': ''}
+    # Document number + filing date. Added 2026-08-23 for entity_check.py, which needs a citable
+    # artifact rather than just a status -- but they are cheap and useful to every caller.
+    m = re.search(r'Document Number(?:\s|&nbsp;|<[^>]*>)*([A-Z]?\d{6,14})', t, re.I)
+    if m:
+        out['doc'] = m.group(1)
+    m = re.search(r'Date Filed(?:\s|&nbsp;|<[^>]*>)*(\d{2}/\d{2}/\d{4})', t, re.I)
+    if m:
+        out['filed'] = m.group(1)
     m = re.search(r'>\s*Status\s*<[^>]*>\s*<span[^>]*>\s*([A-Za-z]+)', t) or re.search(r'Status</label>\s*<span[^>]*>([A-Za-z]+)', t)
     if m:
         out['status'] = m.group(1).upper()

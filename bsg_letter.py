@@ -46,6 +46,7 @@ import json
 import os
 
 import disclaimer as D
+import entity
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -54,14 +55,12 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # separately actionable misrepresentation to a distressed homeowner (FDUTPA + MARS 1015.3);
 # _company() enforces it by printing unbranded rather than false.
 #
-# 2026-08-23 RE-ARMED. The 2026-08-23 un-gate was made on a verbal confirmation that the entity was
-# filed; a Sunbiz lookup the same day found NO 'Biscayne Solutions Group' -- strict match not_found,
-# and the contiguous alphabetical window (BISCAYNE SOLAR SYSTEMS -> BISCAYNE SOLUTIONS INC. ->
-# BISCAYNE SOUTH CORP) has no gap it could occupy. The filing is 1-2 days old and Sunbiz lags new
-# filings by about a business day, so this is most likely an indexing gap -- but "probably filed" is
-# not a substantiated entity claim to a distressed homeowner. Prints bare until verified.
-# entity_check.py re-verifies daily and clears this automatically. Do NOT empty this tuple by hand.
-UNOWNED = ('biscayne solutions group',)
+# The entity gate now lives in entity.py and is driven by a Sunbiz lookup, not by a tuple anyone
+# can edit. It was a hand-maintained UNOWNED list twice, and both times it encoded a belief instead
+# of a fact: 'Miami Solutions Group LLC' belonged to another company, and 'Biscayne Solutions Group'
+# was un-gated on a verbal confirmation while the register had no such entity. Fail-closed now --
+# no evidence, no claim. `python entity_check.py` is the only thing that opens it.
+UNOWNED = ()   # DEPRECATED shim: entity.DENY is the manual kill switch. Kept so old imports survive.
 
 
 def _sender():
@@ -72,21 +71,11 @@ def _sender():
 
 
 def _company(override=''):
-    """(display_name, warning). Never returns an entity claim we cannot substantiate."""
-    s = _sender()
-    raw = (override or s.get('llc') or '').strip()
-    bare = raw.lower().replace(',', '').replace('llc', '').strip()
-    if not raw:
-        return '', 'no company name set in sender.json'
-    if bare in UNOWNED:
-        # Strip the entity suffix and flag it. The letter still prints -- a field rep with no paper
-        # is worse than a field rep with unbranded paper -- but it will not assert an LLC we do not
-        # own, and the operator gets told loudly at build time.
-        return raw.replace(' LLC', '').replace(', LLC', '').strip(), (
-            'the configured entity is NOT in the Sunbiz index -- it cannot be substantiated to a '
-            'homeowner today. Printed WITHOUT the LLC suffix. Run entity_check.py; the suffix '
-            'returns by itself once the filing indexes. Do not run a large print job before then.')
-    return raw, ''
+    """(display_name, warning). Never returns an entity claim we cannot substantiate.
+
+    Thin wrapper over entity.display_llc() -- kept because callers expect this 2-tuple."""
+    name, _doc, warn = entity.display_llc(override)
+    return name, warn
 
 
 BLANK = '<span class="bl"></span>'

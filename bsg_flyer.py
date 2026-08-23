@@ -37,6 +37,7 @@ import json
 import os
 
 import disclaimer as D
+import entity
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -49,34 +50,23 @@ COLORS = {  # loud enough to find in a drawer, light enough that black text stay
 }
 
 
-# TRUTH GATE (same rule as bsg_letter._company): never print an " LLC" entity claim for a name we
-# do not own -- asserting one to a distressed homeowner is a MARS 1015.3 / FDUTPA
-# misrepresentation.
-# 2026-08-23 RE-ARMED. The 2026-08-23 un-gate was made on a verbal confirmation that the entity was
-# filed; a Sunbiz lookup the same day found NO 'Biscayne Solutions Group' -- strict match not_found,
-# and the contiguous alphabetical window (BISCAYNE SOLAR SYSTEMS -> BISCAYNE SOLUTIONS INC. ->
-# BISCAYNE SOUTH CORP) has no gap it could occupy. The filing is 1-2 days old and Sunbiz lags new
-# filings by about a business day, so this is most likely an indexing gap -- but "probably filed" is
-# not a substantiated entity claim to a distressed homeowner. Prints bare until verified.
-# entity_check.py re-verifies daily and clears this automatically. Do NOT empty this tuple by hand.
-UNOWNED = ('biscayne solutions group',)
+# The entity gate lives in entity.py -- a Sunbiz-verified fact, not a hand-edited list. See that
+# module for why. Fail-closed: the " LLC" suffix prints only when the register substantiates it.
+UNOWNED = ()   # DEPRECATED shim; entity.DENY is the manual kill switch.
 
 
 def _display_llc(raw):
-    raw = (raw or '').strip()
-    bare = raw.lower().replace(',', '').replace('llc', '').strip()
-    if bare in UNOWNED:
-        return raw.replace(' LLC', '').replace(', LLC', '').strip()
-    return raw
+    """Company name as it may legally be shown. Delegates to entity.display_llc()."""
+    return entity.display_llc(raw)[0]
 
 
 def sender():
     try:
         s = json.load(open(os.path.join(HERE, 'sender.json'), encoding='utf-8'))
         return s.get('name') or 'Alejandro Gonzalez', s.get('phone') or '', \
-            _display_llc(s.get('llc') or 'Biscayne Solutions Group')
+            _display_llc(s.get('llc') or '')
     except Exception:
-        return 'Alejandro Gonzalez', '', 'Biscayne Solutions Group'
+        return 'Alejandro Gonzalez', '', _display_llc('')
 
 
 def card_en(name, phone):

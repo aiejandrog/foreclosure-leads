@@ -295,6 +295,54 @@ if _ALL:
         add('FAIL' if lead_act == 0 else 'PASS', 'RULE: §362 stay flags reach the build',
             f'cache {cache_act} active stays -> board {lead_act}')
 
+# ---- 2b. ENTITY CLAIM ---------------------------------------------------------------------------
+# Twice the company name was asserted to homeowners without anyone reading the register, and the
+# second time it reached the PUBLIC board. entity.py now gates the suffix on a Sunbiz verdict, but
+# this check deliberately does NOT trust that: it scans the BUILT ARTIFACT for the assertion.
+# Auditing known code paths is what missed six leaks on 2026-08-23 -- two letterhead fallbacks, the
+# quit-claim deed grantee, and a second fictitious entity on the door-step identity card. Checking
+# the output cannot be fooled by a path nobody remembered.
+def chk_entity():
+    try:
+        import entity
+    except Exception as e:
+        add('WARN', 'entity claim', f'entity.py unavailable ({e})')
+        return
+    raw = (entity.sender().get('llc') or '').strip()
+    if not raw:
+        add('WARN', 'entity claim', 'no company name set in sender.json')
+        return
+    st, ok = entity.status(), entity.verified()
+    if ok:
+        add('PASS', 'entity claim', f"{st.get('matched') or raw} ACTIVE doc={st.get('doc') or '?'}")
+    else:
+        add('WARN', 'entity claim',
+            f"{raw} not verified ({st.get('status') or 'never checked'}) — suffix withheld; run entity_check.py")
+
+    # The assertion guard. If the published board carries the full entity string while the register
+    # cannot substantiate it, something bypassed entity.py — block the publish.
+    idx = os.path.join(HERE, 'docs', 'index.html')
+    if not ok and os.path.exists(idx):
+        # FAIL-CLOSED. The first cut of this used io.open() without importing io; the NameError was
+        # swallowed by a bare except and the guard reported PASS over a board that DID carry the
+        # claim. A compliance guard that cannot read its artifact must never report clean.
+        try:
+            with open(idx, encoding='utf-8', errors='replace') as f:
+                leaked = f.read().count(raw)
+        except Exception as e:
+            add('FAIL', 'entity claim in published board',
+                f'could not read docs/index.html to check for an unsubstantiated entity claim '
+                f'({type(e).__name__}: {e}) — refusing to report clean')
+            return
+        if leaked:
+            add('FAIL', 'entity claim in published board',
+                f'{leaked} occurrence(s) of "{raw}" in docs/index.html while UNVERIFIED — '
+                'a surface is bypassing entity.py')
+        else:
+            add('PASS', 'entity claim in published board', 'no unsubstantiated entity claim')
+
+chk_entity()
+
 # ---- 3. upstream sources still alive ----------------------------------------------------------
 def chk_gis():
     r = requests.get('https://gisweb.miamidade.gov/arcgis/rest/services/MD_ComparableSales/MapServer/5/query',
@@ -364,7 +412,8 @@ json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
 #   exit 2 = compliance/systemic FAIL -> caller MUST skip publish
 #   exit 1 = coverage-floor FAIL only -> advisory; caller may publish if publish_guard is clean
 #   exit 0 = healthy
-_CRITICAL_FAIL = {'RULE: §362 stay flags reach the build', 'upstream sources'}
+_CRITICAL_FAIL = {'RULE: §362 stay flags reach the build', 'upstream sources',
+                  'entity claim in published board'}
 _crit = [n for l, n, d in R if l == 'FAIL' and n in _CRITICAL_FAIL]
 if _crit:
     print(f"  !! COMPLIANCE FAIL (blocks publish): {', '.join(_crit)}")

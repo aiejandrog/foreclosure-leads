@@ -1276,6 +1276,28 @@ def _tax_url_from_folio(r):
     return 'https://miamidade.county-taxes.com/public/real_estate/parcels/' + folio
 
 
+
+def subst_build_facts(tpl, updated):
+    """Fill the board's build-time placeholders. BOTH template readers must go through this.
+
+    The board is JavaScript in a self-contained encrypted file -- it cannot call Python, so any fact
+    that Python owns has to be injected here or the board silently drifts from every other surface.
+
+      __ENTITY_LLC__  the company name AS IT MAY LEGALLY BE SHOWN. entity.py decides whether the
+                      " LLC" suffix is substantiated; hardcoding it in the template is what let a
+                      false entity claim reach the public site on 2026-08-23.
+      __EMBLEM_W/H__  the emblem's real pixel aspect, from the payload actually embedded. Hardcoding
+                      it meant a logo swap stretched the mark on every letterhead.
+    """
+    import entity as _entity
+    import bsg_brand as _brand
+    name, _doc, _warn = _entity.display_llc()
+    return (tpl.replace('__UPDATED__', updated)
+               .replace('__ENTITY_LLC__', name.replace("'", "\'"))
+               .replace('__EMBLEM_W__', str(_brand.NATIVE_W))
+               .replace('__EMBLEM_H__', str(_brand.NATIVE_H)))
+
+
 def make_tracker(leads):
     # merge locally skip-traced phones/emails (never fetched here; produced by skiptrace.py, gitignored)
     st = {}
@@ -2240,7 +2262,8 @@ def make_tracker(leads):
     except Exception as _e:
         print('phone rank: SKIPPED (%s) — first-number order falls back to county order' % str(_e)[:80])
 
-    tpl = open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read().replace('__UPDATED__', f"{datetime.now():%Y-%m-%d %H:%M}")
+    tpl = subst_build_facts(open(os.path.join(HERE,'tracker_template.html'), encoding='utf-8').read(),
+                            f"{datetime.now():%Y-%m-%d %H:%M}")
     # Motion v13 (UMD) inlined, not CDN-linked: the Desktop twin is opened over file://, where an ESM
     # import is CORS-blocked and a network <script> dies offline. If the vendored file ever goes
     # missing the placeholder collapses to empty and _fxEnter() no-ops — the board still renders.
