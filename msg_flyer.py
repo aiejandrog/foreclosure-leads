@@ -91,14 +91,30 @@ mortgages and foreclosure workouts</b> &mdash; personally reviews your case and 
 
 
 def card_missed_en(name, phone):
+    # THE BANNER LEAK (fixed 2026-08-23). This variant is left at a door when nobody answers, so
+    # whoever picks it up reads it: a neighbour, a tenant, an adult child, whoever. The BODY was
+    # written carefully for exactly that reason and says only "time-sensitive matter concerning this
+    # property" -- and then the loudest line on the card announced FREE FORECLOSURE CONSULTATION to
+    # that same audience. Discretion in 9pt body copy is worth nothing under a banner. The door card
+    # now names no situation anywhere on its face. The 'keep' card is handed to the owner in person,
+    # so that one may still say the word.
+    #
+    # WHY IT READ SOFT (Jose, same day): the old hook, "Sorry I missed you today", spends the
+    # biggest type on the card apologising. The first line has one job, which is to make a man who is
+    # being buried in mail stop and read the second line. "Doing nothing is a decision" states the
+    # one thing that is true of every owner in this position and names no situation at all.
+    # "He does not want your house" is the differentiator: every other card in that stack does.
+    #
+    # VOICE: no em dashes (2026-08-22 house standard, adopted everywhere else and missed here --
+    # four of them on a card this small is the loudest tell a machine wrote it).
     return """<div class="card">
-<div class="tag">FREE FORECLOSURE CONSULTATION &middot; 5 MINUTES &middot; NO FEE &middot; NO COMMITMENT</div>
-<div class="hook">Sorry I missed you today.</div>
-<div class="body">I came by to visit with you about a <b>time-sensitive matter concerning this
-property</b>. When an owner does nothing, the bank wins and the owner loses &mdash; and there are
-usually <b>3, 4, sometimes 5 options</b> nobody has shown you. One free call and our senior
-advisor &mdash; <b>over 30 years in mortgages and foreclosure workouts</b> &mdash; walks you
-through every one of them.</div>
+<div class="tag">TIME-SENSITIVE &middot; ABOUT THIS PROPERTY &middot; NO FEE &middot; NO OBLIGATION</div>
+<div class="hook">Doing nothing<br>is a decision.</div>
+<div class="body">I came by today about a <b>time-sensitive matter concerning this property</b>.
+Most owners in this position are shown exactly <b>one</b> option, usually by the people they owe.
+There are normally <b>three, four, sometimes five</b>. Our senior advisor has spent <b>over 30
+years in mortgages and workouts</b> and will walk you through all of them on one call. He does not
+charge for it, and <b>he does not want your house</b>.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
@@ -108,14 +124,18 @@ through every one of them.</div>
 
 
 def card_missed_es(name, phone):
+    # Mirrors card_missed_en exactly: banner names no situation (this card is read by whoever finds
+    # it at the door), no em dashes, and the hook stops spending the largest type on an apology.
+    # "No quiere su casa" is the line that separates this from every other card in the stack.
     return """<div class="card">
-<div class="tag">CONSULTA GRATIS SOBRE SU CASO DE FORECLOSURE &middot; 5 MINUTOS &middot; SIN COSTO</div>
-<div class="hook">Lamento no haberlo encontrado hoy.</div>
-<div class="body">Pas&eacute; a visitarlo por un <b>asunto urgente relacionado con esta
-propiedad</b>. Cuando un due&ntilde;o no hace nada, el banco gana y el due&ntilde;o pierde &mdash;
-y casi siempre hay <b>3, 4, hasta 5 opciones</b> que nadie le ha mostrado. Una llamada gratis y
-nuestro asesor principal &mdash; <b>con m&aacute;s de 30 a&ntilde;os en hipotecas y soluciones de
-foreclosure</b> &mdash; le explica cada una.</div>
+<div class="tag">URGENTE &middot; SOBRE ESTA PROPIEDAD &middot; SIN COSTO &middot; SIN COMPROMISO</div>
+<div class="hook">No hacer nada<br>tambi&eacute;n es decidir.</div>
+<div class="body">Pas&eacute; hoy por un <b>asunto urgente relacionado con esta propiedad</b>. A la
+mayor&iacute;a de los due&ntilde;os en esta situaci&oacute;n les muestran <b>una sola</b>
+opci&oacute;n, casi siempre la gente a quien le deben. Normalmente hay <b>tres, cuatro, hasta
+cinco</b>. Nuestro asesor principal tiene <b>m&aacute;s de 30 a&ntilde;os en hipotecas y
+soluciones</b> y se las explica todas en una llamada. No cobra por eso, y
+<b>no quiere su casa</b>.</div>
 <div class="who"><div class="nm">%s</div>
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
