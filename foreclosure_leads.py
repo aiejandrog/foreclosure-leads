@@ -1307,6 +1307,7 @@ def subst_build_facts(tpl, updated):
     name, _doc, _warn = _entity.display_llc()
     snd = _entity.sender()
     return (tpl.replace('__UPDATED__', updated)
+               .replace('__ENTITY_VERIFIED__', 'true' if _entity.verified() else 'false')
                .replace('__ENTITY_LLC__', _js(name))
                .replace('__CLIENT_EMAIL__', _js(snd.get('client_email')))
                .replace('__EMBLEM_W__', str(_brand.NATIVE_W))

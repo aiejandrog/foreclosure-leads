@@ -2674,6 +2674,9 @@ function _workQueue(){
 // company (L22000200556), so every generator stripped the suffix and this board printed the bare
 // name. The rename to Biscayne Solutions Group kept that posture: see bsg_letter.UNOWNED for why
 // the suffix is still withheld, and entity_check.py for what lifts it.
+// True only when entity_check.py has a strict, exact, ACTIVE Sunbiz match for the configured
+// company. Injected at build time -- the board is JS and cannot ask Python at runtime.
+const ENTITY_VERIFIED = __ENTITY_VERIFIED__;
 const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'__ENTITY_LLC__', phone:'(786) 631-1823',
                          addr:'231 NW 109th Ave, Miami, FL 33172', title:'Acquisitions',
                          email:'agonzalez0311707@gmail.com', web:'', partner:''};
@@ -8050,7 +8053,11 @@ function _docFields(r){
     orconf: (r && r.orconf) || _b,
     // buyer identity (SENDER on this device — MUST NOT include Carlos or an attorney;
     // Carlos is the door-visit worker, not the buyer)
-    buyerName: s.name || _b, buyerLLC: s.llc || 'DealFlow Investments LLC',
+    // buyerLLC falls back to the GATED company display value, never to a literal. It used to
+    // fall back to 'DealFlow Investments LLC', which is not a registered Florida entity -- and
+    // because this runs BEFORE every generator, that name defeated the downstream guards that
+    // test for '__blank__' (they never saw a blank). Fix the source, not each consumer.
+    buyerName: s.name || _b, buyerLLC: s.llc || SENDER_DEFAULTS.llc,
     buyerPhone: s.phone || _b, buyerEmail: s.email || _b,
     buyerAddr: s.addr || _b, buyerTitle: s.title || _b, buyerWeb: s.web || _b,
     todayLong: todayLong, todayLongES: todayLongES
@@ -8354,7 +8361,7 @@ function genResourcesCard(r){
   var body = ''
     + '<div class="doc"><div class="kicker">HELP THAT IS FREE · AYUDA GRATUITA</div>'
     +   '<h1>Free foreclosure resources</h1>'
-    +   '<div class="sub">No cost · No obligation · Independent of DealFlow Investments LLC</div>'
+    +   '<div class="sub">No cost · No obligation · Independent of '+esc(f.buyerLLC)+'</div>'
     +   '<p><b>HUD-approved housing counseling</b> (free by law — they do not sell anything)<br>'
     +     'Florida: <b>1-888-995-HOPE (4673)</b><br>'
     +     '<span class="mini">National: hud.gov/counseling</span></p>'
@@ -8367,7 +8374,7 @@ function genResourcesCard(r){
     +     'Case number (record locator only): <b>'+_dfHtml(f.caseNo)+'</b>'
     +     (f.docket!=='__blank__' ? '<br><span class="mini">Docket: '+esc(f.docket)+'</span>' : '')
     +   '</p>'
-    +   '<p class="mini">These resources are independent of DealFlow Investments LLC. We do not control them and receive no payment from them.</p>'
+    +   '<p class="mini">These resources are independent of '+esc(f.buyerLLC)+'. We do not control them and receive no payment from them.</p>'
     +   '<div class="rule"></div>'
     +   '<div class="kicker" style="color:#0B1730">ESPAÑOL</div>'
     +   '<p><b>Asesoramiento de vivienda aprobado por HUD</b> (gratis por ley)<br>'
@@ -9496,7 +9503,7 @@ function genAttyPacket(r){
     +     'Documents left: '+_dfLine(36)+'<br>'
     +     'Follow-up attempts: '+_dfLine(36)+'</p>'
     +   '<h2>7. Referring party</h2>'
-    +   '<p>Referred by: DealFlow Investments LLC / '+_dfHtml(f.buyerName)+'<br>'
+    +   '<p>Referred by: '+esc(f.buyerLLC)+' / '+_dfHtml(f.buyerName)+'<br>'
     +     'Phone: '+_dfHtml(f.buyerPhone)+' &nbsp; Email: '+_dfHtml(f.buyerEmail)+'<br>'
     +     'Relationship: Potential buyer / referral only<br>'
     +     'Compensation arrangement: <b>NONE</b> — no fee-splitting; no referral fees on legal services.</p>'
@@ -9681,7 +9688,11 @@ function genQuitClaim(r, opts){
   // naming a grantee that does not exist on Sunbiz cannot take title, and a deed is RECORDED --
   // the one document class where a wrong value is worse than a blank the operator must fill.
   // Restore the default here once entity_check.py reports the filing ACTIVE.
-  var granteeSet = (f.buyerLLC !== '__blank__');
+  // Gated on ENTITY_VERIFIED, not on '__blank__'. buyerLLC always has a value (it falls back to
+  // the company display name), so a blank test could never fire -- the guard was decorative.
+  // A deed is RECORDED and conveys title: naming a grantee the register cannot substantiate
+  // is the one place a blank the operator fills is strictly safer than an auto-filled name.
+  var granteeSet = (ENTITY_VERIFIED && f.buyerLLC !== '__blank__');
   var grantee = granteeSet ? f.buyerLLC : '';
   var isHS = !!(r && r.hs);
   var B = function(w){ return _dfLine(w); };
