@@ -168,9 +168,14 @@ python -u bounces.py >> "%LOG%" 2>&1
 
 rem  Verify addresses BEFORE they can enter a queue (Cuban re-judge 2026-08-09: reacting at the
 rem  5% banner still eats avoidable reputation damage on every fresh scrape). Free layers only
-rem  unless a provider key file exists — suppression ledger, syntax, learned dead domains.
+rem  catch syntax/role/learned-dead-domain -- they cannot settle yahoo.com/aol.com (47%/49% dead
+rem  in this ledger), which is most of the 32%-first-contact-bounce problem analyst.py measured
+rem  2026-08-23. --api spends the already-loaded zerobounce.key at ~$0.008/address; --limit 150
+rem  caps it near $1.20/night (worst case) while clearing the ~3,900-address backlog in a few weeks.
+rem  provider_check() degrades to free-tier-only on any key/credit/network failure -- see its
+rem  docstring -- so a dead key never breaks this step, it just stops buying anything.
 echo [3i/5] Verifying fresh addresses before they enter the sendable pool...
-python -u verify_emails.py >> "%LOG%" 2>&1
+python -u verify_emails.py --api --limit 150 >> "%LOG%" 2>&1
 
 rem  ENTITY GATE. Re-verify the company against Sunbiz BEFORE the board is built, so a filing
 rem  that has just indexed starts printing its " LLC" on this run instead of the next one --

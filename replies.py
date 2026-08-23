@@ -32,10 +32,18 @@ import os, sys, json, re, imaplib, email
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 from datetime import datetime, timedelta
+import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KEY = os.path.join(HERE, 'gmail.key')
 OUT = os.path.join(HERE, 'replies.json')
+# ALERTS carries ONLY what changed since the last run — a running log a human (or a Monitor-style
+# watcher tailing this file) can act on same-day, instead of the only record being replies.json
+# (which the daily .bat pipes straight into an unread %TEMP% file) or a weekly scorecard that finds
+# a written reply days after it arrived. See run() for why "new" means n-count increased, not just
+# "key wasn't there before" — days=30 means the SAME reply reappears in the search window on every
+# run for a month, and re-alerting on it every single day would make the file worthless within a week.
+ALERTS = P.out('NEW-REPLIES.txt')
 
 # The subject our outreach always sends. Replies keep it as "Re: Regarding your property at ...",
 # which is what makes PASS 2 (subject matching) possible — see main().
@@ -254,7 +262,9 @@ def main():
     user, pw = cred
     print(f'checking mailbox: {user}')
     since = (datetime.now() - timedelta(days=days)).strftime('%d-%b-%Y')
+    prior = _load_json('replies.json', {})
     found = {}
+    new_alerts = []
     try:
         M = imaplib.IMAP4_SSL('imap.gmail.com')
         M.login(user, pw)
@@ -272,12 +282,24 @@ def main():
                    'stop': is_stop,
                    'excerpt': ' '.join(fresh.split())[:220],
                    'checked': datetime.now().isoformat(timespec='minutes')}
+            # NEW means the message count for this address grew since the last run, not just "the
+            # key is new" -- with days=30 the same reply reappears in this search every day for a
+            # month, and a returning replier's SECOND message should still alert even though the
+            # address itself was already known.
+            is_new = rec['n'] > ((prior.get('@' + addr) or {}).get('n') or 0)
             found['@' + addr] = rec
+            case_hit = None
             for case, ems in by_case.items():
                 if addr in ems:
                     found[case] = rec
+                    case_hit = case
             flag = '  [STOP WORD IN SUBJECT]' if rec['stop'] else ''
             print(f'  REPLY from {addr} — {len(ids)} msg(s) · {subj[:52]}{flag}')
+            if is_new:
+                new_alerts.append({'case': case_hit, 'email': addr, 'when': when,
+                                    'stop': is_stop, 'excerpt': rec['excerpt']})
+                print(f'  NEW SELLER REPLY | {case_hit or "no case on file"} | {addr} | '
+                      f'{rec["excerpt"][:90]}')
 
         # ---- PASS 2: SUBJECT match — a reply from an address we DON'T have on file ---------------
         # PASS 1 only searches FROM the addresses skiptrace found. An owner who replies from ANY
@@ -317,6 +339,7 @@ def main():
                        'excerpt': ' '.join(fresh.split())[:220],
                        'via': 'subject-match', 'new_address': True,
                        'checked': datetime.now().isoformat(timespec='minutes')}
+                is_new = ('@' + sender) not in prior
                 found['@' + sender] = rec
                 if case:
                     found[case] = rec
@@ -326,6 +349,11 @@ def main():
                       f'{subj[:46]}{flag}')
                 print(f'      -> lead: {case or "no case matched — check the address"}'
                       f'   ** add {sender} to this owner\'s file **')
+                if is_new:
+                    new_alerts.append({'case': case, 'email': sender, 'when': when,
+                                        'stop': is_stop, 'excerpt': rec['excerpt']})
+                    print(f'  NEW SELLER REPLY | {case or "no case on file"} | {sender} | '
+                          f'{rec["excerpt"][:90]}')
         M.logout()
     except Exception as e:
         print('IMAP check failed:', str(e)[:140])
@@ -341,6 +369,23 @@ def main():
         print('  ACT ON THE STOP REPLIES FIRST: add them to optouts.json before any further contact.')
     print('Rebuild the board to surface them:  python -c "import json,foreclosure_leads as F;'
           ' F.make_tracker(json.load(open(\'leads_final.json\',encoding=\'utf-8\')))"')
+
+    # run-replies-daily.bat pipes ALL of this stdout into an unread %TEMP% file, and replies.json
+    # only feeds pull-based consumers (the board, morning_planner, the weekly scorecard) -- nothing
+    # ever told a human THE DAY a reply landed. This file exists to be checked/tailed daily; it holds
+    # only what changed since the last run, and disappears when there is nothing new so it can never
+    # be mistaken for a fresh alert days later.
+    if new_alerts:
+        lines = [f'NEW SELLER REPLIES — as of {datetime.now().strftime("%Y-%m-%d %H:%M")}', '']
+        for a in new_alerts:
+            tag = '  [STOP WORD — opt-out, do not text/call further]' if a['stop'] else ''
+            lines.append(f'{a["case"] or "(no case matched — check the address)"} | {a["email"]} | {a["when"]}{tag}')
+            lines.append(f'    {a["excerpt"]}')
+            lines.append('')
+        open(ALERTS, 'w', encoding='utf-8').write('\n'.join(lines))
+        print(f'\n{len(new_alerts)} NEW reply(ies) since the last check -> {ALERTS}')
+    elif os.path.exists(ALERTS):
+        os.remove(ALERTS)
 
 
 if __name__ == '__main__':

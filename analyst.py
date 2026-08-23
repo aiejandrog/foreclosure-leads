@@ -116,6 +116,54 @@ def _in_last(days, when, now=None):
     return d is not None and 0 <= d <= days
 
 
+def _opt_cutoff_dt(n):
+    """Best-effort precise datetime of the opt-out MOMENT, mirroring docs/call/index.html's
+    _effOptout(): earliest optlog event's tsu/ts, ignoring a 'cleared-local' reversal. Returns None
+    when only the bare n['optout'] date scalar exists -- no time-of-day is knowable then."""
+    evs = [e for e in (n.get('optlog') or []) if isinstance(e, dict) and e.get('act') != 'cleared-local']
+    dts = []
+    for e in evs:
+        tsu = e.get('tsu')
+        if isinstance(tsu, (int, float)):
+            try:
+                dts.append(dt.datetime.fromtimestamp(tsu / 1000.0)); continue
+            except Exception:
+                pass
+        ts = e.get('ts')
+        if isinstance(ts, str):
+            try:
+                dts.append(dt.datetime.fromisoformat(ts.replace(' ', 'T'))); continue
+            except Exception:
+                pass
+    return min(dts) if dts else None
+
+
+def _touched_after_optout(n):
+    """Touches genuinely after the opt-out moment -- mirrors _dialedAfter() in docs/call/index.html.
+    Bug this replaces (found 2026-08-23, false-positived CACE-25-005200): comparing a touch's precise
+    timestamp against MIDNIGHT of n['optout'] flags any touch later the SAME day the opt-out was
+    recorded, even one that happened hours or days BEFORE the opt-out actually existed -- optout_sync
+    can lag the real event by more than a day, and the optout date often equals the date of the very
+    touch that prompted the opt-out. Only optlog's own precise timestamp can settle same-day order;
+    without one, require a strictly LATER calendar day, not just a later time-of-day."""
+    if not n.get('optout'):
+        return []
+    cutoff = _opt_cutoff_dt(n)
+    hits = []
+    for t in (n.get('touches') or []):
+        if t.get('ch') not in OUTREACH_CH:
+            continue
+        if cutoff is not None:
+            td = _t_dt(t)
+            if td and td > cutoff:
+                hits.append(t)
+        else:
+            td_date = str(t.get('d') or '')
+            if td_date and td_date > str(n['optout'])[:10]:
+                hits.append(t)
+    return hits
+
+
 # ---------------------------------------------------------------- metric computation
 def compute(now=None):
     now = now or _now()
@@ -229,19 +277,18 @@ def compute(now=None):
     m['replies_checked_age_d'] = round(_days_ago(replies_checked, now) or 99, 1) if replies_checked else None
 
     # -- compliance flags ------------------------------------------------------------------
+    # Every flag carries the date of the underlying EVENT, not "today". Compliance used to scan
+    # all-time ledgers with no age marker on a "WEEKLY Scorecard" -- a single incident already fixed
+    # in the tool (e.g. the 2026-08-18 shared call registry) then re-docked the same 2-4 points every
+    # Sunday forever, because nothing ever told the score "this is old news". RECENT_DAYS is how long
+    # a flag keeps full weight before it becomes a listed-but-not-rescored historical entry.
+    RECENT_DAYS = 14
     flags = []
     #  touches after a recorded opt-out (the cure-trail check the board runs per-device)
     for c, n in (wn.get('notes') or {}).items():
-        if not n.get('optout'):
-            continue
-        try:
-            od = dt.datetime.fromisoformat(str(n['optout'])[:10])
-        except Exception:
-            continue
-        for t in (n.get('touches') or []):
-            td = _t_dt(t)
-            if td and td > od and t.get('ch') in OUTREACH_CH:
-                flags.append(f'OPT-OUT VIOLATION: {c} touched ({t.get("ch")}) after opt-out {n["optout"]}')
+        for t in _touched_after_optout(n):
+            flags.append({'kind': 'OPT-OUT VIOLATION', 'date': str(t.get('d') or n['optout'])[:10],
+                          'text': f'OPT-OUT VIOLATION: {c} touched ({t.get("ch")}) after opt-out {n["optout"]}'})
     #  >3 telephonic touches on one lead in one day (FTSA 3-in-24h)
     percase_day = {}
     for c, t in tch:
@@ -249,10 +296,16 @@ def compute(now=None):
             percase_day[(c, t.get('d'))] = percase_day.get((c, t.get('d')), 0) + 1
     for (c, d0), n0 in percase_day.items():
         if n0 > 3:
-            flags.append(f'FTSA TOUCH CAP: {c} had {n0} telephonic touches on {d0} (max 3/24h)')
+            flags.append({'kind': 'FTSA TOUCH CAP', 'date': d0,
+                          'text': f'FTSA TOUCH CAP: {c} had {n0} telephonic touches on {d0} (max 3/24h)'})
     if m['bounce_rate_7d'] > 5:
-        flags.append(f'SPAM-REPUTATION RISK: {m["bounce_rate_7d"]}% bounce rate this week '
-                     f'(provider tolerance ~2%) on the personal Gmail')
+        flags.append({'kind': 'SPAM-REPUTATION RISK', 'date': m['date'],
+                      'text': f'SPAM-REPUTATION RISK: {m["bounce_rate_7d"]}% bounce rate this week '
+                              f'(provider tolerance ~2%) on the personal Gmail'})
+    for f in flags:
+        f['age_d'] = round(_days_ago(f['date'] + 'T00:00:00', now) or 0, 1) if f['date'] else 0.0
+        f['recent'] = f['age_d'] <= RECENT_DAYS
+    flags.sort(key=lambda f: f['date'] or '', reverse=True)
     m['compliance_flags'] = flags
 
     # -- scores ----------------------------------------------------------------------------
@@ -268,7 +321,9 @@ def compute(now=None):
         sc['followup'] = 5.0  # nothing to follow up = neutral, not good
     comp = 10.0
     for f in flags:
-        comp -= 4 if 'VIOLATION' in f else 2
+        if not f['recent']:
+            continue
+        comp -= 4 if 'VIOLATION' in f['kind'] else 2
     sc['compliance'] = round(max(0.0, comp), 1)
     for k, v in STATIC_SCORES.items():
         sc[k] = v['score']
@@ -420,7 +475,10 @@ def render(m, prev):
         warn = (f'<div class="alert">Call-history backup is {m["worker_notes_age_d"]:.0f} days stale — '
                 f'activity numbers may be undercounted.</div>')
 
-    flags = ''.join(f'<li>{f}</li>' for f in m['compliance_flags']) or '<li class="ok">No violations detected in the ledgers.</li>'
+    def _flag_li(f):
+        stale = '' if f['recent'] else f'<span class="stale">{f["age_d"]:.0f}d ago — historical, not scored this week: </span>'
+        return f'<li>{stale}{f["text"]}</li>'
+    flags = ''.join(_flag_li(f) for f in m['compliance_flags']) or '<li class="ok">No violations detected in the ledgers.</li>'
     sugs = ''.join(f'<li><b class="{p.lower()}">{p}</b> {s}</li>' for p, s in m['suggestions']) \
            or '<li class="ok">All weekly floors met.</li>'
     qs = ''.join(f'<li>{q}</li>' for q in m['jose_questions'])
@@ -453,6 +511,7 @@ def render(m, prev):
  .pace{{background:#fff;border:1px solid #e4e7ef;border-left:4px solid #b58a1f;border-radius:10px;padding:12px 16px}}
  ul{{background:#fff;border:1px solid #e4e7ef;border-radius:10px;margin:0;padding:10px 14px 10px 30px}}
  li{{margin:7px 0}} li.ok{{color:#1e7a3c}}
+ .stale{{color:#8b93a7;font-weight:600}}
  b.p0{{color:#b3372f}} b.p1{{color:#b58a1f}} b.p2{{color:#4a5878}}
  .foot{{color:#9aa1b3;font-size:11px;margin-top:26px}}
 </style></head><body><div class="wrap">

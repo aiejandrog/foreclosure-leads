@@ -358,6 +358,8 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 #syncbtn{border-radius:var(--pill);font-weight:600}
 #syncbtn.syncstale{border-color:#DEA02C;background:#FBF5E6;color:#7A5A10}
 #syncbtn.syncstale .syncfresh{color:#B45309}
+#syncbtn.syncviolation{border-color:#b3261e;background:#fdecea;color:#8f2b23}
+#syncbtn.syncviolation .syncfresh{color:#b3261e}
 .syncfresh{font-size:10px;color:var(--muted-2);font-weight:600;margin-left:2px}
 /* search with affordance */
 .qwrap{position:relative;display:inline-flex;align-items:center}
@@ -13507,6 +13509,12 @@ window.addEventListener('message', function(ev){
         localStorage.setItem('fcCallQueue', JSON.stringify(_cq));
       }
     } catch(e){}
+    // ALSO stamp the synced note, not just the local-only fcCallQueue array above. This runs in the
+    // Morning Worker's own unattended tab; fcCallQueue never leaves that tab's localStorage, so the
+    // phone Call Mode people actually dial from had no way to know this case was queued (see
+    // _mergeLead's .wq comment). save() below both persists and schedules the team-sync push.
+    (notes[r.case] = notes[r.case] || {status:'',note:''}).wq = _today();
+    save();
   } else if(d.k === 'badnum'){
     // Wrong/dead number from the worker: remember it (the build-time card filter drops
     // it from every future bake), retire the durable call-queue entry, and park the case
@@ -14841,6 +14849,16 @@ function _mergeLead(local, remote){
      stale cooldown in place — the lead reappears (or fails to) on the wrong schedule, and the log
      looks like it worked. This is the clause that makes phone logging actually mean something. */
   if(remote.cooldownH != null && _lastTouchD(remote) >= _lastTouchD(local)) out.cooldownH = remote.cooldownH;
+  /* WORKER QUEUE MEMBERSHIP. `.wq` is stamped by the 'callq' handler below (phone-only, nothing to
+     auto-email) so this case shows up in docs/call/index.html's workerQ() highest-priority lane on
+     ANY device -- fcCallQueue alone is a plain localStorage array, private to whichever browser
+     built it, and never crossed team sync at all. That is the root cause a 2026-08-23 audit traced
+     for 333 leads queued in 7 days and 1 dialled: the Worker queued them in its own unattended tab
+     on this laptop, and the phone people actually dial from never saw a single one. Non-authoritative
+     on purpose -- it only affects which lane a case is OFFERED in, never whether it is suppressed
+     (that is touches/optout/cooldown, all already merged above), so a stale remote value re-adding a
+     `.wq` just-cleared elsewhere is cosmetic, not a compliance risk. */
+  if(remote.wq && (!out.wq || remote.wq > out.wq)) out.wq = remote.wq;
   /* DIALS: union, dedupe by (timestamp | last-4). Additive attempt record, NOT a contact record —
      autoLog deliberately collapses repeat same-outcome touches, so this is the only place a second
      "No answer" on the same lead the same morning survives. Dial-through is the number the whole
@@ -14961,12 +14979,31 @@ async function syncPull(){
     const tid = await _teamId(key), me = _deviceId();
     const r = await fetch(SB_TBL+'?team_id=eq.'+encodeURIComponent(tid)+'&select=device_id,payload', {headers:{'apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY}});
     if(!r.ok) throw new Error('pull '+r.status);
-    const rows = await r.json(); let merged = 0, optouts = 0;
+    const rows = await r.json(); let merged = 0, optouts = 0, violations = 0;
     for(const row of rows){ if(row.device_id === me) continue;
-      try{ const remote = await _decBlob(row.payload, key); const s = mergeNotes(remote); merged += s.leads; optouts += s.optouts; }catch(e){}
+      try{ const remote = await _decBlob(row.payload, key); const s = mergeNotes(remote); merged += s.leads; optouts += s.optouts; violations += s.violations; }catch(e){}
     }
     localStorage.setItem('fcLastPull', _nowTS()); syncStatus('');
-    return {merged, optouts};
+    // A merged-in opt-out can retroactively turn a call already logged into an after-opt-out
+    // contact (mergeNotes' own comment). This ran silently: the auto-pull (every 45s, no modal
+    // open) discarded `violations` and only the manual "import a teammate's file" path ever showed
+    // it. Persist past this tick so the always-visible Sync button chip can carry it until someone
+    // actually opens Sync — the FTSA/FDUTPA fact pattern this exists to catch cannot wait 45 seconds
+    // for the next routine tick to silently overwrite the only place it was ever shown.
+    if(violations){
+      const prior = parseInt(localStorage.getItem('fcOptoutViolations')||'0', 10) || 0;
+      localStorage.setItem('fcOptoutViolations', String(prior + violations));
+      try{ syncFreshness(); }catch(e){}
+      // This function is extracted VERBATIM onto docs/call/index.html (call_mode.py's build step),
+      // which has no #syncbtn chip for syncFreshness() to paint but DOES define a real toast() --
+      // the phone is the surface someone is actually holding while dialing, so it gets the loud
+      // version. typeof-guarded because THIS page (the board) has no toast() of its own; unguarded
+      // it would throw the first time an opt-out synced in here instead of on a phone.
+      if(typeof toast === 'function') toast('⚠ ' + violations + ' lead' + (violations===1?'':'s') +
+          ': opt-out synced in AFTER you logged a touch — open The Call Log and document the cure',
+          {bad:true, ms:8000});
+    }
+    return {merged, optouts, violations};
   }catch(e){ syncStatus('offline — will retry', true); return 0; }
 }
 function syncStatus(msg, warn){ const el = document.getElementById('syncstat'); if(!el) return; const on = !!_teamKey();
@@ -14977,6 +15014,19 @@ function _ago(ts){ if(!ts) return ''; const m = Math.max(0, Math.round((new Date
 function startTeamSync(){ if(!_teamKey()) return; clearInterval(_pullTimer); syncPull(); _pullTimer = setInterval(syncPull, 45000); syncPush(); }
 function syncFreshness(){
   const b = document.getElementById('syncbtn'); if(!b) return;
+  const tag = document.getElementById('syncfresh');
+  // An opt-out that synced in AFTER a touch was already logged outranks mere staleness — it is a
+  // contact that may already have happened on the wrong side of FTSA/FDUTPA, not a "sync later"
+  // reminder. Stays lit until openSyncModal() clears it, so it survives past the next 45s auto-pull.
+  const viol = parseInt(localStorage.getItem('fcOptoutViolations')||'0', 10) || 0;
+  if(viol){
+    b.classList.remove('syncstale'); b.classList.add('syncviolation');
+    b.title = (b.dataset.baseTitle||'') + ' — ⚠ ' + viol + ' lead' + (viol===1?'':'s') +
+      ' show a touch logged BEFORE an opt-out synced in. Open Sync and check Call Log / notes for each.';
+    if(tag) tag.textContent = '⚠ ' + viol + ' after opt-out';
+    return;
+  }
+  b.classList.remove('syncviolation');
   const last = localStorage.getItem('fcLastMerge') || '';
   if(!last){ b.classList.remove('syncstale'); b.title = b.dataset.baseTitle || b.title; return; }
   const hrs = Math.max(0, Math.round((new Date(_nowTS().replace(' ','T')) - new Date(last.replace(' ','T')))/3600000));
@@ -14984,7 +15034,7 @@ function syncFreshness(){
   const stale = hrs >= 12;
   b.classList.toggle('syncstale', stale);
   b.title = (b.dataset.baseTitle||'') + ' — last team merge: ' + label + (stale ? ' · OVERDUE, import teammate files' : '');
-  const tag = document.getElementById('syncfresh'); if(tag){ tag.textContent = (stale?'⚠ ':'')+'sync '+label; }
+  if(tag) tag.textContent = (stale?'⚠ ':'')+'sync '+label;
 }
 // ================= MANUAL DATA REFRESH (fires the GitHub Actions pipeline) =================
 // Top-corner "↻ Refresh" button. Guardrails, in order: (1) freshness check — if the data was
@@ -15228,6 +15278,9 @@ document.addEventListener('keydown', e => {
   else if(e.key === 'Escape') { const m=document.getElementById('playbookmodal'); if(m && m.style.display==='block') closePlaybook(); }
 });
 function openSyncModal(){  const on = !!_teamKey();
+  // Opening Sync is the acknowledgment: he's now looking at the surface that names which leads
+  // to check (Call Log / notes). Clear the chip so it does not nag forever once it has been seen.
+  if(localStorage.getItem('fcOptoutViolations')){ localStorage.removeItem('fcOptoutViolations'); try{ syncFreshness(); }catch(e){} }
   document.getElementById('syncbody').innerHTML =
     '<div class="dm-sec" style="font-size:17px;margin-bottom:2px">Sync across devices &amp; team</div>'+
     '<div class="sd" style="color:var(--muted);font-size:12.5px;margin-bottom:6px">Your notes, calls, opt-outs and verified liens live on THIS device. Turn on team auto-sync so everyone stays current automatically, or hand off a file manually.</div>'+

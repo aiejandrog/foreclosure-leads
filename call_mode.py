@@ -984,6 +984,7 @@ button.big{background:#1d4ed8;color:#fff}
 .toast{position:fixed;left:0;right:0;bottom:0;z-index:60;pointer-events:none;background:var(--ok);color:#fff;padding:16px;
      font-weight:700;text-align:center;transform:translateY(100%);transition:transform .18s}
 .toast.on{transform:none}
+.toast.bad{background:var(--bad)}
 .gate{padding:28px 18px;max-width:420px;margin:0 auto}
 .gate input{width:100%;min-height:52px;font-size:17px;padding:0 12px;border-radius:10px;border:1px solid #2a3f6b;
      background:#0f1d3a;color:var(--ink)}
@@ -1246,10 +1247,20 @@ async function boot(){
    lead is phone-only — same origin, so this page reads it directly with no new transport. Its own
    comment in the board records why it is durable: "before this, 192 queued calls evaporated with the
    tab and the week produced exactly one dial."
-   Entries retire only on a logged call outcome, which is exactly what this page does. */
+   Entries retire only on a logged call outcome, which is exactly what this page does.
+
+   THIS WAS STILL DEVICE-LOCAL (found 2026-08-23). fcCallQueue lives in the browser that built it —
+   the unattended Morning Worker tab on the laptop — and team sync only ever carried `notes`, never
+   this array. 333 leads queued in 7 days, 1 dialled: the queue this function reads was empty on
+   every phone, every time, because nothing had ever written to ITS localStorage. `.wq` on a case's
+   own (synced) note is the fix — see _mergeLead in the extracted sync block below — so union both
+   sources here: fcCallQueue for same-device continuity, `.wq` for whatever arrived from a teammate
+   or the laptop. */
 function workerQ(){
-  try{ return (JSON.parse(localStorage.getItem('fcCallQueue')||'[]')||[]).map(function(x){ return x.c; }); }
-  catch(e){ return []; }
+  var s = {};
+  try{ (JSON.parse(localStorage.getItem('fcCallQueue')||'[]')||[]).forEach(function(x){ s[x.c]=1; }); }catch(e){}
+  for(var k in notes){ if(k.charAt(0)!=='#' && notes[k] && notes[k].wq) s[k]=1; }
+  return Object.keys(s);
 }
 function retireFromWorkerQ(caseId){
   try{
@@ -1257,6 +1268,7 @@ function retireFromWorkerQ(caseId){
     var n = q.filter(function(x){ return x.c !== caseId; });
     if(n.length !== q.length) localStorage.setItem('fcCallQueue', JSON.stringify(n));
   }catch(e){}
+  if(notes[caseId] && notes[caseId].wq) delete notes[caseId].wq;
 }
 /* CLIENT-SIDE SUPPRESSION — the read-back the first version was missing.
    Build-time filtering catches opt-outs and stays that existed when the page was BUILT. Everything
@@ -2406,7 +2418,9 @@ function afterCall(r, o, nextC){
       var nn = notes[r.c] = notes[r.c] || {status:'',note:''};
       nn.touches = nn.touches || [];
       nn.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text', out:'Text sent — ' + st, by:caller()});
-      saveNotes(); queueSync(); toast('Text logged'); go();
+      saveNotes(); queueSync();
+      if(!_ftsaCapToast(nn)) toast('Text logged');
+      go();
     };
     /* RESEND. Same body, same number — re-fires the composer. Does NOT log anything: a second open
        is still not a delivery, and the Yes button remains the only thing that writes the touch. */
@@ -2423,6 +2437,23 @@ function afterCall(r, o, nextC){
     };
   };
 }
+/* FTSA caps telephonic (call/text) contact at 3 per lead per 24h. Before this, the only place that
+   counted same-day touches was analyst.py's WEEKLY scan reading ALL-TIME touches -- a 4th touch
+   surfaced days later, by which point a 5th and 6th could already be sitting in the ledger too. The
+   dial or text has already happened by the time either caller below runs, so this cannot un-ring the
+   phone; it exists to make the cap-crossing impossible to miss RIGHT NOW and to mark the exact touch
+   an audit would need to find, instead of leaving that to a future re-scan of timestamps. */
+function _telephonicToday(n){
+  return (n.touches||[]).filter(function(x){ return x.d===today() && (x.ch==='call'||x.ch==='text'); }).length;
+}
+function _ftsaCapToast(n, extra){
+  var cnt = _telephonicToday(n);
+  if(cnt <= 3) return false;
+  n.touches[n.touches.length-1].capExceeded = true;
+  toast('⚠ FTSA cap: touch #' + cnt + ' today for this lead (max 3/24h).' + (extra ? ' ' + extra : '') +
+        ' Stop contacting them until tomorrow.', {bad:true, ms:8000});
+  return true;
+}
 /* Mirrors tracker_template.html's `callout` dispatcher so the phone and the laptop write the SAME
    shape. n.dials is additive and never deduped — it is the dial-through count the whole logging
    problem exists to recover; the touch itself stays deduped for cooldown purposes. */
@@ -2436,8 +2467,10 @@ function logOutcome(r,o,digits){
   var fresh = !(last && last.d===today() && last.ch==='call' && last.out===o.t);
   // `by` = who made this call (from their access code). It is what lets the other phone say
   // "called 2h ago by Carlos" instead of skipping a lead for no visible reason.
-  if(fresh)
+  if(fresh){
     n.touches.push({d:today(),ts:nowTS(),tsu:Date.now(),ch:'call',out:o.t,by:caller()});
+    _ftsaCapToast(n);
+  }
   n.dials=n.dials||[];
   n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()});
   n.cooldownH=o.h;
@@ -2491,10 +2524,11 @@ function queueSync(){
    now that the 650ms screen-holds are gone) let the FIRST toast's 1400ms timer strip the class off
    the SECOND — the confirmation he most needs flashes for a few ms and dies. */
 var _toastT=null;
-function toast(t){
+function toast(t,opts){
   var el=$('toast'); el.textContent=t; el.classList.add('on');
+  el.classList.toggle('bad', !!(opts && opts.bad));
   clearTimeout(_toastT);
-  _toastT=setTimeout(function(){el.classList.remove('on');},1400);
+  _toastT=setTimeout(function(){el.classList.remove('on');},(opts && opts.ms) || 1400);
 }
 
 /* ON-DEVICE ERROR LOG. I cannot see his phone; "sometimes the buttons do not work" is a symptom
