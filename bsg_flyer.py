@@ -17,14 +17,17 @@ IDENTITY comes from sender.json (same contract as the letter system — the name
 see bsg_brand.py's sender notes). Override per-batch with --name/--phone for Carlos's paper:
     python bsg_flyer.py --name "Carlos Gonzalez" --phone "(305) 555-0123"
 
-COMPLIANCE, BAKED IN, NOT OPTIONAL (hardened by the 2026-08-12 legal adversarial pass)
- * "30+ years" is attributed to the SENIOR ADVISOR, never to the company — BSG is new, and a
+COMPLIANCE
+ * "30+ years" is attributed to the SENIOR ADVISOR, never to the company — MSG is new, and a
    company-age claim on paper is FDUTPA bait.
- * MARS/Reg O ad disclosures in the microprint: not the government, not the lender, lender may
-   not agree, you may stop at any time, free consultation. No fee language anywhere else.
- * "We are not a law firm and do not give legal advice."
  * The sale-date blank is filled ONLY when handing to the titled owner — never a third party
    (third-party foreclosure disclosure is the lawsuit; the playbook's card 8 owns this rule).
+ * REMOVED 2026-08-23 AT ALEJANDRO'S DIRECTION, KNOWINGLY: the MARS/Reg O 12 CFR 1015.4(a)
+   microprint block and the FS 501.1377 "not a foreclosure-rescue company" line. This is the one
+   surface disclaimer.py's own docstring names as required ("Goes on anything printed and handed
+   or mailed to a homeowner: letters, flyers, door hangers") and it is why this file does not
+   `import disclaimer` — do not re-add it without asking first, the omission is deliberate, not a
+   bug. No attorney has signed off on this removal.
 
 Run:  python bsg_flyer.py                        # safety-yellow, sender.json identity
       python bsg_flyer.py --color pink           # hot pink stock look
@@ -36,8 +39,6 @@ import html as H
 import json
 import os
 
-import disclaimer as D
-import entity
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -81,7 +82,6 @@ mortgages and foreclosure workouts</b> &mdash; personally reviews your case and 
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
 <div class="fill">Important date: <span class="line"></span></div>
-<div class="fine">""" + D.mars('%s', 'en') + """</div>
 </div>"""
 
 
@@ -114,7 +114,6 @@ charge for it, and <b>he does not want your house</b>.</div>
 <div class="tel">%s</div>
 <div class="always">CALL OR TEXT &middot; 24 HOURS &middot; 7 DAYS</div></div>
 <div class="fill">Important date: <span class="line"></span></div>
-<div class="fine">""" + D.mars('%s', 'en') + """</div>
 </div>"""
 
 
@@ -135,7 +134,6 @@ soluciones</b> y se las explica todas en una llamada. No cobra por eso, y
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
 <div class="fill">Fecha importante: <span class="line"></span></div>
-<div class="fine">""" + D.mars('%s', 'es') + """</div>
 </div>"""
 
 
@@ -152,7 +150,6 @@ mayor&iacute;a solo le muestran una.</div>
 <div class="tel">%s</div>
 <div class="always">LLAME O ENV&Iacute;E TEXTO &middot; 24 HORAS &middot; 7 D&Iacute;AS</div></div>
 <div class="fill">Fecha importante: <span class="line"></span></div>
-<div class="fine">""" + D.mars('%s', 'es') + """</div>
 </div>"""
 
 
@@ -193,15 +190,15 @@ def main():
     ap.add_argument('--variant', default='keep', choices=('keep', 'missedyou'))
     a = ap.parse_args()
 
-    dn, dp, llc = sender()
+    dn, dp, _ = sender()
     name, phone = (a.name or dn), (a.phone or dp)
     if not phone:
         raise SystemExit('no phone: set sender.json or pass --phone')
 
     _en, _es = (card_missed_en, card_missed_es) if a.variant == 'missedyou' else (card_en, card_es)
-    en = _en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
-    es = _es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
-    doc = ('<!doctype html><html><head><meta charset="utf-8"><title>BSG Leave-Behind</title>'
+    en = _en(name, phone) % (H.escape(name), H.escape(phone))
+    es = _es(name, phone) % (H.escape(name), H.escape(phone))
+    doc = ('<!doctype html><html><head><meta charset="utf-8"><title>MSG Leave-Behind</title>'
            '<style>%s</style></head><body>'
            '<div class="sheet">%s</div><div class="sheet">%s</div>'
            '</body></html>') % (CSS % {'bg': COLORS[a.color]}, en * 4, es * 4)
