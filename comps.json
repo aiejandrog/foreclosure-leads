@@ -29656,5 +29656,305 @@
 "psf": 272
 }
 ]
+},
+"502026CC008246XXXANB": {
+"arv": 373750,
+"psf": 287.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "10817 QUAIL COVEY RD",
+"price": 380000,
+"yr": 2025,
+"sqft": 1300,
+"psf": 292
+},
+{
+"addr": "4241 QUAIL RIDGE DR N A",
+"price": 375000,
+"yr": 2025,
+"sqft": 1325,
+"psf": 283
+},
+{
+"addr": "10885 QUAIL COVEY RD",
+"price": 440000,
+"yr": 2025,
+"sqft": 1560,
+"psf": 282
+}
+]
+},
+"502026CA000921XXXAMB": {
+"arv": 402484,
+"psf": 259.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "8130 SANDPIPER WAY",
+"price": 470000,
+"yr": 2024,
+"sqft": 1883,
+"psf": 250
+},
+{
+"addr": "8226 QUAIL MEADOW WAY",
+"price": 439900,
+"yr": 2024,
+"sqft": 1633,
+"psf": 269
+},
+{
+"addr": "8173 QUAIL MEADOW TRCE",
+"price": 440000,
+"yr": 2024,
+"sqft": 1632,
+"psf": 270
+}
+]
+},
+"502025CA007128XXXAMB": {
+"arv": 496470,
+"psf": 402.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "3230 S OCEAN BLVD C 505",
+"price": 545000,
+"yr": 2025,
+"sqft": 1176,
+"psf": 463
+},
+{
+"addr": "3520 S OCEAN BLVD F405",
+"price": 400000,
+"yr": 2025,
+"sqft": 1174,
+"psf": 341
+},
+{
+"addr": "3501 S OCEAN BLVD 204",
+"price": 480000,
+"yr": 2025,
+"sqft": 1570,
+"psf": 306
+}
+]
+},
+"502025CC016427XXXAMB": {
+"arv": 297297,
+"psf": 231.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "13367 VIA VESTA B",
+"price": 295000,
+"yr": 2025,
+"sqft": 1287,
+"psf": 229
+},
+{
+"addr": "6132 STANLEY LN",
+"price": 300000,
+"yr": 2025,
+"sqft": 1287,
+"psf": 233
+},
+{
+"addr": "6088 OVERLAND PL",
+"price": 291500,
+"yr": 2025,
+"sqft": 1287,
+"psf": 226
+}
+]
+},
+"502025CA009579XXXAMB": {
+"arv": 224868,
+"psf": 240.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "5205 BAYSIDE DR",
+"price": 302000,
+"yr": 2025,
+"sqft": 1231,
+"psf": 245
+},
+{
+"addr": "6163 ELSINORE CIR",
+"price": 269000,
+"yr": 2025,
+"sqft": 1100,
+"psf": 245
+},
+{
+"addr": "6205 POND TREE CT",
+"price": 305000,
+"yr": 2025,
+"sqft": 1294,
+"psf": 236
+}
+]
+},
+"502024CA002801XXXAMB": {
+"arv": 458664,
+"psf": 339.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "416 S C ST",
+"price": 273000,
+"yr": 2025,
+"sqft": 800,
+"psf": 341
+},
+{
+"addr": "1106 S E ST",
+"price": 380000,
+"yr": 2025,
+"sqft": 1125,
+"psf": 338
+},
+{
+"addr": "1108 S G ST",
+"price": 480000,
+"yr": 2025,
+"sqft": 1384,
+"psf": 347
+}
+]
+},
+"502025CA011443XXXAMB": {
+"arv": 375192,
+"psf": 324.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "427 RAINBOW SPRINGS TER",
+"price": 415000,
+"yr": 2025,
+"sqft": 1395,
+"psf": 297
+},
+{
+"addr": "1137 GRANDVIEW CIR",
+"price": 435000,
+"yr": 2025,
+"sqft": 1239,
+"psf": 351
+},
+{
+"addr": "208 BOBWHITE RD",
+"price": 515000,
+"yr": 2025,
+"sqft": 1428,
+"psf": 361
+}
+]
+},
+"502025CA012411XXXAMB": {
+"arv": 259560,
+"psf": 210.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "7005 70TH WAY",
+"price": 256000,
+"yr": 2025,
+"sqft": 1236,
+"psf": 207
+},
+{
+"addr": "6321 63RD WAY",
+"price": 263000,
+"yr": 2025,
+"sqft": 1236,
+"psf": 213
+},
+{
+"addr": "6503 65TH WAY",
+"price": 267000,
+"yr": 2025,
+"sqft": 1236,
+"psf": 216
+}
+]
+},
+"502025CA012556XXXAMB": {
+"arv": 482073,
+"psf": 303.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "6415 TOULON DR",
+"price": 385000,
+"yr": 2025,
+"sqft": 1249,
+"psf": 308
+},
+{
+"addr": "6317 CASABELLA LN",
+"price": 555000,
+"yr": 2025,
+"sqft": 1860,
+"psf": 298
+},
+{
+"addr": "6526 CONTEMPO LN",
+"price": 570000,
+"yr": 2025,
+"sqft": 1842,
+"psf": 309
+}
+]
+},
+"502026CA001858XXXAMB": {
+"arv": 494394,
+"psf": 222.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "4711 HOLLY LAKE DR",
+"price": 356000,
+"yr": 2025,
+"sqft": 1646,
+"psf": 216
+},
+{
+"addr": "4402 BERKSHIRE WHARF DR",
+"price": 340000,
+"yr": 2025,
+"sqft": 1574,
+"psf": 216
+},
+{
+"addr": "4304 S LANDAR DR",
+"price": 375000,
+"yr": 2025,
+"sqft": 1646,
+"psf": 228
+}
+]
 }
 }

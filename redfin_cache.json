@@ -6399,5 +6399,57 @@
 "url": "https://www.redfin.com/FL/Lauderhill/2511-NW-56th-Ave-33313/home/200034793",
 "conf": "ok",
 "t": 1787415220.357567
+},
+"00424536220010010": {
+"v": 267995,
+"url": "https://www.redfin.com/FL/Boynton-Beach/4650-Kittiwake-Ct-33436/home/42206482",
+"conf": "ok",
+"sqft": 1435,
+"t": 1787483868.887577
+},
+"74414224030000470": {
+"v": 367201,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/8426-Quail-Meadow-Way-33412/home/42508597",
+"conf": "ok",
+"sqft": 1935,
+"t": 1787483868.887577
+},
+"50434435050011040": {
+"v": 0,
+"conf": "nomatch",
+"t": 1787483868.887577
+},
+"18424423113310032": {
+"v": 0,
+"conf": "nomatch",
+"t": 1787483868.887577
+},
+"38434421152990080": {
+"v": 406220,
+"url": "https://www.redfin.com/FL/Lake-Worth-Beach/1101-S-C-St-33460/home/42417235",
+"conf": "ok",
+"sqft": 1351,
+"t": 1787483868.887577
+},
+"72414325090000120": {
+"v": 309751,
+"url": "https://www.redfin.com/FL/Royal-Palm-Beach/10685-Bobbie-Ln-33411/home/42485536",
+"conf": "ok",
+"sqft": 1158,
+"t": 1787483868.887577
+},
+"74434307040001003": {
+"v": 263247,
+"url": "https://www.redfin.com/FL/West-Palm-Beach/6408-64th-Way-33409/home/42511966",
+"conf": "ok",
+"sqft": 1236,
+"t": 1787483868.887577
+},
+"18424425400030040": {
+"v": 412207,
+"url": "https://www.redfin.com/FL/Greenacres/5828-Erik-Way-33463/home/42594971",
+"conf": "ok",
+"sqft": 2227,
+"t": 1787483868.887577
 }
 }
