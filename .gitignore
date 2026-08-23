@@ -258,3 +258,6 @@ markey_pull.py
 markey_brief.py
 markey_call_recap.py
 markey_options.py
+
+# key rotation backups — old vendor keys, never commit
+.key-backups/
