@@ -37,35 +37,50 @@ def steps(lead, sender):
     se = sender.get('email') or ''
     sllc = sender.get('llc') or ''
     sig = f"\n\n{sn}" + (f"\n{sllc}" if sllc else '') + (f"\n{sp}" if sp else '') + (f"\n{se}" if se else '')
+    # ADDED 2026-08-22. All four touches shipped with a STOP line and NOTHING else — no
+    # not-an-attorney, no not-a-rescue-company, no fee statement. Every other outward channel
+    # carries this: msg_letter and msg_flyer run the full MARS/Reg O block, outreach_mail says
+    # "not a lender, not a foreclosure-rescue company, and not an attorney", and outreach_email
+    # was given the same line earlier today. cadence.py builds its own bodies in this function,
+    # so none of that reached it.
+    #
+    # It matters most HERE. Touch 2 tells an owner in foreclosure there may be "real money left
+    # over ... that belongs to you" and offers a call about it. FS 501.1377 turns on holding
+    # yourself out as offering a foreclosure-related service for a fee, so the denial and the
+    # "no fee" statement are the two sentences that keep that pitch on the right side of it.
+    disc = ("\n\nI am not your lender, not the government, not a foreclosure-rescue company, and "
+            "not an attorney — nothing here is legal advice, and there is never a fee to talk to me.")
     unsub = "\n\n(If you'd rather not hear from me, just reply 'stop' and you won't hear from me again — no hard feelings.)"
     s0 = (f"Hi {first},\n\nMy name's {sn}. I work with a small local team that helps owners in "
           f"foreclosure, and I came across {addr} with an auction scheduled for {auc}.\n\n"
           f"I'm not calling to pressure you into anything — I just want to make sure you've seen "
           f"all the options on the table before that date, because most of them expire with the "
           f"sale. Whatever direction you choose, the numbers should drive it, and I'm happy to walk "
-          f"you through yours at no charge." + sig + unsub)
+          f"you through yours at no charge." + sig + disc + unsub)
     s1 = (f"Hi {first},\n\nQuick follow-up on {addr}. The reason I reached out: from the public "
           f"records, there may be real money left over after the loan is settled — money that "
           f"belongs to you, not the bank, if it's handled before {auc}.\n\nTen minutes on the "
           f"phone is usually enough to tell whether your numbers support that. No cost, no "
-          f"obligation — I'd rather you know than guess." + sig + unsub)
+          f"obligation — I'd rather you know than guess." + sig + disc + unsub)
     s2 = (f"Hi {first},\n\nLast few details before {auc}, in plain terms. Owners in your spot "
           f"usually have three real options:\n\n"
           f"  1) Stop the sale and buy time (60-90 days) to regroup.\n"
           f"  2) Sell before the auction and keep the equity yourself.\n"
           f"  3) Borrow against the equity and stay in the home.\n\n"
           f"Which one fits depends on your numbers — and I can show you all three against your "
-          f"actual property, {addr}, at no charge." + sig + unsub)
+          f"actual property, {addr}, at no charge." + sig + disc + unsub)
     s3 = (f"Hi {first},\n\nThis is my last note about {addr}. The {auc} date is close now, and "
           f"once a sale happens the options close with it.\n\nWhatever you decide — even deciding "
           f"to let it go — please decide it with the real numbers in your hand, not the bank's. "
-          f"If a 10-minute call helps, I'm around." + sig + unsub)
+          f"If a 10-minute call helps, I'm around." + sig + disc + unsub)
     subj = [f"{addr} — before the auction date",
             f"the part of {addr.split(',')[0]} that belongs to you",
             f"3 options before {auc} — {addr.split(',')[0]}",
             f"last note on {addr.split(',')[0]} before {auc}"]
     es = ("\n\n---\n\n(ES) Hablo español con gusto — si le es más cómodo, respóndame en español "
-          "y seguimos por escrito o por teléfono.\n")
+          "y seguimos por escrito o por teléfono. No soy su prestamista, no soy del gobierno, "
+          "no soy una empresa de rescate de ejecuciones, y no soy abogado; esto no es asesoría "
+          "legal y nunca hay cargo por hablar conmigo.\n")
     bodies = [s0 + es, s1 + es, s2 + es, s3 + es]
     return list(zip(subj, bodies))
 
