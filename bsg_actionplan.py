@@ -70,12 +70,16 @@ until the entity exists:</p>
   <tr><td>Attorney cures the Acosta retainer</td><td>The entity document number</td></tr>
   <tr><td>E&amp;O / liability insurance</td><td>A formed entity to insure</td></tr>
 </table>
-<div class="note"><b>Entity resolved (2026-08-23):</b> the old name &mdash; "Miami Solutions Group LLC"
-&mdash; was registered to another Florida company (L22000200556, active since 2022), so every
-generator stripped the "LLC" to avoid claiming an entity we did not own. The company is now
-<b>Biscayne Solutions Group LLC</b>, a NEW filing rather than a DBA under Tradervert (a DBA gives
-zero liability separation, so a complaint would reach the entity holding the CDL income). The
-guardrail stays wired but is disarmed; the full entity name now prints on every surface.</div>
+<div class="note"><b>Entity: renamed, filed, NOT YET VERIFIABLE (2026-08-23).</b> The old name
+&mdash; "Miami Solutions Group LLC" &mdash; is registered to another Florida company
+(L22000200556), so every generator stripped the "LLC" rather than claim an entity we did not own.
+The company is now <b>Biscayne Solutions Group</b>, filed as a NEW LLC rather than a DBA under
+Tradervert (a DBA gives zero liability separation, so a complaint would reach the entity holding
+the CDL income). <b>Sunbiz does not yet show it</b> &mdash; new filings lag the public index by
+about a business day &mdash; so the guardrail is still ON and the "LLC" does not print anywhere.
+It lifts by itself on the next refresh after the filing indexes. Note
+<b>BISCAYNE SOLUTIONS INC.</b> is an ACTIVE Florida company; confirm the Division accepted ours as
+distinguishable (FS 605.0112) when the record appears.</div>
 
 <h2>2. The critical path, in order, with real turnaround times</h2>
 

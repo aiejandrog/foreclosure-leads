@@ -54,13 +54,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # separately actionable misrepresentation to a distressed homeowner (FDUTPA + MARS 1015.3);
 # _company() enforces it by printing unbranded rather than false.
 #
-# 2026-08-23 UN-GATED. This guard existed for 'Miami Solutions Group' -- FL L22000200556, active
-# since 04/27/2022, managed by other parties. The company is now Biscayne Solutions Group LLC,
-# which Alejandro confirms is filed and owned, so the full entity name prints for the first time.
-# NOT independently verified: Sunbiz refuses automated lookup (403). Record the BSG document
-# number on this line when you have it -- it is the only place the filing is evidenced in code.
-# Re-arm by putting a lowercase bare name back in the tuple; the machinery below is untouched.
-UNOWNED = ()
+# 2026-08-23 RE-ARMED. The 2026-08-23 un-gate was made on a verbal confirmation that the entity was
+# filed; a Sunbiz lookup the same day found NO 'Biscayne Solutions Group' -- strict match not_found,
+# and the contiguous alphabetical window (BISCAYNE SOLAR SYSTEMS -> BISCAYNE SOLUTIONS INC. ->
+# BISCAYNE SOUTH CORP) has no gap it could occupy. The filing is 1-2 days old and Sunbiz lags new
+# filings by about a business day, so this is most likely an indexing gap -- but "probably filed" is
+# not a substantiated entity claim to a distressed homeowner. Prints bare until verified.
+# entity_check.py re-verifies daily and clears this automatically. Do NOT empty this tuple by hand.
+UNOWNED = ('biscayne solutions group',)
 
 
 def _sender():
@@ -82,8 +83,9 @@ def _company(override=''):
         # is worse than a field rep with unbranded paper -- but it will not assert an LLC we do not
         # own, and the operator gets told loudly at build time.
         return raw.replace(' LLC', '').replace(', LLC', '').strip(), (
-            'the configured name is registered to another Florida company (L22000200556). '
-            'Printed WITHOUT an entity suffix. Do not run a large print job until the real name is set.')
+            'the configured entity is NOT in the Sunbiz index -- it cannot be substantiated to a '
+            'homeowner today. Printed WITHOUT the LLC suffix. Run entity_check.py; the suffix '
+            'returns by itself once the filing indexes. Do not run a large print job before then.')
     return raw, ''
 
 

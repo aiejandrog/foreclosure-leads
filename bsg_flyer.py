@@ -51,10 +51,15 @@ COLORS = {  # loud enough to find in a drawer, light enough that black text stay
 
 # TRUTH GATE (same rule as bsg_letter._company): never print an " LLC" entity claim for a name we
 # do not own -- asserting one to a distressed homeowner is a MARS 1015.3 / FDUTPA
-# misrepresentation. 2026-08-23: un-gated. The gated name was 'Miami Solutions Group'
-# (FL L22000200556, another company); Biscayne Solutions Group LLC is filed and owned, so the
-# suffix now prints. Keep _display_llc() wired -- re-arm by adding a lowercase bare name here.
-UNOWNED = ()
+# misrepresentation.
+# 2026-08-23 RE-ARMED. The 2026-08-23 un-gate was made on a verbal confirmation that the entity was
+# filed; a Sunbiz lookup the same day found NO 'Biscayne Solutions Group' -- strict match not_found,
+# and the contiguous alphabetical window (BISCAYNE SOLAR SYSTEMS -> BISCAYNE SOLUTIONS INC. ->
+# BISCAYNE SOUTH CORP) has no gap it could occupy. The filing is 1-2 days old and Sunbiz lags new
+# filings by about a business day, so this is most likely an indexing gap -- but "probably filed" is
+# not a substantiated entity claim to a distressed homeowner. Prints bare until verified.
+# entity_check.py re-verifies daily and clears this automatically. Do NOT empty this tuple by hand.
+UNOWNED = ('biscayne solutions group',)
 
 
 def _display_llc(raw):

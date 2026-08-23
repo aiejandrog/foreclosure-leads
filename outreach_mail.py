@@ -235,13 +235,18 @@ def _lh_header(snd, height_px=52):
 
 
 def _safe_llc(snd):
-    """Legacy-identity upgrade. Was a truth-gate stripping the " LLC" off 'Miami Solutions Group'
-    (FL L22000200556 -- another company). Renamed 2026-08-23; the entity is now Biscayne Solutions
-    Group LLC and the suffix is legitimate. A sender.json or saved profile that predates the rename
-    still carries the old name, so map it forward rather than mailing under a name we do not use."""
-    v = (snd.get('llc') or 'Biscayne Solutions Group LLC').strip()
+    """Truth-gate + legacy-identity upgrade, in that order.
+
+    Any pre-rename profile still carrying 'Miami Solutions Group' maps forward to the current
+    company. Then the ENTITY CLAIM is stripped: a Sunbiz lookup on 2026-08-23 found no
+    'Biscayne Solutions Group' (see bsg_letter.UNOWNED for the evidence), so the " LLC" does not
+    print until the filing indexes. sender.json keeps the canonical entity string for the legal
+    pack -- stripping happens at DISPLAY only, and entity_check.py lifts it automatically."""
+    v = (snd.get('llc') or 'Biscayne Solutions Group').strip()
     if re.match(r'^\s*miami\s+solutions\s+group(\s+ll?c\.?)?\s*$', v, re.I):
-        v = 'Biscayne Solutions Group LLC'
+        v = 'Biscayne Solutions Group'
+    if re.match(r'^\s*biscayne\s+solutions\s+group\s+ll?c\.?\s*$', v, re.I):
+        v = 'Biscayne Solutions Group'
     return v
 
 def _lh_sign(snd, lang='en'):
