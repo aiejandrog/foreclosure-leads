@@ -121,8 +121,11 @@ def display_llc(override=''):
                           % (st.get('matched') or raw, st.get('status')))
     near = ', '.join(st.get('neighbours') or [])[:120]
     return bare, '', ('%s is NOT in the Sunbiz index%s. It cannot be substantiated to a homeowner, '
-                      'so it printed WITHOUT the LLC suffix. If the filing is new, the index lags '
-                      'about a business day and the suffix returns by itself on the next refresh.'
+                      'so it printed WITHOUT the LLC suffix. A NEW FILING IS NORMALLY PENDING FOR '
+                      '2-5 BUSINESS DAYS while the Division processes it, plus about a day to '
+                      'index -- so this message for the better part of a week is expected, not a '
+                      'fault. The suffix returns by itself on the first refresh after it appears. '
+                      'Do not hand-open the gate to get ahead of it.'
                       % (raw, (' (nearest: %s)' % near) if near else ''))
 
 
