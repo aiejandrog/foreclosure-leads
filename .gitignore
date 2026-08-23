@@ -175,6 +175,14 @@ diligence/
 MSG_*.html
 MSG_*.pdf
 MSG_*.csv
+# 2026-08-23: company renamed Miami Solutions Group -> Biscayne Solutions Group. The BSG_*
+# rules land BEFORE any generator is retargeted -- flip the prefix first and the next
+# refresh-dealflow.bat writes BSG_Call_List_<date>.pdf (305 phones) to repo root UNIGNORED,
+# then `git add -A` pushes it public. The MSG_* rules stay: dated pre-rename deliverables are
+# still on disk and must remain ignored.
+BSG_*.html
+BSG_*.pdf
+BSG_*.csv
 Acosta_*.html
 Acosta_*.pdf
 Tradervert_*.pdf
