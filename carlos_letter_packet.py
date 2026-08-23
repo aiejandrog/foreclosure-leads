@@ -28,8 +28,26 @@ import re
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, '_letter_rows.json')
 
-SENDER = {'name': 'Carlos Gonzalez', 'co': 'Biscayne Solutions Group', 'phone': '(786) 631-1823',
-          'email': 'miamisolutionsgroup@gmail.com'}
+# The company inbox comes from sender.json `client_email` -- it was this literal in THREE files,
+# which is three chances to update two of them. `co` follows entity.py so this packet can never
+# assert an LLC the register cannot substantiate.
+def _sender_defaults():
+    d = {'name': 'Carlos Gonzalez', 'co': 'Biscayne Solutions Group',
+         'phone': '(786) 631-1823', 'email': 'miamisolutionsgroup@gmail.com'}
+    try:
+        import entity
+        s = entity.sender()
+        d['co'] = entity.display_llc()[0] or d['co']
+        if (s.get('phone') or '').strip():
+            d['phone'] = s['phone'].strip()
+        if (s.get('client_email') or '').strip():
+            d['email'] = s['client_email'].strip()
+    except Exception:
+        pass
+    return d
+
+
+SENDER = _sender_defaults()
 
 _ENTITY = re.compile(r'\b(LLC|L L C|INC|CORP|CORPORATION|HOLDINGS?|INVESTMENTS?|PROPERTIES|'
                      r'PARTNERS?|CAPITAL|VENTURES?|GROUP|BANK|MORTGAGE|LP|LLP|ASSOC|COMPANY|'

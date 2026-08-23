@@ -275,3 +275,9 @@ markey_options.py
 # and a stale ACTIVE is exactly the thing that must never authorise an entity claim. Absent =
 # unverified = suffix withheld, which is the correct default for a fresh clone or a CI runner.
 entity_status.json
+
+# Attorney work-product: entity_brief.py's packet. No homeowner data in it, but it details
+# a third-party company and the cure posture on a SIGNED instrument -- run-leads.bat does
+# `git add -A` against a PUBLIC repo, so it must be ignored by name, not by good intentions.
+Entity_Brief_*.html
+Entity_Brief_*.pdf

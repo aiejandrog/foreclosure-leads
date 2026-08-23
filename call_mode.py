@@ -145,6 +145,40 @@ _DRILL = os.path.join(os.path.expanduser('~'), 'projects', 'obsidian-vault', '5-
 _DRILL_CACHE = os.path.join(HERE, 'call_objections.json')
 
 
+# The close script tells the homeowner the company name "is how it shows on your caller ID". That is
+# a factual claim about the carrier's CNAM record, and it has been FALSE since the 2026-08-23 rename
+# -- said out loud, to exactly the audience the MARS rules exist to protect. Stripped HERE rather
+# than in call_objections.json because that file is only a CACHE of a pack authored in the Obsidian
+# vault; editing the JSON would be undone by the next vault parse. Flip sender.json `cnam_verified`
+# once the carrier record actually changes and the sentence comes back.
+_CNAM_EN = re.compile(r"\s*[\u2014-]?\s*just put [A-Za-z]{2,4},?\s*that'?s how it shows on your caller ID\.?", re.I)
+_CNAM_ES = re.compile(r"\s*[\u2014-]?\s*p[o\u00f3]ngale [A-Za-z]{2,4},?\s*as[i\u00ed] le sale en el identificador\.?", re.I)
+
+
+def _cnam_ok():
+    try:
+        import entity
+        return bool(entity.sender().get('cnam_verified'))
+    except Exception:
+        return False
+
+
+def _strip_cnam(cards):
+    """Drop the caller-ID claim from every card until sender.json says CNAM is verified."""
+    if _cnam_ok():
+        return cards
+
+    def fix(v):
+        if isinstance(v, str):
+            return _CNAM_ES.sub('.', _CNAM_EN.sub('.', v))
+        if isinstance(v, list):
+            return [fix(x) for x in v]
+        if isinstance(v, dict):
+            return {k: fix(x) for k, x in v.items()}
+        return v
+    return fix(cards)
+
+
 def load_objections(path=None):
     """-> [{n, t, say, reb, one}] for the Core 10, or [] if neither vault nor cache is reachable.
 
@@ -164,7 +198,7 @@ def load_objections(path=None):
         # not just cost the objection picker, it silently cost the ENTIRE calling page.
         # Fall back to the vendored cache (the CI path) before giving up.
         try:
-            cards = json.load(open(_DRILL_CACHE, encoding='utf-8'))
+            cards = _strip_cnam(json.load(open(_DRILL_CACHE, encoding='utf-8')))
             if cards:
                 print('call mode: vault drill pack unreachable — using vendored call_objections.json'
                       ' (%d cards). Fine on CI; on the LOCAL machine this means the vault moved.'
@@ -206,10 +240,13 @@ def load_objections(path=None):
     # Best-effort: a read-only checkout must not fail the build over a cache write.
     if out:
         try:
+            # The CACHE stays a FAITHFUL copy of the vault pack. Sanitising happens on both READ
+            # paths instead, so flipping sender.json cnam_verified restores the caller-ID sentence
+            # immediately rather than waiting for the next vault parse to rewrite this file.
             json.dump(out, open(_DRILL_CACHE, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
         except Exception:
             pass
-    return out
+    return _strip_cnam(out)
 
 
 def _digits(v):

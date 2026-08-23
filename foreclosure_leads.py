@@ -1277,23 +1277,38 @@ def _tax_url_from_folio(r):
 
 
 
+def _js(v):
+    """Escape a Python string for a single-quoted JavaScript literal.
+
+    Every injected value lands inside `llc:'...'` / `= '...'` in the board. A bare apostrophe would
+    close the literal and break the whole page -- and the board is one self-contained encrypted
+    file, so a syntax error there is a blank site, not a degraded one.
+    """
+    return (str(v or '').replace('\\', '\\\\').replace("'", "\\'")
+            .replace('\r', '').replace('\n', ' '))
+
+
 def subst_build_facts(tpl, updated):
     """Fill the board's build-time placeholders. BOTH template readers must go through this.
 
     The board is JavaScript in a self-contained encrypted file -- it cannot call Python, so any fact
     that Python owns has to be injected here or the board silently drifts from every other surface.
 
-      __ENTITY_LLC__  the company name AS IT MAY LEGALLY BE SHOWN. entity.py decides whether the
-                      " LLC" suffix is substantiated; hardcoding it in the template is what let a
-                      false entity claim reach the public site on 2026-08-23.
-      __EMBLEM_W/H__  the emblem's real pixel aspect, from the payload actually embedded. Hardcoding
-                      it meant a logo swap stretched the mark on every letterhead.
+      __ENTITY_LLC__   the company name AS IT MAY LEGALLY BE SHOWN. entity.py decides whether the
+                       " LLC" suffix is substantiated; hardcoding it in the template is what let a
+                       false entity claim reach the public site on 2026-08-23.
+      __CLIENT_EMAIL__ the company inbox printed on client paper. One value in sender.json instead
+                       of the same literal in three files.
+      __EMBLEM_W/H__   the emblem's real pixel aspect, from the payload actually embedded.
+                       Hardcoding it meant a logo swap stretched the mark on every letterhead.
     """
     import entity as _entity
     import bsg_brand as _brand
     name, _doc, _warn = _entity.display_llc()
+    snd = _entity.sender()
     return (tpl.replace('__UPDATED__', updated)
-               .replace('__ENTITY_LLC__', name.replace("'", "\'"))
+               .replace('__ENTITY_LLC__', _js(name))
+               .replace('__CLIENT_EMAIL__', _js(snd.get('client_email')))
                .replace('__EMBLEM_W__', str(_brand.NATIVE_W))
                .replace('__EMBLEM_H__', str(_brand.NATIVE_H)))
 

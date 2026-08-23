@@ -32,13 +32,16 @@ MARK_H = 74
 LLC = 'Biscayne Solutions Group, LLC'
 
 # Email is PINNED per Jose's request (WhatsApp, 2026-08-08 10:58 PM): the company inbox goes on
-# client paper, not the personal Gmail. Deliberately NOT overridden by sender.json — its email
-# field still carries the personal address for the outreach pipeline's display name.
+# client paper, not the personal Gmail. Still true — but it now comes from sender.json's SEPARATE
+# `client_email` key instead of a literal repeated in three files. `email` in that file remains
+# the PERSONAL address for the outreach pipeline's display name; do not collapse the two.
 SENDER = {'phone': '(786) 631-1823', 'email': 'miamisolutionsgroup@gmail.com'}
 try:
     _s = json.load(open(os.path.join(HERE, 'sender.json'), encoding='utf-8'))
     if (_s.get('phone') or '').strip():
         SENDER['phone'] = _s['phone'].strip()
+    if (_s.get('client_email') or '').strip():
+        SENDER['email'] = _s['client_email'].strip()
 except Exception:
     pass
 
