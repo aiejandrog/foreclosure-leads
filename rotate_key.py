@@ -38,6 +38,21 @@ VENDORS = {
         'console': 'https://tracerfy.com/',
         'note': 'Sign in -> account/API settings -> regenerate the API key.',
     },
+    'whitepages': {
+        'file': 'whitepages.key',
+        'console': 'https://pro.whitepages.com/',
+        'note': ('Whitepages Pro / Ekata dashboard -> API keys -> regenerate. Used by '
+                 'whitepages_lookup.py (property + person layers) and wp_gap_loop.py, both wired '
+                 'into refresh-dealflow.bat.'),
+    },
+    'zerobounce': {
+        'file': 'zerobounce.key',
+        'console': 'https://www.zerobounce.net/members/apikey/',
+        'note': ('ZeroBounce -> API -> regenerate key. Used by verify_emails.py, the FORWARD guard '
+                 'that blocks dead addresses before a first send (the bounce list only learns after '
+                 'reputation is already spent). Verification here calls /v2/getcredits, which costs '
+                 'NO credit — checking a key never bills you.'),
+    },
     'gmail': {
         'file': 'gmail.key',
         'console': 'https://myaccount.google.com/apppasswords',
@@ -118,7 +133,47 @@ def check_gmail(key):
         return False, str(e)[:70]
 
 
-CHECKS = {'2captcha': check_2captcha, 'tracerfy': check_tracerfy, 'gmail': check_gmail}
+def check_zerobounce(key):
+    """Ask ZeroBounce for the credit balance. Free endpoint — proves the key, bills nothing.
+
+    Deliberately NOT /v2/validate: validating burns a credit every time a key is checked, and this
+    tool is meant to be run freely (before, after, and whenever something looks wrong).
+    """
+    import requests                      # module-local, matching the other checks in this file
+    try:
+        r = requests.get('https://api.zerobounce.net/v2/getcredits',
+                         params={'api_key': key.strip()}, timeout=30)
+        d = r.json()
+    except Exception as e:
+        return False, str(e)[:70]
+    # documented contract: Credits == -1 means the key is invalid; a real balance means it works
+    c = str(d.get('Credits', d.get('credits', ''))).strip()
+    if c in ('', '-1'):
+        return False, 'rejected (Credits=-1 — invalid or revoked key)'
+    return True, 'valid — %s credit(s) remaining' % c
+
+
+def check_whitepages(key):
+    """One cheap /v2/person call. Whitepages has no free key-info endpoint, so the ONLY way to
+    prove a key is to use it — this is the smallest possible request, and an auth failure is
+    reported distinctly from a rate-limit so a 429 is never mistaken for a dead key."""
+    import requests                      # module-local, matching the other checks in this file
+    try:
+        r = requests.get('https://api.whitepages.com/v2/person',
+                         params={'api_key': key.strip(), 'name': 'John Smith'}, timeout=35)
+    except Exception as e:
+        return False, str(e)[:70]
+    if r.status_code in (401, 403):
+        return False, 'rejected (HTTP %d — invalid or revoked key)' % r.status_code
+    if r.status_code == 429:
+        return False, 'RATE-LIMITED (429) — cannot prove the key right now; try again later'
+    if r.status_code >= 500:
+        return False, 'Whitepages server error %d — not a key problem' % r.status_code
+    return True, 'accepted (HTTP %d)' % r.status_code
+
+
+CHECKS = {'2captcha': check_2captcha, 'tracerfy': check_tracerfy, 'gmail': check_gmail,
+          'zerobounce': check_zerobounce, 'whitepages': check_whitepages}
 
 
 def main():
