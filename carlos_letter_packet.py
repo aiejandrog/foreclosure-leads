@@ -28,7 +28,7 @@ import re
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, '_letter_rows.json')
 
-SENDER = {'name': 'Carlos Gonzalez', 'co': 'Miami Solutions Group', 'phone': '(786) 631-1823',
+SENDER = {'name': 'Carlos Gonzalez', 'co': 'Biscayne Solutions Group', 'phone': '(786) 631-1823',
           'email': 'miamisolutionsgroup@gmail.com'}
 
 _ENTITY = re.compile(r'\b(LLC|L L C|INC|CORP|CORPORATION|HOLDINGS?|INVESTMENTS?|PROPERTIES|'
@@ -75,7 +75,7 @@ def letter_person(r):
     #     is a commercial communication and this is the sentence that keeps it clean.
     #   * we offer exactly TWO things, the two we can actually do: buy it, or help sell it before
     #     the auction. No loan modification, no short-sale negotiation, no bankruptcy. Offering
-    #     those needs licenses MSG does not hold, and putting bankruptcy in a letter to a
+    #     those needs licenses BSG does not hold, and putting bankruptcy in a letter to a
     #     distressed homeowner is legal advice from a non-lawyer.
     #   * anything beyond that is pointed at their own attorney or a FREE HUD counselor.
     en = (

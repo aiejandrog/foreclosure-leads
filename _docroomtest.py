@@ -36,7 +36,7 @@ async def main():
            ['tpa','genThirdPartyAuth']].forEach(([k,fn]) => {
             try {
               const h = window[fn] ? window[fn](r) : '';
-              // Strip embedded base64 before the NaN scan. The MSG letterhead logo is a data URI and
+              // Strip embedded base64 before the NaN scan. The BSG letterhead logo is a data URI and
               // base64 alphabets happily contain the literal substring "NaN" — matching it there is a
               // false positive that would mask the real thing this guards: broken merge math printing
               // "NaN" into a document an owner is about to sign.

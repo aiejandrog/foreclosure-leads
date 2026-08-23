@@ -49,11 +49,11 @@ CALL_OUTCOMES = [
 # 8/17 masterclass voice. {st1} not {street}: the full address read aloud sounds like a process
 # server (Evernia St lesson, 2026-08-16). {phone} is the explicit callback slot — fillScript
 # resolves it from SENDER.phone. Numbers written as words because he READS this live.
-VOICEMAIL_EN = ("Hi {first}, this is {sender} with Miami Solutions Group, about {st1}. "
+VOICEMAIL_EN = ("Hi {first}, this is {sender} with Biscayne Solutions Group, about {st1}. "
                 "You may have a plan. Keep it. A plan can land a day late, and here a day is "
                 "everything. Our senior advisor, thirty plus years, maps your free backup in five "
                 "minutes. Call me any hour at {phone}. Thanks.")
-VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Miami Solutions Group, por {st1}. "
+VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Biscayne Solutions Group, por {st1}. "
                 "Si tiene un plan, sígalo. Un plan puede llegar un día tarde, y aquí un día lo es "
                 "todo. Nuestro asesor principal, más de treinta años, le arma su respaldo gratis "
                 "en cinco minutos. Llámeme a cualquier hora al {phone}. Gracias.")
@@ -117,7 +117,7 @@ FIFTEEN_SEC = ("Totally understand. One thing and I am gone: our senior advisor 
                "mortgages and foreclosure workouts — reviews your case free, five minutes, on the "
                "phone. If nothing fits, we part friends. Fair?")
 
-MARS_BLOCK = ("Before we start, a few things I am required to tell you: Miami Solutions Group is not "
+MARS_BLOCK = ("Before we start, a few things I am required to tell you: Biscayne Solutions Group is not "
               "associated with the government, and our service is not approved by the government or "
               "by your lender. Even if you use our service, your lender may not agree to change your "
               "loan. You may stop doing business with us at any time. This consultation is free, and "
@@ -136,7 +136,7 @@ NEVER_SAY = [
 # Where the Core 10 lives. Read at BUILD time so the page stays in step with the canon instead of
 # carrying a copy that silently rots.
 _DRILL = os.path.join(os.path.expanduser('~'), 'projects', 'obsidian-vault', '5-projects',
-                      'MSG Sales', 'MSG Objection Drill Pack - Procrastinator Psychology.md')
+                      'BSG Sales', 'BSG Objection Drill Pack - Procrastinator Psychology.md')
 # Vendored copy of the PARSED cards, committed to the repo. The vault only exists on this machine —
 # CI has no drill pack, so before this cache a CI rebuild silently replaced Call Mode with a page
 # that had zero objection cards, overwriting a full local build with a degraded one every night.
@@ -1057,7 +1057,7 @@ function nowTS(){return new Date().toLocaleString();}
 /* WHO IS SPEAKING. The board keeps identity in SENDER_DEFAULTS + localStorage.fcSender; this page is
    the SAME ORIGIN so it reads the same store rather than baking a second copy that could drift.
    Two heals copied from the board because both were real: a company name saved into `name` renders
-   "this is Miami Solutions Group with Miami Solutions Group", and the legacy auto-injected "Jose"
+   "this is Biscayne Solutions Group with Biscayne Solutions Group", and the legacy auto-injected "Jose"
    must not win over the real identity. Empty saved values must never clobber the default. */
 var SENDER = {name:'Alejandro Gonzalez', phone:'(786) 631-1823'};
 try{
@@ -2005,21 +2005,21 @@ function textStage(r){
    every message (the FTSA 15-day cure safe harbor is worthless if the STOP line is missing).
 
    Written as TEMPLATES and run through fillScript rather than interpolated here. SENDER is an
-   OBJECT — a raw `+ SENDER +` renders "this is [object Object] with Miami Solutions Group", which is
+   OBJECT — a raw `+ SENDER +` renders "this is [object Object] with Biscayne Solutions Group", which is
    the same failure as the {sender} bug that already reached a live read-aloud script. Going through
    fillScript also inherits the Jose heal and the company-name heal for free. */
 /* 8/17 masterclass voice (overnight 2026-08-18): cushion + parachute, one ask, no em dashes
    (reads as AI in a text), 'save this number' = drill card 14's read-back close at SMS size.
    ES drafts exist (workflow wf_50663fa7) but TEXT_T is EN-only until a language path lands. */
 var TEXT_T = {
-  cold:   'Hi{first}, this is {sender} with Miami Solutions Group. I just tried calling about {st1}. '
+  cold:   'Hi{first}, this is {sender} with Biscayne Solutions Group. I just tried calling about {st1}. '
         + 'I am not selling anything and not trying to buy the house. If you have a plan, keep it. '
         + 'A free 5 minutes with our senior advisor, 30 plus years, gets you every option. '
         + 'Reply YES, or STOP to opt out.',
-  follow: 'Hi{first}, {sender} with Miami Solutions Group again about {st1}. If your plan is moving, '
+  follow: 'Hi{first}, {sender} with Biscayne Solutions Group again about {st1}. If your plan is moving, '
         + 'good, keep it. One question. Do you have it in writing yet? If not, our senior advisor '
         + 'can be the backup, free, 5 minutes. Reply YES, or STOP to opt out.',
-  final:  'Hi{first}, last text from me, {sender} with Miami Solutions Group about {st1}. I hope your '
+  final:  'Hi{first}, last text from me, {sender} with Biscayne Solutions Group about {st1}. I hope your '
         + 'plan lands on time. If anything slips, one free call with our senior advisor maps what '
         + 'still works. Save this number even if you delete this text. Reply YES, or STOP to opt out.'
 };

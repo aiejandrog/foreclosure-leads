@@ -1,8 +1,8 @@
 #!/usr/bin/env python
-"""msg_letter — the fill-in-the-blank door letter. Carlos's #1 field request (2026-08-14).
+"""bsg_letter — the fill-in-the-blank door letter. Carlos's #1 field request (2026-08-14).
 
 WHAT THIS IS AND WHY IT IS DIFFERENT FROM THE POSTCARD
-The postcard (msg_flyer.py) is the loud thing that survives a drawer. This is the quiet thing that
+The postcard (bsg_flyer.py) is the loud thing that survives a drawer. This is the quiet thing that
 goes in a sealed envelope when nobody answers, or into the owner's hand when they do. It is
 pre-printed with BLANKS the field rep fills in by hand at the door:
 
@@ -36,8 +36,8 @@ COMPLIANCE, BAKED IN (2026-08-12 legal pass, same rails as the postcard)
 LAYOUT: half-letter (5.5 x 8.5), 2 per sheet, English page 1 / Spanish page 2. Duplex on the LONG
 edge and cut once — each cut gives one bilingual letter.
 
-Run:  python msg_letter.py                       # identity from sender.json
-      python msg_letter.py --name "Carlos Gonzalez" --phone "(305) 555-0123"
+Run:  python bsg_letter.py                       # identity from sender.json
+      python bsg_letter.py --name "Carlos Gonzalez" --phone "(305) 555-0123"
 """
 import argparse
 import datetime
@@ -50,11 +50,17 @@ import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# The registered name of the company. Until an entity is actually formed and the name is one we own,
-# this must NOT print an "LLC" claim -- claiming a registered entity that does not exist is a
-# separately actionable misrepresentation to a distressed homeowner (FDUTPA + MARS 1015.3).
-# msg_letter refuses to print an unowned name; see _company().
-UNOWNED = ('miami solutions group',)   # verified 2026-08-13: L22000200556, owned by other parties
+# Names we must NOT print an "LLC" claim for. Asserting a registered entity we do not own is a
+# separately actionable misrepresentation to a distressed homeowner (FDUTPA + MARS 1015.3);
+# _company() enforces it by printing unbranded rather than false.
+#
+# 2026-08-23 UN-GATED. This guard existed for 'Miami Solutions Group' -- FL L22000200556, active
+# since 04/27/2022, managed by other parties. The company is now Biscayne Solutions Group LLC,
+# which Alejandro confirms is filed and owned, so the full entity name prints for the first time.
+# NOT independently verified: Sunbiz refuses automated lookup (403). Record the BSG document
+# number on this line when you have it -- it is the only place the filing is evidenced in code.
+# Re-arm by putting a lowercase bare name back in the tuple; the machinery below is untouched.
+UNOWNED = ()
 
 
 def _sender():
@@ -233,13 +239,13 @@ def main():
 
     doc = build(name, phone, company)
     today = datetime.date.today().isoformat()
-    html_out = os.path.join(HERE, 'MSG_Door_Letter_%s.html' % today)
+    html_out = os.path.join(HERE, 'BSG_Door_Letter_%s.html' % today)
     open(html_out, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    outs = [os.path.join(HERE, 'MSG_Door_Letter_%s.pdf' % today)]
+    outs = [os.path.join(HERE, 'BSG_Door_Letter_%s.pdf' % today)]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(P.out('MSG_Door_Letter_%s.pdf' % today))
+        outs.append(P.out('BSG_Door_Letter_%s.pdf' % today))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()

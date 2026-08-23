@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""morning_planner.py -- auto-generate the daily MSG standup agenda.
+"""morning_planner.py -- auto-generate the daily BSG standup agenda.
 
 The blank meeting template was the wrong shape. Alejandro wants Jose and Carlos to join and
 have the day's priorities already framed on the page, not have to fill in what matters each
@@ -21,7 +21,7 @@ Usage:
     python morning_planner.py --focus "closing prep"      # pre-fill Today's Focus box
     python morning_planner.py --out X.html                # override output path
 
-Output default: ~/DEALFLOW/MSG-Meeting-Agendas/YYYY-MM-DD_standup.html
+Output default: ~/DEALFLOW/BSG-Meeting-Agendas/YYYY-MM-DD_standup.html
 
 Cron-friendly: add to Windows Task Scheduler at 6:45 AM ET on weekdays; every morning the
 day's agenda is on Alejandro's Desktop before he opens the laptop.
@@ -39,7 +39,7 @@ from collections import Counter, defaultdict
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DEFAULT_OUT_DIR = os.path.join(P.DEALFLOW_DIR, 'MSG-Meeting-Agendas')
+DEFAULT_OUT_DIR = os.path.join(P.DEALFLOW_DIR, 'BSG-Meeting-Agendas')
 
 _COMPANY_RE = re.compile(
     r'\b(LLC|L\.?L\.?C|INC|CORP|CORPORATION|TRUST|LP|LLP|COMPANY|CO\.|ASSOC|ASSOCIATION|BANK|'
@@ -528,7 +528,7 @@ def render(day_dt, leads, replies, optouts, focus_override, mail_ledger,
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>MSG Standup — {day_dt.strftime("%A, %b %d %Y")}</title>
+<title>BSG Standup — {day_dt.strftime("%A, %b %d %Y")}</title>
 <style>
 @page {{ size: Letter; margin: 0.45in; }}
 *      {{ box-sizing: border-box; }}
@@ -618,7 +618,7 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
   <div class="head">
     <div class="brand">
       {_esc(meeting_kind)}
-      <small>Miami Solutions Group &middot; auto-planner</small>
+      <small>Biscayne Solutions Group &middot; auto-planner</small>
     </div>
     <div class="meta">
       <div><b>{_esc(day_dt.strftime("%A, %B %d, %Y"))}</b></div>
@@ -653,7 +653,7 @@ table tr:nth-child(even) td {{ background:#fbfaf6; }}
   <h2>Attendees</h2>
   <div class="att">
     <label class="row"><input type="checkbox" checked><span class="name">Alejandro</span> <span class="role">— DealFlow / strategy</span></label>
-    <label class="row"><input type="checkbox"><span class="name">Jose</span> <span class="role">— field / signer / MSG</span></label>
+    <label class="row"><input type="checkbox"><span class="name">Jose</span> <span class="role">— field / signer / BSG</span></label>
     <label class="row"><input type="checkbox"><span class="name">Carlos</span> <span class="role">— door runs / mail</span></label>
     <label class="row"><input type="checkbox"><span class="name">Guest</span> <span class="role" contenteditable="true" data-ph="— name / role"></span></label>
   </div>
@@ -779,7 +779,7 @@ def main():
                     help="Carlos's daily property-visit target (default 3)")
     ap.add_argument('--exclude-zips', default='33172',
                     help='comma-separated ZIPs Carlos has already worked out (default 33172)')
-    ap.add_argument('--out', default='', help='output path (default: Desktop/MSG-Meeting-Agendas/YYYY-MM-DD_standup.html)')
+    ap.add_argument('--out', default='', help='output path (default: Desktop/BSG-Meeting-Agendas/YYYY-MM-DD_standup.html)')
     ap.add_argument('--no-open', action='store_true', help='skip auto-opening in the default browser')
     args = ap.parse_args()
 

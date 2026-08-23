@@ -35,7 +35,7 @@ call lists, the transfer bundle. `P.DESKTOP` exists for shortcuts and count-only
 
 All homeowner-facing compliance language comes from **`disclaimer.py`** — `mars()` (12 CFR 1015.4(a)
 MARS/Reg O), `identity()` ("I am not your lender / the government / a rescue company / an attorney"),
-`sig_tag()`. Every surface imports it: `msg_letter`, `msg_flyer`, `outreach_mail`, `outreach_email`.
+`sig_tag()`. Every surface imports it: `bsg_letter`, `bsg_flyer`, `outreach_mail`, `outreach_email`.
 
 **Never re-type this text into a new module.** It was hand-copied across four files once already and
 drifted into five versions, each weaker than the last in a different way. Add a caller, not a copy.

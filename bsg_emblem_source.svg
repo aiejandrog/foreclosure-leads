@@ -1,0 +1,49 @@
+<!-- Biscayne Solutions Group emblem — SOURCE OF TRUTH for make_bsg_emblem.py.
+
+     Lifted 2026-08-23 from the header lockup in bsg-site/index.html, which is where this mark was
+     first designed. Kept letter-free ON PURPOSE: the previous emblem was a WORDMARK (its artwork
+     spelled MSG), so renaming the company silently invalidated the artwork and there was no way to
+     recolour it — the source PNG had already been deleted with the Desktop brand folder. A mark
+     made of geometry cannot go stale when the name changes.
+
+     The three placeholder colours (TOP, BOTTOM, KNOCK) are substituted by make_bsg_emblem.py to derive the colour, one-ink
+     and reversed variants. Do not hard-code hex here; add a token instead.
+
+     Replacing this with Alejandro's real logo = drop a new SVG in this file, keep the tokens, re-run
+     `python make_bsg_emblem.py`. No code changes anywhere.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 72" width="64" height="72">
+  <defs>
+    <linearGradient id="sh" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="__TOP__"/>
+      <stop offset="1" stop-color="__BOTTOM__"/>
+    </linearGradient>
+  </defs>
+
+  <!-- shield -->
+  <path d="M32 2 60 10v28c0 18-13 27-28 32C17 65 4 56 4 38V10z" fill="url(#sh)"/>
+
+  <!-- bay water -->
+  <path d="M6 44c8-5 14 3 22-1s14-6 30 0" stroke="__KNOCK__" stroke-width="4.5" fill="none" opacity=".95"/>
+  <path d="M6 53c8-5 14 3 22-1s14-6 30 0" stroke="__KNOCK__" stroke-width="3.2" fill="none" opacity=".6"/>
+
+  <!-- palms. Drawn as a curved trunk plus radiating fronds, NOT an ellipse on a stem: the site
+       header used a horizontal ellipse capping a vertical line, which reads fine at 34px in a nav
+       bar and reads unmistakably as a MUSHROOM at letterhead size. Fronds are stroked curves so
+       the silhouette survives the one-ink variant and the fax. -->
+  <g stroke="__KNOCK__" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M23.4 43.5c-.8-5.5-.5-9.5.9-13.2" stroke-width="1.7"/>
+    <path d="M24.3 30.3c-3.6-2.6-7.4-2.7-10.3-.6" stroke-width="1.45"/>
+    <path d="M24.3 30.3c-2.6-3.7-6-5.6-9.4-5.5" stroke-width="1.45"/>
+    <path d="M24.3 30.3c.2-3.9 1.5-7 3.6-9" stroke-width="1.45"/>
+    <path d="M24.3 30.3c3.4-2.9 7.2-3.4 10.4-1.7" stroke-width="1.45"/>
+    <path d="M24.3 30.3c2.4-3.6 5.7-5.7 9-6" stroke-width="1.45"/>
+  </g>
+  <g stroke="__KNOCK__" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".82">
+    <path d="M39.6 44.2c-.6-4.2-.4-7.2.7-10" stroke-width="1.35"/>
+    <path d="M40.3 34.2c-2.7-2-5.6-2-7.8-.4" stroke-width="1.2"/>
+    <path d="M40.3 34.2c-1.9-2.8-4.5-4.2-7.1-4.1" stroke-width="1.2"/>
+    <path d="M40.3 34.2c.2-2.9 1.1-5.3 2.7-6.8" stroke-width="1.2"/>
+    <path d="M40.3 34.2c2.6-2.2 5.5-2.6 7.9-1.3" stroke-width="1.2"/>
+  </g>
+</svg>

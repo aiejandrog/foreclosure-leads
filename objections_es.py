@@ -26,7 +26,7 @@ RULES OBSERVED IN EVERY LINE
   * The closes are the canon's own: "¿Verdad que sí?" / "¿No le parece?" / "Usted no pierde nada."
 """
 
-# key = objection number in the Core 10 (see MSG Objection Drill Pack - Procrastinator Psychology.md)
+# key = objection number in the Core 10 (see BSG Objection Drill Pack - Procrastinator Psychology.md)
 ES = {
     1: {  # The Bank Mod Shield
         'say': 'El banco ya está trabajando conmigo en una modificación. No quiero dañar eso hablando con otra persona.',
@@ -251,7 +251,7 @@ ES.update({
         'reb': [
             'Hagame un favor antes de colgar. Yo he invertido mi tiempo y voy a seguir '
             'invirtiendolo despues de esta llamada — asi que guarde mi numero ahora mismo. Mi nombre '
-            'es Jesse. La compania es Miami Solutions Group — pongale MSG, asi le sale en el '
+            'es Jesse. La compania es Biscayne Solutions Group — pongale BSG, asi le sale en el '
             'identificador. Este es mi celular personal, y le doy tambien el de la oficina. Ahora '
             'leamelo todo de vuelta — quiero asegurarme de que lo tiene bien.',
             'Si lo lee de vuelta completo, esta DENTRO. Si "se le acabo la tinta" o le pide que se '

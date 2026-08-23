@@ -463,7 +463,7 @@ service on the docket before relying on a WIPED row.</div>
 <ul>{cite_html or '<li>See the case docket and official records for this folio.</li>'}</ul>
 
 <div class="foot">
-Prepared by Miami Solutions Group. Compiled from public records believed accurate on {today}; every
+Prepared by Biscayne Solutions Group. Compiled from public records believed accurate on {today}; every
 figure is traceable to the sources listed. <b>This is research, not legal, tax or investment advice,
 and not a title opinion.</b> Auction outcomes, property condition and title status can change without
 notice — confirm the sale status and obtain a title search before bidding.
@@ -579,7 +579,7 @@ they may become the best buys on the calendar.</div>
 {blocked_html or '<tr><td colspan="6" class="est">None — every property on this date is fully quantified.</td></tr>'}</table>
 
 <div class="foot">One brief per property accompanies this sheet — each shows what survives the sale,
-the accrued payoff with its source, title gates and occupancy. Prepared by Miami Solutions Group from
+the accrued payoff with its source, title gates and occupancy. Prepared by Biscayne Solutions Group from
 public records on {today}. <b>Research, not legal, tax or investment advice, and not a title opinion.</b>
 Confirm each sale is still on the morning of; sales cancel constantly for payoff, bankruptcy and
 loss mitigation.</div>

@@ -280,7 +280,7 @@ tr:nth-child(even){{background:#fafcff}} .mut{{color:#9aa4b6}}
 ul{{margin:6px 0 0 18px;columns:2}}
 </style></head><body>
 <h1>Hard-Money Balloon Book &mdash; investor loans coming due</h1>
-<div class="sub">Miami Solutions Group &middot; built {date} from public mortgage records + Sunbiz &middot;
+<div class="sub">Biscayne Solutions Group &middot; built {date} from public mortgage records + Sunbiz &middot;
 origin window {lo} to {hi} ({months} months)</div>
 <div class="kpis">
   <div class="kpi"><div class="n">{fits_n}</div><div class="l">Fit his DSCR box (&le;80% LTV)</div></div>

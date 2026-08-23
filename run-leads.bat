@@ -4,7 +4,7 @@ echo ==== run %date% %time% ==== >> leads-run.log
 python foreclosure_leads.py >> leads-run.log 2>&1
 if errorlevel 1 (echo SCRAPE FAILED - skipping commit/push, live site left intact >> leads-run.log & goto :done)
 rem  2026-08-19 stress-test CRITICAL: this was `git add -A`, which stages EVERYTHING not gitignored -
-rem  and the client deliverables at repo root (MSG_Call_List = 305 phones, Acosta_Position_Report,
+rem  and the client deliverables at repo root (BSG_Call_List = 305 phones, Acosta_Position_Report,
 rem  workups) were NOT gitignored, so one run of this bat would have published families' phone
 rem  numbers to a PUBLIC repo. Now: rebuild, gate, and add ONLY the two built site paths - never -A.
 rem  Same contract as refresh-dealflow.bat.

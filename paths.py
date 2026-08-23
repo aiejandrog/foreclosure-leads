@@ -26,7 +26,7 @@ sitting in the cloud.
 
 USAGE
     import paths as P
-    P.out('MSG_Call_List_2026-08-22.pdf')   # full path, parent folder created
+    P.out('BSG_Call_List_2026-08-22.pdf')   # full path, parent folder created
     P.DEALFLOW_DIR                          # the folder itself
     P.TWIN                                  # the plaintext board twin
     P.DESKTOP                               # the real Desktop — PII must NOT go here

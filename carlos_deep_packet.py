@@ -72,7 +72,7 @@ def main():
            '<h1>Carlos — Deep Zone Doors <span style="font-weight:400;font-size:15px;color:#5b6472">(county-lien lane)</span></h1>',
            f'<div class="sub">Built {datetime.date.today()} · these are NOT auction leads — different opener, below · '
            'houses only, individual owners only, nothing you have walked before</div>',
-           '<div class="talk"><b>THE OPENER FOR THESE DOORS:</b> "Hi, I\'m with Miami Solutions Group — we help '
+           '<div class="talk"><b>THE OPENER FOR THESE DOORS:</b> "Hi, I\'m with Biscayne Solutions Group — we help '
            'homeowners deal with county liens and code-enforcement fines. The county has '
            '<i>(a recorded lien on / an active case against)</i> this property and the fines grow until it\'s '
            'resolved. We can help you figure out what\'s owed and what your options are — no charge to talk." '

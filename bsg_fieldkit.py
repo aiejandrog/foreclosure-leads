@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""msg_fieldkit — two field cards on one sheet: the no-soliciting rule card + the pack list.
+"""bsg_fieldkit — two field cards on one sheet: the no-soliciting rule card + the pack list.
 
 Both are ⚡-this-week Field Kit items. They print two-up on one portrait letter sheet, cut once:
 
@@ -15,7 +15,7 @@ Both are ⚡-this-week Field Kit items. They print two-up on one portrait letter
 
 No PII, no data source — it always builds.
 
-Run:  python msg_fieldkit.py
+Run:  python bsg_fieldkit.py
 """
 import datetime
 import os
@@ -85,7 +85,7 @@ def _kit():
         'Blank envelopes (for the sealed &ldquo;[first name] / PERSONAL&rdquo; drop)',
         'Two pens + a mini stapler',
         'Laminated no-soliciting card (above) + this list',
-        'Photo ID + an MSG card &mdash; show both, no argument, if asked who you are',
+        'Photo ID + an BSG card &mdash; show both, no argument, if asked who you are',
         'Phone charged + a battery pack',
     ]
     heat = [
@@ -120,13 +120,13 @@ def main():
     doc = ('<!doctype html><html><head><meta charset="utf-8"><title>Field Kit</title>'
            '<style>%s</style></head><body>%s%s</body></html>' % (CSS, NOSOLICIT, _kit()))
     today = datetime.date.today().isoformat()
-    hp = os.path.join(HERE, 'MSG_Field_Kit_%s.html' % today)
+    hp = os.path.join(HERE, 'BSG_Field_Kit_%s.html' % today)
     open(hp, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    outs = [os.path.join(HERE, 'MSG_Field_Kit_%s.pdf' % today)]
+    outs = [os.path.join(HERE, 'BSG_Field_Kit_%s.pdf' % today)]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(P.out('MSG_Field_Kit_%s.pdf' % today))
+        outs.append(P.out('BSG_Field_Kit_%s.pdf' % today))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()

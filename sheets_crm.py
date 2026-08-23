@@ -19,7 +19,7 @@ chain conf, cadastral warns, cert flags all included), so the sheet always agree
 Falls back to the slim county JSONs if the twin is missing.
 
 TWO OUTPUTS, EVERY RUN
-  1. Desktop\DEALFLOW\MSG_CRM.csv — always written; importable into anything.
+  1. Desktop\DEALFLOW\BSG_CRM.csv — always written; importable into anything.
   2. Google Sheets push — ONLY when sheets_crm_webhook.url exists (gitignored). The webhook is a
      Google Apps Script bound to the team sheet, deployed by Alejandro once (sheets_crm_SETUP.txt).
      No OAuth lives in this repo; the script runs as his account and the URL is the only secret.
@@ -361,7 +361,7 @@ def main():
     rows = build_rows(rows_src, notes, st, pbl)
     prospects = build_prospects(rows_src, notes, st, pbl)
     os.makedirs(DESK, exist_ok=True)
-    out = os.path.join(DESK, 'MSG_CRM.csv')
+    out = os.path.join(DESK, 'BSG_CRM.csv')
     with open(out, 'w', newline='', encoding='utf-8-sig') as f:   # BOM so Excel/Sheets read accents
         w = csv.writer(f)
         w.writerow(HEADERS)

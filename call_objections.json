@@ -240,14 +240,14 @@
   "t": "CLOSE — Save My Number (the read-back test)",
   "say": "Nothing — this is YOUR move at the end of any call that went well, before you hang up.",
   "reb": [
-   "Do me one favor before we hang up. I've invested my time, and I'm going to keep investing it after this call — so save my number right now. My name is Jesse. The company is Miami Solutions Group — just put MSG, that's how it shows on your caller ID. This is my personal cell, and let me give you the office number too. Now read it all back to me — I want to make sure you got everything right.",
+   "Do me one favor before we hang up. I've invested my time, and I'm going to keep investing it after this call — so save my number right now. My name is Jesse. The company is Biscayne Solutions Group — just put BSG, that's how it shows on your caller ID. This is my personal cell, and let me give you the office number too. Now read it all back to me — I want to make sure you got everything right.",
    "If they read it back clean, they're in. If \"my pen ran out of ink\" or they ask you to repeat it, they're tepid — tighten the follow-up and don't count the deal. Same muscle, bigger size: the paperwork trial close. \"Let me get the paperwork together — I'll email it, we go over it, and if we agree we shake hands. If not, I wasted fifteen minutes of my time and we part friends. Nothing gambled on your part. Sound fair?\" Their reaction to concrete paperwork IS the temperature reading. And when they're warm but need authority: \"Just get on the phone with our senior advisor for five minutes and we'll find a solution for this property.\""
   ],
   "one": "If they read it back clean they're in — if the pen 'ran out of ink,' they're not.",
   "es": {
    "say": "Nada — este es SU movimiento al final de toda llamada que fue bien, antes de colgar.",
    "reb": [
-    "Hagame un favor antes de colgar. Yo he invertido mi tiempo y voy a seguir invirtiendolo despues de esta llamada — asi que guarde mi numero ahora mismo. Mi nombre es Jesse. La compania es Miami Solutions Group — pongale MSG, asi le sale en el identificador. Este es mi celular personal, y le doy tambien el de la oficina. Ahora leamelo todo de vuelta — quiero asegurarme de que lo tiene bien.",
+    "Hagame un favor antes de colgar. Yo he invertido mi tiempo y voy a seguir invirtiendolo despues de esta llamada — asi que guarde mi numero ahora mismo. Mi nombre es Jesse. La compania es Biscayne Solutions Group — pongale BSG, asi le sale en el identificador. Este es mi celular personal, y le doy tambien el de la oficina. Ahora leamelo todo de vuelta — quiero asegurarme de que lo tiene bien.",
     "Si lo lee de vuelta completo, esta DENTRO. Si \"se le acabo la tinta\" o le pide que se lo repita, esta tibio — apriete el seguimiento y no cuente el negocio. El mismo musculo en tamano grande: el cierre de papeleria. \"Dejeme preparar los papeles — se los mando por correo, los repasamos, y si estamos de acuerdo nos damos la mano. Si no, perdi quince minutos de mi tiempo y quedamos como amigos. Usted no arriesga nada. Le parece justo?\" Y cuando estan tibios pero necesitan autoridad: \"Pongase al telefono con nuestro asesor principal cinco minutos y le encontramos una solucion a esta propiedad.\""
    ],
    "one": "Si lo lee de vuelta completo esta dentro — si \"se acabo la tinta\", no lo esta."

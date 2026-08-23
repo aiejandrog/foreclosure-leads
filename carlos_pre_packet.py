@@ -237,7 +237,7 @@ td{padding:6px 8px;border-top:1px solid #eef0f5;vertical-align:top}
 SCRIPT = """
 <div class="script">
 <div class="must"><b>SAY THIS FIRST, WORD FOR WORD, AT EVERY DOOR:</b><br>
-&ldquo;Miami Solutions Group is not associated with the government, and we are not approved by the
+&ldquo;Biscayne Solutions Group is not associated with the government, and we are not approved by the
 government or your lender.&rdquo;<br>
 <span style="font-size:10.5px;opacity:.9">This sentence is not optional and it is not small talk. It
 is the line that keeps this legal. Say it before anything else.</span></div>
@@ -305,7 +305,7 @@ never go into a back yard.</li>
 &nbsp;&nbsp;|&nbsp;&nbsp; <b>Emergency: 911 first, then Alex.</b></div>
 <ul>
 <li><b>Hours:</b> 9:00 AM to 7:00 PM only. No Sundays. Never after dark.</li>
-<li><b>Carry photo ID and an MSG card.</b> If anyone asks who you are, show both, no argument.</li>
+<li><b>Carry photo ID and an BSG card.</b> If anyone asks who you are, show both, no argument.</li>
 <li><b>NO SOLICITING sign</b> &rarr; do not knock. Mark NS and move on. It is not worth the complaint.</li>
 <li><b>Never</b> open a gate, enter a yard past a closed gate, pass a dog, or knock on a door that is
 standing open. Never step inside a house, even if invited &mdash; talk on the porch.</li>

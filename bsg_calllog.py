@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""msg_calllog — the call sheet you fill in WHILE you dial. The phone twin of the door log.
+"""bsg_calllog — the call sheet you fill in WHILE you dial. The phone twin of the door log.
 
 WHY THIS EXISTS RIGHT NOW
 Alejandro went from ~8 lifetime dials to 11-15 in a single day. That is the most valuable thing
@@ -21,7 +21,7 @@ each page is what turns a day of calling into a conversion rate.
 
 Landscape letter, 20 dials a page, 3 pages. No PII, no data source — it always builds.
 
-Run:  python msg_calllog.py
+Run:  python bsg_calllog.py
 """
 import argparse
 import datetime
@@ -121,13 +121,13 @@ def main():
            '<style>%s</style></head><body>%s</body></html>'
            % (CSS, ''.join(page(n) for n in range(1, a.pages + 1))))
     today = datetime.date.today().isoformat()
-    hp = os.path.join(HERE, 'MSG_Call_Log_%s.html' % today)
+    hp = os.path.join(HERE, 'BSG_Call_Log_%s.html' % today)
     open(hp, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    outs = [os.path.join(HERE, 'MSG_Call_Log_%s.pdf' % today)]
+    outs = [os.path.join(HERE, 'BSG_Call_Log_%s.pdf' % today)]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(P.out('MSG_Call_Log_%s.pdf' % today))
+        outs.append(P.out('BSG_Call_Log_%s.pdf' % today))
     with sync_playwright() as p:
         b = p.chromium.launch(); pg = b.new_page()
         pg.goto('file:///' + hp.replace(os.sep, '/')); pg.wait_for_timeout(300)

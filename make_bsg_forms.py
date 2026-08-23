@@ -1,13 +1,13 @@
 #!/usr/bin/env python
-"""Typeset the two client-facing MSG forms — Retainer Agreement and Third-Party Authorization.
+"""Typeset the two client-facing BSG forms — Retainer Agreement and Third-Party Authorization.
 
 Scope is deliberately narrow: **presentation and translation only.** The text of both documents is
 reproduced as written. Nothing is added, removed, softened, or annotated — no review banners, no
 internal guidance boxes, no "office only" markings. These are the copies a homeowner receives, so
 they carry the emblem and the contact block and nothing that reads as an internal working file.
 
-Retainer copy: Alejandro's `MSG RETAINER AGREEMENT.pdf`, verbatim.
-TPA copy: the English template body in `02_Third-Party-Authorization-to-Release-Information-MSG.md`.
+Retainer copy: Alejandro's `BSG RETAINER AGREEMENT.pdf`, verbatim.
+TPA copy: the English template body in `02_Third-Party-Authorization-to-Release-Information-BSG.md`.
 Spanish: a straight translation of those same documents. Same sections, same order, same fields —
 no clause added, none dropped.
 
@@ -16,7 +16,7 @@ these go to homeowners, servicers and opposing counsel. Phone and email carry th
 keeps its "Mailing Address" line as an empty rule, because a servicer needs somewhere to send the
 information it releases — that stays a fill-in, not a printed home address.
 
-    python make_msg_forms.py
+    python make_bsg_forms.py
 """
 import json
 import os
@@ -24,12 +24,12 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-import msg_brand  # noqa: E402
+import bsg_brand  # noqa: E402
 import paths as P
 
-OUT = P.out('MSG-Client-Forms')
+OUT = P.out('BSG-Client-Forms')
 MARK_H = 74
-LLC = 'Miami Solutions Group, LLC'
+LLC = 'Biscayne Solutions Group, LLC'
 
 # Email is PINNED per Jose's request (WhatsApp, 2026-08-08 10:58 PM): the company inbox goes on
 # client paper, not the personal Gmail. Deliberately NOT overridden by sender.json — its email
@@ -132,7 +132,7 @@ T = {
   'services': 'Services Retained',
   'svc': ['Loan Modification / Forbearance Plan',
           'Deed in Lieu of Foreclosure &amp; Cash for Keys',
-          'MSG to Buy Subject Property',
+          'BSG to Buy Subject Property',
           'Short Sale Negotiation',
           'Foreclosure Auction Prevention',
           'Other Services (please describe below)'],
@@ -142,22 +142,22 @@ T = {
   'wire': 'Wire Transfer', 'zelle': 'Zelle', 'other': 'Other',
   'pay2': '2nd Payment', 'due2': 'Due Date',
   'terms': 'Terms &amp; Conditions',
-  'tm': [('Engagement.', 'The Borrower(s) hereby retain Miami Solutions Group, LLC ("MSG") to '
+  'tm': [('Engagement.', 'The Borrower(s) hereby retain Biscayne Solutions Group, LLC ("BSG") to '
           'provide the services checked above. This agreement constitutes the entire understanding '
           'between the parties.'),
          ('Authorization.', 'Borrower(s) acknowledge that they have executed a Third-Party '
-          'Authorization allowing MSG to communicate directly with their lender/servicer and to act '
+          'Authorization allowing BSG to communicate directly with their lender/servicer and to act '
           'on their behalf regarding the above-referenced loan.'),
          ('Client Cooperation.', 'Borrower(s) agree to provide all required documentation, '
-          'information, and cooperation in a timely manner to allow MSG to perform the retained '
+          'information, and cooperation in a timely manner to allow BSG to perform the retained '
           'services. Failure to cooperate may result in termination of services.'),
-         ('No Guarantee of Result.', 'Borrower(s) understand that MSG provides professional '
+         ('No Guarantee of Result.', 'Borrower(s) understand that BSG provides professional '
           'negotiation and consulting services but cannot guarantee a specific outcome. All results '
           "depend on the lender/servicer's policies, investor guidelines, and Borrower(s)' "
           'cooperation and financial circumstances.'),
-         ('Communication.', 'Borrower(s) designate MSG as their exclusive point of contact with '
-          'their lender/servicer and agree to direct all lender communications through MSG.'),
-         ('Confidentiality.', 'MSG agrees to maintain all client information confidential in '
+         ('Communication.', 'Borrower(s) designate BSG as their exclusive point of contact with '
+          'their lender/servicer and agree to direct all lender communications through BSG.'),
+         ('Confidentiality.', 'BSG agrees to maintain all client information confidential in '
           'accordance with applicable laws and professional standards.'),
          ('Termination.', 'Either party may terminate this agreement with written notice. '
           'Borrower(s) remain responsible for fees incurred up to the date of termination.'),
@@ -169,11 +169,11 @@ T = {
            'confirm that all information provided is true and accurate to the best of my/our '
            'knowledge.',
   'b_sigs': 'Borrower / Homeowner Signatures', 'signature': 'Signature',
-  'accept': 'Miami Solutions Group, LLC — Acceptance',
-  'accept_p': 'The undersigned representative of Miami Solutions Group, LLC accepts this engagement '
+  'accept': 'Biscayne Solutions Group, LLC — Acceptance',
+  'accept_p': 'The undersigned representative of Biscayne Solutions Group, LLC accepts this engagement '
               'and agrees to perform the services checked above in accordance with the terms set '
               'forth herein.',
-  'auth_sig': 'Authorized Signature (MSG, LLC Manager)', 'printed': 'Printed Name',
+  'auth_sig': 'Authorized Signature (BSG, LLC Manager)', 'printed': 'Printed Name',
   # --- tpa
   't_title': 'Third-Party Authorization to Release Information',
   'folio': 'Folio / Parcel ID',
@@ -213,7 +213,7 @@ T = {
   't4': '4. Duration and Revocation',
   't4_p1': 'This authorization is effective as of the date signed and <b>REMAINS IN EFFECT UNTIL '
            'REVOKED IN WRITING</b> by the Borrower. Written revocation may be delivered to any '
-           'Information Holder and to Miami Solutions Group, LLC at the email or telephone above. '
+           'Information Holder and to Biscayne Solutions Group, LLC at the email or telephone above. '
            'Absent written revocation, Information Holders may rely on this authorization for all '
            'requests made in its name.',
   't4_p2': 'A photocopy, scanned copy, facsimile copy, or emailed PDF copy of this authorization '
@@ -222,8 +222,8 @@ T = {
   't5_signed': 'Signed this {D} day of {M}, 20{Y}',
   'owner_borrower': 'Borrower', 'print_name': 'Print Name', 'dob': 'Date of Birth',
   't5_note': 'Some servicers require date of birth to release information.',
-  't7': '6. MSG Acknowledgment', 't7_p': 'Received and acknowledged by:',
-  't7_cap': 'Managing Member, Miami Solutions Group, LLC &mdash; authorized to act on behalf of the '
+  't7': '6. BSG Acknowledgment', 't7_p': 'Received and acknowledged by:',
+  't7_cap': 'Managing Member, Biscayne Solutions Group, LLC &mdash; authorized to act on behalf of the '
             'Company',
   't_instr_h': 'INSTRUCTIONS TO INFORMATION HOLDERS:',
   't_instr': "This authorization is provided pursuant to the Borrower's rights under 15 U.S.C. "
@@ -246,7 +246,7 @@ T = {
   'services': 'Servicios Contratados',
   'svc': ['Modificaci&oacute;n de Pr&eacute;stamo / Plan de Indulgencia',
           'Escritura en Lugar de Ejecuci&oacute;n y Efectivo por Llaves',
-          'MSG Compra la Propiedad en Cuesti&oacute;n',
+          'BSG Compra la Propiedad en Cuesti&oacute;n',
           'Negociaci&oacute;n de Venta Corta (Short Sale)',
           'Prevenci&oacute;n de la Subasta de Ejecuci&oacute;n',
           'Otros Servicios (describa a continuaci&oacute;n)'],
@@ -256,26 +256,26 @@ T = {
   'pay_method': 'M&eacute;todo de Pago', 'wire': 'Transferencia Bancaria', 'zelle': 'Zelle',
   'other': 'Otro', 'pay2': '2.&ordm; Pago', 'due2': 'Fecha de Vencimiento',
   'terms': 'T&eacute;rminos y Condiciones',
-  'tm': [('Contrataci&oacute;n.', 'Por el presente, el/los Prestatario(s) contrata(n) a Miami '
-          'Solutions Group, LLC ("MSG") para prestar los servicios marcados anteriormente. Este '
+  'tm': [('Contrataci&oacute;n.', 'Por el presente, el/los Prestatario(s) contrata(n) a Biscayne '
+          'Solutions Group, LLC ("BSG") para prestar los servicios marcados anteriormente. Este '
           'acuerdo constituye el entendimiento completo entre las partes.'),
          ('Autorizaci&oacute;n.', 'El/los Prestatario(s) reconoce(n) que ha(n) firmado una '
-          'Autorizaci&oacute;n a Terceros que permite a MSG comunicarse directamente con su '
+          'Autorizaci&oacute;n a Terceros que permite a BSG comunicarse directamente con su '
           'prestamista/administrador y actuar en su nombre con respecto al pr&eacute;stamo antes '
           'referido.'),
          ('Cooperaci&oacute;n del Cliente.', 'El/los Prestatario(s) acuerda(n) proporcionar toda la '
           'documentaci&oacute;n, informaci&oacute;n y cooperaci&oacute;n requeridas de manera '
-          'oportuna para permitir que MSG preste los servicios contratados. La falta de '
+          'oportuna para permitir que BSG preste los servicios contratados. La falta de '
           'cooperaci&oacute;n puede resultar en la terminaci&oacute;n de los servicios.'),
-         ('Sin Garant&iacute;a de Resultado.', 'El/los Prestatario(s) entiende(n) que MSG presta '
+         ('Sin Garant&iacute;a de Resultado.', 'El/los Prestatario(s) entiende(n) que BSG presta '
           'servicios profesionales de negociaci&oacute;n y consultor&iacute;a pero no puede '
           'garantizar un resultado espec&iacute;fico. Todos los resultados dependen de las '
           'pol&iacute;ticas del prestamista/administrador, las pautas del inversionista y la '
           'cooperaci&oacute;n y las circunstancias financieras del/de los Prestatario(s).'),
-         ('Comunicaci&oacute;n.', 'El/los Prestatario(s) designa(n) a MSG como su punto de contacto '
+         ('Comunicaci&oacute;n.', 'El/los Prestatario(s) designa(n) a BSG como su punto de contacto '
           'exclusivo con su prestamista/administrador y acuerda(n) dirigir todas las comunicaciones '
-          'del prestamista a trav&eacute;s de MSG.'),
-         ('Confidencialidad.', 'MSG acuerda mantener confidencial toda la informaci&oacute;n del '
+          'del prestamista a trav&eacute;s de BSG.'),
+         ('Confidencialidad.', 'BSG acuerda mantener confidencial toda la informaci&oacute;n del '
           'cliente de conformidad con las leyes aplicables y las normas profesionales.'),
          ('Terminaci&oacute;n.', 'Cualquiera de las partes puede terminar este acuerdo mediante '
           'notificaci&oacute;n por escrito. El/los Prestatario(s) contin&uacute;a(n) siendo '
@@ -288,11 +288,11 @@ T = {
            'que toda la informaci&oacute;n proporcionada es verdadera y precisa seg&uacute;n mi/'
            'nuestro leal saber y entender.',
   'b_sigs': 'Firmas del Prestatario / Propietario', 'signature': 'Firma',
-  'accept': 'Miami Solutions Group, LLC — Aceptaci&oacute;n',
-  'accept_p': 'El representante abajo firmante de Miami Solutions Group, LLC acepta esta '
+  'accept': 'Biscayne Solutions Group, LLC — Aceptaci&oacute;n',
+  'accept_p': 'El representante abajo firmante de Biscayne Solutions Group, LLC acepta esta '
               'contrataci&oacute;n y se compromete a prestar los servicios marcados anteriormente '
               'de conformidad con los t&eacute;rminos aqu&iacute; establecidos.',
-  'auth_sig': 'Firma Autorizada (Gerente de MSG, LLC)', 'printed': 'Nombre en Letra de Molde',
+  'auth_sig': 'Firma Autorizada (Gerente de BSG, LLC)', 'printed': 'Nombre en Letra de Molde',
   't_title': 'Autorizaci&oacute;n a Terceros para Divulgar Informaci&oacute;n',
   'folio': 'Folio / N.&ordm; de Parcela',
   't1': '1. Autorizaci&oacute;n',
@@ -341,7 +341,7 @@ T = {
   't4': '4. Vigencia y Revocaci&oacute;n',
   't4_p1': 'Esta autorizaci&oacute;n entra en vigor en la fecha de su firma y <b>PERMANECE VIGENTE '
            'HASTA SER REVOCADA POR ESCRITO</b> por el Prestatario. La revocaci&oacute;n escrita '
-           'podr&aacute; entregarse a cualquier Tenedor de Informaci&oacute;n y a Miami Solutions '
+           'podr&aacute; entregarse a cualquier Tenedor de Informaci&oacute;n y a Biscayne Solutions '
            'Group, LLC al correo electr&oacute;nico o tel&eacute;fono indicados arriba. En ausencia '
            'de revocaci&oacute;n escrita, los Tenedores de Informaci&oacute;n podr&aacute;n confiar '
            'en esta autorizaci&oacute;n para todas las solicitudes hechas en su nombre.',
@@ -354,8 +354,8 @@ T = {
   'dob': 'Fecha de Nacimiento',
   't5_note': 'Algunos administradores exigen la fecha de nacimiento para divulgar '
              'informaci&oacute;n.',
-  't7': '6. Reconocimiento de MSG', 't7_p': 'Recibido y reconocido por:',
-  't7_cap': 'Miembro Gerente, Miami Solutions Group, LLC &mdash; autorizado para actuar en nombre de '
+  't7': '6. Reconocimiento de BSG', 't7_p': 'Recibido y reconocido por:',
+  't7_cap': 'Miembro Gerente, Biscayne Solutions Group, LLC &mdash; autorizado para actuar en nombre de '
             'la Compa&ntilde;&iacute;a',
   't_instr_h': 'INSTRUCCIONES PARA LOS TENEDORES DE INFORMACI&Oacute;N:',
   't_instr': 'Esta autorizaci&oacute;n se otorga conforme a los derechos del Prestatario bajo 15 '
@@ -368,9 +368,9 @@ T = {
 
 
 def head(t):
-    w = msg_brand.mark_size(MARK_H)
+    w = bsg_brand.mark_size(MARK_H)
     return (f'<header class="lh">'
-            f'<img src="{msg_brand.MONO_B64}" width="{w}" height="{MARK_H}" alt="{LLC}">'
+            f'<img src="{bsg_brand.MONO_B64}" width="{w}" height="{MARK_H}" alt="{LLC}">'
             f'<div class="meta"><span class="co">{LLC}</span><br>'
             f'<b>{t["ph"]}</b>&nbsp;&nbsp;{SENDER["phone"]}<br>'
             f'<b>{t["email"]}</b>&nbsp;&nbsp;{SENDER["email"]}</div></header><div class="rule"></div>')
@@ -438,7 +438,7 @@ def retainer(lang):
           f'<b>{LLC.upper()}</b><br>'
           f'{t["ph"].upper()}: {SENDER["phone"]}&nbsp;&nbsp;&middot;&nbsp;&nbsp;'
           f'{t["email"].upper()}: {SENDER["email"]}</div></div>']
-    return page(f'MSG Retainer Agreement ({lang.upper()})', ''.join(b), t)
+    return page(f'BSG Retainer Agreement ({lang.upper()})', ''.join(b), t)
 
 
 def tpa(lang):
@@ -483,7 +483,7 @@ def tpa(lang):
           f'<div class="cap">{t["t7_cap"]}</div></div>',
           f'<div class="box" style="margin-top:24px"><div class="note">'
           f'<b>{t["t_instr_h"]}</b> {t["t_instr"]}</div></div>']
-    return page(f'MSG Third-Party Authorization ({lang.upper()})', ''.join(b), t)
+    return page(f'BSG Third-Party Authorization ({lang.upper()})', ''.join(b), t)
 
 
 CASES = {
@@ -521,8 +521,8 @@ def main():
     docs = []
     for lang in ('en', 'es'):
         sfx = lang.upper()
-        docs += [(f'MSG_Retainer_Agreement{tag}_{sfx}', retainer(lang)),
-                 (f'MSG_Third_Party_Authorization{tag}_{sfx}', tpa(lang))]
+        docs += [(f'BSG_Retainer_Agreement{tag}_{sfx}', retainer(lang)),
+                 (f'BSG_Third_Party_Authorization{tag}_{sfx}', tpa(lang))]
     made = []
     with sync_playwright() as p:
         b = p.chromium.launch()
@@ -538,7 +538,7 @@ def main():
             print(f'  {name}.pdf')
         b.close()
     # the pre-bilingual filenames would otherwise sit next to these and get mailed by mistake
-    for stale in ('MSG_Retainer_Agreement', 'MSG_Third_Party_Authorization'):
+    for stale in ('BSG_Retainer_Agreement', 'BSG_Third_Party_Authorization'):
         for ext in ('.pdf', '.html'):
             p_ = os.path.join(OUT, stale + ext)
             if os.path.exists(p_):

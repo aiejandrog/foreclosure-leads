@@ -207,7 +207,7 @@ its last good build — that is the intended behaviour, not a failure.
      refresh writes to the new location and leaves the old one sitting in OneDrive full of PII.
      Move it to `~\DEALFLOW`, delete the original, then **empty the OneDrive recycle bin**.
   2. Check the synced Desktop root for `Tracerfy_*.csv` (case + name + street + city + zip),
-     `HardMoney_Balloon_Book_*.html`, `DealFlow-Scorecard\`, `MSG-Meeting-Agendas\` and any
+     `HardMoney_Balloon_Book_*.html`, `DealFlow-Scorecard\`, `BSG-Meeting-Agendas\` and any
      `DEALFLOW_TRANSFER_*.zip`. All of those used to land there and all now go to `~\DEALFLOW`.
   3. `acosta_report.py` and `amlong_brief.py` are **gitignored** (they carry PII inline), so the
      fix did not travel. Change `os.path.expanduser(os.path.join('~','OneDrive','Desktop','DEALFLOW', …))`
@@ -215,7 +215,7 @@ its last good build — that is the intended behaviour, not a failure.
 
   Two files stay on the synced Desktop deliberately: `DEALFLOW-STATUS.txt` (`run_report.py` — counts
   only, no names, and the point is that it is visible after an unattended run) and
-  `make_msg_emblem.py`'s brand artwork (no homeowner data, and it has its own `MSG_BRAND_OUT`).
+  `make_bsg_emblem.py`'s brand artwork (no homeowner data, and it has its own `BSG_BRAND_OUT`).
 - `OneDrive\Documents\DEALFLOW` is a **website-work hub only** — notes, launchers, design
   references. No code, no data, no keys. The code lives here in git.
 - Origin has a stray Claude cloud branch `claude/phone-number-lookup-u4gvzm`. Merge or delete it;

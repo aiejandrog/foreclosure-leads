@@ -38,7 +38,7 @@ import re
 import sys
 
 import disclaimer as D
-import msg_brand
+import bsg_brand
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LOB_KEY_FILE = os.path.join(HERE, 'lob.key')
@@ -198,13 +198,13 @@ def _sig_lines(snd):
 
 
 def _lh_header(snd, height_px=52):
-    """MSG letterhead block — mark left, contact right, black rule under.
+    """BSG letterhead block — mark left, contact right, black rule under.
 
-    The company name is NOT in this header. The shield carries MSG; `_lh_sign()` spells the entity
+    The company name is NOT in this header. The shield carries BSG; `_lh_sign()` spells the entity
     out once at the foot of the page. That is the whole point of the mark-only artwork — the old
     lockup put the name in the header AND baked it into the image AND repeated it in the footer.
 
-    Same lockup genLetter() renders in the board (_msgHead), but deliberately COMPACT here: a Lob letter
+    Same lockup genLetter() renders in the board (_bsgHead), but deliberately COMPACT here: a Lob letter
     is billed per page, so the header gets one contact line instead of three and a 52px mark instead of
     88px. The decoration yields, never the copy — the body is what converts, and these owners are often
     reading it in a hurry or with bad eyes. 52px was picked off a measured sweep: it costs 0.11in over
@@ -218,28 +218,30 @@ def _lh_header(snd, height_px=52):
     # prints this page in black and white. A straight grayscale of navy-field/gold-letters collapses
     # to a single mid-gray mass and the letterforms disappear. MONO_BW_B64 is the same emblem with
     # the field forced black and the mark knocked out white, which is what survives one-ink printing
-    # and fax. Flip to msg_brand.MONO_B64 + mark_size() only if Lob is switched to colour (costs more
+    # and fax. Flip to bsg_brand.MONO_B64 + mark_size() only if Lob is switched to colour (costs more
     # per letter) — the two must move together or the letter prints a gray smear.
-    w = msg_brand.mono_bw_size(height_px)
+    w = bsg_brand.mono_bw_size(height_px)
     bits = []
     for k in ('addr', 'phone', 'email', 'web'):
         v = (snd.get(k) or '').strip()
         if v:
             bits.append('<span style="white-space:nowrap">' + e(v) + '</span>')
     lines = ['&nbsp;&middot;&nbsp;'.join(bits)] if bits else []
-    return ('<table class="msg-lh" role="presentation"><tr>'
-            f'<td class="msg-lh-mark"><img src="{msg_brand.MONO_BW_B64}" width="{w}" height="{height_px}" alt="{e(llc)}"></td>'
-            f'<td class="msg-lh-meta">{"<br>".join(lines)}</td>'
-            '</tr></table><div class="msg-lh-rule"></div>')
+    return ('<table class="bsg-lh" role="presentation"><tr>'
+            f'<td class="bsg-lh-mark"><img src="{bsg_brand.MONO_BW_B64}" width="{w}" height="{height_px}" alt="{e(llc)}"></td>'
+            f'<td class="bsg-lh-meta">{"<br>".join(lines)}</td>'
+            '</tr></table><div class="bsg-lh-rule"></div>')
 
 
 
 def _safe_llc(snd):
-    """Truth-gate: 'Miami Solutions Group LLC' is registered to ANOTHER Florida company
-    (L22000200556). Every generator strips the unowned suffix until MSG files its own entity."""
-    v = (snd.get('llc') or 'Miami Solutions Group').strip()
-    if re.match(r'^\s*miami\s+solutions\s+group\s+ll?c\.?\s*$', v, re.I):
-        v = 'Miami Solutions Group'
+    """Legacy-identity upgrade. Was a truth-gate stripping the " LLC" off 'Miami Solutions Group'
+    (FL L22000200556 -- another company). Renamed 2026-08-23; the entity is now Biscayne Solutions
+    Group LLC and the suffix is legitimate. A sender.json or saved profile that predates the rename
+    still carries the old name, so map it forward rather than mailing under a name we do not use."""
+    v = (snd.get('llc') or 'Biscayne Solutions Group LLC').strip()
+    if re.match(r'^\s*miami\s+solutions\s+group(\s+ll?c\.?)?\s*$', v, re.I):
+        v = 'Biscayne Solutions Group LLC'
     return v
 
 def _lh_sign(snd, lang='en'):
@@ -252,7 +254,7 @@ def _lh_sign(snd, lang='en'):
     llc = _safe_llc(snd)
     who = [str(snd[k]).strip() for k in ('name', 'title', 'phone', 'email')
            if (snd.get(k) or '').strip()]
-    return ('<div class="msg-sig">'
+    return ('<div class="bsg-sig">'
             f'<span class="nm">{e(llc)}</span>'
             + (e(' · '.join(who)) + '<br>' if who else '')
             + D.sig_tag(lang) + '</div>')
@@ -301,7 +303,7 @@ def build_letter_html(r, snd, lang='en'):
     if lang == 'es':
         if td:
             body = f"""<p>Estimado/a {e(first)},</p>
-<p>Mi nombre es {sN}, de Miami Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. {D.identity('es')} Los registros del condado muestran que su propiedad en <b>{addr}</b> tiene una <b>subasta de tax deed el {dt}</b>{case_es} por impuestos sin pagar.</p>
+<p>Mi nombre es {sN}, de Biscayne Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. {D.identity('es')} Los registros del condado muestran que su propiedad en <b>{addr}</b> tiene una <b>subasta de tax deed el {dt}</b>{case_es} por impuestos sin pagar.</p>
 <p>Antes de esa fecha, los dueños suelen mirar tres caminos: pagar los impuestos atrasados y conservarla; vender en privado en efectivo antes de la subasta; o, si se vende por más de lo adeudado, reclamar el excedente que la ley permita. Con gusto repasamos cuál aún le sirve — sin costo ni compromiso.</p>
 <p>Si una venta privada resulta ser lo correcto, comprar tal cual y en efectivo antes de la fecha es una de las cosas que podemos hacer. Si otro camino es mejor, se lo diré con honestidad.</p>
 <p>{intake_es}</p>
@@ -310,7 +312,7 @@ def build_letter_html(r, snd, lang='en'):
         else:
             byp = f" por parte de {plaintiff}" if plaintiff else ''
             body = f"""<p>Estimado/a {e(first)},</p>
-<p>Mi nombre es {sN}, de Miami Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. {D.identity('es')} Los registros públicos muestran que su propiedad en <b>{addr}</b> está en ejecución hipotecaria{byp}{case_es}, con subasta el <b>{dt}</b>.</p>
+<p>Mi nombre es {sN}, de Biscayne Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. {D.identity('es')} Los registros públicos muestran que su propiedad en <b>{addr}</b> está en ejecución hipotecaria{byp}{case_es}, con subasta el <b>{dt}</b>.</p>
 <p>No le escribo para convencerlo de nada. Cuando un dueño pregunta qué opciones tiene, estas son las <b>cinco salidas</b> de todo propietario en ejecución en Florida (de nuestro manual de campo):</p>
 {exits_es}
 <p>Mi trabajo es asegurarme de que sepa que las cinco están sobre la mesa para que la fecha de subasta no lo tome por sorpresa. Si una venta privada en efectivo es el camino, comprar tal cual antes de la fecha es una de las herramientas sobre la mesa. Si otra salida le conviene más, se lo diré, aunque no me incluya.</p>
@@ -320,7 +322,7 @@ def build_letter_html(r, snd, lang='en'):
     else:
         if td:
             body = f"""<p>Dear {e(owner)},</p>
-<p>My name is {sN}, with Miami Solutions Group. We work with homeowners in exactly this situation, every option on one table. {D.identity('en')} County records show your property at <b>{addr}</b> is scheduled for a <b>tax deed sale on {dt}</b>{case_en} due to unpaid property taxes.</p>
+<p>My name is {sN}, with Biscayne Solutions Group. We work with homeowners in exactly this situation, every option on one table. {D.identity('en')} County records show your property at <b>{addr}</b> is scheduled for a <b>tax deed sale on {dt}</b>{case_en} due to unpaid property taxes.</p>
 <p>Before that date, owners usually look at three paths: pay the back taxes and keep it; sell privately for cash before the sale; or, if it sells for more than the taxes owed, claim any surplus the law allows. I am glad to walk through which of those still fits — at no cost and no obligation.</p>
 <p>If a private sale turns out to be the right move, buying as-is for cash before the deadline is one of the things we can do. If another path is better, I will tell you honestly.</p>
 <p>{intake_en}</p>
@@ -329,7 +331,7 @@ def build_letter_html(r, snd, lang='en'):
         else:
             byp = f" by {plaintiff}" if plaintiff else ''
             body = f"""<p>Dear {e(owner)},</p>
-<p>My name is {sN}, with Miami Solutions Group. We work with homeowners in exactly this situation, every option on one table. {D.identity('en')} Public records show your property at <b>{addr}</b> is in foreclosure{byp}{case_en}, with a sale scheduled for <b>{dt}</b>.</p>
+<p>My name is {sN}, with Biscayne Solutions Group. We work with homeowners in exactly this situation, every option on one table. {D.identity('en')} Public records show your property at <b>{addr}</b> is in foreclosure{byp}{case_en}, with a sale scheduled for <b>{dt}</b>.</p>
 <p>I am not writing to talk you into anything. When owners ask what their options are, these are the <b>five exits</b> every Florida foreclosure homeowner has (from our field manual):</p>
 {exits_en}
 <p>My job is to make sure you know all five are on the table so the sale date does not sneak up. If a private cash sale is the path that fits, buying as-is before the deadline is one of the tools on the table. If another exit is better for you, I will say so, even when it does not involve me.</p>
@@ -341,7 +343,7 @@ def build_letter_html(r, snd, lang='en'):
     ret = '<br>'.join(e(x) for x in [snd.get('name'), _safe_llc(snd), snd.get('addr')] if x and str(x).strip())
     lh_head, lh_sign = _lh_header(snd), _lh_sign(snd, lang)
     # 2.6in top pad reserves the #10 window zone for Lob's stamped recipient address (address_placement).
-    # The MSG letterhead therefore goes BELOW that reserve, as the first thing in the content area — a
+    # The BSG letterhead therefore goes BELOW that reserve, as the first thing in the content area — a
     # logo inside the window band would print underneath Lob's own address overlay and ruin real,
     # paid-for mail. Everything above 2.6in stays Lob's.
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
@@ -353,15 +355,15 @@ body{{font-family:Georgia,'Times New Roman',serif;color:#111;line-height:1.31;fo
 .date{{margin:0 0 10px;color:#333}}
 ul{{margin:10px 0}}
 p{{margin:0 0 6px}}
-.msg-lh{{width:100%;border-collapse:collapse;margin:0;table-layout:fixed}}
-.msg-lh td{{vertical-align:middle;padding:0;border:0}}
-.msg-lh-mark{{width:1%;white-space:nowrap;padding-right:14px}}
-.msg-lh-mark img{{display:block;border:0}}
-.msg-lh-meta{{text-align:right;font:8.5pt/1.6 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1A1A1A}}
-.msg-lh-rule{{border-top:2px solid #1A1A1A;height:0;font-size:0;line-height:0;margin:5px 0 8px}}
-.msg-sig{{margin-top:8px;padding-top:5px;border-top:1px solid #C9CDD4;text-align:center;
+.bsg-lh{{width:100%;border-collapse:collapse;margin:0;table-layout:fixed}}
+.bsg-lh td{{vertical-align:middle;padding:0;border:0}}
+.bsg-lh-mark{{width:1%;white-space:nowrap;padding-right:14px}}
+.bsg-lh-mark img{{display:block;border:0}}
+.bsg-lh-meta{{text-align:right;font:8.5pt/1.6 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#1A1A1A}}
+.bsg-lh-rule{{border-top:2px solid #1A1A1A;height:0;font-size:0;line-height:0;margin:5px 0 8px}}
+.bsg-sig{{margin-top:8px;padding-top:5px;border-top:1px solid #C9CDD4;text-align:center;
   font:7.5pt/1.65 'Helvetica Neue',Helvetica,Arial,sans-serif;color:#7C8492;letter-spacing:.05em}}
-.msg-sig .nm{{display:block;font-weight:700;font-size:8pt;color:#5A6472;letter-spacing:.13em;
+.bsg-sig .nm{{display:block;font-weight:700;font-size:8pt;color:#5A6472;letter-spacing:.13em;
   text-transform:uppercase;margin-bottom:2px}}
 </style></head><body><div class="page">
 <div class="ret">{ret}</div>

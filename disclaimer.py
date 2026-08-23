@@ -5,8 +5,8 @@ The same disclaimer was hand-copied into four modules and had drifted into five 
 Audited 2026-08-22, before this file existed:
 
     surface            MARS/Reg O   not a law firm   not a lender/broker   not a rescue company
-    msg_letter            yes            yes                yes                   NO
-    msg_flyer             yes            yes                NO                    NO
+    bsg_letter            yes            yes                yes                   NO
+    bsg_flyer             yes            yes                NO                    NO
     outreach_mail         partial        yes                yes                   yes
     outreach_email        NO             yes ("lawyer")     yes                   yes (added 08-22)
 
@@ -26,7 +26,7 @@ WHAT IS IN HERE
 
 HOW TO USE IT
     import disclaimer as D
-    D.mars('Miami Solutions Group')          # letter — company name filled in
+    D.mars('Biscayne Solutions Group')          # letter — company name filled in
     D.mars('%s')                             # flyer — leaves a %s for %-formatting
     D.mars(lang='es', as_html=False)         # plain unicode instead of HTML entities
     D.identity()                             # "I am not your lender, ..."
@@ -57,8 +57,8 @@ def _ent(s):
 # ---------------------------------------------------------------------------------------------
 # MARS / Reg O — 12 CFR 1015.4(a). {co} is the company name.
 #
-# Sentence order follows msg_letter's 2026-08-12 legal pass: the mandated disclosures come FIRST,
-# at body-copy size, then the house denials. msg_flyer used to lead with "not a law firm", which
+# Sentence order follows bsg_letter's 2026-08-12 legal pass: the mandated disclosures come FIRST,
+# at body-copy size, then the house denials. bsg_flyer used to lead with "not a law firm", which
 # pushed the federally-required sentences behind a house line; it now matches the letter.
 #
 # "We are not a foreclosure-rescue company" is the clause added 2026-08-22 at Alejandro's
@@ -120,7 +120,7 @@ def mars(company='', lang='en', as_html=True):
     """MARS/Reg O 12 CFR 1015.4(a) disclosures.
 
     company  — the name to drop in. Pass '%s' to leave a positional placeholder for a caller that
-               %-formats its template later (msg_flyer does this). Pass '' for a generic "We".
+               %-formats its template later (bsg_flyer does this). Pass '' for a generic "We".
     as_html  — True (default) renders Spanish accents as HTML entities, for templates that keep
                their source ASCII. False returns real unicode, for plain-text bodies.
     """
@@ -171,9 +171,9 @@ def sig_tag(lang='en', as_html=True):
 if __name__ == '__main__':
     for lang in ('en', 'es'):
         print('=' * 78)
-        print('%s  —  mars("Miami Solutions Group")' % lang.upper())
+        print('%s  —  mars("Biscayne Solutions Group")' % lang.upper())
         print('-' * 78)
-        print(mars('Miami Solutions Group', lang, as_html=False))
+        print(mars('Biscayne Solutions Group', lang, as_html=False))
         print()
         print('%s  —  identity()' % lang.upper())
         print('-' * 78)

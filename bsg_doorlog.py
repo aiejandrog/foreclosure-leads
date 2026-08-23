@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""msg_doorlog — the door log sheet Carlos fills in AT THE DOOR. Carlos's task, ⚡ this week.
+"""bsg_doorlog — the door log sheet Carlos fills in AT THE DOOR. Carlos's task, ⚡ this week.
 
 WHY THIS EXISTS AND WHY IT IS SEPARATE FROM THE DOOR BOOK
 The door book (carlos_pre_packet.py) is organised by ROUTE and now carries a per-door tick-strip
@@ -22,7 +22,7 @@ book — so it is the complete record, not a subset of the route.
 Landscape letter, ~18 doors a page, 3 pages. English with small Spanish subtitles (Carlos works
 both). No PII, no data source — it always builds.
 
-Run:  python msg_doorlog.py
+Run:  python bsg_doorlog.py
 """
 import argparse
 import datetime
@@ -101,13 +101,13 @@ def main():
            '<style>%s</style></head><body>%s</body></html>'
            % (CSS, ''.join(page(n) for n in range(1, a.pages + 1))))
     today = datetime.date.today().isoformat()
-    hp = os.path.join(HERE, 'MSG_Door_Log_%s.html' % today)
+    hp = os.path.join(HERE, 'BSG_Door_Log_%s.html' % today)
     open(hp, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    outs = [os.path.join(HERE, 'MSG_Door_Log_%s.pdf' % today)]
+    outs = [os.path.join(HERE, 'BSG_Door_Log_%s.pdf' % today)]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(P.out('MSG_Door_Log_%s.pdf' % today))
+        outs.append(P.out('BSG_Door_Log_%s.pdf' % today))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()

@@ -300,12 +300,12 @@ def main():
         return 1
     doc = build(rows, a.days, lp=a.lp)
     today = datetime.date.today().isoformat()
-    hp = os.path.join(HERE, 'MSG_Call_List_%s%s.html' % ('LP_' if a.lp else '', today))
+    hp = os.path.join(HERE, 'BSG_Call_List_%s%s.html' % ('LP_' if a.lp else '', today))
     open(hp, 'w', encoding='utf-8').write(doc)
     from playwright.sync_api import sync_playwright
-    outs = [os.path.join(HERE, 'MSG_Call_List_%s%s.pdf' % ('LP_' if a.lp else '', today))]
+    outs = [os.path.join(HERE, 'BSG_Call_List_%s%s.pdf' % ('LP_' if a.lp else '', today))]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(P.out('MSG_Call_List_%s%s.pdf' % ('LP_' if a.lp else '', today)))
+        outs.append(P.out('BSG_Call_List_%s%s.pdf' % ('LP_' if a.lp else '', today)))
     with sync_playwright() as p:
         b = p.chromium.launch(); pg = b.new_page()
         pg.goto('file:///' + hp.replace(os.sep, '/')); pg.wait_for_timeout(350)

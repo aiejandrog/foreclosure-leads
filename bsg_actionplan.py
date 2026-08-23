@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""msg_actionplan — the whole board, solved or planned, in one printable document.
+"""bsg_actionplan — the whole board, solved or planned, in one printable document.
 
 WHY THIS EXISTS
 The Notion board is 10 goals and 25 priorities. Read as a list it looks like 35 things. It is not — it
@@ -9,7 +9,7 @@ work goes into the item that unblocks twenty others instead of the item that fee
 Written to be read on paper by someone with a CDL job and evenings free. No jargon, no filler, dates
 and owners on everything.
 
-Run:  python msg_actionplan.py
+Run:  python bsg_actionplan.py
 """
 import datetime
 import os
@@ -70,11 +70,12 @@ until the entity exists:</p>
   <tr><td>Attorney cures the Acosta retainer</td><td>The entity document number</td></tr>
   <tr><td>E&amp;O / liability insurance</td><td>A formed entity to insure</td></tr>
 </table>
-<div class="note"><b>Why the current name cannot be used:</b> "Miami Solutions Group LLC" is registered to
-another Florida company (L22000200556, active since 2022). Every generator now strips the "LLC" so we
-never claim an entity we do not own &mdash; but that is a guardrail, not a fix. File a NEW LLC, not a
-DBA under Tradervert: a DBA gives zero liability separation, so a complaint would reach the entity
-holding the CDL income.</div>
+<div class="note"><b>Entity resolved (2026-08-23):</b> the old name &mdash; "Miami Solutions Group LLC"
+&mdash; was registered to another Florida company (L22000200556, active since 2022), so every
+generator stripped the "LLC" to avoid claiming an entity we did not own. The company is now
+<b>Biscayne Solutions Group LLC</b>, a NEW filing rather than a DBA under Tradervert (a DBA gives
+zero liability separation, so a complaint would reach the entity holding the CDL income). The
+guardrail stays wired but is disarmed; the full entity name now prints on every surface.</div>
 
 <h2>2. The critical path, in order, with real turnaround times</h2>
 
@@ -184,12 +185,12 @@ def main():
               .replace('@@GATEDAYS@@', str(days_gate))
               .replace('@@ACOSTADAYS@@', str((datetime.date(2026, 8, 31) - TODAY).days)))
     assert '@@' not in doc, 'unreplaced token'
-    hp = os.path.join(HERE, 'MSG_Action_Plan_%s.html' % TODAY.isoformat())
+    hp = os.path.join(HERE, 'BSG_Action_Plan_%s.html' % TODAY.isoformat())
     open(hp, 'w', encoding='utf-8').write(doc)
     from playwright.sync_api import sync_playwright
-    outs = [os.path.join(HERE, 'MSG_Action_Plan_%s.pdf' % TODAY.isoformat())]
+    outs = [os.path.join(HERE, 'BSG_Action_Plan_%s.pdf' % TODAY.isoformat())]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(P.out('MSG_Action_Plan_%s.pdf' % TODAY.isoformat()))
+        outs.append(P.out('BSG_Action_Plan_%s.pdf' % TODAY.isoformat()))
     with sync_playwright() as p:
         b = p.chromium.launch(); pg = b.new_page()
         pg.goto('file:///' + hp.replace(os.sep, '/')); pg.wait_for_timeout(350)

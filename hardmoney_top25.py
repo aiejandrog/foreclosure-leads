@@ -136,7 +136,7 @@ def select(n=25):
 def opener(r):
     """The first ten seconds, written out. A caller who has to improvise this will not make 25 calls."""
     first = r.get('first') or 'there'
-    return ('Hi %s, this is Alejandro with Miami Solutions Group. I work with investors on Broward '
+    return ('Hi %s, this is Alejandro with Biscayne Solutions Group. I work with investors on Broward '
             'rental property. I pulled the public record on %s and it looks like the %s loan on %s '
             'is coming up on its balloon. I place those into a 30-year fixed around 6 to 8 percent, '
             'no income documents, underwritten on the property\'s own rent. On a loan your size '
@@ -212,7 +212,7 @@ def build_html(rows, phones):
     doc = """<!doctype html><html><head><meta charset="utf-8">
 <title>Hard-Money Refi Call Sheet</title><style>%s</style></head><body>
 <h1>Refi Call Sheet &mdash; top %d</h1>
-<div class="sub">Miami Solutions Group &middot; built %s &middot; $%s of loans &middot;
+<div class="sub">Biscayne Solutions Group &middot; built %s &middot; $%s of loans &middot;
 about $%s/yr of interest on the table at 11%%&rarr;7%%</div>
 <div class="how"><b>How to work this list</b><ul>
 <li>These are <b>business loans to LLCs</b>, not consumer mortgages. The homeowner-rescue script and

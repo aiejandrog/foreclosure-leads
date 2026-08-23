@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""msg_sops — the two signable operating rules that keep outreach legal.
+"""bsg_sops — the two signable operating rules that keep outreach legal.
 
 WHY THESE TWO, AND WHY ON PAPER
 Both are Notion ⚡-this-week Compliance items, and both are the kind of rule that is worth nothing as a
@@ -20,7 +20,7 @@ not evidence. This one is.
 
 Deliberately blunt, deliberately short. A rule nobody can recite is a rule nobody follows.
 
-Run:  python msg_sops.py
+Run:  python bsg_sops.py
 """
 import datetime
 import os
@@ -163,13 +163,13 @@ def main():
     body = (TEXTING + RECORDING).replace('@@SIG@@', SIG).replace('@@DATE@@', nice)
     doc = ('<!doctype html><html><head><meta charset="utf-8"><title>Operating Rules</title>'
            '<style>%s</style></head><body>%s</body></html>' % (CSS, body))
-    hp = os.path.join(HERE, 'MSG_Operating_Rules_%s.html' % today.isoformat())
+    hp = os.path.join(HERE, 'BSG_Operating_Rules_%s.html' % today.isoformat())
     open(hp, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    outs = [os.path.join(HERE, 'MSG_Operating_Rules_%s.pdf' % today.isoformat())]
+    outs = [os.path.join(HERE, 'BSG_Operating_Rules_%s.pdf' % today.isoformat())]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        outs.append(P.out('MSG_Operating_Rules_%s.pdf' % today.isoformat()))
+        outs.append(P.out('BSG_Operating_Rules_%s.pdf' % today.isoformat()))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()

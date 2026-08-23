@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""msg_flyer — the leave-behind. Jesse's replacement for the business card (2026-08-12 call).
+"""bsg_flyer — the leave-behind. Jesse's replacement for the business card (2026-08-12 call).
 
 THE DOCTRINE, VERBATIM FROM THE CALL
 Business cards go in a drawer and die. The replacement is a QUARTER of a letter page — cut a
@@ -14,11 +14,11 @@ Page 1: 4-up ENGLISH cards on one letter sheet.   Page 2: 4-up SPANISH cards, mi
 Print duplex (flip on LONG edge), cut twice -> 4 bilingual postcards per sheet. Faint cut guides.
 
 IDENTITY comes from sender.json (same contract as the letter system — the name MUST be a person;
-see msg_brand.py's sender notes). Override per-batch with --name/--phone for Carlos's paper:
-    python msg_flyer.py --name "Carlos Gonzalez" --phone "(305) 555-0123"
+see bsg_brand.py's sender notes). Override per-batch with --name/--phone for Carlos's paper:
+    python bsg_flyer.py --name "Carlos Gonzalez" --phone "(305) 555-0123"
 
 COMPLIANCE, BAKED IN, NOT OPTIONAL (hardened by the 2026-08-12 legal adversarial pass)
- * "30+ years" is attributed to the SENIOR ADVISOR, never to the company — MSG is new, and a
+ * "30+ years" is attributed to the SENIOR ADVISOR, never to the company — BSG is new, and a
    company-age claim on paper is FDUTPA bait.
  * MARS/Reg O ad disclosures in the microprint: not the government, not the lender, lender may
    not agree, you may stop at any time, free consultation. No fee language anywhere else.
@@ -26,9 +26,9 @@ COMPLIANCE, BAKED IN, NOT OPTIONAL (hardened by the 2026-08-12 legal adversarial
  * The sale-date blank is filled ONLY when handing to the titled owner — never a third party
    (third-party foreclosure disclosure is the lawsuit; the playbook's card 8 owns this rule).
 
-Run:  python msg_flyer.py                        # safety-yellow, sender.json identity
-      python msg_flyer.py --color pink           # hot pink stock look
-      python msg_flyer.py --name X --phone Y     # someone else's paper
+Run:  python bsg_flyer.py                        # safety-yellow, sender.json identity
+      python bsg_flyer.py --color pink           # hot pink stock look
+      python bsg_flyer.py --name X --phone Y     # someone else's paper
 """
 import argparse
 import datetime
@@ -49,12 +49,12 @@ COLORS = {  # loud enough to find in a drawer, light enough that black text stay
 }
 
 
-# TRUTH GATE (same rule as msg_letter._company + msg-web): never print an " LLC" entity claim
-# until an entity we own is filed. "Miami Solutions Group LLC" (L22000200556) is registered to
-# another Florida company, so asserting it to a distressed homeowner is a MARS 1015.3 / FDUTPA
-# misrepresentation. Strip the suffix at display; the canonical entity string stays in sender.json
-# for the legal pack, which is attorney-gated and used only once the entity actually exists.
-UNOWNED = ('miami solutions group',)
+# TRUTH GATE (same rule as bsg_letter._company): never print an " LLC" entity claim for a name we
+# do not own -- asserting one to a distressed homeowner is a MARS 1015.3 / FDUTPA
+# misrepresentation. 2026-08-23: un-gated. The gated name was 'Miami Solutions Group'
+# (FL L22000200556, another company); Biscayne Solutions Group LLC is filed and owned, so the
+# suffix now prints. Keep _display_llc() wired -- re-arm by adding a lowercase bare name here.
+UNOWNED = ()
 
 
 def _display_llc(raw):
@@ -69,9 +69,9 @@ def sender():
     try:
         s = json.load(open(os.path.join(HERE, 'sender.json'), encoding='utf-8'))
         return s.get('name') or 'Alejandro Gonzalez', s.get('phone') or '', \
-            _display_llc(s.get('llc') or 'Miami Solutions Group')
+            _display_llc(s.get('llc') or 'Biscayne Solutions Group')
     except Exception:
-        return 'Alejandro Gonzalez', '', 'Miami Solutions Group'
+        return 'Alejandro Gonzalez', '', 'Biscayne Solutions Group'
 
 
 def card_en(name, phone):
@@ -206,19 +206,19 @@ def main():
     _en, _es = (card_missed_en, card_missed_es) if a.variant == 'missedyou' else (card_en, card_es)
     en = _en(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
     es = _es(name, phone) % (H.escape(name), H.escape(phone), H.escape(llc))
-    doc = ('<!doctype html><html><head><meta charset="utf-8"><title>MSG Leave-Behind</title>'
+    doc = ('<!doctype html><html><head><meta charset="utf-8"><title>BSG Leave-Behind</title>'
            '<style>%s</style></head><body>'
            '<div class="sheet">%s</div><div class="sheet">%s</div>'
            '</body></html>') % (CSS % {'bg': COLORS[a.color]}, en * 4, es * 4)
 
     today = datetime.date.today().isoformat()
-    html_out = os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.html' % (a.variant, a.color, today))
+    html_out = os.path.join(HERE, 'BSG_Flyer_%s_%s_%s.html' % (a.variant, a.color, today))
     open(html_out, 'w', encoding='utf-8').write(doc)
 
     from playwright.sync_api import sync_playwright
-    pdfs = [os.path.join(HERE, 'MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))]
+    pdfs = [os.path.join(HERE, 'BSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today))]
     if not os.environ.get('DEALFLOW_NO_DESKTOP'):
-        pdfs.append(P.out('MSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today)))
+        pdfs.append(P.out('BSG_Flyer_%s_%s_%s.pdf' % (a.variant, a.color, today)))
     with sync_playwright() as p:
         b = p.chromium.launch()
         pg = b.new_page()

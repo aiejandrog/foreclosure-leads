@@ -455,7 +455,7 @@ def _compose_single(r, snd, lang='en'):
     subj_es = f'Referente a su propiedad en {street}'
 
     # 2026-08-11 rewrite (Alejandro) -- mirrors tracker genEmail exactly (ASCII conventions:
-    # -- for em dash, stripped accents). MSG identity everywhere ("local home buyer" is out),
+    # -- for em dash, stripped accents). BSG identity everywhere ("local home buyer" is out),
     # the five-exits listicle is gone (options live in ONE flowing sentence), bodies ~40% shorter.
     # Kept: real case number, STOP line verbatim, sig, no rescue promises.
     sL = snd.get('llc') or '[YOUR COMPANY]'
@@ -587,10 +587,10 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
 
     subj_en = f'Regarding {n} properties in your name'
     subj_es = f'Referente a {n} propiedades a su nombre'
-    # 2026-08-11 rewrite -- mirrors tracker genPortfolioEmail (MSG identity, no listicle, shorter).
+    # 2026-08-11 rewrite -- mirrors tracker genPortfolioEmail (BSG identity, no listicle, shorter).
     sL = snd.get('llc') or '[YOUR COMPANY]'
     body_en = (
-        f"Hi {first},\n\nI'm {sN} with Miami Solutions Group. "
+        f"Hi {first},\n\nI'm {sN} with Biscayne Solutions Group. "
         f"{D.identity('en', as_html=False)}\n\n"
         f'Public records show {n} properties in your name are in foreclosure right now. Every '
         f"case number below is real -- you can look each one up on the county clerk's site:\n\n" +
@@ -604,7 +604,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
         f'Reply STOP or ask me not to contact you again and I will honor it for every property above.'
     )
     body_es = (
-        f"Hola {first},\n\nSoy {sN}, de Miami Solutions Group. "
+        f"Hola {first},\n\nSoy {sN}, de Biscayne Solutions Group. "
         f"{D.identity('es', as_html=False)}\n\n"
         f'Los registros publicos muestran {n} propiedades a su nombre en ejecucion hipotecaria '
         f'ahora mismo. Cada numero de caso abajo es real -- puede verificarlos usted mismo en '
