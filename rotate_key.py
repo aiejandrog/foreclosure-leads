@@ -38,6 +38,15 @@ VENDORS = {
         'console': 'https://tracerfy.com/',
         'note': 'Sign in -> account/API settings -> regenerate the API key.',
     },
+    'gmail': {
+        'file': 'gmail.key',
+        'console': 'https://myaccount.google.com/apppasswords',
+        'note': ('CREATE THE NEW ONE FIRST, install it here, confirm a send works, and only THEN '
+                 'delete the old app password. Revoking first takes the send bridge down — no Jesse '
+                 'workups, no morning worker, no lead outreach — until a new one is in place. '
+                 'Pass just the 16-character password; the account email is kept from the existing '
+                 'file. Google shows it with spaces ("abcd efgh ijkl mnop"); they are ignored.'),
+    },
 }
 
 
@@ -78,7 +87,38 @@ def check_tracerfy(key):
             os.environ['TRACERFY_API_KEY'] = old
 
 
-CHECKS = {'2captcha': check_2captcha, 'tracerfy': check_tracerfy}
+def check_gmail(key):
+    """LOG IN to Gmail's SMTP and hang up. Proves the credential without sending anything.
+
+    gmail.key is 'user@gmail.com:<16-char app password>'. A bare 16-char password is accepted too
+    and reuses the account already on file — Google shows app passwords in four spaced blocks and
+    nobody retypes their own address to rotate one.
+    """
+    import smtplib
+    import ssl
+    if ':' in key:
+        user, pw = key.split(':', 1)
+    else:
+        path = os.path.join(HERE, 'gmail.key')
+        if not os.path.exists(path):
+            return False, 'no gmail.key on disk to take the account from — pass user@gmail.com:password'
+        user = open(path, encoding='utf-8').read().strip().split(':', 1)[0]
+        pw = key
+    user, pw = user.strip().lower(), pw.replace(' ', '').strip()
+    if len(pw) != 16:
+        return False, 'app passwords are 16 characters; got %d' % len(pw)
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ssl.create_default_context(),
+                              timeout=45) as s:
+            s.login(user, pw)              # authenticate only — no message is sent
+        return True, 'SMTP login OK as %s' % user
+    except smtplib.SMTPAuthenticationError:
+        return False, 'Google rejected it (wrong/revoked app password)'
+    except Exception as e:
+        return False, str(e)[:70]
+
+
+CHECKS = {'2captcha': check_2captcha, 'tracerfy': check_tracerfy, 'gmail': check_gmail}
 
 
 def main():
@@ -116,6 +156,7 @@ def main():
         return 2
     print('     accepted (%s)' % detail)
 
+    old_raw = open(path, encoding='utf-8').read().strip() if os.path.exists(path) else ''
     os.makedirs(BACKUP, exist_ok=True)
     if os.path.exists(path):
         stamp = time.strftime('%Y%m%d-%H%M%S')
@@ -125,7 +166,19 @@ def main():
     else:
         print('2/4  no existing key to back up')
 
-    open(path, 'w', encoding='utf-8').write(new + '\n')
+    # gmail.key must stay 'user@gmail.com:password'. Writing a bare 16-char password here would
+    # destroy the account prefix and the bridge would come up with no user at all — a broken send
+    # path that looks like a bad password. Re-attach the account from the file being replaced.
+    to_write = new
+    if a.vendor == 'gmail' and ':' not in new:
+        user = old_raw.split(':', 1)[0] if old_raw and ':' in old_raw else ''
+        if not user:
+            print('     cannot rebuild gmail.key without the account — pass user@gmail.com:password')
+            return 2
+        to_write = '%s:%s' % (user, new.replace(' ', '').strip())
+        print('     (re-attached account %s)' % user)
+
+    open(path, 'w', encoding='utf-8').write(to_write + '\n')
     print('3/4  wrote %s' % v['file'])
 
     ok2, detail2 = check(open(path, encoding='utf-8').read().strip())
