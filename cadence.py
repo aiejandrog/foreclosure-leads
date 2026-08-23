@@ -30,7 +30,16 @@ STOP_WORDS = re.compile(r'\b(stop|unsubscribe|remove me|do not contact|para|dete
 # ---- the 4-touch sequence (EN, with the ES block every owner expects from this operation) ------
 def steps(lead, sender):
     first = (lead.get('owner') or '').split(',')[0].split()[0].title() or 'there'
+    # The board stores addresses as "455 NE 210 TER, MIAMI, FL- 33179". That stray hyphen after the
+    # state, and the shouted city, appear in every message and are the most machine-looking thing on
+    # the page. Nobody writes their own address that way. Tidy it for display only.
     addr = lead.get('addr') or 'your property'
+    if addr != 'your property':
+        addr = re.sub(r',\s*([A-Z]{2})-\s*', r', \1 ', addr)
+        parts = [p.strip() for p in addr.split(',')]
+        if len(parts) >= 2 and parts[1].isupper():
+            parts[1] = parts[1].title()
+        addr = ', '.join(p for p in parts if p)
     auc = lead.get('auction') or 'the scheduled date'
     sn = sender.get('name') or ''
     sp = sender.get('phone') or ''
@@ -48,36 +57,42 @@ def steps(lead, sender):
     # over ... that belongs to you" and offers a call about it. FS 501.1377 turns on holding
     # yourself out as offering a foreclosure-related service for a fee, so the denial and the
     # "no fee" statement are the two sentences that keep that pitch on the right side of it.
+    # VOICE, rewritten 2026-08-22. Every touch used to lean on em dashes, five per message, which
+    # is the single loudest tell that a machine wrote it. call_mode.py's TEXT_T templates already
+    # solved this for SMS on 08-18 with the note "no em dashes (reads as AI in a text)", so the
+    # house voice already existed and only the email side had missed it: short declaratives, commas
+    # instead of dashes, a cushion before the ask, one ask per message. These now match.
     disc = ("\n\nI am not your lender, not the government, not a foreclosure-rescue company, and "
-            "not an attorney — nothing here is legal advice, and there is never a fee to talk to me.")
-    unsub = "\n\n(If you'd rather not hear from me, just reply 'stop' and you won't hear from me again — no hard feelings.)"
-    s0 = (f"Hi {first},\n\nMy name's {sn}. I work with a small local team that helps owners in "
-          f"foreclosure, and I came across {addr} with an auction scheduled for {auc}.\n\n"
-          f"I'm not calling to pressure you into anything — I just want to make sure you've seen "
-          f"all the options on the table before that date, because most of them expire with the "
-          f"sale. Whatever direction you choose, the numbers should drive it, and I'm happy to walk "
-          f"you through yours at no charge." + sig + disc + unsub)
-    s1 = (f"Hi {first},\n\nQuick follow-up on {addr}. The reason I reached out: from the public "
-          f"records, there may be real money left over after the loan is settled — money that "
-          f"belongs to you, not the bank, if it's handled before {auc}.\n\nTen minutes on the "
-          f"phone is usually enough to tell whether your numbers support that. No cost, no "
-          f"obligation — I'd rather you know than guess." + sig + disc + unsub)
-    s2 = (f"Hi {first},\n\nLast few details before {auc}, in plain terms. Owners in your spot "
-          f"usually have three real options:\n\n"
-          f"  1) Stop the sale and buy time (60-90 days) to regroup.\n"
+            "not an attorney. Nothing here is legal advice, and there is never a fee to talk to me.")
+    unsub = ("\n\n(If you'd rather not hear from me, reply 'stop' and you won't hear from me again. "
+             "No hard feelings.)")
+    s0 = (f"Hi {first},\n\nMy name is {sn}. I work with a small local team that helps owners in "
+          f"foreclosure. Your property at {addr} has an auction scheduled for {auc}.\n\n"
+          f"I'm not calling to pressure you. I just want to make sure you've seen your options before "
+          f"that date, because most of them close when the sale happens. If you already have a plan, "
+          f"keep it. If you want a second look at the numbers, it costs you nothing."
+          + sig + disc + unsub)
+    s1 = (f"Hi {first},\n\nFollowing up on {addr}. Public records suggest there may be money left "
+          f"over after the loan is paid off. If there is, it belongs to you and not the bank, but it "
+          f"has to be handled before {auc}.\n\nTen minutes on the phone is usually enough to tell "
+          f"whether your numbers work that way. It costs you nothing, and I'd rather you know than "
+          f"guess." + sig + disc + unsub)
+    s2 = (f"Hi {first},\n\nA few details before {auc}, in plain terms. Owners in your situation "
+          f"usually have three real options.\n\n"
+          f"  1) Stop the sale and buy time, usually 60 to 90 days, to regroup.\n"
           f"  2) Sell before the auction and keep the equity yourself.\n"
           f"  3) Borrow against the equity and stay in the home.\n\n"
-          f"Which one fits depends on your numbers — and I can show you all three against your "
-          f"actual property, {addr}, at no charge." + sig + disc + unsub)
-    s3 = (f"Hi {first},\n\nThis is my last note about {addr}. The {auc} date is close now, and "
-          f"once a sale happens the options close with it.\n\nWhatever you decide — even deciding "
-          f"to let it go — please decide it with the real numbers in your hand, not the bank's. "
-          f"If a 10-minute call helps, I'm around." + sig + disc + unsub)
-    subj = [f"{addr} — before the auction date",
+          f"Which one fits comes down to your numbers. I can walk you through all three against your actual "
+          f"property at {addr}, and it costs you nothing." + sig + disc + unsub)
+    s3 = (f"Hi {first},\n\nThis is my last note about {addr}. The {auc} date is close, and once the "
+          f"sale happens the options close with it.\n\nWhatever you decide, including deciding to let "
+          f"it go, decide it with your own numbers in front of you instead of the bank's. If a 10 "
+          f"minute call helps, I'm around." + sig + disc + unsub)
+    subj = [f"About {addr.split(',')[0]} before the auction date",
             f"the part of {addr.split(',')[0]} that belongs to you",
-            f"3 options before {auc} — {addr.split(',')[0]}",
+            f"3 options before {auc} for {addr.split(',')[0]}",
             f"last note on {addr.split(',')[0]} before {auc}"]
-    es = ("\n\n---\n\n(ES) Hablo español con gusto — si le es más cómodo, respóndame en español "
+    es = ("\n\n---\n\n(ES) Hablo español con gusto. Si le es más cómodo, respóndame en español "
           "y seguimos por escrito o por teléfono. No soy su prestamista, no soy del gobierno, "
           "no soy una empresa de rescate de ejecuciones, y no soy abogado; esto no es asesoría "
           "legal y nunca hay cargo por hablar conmigo.\n")
