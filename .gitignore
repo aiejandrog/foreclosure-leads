@@ -175,11 +175,10 @@ diligence/
 MSG_*.html
 MSG_*.pdf
 MSG_*.csv
-# 2026-08-23: company renamed Miami Solutions Group -> Biscayne Solutions Group. The BSG_*
-# rules land BEFORE any generator is retargeted -- flip the prefix first and the next
-# refresh-dealflow.bat writes BSG_Call_List_<date>.pdf (305 phones) to repo root UNIGNORED,
-# then `git add -A` pushes it public. The MSG_* rules stay: dated pre-rename deliverables are
-# still on disk and must remain ignored.
+# BSG_* is the same generation renamed for the Biscayne Solutions Group rebrand (msg_flyer.py's
+# output prefix moved 2026-08-23). Added in the SAME commit as the rename, per this file's own rule
+# — *.pdf below is blanket, but nothing blanket-covers .html, so a renamed HTML deliverable would
+# have walked straight past every prefix rule above.
 BSG_*.html
 BSG_*.pdf
 BSG_*.csv

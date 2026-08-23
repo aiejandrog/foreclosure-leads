@@ -233,7 +233,7 @@ def main():
     _en, _es = (card_missed_en, card_missed_es) if a.variant == 'missedyou' else (card_en, card_es)
     en = _en(name, phone) % (H.escape(name), H.escape(phone))
     es = _es(name, phone) % (H.escape(name), H.escape(phone))
-    doc = ('<!doctype html><html><head><meta charset="utf-8"><title>MSG Leave-Behind</title>'
+    doc = ('<!doctype html><html><head><meta charset="utf-8"><title>BSG Florida Leave-Behind</title>'
            '<style>%s</style></head><body>'
            '<div class="sheet">%s</div><div class="sheet">%s</div>'
            '</body></html>') % (CSS % {'bg': COLORS[a.color]}, en * 4, es * 4)
