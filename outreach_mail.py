@@ -280,10 +280,10 @@ def build_letter_html(r, snd, lang='en'):
     # Keep in sync with tracker_template.html genLetter() — Field Manual 5 exits + buyer posture + Carlos intake.
     intake_en = ('I take information, not your time. I bring it to the people who put every option on the table. '
                  'If you want that conversation at no charge, the only courtesy I ask is that you answer when we call. '
-                 'If you are not interested, tell me — nobody\'s feelings get hurt.')
+                 'If you are not interested, tell me. Nobody\'s feelings get hurt.')
     intake_es = ('Yo tomo información, no su tiempo. Se la llevo a las personas que arman las opciones. '
                  'Si quiere que pongamos todas las salidas sobre la mesa sin costo, la única cortesía que pido '
-                 'es que conteste cuando llamemos. Si no le interesa, dígamelo — nadie se ofende.')
+                 'es que conteste cuando llamemos. Si no le interesa, dígamelo. Nadie se ofende.')
     exits_en = """<ol>
 <li><b>REINSTATE</b> — pay arrears + fees to bring the loan current. Stops the sale.</li>
 <li><b>LOAN MODIFICATION</b> — the bank changes payment terms (often 60–120 days).</li>
