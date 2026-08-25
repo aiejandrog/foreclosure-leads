@@ -305,3 +305,7 @@ _rdc.py
 _rdc2.py
 send_complaint.py
 send_taxes.py
+
+# transfer bundles: secrets + ledgers staged for another machine, never committed
+/DEALFLOW-transfer/
+/DEALFLOW-transfer*.7z
