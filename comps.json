@@ -29956,5 +29956,275 @@
 "psf": 228
 }
 ]
+},
+"CACE-20-003482": {
+"arv": 442661,
+"psf": 299.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "9951 SW 9 CT",
+"price": 629900,
+"yr": 2025,
+"sqft": 2056,
+"psf": 306
+},
+{
+"addr": "3111 THAMES WAY",
+"price": 549900,
+"yr": 2025,
+"sqft": 1878,
+"psf": 293
+},
+{
+"addr": "2155 SW 101 WAY",
+"price": 457000,
+"yr": 2025,
+"sqft": 1618,
+"psf": 282
+}
+]
+},
+"CACE-25-018553": {
+"arv": 361218,
+"psf": 286.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "195 NW ELLER ST",
+"price": 415000,
+"yr": 2025,
+"sqft": 1418,
+"psf": 293
+},
+{
+"addr": "400 N FEDERAL HWY",
+"price": 280000,
+"yr": 2025,
+"sqft": 1002,
+"psf": 279
+},
+{
+"addr": "120 NE 5 ST",
+"price": 345000,
+"yr": 2025,
+"sqft": 1275,
+"psf": 271
+}
+]
+},
+"CACE-25-012839": {
+"arv": 464908,
+"psf": 284.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "2780 SW 15 ST",
+"price": 319000,
+"yr": 2025,
+"sqft": 1118,
+"psf": 285
+},
+{
+"addr": "1242 NW 51 WAY",
+"price": 380000,
+"yr": 2025,
+"sqft": 1345,
+"psf": 283
+},
+{
+"addr": "1238 NW 51 WAY",
+"price": 384700,
+"yr": 2025,
+"sqft": 1345,
+"psf": 286
+}
+]
+},
+"502026CC006407XXXAMB": {
+"arv": 286518,
+"psf": 318.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1721 ROYAL FOREST CT",
+"price": 210000,
+"yr": 2025,
+"sqft": 680,
+"psf": 309
+},
+{
+"addr": "436 GULFSTREAM RD",
+"price": 410000,
+"yr": 2025,
+"sqft": 1254,
+"psf": 327
+},
+{
+"addr": "1481 ROYAL FOREST CT",
+"price": 330000,
+"yr": 2025,
+"sqft": 1100,
+"psf": 300
+}
+]
+},
+"502025CA007102XXXAMB": {
+"arv": 635336,
+"psf": 266.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "19502 WEATHERVANE WAY",
+"price": 515000,
+"yr": 2024,
+"sqft": 1921,
+"psf": 268
+},
+{
+"addr": "19506 WEATHERVANE WAY",
+"price": 510000,
+"yr": 2024,
+"sqft": 1921,
+"psf": 265
+},
+{
+"addr": "19627 WEATHERVANE WAY",
+"price": 510000,
+"yr": 2024,
+"sqft": 1921,
+"psf": 265
+}
+]
+},
+"502025CA013486XXXAMB": {
+"arv": 457792,
+"psf": 368.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "518 N K ST",
+"price": 320000,
+"yr": 2025,
+"sqft": 860,
+"psf": 372
+},
+{
+"addr": "515 N D ST",
+"price": 349000,
+"yr": 2025,
+"sqft": 960,
+"psf": 364
+},
+{
+"addr": "603 N D ST",
+"price": 305000,
+"yr": 2025,
+"sqft": 840,
+"psf": 363
+}
+]
+},
+"502026CA003619XXXAMB": {
+"arv": 780000,
+"psf": 375.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "844 30TH CT",
+"price": 485000,
+"yr": 2025,
+"sqft": 1445,
+"psf": 336
+},
+{
+"addr": "517 29TH ST",
+"price": 902000,
+"yr": 2025,
+"sqft": 2177,
+"psf": 414
+},
+{
+"addr": "517 34TH ST",
+"price": 570000,
+"yr": 2025,
+"sqft": 1356,
+"psf": 420
+}
+]
+},
+"502026CC009427XXXASB": {
+"arv": 371960,
+"psf": 340,
+"n": 13,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "327 NW 11TH AVE",
+"price": 345200,
+"yr": 2025,
+"sqft": 1016,
+"psf": 340
+},
+{
+"addr": "224 NW 4TH AVE",
+"price": 405000,
+"yr": 2025,
+"sqft": 1200,
+"psf": 338
+},
+{
+"addr": "50 NW 12TH AVE",
+"price": 500000,
+"yr": 2025,
+"sqft": 1566,
+"psf": 319
+}
+]
+},
+"502026CC009055XXXAMB": {
+"arv": 490750,
+"psf": 323.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "3501 S OCEAN BLVD 204",
+"price": 480000,
+"yr": 2025,
+"sqft": 1570,
+"psf": 306
+},
+{
+"addr": "3520 S OCEAN BLVD F405",
+"price": 400000,
+"yr": 2025,
+"sqft": 1174,
+"psf": 341
+},
+{
+"addr": "3546 S OCEAN BLVD 316",
+"price": 350000,
+"yr": 2025,
+"sqft": 1224,
+"psf": 286
+}
+]
 }
 }
