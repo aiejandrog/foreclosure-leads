@@ -80,7 +80,15 @@ def _addr_of(r):
 
 def _condo_ish(r):
     dor = (r.get('dor_desc') or '').lower()
-    if 'condo' in dor: return True
+    # 'cooperative' added 2026-08-24: 1110 VENETIAN WAY 1A came through a door build clean because
+    # the county calls it COOPERATIVE - RESIDENTIAL, which contains no 'condo' substring. A co-op is
+    # the no-condo rule's case exactly, and then some -- the owner holds SHARES in a corporation
+    # plus a proprietary lease, not the real property, so there is no deed to buy, the board can veto
+    # a transfer outright, and the foreclosure runs on a different track than the one every piece of
+    # our door copy describes. Wrong door, wrong pitch.
+    # 'townhouse' is NOT here on purpose: a fee-simple townhouse is a real house on a real lot and a
+    # legitimate door -- the caller decides that one, this only catches shared-ownership forms.
+    if 'condo' in dor or 'cooperative' in dor or 'co-op' in dor: return True
     addr = _addr_of(r).lower()
     return ' apt ' in addr or ' #' in addr or ' unit ' in addr
 
