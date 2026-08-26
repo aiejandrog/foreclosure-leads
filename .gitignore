@@ -116,6 +116,13 @@ _chunk.html
 # most valuable suite in the repo and should not be the one file that never survives a clone.
 balloon_refi.json
 replies.json
+# the daily door-route system's local state (bsg_daily_routes.py / routed_ledger.py, 2026-08-24):
+# routed_ledger.json = every address ever issued on a route sheet with attempt history — homeowner
+# PII exactly like worker_notes.json below; lp_geo_cache.json = folio→lat/lng for LP parcels
+# (folio alone re-identifies the owner via the PA); the run log carries addresses too.
+routed_ledger.json
+lp_geo_cache.json
+daily-routes-run.log
 # tracker localStorage mirrored to disk by send_server.py POST /notes — full PII call history
 worker_notes.json
 worker_notes_snapshots/
