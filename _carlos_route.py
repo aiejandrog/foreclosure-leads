@@ -105,6 +105,46 @@ def _days_to(sale):
         except Exception: pass
     return None
 
+def _digits(v):
+    n = ''.join(c for c in str(v or '') if c.isdigit())
+    if len(n) == 11 and n.startswith('1'):      # same normalisation _phones_from_skip does
+        n = n[1:]
+    return n
+
+
+def _identity_opted(skip, optouts):
+    """True when this lead's traced email or phone matches a CASE-LESS opt-out in the ledger.
+
+    optouts is keyed by case AND by '@'+hash(email) / '#'+hash(digits), because a stop that arrives
+    as an email reply has no case number attached to it. `case in optouts` cannot match those.
+
+    Reads skip['phones'] RAW rather than going through _phones_from_skip(): that helper drops
+    DNC-flagged numbers and keeps only the first four, and a DNC number is precisely one that might
+    carry an opt-out. Filtering the haystack before searching it is how a suppression misses.
+    """
+    ident = {str(k) for k in (optouts or {}) if str(k)[:1] in ('@', '#')}
+    if not ident or not skip:
+        return False
+    try:
+        # function-level: foreclosure_leads imports the route modules, so top-level would be circular
+        from foreclosure_leads import _addr_key as _ak
+    except Exception:
+        return False
+    for e in (skip.get('emails') or []):
+        e = str(e or '').strip().lower()
+        # RAW key or HASHED key. optouts.json itself stores '@someone@gmail.com' verbatim;
+        # only the board bake hashes them for publication. Matching hashed-only made this
+        # whole function a no-op against the real ledger — verified against optouts.json,
+        # not against a synthetic fixture that happened to use the shape I assumed.
+        if e and (('@' + e) in ident or ('@' + _ak(e)) in ident):
+            return True
+    for p in (skip.get('phones') or []):
+        n = _digits(p.get('number') or p.get('phone') or '') if isinstance(p, dict) else _digits(p)
+        if n and (('#' + n) in ident or ('#' + _ak(n)) in ident):
+            return True
+    return False
+
+
 def _live_lead(r, skip, siblings=None, optouts=None):
     """DROP-OR-KEEP filter -- the compliance + gas gate before ranking."""
     case = r.get('case') or r.get('Case #')
@@ -114,6 +154,11 @@ def _live_lead(r, skip, siblings=None, optouts=None):
     if siblings and (siblings.get(case) or {}).get('claimed'): return False
     # server-side opt-out ledger (optouts.json) -- an owner who said stop gets NO door either
     if optouts and case in optouts: return False
+    # ...and that promise was only true for opt-outs that happened to carry a case number. A stop
+    # sent as an email reply is keyed by identity, not case, so it matched nothing here and the
+    # person still got a knock. Doors are the most invasive channel we run; it should be the least
+    # willing to guess. (Same gap fixed in the Morning Worker and Call Mode today.)
+    if optouts and _identity_opted(skip, optouts): return False
     # already-sold / cancelled won't have a future date -- days<0 = past
     d = _days_to(_sale_date(r))
     if d is not None and d < 0: return False

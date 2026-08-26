@@ -502,7 +502,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             return False
         for _e in (lead.get('emails') or []):
             _e = str(_e or '').strip().lower()
-            if _e and ('@' + _ak(_e)) in _oo_ident:
+            # raw key OR hashed key — optouts.json stores the address verbatim; only the
+            # board bake hashes it. Hashed-only matched nothing against the real ledger.
+            if _e and (('@' + _e) in _oo_ident or ('@' + _ak(_e)) in _oo_ident):
                 return True
         for _p in (lead.get('phones') or []):
             # Digits only, NO country-code normalisation — deliberately matching what the ledger key
@@ -512,7 +514,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # arrive, strip a leading '1' HERE, in the board, and in the bake — all three or none,
             # or the hashes stop agreeing and the suppression silently stops matching.
             _p = re.sub(r'\D', '', str(_p or ''))
-            if _p and ('#' + _ak(_p)) in _oo_ident:
+            if _p and (('#' + _p) in _oo_ident or ('#' + _ak(_p)) in _oo_ident):
                 return True
         return False
 
