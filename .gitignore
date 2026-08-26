@@ -9,6 +9,7 @@ _*.py
 !_cstest.py
 !_redesign_verify.py
 !_gatetest.py
+!_suppressiontest.py
 !_diligencetest.py
 !_filtertest.py
 !_funneltest.py

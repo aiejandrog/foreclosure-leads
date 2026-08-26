@@ -437,10 +437,26 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust
     return queue, skips
 
 
-def load_suppress(path):
-    """Build a set of suppressed case numbers from an exported tracker notes/sync JSON.
-    Accepts a few shapes: {case: {status: 'DO NOT CONTACT', optout: true, ...}} or a list of such."""
+def load_suppress(path, _server=True):
+    """Suppressed case numbers from an exported tracker notes/sync JSON, ALWAYS unioned with the
+    server ledger (optouts.json).
+
+    Accepts a few shapes: {case: {status: 'DO NOT CONTACT', optout: true, ...}} or a list of such.
+
+    The server ledger is folded in HERE, not at the call site, on purpose. It started as a union in
+    main() — correct, but it meant the safe behaviour depended on one line in one caller remembering
+    to do it, and a test of this function could not tell whether that line still existed. Putting it
+    in the function makes the safe thing the only thing: every caller, present and future, gets the
+    ledger whether or not it passes a path. `_server=False` exists solely so this function can load
+    the ledger itself without recursing.
+    """
     out = set()
+    if _server:
+        srv = os.path.join(HERE, 'optouts.json')
+        if os.path.exists(srv):
+            out |= load_suppress(srv, _server=False)
+        else:
+            print('WARNING: optouts.json not found — mailing WITHOUT server-ledger suppression')
     if not path or not os.path.exists(path):
         return out
     try:
@@ -537,14 +553,10 @@ def main():
         sent = json.load(open(SENT_LEDGER, encoding='utf-8')) if os.path.exists(SENT_LEDGER) else {}
     except Exception:
         sent = {}
-    # THE SERVER LEDGER IS ALWAYS ON. --suppress takes a hand-exported tracker notes file, so
-    # suppression was OPTIONAL: forget the flag and this mails everybody, including people on
-    # optouts.json who told us to stop. Physical mail is the one channel that leaves a paper
-    # exhibit in someone's hand, so it should be the hardest to send by accident, not the easiest.
-    # load_suppress already unwraps the {notes:{...}} envelope, which is optouts.json's own shape.
-    # (Lob has never run — mail_letters_sent.json does not exist — so this is a guard on the first
-    # run, not a fix for mail already sent.)
-    suppress = load_suppress(a.suppress) | load_suppress(os.path.join(HERE, 'optouts.json'))
+    # load_suppress() folds in the server ledger itself — see its docstring. Suppression used to
+    # be OPTIONAL here (no --suppress flag, no suppression at all), which on the one channel that
+    # puts paper in someone's hand is the wrong default.
+    suppress = load_suppress(a.suppress)
 
     if a.queue:
         # human already selected + opt-out-filtered these in the tracker; trust the picks, keep safety backstops
