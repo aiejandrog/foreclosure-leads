@@ -6806,7 +6806,16 @@ function _ownerOwedOf(r){
     var _assV = +r.assessed_value || +r.assessed || 0;
     var _half = _assV ? _assV/2 : ((+r.value||0)/2);
     var _new  = owed - _half;
-    owed = (_new > 0) ? _new : (_assV ? 0 : owed);   // no assessed value: hold the pre-subtract debt
+    // IMPOSSIBLE NEGATIVE = the data is wrong, not the debt. obid on a homestead TD statutorily
+    // CONTAINS half the assessed value (taxes + assessed/2, FS 197.502(6)(c)), so obid minus
+    // half-assessed can only go <= 0 when one of the two fields is bad. The first fix held the
+    // pre-subtract debt only on the NO-assessed path and returned 0 on the with-assessed path —
+    // directly contradicting the paragraph above it ("expose ... instead of silently zeroing")
+    // and quoting a $0 payoff on a live homestead whenever assessed drifted high. Caught by
+    // _cstest's SOH simulation (assessed=60% of market), overnight loop 2026-08-26. Hold the
+    // pre-subtract debt on BOTH impossible paths: understating equity is recoverable, telling
+    // the deal desk a family owes nothing is not.
+    owed = (_new > 0) ? _new : owed;
   }
   return owed;
 }

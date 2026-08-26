@@ -42,7 +42,11 @@ with sync_playwright() as p:
     picks = pg.evaluate("""() => {
       const md = DATA.filter(r=>(r.county||'MIAMI-DADE')==='MIAMI-DADE' && r.st==='FC');
       const withPhone = md.find(r=>_cleanPhones(r).length>0);
-      const noPhone = md.find(r=>_cleanPhones(r).length===0 && r.st!=='LP');
+      // ...and not contact-BLOCKED: the first no-phone pick landed on a §362-stayed lead
+      // (2025-002125-CA-01) whose sheet CORRECTLY suppresses find-a-number along with every other
+      // channel — hunting numbers for a protected debtor is the violation. The check's promise is
+      // about plain no-phone leads, so sample one whose contact gate is open. (2026-08-26)
+      const noPhone = md.find(r=>_cleanPhones(r).length===0 && r.st!=='LP' && !_textContactBlocked(r));
       const withAuc = md.find(r=>r.auc);
       const withRecqs = md.find(r=>r.recqs);
       const lp = DATA.find(r=>r.st==='LP' && !r.co && r.people);   // human-owned LP: People-search IS the play
@@ -350,22 +354,33 @@ with sync_playwright() as p:
       const rowsBefore = document.querySelectorAll('#tb tr[data-case]').length;
       openCallSheet(c); closeCallSheet();                       // LOOKING: must stamp nothing now
       const out = {hubStampsNothing: !viewed.has(c), notFiled: !filed.has(c)};
-      // WORKING: a people-search link click in this lead's links sub-row must stamp it
-      const lr = document.querySelector('#tb tr[data-case="'+CSS.escape(c)+'"] + tr.lrow');
-      const link = lr && [...lr.querySelectorAll('a[href]')].find(a =>
-        /truepeoplesearch\\.com|whitepages\\.com|cyberbackgroundchecks\\.com/i.test(a.href));
-      if(link){
-        link.addEventListener('click', ev => ev.preventDefault(), {once:true});   // don't leave the page
-        link.click();
+      // WORKING: a people-search click must stamp the lead. Where those links LIVE moved twice
+      // (2026-08-26 audit): the row's links sub-row lazy-renders AND renders EMPTY of anchors on
+      // the current build — the find-a-number chips now live on the CALL SHEET (_csPeople), and
+      // the delegated stamper resolves the open sheet via callSheetCase. Test the path the
+      // operator actually uses: open a sheet that carries people links, click one there.
+      let c2 = null, link = null, map = null;
+      const cand = DATA.find(x => x.people && !_textContactBlocked(x));
+      if(cand){
+        c2 = cand.case;
+        openCallSheet(c2);
+        link = [...document.querySelectorAll('.cspeople a[href]')].find(a =>
+          /truepeoplesearch\\.com|whitepages\\.com|cyberbackgroundchecks\\.com/i.test(a.href));
+        map = [...document.querySelectorAll('a[href]')].find(a => /google\\.com\\/maps/i.test(a.href));
+        if(link){
+          viewed.delete(c2);
+          link.addEventListener('click', ev => ev.preventDefault(), {once:true});   // don't leave the page
+          link.click();
+        }
       }
       out.linkFound = !!link;
-      out.contactStamps = viewed.has(c);
-      // a map link click must NOT stamp
-      viewed.delete(c);
-      const map = lr && [...lr.querySelectorAll('a[href]')].find(a => /google\\.com\\/maps/i.test(a.href));
+      out.contactStamps = !!c2 && viewed.has(c2);
+      // a map click (looking, not working) must NOT stamp
+      if(c2) viewed.delete(c2);
       if(map){ map.addEventListener('click', ev => ev.preventDefault(), {once:true}); map.click(); }
       out.mapFound = !!map;
-      out.mapStampsNothing = !viewed.has(c);
+      out.mapStampsNothing = !c2 || !viewed.has(c2);
+      if(c2) closeCallSheet();
       // give the listener's delayed render() a beat, then check nothing vanished + the split holds
       setTimeout(() => {
         _markViewed(c); render();                                // simulate a worked lead
@@ -569,8 +584,10 @@ with sync_playwright() as p:
     # go pull a senior 2nd that FS 197.552 extinguishes at the sale. That sends them researching the
     # wrong lien and implies the equity is at risk from a mortgage that will be wiped.
     lens = pg.evaluate("""() => {
+      // not LP: a fresh lis pendens deliberately has no FINAL JUDGMENT box (the LP-framing check
+      // above REQUIRES that), so sampling one here misread the LP lens as a broken FC lens.
       const t = DATA.find(r => r.st === 'TD' && !r._nodata);
-      const f = DATA.find(r => r.st !== 'TD' && !r._nodata);
+      const f = DATA.find(r => r.st !== 'TD' && r.st !== 'LP' && !r._nodata);
       if(!t || !f) return {ok:false};
       const boxOf = () => [...document.querySelectorAll('.csbox')]
         .map(b => (((b.querySelector('.csl')||{}).textContent||'')+' | '+((b.querySelector('.csv')||{}).textContent||'')+' | '+((b.querySelector('.css')||{}).textContent||''))).join('\\u2028');
@@ -582,7 +599,9 @@ with sync_playwright() as p:
         tdOpening:    /OPENING BID/.test(tdBox),
         tdWiped:      /MORTGAGES WIPED/.test(tdBox) && /197\\.552/.test(tdBox),
         tdNoHunt:     !/senior 2nd\\/HELOC/.test(tdBox),
-        fcIntact:     /FINAL JUDGMENT/.test(fcBox) && !/MORTGAGES WIPED/.test(fcBox)};
+        // PAYOFF is the accrued-interest variant of the same foreclosure lens (FS 55.03 accrual,
+        // _isAccrued swaps the label) — both count as intact; only the TD lens leaking would not.
+        fcIntact:     /(FINAL JUDGMENT|PAYOFF)/.test(fcBox) && !/MORTGAGES WIPED/.test(fcBox)};
     }""")
     rec('TD sheet drops the phantom final judgment for the opening bid',
         lens['ok'] and lens['tdNoJudgment'] and lens['tdOpening'], '')
@@ -1115,7 +1134,11 @@ with sync_playwright() as p:
     rec('Playbook: keyboard shortcut P opens it', reopened, '')
     pg.keyboard.press('Escape'); pg.wait_for_timeout(200)
 
-    real = [e for e in errs if 'favicon' not in e]
+    # ERR_CONNECTION_REFUSED is the board probing the localhost send bridge (send_server.py) while
+    # it is offline — a designed, supported state ("Logged to this phone only" degradation), and
+    # the normal one on a test runner. Filtering it keeps the check able to catch REAL errors
+    # instead of always drowning in bridge noise. (2026-08-26)
+    real = [e for e in errs if 'favicon' not in e and 'ERR_CONNECTION_REFUSED' not in e]
     rec('No console/page errors', not real, '; '.join(real[:3])[:200])
     b.close()
 
