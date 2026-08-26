@@ -8,8 +8,14 @@ How it works end to end:
      next touch (day 0/2/4/7), and advances the state in cadence_state.json.
   3. Every run also polls the inbox (IMAP) for anything FROM an enrolled owner. The moment a
      reply lands, that sequence is CANCELLED for good — the lead goes warm and no more touches
-     go out. Replies containing stop/unsubscribe/para/detener additionally write optouts.json in
-     the tracker's notes-import format so the do-not-contact ledger picks them up on import.
+     go out. Replies containing stop/unsubscribe/para/detener are additionally ledgered straight
+     into optouts.json (add-only, both the case key and the '@email' key) and onto the
+     bounced_emails.json hard-suppression list the send bridge enforces.
+  4. Before any of that, every run re-reads the opt-out ledger and drops anyone suppressed since
+     the queue was exported. The queue is a snapshot; the ledger is the truth.
+
+The company name in the signature comes from entity.display_llc() — the " LLC" suffix prints only
+on a strict ACTIVE Sunbiz match. Never sign with a raw sender.llc string; see safe_llc() below.
 
 Run `python cadence.py --dry-run` first: prints exactly what it would send, to whom, and what the
 reply check would do — without touching the mail server. gmail.key = one line:  you@gmail.com:apppassword
@@ -19,6 +25,9 @@ from datetime import date, datetime, timedelta
 from email.mime.text import MIMEText
 from email.utils import formataddr, parseaddr
 
+import entity
+import outreach_email as _oe
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE = os.path.join(HERE, 'cadence_queue.json')
 STATE = os.path.join(HERE, 'cadence_state.json')
@@ -26,6 +35,27 @@ KEY = os.path.join(HERE, 'gmail.key')
 OPTOUTS = os.path.join(HERE, 'optouts.json')
 
 STOP_WORDS = re.compile(r'\b(stop|unsubscribe|remove me|do not contact|para|detener|dejen de escribir|no contactar)\b', re.I)
+
+
+def safe_llc(raw):
+    """The company name as it may legally be signed, per the Sunbiz gate in entity.py.
+
+    ADDED 2026-08-26. cadence.py was the ONE owner-facing channel that never consulted the gate.
+    Every other surface does -- bsg_letter, bsg_flyer, outreach_mail, call_mode,
+    carlos_letter_packet, foreclosure_leads -- but cadence builds its own signature block from
+    cadence_queue.json's sender dict, and that queue was exported 2026-08-23 10:43, hours BEFORE
+    the gate landed. So it carried "Biscayne Solutions Group LLC" while entity_status.json said
+    NOT_FOUND, and signed 59 emails with it on 08-24 and 08-25.
+
+    A queue is a frozen snapshot of a sender profile, so it can also still hold the retired
+    'Miami Solutions Group' -- which belongs to a DIFFERENT Florida company. Map that forward
+    first (same rule as outreach_mail._safe_llc), then let the gate decide about the suffix.
+    Fail-closed: on any doubt this returns the bare name, never the entity claim."""
+    v = (raw or '').strip()
+    if re.match(r'^\s*miami\s+solutions\s+group(\s+ll?c\.?)?\s*$', v, re.I):
+        v = 'Biscayne Solutions Group LLC'
+    name, _doc, warn = entity.display_llc(v)
+    return name, warn
 
 # ---- the 4-touch sequence (EN, with the ES block every owner expects from this operation) ------
 def steps(lead, sender):
@@ -44,7 +74,7 @@ def steps(lead, sender):
     sn = sender.get('name') or ''
     sp = sender.get('phone') or ''
     se = sender.get('email') or ''
-    sllc = sender.get('llc') or ''
+    sllc = safe_llc(sender.get('llc'))[0]
     sig = f"\n\n{sn}" + (f"\n{sllc}" if sllc else '') + (f"\n{sp}" if sp else '') + (f"\n{se}" if se else '')
     # ADDED 2026-08-22. All four touches shipped with a STOP line and NOTHING else — no
     # not-an-attorney, no not-a-rescue-company, no fee statement. Every other outward channel
@@ -161,6 +191,12 @@ def main():
         return 1
     sender = payload.get('sender') or {}
     queue = payload['queue']
+    # Surface the entity gate's verdict in the run log. This is a scheduled job -- if the warning
+    # is only a return value nobody reads it, and "why is my company name missing its LLC" becomes
+    # a mystery instead of a one-line answer sitting in cadence-run.log.
+    _llc, _llcwarn = safe_llc(sender.get('llc'))
+    if _llcwarn:
+        print('  ENTITY GATE: signing as %r — %s' % (_llc, _llcwarn))
     state = load_json(STATE, {})
     cred = load_key()
     if not cred and not args.dry_run:
@@ -175,13 +211,43 @@ def main():
             state[c] = {'step': lead.get('step', 0), 'next': lead.get('next') or str(today),
                         'status': 'active', 'owner': lead.get('owner'), 'addr': lead.get('addr'),
                         'email': lead.get('email'), 'auction': lead.get('auction'), 'log': []}
-        elif state[c].get('status') in ('stopped', 'replied', 'cancelled', 'completed'):
+        elif state[c].get('status') in ('stopped', 'suppressed', 'replied', 'cancelled', 'completed'):
             state[c] = state[c]   # never resurrect a finished sequence by re-exporting
         else:
             state[c]['owner'] = lead.get('owner'); state[c]['addr'] = lead.get('addr')
             state[c]['email'] = lead.get('email'); state[c]['auction'] = lead.get('auction')
 
     active = {c: s for c, s in state.items() if s.get('status') == 'active' and s.get('email')}
+
+    # 0) SUPPRESSION SWEEP, at send time.
+    #
+    # ADDED 2026-08-26. Until now cadence checked opt-outs exactly once: at queue-EXPORT time, on
+    # the board, on whichever machine built cadence_queue.json. Everything after that ran blind.
+    # An owner who told Carlos to stop at the door, said stop on the phone, or whose STOP reply was
+    # ledgered by optout_sync overnight, stayed enrolled and kept receiving touches -- and this
+    # engine is scheduled, so nobody is watching when it sends. The queue in use here was exported
+    # 2026-08-23 and drives sends for a week or more; a one-time filter cannot hold that long.
+    #
+    # Reuses outreach_email._load_optouts(), which unwraps the {_dealflow_notes, exported, device,
+    # notes:{...}} envelope correctly and returns lowercased keys with the '@' stripped, so a case
+    # number and an email address both match. That function carries its own war story: it was dead
+    # code until 2026-08-19 and a written STOP was followed by a fresh cold email. Call it, do not
+    # re-implement it.
+    _oo = _oe._load_optouts()
+    _sup = load_json(os.path.join(HERE, 'bounced_emails.json'), {})
+    _sup = {str(k).strip().lower() for k in _sup} if isinstance(_sup, dict) else set()
+    for c, s in list(active.items()):
+        em = (s.get('email') or '').strip().lower()
+        why = ('opt-out ledger' if (c.strip().lower() in _oo or em in _oo)
+               else 'hard-suppression list' if em in _sup else '')
+        if why:
+            # NOT 'stopped' -- that status means "this engine heard a stop word" and feeds the
+            # ledger write below. These are already suppressed elsewhere; re-ledgering them under
+            # cadence's provenance would forge the record of how we learned.
+            s['status'] = 'suppressed'
+            s['log'].append({'d': str(today), 'ev': f'suppressed before send ({why})'})
+            active.pop(c)
+            print(f'  SUPPRESSED (not sent) -> {em or c}  ({s.get("owner")}) — {why}')
 
     # 1) reply check FIRST — never send another touch to someone who already wrote back
     replies = imap_replies(cred, [s['email'] for s in active.values()], args.dry_run or not cred)
@@ -194,14 +260,62 @@ def main():
     if any(r == 'replied' for r in replies.values()):
         print(f"  auto-cancelled on reply: {sum(1 for r in replies.values() if r=='replied')}")
 
-    # write opt-outs in the tracker's notes-import shape (merge via Sync/team -> Import)
+    # write opt-outs into the SERVER LEDGER, add-only (the board, call_list, carlos_* routes,
+    # morning_planner and outreach_email all read this file).
+    #
+    # REWRITTEN 2026-08-26. This used to be `json.dump({'notes': notes}, open(OPTOUTS, 'w'))` --
+    # a full-file OVERWRITE with only cadence's own stop-word set. It would have dropped the
+    # {_dealflow_notes, exported, device} envelope every other consumer unwraps, and erased every
+    # opt-out this engine did not personally detect: Norma Hendy, gil_sosa (a wrong-person hit),
+    # and the rest. It had not fired yet only because no enrolled owner had replied STOP. Same
+    # one-way posture as optout_sync.py: ADD only, never clear, never downgrade, never rewrite an
+    # entry a human left. Re-running is a no-op.
+    #
+    # BOTH KEYS, same reason optout_sync writes both: the ledger is case-keyed but replies are
+    # email-keyed, and suppressing one key and not the other is exactly how a handled opt-out
+    # comes back. The raw address also goes on the hard-suppression list the send bridge enforces.
     stopped = {c: s for c, s in state.items() if s.get('status') == 'stopped'}
-    if stopped:
-        notes = {c: {'status': 'DO NOT CONTACT', 'optout': str(today),
-                     'optlog': [{'ts': datetime.now().isoformat(timespec='seconds'), 'act': 'set-local', 'src': 'cadence stop-word'}]}
-                 for c in stopped}
-        json.dump({'notes': notes}, open(OPTOUTS, 'w', encoding='utf-8'), indent=1)
-        print(f'  optouts.json updated for {len(stopped)} owner(s) — import it in the tracker (Sync/team)')
+    if stopped and args.dry_run:
+        print(f'  [dry-run] would ledger {len(stopped)} opt-out(s): {", ".join(stopped)}')
+    elif stopped:
+        opt = load_json(OPTOUTS, {}) or {}
+        if not isinstance(opt, dict):
+            opt = {}
+        opt.setdefault('_dealflow_notes', 1)
+        opt.setdefault('device', 'server-ledger')
+        opt['exported'] = str(today)
+        notes = opt.setdefault('notes', {})
+        sup = load_json(os.path.join(HERE, 'bounced_emails.json'), {})
+        if not isinstance(sup, dict):
+            sup = {}
+        now = datetime.now().isoformat(timespec='seconds')
+        added, sup_new = [], []
+        for c, s in stopped.items():
+            em = (s.get('email') or '').strip().lower()
+            entry = {'status': 'DO NOT CONTACT', 'optout': str(today),
+                     'note': ('AUTO-LEDGERED by cadence.py: the owner replied with a stop word to '
+                              'the 4-touch sequence. Covers ALL channels: no email, no call, no '
+                              'text, no door. Owner %s, %s.'
+                              % (s.get('owner') or '?', s.get('addr') or '?')),
+                     'optlog': [{'ts': now, 'act': 'opted-out', 'src': 'cadence stop-word (IMAP reply)'}]}
+            for key in (c, ('@' + em) if em else ''):
+                if key and key not in notes:
+                    notes[key] = dict(entry)
+                    added.append(key)
+            if em and em not in sup:
+                sup[em] = {'type': 'optout', 'when': str(today), 'why': 'cadence stop-word reply'}
+                sup_new.append(em)
+        if added:
+            tmp = OPTOUTS + '.tmp'
+            json.dump(opt, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
+            os.replace(tmp, OPTOUTS)
+        if sup_new:
+            _b = os.path.join(HERE, 'bounced_emails.json')
+            tmp = _b + '.tmp'
+            json.dump(sup, open(tmp, 'w', encoding='utf-8'), indent=0, ensure_ascii=False)
+            os.replace(tmp, _b)
+        print(f'  optouts.json: {len(added)} key(s) ledgered for {len(stopped)} owner(s), '
+              f'{len(sup_new)} address(es) hard-suppressed')
 
     # 2) send due steps
     sent = 0
@@ -242,7 +356,9 @@ def main():
 
     json.dump(state, open(STATE, 'w', encoding='utf-8'), indent=1)
     print(f'done. {sent} sent, {sum(1 for s in state.values() if s.get("status")=="active")} active, '
-          f'{sum(1 for s in state.values() if s.get("status")=="replied")} replied-cancelled.')
+          f'{sum(1 for s in state.values() if s.get("status")=="replied")} replied-cancelled, '
+          f'{sum(1 for s in state.values() if s.get("status")=="suppressed")} suppressed, '
+          f'{sum(1 for s in state.values() if s.get("status")=="stopped")} opted-out.')
     return 0
 
 
