@@ -2549,24 +2549,42 @@ def make_tracker(leads):
                 # carry only what suppression needs — never the free-text note (it can quote
                 # the owner verbatim and this file ships inside a page that leaves the machine)
                 _entry = {'optout': _n.get('optout') or '', 'status': _n.get('status') or 'DO NOT CONTACT'}
-                if str(_c).startswith('@'):
-                    _hit = _by_email.get(str(_c)[1:].strip().lower()) or []
-                    if not _hit:
-                        _oo_unresolved += 1
-                        continue
-                    for _hc in _hit:
+                if str(_c).startswith('@') or str(_c).startswith('#'):
+                    # PERSON-LEVEL SUPPRESSION SURVIVES, HASHED.
+                    # The board builds _optedOutIdentities() from notes keys starting '@'/'#' and
+                    # _isOptedOutPerson() blocks EVERY case carrying that email or phone -- an owner
+                    # with six concurrent sales who says stop once is suppressed on all six. That is
+                    # the strongest opt-out path in the system and it is fed from here.
+                    #
+                    # The first cut of this fix resolved these to a case and dropped the identity
+                    # key, which closed the plaintext leak and silently killed cross-case
+                    # suppression with it. Emit BOTH: the case (so the right lead is suppressed even
+                    # on a device that has never seen this person) and an OPAQUE identity key, so
+                    # _isOptedOutPerson still works without publishing the address.
+                    _raw = str(_c)[1:].strip().lower()
+                    if str(_c).startswith('#'):
+                        _raw = re.sub(r'\D', '', _raw)
+                    _optouts[str(_c)[0] + _addr_key(_raw)] = dict(_entry)
+                    for _hc in (_by_email.get(_raw) or []):
                         if _hc:
                             _optouts[_hc] = dict(_entry)
+                    if not (_by_email.get(_raw) or []):
+                        _oo_unresolved += 1
                 else:
                     _optouts[_c] = _entry
         except Exception as e:
             print(f'optouts.json unreadable ({e}) — board falls back to device-local suppression only')
     # Belt to the resolver's braces. If an email ever reaches this dict again -- a new key shape, a
     # hand-edited ledger -- it must not be the published page that finds out.
-    _leaked = [k for k in _optouts if '@' in str(k)]
+    # '@<hash>' / '#<hash>' identity keys are intended (see above) -- reject only a real ADDRESS or
+    # a real phone number. Matching on a bare '@' would reject the hashed keys the person-level
+    # suppression depends on, which is how that suppression got dropped the first time.
+    _leaked = [k for k in _optouts
+               if _EMAIL_RE.search(str(k)) or re.fullmatch(r'#\d{7,}', str(k))]
     if _leaked:
-        raise SystemExit('docs/index.html: %d opt-out key(s) still carry an email address and would '
-                         'be published in plaintext: %s' % (len(_leaked), ', '.join(_leaked)[:200]))
+        raise SystemExit('docs/index.html: %d opt-out key(s) still carry a real email address or '
+                         'phone number and would be published in plaintext: %s'
+                         % (len(_leaked), ', '.join(_leaked)[:200]))
     tpl = tpl.replace('__OPTOUTS__', _esc_json(_optouts))
     if _optouts:
         print(f'opt-outs: {len(_optouts)} owner(s) baked in from the server ledger (suppressed on EVERY device)')

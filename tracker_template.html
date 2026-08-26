@@ -3286,11 +3286,23 @@ function _optedOutIdentities(){
   _OOP = {em: em, ph: ph}; _OOPsrc = notes;
   return _OOP;
 }
+/* PERSON-LEVEL OPT-OUT — matches RAW or HASHED identity keys.
+   The server ledger no longer publishes '@someone@gmail.com' as a notes key: that put real
+   addresses in a public page. It now publishes '@'+_addrKey(email) (and '#'+_addrKey(digits)), so
+   this has to hash the lead's own contacts before comparing. RAW keys are still honoured because a
+   device can create one locally when an operator opts someone out by hand, and because a browser
+   that merged the old server ledger still has raw keys saved in localStorage.
+   Dropping the raw branch would un-suppress those people on that device. */
 function _isOptedOutPerson(r){
   const S = _optedOutIdentities();
   if(!S.em.size && !S.ph.size) return false;
-  if((r.emails||[]).some(function(e){ return S.em.has(String(e||'').trim().toLowerCase()); })) return true;
-  return (r.phones||[]).some(function(p){ return S.ph.has(String(p||'').replace(/\D/g,'')); });
+  const hit = function(set, val){
+    if(!val) return false;
+    if(set.has(val)) return true;
+    try { return set.has(_addrKey(val)); } catch(e){ return false; }
+  };
+  if((r.emails||[]).some(function(e){ return hit(S.em, String(e||'').trim().toLowerCase()); })) return true;
+  return (r.phones||[]).some(function(p){ return hit(S.ph, String(p||'').replace(/\D/g,'')); });
 }
 
 function _textContactBlocked(r){
@@ -11752,6 +11764,13 @@ function _workerEligible(r){
   if(_aucPassed(r)) return false;
   var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
   if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD') return false;
+  // PERSON-LEVEL, not just case-level. The checks above only see an opt-out recorded against THIS
+  // case. An owner with several concurrent sales is one human with one inbox: when they say stop on
+  // one case, _isOptedOutPerson matches their email/phone and suppresses them everywhere. Every
+  // other channel got that through _textContactBlocked(); the worker — the one surface that sends
+  // unattended, in bulk, at 8am — was checking only the case and would have kept mailing them on
+  // their remaining properties (2026-08-26).
+  if(typeof _isOptedOutPerson === 'function' && _isOptedOutPerson(r)) return false;
   // A wrong number recorded from call mode is a data problem, not a lead — re-verify title first.
   if(n.wrongown) return false;
   // must be reachable at all — a lead with no phone and no email is a lookup task, not outreach
@@ -11788,6 +11807,8 @@ function _laneStats(lane){
        || /timeshare|parcel not linked/i.test(String(r.warn || ''))){ s.suppressed++; return; }
     var n = notes[r.case]||{}; var st = String(n.status||'').toUpperCase();
     if(n.optout || st==='DO NOT CONTACT' || st==='OPTED OUT' || st==='DEAD'){ s.suppressed++; return; }
+    // mirror _workerEligible's person-level opt-out, or the lane count promises work it will refuse
+    if(typeof _isOptedOutPerson === 'function' && _isOptedOutPerson(r)){ s.suppressed++; return; }
     if(!((r.phones||[]).length || (r.emails||[]).length)){ s.noContact++; return; }
     if(n.wrongown){ s.suppressed++; return; }
     // Mirrors _workerEligible's outcome-aware cooldown — see the comment there. Reply-waiting
