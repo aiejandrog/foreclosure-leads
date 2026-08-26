@@ -1288,6 +1288,56 @@ def _js(v):
             .replace('\r', '').replace('\n', ' '))
 
 
+_EMAIL_RE = re.compile(r'[\w.+-]+@[\w-]+\.[\w.-]+')
+# Ours, and Jesse's. These are on the page deliberately (sender identity, the Brief Jesse button).
+_OWN_EMAILS = ('agonzalez0311707@gmail.com', 'celusa13@gmail.com', 'miamisolutionsgroup@gmail.com')
+
+
+def assert_no_bulk_emails(html, where, limit=6):
+    """Refuse to publish a page carrying a harvestable list of homeowner email addresses.
+
+    The lead payload is encrypted, so for a long time it was assumed the page held no addresses.
+    It held 1,438 of them (found 2026-08-26): MAILTO keyed its recipient ledger BY ADDRESS, in
+    plaintext, outside the payload, in a PUBLIC repo -- people in foreclosure, ready to scrape.
+    Three more were in SERVER_OPTOUTS, more in REPLIES, and four were sitting in developer comments
+    in tracker_template.html that name real owners as worked examples.
+
+    Every one of those was invisible to review because nothing counted. This counts. It is a
+    tripwire, not a scrubber: it fails the build so a person decides what to do, rather than
+    quietly stripping something a feature depended on.
+    """
+    found = sorted({e.lower() for e in _EMAIL_RE.findall(html)}
+                   - {e.lower() for e in _OWN_EMAILS})
+    if len(found) > limit:
+        raise SystemExit('%s: %d third-party email address(es) would be published in plaintext '
+                         '(limit %d). First few: %s' % (where, len(found), limit, ', '.join(found[:5])))
+
+
+def _addr_key(addr):
+    """FNV-1a/base36 of a lowercased email — the key the board's recipient guard looks up.
+
+    MAILTO used to ship the addresses themselves as object keys: 1,438 people in foreclosure, in
+    plaintext, outside the encrypted lead payload, in a PUBLIC repo. The guard only ever asks "when
+    did we last mail this inbox?", so it never needed the address, only a stable identity.
+
+    This is obfuscation, not encryption, and the difference matters: it removes a list anyone could
+    scrape or index, and it does NOT stop someone checking whether one address they already hold is
+    in it. The real fix is moving this const inside the encrypted payload with the lead data.
+    Must stay byte-identical to _addrKey() in tracker_template.html.
+    """
+    h = 0x811c9dc5
+    for ch in str(addr or '').lower().strip():
+        h = ((h ^ ord(ch)) * 0x01000193) & 0xFFFFFFFF
+    # base36 — same alphabet and direction as JS Number.prototype.toString(36)
+    if not h:
+        return '0'
+    digits, out = '0123456789abcdefghijklmnopqrstuvwxyz', ''
+    while h:
+        out = digits[h % 36] + out
+        h //= 36
+    return out
+
+
 _PLACEHOLDER = re.compile(r'__[A-Z][A-Z0-9_]{2,}__')
 
 
@@ -2371,14 +2421,54 @@ def make_tracker(leads):
     # Owner replies detected by replies.py (gitignored replies.json, written from IMAP). Absent
     # until the operator adds gmail.key -- and an empty table is the honest state: the Proof Sheet
     # then reads "awaiting reply" for every send instead of implying nobody wrote back.
-    _replies = {}
+    # replies.json was dumped VERBATIM into this page until 2026-08-26 -- whole file, every field,
+    # plaintext, OUTSIDE the encrypted __DATA__ payload, in a PUBLIC repo. It is keyed by case AND
+    # by '@'+the owner's email, so three homeowners' personal addresses were published in the clear
+    # alongside the text of what they wrote to us. The opt-out bake fifty lines down already refused
+    # to publish owner text for precisely this reason; this one never got the same treatment.
+    #
+    # Two changes. The '@email' keys resolve to their case here (same resolver as the opt-outs), so
+    # no address ships and _replyFor still finds the reply by case. And only the fields the board
+    # actually reads survive -- 'email' was never one of them, it was pure exhaust.
+    _replies_raw = {}
     _rf = os.path.join(HERE, 'replies.json')
     if os.path.exists(_rf):
-        try: _replies = json.load(open(_rf, encoding='utf-8')) or {}
-        except Exception: _replies = {}
+        try: _replies_raw = json.load(open(_rf, encoding='utf-8')) or {}
+        except Exception: _replies_raw = {}
+    _RP_KEEP = ('stop', 'when', 'n', 'src', 'subject', 'excerpt', 'note', 'checked', 'via')
+    _rp_by_email = {}
+    for _sr in slim:
+        for _se in (_sr.get('emails') or []):
+            _rp_by_email.setdefault(str(_se).strip().lower(), []).append(str(_sr.get('case') or ''))
+    _replies, _rp_unresolved = {}, 0
+    for _k, _v in (_replies_raw.items() if isinstance(_replies_raw, dict) else []):
+        if not isinstance(_v, dict):
+            continue
+        # An excerpt is the owner's own words, and a reply chain quotes its own headers, so the
+        # body carries addresses even after the 'email' field is dropped. Redact them: the operator
+        # needs to read what the person SAID, never their address, and this text ships plaintext.
+        _slim_v = {f: (_EMAIL_RE.sub('[email]', str(_v[f])) if isinstance(_v[f], str) else _v[f])
+                   for f in _RP_KEEP if f in _v}
+        if str(_k).startswith('@'):
+            _hit = _rp_by_email.get(str(_k)[1:].strip().lower()) or []
+            if not _hit:
+                _rp_unresolved += 1
+                continue
+            for _hc in _hit:
+                if _hc and _hc not in _replies:
+                    _replies[_hc] = dict(_slim_v)
+        else:
+            _replies[_k] = _slim_v
+    _rp_leaked = [k for k in _replies if '@' in str(k)]
+    if _rp_leaked:
+        raise SystemExit('docs/index.html: %d reply key(s) still carry an email address and would be '
+                         'published in plaintext: %s' % (len(_rp_leaked), ', '.join(_rp_leaked)[:200]))
     tpl = tpl.replace('__REPLIES__', _esc_json(_replies))
     if _replies:
         print(f'replies: {len(_replies)} owner reply/replies merged')
+    if _rp_unresolved:
+        print(f'replies: {_rp_unresolved} email-keyed reply/replies match no lead on the board — '
+              f'not baked (their addresses are never published).')
 
     # ---- SERVER SEND LEDGER -------------------------------------------------------------------
     # mail_sent.json is the bridge's record of confirmed SMTP deliveries. Until now the BOARD never
@@ -2387,6 +2477,9 @@ def make_tracker(leads):
     # never-contacted and re-sent the COLD template. Measured 2026-08-08: 33 cases had received 4+
     # emails despite the FINAL variant promising the third is the last. See MAILLOG in the template.
     _mlog, _mto = _mail_ledger()
+    # See _addr_key: the recipient guard matches identities, so the page gets hashes instead of the
+    # 1,438 homeowner addresses it used to publish in the clear.
+    _mto = {_addr_key(_a): _t for _a, _t in (_mto or {}).items()}
     tpl = tpl.replace('__MAILLOG__', _esc_json(_mlog))
     tpl = tpl.replace('__MAILTO__', _esc_json(_mto))
     # SMS counterpart. __TEXTPERSON__ is the authoritative one — it survives a case dropping off the
@@ -2418,6 +2511,7 @@ def make_tracker(leads):
     # Baked in here so suppression travels with the page. Merge is SAFETY-ONE-WAY on the client:
     # the server can add an opt-out, never clear one.
     _optouts = {}
+    _oo_unresolved = 0          # counted inside the try; read after it, including on the error path
     _of = os.path.join(HERE, 'optouts.json')
     if os.path.exists(_of):
         try:
@@ -2426,19 +2520,59 @@ def make_tracker(leads):
             _oo_notes = _raw_oo.get('notes') if isinstance(_raw_oo, dict) else None
             if not isinstance(_oo_notes, dict):
                 _oo_notes = _raw_oo if isinstance(_raw_oo, dict) else {}
+            # AN EMAIL-KEYED OPT-OUT RESOLVES TO ITS CASE, AND NEVER SHIPS AS AN EMAIL.
+            # A written STOP that arrives by reply has no case attached, so the ledger keys it
+            # '@someone@gmail.com'. Baking that key verbatim did two bad things at once:
+            #   1. It PUBLISHED three real homeowners' personal email addresses, in plaintext, in
+            #      docs/index.html, in a PUBLIC repo. People who asked to be left alone, made
+            #      searchable. The note text was already withheld for this exact reason -- but the
+            #      KEY is the identifier, and it was going out in full.
+            #   2. It suppressed NOBODY. The board only ever reads notes by case id; the one
+            #      '@'+email lookup in the page is _replyFor (replies), not opt-outs. So the entry
+            #      created an orphan note under a key nothing matches, and the cross-device
+            #      suppression this whole block exists to provide silently did not cover the
+            #      email-only opt-outs -- the ones most likely to be a written STOP.
+            # Resolving to the case fixes both: no address leaves the machine, and the right lead
+            # is actually suppressed on every device. An address that matches no lead is dropped
+            # loudly -- there is nothing on the board to suppress, and outreach_email._eligible()
+            # still refuses it from optouts.json, which is gitignored and stays local.
+            _by_email = {}
+            for _sr in slim:
+                for _se in (_sr.get('emails') or []):
+                    _by_email.setdefault(str(_se).strip().lower(), []).append(str(_sr.get('case') or ''))
             for _c, _n in _oo_notes.items():
                 if not isinstance(_n, dict):
                     continue
                 _st = str(_n.get('status') or '').upper()
-                if _n.get('optout') or _st in ('DO NOT CONTACT', 'OPTED OUT'):
-                    # carry only what suppression needs — never the free-text note (it can quote
-                    # the owner verbatim and this file ships inside a page that leaves the machine)
-                    _optouts[_c] = {'optout': _n.get('optout') or '', 'status': _n.get('status') or 'DO NOT CONTACT'}
+                if not (_n.get('optout') or _st in ('DO NOT CONTACT', 'OPTED OUT')):
+                    continue
+                # carry only what suppression needs — never the free-text note (it can quote
+                # the owner verbatim and this file ships inside a page that leaves the machine)
+                _entry = {'optout': _n.get('optout') or '', 'status': _n.get('status') or 'DO NOT CONTACT'}
+                if str(_c).startswith('@'):
+                    _hit = _by_email.get(str(_c)[1:].strip().lower()) or []
+                    if not _hit:
+                        _oo_unresolved += 1
+                        continue
+                    for _hc in _hit:
+                        if _hc:
+                            _optouts[_hc] = dict(_entry)
+                else:
+                    _optouts[_c] = _entry
         except Exception as e:
             print(f'optouts.json unreadable ({e}) — board falls back to device-local suppression only')
+    # Belt to the resolver's braces. If an email ever reaches this dict again -- a new key shape, a
+    # hand-edited ledger -- it must not be the published page that finds out.
+    _leaked = [k for k in _optouts if '@' in str(k)]
+    if _leaked:
+        raise SystemExit('docs/index.html: %d opt-out key(s) still carry an email address and would '
+                         'be published in plaintext: %s' % (len(_leaked), ', '.join(_leaked)[:200]))
     tpl = tpl.replace('__OPTOUTS__', _esc_json(_optouts))
     if _optouts:
         print(f'opt-outs: {len(_optouts)} owner(s) baked in from the server ledger (suppressed on EVERY device)')
+    if _oo_unresolved:
+        print(f'opt-outs: {_oo_unresolved} email-only opt-out(s) match no lead on the board — not baked. '
+              f'The send path still refuses them from optouts.json.')
 
     # ---- SERVER-SIDE DEAD LEDGER --------------------------------------------------------------
     # Same disease as opt-outs, different symptom: "this deal no longer exists" lived only in one
@@ -2580,6 +2714,7 @@ def make_tracker(leads):
     # top-level ReferenceError that kills every declaration after it, and the page still serves a
     # 200 while doing nothing -- which is exactly how design-preview.html stayed dead unnoticed.
     assert_no_placeholders(_page, 'docs/index.html')
+    assert_no_bulk_emails(_page, 'docs/index.html')
     open(docs,'w',encoding='utf-8').write(_page)
     # ---- CALL MODE (docs/call/) ----------------------------------------------------------------
     # The phone-first calling page. Wrapped in try/except ON PURPOSE: this is an additive artifact,

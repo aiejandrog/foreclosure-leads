@@ -2331,7 +2331,8 @@ const REPLIES = (function(){ try { return __REPLIES__; } catch(e){ return {}; } 
 /* ---- SERVER SEND LEDGER ------------------------------------------------------------------------
    Baked from mail_sent.json — the send bridge's record of CONFIRMED SMTP deliveries.
      MAILLOG: case  -> {n: confirmed sends, last: newest send, epoch ms}
-     MAILTO:  email -> newest send epoch ms (trimmed to 14 days; feeds the 24h recipient guard)
+     MAILTO:  _addrKey(email) -> newest send epoch ms (14 days; feeds the 24h recipient guard).
+              HASHED, never the address — see the note on the const below.
 
    WHY THIS EXISTS (measured 2026-08-08). Every send-stage decision — _mailHist, the 72h cooldown,
    the 24h recipient dedupe — read this browser's localStorage and nothing else. The board as built
@@ -2346,6 +2347,21 @@ const REPLIES = (function(){ try { return __REPLIES__; } catch(e){ return {}; } 
    Same one-way posture as the opt-out ledger below: the server can only ever say a lead has been
    contacted MORE than this browser knows, never less. */
 const MAILLOG = (function(){ try { return __MAILLOG__; } catch(e){ return {}; } })();
+/* MAILTO IS KEYED BY A HASH, NOT BY THE ADDRESS. Until 2026-08-26 it shipped 1,438 homeowner
+   email addresses as plaintext object keys, in this page, OUTSIDE the encrypted lead payload, in a
+   PUBLIC repo -- a ready-made harvest list of people in foreclosure. The guard below never reads an
+   address out of MAILTO and never displays one; it only asks "when did we last mail this inbox?",
+   which an opaque key answers exactly as well. FNV-1a is not a security boundary and is not meant
+   to be one -- it removes a scrapeable list, it does not defeat someone testing a specific address
+   they already have. Must stay byte-identical to foreclosure_leads._addr_key(). */
+function _addrKey(addr){
+  var s = String(addr||'').toLowerCase().trim(), h = 0x811c9dc5;
+  for (var i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h + ((h<<1) + (h<<4) + (h<<7) + (h<<8) + (h<<24))) >>> 0;   // *16777619, mod 2^32
+  }
+  return h.toString(36);
+}
 const MAILTO  = (function(){ try { return __MAILTO__;  } catch(e){ return {}; } })();
 /* SMS ledgers — same purpose as MAILLOG, built because text history was per-browser-profile and a
    fresh profile restarted the 3-touch ladder at touch 1 on someone already messaged three times.
@@ -3250,7 +3266,7 @@ function _daClockHtml(r){
    walks notes. The result is a note attached to no case, which suppresses NOTHING: the person is
    marked DO NOT CONTACT and stays fully reachable through any lead keyed differently.
 
-   Measured 2026-08-16: 2 such orphans exist (@gil_sosa@hotmail.com, @norma1940hendy@gmail.com), and
+   Measured 2026-08-16: 2 such orphans exist (both hotmail/gmail owner addresses), and
    only ONE maps to a live lead (CACE-25-005200, Norma Hendy) which is already suppressed on its own
    case — so there is no active leak right now. This is prophylactic: the moment skiptrace attaches
    one of those addresses to a different lead, nothing else would stop it.
@@ -11415,7 +11431,7 @@ function _recentlyEmailedTo(addr, hours){
      BCC addresses too: an owner whose primary mailbox changed between runs is still the same human
      with the same inbox. One synthetic hit is enough — the guard is a boolean; `n` only feeds a
      display string. */
-  var bt = MAILTO[addr] || 0;
+  var bt = MAILTO[_addrKey(addr)] || 0;
   if(bt >= cutoff) hits.push({ch:'email', to:addr, t:bt, src:'ledger',
                               d:new Date(bt).toLocaleDateString('en-CA')});
   if(!hits.length) return null;
@@ -11922,7 +11938,7 @@ function _cardMail(r){
     if(!LE || LE.c !== r.case) return EMPTY;
     // FALLBACK MUST RESPECT THE ALLOWLIST. This read `(r.emails||[])[0]` — the raw, unfiltered
     // first address — so a lead whose ONLY address was a work mailbox still produced a send
-    // payload. Measured: 4 leads leaked, incl. darin.mcmurray@lennar.com, i.e. a foreclosure
+    // payload. Measured: 4 leads leaked, one a homebuilder work mailbox, i.e. a foreclosure
     // notice addressed to a homeowner's employer. No sendable address means NO EMAIL.
     var to = LE.to || _mailableList(r)[0] || '';
     return {
@@ -14283,7 +14299,7 @@ function genScript(r){
    not a personal mailbox at all. Measured across the 1,171 addresses on this board, 81 (6.9%) fall
    into three buckets we must never auto-send to:
 
-     1. EMPLOYER / WORK addresses — darin.mcmurray@lennar.com, someone@ncl.com, @nautiluslegal.com,
+     1. EMPLOYER / WORK addresses — a homebuilder, a cruise line, a law firm (see DEAD_DOMAINS),
         @barucapital.com, @broward.org, @fsu.edu. Emailing a homeowner's WORK account about their
         foreclosure routes the message through their employer's mail server and can disclose their
         financial distress to their boss. Same reasoning that put the other addresses in BCC.
@@ -14344,8 +14360,8 @@ function genEmail(r, quiet){
   const caseTagES = caseNo ? (td ? ` (Número de certificado/caso ${caseNo})` : ` (Caso Número ${caseNo})`) : '';
   /* REACH EVERY ADDRESS ON FILE — BUT VIA BCC.
      Why all of them: skiptrace returns several addresses per lead and only one is usually live.
-     Toni Labriola replied from labriola.toni@gmail.com, which was NOT the address we mailed
-     (labriolatoni@gmail.com) — that reply only reached us because replies.py also matches on
+     One owner replied from a dotted variant of the address we mailed (first.last@ vs firstlast@)
+     — that reply only reached us because replies.py also matches on
      subject. Mailing the first address alone is a coin flip on whether the owner ever sees it.
      Why BCC and never a shared To:: these are NOT all the owner's own addresses. Case
      2025-007384-CA-01 is owned by DEBORAH C DAVIS SLADE, yet the six traced addresses include
