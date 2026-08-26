@@ -256,6 +256,42 @@ else:
                 rec('FTSA window: WhatsApp rides the same gate (no side door)',
                     not any(win[str(h)]['wa'] for h in (7, 20, 23)),
                     'WA live outside hours: %s' % [h for h in (7, 20, 23) if win[str(h)]['wa']])
+
+            # ---- FTSA 3-TOUCH BURST CAP (FTSA_MAX_24H) ----------------------------------------
+            # Third limit on the same question, and the third with no coverage: FS 501.059 caps
+            # telephonic solicitation, and 4+ contacts inside 24 hours is the burst pattern that
+            # reads as harassment regardless of the hour or the consent. _recentTeleCount counts
+            # call+text touches in a rolling 24h; at FTSA_MAX_24H the composer stops offering send.
+            # Seeded on a COPY of the note so the board's real notes are untouched.
+            cap = pg.evaluate("""(maxN) => {
+                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct);
+                if(!lead) return null;
+                const key = lead.case, saved = notes[key];
+                const mk = n => ({touches: Array.from({length:n}, () => ({ch:'call', tsu: Date.now()-3600000}))});
+                const realHour = _flHour; _flHour = () => 10;      // inside the window, isolate the cap
+                const out = {};
+                [0, maxN - 1, maxN, maxN + 2].forEach(n => {
+                    notes[key] = mk(n);
+                    const html = textCardHtml(lead);
+                    out[n] = { counted: _recentTeleCount(lead),
+                               live: /<a class="txsend"/.test(html) && /href="sms:/.test(html) };
+                });
+                notes[key] = saved; _flHour = realHour;
+                return {max: maxN, rows: out};
+            }""", pg.evaluate('() => FTSA_MAX_24H'))
+            if not cap:
+                rec('FTSA 24h cap: a textable lead exists to test', False, 'none on this board')
+            else:
+                m = cap['max']
+                rec('FTSA 24h cap: counts the seeded telephonic touches',
+                    cap['rows'][str(m)]['counted'] == m, str({k: v['counted'] for k, v in cap['rows'].items()}))
+                rec('FTSA 24h cap: under the cap, sending is still offered',
+                    cap['rows']['0']['live'] and cap['rows'][str(m - 1)]['live'],
+                    '0 and %d touches' % (m - 1))
+                rec('FTSA 24h cap: AT the cap, sending is withheld',
+                    not cap['rows'][str(m)]['live'], '%d touches in 24h' % m)
+                rec('FTSA 24h cap: over the cap, still withheld',
+                    not cap['rows'][str(m + 2)]['live'], '%d touches in 24h' % (m + 2))
             b.close()
         srv.shutdown()
 
