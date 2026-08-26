@@ -167,6 +167,54 @@ else:
     rec('REAL optouts.json: every identity key actually suppresses', True,
         'no identity keys in the ledger today')
 
+# ---- 5b. STOP DETECTION (replies.is_stop_text) -----------------------------------------------
+# Upstream of everything else in this file. Each surface below refuses people who are ON the
+# ledger; this is what decides who goes on it — and a detected stop AUTO-SUPPRESSES on the board
+# the moment replies.py runs, with no human in between.
+#
+# It was wrong in BOTH directions until 2026-08-26 and had no test at all:
+#   * `stop` matched "Can you stop the foreclosure?" — the most motivated reply a homeowner
+#     can send — and permanently killed that lead on every channel.
+#   * seven of eight real opt-out phrasings were missed, so those people kept being contacted.
+# Both halves are asserted, because fixing either one alone leaves the system broken.
+import replies as RP                                            # noqa: E402
+
+_HELP = ['Can you stop the foreclosure?', 'Is there any way to stop the sale?',
+         'I need to stop the auction please', 'what can i do to stop this',
+         'Do you think we can stop the sale date?', 'can u stop it']
+_OPTOUT = ['take me off your list', 'please opt me out', 'remove my email address',
+           'leave me alone', 'do not email me again', 'no longer wish to be contacted',
+           'quit emailing me', 'unsubscribe me', 'opt-out', 'no me contacte']
+_REAL = ['Stop', 'Please stop', 'Please stop sending emails', 'STOP',
+         'remove me from your list', 'Please stop. I am not Virginia.']
+
+_hf = [t for t in _HELP if RP.is_stop_text(t)]
+rec('stop-detection: asking us to stop the FORECLOSURE is not an opt-out',
+    not _hf, 'wrongly flagged: %s' % (_hf or 'none'))
+_om = [t for t in _OPTOUT if not RP.is_stop_text(t)]
+rec('stop-detection: real opt-out phrasings are caught',
+    not _om, 'missed: %s' % (_om or 'none'))
+_rm = [t for t in _REAL if not RP.is_stop_text(t)]
+rec('stop-detection: the phrasings actually in replies.json stay caught',
+    not _rm, 'regressed: %s' % (_rm or 'none'))
+
+# And against the LIVE corpus — the check that proves no currently-suppressed person is freed and
+# nobody new is silenced by a change to this function.
+try:
+    _rp = json.load(open(os.path.join(HERE, 'replies.json'), encoding='utf-8')) or {}
+    _flip = []
+    for _k, _v in _rp.items():
+        if not isinstance(_v, dict):
+            continue
+        _txt = ' '.join(str(_v.get(f) or '') for f in ('subject', 'excerpt', 'note'))
+        if RP.is_stop_text(_txt) != bool(_v.get('stop')):
+            _flip.append(_k)
+    rec('stop-detection: no live reply changes classification', not _flip,
+        '%d reply/replies, %s' % (len(_rp), ('flipped: %s' % _flip[:3]) if _flip else 'all stable'))
+except FileNotFoundError:
+    rec('stop-detection: no live reply changes classification', True, 'replies.json absent')
+
+
 # ---- 6. BOARD + MORNING WORKER (browser) ------------------------------------------------------
 CODE = _live_code()
 if not CODE:
