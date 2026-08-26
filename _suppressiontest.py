@@ -292,6 +292,48 @@ else:
                     not cap['rows'][str(m)]['live'], '%d touches in 24h' % m)
                 rec('FTSA 24h cap: over the cap, still withheld',
                     not cap['rows'][str(m + 2)]['live'], '%d touches in 24h' % (m + 2))
+
+            # ---- LIFETIME LADDER (TEXT_MAX_TOTAL) ---------------------------------------------
+            # The last named contact limit. Distinct from the 24h burst cap above: that one is a
+            # rate, this one is a TOTAL. Three texts to a human about their foreclosure is the
+            # whole relationship — after that the ladder retires them permanently, and touch 3's
+            # copy literally says "this is my last message", so a fourth send makes that a lie.
+            # The touches carry ch:'text' with no inbound marker; an inbound one ends the ladder
+            # early and must NOT be counted as a send, which is asserted separately.
+            lad = pg.evaluate("""(maxN) => {
+                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct);
+                if(!lead) return null;
+                const key = lead.case, saved = notes[key];
+                const realHour = _flHour; _flHour = () => 10;   // isolate: window and burst cap open
+                const sends = n => ({touches: Array.from({length:n}, () => ({ch:'text', d:'2026-01-0'+1}))});
+                const out = {};
+                [0, 1, 2, maxN, maxN + 1].forEach(n => {
+                    notes[key] = sends(n);
+                    out[n] = { stage: _textStage(lead),
+                               live: /<a class="txsend"/.test(textCardHtml(lead)) };
+                });
+                // an inbound reply is not a send: 1 text + 1 "replied" must read as replied, not 2 sends
+                notes[key] = {touches: [{ch:'text', d:'2026-01-01'},
+                                        {ch:'text', d:'2026-01-02', out:'replied'}]};
+                out.inbound = { stage: _textStage(lead), sends: _textPersonHist(lead).sends };
+                notes[key] = saved; _flHour = realHour;
+                return {max: maxN, rows: out};
+            }""", pg.evaluate('() => TEXT_MAX_TOTAL'))
+            if not lad:
+                rec('lifetime ladder: a textable lead exists to test', False, 'none on this board')
+            else:
+                M = lad['max']
+                rec('lifetime ladder: climbs cold -> follow -> final',
+                    [lad['rows'][str(i)]['stage'] for i in (0, 1, 2)] == ['cold', 'follow', 'final'],
+                    str([lad['rows'][str(i)]['stage'] for i in (0, 1, 2)]))
+                rec('lifetime ladder: at TEXT_MAX_TOTAL the person is RETIRED',
+                    lad['rows'][str(M)]['stage'] == 'retired', '%d sends -> %s' % (M, lad['rows'][str(M)]['stage']))
+                rec('lifetime ladder: a retired person can no longer be texted',
+                    not lad['rows'][str(M)]['live'] and not lad['rows'][str(M + 1)]['live'],
+                    'live at %d/%d sends: %s/%s' % (M, M + 1, lad['rows'][str(M)]['live'], lad['rows'][str(M + 1)]['live']))
+                rec('lifetime ladder: an inbound reply ends it and is not counted as a send',
+                    lad['rows']['inbound']['stage'] == 'replied' and lad['rows']['inbound']['sends'] == 1,
+                    str(lad['rows']['inbound']))
             b.close()
         srv.shutdown()
 
