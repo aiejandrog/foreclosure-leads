@@ -82,3 +82,36 @@ if __name__ == '__main__':
     print('TWIN              :', TWIN)
     print('DESKTOP           :', DESKTOP)
     print('  synced          :', DESKTOP_IS_SYNCED)
+
+
+# ---------------------------------------------------------------------------------------------
+# THE ACCESS CODE IS NOT A CONSTANT — it is a secret, and it belongs with the other things git
+# does not carry.
+#
+# Eighteen test suites each hardcoded `CODE = 'DEALFLOW-xxxxxxxx'`. All eighteen were gitignored,
+# so nothing was published by them — but two OTHER suites carried the same literal and were TRACKED
+# via ! negations, which put a live board-decrypting code into this PUBLIC repo (scrubbed 69884b5).
+# The literal is the hazard; whether a given file happens to be ignored today is not a property you
+# can rely on, because adding a negation is a one-line change nobody thinks of as publishing a key.
+#
+# It also made rotation an 18-file edit, which is its own reason the code never got rotated.
+# ---------------------------------------------------------------------------------------------
+def live_code(name=''):
+    """An access code from the gitignored site.codes. `name` picks a specific operator's line
+    (substring, case-insensitive); default is the first code in the file.
+
+    Returns None when site.codes is absent — a caller on a machine without it should say so and
+    skip, not fall back to a literal.
+    """
+    import re as _re
+    p = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'site.codes')
+    try:
+        for line in open(p, encoding='utf-8'):
+            if name and name.lower() not in line.lower():
+                continue
+            m = _re.search(r'(DEALFLOW-[A-Z0-9]{6,})', line)
+            if m:
+                return m.group(1)
+    except Exception:
+        pass
+    return None
