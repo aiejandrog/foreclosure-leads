@@ -221,6 +221,41 @@ else:
             rec('board: every channel blocked via _textContactBlocked',
                 out['text_blocked'] == 'optout', str(out['text_blocked']))
             rec('board: a clean lead is not suppressed', out['clean_person'] is False)
+            # ---- FTSA SEND WINDOW (FS 501.059) ------------------------------------------------
+            # Same question as the rest of this file — "can this channel reach the person right
+            # now" — with time as the gate instead of consent. 8am-8pm ET, $500-$1,500 per message
+            # outside it. Lives here rather than in _dnctest because _dnctest is gitignored AND
+            # hardcodes a live access code, so coverage put there survives on exactly one laptop
+            # and could never be tracked without publishing the code.
+            # FTSA_HR_END is EXCLUSIVE: 19:00 sends, 20:00 does not.
+            win = pg.evaluate("""() => {
+                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct);
+                if(!lead) return null;
+                const real = _flHour, o = {};
+                [7, 8, 10, 19, 20, 23].forEach(h => {
+                    _flHour = () => h;
+                    const html = textCardHtml(lead);
+                    o[h] = { live: /<a class="txsend"/.test(html) && /href="sms:/.test(html),
+                             wa:   /<a class="txwa"/.test(html),
+                             off:  /<span class="txsend off"/.test(html) };
+                });
+                _flHour = real;
+                return o;
+            }""")
+            if not win:
+                rec('FTSA window: a textable lead exists to test', False, 'none on this board')
+            else:
+                rec('FTSA window: 8am / 10am / 7pm CAN send',
+                    all(win[str(h)]['live'] for h in (8, 10, 19)),
+                    str({h: win[str(h)]['live'] for h in (8, 10, 19)}))
+                rec('FTSA window: 7am / 8pm / 11pm CANNOT send',
+                    not any(win[str(h)]['live'] for h in (7, 20, 23)),
+                    str({h: win[str(h)]['live'] for h in (7, 20, 23)}))
+                rec('FTSA window: no sms: href survives outside it',
+                    all(win[str(h)]['off'] for h in (7, 20, 23)))
+                rec('FTSA window: WhatsApp rides the same gate (no side door)',
+                    not any(win[str(h)]['wa'] for h in (7, 20, 23)),
+                    'WA live outside hours: %s' % [h for h in (7, 20, 23) if win[str(h)]['wa']])
             b.close()
         srv.shutdown()
 
