@@ -325,9 +325,34 @@ jobs:
         continue-on-error: true
         timeout-minutes: 45
         run: |
-          if [ ! -s captcha.key ]; then echo "no 2Captcha key — PB liens skipped"; exit 0; fi
-          if [ ! -f palmbeach_leads.json ]; then echo "no palmbeach_leads.json — PB liens skipped"; exit 0; fi
+          # A SKIP HERE MUST BE LOUD. Three comments in this file still assert "CI has no 2Captcha
+          # key" while the API-keys step above writes captcha.key from ${{ secrets.CAPTCHA_KEY }} and
+          # the MD lien step branches on it — so either the secret was added later and those comments
+          # are stale, or it was never configured and every captcha-gated step in the cloud has been
+          # quietly taking its --cached-only path. Whichever it is, a step that prints one line and
+          # exits 0 into a 3000-line log is indistinguishable from a step that worked. Warn into the
+          # job summary so the answer is on the run's front page instead of buried.
+          if [ ! -s captcha.key ]; then
+            echo "::warning::PB liens SKIPPED — no 2Captcha key in CI. Set the CAPTCHA_KEY repo secret or Palm Beach coverage stays frozen."
+            echo "### ⚠ Palm Beach liens skipped — no 2Captcha key" >> $GITHUB_STEP_SUMMARY
+            echo "Landmark is reCAPTCHA-v2 gated and there is no \`CAPTCHA_KEY\` secret, so PB lien coverage cannot move in the cloud." >> $GITHUB_STEP_SUMMARY
+            exit 0
+          fi
+          if [ ! -f palmbeach_leads.json ]; then
+            echo "::warning::PB liens skipped — no palmbeach_leads.json (the [1c/5] county scrape produced nothing)"
+            exit 0
+          fi
+          BEFORE=$(python -c "import json,os;print(len(json.load(open('palmbeach_liens.json'))) if os.path.exists('palmbeach_liens.json') else 0)")
           python -u palmbeach_liens.py --all --limit 60 --workers 8
+          AFTER=$(python -c "import json,os;print(len(json.load(open('palmbeach_liens.json'))) if os.path.exists('palmbeach_liens.json') else 0)")
+          echo "PB lien chains: $BEFORE -> $AFTER"
+          echo "Palm Beach lien chains: **$BEFORE → $AFTER** (+$((AFTER-BEFORE)) this run)" >> $GITHUB_STEP_SUMMARY
+          # Zero progress with a key present means the portal refused us — most likely an Azure-IP
+          # or fingerprint block on erec.mypalmbeachclerk.com, which no amount of captcha budget
+          # fixes. That is a different failure from "no key" and must not read as success.
+          if [ "$AFTER" -le "$BEFORE" ]; then
+            echo "::warning::PB liens traced ZERO new chains despite a 2Captcha key — check for a Landmark session/IP block in the log above."
+          fi
 
       # ---- [2c/5] Fresh LIS PENDENS front-of-funnel -------------------------------------------
       # The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
