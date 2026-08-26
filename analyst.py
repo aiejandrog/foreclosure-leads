@@ -228,8 +228,24 @@ def compute(now=None):
             return 9999
     _wl7 = [e for e in wlog if isinstance(e, dict) and _wl_days_ago(e) <= 7]
     m['callq_7d'] = sum(1 for e in _wl7 if e.get('a') == 'callq')
-    m['dials_disposed_7d'] = sum(1 for e in _wl7 if e.get('a') == 'callout'
-                                 or (e.get('a') == 'call' and str(e.get('detail','')).startswith('call outcome:')))
+    # BOARD-side dispositions (the Morning Worker's own callout dispatcher).
+    _disp_board = sum(1 for e in _wl7 if e.get('a') == 'callout'
+                      or (e.get('a') == 'call' and str(e.get('detail','')).startswith('call outcome:')))
+    # PHONE-side dispositions. workerLog is written ONLY by the board — Call Mode contains zero
+    # references to it (grep-verified 2026-08-26) — so every dial placed from the phone, which is
+    # where the dialing actually happens, was invisible here. Measured that morning: 107 call
+    # touches and 117 n.dials entries in 7 days, all stamped by:'Alejandro', against
+    # dials_disposed=0. The scorecard printed "dial-through 0.0%" and fired the P0 "THE CALL QUEUE
+    # IS NOT BEING DIALED — clear ten today" at a man who had just dialled 107 times. A metric that
+    # reads one surface while the work happens on another does not measure effort, it slanders it.
+    # n.dials is Call Mode's additive per-dial record (logOutcome pushes one per disposition, never
+    # deduped) and the board does NOT write it, so summing the two surfaces cannot double-count.
+    _disp_phone = sum(1 for c, n in (wn.get('notes') or {}).items()
+                      for d0 in (n.get('dials') or [])
+                      if (dd := _t_dt(d0)) and _in_last(7, _days_ago(dd, now), now))
+    m['dials_disposed_board_7d'] = _disp_board
+    m['dials_disposed_phone_7d'] = _disp_phone
+    m['dials_disposed_7d'] = _disp_board + _disp_phone
     m['dial_through_pct'] = (round(100.0 * m['dials_disposed_7d'] / m['callq_7d'], 1)
                              if m['callq_7d'] else None)
 
@@ -457,6 +473,8 @@ def render(m, prev):
         ('Live conversations · 7d', m['convos_7d'], 'convos_7d'),
         ('Call queue added · 7d', m.get('callq_7d', 0), 'callq_7d'),
         ('Dials disposed · 7d', m.get('dials_disposed_7d', 0), 'dials_disposed_7d'),
+        ('&nbsp;&nbsp;from the phone (Call Mode)', m.get('dials_disposed_phone_7d', 0), 'dials_disposed_phone_7d'),
+        ('&nbsp;&nbsp;from the board (Worker)', m.get('dials_disposed_board_7d', 0), 'dials_disposed_board_7d'),
         ('Dial-through %', (str(m['dial_through_pct']) + '%') if m.get('dial_through_pct') is not None else '—', None),
         ('Replies (all-time hot)', m['replies_hot'], 'replies_hot'),
         ('Appointments', m['appointments'], 'appointments'),
