@@ -1,6 +1,6 @@
 # MACHINE HANDOFF — read this before you work on DEALFLOW from a different computer
 
-Last updated: **2026-08-22** (desktop set-up + audit session)
+Last updated: **2026-08-26** (found the ninth task; cadence send path hardened)
 
 This repo is worked from more than one machine and is also refreshed by GitHub Actions.
 Git carries the **code and the published site**. It does **not** carry the data, the secrets, or the
@@ -12,11 +12,33 @@ worker state. That asymmetry is the whole reason this file exists.
 
 | Machine | Role today | Tasks |
 |---|---|---|
-| **Laptop** | **ARMED — the live runner** | 8 scheduled tasks enabled |
-| **DESKTOP-35NNMFL** (Gigabyte B450M) | Runner-in-waiting | 8 tasks registered, **all Disabled** |
+| **Laptop** | **ARMED — the live runner** | 8 pipeline tasks enabled |
+| **DESKTOP-35NNMFL** (Gigabyte B450M) | Runner-in-waiting for the pipeline — but **sending live outreach** | 8 pipeline tasks Disabled, **`DealFlow Cadence` ENABLED, 09:00 daily** |
 | **GitHub Actions** | Backup / watchdog | `refresh.yml` 13:00 UTC daily, `freshness-watchdog.yml` 15:00 UTC |
 
-Evidence the laptop is live: commits `2dfac36` (08-22 10:21) and `977ee77` (08-22 10:33).
+Evidence the laptop is live: commits `9ff826b`/`43ed370`/`8efda91` (08-24) and `f7492a5`/`e0ab111`/
+`b8b771e` (08-25) — the full nightly chain, plus `github-actions[bot]` on both days.
+
+### ⚠ The split that this table used to hide (found 2026-08-26)
+
+"8 tasks, all Disabled" was true and still misleading. There is a **NINTH task**, `DealFlow
+Cadence`, registered outside `install-tasks.ps1` and **enabled on the desktop** — so the laptop runs
+the pipeline while the desktop emails homeowners every morning at 09:00. It had sent 59 owners
+through steps 2–3 of the 4-touch sequence before anyone noticed, off a board frozen at 08-20 and a
+local `optouts.json` last touched 08-22.
+
+`install-tasks.ps1 -DisableLocal` **does not know about this task** and will not stand it down. Any
+arming or disarming has to handle it by name:
+
+```
+pwsh -c "Disable-ScheduledTask -TaskName 'DealFlow Cadence'"     # or Enable-
+```
+
+The send path was hardened on 08-26 (`d53955d`) so it re-reads the opt-out ledger before every send
+instead of trusting the export-time filter. That closes the code hole. It does **not** close the
+machine hole: `optouts.json` is gitignored, so the desktop's ledger is only as current as the last
+hand-copy from the laptop. Outreach from an unarmed box is still reading a ledger that can be days
+behind the one the armed box is writing.
 
 **Only ONE machine may be armed.** `worker_notes.json`, `optouts.json`, `mail_sent.json` and every
 cache are gitignored, so two armed machines do not share state — they fork it, and each one
@@ -125,7 +147,10 @@ develop and push today. Three gaps remain, all needing a copy from the laptop:
 | ledgers are **08-13 / 08-20** vintage | do NOT run outreach from here until refreshed — `optouts.json` is 9 days stale |
 | `lob.key` absent | no physical mail send (may simply be unconfigured everywhere) |
 
-## 4. Scheduled tasks (identical on both machines)
+## 4. Scheduled tasks
+
+The eight below are the ones `install-tasks.ps1` registers, enables and disables as a set. They are
+identical on both machines.
 
 | Task | Time | Cadence |
 |---|---|---|
@@ -138,7 +163,21 @@ develop and push today. Three gaps remain, all needing a copy from the laptop:
 | DEALFLOW Morning Worker | 08:00 | daily |
 | DealFlow Sheets CRM | 08:05 | daily |
 
-Two settings decide whether these actually fire:
+**Outside that set, and outside the installer entirely:**
+
+| Task | Time | Cadence | Where |
+|---|---|---|---|
+| **DealFlow Cadence** | 09:00 | daily | **ENABLED on DESKTOP-35NNMFL** (§1) |
+
+Runs `python -u cadence.py`, logs to `~\DEALFLOW\cadence-run.log`. It sends real email to
+homeowners. Because the installer does not manage it, every arm/disarm has to name it explicitly —
+see §1. Check it on any machine with:
+
+```
+pwsh -c "Get-ScheduledTask | ? TaskName -like '*ealFlow*' | ft TaskName,State"
+```
+
+Two settings decide whether the eight actually fire:
 
 - `DisallowStartIfOnBatteries` / `StopIfGoingOnBatteries` are **true on 6 of the 8 tasks**. On a
   desktop that is inert. On a laptop it means the task is skipped on battery and **killed mid-run**
