@@ -64,23 +64,35 @@ def _ent(s):
 # "We are not a foreclosure-rescue company" is the clause added 2026-08-22 at Alejandro's
 # direction. It was already on the Lob mail and on nothing else. See the OPEN QUESTION below.
 # ---------------------------------------------------------------------------------------------
-_MARS_EN = (
-    "{co} is not associated with the government, and our service is not approved by the "
-    "government or your lender. Even if you use our service, your lender may not agree to "
-    "change your loan. You may stop doing business with us at any time. We are not a law "
-    "firm and do not give legal advice. We are not a lender or mortgage broker and we do not "
-    "quote loan rates or terms. We are not a foreclosure-rescue company. Consultations are "
-    "always free."
-)
+# Stored as ordered ELEMENTS, not one blob, so a surface that cannot carry the whole block can
+# still pull the exact sentences it owes without hand-copying them. The first three keys are the
+# federally-mandated §1015.4(a) disclosures; the rest are house denials. mars() joins them with a
+# single space, which reproduces the pre-2026-08-26 blob byte-for-byte (asserted at import).
+_MARS_PARTS_EN = [
+    ('govt',      "{co} is not associated with the government, and our service is not approved by "
+                  "the government or your lender."),
+    ('may_agree', "Even if you use our service, your lender may not agree to change your loan."),
+    ('may_stop',  "You may stop doing business with us at any time."),
+    ('law_firm',  "We are not a law firm and do not give legal advice."),
+    ('lender',    "We are not a lender or mortgage broker and we do not quote loan rates or terms."),
+    ('rescue',    "We are not a foreclosure-rescue company."),
+    ('free',      "Consultations are always free."),
+]
 
-_MARS_ES = (
-    "{co} no está asociado con el gobierno, y nuestro servicio no está aprobado por el "
-    "gobierno ni por su banco. Aunque use nuestro servicio, es posible que su banco no acepte "
-    "modificar su préstamo. Puede dejar de trabajar con nosotros en cualquier momento. No "
-    "somos un bufete de abogados y no damos consejos legales. No somos prestamista ni "
-    "corredor hipotecario y no cotizamos tasas ni términos. No somos una empresa de rescate "
-    "de ejecuciones. Las consultas siempre son gratis."
-)
+_MARS_PARTS_ES = [
+    ('govt',      "{co} no está asociado con el gobierno, y nuestro servicio no está aprobado por "
+                  "el gobierno ni por su banco."),
+    ('may_agree', "Aunque use nuestro servicio, es posible que su banco no acepte modificar su "
+                  "préstamo."),
+    ('may_stop',  "Puede dejar de trabajar con nosotros en cualquier momento."),
+    ('law_firm',  "No somos un bufete de abogados y no damos consejos legales."),
+    ('lender',    "No somos prestamista ni corredor hipotecario y no cotizamos tasas ni términos."),
+    ('rescue',    "No somos una empresa de rescate de ejecuciones."),
+    ('free',      "Las consultas siempre son gratis."),
+]
+
+_MARS_EN = ' '.join(t for _, t in _MARS_PARTS_EN)
+_MARS_ES = ' '.join(t for _, t in _MARS_PARTS_ES)
 
 # ---------------------------------------------------------------------------------------------
 # IDENTITY — the opening "who I am not" sentence. First person: it is said by Jose or Carlos,
@@ -105,6 +117,7 @@ _SIG_TAG_ES = ("No somos un bufete de abogados. No somos un consejero de viviend
                "No somos una empresa de rescate de ejecuciones.")
 
 _MARS = {'en': _MARS_EN, 'es': _MARS_ES}
+_MARS_PARTS = {'en': _MARS_PARTS_EN, 'es': _MARS_PARTS_ES}
 _IDENTITY = {'en': _IDENTITY_EN, 'es': _IDENTITY_ES}
 _SIG_TAG = {'en': _SIG_TAG_EN, 'es': _SIG_TAG_ES}
 
@@ -133,6 +146,28 @@ def mars(company='', lang='en', as_html=True):
                     .replace('{co} no está asociado', 'No estamos asociados'))
     else:
         text = text.replace('{co}', company)
+    return _ent(text) if as_html else text
+
+
+def mars_part(*keys, **kw):
+    """One or more MARS sentences by key, joined with a space, in the stored order.
+
+    For a surface that already says some of the block in its own voice and only owes the rest —
+    the handwritten letter in carlos_letter_packet is the case this exists for. Keys:
+    govt, may_agree, may_stop, law_firm, lender, rescue, free. The first three are the federally
+    mandated ones; never drop those from a mailed piece to buy brevity.
+    """
+    lang, company, as_html = kw.pop('lang', 'en'), kw.pop('company', ''), kw.pop('as_html', True)
+    if kw:
+        raise TypeError('unexpected keyword %r' % next(iter(kw)))
+    parts = dict(_pick(_MARS_PARTS, lang))
+    missing = [k for k in keys if k not in parts]
+    if missing:
+        raise KeyError('no MARS element %r — have %s' % (missing[0], ', '.join(parts)))
+    text = ' '.join(parts[k] for k in keys)
+    text = text.replace('{co}', company) if company else \
+        (text.replace('{co} is not associated', 'We are not associated')
+             .replace('{co} no está asociado', 'No estamos asociados'))
     return _ent(text) if as_html else text
 
 

@@ -25,6 +25,8 @@ import json
 import os
 import re
 
+import disclaimer as D
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, '_letter_rows.json')
 
@@ -32,6 +34,10 @@ SRC = os.path.join(HERE, '_letter_rows.json')
 # which is three chances to update two of them. `co` follows entity.py so this packet can never
 # assert an LLC the register cannot substantiate.
 def _sender_defaults():
+    # The email keeps the retired name on purpose. That mailbox EXISTS and is read; a biscayne*
+    # address does not, and a printed reply-to that bounces is worse than one that looks mismatched.
+    # It is only on the ENTITY letter (the handwritten one carries a phone), so the audience for the
+    # mismatch is a company, not a homeowner. Swap it the day the new mailbox receives, not before.
     d = {'name': 'Carlos Gonzalez', 'co': 'Biscayne Solutions Group',
          'phone': '(786) 631-1823', 'email': 'miamisolutionsgroup@gmail.com'}
     try:
@@ -96,6 +102,11 @@ def letter_person(r):
     #     those needs licenses BSG does not hold, and putting bankruptcy in a letter to a
     #     distressed homeowner is legal advice from a non-lawyer.
     #   * anything beyond that is pointed at their own attorney or a FREE HUD counselor.
+    #   * the two MARS sentences come from disclaimer.mars_part(), not from a copy pasted here.
+    #     Carlos writes these letters out by hand, so the whole mars() block is not an option — he
+    #     would paraphrase it, and a paraphrased federal disclosure is worse than a short one. Two
+    #     sentences he will actually copy is the trade. The entity letter below does NOT carry them:
+    #     MARS runs to consumers, and an LLC-owned parcel is not one.
     en = (
         "%s,\n\n"
         "My name is %s. I work with %s, here in Miami-Dade. We are not associated with the "
@@ -111,11 +122,13 @@ def letter_person(r):
         "What happened with the house? If selling is something you would even consider, call me and "
         "I will give you a straight answer about what it is worth and how fast it could be done. It "
         "costs nothing to talk and I am not going to pressure you.\n\n"
+        "%s\n\n"
         "%s — %s\n\n"
         "If you would rather not hear from us again, just call or write and say stop, and we will "
         "not contact you again."
         % (first if first != 'there' else 'Hello', SENDER['name'], SENDER['co'], st,
            who, (' (Case No. %s).' % case) if case else '.', when,
+           D.mars_part('may_agree', 'may_stop', as_html=False),
            SENDER['name'], SENDER['phone'])
     )
     es = (
@@ -134,11 +147,13 @@ def letter_person(r):
         "¿Qué pasó con la casa? Si vender es algo que consideraría, llámeme y le doy una respuesta "
         "directa de cuánto vale y qué tan rápido se podría hacer. Hablar no cuesta nada y no le voy "
         "a presionar.\n\n"
+        "%s\n\n"
         "%s — %s\n\n"
         "Si prefiere no recibir más cartas nuestras, llame o escriba y díganos que pare, y no lo "
         "volvemos a contactar."
         % (first if first != 'there' else 'Hola', SENDER['name'], SENDER['co'], st,
            whoES, (' (Caso Núm. %s).' % case) if case else '.', whenES,
+           D.mars_part('may_agree', 'may_stop', lang='es', as_html=False),
            SENDER['name'], SENDER['phone'])
     )
     return en, es

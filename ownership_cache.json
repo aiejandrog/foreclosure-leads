@@ -1733,14 +1733,14 @@
   "current_owner": "EKREM & ONUR GROUP LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-26"
  },
  "00424334050000040|ETIENNEIDLINE|": {
   "title_status": "clear",
   "current_owner": "ETIENNE ELIANA & ETIENNE IDLINE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-08-26"
  },
  "494330CJ0180|ANATOLIYMEDYNSKIY|": {
   "title_status": "unverified",
@@ -1881,5 +1881,159 @@
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
   "ts": "2026-08-25"
+ },
+ "514223BC1900|SOFF|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-08-26"
+ },
+ "00424708080030940|MANDRANORMA|": {
+  "title_status": "clear",
+  "current_owner": "MANDRA ANTHONY G & MANDRA NORMA M",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "30424110340000790|DRAKEGARY|": {
+  "title_status": "unverified",
+  "current_owner": "LUKASIK GAIL DRAKE",
+  "flip_date": "",
+  "evidence": "live owner 'LUKASIK GAIL DRAKE' shares only a surname with the defendant 'DRAKE GARY EST' — verify it is the same household",
+  "ts": "2026-08-26"
+ },
+ "73414407050000870|JOHNULANOWSKI|": {
+  "title_status": "clear",
+  "current_owner": "ULANOWSKI JOHN",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "74434320056142080|LUTHERTIFFANY|": {
+  "title_status": "transferred",
+  "current_owner": "ODARP CAPITAL LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner 'ODARP CAPITAL LLC' is not the foreclosure defendant 'LUTHER TIFFANY'",
+  "ts": "2026-08-26"
+ },
+ "72414326210001940|GLEASONJONATHAN|": {
+  "title_status": "clear",
+  "current_owner": "GLEASON JONATHAN C",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "72414323200000150|DESTINEROSE|": {
+  "title_status": "clear",
+  "current_owner": "DESTINE ROSE A & MORIN ROMANE",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "00424516040000280|GERALDINEROSENBERG|": {
+  "title_status": "clear",
+  "current_owner": "ROSENBERG GERALDINE EST",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "00404321010000630|ALANKARPAVAN|": {
+  "title_status": "clear",
+  "current_owner": "ALANKAR PAVAN & ALANKAR SHUSHMA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "18424422310000890|BRIANLEE|": {
+  "title_status": "transferred",
+  "current_owner": "K & R DEVELOPMENT GROUP",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner 'K & R DEVELOPMENT GROUP' is not the foreclosure defendant 'LEE BRIAN'",
+  "ts": "2026-08-26"
+ },
+ "00424520050010210|AUDEANDONALDSON|": {
+  "title_status": "clear",
+  "current_owner": "DONALDSON AUDEAN",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "00424322030112450|MYRONSOLOMON|": {
+  "title_status": "unverified",
+  "current_owner": "SOLOMON ROBIN & WEINSTEIN RONNI",
+  "flip_date": "",
+  "evidence": "live owner 'SOLOMON ROBIN & WEINSTEIN RONNI' shares only a surname with the defendant 'SOLOMON MYRON EST' — verify it is the same household",
+  "ts": "2026-08-26"
+ },
+ "70424413300002150|JHOJANAURUENA|": {
+  "title_status": "clear",
+  "current_owner": "URUENA JHOJANA M",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "00434631110000470|KULYKSERGIY|": {
+  "title_status": "clear",
+  "current_owner": "KULYK SERGIY & KULYK VIKTORIIA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "18424426153310041|BOBBYGRIFFIN|": {
+  "title_status": "clear",
+  "current_owner": "GRIFFIN BOBBY",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "36434221170005160|ANNDOLLJO|": {
+  "title_status": "clear",
+  "current_owner": "DOLL JO ANN",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "00424414630131303|HIBLINEJOANNE|": {
+  "title_status": "clear",
+  "current_owner": "HIBLINE JOANNE M",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "00424434290002750|JUDITHMATEOSMITH|": {
+  "title_status": "clear",
+  "current_owner": "MATEO-SMITH JUDITH",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "52424209140032000|BARTHOLOMEWDAWN|": {
+  "title_status": "clear",
+  "current_owner": "BARTHOLOMEW DAWN M",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "3421010130360|RUBYLETTEWALKER|": {
+  "title_status": "clear",
+  "current_owner": "RUBYLETTE M WALKER",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "0232341180090|CHRISTOPHERLEONTEREGAN|": {
+  "title_status": "clear",
+  "current_owner": "CHRISTOPHER REGAN; LEONTE REGAN",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
+ },
+ "1079150210250|FERNANDEZGALICIALUZMA|": {
+  "title_status": "clear",
+  "current_owner": "MA LUZ FERNANDEZ GALICIA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-08-26"
  }
 }

@@ -1288,6 +1288,41 @@ def _js(v):
             .replace('\r', '').replace('\n', ' '))
 
 
+_PLACEHOLDER = re.compile(r'__[A-Z][A-Z0-9_]{2,}__')
+
+
+def assert_no_placeholders(html, where):
+    """Refuse to write a page that still carries an unsubstituted __TOKEN__.
+
+    Every placeholder in tracker_template.html sits in JS as a bare identifier, so one that survives
+    the build is not a cosmetic blemish -- it is a ReferenceError at top level, and it aborts the
+    rest of the script. Everything declared after it never initialises and the page is dead.
+
+    design-preview.html shipped that way with eleven of them (found 2026-08-26): build_preview.py
+    called subst_build_facts() under a comment claiming it was 'the same substitution the real build
+    uses', which was true of six tokens and false of the other eleven that make_tracker does inline.
+    _calctest, _scripttest and _redesign_verify had all been pointed at that dead page. Nothing
+    failed loudly, because a page that renders nothing still serves a 200.
+    """
+    left = sorted(set(_PLACEHOLDER.findall(html)))
+    if left:
+        raise SystemExit('%s: %d unsubstituted placeholder(s) -- the page would abort on load: %s'
+                         % (where, len(left), ', '.join(left)))
+
+
+def _motion_js():
+    """vendor/motion.min.js, inlined. Empty (not fatal) if absent -- _fxEnter() no-ops and the
+    board still renders. Shared so the preview build cannot animate differently from the real one."""
+    try:
+        js = open(os.path.join(HERE, 'vendor', 'motion.min.js'), encoding='utf-8').read()
+        if '</script' in js:          # would terminate the inline block early and shred the page
+            raise ValueError('vendor/motion.min.js contains a </script> token — refusing to inline')
+        return js
+    except Exception as e:
+        print(f'motion.js not inlined ({e}) — board renders without entrance animation')
+        return ''
+
+
 def subst_build_facts(tpl, updated):
     """Fill the board's build-time placeholders. BOTH template readers must go through this.
 
@@ -2283,14 +2318,7 @@ def make_tracker(leads):
     # Motion v13 (UMD) inlined, not CDN-linked: the Desktop twin is opened over file://, where an ESM
     # import is CORS-blocked and a network <script> dies offline. If the vendored file ever goes
     # missing the placeholder collapses to empty and _fxEnter() no-ops — the board still renders.
-    try:
-        _motion = open(os.path.join(HERE,'vendor','motion.min.js'), encoding='utf-8').read()
-        if '</script' in _motion:      # would terminate the inline block early and shred the page
-            raise ValueError('vendor/motion.min.js contains a </script> token — refusing to inline')
-    except Exception as _e:
-        print(f'motion.js not inlined ({_e}) — board renders without entrance animation')
-        _motion = ''
-    tpl = tpl.replace('__MOTIONJS__', _motion)
+    tpl = tpl.replace('__MOTIONJS__', _motion_js())
     os.makedirs(os.path.join(HERE,'docs'), exist_ok=True)
     docs = os.path.join(HERE,'docs','index.html')
 
@@ -2547,7 +2575,12 @@ def make_tracker(leads):
     # carrying a coordinate 0.9mi from downtown Miami, 27mi from the property), so including it
     # would poison the very centroid meant to locate it.
     tpl = tpl.replace('__ZIPCENT__', _esc_json(_zip_centroids(slim)))
-    open(docs,'w',encoding='utf-8').write(_marker + tpl.replace('__DATA__', _payload))
+    _page = _marker + tpl.replace('__DATA__', _payload)
+    # Last gate before the board the business runs on goes to disk. A surviving __TOKEN__ is a
+    # top-level ReferenceError that kills every declaration after it, and the page still serves a
+    # 200 while doing nothing -- which is exactly how design-preview.html stayed dead unnoticed.
+    assert_no_placeholders(_page, 'docs/index.html')
+    open(docs,'w',encoding='utf-8').write(_page)
     # ---- CALL MODE (docs/call/) ----------------------------------------------------------------
     # The phone-first calling page. Wrapped in try/except ON PURPOSE: this is an additive artifact,
     # and a failure building it must cost the phone page, never the board the business runs on.

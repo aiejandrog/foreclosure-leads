@@ -318,3 +318,6 @@ send_taxes.py
 # transfer bundles: secrets + ledgers staged for another machine, never committed
 /DEALFLOW-transfer/
 /DEALFLOW-transfer*.7z
+send_condo_value.py
+_wcv*.py
+_wcv*.json

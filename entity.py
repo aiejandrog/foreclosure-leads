@@ -47,6 +47,28 @@ MAX_AGE_DAYS = 30
 # mechanism that failed twice.
 DENY = ()
 
+# RETIRED NAMES. A sender profile written before the 2026-08-23 rename still carries the name that
+# turned out to belong to another Florida company, and a profile is not always sender.json: it can
+# be a frozen sender dict inside cadence_queue.json, or an fcSender saved in a browser's
+# localStorage months ago. cadence.py and outreach_mail.py each grew their own private copy of this
+# regex and mapped forward at their own send sites; carlos_letter_packet.py did not, so it kept
+# signing letters with the other company's name right up until this was written.
+#
+# A rename is a fact about the world, not about a module, so it belongs at the gate every surface
+# already goes through. This is NOT the manual ALLOW the docstring forbids: the name it maps TO is
+# handed to exactly the same Sunbiz check as any other, and is still stripped to bare if unfiled.
+RETIRED = ((re.compile(r'^\s*miami\s+solutions\s+group(\s+ll?c\.?)?\s*$', re.I),
+            'Biscayne Solutions Group LLC'),)
+
+
+def forward(raw):
+    """A retired company name mapped to its replacement; anything else returned unchanged."""
+    v = (raw or '').strip()
+    for pat, repl in RETIRED:
+        if pat.match(v):
+            return repl
+    return v
+
 
 def _norm(s):
     return re.sub(r'[^a-z0-9]+', '', str(s or '').lower())
@@ -93,7 +115,7 @@ def verified(raw=''):
 
 def display_llc(override=''):
     """(display_name, doc_number, warning). Never returns a claim we cannot substantiate."""
-    raw = (override or sender().get('llc') or '').strip()
+    raw = forward((override or sender().get('llc') or '').strip())
     if not raw:
         return '', '', 'no company name set in sender.json'
     st = status()

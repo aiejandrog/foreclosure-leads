@@ -87,10 +87,34 @@ for _f in FAKE:
     if _f.get("people") and _f.get("addr") and "," in _f["addr"]:
         _f["peopleaddr"] = "#"
 
-# Same substitution the real build uses -- otherwise the preview renders literal __ENTITY_LLC__
+# subst_build_facts() covers the six build FACTS (company, emblem, updated stamp). make_tracker()
+# substitutes ELEVEN more inline, and until 2026-08-26 this file did not, so the preview shipped with
+# literal __OPTOUTS__ / __MOTIONJS__ still in it. Those are bare identifiers in JS: the first one
+# throws at top level and aborts the whole script, which is why the preview rendered a dead page and
+# _calctest saw _verdict=undefined on every lead. A page whose JS never ran is not a design preview,
+# and three suites had been pointed at it.
+#
+# These are substituted EMPTY on purpose, and it is not laziness. design-preview.html is plaintext
+# and committed to a PUBLIC repo. __OPTOUTS__, __REPLIES__, __MAILLOG__, __MAILTO__, __TEXTLOG__,
+# __TEXTPERSON__ and __DEADS__ are all real homeowner PII in the real build. Wiring the live values
+# in here to "make the preview more realistic" would publish them. Empty is the correct value.
+# The JSON payloads sit bare in the template (`const SERVER_OPTOUTS = __OPTOUTS__;`) so they take
+# a literal; BUILT and BUILTAT sit INSIDE quotes already (`const BUILT = "__BUILT__";`) so they take
+# the raw string. Quoting one like the other is a syntax error that kills the page just as dead as
+# the missing substitution did -- check the template, do not assume.
+PREVIEW_EMPTY = {
+    '__OPTOUTS__': '[]', '__REPLIES__': '{}', '__MAILLOG__': '{}', '__MAILTO__': '{}',
+    '__TEXTLOG__': '{}', '__TEXTPERSON__': '{}', '__DEADS__': '[]', '__ZIPCENT__': '{}',
+    '__BUILT__': 'preview', '__BUILTAT__': '2026-07-14T12:00',
+}
+
 tpl = F.subst_build_facts(open(os.path.join(HERE, "tracker_template.html"), encoding="utf-8").read(),
                           "2026-07-14 12:00")
+tpl = tpl.replace('__MOTIONJS__', F._motion_js())   # our own code, not PII — ship the real thing
+for _tok, _val in PREVIEW_EMPTY.items():
+    tpl = tpl.replace(_tok, _val)
 html = tpl.replace("__DATA__", F._esc_json(FAKE))
+F.assert_no_placeholders(html, 'design-preview.html')
 out = os.path.join(HERE, "design-preview.html")
 open(out, "w", encoding="utf-8").write(html)
 print(f"wrote {out}  ({len(FAKE)} sample leads, plaintext, no gate)")

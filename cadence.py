@@ -48,13 +48,11 @@ def safe_llc(raw):
     NOT_FOUND, and signed 59 emails with it on 08-24 and 08-25.
 
     A queue is a frozen snapshot of a sender profile, so it can also still hold the retired
-    'Miami Solutions Group' -- which belongs to a DIFFERENT Florida company. Map that forward
-    first (same rule as outreach_mail._safe_llc), then let the gate decide about the suffix.
+    'Miami Solutions Group' -- which belongs to a DIFFERENT Florida company. display_llc() maps
+    retired names forward itself (entity.RETIRED) before deciding about the suffix, so a stale
+    queue is covered by the same gate as a stale sender.json.
     Fail-closed: on any doubt this returns the bare name, never the entity claim."""
-    v = (raw or '').strip()
-    if re.match(r'^\s*miami\s+solutions\s+group(\s+ll?c\.?)?\s*$', v, re.I):
-        v = 'Biscayne Solutions Group LLC'
-    name, _doc, warn = entity.display_llc(v)
+    name, _doc, warn = entity.display_llc((raw or '').strip())
     return name, warn
 
 # ---- the 4-touch sequence (EN, with the ES block every owner expects from this operation) ------

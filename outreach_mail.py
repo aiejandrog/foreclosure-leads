@@ -238,12 +238,10 @@ def _lh_header(snd, height_px=52):
 def _safe_llc(snd):
     """Company name as it may legally be shown, plus the pre-rename identity upgrade.
 
-    A sender profile written before 2026-08-23 still says 'Miami Solutions Group'; map it forward
-    first, then let entity.display_llc() decide whether the " LLC" suffix may print at all."""
-    v = (snd.get('llc') or '').strip()
-    if re.match(r'^\s*miami\s+solutions\s+group(\s+ll?c\.?)?\s*$', v, re.I):
-        v = 'Biscayne Solutions Group LLC'
-    return entity.display_llc(v)[0]
+    A sender profile written before 2026-08-23 still says 'Miami Solutions Group'. display_llc()
+    maps that forward itself now (entity.RETIRED) and then decides whether the " LLC" suffix may
+    print at all, so this is just the profile lookup."""
+    return entity.display_llc((snd.get('llc') or '').strip())[0]
 
 
 def _lh_sign(snd, lang='en'):
