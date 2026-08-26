@@ -2586,7 +2586,15 @@ function wire(){
 var touched=false;
 async function freshCheck(){
   try{
-    var u=location.pathname.replace(/\/$/,'')+'/index.html';
+    /* BOTH URL FORMS. This assumed the path was always a DIRECTORY (/call/ -> /call/index.html),
+       so opening the page at its explicit file URL — a bookmark, an iOS Add-to-Home-Screen, a
+       pasted link — built /call/index.html/index.html, 404'd, and the catch below swallowed it in
+       silence. The whole job of this function is to notice a stale cache ("a phone quietly serving
+       last week's list is the failure most likely to go unnoticed", per the comment above it), and
+       for anyone on the file URL it had been doing nothing at all. Caught by the first runtime test
+       of this page, 2026-08-26. */
+    var _p=location.pathname;
+    var u=/\.html?$/i.test(_p) ? _p : _p.replace(/\/$/,'')+'/index.html';
     var res=await fetch(u+'?_='+Date.now(),{headers:{'Range':'bytes=0-1200'}});
     var t=await res.text();
     /* [A-Za-z0-9]+, not [a-f0-9]+. The signature is a sha256 hex prefix today, so hex-only works —
