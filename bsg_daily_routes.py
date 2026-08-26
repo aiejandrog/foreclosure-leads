@@ -170,7 +170,18 @@ def build_pool(drop):
             return
         seen.add(a)
         row['kind'] = kind
-        row['phones'] = _phones(skip.get(row['case']))
+        _sk = skip.get(row['case']) or {}
+        row['phones'] = _phones(_sk)
+        # DOOR-ONLY: no phone and no live email anywhere. For these the door (or a letter) is the
+        # ONLY channel that exists — every other lead on the sheet could have been reached from a
+        # chair. Measured 2026-08-26: 109 live leads are unreachable digitally and 58 of those
+        # model over $50k equity, topping out at $2.09M with an auction 21 days out. Driving past
+        # one of those to knock someone you could have phoned is the most expensive mistake this
+        # tool can make, so it ranks first (see build_routes' sort).
+        _dead = {str(e).lower() for e in (_sk.get('emails_dead') or [])}
+        _live_mail = [e for e in (_sk.get('emails') or []) if str(e).lower() not in _dead]
+        row['emails'] = _live_mail
+        row['door_only'] = not row['phones'] and not _live_mail
         doors.append(row)
 
     # -- auction pool: the only place equity is real ------------------------------------------
@@ -310,8 +321,10 @@ def build_routes(doors, led, day, drop):
         r['last_class'] = last_cls
         elig.append(r)
 
-    # fresh first, then re-knocks; inside each, auction (real clock) outranks the rest
-    elig.sort(key=lambda r: (r['attempt'], 0 if r['kind'] == 'auction' else 1, _mi_home(r)))
+    # fresh first, then re-knocks; then DOOR-ONLY leads (a door is their only channel — everyone
+    # else on this sheet could have been phoned); then auction (a real clock); then distance.
+    elig.sort(key=lambda r: (r['attempt'], 0 if r.get('door_only') else 1,
+                             0 if r['kind'] == 'auction' else 1, _mi_home(r)))
 
     for r in elig:
         r['sec'] = None
@@ -505,6 +518,7 @@ table.tt td:first-child{font-weight:800;background:#f4f6fa;white-space:nowrap}
 .addr{font-size:15.5px;font-weight:800;color:#12204a;text-decoration:none}
 .kind{color:#fff;font-size:9px;font-weight:800;padding:2px 7px;border-radius:20px;letter-spacing:.05em}
 .att{background:#f1e9d2;color:#7a5a10;font-size:9.5px;font-weight:800;padding:2px 7px;border-radius:20px}
+.donly{background:#12204a;color:#fff;font-size:9.5px;font-weight:800;padding:2px 8px;border-radius:20px;letter-spacing:.04em}
 .meta{font-size:11.5px;color:#3d4761;margin-top:2px}
 .meta2{font-size:10.5px;color:#79839c;margin-top:1px}
 .urg{color:#b3372f}.noeq{color:#8f6a1f;font-weight:700}
@@ -531,6 +545,9 @@ def _card(r, i):
     q = quote_plus('%s, %s FL %s' % (r['addr'], r.get('city') or 'Miami', r.get('zip') or ''))
     lbl, col = BADGE[r['kind']]
     att = ('<span class="att">attempt #%d</span>' % r['attempt']) if r.get('attempt', 1) > 1 else ''
+    if r.get('door_only'):
+        att += ('<span class="donly" title="No phone and no live email anywhere in the file — '
+                'this door is the only way to reach this owner">DOOR IS THE ONLY WAY</span>')
     if r['kind'] == 'auction':
         money = ('<b>Equity $%s</b> (%.0f%%) = %s $%s &minus; judgment $%s &middot; '
                  '<b class="urg">sale in %sd (%s)</b>'
