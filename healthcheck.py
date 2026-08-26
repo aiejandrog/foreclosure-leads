@@ -20,6 +20,52 @@ def load(fn):
     try: return json.load(open(p, encoding='utf-8'))
     except Exception: return None
 
+# ---- am I the runner? -------------------------------------------------------------------------
+# ADDED 2026-08-26, after this check lied to a reader on the desktop.
+#
+# Half of what healthcheck measures comes from GITIGNORED worker ledgers -- leads_final.json,
+# skiptrace_results.json, worker_notes.json. Git does not carry them (MACHINE-HANDOFF §3), so on any
+# box that is not the armed runner they are frozen at whatever snapshot was last hand-copied there,
+# while the repo keeps pulling fresh commits from the machine that IS running.
+#
+# The report did not know the difference. Run on the desktop 2026-08-26 it printed
+# "skiptrace freshness FAIL -- the nightly skiptrace is not running", stated as a fact about the
+# system. The nightly skiptrace was running fine on the laptop and had exited 0 both preceding
+# nights; the desktop's copy was simply 6 days old because the desktop is not the runner. Two of the
+# two FAILs in that report were this artifact. A resilience check whose whole job is "tell us when
+# it breaks instead of rotting silently" cannot also invent outages -- that is how a reader learns
+# to discount the report, which is the exact failure the ping() retry logic above was written to
+# prevent.
+#
+# Levels are deliberately NOT downgraded here. healthcheck is a publish gate; softening a FAIL on a
+# heuristic risks masking a real one on the real runner. This only labels.
+def _is_runner():
+    """(bool, reason). False when this checkout's worker ledgers cannot describe the live system."""
+    # 1) The pipeline logs are gitignored, so they exist only where the pipeline has actually run.
+    #    None of them present == this box has never run a refresh, full stop.
+    if not any(os.path.exists(os.path.join(HERE, f))
+               for f in ('leads-run.log', 'phones-run.log', 'cloud-run.log')):
+        return False, 'no pipeline log on this machine — it has never run a refresh here'
+    # 2) Otherwise compare the local board data against the published board's last COMMIT. On the
+    #    runner these move together. Elsewhere the commits keep arriving and the ledger does not.
+    try:
+        import subprocess
+        out = subprocess.run(['git', 'log', '-1', '--format=%ct', '--', 'docs/index.html'],
+                             cwd=HERE, capture_output=True, text=True, timeout=15)
+        committed = int((out.stdout or '0').strip() or 0)
+        local = os.path.getmtime(os.path.join(HERE, 'leads_final.json'))
+        gap_d = (committed - local) / 86400.0
+        if committed and gap_d > 2:
+            return False, (f'the published board was committed {gap_d:.0f}d after this box last '
+                           f'built leads_final.json — another machine is the runner')
+    except Exception:
+        pass
+    return True, ''
+
+
+IS_RUNNER, _NOT_RUNNER_WHY = _is_runner()
+_STALE_NOTE = '' if IS_RUNNER else '  [stale local copy — this box is not the runner]'
+
 _SRC_DOWN = []          # names of sources that failed every retry — used for the systemic rule below
 
 def ping(name, fn, tries=3):
@@ -172,8 +218,11 @@ try:
     if _tds:
         _sage = (_dt2.date.today() - max(_tds)).days
         _slvl = 'FAIL' if _sage > 4 else ('WARN' if _sage > 2 else 'PASS')
+        # "the nightly skiptrace is not running" is a claim about the SYSTEM. Only the runner is
+        # entitled to make it — everywhere else an old trace date just means an old copy.
         add(_slvl, 'skiptrace freshness', f'newest trace {max(_tds).isoformat()} ({_sage}d old, {len(_str)} cached)'
-            + (' — the nightly skiptrace is not running' if _slvl != 'PASS' else ''))
+            + (('' if not IS_RUNNER else ' — the nightly skiptrace is not running') + _STALE_NOTE
+               if _slvl != 'PASS' else ''))
     else:
         add('WARN', 'skiptrace freshness', 'no dated traces in skiptrace_results.json')
     _rl = os.path.join(HERE, 'leads-run.log')
@@ -393,11 +442,21 @@ else:
 fails = [x for x in R if x[0] == 'FAIL']; warns = [x for x in R if x[0] == 'WARN']
 icon = {'PASS': 'ok  ', 'WARN': 'WARN', 'FAIL': 'FAIL'}
 print(f"\n=== DEALFLOW health · {time.strftime('%Y-%m-%d %H:%M')} ===")
+if not IS_RUNNER:
+    print("  !! NOT THE RUNNER — " + _NOT_RUNNER_WHY)
+    print("     Every ledger-derived number below (lead count, tier split, enrichment, lien and")
+    print("     phone coverage, trace freshness) describes THIS BOX'S FROZEN SNAPSHOT, not the live")
+    print("     system — those files are gitignored and do not travel. Only the upstream source")
+    print("     pings, the entity gate and the published-board checks mean anything here.")
+    print("     For real numbers, read health.json from the armed runner. (MACHINE-HANDOFF §1, §3.)")
 for lvl, name, detail in R:
     print(f"  [{icon[lvl]}] {name:32} {detail}")
 status = 'DOWN' if fails else ('DEGRADED' if warns else 'HEALTHY')
 print(f"\n  STATUS: {status}   ({len(R)-len(fails)-len(warns)} ok · {len(warns)} warn · {len(fails)} fail)")
 json.dump({'status': status, 'checked': time.strftime('%Y-%m-%d %H:%M'),
+           # Anything consuming health.json (the site header bakes it in) must be able to tell a
+           # real report from a non-runner's snapshot. Absent this flag they look identical.
+           'runner': IS_RUNNER, 'runner_note': _NOT_RUNNER_WHY,
            'checks': [{'level': l, 'name': n, 'detail': d} for l, n, d in R],
            'sources_ok': sum(1 for l, n, d in R if n.startswith('source') and l == 'PASS'),
            'sources_total': sum(1 for l, n, d in R if n.startswith('source'))},
