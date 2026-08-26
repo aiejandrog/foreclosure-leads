@@ -2695,6 +2695,13 @@ def make_tracker(leads):
         'arv':    sum(1 for d in slim if d.get('arv')),
         'rfval':  sum(1 for d in slim if d.get('rfval')),
         'zest':   sum(1 for d in slim if d.get('zest')),
+        # §362 STAYS ON THE ACTUAL BUILD. healthcheck's "RULE: §362 stay flags reach the build" is
+        # one of only three FAILs that block a publish, and it counted the INPUT LEAD FILES — it
+        # never looked at the build it is named for. The 2026-07-21 hole was cache-had-67,
+        # published-build-had-ZERO; if that stripping happens inside make_tracker rather than
+        # upstream, the rule passes while the board ships unprotected. Publishing the count here
+        # lets the rule read the artifact instead of its ingredients.
+        'bkstay': sum(1 for d in slim if d.get('saleBkAct') or d.get('sale_bk_active')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
     # (the final bounce sweep runs ABOVE, before the Desktop twin is written — one sweep, not two)

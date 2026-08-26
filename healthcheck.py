@@ -344,9 +344,32 @@ if _ALL:
     _shc = load('sale_history_cache.json') or {}
     cache_act = sum(1 for e in _shc.values() if isinstance(e, dict) and e.get('a'))
     lead_act = sum(1 for r in _ALL if r.get('sale_bk_active') or r.get('saleBkAct'))
+    # The count above is the LEAD FILES, not the build — this rule was named for an artifact it
+    # never opened. Read the published board's own coverage marker so the chain is measured end to
+    # end: cache -> lead files -> BOARD. And a partial strip is a hole too: the old test was
+    # `lead_act == 0`, so 77 stays collapsing to 3 passed clean.
+    board_act = None
+    try:
+        _p = os.path.join(HERE, 'docs', 'index.html')
+        _m = re.search(r'DEALFLOW-COVERAGE (\{.*?\})', open(_p, encoding='utf-8', errors='replace').read(4000))
+        if _m:
+            board_act = json.loads(_m.group(1)).get('bkstay')
+    except Exception:
+        board_act = None
     if cache_act:
-        add('FAIL' if lead_act == 0 else 'PASS', 'RULE: §362 stay flags reach the build',
-            f'cache {cache_act} active stays -> board {lead_act}')
+        _detail = f'cache {cache_act} -> leads {lead_act} -> board {board_act if board_act is not None else "?"}'
+        if lead_act == 0 or board_act == 0:
+            add('FAIL', 'RULE: §362 stay flags reach the build', _detail + ' — STRIPPED')
+        elif board_act is None:
+            # An older build has no bkstay key. Do not fail on a missing measurement, but do not
+            # report a pass we did not make either.
+            add('WARN', 'RULE: §362 stay flags reach the build',
+                _detail + ' — board count unavailable (rebuild to publish it)')
+        elif board_act < lead_act * 0.5:
+            add('FAIL', 'RULE: §362 stay flags reach the build',
+                _detail + ' — over half the stays vanished between leads and board')
+        else:
+            add('PASS', 'RULE: §362 stay flags reach the build', _detail)
 
 # ---- 2b. ENTITY CLAIM ---------------------------------------------------------------------------
 # Twice the company name was asserted to homeowners without anyone reading the register, and the
