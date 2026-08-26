@@ -34,7 +34,29 @@ STATE = os.path.join(HERE, 'cadence_state.json')
 KEY = os.path.join(HERE, 'gmail.key')
 OPTOUTS = os.path.join(HERE, 'optouts.json')
 
-STOP_WORDS = re.compile(r'\b(stop|unsubscribe|remove me|do not contact|para|detener|dejen de escribir|no contactar)\b', re.I)
+# STOP DETECTION IS NOT LOCAL ANY MORE. This module used to own the regex below, and earlier today
+# (d53955d) I made its verdict permanent: a detected stop now writes optouts.json and the
+# bounced_emails.json hard-suppression list, which every channel reads. That change is only as good
+# as the detector behind it, and hours later replies.py proved this exact pattern wrong in BOTH
+# directions (f80f5e6): `\bstop\b` matched "Can you stop the foreclosure?" and "Is there any way to
+# stop the sale?" -- the most motivated reply a homeowner in foreclosure can send, and the central
+# phrase of the business -- while missing "take me off your list", "opt me out" and "leave me
+# alone" entirely. So the naive version was auto-suppressing the hottest leads across every channel
+# and letting real opt-outs through, and my commit is what promoted that mistake from a local status
+# flag to a permanent cross-channel ledger entry.
+#
+# replies.is_stop_text() separates the two readings (explicit opt-out phrasing wins; a bare "stop"
+# counts unless every occurrence is followed by a case-object) and is covered by _suppressiontest.
+# Call it. Do not re-implement it here -- a second detector is how the two drift apart, and the half
+# that drifts is the half nobody is testing.
+def _is_stop(text):
+    try:
+        from replies import is_stop_text
+    except Exception:
+        # Fail CLOSED toward suppression: if the shared detector cannot be imported, treat an
+        # explicit opt-out word as a stop rather than silently contacting someone who asked to end.
+        return bool(re.search(r'\b(unsubscribe|remove me|do not contact|no contactar)\b', text or '', re.I))
+    return bool(is_stop_text(text))
 
 
 def safe_llc(raw):
@@ -169,7 +191,8 @@ def imap_replies(cred, emails, dry):
             # read the latest one for STOP words
             latest = data[0].split()[-1]
             typ, body = M.fetch(latest, '(RFC822.TEXT)')
-            if typ == 'OK' and body and body[0] and isinstance(body[0], tuple) and STOP_WORDS.search(body[0][1].decode('utf-8', 'ignore')):
+            if typ == 'OK' and body and body[0] and isinstance(body[0], tuple) and \
+                    _is_stop(body[0][1].decode('utf-8', 'ignore')):
                 out[em] = 'stopped'
         M.logout()
     except Exception as e:
