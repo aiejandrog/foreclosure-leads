@@ -315,15 +315,33 @@ def main():
         typ, data = M.search(None, f'(SINCE {since} SUBJECT "{SUBJ_TAG}")')
         if typ == 'OK' and data and data[0]:
             addr_map = owner_addrs()
+            # HEADER-FIRST TRIAGE (2026-08-26). This loop full-fetched RFC822 for EVERY message in
+            # the 30-day subject window just to read who sent it, then discarded nearly all of them
+            # -- and the window only ever grows, so the run got slower every day until the 06:45
+            # task blew through its PT30M ExecutionTimeLimit mid-scan (killed = replies.json never
+            # written = that morning's detected replies thrown away). Sender/self/bounce/subject-
+            # frag are all HEADER questions; fetch headers only (cheap, no body), and pay for the
+            # full message -- excerpt + STOP scan need the body -- only for the handful that survive.
             for mid in data[0].split():
+                typh, hd = M.fetch(mid, '(BODY.PEEK[HEADER.FIELDS (SUBJECT FROM)])')
+                if typh != 'OK' or not hd or not hd[0] or not isinstance(hd[0], tuple):
+                    continue
+                hmsg = email.message_from_bytes(hd[0][1])
+                sender = (parseaddr(str(hmsg.get('From') or ''))[1] or '').lower().strip()
+                hsubj = str(make_header(decode_header(hmsg.get('Subject') or '')))
+                if not sender or sender == str(user).lower() or sender in seen:
+                    continue
+                # a bounce/auto-notice is not an owner writing back
+                if re.search(r'(mailer-daemon|postmaster|no-?reply|do-?not-?reply)', sender, re.I):
+                    continue
+                mfrag = re.search(r'property at\s+(.+)$', hsubj or '', re.I)
+                if not mfrag or not _norm_addr(mfrag.group(1)):
+                    continue
                 typ2, md = M.fetch(mid, '(RFC822)')
                 if typ2 != 'OK' or not md or not md[0]:
                     continue
                 subj, when, fresh, is_stop, sender = _read_msg(md[0][1])
                 if not sender or sender == str(user).lower() or sender in seen:
-                    continue
-                # a bounce/auto-notice is not an owner writing back
-                if re.search(r'(mailer-daemon|postmaster|no-?reply|do-?not-?reply)', sender, re.I):
                     continue
                 m = re.search(r'property at\s+(.+)$', subj or '', re.I)
                 frag = _norm_addr(m.group(1)) if m else ''
