@@ -14640,9 +14640,56 @@ function notesBridgePush(){
   try{
     fetch('http://127.0.0.1:8823/notes', {method:'POST', headers:{'Content-Type':'application/json'},
           body: JSON.stringify(_notesBridgePayload())})
-      .catch(function(){ return null; })
-      .then(function(){ _nbBusy = false; });
+      /* SILENCE WAS THE BUG (2026-08-26). This resolved the same way for every outcome: a 400,
+         a 500, a bridge that is not running, and — the one that actually happened — a push the
+         server deliberately REFUSED because this device's state is poorer than the backup on
+         disk. 17 real device pushes were refused this month, one of them holding 496 notes, and
+         every single one looked like a successful save from here. worker_notes.json is what the
+         weekly scorecard reads, so a device silently failing to back up is a device whose work
+         does not exist as far as the business is concerned.
+         `.catch` alone never sees a non-2xx: fetch only rejects on network failure. Check both. */
+      .then(function(res){
+        if(!res || !res.ok) throw new Error(res ? ('HTTP ' + res.status) : 'no response');
+        return res.json().catch(function(){ return {}; });
+      })
+      .then(function(j){
+        if(j && j.saved === false){
+          _nbWarn('This device did NOT back up: the local backup on disk is richer than what this '
+                + 'tab holds. Import/sync the team notes here BEFORE working, or anything you log '
+                + 'in this tab stays only in this browser.');
+        } else { _nbWarn(''); }
+        _nbBusy = false;
+      })
+      .catch(function(e){
+        _nbWarn('Local backup bridge unreachable (' + (e && e.message ? e.message : 'offline')
+              + '). Calls and notes are saving to THIS BROWSER only — worker_notes.json is not '
+              + 'being updated, so the scorecard will not see today\'s work.');
+        _nbBusy = false;
+      });
   }catch(e){ _nbBusy = false; }
+}
+/* One visible, non-modal line. Reuses the sync status bar when present so this cannot become
+   another warning nobody sees; falls back to a console error so it is at least recoverable. */
+var _nbLastWarn = null;
+function _nbWarn(msg){
+  if(msg === _nbLastWarn) return;            // do not re-paint the same line every 5s
+  _nbLastWarn = msg;
+  try{
+    var el = document.getElementById('nbwarn');
+    if(!el && msg){
+      el = document.createElement('div');
+      el.id = 'nbwarn';
+      el.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:#fdecea;'
+        + 'color:#8f2b23;border-top:2px solid #b3372f;padding:9px 14px;font:600 12.5px/1.45 '
+        + "'Segoe UI',Arial,sans-serif";
+      document.body.appendChild(el);
+    }
+    if(el){
+      if(msg){ el.textContent = '⚠ ' + msg; el.style.display = 'block'; }
+      else { el.style.display = 'none'; }
+    }
+    if(msg && typeof console !== 'undefined') console.error('[notes-bridge] ' + msg);
+  }catch(e){}
 }
 function notesBridgePushSoon(){ clearTimeout(_nbTimer); _nbTimer = setTimeout(notesBridgePush, 5000); }
 

@@ -164,6 +164,13 @@ def _richness(payload):
         + len((payload or {}).get('sentArchive') or [])
 
 
+# Result of the LAST _write_notes call, so the handler can tell the client the truth instead of a
+# hardcoded 'saved': True. The shrink guard below can legitimately REFUSE a push — 17 real device
+# pushes were refused this month (one holding 496 notes) and every one returned 200/saved:true, so
+# the person at that device believed their work was backed up. Refusing is right; lying is not.
+_WROTE = {'ok': True, 'cur': 0, 'inc': 0}
+
+
 def _write_notes(payload):
     """Atomic write of the tracker's localStorage state + one snapshot file per day.
 
@@ -198,6 +205,9 @@ def _write_notes(payload):
                 wins = inc_rich >= cur_rich
         except Exception:
             wins = True   # unreadable/corrupt backup — a good push should be allowed to heal it
+        _WROTE['ok'] = bool(wins)
+        _WROTE['cur'] = cur_rich
+        _WROTE['inc'] = inc_rich
         if wins:
             tmp = NOTES_FILE + '.tmp'
             with open(tmp, 'w', encoding='utf-8') as f:
@@ -728,9 +738,19 @@ class Handler(BaseHTTPRequestHandler):
         except Exception as e:
             return self._json(500, {'ok': False, 'err': f'write failed: {e}'})
         n_notes = len(payload.get('notes') or {})
-        self.log_message('notes push: %d leads, %d log entries, %d KB',
-                         n_notes, len(payload.get('workerLog') or []), size // 1024)
-        return self._json(200, {'ok': True, 'saved': True, 'notes_count': n_notes, 'bytes': size})
+        saved = bool(_WROTE.get('ok', True))
+        self.log_message('notes push: %d leads, %d log entries, %d KB — %s',
+                         n_notes, len(payload.get('workerLog') or []), size // 1024,
+                         'saved' if saved else 'REFUSED (poorer than the backup on disk)')
+        out = {'ok': True, 'saved': saved, 'notes_count': n_notes, 'bytes': size}
+        if not saved:
+            # 200, not an error: the SERVER did the right thing. But the client must be able to
+            # tell "backed up" from "refused" — it could not before, and 17 refusals this month
+            # went unnoticed on the devices that made them.
+            out['refused'] = 'richer state already on disk'
+            out['disk_richness'] = _WROTE.get('cur')
+            out['push_richness'] = _WROTE.get('inc')
+        return self._json(200, out)
 
     def do_POST(self):
         if self.path.startswith('/notes'):

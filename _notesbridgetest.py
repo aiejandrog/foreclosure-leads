@@ -75,7 +75,31 @@ def main():
         if os.path.exists(NOTES):
             real_backup = open(NOTES, encoding='utf-8').read()
 
-        r = _post(f'http://127.0.0.1:{PORT}/notes', PAYLOAD)
+        # RICHEST-WINS GUARD (added to the server 2026-08-03, after this suite was written).
+        # A bare synthetic payload is POORER than the real backup, so the server correctly REFUSES
+        # it — this suite then failed on its own round-trip assertion for weeks while the product
+        # was working exactly as designed. Push the real state PLUS the synthetic row: legitimately
+        # richer, so it wins, and the round-trip assertion tests what it was written to test.
+        # (The real file is restored in cleanup below, as it always was.)
+        # Start from the WHOLE real payload, not hand-picked keys: _richness() also counts
+        # sentArchive, and cherry-picking notes+workerLog produced a push with MORE notes but
+        # LOWER richness (1229 notes / 5185 vs 5482) — refused, correctly. Copy everything, then
+        # overlay the synthetic row and marker device.
+        _pay = dict(PAYLOAD)
+        if real_backup:
+            try:
+                _cur = json.loads(real_backup)
+                _pay = dict(_cur)
+                _merged = dict(_cur.get('notes') or {})
+                _merged.update(PAYLOAD['notes'])
+                _pay['notes'] = _merged
+                _pay['_dealflow_notes'] = True
+                _pay['device'] = MARKER
+            except Exception:
+                pass
+        r = _post(f'http://127.0.0.1:{PORT}/notes', _pay)
+        if r.get('saved') is False:
+            fails.append(f'a legitimately richer push was refused: {r}')
         if not r.get('ok'):
             fails.append(f'/notes returned not-ok: {r}')
         if not os.path.exists(NOTES):
@@ -88,6 +112,21 @@ def main():
                 fails.append('notes payload missing from worker_notes.json')
         if not os.path.exists(SNAP):
             fails.append('daily snapshot was not written')
+
+        # A POORER push must be REFUSED — and must SAY SO. Until 2026-08-26 the server answered
+        # 200/saved:true for these, so 17 real device pushes were silently dropped this month (one
+        # holding 496 notes) while each device believed it had backed up. Refusing is right;
+        # reporting it as a save is not.
+        poor = _post(f'http://127.0.0.1:{PORT}/notes',
+                     {'_dealflow_notes': True, 'device': MARKER + '-poor',
+                      'notes': {'ONLY-1': {'status': 'x'}}, 'workerLog': []})
+        if poor.get('saved') is not False:
+            fails.append(f'a poorer push was not refused (clobber guard): {poor}')
+        if not poor.get('refused'):
+            fails.append(f'a refused push did not explain itself: {poor}')
+        after_poor = json.load(open(NOTES, encoding='utf-8'))
+        if 'ONLY-1' in (after_poor.get('notes') or {}):
+            fails.append('the poorer push OVERWROTE the backup')
 
         # junk must be rejected
         try:
