@@ -12744,7 +12744,15 @@ function genMorningWorker(lane, autostart){
     +     'render();'
     +         '} else {'
     // A single bad lead must not end the morning. Log it and keep moving.
+    // POST THE SKIP. Every sibling branch records something — 200 posts "sent", 409 and the
+    // verified-only hold post "skip", attempt()'s no-channel case posts "skip". This one recorded
+    // NOTHING: addLog writes to the worker tab's own log, which dies with the tab. So a lead that
+    // fails here every single morning comes back tomorrow looking never-attempted, with no trace
+    // anywhere of why it keeps not going out. That is the same shape as the composer-open bug —
+    // send_server's own words for the rule are "the attempt stops being invisible without becoming
+    // a contact" — and "skip" is exactly that: a record, not a delivery, not a touch.
     +           'addLog("fail", r.first||r.owner, "bridge error: "+String(x.j.err||"unknown")+" — skipping this lead", "warn");'
+    +           'post("skip", {why:"bridge-error", err:String(x.j.err||"unknown").slice(0,120), st:x.status});'
     +           'setTimeout(function(){ advance(); }, 700);'
     +         '}'
     +       '})'
