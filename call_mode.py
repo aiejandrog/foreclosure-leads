@@ -480,10 +480,50 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         k = d.get('pkey')
         if k and d.get('case'):
             _groups.setdefault(k, []).append(d['case'])
+    # IDENTITY-LEVEL OPT-OUTS — the ones with no case attached.
+    # `optouts` is keyed by CASE, and ALSO by '@'+hash(email) / '#'+hash(digits) for a stop that
+    # arrived without one (an email reply: they wrote "stop", they never quoted a case number).
+    # `case in optouts` can never match those keys, so a person who said stop by email stayed
+    # dialable HERE — on the one surface whose entire purpose is dialing them. The board has had
+    # this via _isOptedOutPerson() for months; Call Mode never got it, and neither did the Morning
+    # Worker until today. Same fix, third surface.
+    _oo_ident = {str(k) for k in optouts if str(k)[:1] in ('@', '#')}
+    _ak = None
+    if _oo_ident:
+        # function-level import on purpose: foreclosure_leads imports THIS module, so a top-level
+        # one would be circular. Hash must be the same one the ledger was keyed with, never a copy.
+        try:
+            from foreclosure_leads import _addr_key as _ak
+        except Exception:
+            _ak = None
+
+    def _identity_opted(lead):
+        if not _oo_ident or not _ak:
+            return False
+        for _e in (lead.get('emails') or []):
+            _e = str(_e or '').strip().lower()
+            if _e and ('@' + _ak(_e)) in _oo_ident:
+                return True
+        for _p in (lead.get('phones') or []):
+            # Digits only, NO country-code normalisation — deliberately matching what the ledger key
+            # was hashed from and what the board's _isOptedOutPerson does. So a '+1' 11-digit number
+            # would NOT match a 10-digit opt-out. Checked 2026-08-26: all 9,885 phones in the
+            # skiptrace cache are 10 digits, so this is theoretical today. If 11-digit numbers ever
+            # arrive, strip a leading '1' HERE, in the board, and in the bake — all three or none,
+            # or the hashes stop agreeing and the suppression silently stops matching.
+            _p = re.sub(r'\D', '', str(_p or ''))
+            if _p and ('#' + _ak(_p)) in _oo_ident:
+                return True
+        return False
+
     out = []
+    _ident_dropped = 0
     for d in slim:
         case = d.get('case') or ''
         if not case or case in optouts or case in deads:
+            continue
+        if _identity_opted(d):
+            _ident_dropped += 1
             continue
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
             continue
@@ -688,6 +728,11 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         return 1
     out.sort(key=lambda r: (_band(r), 0 if r.get('e') is not None else 1, -(r.get('e') or 0),
                             r.get('d', 9999)))
+    if _ident_dropped:
+        # Say it out loud. A suppression that removes people silently is indistinguishable from a
+        # queue that was always this size, and this one drops leads that LOOK perfectly callable.
+        print('call mode: %d lead(s) dropped — the person opted out by email/phone with no case '
+              'attached (identity ledger)' % _ident_dropped)
     return out[:cap], len(out)
 
 
