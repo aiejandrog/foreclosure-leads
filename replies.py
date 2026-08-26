@@ -49,10 +49,59 @@ ALERTS = P.out('NEW-REPLIES.txt')
 # which is what makes PASS 2 (subject matching) possible — see main().
 SUBJ_TAG = 'Regarding your property at'
 
-# Words that mean "stop contacting me". A reply carrying one of these is flagged so the operator
-# can push it into the opt-out ledger immediately -- an opt-out is more urgent than a warm lead.
-STOP_WORDS = re.compile(r'\b(stop|unsubscribe|remove me|do not contact|dont contact|'
-                        r'no me contacte|no contacte|detener|parar|quitar)\b', re.I)
+# UNAMBIGUOUS opt-out phrasings — these mean "stop contacting me" in any context.
+#
+# The previous pattern was `\b(stop|unsubscribe|remove me|do not contact|dont contact|...)\b`,
+# and it was wrong in BOTH directions.
+#
+# MISSED (of eight realistic opt-out sentences, only "unsubscribe" matched): "take me off your
+# list", "opt me out", "remove my email address", "leave me alone", "do not email me again",
+# "no longer wish to be contacted", "quit emailing me". Those people kept being contacted, which
+# is the exposure the entire suppression chain exists to prevent.
+OPTOUT_PHRASES = re.compile(
+    r'\bunsubscribe\b'
+    r'|\bopt[\s-]?out\b|\bopt me out\b'
+    r'|\btake me off\b|\bremove me\b'
+    r'|\bremove my\s+(?:e-?mail|address|number|phone|name|info)'
+    r"|\bdo\s?n[o']?t\s+(?:contact|e-?mail|call|text|message|write|reach|send)"
+    r'|\b(?:quit|stop|cease)\s+(?:contact|contacting|e-?mailing|calling|texting|messaging'
+    r'|writing|sending|soliciting)'
+    r'|\bleave me alone\b'
+    r'|\bno longer\s+(?:wish|want|interested)'
+    r'|\bno me contacte\b|\bno contacte\b|\bno me escriba\b|\bd[eé]jeme en paz\b'
+    r'|\bquitar\b|\bdetener\b|\bparar\b', re.I)
+
+# FALSE-FLAGGED, and this is the dangerous half. A bare "stop" is genuinely ambiguous IN THIS
+# BUSINESS: "Please stop." is an opt-out, but "Can you stop the foreclosure?" is the most motivated
+# reply a homeowner can send. A detected stop AUTO-SUPPRESSES on the board — optout +
+# DO NOT CONTACT across the worker, call sheet, dial and cadence — so `\bstop\b` silently killed
+# every one of these:
+#     "Can you stop the foreclosure?"     "Is there any way to stop the sale?"
+#     "I need to stop the auction"        "what can i do to stop this"
+# Our own outreach copy is built around never promising to stop a foreclosure precisely because
+# that is the thing these owners write in to ask for.
+_BARE_STOP = re.compile(r'\bstop\b', re.I)
+# What follows a "stop" that is aimed at the CASE rather than at us.
+_STOP_OBJECT = re.compile(r'\s*(?:the|this|my|a|an)?\s*'
+                          r'(?:foreclosure|sale|auction|case|process|hearing|judgment|eviction'
+                          r'|it|this|that)\b', re.I)
+
+
+def is_stop_text(text):
+    """True when the writer is telling US to stop — not asking us to stop the foreclosure.
+
+    Explicit phrasing wins outright. A bare "stop" counts UNLESS every occurrence is followed by a
+    case-object, so "Please stop." and "stop sending emails" are opt-outs while "stop the sale" is
+    not. Erring toward suppression stays the default wherever the two readings genuinely collide;
+    this only separates the readings that do not.
+    """
+    t = str(text or '')
+    if OPTOUT_PHRASES.search(t):
+        return True
+    for m in _BARE_STOP.finditer(t):
+        if not _STOP_OBJECT.match(t[m.end():m.end() + 40]):
+            return True          # a "stop" not aimed at the case is aimed at us
+    return False
 
 
 def _load_json(path, default):
@@ -144,7 +193,7 @@ def _read_msg(raw):
         if m and m.start() < cut:
             cut = m.start()
     fresh = body[:cut][:2000]
-    is_stop = bool(STOP_WORDS.search(subj or '') or STOP_WORDS.search(fresh))
+    is_stop = bool(is_stop_text(subj) or is_stop_text(fresh))
     return subj, when, fresh, is_stop, sender
 
 
