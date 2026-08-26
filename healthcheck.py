@@ -393,6 +393,55 @@ def chk_entity():
 chk_entity()
 
 # ---- 3. upstream sources still alive ----------------------------------------------------------
+def chk_committed_secrets():
+    """No live access code may sit in a file git actually tracks.
+
+    Found 2026-08-26: _eq30test.py and _hangertest.py are tracked (via ! negations in .gitignore)
+    and each hardcoded a real DEALFLOW-xxxxxxxx code. This repo is PUBLIC, and that code decrypts
+    the published board -- 1,928 leads with names, addresses and phone numbers. The payload
+    encryption was working the whole time; the key was committed next to it.
+
+    Reads the codes from the gitignored site.codes and greps the tracked file list for each. It
+    cannot see history -- a code already pushed stays pushed and has to be ROTATED, not deleted.
+    """
+    import subprocess
+    codes = []
+    p_codes = os.path.join(HERE, 'site.codes')
+    if not os.path.exists(p_codes):
+        add('WARN', 'committed secrets', 'no site.codes here — cannot check for leaked codes')
+        return
+    try:
+        for line in open(p_codes, encoding='utf-8'):
+            m = re.search(r'(DEALFLOW-[A-Z0-9]{6,})', line)
+            if m:
+                codes.append(m.group(1))
+    except Exception as e:
+        add('WARN', 'committed secrets', 'site.codes unreadable (%s)' % e)
+        return
+    try:
+        tracked = subprocess.run(['git', 'ls-files'], cwd=HERE, capture_output=True,
+                                 text=True, timeout=30).stdout.split()
+    except Exception as e:
+        add('WARN', 'committed secrets', 'git ls-files failed (%s)' % e)
+        return
+    hits = []
+    for f in tracked:
+        fp = os.path.join(HERE, f)
+        try:
+            body = open(fp, encoding='utf-8', errors='ignore').read()
+        except Exception:
+            continue
+        for c in codes:
+            if c in body:
+                hits.append('%s carries %s...' % (f, c[:13]))
+    if hits:
+        add('FAIL', 'committed secrets',
+            '%d live access code(s) in TRACKED files on a PUBLIC repo — ROTATE them, deleting the '
+            'line does not un-publish it: %s' % (len(hits), '; '.join(hits[:4])))
+    else:
+        add('PASS', 'committed secrets', '%d live code(s), none in a tracked file' % len(codes))
+
+
 def chk_gis():
     r = requests.get('https://gisweb.miamidade.gov/arcgis/rest/services/MD_ComparableSales/MapServer/5/query',
                      params={'where': "FOLIO='0142060580800'", 'outFields': 'FOLIO', 'returnGeometry': 'false', 'f': 'json'},
@@ -418,6 +467,8 @@ def chk_clerk():
 def chk_rf():
     r = requests.get('https://www.miamidade.realforeclose.com/index.cfm', headers={'User-Agent': UA}, timeout=20)
     return (r.status_code == 200, f'auction site {r.status_code}')
+chk_committed_secrets()
+
 ping('source · PA GIS (lookup)', chk_gis)
 ping('source · Property Appraiser', chk_pa)
 ping('source · Clerk OCS (cases)', chk_clerk)

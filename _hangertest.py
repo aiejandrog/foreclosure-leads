@@ -3,7 +3,25 @@ import http.server, socketserver, threading, os, functools
 from playwright.sync_api import sync_playwright
 
 HERE = os.path.dirname(os.path.abspath(__file__)); DOCS = os.path.join(HERE, 'docs'); PORT = 8795
-CODE = 'DEALFLOW-WZWUHZBD'
+# NEVER hardcode a live access code in a TRACKED file. This line used to carry the real one, and
+# this file is committed to a PUBLIC repo -- that code decrypts the published board: 1,928 leads
+# with names, addresses and phone numbers. The encryption was real; the key was published beside it.
+# site.codes is gitignored and stays on the machine. _gatetest.py already avoided this by using a
+# synthetic code; these two suites need a real one because they assert against the real payload.
+def _live_code():
+    import os as _os, re as _re
+    _p = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), 'site.codes')
+    try:
+        for _line in open(_p, encoding='utf-8'):
+            _m = _re.search(r'(DEALFLOW-[A-Z0-9]{6,})', _line)
+            if _m:
+                return _m.group(1)
+    except Exception:
+        pass
+    raise SystemExit('no site.codes on this machine -- cannot run a gated suite')
+
+
+CODE = _live_code()
 Handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=DOCS)
 class Q(socketserver.TCPServer): allow_reuse_address = True
 srv = Q(('127.0.0.1', PORT), Handler); threading.Thread(target=srv.serve_forever, daemon=True).start()
