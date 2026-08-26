@@ -11953,7 +11953,22 @@ function _workerQueue(lane){
     var _rot = (new Date().getDate() * 7) % _ph.length;
     _ph = _ph.slice(_rot).concat(_ph.slice(0, _rot));
   }
-  return _em.slice(0, Math.max(0, cap.left)).concat(_ph.slice(0, 60));
+  /* BOUND THE EMAIL QUEUE BY BOTH CEILINGS.
+     cap.left is MESSAGES remaining (300 - sent). But send_server also enforces 450 RECIPIENTS, and
+     one send fans out to every address on the lead — genEmail puts emails[0] in `to` and BCCs the
+     rest. So slicing by messages alone hands the operator a 300-lead morning when ~234 can actually
+     go, and the tail comes back as a wall of server refusals that reads as a broken worker.
+     Recipients are counted EXACTLY here, not estimated: it is the same emails array the send uses.
+     With no live bridge read cap.rcptMax is 0, rLeft is Infinity, and this is byte-for-byte the
+     old behaviour — the offline path must not change. */
+  var _rLeft = cap.rcptMax ? Math.max(0, cap.rcptMax - cap.rcptN) : Infinity;
+  var _emCap = Math.max(0, cap.left), _out = [], _used = 0;
+  for(var _qi = 0; _qi < _em.length && _out.length < _emCap; _qi++){
+    var _need = Math.max(1, ((_em[_qi].emails || []).length));
+    if(_used + _need > _rLeft) break;
+    _out.push(_em[_qi]); _used += _need;
+  }
+  return _out.concat(_ph.slice(0, 60));
 }
 /* COMPOSE THE MESSAGE ON THE BOARD — the worker tab cannot do it. --------------------------------
    The worker is a Blob document with its own global scope: DATA, genEmail, genPortfolioEmail and
