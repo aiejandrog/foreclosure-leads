@@ -6819,7 +6819,20 @@ function _ownerOwedOf(r){
   }
   return owed;
 }
-function _ownerStackOf(r){ return (+r._slien||0)+(+r._jlien||0)+(+r._assess||0)+(+r._mlien||0)+(+r._btax||0); }
+function _ownerStackOf(r){
+  // A TAX DEED WIPES THE PRIVATE STACK (FS 197.552). The debt panel already tells the operator
+  // exactly this — "every mortgage and private lien below is extinguished" — while this function
+  // went on subtracting those same liens from the owner's equity two inches above it. Measured
+  // 2026-08-26: case 53894 (Broward TD) carried a chain-derived surviving senior of $85,500 and
+  // its owner equity was understated by exactly that. Only 1 of 165 TDs carries a private stack
+  // today, but a wrong number on the one screen he decides from is wrong at any count, and
+  // understating equity kills a live lead quietly.
+  // Governmental burdens are NOT wiped and stay in the stack for every sale type: ad-valorem back
+  // taxes (_btax) and municipal/code assessments (_assess) ride through a tax deed.
+  var priv = (+r._slien||0)+(+r._jlien||0)+(+r._mlien||0);
+  var govt = (+r._assess||0)+(+r._btax||0);
+  return (r.st === 'TD' ? 0 : priv) + govt;
+}
 function _ownerEqOf(r){
   var v = _basisOf(r); if(!v) return 0;
   return Math.max(0, v - _ownerOwedOf(r) - _ownerStackOf(r));

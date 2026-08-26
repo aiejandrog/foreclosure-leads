@@ -495,6 +495,13 @@ with sync_playwright() as p:
       let silent = 0, flagged = 0, agree = 0; const ex = [];
       DATA.forEach(r => {
         if(!(r.orliens||[]).length) return;
+        // TAX DEEDS HAVE NO SURVIVING CHAIN. FS 197.552 extinguishes every mortgage and private
+        // lien, and _debtStack correctly renders the tax-deed variant ("wiped at the tax-deed
+        // sale") with no senior row and no reconciliation banner — while _chainSurv still carries
+        // a foreclosure-lens figure. Scoring that as a silent contradiction flagged case 53894 on
+        // a panel behaving exactly as designed. (Second time tonight TDs in a denominator caused a
+        // false alarm — see the plaintiff check in _diligencetest.)
+        if(r.st === 'TD') return;
         const h = _debtStack(r), box = +r._chainSurv || 0;
         const asserts = h.indexOf('SENIOR — SURVIVES') > -1;
         const banner  = h.indexOf('CHAIN NOT RECONCILED') > -1;
@@ -1138,7 +1145,12 @@ with sync_playwright() as p:
     # it is offline — a designed, supported state ("Logged to this phone only" degradation), and
     # the normal one on a test runner. Filtering it keeps the check able to catch REAL errors
     # instead of always drowning in bridge noise. (2026-08-26)
-    real = [e for e in errs if 'favicon' not in e and 'ERR_CONNECTION_REFUSED' not in e]
+    # [notes-bridge] lines are an INTENTIONAL diagnostic, not a page error: a fresh test tab holds
+    # one note, the bridge's richest-wins guard rightly refuses its push, and the board now says so
+    # out loud (added 2026-08-26 — 17 real refusals had been silent). Firing here would mean the
+    # warning works. Page errors and every other console error still fail this check.
+    real = [e for e in errs if 'favicon' not in e and 'ERR_CONNECTION_REFUSED' not in e
+            and '[notes-bridge]' not in e]
     rec('No console/page errors', not real, '; '.join(real[:3])[:200])
     b.close()
 

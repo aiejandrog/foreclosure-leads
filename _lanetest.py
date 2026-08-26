@@ -14,6 +14,19 @@ JS = r"""() => {
     const q = _workerQueue(k);
     out.queues[k] = {
       n: q.length,
+      // SENDABLE portion only, using the PRODUCT'S definition — the queue deliberately also
+      // carries a call bucket that consumes no send budget, and "has an email" is NOT what puts a
+      // lead in the sendable half. _workerQueue counts a lead sendable only when it has ALLOWLIST-
+      // FILTERED mailboxes (a lead whose addresses are all junk domains composes nothing) AND its
+      // mail stage is neither 'replied' nor 'done' (those bake an empty mail by design). Counting
+      // raw r.emails instead reported 88 sendable in a 41-slot budget on a queue that was
+      // correctly capped. This still verifies the real property — that the cap.left slice was
+      // applied — because removing the slice makes this count exceed the budget.
+      nSend: q.filter(r => {
+        const boxes = (typeof _mailableList === 'function') ? _mailableList(r).length : (r.emails||[]).length;
+        const ms = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
+        return boxes > 0 && ms !== 'replied' && ms !== 'done';
+      }).length,
       sample: q.slice(0,2).map(r => ({c:r.case, days:(typeof r.days==='number'&&r.days>=0)?r.days:null, st:r.st, tier:r.tier,
                                       ph:(r.phones||[]).length, em:(r.emails||[]).length}))
     };
@@ -91,7 +104,17 @@ async def main():
             q = ((res.get('queues') or {}).get(k) or {}).get('n')
             rec(f'{k}: queue never exceeds the lane it was drawn from',
                 isinstance(q, int) and q <= n, {'tab': n, 'queue': q})
-            if isinstance(capleft, int):
+            # SENDABLE entries only. This compared the WHOLE queue against cap.left and passed
+            # for months by luck: the queue is min(emailable, cap.left) + up to 60 phone-only, so
+            # the sum only breaches cap.left once cap.left drops below ~60. It finally did
+            # (2026-08-26: 259 of 300 sent, 41 left, queue 101 = 41 + 60) and the check fired on
+            # a queue that was behaving exactly as designed. Phone-only leads spend no send budget.
+            qs = ((res.get('queues') or {}).get(k) or {}).get('nSend')
+            if isinstance(capleft, int) and isinstance(qs, int):
+                rec(f'{k}: SENDABLE queue never exceeds the remaining send budget',
+                    qs <= capleft, {'sendable': qs, 'cap_left': capleft,
+                                    'phone_only': (((res.get('queues') or {}).get(k) or {}).get('n') or 0) - qs})
+            if False:
                 rec(f'{k}: queue never exceeds the remaining send budget',
                     isinstance(q, int) and q <= capleft, {'queue': q, 'cap_left': capleft})
             rec(f'{k}: an empty lane queues nothing', not (n == 0 and q), {'tab': n, 'queue': q})
