@@ -24,7 +24,7 @@ and only NEW leads are ever charged.
   python bd_budget.py            # show today's spend, the cap, and what's left
   python bd_budget.py --cap 2    # set the daily cap
 """
-import json, os, sys
+import json, os, sys, threading
 from datetime import date
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -83,6 +83,16 @@ def can_spend(dollars):
     return (spent_today() + float(dollars)) <= cap() + 1e-9
 
 
+# In-process serialisation for charge(). The tmp+os.replace below is atomic against
+# CORRUPTION, but it is still a load-modify-write: two threads that read the same ledger both add
+# their own spend and the second write erases the first. That never mattered while every caller was
+# single-threaded. palmbeach_liens.py --workers runs concurrent 2Captcha solves as of 2026-08-26,
+# each charging $0.003 on completion, so the races are now real. Cross-PROCESS races remain (two
+# schedulers on one box) -- unchanged from before, and the reason the cap is a soft ceiling on the
+# 2captcha line rather than a hard gate.
+_CHARGE_LOCK = threading.Lock()
+
+
 def charge(dollars, note=''):
     """Record a spend. Called AFTER a billable request goes out — a call that reached the provider
     costs money whether or not it returned data, so misses are charged too (that is the honest
@@ -92,20 +102,21 @@ def charge(dollars, note=''):
     $10.00 cap-out day could not say who spent it — on 08-16 attributing $6.30 of pre-6AM spend
     took cross-referencing three logs. Every caller already passes a meaningful note ('wp',
     'wp-miss', 'tracerfy-dnc', ...); now it lands in the ledger."""
-    led = _load()
-    k = str(date.today())
-    day = led.get(k)
-    if not isinstance(day, dict):
-        day = {'total': _day_total(day), 'by': {}}
-    day['total'] = round(day['total'] + float(dollars), 4)
-    nk = note or 'unattributed'
-    day['by'][nk] = round(float(day['by'].get(nk, 0.0)) + float(dollars), 4)
-    led[k] = day
-    tmp = LEDGER + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(led, f, indent=1)
-    os.replace(tmp, LEDGER)                              # atomic: concurrent runs can't corrupt it
-    return day['total']
+    with _CHARGE_LOCK:
+        led = _load()
+        k = str(date.today())
+        day = led.get(k)
+        if not isinstance(day, dict):
+            day = {'total': _day_total(day), 'by': {}}
+        day['total'] = round(day['total'] + float(dollars), 4)
+        nk = note or 'unattributed'
+        day['by'][nk] = round(float(day['by'].get(nk, 0.0)) + float(dollars), 4)
+        led[k] = day
+        tmp = LEDGER + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(led, f, indent=1)
+        os.replace(tmp, LEDGER)                              # atomic: concurrent runs can't corrupt it
+        return day['total']
 
 
 def breakdown_today():

@@ -60,6 +60,98 @@ def solve_token_2captcha():
     return tok
 
 
+# ---- parallel token supply ----------------------------------------------------------------------
+# ADDED 2026-08-26. Palm Beach lien coverage sat at 33% (94/284) while Broward ran 64%, and the
+# reason was never the parser -- it is wall clock. Every Landmark search burns a ONE-SHOT v2 token
+# (see `tok = ''  # consumed`), a lead costs one or two of them, and a 2Captcha v2 solve takes
+# 60-180s. Solved strictly in series that is ~190s per lead, which is why refresh-dealflow.bat caps
+# the nightly at --limit 6 ("~6-18 min of captcha solving so a bad portal day can't hang the
+# nightly"). Six a night against a 190-lead backlog is 32 nights, and any night that is skipped
+# never catches up.
+#
+# The fix is not a bigger cap on a serial solve -- that just moves the hang into the morning window.
+# 2Captcha runs tasks concurrently, so K solves in flight turn a 90s serial cost into 90s/K
+# amortised. The SCRAPE stays single-threaded on purpose: one cookie jar (JAR is a fixed path),
+# one `out` dict, one file write per lead. Only the waiting is parallel, which is where all the
+# time was.
+#
+# TTL IS THE WHOLE DESIGN CONSTRAINT. A reCAPTCHA v2 token dies about 120s after it is minted, so a
+# deep pre-solved pool would be a pool of corpses. The queue is therefore small and bounded: at most
+# `slack` tokens may sit idle, every token is stamped when minted, and anything older than MAX_AGE
+# on the way out is dropped rather than spent on a search that would answer 'Invalid Captcha'. A
+# discarded token costs $0.003 and the counter prints at the end -- if discards climb, --workers is
+# set higher than the loop can drink.
+MAX_TOKEN_AGE = 100          # seconds; real TTL is ~120, leave margin for the search round-trip
+
+
+class _TokenPool:
+    """K background 2Captcha solvers feeding a small bounded queue of FRESH tokens."""
+
+    def __init__(self, workers, slack=2):
+        import queue as _q
+        import threading as _t
+        self.q = _q.Queue(maxsize=max(1, slack))
+        self.stop = _t.Event()
+        self.minted = self.discarded = self.failed = 0
+        self._lock = _t.Lock()
+        self.threads = [_t.Thread(target=self._run, name=f'pbsolve{i}', daemon=True)
+                        for i in range(workers)]
+        for t in self.threads:
+            t.start()
+        print(f'  [pool] {workers} concurrent 2Captcha solver(s), queue slack {slack}')
+
+    def _run(self):
+        import queue as _q
+        while not self.stop.is_set():
+            try:
+                from captcha_solver import solve_recaptcha_v2
+                tok = solve_recaptcha_v2(SITE_KEY, PAGE_URL) or ''
+            except Exception as e:
+                print(f'  [pool] solve error: {str(e)[:70]}')
+                tok = ''
+            if not tok:
+                with self._lock:
+                    self.failed += 1
+                if self.stop.wait(5):        # brief backoff; do not hammer a failing API
+                    return
+                continue
+            with self._lock:
+                self.minted += 1
+            # Block until the consumer has room. A token that waits here is ageing, which is
+            # exactly what the get() freshness check exists to catch.
+            while not self.stop.is_set():
+                try:
+                    self.q.put((tok, time.time()), timeout=2)
+                    break
+                except _q.Full:
+                    continue
+
+    def get(self, timeout=300):
+        """Next FRESH token, or '' if none arrives in time. Stale tokens are dropped, not spent."""
+        import queue as _q
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                tok, born = self.q.get(timeout=min(5, max(0.1, deadline - time.time())))
+            except _q.Empty:
+                continue
+            age = time.time() - born
+            if age > MAX_TOKEN_AGE:
+                with self._lock:
+                    self.discarded += 1
+                continue
+            return tok
+        return ''
+
+    def close(self):
+        self.stop.set()
+        print(f'  [pool] minted {self.minted}, discarded-stale {self.discarded}, '
+              f'failed {self.failed}')
+
+
+POOL = None      # set by main() when --workers > 1
+
+
 def _curl(url, post=None, timeout=45):
     cmd = [CURL, '-s', '-m', str(timeout), '-A', UA, '-c', JAR, '-b', JAR, '-L',
            '-H', 'Accept: text/html,application/json,*/*;q=0.8', '-H', 'Accept-Language: en-US,en;q=0.9']
@@ -485,6 +577,13 @@ def harvest_token(timeout=120):
 def _obtain_token(headed=False, use_2captcha=True):
     """Prefer 2Captcha; fall back to headed human click only if requested and 2Captcha fails."""
     token = ''
+    if use_2captcha and POOL is not None:
+        # --workers > 1: solves are already in flight; take the next fresh one instead of
+        # starting a 90s wait here. Falls through to the serial path if the pool runs dry.
+        token = POOL.get()
+        if token:
+            return token, '2captcha-pool'
+        print('  [pool] dry — falling back to a serial solve')
     if use_2captcha:
         token = solve_token_2captcha()
     if token:
@@ -533,6 +632,10 @@ def main():
                     help='skip 2Captcha; use --headed only when gated')
     ap.add_argument('--parse-dump', action='store_true',
                     help='re-parse _pb_last_results.html / JSON dump only (no network)')
+    ap.add_argument('--workers', type=int, default=1,
+                    help='concurrent 2Captcha solvers (default 1 = the original serial behaviour). '
+                         '>1 keeps N solves in flight so the scrape is not waiting 60-180s per '
+                         'one-shot token. The scrape itself stays single-threaded.')
     a = ap.parse_args()
 
     if a.parse_dump:
@@ -584,6 +687,28 @@ def main():
     if not start_session():
         print('ABORT: no Landmark session (site down / fingerprint block). Try again later.')
         return
+
+    global POOL
+    # Never spin more solvers than the batch can drink. Workers keep solving until the loop ends, so
+    # every worker beyond the batch's appetite is a token minted, charged ($0.003) and thrown away.
+    # A lead needs at most two (parcel + name), and the +1 covers the re-gate check after the last.
+    want = min(a.workers, 2 * len(picked) + 1)
+    if want < a.workers:
+        print(f'  --workers {a.workers} capped to {want} for a {len(picked)}-lead batch')
+    if want > 1 and not a.no_2captcha:
+        from captcha_solver import has_key
+        if has_key():
+            POOL = _TokenPool(want)
+        else:
+            print('  --workers ignored: no 2Captcha key, nothing to parallelise')
+    try:
+        return _trace(a, picked, out)
+    finally:
+        if POOL is not None:
+            POOL.close()
+
+
+def _trace(a, picked, out):
     gated = show_captcha()
     token = ''
     token_src = ''

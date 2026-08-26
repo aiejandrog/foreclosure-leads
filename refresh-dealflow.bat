@@ -77,9 +77,16 @@ rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chai
 if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
 rem  Palm Beach chains via the county's OWN Landmark portal (2Captcha v2 - slow but first-party).
 rem  Replaces the BatchData lien feed (BATCHDATA-EXIT, 2026-08-11): old bd chains keep merging from
-rem  the committed batchdata_liens.json cache; only NEW purchases stopped. --limit 6 bounds a run
-rem  to ~6-18 min of captcha solving so a bad portal day can't hang the nightly.
-if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 6 >> "%LOG%" 2>&1
+rem  the committed batchdata_liens.json cache; only NEW purchases stopped.
+rem  --limit 6 -> 18 with --workers 4 (2026-08-26). The old cap was never about money (~$0.036 a
+rem  night); it bounded WALL CLOCK, because every Landmark search burns a one-shot v2 token and a
+rem  serial solve is 60-180s, so six leads already cost ~6-18 min of the morning window. --workers
+rem  keeps 4 solves in flight instead of waiting on one at a time, so 18 leads now fit inside the
+rem  SAME time budget the old 6 needed. Spend goes to ~$0.11/night. If a portal day goes bad the
+rem  pool falls back to serial solving and the limit still bounds the run.
+rem  The 190-lead backlog is cleared by the CLOUD, not here - refresh.yml step [2b2/5] runs
+rem  --limit 60 --workers 8 with no morning window to protect. This line keeps NEW leads current.
+if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 18 --workers 4 >> "%LOG%" 2>&1
 
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who

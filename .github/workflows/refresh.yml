@@ -288,8 +288,46 @@ jobs:
           if [ -s captcha.key ]; then python records_liens.py --all --limit 60; else python records_liens.py --all --cached-only; fi
           if [ -f broward_leads.json ]; then python broward_liens.py --all; fi
           # BatchData lien feed exited 2026-08-11 — frozen cache is committed; counties own new chains.
-          # Broward plaintiff -> bank-1st(clean) vs junior/HOA(senior survives). PB is headed-browser (--pb) = local only.
+          # Broward plaintiff -> bank-1st(clean) vs junior/HOA(senior survives).
           if [ -s captcha.key ] && [ -f broward_leads.json ]; then python county_plaintiffs.py --county broward --near --limit 60; fi
+
+      # ---- [2b1/5] Code-enforcement liens (free Miami-Dade CCVIOL ArcGIS, folio-keyed) ---------
+      # A code lien is a junior lien invisible to the mortgage chain — the thing that turns a
+      # "90% equity" lead into a loss. Free, no key, no captcha; cross-references every MD folio.
+      - name: '[2b1/5] Code-enforcement liens (Miami-Dade)'
+        continue-on-error: true
+        run: python code_liens.py
+
+      # ---- [2b4/5] Palm Beach lien chains ------------------------------------------------------
+      # ADDED 2026-08-26. PB lien coverage was 33% (94/284) against Broward's 64%, and this workflow
+      # was the reason: it ran MD and Broward chains and skipped Palm Beach entirely. The step above
+      # used to explain why — "PB is headed-browser (--pb) = local only" — and that stopped being
+      # true on 2026-08-22, when palmbeach_liens.py gained a 2Captcha reCAPTCHA-v2 path and stopped
+      # needing a human to click a checkbox. The comment was never updated, so the cloud kept
+      # skipping a county it had been able to trace for four days.
+      #
+      # (Not to be confused with ROADMAP-TO-9's "2Captcha RULED OUT" note — that was Miami-Dade's
+      # reCAPTCHA v3, where the county rejects solved tokens on score. Landmark is v2 checkbox,
+      # which 2Captcha solves outright. Different wall, different verdict.)
+      #
+      # THE CLOUD IS THE RIGHT HOME FOR THIS, and the laptop is not. Every Landmark search burns a
+      # one-shot token and a v2 solve takes 60-180s, so refresh-dealflow.bat caps the nightly at
+      # --limit 6 to keep the morning window under ~18 minutes. Six a night never clears a 190-lead
+      # backlog. Here there is no morning window: --workers 8 keeps 8 solves in flight, which is what
+      # makes --limit 60 finish in roughly the time --limit 6 takes serially.
+      #
+      # Cost is bounded and small: ~2 solves/lead x $0.003 = ~$0.36 for a full 60-lead run, on a
+      # balance that sits around $6. --all skips anything already in palmbeach_liens.json, so once
+      # the backlog is cleared these runs go near-free and only touch genuinely new leads. The cache
+      # is already restored and saved by this workflow (see the state cache steps) — it just had
+      # nothing writing to it.
+      - name: '[2b4/5] Palm Beach lien chains (Landmark, parallel 2Captcha)'
+        continue-on-error: true
+        timeout-minutes: 45
+        run: |
+          if [ ! -s captcha.key ]; then echo "no 2Captcha key — PB liens skipped"; exit 0; fi
+          if [ ! -f palmbeach_leads.json ]; then echo "no palmbeach_leads.json — PB liens skipped"; exit 0; fi
+          python -u palmbeach_liens.py --all --limit 60 --workers 8
 
       # ---- [2c/5] Fresh LIS PENDENS front-of-funnel -------------------------------------------
       # The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
@@ -302,12 +340,6 @@ jobs:
       # the free Miami-Dade parcel roll (MDC.PaGis, no key, no captcha) and grades every hit; lp_leads
       # then fills addr/folio from the `high` rows ONLY. Ordering matters — lp_leads reads the file
       # lp_resolve writes, so a swap here silently reverts us to blank addresses.
-      # ---- [2b1/5] Code-enforcement liens (free Miami-Dade CCVIOL ArcGIS, folio-keyed) ---------
-      # A code lien is a junior lien invisible to the mortgage chain — the thing that turns a
-      # "90% equity" lead into a loss. Free, no key, no captcha; cross-references every MD folio.
-      - name: '[2b1/5] Code-enforcement liens (Miami-Dade)'
-        continue-on-error: true
-        run: python code_liens.py
 
       # ---- [2b2/5] Delinquent property taxes, Miami-Dade + Broward (Playwright past Cloudflare) --
       # First-priority lien that survives foreclosure (FS 197.122), invisible to the mortgage chain.
