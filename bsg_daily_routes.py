@@ -235,6 +235,14 @@ def build_pool(drop):
                         'verified'))
     for kk, n in up['dropped'].items():
         drop[f'verified: {kk}'] += n
+    # LOUD when the county-verified pool collapses for a FIXABLE reason. 'no-pa-data' means the
+    # rows were never priced — lp_values.py --all did not run (the nightly refresh rewrites
+    # lp_addresses.json and prices high-confidence rows ONLY). Without this the pool just comes
+    # back empty and the sheet looks thin with no explanation. See run-daily-routes.bat.
+    _nopa = up['dropped'].get('no-pa-data', 0)
+    if _nopa and not up['knockable']:
+        print(f'!! COUNTY-VERIFIED POOL EMPTY: all {_nopa} medium row(s) lack PA data — '
+              f'run  python lp_values.py --all  (the routes bat does this before every build).')
     flat = [b for b, _ in lp_rows]
     _lp_coords(flat)
     for base, kind in lp_rows:
@@ -348,11 +356,24 @@ def build_routes(doors, led, day, drop):
         b_rows, _ = _take(zones[1]['rows'], want)
         a_name, b_name = zones[0]['name'], zones[1]['name']
         remaining = list(zones[2:])
+        # AT MOST ONE top-up zone per route. Chaining is transitive — each hop was <=8mi from the
+        # previous TAIL, so a route walked Fontainebleau -> Hialeah Gardens -> Miami Gardens -> NMB,
+        # ~20 miles end to end (measured 2026-08-26). That is a county march, not the "stays all
+        # fresh within that area / one city, little subsections" run he asked for. One neighboring
+        # zone is a reposition; three is a different day.
+        _tops = {'a': 0, 'b': 0}
         for _ in range(len(remaining)):
             if len(a_rows) >= DOORS_MIN + SPARES and len(b_rows) >= DOORS_MIN + SPARES:
                 break
             # always feed the thinner route, from the zone nearest ITS current tail
             thin = a_rows if len(a_rows) <= len(b_rows) else b_rows
+            _k = 'a' if thin is a_rows else 'b'
+            if _tops[_k] >= 1:                 # this route already took its one reposition
+                other = 'b' if _k == 'a' else 'a'
+                if _tops[other] >= 1:
+                    break
+                thin = b_rows if _k == 'a' else a_rows
+                _k = other
             tail = thin[-1] if thin else None
             if tail is None:
                 break
@@ -367,6 +388,7 @@ def build_routes(doors, led, day, drop):
             extra, _ = _take(cand['rows'], want - len(thin))
             if extra:
                 thin += extra
+                _tops[_k] += 1
                 if thin is a_rows:
                     a_name += ' + ' + cand['name']
                 else:
@@ -437,7 +459,11 @@ def build_routes(doors, led, day, drop):
         if abs(ma - mb) <= max(BALANCE_TOL, 0.15 * max(ma, mb)):
             break
         heavy, light = (a_main, b_main) if ma > mb else (b_main, a_main)
-        if len(heavy) <= max(8, len(light) + 1):
+        # Floor only. The old guard also refused to shave whenever heavy had <= light+1 DOORS —
+        # which is exactly the case this balancer exists for: a route heavy in MINUTES but light
+        # in doors (measured 2026-08-26: A 12 doors/199min vs B 13 doors/165min, 34min apart,
+        # shave declined because 12 <= 14). Door count is not the quantity being balanced.
+        if len(heavy) <= 8:
             break
         heavy.pop()
     # DAY ROTATION: whoever drew the longer route today gets the shorter one tomorrow. Parity of

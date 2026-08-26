@@ -90,9 +90,23 @@ def record_issue(led, addr, case, who, klass, day=None):
     d['attempts'].append({'d': day, 'who': who, 'class': klass, 'out': 'issued'})
     d['last_issued'] = day
     d['case'] = d.get('case') or case
-    if len(d['attempts']) >= MAX_ATTEMPTS:
+    # REAL attempts only — seeded print history never spends the budget (see _real)
+    if len(_real(d['attempts'])) >= MAX_ATTEMPTS:
         d['rest_until'] = (dt.date.fromisoformat(day) + dt.timedelta(days=REST_D)).isoformat()
     return True
+
+
+def _real(atts):
+    """Attempts that represent an actual ROUTED-BY-THIS-SYSTEM knock opportunity.
+
+    Seeded rows ('issued-preledger') are IMPORTED PRINT HISTORY, not attempts: seed() records one
+    per artifact an address appeared in, so a lead that rode five old packets arrived carrying five
+    'attempts' — and 89 doors were already past MAX_ATTEMPTS on day one (measured 2026-08-26). The
+    cap check outlives rest_until, so those leads were banned from the door system permanently, for
+    the crime of having been printed a lot. They were never even knocked: the door ledger has zero
+    logged touches. Print history still earns the 30-day rest (so day one is not a re-flood) — it
+    must not spend the attempt budget."""
+    return [x for x in (atts or []) if x.get('out') != 'issued-preledger']
 
 
 def state(led, addr, today=None):
@@ -102,9 +116,9 @@ def state(led, addr, today=None):
     d = led['doors'].get(a)
     if not d:
         return True, 1, None, 'fresh'
-    atts = d.get('attempts') or []
+    atts = _real(d.get('attempts') or [])
     n = len(atts)
-    last = atts[-1] if atts else {}
+    last = atts[-1] if atts else ((d.get('attempts') or [{}])[-1])
     if d.get('rest_until'):
         try:
             if dt.date.fromisoformat(d['rest_until']) > today:
@@ -194,9 +208,37 @@ def seed():
     return 0
 
 
+def migrate():
+    """Collapse duplicated seeded rows: one 'issued-preledger' per door, keeping the LATEST print
+    date (that is what the 30-day rest should count from). seed() wrote one row per artifact, so a
+    much-printed address carried five — inflating nothing now that _real() ignores them for the
+    cap, but still misleading on the card and in any future count. Also sorts attempts by date;
+    glob order had them out of sequence, which made `attempts[-1]` (the 'last attempt') wrong."""
+    led = load()
+    fixed = 0
+    for a, d in led['doors'].items():
+        atts = sorted(d.get('attempts') or [], key=lambda x: str(x.get('d') or ''))
+        seeded = [x for x in atts if x.get('out') == 'issued-preledger']
+        real = [x for x in atts if x.get('out') != 'issued-preledger']
+        if len(seeded) > 1:
+            fixed += 1
+        keep = ([seeded[-1]] if seeded else []) + real
+        keep.sort(key=lambda x: str(x.get('d') or ''))
+        if keep != atts:
+            d['attempts'] = keep
+        if keep:
+            d['first_issued'] = keep[0]['d']
+            d['last_issued'] = keep[-1]['d']
+    save(led)
+    print(f'migrated: collapsed duplicate seed rows on {fixed} door(s); attempts date-sorted')
+    return 0
+
+
 def main():
     if '--seed' in sys.argv[1:]:
         return seed()
+    if '--migrate' in sys.argv[1:]:
+        return migrate()
     led = load()
     doors = led['doors']
     today = dt.date.today()
