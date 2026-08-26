@@ -164,6 +164,95 @@ def main():
         rec('401 explains it was an auth failure', 'AUTH' in str(j.get('err', '')).upper(), j)
         proc2.terminate(); proc2.wait(timeout=10)
 
+        # ---- BOUNCE BREAKER ---------------------------------------------------------------
+        # BOUNCE_CEILING is the kill switch for the 2026-08-08 failure: outreach ran at a
+        # 28-33% recipient bounce rate for SEVEN DAYS, 478 of 1,712 addresses confirmed dead,
+        # and nothing stopped it or even said so. Providers tolerate ~2% and suppress the
+        # account near 5% — at which point every lead on the board goes dark at once, live
+        # conversations included. It had ZERO tests.
+        #
+        # Above the ceiling the handler admits ONLY proven-deliverable recipients, and ONE
+        # unproven address must block the WHOLE send — otherwise a bcc fan-out smuggles
+        # unverified addresses past the breaker, which is the difference between a breaker and
+        # a suggestion. That is the property worth pinning.
+        port3 = free_port()
+        work3 = pathlib.Path(tempfile.mkdtemp(prefix='dfbounce_'))
+        proc3 = None
+        try:
+            shutil.copy(HERE / 'send_server.py', work3 / 'send_server.py')
+            (work3 / 'gmail.key').write_text('tester@example.com:abcdabcdabcdabcd\n', encoding='utf-8')
+            (work3 / 'sender.json').write_text(json.dumps({'name': 'Test Sender'}), encoding='utf-8')
+            # 10 delivered sends; 4 of those addresses later bounced -> 40%, far over the 10% ceiling.
+            import datetime as _dt
+            _today = _dt.date.today().isoformat()
+            _led = [{'ch': 'email', 'message_id': 'm%d' % i, 'd': _today, 'ts_utc': _today + 'T12:00:00+00:00',
+                     'to': ('dead%d@example.com' % i) if i < 4 else ('good%d@example.com' % i)}
+                    for i in range(10)]
+            (work3 / 'mail_sent.json').write_text(json.dumps(_led), encoding='utf-8')
+            (work3 / 'bounced_emails.json').write_text(
+                json.dumps(['dead%d@example.com' % i for i in range(4)]), encoding='utf-8')
+            shim3 = work3 / '_run_bridge3.py'
+            shim3.write_text(
+                'import sys, smtplib\n'
+                'class _FakeSMTP:\n'
+                '    def __init__(self, *a, **k): pass\n'
+                '    def __enter__(self): return self\n'
+                '    def __exit__(self, *a): return False\n'
+                '    def login(self, u, p): pass\n'
+                '    def send_message(self, m): return {}\n'
+                'smtplib.SMTP_SSL = _FakeSMTP\n'
+                'sys.argv = ["send_server.py", "--port", "%d"]\n'
+                'exec(open("send_server.py", encoding="utf-8").read())\n' % port3,
+                encoding='utf-8')
+            proc3 = subprocess.Popen([sys.executable, str(shim3)], cwd=str(work3),
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            for _ in range(40):
+                if call(port3, '/health')[0] == 200:
+                    break
+                time.sleep(0.25)
+
+            st, j = call(port3, '/health')
+            _rate = (j.get('bounce') or {}).get('rate')
+            rec('breaker sees the seeded bounce rate', isinstance(_rate, (int, float)) and _rate > 0.10,
+                {'rate': _rate})
+            rec('breaker reports itself blocked', j.get('bounce_blocked') is True, j.get('bounce_blocked'))
+
+            # A KNOWN-DEAD address must be refused. This is the hard case — the breaker exists
+            # to stop mailing addresses we have already watched bounce.
+            # The refusal must come from the BREAKER, not the 24h dedupe. dead1 is in the seeded
+            # ledger, so a bare `st != 200` passes on a 409 even with the breaker disabled — the
+            # first version did exactly that and survived a mutation test that removed the breaker.
+            st, j = call(port3, '/send', {'to': 'dead1@example.com', 'subj': 'S', 'body': 'B',
+                                          'meta': {'c': 'C-B1'}})
+            _e1 = str(j.get('err') or '')
+            rec('over the ceiling, a KNOWN-BOUNCED recipient is refused BY THE BREAKER',
+                st != 200 and '24h' not in _e1, {'st': st, 'err': _e1[:70]})
+
+            # An UNKNOWN address is deliberately NOT refused: the probe lane trickles at most
+            # PROBE_DAILY_CAP of them per day so the ~850 unknowns self-verify for $0. Asserting a
+            # refusal here would have been asserting a bug — the first version of this test did
+            # exactly that and reported working code as broken.
+            st, j = call(port3, '/send', {'to': 'stranger@example.com', 'subj': 'S', 'body': 'B',
+                                          'meta': {'c': 'C-B2'}})
+            rec('over the ceiling, an UNKNOWN recipient still probes (trickle, not a block)',
+                st == 200, {'st': st, 'err': str(j.get('err'))[:70]})
+
+            # One known-dead BCC must sink an otherwise-fine send: bcc fan-out cannot smuggle a
+            # dead address past the breaker. Uses a FRESH `to` — the first version reused an
+            # address already in the ledger and passed on a 24h-dedupe 409, proving nothing.
+            st, j = call(port3, '/send', {'to': 'fresh-to@example.com', 'bcc': 'dead2@example.com',
+                                          'subj': 'S', 'body': 'B', 'meta': {'c': 'C-B3'}})
+            _err = str(j.get('err') or '')
+            rec('one KNOWN-DEAD bcc blocks the whole send (no fan-out smuggling)',
+                st != 200 and '24h' not in _err, {'st': st, 'err': _err[:70]})
+        finally:
+            if proc3 is not None:
+                try:
+                    proc3.terminate(); proc3.wait(timeout=10)
+                except Exception:
+                    pass
+            shutil.rmtree(work3, ignore_errors=True)
+
     finally:
         try:
             shutil.rmtree(work, ignore_errors=True)

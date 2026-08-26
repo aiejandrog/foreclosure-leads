@@ -10,6 +10,8 @@ _*.py
 !_redesign_verify.py
 !_gatetest.py
 !_suppressiontest.py
+!_dnctest.py
+!_senderdefaulttest.py
 !_diligencetest.py
 !_filtertest.py
 !_funneltest.py
