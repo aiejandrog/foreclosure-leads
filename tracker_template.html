@@ -11184,7 +11184,12 @@ function _wlog(caseId, action, detail, ok){
   var e = {
     t: Date.now(),
     ts: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
-    d: new Date().toISOString().slice(0,10),
+    // LOCAL day, not toISOString (UTC): Miami runs UTC-4/-5, so a UTC stamp rolls the "day" at
+    // 8 PM ET. Measured 2026-08-26: every evening entry bucketed under TOMORROW — the worker's
+    // "sent today" strip zeroed at 8 PM, and _sentTodayCount (the daily-cap FALLBACK when the
+    // send bridge is offline >2min) reset with it, exactly in the window where the FTSA banner
+    // is advisory-only. The server (send_server.py) always counted local; now every counter does.
+    d: _today(),
     c: caseId,
     addr: (r.addr||'').split(',')[0] || caseId,
     who: ((r.oname || r.owners || '').split(';')[0] || '').slice(0,30),
@@ -11371,7 +11376,7 @@ function _sentAdd(entry){
   return entry;
 }
 function _sentToday(){
-  var d = new Date().toISOString().slice(0,10);
+  var d = _today();   // local day — see _wlog's note; the writer stamps _today() too
   return _sentAll().filter(function(s){ return (s.d||'') === d; });
 }
 /* ---- RECIPIENT DEDUPE — spam-reputation guard, not a legal one ---------------------------------
@@ -11399,7 +11404,7 @@ function _recentlyEmailedTo(addr, hours){
      display string. */
   var bt = MAILTO[addr] || 0;
   if(bt >= cutoff) hits.push({ch:'email', to:addr, t:bt, src:'ledger',
-                              d:new Date(bt).toISOString().slice(0,10)});
+                              d:new Date(bt).toLocaleDateString('en-CA')});
   if(!hits.length) return null;
   hits.sort(function(a,b){ return (b.t||0) - (a.t||0); });
   return {n: hits.length, last: hits[0],
@@ -11418,7 +11423,7 @@ function _replyFor(caseId, email){
   return null;
 }
 function _wlogToday(){
-  var d = new Date().toISOString().slice(0,10);
+  var d = _today();   // local day, matching the writer
   return _wlogAll().filter(function(e){ return e.d === d; });
 }
 /* ACTION VOCABULARY — intent and delivery are DIFFERENT events, 2026-08-02.
@@ -13051,7 +13056,7 @@ function genMorningWorker(lane, autostart){
     +     'fb();'
     +   '}'
     +   'function _copyDay(btn){'
-    +     'var head="MORNING WORKER — "+new Date().toISOString().slice(0,10)+"\\n"+String((statEl&&statEl.textContent)||"")+"\\n------------------------------------------------------------";'
+    +     'var head="MORNING WORKER — "+new Date().toLocaleDateString("en-CA")+"\\n"+String((statEl&&statEl.textContent)||"")+"\\n------------------------------------------------------------";'
     +     'var body=LOG.map(function(e){ return "["+(e.ts||"")+"] "+String(e.a||"").toUpperCase()+"  "+(e.who||e.addr||"")+(e.detail?" — "+e.detail:"")+((e.ok===false)?"  (!)":""); }).join("\\n");'
     +     '_wcopy(head+"\\n"+body, btn);'
     +     'addLog("info","copy","activity log copied — "+LOG.length+" line(s)");'
@@ -13061,7 +13066,7 @@ function genMorningWorker(lane, autostart){
     +     'TEXTQ.forEach(function(x){ rows.push(x.name+"  \u00b7  "+(x.phone||"no number")+"  \u00b7  "+(x.addr||"")+(x.judg?"  \u00b7  $"+Math.round(+x.judg).toLocaleString()+" judgment":"")+"  \u00b7  TEXTABLE  \u00b7  "+x.c+(x.wp?"  \u00b7  "+x.wp:"")); });'
     +     'CALLQ.forEach(function(x){ if(TEXTQ.some(function(y){return y.c===x.c;})) return; rows.push(x.name+"  \u00b7  "+(x.phone||"no number")+"  \u00b7  "+(x.addr||"")+(x.judg?"  \u00b7  $"+Math.round(+x.judg).toLocaleString()+" judgment":"")+"  \u00b7  call only  \u00b7  "+x.c+(x.wp?"  \u00b7  "+x.wp:"")); });'
     +     'if(!rows.length){ addLog("fail","copy","call list is empty — nothing to copy","warn"); return; }'
-    +     '_wcopy("CALL LIST — "+new Date().toISOString().slice(0,10)+" ("+rows.length+")\\n"+rows.join("\\n"), btn);'
+    +     '_wcopy("CALL LIST — "+new Date().toLocaleDateString("en-CA")+" ("+rows.length+")\\n"+rows.join("\\n"), btn);'
     +     'addLog("info","copy","call list copied — "+rows.length+" lead(s)");'
     +   '}'
     +   'document.addEventListener("click", function(e){'
@@ -13408,7 +13413,7 @@ window.addEventListener('message', function(ev){
       var LE = window.__lastEmail;
       if(LE && LE.c === r.case && (LE.to || em2)){
         archived = true;
-        _sentAdd({d:new Date().toISOString().slice(0,10), t:Date.now(),
+        _sentAdd({d:_today(), t:Date.now(),
                   ts:new Date().toLocaleString(), c:r.case, ch:'email',
                   to:LE.to||em2, who:LE.who||'', addr:LE.addr||r.addr||'',
                   subj:LE.subj||'', body:LE.body||'', subjES:LE.subjES||'', bodyES:LE.bodyES||'',
@@ -17223,7 +17228,10 @@ async function boot(){
        2. a per-DAY key, so even a fresh tab opened at the same URL will not auto-send twice.
      A human can always still press "Start auto-run" — this only governs the unattended path. */
   if(/worker=morning/.test(location.hash||'')){
-    var _asKey = 'dealflow_autostart_' + new Date().toISOString().slice(0,10);
+    // LOCAL day: the UTC key minted a FRESH day at 8 PM ET, so a worker tab opened in the
+    // evening could auto-send a second time on the same local day — the exact replay this
+    // per-day key exists to prevent. (2026-08-26)
+    var _asKey = 'dealflow_autostart_' + _today();
     var _already = false;
     try { _already = !!localStorage.getItem(_asKey); } catch(e){}
     try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
