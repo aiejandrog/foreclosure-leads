@@ -286,8 +286,7 @@ def _probe_quota_left():
 
 def _proven_deliverable():
     """Addresses with DIRECT evidence of deliverability: mailed >= 48h ago, never observed
-    bouncing. This is the positive class the verifier files cannot supply without a paid API
-    key (verified_emails.json currently holds ZERO 'ok' rows — only dead/risky/unknown).
+    bouncing. OBSERVED evidence only — a paid API 'ok' is NOT acceptance-grade (see below).
 
     WHY (2026-08-10): the bounce breaker rightly blocks bulk sends while the 7-day rate sits
     near 28%, but it also gags follow-ups to the ~1,200 addresses that ACCEPTED mail during
@@ -320,9 +319,16 @@ def _proven_deliverable():
             a = a.strip().lower()
             if a and a not in bad:
                 ok.add(a)
-    for a, x in ver.items():                     # API-verified 'ok' counts too, once a key exists
-        if (x or {}).get('v') == 'ok' and str(a).lower() not in bad:
-            ok.add(str(a).lower())
+    # API-'ok' NO LONGER admits (removed 2026-08-26, measured that morning). The 2026-08-12
+    # ZeroBounce run produced 381 'ok' rows; the 08-24 Morning Worker wave bulk-mailed 113 of
+    # those as "proven" first-contacts and 63 HARD-BOUNCED — a 56% false-valid rate on this
+    # list's yahoo/aol-heavy segment. That single wave drove the trailing bounce rate from ~5%
+    # to 28.3% and slammed the breaker shut on everything, including genuinely-proven
+    # follow-ups. The forensics were only recoverable by reconstruction because the observed
+    # bounce rightly OVERRODE the stale paid verdicts (why='hard-bounced (observed', d=08-26),
+    # erasing the 'ok' trail. Paid verdicts still matter — they now make an address
+    # PROBE-ELIGIBLE (see _cls in the send gate): a few per day, graduating on 48h of observed
+    # silence like every other unknown. Vendor "valid" is a hint; acceptance is evidence.
     return ok
 
 
@@ -853,6 +859,12 @@ class Handler(BaseHTTPRequestHandler):
                         v = (_ver.get(a) or {}).get('v')
                         if a in _bad or v == 'dead':
                             return 'dead'
+                        # API-'ok' is PROBE-eligible, not proven (2026-08-26): ZeroBounce 'valid'
+                        # ran a 56% false-valid rate on the 08-24 wave. An ok verdict earns a
+                        # paced probe slot exactly like an unknown; only observed acceptance
+                        # graduates it into the proven pool.
+                        if v == 'ok':
+                            return 'unknown'
                         return v or 'unknown'
                     if (all(_cls(a) == 'unknown' for a in _unproven)
                             and len(_unproven) <= _probe_quota_left()):
