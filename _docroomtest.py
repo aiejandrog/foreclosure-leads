@@ -24,8 +24,13 @@ async def main():
         })""")
         rec('approval gate EXISTS and the deed ships locked',
             gate['hasGate'] and gate['deedLocked'], gate)
-        rec('the lock is deed-only (no other template is gated)',
-            gate['keys'] == ['quitclaim'], gate['keys'])
+        # DEED + RETAINER (suite updated 2026-08-26): the 2026-08-11 deep sweep added the retainer
+        # to the gate deliberately — as transcribed it carried an up-front deposit grid (12 CFR
+        # 1015.5(a) + FS 501.1377 forbid fees before the promised result; FL adds $15k/violation)
+        # and rescue-promise framing, so it must not print client-facing without counsel either.
+        # The contract this check protects is unchanged: nothing ELSE quietly joins the gate.
+        rec('the lock gates exactly the deed + the retainer (nothing else)',
+            sorted(gate['keys']) == ['quitclaim', 'retainer'], gate['keys'])
 
         # merge-blank generators stay OPEN; the two deed generators must return the block shell
         gens = await pg.evaluate("""() => {
