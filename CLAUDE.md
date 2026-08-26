@@ -8,6 +8,51 @@ desktop (DESKTOP-35NNMFL), and GitHub Actions. Git carries code and the publishe
 
 1. `git pull` — another machine or the cloud runner may have pushed since this checkout.
 2. Check which machine is armed (`MACHINE-HANDOFF.md` §1). Only one may run the schedule.
+3. Check the ownership claims below before editing anything they cover.
+
+## OWNED SURFACE: suppression — do not edit from another session
+
+**Claimed 2026-08-26 by the DESKTOP-35NNMFL session, at Alejandro's direction. Stands until he
+lifts it.** Working parity (§3b) still applies to the whole rest of the repo; this is one surface.
+
+On 2026-08-26 two Claude sessions edited opt-out logic in the same hours from different machines.
+Nothing collided in git — the damage was subtler and it happened twice in one day:
+
+- `f5856b0` ("privacy: the public board published 1,449 homeowner email addresses in plaintext",
+  cited as `c047f7d` in `95231d8` — that SHA was rebased away, which is its own argument for
+  quoting subjects and not just hashes here) dropped the `'@email'` identity keys, which emptied
+  `_optedOutIdentities()` and silently removed person-level suppression. Caught and repaired in
+  `95231d8`.
+- `d53955d` made cadence's detected STOP write the shared ledger and the hard-suppression list —
+  correct in itself, but it promoted a verdict produced by a **known-bad detector** into permanent
+  cross-channel suppression. `f80f5e6` proved that detector matched "Can you stop the
+  foreclosure?" hours later. Repaired in `e79e104`.
+
+Neither is a merge conflict. Both are two correct-looking changes composing into a wrong system,
+which is the specific failure mode a shared surface with two owners produces, and the blast radius
+here is contacting a homeowner who told us to stop.
+
+**In scope — do not edit without handing the surface back:**
+
+| | |
+|---|---|
+| the ledger | `optouts.json` shape and every writer of it — `optout_sync.py`, `cadence.py`, `replies.py` |
+| stop detection | `replies.is_stop_text()` and anything that decides a reply means stop |
+| hard suppression | `bounced_emails.json` and the send-bridge list |
+| person-level gates | board `_optedOutIdentities` / `_isOptedOutPerson` / `_textContactBlocked` / `_workerEligible` / `_laneStats` |
+| send-time checks | `cadence.py`'s pre-send sweep, `outreach_email._load_optouts()` |
+| the tests | `_suppressiontest.py`, `_optouttest.py`, `_dnctest.py` |
+
+Touching adjacent code that merely *reads* a suppression verdict is fine. Changing what produces
+one is not.
+
+**If you find a suppression bug from another session:** do not fix it. Write it in the commit
+message of whatever you were doing, or add a line here, and say so in your summary to Alejandro.
+An unfixed, reported bug on this surface is cheaper than two uncoordinated fixes.
+
+State as of the claim: cadence calls `replies.is_stop_text()` (no local detector), the ledger write
+is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
+ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.
 
 ## The website
 
