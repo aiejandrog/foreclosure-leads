@@ -24,22 +24,29 @@ SETUP = r"""() => {
   // A. Inject three synthetic leads that share a primary email, plus one lone lead. Deliberately
   //    inserted at the top of DATA so the URGENT lane picks them up regardless of what real leads
   //    exist. `days` is short (sale in 4 days) so the URGENT lane test accepts them.
+  const _fmt = t => { const d = new Date(Date.now() + t*864e5);
+    return String(d.getMonth()+1).padStart(2,'0')+'/'+String(d.getDate()).padStart(2,'0')+'/'+d.getFullYear(); };
   const inject = [
+    // RELATIVE auction dates (2026-08-26): these were hardcoded calendar strings, and the board
+    // now RECOMPUTES days from the auction string instead of trusting a baked r.days (the
+    // "baked days lies" truth fix) — so once the dates aged into the past every synthetic read
+    // as auction-passed and was correctly gated out of every lane. 0/15 checks could even run.
+    // A fixture with a calendar date in it is a time bomb; build them off today's clock.
     {case:'TEST-A', addr:'100 A ST', owners:'DOE, JANE', oname:'JANE DOE',
      emails:['portfolio14@example.com','alt@example.com'], phones:['3055551000'],
-     plaintiff:'Bank A', auction:'08/05/2026', days:4, tier:'A', st:'', filed:'20260701',
+     plaintiff:'Bank A', auction:_fmt(4), days:4, tier:'A', st:'', filed:'20260701',
      folio:'AAA'},
     {case:'TEST-B', addr:'200 B ST', owners:'DOE, JANE', oname:'JANE DOE',
      emails:['portfolio14@example.com'], phones:[],
-     plaintiff:'Bank B', auction:'08/06/2026', days:5, tier:'B', st:'', filed:'20260702',
+     plaintiff:'Bank B', auction:_fmt(5), days:5, tier:'B', st:'', filed:'20260702',
      folio:'BBB'},
     {case:'TEST-C', addr:'300 C ST', owners:'DOE, JANE', oname:'JANE DOE',
      emails:['portfolio14@example.com'], phones:['3055553000'],
-     plaintiff:'Bank C', auction:'08/07/2026', days:6, tier:'C', st:'', filed:'20260703',
+     plaintiff:'Bank C', auction:_fmt(6), days:6, tier:'C', st:'', filed:'20260703',
      folio:'CCC'},
     {case:'TEST-SOLO', addr:'999 Z ST', owners:'ROE, JOHN', oname:'JOHN ROE',
      emails:['solo@example.com'], phones:['3055559000'],
-     plaintiff:'Bank Z', auction:'08/07/2026', days:6, tier:'A', st:'', filed:'20260704',
+     plaintiff:'Bank Z', auction:_fmt(6), days:6, tier:'A', st:'', filed:'20260704',
      folio:'ZZZ'}
   ];
   // DATA is a top-level `let` (not a window property) — reassigning window.DATA does not reach

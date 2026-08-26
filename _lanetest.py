@@ -49,7 +49,9 @@ JS = r"""() => {
     const doc = genEmail(row, true);
     out.earlyEmail = {case:row.case, auction:row.auction||'',
                       blankDate: /scheduled for \.|subasta el \./.test(doc),
-                      hasEarlyCopy: doc.indexOf('No auction date has been set yet')>-1};
+                      // the early body was rewritten in the 2026-08-22 voice pass; match the
+                      // durable semantic ("no auction date yet") rather than one exact sentence
+                      hasEarlyCopy: /no auction date yet/i.test(doc)};
   }
   return out;
 }"""
@@ -102,12 +104,14 @@ async def main():
         leaks = res.get('suppressionLeaks') or []
         rec('no suppressed lead leaked into a queue', not leaks, leaks[:5])
 
-        # Every lane must bake a usable document: 3 lane tabs, a cap meter, an active tab.
+        # Every lane must bake a usable document: FOUR lane tabs (replied/urgent/active/early —
+        # the REPLIED lane was added so owner replies lead the queue; suite updated 2026-08-26),
+        # a cap meter, an active tab.
         docs = res.get('docs') or {}
         for lane, d in docs.items():
             if not isinstance(d, dict):
                 continue
-            rec(f'{lane}: worker doc renders 3 lane tabs', d.get('tabs') == 3, d.get('tabs'))
+            rec(f'{lane}: worker doc renders 4 lane tabs', d.get('tabs') == 4, d.get('tabs'))
             rec(f'{lane}: worker doc has the cap meter', d.get('capMeter') is True, d.get('capMeter'))
             rec(f'{lane}: exactly one lane tab is active', d.get('on') is True, d.get('on'))
             # The 9999 NO_SALE sentinel once rendered as "(nulld)" on every Lis Pendens row.
