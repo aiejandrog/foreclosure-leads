@@ -632,6 +632,9 @@ def main():
                     help='skip 2Captcha; use --headed only when gated')
     ap.add_argument('--parse-dump', action='store_true',
                     help='re-parse _pb_last_results.html / JSON dump only (no network)')
+    ap.add_argument('--deadline', type=int, default=int(os.environ.get('PB_LIENS_DEADLINE', '0')),
+                    help='stop cleanly after N seconds and leave the rest for the next run '
+                         '(0 = no bound). Same idea as GEN_DEADLINE in gen_cases_qs.py.')
     ap.add_argument('--workers', type=int, default=1,
                     help='concurrent 2Captcha solvers (default 1 = the original serial behaviour). '
                          '>1 keeps N solves in flight so the scrape is not waiting 60-180s per '
@@ -719,7 +722,19 @@ def _trace(a, picked, out):
         print(f'  captcha path: {token_src}')
 
     done = blocked = 0
+    # WALL-CLOCK BOUND (2026-08-26). --limit was doing this job and doing it badly: it caps the
+    # number of LEADS, but the cost of a lead is one or two 2Captcha solves at 60-180s each, so the
+    # same --limit is a 6-minute run on a good night and a 25-minute one on a bad night. That is why
+    # the nightly cap sat at 6 — it had to be sized for the worst case, which starved every good
+    # night. A deadline bounds the thing that actually matters, so --limit can be set to what the
+    # backlog needs and the clock decides where the run stops. Untraced leads are not lost; --all
+    # skips what is already in palmbeach_liens.json, so the next run resumes exactly here.
+    _start = time.time()
     for r in picked:
+        if a.deadline and time.time() - _start > a.deadline:
+            print(f"  .. {a.deadline}s budget hit after {done} traced; stopping "
+                  f"({len(picked) - done - blocked} left for the next run)")
+            break
         case = r.get('case', ''); owner = (r.get('owners') or '').strip()
         pcn = re.sub(r'\D', '', r.get('folio', '') or '')
         use_2c = not a.no_2captcha

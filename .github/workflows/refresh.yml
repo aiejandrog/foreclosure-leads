@@ -343,7 +343,9 @@ jobs:
             exit 0
           fi
           BEFORE=$(python -c "import json,os;print(len(json.load(open('palmbeach_liens.json'))) if os.path.exists('palmbeach_liens.json') else 0)")
-          python -u palmbeach_liens.py --all --limit 60 --workers 8
+          # --deadline stops cleanly and reports what is left; the 45-min step timeout above is a
+          # hard kill that would cut a run mid-lead. Keep the deadline comfortably under it.
+          python -u palmbeach_liens.py --all --limit 120 --workers 8 --deadline 2100
           AFTER=$(python -c "import json,os;print(len(json.load(open('palmbeach_liens.json'))) if os.path.exists('palmbeach_liens.json') else 0)")
           echo "PB lien chains: $BEFORE -> $AFTER"
           echo "Palm Beach lien chains: **$BEFORE → $AFTER** (+$((AFTER-BEFORE)) this run)" >> $GITHUB_STEP_SUMMARY

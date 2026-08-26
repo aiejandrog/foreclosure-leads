@@ -78,15 +78,21 @@ if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
 rem  Palm Beach chains via the county's OWN Landmark portal (2Captcha v2 - slow but first-party).
 rem  Replaces the BatchData lien feed (BATCHDATA-EXIT, 2026-08-11): old bd chains keep merging from
 rem  the committed batchdata_liens.json cache; only NEW purchases stopped.
-rem  --limit 6 -> 18 with --workers 4 (2026-08-26). The old cap was never about money (~$0.036 a
-rem  night); it bounded WALL CLOCK, because every Landmark search burns a one-shot v2 token and a
-rem  serial solve is 60-180s, so six leads already cost ~6-18 min of the morning window. --workers
-rem  keeps 4 solves in flight instead of waiting on one at a time, so 18 leads now fit inside the
-rem  SAME time budget the old 6 needed. Spend goes to ~$0.11/night. If a portal day goes bad the
-rem  pool falls back to serial solving and the limit still bounds the run.
-rem  The 190-lead backlog is cleared by the CLOUD, not here - refresh.yml step [2b2/5] runs
-rem  --limit 60 --workers 8 with no morning window to protect. This line keeps NEW leads current.
-if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 18 --workers 4 >> "%LOG%" 2>&1
+rem  --limit 6 -> 60 with --workers 6 --deadline 720 (2026-08-26). The old cap was never about
+rem  money (~$0.036 a night); it bounded WALL CLOCK. But --limit caps LEADS, and a lead costs one
+rem  or two 2Captcha solves at 60-180s each, so the same --limit is a 6-minute run on a good night
+rem  and a 25-minute one on a bad one. It had to be sized for the worst case, which starved every
+rem  good night - six leads against a 190-lead backlog is 32 nights.
+rem  --deadline bounds the clock directly (12 min, well inside the old worst case), so --limit can
+rem  be set to what the BACKLOG needs and the clock decides where the run stops. --workers 6 keeps
+rem  6 solves in flight; note this does NOT raise the request rate at the county - the searches are
+rem  still strictly serial, only the 2Captcha waiting overlaps. Nothing is lost at the cutoff:
+rem  --all skips whatever is already in palmbeach_liens.json, so the next run resumes where this
+rem  one stopped. Worst case spend is ~$0.36 on a night that traces the full 60.
+rem  THE CLOUD CANNOT DO THIS YET: refresh.yml's PB step skipped in 0s on run #45 because there is
+rem  no CAPTCHA_KEY repo secret. Until that secret exists, this laptop line is the ONLY thing
+rem  moving Palm Beach coverage.
+if exist captcha.key if exist palmbeach_leads.json python -u palmbeach_liens.py --all --limit 60 --workers 6 --deadline 720 >> "%LOG%" 2>&1
 
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
