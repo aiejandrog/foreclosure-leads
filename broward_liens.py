@@ -505,7 +505,17 @@ def main():
         time.sleep(wait)
     if not sess:
         print("ABORT: could not establish an AcclaimWeb session (Cloudflare block / site down). Try again later.")
-        return
+        # EXIT NON-ZERO (2026-08-26). This used to `return`, so the process exited 0 after six
+        # backoff retries (20+40+60+80+100 = 300s) having traced NOTHING. A caller cannot tell that
+        # apart from a clean run with no new leads, and one caller in particular has been fooled by
+        # it for a long time: the GitHub Actions runner. CURL above pins System32's Schannel curl on
+        # Windows and falls back to bare `curl` everywhere else, and this module's own note says a
+        # non-Schannel fingerprint is exactly what Cloudflare blocks -- so on the Ubuntu runner this
+        # almost certainly aborts every night, burns five minutes doing it, and reports success.
+        # Measured corroboration: the cloud's [2b/5] step ran 362s on run #45, which is ~300s of
+        # these retries plus MD's cached-only pass.
+        # 2, not 1, to distinguish "no session" from an ordinary error.
+        return 2
     print(f"session up (doctypes {sess['doctypes'].count(',')+1}, booktypes {sess['booktypes'].count(',')+1})")
 
     done = hits = blocked = 0
@@ -537,4 +547,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main() returns 2 when no AcclaimWeb session could be established; propagate it so a
+    # blocked run is visible to the caller instead of looking like a clean no-op.
+    raise SystemExit(main() or 0)
