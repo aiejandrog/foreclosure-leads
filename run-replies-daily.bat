@@ -10,7 +10,13 @@ REM auto-ran on YESTERDAY'S build. Speed-to-lead was 24-48h by scheduling accide
 REM The worker session that opens at 8:00 must contain the replies found at 7:00.
 setlocal
 cd /d "%~dp0"
-python -u replies.py > "%TEMP%\dealflow_replies_last.txt" 2>&1
+REM Durable log in the repo (gitignored), matching phones-run.log / daily-routes-run.log. The old
+REM %TEMP%\dealflow_replies_last.txt evaporated with Windows temp cleanup — verified 2026-08-26:
+REM the 08-25 run exited 0 and its output file already no longer existed anywhere, so a bad morning
+REM would have been undiagnosable by afternoon.
+set "LOG=%~dp0replies-run.log"
+echo ==== replies-daily %date% %time% ==== >> "%LOG%"
+python -u replies.py >> "%LOG%" 2>&1
 
 REM DETECTION IS NOT SUPPRESSION. replies.py only writes stop:true into replies.json; optout_sync.py
 REM is what carries that into optouts.json, the ledger the board and the send path actually consult.
@@ -26,21 +32,21 @@ REM
 REM Runs on whichever machine is armed, right after the scan that produces its input, and BEFORE the
 REM rebuild below so a fresh opt-out reaches the board in the same pass. It only ever ADDS and
 REM re-running is a no-op, so a failure here must not stop the publish.
-python -u optout_sync.py >> "%TEMP%\dealflow_replies_last.txt" 2>&1
+python -u optout_sync.py >> "%LOG%" 2>&1
 
 REM Bake the fresh replies into the board and publish. Rebuild-only (no scrape) — this is
 REM the same command the memory file records for time-critical rebuilds, ~2 min total.
-python -u -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%TEMP%\dealflow_replies_last.txt" 2>&1
+python -u -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo REBUILD FAILED - board not published, replies still on disk only >> "%TEMP%\dealflow_replies_last.txt"
+  echo REBUILD FAILED - board not published, replies still on disk only >> "%LOG%"
   goto :end
 )
-git add docs/index.html docs/call >> "%TEMP%\dealflow_replies_last.txt" 2>&1
-git commit -m "replies: morning scan baked into board (auto)" >> "%TEMP%\dealflow_replies_last.txt" 2>&1
+git add docs/index.html docs/call >> "%LOG%" 2>&1
+git commit -m "replies: morning scan baked into board (auto)" >> "%LOG%" 2>&1
 if not errorlevel 1 (
-  git pull --rebase --autostash -X theirs origin main >> "%TEMP%\dealflow_replies_last.txt" 2>&1
-  git push origin main >> "%TEMP%\dealflow_replies_last.txt" 2>&1
-  if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%TEMP%\dealflow_replies_last.txt" 2>&1 )
+  git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
+  git push origin main >> "%LOG%" 2>&1
+  if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
 )
 :end
 endlocal

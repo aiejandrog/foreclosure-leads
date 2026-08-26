@@ -123,6 +123,7 @@ replies.json
 routed_ledger.json
 lp_geo_cache.json
 daily-routes-run.log
+replies-run.log
 # tracker localStorage mirrored to disk by send_server.py POST /notes — full PII call history
 worker_notes.json
 worker_notes_snapshots/
