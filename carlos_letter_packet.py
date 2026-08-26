@@ -259,8 +259,45 @@ def _days_out(d):
     return None
 
 
+def _optout_cases():
+    """Cases on the server opt-out ledger. Empty set if the ledger is missing — fail OPEN on the
+    file, never on the check: a missing optouts.json must not silently disable suppression.
+
+    The rules card in this packet promises "If someone tells us to stop, that address is done,
+    permanently" — and nothing here enforced it. The rows come from a hand-built _letter_rows.json,
+    so a regenerated list could put an opted-out owner back in the book with the promise still
+    printed on the facing page. Checked 2026-08-26: the current 38 rows contain none, so this is a
+    guard against the next regeneration, not a retraction of letters already written.
+
+    Identity ('@'/'#') keys are deliberately NOT consulted: this lane is defined as leads with no
+    traced phone and no deliverable email — all 38 rows carry zero contacts — so there is nothing
+    to match an identity against. Case is the only key that can apply here.
+    """
+    p = os.path.join(HERE, 'optouts.json')
+    if not os.path.exists(p):
+        print('WARNING: optouts.json not found — letters generated WITHOUT opt-out suppression')
+        return set()
+    try:
+        raw = json.load(open(p, encoding='utf-8')) or {}
+        notes = raw.get('notes') if isinstance(raw, dict) else None
+        if not isinstance(notes, dict):
+            notes = raw if isinstance(raw, dict) else {}
+        return {str(k) for k, v in notes.items()
+                if not str(k).startswith(('@', '#'))
+                and isinstance(v, dict)
+                and (v.get('optout') or str(v.get('status') or '').upper() in ('DO NOT CONTACT', 'OPTED OUT'))}
+    except Exception as e:
+        print('WARNING: optouts.json unreadable (%s) — letters generated WITHOUT suppression' % e)
+        return set()
+
+
 def main():
     rows = json.load(open(SRC, encoding='utf-8'))
+    _opt = _optout_cases()
+    _n0 = len(rows)
+    rows = [r for r in rows if str(r.get('c') or '') not in _opt]
+    if len(rows) != _n0:
+        print('opt-out: %d letter(s) dropped — the owner asked us to stop' % (_n0 - len(rows)))
     dropped = []
     keep = []
     for r in rows:

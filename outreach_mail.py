@@ -537,7 +537,14 @@ def main():
         sent = json.load(open(SENT_LEDGER, encoding='utf-8')) if os.path.exists(SENT_LEDGER) else {}
     except Exception:
         sent = {}
-    suppress = load_suppress(a.suppress)
+    # THE SERVER LEDGER IS ALWAYS ON. --suppress takes a hand-exported tracker notes file, so
+    # suppression was OPTIONAL: forget the flag and this mails everybody, including people on
+    # optouts.json who told us to stop. Physical mail is the one channel that leaves a paper
+    # exhibit in someone's hand, so it should be the hardest to send by accident, not the easiest.
+    # load_suppress already unwraps the {notes:{...}} envelope, which is optouts.json's own shape.
+    # (Lob has never run — mail_letters_sent.json does not exist — so this is a guard on the first
+    # run, not a fix for mail already sent.)
+    suppress = load_suppress(a.suppress) | load_suppress(os.path.join(HERE, 'optouts.json'))
 
     if a.queue:
         # human already selected + opt-out-filtered these in the tracker; trust the picks, keep safety backstops
