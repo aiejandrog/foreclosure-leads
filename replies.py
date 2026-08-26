@@ -31,7 +31,7 @@ Run:  python replies.py            # check the last 30 days
 import os, sys, json, re, imaplib, email
 from email.header import decode_header, make_header
 from email.utils import parseaddr
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -85,6 +85,69 @@ _BARE_STOP = re.compile(r'\bstop\b', re.I)
 _STOP_OBJECT = re.compile(r'\s*(?:the|this|my|a|an)?\s*'
                           r'(?:foreclosure|sale|auction|case|process|hearing|judgment|eviction'
                           r'|it|this|that)\b', re.I)
+
+
+def _unanswered(found, min_days=2):
+    """Replies with no outbound email sent to that address SINCE the reply. Oldest first.
+
+    NOVELTY IS NOT THE SAME AS OUTSTANDING. NEW-REPLIES.txt carries only what changed since the
+    last run and deletes itself when nothing is new — deliberately, so a stale file can never read
+    as a fresh alert. The cost is that a reply is announced exactly once, and nothing anywhere
+    tracks whether anyone ever answered it.
+
+    Measured 2026-08-26: eight non-stop replies outstanding, median 18 days, oldest 30 —
+    "Yes my number is 3059093711 u can call me after 5:30" had been sitting for a month. Four of
+    the ten replied leads had also aged off the board entirely, so the REPLIED lane could not show
+    them either: the lane reads DATA, and the lead was gone. A reply outlives its lead, and when
+    the lead churns the reply goes silent.
+
+    This reads replies.json against mail_sent.json and needs neither the board nor the lead to
+    still exist, which is the whole point.
+    """
+    try:
+        from email.utils import parsedate_to_datetime
+    except Exception:
+        return []
+    ledger = []
+    try:
+        raw = json.load(open(os.path.join(HERE, 'mail_sent.json'), encoding='utf-8'))
+        ledger = raw if isinstance(raw, list) else []
+    except Exception:
+        pass
+    # newest outbound send per address
+    last_out = {}
+    for e in ledger:
+        if not isinstance(e, dict) or e.get('ch') != 'email':
+            continue
+        when = str(e.get('ts_utc') or e.get('d') or '')[:10]
+        for a in [e.get('to') or ''] + str(e.get('bcc') or '').split(','):
+            a = a.strip().lower()
+            if a and when > last_out.get(a, ''):
+                last_out[a] = when
+    now = datetime.now(timezone.utc)
+    out = []
+    for key, rec in (found or {}).items():
+        if not isinstance(rec, dict) or str(rec.get('stop')).lower() == 'true':
+            continue
+        if str(key).startswith('@'):
+            continue                      # the case row carries the same reply; do not double-count
+        try:
+            when = parsedate_to_datetime(rec.get('when') or '')
+        except Exception:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        age = (now - when).days
+        if age < min_days:
+            continue
+        addr = str(rec.get('email') or '').strip().lower()
+        replied_on = when.date().isoformat()
+        if addr and last_out.get(addr, '') > replied_on:
+            continue                      # we wrote back after they did
+        out.append({'case': key, 'email': addr, 'age': age,
+                    'excerpt': (rec.get('excerpt') or '')[:150]})
+    out.sort(key=lambda r: -r['age'])
+    return out
 
 
 def _ledger_stops(found):
@@ -506,15 +569,33 @@ def main():
     # ever told a human THE DAY a reply landed. This file exists to be checked/tailed daily; it holds
     # only what changed since the last run, and disappears when there is nothing new so it can never
     # be mistaken for a fresh alert days later.
-    if new_alerts:
-        lines = [f'NEW SELLER REPLIES — as of {datetime.now().strftime("%Y-%m-%d %H:%M")}', '']
-        for a in new_alerts:
-            tag = '  [STOP WORD — opt-out, do not text/call further]' if a['stop'] else ''
-            lines.append(f'{a["case"] or "(no case matched — check the address)"} | {a["email"]} | {a["when"]}{tag}')
-            lines.append(f'    {a["excerpt"]}')
-            lines.append('')
+    # OUTSTANDING, not just NEW. A reply used to be announced exactly once and then this file
+    # deleted itself, so nothing anywhere said "a human wrote to you 23 days ago and no one has
+    # written back". Measured today: five outstanding, oldest 23 days, including someone proposing
+    # a meeting time with a sale date attached. Ageing replies now keep the file alive on their own.
+    _out = _unanswered(found)
+    if new_alerts or _out:
+        lines = [f'SELLER REPLIES — as of {datetime.now().strftime("%Y-%m-%d %H:%M")}', '']
+        if new_alerts:
+            lines += ['NEW SINCE THE LAST CHECK', '']
+            for a in new_alerts:
+                tag = '  [STOP WORD — opt-out, do not text/call further]' if a['stop'] else ''
+                lines.append(f'{a["case"] or "(no case matched — check the address)"} | {a["email"]} | {a["when"]}{tag}')
+                lines.append(f'    {a["excerpt"]}')
+                lines.append('')
+        if _out:
+            lines += [f'STILL UNANSWERED — {len(_out)}, oldest {_out[0]["age"]} days.',
+                      'No email has gone to these addresses since they wrote. Oldest first.', '']
+            for u in _out:
+                lines.append(f'{u["age"]:>3}d | {u["case"]} | {u["email"]}')
+                lines.append(f'    {u["excerpt"]}')
+                lines.append('')
         open(ALERTS, 'w', encoding='utf-8').write('\n'.join(lines))
-        print(f'\n{len(new_alerts)} NEW reply(ies) since the last check -> {ALERTS}')
+        if new_alerts:
+            print(f'\n{len(new_alerts)} NEW reply(ies) since the last check -> {ALERTS}')
+        if _out:
+            print(f'{len(_out)} reply(ies) STILL UNANSWERED, oldest {_out[0]["age"]}d '
+                  f'({_out[0]["case"]}) -> {ALERTS}')
     elif os.path.exists(ALERTS):
         os.remove(ALERTS)
 
