@@ -328,7 +328,12 @@ def compute(now=None):
     sc = {}
     sc['data_quality'] = round(10 * (0.6 * m['leads_phone'] + 0.4 * m['leads_email']) / max(1, m['leads_total']), 1)
     dial_part = min(1.0, m['calls_7d'] / TARGET_DIALS_WK)
-    mail_part = min(1.0, m['emails_7d'] / TARGET_EMAILS_WK)
+    # DELIVERED, not sent (2026-08-26). Scoring raw sends rewarded volume that bounced: last week
+    # 419 sends contained 65 dead addresses, and the outreach score counted all 419 as work done
+    # while the compliance score separately docked the bounce rate. Outreach that did not reach a
+    # human is not outreach. (No change to today's grade — both figures clear the weekly floor —
+    # but a future bad-list week now shows up here instead of only in compliance.)
+    mail_part = min(1.0, (m['emails_7d'] - m['emails_bounced_7d']) / TARGET_EMAILS_WK)
     door_part = min(1.0, m['doors_7d'] / TARGET_DOORS_WK)
     sc['outreach'] = round(10 * (0.5 * dial_part + 0.3 * mail_part + 0.2 * door_part), 1)
     if m['replies_hot']:
@@ -469,6 +474,12 @@ def render(m, prev):
         ('&nbsp;&nbsp;reachable (phone)', m['leads_phone'], 'leads_phone'),
         ('Emails delivered · 7d', m['emails_7d'] - m['emails_bounced_7d'], None),
         ('Dials · 7d', m['calls_7d'], 'calls_7d'),
+        # TEXTS were computed every run and never printed — 92 of them last week, a whole
+        # outreach channel missing from the only page that reports the business (2026-08-26).
+        # They are also invisible in workerLog (0 'text' entries vs 92 touches): confirmed texts
+        # are written by Call Mode's after-call bar on the PHONE, and the board only ever logs
+        # 'textopen' (composer opened, deliberately NOT a contact). Touch-sourced, like dials.
+        ('Texts · 7d', m['texts_7d'], 'texts_7d'),
         ('Doors · 7d', m['doors_7d'], 'doors_7d'),
         ('Live conversations · 7d', m['convos_7d'], 'convos_7d'),
         ('Call queue added · 7d', m.get('callq_7d', 0), 'callq_7d'),
