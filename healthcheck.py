@@ -97,7 +97,11 @@ if not leads:
     add('FAIL', 'leads_final.json', 'missing or unreadable — the site cannot be built')
 else:
     n = len(leads)
-    add('FAIL' if n < 20 else 'PASS', 'lead count', f'{n} leads')
+    # SCOPED LABEL. This file is the Miami-Dade AUCTION pipeline only. The board merges Broward,
+    # Palm Beach and lis pendens on top of it and ships ~1,900 -- so a bare "lead count: 367" read
+    # like the whole system was five times smaller than it is. Every ledger number below inherits
+    # this scope; chk_shipped() reports what actually went out.
+    add('FAIL' if n < 20 else 'PASS', 'lead count (MD auction pipeline)', f'{n} leads')
     tiers = {t: sum(1 for r in leads if r.get('tier') == t) for t in ('A', 'B', 'C')}
     add('PASS', 'tier split', f"A={tiers['A']} B={tiers['B']} C={tiers['C']}")
     withval = sum(1 for r in leads if (r.get('market_value') or 0) > 0)
@@ -393,6 +397,45 @@ def chk_entity():
 chk_entity()
 
 # ---- 3. upstream sources still alive ----------------------------------------------------------
+def chk_shipped():
+    """What the PUBLISHED board actually carries, from its own coverage marker.
+
+    Every other ledger number here comes from leads_final.json -- the Miami-Dade auction pipeline,
+    367 rows. The board merges Broward, Palm Beach and lis pendens on top and ships ~1,900. So the
+    health report described one input file while the business ran on something five times larger,
+    and nothing reconciled the two.
+
+    make_tracker bakes DEALFLOW-COVERAGE into docs/index.html as a plaintext, greppable census for
+    exactly this reason -- it can be read without decrypting the payload. Nothing was reading it.
+    """
+    p = os.path.join(HERE, 'docs', 'index.html')
+    if not os.path.exists(p):
+        add('FAIL', 'shipped board', 'docs/index.html not built')
+        return
+    try:
+        head = open(p, encoding='utf-8', errors='replace').read(4000)
+        m = re.search(r'DEALFLOW-COVERAGE (\{.*?\})', head)
+        if not m:
+            add('WARN', 'shipped board', 'no DEALFLOW-COVERAGE marker — built by an older make_tracker?')
+            return
+        cov = json.loads(m.group(1))
+    except Exception as e:
+        add('WARN', 'shipped board', 'coverage marker unreadable (%s)' % e)
+        return
+    shipped = int(cov.get('leads') or 0)
+    add('FAIL' if shipped < 100 else 'PASS', 'shipped board · leads',
+        '%d leads published (built %s)' % (shipped, cov.get('built', '?')))
+    if shipped:
+        ph = int(cov.get('phones') or 0)
+        add('WARN' if ph / shipped < 0.35 else 'PASS', 'shipped board · dialable',
+            '%d/%d carry a phone (%d%%)' % (ph, shipped, round(ph / shipped * 100)))
+        # A lead is valuable to work if ANY value source landed on it. Counting one field alone
+        # understates it -- the board itself falls back across these.
+        val = max(int(cov.get(k) or 0) for k in ('arv', 'rfval', 'zest'))
+        add('WARN' if val / shipped < 0.20 else 'PASS', 'shipped board · valued',
+            'best single value source covers %d/%d (%d%%)' % (val, shipped, round(val / shipped * 100)))
+
+
 def chk_committed_secrets():
     """No live access code may sit in a file git actually tracks.
 
@@ -467,6 +510,7 @@ def chk_clerk():
 def chk_rf():
     r = requests.get('https://www.miamidade.realforeclose.com/index.cfm', headers={'User-Agent': UA}, timeout=20)
     return (r.status_code == 200, f'auction site {r.status_code}')
+chk_shipped()
 chk_committed_secrets()
 
 ping('source · PA GIS (lookup)', chk_gis)
