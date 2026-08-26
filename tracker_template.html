@@ -13446,6 +13446,9 @@ window.addEventListener('message', function(ev){
       var _cq3 = _cq2.filter(function(x){ return x.c!==r.case; });
       if(_cq3.length !== _cq2.length) localStorage.setItem('fcCallQueue', JSON.stringify(_cq3));
     } catch(e){}
+    // ...and from the SYNCED queue marker, so the retire reaches every other device. Deleting
+    // n.wq cannot survive the add-only merge; the wqx tombstone can (see _mergeLead).
+    if(n.wq) n.wqx = _today();
     if(oc === 'appt'){
       // The single best outcome a dial can produce. Writing the status here is what makes the
       // scorecard's Appointments row move without leaving the worker — the exact gap Zuckerberg
@@ -13528,6 +13531,8 @@ window.addEventListener('message', function(ev){
       var _cqB = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
       localStorage.setItem('fcCallQueue', JSON.stringify(_cqB.filter(function(x){ return x.c!==r.case; })));
     } catch(e){}
+    // synced-marker retire too — a bad number must clear the lane on the phone, not just here
+    if(nb.wq) nb.wqx = _today();
     _wlog(r.case, 'skip', 'bad number '+bph+' recorded — queued for re-trace; lead re-enters when a new number lands', true);
     try {
       fetch('http://127.0.0.1:8823/retrace', {method:'POST', headers:{'Content-Type':'application/json'},
@@ -14859,6 +14864,13 @@ function _mergeLead(local, remote){
      (that is touches/optout/cooldown, all already merged above), so a stale remote value re-adding a
      `.wq` just-cleared elsewhere is cosmetic, not a compliance risk. */
   if(remote.wq && (!out.wq || remote.wq > out.wq)) out.wq = remote.wq;
+  /* `.wqx` is wq's RETIRE tombstone (found 2026-08-26): retiring used to DELETE .wq locally, but
+     this merge is add-only, so the other device's surviving .wq re-infected the queue on the very
+     next pull — a lead someone already worked reappeared in the phone lane after its cooldown.
+     A deletion cannot win an add-only merge; a newer tombstone can. workerQ() shows a case only
+     when wq is strictly newer than wqx, so re-queueing after a retire still works (new wq > old
+     wqx) and a same-day tie goes to the retire (worked today = not offered again today). */
+  if(remote.wqx && (!out.wqx || remote.wqx > out.wqx)) out.wqx = remote.wqx;
   /* DIALS: union, dedupe by (timestamp | last-4). Additive attempt record, NOT a contact record —
      autoLog deliberately collapses repeat same-outcome touches, so this is the only place a second
      "No answer" on the same lead the same morning survives. Dial-through is the number the whole

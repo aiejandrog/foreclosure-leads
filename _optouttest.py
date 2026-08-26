@@ -25,16 +25,29 @@ JS = r"""() => {
     o.funnelStage  = _funnelStage(r);                      // must be 'out'
     o.isOptedOut   = typeof _isOptedOut === 'function' ? _isOptedOut(n) : null;
     o.inView       = view().some(x => x.case === c);
-    // Visible is CORRECT (hideDead defaults off — you want to know the lead exists so you do not
-    // re-research it). What matters is that it is visibly MARKED, not silently normal.
-    o.rowMarked = (function(){
-      const tr = Array.from(document.querySelectorAll('tbody tr')).find(t => t.innerHTML.indexOf(c) > -1);
-      if(!tr) return 'row-not-rendered';
-      const t = tr.innerText.toUpperCase();
-      return (t.indexOf('DO NOT CONTACT') > -1 || t.indexOf('OPT') > -1 || t.indexOf('DNC') > -1) ? 'marked' : tr.innerText.slice(0,90);
-    })();
   }
   return o;
+}"""
+
+# Visible is CORRECT (hideDead defaults off — you want to know the lead exists so you do not
+# re-research it). What matters is that it is visibly MARKED, not silently normal.
+# SEPARATE PASS, driven through the board's own search box: the table lazy-renders (~124 rows of
+# ~1900), so scanning document rows finds nothing when the opted-out lead sorts deep — this check
+# spent a run FAILING with 'row-not-rendered' while the board was actually fine (verified
+# 2026-08-26: idx 1880 of 1898, 124 rendered; searched row renders AND carries the mark). The
+# guarantee we care about is "when a human LOOKS at this lead, it is marked" — searching is how
+# a human looks.
+JS_MARK = r"""(c) => {
+  const q = document.querySelector('#q,#search,input[type=search]');
+  if(!q) return 'no-search-box';
+  q.value = c; q.dispatchEvent(new Event('input', {bubbles:true}));
+  return 'typed';
+}"""
+JS_MARK2 = r"""(c) => {
+  const tr = Array.from(document.querySelectorAll('tbody tr')).find(t => t.innerHTML.indexOf(c) > -1);
+  if(!tr) return 'row-not-rendered-even-after-search';
+  const t = tr.innerText.toUpperCase();
+  return (t.indexOf('DO NOT CONTACT') > -1 || t.indexOf('OPT') > -1 || t.indexOf('DNC') > -1) ? 'marked' : tr.innerText.slice(0,90);
 }"""
 
 async def main():
@@ -46,6 +59,9 @@ async def main():
         errs=[]; pg.on('pageerror', lambda e: errs.append(str(e)))
         await pg.goto(SRC.as_uri()); await pg.wait_for_timeout(3000)
         d=await pg.evaluate(JS)
+        typed = await pg.evaluate(JS_MARK, d.get('case'))
+        await pg.wait_for_timeout(800)
+        d['rowMarked'] = (await pg.evaluate(JS_MARK2, d.get('case'))) if typed == 'typed' else typed
 
         rec('server ledger reached the page', d['ledgerN']>0, f"{d['ledgerN']} opt-out(s): {d['ledger']}")
         rec('the opted-out lead is on the board', d.get('leadFound'), d.get('case'))

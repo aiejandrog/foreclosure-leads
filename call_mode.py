@@ -1259,7 +1259,16 @@ async function boot(){
 function workerQ(){
   var s = {};
   try{ (JSON.parse(localStorage.getItem('fcCallQueue')||'[]')||[]).forEach(function(x){ s[x.c]=1; }); }catch(e){}
-  for(var k in notes){ if(k.charAt(0)!=='#' && notes[k] && notes[k].wq) s[k]=1; }
+  /* wqx = wq's retire TOMBSTONE (2026-08-26). The first fix DELETED .wq on retire, but _mergeLead
+     is add-only for wq — the other device's surviving copy re-infected this lane on the next pull,
+     so a lead someone had already worked came back as "queued" after its cooldown. A deletion
+     cannot win an add-only merge; a newer tombstone can. Show a case only when its wq is strictly
+     newer than any wqx: re-queueing later still works (new wq > old wqx), and a same-day tie goes
+     to the retire — worked today is not offered again today. */
+  for(var k in notes){
+    var n = notes[k];
+    if(k.charAt(0)!=='#' && n && n.wq && !(n.wqx && n.wqx >= n.wq)) s[k]=1;
+  }
   return Object.keys(s);
 }
 function retireFromWorkerQ(caseId){
@@ -1268,7 +1277,8 @@ function retireFromWorkerQ(caseId){
     var n = q.filter(function(x){ return x.c !== caseId; });
     if(n.length !== q.length) localStorage.setItem('fcCallQueue', JSON.stringify(n));
   }catch(e){}
-  if(notes[caseId] && notes[caseId].wq) delete notes[caseId].wq;
+  var nn = notes[caseId];
+  if(nn && nn.wq) nn.wqx = today();
 }
 /* CLIENT-SIDE SUPPRESSION — the read-back the first version was missing.
    Build-time filtering catches opt-outs and stays that existed when the page was BUILT. Everything
