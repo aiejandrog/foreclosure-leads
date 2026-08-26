@@ -11651,11 +11651,14 @@ function _renderCapBadge(){
   el.style.opacity = '';
   var cap = _capState();
   el.className = 'mcapbadge on' + (cap.blocked ? ' blocked' : (cap.warn ? ' warn' : ''));
-  el.textContent = cap.n + ' / ' + cap.max;
-  // Name the unit. "234 / 450" means nothing if you assume it counts messages and it is counting
-  // addresses — and recipients is the limit that stops the run first.
-  el.title = "today's " + cap.unit + ' — the ceiling the bridge will actually enforce'
-           + (cap.unit === 'recipients' ? ' (binds before the message cap; each send BCCs alternates)' : '');
+  // .disp, not .n/.max: those stay message-denominated for the worker's arithmetic (see _capState).
+  // The badge shows whichever ceiling is closest to its limit, because that is the one that will
+  // stop the run — and it NAMES the unit, since "400 / 450" is unreadable if you assume messages.
+  el.textContent = cap.disp.n + ' / ' + cap.disp.max;
+  el.title = "today's " + cap.disp.unit + ' — the ceiling the bridge will actually enforce'
+           + (cap.disp.unit === 'recipients'
+              ? ' (binds before the ' + cap.max + '-message cap; each send BCCs alternates)'
+              : ' · ' + cap.rcptN + '/' + (cap.rcptMax || '?') + ' recipients used');
 }
 try { _pollLiveCap(); setInterval(_pollLiveCap, 45000); } catch(e){}
 function _capState(){
@@ -11664,23 +11667,30 @@ function _capState(){
   // an offline-safe one, and the same behavior this always had before live polling existed.
   var live = !!(_liveCap && (Date.now()-_liveCapAt) < 120000);
   var n = live ? (_liveCap.sent_today||0) : _sentTodayCount();
-  var max = DAILY_MAX, warnAt = DAILY_WARN, unit = 'messages';
-  /* SHOW WHICHEVER CEILING ACTUALLY BINDS.
-     send_server enforces TWO limits, and its own comment says which one stops the run first:
-     daily_cap=300 messages, recipient_cap=450 ADDRESSES, and this board averages ~1.92 recipients
-     per message because every send BCCs the owner's alternates. 450/1.92 is ~234 messages — so the
-     server halts at ~234 while this badge still reads "234 / 300" and promises 66 more. The
-     operator plans the morning around a number that cannot happen, then the run stops early and
-     looks broken. The bridge already returns recipients_today/recipient_cap; nothing read them.
-     Report the limit closest to its ceiling, so the badge is the one the server will enforce. */
-  if(live && +_liveCap.recipient_cap > 0){
-    var rN = +_liveCap.recipients_today || 0, rMax = +_liveCap.recipient_cap;
-    if((rN / rMax) > (n / (max || 1))){
-      n = rN; max = rMax; warnAt = Math.round(rMax * (DAILY_WARN / (DAILY_MAX || 1))); unit = 'recipients';
-    }
-  }
-  return {n:n, left:Math.max(0, max-n), warn:n>=warnAt, blocked:n>=max,
-          warnAt:warnAt, max:max, live:live, unit:unit};
+  /* n / max STAY MESSAGE-DENOMINATED. The Morning Worker's own stop is `sentToday() >= CAP.max`,
+     and sentToday() counts MESSAGES — so putting a recipient ceiling in .max would compare a
+     message count against an address limit and let the run reach 450 MESSAGES, half again over
+     the message cap and roughly double the recipient cap. Anything reading .max is doing message
+     arithmetic; the recipient view is a separate field.
+
+     THE RECIPIENT CEILING IS THE ONE THAT ACTUALLY BINDS. send_server enforces daily_cap=300
+     messages AND recipient_cap=450 addresses, and its own comment says recipients stop the run
+     first, at ~234 messages, because every send BCCs the owner's alternates (~1.92 addresses per
+     message). The badge counted messages, so at 200 sent it read "200 / 300" and promised 100 more
+     while the server was 50 addresses from refusing. The bridge has always returned
+     recipients_today/recipient_cap; nothing read them. `.disp` is what the badge should show. */
+  var rN = live ? (+_liveCap.recipients_today || 0) : 0;
+  var rMax = live ? (+_liveCap.recipient_cap || 0) : 0;
+  var s = {n:n, left:Math.max(0, DAILY_MAX-n), warn:n>=DAILY_WARN, blocked:n>=DAILY_MAX,
+           warnAt:DAILY_WARN, max:DAILY_MAX, live:live,
+           rcptN:rN, rcptMax:rMax};
+  // blocked when EITHER ceiling is reached — the server refuses on either.
+  if(rMax && rN >= rMax) s.blocked = true;
+  var rWarnAt = rMax ? Math.round(rMax * (DAILY_WARN / (DAILY_MAX || 1))) : 0;
+  if(rMax && rN >= rWarnAt) s.warn = true;
+  s.disp = (rMax && (rN / rMax) > (n / (DAILY_MAX || 1)))
+    ? {n:rN, max:rMax, unit:'recipients'} : {n:n, max:DAILY_MAX, unit:'messages'};
+  return s;
 }
 /* ---- FL FTSA CALL WINDOW ---------------------------------------------------------------------
    Florida FTSA (FS 501.059) restricts telephonic solicitation to 8:00 AM – 8:00 PM local time of
