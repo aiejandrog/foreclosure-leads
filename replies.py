@@ -87,6 +87,64 @@ _STOP_OBJECT = re.compile(r'\s*(?:the|this|my|a|an)?\s*'
                           r'|it|this|that)\b', re.I)
 
 
+def _ledger_stops(found):
+    """Write every detected STOP straight into optouts.json. Returns (written, already_there).
+
+    THE TOOL THAT DETECTS THE STOP IS THE ONE THAT SHOULD RECORD IT. This used to print
+    "ACT ON THE STOP REPLIES FIRST: add them to optouts.json before any further contact" and leave
+    it to a person. The ledger's own audit trail shows what that costs — gil_sosa@hotmail.com wrote
+    "Please stop sending emails" on 2026-08-08, replies.py saw it, and the entry reads:
+
+        "Detected in replies.json 2026-08-12 but NOT ledgered until 2026-08-13
+         (5-day gap; see the reply->optout sync gap)"
+        optlog: [... {"act": "ledgered", "src": "manual sync from replies.json"}]
+
+    Five days of being contactable after asking us to stop, because the step was manual. The board
+    auto-suppresses case-keyed stops the moment it loads, but that only helps devices that reload,
+    and it cannot help the Python send/door/letter paths at all — those read optouts.json.
+
+    SAFETY-ONE-WAY, matching the ledger's existing rule: this only ADDS. An entry that already
+    exists is never rewritten, never downgraded, never cleared — so a hand-written note with more
+    context than we have here always survives.
+    """
+    p = os.path.join(HERE, 'optouts.json')
+    try:
+        raw = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
+    except Exception as e:
+        print(f'  !! optouts.json unreadable ({e}) — STOP replies NOT ledgered, do it by hand')
+        return 0, 0
+    envelope = isinstance(raw, dict) and isinstance(raw.get('notes'), dict)
+    notes = raw['notes'] if envelope else (raw if isinstance(raw, dict) else {})
+
+    now = datetime.now()
+    written = already = 0
+    for key, rec in found.items():
+        if not (isinstance(rec, dict) and rec.get('stop')):
+            continue
+        # keep BOTH shapes the ledger already uses: '@address' identity keys and bare case keys.
+        if key in notes:
+            already += 1
+            continue
+        notes[key] = {
+            'status': 'DO NOT CONTACT',
+            'optout': now.strftime('%Y-%m-%d'),
+            'note': ('OPT-OUT %s - auto-ledgered by replies.py from an inbound reply: "%s"'
+                     % (now.strftime('%Y-%m-%d %H:%M'), (rec.get('excerpt') or '')[:180])),
+            'optlog': [{'ts': now.strftime('%Y-%m-%d %H:%M'), 'act': 'opted-out',
+                        'src': 'email reply - STOP detected by replies.py'},
+                       {'ts': now.strftime('%Y-%m-%d %H:%M'), 'act': 'ledgered',
+                        'src': 'automatic (replies.py)'}],
+        }
+        written += 1
+    if written:
+        try:
+            json.dump(raw if envelope else notes, open(p, 'w', encoding='utf-8'), indent=1)
+        except Exception as e:
+            print(f'  !! could not write optouts.json ({e}) — {written} STOP(s) NOT ledgered')
+            return 0, already
+    return written, already
+
+
 def is_stop_text(text):
     """True when the writer is telling US to stop — not asking us to stop the foreclosure.
 
@@ -433,7 +491,13 @@ def main():
     print(f'\nreplies.json written — {replies} address(es) replied'
           + (f', {stops} contain a STOP word' if stops else ''))
     if stops:
-        print('  ACT ON THE STOP REPLIES FIRST: add them to optouts.json before any further contact.')
+        _ledgered, _already = _ledger_stops(found)
+        if _ledgered:
+            print(f'  {_ledgered} STOP repl(ies) written to optouts.json automatically'
+                  + (f' ({_already} already there)' if _already else ''))
+        else:
+            print(f'  {_already} STOP repl(ies) already on the opt-out ledger.')
+        print('  Review them, but they are already suppressed — no manual step is required.')
     print('Rebuild the board to surface them:  python -c "import json,foreclosure_leads as F;'
           ' F.make_tracker(json.load(open(\'leads_final.json\',encoding=\'utf-8\')))"')
 

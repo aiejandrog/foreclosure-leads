@@ -2425,7 +2425,17 @@ const SERVER_OPTOUTS = __OPTOUTS__;
     Object.keys(REPLIES).forEach(function(c){
       var rep = REPLIES[c] || {};
       if(!rep.stop) return;
-      if(String(c).charAt(0) === '@') return;   // REPLIES is indexed by case# AND '@email'; only case# is a lead
+      /* AN '@' KEY IS NOT A LEAD — BUT IT IS STILL A PERSON WHO SAID STOP.
+         Accepts identity keys as well as case keys. An '@' note is exactly the shape
+         _optedOutIdentities() reads, so writing one suppresses that person on every case carrying
+         the address — the right blast radius for "stop emailing me" from an address we cannot tie
+         to a single lead.
+         CURRENTLY INERT, deliberately kept: make_tracker now resolves '@'+address reply keys to
+         their case before baking (and drops ones matching no lead), so REPLIES reaching this board
+         carries case keys only — verified, zero '@' stop keys in the live build. This is the
+         belt to that braces. If the bake ever ships an identity key again, a stop on it suppresses
+         instead of being silently skipped, which is what used to happen. */
+      if(String(c).charAt(0) === '#') return;   // phone-keyed replies do not exist; guard anyway
       var n = notes[c] = notes[c] || {status:'', note:''};
       if(n.optout || String(n.status||'').toUpperCase() === 'DO NOT CONTACT') return;  // already suppressed
       n.optout = _today();
