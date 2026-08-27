@@ -565,6 +565,7 @@ def main():
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
 
     picked = []
+    md_retries = []          # previously-failed traces, retried within the run's budget
     skipped = {}
     for r in leads:
         case = r.get('Case #', '') or ''
@@ -580,9 +581,27 @@ def main():
                 skipped.setdefault(why, []).append(oc)
                 continue
         if a.cached_only and oc not in qs_cache: continue
-        if case in out and not a.case: continue                      # already traced (unless targeting it)
+        if case in out and not a.case:
+            # A FAILED trace is not a result. Miami-Dade cached conf 'none' FOREVER, so 259 of 370
+            # MD leads were frozen as "equity unverified" and the tracer reported nothing left to
+            # do — the same bug Broward fixed 2026-08-18 (broward_liens ~L474), which MD never got.
+            # It matters more here than it did there: MD returns 'none' when there is no FOLIO to
+            # isolate by (analyze(), ~L377), and stub_resolve.py now BACKFILLS folios — so a lead
+            # that legitimately failed last week can succeed today with no other change.
+            # Capped per run: a mint costs ~$0.003, so retries are bounded like fresh pulls.
+            if (out.get(case) or {}).get('conf') == 'none':
+                md_retries.append(r)
+            continue
         picked.append(r)
     if a.limit: picked = picked[:a.limit]
+    # append retries AFTER the fresh cap so new leads always win the budget
+    if md_retries:
+        room = max(0, (a.limit or len(picked) + 40) - len(picked))
+        take = md_retries[:min(room, 40)]
+        if take:
+            print(f"retrying {len(take)} previously-failed trace(s) of {len(md_retries)} "
+                  f"(folios backfilled since; a cached failure is not a result)")
+            picked += take
 
     cached = sum(1 for r in picked if (r.get('owner_clean','') or '').strip() in qs_cache)
     print(f"{len(picked)} lead(s) to pull ({cached} via cached token / requests, {len(picked)-cached} need a mint)")
