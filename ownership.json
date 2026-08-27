@@ -268,15 +268,15 @@
  "2025-004640-CA-01": {
   "title_status": "unverified",
   "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED â€” CHECK",
-  "title_evidence": "appraiser returned no current owner for the folio â€” VERIFY before contact",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
   "ts": "2026-08-27"
  },
  "2025-009489-CA-01": {
   "title_status": "unverified",
   "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED â€” CHECK",
-  "title_evidence": "appraiser returned no current owner for the folio â€” VERIFY before contact",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
   "ts": "2026-08-27"
  },
  "502022CA006893XXXXMB": {
@@ -303,8 +303,8 @@
  "502025CA002593XXXAMB": {
   "title_status": "unverified",
   "title_owner": "LUKASIK GAIL DRAKE",
-  "title_flag": "OWNERSHIP UNVERIFIED â€” CHECK",
-  "title_evidence": "live owner 'LUKASIK GAIL DRAKE' shares only a surname with the defendant 'DRAKE GARY EST' â€” verify it is the same household",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "live owner 'LUKASIK GAIL DRAKE' shares only a surname with the defendant 'DRAKE GARY EST' — verify it is the same household",
   "ts": "2026-08-27"
  },
  "502025CA004168XXXAMB": {
@@ -317,7 +317,7 @@
  "502025CA004474XXXAMB": {
   "title_status": "transferred",
   "title_owner": "ODARP CAPITAL LLC",
-  "title_flag": "OWNERSHIP CHANGED â€” VERIFY",
+  "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'ODARP CAPITAL LLC' is not the foreclosure defendant 'LUTHER TIFFANY'",
   "ts": "2026-08-27"
  },
@@ -345,7 +345,7 @@
  "502025CA011161XXXAMB": {
   "title_status": "transferred",
   "title_owner": "K & R DEVELOPMENT GROUP",
-  "title_flag": "OWNERSHIP CHANGED â€” VERIFY",
+  "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'K & R DEVELOPMENT GROUP' is not the foreclosure defendant 'LEE BRIAN'",
   "ts": "2026-08-27"
  },
@@ -359,8 +359,8 @@
  "502026CA000303XXXAMB": {
   "title_status": "unverified",
   "title_owner": "SOLOMON ROBIN & WEINSTEIN RONNI",
-  "title_flag": "OWNERSHIP UNVERIFIED â€” CHECK",
-  "title_evidence": "live owner 'SOLOMON ROBIN & WEINSTEIN RONNI' shares only a surname with the defendant 'SOLOMON MYRON EST' â€” verify it is the same household",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "live owner 'SOLOMON ROBIN & WEINSTEIN RONNI' shares only a surname with the defendant 'SOLOMON MYRON EST' — verify it is the same household",
   "ts": "2026-08-27"
  },
  "502026CA002350XXXAMB": {
@@ -436,8 +436,8 @@
  "CACE-18-023358": {
   "title_status": "unverified",
   "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED â€” CHECK",
-  "title_evidence": "appraiser returned no current owner for the folio â€” VERIFY before contact",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
   "ts": "2026-08-27"
  },
  "CACE-22-009441": {
@@ -471,8 +471,8 @@
  "CACE-24-013679": {
   "title_status": "unverified",
   "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED â€” CHECK",
-  "title_evidence": "appraiser returned no current owner for the folio â€” VERIFY before contact",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
   "ts": "2026-08-27"
  },
  "CACE-25-000980": {
@@ -520,8 +520,8 @@
  "CACE-25-016631": {
   "title_status": "unverified",
   "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED â€” CHECK",
-  "title_evidence": "appraiser returned no current owner for the folio â€” VERIFY before contact",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
   "ts": "2026-08-27"
  },
  "CACE-25-018445": {
@@ -534,8 +534,8 @@
  "CACE-26-001036": {
   "title_status": "unverified",
   "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED â€” CHECK",
-  "title_evidence": "appraiser returned no current owner for the folio â€” VERIFY before contact",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
   "ts": "2026-08-27"
  },
  "502025CA003828XXXAMB": {
