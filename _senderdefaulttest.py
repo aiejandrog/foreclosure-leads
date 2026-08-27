@@ -44,7 +44,18 @@ with sync_playwright() as p:
     rec('Fresh device prefills name/company/phone', s1['name']=='Alejandro Gonzalez' and s1['llc']==CO and s1['phone']=='(786) 631-1823', str(s1))
 
     # the generated email actually carries all three (no [YOUR NAME]/[YOUR COMPANY]/[YOUR PHONE] left)
-    case = pg1.evaluate("() => { const r=DATA.find(x=>x.case && x.case.length>3); return r.case; }")
+    # PICK A LEAD THAT CAN ACTUALLY PRODUCE AN EMAIL. This took the first lead with a case
+    # number, which today is under an active §362 BANKRUPTCY STAY — so genEmail correctly refused
+    # to compose and returned the suppression notice instead. No email means no identity block,
+    # so all three identity checks failed while the sender prefill and genEmail were both working
+    # exactly as designed. Use the same gate genEmail uses (_textContactBlocked) so the fixture is
+    # a lead the composer will actually serve.
+    case = pg1.evaluate("""() => {
+      const D=(typeof DATA!=='undefined')?DATA:[];
+      const ok = (typeof _textContactBlocked==='function') ? (r => !_textContactBlocked(r)) : (() => true);
+      const r = D.find(x => x.case && x.case.length>3 && ok(x));
+      return r ? r.case : null;
+    }""")
     with pg1.context.expect_page() as pop:
         pg1.evaluate("(c)=>{ genEmail(DATA.find(x=>x.case===c)); }", case)
     ep = pop.value; ep.wait_for_load_state('domcontentloaded')
