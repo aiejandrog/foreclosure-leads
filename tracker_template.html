@@ -2290,8 +2290,13 @@ body.compact .dg-v{font-size:14.5px}
 <div class="tblwrap">
 <table id="tbl">
 <colgroup>
-<!-- 12 cols for 12 columns — the Photo col was missing, shifting every width one column left -->
-<col style="width:172px"><col style="width:44px"><col style="width:150px"><col style="width:50px"><col style="width:106px"><col style="width:78px"><col style="width:210px"><col style="width:230px"><col style="width:200px"><col style="width:280px"><col style="width:130px"><col style="width:150px">
+<!-- ONE <col> PER <th>, and the count is asserted in _gallerytest. This carried 12 widths for
+     11 headers after the 07-25 consolidation dropped a column: browsers map <col> positionally
+     and ignore the extra, so nothing looked wrong — but the next person to add a column would
+     have inherited a silent one-column width shift, which is the exact bug the old comment here
+     was written about. Photo, Tier, Est.Profit, Score, Auction, Type, Owner/Case, Property,
+     Mailing, Status, Notes = 11. -->
+<col style="width:172px"><col style="width:44px"><col style="width:150px"><col style="width:50px"><col style="width:106px"><col style="width:78px"><col style="width:210px"><col style="width:230px"><col style="width:200px"><col style="width:280px"><col style="width:130px">
 </colgroup>
 <thead><tr>
 <th>Photo</th>
@@ -14868,7 +14873,13 @@ function _nbWarn(msg){
       if(msg){ el.textContent = '⚠ ' + msg; el.style.display = 'block'; }
       else { el.style.display = 'none'; }
     }
-    if(msg && typeof console !== 'undefined') console.error('[notes-bridge] ' + msg);
+    // console.WARN, not error. This is advisory ("your other device holds more notes than this
+    // tab — sync before working"), it is expected on any fresh browser, and it fires on a 5s
+    // timer. Logged as console.error it made "no console errors" FAIL in three suites for a
+    // perfectly healthy page — so those checks got dismissed as flaky, which is precisely how a
+    // real error would have sailed through unnoticed. An error means something is broken; this
+    // means something needs syncing. The on-page #nbwarn banner is unchanged.
+    if(msg && typeof console !== 'undefined') console.warn('[notes-bridge] ' + msg);
   }catch(e){}
 }
 function notesBridgePushSoon(){ clearTimeout(_nbTimer); _nbTimer = setTimeout(notesBridgePush, 5000); }

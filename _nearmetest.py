@@ -301,9 +301,22 @@ async def main():
         rec('B: no-street-number lead excluded', not B['hasNoStreet'], B['testCases'])
         # Distances non-decreasing
         dists = B['distances']
-        rec('B: results sorted by distance ascending',
-            all(dists[i] <= dists[i+1] + 0.001 for i in range(len(dists)-1)),
-            dists[:6])
+        # Report the VIOLATION, not the first 6 values. This printed dists[:6] — which was
+        # perfectly ascending — so a genuine out-of-order pair further down read as "the sort is
+        # broken but here is a correct-looking list", and the failure was dismissed as flaky for
+        # weeks. A red test has to say what is wrong, or it trains you to ignore it.
+        # TOLERANCE MUST MATCH THE COMPARATOR. _nearMeRun sorts with a deliberate 0.05-mile band
+        # in which a real house outranks a condo unit ("a unit number is a lobby buzzer behind a
+        # locked door, not a knockable door"). Asserting 0.001 therefore called a CORRECT sort
+        # broken — a 0.019-mile house/unit swap at index 6 — and contradicted this file's very
+        # next assertion, which requires exactly that swap. Same 0.05 as the code, so a real
+        # ordering bug still fails while the intended tie-break passes.
+        _bad = [(i, dists[i], dists[i+1]) for i in range(len(dists)-1)
+                if dists[i] > dists[i+1] + 0.05]
+        rec('B: results sorted by distance ascending', not _bad,
+            ('OK %d results' % len(dists)) if not _bad else
+            ('%d break(s), first at index %d: %.3f then %.3f (of %d)'
+             % (len(_bad), _bad[0][0], _bad[0][1], _bad[0][2], len(dists))))
         # Tie-break: house before unit
         rec('B: tie-break puts HOUSE before UNIT at similar distance',
             B['tieOrder'] == ['NM-T-HOUSE', 'NM-T-UNIT'] or B['tieOrder'][:1] == ['NM-T-HOUSE'],
