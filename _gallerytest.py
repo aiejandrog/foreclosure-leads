@@ -12,6 +12,10 @@ threading.Thread(target=srv.serve_forever, daemon=True).start()
 
 R=[]
 def rec(n, ok, d=''): R.append(ok); print((('  PASS ' if ok else '  FAIL ')+n+(' | '+d if d else '')).encode('ascii','replace').decode('ascii'))
+# SKIP is not PASS. It records nothing, so a skipped check can never pad the score — it prints the
+# reason and stays out of the tally. Used where live data, not the code, decides whether the case
+# under test even exists today.
+def skip(n): print(('  SKIP ' + n).encode('ascii','replace').decode('ascii'))
 
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True); ctx = b.new_context(viewport={'width':1500,'height':1000})
@@ -47,8 +51,32 @@ with sync_playwright() as p:
         pg.wait_for_function("""() => [...document.querySelectorAll('.pcell img:not([loading])')].every(i =>
           (i.complete && i.naturalWidth>0) || ((i.closest('.pthumb')||{classList:{contains:()=>false}}).classList.contains('imgfail')))""", timeout=20000)
     except Exception: pass
-    eager = pg.evaluate("() => { const e=[...document.querySelectorAll('.pcell img:not([loading])')]; return {n:e.length, loaded:e.filter(i=>i.complete&&i.naturalWidth>0).length}; }")
-    rec('Above-the-fold thumbnails eager-load real pixels', eager['n']>0 and eager['loaded']==eager['n'], str(eager))
+    # ASSERT THE RULE, NOT TODAY'S SORT ORDER. This required at least one eager <img> to exist,
+    # which silently assumed the top rows carry photos. They need not: 633 of 1,940 leads have a
+    # photo, but the default sort (tier/profit) put ZERO of them in the first 14 rows today — so
+    # the check failed while the eager-loading code was perfectly correct and simply had nothing
+    # to load. The real invariant is the RULE: a thumbnail above the fold must be eager (no
+    # loading attr), one below it must be lazy, and any eager image must actually decode.
+    eager = pg.evaluate("""() => {
+      const rows=[...document.querySelectorAll('#tbl tbody tr')];
+      const imgOf=tr=>{const c=tr.querySelector('.pcell'); return c?c.querySelector('img'):null;};
+      const top=rows.slice(0,14).map(imgOf).filter(Boolean);
+      const below=rows.slice(14).map(imgOf).filter(Boolean);
+      return {topImgs:top.length,
+              topEager:top.filter(i=>!i.hasAttribute('loading')).length,
+              topLoaded:top.filter(i=>i.complete&&i.naturalWidth>0).length,
+              belowImgs:below.length,
+              belowLazy:below.filter(i=>i.getAttribute('loading')==='lazy').length};
+    }""")
+    if eager['topImgs'] == 0:
+        skip('Above-the-fold eager rule (no lead in the top 14 rows has a photo today)')
+    else:
+        rec('Above-the-fold thumbnails are eager and decode',
+            eager['topEager'] == eager['topImgs'] and eager['topLoaded'] == eager['topImgs'], str(eager))
+    if eager['belowImgs'] == 0:
+        skip('Below-the-fold lazy rule (no thumbnails past row 14)')
+    else:
+        rec('Below-the-fold thumbnails stay lazy', eager['belowLazy'] == eager['belowImgs'], str(eager))
 
     # 4) clicking a thumbnail opens the gallery with an image + a View-on-Zillow button
     c = pg.evaluate("() => { const r=DATA.find(x=>(x.photos||[]).length); return r?r.case:null; }")
