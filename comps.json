@@ -30346,5 +30346,425 @@
 "psf": 295
 }
 ]
+},
+"COCE-25-047212": {
+"arv": 333700,
+"psf": 260.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "880 B SW 80 AVE",
+"price": 400000,
+"yr": 2025,
+"sqft": 1589,
+"psf": 252
+},
+{
+"addr": "7600 SW 8 CT",
+"price": 390000,
+"yr": 2025,
+"sqft": 1451,
+"psf": 269
+},
+{
+"addr": "7940 SW 5 ST",
+"price": 320000,
+"yr": 2025,
+"sqft": 1184,
+"psf": 270
+}
+]
+},
+"CONO-26-046833": {
+"arv": 642600,
+"psf": 262.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "8650 NW 56 ST",
+"price": 775000,
+"yr": 2025,
+"sqft": 2916,
+"psf": 266
+},
+{
+"addr": "5325 NW 84 WAY",
+"price": 730000,
+"yr": 2025,
+"sqft": 2820,
+"psf": 259
+},
+{
+"addr": "5316 NW 98 WAY",
+"price": 680000,
+"yr": 2025,
+"sqft": 2534,
+"psf": 268
+}
+]
+},
+"COWE-24-017753": {
+"arv": 716224,
+"psf": 304.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "18778 SW 28 ST",
+"price": 605000,
+"yr": 2025,
+"sqft": 1983,
+"psf": 305
+},
+{
+"addr": "2734 SW 179 TER",
+"price": 625000,
+"yr": 2025,
+"sqft": 2065,
+"psf": 303
+},
+{
+"addr": "2396 SW 183 TER",
+"price": 900000,
+"yr": 2025,
+"sqft": 2995,
+"psf": 301
+}
+]
+},
+"COWE-25-015279": {
+"arv": 469490,
+"psf": 266.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "8530 NW 47 ST",
+"price": 510000,
+"yr": 2025,
+"sqft": 1939,
+"psf": 263
+},
+{
+"addr": "4648 NW 90 AVE",
+"price": 385000,
+"yr": 2025,
+"sqft": 1429,
+"psf": 269
+},
+{
+"addr": "9504 NW 46 ST",
+"price": 625000,
+"yr": 2025,
+"sqft": 2284,
+"psf": 274
+}
+]
+},
+"CACE-19-002281": {
+"arv": 3015608,
+"psf": 472.0,
+"n": 12,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1227 JACKSON ST",
+"price": 2190200,
+"yr": 2024,
+"sqft": 4465,
+"psf": 491
+},
+{
+"addr": "1020 S SOUTHLAKE DR",
+"price": 1720000,
+"yr": 2024,
+"sqft": 3794,
+"psf": 453
+},
+{
+"addr": "930 JEFFERSON ST",
+"price": 1880000,
+"yr": 2024,
+"sqft": 4245,
+"psf": 443
+}
+]
+},
+"CACE-23-022698": {
+"arv": 776160,
+"psf": 294.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "5209 ARTHUR ST",
+"price": 570000,
+"yr": 2025,
+"sqft": 2058,
+"psf": 277
+},
+{
+"addr": "905 N 40 AVE",
+"price": 550000,
+"yr": 2025,
+"sqft": 1770,
+"psf": 311
+},
+{
+"addr": "3920 HAYES ST",
+"price": 502500,
+"yr": 2025,
+"sqft": 1827,
+"psf": 275
+}
+]
+},
+"CACE-25-011073": {
+"arv": 394602,
+"psf": 284.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "3446 NW 79 WAY",
+"price": 502500,
+"yr": 2025,
+"sqft": 1767,
+"psf": 284
+},
+{
+"addr": "6657 HIDDEN COVE DR",
+"price": 419000,
+"yr": 2025,
+"sqft": 1471,
+"psf": 285
+},
+{
+"addr": "6543 HIDDEN COVE DR",
+"price": 425000,
+"yr": 2025,
+"sqft": 1471,
+"psf": 289
+}
+]
+},
+"CACE-25-017831": {
+"arv": 518816,
+"psf": 261.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "9407 NW 81 CT",
+"price": 410000,
+"yr": 2025,
+"sqft": 1557,
+"psf": 263
+},
+{
+"addr": "7661 NW 88 LN",
+"price": 480000,
+"yr": 2025,
+"sqft": 1845,
+"psf": 260
+},
+{
+"addr": "8114 NW 94 LN",
+"price": 465000,
+"yr": 2025,
+"sqft": 1804,
+"psf": 258
+}
+]
+},
+"502026CC002072XXXASB": {
+"arv": 295052,
+"psf": 259.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "3930 VILLAGE DR B",
+"price": 335000,
+"yr": 2025,
+"sqft": 1320,
+"psf": 254
+},
+{
+"addr": "4005 VILLAGE DR B",
+"price": 350000,
+"yr": 2025,
+"sqft": 1320,
+"psf": 265
+},
+{
+"addr": "3710 VILLAGE DR C",
+"price": 355000,
+"yr": 2025,
+"sqft": 1326,
+"psf": 268
+}
+]
+},
+"502025CA009535XXXAMB": {
+"arv": 453330,
+"psf": 219.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1919 STRATFORD WAY",
+"price": 296000,
+"yr": 2025,
+"sqft": 1362,
+"psf": 217
+},
+{
+"addr": "4399 WILLOW POND CIR",
+"price": 255000,
+"yr": 2025,
+"sqft": 1153,
+"psf": 221
+},
+{
+"addr": "4267 WILLOW BROOK CIR",
+"price": 251000,
+"yr": 2025,
+"sqft": 1216,
+"psf": 206
+}
+]
+},
+"502026CC006485XXXAWB": {
+"arv": 546288,
+"psf": 304,
+"n": 13,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "6160 ROYAL BIRKDALE DR",
+"price": 645000,
+"yr": 2025,
+"sqft": 2122,
+"psf": 304
+},
+{
+"addr": "5997 LAS COLINAS CIR",
+"price": 555000,
+"yr": 2025,
+"sqft": 1813,
+"psf": 306
+},
+{
+"addr": "6292 BARTON CREEK CIR",
+"price": 560000,
+"yr": 2025,
+"sqft": 1873,
+"psf": 299
+}
+]
+},
+"502024CA007481XXXAMB": {
+"arv": 283662,
+"psf": 229.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "1720 FOREST LAKES CIR D",
+"price": 273500,
+"yr": 2025,
+"sqft": 1236,
+"psf": 221
+},
+{
+"addr": "3803 VICTORIA DR",
+"price": 290000,
+"yr": 2025,
+"sqft": 1218,
+"psf": 238
+},
+{
+"addr": "154 SPRINGDALE CIR",
+"price": 283000,
+"yr": 2025,
+"sqft": 1183,
+"psf": 239
+}
+]
+},
+"502025CA011130XXXAMB": {
+"arv": 578700,
+"psf": 321.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "2634 FAIRWAY COVE CT",
+"price": 599000,
+"yr": 2025,
+"sqft": 1866,
+"psf": 321
+},
+{
+"addr": "2688 YARMOUTH DR",
+"price": 670000,
+"yr": 2025,
+"sqft": 2082,
+"psf": 322
+},
+{
+"addr": "12971 BUCKLAND CT",
+"price": 725000,
+"yr": 2025,
+"sqft": 2248,
+"psf": 323
+}
+]
+},
+"502025CA009185XXXAMB": {
+"arv": 283814,
+"psf": 215.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "120 SW 10TH ST",
+"price": 299999,
+"yr": 2025,
+"sqft": 1358,
+"psf": 221
+},
+{
+"addr": "1312 SW 18TH CT",
+"price": 300000,
+"yr": 2025,
+"sqft": 1428,
+"psf": 210
+},
+{
+"addr": "2392 SW 13TH TER",
+"price": 275000,
+"yr": 2025,
+"sqft": 1317,
+"psf": 209
+}
+]
 }
 }
