@@ -17,6 +17,31 @@ Jesse's manual method, and where each tell lives:
       association's OWN case. This is the cheapest early warning we have.  -> hoa_codefendant()
   #4  A recent sale on a distressed property is a RED FLAG, not a comp.   -> RECENT_SALE flag
 
+WHY THIS EXISTS, PART TWO (Sisavath, 2026-08-26 — the OTHER way to burn a closer)
+Milouse was "the owner is already gone". Sisavath is "the equity was never there".
+Case 502024CA010265XXXAMB, 4118 41st Way, West Palm Beach. She paid $315,000 on 8/31/2023; the
+house is worth roughly $273,683 today. Her board row carries value $225,675 and judg $20,323.36 —
+and that judgment is the HOA'S, not the mortgage. The ~$298,000 first and the HUD partial claim
+recorded 7/2/2024 appear in NO field of that row. So the board did the only arithmetic available to
+it ($225,675 - $20,323) and printed 91% equity, about $205,351 of it. `eqfake` was ALREADY True:
+this repo had already concluded the number was phantom, and the entire consequence of that flag was
+a letter painted on a card. A closer pitched the 91% anyway.
+
+Three more tells, each of which stops that call on its own:
+  #5  Debt the row can actually see >= the value it prints.       -> UNDERWATER flag (critical)
+      Not an equity deal. Nobody pitches one.
+  #6  They paid at or above today's value, recently. Equity is    -> PURCHASE_ANCHOR flag (high)
+      then arithmetically impossible whatever the equity field says.
+  #7  eqfake means OUR OWN BOARD says the equity number is a      -> EQ_UNRELIABLE flag (high)
+      gross upper bound. That has to stop a human, not decorate a card.
+
+AND THE STRUCTURAL BUG THE THREE OF THEM EXPOSED
+The old is_hold() asked needs_deep_dive() first and returned False when the answer was no. But
+deep_dive_reason() returns '' on an eqfake row BY DESIGN (L~510) — so the exact rows this repo has
+already judged untrustworthy were the rows the gate refused to look at. Hold/release now lives in
+contact_gate(), which reads the DATA, not the dive. is_hold() is a thin wrapper over it so there is
+one policy and it cannot drift.
+
 SCOPE / CONTRACT
   * PURE DATA IN, DATA OUT. No network, no file writes, no imports beyond the stdlib.
     The live check already exists and lives in ownership_gate.py / ownership_scan.py.
@@ -343,6 +368,80 @@ def owner_equity(row):
 
 
 # --------------------------------------------------------------------------------------------
+# SISAVATH TELL #5 — every dollar of debt THIS ROW can actually see
+# --------------------------------------------------------------------------------------------
+# The recorded-chain fields, baked onto slim by foreclosure_leads._fwd_flags (~L850) and the
+# records_liens / batchdata_liens merge (~L1704, ~L1907). They are absent on the raw county files,
+# which is exactly why Sisavath's $298k first was invisible: the ONLY debt figure on her row was an
+# HOA judgment of $20,323, and 225,675 - 20,323 is a very convincing 91%.
+_CHAIN_DEBT_KEYS = ('orsurvsen', 'orsurvfirst', 'orsurv', 'orjunior', 'orjuniors')
+
+
+def known_debt_of(row):
+    """Total debt this row can see, WITH provenance. Never raises.
+
+      {'total': float, 'parts': [{'usd','kind','label'}], 'indicative': bool, 'how': str}
+      kind: 'judgment' (court figure) | 'principal' (recorded, original) | 'balance' (estimated)
+
+    WHY IT TAKES max() OVER THE CHAIN FIELDS AND NOT sum()
+    foreclosure_leads._senior_surviving (L817) documents that the three chain engines disagree about
+    what `surv` holds — records_liens/broward_liens put seniors+juniors in it, BatchData puts seniors
+    only — and that the board double-subtracted one against the other and erased an entire $811,577
+    first mortgage to $0 on 502024CA012300XXXAMB. `orjunior` and `orsurv` are literally assigned the
+    same sum in records_liens.py:494. Adding these fields together INVENTS debt; taking the largest
+    single figure under-counts it. UNDERWATER is critical and it kills a pitch, so it takes the
+    under-count: it only fires when even the smallest defensible read of the debt swallows the value.
+
+    WHY 'indicative' EXISTS — the repo's hard rule: A RECORDED PRINCIPAL IS NOT A PAYOFF
+    Official Records gives us the number written on the mortgage the day it was signed
+    (records_liens.py:410 reads 'amt' straight off the instrument). Years of payments have moved it
+    and nothing in this file knows by how much. BatchData ships a current estimated BALANCE instead
+    (batchdata_liens.py:108 'bal', stamped orconf='bd'). A final judgment is a court figure as of the
+    judgment date and only grows from there under FS 55.03. So this total is a DIRECTION, not a
+    quote, and any flag built on it has to say which figure it used and stop short of asserting a
+    payoff. That is the difference between "this is not an equity deal" (true, sayable) and
+    "you owe $298,000" (a number we do not have).
+
+    Deliberately NOT counted: orhoa / orcode. When our case IS the association's or the city's, the
+    judgment already IS that lien and counting both would double it — the same class of mistake as
+    summing the chain fields.
+    """
+    try:
+        r = _d(row)
+        parts = []
+        # A judgment we cannot read is not a debt figure, it is a blank. `ju` / judgment_unknown is
+        # the repo's own marker for that, and asserting UNDERWATER off a blank would be a fresh lie.
+        unknown = bool(r.get('ju') or r.get('judgment_unknown'))
+        owed = owner_owed_of(r)
+        if owed > 0 and not unknown:
+            td = _s(r.get('st')).upper() == 'TD'
+            parts.append({
+                'usd': owed, 'kind': 'judgment',
+                'label': (('the $%s opening bid' if td else
+                           'the $%s judgment/payoff on the foreclosing case')
+                          % format(int(owed), ','))})
+        chain, conf = 0.0, _s(r.get('orconf')).lower()
+        for k in _CHAIN_DEBT_KEYS:
+            v = _n(r.get(k))
+            if v > chain:
+                chain = v
+        if chain > 0:
+            bal = (conf == 'bd')
+            parts.append({
+                'usd': chain, 'kind': 'balance' if bal else 'principal',
+                'label': (('an estimated $%s still open on the recorded mortgage chain' if bal else
+                           'a $%s mortgage on the recorded chain (ORIGINAL PRINCIPAL off the '
+                           'instrument — not a payoff)')
+                          % format(int(chain), ','))})
+        total = round(sum(p['usd'] for p in parts), 2)
+        return {'total': total, 'parts': parts,
+                'indicative': any(p['kind'] == 'principal' for p in parts),
+                'how': ' + '.join(p['label'] for p in parts)}
+    except Exception:
+        return {'total': 0.0, 'parts': [], 'indicative': False, 'how': ''}
+
+
+# --------------------------------------------------------------------------------------------
 # (1) TELL #3 — the HOA / association co-defendant
 # --------------------------------------------------------------------------------------------
 def _party_names(row):
@@ -570,6 +669,31 @@ def risk_flags(row):
                 'of title%s. This property belongs to a third party.' % ((' (%s)' % sib) if sib else ''),
                 'Stop. Nothing to sell, nobody to help.', sib))
 
+        # ---- UNDERWATER — Sisavath tell #5. The debt the row can SEE already eats the value.
+        # Fires with no reference to `dive`, on purpose: the dive gate is the thing that waved
+        # Sisavath through. A lead whose known debt exceeds its value is not a deep dive we owe, it
+        # is a pitch that must not happen, and that is true whether or not anyone calls it "equity".
+        basis = basis_of(r)
+        debt = known_debt_of(r)
+        if basis > 0 and debt['total'] > 0 and debt['total'] >= basis:
+            out.append(_flag(
+                'UNDERWATER', SEV_CRITICAL,
+                'Known debt of $%s is at or above the $%s this row calls the value — the owner is '
+                'underwater by about $%s. There is no equity position here to buy and none to pitch. '
+                'Counted: %s.%s'
+                % (format(int(debt['total']), ','), format(int(basis), ','),
+                   format(int(max(0.0, debt['total'] - basis)), ','), debt['how'],
+                   (' This comparison is INDICATIVE, not a payoff — a recorded principal is the '
+                    'amount written on the instrument the day it was signed, and nothing here knows '
+                    'what has been paid down since. It is enough to stop an equity pitch; it is not '
+                    'enough to quote.' if debt['indicative'] else
+                    ' The judgment figure grows with statutory interest (FS 55.03), so the real debt '
+                    'is this or larger, never smaller.')),
+                'Do not say an equity number out loud. Order the real payoff / reinstatement figure '
+                'in writing first. If the debt holds up, the conversation is a short sale or a '
+                'modification — Sisavath was pitched an equity deal on a house whose $20,323 '
+                'judgment was the HOA\'s, with a ~$298,000 first and a HUD partial claim behind it.'))
+
         # ---- HOA_CODEFENDANT — Jesse's tell #3, the cheap early warning
         assns = hoa_parties(r)
         if assns and not plaintiff_is_assn(r):
@@ -627,6 +751,79 @@ def risk_flags(row):
                     'Confirm the equity is real against the recorded mortgage amount, not against '
                     'the county roll value.'))
 
+        # ---- PURCHASE_ANCHOR — Sisavath tell #6. What they PAID beats what we ESTIMATE.
+        # RECENT_SALE (above) says "a fresh sale is suspicious". This says something harder and
+        # arithmetic: they paid at or above what this row thinks the house is worth, so there is no
+        # room for equity no matter what the equity field prints. Sisavath: $315,000 in Aug 2023,
+        # worth about $273,683 — and the board still showed 91%.
+        # WINDOW: reuses RECENT_SALE_YEARS deliberately rather than inventing a number. The purchase
+        # price only anchors while little principal has been paid down; past that the two facts drift
+        # apart and this stops being evidence. An older overpay is a real hole this does not cover —
+        # say that out loud rather than pretending the window is a conclusion.
+        # STRICTLY BEFORE THE FILING (sy < cy), and that is not fussiness. A sale recorded in or
+        # after the filing year is at least as likely to be a certificate of title, a tax deed or a
+        # rescue-scam transfer as a purchase — measured on the live board, the only such row is
+        # 2026A00257 at "$4,200,000" against a $2,205,000 value. Calling that "the owner paid" would
+        # print a fabrication in a closer's voice, which is the exact failure this file exists to
+        # stop. RECENT_SALE already carries that case at SEV_HIGH and says the true thing about it.
+        px = _n(_first(r, 'bprice', 'last_sale_price', 'sale_price'))
+        if px > 0 and basis > 0 and sy and cy and sy < cy and (cy - sy) <= RECENT_SALE_YEARS \
+                and px >= basis:
+            out.append(_flag(
+                'PURCHASE_ANCHOR', SEV_HIGH,
+                'The owner paid $%s for this in %d — at or above the $%s this row calls today\'s '
+                'value. You cannot buy at or above market, hold it %d year(s), and have meaningful '
+                'equity. Whatever number the equity field shows was computed against the county roll '
+                'and one judgment, not against what this owner actually owes.'
+                % (format(int(px), ','), sy, format(int(basis), ','), max(0, cy - sy)),
+                'Treat the equity on this row as fiction until the recorded mortgage says otherwise. '
+                'Pull the deed AND the mortgage at %s — the purchase price tells you roughly what '
+                'they borrowed; the roll value tells you nothing about it.'
+                % (links['records'] or 'the county official records')))
+
+        # ---- EQ_UNRELIABLE — Sisavath tell #7. Our own board already called this number a lie.
+        # eqfake is set upstream when the equity read is a gross upper bound: an HOA/junior case with
+        # a first mortgage still standing, an individual plaintiff, a judgment too small to be the
+        # real debt. Until now it did two things: skip the deep dive (deep_dive_reason L~510) and
+        # paint a letter on a card. Skipping the dive is correct — there is nothing to verify about a
+        # number we already know is wrong — but it silently doubled as PERMISSION TO CALL, because
+        # the old is_hold() short-circuited on the dive. Sisavath's row carried eqfake AND 91%.
+        # GUARD: only fires where the row is actually SHOWING an equity number a human could pitch.
+        # An eqfake row with no value and no judgment (most of lp_leads.json) claims nothing, so
+        # there is nothing to be wrong about and nothing to hold.
+        if r.get('eqfake') or r.get('eq_fake'):
+            hd_pct = _n(_first(r, 'eq', 'equity_pct'))
+            hd_usd = _n(_first(r, 'equity'))
+            c_usd, c_pct = owner_equity(r)
+            if hd_pct > 0 or hd_usd > 0 or c_usd > 0:
+                # 'eq' is OVERLOADED: a percent on the county rows (Sisavath carries eq 91) and raw
+                # DOLLARS on lp_leads (2026-015820-CA-01 carries eq 344139 against judg 0). Equity
+                # cannot exceed 100% of the basis, so a headline over 100 is a dollar figure wearing
+                # a percent's key name. Render from owner_equity() wherever it can be computed so a
+                # closer never reads "344139%" off this sentence.
+                if c_usd > 0:
+                    shown = '$%s (%d%%)' % (format(int(c_usd), ','), round(c_pct))
+                elif 0 < hd_pct <= 100:
+                    shown = '%d%%' % round(hd_pct)
+                else:
+                    shown = '$%s' % format(int(hd_usd or hd_pct), ',')
+                out.append(_flag(
+                    'EQ_UNRELIABLE', SEV_HIGH,
+                    'This row is flagged eqfake — WE have already concluded its equity number is a '
+                    'gross upper bound — and it is still showing %s.%s Sisavath\'s row said eqfake '
+                    'and 91%% at the same time; the 91%% got pitched, and the first mortgage behind '
+                    'it was about $298,000 on a house worth roughly $273,683.'
+                    % (shown,
+                       (' Note the shape here: the judgment on this row is $0, so that figure is not '
+                        'equity computed against the wrong debt — it is the whole value with NO debt '
+                        'subtracted at all, because none has been captured yet.'
+                        if owner_owed_of(r) <= 0 else
+                        ' The board already knows the debt figure on this lead is not the real debt.')),
+                    'Do not quote equity, a spread, or a payoff on this lead. Find the senior debt '
+                    'first: the recorded mortgage chain at %s, then the payoff in writing. If the '
+                    'equity survives that, it becomes a real lead — before that it is a guess with a '
+                    'dollar sign on it.' % (links['records'] or 'the county official records')))
+
         # ---- HIGH_EQUITY_UNVERIFIED — big money, no live title read
         if dive and ts != 'clear' and ts != 'transferred':
             usd, pct = owner_equity(r)
@@ -660,19 +857,106 @@ def severity_of(row):
         return ''
 
 
+# --------------------------------------------------------------------------------------------
+# THE HOLD / RELEASE DECISION — one policy, one call, no drift
+# --------------------------------------------------------------------------------------------
+# TWO CLASSES, and the split IS the lesson from the two incidents.
+#
+# _HOLD_ALWAYS — these never ask whether the lead "earned" a deep dive, because the deep-dive gate
+#   is precisely what let Sisavath through. deep_dive_reason() returns '' on an eqfake row by design,
+#   so needs_deep_dive() was False, so the old is_hold() returned False on its second line and never
+#   read a single flag. Everything in this tuple fires on the DATA.
+# _HOLD_ON_DIVE — unchanged from the Milouse build. These are "verify before you contact" questions
+#   about a lead that DOES show a real equity position; on a lead with no equity position there is
+#   nothing being sold and nothing to get wrong, so they stay dive-gated exactly as before.
+#
+# Nothing was removed from either list. A code that held before still holds.
+_HOLD_ALWAYS = ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
+                'EQ_UNRELIABLE')
+_HOLD_ON_DIVE = ('HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED', 'PARTIES_UNAVAILABLE')
+
+
+def contact_gate(row):
+    """HOLD or RELEASE for ONE lead, with the reason. This is THE call for every contact path —
+    door route, call sheet, call mode, cold email, cadence enrolment, letters, the team sheet.
+
+    Returns (never None, never raises):
+      {'hold':   bool,   True = do not put a human on this until somebody checks it
+       'sev':    str,    worst severity across ALL flags: critical|high|med|low|'' (clean)
+       'codes':  [str],  every flag code on the row, most severe first
+       'why':    str,    the ONE sentence to print/log — the flag that caused the hold
+       'action': str}    what to actually do about that flag
+
+    Usage is meant to be one line at a drop site, WITH the reason, because a suppression that
+    removes rows silently is indistinguishable from a queue that was always this size:
+
+        g = diligence_flags.contact_gate(r)
+        if g['hold']:
+            drop['diligence hold: ' + (g['codes'][0] if g['codes'] else '?')] += 1
+            continue
+
+    IT FAILS CLOSED, AND IT IS THE ONLY THING IN THIS FILE THAT DOES.
+    The module contract above is "never raises, return the empty answer" — and for annotate() /
+    risk_flags() that is right, because the empty answer there means "no flags to show". Here the
+    empty answer would mean "safe to call a distressed homeowner", which is the worst possible
+    default and is exactly how a data regression upstream would read as "nothing to hold today". So
+    an unreadable row, a non-dict, or an internal error returns hold=True with an explicit
+    GATE_NO_ROW / GATE_ERROR code. Count those separately from real holds: a sudden pile of them is
+    a bug in the caller, not a pile of bad leads.
+    """
+    try:
+        if not isinstance(row, dict):
+            return {'hold': True, 'sev': SEV_CRITICAL, 'codes': ['GATE_NO_ROW'],
+                    'why': 'No readable lead row reached the diligence gate, so nothing about this '
+                           'lead has been checked. Holding — an unreadable row must never come out '
+                           'the same door as a clean one.',
+                    'action': 'Fix the caller: it passed %s instead of a lead dict.'
+                              % type(row).__name__}
+        fl = risk_flags(row)
+        codes = [_s(f.get('code')) for f in fl]
+        dive = needs_deep_dive(row)
+        hit = None
+        for f in fl:                                  # fl is already sorted most-severe-first
+            c = _s(f.get('code'))
+            if c in _HOLD_ALWAYS or (dive and c in _HOLD_ON_DIVE):
+                hit = f
+                break
+        if hit is None and (title_status_of(row) == 'transferred' or row.get('sibclaimed')):
+            # The row is stamped proven-gone but the flag builder came back without the matching
+            # flag — i.e. risk_flags() swallowed something. The Milouse build checked these two
+            # stamps before it looked at any flag; keep that belt, and fail closed rather than
+            # release a house that is already sold.
+            return {'hold': True, 'sev': SEV_CRITICAL, 'codes': (codes or ['GATE_ERROR']),
+                    'why': 'This lead is stamped as already transferred / already claimed by another '
+                           'case, and the flag builder returned nothing for it. Holding on the stamp.',
+                    'action': 'Re-run ownership_gate.py on this case and check why risk_flags() came '
+                              'back empty.'}
+        return {'hold': hit is not None,
+                'sev': (_s(fl[0].get('sev')) if fl else ''),
+                'codes': codes,
+                'why': (_s(hit.get('msg')) if hit else ''),
+                'action': (_s(hit.get('action')) if hit else '')}
+    except Exception as e:
+        return {'hold': True, 'sev': SEV_CRITICAL, 'codes': ['GATE_ERROR'],
+                'why': 'The diligence gate could not evaluate this lead (%s), so it is unchecked, '
+                       'not clean. Holding.' % (_s(e)[:120] or 'unknown error'),
+                'action': 'Fix the error, then re-run. Do not release the lead by turning the gate '
+                          'off — that is the state we were already in when Sisavath got pitched.'}
+
+
 def is_hold(row):
     """TRUE = do not put a human on this until it is checked. The ONE predicate the door book and
-    the call sheet should read. Deliberately NOT 'dead' — a hold is work, a kill is a delete."""
-    try:
-        if title_status_of(row) == 'transferred' or _d(row).get('sibclaimed'):
-            return True
-        if not needs_deep_dive(row):
-            return False
-        codes = {f['code'] for f in risk_flags(row)}
-        return bool(codes & {'HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED',
-                             'PARTIES_UNAVAILABLE'})
-    except Exception:
-        return False
+    the call sheet should read. Deliberately NOT 'dead' — a hold is work, a kill is a delete.
+
+    Thin wrapper over contact_gate() so there is exactly one hold policy in the repo. Prefer
+    contact_gate() at a drop site: this bool has no reason channel, and a caller that logs
+    "diligence hold" with no code cannot tell a real hold from a broken row.
+
+    BEHAVIOUR CHANGE 2026-08-27, and it is intentional: this used to return False when it could not
+    evaluate a row. It now returns True (see contact_gate's fail-closed note). Nothing that held
+    before releases now.
+    """
+    return bool(contact_gate(row).get('hold'))
 
 
 # --------------------------------------------------------------------------------------------
@@ -708,11 +992,20 @@ def checklist(row):
 
         if not reason:
             dead = title_status_of(r) == 'transferred' or r.get('sibclaimed')
-            out['why'] = ('ALREADY PROVEN GONE — do not spend the 3-5 minutes, spend zero. '
-                          'See the flags.' if dead else
-                          'No real equity position (%s%% / $%s). Jesse rule #1: a plain foreclosure '
-                          'we get paid to stop does not earn the deep dive.'
-                          % (round(pct), format(int(usd), ',')))
+            gate = contact_gate(r)
+            if dead:
+                out['why'] = ('ALREADY PROVEN GONE — do not spend the 3-5 minutes, spend zero. '
+                              'See the flags.')
+            elif gate.get('hold'):
+                # "No deep dive owed" and "safe to contact" were the same sentence in this printout
+                # until Sisavath. They are not the same sentence. An eqfake / underwater row earns
+                # no dive precisely because the number is already known to be wrong — which is a
+                # reason to stop, not a reason to dial.
+                out['why'] = 'NO DEEP DIVE OWED, BUT HOLD — %s' % gate.get('why', '')
+            else:
+                out['why'] = ('No real equity position (%s%% / $%s). Jesse rule #1: a plain '
+                              'foreclosure we get paid to stop does not earn the deep dive.'
+                              % (round(pct), format(int(usd), ',')))
             out['text'] = _checklist_text(out)
             return out
 
@@ -837,7 +1130,10 @@ def annotate(row, checklist_mode='none'):
       dd      bool   needs the mandatory 3-5 minute dive (Jesse rule #1)
       ddwhy   str    one line: why this lead earned the dive
       ddsev   str    worst severity across the flags: critical|high|med|low
-      ddhold  bool   do not put a human on this until it is checked
+      ddhold  bool   contact_gate() says hold. THE field every JS surface must read; it is the
+                     only way the Python decision reaches the browser, and an absent key there is
+                     falsy, so a skipped bake fails OPEN with no error anywhere. Assert on the
+                     count of rows carrying it at build time — do not assume the loop ran.
       ddassn  str    the association co-defendant name (Jesse tell #3), '' when none
       ddflags list   [{code,sev,msg,action,party}]
       ddchk   str|dict  the printable checklist, ONLY when dd is True
@@ -851,11 +1147,24 @@ def annotate(row, checklist_mode='none'):
                     do not pay for 312 copies of it in the page.
     """
     try:
+        # The bake loop's contract is unchanged and stays absolute: a malformed row adds NOTHING to
+        # the board. contact_gate() below fails closed, but that belongs at a contact decision, not
+        # here — make_tracker does `_d.update(annotate(_d))`, which cannot even reach a non-dict.
+        if not isinstance(row, dict):
+            return {}
         fl = risk_flags(row)
         dd = needs_deep_dive(row)
+        gate = contact_gate(row)
         assn = hoa_codefendant(row)
-        if not fl and not dd:
+        # A HOLD MUST NEVER FALL OUT OF THE BAKE. The browser reads r.ddhold, and an undefined field
+        # there is falsy — it fails OPEN, silently, with nothing in the console. So if the gate says
+        # hold, this row is baked even when risk_flags() came back empty (the fail-closed paths), and
+        # it is baked WITH its reason attached rather than as a bare true nobody can explain.
+        if not fl and not dd and not gate.get('hold'):
             return {}
+        if gate.get('hold') and not fl:
+            fl = [_flag(((gate.get('codes') or ['GATE_ERROR'])[0]), gate.get('sev') or SEV_CRITICAL,
+                        gate.get('why', ''), gate.get('action', ''))]
         o = {}
         if dd:
             o['dd'] = True
@@ -869,7 +1178,7 @@ def annotate(row, checklist_mode='none'):
             o['ddsev'] = fl[0]['sev']
         if assn:
             o['ddassn'] = assn
-        if is_hold(row):
+        if gate.get('hold'):
             o['ddhold'] = True
         return o
     except Exception:
@@ -950,6 +1259,87 @@ def _selftest():
             for f in risk_flags(mil2)), 'ownership_gate stamp -> CRITICAL')
     chk(needs_deep_dive(mil2) is False, 'proven gone -> no dive, just the warning')
     chk(checklist(mil)['steps'] and checklist(mil2)['steps'] == [], 'checklist follows the dive gate')
+
+    print('--- the SECOND incident (Sisavath) — each new rule must catch it ALONE ---')
+    # Her real palmbeach_leads.json row, field for field. No sale year, no purchase price, no
+    # mortgage: the ONLY thing on it that knows the truth is eqfake.
+    sis = {'case': '502024CA010265XXXAMB', 'county': 'PALM BEACH', 'st': 'FC', 'ftype': 'MORTGAGE',
+           'owners': 'SISAVATH VANHNALY K &', 'addr': '4118 41ST WAY, WEST PALM BEACH, FL 33407',
+           'value': 225675, 'judg': 20323.36, 'eq': 91, 'eqfake': True,
+           'bought': 0, 'bprice': 0, 'filed': 0, 'defs': '', 'named': [], 'plaintiff': ''}
+    chk(needs_deep_dive(sis) is False, 'eqfake still skips the DIVE — rule #1 unchanged')
+    chk({f['code'] for f in risk_flags(sis)} == {'EQ_UNRELIABLE'},
+        'EQ_UNRELIABLE fires ALONE on the untouched live row (got %s)'
+        % sorted({f['code'] for f in risk_flags(sis)}))
+    chk(is_hold(sis) is True, 'and she is HELD — the dive gate no longer decides contact')
+    g = contact_gate(sis)
+    chk(g['hold'] is True and g['sev'] == SEV_HIGH and g['codes'] == ['EQ_UNRELIABLE'] and g['why'],
+        'contact_gate: hold + severity + codes + a printable reason')
+    chk('NO DEEP DIVE OWED, BUT HOLD' in checklist(sis)['why'],
+        'the printout no longer reads "no dive" as "safe to call"')
+
+    # #5 UNDERWATER, isolated: title already read clear (kills HIGH_EQUITY_UNVERIFIED), a party
+    # present (kills PARTIES_UNAVAILABLE), no eqfake, no sale data. Only the debt can hold it.
+    sis_u = {'case': '502024CA010265XXXAMB', 'county': 'PALM BEACH', 'value': 273683,
+             'judg': 20323.36, 'orsurvfirst': 298000, 'orconf': 'ok', 'title_status': 'clear',
+             'defs': 'UNKNOWN TENANT #1', 'filed': 2024}
+    uf = [f for f in risk_flags(sis_u) if f['code'] == 'UNDERWATER']
+    chk({f['code'] for f in risk_flags(sis_u)} == {'UNDERWATER'},
+        'UNDERWATER fires alone (got %s)' % sorted({f['code'] for f in risk_flags(sis_u)}))
+    chk(bool(uf) and uf[0]['sev'] == SEV_CRITICAL, 'UNDERWATER is critical')
+    chk(bool(uf) and 'INDICATIVE' in uf[0]['msg'] and 'ORIGINAL PRINCIPAL' in uf[0]['msg'],
+        'says the comparison is indicative AND names the recorded-principal figure it used')
+    chk(is_hold(sis_u) is True, 'UNDERWATER holds on its own')
+    chk(round(known_debt_of(sis_u)['total']) == 318323, 'debt = judgment + the ONE largest chain '
+        'figure, never the sum of the chain fields (got $%s)'
+        % format(int(known_debt_of(sis_u)['total']), ','))
+    chk(known_debt_of(dict(sis_u, orsurv=298000, orjunior=298000))['total']
+        == known_debt_of(sis_u)['total'], 'duplicate chain fields cannot inflate the debt')
+    chk(not any(f['code'] == 'UNDERWATER' for f in risk_flags(dict(sis_u, ju=True, orsurvfirst=0))),
+        'a judgment we cannot read is a blank, not a debt — no UNDERWATER off it')
+
+    # #6 PURCHASE_ANCHOR, isolated from the dive: ju=True kills the dive AND the judgment figure, so
+    # the only flag that can hold this row is the price she paid. This is the shape that proves the
+    # rule does not depend on needs_deep_dive() — the exact dependency that burned us.
+    sis_p = {'case': '502024CA010265XXXAMB', 'county': 'PALM BEACH', 'value': 273683,
+             'judg': 20323.36, 'ju': True, 'bprice': 315000, 'bought': 2023, 'filed': 2024,
+             'defs': 'UNKNOWN TENANT #1'}
+    pcodes = {f['code'] for f in risk_flags(sis_p)}
+    chk('PURCHASE_ANCHOR' in pcodes, 'PURCHASE_ANCHOR: paid $315,000 in 2023 on a $273,683 value')
+    chk(needs_deep_dive(sis_p) is False, 'no dive owed on this row at all')
+    chk(contact_gate(sis_p)['hold'] is True and contact_gate(sis_p)['codes'][0] == 'PURCHASE_ANCHOR',
+        'it holds anyway, and it is the reason printed')
+    chk(not any(f['code'] == 'PURCHASE_ANCHOR'
+                for f in risk_flags(dict(sis_p, bprice=200000))),
+        'bought BELOW value -> no anchor flag (the rule is an inequality, not a vibe)')
+    chk(not any(f['code'] == 'PURCHASE_ANCHOR' for f in risk_flags(dict(sis_p, bought=2009))),
+        'an old purchase is not an anchor — principal has been paid down since')
+
+    # #7 EQ_UNRELIABLE must NOT fire where the row claims nothing. lp_leads.json rows carry
+    # eqfake with value 0 and judg 0: no equity number exists, so there is nothing to be wrong
+    # about and nothing to hold. Without this guard the gate eats the whole LP pool.
+    lp = {'case': 'COWE-26-055152', 'county': 'BROWARD', 'value': 0, 'judg': 0, 'eqfake': True,
+          'eq': 0, 'defs': '', 'named': []}
+    chk(risk_flags(lp) == [] and is_hold(lp) is False,
+        'eqfake with no equity number anywhere -> no flag, no hold')
+    mk = dict(lp, value=839540, plaintiff='PHOENICIAN COVE HOMEOWNERS ASSN INC')
+    chk(any(f['code'] == 'EQ_UNRELIABLE' for f in risk_flags(mk)),
+        'eqfake on a row printing 100% of $839,540 off a $0 judgment -> HELD (Markey, 8270 '
+        'Phoenician Ct — this one used to walk through because nothing could see it)')
+
+    print('--- the gate fails CLOSED, unlike everything else in this file ---')
+    for bad in (None, [], 'nonsense', 42):
+        chk(contact_gate(bad)['hold'] is True and contact_gate(bad)['codes'] == ['GATE_NO_ROW'],
+            'unreadable row %r -> HOLD, not release' % (str(bad)[:20],))
+    chk(is_hold(mil) is True and is_hold(mil2) is True, 'Milouse still holds both ways (no regression)')
+    chk(all(annotate(b) == {} for b in (None, [], 'nonsense', 42)),
+        'annotate() still bakes NOTHING onto a malformed row — the gate fails closed, the bake does not')
+    chk(annotate(sis).get('ddhold') is True and annotate(sis).get('ddflags'),
+        'a held row bakes ddhold WITH its reason (the browser reads ddhold and an absent key '
+        'fails open)')
+    chk(contact_gate({'case': 'X', 'value': 300000, 'judg': 290000, 'title_status': 'clear',
+                      'defs': 'UNKNOWN TENANT #1'})['hold'] is False,
+        'a thin-equity, title-clear lead is still RELEASED — this is a gate, not a wall')
 
     print('--- case_year across all four dialects (sibling_cases._lead_year bug) ---')
     for c, y in (('2026-002031-CA-01', 2026), ('CACE-24-006635', 2024), ('CONO-23-008222', 2023),
