@@ -66,10 +66,19 @@ with sync_playwright() as p:
     fx = pg.evaluate("""() => {
       const cand = DATA.filter(r => !r.eqfake && (typeof isFlaggedDead!=='function' || !isFlaggedDead(r)) && _basisOf(r));
       // BELOW-BAR: raw gross eq clears 30 but the surviving mortgage pulls net under 30 (must be hidden)
-      const below = cand.find(r => (r.eq||0) >= 40 && netEqPct(r) < 30 && netEqPct(r) < (r.eq||0) - 5);
-      // ABOVE-BAR: net equity comfortably clears the bar (must be shown)
-      const above = cand.find(r => netEqPct(r) >= 40);
-      const pack = r => r ? {case:r.case, rawEq:r.eq, netEq:netEqPct(r)} : null;
+      // MEASURE WHAT THE FILTER MEASURES. This picked its fixture with netEqPct() while the
+      // filter gates on _ownerEqOf()/_basisOf() — two different questions, so the test failed on
+      // a filter that was behaving correctly. The switch was deliberate and documented at the
+      // filter: netEqPct models "you acquire at the opening bid", which is true at a foreclosure
+      // sale and a fantasy at a tax deed, so gating on it silently buried Jose's entire TD lane.
+      // _ownerEqOf answers the question the button actually asks — "does the OWNER have real
+      // equity" — and subtracts both what is owed and the lien stack, so a surviving senior still
+      // drags a lead under the bar. Same invariant, measured the way the filter measures it.
+      const ownPct = r => { const b=_basisOf(r); return b ? Math.round((_ownerEqOf(r)/b)*100) : 0; };
+      const below = cand.find(r => (r.eq||0) >= 40 && ownPct(r) < 30 && ownPct(r) < (r.eq||0) - 5);
+      // ABOVE-BAR: owner equity comfortably clears the bar (must be shown)
+      const above = cand.find(r => ownPct(r) >= 40);
+      const pack = r => r ? {case:r.case, rawEq:r.eq, netEq:ownPct(r)} : null;
       return {below: pack(below), above: pack(above)};
     }""")
     if fx['below']:

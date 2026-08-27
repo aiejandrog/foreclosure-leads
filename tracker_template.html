@@ -10274,7 +10274,7 @@ function genFieldSheet(r){
     +       '. I&rsquo;m with Biscayne Solutions Group &mdash; I&rsquo;m not your lender or an attorney. I saw the county has a sale '
     +       'date on this property and I wanted to see, face to face, if there&rsquo;s a way I can help before that date.&rdquo;</p>'
     +     '<p><b>ES:</b> &ldquo;Hola, &iquest;es usted '+esc(first)+'? Me llamo '+esc((typeof sender==="object"&&sender.name)||'[su nombre]')
-    +       '. Soy comprador de casas local &mdash; no soy prestamista ni abogado. Vi que el condado tiene fecha de '
+    +       '. Soy de Biscayne Solutions Group &mdash; no soy prestamista ni abogado. Vi que el condado tiene fecha de '
     +       'subasta y quer&iacute;a ver, en persona, si puedo ayudar antes de esa fecha.&rdquo;</p>'
     +   '</div>'
 
@@ -12494,6 +12494,7 @@ function genMorningWorker(lane, autostart){
     +   'function renderCap(){'
     +     'var n=sentToday(), left=Math.max(0,CAP.max-n), blocked=n>=CAP.max, warn=n>=CAP.warnAt;'
     +     'var box=document.getElementById("mwcap");'
+    +     'if(!box) return;'
     +     'box.className="mwcap"+(blocked?" blocked":(warn?" warn":""));'
     +     'document.getElementById("mwcapn").textContent=n+" / "+CAP.max;'
     +     'document.getElementById("mwcapbar").style.width=Math.min(100,Math.round(n/CAP.max*100))+"%";'
@@ -13148,7 +13149,7 @@ function genMorningWorker(lane, autostart){
     +         '+"<p>You have sent <b>"+CAP.max+"</b> cold messages today. Stop here.</p>"'
     +         '+"<p>This is not an arbitrary rule: past roughly 50 unsolicited messages a day, Gmail starts throttling and recipient providers start scoring the sender as spam. The account that takes the damage is the one you run the business from &mdash; Jose, lenders, the county. A slow pipeline recovers; a burned inbox does not.</p>"'
     +         '+"<p><b>Calling is not capped.</b> Work the phone for the rest of the day &mdash; it converts better than email anyway.</p></div>";'
-    +       'prog.textContent="cap reached"; renderLog(); return;'
+    +       'prog.textContent="cap reached"; renderLog(); renderCap(); return;'
     +     '}'
     +     'if(!Q.length){'
     +       'var s=LSTAT[lane]||{}, why="";'
