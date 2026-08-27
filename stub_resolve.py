@@ -447,10 +447,25 @@ def _patch_md(cache, verbose):
         r['Folio'] = fol
         r['market_value'] = info['market_value']
         r['homestead'] = bool(info.get('homestead'))
+        # EQUITY ONLY WHEN THE DEBT IS KNOWN. These stubs are precisely the population with no
+        # posted judgment, and `market_value - 0` is a fantasy 100% — the exact number qualify()
+        # deliberately ZEROES on judgment_unknown (foreclosure_leads ~489). Writing it back here
+        # re-created the lie one layer down, and blanking `warning` deleted the sentence that
+        # explained it while `disqualifiers` still said "judgment not posted". The county twin
+        # (_patch_county) never had this bug because it defers to CL._value_metrics; only this
+        # hand-rolled Miami-Dade path did. Found in the 2026-08-27 audit, hours after the whole
+        # eqstate effort went in to kill this class of bug. Same rule as everywhere else:
+        # unknown debt is not zero debt.
         judg = float(r.get('judgment') or 0)
-        r['equity'] = round(info['market_value'] - judg)
-        r['equity_pct'] = round((info['market_value'] - judg) / info['market_value'] * 100) if info['market_value'] else 0
-        r['warning'] = ''
+        _ju = bool(r.get('judgment_unknown')) or judg <= 0
+        if _ju:
+            r['equity'] = 0
+            r['equity_pct'] = 0
+            r['warning'] = r.get('warning') or 'judgment not posted - debt unknown'
+        else:
+            r['equity'] = round(info['market_value'] - judg)
+            r['equity_pct'] = round((info['market_value'] - judg) / info['market_value'] * 100)
+            r['warning'] = ''
         r['pa_url'] = 'https://apps.miamidadepa.gov/PropertySearch/#/?folio=' + fol
         if not (r.get('Address') or '').strip():
             addr = res.get('addr') or info.get('site_addr') or ''

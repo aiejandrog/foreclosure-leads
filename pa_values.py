@@ -451,8 +451,15 @@ def lookup(county, folio='', addr=''):
     if county not in _FULL_LEN:
         return None
     folio = str(folio or '').strip().upper()
-    street, num, _u = _street_unit(addr or '')
-    ck = '%s|%s|%s' % (county, folio, street)
+    street, num, _unit = _street_unit(addr or '')
+    # THE UNIT IS PART OF THE IDENTITY. _street_unit STRIPS the unit out of `street`, so keying on
+    # street alone made every unit in a tower share one cache entry: '1950 S OCEAN DR #402' and
+    # '#1503' both key to 'BROWARD||1950 S OCEAN DR', and the second lead was served the FIRST
+    # one's value, owner, mailing address and homestead flag. That is the assv-leak defect one
+    # layer down — a number belonging to a different property, on a lead nobody would suspect —
+    # and it lands hardest on exactly this module's main population (leads with NO folio, where
+    # the address is the only key there is). Found in the 2026-08-27 audit.
+    ck = '%s|%s|%s|%s' % (county, folio, street, _unit)
     cache = _load_cache()
     e = cache.get(ck)
     if e is not None:
@@ -468,9 +475,11 @@ def lookup(county, folio='', addr=''):
     out = None
     try:
         full = folio if len(folio) >= _FULL_LEN[county] else ''
+        _from_addr = False
         if not full and addr:
             full = (_bw_resolve(addr, crippled=folio) if county == 'BROWARD'
                     else _pb_resolve(addr))
+            _from_addr = bool(full)
         if full:
             info = None
             if _live_ok():
@@ -478,9 +487,14 @@ def lookup(county, folio='', addr=''):
                     info = fl_cadastral.enrich(parcel_id=full)
                 except Exception:
                     info = None
-            # corroborate an address-resolved parcel against the roll's own site address —
-            # a wrong parcel's value is worse than no value
-            if info and num and info.get('site_addr') and _num_of(info['site_addr']) != num:
+            # Corroborate an ADDRESS-RESOLVED parcel against the roll's own site address — a wrong
+            # parcel's value is worse than no value. Gated on _from_addr: when the folio came
+            # straight off the auction listing there is nothing to corroborate, and this check was
+            # instead DISCARDING valid cadastral records whose site address is written differently
+            # (a range like '7165-7167 PEMBROKE RD', or a listing carrying the mailing address) —
+            # and burning a live fetch from the MAX_LIVE budget to do it. Audit 2026-08-27.
+            if (_from_addr and info and num and info.get('site_addr')
+                    and _num_of(info['site_addr']) != num):
                 info = None
             if info and info.get('market_value'):
                 info = dict(info)

@@ -450,12 +450,31 @@ def _greet_name(d):
     'CACE-'). Companies are left untouched: flipping "XPRESS ASSET MANAGEMENT LLC" helps nobody and
     firstName() ignores company rows anyway. Trailing '&' co-owner markers are already stripped by
     owner_clean upstream ("COTTO JOSE J &" -> "COTTO JOSE J" -> flips to "JOSE J COTTO").
+
+    2026-08-27: THE CASE-NUMBER HEURISTIC WAS THE BUG. Keying the flip on "case starts with 50"
+    assumed case FORMAT predicts roll CONVENTION. It does not, and two lanes proved it on the live
+    payload: the Fresh-filings lane sets `oname` from _rec_name(), whose own docstring says it
+    emits "Last, First" — the RECORDS-search order — so 353 of 400 shipped rows greeted people as
+    "Hi, is this Hazan?" (Elizabeth Hazan) and "Hi, is this Amlong?" (an active deal file). PB tax
+    deeds carry case '2026-2658TD', which also fails the '50' test, so "BROWN ROGER L" shipped
+    unflipped too. Read the STRING, never the case number: a comma is an explicit LAST,FIRST
+    marker in any county, and the PB comma-less shape stays county-gated as before.
     """
     on = (d.get('oname') or '').strip()
     case = str(d.get('case') or '')
     owners_first = (d.get('owners') or '').split(';')[0]
-    if (case.startswith('50') and on and ',' not in owners_first
-            and not _COMPANY_RE.search(on)):
+    if not on or _COMPANY_RE.search(on):
+        return on[:40]
+    # 1) EXPLICIT "LAST, FIRST" — self-identifying, no county guess required.
+    if ',' in on:
+        last, _, rest = on.partition(',')
+        last, rest = last.strip(), rest.strip()
+        if last and rest:
+            return (rest + ' ' + last).strip()[:40]
+    # 2) Palm Beach's comma-less "LAST FIRST" roll (340/340 sampled). Still county-gated, but now
+    #    by the lead's own county field with the case prefix only as a fallback for older rows.
+    _cty = str(d.get('county') or '').upper()
+    if (('PALM' in _cty) or case.startswith('50')) and ',' not in owners_first:
         toks = on.split()
         if len(toks) >= 2:
             on = ' '.join(toks[1:] + [toks[0]])   # LAST FIRST [M] -> FIRST [M] LAST
@@ -662,9 +681,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'e': eq if (eq is not None and (d.get('value') or 0)) else None,
             # EQUITY VERIFIED (2026-08-27). `e` alone cannot tell a caller whether the number is a
             # FACT or a GUESS, and the sort below ranked a guessed 90% above a traced-and-proven
-            # 45% — so the sessions opened on the least certain leads on the board. 'v' is 1 only
-            # when the recorded chain was actually traced (equity_state clear/priced). One byte.
-            'v': 1 if str(d.get('eqstate') or '') in ('clear', 'priced') else 0,
+            # 45% — so sessions opened on the least certain leads on the board. 1 = the recorded
+            # chain was actually traced (equity_state clear/priced).
+            # ⚠️ NAMED 'eqv', NOT 'v'. This shipped as 'v' for one build and Python kept the LAST
+            # duplicate key — silently deleting `'v': _n('value')` six lines up, so all 400 rows
+            # carried a 0/1 flag where six renderers read DOLLARS: the card printed "Property
+            # value $0", and the outcome screen computed `r.v - owed` and told the caller
+            # "UNDERWATER $480k" about a lead whose own card said "Equity 4% VERIFIED". A dict
+            # literal will not warn you; only the payload does.
+            'eqv': 1 if str(d.get('eqstate') or '') in ('clear', 'priced') else 0,
             'ss': (d.get('orsurvsen') if isinstance(d.get('orsurvsen'), (int, float)) else None),
             'oc': _s('orconf', 6), 'td': _n('taxDue'), 'et': _n('etax'),
             # ---- clock ----
@@ -747,7 +772,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # at 45% by the recorded chain — the caller spent the freshest hour of the day on the leads
     # most likely to evaporate (the Acosta pattern, at the top of the queue). Traced first, then
     # the number. Untraced leads still ship; they just stop cutting the line.
-    out.sort(key=lambda r: (_band(r), 0 if r.get('v') else 1,
+    out.sort(key=lambda r: (_band(r), 0 if r.get('eqv') else 1,
                             0 if r.get('e') is not None else 1, -(r.get('e') or 0),
                             r.get('d', 9999)))
     if _ident_dropped:
@@ -1989,7 +2014,7 @@ function screenLead(){
     + kv('Equity', r.e==null ? '<span class="nc">not known</span>' : (Math.round(r.e)+'%'+(has(r,'E')?' <span class="nc">gross</span>':'')
          // Say which kind of number this is, on the surface where it gets spoken out loud. A
          // traced chain is the difference between "you have equity" and "you might".
-         + (r.v ? ' <span class="ok">VERIFIED</span>' : ' <span class="nc">unverified — chain not traced</span>')))
+         + (r.eqv ? ' <span class="ok">VERIFIED</span>' : ' <span class="nc">unverified — chain not traced</span>')))
     + kv('Surviving 1st', r.ss==null ? '<span class="nc">not checked</span>' : (r.ss===0?'none':money(r.ss)), 1)
     + '</div>';
   var mc='';

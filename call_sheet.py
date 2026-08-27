@@ -57,7 +57,7 @@ def build(top=40):
 
 def _render(rows, total, top):
     today = datetime.date.today()
-    ver = sum(1 for r in rows if r.get('v'))
+    ver = sum(1 for r in rows if r.get('eqv'))
     L = []
     L.append('DEALFLOW CALL SHEET  ·  %s' % today.strftime('%A %B %d, %Y'))
     L.append('=' * 78)
@@ -69,7 +69,7 @@ def _render(rows, total, top):
     L.append('-' * 78)
     for i, r in enumerate(rows[:top], 1):
         eq = ('%d%%' % round(r['e'])) if r.get('e') is not None else 'n/k'
-        if r.get('v'):
+        if r.get('eqv'):
             eq += '*'
         L.append('%-3d %-22s %-26s %-15s %4s %-7s %s' % (
             i, (r.get('on') or r.get('o') or '')[:22], (r.get('a') or '(no address)')[:26],

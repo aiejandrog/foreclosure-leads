@@ -193,6 +193,56 @@ def _board_age_days():
 
 
 # ---------------------------------------------------------------- signals
+_DG_TALLY = None
+_OPTOUTS = {}   # set in main() before the tables build
+
+
+def _agenda_safe(r):
+    """Is it safe to put a HUMAN on this lead today? The morning agenda hands out assignments,
+    so it owes the same gates every other contact surface already runs.
+
+    Wired 2026-08-27: diligence_gate was imported by 13 modules (routes, call mode, outreach,
+    letters, cadence, CRM...) and NOT by this one — the page the day is planned from. Measured
+    that morning: 30 of 40 Workable rows and 13 of 20 Expiring rows were `hold` (UNDERWATER,
+    EQ_UNRELIABLE, HIGH_EQUITY_UNVERIFIED, RECENT_SALE) — each rendered with a Tier letter and an
+    'Assigned to' cell and no flag. diligence_gate.py's own definition of hold is literally
+    'do NOT put a human on this today'.
+    """
+    global _DG_TALLY
+    if not _knock_eligible(r):          # §362 stay / sibling-claimed
+        return False
+    try:
+        import diligence_gate as _DG
+        if _DG_TALLY is None:
+            _DG_TALLY = _DG.Tally()
+        if (_DG_TALLY.check(r) or {}).get('hold'):
+            return False
+    except Exception:
+        pass                            # a broken gate must not empty the agenda
+    return True
+
+
+def _opted_out(r, optouts):
+    """optouts.json was LOADED and never used to suppress anything — its only consumer computed
+    a count that was never rendered. So a person on the ledger appeared as a Workable row with an
+    'Assigned to' cell. Note the envelope: the real payload is under 'notes'."""
+    if not optouts:
+        return False
+    led = optouts.get('notes') if isinstance(optouts, dict) and 'notes' in optouts else optouts
+    if not isinstance(led, dict):
+        return False
+    case = _case(r)
+    if case and case in led:
+        return True
+    for e in (r.get('emails') or []):
+        if ('@' + str(e).strip().lower()) in led:
+            return True
+    for p in (r.get('phones') or []):
+        if ('#' + re.sub(r'\D', '', str(p))) in led:
+            return True
+    return False
+
+
 def _eq_pct(r):
     """Equity % as a float, or None for NOT CHECKED. County lanes use `eq`, Miami-Dade
     `equity_pct` — read both, and never let a missing value read as 0."""
@@ -227,7 +277,8 @@ def _workable_leads(leads, min_days=13, max_days=45, limit=40):
     already too close to work realistically -- see _expiring_leads for that separate section."""
     rows = [r for r in leads
             if (_days(r) is not None and min_days <= _days(r) <= max_days)
-            and not _deeply_underwater(r)]
+            and not _deeply_underwater(r)
+            and _agenda_safe(r) and not _opted_out(r, _OPTOUTS)]
     # VERIFIED EQUITY FIRST. Tier is derived from the equity number, so sorting on tier alone let
     # an untraced guess headline the morning brief ahead of a chain-verified lead. Traced first,
     # then the old key unchanged.
@@ -240,7 +291,8 @@ def _expiring_leads(leads, max_days=12, limit=20):
     """Sales inside the min_days window. Named honestly: these are past the letter-arrival
     window; the meeting decision is call/door-knock TODAY or write them off. Not the focus."""
     rows = [r for r in leads
-            if (_days(r) is not None and 0 <= _days(r) <= max_days)]
+            if (_days(r) is not None and 0 <= _days(r) <= max_days)
+            and _agenda_safe(r) and not _opted_out(r, _OPTOUTS)]
     # VERIFIED EQUITY FIRST. Tier is derived from the equity number, so sorting on tier alone let
     # an untraced guess headline the morning brief ahead of a chain-verified lead. Traced first,
     # then the old key unchanged.
@@ -279,7 +331,14 @@ def _routable_addr(r):
 
 
 def _knock_eligible(r):
-    if r.get('saleBkAct') and not r.get('saleLift'):
+    # §362 STAY — DEAD CODE UNTIL 2026-08-27. `saleBkAct` is the BAKED-BOARD field name; this
+    # module reads the RAW lead files, where the field is `sale_bk_active`. Measured on the live
+    # data: saleBkAct present on 0/1940 leads, sale_bk_active on 79 — so this gate could never
+    # fire, and 41 stayed leads sat in the workable window. This is the SAME defect the repo
+    # already fixed in outreach_email.py, build_cadence_queue.py, healthcheck.py and diligence.py,
+    # each of which tests BOTH spellings. Contacting a debtor under an active stay is a federal
+    # violation, so this one reads both too — and any future writer of either name is covered.
+    if (r.get('saleBkAct') or r.get('sale_bk_active')) and not (r.get('saleLift') or r.get('sale_bk_lifted')):
         return False
     if r.get('sibclaimed'):
         return False
@@ -428,6 +487,17 @@ def _new_replies(replies_data, since_days=1):
     today = dt.date.today()
     for e in entries:
         if not isinstance(e, dict):
+            continue
+        # 🔴 A STOP IS NOT A CALLBACK. replies.py stamps stop=True when the owner wrote "stop",
+        # and filters it at replies.py:130 — this page never did, so three people who put
+        # "please stop" IN WRITING rendered under "Owner replies waiting for a call back — these
+        # ARE the day", each with a "Who is calling this back TODAY?" cell. That is the opt-out
+        # ledger's whole purpose inverted on the one page the morning is planned from, and it is
+        # a compliance problem (FS 501.1377 / TCPA), not a UX one. Found in the 2026-08-27 audit.
+        if str(e.get('stop') or '').strip().lower() == 'true':
+            continue
+        # An out-of-office auto-reply is not a human waiting on us either.
+        if re.search(r'automatic reply|out of office|autoreply', str(e.get('subject') or ''), re.I):
             continue
         addr = str(e.get('email') or '').strip().lower()
         if addr and addr in seen:
@@ -842,6 +912,7 @@ def main():
     leads = _load_leads()
     replies = _load_json('replies.json', {})
     optouts = _load_json('optouts.json', {})
+    globals()['_OPTOUTS'] = optouts   # the tables suppress from the SAME ledger
     mail_ledger = _load_json('mail_sent.json', [])
 
     excl = tuple(z.strip() for z in args.exclude_zips.split(',') if z.strip())
