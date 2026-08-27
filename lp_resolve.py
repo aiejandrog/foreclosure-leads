@@ -75,6 +75,9 @@ _cache, _net_calls, _dry = {}, [0], [False]
 
 
 # ---- endpoint --------------------------------------------------------------------------------
+_ERRS = [0]      # transport failures inside one resolve() — see _run
+
+
 def q(where):
     """Cached PaGis query. Returns (rows, truncated). A response without a 'features' key is an
     ERROR, not an empty result — returning [] there would read as 'no such parcel' and blank a
@@ -380,7 +383,15 @@ def _run(where, p, tokens_to_verify=None, pb_variant=None):
     """Query + strict client-side adjudication. Returns (kept_rows, raw_count, truncated)."""
     rows, trunc = q(where)
     if rows is None:
-        return None, 0, False                      # error or dry-run miss — unknown, not empty
+        # UNKNOWN, NOT EMPTY — and the caller must be able to tell. Every rung collapses this to
+        # `continue`, so by the time resolve() sees best=None the reason is gone and it returns
+        # the same blank row as a genuine no-match. main() then does prev.update(out), so a PaGis
+        # outage OVERWRITES good rows: 978 resolved addresses (526 high-confidence, 800 with a
+        # folio) would be zeroed in one run, and lp_leads drops addr/folio/value/hs on all of
+        # them. Count the transport failures here; resolve() reads the counter and marks the row
+        # 'unknown' so the merge can skip it. Same rule as everywhere: a failure is not a result.
+        _ERRS[0] += 1
+        return None, 0, False
     if trunc:
         return [], len(rows), True                 # partial page: refuse to pick from it
     keep = []
@@ -554,6 +565,7 @@ LADDER = [rung_platbook, rung_condo_or,
 
 
 def resolve(rec):
+    _ERRS[0] = 0
     p = parse_lp(rec.get('legal') or '')
     row = {'case': rec.get('case', ''), 'folio': '', 'addr': '', 'city': '', 'zip': '',
            'paOwner': '', 'confidence': 'none', 'rung': '', 'evidence': '',
@@ -583,6 +595,15 @@ def resolve(rec):
         if best is None or len(rows) < len(best['rows']):
             best = got                             # keep the tightest ambiguous set for a human
     if best is None:
+        if _ERRS[0]:
+            # The ladder never got a clean answer from PaGis. That is NOT "no parcel matches" —
+            # it is "we could not ask". Marked 'unknown' so main() leaves any previously resolved
+            # address for this case untouched instead of overwriting it with blanks.
+            row['confidence'] = 'unknown'
+            row['evidence'] = ('%d PaGis query(s) failed — the chain was NOT established. Existing '
+                               'resolution (if any) is preserved; retry when the service is up.'
+                               % _ERRS[0])
+            return row
         row['evidence'] = 'no parcel matched any rung (plat book, condo book, subdivision name, owner)'
         return row
 
@@ -733,8 +754,23 @@ def main():
         if os.path.exists(OUT):
             try: prev = json.load(open(OUT, encoding='utf-8'))
             except Exception: prev = {}
-        prev.update(out)
+        # A FAILED LOOKUP MUST NEVER OVERWRITE A GOOD ROW. prev.update(out) wrote every result
+        # blindly, so one PaGis outage replaced resolved addresses with blanks — 978 rows, 526 of
+        # them high-confidence, and lp_leads then drops addr/folio/value/hs on all of them. Rows
+        # marked 'unknown' (transport failure, see resolve()) are held back: the previous
+        # resolution stays, and the case is simply retried next run.
+        _held = [c for c, r in out.items()
+                 if r.get('confidence') == 'unknown' and c in prev]
+        _merge = {c: r for c, r in out.items() if c not in _held}
+        prev.update(_merge)
         json.dump(prev, open(OUT, 'w', encoding='utf-8'), indent=1)
+        if _held:
+            print('PRESERVED %d existing resolution(s) — PaGis failed on those cases this run; '
+                  'they were NOT blanked. Retry when the service is up.' % len(_held))
+        _unk = sum(1 for r in out.values() if r.get('confidence') == 'unknown')
+        if _unk:
+            print('%d record(s) could not be asked (service errors) — reported as unknown, '
+                  'not as "no parcel matched".' % _unk)
 
     n = len(out)
     c = lambda k: sum(1 for r in out.values() if r['confidence'] == k)

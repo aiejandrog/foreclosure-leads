@@ -312,6 +312,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--county', required=True)
     ap.add_argument('--dates', type=int, default=0)
+    ap.add_argument('--force', action='store_true',
+                    help='write even if the scrape collapsed vs the existing file (see scrape_guard)')
     a = ap.parse_args()
     key = a.county.upper().strip()
     if key not in COUNTIES:
@@ -323,15 +325,15 @@ def main():
     slim = to_slim(key, cfg, base, items)
     got = sum(1 for s in slim if s['value']); aN = sum(1 for s in slim if s['tier'] == 'A')
     out = os.path.join(HERE, key.lower().replace(' ', '') + '_leads.json')
-    # Safety guard (matches foreclosure_leads.py): a blocked/thin scrape must NEVER overwrite a good
-    # file with an empty one. Bail and leave the last good snapshot in place so the site stays populated.
-    MIN = 10
-    if len(slim) < MIN:
-        prev = 0
-        if os.path.exists(out):
-            try: prev = len(json.load(open(out, encoding='utf-8')))
-            except Exception: prev = 0
-        print(f"ABORT: only {len(slim)} {key} leads scraped (< {MIN}). Keeping the existing {prev}-lead file.")
+    # Safety guard: a blocked/thin scrape must NEVER overwrite a good file. RATIO against what is
+    # already on disk, not a fixed floor — MIN=10 was set when this file held a handful of rows and
+    # never moved, so Broward could collapse 249 -> 11 and still pass, print "DONE: 11 leads", and
+    # publish. The board-wide publish_guard cannot see it either: wiping one county still leaves
+    # ~88% of a 1,940-lead board, over its 70% bar. See scrape_guard.py.
+    import scrape_guard
+    _ok, _msg = scrape_guard.check(key, len(slim), out, min_abs=10, force=a.force)
+    print(_msg)
+    if not _ok:
         raise SystemExit(1)
     # Preserve photos across the refresh (see photo_carry): carry from the previous county snapshot
     # BEFORE overwriting it, so returning leads keep their images even if the photo pass never runs.

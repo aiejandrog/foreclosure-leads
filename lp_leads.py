@@ -206,6 +206,16 @@ def build():
             'docket': (docket if _cty == 'MIAMI-DADE' else ''),
             'ctype': 'Bank/Mortgage', 'ftype': 'MORTGAGE',
         })
+    # This file had NO write guard at all — 1,007 rows, overwritten unconditionally, so an upstream
+    # lis_pendens.json that came back thin (a walled sweep, an interrupted write) silently emptied
+    # the entire Fresh-filings lane and the board simply showed fewer leads. Same ratio rule as the
+    # county and Miami-Dade writers now use. (scrape_guard.py)
+    import scrape_guard
+    _ok, _msg = scrape_guard.check('LP lane', len(out), OUT, min_abs=10,
+                                   force=os.environ.get('DEALFLOW_FORCE') == '1')
+    print(_msg)
+    if not _ok:
+        raise SystemExit(1)
     json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
     print(f'DONE: {len(out)} LP leads -> lp_leads.json (st=LP -> board play LP-EARLY)')
     if addrs:

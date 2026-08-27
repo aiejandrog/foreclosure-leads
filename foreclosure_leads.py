@@ -2868,8 +2868,15 @@ def main():
     print(f"scraped {len(leads)} pending auctions")
     # Guard the live site: a broken/blocked scrape must never overwrite a good tracker with an
     # empty one. Bail before regenerating anything (leads_*.json are gitignored, so nothing commits).
-    if len(leads) < 20:
-        print(f"ABORT: only {len(leads)} leads scraped (expected 100+). Not regenerating the site.")
+    # RATIO against the file already on disk, not a fixed 20 — that floor was set when the board
+    # was small and never moved, so Miami-Dade could collapse 370 -> 21 and still regenerate the
+    # whole site. A partial scrape is a failure, not a smaller day. (scrape_guard.py)
+    import scrape_guard
+    _ok, _msg = scrape_guard.check('MIAMI-DADE', len(leads),
+                                   os.path.join(HERE, 'leads_final.json'), min_abs=20,
+                                   force=os.environ.get('DEALFLOW_FORCE') == '1')
+    print(_msg)
+    if not _ok:
         sys.exit(1)
     # Defensive dedupe: the calendar can list the same auction item twice. Collapse exact repeats
     # (same case + folio + auction date) so a duplicate never becomes two rows in the tracker.
