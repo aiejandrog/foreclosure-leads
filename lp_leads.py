@@ -155,9 +155,21 @@ def build():
             # the parcel is right but the deed moved after the filing — use the address, not the name
             'paOwner': (a.get('paOwner') or '') if mismatch else '',
             'ownerMismatch': mismatch,
-            # judg stays 0: a lis pendens has no final judgment yet, so equity here is the WHOLE
-            # value against an unknown debt. eqfake marks that honestly rather than showing 100% equity.
-            'judg': 0, 'eq': value, 'eqfake': bool(value),
+            # judg stays 0: a lis pendens has no final judgment yet.
+            #
+            # 🔴 `eq` IS A PERCENT. It was set to `value` — DOLLARS — in a field every other lane
+            # and every consumer treats as a percentage (tracker_template says so in as many
+            # words: "r.eq is a PERCENT (75.7), not dollars"). 389 of 1007 LP rows carried eq >
+            # 100; Call Mode rendered "Equity 9748005% gross", the equity floor compared dollars
+            # against -25, and the dial-order sort ranked LP dollar figures against FC percentages
+            # so the biggest-value filings outranked every genuinely scored lead in their band.
+            # It was contained only by `eqfake`, one data-coverage step from clearing itself.
+            #
+            # The honest value is NONE, not 0 and not the price: without a judgment the equity
+            # PERCENTAGE is not computable, and not-computable is not zero (the board's own
+            # not-checked-is-not-zero rule). `value` already carries the dollars for anything that
+            # wants them, and eqfake still marks the whole-value-vs-unknown-debt caveat.
+            'judg': 0, 'eq': None, 'eqfake': bool(value),
             'hs': bool(a.get('hs')) if conf == 'high' else False,
             'beds': a.get('beds') or 0, 'baths': a.get('baths') or 0,
             'sqft': a.get('sqft') or 0, 'built': a.get('built') or 0,

@@ -887,8 +887,25 @@ def phone_index(slim):
     seen, table, digits = {}, [], {}
     for d in slim:
         case = (d.get('case') or '').strip()
-        phones = [re.sub(r'\D', '', str(p))[-10:] for p in (d.get('phones') or [])]
-        phones = [p for p in phones if len(p) == 10]
+        # 🔴 DNC NUMBERS MUST NOT BE SERIALIZED. This module's own docstring states the invariant:
+        # "DNC numbers are never serialized... A number that is not in the payload cannot be
+        # rendered, cannot be tel:-linked." call_rows() honours it; this index did not — it walked
+        # `phones` with no `phdnc` read at all, so all 1,142 DNC-flagged numbers shipped, and
+        # screenLookup paints "Call back" and "Text" anchors on whatever it resolves. Withholding
+        # on the dial list while tel:-linking the same number on the lookup screen is not a
+        # partial control, it is no control. Same zip-and-filter discipline as call_rows: pair
+        # each number with its flag BEFORE filtering, so a short/missing phdnc can never shift the
+        # flags onto the wrong numbers. Identification still works — a DNC lead keeps its row in
+        # `t` via any non-DNC number; only the DNC digits are absent from `d`.
+        _ph_raw = list(d.get('phones') or [])
+        _dnc_raw = list(d.get('phdnc') or [])
+        phones = []
+        for _i, _p in enumerate(_ph_raw):
+            if _i < len(_dnc_raw) and _dnc_raw[_i]:
+                continue
+            _pd = re.sub(r'\D', '', str(_p))[-10:]
+            if len(_pd) == 10:
+                phones.append(_pd)
         if not case or not phones:
             continue
         if case not in seen:
