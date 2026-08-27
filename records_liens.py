@@ -564,6 +564,61 @@ def main():
     a = ap.parse_args()
 
     leads = json.load(open(LEADS, encoding='utf-8'))
+    # THE LP BOARD WAS NEVER PULLED. leads_final.json is the AUCTION board — 370 rows that already
+    # have a judgment. lp_leads.json is 1,007 lis-pendens rows that by definition do NOT yet, and
+    # nothing has ever pointed a mortgage pull at them. So every fresh filing sat at "debt unknown"
+    # permanently, and a closer reading value-with-no-debt reads it as equity. That is exactly the
+    # state that put an underwater owner (Sisavath, 4118 41st Way) on a live call: value $225,675,
+    # no payoff on the row, board printing 91%.
+    # Miami-Dade only here — this module speaks to the MDC recorder. Broward/PB LP rows are pulled
+    # by broward_liens.py / palmbeach_liens.py against their own counties.
+    # Keys are translated to the fat shape the loop below reads ('Case #', 'owner_clean', 'folio'),
+    # and a case already present from leads_final wins, so nothing is double-pulled.
+    try:
+        _lp_path = os.path.join(HERE, 'lp_leads.json')
+        if os.path.exists(_lp_path):
+            _have = {(r.get('Case #') or '') for r in leads}
+            _lp_added = 0
+            for _r in json.load(open(_lp_path, encoding='utf-8')):
+                if not isinstance(_r, dict):
+                    continue
+                _c = str(_r.get('case') or '')
+                if not _c or _c in _have:
+                    continue
+                if str(_r.get('county') or '').upper() not in ('', 'MIAMI-DADE', 'MIAMI DADE'):
+                    continue
+                # NAME ORDER IS LOAD-BEARING AND IT FAILS SILENTLY. _name_parts() above takes the
+                # LAST token as the surname because leads_final's owner_clean is "FIRST [MIDDLE]
+                # LAST". The LP board is the other way round: oname is "LABISSIERE, FRANTZ" and
+                # owners is "LABISSIERE FRANTZ". Handing either straight over searches surname
+                # FRANTZ, given "LABISSIERE," — which returns ZERO documents and is then reported
+                # as "ok  ...  0 open mtg". An empty search that prints like a clean title check is
+                # the single most dangerous output this repo can produce, so flip it here.
+                _own = str(_r.get('oname') or '').strip()
+                if ',' in _own:                                   # "LAST, FIRST M" -> "FIRST M LAST"
+                    _last, _rest = _own.split(',', 1)
+                    _own = '%s %s' % (_rest.strip(), _last.strip())
+                elif not _own:
+                    _own = str(_r.get('owners') or '').strip()
+                _own = ' '.join(_own.split())
+                if not _own:
+                    continue
+                leads.append({'Case #': _c, 'owner_clean': _own,
+                              # 'Folio' with a capital F — that is the key the loop reads at ~L684
+                              # ('folio' lowercase silently yields no isolation, and analyze() then
+                              # returns nothing, which prints as "0 open mtg" = a clean title check
+                              # that never happened). Set both so neither spelling can lose.
+                              'Folio': str(_r.get('folio') or ''),
+                              'folio': str(_r.get('folio') or ''),
+                              'Address': str(_r.get('addr') or ''),
+                              'tier': str(_r.get('tier') or ''), '_src': 'lp'})
+                _have.add(_c)
+                _lp_added += 1
+            if _lp_added:
+                print('  + %d Miami-Dade LP lead(s) folded in from lp_leads.json '
+                      '(never pulled before this)' % _lp_added)
+    except Exception as _e:                                   # never let this kill a nightly run
+        print('  ! LP fold-in skipped: %s' % _e)
     qs_cache = json.load(open(QS_CACHE, encoding='utf-8')) if os.path.exists(QS_CACHE) else {}
     out = json.load(open(OUT, encoding='utf-8')) if os.path.exists(OUT) else {}
 

@@ -2455,11 +2455,20 @@ def make_tracker(leads):
     try:
         import diligence_flags as _DF_BAKE
         import diligence_gate as _DG_BAKE
+        # Buy-box is OPTIONAL by construction: if buybox.py is missing or broken the board still
+        # builds and every lane except the buy-box lane is untouched. A standing preference must
+        # never be able to take down the pipeline that finds the leads in the first place.
+        try:
+            import buybox as _BB_BAKE
+        except Exception as _bbe:
+            _BB_BAKE = None
+            print('buybox: SKIPPED (%s) - no buy-box lane this build' % str(_bbe)[:80])
         _dg_tally = _DG_BAKE.Tally()
         _dg_baked = 0
         for _d in slim:
             try:
                 _d.update(_DF_BAKE.annotate(_d))              # flags/severity/dive, for display
+                _d.update(_BB_BAKE.annotate(_d) if _BB_BAKE else {})   # standing buy-box tag
                 _g = _dg_tally.check(_d)                      # the contact decision + bookkeeping
                 _d.update(_DG_BAKE.board_fields(_d))
                 if not _g['hold']:
@@ -2473,6 +2482,21 @@ def make_tracker(leads):
                 if not _dg_tally.unchecked_why:
                     _dg_tally.unchecked_why = str(_de)[:120]
         print('diligence: %d of %d row(s) carry a gate verdict (ddhold/ddwarn)' % (_dg_baked, len(slim)))
+        if _BB_BAKE:
+            # Print the split, not just the total. "12 in the buy-box" hides that 3 of them are
+            # underwater and will never appear in the lane — and a lane smaller than its headline
+            # number is how people stop trusting the headline number.
+            _bb_rows = [_d for _d in slim if _d.get('bb')]
+            _bb_uw = sum(1 for _d in _bb_rows if _d.get('bbstate') == 'UNDERWATER')
+            _bb_ok = sum(1 for _d in _bb_rows if _d.get('bbstate') == 'CONFIRMED')
+            # ASCII ONLY IN THIS PRINT, and that is not a style note. This block runs inside the
+            # bake's try/except, stdout on the nightly is a Windows cp1252 console, and the em-dash
+            # this line originally carried raised UnicodeEncodeError -> the whole buy-box report
+            # AND the diligence tally below it vanished silently while the build still exited 0.
+            # A status line that can kill the status lines after it is worse than no status line.
+            print('buybox: %d row(s) match a standing box - %d CONFIRMED room, %d unknown, '
+                  '%d UNDERWATER (excluded from the call lane)'
+                  % (len(_bb_rows), _bb_ok, len(_bb_rows) - _bb_ok - _bb_uw, _bb_uw))
         _dg_tally.report('diligence', indent='  ')
         if _dg_tally.n_held and not any(d.get('ddhold') for d in slim):
             # The tally says it held leads and not one row carries the field the browser reads.

@@ -704,6 +704,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'ab': 1 if (_m1 and _a1 and _m1 != _a1) else None,
             'dd': _s('dor_desc', 30), 'bd': _n('beds'), 'ba': _n('baths'), 'sf': _n('sqft'),
             'zs': _s('zstatus', 12),
+            # BUY-BOX. A standing acquisition criterion (buybox.py) that make_tracker stamps onto
+            # the row. Shipped as two short keys so the phone can lane on it without re-deriving
+            # anything: 'bb' = which box, 'bbs' = CONFIRMED | UNKNOWN | UNDERWATER.
+            # IT IS AN INTERNAL SORT, NOT A DIFFERENT PITCH. These are the same distressed owners
+            # and they get the same advisor script — "I am not trying to buy your house" stays
+            # true, because it is. Leading a preforeclosure homeowner with "I want to buy it" is
+            # the exact predatory framing the language law exists to prevent. The box decides
+            # WHICH doors get knocked first, never what is said at them.
+            'bb': _s('bb', 12), 'bbs': _s('bbstate', 12),
             # HIS FILE — the research links. Ship the two SEEDS (folio + county), not five long
             # URLs: 400 rows x ~450 chars of URL is ~180 KB on a page that has to open on a phone
             # at a door. The page rebuilds appraiser/tax/docket/people from these (see fileLinks).
@@ -1508,6 +1517,15 @@ function pool(){
   optPhones(true);
   var base;
   if(lane==='wq'){ var s={}; workerQ().forEach(function(c){ s[c]=1; }); base = ROWS.filter(function(r){ return s[r.c]; }); }
+  /* BUY-BOX LANE. Everything matching a standing acquisition criterion, in either board state —
+     a 4-bedroom in Miami Gardens is worth the call whether its sale is next week or unscheduled,
+     so this deliberately does NOT split on r.lp the way the other two lanes do.
+     UNDERWATER rows are dropped from this lane specifically. They stay reachable everywhere else
+     (an upside-down owner still deserves the advisor call, and short sales are real work) — but
+     this lane answers "which of these could we ACQUIRE", and a house worth less than its liens is
+     not a candidate. Showing it here is how a $222k-underwater lead got ranked #2 on a hand-built
+     sheet under the heading "most runway". */
+  else if(lane==='bb'){ base = ROWS.filter(function(r){ return !!r.bb && r.bbs !== 'UNDERWATER'; }); }
   else base = ROWS.filter(function(r){ return lane==='soon' ? !r.lp : !!r.lp; });
   var n = 0;
   var keep = base.filter(function(r){ if(suppressed(r)){ n++; return false; } return true; });
@@ -1586,6 +1604,9 @@ function render(){
 }
 function head(){
   var wq = workerQ().length;
+  /* Buy-box count. Same predicate as the lane filter, so the number on the button and the list
+     behind it can never disagree — a count derived a second way is a count that drifts. */
+  var bbn = ROWS.filter(function(r){ return !!r.bb && r.bbs !== 'UNDERWATER'; }).length;
   /* NO SILENT CAPS. Suppression is correct, but a list that quietly shrank looks identical to a list
      that was always that size — the exact confusion that hid 466 callable leads behind call_list's
      --max 30. Say the number out loud.
@@ -1596,6 +1617,10 @@ function head(){
     +(wq?('<button data-l="wq" class="'+(lane==='wq'?'on':'')+'">Worker &middot; '+wq+'</button>'):'')
     +'<button data-l="soon" class="'+(lane==='soon'?'on':'')+'">Sale soon</button>'
     +'<button data-l="lp" class="'+(lane==='lp'?'on':'')+'">Fresh filings</button>'
+    /* Count in the label, same rule as the Worker lane: a lane whose size is invisible gets
+       assumed to be whatever it was last time. Hidden only when the box matches nothing, so an
+       empty buy-box never reads as a broken build. */
+    +(bbn?('<button data-l="bb" class="'+(lane==='bb'?'on':'')+'">Buy-box &middot; '+bbn+'</button>'):'')
     +'</div>'
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
           +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')

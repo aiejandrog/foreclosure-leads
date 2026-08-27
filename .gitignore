@@ -10,6 +10,8 @@ _*.py
 !_redesign_verify.py
 !_gatetest.py
 !_suppressiontest.py
+BSG_Mail_Campaign_*.html
+BSG_Mail_Campaign_*.pdf
 !_dnctest.py
 !_senderdefaulttest.py
 !_diligencetest.py
@@ -344,3 +346,7 @@ send_sisavath5.py
 send_sisavath_sheet.py
 # Jose buy-box output: owner names + addresses for people in foreclosure — public repo, keep out
 jose_buybox.json
+buybox_mg4.json
+_mg4.json
+_mg4.txt
+buybox.py

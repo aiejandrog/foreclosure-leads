@@ -83,6 +83,11 @@ rem  --retries 80: a cached conf='none' is a FAILURE, not a result. MD cached fa
 rem  which froze 259 of 370 leads at "equity unverified" while the tracer reported nothing to do.
 rem  stub_resolve (step 1d) backfills the folios these traces need, so yesterday's failure often
 rem  succeeds today — retry a real batch every night, not never. Camoufox mints are free.
+rem  2026-08-27: this now also covers the LIS PENDENS board. records_liens read only leads_final.json
+rem  (370 AUCTION rows, which already have a judgment) and never touched lp_leads.json (1,007 rows
+rem  that by definition do NOT). So every fresh filing sat at "debt unknown" forever, and a closer
+rem  reading value-with-no-debt reads it as equity - the exact state that put an underwater owner on
+rem  a live call. 284 Miami-Dade LP leads folded in; --all picks them up here, 120/night.
 python -u records_liens.py --all --limit 120 --retries 80 >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
 if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
@@ -309,6 +314,14 @@ if errorlevel 1 (
 )
 echo     Pushed - live site updates in ~1-2 min.>> "%LOG%"
 echo     DONE - pushed. Refresh the site in ~1-2 min.
+
+rem  STANDING BUY-BOXES. Jose asked for "Miami Gardens, 4+ bed / 2+ bath, for my son" and that got
+rem  answered ONCE, by hand, as a dated HTML sheet. Two more matching cases were filed inside the
+rem  next week and were on nobody's radar, because a hand-built sheet is a photograph, not a filter.
+rem  This re-evaluates the criteria every night against the whole board, so a new 4-bedroom in
+rem  Miami Gardens surfaces by itself. Edit BOXES in buybox.py to add a box; nothing else changes.
+echo [buybox] Re-scanning standing acquisition criteria...
+python -u buybox.py --box mg4 --json buybox_mg4.json >> "%LOG%" 2>&1
 
 :end
 echo [health] Checking shipped data + upstream sources...
