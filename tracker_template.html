@@ -4355,6 +4355,17 @@ function _wpHousehold(r){
       + '</div></div>';
   }
   var fmtPh = function(n){ n = String(n||'').replace(/\D/g,''); if(n.length===11 && n[0]==='1') n = n.slice(1); return n.length===10 ? n.slice(0,3)+'-'+n.slice(3,6)+'-'+n.slice(6) : n; };
+  // DNC MUST BE VISIBLE ON EVERY SURFACE. This block renders phones from r.wpOwners / resid — a
+  // DIFFERENT source than r.phones — and never consulted r.phdnc, so a DNC number appeared here
+  // as a bare tappable dialer with NO badge and NO tooltip, while the same number one card over
+  // carries "DNC · call only". The board's documented policy (line ~3377) is that a DNC number
+  // stays manually dialable about the owner's OWN foreclosure and only Text/WA are withheld —
+  // so this matches that policy rather than inventing a third one: keep the dial, show the badge.
+  // (Call Mode deliberately takes the STRICTER line and never serializes DNC at all. That
+  // divergence is real and is Alejandro's call, not a thing to silently harmonise here.)
+  var _dncSet = new Set((r.phones||[]).filter(function(p,i){ return (r.phdnc||[])[i]; })
+                        .map(function(p){ return String(p).replace(/\D/g,'').slice(-10); }));
+  var _isDnc = function(d){ return _dncSet.has(String(d||'').replace(/\D/g,'').slice(-10)); };
   var anyAbs = owners.some(function(o){ return o.absentee; });
   var personCt = (r.wpAllPhones||[]).filter(function(p){return p.source==='person';}).length;
   var head = '<div class="cssec">🔎 WHITEPAGES-VERIFIED HOUSEHOLD'
@@ -4366,6 +4377,8 @@ function _wpHousehold(r){
     var atProp = !o.absentee;
     var phList = (o.phones||[]).map(function(p){
       var digits = String(p.n||'').replace(/\D/g,'');
+      if(_isDnc(digits)) return '<a class="wpph wpdnc" href="tel:'+esc(digits)+'" title="DNC — manual single dial only, no text/autodial">'+esc(fmtPh(p.n))+'</a>'
+        + '<span class="cttag dnc">DNC · call only</span>';
       return '<a class="wpph'+(p.type && p.type.indexOf('mob')>-1 ? ' wpmob' : '')+'" href="tel:'+esc(digits)+'">'+esc(fmtPh(p.n))+'</a>'
         + '<span class="wpt">'+esc(p.type||'?')+'</span>';
     }).join(' ');
@@ -4391,6 +4404,8 @@ function _wpHousehold(r){
       + resid.map(function(o){
           var ph = (o.phones||[]).map(function(p){
             var digits = String(p.n||'').replace(/\D/g,'');
+            if(_isDnc(digits)) return '<a class="wpph wpdnc" href="tel:'+esc(digits)+'" title="DNC — manual single dial only, no text/autodial">'+esc(fmtPh(p.n))+'</a>'
+              + '<span class="cttag dnc">DNC · call only</span>';
             return '<a class="wpph'+(p.type && p.type.indexOf('mob')>-1 ? ' wpmob' : '')+'" href="tel:'+esc(digits)+'">'+esc(fmtPh(p.n))+'</a>'
               + '<span class="wpt">'+esc(p.type||'?')+'</span>';
           }).join(' ');
