@@ -228,6 +228,16 @@ rem  actually churning" were unanswerable - which is precisely the question that
 rem  restructure. Each nightly append makes churn measurable from here on.
 python -u auction_archive.py >> "%LOG%" 2>&1
 
+echo [4d/5] Morning worker standup (today's meeting agenda + workable lanes)...
+rem  ADDED 2026-08-27: morning_planner.py was called by NOTHING — not this bat, not refresh.yml,
+rem  not a scheduled task. analyst.py imports it as a LIBRARY, which is why a grep looked like it
+rem  ran. So the morning standup only existed when a human remembered to type the command, and
+rem  the one surface built to answer "what do I do today" was the one surface that never appeared
+rem  on its own. Same defect class as ownership_scan (called by nothing until 08-19). It reads the
+rem  freshly-rebuilt leads above and writes the agenda to the Desktop, so it must run AFTER [4/5].
+python -u morning_planner.py >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! morning worker failed - see leads-run.log ^(board unaffected^).>> "%LOG%"
+
 echo [4d/5] Team CRM (Desktop CSV always; Google Sheets when sheets_crm_webhook.url exists)...
 rem  Reads the Desktop twin's RAW payload, so it MUST run after the [4/5] rebuild above.
 python -u sheets_crm.py >> "%LOG%" 2>&1
