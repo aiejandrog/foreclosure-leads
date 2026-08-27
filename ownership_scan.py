@@ -115,7 +115,31 @@ def main():
 
     kept, held = OG.gate_rows(rows, folio_key='folio', owner_key='owner', filed_key='filed',
                               county_key='county', budget_s=a.budget)
-    out = {}
+    # MERGE, NEVER OVERWRITE (fixed 2026-08-27).
+    # This used to be `out = {}` then a full-file json.dump — so every run REPLACED ownership.json
+    # with only the cases IT had just scanned. `--max` defaults well below the board size, so a
+    # routine `--days 45 --max 40` silently erased the other 40 verdicts, INCLUDING both recorded
+    # TRANSFERRED flips. That is the one stamp in this file that kills a lead outright: it is what
+    # stops a closer pitching equity to somebody who no longer owns the house (Milouse), and losing
+    # it turns a proven-gone property back into a callable lead with no trace in any log.
+    # Caught while running this script as the documented remedy for a diligence hold — the remedy
+    # was destroying the evidence the gate reads.
+    # Same one-way posture as optout_sync.py and cadence.py's ledger write: a fresh scan of a case
+    # supersedes the old verdict for THAT case, and a case this run did not look at keeps whatever
+    # it had. Re-running is idempotent.
+    prev = {}
+    if os.path.exists(OUT):
+        try:
+            with open(OUT, encoding='utf-8') as _fh:
+                _p = json.load(_fh)
+            if isinstance(_p, dict):
+                prev = _p
+        except Exception as _pe:
+            # An unreadable existing file must not be silently replaced with a partial scan.
+            print('ownership.json unreadable (%s) — NOT overwriting it. Fix or move it, then '
+                  're-run.' % str(_pe)[:100])
+            return 1
+    out = dict(prev)
     for r in rows:
         out[r['case']] = {'title_status': r.get('title_status', 'unverified'),
                           'title_owner': r.get('title_owner', ''),
@@ -125,6 +149,12 @@ def main():
     tmp = OUT + '.tmp'
     json.dump(out, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
     os.replace(tmp, OUT)
+    if prev:
+        _scanned = {r['case'] for r in rows}
+        _carried = len([c for c in prev if c not in _scanned])
+        print('ownership scan: %d case(s) scanned this run (%d re-scanned), %d carried forward '
+              'untouched, %d total in ownership.json'
+              % (len(_scanned), len([c for c in _scanned if c in prev]), _carried, len(out)))
 
     flips = [c for c, v in out.items() if v['title_status'] == 'transferred']
     print('wrote ownership.json — %d cases (%d TRANSFERRED, %d unverified)'

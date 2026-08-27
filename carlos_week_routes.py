@@ -68,7 +68,17 @@ def _in_deal(case):
     return st in _DEAL_STAGES
 
 
+# DILIGENCE TALLY. CR._live_lead enforces the gate for this script too, but it returns a bare bool
+# with no reason channel, so a week's route can collapse from 15 doors to 1 and print nothing about
+# why. Ask the gate here purely for the BOOKKEEPING (the drop itself still happens inside
+# _live_lead) so main() can say what happened. Measured 2026-08-27: 14 of 15 doors were held, and
+# the dominant reason was an ownership check that has never been run — not a bad lead.
+DILIGENCE = None
+
+
 def _house_only(r, skip, sibs, opt):
+    if DILIGENCE is not None:
+        DILIGENCE.check(r)
     if not CR._live_lead(r, skip, siblings=sibs, optouts=opt):
         return False
     if _in_deal(r.get('case') or r.get('Case #')):
@@ -81,6 +91,12 @@ def _house_only(r, skip, sibs, opt):
 
 
 def main():
+    global DILIGENCE
+    try:
+        import diligence_gate as _DG
+        DILIGENCE = _DG.Tally()
+    except Exception as _e:
+        print('diligence tally unavailable (%s) — routes still gated inside _live_lead.' % str(_e)[:80])
     leads = CR._load('leads_final.json') or []
     geo = CR._load('geocode_cache.json') or {}
     skip = CR._load('skiptrace_results.json') or {}
@@ -184,6 +200,8 @@ def main():
     for name, _, _ in CITIES:
         print(f'  {name:14} {len(days[name])} doors')
     print('total:', total)
+    if DILIGENCE is not None:
+        DILIGENCE.report('carlos week', indent='')
 
 
 if __name__ == '__main__':
