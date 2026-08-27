@@ -552,6 +552,9 @@ def main():
     ap.add_argument('--tier', default='')
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--retries', type=int, default=40,
+                    help='max previously-FAILED traces to retry this run (nightly default 40; '
+                         'raise to clear a backlog — camoufox mints are free, 2Captcha ~$0.003)')
     ap.add_argument('--cached-only', action='store_true', help="only owners with a cached search token (fast, no browser)")
     ap.add_argument('--no-camoufox', action='store_true',
                     help="skip the free Camoufox token mint and go straight to 2Captcha "
@@ -596,8 +599,8 @@ def main():
     if a.limit: picked = picked[:a.limit]
     # append retries AFTER the fresh cap so new leads always win the budget
     if md_retries:
-        room = max(0, (a.limit or len(picked) + 40) - len(picked))
-        take = md_retries[:min(room, 40)]
+        room = max(0, (a.limit or len(picked) + a.retries) - len(picked))
+        take = md_retries[:min(room, a.retries)]
         if take:
             print(f"retrying {len(take)} previously-failed trace(s) of {len(md_retries)} "
                   f"(folios backfilled since; a cached failure is not a result)")

@@ -79,7 +79,11 @@ rem  Miami-Dade Official Records sits behind Cloudflare Turnstile. captcha_solve
 rem  valid token (~$0.003/solve) so records_liens.py reads the chain with plain requests, no browser.
 rem  --all SKIPS already-traced cases (line 361), so each run only spends on genuinely NEW leads; --limit
 rem  60 caps a single run at ~$0.18 so a bad day can never run the 2Captcha balance away.
-python -u records_liens.py --all --limit 60 >> "%LOG%" 2>&1
+rem  --retries 80: a cached conf='none' is a FAILURE, not a result. MD cached failures forever,
+rem  which froze 259 of 370 leads at "equity unverified" while the tracer reported nothing to do.
+rem  stub_resolve (step 1d) backfills the folios these traces need, so yesterday's failure often
+rem  succeeds today — retry a real batch every night, not never. Camoufox mints are free.
+python -u records_liens.py --all --limit 120 --retries 80 >> "%LOG%" 2>&1
 rem  Broward records are captcha-free (AcclaimWeb, curl session) - pull the chain for new Broward leads.
 if exist broward_leads.json python -u broward_liens.py --all >> "%LOG%" 2>&1
 rem  Palm Beach chains via the county's OWN Landmark portal (2Captcha v2 - slow but first-party).
