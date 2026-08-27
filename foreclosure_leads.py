@@ -2396,6 +2396,56 @@ def make_tracker(leads):
             _d['title_owner'] = _og.get('title_owner', '')
             _d['title_evidence'] = _og.get('title_evidence', '')
 
+    # ---- DILIGENCE BAKE (Jesse's pre-contact check, as data) -----------------------------------
+    # MUST run AFTER the ownership stamp directly above and BEFORE anything reads `slim`, because
+    # diligence_flags.title_status_of() reads the key written on the line above this comment. A row
+    # with no stamp trips HIGH_EQUITY_UNVERIFIED at HIGH instead of MED, so the order is the
+    # difference between "nobody has checked this" and "we checked and it was fine".
+    #
+    # This is the ONLY place the Python verdict can reach the browser. The board, the Morning
+    # Worker, the Closers cockpit and the printed call sheet all gate on `r.ddhold`, and an
+    # UNDEFINED field in JS is falsy — so a bake that silently does not run fails OPEN with nothing
+    # in the console anywhere. That is why the whole loop is wrapped (a throw here would abort
+    # make_tracker and freeze the live board at the last good build, the 08-14/08-16 stale-site
+    # failure class) AND why it counts what it stamped and says so out loud. "0 rows carry ddhold"
+    # must look different from "the gate ran and held nobody".
+    #
+    # ddhold from annotate() is diligence_flags' RAW verdict; board_fields() is the CONTACT POLICY
+    # (diligence_gate). They differ on ~404 rows — the lis-pendens pool, where eqfake means "no debt
+    # captured yet", not "we did the arithmetic wrong". The policy one wins, so it is written last
+    # and the raw one is removed when the policy releases. One field, one meaning.
+    _dg_tally = None
+    try:
+        import diligence_flags as _DF_BAKE
+        import diligence_gate as _DG_BAKE
+        _dg_tally = _DG_BAKE.Tally()
+        _dg_baked = 0
+        for _d in slim:
+            try:
+                _d.update(_DF_BAKE.annotate(_d))              # flags/severity/dive, for display
+                _g = _dg_tally.check(_d)                      # the contact decision + bookkeeping
+                _d.update(_DG_BAKE.board_fields(_d))
+                if not _g['hold']:
+                    _d.pop('ddhold', None)                    # annotate's raw verdict must not win
+                if _d.get('ddhold') or _d.get('ddwarn'):
+                    _dg_baked += 1
+            except Exception as _de:
+                # ONE bad row is one bad row. It ships ungated (the board serving nothing is worse)
+                # and it is counted as unchecked, which prints on its own line below.
+                _dg_tally.unchecked += 1
+                if not _dg_tally.unchecked_why:
+                    _dg_tally.unchecked_why = str(_de)[:120]
+        print('diligence: %d of %d row(s) carry a gate verdict (ddhold/ddwarn)' % (_dg_baked, len(slim)))
+        _dg_tally.report('diligence', indent='  ')
+        if _dg_tally.n_held and not any(d.get('ddhold') for d in slim):
+            # The tally says it held leads and not one row carries the field the browser reads.
+            # That is the exact silent-failure this bake exists to make impossible — say it.
+            print('  !! diligence: %d hold(s) computed but ZERO rows carry ddhold — the browser '
+                  'gates will pass everything. Investigate before trusting this build.'
+                  % _dg_tally.n_held)
+    except Exception as _dge:
+        print('diligence: SKIPPED (%s) — every contact surface on this build is UNGATED.' % str(_dge)[:120])
+
     # ---- PERSON KEYS (cross-case contact identity) ---------------------------------------------
     # Computed at BUILD time, not in the browser: a client-side pass would be O(n^2) inside render
     # loops over ~1,500 leads, and it would only ever see the cases in THIS build — a person whose

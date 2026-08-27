@@ -382,6 +382,8 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust
     letter physically requires or that law requires: a real owner name + deliverable address, opt-out
     suppression, and no double-mailing."""
     from collections import Counter
+    import diligence_gate as _DG
+    _dg = _DG.Tally()
     skips = Counter()
     seen = set()
     queue = []
@@ -423,6 +425,16 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust
         if (_g(r, 'saleBkAct') or _g(r, 'sale_bk_active')) and not _g(r, 'saleLift'):
             skips['active-bankruptcy-stay'] += 1
             continue
+        # DILIGENCE GATE — a HARD backstop, OUTSIDE `if not trust_selection`, on the same reasoning
+        # the §362 comment above spells out. A human picking the lead in the tracker proves he wants
+        # to mail it; it does not prove anybody answered the title question. And mail is the channel
+        # that leaves a physical exhibit in a stranger's hands with our name on it — a letter to
+        # someone who sold the house in May, or an equity pitch to someone $70k underwater, is the
+        # one version of this mistake that cannot be walked back with a phone call.
+        _dgv = _dg.check(r)
+        if _dgv['hold']:
+            skips['diligence-hold(%s)' % _dgv['code']] += 1
+            continue
         if not remail and _case(r) in sent:
             skips['already-mailed'] += 1
             continue
@@ -434,6 +446,7 @@ def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust
         queue.append((r, parsed))
         if limit and len(queue) >= limit:
             break
+    _dg.report('letters', indent='  ')
     return queue, skips
 
 

@@ -270,6 +270,51 @@ def main():
             active.pop(c)
             print(f'  SUPPRESSED (not sent) -> {em or c}  ({s.get("owner")}) — {why}')
 
+    # 0b) DILIGENCE SWEEP, also at send time, and for the same reason as the sweep above.
+    #
+    # build_cadence_queue gates enrolment, which is correct and is not sufficient. A cadence_queue
+    # entry is {case, owner, addr, email, auction, step, next} — no value, no judgment, no parties,
+    # no sale year — so nothing in it can be diligence-checked on its own, and cadence_state.json
+    # keeps a sequence ALIVE across rebuilds by design (an already-known case keeps its progress).
+    # An owner enrolled before the gate existed therefore keeps receiving touches 2, 3 and 4 forever
+    # no matter what the gate later concludes, and this engine has no cap, no throttle and no
+    # --limit. So look the case back up in the lead files and re-ask, every run.
+    #
+    # 'held' is its own status, NOT 'suppressed': suppressed means a human said stop and it is
+    # permanent. A diligence hold is WORK — clear the reason, rebuild the queue, and the sequence
+    # resumes. Conflating the two would quietly convert a verification task into a dead lead.
+    try:
+        import diligence_gate as _dg
+        _rows = {}
+        for _r in (_oe._load_leads() or []):
+            _c = _oe._case(_r)
+            if _c and _c not in _rows:
+                _rows[_c] = _r
+        _held = 0
+        _nolookup = 0
+        for c, s in list(active.items()):
+            _row = _rows.get(c)
+            if _row is None:
+                _nolookup += 1          # off the board (auction passed, file rotated) — not a hold
+                continue
+            _g = _dg.gate(_row)
+            if _g['hold']:
+                _held += 1
+                s['status'] = 'held'
+                s['log'].append({'d': str(today),
+                                 'ev': 'held before send — diligence %s: %s' % (_g['code'],
+                                                                               _dg._clip(_g['why'], 160))})
+                active.pop(c)
+                print('  HELD (not sent) -> %s  (%s) — diligence %s: %s'
+                      % (s.get('email') or c, s.get('owner'), _g['code'], _dg._clip(_g['why'], 120)))
+        if _held or _nolookup:
+            print('  diligence sweep: %d sequence(s) held, %d case(s) not found in the lead files '
+                  '(off-board, left running)' % (_held, _nolookup))
+    except Exception as _dge:
+        # A cadence run that cannot diligence-check must still deliver its opt-out sweep and its
+        # reply check. Say the protection is off; do not take the engine down with it.
+        print('  !! diligence sweep SKIPPED (%s) — this run is sending UNGATED.' % str(_dge)[:120])
+
     # 1) reply check FIRST — never send another touch to someone who already wrote back
     replies = imap_replies(cred, [s['email'] for s in active.values()], args.dry_run or not cred)
     for c, s in active.items():

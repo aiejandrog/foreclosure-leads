@@ -37,6 +37,7 @@ import os
 import re
 import urllib.request
 from datetime import datetime
+import diligence_gate as _DG
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -216,6 +217,13 @@ def build_prospects(rows_src, notes, st, pbl):
 
 
 def _doorish(r):
+    # DILIGENCE GATE. `ddhold` is baked by make_tracker and arrives free on the twin's RAW payload;
+    # _leads() also FALLS BACK to the raw county files, where the field does not exist and an
+    # `r.get('ddhold')` read would silently pass everything — so ask the gate, which is correct on
+    # both shapes and costs 0.0001s a row. This is the "untouched lead earns a row anyway" path:
+    # Carlos and Jose dial straight off this sheet.
+    if _DG.gate(r)['hold']:
+        return False
     if r.get('title_status') == 'transferred':   # ownership flip: never send a rep to a stranger's door
         return False
     if r.get('vac'):                             # vacant land: no homeowner to help
@@ -269,6 +277,7 @@ def _closed_cases():
 
 def build_rows(rows_src, notes, st, pbl):
     closed = _closed_cases()
+    _dg = _DG.Tally()
     rows = []
     for r in rows_src:
         case = r.get('case') or ''
@@ -297,8 +306,22 @@ def build_rows(rows_src, notes, st, pbl):
                                  last.get('ch'), last.get('out') or '')).strip() if last else ''
         _d = r.get('days')
         _passed = isinstance(_d, (int, float)) and _d < 0
+        # DILIGENCE HOLD, SHOWN NOT DELETED. An untouched held lead never earns a row at all
+        # (_doorish returns False above). A lead somebody has ALREADY worked keeps its row — the
+        # touch history and the notes are the point of a CRM and dropping them would erase Carlos's
+        # work — but its Status says HOLD so nobody dials it off this tab, and the reason rides in
+        # the chain-note column where every other verification caveat already lives.
+        _dgv = _dg.check(r)
+        _note = _chain_note(r, pbl)
+        if _dgv['hold']:
+            _note = ('DILIGENCE HOLD (%s): %s' % (_dgv['code'], _dgv['why'])
+                     + (' | ' + _note if _note else ''))
+        elif _dgv['warn'] and _dgv['why']:
+            _note = ('DO NOT QUOTE THE EQUITY: ' + _dgv['why']) + (' | ' + _note if _note else '')
         rows.append([
-            ('AUCTION PASSED - surplus only' if _passed else '') or status or ('Door-ready' if _doorish(r) else 'Worked'),
+            ('HOLD - DILIGENCE (%s)' % _dgv['code'] if _dgv['hold'] else '')
+            or ('AUCTION PASSED - surplus only' if _passed else '') or status
+            or ('Door-ready' if _doorish(r) else 'Worked'),
             r.get('addr') or '',
             (r.get('owners') or '').split(';')[0].strip(),
             _fmt_phone(phones[0]) if phones else '',
@@ -311,7 +334,7 @@ def build_rows(rows_src, notes, st, pbl):
             round(judg) if judg else '',
             neq,
             eqp if eqp != '' else '',
-            _chain_note(r, pbl),
+            _note,
             last_s,
             len(human),
             n.get('next') or '',
@@ -324,6 +347,10 @@ def build_rows(rows_src, notes, st, pbl):
         return (1 if d < 0 else 0, d if d >= 0 else -d,
                 -(x[11] if isinstance(x[11], (int, float)) else 0))
     rows.sort(key=_key)
+    # These holds do NOT shrink the sheet — they re-label rows Carlos and Jose can still see. Print
+    # anyway: the count is how anyone notices the day HIGH_EQUITY_UNVERIFIED doubles because
+    # ownership_scan stopped running.
+    _dg.report('sheets CRM', indent='  ')
     return rows
 
 

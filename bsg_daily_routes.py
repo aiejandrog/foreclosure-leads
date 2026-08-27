@@ -150,6 +150,8 @@ def build_pool(drop):
             return 'wrong owner on file'
         return None
 
+    import diligence_gate as _DG
+    _dg = _DG.Tally()
     doors, specials = [], []
     seen = set()
 
@@ -187,6 +189,18 @@ def build_pool(drop):
     # -- auction pool: the only place equity is real ------------------------------------------
     for r in leads:
         c = r.get('case') or r.get('Case #')
+        # DILIGENCE GATE — on the RAW leads_final row, which is the richest shape the rules ever
+        # see (full defendants string, last_sale_date, filing_year). Doors are the most invasive
+        # channel we run, so this is the first question asked.
+        # DELIBERATELY BEFORE _live_lead, which also enforces the gate (it is shared with
+        # carlos_week_routes.py and had to). _live_lead returns a bare bool with no reason channel,
+        # so whichever runs first owns the accounting — and a door plan that shrinks needs to say
+        # WHICH check shrank it, not just that "the live-lead gate (BK/claimed/optout/passed/TD)"
+        # did. Asking here first means the specific code lands in the morning log.
+        _dgv = _dg.check(r)
+        if _dgv['hold']:
+            drop['auction: diligence hold (%s)' % _dgv['code']] += 1
+            continue
         if not CR._live_lead(r, skip, siblings=sibs, optouts=optouts):
             drop['auction: live-lead gate (BK/claimed/optout/passed/TD)'] += 1
             continue
@@ -269,6 +283,18 @@ def build_pool(drop):
                 'value': r.get('value') or 0, 'flag': r['upgrade'], 'why': r['upgrade_why']}
         if not _notes_block(r['case'], RL.norm(srow['addr'])) and r['case'] not in optouts:
             specials.append(srow)
+    _dg.report('door routes', indent='')
+    # HONEST HOLE, stated where the log will show it. The auction pool above is gated; the LP
+    # 'fresh' and 'verified' pools are NOT, because lp_addresses.json rows carry no case-level
+    # equity, no parties and no sale year — every rule would no-op and report a clean result it
+    # never actually computed. That is a scraper gap, not a gate to write, and a gate that silently
+    # covers one pool out of three while printing "installed" is the failure class this whole job
+    # exists to close.
+    _lp_doors = sum(1 for d in doors if d.get('kind') in ('fresh', 'verified'))
+    if _lp_doors:
+        print('door routes: %d LP door(s) on this sheet are NOT diligence-gated — lp_addresses.json '
+              'carries no equity, parties or sale year to check. Verify ownership at the door.'
+              % _lp_doors)
     return doors, specials
 
 

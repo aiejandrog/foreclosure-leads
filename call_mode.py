@@ -520,6 +520,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
 
     out = []
     _ident_dropped = 0
+    import diligence_gate as _DG
+    _dg = _DG.Tally()
     for d in slim:
         case = d.get('case') or ''
         if not case or case in optouts or case in deads:
@@ -530,6 +532,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         if d.get('sibclaimed') or d.get('saleBkAct') or d.get('lpDismissed'):
             continue
         if d.get('title_status') == 'transferred':          # ownership gate — they no longer own it
+            continue
+        # DILIGENCE GATE — same class of drop as the ownership gate directly above, and placed with
+        # it on purpose: both are "this lead is not what the card says it is", both are decided at
+        # build time, and neither is a preference. Sits BEFORE the equity floor and the phone-pair
+        # work below so a held lead never pays for a rank translation it will not use.
+        _dgv = _dg.check(d)
+        if _dgv['hold']:
             continue
         # EQUITY FLOOR. A KNOWN, deeply underwater lead is a call with no possible win: no equity to
         # protect, no surplus at sale (hammer < judgment), no service to offer anyone. The sort puts
@@ -735,6 +744,9 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # queue that was always this size, and this one drops leads that LOOK perfectly callable.
         print('call mode: %d lead(s) dropped — the person opted out by email/phone with no case '
               'attached (identity ledger)' % _ident_dropped)
+    # Same rule, same reason — and the diligence holds are the ones that look MOST callable of all,
+    # because a held lead's card still shows equity, a phone and an auction date.
+    _dg.report('call mode', indent='')
     return out[:cap], len(out)
 
 

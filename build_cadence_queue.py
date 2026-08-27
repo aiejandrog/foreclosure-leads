@@ -40,7 +40,10 @@ from datetime import date, timedelta
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
+import diligence_gate as _DG
 import outreach_email as OE
+
+_DGQ = _DG.Tally()
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE = os.path.join(HERE, 'cadence_queue.json')
@@ -91,6 +94,20 @@ def collect():
             continue
         if (r.get('saleBkAct') or r.get('sale_bk_active')) and not r.get('saleLift'):
             dropped['active bankruptcy stay'] = dropped.get('active bankruptcy stay', 0) + 1
+            continue
+        # DILIGENCE GATE — explicit, even though OE._eligible above already applies it.
+        # L78-80 KEEPS only the rows _eligible REJECTED for 'worker already emailed', so a lead
+        # dropped for a diligence hold there falls out of this pool silently and correctly. Silently
+        # is the problem: the drop would never appear in the report and the pool would just be
+        # smaller. Re-asking here costs one dict lookup and buys a line in the log.
+        # THIS IS ALSO THE ONLY ENFORCEABLE POINT FOR THE 4-TOUCH SEQUENCE. cadence.py sends off
+        # cadence_queue.json entries of {case, owner, addr, email, auction, step, next} — no value,
+        # no judgment, no parties, no sale year. Every diligence rule would no-op there. Enrolment
+        # is the gate; see the re-screen of already-enrolled entries below.
+        _dgv = _DGQ.check(r)
+        if _dgv['hold']:
+            k = 'diligence hold: %s' % _dgv['code']
+            dropped[k] = dropped.get(k, 0) + 1
             continue
         if em in supp:
             dropped['previously bounced'] = dropped.get('previously bounced', 0) + 1

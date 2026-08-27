@@ -2612,6 +2612,7 @@ function _isCloser(r){
   if(r._nodata || (typeof isFlaggedDead==='function' && isFlaggedDead(r)) || (typeof notForModel==='function' && notForModel(r))) return false;
   if(r._verdict !== 'STRONG' && r._verdict !== 'MARGINAL') return false;   // must pencil out
   if(r.eqfake) return false;                                               // TRUST: no fantasy equity in the closers
+  if(r.ddhold) return false;                                               // diligence gate: unverified/underwater/not-their-house — also closes the Call Sheet view, which filters on _isCloser
   var n = notes[r.case] || {}; if(n.status === 'Dead' || n.status === 'DO NOT CONTACT') return false;
   if(_isWrongOwner(n)) return false;              // identity disproven — re-verify before it can rank
   var d = r.days; if(!(d > 2 && d <= 45)) return false;                    // runway to actually close, not passed / too tight
@@ -2999,6 +3000,22 @@ function verdictBadge(r){ return r._verdict==='VERIFY' ? '<span class="vb vbv">V
 // deal-killer chips: 🔴 TAKEN (already deeded to an investor) · 🟠 2ND FORECLOSURE (a separate mortgage case).
 // Conservative: solid red only when high-confidence; low-confidence shows amber "MAYBE SOLD / verify".
 function flagChips(r){ let o='';
+  // DILIGENCE — the hold is a SUPPRESSION, so it has to be visible on the card or the lead just
+  // quietly stops appearing in the worker and the Closers and nobody can say why. Red HOLD when the
+  // gate blocked contact, amber DON'T QUOTE when it let the lead through but the equity figure on
+  // this row is not a real number (eqfake with no debt captured — the whole lis-pendens pool).
+  // Reason text comes from Python (ddwhy2) so the card and the build log say the same sentence.
+  if(r.ddhold){
+    o+='<span class="chip tax" title="DILIGENCE HOLD'+(r.ddcode?' ('+esc(r.ddcode)+')':'')+'. '+
+      esc(r.ddwhy2||'The pre-contact diligence gate held this lead.')+
+      (r.ddact?'&#10;&#10;DO THIS: '+esc(r.ddact):'')+
+      '&#10;&#10;The lead is NOT deleted — it is held out of the Morning Worker, Call Mode, the Closers cockpit and every '+
+      'outbound queue until somebody clears the reason above.">HOLD &mdash; DILIGENCE</span>'; }
+  else if(r.ddwarn){
+    o+='<span class="chip hoa" title="'+esc(r.ddwhy2||'The equity number on this row is not a verified number.')+
+      (r.ddact?'&#10;&#10;DO THIS: '+esc(r.ddact):'')+
+      '&#10;&#10;Contact is fine. The NUMBER is not: do not say an equity figure, a spread or a payoff on this lead '+
+      'until the senior debt is in writing.">DON&rsquo;T QUOTE THE EQUITY</span>'; }
   // SOLD — the strongest of these: a LIVE county-appraiser read says the current owner of record is not
   // the person this case is against. Catches the cross-case transfer (an HOA foreclosure's Certificate of
   // Title) that CLAIMED/TAKEN both miss because neither looks outside our own docket. Renders the actual
@@ -11790,6 +11807,14 @@ function _workerEligible(r){
   // Shared gate for every lane. Suppression first — these are legal, not preferences.
   if(!r || !r.case) return false;
   if(r.sibclaimed || r.saleBkAct || r.lpDismissed) return false;
+  // DILIGENCE HOLD (diligence_gate.py, baked onto the row by make_tracker as ddhold). Jesse's
+  // pre-contact check, expressed as a field: the owner is already gone, the debt eats the value,
+  // they paid above today's price, or the equity number came off a judgment that is not the real
+  // debt. The worker is the ONE surface that sends unattended, in bulk, at 8am — a held lead here
+  // is an email and a text to a stranger before anyone reads the card. Nothing is deleted: the row
+  // stays on the board with its reason in ddwhy2 and a HOLD chip. If the Python bake did not run,
+  // ddhold is undefined and this passes — see the build-time assertion in foreclosure_leads.py.
+  if(r.ddhold) return false;
   // OWNERSHIP FLIP: the live appraiser says this person no longer owns the property. Every other
   // surface (board chips, Closers, Call Mode) already kills these; the worker was the one place
   // still emailing/texting/queueing calls to non-owners (2026-08-18 congruence audit).
@@ -11841,6 +11866,8 @@ function _laneStats(lane){
     if(!r || !r.case || !L.test(_saleDays(r), r)) return;
     s.pool++;
     if(r.sibclaimed || r.saleBkAct || _aucPassed(r)){ s.suppressed++; return; }
+    // mirror _workerEligible's diligence hold, or the lane count promises work the queue refuses
+    if(r.ddhold){ s.suppressed++; return; }
     // mirror _workerEligible's ownership-flip + non-business gates or the lane counts lie
     if((typeof isFlaggedDead === 'function' && isFlaggedDead(r)) || r.vac
        || /timeshare|parcel not linked/i.test(String(r.warn || ''))){ s.suppressed++; return; }

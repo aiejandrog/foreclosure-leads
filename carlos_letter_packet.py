@@ -298,6 +298,36 @@ def main():
     rows = [r for r in rows if str(r.get('c') or '') not in _opt]
     if len(rows) != _n0:
         print('opt-out: %d letter(s) dropped — the owner asked us to stop' % (_n0 - len(rows)))
+    # DILIGENCE GATE. _letter_rows.json is a hand-built scratch file whose case key is 'c', not
+    # 'case' — diligence_flags.case_of() does not read 'c', so gating the row as-is would have
+    # produced a clean verdict it never computed (the "succeeds while doing nothing" class). Look the
+    # REAL board row up by case and gate THAT; a case with no board row is reported, not silently
+    # passed, because a letter is the channel that leaves paper in someone's hands.
+    try:
+        import diligence_gate as _DG
+        import outreach_email as _OE
+        _by_case = {}
+        for _lr in (_OE._load_leads() or []):
+            _lc = _OE._case(_lr)
+            if _lc and _lc not in _by_case:
+                _by_case[_lc] = _lr
+        _dg, _keep, _missing = _DG.Tally(), [], 0
+        for r in rows:
+            _src = _by_case.get(str(r.get('c') or ''))
+            if _src is None:
+                _missing += 1
+                _keep.append(r)
+                continue
+            if _dg.check(_src)['hold']:
+                continue
+            _keep.append(r)
+        rows = _keep
+        _dg.report('carlos letters', indent='')
+        if _missing:
+            print('carlos letters: %d row(s) had no matching board lead and were NOT '
+                  'diligence-checked — verify those by hand before mailing.' % _missing)
+    except Exception as _dge:
+        print('carlos letters: diligence gate SKIPPED (%s) — this packet is UNGATED.' % str(_dge)[:120])
     dropped = []
     keep = []
     for r in rows:

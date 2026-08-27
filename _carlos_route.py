@@ -159,6 +159,21 @@ def _live_lead(r, skip, siblings=None, optouts=None):
     # person still got a knock. Doors are the most invasive channel we run; it should be the least
     # willing to guess. (Same gap fixed in the Morning Worker and Call Mode today.)
     if optouts and _identity_opted(skip, optouts): return False
+    # DILIGENCE GATE. This function is the SHARED door filter -- bsg_daily_routes.py and
+    # carlos_week_routes.py both call it, so this one line covers both route generators. It is the
+    # highest-leverage line in the door stack: everything above it asks "may we contact them", this
+    # asks "is the lead what the card says it is" (owner already gone, debt eats the value, they
+    # paid above today's price, equity computed off the wrong judgment).
+    # NO REASON CHANNEL HERE -- the signature is a bare bool and changing it would change two
+    # callers. bsg_daily_routes therefore asks the gate itself, first, and logs the specific code;
+    # carlos_week_routes gets the protection without the breakdown. If a third caller appears and
+    # needs the reason, call diligence_gate.gate() there rather than widening this.
+    try:
+        import diligence_gate as _DG
+        if _DG.gate(r)['hold']: return False
+    except Exception:
+        pass                    # a gate that cannot load must not empty a door route -- see the
+                                # fail-open rule in diligence_gate's docstring
     # already-sold / cancelled won't have a future date -- days<0 = past
     d = _days_to(_sale_date(r))
     if d is not None and d < 0: return False

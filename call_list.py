@@ -58,6 +58,8 @@ def _money(v):
 
 def collect(days_window, cap, lp=False):
     import phone_rank as PR
+    import diligence_gate as DG
+    _dg = DG.Tally()
     # skiptrace_results.json is a DICT KEYED BY CASE NUMBER, and the records inside carry no 'case'
     # field of their own ({name, address, phones, emails, traced, source}). Reading .values() and
     # looking for r['case'] silently produces an empty map — every lead then looks like it has no
@@ -96,6 +98,10 @@ def collect(days_window, cap, lp=False):
             if not case or r.get('lpDismissed') or r.get('lpClosed'):
                 continue
             if (own.get(case) or {}).get('title_status') == 'transferred':
+                continue
+            # DILIGENCE GATE — on the SOURCE row `r`, never on the display dict built below, which
+            # drops every field the rules read (no defendants, no sale year, no judgment).
+            if _dg.check(r)['hold']:
                 continue
             owner = str(r.get('oname') or r.get('owners') or '').strip()
             if owner.upper() in opt:
@@ -136,6 +142,7 @@ def collect(days_window, cap, lp=False):
                     pass
             return datetime.date(1900, 1, 1)
         rows.sort(key=_fkey, reverse=True)      # newest filing first — freshness IS the edge
+        _dg.report('call list (LP)', indent='')
         return rows[:cap]
 
     srcs = [('leads_final.json', 'Case #', 'owners', 'Address', 'AuctionDate', 'days_to_auction',
@@ -156,6 +163,11 @@ def collect(days_window, cap, lp=False):
                 continue
             # OWNERSHIP GATE — never dial someone who no longer owns the property.
             if (own.get(case) or {}).get('title_status') == 'transferred':
+                continue
+            # DILIGENCE GATE — same placement rule as the LP branch: the SOURCE row, before the
+            # display dict. These are RAW county rows with no title_status of their own; the gate
+            # merges ownership.json itself so an already-cleared lead is not held twice.
+            if _dg.check(r)['hold']:
                 continue
             owner = str(r.get(ok) or '').strip()
             if owner.upper() in opt:
@@ -191,6 +203,7 @@ def collect(days_window, cap, lp=False):
             })
     # sort: soonest sale, then known equity high-to-low, then the unknowns
     rows.sort(key=lambda x: (x['days'], 0 if x['eq'] is not None else 1, -(x['eq'] or 0)))
+    _dg.report('call list', indent='')
     return rows[:cap]
 
 

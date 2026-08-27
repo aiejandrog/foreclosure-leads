@@ -38,6 +38,7 @@ import datetime
 import glob
 import json
 
+import diligence_gate as _DG
 import disclaimer as D
 import os
 import random
@@ -366,6 +367,11 @@ def _worker_hist(ledger=None):
     return out
 
 
+# Module-level so build_cadence_queue.py — which calls _eligible() directly and inverts its verdict
+# — shares the same bookkeeping instead of counting holds twice or not at all.
+DILIGENCE = _DG.Tally()
+
+
 def _eligible(r, ledger, optouts, min_hours):
     """Returns (ok:bool, why:str). Mirrors the tracker's _workerEligible + a few CLI extras."""
     if not _case(r):
@@ -384,6 +390,17 @@ def _eligible(r, ledger, optouts, min_hours):
         return False, 'active bankruptcy stay'
     if r.get('sibclaimed'):
         return False, 'sibling case sold'
+    # DILIGENCE GATE. Sits with the other compliance drops, not with the judgment filters.
+    # NOTE ON ROW SHAPE: _load_leads() reads the RAW *_leads.json files, which carry no
+    # 'title_status' — diligence_gate merges ownership.json in itself, so a lead ownership_scan has
+    # already cleared is not held for a check that already happened.
+    # The `why` returned here is the CODE only, deliberately: main()'s 'excluded:' block uses the
+    # reason string as a dict key, and the gate's full sentence carries dollar figures unique to
+    # each lead — it would print one line per held row instead of one line per reason. The full
+    # sentences come out of DILIGENCE.report() below the same block.
+    _dg = DILIGENCE.check(r)
+    if _dg['hold']:
+        return False, 'diligence hold: %s' % _dg['code']
     # opt-out is keyed by CASE or EMAIL in the ledger — check both (the case catches an owner who
     # opted out by phone/text with no email on the STOP record).
     if _case(r).strip().lower() in optouts:
@@ -747,6 +764,7 @@ def main():
     for why, n in sorted(_keep.reasons.items(), key=lambda kv: -kv[1]):
         if why != '_pass':
             print(f'    {n:5}  {why}')
+    DILIGENCE.report('  diligence', indent='  ')
 
     if entries:
         print('\n  top of queue:')
