@@ -329,6 +329,19 @@ def enrich(leads):
     s = requests.Session(); s.headers['User-Agent'] = UA
     for i, r in enumerate(leads):
         folio = _valid_folio(r.get('Folio',''))
+        if not folio:
+            # STUB HOOK: a case the resolver has already tied to a parcel (stub_folios.json —
+            # defendant-name -> appraiser roll, corroborated; see stub_resolve.py). The auction
+            # published nothing for these, so without this line they re-enter every nightly as
+            # value-less 'parcel not linked' rows forever.
+            try:
+                import stub_resolve
+                _sf = _valid_folio(stub_resolve.folio_for(r.get('Case #', '')))
+                if _sf:
+                    r['Folio'] = _sf
+                    folio = _sf
+            except Exception:
+                pass
         r['enriched'] = False
         if not folio: continue   # skip non-parcel / multi-parcel rows (no real folio to look up)
         # ONE try/except that guards BOTH the fetch AND the parse — a single malformed PA response

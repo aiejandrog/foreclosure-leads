@@ -7115,8 +7115,20 @@ function _doorVerified(r){
   if(r.title_status === 'transferred') fails.push('OWNER FLIPPED — appraiser shows a new owner; they no longer own it');
   else if(r.title_status !== 'clear') warns.push('ownership not re-verified against the live roll (gate has not scanned this one)');
   if(_isWrongOwner(n)) fails.push('WRONG PERSON confirmed on this lead — re-verify the owner first');
-  // value: the assv-leak class — a number nobody actually looked up
-  if(r.warn) fails.push('VALUE UNVERIFIED — ' + r.warn);
+  // value: the assv-leak class — a number nobody actually looked up. But NOT every warn is a
+  // value warn: a tax-deed row with a real roll value warning about SURVIVING LIENS is title
+  // diligence for the BUYER (the drive itself is sound — owner current, value real), and an
+  // HOA-case warn about the SENIOR MORTGAGE is the junior-lien/Acosta class (equity not real),
+  // not a value problem. Labeling all three 'VALUE UNVERIFIED' buried the two real categories
+  // and made the census unreadable (2026-08-27). Value-less rows fail exactly as before.
+  if(r.warn){
+    if(r.value > 0 && /tax-deed: verify surviving liens/i.test(r.warn))
+      warns.push('TITLE DILIGENCE (tax deed) — ' + r.warn);
+    else if(r.value > 0 && /HOA\/assoc case - verify senior mortgage/i.test(r.warn))
+      fails.push('SENIOR DEBT UNKNOWN — ' + r.warn);
+    else
+      fails.push('VALUE UNVERIFIED — ' + r.warn);
+  }
   // equity: the Acosta lesson — "we started off thinking he had $100k of equity; he had nothing"
   if(r.ju) fails.push('JUDGMENT UNKNOWN — the equity number is a guess, not a fact');
   else if((r.eqfake || r.mr) && !(r.orconf === 'ok' || r.orconf === 'low'))

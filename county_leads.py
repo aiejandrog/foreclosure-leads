@@ -197,6 +197,14 @@ def to_slim(county, cfg, base, items):
     slim = []
     for r in items:
         folio = re.sub(r'\D', '', r.get('Folio', '') or '')
+        if not folio:
+            # STUB HOOK: a case stub_resolve has already tied to a parcel (defendant-name ->
+            # appraiser roll, corroborated). Kept raw — Broward condo folios carry letters.
+            try:
+                import stub_resolve
+                folio = stub_resolve.folio_for(r.get('Case #', '')) or ''
+            except Exception:
+                pass
         judg = F.money(r.get('Final Judgment Amount', ''))
         # TRUE type from the auction plaintiff (bank-charter guard wins first); the case-number prefix is
         # only the fallback when the auction gives no plaintiff. The recorded-chain plaintiff later overrides

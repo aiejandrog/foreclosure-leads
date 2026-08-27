@@ -57,6 +57,13 @@ if errorlevel 1 echo     ^!^! Broward scrape thin/failed - kept last good Browar
 python -u county_leads.py --county "palm beach" >> "%LOG%" 2>&1
 if errorlevel 1 echo     ^!^! Palm Beach scrape thin/failed - kept last good Palm Beach file.>> "%LOG%"
 
+echo [1d/5] Resolving parcel-less auction stubs (defendant name -^> appraiser roll, corroborated)...
+rem  'parcel not linked' rows are auction items that publish NOTHING (no address, no folio). The
+rem  court knows the defendant and the appraiser knows what they own; stub_resolve ties the two,
+rem  caches case-^>folio in stub_folios.json, and the scrape hooks keep it resolved every night.
+rem  --limit caps Broward clerk lookups (2Captcha, ~$0.003/case) per run.
+python -u stub_resolve.py --sweep --limit 25 >> "%LOG%" 2>&1
+
 echo [2/5] Generating direct court-case + records links (new owners only; capped so publish is never starved)...
 python -u gen_cases_qs.py --limit 40 >> "%LOG%" 2>&1
 python -u gen_records_qs.py --limit 40 >> "%LOG%" 2>&1
