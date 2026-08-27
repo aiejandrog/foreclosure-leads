@@ -324,3 +324,14 @@ send_taxes.py
 send_condo_value.py
 _wcv*.py
 _wcv*.json
+send_scripts6.py
+_send_pipeline.py
+_send_t1.py
+sisavath_brief.py
+send_sisavath2.py
+send_sisavath3.py
+send_sisavath4.py
+send_sisavath5.py
+send_sisavath_sheet.py
+# Jose buy-box output: owner names + addresses for people in foreclosure — public repo, keep out
+jose_buybox.json
