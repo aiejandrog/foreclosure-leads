@@ -15,6 +15,7 @@ from datetime import datetime, date, timedelta
 import requests
 from playwright.sync_api import sync_playwright
 import paths as P
+import equity_state as _es
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DESKTOP = P.DESKTOP
@@ -1713,6 +1714,12 @@ def make_tracker(leads):
             'folio': _valid_folio(r.get('Folio','')),   # lets the in-site property lookup cross-check any parcel against this auction list
         }
         rlh = rl.get(r.get('Case #',''))
+        # EQUITY STATE on EVERY lead, chain or no chain (see equity_state.py). An empty chain is
+        # a FINDING, not an absence: 'searched 30 instruments, nothing survives' and 'never
+        # checked' are opposite facts that both used to render as a blank cell — which is how a
+        # verified-clear lead sat invisible next to a guess. Stamped before the liens gate below
+        # so it is set even when that gate skips.
+        _es.apply(d, rlh)
         if rlh and rlh.get('liens'):
             d['orliens'] = rlh.get('liens', [])          # the recorded mortgage chain (open/satisfied + amounts)
             d['orjunior'] = rlh.get('junior', 0)         # suggested surviving 2nd (open mtgs beyond the foreclosing 1st)
@@ -1916,6 +1923,10 @@ def make_tracker(leads):
                             _s += 8 if _d.get('oname') else 4
                             _d['score'] = round(_s)
                             _d['tier'] = 'A' if _d['score'] >= 70 else ('B' if _d['score'] >= 50 else 'C')
+                # EQUITY STATE for the county lanes too — same rule, same module, no drift.
+                # This is the path that was hiding 19 VERIFIED-CLEAR Broward leads and 226
+                # Palm Beach ceiling-only chains behind an empty cell.
+                _es.apply(_d, _h)
                 if _h and _h.get('liens'):
                     _d['orliens'] = _h.get('liens', [])
                     _d['orjunior'] = _h.get('junior', 0)

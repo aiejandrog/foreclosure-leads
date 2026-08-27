@@ -7130,6 +7130,21 @@ function _doorVerified(r){
       fails.push('VALUE UNVERIFIED — ' + r.warn);
   }
   // equity: the Acosta lesson — "we started off thinking he had $100k of equity; he had nothing"
+  // EQUITY STATE (2026-08-27). The recorded chain is pulled nightly for nearly every lead, but
+  // an EMPTY chain used to render identically to one never pulled — so a VERIFIED-CLEAR lead
+  // (30 instruments searched, nothing surviving) looked exactly like a guess, and a guess looked
+  // exactly like a fact. Only 'clear'/'priced' are facts; everything else must say so out loud.
+  var _eqs = r.eqstate || 'unchecked';
+  if(r.value > 0 && !r.ju){
+    if(_eqs === 'unpriced')
+      fails.push('EQUITY IS A CEILING — ' + (r.eqopen||'?') + ' mortgage(s) recorded, county publishes no amounts; ask the owner what they owe');
+    else if(_eqs === 'none')
+      fails.push('EQUITY UNVERIFIED — recorded chain could not be established' + (r.eqrecs ? ' ('+r.eqrecs+' records searched)' : ''));
+    else if(_eqs === 'unchecked')
+      fails.push('EQUITY NOT CHECKED — no recorded chain pulled for this lead yet');
+    else if(_eqs === 'clear' && r.eqlow)
+      warns.push('chain traced clear, but on a COMMON owner name — confirm identity before pitching the number');
+  }
   if(r.ju) fails.push('JUDGMENT UNKNOWN — the equity number is a guess, not a fact');
   else if((r.eqfake || r.mr) && !(r.orconf === 'ok' || r.orconf === 'low'))
     fails.push('JUNIOR-LIEN equity (gross) — recorded chain not resolved; the shown % is fake');
