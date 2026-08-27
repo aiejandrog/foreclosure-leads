@@ -179,7 +179,12 @@ rem  ADDED 2026-08-19: ownership_scan.py was called by NOTHING - not this bat, n
 rem  so the title-flip truth on the board was only as fresh as the last time a human remembered
 rem  to run it (it had been stamped 08-14 for five days). A lead whose title already transferred
 rem  is a WRONG-PERSON conversation waiting to happen. Free, and --budget bounds it to 3 minutes.
-python -u ownership_scan.py --days 45 --max 80 --budget 180 >> "%LOG%" 2>&1
+rem  RAISED 2026-08-27: --max 80 capped to "the 80 SOONEST", so the nightly re-scanned the same
+rem  80 leads every night and the other 412 in the window were NEVER checked. The consequence was
+rem  not cosmetic: the diligence gate HELD 288 leads out of the call queue for "never had a live
+rem  ownership check" — leads with real equity and a phone, held by an unrun check rather than a
+rem  defect. The scan is free (county appraiser pages) and runs ~2.5s/lead, so cover the window.
+python -u ownership_scan.py --days 45 --max 500 --budget 1500 >> "%LOG%" 2>&1
 
 rem  [moved up to [3/5]] llc_officers now runs BEFORE skip-trace so officer phones can be pulled.
 

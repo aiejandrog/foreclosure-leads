@@ -131,6 +131,23 @@ def _load_leads():
             leads += json.load(open(path, encoding='utf-8'))
         except Exception:
             pass
+    # EQUITY STATE (2026-08-27). This planner reads the RAW lead files, and `eqstate` is stamped
+    # during the board merge — so the morning brief has never known which equity numbers were
+    # actually traced. It ranked on tier, and tier is computed from the equity number itself, so
+    # a lead whose equity was pure guess could headline the day. Stamp it here from the same
+    # caches the board uses, via the same module, so both surfaces agree by construction.
+    try:
+        import equity_state as _es
+        _chains = {}
+        for _cf in ('records_liens.json', 'broward_liens.json', 'palmbeach_liens.json'):
+            try:
+                _chains.update(json.load(open(os.path.join(HERE, _cf), encoding='utf-8')))
+            except Exception:
+                pass
+        for r in leads:
+            _es.apply(r, _chains.get(_case(r)))
+    except Exception:
+        pass
     # merge skiptrace so emails/phones show up
     st_path = os.path.join(HERE, 'skiptrace_results.json')
     if os.path.exists(st_path):
@@ -176,13 +193,46 @@ def _board_age_days():
 
 
 # ---------------------------------------------------------------- signals
+def _eq_pct(r):
+    """Equity % as a float, or None for NOT CHECKED. County lanes use `eq`, Miami-Dade
+    `equity_pct` — read both, and never let a missing value read as 0."""
+    for k in ('eq', 'equity_pct'):
+        v = (r or {}).get(k)
+        if v is None or v == '':
+            continue
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def _deeply_underwater(r, floor=-25.0):
+    """KNOWN to be far underwater — no equity to protect and no surplus at sale, so it cannot
+    convert. Mirrors call_mode's CALLMODE_EQ_FLOOR exactly, including the load-bearing part:
+    NOT CHECKED (None) is not underwater and always ships."""
+    v = _eq_pct(r)
+    return v is not None and v <= floor
+
+
+def _verified(r):
+    """Equity proved by an actually-traced recorded chain (equity_state clear/priced) — the only
+    kind that may be spoken as fact to a homeowner. Everything else is a working hypothesis."""
+    return str((r or {}).get('eqstate') or '') in ('clear', 'priced')
+
+
 def _workable_leads(leads, min_days=13, max_days=45, limit=40):
     """The lane Alejandro actually meets on: sales far enough out that a letter can arrive, a
     call can land, an offer can be negotiated, and a title company can close. Sub-13 days is
     already too close to work realistically -- see _expiring_leads for that separate section."""
     rows = [r for r in leads
-            if (_days(r) is not None and min_days <= _days(r) <= max_days)]
-    rows.sort(key=lambda r: (_days(r) or 0, {'A': 0, 'B': 1, 'C': 2}.get(_tier(r), 3)))
+            if (_days(r) is not None and min_days <= _days(r) <= max_days)
+            and not _deeply_underwater(r)]
+    # VERIFIED EQUITY FIRST. Tier is derived from the equity number, so sorting on tier alone let
+    # an untraced guess headline the morning brief ahead of a chain-verified lead. Traced first,
+    # then the old key unchanged.
+    rows.sort(key=lambda r: (0 if _verified(r) else 1, _days(r) or 0,
+                             {'A': 0, 'B': 1, 'C': 2}.get(_tier(r), 3)))
     return rows[:limit]
 
 
@@ -191,7 +241,11 @@ def _expiring_leads(leads, max_days=12, limit=20):
     window; the meeting decision is call/door-knock TODAY or write them off. Not the focus."""
     rows = [r for r in leads
             if (_days(r) is not None and 0 <= _days(r) <= max_days)]
-    rows.sort(key=lambda r: (_days(r) or 0, {'A': 0, 'B': 1, 'C': 2}.get(_tier(r), 3)))
+    # VERIFIED EQUITY FIRST. Tier is derived from the equity number, so sorting on tier alone let
+    # an untraced guess headline the morning brief ahead of a chain-verified lead. Traced first,
+    # then the old key unchanged.
+    rows.sort(key=lambda r: (0 if _verified(r) else 1, _days(r) or 0,
+                             {'A': 0, 'B': 1, 'C': 2}.get(_tier(r), 3)))
     return rows[:limit]
 
 

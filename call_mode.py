@@ -660,6 +660,11 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'v': _n('value'), 'py': _n('payoff'), 'ja': _n('jaccr'), 'jg': _n('judg'),
             'jd': _s('jdate', 10), 'arv': _n('arv'), 'an': _n('arvn'),
             'e': eq if (eq is not None and (d.get('value') or 0)) else None,
+            # EQUITY VERIFIED (2026-08-27). `e` alone cannot tell a caller whether the number is a
+            # FACT or a GUESS, and the sort below ranked a guessed 90% above a traced-and-proven
+            # 45% — so the sessions opened on the least certain leads on the board. 'v' is 1 only
+            # when the recorded chain was actually traced (equity_state clear/priced). One byte.
+            'v': 1 if str(d.get('eqstate') or '') in ('clear', 'priced') else 0,
             'ss': (d.get('orsurvsen') if isinstance(d.get('orsurvsen'), (int, float)) else None),
             'oc': _s('orconf', 6), 'td': _n('taxDue'), 'et': _n('etax'),
             # ---- clock ----
@@ -737,7 +742,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         if d <= 45:
             return 0
         return 1
-    out.sort(key=lambda r: (_band(r), 0 if r.get('e') is not None else 1, -(r.get('e') or 0),
+    # VERIFIED EQUITY OUTRANKS A BIGGER GUESS. Within a band the old key sorted purely on the
+    # equity NUMBER, so a lead whose 90% was never traced opened the session ahead of one proven
+    # at 45% by the recorded chain — the caller spent the freshest hour of the day on the leads
+    # most likely to evaporate (the Acosta pattern, at the top of the queue). Traced first, then
+    # the number. Untraced leads still ship; they just stop cutting the line.
+    out.sort(key=lambda r: (_band(r), 0 if r.get('v') else 1,
+                            0 if r.get('e') is not None else 1, -(r.get('e') or 0),
                             r.get('d', 9999)))
     if _ident_dropped:
         # Say it out loud. A suppression that removes people silently is indistinguishable from a
@@ -1975,7 +1986,10 @@ function screenLead(){
   var mny = '<div class="grid">'
     + kv('They owe (with interest)', money(r.py))
     + kv('Property value', money(r.v))
-    + kv('Equity', r.e==null ? '<span class="nc">not known</span>' : (Math.round(r.e)+'%'+(has(r,'E')?' <span class="nc">gross</span>':'')))
+    + kv('Equity', r.e==null ? '<span class="nc">not known</span>' : (Math.round(r.e)+'%'+(has(r,'E')?' <span class="nc">gross</span>':'')
+         // Say which kind of number this is, on the surface where it gets spoken out loud. A
+         // traced chain is the difference between "you have equity" and "you might".
+         + (r.v ? ' <span class="ok">VERIFIED</span>' : ' <span class="nc">unverified — chain not traced</span>')))
     + kv('Surviving 1st', r.ss==null ? '<span class="nc">not checked</span>' : (r.ss===0?'none':money(r.ss)), 1)
     + '</div>';
   var mc='';
