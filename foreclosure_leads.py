@@ -2844,6 +2844,17 @@ def make_tracker(leads):
         if _cm_rows:
             print('call mode: %d dialable lead(s) of %d qualifying -> docs/call/  (%s)'
                   % (_cm_rows, _cm_total, 'encrypted' if codes else 'STUB — no site.codes'))
+        # DESKTOP CALL SHEET. Both the board and Call Mode require a decision to OPEN them, and
+        # on 2026-08-27 that was the whole funnel: 133 leads with verified equity, a phone and a
+        # clean gate — zero touched, one text sent in nine days. A plain file that is simply
+        # THERE at 7 AM, best call at the top, removes the last step between the data and a dial.
+        # Same rows Call Mode just built, so the sheet and the phone can never disagree.
+        try:
+            import call_sheet
+            _cs_rows, _cs_total = call_mode.call_rows(slim, optouts=_optouts, deads=_deads)
+            call_sheet.write(_cs_rows, _cs_total)
+        except Exception as _cse:
+            print('call sheet: SKIPPED (%s) — board is unaffected' % str(_cse)[:100])
     except Exception as _cme:
         print('call mode: SKIPPED (%s) — board is unaffected' % str(_cme)[:120])
 
