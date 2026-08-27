@@ -33,6 +33,8 @@ _*.py
 !_gallerytest.py
 !_lktest.py
 !_plantest.py
+!_cyberaddrtest.py
+!_nearmetest.py
 !_docroomtest.py
 !_portfoliotest.py
 _*.html
