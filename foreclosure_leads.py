@@ -550,9 +550,22 @@ def qualify(leads):
         _oc = re.sub(r'\s*&\s*[WH]\b.*$', '', _oc, flags=re.I)
         _oc = re.sub(r'\b(ET\s?UX|ET\s?VIR|H/W|W/H|LE|REM|TRS|JR|SR|II|III|IV|ETAL|ET AL)\b', '', _oc, flags=re.I)
         _oc = re.sub(r'\s*&\s*$', '', _oc).strip()
+        # THE COMMA-FLIP IS FOR PEOPLE ONLY. 'SMITH, JOHN' -> 'JOHN SMITH' is right; but a company
+        # carries its entity type after the SAME comma, so the identical flip produced names that
+        # exist nowhere on earth: 'ALTUS IG REAL ESTATE, LLC' -> 'LLC ALTUS IG REAL ESTATE',
+        # '524 NORTH LAKE, LLC' -> 'LLC 524 NORTH LAKE', 'AMERICAN REMODEL, INC.' -> 'INC. AMERICAN
+        # REMODEL'. owner_clean is the string records_liens/gen_records_qs search the official
+        # records index with, so every company-owned lead searched a nonexistent party and came back
+        # '(no records / blocked)' — indistinguishable from a genuinely untraceable owner, and it
+        # cached as conf 'none' FOREVER. Visible in the 2026-08-27 MD backlog run: entity-suffix
+        # names dominated the failures. Flip only when the tail is NOT an entity suffix.
         if ',' in _oc:
             _last, _, _rest = _oc.partition(',')
-            _oc = (_rest.strip() + ' ' + _last.strip()).strip()
+            if re.match(r'^\s*(?:LLC|L\.L\.C\.?|INC\.?|CORP\.?|CO\.?|LP|LLP|LTD\.?|PA|PLLC|'
+                        r'TRUST|TR|N\.?A\.?|FSB|ASSN|ASSOC(?:IATION)?)\s*\.?\s*$', _rest, re.I):
+                _oc = re.sub(r',\s*', ' ', _oc).strip()      # keep entity order: 'X LLC'
+            else:
+                _oc = (_rest.strip() + ' ' + _last.strip()).strip()
         r['owner_clean'] = re.sub(r'\s{2,}', ' ', _oc).strip()
         # Estimated ANNUAL property tax (the delinquent balance is Cloudflare-walled, not scrapable).
         # Miami-Dade aggregate millage ~2% of taxable value; homestead runs lower (exemptions + SOH cap).
