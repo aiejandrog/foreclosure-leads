@@ -12464,7 +12464,26 @@ function genMorningWorker(lane, autostart){
     // real /send response ALREADY carry the server's true sent_today; cache whichever is freshest
     // and prefer it. Falls back to the local tally only if the bridge has never answered.
     +   'var _liveSent=null, _liveAt=0;'
-    +   'function _cacheLive(n){ if(typeof n==="number"){ _liveSent=n; _liveAt=Date.now(); renderCap(); } }'
+    // THE VERDICT MUST FOLLOW THE AUTHORITATIVE COUNT, not just the meter. The stop card is
+    // decided ONCE, in render(), from whatever sentToday() knew at open — and at open the bridge
+    // has not answered yet, so that is the LOCAL log. When the bridge's real number arrives this
+    // used to repaint the meter only, leaving the card frozen on the stale verdict. Both
+    // directions are real and one of them is unrecoverable:
+    //   log 300 / bridge 15  -> "That is the day's sending limit" over a green 15/300 meter, and
+    //                           he stops working for the day at 5% of the cap.
+    //   log 0  / bridge 300  -> NO stop card at all. He keeps sending past the cap, which is the
+    //                           burned-inbox case this file calls unrecoverable — the account the
+    //                           business runs on (Jose, lenders, the county).
+    // Re-render only when the verdict actually FLIPS, so a routine poll never churns the queue
+    // mid-send. Verified live 2026-08-27: bridge reported sent_today 15 against a 300 cap while
+    // the stubbed log said 300.
+    +   'function _cacheLive(n){'
+    +     'if(typeof n!=="number") return;'
+    +     'var was = sentToday() >= CAP.max;'
+    +     '_liveSent=n; _liveAt=Date.now();'
+    +     'renderCap();'
+    +     'if((sentToday() >= CAP.max) !== was){ try{ render(); }catch(e){} }'
+    +   '}'
     +   'function sentToday(){'
     +     'return (_liveSent!=null && (Date.now()-_liveAt)<120000) ? _liveSent : (STATS.sent||0)+(STATS.text||0);'
     +   '}'

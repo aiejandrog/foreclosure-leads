@@ -95,6 +95,15 @@ async def main():
         await wA.close()
 
         # NOW the real ceiling: DAILY_MAX confirmed deliveries.
+        # STUB THE BRIDGE TOO. The live send-server count is AUTHORITATIVE by design — it is the
+        # process that actually sends — so stubbing only the local log describes a state the
+        # product correctly refuses to believe: with a real bridge answering "15 sent", a log
+        # claiming 300 is a stale log, and not blocking is the right call. Routed on the CONTEXT,
+        # not the page, because the worker opens as a POPUP and page-level routes do not reach it.
+        async def _cap_bridge(route):
+            await route.fulfill(status=200, content_type='application/json',
+                                body='{"ok":true,"ready":true,"sent_today":300,"cap":300}')
+        await ctx.route('**/health*', _cap_bridge)
         await pg.evaluate("() => { window._wlogStats = function(){"
                           "  return {email:0, sent: DAILY_MAX, call:0, text:0, wp:0, done:0, skip:0}; }; }")
         async with ctx.expect_page() as np2:
