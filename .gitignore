@@ -26,6 +26,13 @@ _*.py
 !_codelientest.py
 !_fieldsheettest.py
 !_taxtest.py
+# ADDED 2026-08-27: these three guard real, load-bearing behaviour and were repaired the same day
+# (dynamic fixtures, correct sort tolerance, colgroup/thead agreement). Untracked, they would have
+# been repaired on exactly one laptop and lost on the next clone — the very thing this exemption
+# block exists to prevent.
+!_gallerytest.py
+!_lktest.py
+!_plantest.py
 !_docroomtest.py
 !_portfoliotest.py
 _*.html
