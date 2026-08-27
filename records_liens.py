@@ -673,10 +673,48 @@ def main():
                         src = open(os.path.join(HERE, 'gen_records_qs.py'), encoding='utf-8').read()
                         if 'JS = r"""' in src:
                             models = mint_and_fetch(sp, persist=a.persist)
+            # DEFENDANT FALLBACK. Measured 2026-08-27: of 259 MD leads stuck at conf 'none',
+            # 144 HAD a folio and still returned nothing — because the search key is the
+            # APPRAISER's owner-of-record, which is often not how the CLERK indexes the party:
+            # estates ('HAYDEE BETETA (ESTATE OF)'), entities, trusts, post-deed owners. The
+            # court, however, names the defendant it is actually foreclosing. So when the owner
+            # name finds nothing, search the DEFENDANTS. analyze() still isolates by folio +
+            # subdivision, so a wrong-person hit cannot pollute the number — worst case is
+            # another empty result, same as now.
+            _searched = oc
+            if models is None and not a.cached_only:
+                try:
+                    import stub_resolve as _sr
+                    _cands = _sr.people_from(r.get('defendants') or '')
+                except Exception:
+                    _cands = []
+                for _last, _first in _cands[:2]:
+                    _nm = '%s %s' % (_first, _last)          # split_owner wants FIRST ... LAST
+                    if _nm.strip().upper() == oc.strip().upper():
+                        continue                              # already tried as the owner
+                    _sp = split_owner(_nm)
+                    if not _sp:
+                        continue
+                    if cf_browser is not None:
+                        try:
+                            _qs = camoufox_qs(cf_browser, _sp[0].strip())
+                        except Exception:
+                            _qs = None
+                        if _qs:
+                            models = records_by_qs(_qs)
+                            if models is not None:
+                                cf_free += 1
+                    if models is None:
+                        paid += 1
+                        models = fetch_via_turnstile(_sp)
+                    if models is not None:
+                        _searched = _nm + ' (defendant)'
+                        break
             if models is None:
                 print(f"  --  {case:22} {oc:26} (no records / blocked)")
                 continue
             res = analyze(models, folio, judg, ftype=_fc_type(case))
+            res['searched_as'] = _searched
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
             out[case] = res
             done += 1
