@@ -68,9 +68,17 @@ EMAIL = ''          # deliberately blank — see the note in main()
 WEB = ''            # bsgflorida.com is not live yet; a dead URL on a card is worse than none
 
 # ---- brand ----------------------------------------------------------------------------------
-NAVY = '#0B1730'
-NAVY_SOFT = '#16294d'
-STEEL = '#5b6b82'
+# #0B1730 measured L* ~8.1 -- BELOW the CMYK gamut floor. CMYK cannot hold a chromatic dark that
+# deep, so it converts to a near-neutral rich black and the navy disappears entirely. Worse, a
+# naive sRGB->SWOP conversion lands near 287% total area coverage on a solid that covers 100% of
+# every card back -- over the 240-260% limit for card stock, which means set-off and mottle.
+# #16294d is L* ~16.9, holds its hue in CMYK, and builds around 220% TAC. It was already defined
+# in this file and never used.
+NAVY = '#16294d'
+NAVY_DEEP = '#0B1730'   # screen/board use only -- do not send to a press
+# STEEL was #5b6b82 -- a four-plate build. At 6.5-8pt a 4-plate colour shows a registration
+# fringe on every letterform. This is a near-neutral that presses as mostly K.
+STEEL = '#63656b'
 GOLD = '#C9A227'
 INK = '#1a2233'
 PAPER = '#ffffff'
@@ -92,7 +100,12 @@ def logo_uri(path=''):
 
 CSS = """
 @page{size:3.75in 2.25in;margin:0}
-*{box-sizing:border-box}
+/* WITHOUT THIS THE BACKS PRINT AS BLANK PAPER. Browsers strip background colours from print by
+   default, and the navy back and B's panel are both CSS BACKGROUNDS with white text on them --
+   so a browser print produces white-on-white. The PDF path is immune (Playwright is told
+   print_background=True, verified: #0B1730 is present in the emitted content stream), but the
+   generator also hands out HTML and somebody will print that. */
+*{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;color:%(ink)s}
 /* The artboard IS the bleed area. Trim happens 0.125in inside it on every edge, so anything
    that must survive the cut lives inside .safe. */
@@ -108,7 +121,7 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .co{font-size:8.5pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:%(navy)s}
 .ph{font-size:11pt;font-weight:700;letter-spacing:.01em;color:%(navy)s}
 .sm{font-size:7pt;color:%(steel)s;letter-spacing:.02em}
-.reachsm{font-size:6.5pt;font-weight:600;color:%(steel)s;letter-spacing:.05em}
+.reachsm{font-size:7pt;font-weight:600;color:%(steel)s;letter-spacing:.05em}
 .esline{font-size:7.5pt;font-weight:600;color:%(steel)s;margin-top:1pt}
 /* flex-basis + flex-shrink:0 because this is an EMPTY box inside a flex column: min-height:auto
    resolved to 0 and layout A (the only overflowing column) silently shrank it to 1px of
@@ -162,7 +175,7 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 /* --- BACK --------------------------------------------------------------------------------- */
 .back{background:%(navy)s;color:#fff}
 .back .safe{display:flex;flex-direction:column;justify-content:center}
-.back h4{margin:0 0 .06in;font-size:7pt;letter-spacing:.16em;text-transform:uppercase;
+.back h4{margin:0 0 .06in;font-size:8pt;letter-spacing:.16em;text-transform:uppercase;
          color:%(gold)s;font-weight:700}
 .back ul{margin:0;padding-left:.14in;list-style:none}
 .back li{font-size:8.5pt;line-height:1.5;margin:0 0 1pt;position:relative;padding-left:.11in}
@@ -171,11 +184,11 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 /* Same size as the body, not 6.6pt grey. Fine print reads as "someone made him print this";
    body text reads as "I want you to read this". The content was never the problem. */
 .back .doline{font-size:8.5pt;line-height:1.45;margin:0 0 .05in}
-.back .free{font-size:8pt;line-height:1.4;color:#dbe4f0;margin:0 0 .05in}
-.back .not{font-size:7.6pt;line-height:1.4;color:#c3cfe0;margin:0 0 .05in}
-.back .mine{font-size:7.6pt;line-height:1.4;color:#dbe4f0}
+.back .free{font-size:8pt;line-height:1.4;color:#eef3fa;margin:0 0 .05in}
+.back .not{font-size:8pt;line-height:1.4;color:#e8eef7;margin:0 0 .05in}
+.back .mine{font-size:8pt;line-height:1.4;color:#e8eef7}
 .back .cta{margin-top:.07in;font-size:11pt;font-weight:700;color:#fff;letter-spacing:.01em}
-.back .reach{font-size:7pt;font-weight:600;color:#8fa1bb;letter-spacing:.06em}
+.back .reach{font-size:7.5pt;font-weight:600;color:#8fa1bb;letter-spacing:.06em}
 """ % {'ink': INK, 'paper': PAPER, 'navy': NAVY, 'steel': STEEL, 'gold': GOLD}
 
 
@@ -323,6 +336,30 @@ def main():
         open(p, 'w', encoding='utf-8').write(sheet([L], logo, review=False))
         outs.append(p)
         print('wrote', p)
+    # THE DOCSTRING PROMISED PDFs AND main() ONLY EVER WROTE HTML. That matters more than a
+    # missing feature: HTML has no embedded fonts, so a printer opening it substitutes Segoe UI ->
+    # Arial, and "BISCAYNE SOLUTIONS GROUP" measures 139.6pt in Arial against a 135.4pt column --
+    # it wraps, and B's vertical centring breaks. Never hand a printer live HTML.
+    # print_background=True is load-bearing: without it the navy backs come out blank.
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as pw:
+            b = pw.chromium.launch()
+            pg = b.new_page()
+            for src in outs:
+                pg.goto('file:///' + src.replace(os.sep, '/'))
+                pg.wait_for_timeout(700)
+                pdf = pg.pdf(width='3.75in', height='2.25in', print_background=True,
+                             margin={'top': '0', 'bottom': '0', 'left': '0', 'right': '0'})
+                dst = os.path.splitext(src)[0] + '.pdf'
+                open(dst, 'wb').write(pdf)
+                print('wrote %s (%.0f KB)' % (dst, len(pdf) / 1024))
+            b.close()
+    except Exception as e:
+        print('(PDF step failed: %s)' % e)
+    print()
+    print('SEND THE PDF, NOT THE HTML. Artboard 3.75x2.25in = 3.5x2.0in trim + 0.125in bleed.')
+    print('Tell the printer: bleed 0.125in, safe zone 0.125in inside trim, no crop marks included.')
     return rp, outs
 
 
