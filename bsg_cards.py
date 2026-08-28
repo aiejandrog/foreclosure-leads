@@ -103,14 +103,17 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 
 /* --- shared type ------------------------------------------------------------------------- */
 .nm{font-size:13.5pt;font-weight:700;letter-spacing:.01em;line-height:1.1;margin:0}
-.ti{font-size:8pt;font-weight:600;letter-spacing:.02em;
-    color:%(steel)s;margin:2pt 0 0}
+.ti{font-size:8.5pt;font-weight:500;letter-spacing:.005em;
+    color:%(steel)s;margin:3pt 0 0}
 .co{font-size:8.5pt;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:%(navy)s}
 .ph{font-size:11pt;font-weight:700;letter-spacing:.01em;color:%(navy)s}
 .sm{font-size:7pt;color:%(steel)s;letter-spacing:.02em}
 .reachsm{font-size:6.5pt;font-weight:600;color:%(steel)s;letter-spacing:.05em}
 .esline{font-size:7.5pt;font-weight:600;color:%(steel)s;margin-top:1pt}
-.rule{height:2px;background:%(gold)s;width:34px;border-radius:2px}
+/* flex-basis + flex-shrink:0 because this is an EMPTY box inside a flex column: min-height:auto
+   resolved to 0 and layout A (the only overflowing column) silently shrank it to 1px of
+   antialiasing. A divider that disappears under pressure is not a system element. */
+.rule{height:2px;flex:0 0 2px;background:%(gold)s;width:34px;border-radius:2px}
 
 /* --- A: centered classic ------------------------------------------------------------------ */
 .a{text-align:center}
@@ -119,15 +122,28 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .a .rule{margin:.07in auto}
 
 /* --- B: navy left panel ------------------------------------------------------------------- */
-.b .panel{position:absolute;left:0;top:0;bottom:0;width:1.42in;background:%(navy)s}
+/* THE COMPANY IS THE DOMINANT ELEMENT, and it is TYPE, not the logo.
+   Two findings forced this. (1) The mark has no working single-colour version — inverting it made
+   an unreadable blob, and the white chip that replaced it read as an app icon while sitting
+   2.4:1 off-centre after trim, because it was centred on the BLEED rather than the trim.
+   (2) The company, not the person, is the only searchable token on the card, and the back makes
+   corporate claims ("not a law firm") that need a corporate name to attach to.
+   A left-aligned inset block cannot be mis-centred by a drifting cut, which is why this also
+   fixes the trim defect rather than compensating for it. */
+.b .panel{position:absolute;left:0;top:0;bottom:0;width:1.52in;background:%(navy)s}
+.b .panel .word{position:absolute;left:.28in;top:.34in;right:.16in}
+.b .panel .word span{display:block;color:#fff;font-size:10.5pt;font-weight:700;
+                     letter-spacing:.05em;line-height:1.24;text-transform:uppercase}
+.b .panel .rule{margin-top:.08in;width:28px}
+.b .panel .mark{position:absolute;left:.28in;bottom:.3in;height:.34in;opacity:.9}
 /* The mark is a full-colour metallic asset. brightness(0) invert(1) turned it into an unreadable
    white blob -- verified in the first review render. A logo that cannot reverse gets a white chip
    to sit on; that is a normal print solution, not a compromise. */
-.b .panel .chip{position:absolute;left:50%%;top:50%%;transform:translate(-50%%,-50%%);
-                width:1.02in;height:1.02in;background:#fff;border-radius:.1in;
-                display:flex;align-items:center;justify-content:center}
-.b .panel .chip img{width:.82in;display:block}
-.b .right{position:absolute;left:1.62in;right:.25in;top:.28in;bottom:.28in}
+.b .right{position:absolute;left:1.74in;right:.25in;top:.3in;bottom:.3in}
+/* 13.5pt put "Alejandro Gonzalez" at 1.741in in a 1.76in column -- clearing the safe line by
+   0.019in, about 1.4pt. Technically inside, but any longer name breaks it and it reads jammed.
+   12pt leaves ~0.2in of air and still outranks everything else on the white side. */
+.b .nm{font-size:12pt}
 
 /* --- C: navy band across the top ---------------------------------------------------------- */
 .c .band{position:absolute;left:0;right:0;top:0;height:.95in;background:#fff;
@@ -185,13 +201,15 @@ def front(layout, logo):
                 '<div style="margin-top:.09in">%s</div></div></div>'
                 % (img, H.escape(CO), H.escape(NAME), H.escape(TITLE), _contact_lines()))
     if layout == 'b':
-        return ('<div class="card b"><div class="panel"><div class="chip">%s</div></div>'
+        mark = ('<img class="mark" src="%s" alt="">' % logo) if logo else ''
+        return ('<div class="card b"><div class="panel">'
+                '<div class="word"><span>Biscayne</span><span>Solutions</span><span>Group</span>'
+                '<div class="rule"></div></div>%s</div>'
                 '<div class="right" style="display:flex;flex-direction:column;justify-content:center">'
-                '<div class="co">%s</div><div class="rule" style="margin:.06in 0"></div>'
                 '<div class="nm">%s</div><div class="ti">%s</div>'
                 '<div class="esline">Hablo espa&ntilde;ol</div>'
                 '<div style="margin-top:.1in">%s</div></div></div>'
-                % (img, H.escape(CO), H.escape(NAME), H.escape(TITLE), _contact_lines()))
+                % (mark, H.escape(NAME), H.escape(TITLE), _contact_lines()))
     if layout == 'c':
         return ('<div class="card c"><div class="band">%s<div class="bandco">%s</div></div>'
                 '<div class="body"><div class="nm">%s</div><div class="ti">%s</div>'
