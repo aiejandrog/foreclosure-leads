@@ -84,13 +84,29 @@ INK = '#1a2233'
 PAPER = '#ffffff'
 
 
-def logo_uri(path=''):
-    """Data URI for the brand mark. Falls back to the mark already embedded in bsg_flyer."""
+def logo_uri(path='', mono=''):
+    """Data URI for the brand mark.
+
+    Order: an explicit --logo file, then the VECTOR mark in bsg_mark, then the old raster.
+    The vector is the default because the raster fails at card sizes -- "FLORIDA" prints at
+    1.5-2.5pt inside the bitmap, and its alpha edges are matted toward black so it haloes on
+    white stock. `mono` collapses the mark to one colour for reversing out of the navy panel;
+    the old asset had no working single-colour version at all.
+    """
     if path and os.path.exists(path):
         ext = os.path.splitext(path)[1].lstrip('.').lower() or 'png'
+        if ext == 'svg':
+            import base64 as _b
+            return 'data:image/svg+xml;base64,' + _b.b64encode(
+                open(path, 'rb').read()).decode('ascii')
         return 'data:image/%s;base64,%s' % (
             'jpeg' if ext in ('jpg', 'jpeg') else ext,
             base64.b64encode(open(path, 'rb').read()).decode('ascii'))
+    try:
+        import bsg_mark
+        return bsg_mark.data_uri(mono)
+    except Exception:
+        pass
     try:
         import bsg_flyer
         return bsg_flyer.BSG_LOGO_B64
@@ -130,7 +146,7 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 
 /* --- A: centered classic ------------------------------------------------------------------ */
 .a{text-align:center}
-.a img{height:.72in;display:block;margin:0 auto .07in}
+.a .brandmark{height:.62in;width:auto;display:block;margin:0 auto .07in}
 .a .nm{margin-top:.04in}
 .a .rule{margin:.07in auto}
 
@@ -144,11 +160,17 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
    A left-aligned inset block cannot be mis-centred by a drifting cut, which is why this also
    fixes the trim defect rather than compensating for it. */
 .b .panel{position:absolute;left:0;top:0;bottom:0;width:1.52in;background:%(navy)s}
-.b .panel .word{position:absolute;left:.28in;top:.34in;right:.16in}
+/* The type block that used to live here is GONE. It set BISCAYNE / SOLUTIONS / GROUP as reversed
+   type because the old chrome mark had no legible wordmark and no working mono version -- so the
+   card had to say the company name itself. The vector mark carries its own wordmark and reverses
+   cleanly, so keeping both printed the company name twice in the same 1.5in panel.
+   Centred, not top-anchored: it is now the only object in the panel. */
+.b .panel .word{display:none}
 .b .panel .word span{display:block;color:#fff;font-size:10.5pt;font-weight:700;
                      letter-spacing:.05em;line-height:1.24;text-transform:uppercase}
 .b .panel .rule{margin-top:.08in;width:28px}
-.b .panel .mark{position:absolute;left:.28in;bottom:.3in;height:.34in;opacity:.9}
+.b .panel .mark{position:absolute;left:50%%;top:50%%;transform:translate(-50%%,-50%%);
+                width:1.02in;height:auto}
 /* The mark is a full-colour metallic asset. brightness(0) invert(1) turned it into an unreadable
    white blob -- verified in the first review render. A logo that cannot reverse gets a white chip
    to sit on; that is a normal print solution, not a compromise. */
@@ -168,7 +190,7 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .c .body{position:absolute;left:.28in;right:.28in;top:1.12in}
 
 /* --- D: type-led, minimal ----------------------------------------------------------------- */
-.d img{position:absolute;right:.25in;top:.25in;height:.5in;opacity:.95}
+.d .brandmark{position:absolute;right:.3125in;top:.3125in;height:.46in;width:auto}
 .d .stack{position:absolute;left:.25in;bottom:.25in;right:1in}
 .d .nm{font-size:15pt}
 
@@ -203,8 +225,31 @@ def _contact_lines():
     return ''.join(out)
 
 
+_LOGO_PATH = ''
+
+def mark_inline(mono='', cls='mark'):
+    """The mark as INLINE svg, not <img src="data:...">.
+
+    Chromium refused to paint the data-URI version inside an <img> and drew a broken-image glyph.
+    Inline is also strictly better for print: no base64 round-trip, the RIP sees real geometry,
+    and CSS can size it without an intrinsic-ratio guess. Falls back to the raster <img> when a
+    --logo file was supplied.
+    """
+    if _LOGO_PATH and os.path.exists(_LOGO_PATH):
+        u = logo_uri(_LOGO_PATH)
+        return '<img class="%s" src="%s" alt="">' % (cls, u) if u else ''
+    try:
+        import bsg_mark
+        return bsg_mark.svg(mono).replace('<svg ', '<svg class="%s" ' % cls, 1)
+    except Exception:
+        u = logo_uri('', mono)
+        return '<img class="%s" src="%s" alt="">' % (cls, u) if u else ''
+
+
+
+
 def front(layout, logo):
-    img = '<img src="%s" alt="">' % logo if logo else ''
+    img = mark_inline('', 'brandmark')
     if layout == 'a':
         return ('<div class="card a"><div class="safe" style="display:flex;flex-direction:column;'
                 'align-items:center;justify-content:center">%s'
@@ -214,10 +259,10 @@ def front(layout, logo):
                 '<div style="margin-top:.09in">%s</div></div></div>'
                 % (img, H.escape(CO), H.escape(NAME), H.escape(TITLE), _contact_lines()))
     if layout == 'b':
-        mark = ('<img class="mark" src="%s" alt="">' % logo) if logo else ''
+        # reversed vector — the panel is navy, and this mark HAS a mono version
+        mark = mark_inline('#ffffff', 'mark')
         return ('<div class="card b"><div class="panel">'
-                '<div class="word"><span>Biscayne</span><span>Solutions</span><span>Group</span>'
-                '<div class="rule"></div></div>%s</div>'
+                '%s</div>'
                 '<div class="right" style="display:flex;flex-direction:column;justify-content:center">'
                 '<div class="nm">%s</div><div class="ti">%s</div>'
                 '<div class="esline">Hablo espa&ntilde;ol</div>'
@@ -314,6 +359,8 @@ def main():
     ap.add_argument('--logo', default='', help='path to the brand mark PNG')
     a = ap.parse_args()
 
+    global _LOGO_PATH
+    _LOGO_PATH = a.logo
     logo = logo_uri(a.logo)
     layouts = [a.layout.lower()] if a.layout else ['a', 'b', 'c', 'd']
     today = dt.date.today().isoformat()

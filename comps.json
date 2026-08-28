@@ -30766,5 +30766,215 @@
 "psf": 209
 }
 ]
+},
+"502022CA012458XXXXMB": {
+"arv": 346212,
+"psf": 265.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "8935 THUMBWOOD CIR B",
+"price": 365000,
+"yr": 2025,
+"sqft": 1350,
+"psf": 270
+},
+{
+"addr": "57 SAUSALITO DR",
+"price": 370000,
+"yr": 2025,
+"sqft": 1416,
+"psf": 261
+},
+{
+"addr": "8846 ANDY CT A",
+"price": 375000,
+"yr": 2025,
+"sqft": 1350,
+"psf": 278
+}
+]
+},
+"502025CA012348XXXAMB": {
+"arv": 354262,
+"psf": 301.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "721 21ST ST",
+"price": 306500,
+"yr": 2025,
+"sqft": 1008,
+"psf": 304
+},
+{
+"addr": "2014 DIVISION AVE",
+"price": 340000,
+"yr": 2025,
+"sqft": 1136,
+"psf": 299
+},
+{
+"addr": "730 21ST ST",
+"price": 410000,
+"yr": 2025,
+"sqft": 1378,
+"psf": 298
+}
+]
+},
+"502026CC004759XXXASB": {
+"arv": 549605,
+"psf": 287.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "3316 COMMODORE CT",
+"price": 425000,
+"yr": 2025,
+"sqft": 1478,
+"psf": 288
+},
+{
+"addr": "7167 ELKHORN DR",
+"price": 595000,
+"yr": 2025,
+"sqft": 2084,
+"psf": 286
+},
+{
+"addr": "2584 IRMA LAKE DR",
+"price": 600000,
+"yr": 2025,
+"sqft": 2084,
+"psf": 288
+}
+]
+},
+"502025CA000619XXXAMB": {
+"arv": 489340,
+"psf": 315.5,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "2010 NW 18TH ST",
+"price": 495000,
+"yr": 2025,
+"sqft": 1517,
+"psf": 326
+},
+{
+"addr": "1005 NW 18TH AVE",
+"price": 479000,
+"yr": 2025,
+"sqft": 1571,
+"psf": 305
+},
+{
+"addr": "2070 NW 16TH ST",
+"price": 520000,
+"yr": 2025,
+"sqft": 1533,
+"psf": 339
+}
+]
+},
+"502025CC006438XXXAMB": {
+"arv": 588000,
+"psf": 350.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "518 55TH ST",
+"price": 372000,
+"yr": 2025,
+"sqft": 1060,
+"psf": 351
+},
+{
+"addr": "447 36TH ST",
+"price": 520000,
+"yr": 2025,
+"sqft": 1490,
+"psf": 349
+},
+{
+"addr": "723 58TH ST",
+"price": 320000,
+"yr": 2025,
+"sqft": 960,
+"psf": 333
+}
+]
+},
+"502026CA000732XXXAMB": {
+"arv": 329440,
+"psf": 284.0,
+"n": 14,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "5235 NW 6TH CT",
+"price": 300000,
+"yr": 2025,
+"sqft": 1012,
+"psf": 296
+},
+{
+"addr": "5926 LOS ALAMOS LN",
+"price": 350000,
+"yr": 2025,
+"sqft": 1287,
+"psf": 272
+},
+{
+"addr": "5321 BOLERO CIR",
+"price": 405000,
+"yr": 2025,
+"sqft": 1505,
+"psf": 269
+}
+]
+},
+"502026CA004686XXXAMB": {
+"arv": 685253,
+"psf": 233,
+"n": 13,
+"dist": 0.75,
+"conf": "ok",
+"comps": [
+{
+"addr": "4106 WINDMILL PALM WAY",
+"price": 430000,
+"yr": 2025,
+"sqft": 1846,
+"psf": 233
+},
+{
+"addr": "5091 STARBLAZE DR",
+"price": 540000,
+"yr": 2025,
+"sqft": 2301,
+"psf": 235
+},
+{
+"addr": "5473 QUEENSHIP CT",
+"price": 475000,
+"yr": 2025,
+"sqft": 2077,
+"psf": 229
+}
+]
 }
 }

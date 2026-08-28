@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 620" role="img"
+     aria-label="Biscayne Solutions Group">
+  <!-- skyline: left silver block, centre blue tower with the clipped top, right charcoal block -->
+  <path d="M296 232 V150 h34 v82 z" fill="#ffffff"/>
+  <path d="M404 232 V150 h40 l-2 82 z" fill="#ffffff"/>
+  <path d="M340 232 V96 l62 -34 v170 z" fill="#ffffff"/>
+  <path d="M352 232 V232 h18 v96 h-18 z" fill="#ffffff"/>
+  <!-- the horizon arc under the skyline -->
+  <path d="M214 262 Q380 196 546 262 Q380 226 214 262 z" fill="#ffffff"/>
+  <!-- BSG monogram -->
+  <text x="380" y="452" text-anchor="middle"
+        font-family="Segoe UI,Arial Black,Helvetica,sans-serif" font-weight="900"
+        font-size="196" letter-spacing="-4" fill="#ffffff">B<tspan fill="#ffffff">S</tspan>G</text>
+  <!-- wordmark -->
+  <text x="380" y="536" text-anchor="middle"
+        font-family="Segoe UI,Helvetica,Arial,sans-serif" font-weight="700"
+        font-size="72" letter-spacing="10" fill="#ffffff">BISCAYNE</text>
+  <!-- Flanking rules sit OUTSIDE the wordmark. At font-size 38/letter-spacing 7 the string runs
+       ~420px centred on 380, i.e. x 170-590 -- rules at 176 and 524 landed INSIDE it and struck
+       the type through. Tightened the setting and pushed the rules clear of it. -->
+  <line x1="118" y1="578" x2="176" y2="578" stroke="#ffffff" stroke-width="4"/>
+  <line x1="584" y1="578" x2="642" y2="578" stroke="#ffffff" stroke-width="4"/>
+  <text x="380" y="590" text-anchor="middle"
+        font-family="Segoe UI,Helvetica,Arial,sans-serif" font-weight="500"
+        font-size="34" letter-spacing="5" fill="#ffffff">SOLUTIONS GROUP</text>
+</svg>

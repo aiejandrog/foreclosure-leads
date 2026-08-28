@@ -1244,5 +1244,211 @@
   "miss": true,
   "county": "PALM BEACH",
   "when": "2026-08-27"
+ },
+ "2018-004484-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-08-28"
+ },
+ "2025-002805-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-08-28"
+ },
+ "2026-009137-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-08-28"
+ },
+ "2025-022629-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-08-28"
+ },
+ "CACE-23-020164": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-013181": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-23-001074": {
+  "folio": "494111AD2800",
+  "county": "BROWARD",
+  "how": "owner+assoc-legal",
+  "when": "2026-08-28"
+ },
+ "CACE-24-012407": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-010994": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-018971": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-26-001773": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-24-008626": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-004433": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-007430": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-013018": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-019890": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-15-021344": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-000697": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-019800": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-019860": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-21-020493": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-26-007394": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-23-022042": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-26-000968": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-26-009250": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-008146": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "COCE-25-091196": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "COCE-26-005749": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-18-014899": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-006038": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-014602": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-26-002923": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-24-017115": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-014474": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-25-016522": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "COCE-26-003382": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "COCE-26-027256": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-26-004648": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-26-009249": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "COCE-26-002534": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
+ },
+ "CACE-26-007048": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-08-28"
  }
 }
