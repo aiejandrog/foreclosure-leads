@@ -354,4 +354,8 @@ jose_buybox.json
 buybox_mg4.json
 _mg4.json
 _mg4.txt
-buybox.py
+_ab_cstest.sh
+_ab_*.txt
+.ab_backup/
+_wpcheck.py
+_build*.txt
