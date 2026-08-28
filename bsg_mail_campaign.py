@@ -67,6 +67,17 @@ try:
 except Exception:
     SENDER['co'] = 'Biscayne Solutions Group'
 
+# TRACKING NUMBER — the whole reason a mail test is worth paying for.
+# Every other channel already uses the operator's main line, so a call from a letter is
+# indistinguishable from a call from a door, a text or an email. Spend $264 on 300 letters
+# without this and you still cannot answer "did mail work" — you have bought postage, not data.
+# Set MAIL_TRACKING_PHONE to a number used on NOTHING ELSE (a free Google Voice line is enough)
+# and every call to it is attributable to this campaign by construction.
+# Falls back to the signer's phone with a loud warning rather than silently printing an
+# untrackable letter.
+MAIL_TRACKING_PHONE = os.environ.get('BSG_MAIL_PHONE', '').strip()
+
+
 _ENTITY = re.compile(r'\b(LLC|L L C|INC|CORP|CORPORATION|TRUST|BANK|MORTGAGE|SERVICING|HOLDINGS?|'
                      r'PROPERTIES|PROPERTY|INVESTMENTS?|CAPITAL|FUND|ASSOC|ASSOCIATION|LP|LLP|'
                      r'COMPANY|REALTY|HOMES|GROUP|VENTURES?|PARTNERS?|MANAGEMENT|ENTERPRISES?|'
@@ -221,6 +232,12 @@ def pool(days, opt):
     return out, drops
 
 
+def contact_phone():
+    """The number printed on the letter. The tracking line when one is set, otherwise the signer's
+    with a warning -- never silently untrackable."""
+    return MAIL_TRACKING_PHONE or SENDER['phone']
+
+
 def letter(r):
     """~90 words. Short because it is HANDWRITTEN, not because anything legal was trimmed.
 
@@ -239,8 +256,24 @@ def letter(r):
         "%s\n%s"
         % (r['first'], SENDER['name'], SENDER['co'], street,
            D.mars_part('may_agree', 'may_stop', as_html=False),
-           SENDER['name'], SENDER['phone'])
+           SENDER['name'], contact_phone())
     )
+
+
+def letterhead():
+    """Logo block for the printed variant. Reuses bsg_flyer's embedded PNG rather than a second
+    copy of the asset — one logo, one place, same reason the disclaimer lives in disclaimer.py."""
+    try:
+        import bsg_flyer
+        return ('<img class="logo" src="%s" alt="">' % bsg_flyer.BSG_LOGO_B64)
+    except Exception:
+        return '<div class="logoword">%s</div>' % H.escape(SENDER['co'])
+
+
+def letter_printed(r):
+    """Same words as the handwritten version. The ONLY differences are the letterhead and that a
+    printed letter can carry a full address block, because nobody hand-copies one of those."""
+    return letter(r)
 
 
 CSS = """
@@ -261,6 +294,14 @@ h1{font-size:21px;margin:0 0 2px}
 .body{padding:9px 12px;white-space:pre-wrap;font:13px/1.6 Georgia,serif}
 .meta{font-size:10.5px;color:#4b5563;background:#f3f4f6;padding:5px 11px;border-top:1px solid #e5e7eb}
 .done{font-size:11px;color:#374151;padding:5px 12px 9px}
+/* ---- PRINTED VARIANT: one letter per sheet, logo at the top, address block under it. ---- */
+.pl{page-break-after:always;padding:2mm 4mm 0}
+.pl .logo{height:0.95in;display:block;margin:0 0 5mm}
+.pl .logoword{font:700 20px "Segoe UI",Arial;color:#0B1730;margin:0 0 5mm}
+.pl .to{font:13px/1.5 Georgia,serif;margin:0 0 7mm}
+.pl .dt{font:12px Georgia,serif;color:#4b5563;margin:0 0 5mm}
+.pl .bd{font:13.5px/1.72 Georgia,serif;white-space:pre-wrap}
+.pl .ft{margin-top:8mm;padding-top:3mm;border-top:1px solid #d1d5db;font:10px/1.45 Arial;color:#6b7280}
 """
 
 
@@ -323,6 +364,52 @@ def build(rows, budget, days, drops, total_pool):
     return '\n'.join(out)
 
 
+def build_printed(rows, days, drops, total_pool):
+    """One letter per sheet, on letterhead, ready to fold into a #10 window-less envelope.
+
+    The words are IDENTICAL to the handwritten version -- same offer, same four denials, same two
+    MARS sentences, same opt-out. Only the presentation differs. Keeping one body means a copy fix
+    lands on both variants; two bodies is how the flyer, letter and email drifted apart before.
+    """
+    today = dt.date.today()
+    pretty = today.strftime('%B %-d, %Y') if os.name != 'nt' else today.strftime('%B %d, %Y').replace(' 0', ' ')
+    out = ['<html><head><meta charset="utf-8"><style>%s</style></head><body>' % CSS]
+    for r in rows:
+        city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else 'Miami'
+        out.append('<div class="pl">%s' % letterhead())
+        out.append('<div class="dt">%s</div>' % pretty)
+        out.append('<div class="to">%s<br>%s<br>%s, FL %s</div>'
+                   % (H.escape(person_name(r['owner'])), H.escape(street_case(r['addr'])),
+                      H.escape(city.title()), H.escape(r['zip'])))
+        out.append('<div class="bd">%s</div>' % H.escape(letter(r)))
+        out.append('<div class="ft">%s &middot; %s &middot; case %s</div></div>'
+                   % (H.escape(SENDER['co']), H.escape(contact_phone()), H.escape(r['case'])))
+    out.append('</body></html>')
+    return '\n'.join(out)
+
+
+def build_envelopes(rows):
+    """Address sheet for the printed run: every recipient, in mailing order, to write or label."""
+    out = ['<html><head><meta charset="utf-8"><style>'
+           '@page{size:letter;margin:12mm}'
+           'body{font:12px/1.45 "Segoe UI",Arial;margin:0}'
+           'h1{font-size:18px;margin:0 0 3px}.s{color:#4b5563;font-size:11px;margin-bottom:10px}'
+           'table{width:100%;border-collapse:collapse}'
+           'td{border-bottom:1px solid #e5e7eb;padding:6px 5px;vertical-align:top;font:12px Georgia,serif}'
+           'td.n{width:26px;color:#6b7280;font:11px Arial}'
+           '</style></head><body>',
+           '<h1>Envelopes &mdash; %d</h1>' % len(rows),
+           '<div class="s">Hand-address these in the same order as the letters. '
+           'Return address: %s.</div><table>' % H.escape(SENDER['co'])]
+    for n, r in enumerate(rows, 1):
+        city = r['city'] if r['city'].lower() not in ('unincorporated county', '') else 'Miami'
+        out.append('<tr><td class="n">%d</td><td><b>%s</b><br>%s<br>%s, FL %s</td></tr>'
+                   % (n, H.escape(person_name(r['owner'])), H.escape(street_case(r['addr'])),
+                      H.escape(city.title()), H.escape(r['zip'])))
+    out.append('</table></body></html>')
+    return '\n'.join(out)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--days', type=int, default=14, help='max age of the LP filing (default 14)')
@@ -330,12 +417,24 @@ def main():
     ap.add_argument('--limit', type=int, default=0, help='hard cap on letters (overrides budget)')
     ap.add_argument('--signer-name', default='', help="who signs (default: sender.json's name)")
     ap.add_argument('--signer-phone', default='', help='phone printed under the signature')
+    ap.add_argument('--printed', action='store_true',
+                    help='letterhead + logo, one letter per sheet (instead of the copy-by-hand book)')
+    ap.add_argument('--tracking-phone', default='',
+                    help='number used ONLY on this campaign, so replies are attributable')
     a = ap.parse_args()
 
     if a.signer_name:
         SENDER['name'] = a.signer_name
     if a.signer_phone:
         SENDER['phone'] = a.signer_phone
+    global MAIL_TRACKING_PHONE
+    if a.tracking_phone:
+        MAIL_TRACKING_PHONE = a.tracking_phone.strip()
+    if not MAIL_TRACKING_PHONE:
+        print('WARNING: no tracking number (--tracking-phone or BSG_MAIL_PHONE).')
+        print('         Letters will carry %s, the same line every other channel uses, so a call'
+              % SENDER['phone'])
+        print('         CANNOT be attributed to this mailing. You would be buying postage, not data.')
     opt = _optout_keys()
     rows, drops = pool(a.days, opt)
     total = len(rows)
@@ -345,10 +444,21 @@ def main():
         print('no eligible letters — widen --days')
         return
 
-    html = build(rows, a.budget, a.days, drops, total)
-    p_html = os.path.join(HERE, 'BSG_Mail_Campaign_%s.html' % dt.date.today().isoformat())
+    tag = 'Printed' if a.printed else 'Handwrite'
+    html = build_printed(rows, a.days, drops, total) if a.printed \
+        else build(rows, a.budget, a.days, drops, total)
+    p_html = os.path.join(HERE, 'BSG_Mail_%s_%s.html' % (tag, dt.date.today().isoformat()))
     open(p_html, 'w', encoding='utf-8').write(html)
-    print('%d letters (of %d eligible, filed within %dd)' % (len(rows), total, a.days))
+    if a.printed:
+        # The printed run needs an address list too — the letters go in envelopes somebody still
+        # has to address, and doing that off 300 separate sheets is how one gets misfiled.
+        p_env = os.path.join(HERE, 'BSG_Mail_Envelopes_%s.html' % dt.date.today().isoformat())
+        open(p_env, 'w', encoding='utf-8').write(build_envelopes(rows))
+        print('wrote', p_env)
+    print('%d letters (of %d eligible, filed within %dd) [%s]'
+          % (len(rows), total, a.days, 'PRINTED + logo' if a.printed else 'handwritten'))
+    print('  contact number on the letter: %s%s'
+          % (contact_phone(), '  <-- TRACKING' if MAIL_TRACKING_PHONE else '  (NOT trackable)'))
     print('  postage: $%.2f at $%.2f/letter - $%.2f each split two ways'
           % (len(rows) * PER_LETTER, PER_LETTER, len(rows) * PER_LETTER / 2))
     print('  dropped:', ', '.join('%s %d' % (k, v) for k, v in sorted(drops.items()) if v) or 'none')

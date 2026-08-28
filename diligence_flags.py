@@ -781,6 +781,34 @@ def risk_flags(row):
                 'they borrowed; the roll value tells you nothing about it.'
                 % (links['records'] or 'the county official records')))
 
+        # ---- SOLD_ABOVE_VALUE — the same arithmetic as PURCHASE_ANCHOR, off the one field that
+        # actually survives on the rows that need it. PURCHASE_ANCHOR needs a sale YEAR (bought /
+        # last_sale_date), and the county that publishes no dollar amounts also publishes no sale
+        # date onto our rows: Sisavath's live Palm Beach row carries bought=0, bprice=0, lsd=None —
+        # and zstatus='SOLD' with zprice=315000 against a $225,675 value. The $315,000 she paid was
+        # sitting on the row, two keys away, while three rules written for her all failed to see it.
+        #
+        # NO DATE, AND THAT IS SURVIVABLE HERE. listing_status.py's own docstring says zprice is
+        # "asking price when LISTED/PENDING (0 otherwise)" — but fetch_status keeps it for SOLD
+        # (`price = price if status == 'SOLD' else 0`), so on a SOLD row this is a CLOSED price.
+        # The undated comparison still means something because the failure mode is one-directional:
+        # a distress sale, a certificate of title or a tax deed comes in BELOW market, so it cannot
+        # manufacture this flag. Only a real sale at or above today's value trips it.
+        # It says "the last recorded sale", never "the owner paid" — we do not know the date, and
+        # inventing one in a closer's voice is the exact failure this file exists to stop.
+        _zsold = str(_first(r, 'zstatus')).strip().upper() == 'SOLD'
+        _zpx = _n(_first(r, 'zprice'))
+        if _zsold and _zpx > 0 and basis > 0 and _zpx >= basis:
+            out.append(_flag(
+                'SOLD_ABOVE_VALUE', SEV_HIGH,
+                'The last recorded sale of this property was $%s — $%s ABOVE the $%s this row '
+                'calls today\'s value. Whatever the equity field prints, the market has already '
+                'said this house is worth less than someone paid for it. (Sale date is not on '
+                'this row, so this is the last sale, not necessarily this owner\'s purchase.)'
+                % (format(int(_zpx), ','), format(int(_zpx - basis), ','), format(int(basis), ',')),
+                'Do not quote an equity number. Pull the deed and the mortgage before any '
+                'conversation that depends on there being room in this property.'))
+
         # ---- EQ_UNRELIABLE — Sisavath tell #7. Our own board already called this number a lie.
         # eqfake is set upstream when the equity read is a gross upper bound: an HOA/junior case with
         # a first mortgage still standing, an individual plaintiff, a judgment too small to be the
@@ -871,8 +899,13 @@ def severity_of(row):
 #   nothing being sold and nothing to get wrong, so they stay dive-gated exactly as before.
 #
 # Nothing was removed from either list. A code that held before still holds.
+# SOLD_ABOVE_VALUE belongs here, not only in diligence_gate's fallback tuple. The gate keeps a
+# SUBTRACTIVE guarantee — it may hold fewer leads than this module, never more — so a code the gate
+# is meant to block on has to be blocking HERE first, or the gate silently cannot act on it. That
+# is exactly what happened when it was added to the gate alone: the flag fired, contact_gate said
+# hold, and the released row still went out because the code was never in this tuple.
 _HOLD_ALWAYS = ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
-                'EQ_UNRELIABLE')
+                'SOLD_ABOVE_VALUE', 'EQ_UNRELIABLE')
 _HOLD_ON_DIVE = ('HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED', 'PARTIES_UNAVAILABLE')
 
 

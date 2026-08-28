@@ -39,6 +39,10 @@ import html as H
 import json
 import os
 
+import entity          # _display_llc() delegates to it; removed by accident in 35bc4d1 alongside
+                       # `import disclaimer`, which broke every flyer run with a NameError. The
+                       # disclaimer import stays OUT (see the note above) — this one is the gate
+                       # that decides whether the " LLC" suffix may be printed at all.
 import paths as P
 
 HERE = os.path.dirname(os.path.abspath(__file__))

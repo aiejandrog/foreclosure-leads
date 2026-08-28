@@ -11,6 +11,11 @@ _*.py
 !_gatetest.py
 !_suppressiontest.py
 BSG_Mail_Campaign_*.html
+BSG_Mail_Printed_*.html
+BSG_Mail_Printed_*.pdf
+BSG_Mail_Handwrite_*.html
+BSG_Mail_Handwrite_*.pdf
+BSG_Mail_Envelopes_*.html
 BSG_Mail_Campaign_*.pdf
 !_dnctest.py
 !_senderdefaulttest.py

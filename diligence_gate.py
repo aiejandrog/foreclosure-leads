@@ -108,12 +108,42 @@ except Exception as _e:                                        # pragma: no cove
 # Reading the real tuples means a code the rules owner adds over there is enforced here the same
 # day, with no second list to remember. The literals are a fallback for an older diligence_flags
 # only; if they are ever the thing in use, the module has changed shape and this needs a human.
+# THE SPLIT IS AFFIRMATIVE-EVIDENCE vs ABSENCE-OF-EVIDENCE, and that is the whole policy.
+#
+# The previous version keyed the one carve-out on `owner_owed_of(row) <= 0` — it released a lead
+# BECAUSE no debt figure had been captured. That is backwards in the most expensive way: the gate
+# got STRICTER as the data got BETTER. Measured, not theorised: Markey passed only because his
+# judgment field was empty, and putting his real $3,207 HOA lien on the row — which is exactly what
+# the enrichment pipeline exists to do — flipped him to HELD. A gate that punishes enrichment is a
+# gate that gets switched off the first week it blocks a live deal.
+#
+# So: hold on what we KNOW, warn on what we DON'T.
+#
+#   HOLD  — the row carries affirmative evidence the equity pitch is FALSE. Not a gap, a fact.
+#           UNDERWATER        debt >= value, arithmetic on captured numbers
+#           PURCHASE_ANCHOR   they paid >= today's value, with a date
+#           SOLD_ABOVE_VALUE  last recorded sale >= today's value (Sisavath: $315,000 vs $225,675)
+#           TITLE_TRANSFERRED they do not own it
+#           SIBLING_CLAIMED   another case already took it
+#
+#   WARN  — we do not KNOW the equity. That makes quoting a NUMBER wrong; it does not make the
+#           CALL wrong, and the call is how the number gets found. These ride out with the reason
+#           attached and every surface must show it.
+#           EQ_UNRELIABLE · HIGH_EQUITY_UNVERIFIED · PARTIES_UNAVAILABLE
+#
+# Sisavath still holds, on SOLD_ABOVE_VALUE — evidence, not a missing field, so it survives her row
+# being enriched. Markey passes at EVERY data state including fully verified, which is the property
+# the old carve-out could not offer at any data state.
 _ALWAYS = tuple(getattr(_DF, '_HOLD_ALWAYS', ()) or
                 ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
-                 'EQ_UNRELIABLE')) if _DF else ()
+                 'SOLD_ABOVE_VALUE')) if _DF else ()
+# HOA_CODEFENDANT and RECENT_SALE stay dive-gated holds: a live association case behind our own,
+# and a fresh sale on a distressed parcel, are both affirmative facts about the FILE, not gaps.
 _ON_DIVE = tuple(getattr(_DF, '_HOLD_ON_DIVE', ()) or
-                 ('HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED',
-                  'PARTIES_UNAVAILABLE')) if _DF else ()
+                 ('HOA_CODEFENDANT', 'RECENT_SALE')) if _DF else ()
+
+# Unknowns. Never hold on their own; always travel as a warning with the reason attached.
+_WARN_ONLY = ('EQ_UNRELIABLE', 'HIGH_EQUITY_UNVERIFIED', 'PARTIES_UNAVAILABLE')
 
 # Never block on these. They mean "the gate itself did not work", and per the fail-open rule above
 # that is a caller bug to fix, not a lead to suppress.
@@ -239,21 +269,19 @@ def gate(row):
         dive = _dive(r)
         blocking = [c for c in codes if c in _ALWAYS or (dive and c in _ON_DIVE)]
 
-        # ---- THE ONE CARVE-OUT ------------------------------------------------------------
-        # eqfake WITH a captured debt figure = the board did arithmetic and got it wrong (Sisavath,
-        # 91% off an HOA judgment with a ~$298k first behind it). BLOCK.
-        # eqfake with NO debt captured = no arithmetic happened at all (Markey's $0 judgment, and
-        # essentially the whole LP pool). The contact is sound, only the NUMBER is unsafe. RELEASE
-        # with the reason attached, and let every surface show that reason.
-        if CONDITIONAL_CODE in blocking and _owed(r) <= 0:
-            blocking = [c for c in blocking if c != CONDITIONAL_CODE]
-            if not blocking:
-                m, a = _flag_msg(r, CONDITIONAL_CODE)
-                return _v(False, True, CONDITIONAL_CODE, g, codes, m, a)
+        # ---- UNKNOWNS NEVER HOLD ALONE ----------------------------------------------------
+        # _ALWAYS / _ON_DIVE above already exclude the warn-only codes, so `blocking` cannot contain
+        # one. This strip is belt-and-braces against a future edit to those tuples, and it is where
+        # the old data-absence carve-out used to live. Nothing here inspects whether a field is
+        # missing — that was the bug.
+        blocking = [c for c in blocking if c not in _WARN_ONLY]
 
-        if not blocking:                               # only carved-out codes were holding it
-            m, a = _flag_msg(r, CONDITIONAL_CODE)
-            return _v(False, True, CONDITIONAL_CODE, g, codes, m, a)
+        if not blocking:
+            # Held only by unknowns. Release, and carry the reason: the most severe warn-only code
+            # on the row is what the closer needs to see, not a generic "unverified".
+            _w = next((c for c in codes if c in _WARN_ONLY), CONDITIONAL_CODE)
+            m, a = _flag_msg(r, _w)
+            return _v(False, True, _w, g, codes, m, a)
 
         code = blocking[0]                             # codes[] is already most-severe-first
         why, action = _flag_msg(r, code)
