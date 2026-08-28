@@ -16,6 +16,9 @@ BSG_Mail_Printed_*.pdf
 BSG_Mail_Handwrite_*.html
 BSG_Mail_Handwrite_*.pdf
 BSG_Mail_Envelopes_*.html
+BSG_Card_*.html
+BSG_Cards_REVIEW_*.html
+BSG_Card_*.pdf
 BSG_Mail_Campaign_*.pdf
 !_dnctest.py
 !_senderdefaulttest.py
