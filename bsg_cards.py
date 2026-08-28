@@ -84,6 +84,26 @@ INK = '#1a2233'
 PAPER = '#ffffff'
 
 
+def find_logo():
+    """ONE known path, not a filename guess.
+
+    Fuzzy discovery matched 'logo*' across Downloads/Pictures and picked up an unrelated "City
+    Gear" logo -- guessing at filenames is worse than not guessing, because it silently prints the
+    wrong brand. So: exactly one drop point, any common extension.
+
+        brand/bsg-logo.(svg|png|jpg)
+
+    This exists because an image attached in chat arrives as pixels in the conversation, NOT as a
+    file on disk, and nothing can write those pixels out. One save into this folder is the whole
+    handoff; every generator that takes --logo can then point at the same file.
+    """
+    for ext in ('svg', 'png', 'jpg', 'jpeg', 'webp'):
+        p = os.path.join(HERE, 'brand', 'bsg-logo.' + ext)
+        if os.path.exists(p):
+            return p
+    return ''
+
+
 def logo_uri(path='', mono=''):
     """Data URI for the brand mark.
 
@@ -228,24 +248,37 @@ def _contact_lines():
 _LOGO_PATH = ''
 
 def mark_inline(mono='', cls='mark'):
-    """The mark as INLINE svg, not <img src="data:...">.
+    """The mark, inlined.
 
-    Chromium refused to paint the data-URI version inside an <img> and drew a broken-image glyph.
-    Inline is also strictly better for print: no base64 round-trip, the RIP sees real geometry,
-    and CSS can size it without an intrinsic-ratio guess. Falls back to the raster <img> when a
-    --logo file was supplied.
+    An SVG file is READ AND INLINED, never wrapped in <img src="data:image/svg+xml;base64,...">.
+    Chromium refuses to paint that and draws a broken-image glyph -- it did it twice here, once
+    for the generated mark and again the moment a real file appeared. Inline is also better for
+    print: the RIP sees geometry instead of a base64 blob.
+
+    Raster files still go through <img>, which is correct for them.
+    `mono` asks for a single-colour build, used to reverse out of the navy panel.
     """
-    if _LOGO_PATH and os.path.exists(_LOGO_PATH):
-        u = logo_uri(_LOGO_PATH)
+    src = _LOGO_PATH
+    if src and os.path.exists(src) and src.lower().endswith('.svg'):
+        try:
+            svg = open(src, encoding='utf-8').read()
+            svg = svg[svg.index('<svg'):]                       # drop any XML prolog/comments
+            if mono:
+                # reversing a supplied file: recolour every explicit fill/stroke to the mono value
+                import re as _re
+                svg = _re.sub(r'fill="(?!none)[^"]*"', 'fill="%s"' % mono, svg)
+                svg = _re.sub(r'stroke="(?!none)[^"]*"', 'stroke="%s"' % mono, svg)
+            return svg.replace('<svg ', '<svg class="%s" ' % cls, 1)
+        except Exception:
+            pass
+    if src and os.path.exists(src):
+        u = logo_uri(src)
         return '<img class="%s" src="%s" alt="">' % (cls, u) if u else ''
     try:
         import bsg_mark
         return bsg_mark.svg(mono).replace('<svg ', '<svg class="%s" ' % cls, 1)
     except Exception:
-        u = logo_uri('', mono)
-        return '<img class="%s" src="%s" alt="">' % (cls, u) if u else ''
-
-
+        return ''
 
 
 def front(layout, logo):
@@ -360,7 +393,13 @@ def main():
     a = ap.parse_args()
 
     global _LOGO_PATH
-    _LOGO_PATH = a.logo
+    _LOGO_PATH = a.logo or find_logo()
+    if _LOGO_PATH:
+        print('logo: %s' % _LOGO_PATH)
+    else:
+        print('logo: none found — using the drawn vector mark.')
+        print('      Save your logo to ~/Downloads as bsg.png (any of bsg*/biscayne*/logo*)')
+        print('      and re-run; it will be picked up automatically.')
     logo = logo_uri(a.logo)
     layouts = [a.layout.lower()] if a.layout else ['a', 'b', 'c', 'd']
     today = dt.date.today().isoformat()
