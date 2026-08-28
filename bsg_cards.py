@@ -51,7 +51,10 @@ try:
 except Exception:
     pass
 
-NAME = 'Alejandro Gonzalez'
+# UNIVERSAL BY DEFAULT. A card with one man's name is one man's card -- Carlos, Jose or Jesse
+# cannot hand it out, and a reprint is needed every time the team changes. The company and the
+# offer carry the card; --name puts a person back on it for whoever wants a personal run.
+NAME = ''
 # "ACQUISITIONS" split the reviewers. Compliance called it protective — it signals a
 # principal buyer, which is the express FS 475 own-account exemption. The homeowner reviewer
 # called it the worst word on the card: it is the vocabulary of the servicer and the plaintiff's
@@ -74,7 +77,7 @@ TITLE = 'Homeowner advisory'
 TITLE_ES = 'Asesoria para propietarios'
 SPANISH_LINE = 'Hablo español'
 OFFER = 'A free 5-minute call with our senior advisor'
-OFFER2 = '30+ years. Every option on the table.'
+OFFER2 = '30+ years. Every option, explained.'
 PHONE = '(786) 631-1823'
 EMAIL = ''          # deliberately blank — see the note in main()
 # VERIFIED LIVE 2026-08-28 (HTTP 200) before printing it. A dead URL on a card is worse than no
@@ -94,6 +97,11 @@ NAVY_DEEP = '#0B1730'   # screen/board use only -- do not send to a press
 # STEEL was #5b6b82 -- a four-plate build. At 6.5-8pt a 4-plate colour shows a registration
 # fringe on every letterform. This is a near-neutral that presses as mostly K.
 STEEL = '#63656b'
+# The BSG blue lifted straight from the logo. The card was navy + white + a gold tick, so the
+# only blue on it was inside the mark -- the logo looked pasted onto someone else's card. This is
+# the same blue the mark uses, so the card and the logo are visibly one system.
+BLUE = '#1B5FAA'
+BLUE_TINT = '#eef4fb'
 GOLD = '#C9A227'
 INK = '#1a2233'
 PAPER = '#ffffff'
@@ -186,14 +194,22 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .a .nm{margin-top:.04in}
 .a .rule{margin:.07in auto}
 
-/* --- B: white field, logo in FULL COLOUR ---------------------------------------------------
-   The navy panel forced the mark to reverse to solid white, which throws away the blue, charcoal
-   and grey that ARE the logo. The mark is designed for white; give it white. Navy moves to the
-   back, where it still does the brand work and has no logo to destroy. */
-.b .lockup{position:absolute;left:.3in;top:50%%;transform:translateY(-50%%);width:1.2in}
-.b .divider{position:absolute;left:1.66in;top:.36in;bottom:.36in;width:1px;background:#dbe0e8}
-.b .right{position:absolute;left:1.86in;right:.25in;top:.3in;bottom:.3in}
-.b .nm{font-size:12pt}
+/* --- B: white field, full-colour mark, BLUE as a real brand colour -------------------------
+   The mark is designed for white, so it gets white -- reversing it to solid white threw away the
+   blue/charcoal/grey that ARE the logo. The blue rule and blue phone pull that same hue out into
+   the card, so the mark reads as part of the card instead of pasted onto it. */
+.b .lockup{position:absolute;left:.3in;top:50%%;transform:translateY(-50%%);width:1.16in}
+/* NO EDGE BAR. A bar bleeding off the left edge is invisible on the 10-up sheet (which is
+   deliberately no-bleed, because a desktop printer cannot reach the paper edge) and it is the
+   first thing a drifting trim eats on the commercial version. The blue lives INSIDE the trim
+   instead, where every cut keeps it: the divider and a short rule under the offer. */
+.b .divider{background:%(blue)s;opacity:.30}
+.b .orule{width:.34in;height:2px;background:%(blue)s;border-radius:2px;margin:.055in 0 .05in}
+.b .divider{position:absolute;left:1.62in;top:.32in;bottom:.32in;width:1.5px}
+.b .right{position:absolute;left:1.82in;right:.25in;top:.28in;bottom:.28in}
+.b .offer{font-size:9.5pt;font-weight:700;color:%(navy)s;line-height:1.28}
+.b .offer2{font-size:7.6pt;color:%(steel)s;margin-top:2pt}
+.b .bigph{font-size:13pt;font-weight:700;color:%(blue)s;letter-spacing:.01em;margin-top:.09in}
 /* --- C: navy band across the top ---------------------------------------------------------- */
 .c .band{position:absolute;left:0;right:0;top:0;height:.95in;background:#fff;
           border-bottom:3px solid %(navy)s}
@@ -226,7 +242,8 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .back .mine{font-size:8pt;line-height:1.4;color:#e8eef7}
 .back .cta{margin-top:.07in;font-size:11pt;font-weight:700;color:#fff;letter-spacing:.01em}
 .back .reach{font-size:7.5pt;font-weight:600;color:#8fa1bb;letter-spacing:.06em}
-""" % {'ink': INK, 'paper': PAPER, 'navy': NAVY, 'steel': STEEL, 'gold': GOLD}
+""" % {'ink': INK, 'paper': PAPER, 'navy': NAVY, 'steel': STEEL, 'gold': GOLD,
+   'blue': BLUE, 'bluetint': BLUE_TINT}
 
 
 def _contact_lines():
@@ -288,15 +305,17 @@ def front(layout, logo):
                 '<div style="margin-top:.09in">%s</div></div></div>'
                 % (img, H.escape(CO), H.escape(NAME), H.escape(TITLE), _contact_lines()))
     if layout == 'b':
-        # mono='' -> the logo keeps its own colours
+        who = ('<div class="nm">%s</div>' % H.escape(NAME)) if NAME else ''
         return ('<div class="card b">%s<div class="divider"></div>'
                 '<div class="right" style="display:flex;flex-direction:column;justify-content:center">'
-                '<div class="nm">%s</div><div class="ti">%s</div>'
-                '<div class="esline">%s</div>'
-                '<div style="margin-top:.11in">%s</div>'
+                '%s'
+                '<div class="offer">%s</div>'
+                '<div class="orule"></div><div class="offer2">%s</div>'
+                '<div class="bigph">%s</div>'
+                '<div class="reachsm">call or text &middot; %s</div>'
                 '<div class="weburl">%s</div></div></div>'
-                % (mark_inline('', 'lockup'), H.escape(NAME), H.escape(TITLE),
-                   H.escape(SPANISH_LINE), _contact_lines(), H.escape(WEB)))
+                % (mark_inline('', 'lockup'), who, H.escape(OFFER), H.escape(OFFER2),
+                   H.escape(PHONE), H.escape(SPANISH_LINE), H.escape(WEB)))
     if layout == 'c':
         return ('<div class="card c"><div class="band">%s<div class="bandco">%s</div></div>'
                 '<div class="body"><div class="nm">%s</div><div class="ti">%s</div>'
@@ -358,13 +377,79 @@ def sheet(layouts, logo, review=False):
             % (CSS, extra, '\n'.join(body)))
 
 
+SHEET_CSS = """
+@page{size:8.5in 11in;margin:0}
+body{margin:0}
+/* 10-UP ON US LETTER. Ten 3.5x2.0in cards tile exactly: 2 across (7.0in) and 5 down (10.0in),
+   leaving 0.75in side margins and 0.5in top/bottom -- inside every desktop printer's unprintable
+   edge. NO BLEED here on purpose: a home printer cannot print to the paper edge, so a bleed
+   design would cut with white slivers. The bleed version is the separate per-card PDF for a
+   commercial printer.
+   Cards butt edge to edge so ONE cut line serves both neighbours -- a guillotine or a steel rule
+   and a knife goes straight across. Crop ticks sit in the margin, never on the card. */
+.sheet{position:relative;width:8.5in;height:11in;page-break-after:always}
+.grid{position:absolute;left:.75in;top:.5in;width:7in;height:10in}
+.slot{position:absolute;width:3.5in;height:2in;overflow:hidden}
+.slot .card{width:3.5in;height:2in;box-shadow:none;page-break-after:auto}
+/* The per-card layouts position against a 3.75in artboard whose safe area starts .25in in. On a
+   no-bleed 3.5in slot the same margins would sit .125in too far in, so shift the whole card up
+   and left by exactly the bleed. */
+.slot .card{transform:translate(-.125in,-.125in)}
+.tick{position:absolute;background:#9aa3ad}
+.tickh{width:.16in;height:.5px}
+.tickv{width:.5px;height:.16in}
+.shlbl{position:absolute;left:.75in;top:.22in;font:9px Arial;color:#8a9099;letter-spacing:.06em}
+"""
+
+
+def sheet_10up(layout, logo, side='front'):
+    """Ten cards on one US Letter page, with cut ticks in the margin.
+
+    Front and back are SEPARATE pages, and the back page is column-mirrored so a duplex flip on
+    the long edge lands each back on its own front. Get that wrong and every card is somebody
+    else's back -- which is the single most common way a DIY card sheet is wasted.
+    """
+    cols, rows = 2, 5
+    cells = []
+    for r in range(rows):
+        for c in range(cols):
+            cc = (cols - 1 - c) if side == 'back' else c      # mirror for the duplex flip
+            body = back() if side == 'back' else front(layout, logo)
+            cells.append('<div class="slot" style="left:%.3fin;top:%.3fin">%s</div>'
+                         % (cc * 3.5, r * 2.0, body))
+    ticks = []
+    for c in range(cols + 1):                                  # vertical cuts
+        x = .75 + c * 3.5
+        ticks.append('<div class="tick tickv" style="left:%.3fin;top:.30in"></div>' % x)
+        ticks.append('<div class="tick tickv" style="left:%.3fin;top:10.54in"></div>' % x)
+    for r in range(rows + 1):                                  # horizontal cuts
+        y = .5 + r * 2.0
+        ticks.append('<div class="tick tickh" style="left:.55in;top:%.3fin"></div>' % y)
+        ticks.append('<div class="tick tickh" style="left:7.79in;top:%.3fin"></div>' % y)
+    return ('<div class="sheet"><div class="shlbl">%s &mdash; %s &mdash; 10 cards &mdash; '
+            'cut on the tick marks</div>%s<div class="grid">%s</div></div>'
+            % (H.escape(CO), side.upper(), ''.join(ticks), ''.join(cells)))
+
+
+def build_sheet(layout, logo):
+    return ('<html><head><meta charset="utf-8"><style>%s%s</style></head><body>%s%s</body></html>'
+            % (CSS, SHEET_CSS, sheet_10up(layout, logo, 'front'),
+               sheet_10up(layout, logo, 'back')))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--layout', default='', help='a|b|c|d (default: all four)')
     ap.add_argument('--logo', default='', help='path to the brand mark PNG')
+    ap.add_argument('--sheet', action='store_true',
+                    help='10-up US Letter sheet: front page + mirrored back page, cut marks')
+    ap.add_argument('--name', default='',
+                    help='put a person on the card (default: universal company card)')
     a = ap.parse_args()
 
-    global _LOGO_PATH
+    global _LOGO_PATH, NAME
+    if a.name:
+        NAME = a.name
     _LOGO_PATH = a.logo or find_logo()
     if _LOGO_PATH:
         print('logo: %s' % _LOGO_PATH)
@@ -383,6 +468,32 @@ def main():
         print('      card is clean; a wrong-brand address is not. Set EMAIL once a BSG mailbox is live.')
     if a.logo and not os.path.exists(a.logo):
         print('WARNING: --logo %s not found, using the embedded mark' % a.logo)
+
+    if a.sheet:
+        lay = (a.layout or 'b').lower()
+        html = build_sheet(lay, logo)
+        sp = os.path.join(HERE, 'BSG_Cards_SHEET_%s_%s.html' % (lay.upper(), today))
+        open(sp, 'w', encoding='utf-8').write(html)
+        print('wrote', sp)
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as pw:
+                b = pw.chromium.launch(); pg = b.new_page()
+                pg.goto('file:///' + sp.replace(os.sep, '/')); pg.wait_for_timeout(900)
+                pdf = pg.pdf(format='Letter', print_background=True,
+                             margin={'top': '0', 'bottom': '0', 'left': '0', 'right': '0'})
+                b.close()
+            dp = os.path.splitext(sp)[0] + '.pdf'
+            open(dp, 'wb').write(pdf)
+            print('wrote %s (%.0f KB)' % (dp, len(pdf) / 1024))
+        except Exception as e:
+            print('(sheet PDF failed: %s)' % e)
+        print()
+        print('PRINT: US Letter, ACTUAL SIZE / 100% scale (never "fit to page"), duplex')
+        print('       flip on the LONG edge. 10 cards per sheet. Cut on the tick marks.')
+        print('       Cardstock 65-110lb. This sheet has NO bleed by design -- a desktop')
+        print('       printer cannot reach the paper edge, so a bleed would cut white slivers.')
+        return sp, [sp]
 
     rp = os.path.join(HERE, 'BSG_Cards_REVIEW_%s.html' % today)
     open(rp, 'w', encoding='utf-8').write(sheet(layouts, logo, review=True))
