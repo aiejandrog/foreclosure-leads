@@ -63,8 +63,12 @@ JS = r"""() => {
     out.earlyEmail = {case:row.case, auction:row.auction||'',
                       blankDate: /scheduled for \.|subasta el \./.test(doc),
                       // the early body was rewritten in the 2026-08-22 voice pass; match the
-                      // durable semantic ("no auction date yet") rather than one exact sentence
-                      hasEarlyCopy: /no auction date yet/i.test(doc)};
+                      // durable semantic rather than one exact sentence. The regex still pinned
+                      // the exact words "no auction date yet" and the copy now reads "no auction
+                      // date SET yet" — one inserted word failed a correct email. Allow filler
+                      // between the phrase and "yet", and accept the Spanish body too.
+                      hasEarlyCopy: /no auction date[^.]{0,24}yet/i.test(doc)
+                                 || /sin fecha de subasta/i.test(doc)};
   }
   return out;
 }"""

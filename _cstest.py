@@ -105,7 +105,13 @@ with sync_playwright() as p:
     # Whitepages integration: on leads WITHOUT the paid WP Pro API cache, the sheet still shows the
     # free-consumer-page fallback links (reverse-address + name search). On leads WITH the API cache,
     # they're hidden in favor of the "🔒 WP Pro verified" badge (see Velima assertion below).
-    uncov = pg.evaluate("() => { const r = DATA.find(x => x.st==='FC' && !x.wpKey && !x.co && x.owners); return r ? {case: r.case, cs: _callSheet(r)} : null; }")
+    # ...and CONTACTABLE: a §362-suppressed lead's sheet carries no contact links at all, so the
+    # Whitepages assertions below failed about a lead the board is deliberately refusing to work.
+    uncov = pg.evaluate("""() => {
+      const ok = (typeof _textContactBlocked==='function') ? (r=>!_textContactBlocked(r)) : (()=>true);
+      const r = DATA.find(x => x.st==='FC' && !x.wpKey && !x.co && x.owners && ok(x));
+      return r ? {case: r.case, cs: _callSheet(r)} : null;
+    }""")
     if uncov:
         rec('Sheet (uncovered lead): Whitepages reverse-address link present', 'whitepages.com/address/' in uncov['cs'], uncov['case'])
         rec('Sheet (uncovered lead): Whitepages name link present', 'whitepages.com/name/' in uncov['cs'], '')

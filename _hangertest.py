@@ -40,7 +40,18 @@ with sync_playwright() as p:
     # set a sender name+phone so the hanger fills in
     pg.evaluate("() => { sender.name='Carlos'; sender.phone='(786) 555-0199'; sender.llc='Vertice Home Buyers LLC'; try{saveSender();}catch(e){} }")
     # pick a lead with a known owner
-    case = pg.evaluate("() => DATA[0].case"); owner = pg.evaluate("() => DATA[0].owners")
+    # A CONTACTABLE lead, not DATA[0]. The board now bakes 79 active §362 bankruptcy-stay flags,
+    # and the first lead is one of them — genHanger correctly returns the SUPPRESSION notice, which
+    # has no owner name, no sender block and no handwritten blanks. Three assertions failed for a
+    # document that was never supposed to be a hanger. Same gate the generator itself uses.
+    _pick = pg.evaluate("""() => {
+      const D=(typeof DATA!=='undefined')?DATA:[];
+      const ok = (typeof _textContactBlocked==='function') ? (r=>!_textContactBlocked(r)) : (()=>true);
+      const r = D.find(x => x.owners && x.case && ok(x));
+      return r ? {case:r.case, owners:r.owners} : null;
+    }""")
+    assert _pick, 'no contactable lead with an owner in DATA'
+    case = _pick['case']; owner = _pick['owners']
     # open the hanger in a captured popup
     with pg.context.expect_page() as pop:
         pg.evaluate("(c)=>{ const r=DATA.find(x=>x.case===c); genHanger(r); }", case)

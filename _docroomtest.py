@@ -82,7 +82,15 @@ async def main():
         rec('checklist still marked DO NOT RECORD', deed['norecord'])
 
         # the print bridge: open Doc Room, click a print button, assert a real tab with content
-        r0 = await pg.evaluate("() => (DATA.find(x=>x.addr&&x.case)||DATA[0]).case")
+        # CONTACTABLE fixture: the board now bakes 79 active §362 bankruptcy-stay flags, and the
+        # first lead with an address is one of them — openDocRoom serves the SUPPRESSION notice,
+        # which has no print buttons at all. The assertion failed about a document that was never
+        # meant to be the Doc Room. Same gate the generators themselves use.
+        r0 = await pg.evaluate("""() => {
+          const ok = (typeof _textContactBlocked==='function') ? (r=>!_textContactBlocked(r)) : (()=>true);
+          const r = DATA.find(x=>x.addr && x.case && ok(x)) || DATA.find(x=>x.addr&&x.case) || DATA[0];
+          return r.case;
+        }""")
         async with ctx.expect_page() as np:
             await pg.evaluate(f"() => openDocRoom({r0!r})")
         room = await np.value
