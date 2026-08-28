@@ -324,6 +324,21 @@ echo [buybox] Re-scanning standing acquisition criteria...
 python -u buybox.py --box mg4 --json buybox_mg4.json >> "%LOG%" 2>&1
 
 :end
+rem  REPORT FIRST, HEALTH SECOND (2026-08-27). Measured on this log: the refresh has STARTED on
+rem  time every single morning (5:30:02, seven days straight) and has not written a `done` marker
+rem  since 08/20 — it reaches the healthcheck ~1h50m in, then the process ends before the two
+rem  steps below it ever run. Consequence: DEALFLOW-STATUS.txt on the Desktop, the ONLY unattended
+rem  signal that the night worked, sat frozen at 08-20 for a week while the board published fine
+rem  every day. run_report.py itself is healthy (runs clean by hand in seconds), so it was never
+rem  the failure — it was just last in line behind the slowest step.
+rem  The real work (scrape -> enrich -> build -> publish) is all ABOVE this label and completes,
+rem  so moving the report ahead of the healthcheck costs nothing and guarantees the morning signal
+rem  survives a truncated tail. The `health:` line it prints comes from the PREVIOUS run's
+rem  health.json — one run stale, which is worth far more than no report at all.
+echo [report] Writing run status to Desktop + notification...
+python -u run_report.py >> "%LOG%" 2>&1
+echo ==================== done %date% %time% ====================>> "%LOG%"
+
 echo [health] Checking shipped data + upstream sources...
 python -u healthcheck.py >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -331,9 +346,6 @@ if errorlevel 1 (
 ) else (
   echo     health OK.
 )
-rem  Self-report: writes DEALFLOW-STATUS.txt to the Desktop + a tray notification, so an unattended
-rem  7 AM run tells you whether it worked without needing anyone watching.
-echo [report] Writing run status to Desktop + notification...
-python -u run_report.py >> "%LOG%" 2>&1
-echo ==================== done %date% %time% ====================>> "%LOG%"
+rem  (report + done marker moved ABOVE the healthcheck — see the note at :end)
+echo     health check complete - see leads-run.log.
 endlocal
