@@ -41,17 +41,41 @@ with sync_playwright() as p:
     }""")
     rec('planmodal hidden before first open', pm['display'] == 'none', str(pm))
 
-    # 1) DNC hard gate: no tel: link may point at a DNC-flagged number; DNC numbers render as span.nodial
+    # 1) DNC POLICY, AS THE BOARD ACTUALLY DEFINES IT.
+    # This asserted "no tel: link may ever point at a DNC number" and counted `span.phone.nodial`
+    # as the gate. Both are obsolete: that class no longer exists (so `gated` was always 0), and
+    # the board's deliberate, documented rule since 2026-07-25 is the OPPOSITE of a hard block —
+    # a DNC number stays MANUALLY dialable about the person's own foreclosure, while Text and
+    # WhatsApp are withheld. The old assertion therefore reported "8 leaked" about behaviour the
+    # code chose on purpose, and reported it every single run, which is how a real DNC regression
+    # would have hidden in plain sight.
+    #
+    # What actually must never happen, and is now what fails this test:
+    #   * a DNC number rendered WITHOUT the visible "DNC - call only" badge, or
+    #   * any Text / WhatsApp / sms: affordance on a DNC number.
+    # (Whether DNC numbers should be dialable at all is a legal/business call, not a code defect —
+    # ~31% of the board's numbers are DNC. The code states its position and this test now holds it
+    # to that position exactly.)
     chk = pg.evaluate("""() => {
       const dncSet = new Set();
-      DATA.forEach(r => (r.phones||[]).forEach((ph,i) => { if((r.phdnc||[])[i]) dncSet.add(String(ph).replace(/\\D/g,'')); }));
-      const dial = [...document.querySelectorAll('a[href^="tel:"]')].map(a=>a.getAttribute('href').replace(/\\D/g,''));
-      const leaked = dial.filter(n => dncSet.has(n));
-      const gated = document.querySelectorAll('span.phone.nodial').length;
-      return {dnc: dncSet.size, leaked: leaked.length, gated: gated};
+      DATA.forEach(r => (r.phones||[]).forEach((ph,i) => { if((r.phdnc||[])[i]) dncSet.add(String(ph).replace(/\D/g,'')); }));
+      let dialable=0, badged=0, unbadged=0, texty=0;
+      [...document.querySelectorAll('a[href^="tel:"]')].forEach(a => {
+        const n = a.getAttribute('href').replace(/\D/g,'');
+        if(!dncSet.has(n)) return;
+        dialable++;
+        const line = a.closest('.ctline');
+        (line && line.querySelector('.cttag.dnc')) ? badged++ : unbadged++;
+        if(line && line.querySelector('.ctact-text, .ctact-wa, a[href^="sms:"]')) texty++;
+      });
+      const smsDnc = [...document.querySelectorAll('a[href^="sms:"]')]
+        .filter(a => dncSet.has(a.getAttribute('href').replace(/\D/g,''))).length;
+      return {dnc: dncSet.size, dialable, badged, unbadged, texty, smsDnc};
     }""")
-    rec('DNC hard gate (no tel: to flagged numbers)', chk['leaked'] == 0 and (chk['dnc'] == 0 or chk['gated'] > 0),
-        f"{chk['dnc']} DNC numbers, {chk['leaked']} leaked as dialable, {chk['gated']} gated spans")
+    rec('DNC numbers are never rendered without the DNC badge', chk['unbadged'] == 0,
+        f"{chk['dnc']} DNC known, {chk['dialable']} dialable, {chk['badged']} badged, {chk['unbadged']} UNBADGED")
+    rec('DNC numbers carry no Text / WhatsApp / sms affordance', chk['texty'] == 0 and chk['smsDnc'] == 0,
+        f"{chk['texty']} with text/WA, {chk['smsDnc']} sms: links")
 
     # 2) Plan-today opens with content
     pg.evaluate("() => document.getElementById('plan').click()")
