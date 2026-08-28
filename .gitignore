@@ -44,6 +44,8 @@ BSG_Mail_Campaign_*.pdf
 # physical address, "never names the foreclosing party"). Untracked, the one suite that would
 # catch a disclosure regression lived on a single laptop.
 !_emailtest.py
+# the serial runner itself — see run_suite.py header for why serial matters
+!run_suite.py
 !_cyberaddrtest.py
 !_nearmetest.py
 !_docroomtest.py
