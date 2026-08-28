@@ -35,6 +35,7 @@ import argparse
 import base64
 import datetime as dt
 import html as H
+import io
 import os
 
 import disclaimer as D
@@ -84,6 +85,59 @@ EMAIL = ''          # deliberately blank — see the note in main()
 # URL; an unverified one is a coin flip. This is also the single strongest missing trust element --
 # it is what the daughter types in when she Googles the company after the door knock.
 WEB = 'BSGFlorida.com'
+
+# Layout E is the SHORT card and it is the default. Everything below about hierarchy, denials and
+# five options is still true, but it was true at a length nobody standing in a doorway will read.
+# A card is not a brochure: it gets about two seconds, and every line competing for those two
+# seconds costs the one line that matters. So the front is the mark alone, and the back is the
+# offer, the paths, the number and the code -- nothing else.
+SLOGAN = 'Every option, explained.'
+# "5-10 minutes" instead of "5 minutes": it sets an honest ceiling. A homeowner who believes the
+# call is 5 minutes and finds it runs 9 feels handled; the same call promised as 5-10 does not.
+CONSULT = 'Free 5-10 minute consultation'
+
+# ---- QR --------------------------------------------------------------------------------------
+# Points at the SITE, not a tel: link. A tel: QR fires a dial the instant it is scanned, which is
+# the wrong first move for someone who has not decided to talk yet -- the whole offer is that
+# there is no pressure. The URL is also the trust artifact: it is what the daughter types in when
+# she checks whether the company is real.
+QR_TARGET = 'https://bsgflorida.com'
+
+
+def qr_svg(data=QR_TARGET, dark=None, cls='qr'):
+    """The QR as INLINE SVG, sized entirely by CSS.
+
+    Error level M, not L. For this URL both land on the same 25-module symbol, so the redundancy
+    is free -- there is no reason to take level L's fragility for zero size saving.
+
+    The real constraint at this size is MODULE SIZE, not redundancy. 29 modules (25 + a 2-module
+    quiet zone each side) at 0.55in gives 0.48mm modules, above the ~0.40mm a phone camera
+    resolves comfortably at arm's length. Shrinking the code below ~0.45in crosses that line and
+    it stops scanning for exactly the people most likely to be holding it at arm's length.
+
+    DARK MODULES ON A WHITE CHIP, never white-on-navy. Built inverted first, to sit flush on the
+    navy back, and it did not decode at all: OpenCV's detector refused it outright and inverted
+    codes are a coin flip on real phones. The decoder contract is dark-on-light, so the code gets
+    its own white chip and the navy card provides the contrast around it. Verified by decoding it
+    back off a 4x render -- see _card_e_proof.png; if this is ever restyled, re-run that check
+    rather than eyeballing it, because an unscannable QR looks completely normal.
+
+    The quiet zone is part of the symbol, so nothing may be tucked into it -- border=2 is the
+    minimum that still reads, and the white chip is sized larger than the code so the zone is
+    genuinely blank.
+    """
+    try:
+        import segno
+    except ImportError:
+        return ''
+    dark = dark or NAVY
+    q = segno.make(data, error='m', micro=False)
+    buf = io.BytesIO()                    # segno's SVG writer emits BYTES, not str
+    q.save(buf, kind='svg', xmldecl=False, svgns=True, scale=1, border=2,
+           dark=dark, light=None)
+    svg = buf.getvalue().decode('utf-8')
+    return svg.replace('<svg ', '<svg class="%s" ' % cls, 1)
+
 
 # ---- brand ----------------------------------------------------------------------------------
 # #0B1730 measured L* ~8.1 -- BELOW the CMYK gamut floor. CMYK cannot hold a chromatic dark that
@@ -224,6 +278,18 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .d .stack{position:absolute;left:.25in;bottom:.25in;right:1in}
 .d .nm{font-size:15pt}
 
+/* --- E: the short card. Front is the mark and nothing else. -------------------------------
+   Sized as large as the trim honestly allows. The mark's own "SOLUTIONS GROUP" sub-line is
+   font-size 34 in a 620-unit viewBox, so it scales to 0.055x the mark height: at 1.22in that is
+   ~4.9pt, under the 6pt floor this project holds everything else to. It is grey on white, so it
+   goes SOFT rather than plugging solid the way the old reversed raster did -- acceptable for a
+   sub-wordmark nobody reads letter by letter, and the alternative is redrawing a mark that is
+   not mine to redraw. Flagged rather than silently "fixed". */
+.e .safe{display:flex;flex-direction:column;align-items:center;justify-content:center}
+.e .brandmark{height:1.22in;width:auto;display:block}
+.e .slogan{font-size:7.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
+           color:%(steel)s;margin-top:.10in;text-align:center}
+
 /* --- BACK --------------------------------------------------------------------------------- */
 .back{background:%(navy)s;color:#fff}
 .back .safe{display:flex;flex-direction:column;justify-content:center}
@@ -242,6 +308,33 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .back .mine{font-size:8pt;line-height:1.4;color:#e8eef7}
 .back .cta{margin-top:.07in;font-size:11pt;font-weight:700;color:#fff;letter-spacing:.01em}
 .back .reach{font-size:7.5pt;font-weight:600;color:#8fa1bb;letter-spacing:.06em}
+
+/* --- SHORT BACK (layout E) ----------------------------------------------------------------
+   Five elements, in the order a person actually needs them: what they get, what it covers, who
+   to call, where to look, and the one denial worth keeping. The QR sits in the bottom-right
+   corner and the text column stops short of it -- .qrpad reserves the width so nothing ever
+   runs underneath, which is the usual way a corner code ends up unscannable. */
+.sb{background:%(navy)s;color:#fff}
+.sb .safe{display:flex;flex-direction:column;justify-content:center}
+.sb .hd{font-size:8.5pt;font-weight:700;letter-spacing:.10em;text-transform:uppercase;
+        color:%(gold)s;margin:0 0 .07in}
+.sb .paths{font-size:8.5pt;line-height:1.55;color:#f2f6fb;margin:0}
+/* Clears the QR with a .10in gutter. Measured, not guessed: safe area is 3.25in wide, the code
+   occupies the right .55in of it, so the text column must stop at 2.60in. Set this by eye and the
+   last line of a long phone number tucks under the code and kills the scan. */
+.sb .qrpad{padding-right:.78in}
+.sb .ph2{font-size:15pt;font-weight:700;color:#fff;letter-spacing:.01em;margin-top:.11in;
+         line-height:1}
+.sb .sub{font-size:7pt;font-weight:600;color:#93a5bf;letter-spacing:.07em;margin-top:2.5pt}
+.sb .web2{font-size:8.5pt;font-weight:700;color:#fff;letter-spacing:.02em;margin-top:.075in}
+.sb .deny{font-size:6.6pt;line-height:1.35;color:#9db0cb;margin-top:.06in}
+/* 0.55in -> 0.48mm modules. Do not shrink this: see qr_svg().
+   right/bottom 0 anchors it to the SAFE-AREA corner, not the card's. .safe is already inset
+   .25in, so right:.25in here inset it TWICE and floated the code into the middle of the card
+   while the text column still ran underneath it. Corner means the corner of the printable area. */
+.sb .qrbox{position:absolute;right:0;bottom:0;width:.62in;height:.62in;background:#fff;
+           padding:.035in;border-radius:2px}
+.sb .qr{display:block;width:100%%;height:100%%;shape-rendering:crispEdges}
 """ % {'ink': INK, 'paper': PAPER, 'navy': NAVY, 'steel': STEEL, 'gold': GOLD,
    'blue': BLUE, 'bluetint': BLUE_TINT}
 
@@ -296,6 +389,12 @@ def mark_inline(mono='', cls='mark'):
 
 def front(layout, logo):
     img = mark_inline('', 'brandmark')
+    if layout == 'e':
+        # The mark, the slogan, nothing else. No name, no title, no phone, no QR -- every one of
+        # those was on the front before and every one of them competed with the mark for the two
+        # seconds the card gets. The back carries all of it.
+        return ('<div class="card e"><div class="safe">%s<div class="slogan">%s</div>'
+                '</div></div>' % (img, H.escape(SLOGAN)))
     if layout == 'a':
         return ('<div class="card a"><div class="safe" style="display:flex;flex-direction:column;'
                 'align-items:center;justify-content:center">%s'
@@ -329,6 +428,37 @@ def front(layout, logo):
             % (img, H.escape(CO), H.escape(NAME), H.escape(TITLE), _contact_lines()))
 
 
+def back_short():
+    """The short back: offer, paths, number, site, code. Five things, one screenful of eye.
+
+    What was cut and why it was safe to cut it:
+      * three denial sentences -> one line. "Not a lender or law firm. No fee, no obligation."
+        keeps the actual trust signal (we print our own limits) and drops the explanation of it.
+      * "refer you to licensed professionals" -> gone from the card, still true, still on the site
+        the QR opens. A card cannot carry a policy; it can carry a promise and a link to the policy.
+      * the five paths keep their own words but lose the bullets and the heading -- as one
+        centre-dotted run they read as scope in a single glance instead of a list to work through.
+    Nothing here is a compliance requirement: FS 501.1377's disclosures attach to a foreclosure-
+    rescue CONTRACT, not to a business card. The denial stays because it works, not because it
+    is owed.
+    """
+    qr = qr_svg()
+    return ('<div class="card sb"><div class="safe">'
+            '<div class="qrpad">'
+            '<div class="hd">%s</div>'
+            '<div class="paths">Sell for cash &middot; Refinance &middot; Home equity<br>'
+            'List with a realtor &middot; Understand the timeline</div>'
+            '<div class="ph2">%s</div>'
+            '<div class="sub">CALL OR TEXT &middot; %s</div>'
+            '<div class="web2">%s</div>'
+            '<div class="deny">Not a lender or law firm. No fee, no obligation.</div>'
+            '</div>'
+            '<div class="qrbox">%s</div>'
+            '</div></div>'
+            % (H.escape(CONSULT), H.escape(PHONE), H.escape(SPANISH_LINE.upper()),
+               H.escape(WEB), qr))
+
+
 def back(lang='en'):
     """The back sells the CALL, not a purchase.
 
@@ -354,6 +484,11 @@ def back(lang='en'):
             % (H.escape(OFFER), H.escape(OFFER2), H.escape(PHONE), H.escape(WEB), H.escape(CO)))
 
 
+def back_for(layout):
+    """E gets the short back; a-d keep the long one they were designed around."""
+    return back_short() if layout == 'e' else back()
+
+
 def sheet(layouts, logo, review=False):
     body = []
     for L in layouts:
@@ -362,7 +497,7 @@ def sheet(layouts, logo, review=False):
         body.append(front(L, logo))
         if review:
             body.append('<div class="lbl">Layout %s &mdash; back</div>' % L.upper())
-        body.append(back())
+        body.append(back_for(L))
     extra = ('' if not review else
              'body{background:#e9edf2;padding:16px}'
              '.card{margin:0 auto 6px;box-shadow:0 2px 10px rgba(11,23,48,.18)}'
@@ -390,11 +525,14 @@ body{margin:0}
 .sheet{position:relative;width:8.5in;height:11in;page-break-after:always}
 .grid{position:absolute;left:.75in;top:.5in;width:7in;height:10in}
 .slot{position:absolute;width:3.5in;height:2in;overflow:hidden}
-.slot .card{width:3.5in;height:2in;box-shadow:none;page-break-after:auto}
-/* The per-card layouts position against a 3.75in artboard whose safe area starts .25in in. On a
-   no-bleed 3.5in slot the same margins would sit .125in too far in, so shift the whole card up
-   and left by exactly the bleed. */
-.slot .card{transform:translate(-.125in,-.125in)}
+/* THE CARD KEEPS ITS NATIVE 3.75x2.25 ARTBOARD -- do not re-declare width/height here.
+   Squashing it to 3.5x2.0 also squashes .safe (left/right .25in) from 3.25in to 3.00in of usable
+   column, so the sheet re-wrapped text the bleed card set on one line, and left .safe sitting
+   .125in from the left trim but .375in from the right. The card looked centred and was not.
+   Instead: leave it 3.75in, shift by exactly the bleed, and let the slot's overflow:hidden do the
+   trimming. Card local .125-3.625in then maps to slot 0-3.5in, which IS the trim, and .safe lands
+   .125in inside it on all four sides. */
+.slot .card{box-shadow:none;page-break-after:auto;transform:translate(-.125in,-.125in)}
 .tick{position:absolute;background:#9aa3ad}
 .tickh{width:.16in;height:.5px}
 .tickv{width:.5px;height:.16in}
@@ -414,7 +552,7 @@ def sheet_10up(layout, logo, side='front'):
     for r in range(rows):
         for c in range(cols):
             cc = (cols - 1 - c) if side == 'back' else c      # mirror for the duplex flip
-            body = back() if side == 'back' else front(layout, logo)
+            body = back_for(layout) if side == 'back' else front(layout, logo)
             cells.append('<div class="slot" style="left:%.3fin;top:%.3fin">%s</div>'
                          % (cc * 3.5, r * 2.0, body))
     ticks = []
@@ -439,7 +577,7 @@ def build_sheet(layout, logo):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--layout', default='', help='a|b|c|d (default: all four)')
+    ap.add_argument('--layout', default='', help='e|a|b|c|d (default: e, the short card)')
     ap.add_argument('--logo', default='', help='path to the brand mark PNG')
     ap.add_argument('--sheet', action='store_true',
                     help='10-up US Letter sheet: front page + mirrored back page, cut marks')
@@ -458,7 +596,7 @@ def main():
         print('      Save your logo to ~/Downloads as bsg.png (any of bsg*/biscayne*/logo*)')
         print('      and re-run; it will be picked up automatically.')
     logo = logo_uri(a.logo)
-    layouts = [a.layout.lower()] if a.layout else ['a', 'b', 'c', 'd']
+    layouts = [a.layout.lower()] if a.layout else ['e']
     today = dt.date.today().isoformat()
 
     if not EMAIL:
@@ -470,7 +608,7 @@ def main():
         print('WARNING: --logo %s not found, using the embedded mark' % a.logo)
 
     if a.sheet:
-        lay = (a.layout or 'b').lower()
+        lay = (a.layout or 'e').lower()
         html = build_sheet(lay, logo)
         sp = os.path.join(HERE, 'BSG_Cards_SHEET_%s_%s.html' % (lay.upper(), today))
         open(sp, 'w', encoding='utf-8').write(html)

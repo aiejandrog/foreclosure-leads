@@ -16,3 +16,4 @@ cryptography>=42
 # The import is function-local, so every other module still imports fine without it.
 # Install locally with:  pip install "camoufox[geoip]" && python -m camoufox fetch
 # The browser is ~500 MB and lands in %LOCALAPPDATA%\camoufox, shared across venvs on that user.
+segno>=1.6            # QR codes on the business card back (bsg_cards.qr_svg)
