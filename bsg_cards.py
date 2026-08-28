@@ -60,12 +60,27 @@ NAME = 'Alejandro Gonzalez'
 # legal work — it states own-account purchase plainly — while reading like a person instead of a
 # department. It also fixes a separate defect: the front never said what the business does, and
 # half the time a card lands face-up on a counter.
-TITLE = 'I buy houses in Miami-Dade'
-TITLE_ES = 'Compro casas en Miami-Dade'
-SPANISH_LINE = 'Hablo espanol'
+# WRONG FOR TWO ROUNDS: this said "Acquisitions", then "I buy houses in Miami-Dade".
+# BSG's own homepage copy says the opposite in as many words -- "BSG is not a one-size-fits-all
+# home-buying company". It is a homeowner ADVISORY service: organise the options, explain the
+# tradeoffs, refer out to licensed professionals. Selling for cash is ONE of five paths it
+# presents, alongside refinance, listing with a realtor, home equity investment, and simply
+# understanding the legal timeline.
+# The pitch every other channel already uses, verbatim from call_mode's CIOC script:
+#     "A free 5 minutes with our senior advisor, 30 plus years, gets you every option."
+# Note the advisor is NOT Alejandro. He opens the door; the advisor takes the call. A card that
+# says "I buy houses" both contradicts the brand and promises the wrong person.
+TITLE = 'Homeowner advisory'
+TITLE_ES = 'Asesoria para propietarios'
+SPANISH_LINE = 'Hablo español'
+OFFER = 'A free 5-minute call with our senior advisor'
+OFFER2 = '30+ years. Every option on the table.'
 PHONE = '(786) 631-1823'
 EMAIL = ''          # deliberately blank — see the note in main()
-WEB = ''            # bsgflorida.com is not live yet; a dead URL on a card is worse than none
+# VERIFIED LIVE 2026-08-28 (HTTP 200) before printing it. A dead URL on a card is worse than no
+# URL; an unverified one is a coin flip. This is also the single strongest missing trust element --
+# it is what the daughter types in when she Googles the company after the door knock.
+WEB = 'BSGFlorida.com'
 
 # ---- brand ----------------------------------------------------------------------------------
 # #0B1730 measured L* ~8.1 -- BELOW the CMYK gamut floor. CMYK cannot hold a chromatic dark that
@@ -159,6 +174,7 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .sm{font-size:7pt;color:%(steel)s;letter-spacing:.02em}
 .reachsm{font-size:7pt;font-weight:600;color:%(steel)s;letter-spacing:.05em}
 .esline{font-size:7.5pt;font-weight:600;color:%(steel)s;margin-top:1pt}
+.weburl{font-size:8pt;font-weight:700;color:%(navy)s;letter-spacing:.02em;margin-top:6pt}
 /* flex-basis + flex-shrink:0 because this is an EMPTY box inside a flex column: min-height:auto
    resolved to 0 and layout A (the only overflowing column) silently shrank it to 1px of
    antialiasing. A divider that disappears under pressure is not a system element. */
@@ -170,36 +186,14 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .a .nm{margin-top:.04in}
 .a .rule{margin:.07in auto}
 
-/* --- B: navy left panel ------------------------------------------------------------------- */
-/* THE COMPANY IS THE DOMINANT ELEMENT, and it is TYPE, not the logo.
-   Two findings forced this. (1) The mark has no working single-colour version — inverting it made
-   an unreadable blob, and the white chip that replaced it read as an app icon while sitting
-   2.4:1 off-centre after trim, because it was centred on the BLEED rather than the trim.
-   (2) The company, not the person, is the only searchable token on the card, and the back makes
-   corporate claims ("not a law firm") that need a corporate name to attach to.
-   A left-aligned inset block cannot be mis-centred by a drifting cut, which is why this also
-   fixes the trim defect rather than compensating for it. */
-.b .panel{position:absolute;left:0;top:0;bottom:0;width:1.52in;background:%(navy)s}
-/* The type block that used to live here is GONE. It set BISCAYNE / SOLUTIONS / GROUP as reversed
-   type because the old chrome mark had no legible wordmark and no working mono version -- so the
-   card had to say the company name itself. The vector mark carries its own wordmark and reverses
-   cleanly, so keeping both printed the company name twice in the same 1.5in panel.
-   Centred, not top-anchored: it is now the only object in the panel. */
-.b .panel .word{display:none}
-.b .panel .word span{display:block;color:#fff;font-size:10.5pt;font-weight:700;
-                     letter-spacing:.05em;line-height:1.24;text-transform:uppercase}
-.b .panel .rule{margin-top:.08in;width:28px}
-.b .panel .mark{position:absolute;left:50%%;top:50%%;transform:translate(-50%%,-50%%);
-                width:1.02in;height:auto}
-/* The mark is a full-colour metallic asset. brightness(0) invert(1) turned it into an unreadable
-   white blob -- verified in the first review render. A logo that cannot reverse gets a white chip
-   to sit on; that is a normal print solution, not a compromise. */
-.b .right{position:absolute;left:1.74in;right:.25in;top:.3in;bottom:.3in}
-/* 13.5pt put "Alejandro Gonzalez" at 1.741in in a 1.76in column -- clearing the safe line by
-   0.019in, about 1.4pt. Technically inside, but any longer name breaks it and it reads jammed.
-   12pt leaves ~0.2in of air and still outranks everything else on the white side. */
+/* --- B: white field, logo in FULL COLOUR ---------------------------------------------------
+   The navy panel forced the mark to reverse to solid white, which throws away the blue, charcoal
+   and grey that ARE the logo. The mark is designed for white; give it white. Navy moves to the
+   back, where it still does the brand work and has no logo to destroy. */
+.b .lockup{position:absolute;left:.3in;top:50%%;transform:translateY(-50%%);width:1.2in}
+.b .divider{position:absolute;left:1.66in;top:.36in;bottom:.36in;width:1px;background:#dbe0e8}
+.b .right{position:absolute;left:1.86in;right:.25in;top:.3in;bottom:.3in}
 .b .nm{font-size:12pt}
-
 /* --- C: navy band across the top ---------------------------------------------------------- */
 .c .band{position:absolute;left:0;right:0;top:0;height:.95in;background:#fff;
           border-bottom:3px solid %(navy)s}
@@ -227,7 +221,8 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
    body text reads as "I want you to read this". The content was never the problem. */
 .back .doline{font-size:8.5pt;line-height:1.45;margin:0 0 .05in}
 .back .free{font-size:8pt;line-height:1.4;color:#eef3fa;margin:0 0 .05in}
-.back .not{font-size:8pt;line-height:1.4;color:#e8eef7;margin:0 0 .05in}
+.back .not{font-size:7.4pt;line-height:1.4;color:#c9d5e6;margin:.05in 0 .06in}
+.back .opts{font-size:7.8pt;line-height:1.45;color:#f2f6fb;margin:.045in 0 0}
 .back .mine{font-size:8pt;line-height:1.4;color:#e8eef7}
 .back .cta{margin-top:.07in;font-size:11pt;font-weight:700;color:#fff;letter-spacing:.01em}
 .back .reach{font-size:7.5pt;font-weight:600;color:#8fa1bb;letter-spacing:.06em}
@@ -237,11 +232,12 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 def _contact_lines():
     # "call or text" is not decoration: an ashamed person texts before they call, and nothing
     # on the card otherwise grants permission to.
-    out = ['<div class="ph">%s <span class="reachsm">call or text</span></div>' % H.escape(PHONE)]
+    out = ['<div class="ph">%s</div>' % H.escape(PHONE),
+           '<div class="reachsm">call or text</div>']
     if EMAIL:
         out.append('<div class="sm" style="margin-top:2pt">%s</div>' % H.escape(EMAIL))
-    if WEB:
-        out.append('<div class="sm">%s</div>' % H.escape(WEB))
+    # WEB is deliberately NOT emitted here: layout B renders it in its own .weburl block, and
+    # having both printed BSGFlorida.com twice on the same card.
     return ''.join(out)
 
 
@@ -292,15 +288,15 @@ def front(layout, logo):
                 '<div style="margin-top:.09in">%s</div></div></div>'
                 % (img, H.escape(CO), H.escape(NAME), H.escape(TITLE), _contact_lines()))
     if layout == 'b':
-        # reversed vector — the panel is navy, and this mark HAS a mono version
-        mark = mark_inline('#ffffff', 'mark')
-        return ('<div class="card b"><div class="panel">'
-                '%s</div>'
+        # mono='' -> the logo keeps its own colours
+        return ('<div class="card b">%s<div class="divider"></div>'
                 '<div class="right" style="display:flex;flex-direction:column;justify-content:center">'
                 '<div class="nm">%s</div><div class="ti">%s</div>'
-                '<div class="esline">Hablo espa&ntilde;ol</div>'
-                '<div style="margin-top:.1in">%s</div></div></div>'
-                % (mark, H.escape(NAME), H.escape(TITLE), _contact_lines()))
+                '<div class="esline">%s</div>'
+                '<div style="margin-top:.11in">%s</div>'
+                '<div class="weburl">%s</div></div></div>'
+                % (mark_inline('', 'lockup'), H.escape(NAME), H.escape(TITLE),
+                   H.escape(SPANISH_LINE), _contact_lines(), H.escape(WEB)))
     if layout == 'c':
         return ('<div class="card c"><div class="band">%s<div class="bandco">%s</div></div>'
                 '<div class="body"><div class="nm">%s</div><div class="ti">%s</div>'
@@ -315,52 +311,28 @@ def front(layout, logo):
 
 
 def back(lang='en'):
-    """The back is the trust side. What I do, then my limits, in first person.
+    """The back sells the CALL, not a purchase.
 
-    THE DENIALS ARE SOURCED, NOT TYPED. The first version of this function hardcoded its own
-    denial string — the exact drift disclaimer.py exists to stop, committed on the one artifact a
-    homeowner keeps, photographs and hands to a lawyer. sig_tag() is 87 characters, fits, and
-    restores the two denials the hand-typed line had silently dropped: the foreclosure-rescue
-    denial (which appears on EVERY other surface) and the HUD-counselor denial.
+    Rebuilt from bsgflorida.com's own copy. The five paths are the site's five options in its own
+    order -- "sell for cash" is ONE of them, not the business. The offer line is verbatim from the
+    CIOC door script every other channel already uses, so a homeowner hears the same sentence at
+    the door, on the phone, and off this card.
 
-    THE SELL-SIDE BULLET IS GONE. "Or help you sell it before the sale date" was one sentence
-    carrying three separate exposures: it framed the service against the foreclosure sale date
-    (FS 501.1377), it straddled the MARS short-sale line (a plain third-party sale is carved out,
-    a short sale is expressly IN), and helping another person sell their property for compensation
-    is unlicensed brokerage under FS 475. Deleting it leaves a pure principal-purchase card, which
-    is both the compliant version and the stronger pitch. Buying for your own account is the
-    express FS 475 exemption — so saying plainly that I BUY is protective, not just clearer.
-
-    "We charge no fees" is gone too. disclaimer.py sources that claim narrowly, as
-    "Consultations are always free." The card had escalated it into a categorical claim about the
-    whole relationship — an unauthorized expansion, and the sentence most likely to be literally
-    false the moment any assignment fee exists.
+    The denials stay, and the advisory framing makes them true rather than defensive: referring out
+    to licensed professionals is what the site actually promises.
     """
-    es = (lang == 'es')
-    do = ('Puedo comprar su casa como está y cerrar en la fecha que usted elija.'
-          if es else "I can buy your house as-is and close on the date you pick.")
-    free = ('La consulta siempre es gratis. No hay nada que firmar para hablar. '
-            'Sin obligación de vender.' if es else
-            'Consultations are always free. Nothing to sign to talk. No obligation to sell.')
-    mine = ('Este número es mi celular. Habla conmigo, no con un centro de llamadas.' if es else
-            'This number rings my cell. You get me, not a call center.')
-    head = 'LO QUE HAGO' if es else 'WHAT I DO'
-    reach = 'llame o escriba' if es else 'call or text'
-    try:
-        tag = D.sig_tag('es' if es else 'en', as_html=False)
-    except Exception:
-        tag = ''
     return ('<div class="card back"><div class="safe">'
             '<h4>%s</h4>'
-            '<div class="doline">%s</div>'
             '<div class="free">%s</div>'
-            '<div class="not">%s</div>'
-            '<div class="mine">%s</div>'
-            '<div class="cta">%s &nbsp;<span class="reach">%s</span></div>'
-            '<div class="sm" style="color:#8fa1bb;margin-top:1pt">%s &middot; %s</div>'
+            '<div class="opts">Sell for cash &middot; Refinance &middot; List with a realtor'
+            '<br>Home equity &middot; Understand the legal timeline</div>'
+            '<div class="not">Not a lender, not a law firm, not a foreclosure-rescue company. '
+            'We help you compare options and refer you to licensed professionals. '
+            'No fee. Nothing to sign. No obligation to sell.</div>'
+            '<div class="reach">%s &nbsp;<span class="reachsm">call or text</span></div>'
+            '<div class="mine">%s &middot; %s</div>'
             '</div></div>'
-            % (H.escape(head), H.escape(do), H.escape(free), H.escape(tag), H.escape(mine),
-               H.escape(PHONE), H.escape(reach), H.escape(NAME), H.escape(CO)))
+            % (H.escape(OFFER), H.escape(OFFER2), H.escape(PHONE), H.escape(WEB), H.escape(CO)))
 
 
 def sheet(layouts, logo, review=False):
