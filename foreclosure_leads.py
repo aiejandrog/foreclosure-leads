@@ -693,6 +693,14 @@ def _clean_addr(s):
     s = re.sub(r'\bFL[-,]\s*', 'FL ', s or '')
     return re.sub(r'\s{2,}', ' ', s).strip()
 
+def _esc_js(s):
+    """Escape a plain string for embedding inside a JS TEMPLATE LITERAL (backticks). The identity
+    disclosure is prose today, but a future edit adding an apostrophe-heavy clause, a backslash or
+    a ${...} sequence would otherwise break the board's script — and this text ships to homeowners,
+    so a silent breakage is not acceptable."""
+    return str(s).replace(chr(92), chr(92)*2).replace('`', chr(92)+'`').replace('${', chr(92)+'${')
+
+
 def _esc_json(obj):
     # Escape HTML-significant chars in embedded JSON so a county field containing "</script>"
     # can't break out of the inline <script> and inject/kill the page.
@@ -2529,6 +2537,21 @@ def make_tracker(leads):
 
     tpl = tpl.replace('__BUILTAT__', datetime.now().strftime('%Y-%m-%dT%H:%M'))
     tpl = tpl.replace('__ZIPCENT__', _esc_json(_zip_centroids(slim)))
+    # IDENTITY DISCLOSURE — ONE SOURCE, BAKED. disclaimer.identity() is what outreach_email.py
+    # already sends on every AUTOMATED send; genEmail (the manual copy-and-send path an operator
+    # actually uses) had its own hand-typed variant that had drifted: it said "not a lawyer" and
+    # omitted the foreclosure-rescue-company denial entirely. Same channel, same homeowner, two
+    # different disclosures depending on which button was clicked. Baking it means the manual path
+    # cannot drift from the automated one again — change the sentence in disclaimer.py and every
+    # surface moves together.
+    try:
+        import disclaimer as _D
+        tpl = tpl.replace('__IDENT_EN__', _esc_js(_D.identity('en', as_html=False)))
+        tpl = tpl.replace('__IDENT_ES__', _esc_js(_D.identity('es', as_html=False)))
+    except Exception as _e:
+        # NEVER ship the raw placeholder into homeowner-facing copy. Fail the build instead.
+        raise SystemExit('identity disclosure bake FAILED (%s) — refusing to build a board whose '
+                         'emails would carry a literal __IDENT_EN__ placeholder.' % _e)
     # Owner replies detected by replies.py (gitignored replies.json, written from IMAP). Absent
     # until the operator adds gmail.key -- and an empty table is the honest state: the Proof Sheet
     # then reads "awaiting reply" for every send instead of implying nobody wrote back.
@@ -2845,6 +2868,21 @@ def make_tracker(leads):
     # carrying a coordinate 0.9mi from downtown Miami, 27mi from the property), so including it
     # would poison the very centroid meant to locate it.
     tpl = tpl.replace('__ZIPCENT__', _esc_json(_zip_centroids(slim)))
+    # IDENTITY DISCLOSURE — ONE SOURCE, BAKED. disclaimer.identity() is what outreach_email.py
+    # already sends on every AUTOMATED send; genEmail (the manual copy-and-send path an operator
+    # actually uses) had its own hand-typed variant that had drifted: it said "not a lawyer" and
+    # omitted the foreclosure-rescue-company denial entirely. Same channel, same homeowner, two
+    # different disclosures depending on which button was clicked. Baking it means the manual path
+    # cannot drift from the automated one again — change the sentence in disclaimer.py and every
+    # surface moves together.
+    try:
+        import disclaimer as _D
+        tpl = tpl.replace('__IDENT_EN__', _esc_js(_D.identity('en', as_html=False)))
+        tpl = tpl.replace('__IDENT_ES__', _esc_js(_D.identity('es', as_html=False)))
+    except Exception as _e:
+        # NEVER ship the raw placeholder into homeowner-facing copy. Fail the build instead.
+        raise SystemExit('identity disclosure bake FAILED (%s) — refusing to build a board whose '
+                         'emails would carry a literal __IDENT_EN__ placeholder.' % _e)
     _page = _marker + tpl.replace('__DATA__', _payload)
     # Last gate before the board the business runs on goes to disk. A surviving __TOKEN__ is a
     # top-level ReferenceError that kills every declaration after it, and the page still serves a

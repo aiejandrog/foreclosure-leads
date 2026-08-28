@@ -40,6 +40,10 @@ BSG_Mail_Campaign_*.pdf
 !_gallerytest.py
 !_lktest.py
 !_plantest.py
+# _emailtest guards the homeowner-facing COMPLIANCE copy (identity disclosure, opt-out line,
+# physical address, "never names the foreclosing party"). Untracked, the one suite that would
+# catch a disclosure regression lived on a single laptop.
+!_emailtest.py
 !_cyberaddrtest.py
 !_nearmetest.py
 !_docroomtest.py
