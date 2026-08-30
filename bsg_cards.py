@@ -92,6 +92,18 @@ WEB = 'BSGFlorida.com'
 # A card is not a brochure: it gets about two seconds, and every line competing for those two
 # seconds costs the one line that matters. So the front is the mark alone, and the back is the
 # offer, the paths, the number and the code -- nothing else.
+# THE CARD NEVER SAID WHAT IT WAS FOR. Front was the mark plus "every option, explained" — every
+# option about WHAT? — and the back's "understand the timeline" is a euphemism nobody decodes while
+# standing in their own doorway. A homeowner could hold this card and never learn it concerned
+# their foreclosure.
+# WHERE THE LINE IS, and it is already settled on this account: name the SITUATION, never promise
+# an OUTCOME. "Pre-foreclosure & foreclosure" states the domain of work. "We stop foreclosures" /
+# "we save homes" is an outcome representation, and FS 501.1377 defines a foreclosure-rescue
+# consultant by exactly that kind of representation — which drags in a written contract, the 12pt
+# uppercase disclosure, a 3-day right to cancel and a bar on fees before full performance. Jesse's
+# "we stopped foreclosures for thousands" was refused on the email templates for this reason; the
+# card holds the same line.
+SPECIALTY = 'Pre-foreclosure & foreclosure'
 SLOGAN = 'Every option, explained.'
 # "5-10 minutes" instead of "5 minutes": it sets an honest ceiling. A homeowner who believes the
 # call is 5 minutes and finds it runs 9 feels handled; the same call promised as 5-10 does not.
@@ -307,9 +319,15 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
    sub-wordmark nobody reads letter by letter, and the alternative is redrawing a mark that is
    not mine to redraw. Flagged rather than silently "fixed". */
 .e .safe{display:flex;flex-direction:column;align-items:center;justify-content:center}
-.e .brandmark{height:1.22in;width:auto;display:block}
-.e .slogan{font-size:7.5pt;font-weight:600;letter-spacing:.16em;text-transform:uppercase;
-           color:%(steel)s;margin-top:.10in;text-align:center}
+/* 1.22in -> 1.08in to seat a second line without crowding the trim. The sub-wordmark inside the
+   mark scales with it (~4.3pt now); still grey-on-white, so it softens rather than plugging. */
+.e .brandmark{height:1.08in;width:auto;display:block}
+/* WHAT WE DO reads before the promise. A stranger holding this needs the situation first --
+   the promise only means something once they know what it is a promise about. */
+.e .specialty{font-size:8pt;font-weight:700;letter-spacing:.075em;text-transform:uppercase;
+              color:%(navy)s;margin-top:.10in;text-align:center;white-space:nowrap}
+.e .slogan{font-size:7pt;font-weight:500;letter-spacing:.055em;color:%(steel)s;
+           margin-top:.045in;text-align:center}
 
 /* --- BACK --------------------------------------------------------------------------------- */
 .back{background:%(navy)s;color:#fff}
@@ -411,11 +429,13 @@ def mark_inline(mono='', cls='mark'):
 def front(layout, logo):
     img = mark_inline('', 'brandmark')
     if layout == 'e':
-        # The mark, the slogan, nothing else. No name, no title, no phone, no QR -- every one of
-        # those was on the front before and every one of them competed with the mark for the two
-        # seconds the card gets. The back carries all of it.
-        return ('<div class="card e"><div class="safe">%s<div class="slogan">%s</div>'
-                '</div></div>' % (img, H.escape(SLOGAN)))
+        # The mark, what we do, the promise. Still no name, no title, no phone, no QR -- those all
+        # competed with the mark for the two seconds the card gets, and the back carries them.
+        # But "nothing else" went one line too far: a card that never names foreclosure leaves the
+        # person holding it unable to tell what it is for. Situation first, promise second.
+        return ('<div class="card e"><div class="safe">%s'
+                '<div class="specialty">%s</div><div class="slogan">%s</div>'
+                '</div></div>' % (img, H.escape(SPECIALTY), H.escape(SLOGAN)))
     if layout == 'a':
         return ('<div class="card a"><div class="safe" style="display:flex;flex-direction:column;'
                 'align-items:center;justify-content:center">%s'
@@ -467,8 +487,11 @@ def back_short():
     return ('<div class="card sb"><div class="safe">'
             '<div class="qrpad">'
             '<div class="hd">%s</div>'
+            # "Understand the timeline" -- WHICH timeline? The front answers that, but a card
+            # lands back-up half the time and this side has to stand alone. "Foreclosure timeline"
+            # names it and is three characters SHORTER, so it costs no width against the QR gutter.
             '<div class="paths">Sell for cash &middot; Refinance &middot; Home equity<br>'
-            'List with a realtor &middot; Understand the timeline</div>'
+            'List with a realtor &middot; Foreclosure timeline</div>'
             '<div class="ph2">%s</div>'
             '<div class="sub">CALL OR TEXT &middot; %s</div>'
             '<div class="web2">%s</div>'
