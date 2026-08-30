@@ -37,6 +37,7 @@ import datetime as dt
 import html as H
 import io
 import os
+import re
 
 import disclaimer as D
 
@@ -102,6 +103,10 @@ CONSULT = 'Free 5-10 minute consultation'
 # there is no pressure. The URL is also the trust artifact: it is what the daughter types in when
 # she checks whether the company is real.
 QR_TARGET = 'https://bsgflorida.com'
+# Quiet zone in modules. The spec asks for 4; 2 is the practical floor and it only holds because
+# the code sits on its own white chip, so the navy card supplies the boundary the zone normally
+# provides. Referenced in two places -- keep them one constant so they cannot drift.
+BORDER = 2
 
 
 def qr_svg(data=QR_TARGET, dark=None, cls='qr'):
@@ -133,10 +138,26 @@ def qr_svg(data=QR_TARGET, dark=None, cls='qr'):
     dark = dark or NAVY
     q = segno.make(data, error='m', micro=False)
     buf = io.BytesIO()                    # segno's SVG writer emits BYTES, not str
-    q.save(buf, kind='svg', xmldecl=False, svgns=True, scale=1, border=2,
-           dark=dark, light=None)
+    # svgclass, rather than prepending our own -- segno already writes class="segno", so a second
+    # class= made the tag carry two. Browsers keep the first and drop the rest, so it happened to
+    # work, but it is invalid markup and depends on which one lands first.
+    q.save(buf, kind='svg', xmldecl=False, svgns=True, scale=1, border=BORDER,
+           dark=dark, light=None, svgclass=cls)
     svg = buf.getvalue().decode('utf-8')
-    return svg.replace('<svg ', '<svg class="%s" ' % cls, 1)
+
+    # VIEWBOX, OR THE CODE PAINTS AT A THIRD OF ITS BOX. segno emits width="29" height="29" and
+    # NO viewBox. Without one, `width:100%` stretches the ELEMENT while the drawing stays locked
+    # at 29 user units anchored top-left -- so the code rendered tiny in the corner of its white
+    # chip with dead space right and bottom, looking like a broken image.
+    # Every decode test still PASSED, which is why this survived: the symbol was sharp, just
+    # small, so it read fine at 300-600 DPI and would have failed on a phone at arm's length --
+    # i.e. it worked in every test and nowhere real. Size is now asserted, not just decodability.
+    n = q.symbol_size(scale=1, border=BORDER)[0]
+    svg = re.sub(r'<svg([^>]*?)\swidth="\d+"\s+height="\d+"',
+                 r'<svg\1 viewBox="0 0 %d %d"' % (n, n), svg, count=1)
+    if 'viewBox' not in svg:              # segno changed its output shape -- fail loud, not small
+        raise RuntimeError('qr_svg: could not set a viewBox; the code would print undersized')
+    return svg
 
 
 # ---- brand ----------------------------------------------------------------------------------

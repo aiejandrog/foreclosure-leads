@@ -375,3 +375,5 @@ _build*.txt
 digest_state.json
 # ...but the suite that guards its delta logic MUST survive a clone (same as _suppressiontest)
 !_digesttest.py
+# card QR suite: guards printed SIZE, not just decodability — must survive a clone
+!_cardtest.py
