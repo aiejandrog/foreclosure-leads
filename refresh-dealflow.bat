@@ -337,6 +337,20 @@ rem  survives a truncated tail. The `health:` line it prints comes from the PREV
 rem  health.json — one run stale, which is worth far more than no report at all.
 echo [report] Writing run status to Desktop + notification...
 python -u run_report.py >> "%LOG%" 2>&1
+
+rem  DIGEST SITS HERE FOR THE SAME REASON run_report.py DOES — see the :end note above. It is a
+rem  MORNING SIGNAL, so putting it last would put it exactly where the 2h scheduler kill lands and
+rem  it would be missing on precisely the mornings something went wrong. Everything it reads
+rem  (board, buy-boxes, ledgers, skiptrace) is produced above this line.
+rem  It answers a different question from its neighbours and does not replace any of them:
+rem    run_report.py      did THIS RUN finish
+rem    morning_planner.py what do I knock today
+rem    healthcheck.py     is the infrastructure sane
+rem    morning_digest.py  what CHANGED since yesterday, across every subsystem
+rem  Never raises and always exits 0 by construction, so it cannot mask the health gate below.
+echo [digest] Building the morning digest...
+python -u morning_digest.py >> "%LOG%" 2>&1
+
 echo ==================== done %date% %time% ====================>> "%LOG%"
 
 echo [health] Checking shipped data + upstream sources...

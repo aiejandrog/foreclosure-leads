@@ -370,3 +370,8 @@ _ab_*.txt
 .ab_backup/
 _wpcheck.py
 _build*.txt
+
+# morning digest: the rolling baseline is machine-local run state, not source
+digest_state.json
+# ...but the suite that guards its delta logic MUST survive a clone (same as _suppressiontest)
+!_digesttest.py
