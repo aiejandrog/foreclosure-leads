@@ -143,6 +143,25 @@ def debt_of(row):
     return 0.0, '', ''
 
 
+def _junior_lien(row):
+    """True when the debt figure on this row is a JUNIOR lien, so value-minus-debt is NOT room.
+
+    An HOA or condo-association judgment sits behind a first mortgage that SURVIVES the
+    association's sale. Subtracting only the association's lien answers a question nobody asked.
+
+    foreclosure_leads.py:677 already derives exactly this -- `eq_fake = is_hoa or mortgage_risk` --
+    so read that flag rather than re-deriving the taxonomy and letting the two drift. The plaintiff
+    and case-type tests below are a floor for rows that reach this file without the flag set.
+    """
+    if row.get('eq_fake') or row.get('eqfake') or row.get('mortgage_risk'):
+        return True
+    ct = '%s %s' % (row.get('case_type') or '', row.get('clerk_case_type') or '')
+    if re.search(r'HOA|CONDO|ASSOC', ct, re.I):
+        return True
+    return bool(re.search(r'(CONDOMINIUM|HOMEOWNERS?|PROPERTY\s+OWNERS?|MASTER)[^,]{0,40}ASSOC',
+                          str(row.get('plaintiff') or ''), re.I))
+
+
 def equity_state(row):
     """(state, room_or_None, why). The three-bucket rule, stated in words."""
     try:
@@ -169,6 +188,22 @@ def equity_state(row):
                     'value $%s minus $%s of open RECORDED principal leaves about $%s — but that is '
                     'principal, not a payoff, so treat it as a direction, not a number. %s'
                     % (format(int(val), ','), format(int(debt), ','), format(int(room), ','), note))
+        # A JUNIOR LIEN IS NOT THE DEBT -- and this is the same failure the docstring at the top of
+        # this file was written to prevent, reappearing one bucket over. The rule there is "value
+        # minus nothing is not equity"; the rule here is that value minus the WRONG debt is not
+        # equity either, and it is more dangerous because it prints a confident number.
+        # Caught on 2025-019128-CA-01: a $23,924 condo-association judgment against a $290,272
+        # unit printed "CONFIRMED $266,347 of room, both figures on the row" and ranked #1 in the
+        # box -- while that very row carried mortgage_risk=True, eq_fake=True, tier C and the
+        # warning "HOA/assoc case - verify senior mortgage on docket". The flag was already in
+        # this file's own output dict and nothing read it.
+        if _junior_lien(row):
+            return (EQ_UNKNOWN, room,
+                    'value $%s minus the $%s judgment looks like $%s — but this is an association '
+                    'case and that judgment is JUNIOR. The first mortgage survives the sale and is '
+                    'NOT on this row, so the senior debt is unknown and the real room may be zero. '
+                    'Pull the mortgage before anyone says the word equity.'
+                    % (format(int(val), ','), format(int(debt), ','), format(int(room), ',')))
         return (EQ_CONFIRMED, room,
                 'value $%s minus the $%s owed = $%s of room, both figures on the row.'
                 % (format(int(val), ','), format(int(debt), ','), format(int(room), ',')))
