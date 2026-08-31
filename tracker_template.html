@@ -5345,7 +5345,7 @@ function _pbRender(){
     +   '<h3>Objection Handling — CIOC</h3>'
     +   '<div class="pbcallout"><b>The structure, every time:</b> CUSHION (agree, normalize, majority — never argue, never shame their existing plan) → ISOLATE ("What do you truly want to do with this property?") → OVERCOME (one reframe + one analogy + one what-if; if they have a plan, INSURE it — "I want to be your parachute") → CLOSE (measure what they DID: paperwork trial close, "save my number… read it back to me"). The full 14-card drill deck with Spanish is in <b>Call Mode → script drawer</b>. Drill it: tell Claude "throw me a scenario".</div>'
     +   '<h4>"I already have a lawyer."</h4>'
-    +   '<div class="pbscript">Keep your attorney — that puts you ahead of most people I talk to. Your lawyer is playing defense. Has anyone shown you what happens to your equity while the meter runs? Ten free minutes with our senior advisor, coordinated with your lawyer. If counsel says we\'re not needed, we shake hands and part friends.</div>'
+    +   '<div class="pbscript">Keep your attorney — that puts you ahead of most people I talk to. Your lawyer is playing defense. Has anyone shown you what happens to your equity while the meter runs? Five free minutes with our senior advisor, coordinated with your lawyer. If counsel says we\'re not needed, we shake hands and part friends.</div>'
     +   '<h4>"How did you get my address?"</h4>'
     +   '<div class="pbscript">Everything is public. When a case is filed the county puts it on a public calendar with the address, sale date, and case number. It\'s how title companies find these too. If you don\'t want to hear from me again just say so — I\'ll take you off the list.</div>'
     +   '<h4>"I don\'t want to sell." / "I have a plan."</h4>'
@@ -14516,6 +14516,67 @@ function _mailable(addr){
 }
 function _mailableList(r){ return ((r&&r.emails)||[]).filter(_mailable); }
 
+/* ---- SUBJECT_STYLE — 'urgent' | 'measured'. Alejandro's call, one word, in BOTH files. ---------
+   'urgent'   (default, his 2026-08-28 framing):
+              URGENT: Foreclosure sale 09/22/2026 - Regarding your property at 12535 SW 33 ST
+   'measured' (what shipped 2026-08-28 to 2026-08-30):
+              Sale date 09/22/2026 - Regarding your property at 12535 SW 33 ST
+
+   THE MEASURED FACT THAT LIVES NEXT TO THE DECISION, so it is never lost by being argued away:
+   bounce rate on this channel was pulled from 28-33% down to 16.9% while the measured subject was
+   the one shipping, and "URGENT" in a subject line is a well-known spam-filter trigger and the
+   rescue-scam silhouette. That is a reason to WATCH the bounce number after this ships, not a
+   reason to overrule him. To revert: set this to 'measured' HERE and in outreach_email.py (grep
+   SUBJECT_STYLE) and rebuild. Both files must move together or the manual composer and the
+   unattended sender disagree again.
+
+   WHAT IS NOT OPTIONAL IN EITHER STYLE: the subject still ENDS with "Regarding your property at
+   <STREET>". replies.py PASS-2 recovers the lead from a reply with
+   re.search(r'property at\s+(.+)$', subj) — ANCHORED TO END OF STRING — and finds candidates over
+   IMAP on the substring SUBJ_TAG = 'Regarding your property at'. A prefix survives both. Anything
+   appended AFTER the street becomes part of the captured address, matches no lead, and every reply
+   from an address not already on file silently stops being attributed. */
+var SUBJECT_STYLE = 'urgent';
+function _subjLine(street, dt, td, lang){
+  var d = String(dt||'').trim(), tag;
+  var urgent = (String(SUBJECT_STYLE||'urgent').toLowerCase() !== 'measured');
+  if(lang === 'es'){
+    tag = d ? ((td?'Subasta de tax deed ':'Fecha de subasta ') + d + ' - ') : '';
+    return (urgent?'URGENTE: ':'') + tag + 'Referente a su propiedad en ' + String(street||'');
+  }
+  if(urgent){
+    tag = d ? ((td?'Tax deed sale ':'Foreclosure sale ') + d + ' - ') : '';
+    return 'URGENT: ' + tag + 'Regarding your property at ' + String(street||'');
+  }
+  tag = d ? ((td?'Tax deed sale ':'Sale date ') + d + ' - ') : '';
+  return tag + 'Regarding your property at ' + String(street||'');
+}
+
+/* ---- ALEJANDRO'S COLD EMAIL COPY — ONE STRING, RENDERED TWICE --------------------------------
+   The _ALEXMAIL_EN string below is baked at build time from outreach_copy.email_body_template()
+   — the SAME Python call outreach_email.py makes for the unattended nightly send. The JS never
+   holds a second
+   copy of the words, so this composer and that sender cannot drift; they have drifted three times
+   already (08-22 identity gap, 08-28 "byte-mirror" that was not one, 08-29 senior-advisor
+   framing), and each time the same homeowner could receive two different emails depending on which
+   surface reached them.
+
+   The template carries \u0001-fenced tokens where the per-lead values go. _alexFill is a verbatim
+   port of outreach_copy.fill() — same tokens, same order, same empty-first-name collapse. If the
+   bake fails, foreclosure_leads.py substitutes an empty string here and genEmail falls back to the
+   2026-08-29 body below, which is itself compliant (identity disclosure, STOP line, CAN-SPAM sig).
+   Never a raw placeholder: assert_no_placeholders would fail the build first. */
+var _ALEXMAIL_EN = "__ALEXMAIL_EN__";
+function _alexFill(t, v){
+  t = String(t||'');
+  if(!v.first) t = t.split('Hi \u0001FIRST\u0001,').join('Hi,');
+  var K = [['first','\u0001FIRST\u0001'], ['date','\u0001DATE\u0001'], ['signer','\u0001SIGNER\u0001'],
+           ['phone','\u0001PHONE\u0001'], ['company','\u0001COMPANY\u0001'], ['sig','\u0001SIG\u0001'],
+           ['ident','\u0001IDENT\u0001']];
+  for(var i=0;i<K.length;i++) t = t.split(K[i][1]).join(String(v[K[i][0]]||''));
+  return t;
+}
+
 function genEmail(r, quiet){
   // Contact gate BEFORE composing (2026-08-11 deep sweep). quiet=true is the worker/batch path that
   // stages a send — returning null there means "no email for this lead", which every caller already
@@ -14554,19 +14615,13 @@ function genEmail(r, quiet){
   const bcc = emails.slice(1).join(', ');
   // professional signature block (blank fields skipped)
   const sig = [sN, sT, sL, (sP?'Phone: '+sP:''), (sE?'Email: '+sE:''), sA, sW].filter(x=>x&&String(x).trim()).join('\n');
-  /* SUBJECT — date first, address LAST. Jesse's 8/28 revision put the sale date in the subject so
-     it is visible in the inbox preview without opening; that is the single highest-value change in
-     his draft. It must go BEFORE the address and never after: replies.py PASS-2 recovers the lead
-     from a reply by `re.search(r'property at\s+(.+)$', subj)` — anchored to END of string. Appending
-     ", sale date X" would make the captured address "123 MAIN ST, sale date X", which matches no
-     lead, and every reply from an address not already on file would silently stop being attributed.
-     The IMAP search (SUBJ_TAG = 'Regarding your property at') is a substring and survives a prefix.
-     His "URGENT:" prefix is NOT adopted: bounce rate was dragged from 28-33% down to 16.9% and
-     URGENT in a subject line is a spam-filter magnet, on top of being the rescue-scam silhouette. */
-  const dateTagEN = dt ? ((td ? 'Tax deed sale ' : 'Sale date ') + dt + ' - ') : '';
-  const dateTagES = dt ? ((td ? 'Subasta de tax deed ' : 'Fecha de subasta ') + dt + ' - ') : '';
-  const subjEN = `${dateTagEN}Regarding your property at ${street}`;
-  const subjES = `${dateTagES}Referente a su propiedad en ${street}`;
+  /* SUBJECT — prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of the
+     tail replies.py needs; both are satisfiable and both are required. Built by _subjLine() above,
+     which outreach_email.py mirrors line for line, so the manual composer and the unattended
+     sender cannot describe the same subject two different ways. Style switch + the bounce-rate
+     numbers behind it: see SUBJECT_STYLE above _subjLine. */
+  const subjEN = _subjLine(street, dt, td, 'en');
+  const subjES = _subjLine(street, dt, td, 'es');
   // EARLY-STAGE (Lis Pendens, no auction date yet). Without this branch the standard body renders
   // "with a sale scheduled for ." — a blank where the date should be, which reads as a mail-merge
   // failure and kills the credibility the case number was included to build. It is also the WRONG
@@ -14597,16 +14652,38 @@ function genEmail(r, quiet){
   // channel, same homeowner, two different disclosures depending on which button the operator
   // clicked. __IDENT_EN__/__IDENT_ES__ are substituted at build time from disclaimer.identity(),
   // so the manual path and the automated path are now the same sentence by construction.
-  const introEN = `I'm ${sN} with ${sL||'Biscayne Solutions Group'}. __IDENT_EN__`;
+  // Hoisted to its own const so Alejandro's baked body can be filled with the SAME build-time
+  // substitution instead of hand-typing the sentence a second time. Change disclaimer.identity()
+  // and every one of these moves together, including the automated sender.
+  const _IDENT_EN = `__IDENT_EN__`;
+  const introEN = `I'm ${sN} with ${sL||'Biscayne Solutions Group'}. ${_IDENT_EN}`;
   const introES = `Soy ${sN}, de ${sL||'Biscayne Solutions Group'}. __IDENT_ES__`;
   const bodyEarlyEN = `Hi${first?' '+first:''},\n\n${introEN}\n\nA foreclosure case was just filed against ${addr}${plaintiff?` by ${plaintiff}`:''}${caseTagEN}. There is no auction date yet. That means right now you have the most choices you will ever have.\n\nChoices close one by one as time passes. That is the only reason for this note.\n\nOur senior advisor, over 30 years in mortgages and foreclosure workouts, can go over them with you. Five minutes, free, no fee ever. If nothing fits, we shake hands and part friends.\n\nCall or text me.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
   const bodyEarlyES = `Hola${first?' '+first:''},\n\n${introES}\n\nSe acaba de presentar un caso de ejecución hipotecaria contra ${addr}${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}. Todavía no hay fecha de subasta. Eso significa que ahora mismo usted tiene más opciones que nunca.\n\nLas opciones se van cerrando una por una con el tiempo. Ese es el único punto de esta nota.\n\nNuestro asesor principal, con más de 30 años en hipotecas y casos de ejecución, puede repasarlas con usted. Cinco minutos, gratis, sin cobrarle nunca. Si nada le sirve, nos damos la mano y quedamos como amigos.\n\nLlámeme o mándeme un texto.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
   const bodyEN = td
     ? `Hi${first?' '+first:''},\n\n${introEN}\n\nCounty records show ${addr} has a tax deed sale set for ${dt}${caseTagEN}. You can check that number yourself on the county's site.\n\nBefore that date you still have real paths: pay the back taxes and keep it, sell first (we can buy as-is if that fits), or claim the surplus if it sells for more than what is owed.\n\nOur senior advisor can tell you which one fits. Five free minutes, no fee ever. If none of them fit, we shake hands and part friends.\n\nCall or text me.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`
-    : `Hi${first?' '+first:''},\n\n${introEN}\n\nI know this is a stressful time, and you're probably getting a lot of mail and calls about the property, so I'll be brief.\n\nPublic records show ${addr} is in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale date of ${dt}. That case number is real. You can check it yourself on the county clerk's site.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs time, and the sale date does not wait.\n\nWhat I can offer is a free 15 minute call with our senior advisor, who has over 30 years in mortgages and foreclosure workouts. He'll go through where your case actually stands, lay out every option you have including the ones most owners are never told about, and give you a straight answer on which one fits.\n\nNo fee, ever. No tricks and no pressure. If nothing fits, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+    : `Hi${first?' '+first:''},\n\n${introEN}\n\nI know this is a stressful time, and you're probably getting a lot of mail and calls about the property, so I'll be brief.\n\nPublic records show ${addr} is in foreclosure${plaintiff?` by ${plaintiff}`:''}${caseTagEN}, with a sale date of ${dt}. That case number is real. You can check it yourself on the county clerk's site.\n\nI don't know if you already have a plan. Most owners we talk to do, and if yours is working, keep it. What's true for every plan is that it needs time, and the sale date does not wait.\n\nWhat I can offer is five free minutes on the phone with our senior advisor, who has over 30 years in mortgages and foreclosure workouts. He'll go through where your case actually stands, lay out every option you have including the ones most owners are never told about, and give you a straight answer on which one fits.\n\nNo fee, ever. No tricks and no pressure. If nothing fits, we shake hands and part friends.\n\nAll I need is a reply with a good phone number and the best time to reach you. Or call or text me and I'll set it up.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
   const bodyES = td
     ? `Hola${first?' '+first:''},\n\n${introES}\n\nLos registros del condado muestran que ${addr} tiene subasta de tax deed el ${dt}${caseTagES}. Puede verificar ese número usted mismo en el sitio del condado.\n\nAntes de esa fecha todavía tiene caminos reales: pagar los impuestos atrasados y quedarse con la propiedad, vender antes (podemos comprar tal cual si le sirve), o reclamar el excedente si se vende por más de lo que se debe.\n\nNuestro asesor principal le puede decir cuál le conviene. Cinco minutos gratis, sin cobrarle nunca. Si ninguno le sirve, nos damos la mano y quedamos como amigos.\n\nLlámeme o mándeme un texto.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`
-    : `Hola${first?' '+first:''},\n\n${introES}\n\nSé que este es un momento de mucho estrés, y seguramente está recibiendo mucha correspondencia y muchas llamadas sobre la propiedad, así que voy a ser breve.\n\nLos registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con fecha de subasta el ${dt}. Ese número de caso es real. Puede verificarlo usted mismo en el sitio del clerk del condado.\n\nNo sé si usted ya tiene un plan. La mayoría de los dueños con quienes hablamos lo tienen, y si el suyo está funcionando, sígalo. Lo que es cierto para todo plan es que necesita tiempo, y la fecha de subasta no espera.\n\nLo que le puedo ofrecer es una llamada gratis de 15 minutos con nuestro asesor principal, que tiene más de 30 años en hipotecas y casos de ejecución. Él va a repasar dónde está parado su caso realmente, explicarle todas las opciones que tiene incluyendo las que casi nadie les menciona, y darle una respuesta directa sobre cuál le conviene.\n\nSin cobrarle nunca. Sin trucos y sin presión. Si nada le sirve, nos damos la mano y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número de teléfono y la mejor hora para llamarlo. O llámeme o mándeme un texto y lo coordinamos.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
+    : `Hola${first?' '+first:''},\n\n${introES}\n\nSé que este es un momento de mucho estrés, y seguramente está recibiendo mucha correspondencia y muchas llamadas sobre la propiedad, así que voy a ser breve.\n\nLos registros públicos muestran que ${addr} está en ejecución hipotecaria${plaintiff?` por parte de ${plaintiff}`:''}${caseTagES}, con fecha de subasta el ${dt}. Ese número de caso es real. Puede verificarlo usted mismo en el sitio del clerk del condado.\n\nNo sé si usted ya tiene un plan. La mayoría de los dueños con quienes hablamos lo tienen, y si el suyo está funcionando, sígalo. Lo que es cierto para todo plan es que necesita tiempo, y la fecha de subasta no espera.\n\nLo que le puedo ofrecer son cinco minutos gratis por teléfono con nuestro asesor principal, que tiene más de 30 años en hipotecas y casos de ejecución. Él va a repasar dónde está parado su caso realmente, explicarle todas las opciones que tiene incluyendo las que casi nadie les menciona, y darle una respuesta directa sobre cuál le conviene.\n\nSin cobrarle nunca. Sin trucos y sin presión. Si nada le sirve, nos damos la mano y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número de teléfono y la mejor hora para llamarlo. O llámeme o mándeme un texto y lo coordinamos.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
+  /* ---- ALEJANDRO'S COPY — ENGLISH COLD BODY ----------------------------------------------------
+     He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME template
+     string outreach_email.py renders (baked above from outreach_copy.email_body_template()), so
+     the button an operator clicks and the unattended nightly send cannot say different things to
+     the same homeowner.
+     Scope is deliberate and mirrors outreach_email.py exactly:
+       * English, first touch, foreclosure sale WITH a date -> his copy
+       * early stage (LP, no date) -> unchanged; his copy opens on the auction date and would
+         render a blank there, which reads as a mail-merge failure
+       * tax deed -> unchanged; his copy says "foreclosure auction" and drops the back-taxes /
+         surplus paths that are the only true options on a TD
+       * follow / final and ALL Spanish -> unchanged (his copy is English only)
+     ident is the build-time __IDENT_EN__ substitution; sig is the CAN-SPAM block (physical mailing
+     address) that his three-line sign-off cannot carry on its own. */
+  const bodyColdEN = (!td && _ALEXMAIL_EN)
+    ? _alexFill(_ALEXMAIL_EN, {first:first, date:dt, signer:sN, phone:sP,
+                               company:sL, sig:sig, ident:_IDENT_EN})
+    : bodyEN;
   // FOLLOW / FINAL are type-agnostic: only the date clause changes when no auction date exists,
   // so one pair of bodies serves FC, TD and LP leads alike.
   const dlEN = dt ? `before ${dt}` : 'before the court moves the case forward';
@@ -14617,8 +14694,8 @@ function genEmail(r, quiet){
   // surface reaching a homeowner with no statement of who is writing or who they are not.
   // Email also gets read out of order, forwarded, or never delivered, so 'they saw it in the
   // first one' is not a safe assumption.
-  const bodyFollowEN = `Hi${first?' '+first:''},\n\n${sN} with ${sL||'Biscayne Solutions Group'} again. __IDENT_EN__ I wrote you a few days back about ${street}.\n\nIf you're working a plan right now, the bank, a lawyer, money on the way, keep going. You did the right thing. I'm not asking you to change anything.\n\nI'm asking to be your parachute. Plans can land late, and late can cost the house. So let a backup sit ready ${dlEN}. It costs nothing: five free minutes with our senior advisor, no fee ever. If your plan works, tear the backup up and we part friends.\n\nOr just reply with a good number and a time, and I'll call you.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
-  const bodyFollowES = `Hola${first?' '+first:''},\n\nSoy ${sN}, de ${sL||'Biscayne Solutions Group'}, otra vez. __IDENT_ES__ Le escribí hace unos días sobre ${street}.\n\nSi usted ya tiene un plan en marcha, el banco, un abogado, dinero en camino, sígalo. Hizo lo correcto. No le pido que cambie nada.\n\nLe pido ser su paracaídas. Los planes a veces llegan tarde, y tarde puede costar la casa. Deje un respaldo listo ${dlES}. No cuesta nada: cinco minutos gratis con nuestro asesor principal, sin cobrarle nunca. Si su plan funciona, rompa el respaldo y quedamos como amigos.\n\nO responda con un buen número y una hora, y yo lo llamo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
+  const bodyFollowEN = `Hi${first?' '+first:''},\n\n${sN} with ${sL||'Biscayne Solutions Group'} again. __IDENT_EN__ I wrote you a few days back about ${street}.\n\n${dt?`The sale date is still ${dt}.`:'The case is still moving.'}\n\nIf you're working a plan right now, the bank, a lawyer, money on the way, keep going. You did the right thing, and I'm not asking you to change any of it.\n\nI'm asking to be your parachute. Plans can land late, and late can cost the house. So let a backup sit ready ${dlEN}. It costs nothing: five free minutes with our senior advisor, no fee ever. If your plan works, tear the backup up and we part friends.\n\nAll I need is a reply with a good number and the best time to reach you.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
+  const bodyFollowES = `Hola${first?' '+first:''},\n\nSoy ${sN}, de ${sL||'Biscayne Solutions Group'}, otra vez. __IDENT_ES__ Le escribí hace unos días sobre ${street}.\n\n${dt?`La fecha de subasta sigue siendo el ${dt}.`:'El caso sigue avanzando.'}\n\nSi usted ya tiene un plan en marcha, el banco, un abogado, dinero en camino, sígalo. Hizo lo correcto, y no le pido que cambie nada.\n\nLe pido ser su paracaídas. Los planes a veces llegan tarde, y tarde puede costar la casa. Deje un respaldo listo ${dlES}. No cuesta nada: cinco minutos gratis con nuestro asesor principal, sin cobrarle nunca. Si su plan funciona, rompa el respaldo y quedamos como amigos.\n\nLo único que necesito es que me responda con un buen número y la mejor hora para llamarlo.\n\n${sig}\n\nResponda STOP o pídame no contactarlo y lo respeto.`;
   const fdEN = dt ? `If the ${dt} sale date is already handled` : 'If the case is already handled';
   const fdES = dt ? `Si la subasta del ${dt} ya está resuelta` : 'Si el caso ya está resuelto';
   const bodyFinalEN = `Hi${first?' '+first:''},\n\nThis is my last note about ${street}.\n\n${fdEN}, ignore this and I truly wish you well.\n\nIf it's not, the door stays open. Our senior advisor will still go over your options with you, five minutes, free, no fee ever. Every choice stays yours.\n\nI won't email you again after this. My number stays good.\n\n${sig}\n\nReply STOP or ask me not to contact you again and I will honor it.`;
@@ -14633,7 +14710,7 @@ function genEmail(r, quiet){
     ? {en:{subj:reSubjEN, body:bodyFollowEN}, es:{subj:reSubjES, body:bodyFollowES}}
     : early
     ? {en:{subj:subjEN, body:bodyEarlyEN}, es:{subj:subjES, body:bodyEarlyES}}
-    : {en:{subj:subjEN, body:bodyEN},      es:{subj:subjES, body:bodyES}};
+    : {en:{subj:subjEN, body:bodyColdEN},  es:{subj:subjES, body:bodyES}};
   // SENT-CONTENT CAPTURE. Alejandro: "I need to see the results of what's sending. What is the
   // input?" Stash the EXACT composed subject+body on a global the moment it is built, so the
   // worker's log can archive the real text rather than a summary. Reading it from here instead

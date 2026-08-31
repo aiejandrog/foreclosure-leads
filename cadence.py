@@ -124,7 +124,7 @@ def steps(lead, sender):
           + sig + disc + unsub)
     s1 = (f"Hi {first},\n\nFollowing up on {addr}. Public records suggest there may be money left "
           f"over after the loan is paid off. If there is, it belongs to you and not the bank, but it "
-          f"has to be handled before {auc}.\n\nTen minutes on the phone is usually enough to tell "
+          f"has to be handled before {auc}.\n\nFive minutes on the phone is usually enough to tell "
           f"whether your numbers work that way. It costs you nothing, and I'd rather you know than "
           f"guess." + sig + disc + unsub)
     s2 = (f"Hi {first},\n\nA few details before {auc}, in plain terms. Owners in your situation "

@@ -99,7 +99,7 @@ CIOC = [
     ('ISOLATE', 'Make the objection the ONLY thing in the way. Force open-or-closed. The 8/17 '
      'scalpel: ask what they TRULY want — the answer tells you which program to pitch.',
      'What is it that you truly want to do with this property?  ·  If talking to me couldn\'t '
-     'interfere with your plan at all, is there any other reason not to spend ten minutes?'),
+     'interfere with your plan at all, is there any other reason not to spend five minutes?'),
     ('OVERCOME', 'One reframe + one analogy + one what-if. Not three. ONE. When they have a plan '
      'they believe in: INSURE the hope, never fight it — you are the parachute, not the enemy.',
      'I don\'t want to be your bank or your middleman — I want to be your parachute. You\'re '
@@ -135,8 +135,21 @@ NEVER_SAY = [
 
 # Where the Core 10 lives. Read at BUILD time so the page stays in step with the canon instead of
 # carrying a copy that silently rots.
-_DRILL = os.path.join(os.path.expanduser('~'), 'projects', 'obsidian-vault', '5-projects',
-                      'BSG Sales', 'BSG Objection Drill Pack - Procrastinator Psychology.md')
+#
+# 2026-08-29: it HAD silently rotted. This path was renamed BSG/ with the 2026-08-23 company rename,
+# but the vault folder and file were never renamed and are still MSG Sales/MSG Objection Drill Pack.
+# So the canonical pack has been unreachable since that day, every local build has quietly fallen
+# back to the vendored cache, and every edit made to the vault drill pack since the rename has had
+# ZERO effect on the shipped page. It failed soft -- one printed line inside a long build log --
+# which is exactly why it survived a week. Try both names rather than renaming the vault: the .md is
+# the target of [[MSG Objection Drill Pack - Procrastinator Psychology]] wikilinks from the
+# affirmation scripts and the playbook, and renaming the file breaks all of them.
+_VAULT_5P = os.path.join(os.path.expanduser('~'), 'projects', 'obsidian-vault', '5-projects')
+_DRILL_CANDIDATES = [
+    os.path.join(_VAULT_5P, 'BSG Sales', 'BSG Objection Drill Pack - Procrastinator Psychology.md'),
+    os.path.join(_VAULT_5P, 'MSG Sales', 'MSG Objection Drill Pack - Procrastinator Psychology.md'),
+]
+_DRILL = next((p for p in _DRILL_CANDIDATES if os.path.exists(p)), _DRILL_CANDIDATES[0])
 # Vendored copy of the PARSED cards, committed to the repo. The vault only exists on this machine —
 # CI has no drill pack, so before this cache a CI rebuild silently replaced Call Mode with a page
 # that had zero objection cards, overwriting a full local build with a degraded one every night.

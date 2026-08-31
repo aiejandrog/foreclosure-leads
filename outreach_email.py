@@ -61,6 +61,65 @@ DAILY_MAX = 50
 PACING_SEC_MIN = 2.0
 PACING_SEC_MAX = 3.5
 
+# ---------------------------------------------------------------------------------------------
+# SUBJECT_STYLE — 'urgent' | 'measured'. Alejandro's call, one word, in BOTH files.
+#
+# 'urgent'   (default, his 2026-08-28 framing):
+#            URGENT: Foreclosure sale 09/22/2026 - Regarding your property at 12535 SW 33 ST
+# 'measured' (what shipped 2026-08-28 to 2026-08-30):
+#            Sale date 09/22/2026 - Regarding your property at 12535 SW 33 ST
+#
+# THE MEASURED FACT THAT LIVES NEXT TO THE DECISION, so it is never lost by being argued away:
+# bounce rate on this channel was pulled from 28-33% down to 16.9% (verify_emails.py in the
+# nightly, see the bounce-rate note) while the measured subject was the one shipping, and
+# "URGENT" in a subject line is a well-known spam-filter trigger and the rescue-scam silhouette.
+# That is a reason to WATCH the bounce number after this ships, not a reason to overrule him.
+# To revert: set this to 'measured' HERE and in tracker_template.html (grep SUBJECT_STYLE) and
+# rebuild. Both files must move together or the manual and automated paths disagree again.
+#
+# WHAT IS NOT OPTIONAL IN EITHER STYLE: the subject still ENDS with
+# "Regarding your property at <STREET>". replies.py PASS-2 captures the lead with
+# re.search(r'property at\s+(.+)$', subj) — anchored to end of string — and finds candidates over
+# IMAP on the substring SUBJ_TAG = 'Regarding your property at'. Prefixes survive both. Anything
+# appended AFTER the street silently kills reply attribution for every owner who writes back from
+# an address we do not already have on file.
+SUBJECT_STYLE = 'urgent'
+
+# ALEJANDRO'S COPY. outreach_copy.py is the one source of the words; this module renders the
+# template it bakes, and tracker_template.html's genEmail() renders the SAME baked template with
+# the same token substitution (see the mirror note in outreach_copy.py). Wrapped because this file
+# is imported by build_cadence_queue.py and runs inside the nightly: a broken copy module must
+# cost the new wording, never the send. The fallback is the 2026-08-29 body, which is itself
+# compliant — identity disclosure, STOP line, CAN-SPAM signature all present.
+try:
+    import outreach_copy as _OC
+    _ALEX_TPL_EN = _OC.email_body_template()
+    _missing = _OC.missing_tokens(_ALEX_TPL_EN)
+    if _missing:
+        # Same guard the board's bake runs. A template that lost a token would send a FIXED name,
+        # date, phone or company to every recipient in the batch -- silently, and 50 at a time.
+        raise ValueError('template lost token(s): %s' % ', '.join(_missing))
+except Exception as _oc_err:                                    # pragma: no cover - defensive
+    _OC, _ALEX_TPL_EN = None, ''
+    print('!! outreach_copy unavailable (%s) -- cold English body falls back to the 2026-08-29 '
+          'copy. tracker_template.html will do the same.' % _oc_err)
+
+
+def _subject(street, sale_date='', td=False, lang='en'):
+    """Mirror of genEmail's subject builder. See SUBJECT_STYLE above."""
+    if _OC is not None:
+        return _OC.outreach_subject(street, sale_date, td, lang, SUBJECT_STYLE)
+    d = str(sale_date or '').strip()
+    urgent = (SUBJECT_STYLE != 'measured')
+    if lang == 'es':
+        tag = ((('Subasta de tax deed ' if td else 'Fecha de subasta ') + d + ' - ') if d else '')
+        return ('URGENTE: ' if urgent else '') + tag + 'Referente a su propiedad en ' + street
+    if urgent:
+        tag = ((('Tax deed sale ' if td else 'Foreclosure sale ') + d + ' - ') if d else '')
+        return 'URGENT: ' + tag + 'Regarding your property at ' + street
+    tag = ((('Tax deed sale ' if td else 'Sale date ') + d + ' - ') if d else '')
+    return tag + 'Regarding your property at ' + street
+
 _COMPANY_RE = re.compile(
     r'\b(LLC|L\.?L\.?C|INC|CORP|CORPORATION|TRUST|LP|LLP|COMPANY|CO\.|ASSOC|ASSOCIATION|BANK|'
     r'HOLDINGS|PROPERTY|PROPERTIES|REALTY|REAL ESTATE|INVESTMENTS?|CAPITAL|FUND|ENTERPRISES|'
@@ -468,8 +527,12 @@ def _compose_single(r, snd, lang='en'):
     sig = _sig(snd)
     sN = snd.get('name') or '[YOUR NAME]'
 
-    subj_en = f'Regarding your property at {street}'
-    subj_es = f'Referente a su propiedad en {street}'
+    # SUBJECT -- prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of
+    # the tail replies.py needs; both are satisfiable and both are required. Built by _subject()
+    # at the top of this file so genEmail() and this module cannot describe the same subject two
+    # different ways. Style switch + the bounce-rate numbers: see SUBJECT_STYLE.
+    subj_en = _subject(street, dt, td, 'en')
+    subj_es = _subject(street, dt, td, 'es')
 
     # 2026-08-11 rewrite (Alejandro) -- mirrors tracker genEmail exactly (ASCII conventions:
     # -- for em dash, stripped accents). BSG identity everywhere ("local home buyer" is out),
@@ -540,33 +603,79 @@ def _compose_single(r, snd, lang='en'):
     else:
         plaint_bit_en = f' by {plaintiff}' if plaintiff else ''
         plaint_bit_es = f' por parte de {plaintiff}' if plaintiff else ''
+        # 2026-08-29 -- RE-MIRRORED to tracker genEmail after a silent drift. The comment above has
+        # claimed "mirrors genEmail exactly" since 08-11, but the two bodies had diverged: this one
+        # had no senior-advisor framing at all and told owners an attorney could "fight or pause the
+        # case." So the AUTOMATED nightly send and the MANUAL operator click were two different
+        # emails to the same homeowner -- the same failure mode as the identity gap fixed on 08-22,
+        # one level up in the body. Structure below is Jesse's 8/28 revision (cushion first, date
+        # stated plainly, "I don't know if you have a plan", one concrete ask) with the house rails
+        # kept: senior advisor carries the 30 years (NOT the company), no "stop the foreclosure"
+        # claim, real case number, STOP line, CAN-SPAM sig.
         body_en = (
             f'Hi {first},\n\n{intro_en}\n\n'
+            f"I know this is a stressful time, and you're probably getting a lot of mail and "
+            f"calls about the property, so I'll be brief.\n\n"
             f'Public records show {addr} is in foreclosure{plaint_bit_en}{case_tag_en}, with a '
-            f'sale date of {dt}. That case number is real -- look it up on the county '
-            f"clerk's site. I include it so you know this isn't a mass mailer.\n\n"
-            f'Most owners are never told they have real ways out: catch up the loan, rework it '
-            f'with the bank, sell before the auction and keep your equity, or have an attorney '
-            f'fight or pause the case. Every one of them works better with time left on the '
-            f'clock.\n\n'
-            f'If you want a straight rundown, call or text me. No cost, no obligation -- and '
-            f"if selling isn't your best move, I'll tell you that straight.\n\n"
+            f'sale date of {dt}. That case number is real. You can check it yourself on the '
+            f"county clerk's site.\n\n"
+            f"I don't know if you already have a plan. Most owners we talk to do, and if yours "
+            f"is working, keep it. What's true for every plan is that it needs time, and the "
+            f'sale date does not wait.\n\n'
+            f'What I can offer is five free minutes on the phone with our senior advisor, who has over '
+            f"30 years in mortgages and foreclosure workouts. He'll go through where your case "
+            f'actually stands, lay out every option you have including the ones most owners are '
+            f'never told about, and give you a straight answer on which one fits.\n\n'
+            f'No fee, ever. No tricks and no pressure. If nothing fits, we shake hands and part '
+            f'friends.\n\n'
+            f'All I need is a reply with a good phone number and the best time to reach you. '
+            f"Or call or text me and I'll set it up.\n\n"
             f'{sig}\n\nReply STOP or ask me not to contact you again and I will honor it.'
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
+            f'Se que este es un momento de mucho estres, y seguramente esta recibiendo mucha '
+            f'correspondencia y muchas llamadas sobre la propiedad, asi que voy a ser breve.\n\n'
             f'Los registros publicos muestran que {addr} esta en ejecucion hipotecaria'
             f'{plaint_bit_es}{case_tag_es}, con fecha de subasta el {dt}. Ese numero de caso '
-            f'es real -- puede verificarlo en el sitio del clerk del condado. Lo incluyo para '
-            f'que sepa que esto no es correo masivo.\n\n'
-            f'A la mayoria de los duenos nunca les explican que tienen salidas reales: ponerse '
-            f'al dia con el prestamo, ajustarlo con el banco, vender antes de la subasta y '
-            f'quedarse con su capital, o que un abogado pelee o pause el caso. Todas funcionan '
-            f'mejor con tiempo en el reloj.\n\n'
-            f'Si quiere un repaso directo, llameme o mandeme un texto. Sin costo, sin '
-            f'compromiso -- y si vender no es su mejor opcion, se lo digo tal cual.\n\n'
+            f'es real. Puede verificarlo usted mismo en el sitio del clerk del condado.\n\n'
+            f'No se si usted ya tiene un plan. La mayoria de los duenos con quienes hablamos lo '
+            f'tienen, y si el suyo esta funcionando, sigalo. Lo que es cierto para todo plan es '
+            f'que necesita tiempo, y la fecha de subasta no espera.\n\n'
+            f'Lo que le puedo ofrecer son cinco minutos gratis por telefono con nuestro asesor '
+            f'principal, que tiene mas de 30 anos en hipotecas y casos de ejecucion. El va a '
+            f'repasar donde esta parado su caso realmente, explicarle todas las opciones que '
+            f'tiene incluyendo las que casi nadie les menciona, y darle una respuesta directa '
+            f'sobre cual le conviene.\n\n'
+            f'Sin cobrarle nunca. Sin trucos y sin presion. Si nada le sirve, nos damos la mano '
+            f'y quedamos como amigos.\n\n'
+            f'Lo unico que necesito es que me responda con un buen numero de telefono y la mejor '
+            f'hora para llamarlo. O llameme o mandeme un texto y lo coordinamos.\n\n'
             f'{sig}\n\nResponda STOP o pidame no contactarlo y lo respeto.'
         )
+        # ---- ALEJANDRO'S COPY, ENGLISH COLD BODY -------------------------------------------
+        # He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME
+        # template string genEmail() renders, so the manual composer and this unattended sender
+        # cannot say different things to the same homeowner (they have drifted three times:
+        # 08-22 identity, 08-28 "byte-mirror", 08-29 senior-advisor framing).
+        # Scope is deliberate and mirrors genEmail exactly:
+        #   * English, first touch, foreclosure sale WITH a date -> his copy
+        #   * early stage (LP, no date) -> unchanged; his copy opens on the auction date and
+        #     would render a blank there
+        #   * tax deed -> unchanged; his copy says "foreclosure auction" and drops the
+        #     back-taxes / surplus paths that are the only true options on a TD
+        #   * follow / final and ALL Spanish -> unchanged (his copy is English only)
+        # ident comes from disclaimer.py; sig is the CAN-SPAM block (physical address) the
+        # three-line sign-off cannot carry on its own.
+        # first=_first_name(r), NOT the local `first`. `first` falls back to the whole owner name
+        # when no first name can be parsed, so a nameless lead would greet "Hi Property Owner,"
+        # here while genEmail greets "Hi," -- a two-word divergence, but a divergence, and this
+        # whole change exists to have none. fill() collapses an empty name to "Hi," on both sides.
+        if _ALEX_TPL_EN:
+            body_en = _OC.fill(
+                _ALEX_TPL_EN, first=_first_name(r), date=dt, signer=sN,
+                phone=(snd.get('phone') or '[YOUR PHONE]'), company=sL, sig=sig,
+                ident=D.identity('en', as_html=False))
     return {
         'en': {'subj': subj_en, 'body': body_en},
         'es': {'subj': subj_es, 'body': body_es},

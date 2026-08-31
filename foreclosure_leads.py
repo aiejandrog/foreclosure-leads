@@ -706,6 +706,42 @@ def _esc_json(obj):
     # can't break out of the inline <script> and inject/kill the page.
     return json.dumps(obj).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
 
+
+def _bake_alex_email(tpl, where='board'):
+    """Bake Alejandro's cold-email copy into the board as ONE JS string literal.
+
+    outreach_copy.email_body_template() renders his 2026-08-28 body with chr(1)-fenced tokens where
+    the per-lead values go. outreach_email.py — the unattended nightly sender — renders that exact
+    same call and fills the same tokens. Baking the identical string into genEmail() means the
+    manual composer holds no second copy of the words at all, so the two surfaces cannot drift.
+    They have drifted three times (08-22 identity gap, 08-28 a "byte-mirror" that was not one,
+    08-29 senior-advisor framing) and each time the same homeowner could get two different emails
+    depending on which surface reached them.
+
+    DOES NOT RAISE. This runs inside the nightly and a copy module that fails to import must cost
+    the new wording, never the board. On failure the placeholder is replaced with an empty JS
+    string; genEmail then falls back to the 2026-08-29 body, which is itself compliant (identity
+    disclosure, STOP line, CAN-SPAM signature). outreach_email.py degrades identically, so the two
+    paths still agree with each other even in the failure case. The failure is printed, loudly —
+    silent is how drift happens.
+    """
+    js = '""'
+    try:
+        import outreach_copy as _OC
+        body = _OC.email_body_template()
+        missing = _OC.missing_tokens(body)
+        if missing:
+            # A template with a token missing would ship a FIXED name/date/phone/company to every
+            # homeowner on the board. Fall back rather than send that.
+            raise ValueError('template lost token(s): %s' % ', '.join(missing))
+        js = (json.dumps(body).replace('<', '\\u003c')
+                              .replace('>', '\\u003e')
+                              .replace('&', '\\u0026'))
+    except Exception as _e:
+        print('!! %s: outreach_copy bake FAILED (%s) -- genEmail falls back to the 2026-08-29 '
+              'cold body. Fix outreach_copy.py and rebuild.' % (where, _e))
+    return tpl.replace('"__ALEXMAIL_EN__"', js)
+
 def _encrypt_payload(plaintext, password):
     """AES-GCM-256 with a PBKDF2-SHA256 key. Round-trips with the template's Web Crypto decrypt.
     Output is a small JSON object of base64 strings (no HTML-special chars)."""
@@ -2552,6 +2588,10 @@ def make_tracker(leads):
         # NEVER ship the raw placeholder into homeowner-facing copy. Fail the build instead.
         raise SystemExit('identity disclosure bake FAILED (%s) — refusing to build a board whose '
                          'emails would carry a literal __IDENT_EN__ placeholder.' % _e)
+    # ALEJANDRO'S COLD-EMAIL COPY -- one string, baked from outreach_copy.py and rendered by BOTH
+    # genEmail() and outreach_email.py, so the manual composer and the unattended nightly send
+    # cannot drift. Never raises; see _bake_alex_email().
+    tpl = _bake_alex_email(tpl, 'board (pre desktop twin)')
     # Owner replies detected by replies.py (gitignored replies.json, written from IMAP). Absent
     # until the operator adds gmail.key -- and an empty table is the honest state: the Proof Sheet
     # then reads "awaiting reply" for every send instead of implying nobody wrote back.
@@ -2883,6 +2923,8 @@ def make_tracker(leads):
         # NEVER ship the raw placeholder into homeowner-facing copy. Fail the build instead.
         raise SystemExit('identity disclosure bake FAILED (%s) — refusing to build a board whose '
                          'emails would carry a literal __IDENT_EN__ placeholder.' % _e)
+    # ALEJANDRO'S COLD-EMAIL COPY -- see _bake_alex_email(). Never raises.
+    tpl = _bake_alex_email(tpl, 'docs/index.html')
     _page = _marker + tpl.replace('__DATA__', _payload)
     # Last gate before the board the business runs on goes to disk. A surviving __TOKEN__ is a
     # top-level ReferenceError that kills every declaration after it, and the page still serves a

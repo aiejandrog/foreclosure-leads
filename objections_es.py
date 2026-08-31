@@ -33,7 +33,7 @@ ES = {
         'reb': [
             'Muy bien, y siga con esa modificación — nada de lo que hacemos la toca. Déjeme preguntarle una sola cosa: '
             'si hablar conmigo no pudiera afectar la modificación en lo absoluto, ¿habría alguna otra razón para no '
-            'escuchar diez minutos, o es solamente eso?',
+            'escuchar cinco minutos, o es solamente eso?',
             'Esto es lo que casi nadie sabe: en la Florida la revisión de la modificación y el caso de la corte corren '
             'por carriles separados. La fecha de la corte sigue avanzando mientras el banco "revisa", y las cartas de '
             'negación llegan a menudo pocos días antes de la subasta. Es como reparar el motor mientras el carro sigue '
@@ -54,7 +54,7 @@ ES = {
             'La defensa compra tiempo; no decide qué hace usted con ese tiempo. Mientras tanto los honorarios del banco '
             'y los intereses diarios corren contra su equidad cada mes que el caso se alarga. Su abogado juega a la '
             'defensa, pero nadie está jugando a la ofensiva con su dinero. ¿Y si el juez falla en contra en la próxima '
-            'audiencia y le quedan semanas y no meses — hay un plan para ese día, o solamente la apelación? Diez '
+            'audiencia y le quedan semanas y no meses — hay un plan para ese día, o solamente la apelación? Cinco '
             'minutos gratis con nuestro asesor principal, más de treinta años en esto, coordinado con su abogado, sin '
             'honorarios nunca. Si su abogado dice que no hacemos falta, nos damos la mano y quedamos como amigos.',
         ],
@@ -86,7 +86,7 @@ ES = {
             'El problema es este: su cheque corre en el reloj del IRS o en el reloj de un ajustador de seguros — sin '
             'fecha límite, se atrasa meses, y hasta se lo pueden descontar. La ejecución corre en el reloj de la corte, '
             'con un juez y una fecha. Solamente uno de esos dos relojes tiene horario. ¿Y si el cheque entra tres '
-            'semanas después de la subasta? Diez minutos gratis y tiene un plan B que no le cuesta nada tener guardado. '
+            'semanas después de la subasta? Cinco minutos gratis y tiene un plan B que no le cuesta nada tener guardado. '
             '¿No le parece?',
         ],
         'one': 'Su cheque corre en el reloj del IRS; la ejecución corre en el reloj del juez — solamente uno de los dos '
@@ -103,7 +103,7 @@ ES = {
             'u ochenta dólares por día. Es como pedir el precio del pasaje una semana antes de volar: el número que '
             'usted tiene en la cabeza no es el número de hoy. Y la carta oficial con esa cifra el banco se demora una '
             'semana o más en darla. ¿Y si el dinero de su hermano alcanza para el número viejo pero no para el nuevo? '
-            'Diez minutos gratis con nuestro asesor principal y usted sabe la cifra real antes de pedirle nada a su '
+            'Cinco minutos gratis con nuestro asesor principal y usted sabe la cifra real antes de pedirle nada a su '
             'familia. ¿Verdad que sí?',
         ],
         'one': 'La cifra de reinstalación no son sus pagos atrasados — son pagos más cargos más setenta dólares diarios, '
@@ -113,7 +113,7 @@ ES = {
         'say': 'Mi abogado va a radicar bancarrota. Eso detiene todo esto, así que no hay nada de qué hablar.',
         'reb': [
             'Bien pensado tener esa opción lista — la parada automática es real y sí detiene la subasta. Nada más para '
-            'entenderlo bien: si la bancarrota solamente pausa esto en vez de terminarlo, ¿valdría diez minutos saber '
+            'entenderlo bien: si la bancarrota solamente pausa esto en vez de terminarlo, ¿valdrían cinco minutos saber '
             'qué pasa el día que se levante la pausa?',
             'La bancarrota es un botón de pausa, no un borrador. El prestamista normalmente radica una moción para '
             'levantar la parada, y esas se ven en treinta a sesenta días — y ahí el reloj arranca exactamente donde se '
@@ -175,7 +175,7 @@ ES = {
             'en la mano, o de un papel pegado en la puerta?',
             'Porque un secreto así tiene fecha de vencimiento, y la pone la corte, no usted. Decírselo con opciones es '
             'como el piloto que anuncia la turbulencia junto con la ruta para esquivarla: da miedo un segundo y después '
-            'todo el mundo respira. Decírselo al final es el aterrizaje de emergencia. ¿Y si diez minutos gratis y '
+            'todo el mundo respira. Decírselo al final es el aterrizaje de emergencia. ¿Y si cinco minutos gratis y '
             'privados — usted y el asesor, antes de cualquier conversación en la casa — le dieran las palabras y el '
             'plan para llevárselo a ella? ¿No es justo que cuando ella se entere, se entere de que usted ya estaba '
             'peleando por ella?',
