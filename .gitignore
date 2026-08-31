@@ -377,3 +377,4 @@ digest_state.json
 !_digesttest.py
 # card QR suite: guards printed SIZE, not just decodability — must survive a clone
 !_cardtest.py
+investor_lane.csv
