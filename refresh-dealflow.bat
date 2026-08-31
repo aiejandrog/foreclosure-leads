@@ -398,7 +398,12 @@ python -u investor_lane.py >> "%LOG%" 2>&1
 rem  Recovers phone numbers the morning worker retired by accident. Local JSON only; it never
 rem  deletes a mark, it restores one, and it prints the rebuild command rather than rebuilding.
 echo [phones] Auditing numbers retired by mistake...
-python -u badnum_audit.py >> "%LOG%" 2>&1
+rem  --date IS LOAD-BEARING, do not drop it. Unpinned, this clears `badph` on EVERY case in
+rem  worker_notes.json on every run, so a number Alejandro or Carlos marks bad today is silently
+rem  un-marked by tomorrow's 05:30 refresh, forever — the operator's own control, reverted nightly
+rem  by a script whose docstring only ever justified the one-off 2026-08-13 burst. Pinned to that
+rem  date, it repairs exactly what it was written to repair and touches nothing since.
+python -u badnum_audit.py --date 2026-08-13 >> "%LOG%" 2>&1
 
 rem  ADVISORY, NOT A GATE, and the distinction is deliberate. verify_status_coverage.py exits 1
 rem  when a lead carries an address and folio but was never classified, and there are real
