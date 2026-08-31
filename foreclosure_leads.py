@@ -2888,6 +2888,17 @@ def make_tracker(leads):
         # upstream, the rule passes while the board ships unprotected. Publishing the count here
         # lets the rule read the artifact instead of its ingredients.
         'bkstay': sum(1 for d in slim if d.get('saleBkAct') or d.get('sale_bk_active')),
+        # FOUR ENRICHERS HAD NO CENSUS FIELD AT ALL, so publish_guard was blind to them: a build
+        # with ZERO code liens, ZERO verified taxes, ZERO judgment dates and ZERO ownership checks
+        # produced a census byte-identical to a fully enriched one, and the guard reported "no
+        # material enrichment loss". Verified 2026-08-31 by rebuilding with fresh enrichment and
+        # diffing the marker — every counter was unchanged. That is the exact clobber the guard
+        # exists to prevent, sitting in its blind spot. These are the four the two engines split
+        # between them, which is why the gap only mattered once both engines started publishing.
+        'codeliens': sum(1 for d in slim if d.get('codeliens')),
+        'taxes':     sum(1 for d in slim if d.get('taxChecked')),
+        'judgdt':    sum(1 for d in slim if d.get('jdate')),
+        'ownflip':   sum(1 for d in slim if d.get('paOwner')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
     # (the final bounce sweep runs ABOVE, before the Desktop twin is written — one sweep, not two)

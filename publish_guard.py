@@ -33,11 +33,28 @@ MARK = re.compile(r'<!--\s*DEALFLOW-COVERAGE\s*(\{.*?\})\s*-->')
 # A field only trips the guard when it falls by BOTH a ratio and an absolute amount — so a build that
 # legitimately drops a couple of stale leads never blocks, but a wipeout always does.
 FIELDS = {
-    'liens':  (0.50, 20),   # lien chains: the most expensive data and the first thing CI loses
-    'phones': (0.50, 25),   # dialable numbers
-    'wp':     (0.50, 10),   # Whitepages households
+    # 0.50 WAS TOO LOOSE TO DO THE JOB THIS FILE EXISTS FOR. Against today's live census a build
+    # could shed HALF the lien chains and 615 phone numbers and still publish. Raised to 0.85 for
+    # the two fields CI historically loses; the second (absolute) condition still absorbs ordinary
+    # night-to-night wobble, so this tightens the wipeout case without blocking normal drift.
+    'liens':  (0.85, 20),   # lien chains: the most expensive data and the first thing CI loses
+    'phones': (0.85, 25),   # dialable numbers
     'arv':    (0.50, 25),   # comps
     'leads':  (0.70, 40),   # the board itself (scrape already has its own <20 guard)
+    # ADDED 2026-08-31 — these four enrichers had no census field, so a build containing NONE of
+    # them was indistinguishable from a complete one and the guard waved it through. Small absolute
+    # thresholds on purpose: the failure being caught is a wipeout to zero, not a wobble.
+    'codeliens': (0.50, 3),
+    'taxes':     (0.50, 3),
+    'judgdt':    (0.50, 3),
+    'ownflip':   (0.50, 3),
+    # 'bkstay' deliberately NOT here: §362 stays are already a hard FAIL in healthcheck, and
+    # duplicating a blocking rule in two files means fixing it in one and believing you fixed both.
+    #
+    # 'wp' REMOVED — it was dead. Whitepages coverage is 8 rows against an absolute threshold of
+    # 10, so even a drop to zero could never satisfy both conditions. The quota has been exhausted
+    # since 2026-08-08 and the only caller is commented out. A rule that cannot fire is not
+    # protection, it is the appearance of protection, which is worse.
 }
 
 

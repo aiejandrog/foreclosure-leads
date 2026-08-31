@@ -306,7 +306,11 @@ jobs:
           fi
           # BatchData lien feed exited 2026-08-11 — frozen cache is committed; counties own new chains.
           # Broward plaintiff -> bank-1st(clean) vs junior/HOA(senior survives).
-          if [ -s captcha.key ] && [ -f broward_leads.json ]; then python county_plaintiffs.py --county broward --near --limit 60; fi
+          # MOVED TO THE LAPTOP 2026-08-31. The Broward path pins C:\Windows\System32\curl.exe
+          # (broward_plaintiff.py) for Schannel TLS — the same Cloudflare wall this workflow already
+          # documents for AcclaimWeb. On the laptop it prints "BRO ok"; here it buys a Turnstile
+          # token for a page that never returns. Removing it is a spend cut, not a coverage cut.
+          #   if [ -s captcha.key ] && [ -f broward_leads.json ]; then python county_plaintiffs.py --county broward --near --limit 60; fi
 
       # ---- [2b1/5] Code-enforcement liens (free Miami-Dade CCVIOL ArcGIS, folio-keyed) ---------
       # A code lien is a junior lien invisible to the mortgage chain — the thing that turns a
@@ -414,6 +418,18 @@ jobs:
         run: |
           if [ -s captcha.key ]; then python lis_pendens.py --days 30; fi
           if [ -f lis_pendens.json ]; then python lp_resolve.py; fi
+          # TWO RESOLVERS WERE MISSING HERE, and between them they are most of the board.
+          # The laptop runs this chain through lp_refresh.py, which calls lp_resolve2 and the
+          # Broward BCPA ladder; this hand-rolled copy omitted both and nobody noticed because a
+          # short lp_leads.json looks identical to a complete one.
+          #   lp_resolve2   free ArcGIS second pass; it is what promotes a row to
+          #                 confidence='high', and 'high' is the only tier lp_values.py prices.
+          #   broward_resolve  771 of the 1,423 LP rows are BROWARD and this chain could resolve
+          #                 NONE of them. Plain requests against BCPA — a different host and stack
+          #                 from the AcclaimWeb wall, and pa_values.py already POSTs the same
+          #                 endpoint from CI, so it is expected to work here.
+          if [ -f lp_addresses.json ]; then python lp_resolve2.py; fi
+          if [ -f lp_addresses.json ]; then python fl_lp/broward_resolve.py; fi
           if [ -f lp_addresses.json ]; then python lp_values.py; fi
           # Is the case still alive? A lis pendens stays recorded forever, so nothing in the feed
           # says the foreclosure ended. 8 of the current 125 are voluntarily dismissed — without

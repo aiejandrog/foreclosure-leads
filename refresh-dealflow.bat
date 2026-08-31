@@ -218,6 +218,42 @@ rem  which is the guard working, NOT a pipeline failure: never gate the build on
 echo [3j/5] Verifying the company entity against Sunbiz...
 python -u entity_check.py --quiet >> "%LOG%" 2>&1
 
+rem  ---------------------------------------------------------------------------------------------
+rem  ENGINE RECONCILIATION, 2026-08-31. These five ran ONLY in .github/workflows/refresh.yml, and
+rem  the cloud writes them into a per-engine cache that this machine never sees -- every one of
+rem  these files is gitignored. So the laptop has been BAKING STALE COPIES for weeks:
+rem      code_liens.json 07-30 (32d) · cash_buyers.json 08-04 (27d) · broward_mortgages.json 08-12
+rem      · county_taxes.json 08-14 (17d) · judgment_dates.json 08-19
+rem  Measured by running each here today: code_liens finds 22 RECORDED liens and 9 properties the
+rem  county is foreclosing; county_taxes finds $607,998 owed across 37 parcels, which
+rem  auction_forecast reads as taxDue -- so board equity has been OVERSTATED by that much.
+rem  All five are FREE: no captcha token, no Tracerfy call, no provider key.
+rem  ORDER MATTERS: every one of these must sit BEFORE the [4/5] rebuild, because the bake reads
+rem  their output. cash_buyers is the exception and sits after auction_archive, below.
+rem
+rem  Two of them are MOVES, not copies -- they were on the one engine that provably cannot run them:
+rem    fl_lp/broward_mortgages.py  AcclaimWeb needs native Windows Schannel curl. In CI sweep()
+rem                                returns None and sys.exit(2) is swallowed by `set +e`, which is
+rem                                why broward_mortgages.json had not changed since 08-12 despite
+rem                                running nightly. Here it returns 3,142 rows and exits 0.
+rem    county_plaintiffs.py        Broward path pins C:\Windows\System32\curl.exe; the same
+rem                                Cloudflare wall refresh.yml documents elsewhere. Prints "BRO ok"
+rem                                here, not "landing failed".
+echo [3k/5] Code-enforcement liens (free county ArcGIS)...
+python -u code_liens.py >> "%LOG%" 2>&1
+
+echo [3l/5] Back taxes + sold certificates (feeds equity and the tax chip)...
+python -u county_taxes.py >> "%LOG%" 2>&1
+
+echo [3m/5] Judgment entry dates (FS 55.03 post-judgment interest accrual)...
+python -u judgment_interest.py --all >> "%LOG%" 2>&1
+
+echo [3n/5] Broward plaintiff resolution (needs native Windows curl)...
+python -u county_plaintiffs.py --county broward --near >> "%LOG%" 2>&1
+
+echo [3o/5] Broward private-lender mortgages (AcclaimWeb, needs Schannel curl)...
+python -u fl_lp\broward_mortgages.py >> "%LOG%" 2>&1
+
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 
@@ -232,6 +268,15 @@ rem  same case across two points in time, so reschedule rate, drop-off rate and 
 rem  actually churning" were unanswerable - which is precisely the question that started this
 rem  restructure. Each nightly append makes churn measurable from here on.
 python -u auction_archive.py >> "%LOG%" 2>&1
+
+rem  CASH BUYERS — who is actually winning these auctions. Cloud-only until 2026-08-31, and its
+rem  output is gitignored, so this machine has been reading an 08-04 file.
+rem  HARD DEPENDENCY: auction_archive.py immediately above. Without it cash_buyers falls back to
+rem  _load_board(), which reads the Desktop plaintext twin and raises an uncaught FileNotFoundError
+rem  on any machine that does not have one. That is exactly why it sits HERE and not with the
+rem  other four moved enrichers above the rebuild.
+echo [4c2/5] Cash buyers (who keeps winning the auctions)...
+python -u cash_buyers.py --days 120 >> "%LOG%" 2>&1
 
 echo [4d/5] Morning worker standup (today's meeting agenda + workable lanes)...
 rem  ADDED 2026-08-27: morning_planner.py was called by NOTHING — not this bat, not refresh.yml,
