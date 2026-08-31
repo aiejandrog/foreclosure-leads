@@ -498,9 +498,21 @@ def qualify(leads):
         # foreclosure the judgment is the tiny association lien, not the surviving 1st mortgage, so
         # "equity" is fake-high (a $13k lien on a $348k condo reads as 96%). Don't credit it there —
         # otherwise these unverifiable leads wrongly rank Tier A. (judgment_unknown already zeroed ep.)
-        if mkt and not is_hoa: score += min(42.0, max(0.0, ep) * 0.42)   # equity, 0-42
+        # `not td` for a DIFFERENT reason than `not is_hoa`, and the difference matters. An HOA
+        # judgment is fake debt (the senior mortgage survives, unshown). A tax-deed spread is REAL
+        # -- FS 197.552 extinguishes the mortgage -- but it is an AUCTION SPREAD, not owner equity:
+        # nobody acquires at the opening bid, a competitive sale bids toward market, and IRS/
+        # municipal liens can still survive. Ranking it on the distressed-homeowner ladder is what
+        # made 71 of the board's 114 Tier-A leads tax deeds (62%), median spread 92%. The number is
+        # kept and still displayed as `margin`; only its claim on this ladder is withdrawn.
+        if mkt and not is_hoa and not td: score += min(42.0, max(0.0, ep) * 0.42)  # equity, 0-42
         score += min(18.0, max(0, days) * 1.0)                    # runway, 0-18
-        score += 12 if r.get('homestead') else 0                  # owner-occupied
+        # Homestead is a bonus only in the homeowner lane, where it means occupied and knockable.
+        # On a tax deed FS 197.502(6)(c) puts HALF THE ASSESSED VALUE into the opening bid, so
+        # homestead makes the deal WORSE. The board already says so out loud -- "opening bid already
+        # carries 1/2 the assessed value ... expect thin margin" (tracker_template.html:3097) --
+        # while this line paid it +12 for being owner-occupied. Display and score disagreed.
+        score += 12 if (r.get('homestead') and not td) else 0     # owner-occupied
         if 200000 <= mkt <= 1000000: score += 14                  # value band
         elif mkt > 1000000: score += 9
         elif mkt >= 150000: score += 6

@@ -122,8 +122,20 @@ def _value_metrics(st, judg, val, hs, days, addr, plaintiff, ftype):
     # eqp read a fantasy 100%. The suspect-equity guard needs judg>0, so it can't catch this; mirror
     # Miami-Dade's judgment_unknown handling and never credit equity when the debt is unknown.
     judg_unknown = (st != 'TD') and (judg <= 0)
-    eff_eq = 0 if (eqfake or judg_unknown) else eqp
-    score = max(0, min(100, round(eff_eq) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
+    # TAX DEEDS ARE SUPPRESSED HERE, IN eff_eq, AND DELIBERATELY NOT VIA eqfake.
+    # eqfake means "this equity figure is a LIE" (junior lien, senior mortgage hidden). That is not
+    # true of a tax deed: FS 197.552 extinguishes the mortgage, which is exactly why suspect_equity
+    # above exempts st=='TD'. The spread is real. What is false is its claim on the DISTRESSED-
+    # HOMEOWNER ladder -- nobody buys at the opening bid, a competitive auction bids toward market,
+    # and IRS/municipal liens can survive. So the rank goes and the number stays.
+    # Setting eqfake instead would have cost three things that are all correct today: the card's
+    # honest 'margin' label would flip to '~eq', the 30%-equity filter would silently lose these
+    # rows, and jose_buybox would re-bucket them as 'junior-lien fantasy' -- the precise inverse of
+    # FS 197.552. Suppress the ladder, keep the data.
+    eff_eq = 0 if (eqfake or judg_unknown or st == 'TD') else eqp
+    # Same homestead inversion as the Miami-Dade lane: FS 197.502(6)(c) folds half the assessed
+    # value into a homestead tax deed's opening bid, so homestead is a penalty here, not a bonus.
+    score = max(0, min(100, round(eff_eq) + (10 if (hs and st != 'TD') else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
     tier = 'A' if (val and eff_eq >= 40 and 0 <= days <= 45) else ('B' if val and eff_eq >= 15 else 'C')
     if judg_unknown:
         tier = 'C'; score = min(score, 40)

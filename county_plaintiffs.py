@@ -56,8 +56,13 @@ def reclassify(r, plaintiff, is_bank_first, case_type=''):
     ip = bool(plaintiff) and not _INDIV.search(plaintiff) and not is_bank_first
     eqfake = mr
     judg_unknown = (st != 'TD') and (judg <= 0)
-    eff_eq = 0 if (eqfake or judg_unknown) else eqp
-    score = max(0, min(100, round(eff_eq) + (10 if hs else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
+    # Mirrors county_leads._value_metrics: a tax-deed spread is real but does not rank on the
+    # distressed-homeowner ladder, and homestead is a PENALTY on a tax deed (FS 197.502(6)(c) folds
+    # half the assessed value into the opening bid). This file re-implements that ladder rather than
+    # importing it, so the two have to be edited together or they drift -- which is exactly the
+    # drift this change is repairing.
+    eff_eq = 0 if (eqfake or judg_unknown or st == 'TD') else eqp
+    score = max(0, min(100, round(eff_eq) + (10 if (hs and st != 'TD') else 0) + (10 if 0 <= days <= 30 else 0))) if val else 0
     tier = 'A' if (val and eff_eq >= 40 and 0 <= days <= 45) else ('B' if val and eff_eq >= 15 else 'C')
     if judg_unknown:
         tier = 'C'; score = min(score, 40)
