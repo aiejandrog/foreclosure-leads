@@ -725,7 +725,13 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # true, because it is. Leading a preforeclosure homeowner with "I want to buy it" is
             # the exact predatory framing the language law exists to prevent. The box decides
             # WHICH doors get knocked first, never what is said at them.
+            # 'bbtd' = this match is a TAX DEED sale. It stays in the buy-box JSON and the morning
+            # digest, because it is a real way to acquire a house, but it is NOT a callable lead:
+            # the record owner is usually an LLC, the money figure is an opening bid rather than a
+            # payoff, and the advisor script below is written for a distressed homeowner. Dialing
+            # one means reading foreclosure-rescue language to a holding company.
             'bb': _s('bb', 12), 'bbs': _s('bbstate', 12),
+            'bbtd': 1 if d.get('bbtd') else None,
             # HIS FILE — the research links. Ship the two SEEDS (folio + county), not five long
             # URLs: 400 rows x ~450 chars of URL is ~180 KB on a page that has to open on a phone
             # at a door. The page rebuilds appraiser/tax/docket/people from these (see fileLinks).
@@ -1522,6 +1528,11 @@ var _SUPN = 0;
 /* Case ids that got at least one logged outcome this session. Deduped, because a lead dialled on
    three numbers is one lead worked, not three. */
 var _WORKED = [];
+/* THE buy-box predicate — one function, used by both the lane and the button count. Those were
+   two identical inline copies with a comment promising they could never disagree; a promise kept
+   by hand is a promise that breaks the first time only one copy is edited, and adding the
+   tax-deed test was exactly that edit. */
+function isBuyBox(r){ return !!r.bb && r.bbs !== 'UNDERWATER' && !r.bbtd; }
 function pool(){
   /* Rebuilt here rather than in render() so EVERY caller gets a fresh index — advance() and
      screenOutcome() both call pool() outside a render, and a teammate's opt-out landing between
@@ -1538,7 +1549,7 @@ function pool(){
      this lane answers "which of these could we ACQUIRE", and a house worth less than its liens is
      not a candidate. Showing it here is how a $222k-underwater lead got ranked #2 on a hand-built
      sheet under the heading "most runway". */
-  else if(lane==='bb'){ base = ROWS.filter(function(r){ return !!r.bb && r.bbs !== 'UNDERWATER'; }); }
+  else if(lane==='bb'){ base = ROWS.filter(isBuyBox); }
   else base = ROWS.filter(function(r){ return lane==='soon' ? !r.lp : !!r.lp; });
   var n = 0;
   var keep = base.filter(function(r){ if(suppressed(r)){ n++; return false; } return true; });
@@ -1619,7 +1630,7 @@ function head(){
   var wq = workerQ().length;
   /* Buy-box count. Same predicate as the lane filter, so the number on the button and the list
      behind it can never disagree — a count derived a second way is a count that drifts. */
-  var bbn = ROWS.filter(function(r){ return !!r.bb && r.bbs !== 'UNDERWATER'; }).length;
+  var bbn = ROWS.filter(isBuyBox).length;
   /* NO SILENT CAPS. Suppression is correct, but a list that quietly shrank looks identical to a list
      that was always that size — the exact confusion that hid 466 callable leads behind call_list's
      --max 30. Say the number out loud.

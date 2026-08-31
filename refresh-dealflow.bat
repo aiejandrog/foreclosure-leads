@@ -320,8 +320,13 @@ rem  answered ONCE, by hand, as a dated HTML sheet. Two more matching cases were
 rem  next week and were on nobody's radar, because a hand-built sheet is a photograph, not a filter.
 rem  This re-evaluates the criteria every night against the whole board, so a new 4-bedroom in
 rem  Miami Gardens surfaces by itself. Edit BOXES in buybox.py to add a box; nothing else changes.
+rem
+rem  That last sentence was FALSE until 2026-08-31: this line named `--box mg4` explicitly, so a
+rem  second box was defined-but-never-scanned, and it failed silently because a box that matches
+rem  nothing looks exactly like a box that never ran. No argument now = every box in BOXES, each
+rem  written to its own buybox_<key>.json for the morning digest.
 echo [buybox] Re-scanning standing acquisition criteria...
-python -u buybox.py --box mg4 --json buybox_mg4.json >> "%LOG%" 2>&1
+python -u buybox.py >> "%LOG%" 2>&1
 
 :end
 rem  REPORT FIRST, HEALTH SECOND (2026-08-27). Measured on this log: the refresh has STARTED on

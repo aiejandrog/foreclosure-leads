@@ -361,8 +361,12 @@ send_sisavath4.py
 send_sisavath5.py
 send_sisavath_sheet.py
 # Jose buy-box output: owner names + addresses for people in foreclosure — public repo, keep out
+# GLOB, NOT A NAME. This read `buybox_mg4.json` until 2026-08-31, so the protection covered exactly
+# the one box that existed. The nightly now writes buybox_<key>.json for every box in BOXES, and
+# the first new box (ml4) landed untracked-but-committable with 11 Miami Lakes addresses in it.
+# An ignore rule that has to be edited every time a box is added is a leak with a delay on it.
 jose_buybox.json
-buybox_mg4.json
+buybox_*.json
 _mg4.json
 _mg4.txt
 _ab_cstest.sh
@@ -378,3 +382,4 @@ digest_state.json
 # card QR suite: guards printed SIZE, not just decodability — must survive a clone
 !_cardtest.py
 investor_lane.csv
+blueprint_pdf.py

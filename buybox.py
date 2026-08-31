@@ -34,6 +34,7 @@ traceback, because this runs inside the nightly bake loop.
 import json
 import os
 import re
+import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -46,6 +47,24 @@ BOXES = {
         'min_beds': 4,
         'min_baths': 2,
         'max_value': 0,        # 0 = no ceiling
+    },
+    'ml4': {
+        # Asked for on 2026-08-18 and answered by buybox_miamilakes.py, a one-off script that has
+        # to be run by hand. Same failure the mg4 docstring describes: a hand-run script is a
+        # photograph, not a filter. As a standing box the nightly re-checks it, and on the board of
+        # 2026-08-31 that is 5 outright 4BRs plus 4 convertible 3BRs nobody was looking at.
+        'label': 'Miami Lakes 4BR (or 3BR convertible)',
+        'for': 'live-in buyer, three kids - each wants a room',
+        'zips': ['33014', '33015', '33016', '33018'],
+        'max_value': 0,
+        # A 4BR outright, OR a 3BR big enough that the den/garage becomes bedroom four. The 1,300
+        # floor is buybox_miamilakes.py's own, and its comment records why it is not 1,700: that
+        # line excluded a 1,693 sf Miami Lakes house by SEVEN FEET. No bath minimum, because the
+        # script this box replaces never had one and inventing criteria loses real houses.
+        'any_of': [
+            {'min_beds': 4},
+            {'min_beds': 3, 'max_beds': 3, 'min_sqft': 1300},
+        ],
     },
 }
 
@@ -162,13 +181,41 @@ def _junior_lien(row):
                           str(row.get('plaintiff') or ''), re.I))
 
 
+def is_tax_deed(row):
+    """True when this row is a TAX DEED sale, where the money figure is an OPENING BID."""
+    u = ' '.join(_s(row.get(k)) for k in ('sale_type', 'case_type', 'Auction Type',
+                                          'auction_type', 'clerk_case_type')).upper()
+    return 'TAX DEED' in u or 'TAXDEED' in u.replace(' ', '') or bool(re.search(r'\bTD\b', u))
+
+
 def equity_state(row):
     """(state, room_or_None, why). The three-bucket rule, stated in words."""
     try:
         val = value_of(row)
-        debt, kind, note = debt_of(row)
         if val <= 0:
             return EQ_UNKNOWN, None, 'no value on this row'
+        # A TAX-DEED OPENING BID IS NOT THE DEBT. Third appearance of this file's founding rule:
+        # value minus nothing is not equity (top of file), value minus a JUNIOR lien is not equity
+        # (below), and value minus an OPENING BID is not equity either. The bid is the tax
+        # certificate plus fees and it lands in the same 'judgment' field a court-ordered payoff
+        # does, so debt_of() returns kind='judgment' and the row graduates straight to CONFIRMED.
+        # Caught 2026-08-31 the moment a second buy-box ran: 8300 NW 166 TER (2026A00260) printed
+        # "CONFIRMED $983,501 of room, both figures on the row" at rank 1 — an LLC-owned house that
+        # sold for $1,290,000 in 2023, so there is certainly a mortgage and it is NOT on this row.
+        # Board-wide that was 27 rows advertising $23,002,278 of room that does not exist.
+        # It is also not a lead in the sense the rest of this file means: nobody calls that owner
+        # and buys the house. It is a competitive cash auction that bids toward market, and the
+        # winner still needs quiet title. The row's own `warning` field already said so.
+        if is_tax_deed(row):
+            bid = _n(_first(row, 'opening_bid', 'Opening Bid', 'judg', 'judgment', 'payoff'))
+            amt = ('The $%s on this row is the OPENING BID (tax certificate plus fees), not a '
+                   'payoff and not the debt' % format(int(bid), ',')) if bid > 0 else (
+                   'The figure on this row is an opening bid, not a payoff')
+            return (EQ_UNKNOWN, None,
+                    'TAX DEED sale. %s — the mortgage is not on this row. This is not a doorstep '
+                    'lead either: it is a competitive cash auction that bids toward market, and '
+                    'the winner still needs quiet title. Equity is UNKNOWN.' % amt)
+        debt, kind, note = debt_of(row)
         if debt <= 0:
             return (EQ_UNKNOWN, None,
                     'NO judgment, payoff or open recorded mortgage found — the $%s is what it is '
@@ -229,23 +276,50 @@ def runway_of(row):
         return None, ''
 
 
+def _geo_ok(row, box):
+    """City name or ZIP. A box with neither is county-wide."""
+    hay = (_s(_first(row, 'city')) + ' ' + addr_of(row)).upper()
+    want = [c.upper() for c in (box.get('city') or [])]
+    zips = [str(z) for z in (box.get('zips') or [])]
+    if not want and not zips:
+        return True
+    if want and any(c in hay for c in want):
+        return True
+    # NOT row['zip'] — no board row has that field (0 of 2,050 checked 2026-08-31). The ZIP is
+    # inside the address string, so it is matched there, word-bounded so 33014 cannot be hit by a
+    # house number.
+    return bool(zips and any(re.search(r'\b%s\b' % re.escape(z), hay) for z in zips))
+
+
+def _clause_ok(row, cl):
+    """One size clause. Missing beds/baths is a MISS, not a maybe — we are not going to put a house
+    in a 4-bedroom list because the bedroom count was blank."""
+    beds = _n(row.get('beds'))
+    if beds < _n(cl.get('min_beds') or 0):
+        return False
+    if _n(row.get('baths')) < _n(cl.get('min_baths') or 0):
+        return False
+    top = _n(cl.get('max_beds'))
+    if top and beds > top:
+        return False
+    floor = _n(cl.get('min_sqft'))
+    return not (floor and _n(row.get('sqft')) < floor)
+
+
 def matches(row, box):
-    """Does this row fit the box? Missing beds/baths is a MISS, not a maybe — we are not going to
-    put a house in a 4-bedroom list because the bedroom count was blank."""
+    """Does this row fit the box?
+
+    A box states its size test either directly (min_beds/min_baths/min_sqft/max_beds) or as
+    'any_of': a list of clauses where matching ONE is enough — that is how "a 4BR, or a 3BR big
+    enough to convert" is expressed without a second box or a second code path.
+    """
     try:
-        city = _s(_first(row, 'city')).upper()
-        addr = addr_of(row).upper()
-        want = [c.upper() for c in (box.get('city') or [])]
-        if want and not any(c in city or c in addr for c in want):
-            return False
-        if _n(row.get('beds')) < _n(box.get('min_beds') or 0):
-            return False
-        if _n(row.get('baths')) < _n(box.get('min_baths') or 0):
+        if not _geo_ok(row, box):
             return False
         cap = _n(box.get('max_value'))
         if cap and value_of(row) > cap:
             return False
-        return True
+        return any(_clause_ok(row, c) for c in (box.get('any_of') or [box]))
     except Exception:
         return False
 
@@ -287,6 +361,7 @@ def scan(rows, box_key='mg4'):
                 'days': days, 'runway': rw,
                 'plaintiff': _s(_first(r, 'plaintiff', 'pl'))[:60],
                 'eqfake': bool(r.get('eqfake') or r.get('eq_fake')),
+                'taxdeed': is_tax_deed(r),
                 'box': box_key, 'boxlabel': box.get('label', box_key),
             })
         except Exception:
@@ -297,17 +372,31 @@ def scan(rows, box_key='mg4'):
     return out
 
 
-def annotate(row, box_key='mg4'):
-    """Stamp for the nightly bake: {} when the row is not in the box, else the tag the board,
-    call mode and the morning worker lane on. Never raises."""
+def annotate(row, box_key=None):
+    """Stamp for the nightly bake: {} when the row is in NO box, else the tag the board, call mode
+    and the morning worker lane read. Never raises.
+
+    RUNS EVERY BOX. The signature used to be `box_key='mg4'`, and the nightly called it with no
+    argument, so the board evaluated exactly ONE category no matter how many were defined — while
+    refresh-dealflow.bat sat above its own call reading "Edit BOXES in buybox.py to add a box;
+    nothing else changes". Adding a box changed nothing: it was never scanned, and it failed
+    silently, because a box that matches nothing and a box that is never run look identical
+    downstream. Pass box_key only to test one box in isolation.
+
+    A row can sit in more than one box, so 'bb' carries the first match (the scalar every existing
+    consumer already reads) and 'bball' carries all of them, comma-joined.
+    """
     try:
-        box = BOXES.get(box_key) or {}
-        if not matches(row, box):
+        keys = [box_key] if box_key else list(BOXES.keys())
+        hits = [k for k in keys if matches(row, BOXES.get(k) or {})]
+        if not hits:
             return {}
         st, room, why = equity_state(row)
-        return {'bb': box_key, 'bblabel': box.get('label', box_key),
+        first = BOXES.get(hits[0]) or {}
+        return {'bb': hits[0], 'bblabel': first.get('label', hits[0]),
+                'bball': ','.join(hits),
                 'bbstate': st, 'bbroom': room if room is not None else '',
-                'bbwhy': why}
+                'bbtd': is_tax_deed(row), 'bbwhy': why}
     except Exception:
         return {}
 
@@ -326,15 +415,9 @@ def _load_board():
     return rows
 
 
-def main():
-    import argparse
-    ap = argparse.ArgumentParser(description='Standing acquisition buy-box.')
-    ap.add_argument('--box', default='mg4')
-    ap.add_argument('--json', default='')
-    a = ap.parse_args()
-    hits = scan(_load_board(), a.box)
-    box = BOXES.get(a.box, {})
-    print('%s  —  %s' % (box.get('label', a.box), box.get('for', '')))
+def _report(key, hits):
+    box = BOXES.get(key, {})
+    print('%s  -  %s' % (box.get('label', key), box.get('for', '')))
     print('%d match%s\n' % (len(hits), '' if len(hits) == 1 else 'es'))
     for h in hits:
         room = ('$%s' % format(int(h['room']), ',')) if h['room'] is not None else '—'
@@ -347,9 +430,44 @@ def main():
     if n_unk:
         print('%d of %d have NO debt figure. Their equity is UNKNOWN, not large. Pull the mortgage '
               'before anyone says the word equity on a call.' % (n_unk, len(hits)))
-    if a.json:
-        json.dump(hits, open(os.path.join(HERE, a.json), 'w', encoding='utf-8'), indent=1)
-        print('-> %s' % a.json)
+
+
+def main():
+    import argparse
+    # Only in main(), never at import: this module is imported by the nightly bake and by
+    # morning_digest, and a library that reconfigures its importer's stdout is a side effect
+    # nobody asked for. The em-dashes in eqwhy hit a cp1252 console when the bat redirects to
+    # the log, and an unhandled UnicodeEncodeError there kills the scan while exiting 0.
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+    ap = argparse.ArgumentParser(description='Standing acquisition buy-boxes.')
+    ap.add_argument('--box', default='', help='one box key; default is EVERY box')
+    ap.add_argument('--json', default='', help='only valid with --box; all-box mode always writes '
+                                               'buybox_<key>.json per box')
+    a = ap.parse_args()
+    rows = _load_board()
+
+    if a.box:
+        hits = scan(rows, a.box)
+        _report(a.box, hits)
+        if a.json:
+            json.dump(hits, open(os.path.join(HERE, a.json), 'w', encoding='utf-8'), indent=1)
+            print('-> %s' % a.json)
+        return
+
+    # DEFAULT IS ALL. morning_digest.buyboxes() loops BOXES and loads buybox_<key>.json for each,
+    # so any box the nightly does not write shows up as "MISSING -- the nightly scan did not run".
+    # Writing every box here is what keeps that report honest as boxes are added.
+    for i, key in enumerate(BOXES):
+        if i:
+            print('')
+        hits = scan(rows, key)
+        _report(key, hits)
+        out = 'buybox_%s.json' % key
+        json.dump(hits, open(os.path.join(HERE, out), 'w', encoding='utf-8'), indent=1)
+        print('-> %s' % out)
 
 
 if __name__ == '__main__':
