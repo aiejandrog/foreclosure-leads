@@ -41,7 +41,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 BOXES = {
     'mg4': {
         'label': 'Miami Gardens 4+bd / 2+ba',
-        'for': "Jose's son — live-in, not a flip",
+        'for': "Jose's son - live-in, not a flip",
         'city': ['MIAMI GARDENS'],
         'min_beds': 4,
         'min_baths': 2,
