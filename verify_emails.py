@@ -130,18 +130,39 @@ def _provider():
     return None, None
 
 
+def _days_since(stamp):
+    """Days since an ISO 'YYYY-MM-DD' stamp. Unparseable/missing -> a huge number, so a row with no
+    date is treated as long overdue and gets checked, never silently parked forever."""
+    try:
+        y, m, d = (int(x) for x in str(stamp).split('-')[:3])
+        return (date.today() - date(y, m, d)).days
+    except Exception:
+        return 10 ** 6
+
+
 def provider_check(addr, name, key, timeout=20):
     """-> (verdict, why). Any failure returns ('unknown', ...) so a flaky API never silently
     blocks real leads -- a false 'dead' costs a deal, and that is the more expensive mistake."""
     import urllib.parse
     import urllib.request
     try:
-        # Record the check on the shared ledger — report only, never gate (see captcha_solver).
+        # THE LEDGER IS A GATE HERE, NOT A REPORT — and it had to become one.
+        # This read "report only, never gate", which is right for captcha_solver (a blocked solve
+        # strands a half-finished scrape) but wrong here: an unspent email check costs nothing and
+        # can always be retried tomorrow. With no gate, bd_budget.json's daily_cap of $10.00 was
+        # decorative. Measured 2026-08-31 on batchdata_spend.json: $211.50 over ten days, six of
+        # the last eight nights between $26 and $36 -- 2.6x to 3.6x the cap, every night, unnoticed
+        # because nothing ever read the number back.
         # ZeroBounce ~$0.008/credit at their $16/2,000 tier; NeverBounce comparable.
         try:
             import bd_budget
+            if not bd_budget.can_spend(0.008):
+                # NOT f'{name}: ...' — the settled-verdict test below is startswith(name + ':'),
+                # so that phrasing would file an unspent address as permanently paid and it would
+                # never be checked again. A budget skip must look unfinished, because it is.
+                return 'unknown', f'{name} skipped: daily budget cap reached'
             bd_budget.charge(0.008, name)
-        except Exception:
+        except ImportError:
             pass
         if name == 'zerobounce':
             q = urllib.parse.urlencode({'api_key': key, 'email': addr, 'ip_address': ''})
@@ -273,21 +294,41 @@ def main():
     #
     # Exception: an observed hard bounce always wins, even over a paid 'ok' -- the mailbox
     # demonstrably rejected real mail after the check, and reality outranks a stale API opinion.
-    kept = 0
+    # AN ERRORED CHECK IS NOT A FREE RETRY. A provider error writes why='<name> error: ...', which
+    # does NOT match the settled test startswith('<name>:'), so every failed address came back for
+    # a fresh paid call the next night, and the night after that, forever. Measured 2026-08-31:
+    # 2,845 of 5,407 rows sat in that state -- 2,845 x $0.008 = $22.76 a night, indefinitely, for
+    # zero verdicts. That is the whole overspend. Errors now cool off for ERROR_COOLDOWN_DAYS
+    # instead of being retried nightly; a genuinely transient outage still clears on the next run
+    # after the cooldown, and a permanently bad address stops costing money.
+    ERROR_COOLDOWN_DAYS = 14
+    kept = errskip = 0
     for addr in todo:
         prior = res.get(addr) or {}
-        paid = str(prior.get('why', '')).startswith((prov[0] or '~none~') + ':')
+        pw = str(prior.get('why', ''))
+        paid = pw.startswith((prov[0] or '~none~') + ':')
         if paid and addr not in bounced:
             kept += 1
             continue                      # settled by a paid check -- leave it exactly as it is
+        if (prov[0] and pw.startswith(prov[0] + ' error') and addr not in bounced
+                and _days_since(prior.get('d')) < ERROR_COOLDOWN_DAYS):
+            errskip += 1
+            continue                      # errored recently -- do not re-buy the same failure
         use_api = bool(a.api and prov[0] and (not a.limit or api_used < a.limit))
         v, why = classify(addr, bounced, dead_doms, risky_doms, prov, use_api)
-        if use_api and why.startswith((prov[0] or '') + ':'):
+        # COUNT THE CALL, NOT THE SUCCESS. This incremented only when the verdict matched
+        # '<name>:', so errors were free as far as --limit was concerned and the limit never bound:
+        # `--limit 150` happily made thousands of calls as long as they kept failing. The card is
+        # charged per REQUEST, so the counter has to move per request too.
+        if use_api and not why.startswith(prov[0] + ' skipped'):
             api_used += 1
         res[addr] = {'v': v, 'why': why, 'd': today}
         counts[v] = counts.get(v, 0) + 1
     if kept:
         print(f'{kept} address(es) left untouched -- already settled by a paid check')
+    if errskip:
+        print(f'{errskip} address(es) skipped -- errored within the last {ERROR_COOLDOWN_DAYS}d, '
+              f'not re-billed (this is the $22.76/night leak)')
 
     tmp = OUT + '.tmp'
     json.dump(res, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
