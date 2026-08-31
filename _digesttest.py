@@ -51,9 +51,21 @@ try:
     TODAY = dt.date.today().isoformat()
 
     # ---- 1. deltas against a real prior day -------------------------------------------------
-    json.dump({'current': {'date': Y, 'metrics': {
-        'leads': 367, 'auc30': 195, 'bk': 70, 'tierA': 31}}},
-        open(STATE, 'w', encoding='utf-8'))
+    # BASELINE IS DERIVED FROM TODAY, NOT HARD-CODED. The first version pinned tierA:31 and
+    # asserted a "no change" line appeared — which only held while the live board happened to
+    # carry 31. It shifted to 30 and the suite went red with nothing actually broken, which is
+    # the stale-fixture failure this repo has burned days on before. Building the baseline by
+    # copying current metrics and bumping a chosen few makes both branches deterministic: the
+    # copied keys MUST say "no change", the bumped ones MUST show a delta, whatever the data does.
+    if os.path.exists(STATE):
+        os.remove(STATE)
+    cur = json.loads(run('--json')[0]).get('metrics') or {}
+    BUMP = {'leads': -6, 'auc30': -4, 'bk': -3}            # these must show a delta
+    base = dict(cur)
+    for k, d in BUMP.items():
+        if k in base:
+            base[k] += d
+    json.dump({'current': {'date': Y, 'metrics': base}}, open(STATE, 'w', encoding='utf-8'))
     a, rc = run()
     rec('a changed metric prints a signed delta', '(+' in a or '(-' in a)
     rec('an unchanged metric says "no change", never "(+0)"',
