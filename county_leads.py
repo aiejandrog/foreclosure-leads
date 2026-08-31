@@ -297,7 +297,11 @@ def to_slim(county, cfg, base, items):
             # both work for BW/PB just like Miami-Dade. FC leads have neither and stay 0/''.
             'st': st, 'obid': obid_val, 'folio': folio, 'zillow': z, 'pa': cfg['pa'](folio) if folio else '',
             'tax': cfg['tax'](folio) if folio else '', 'auc': auc, 'people': links['people'], 'peopleaddr': links['peopleaddr'], 'cyberbg': links['cyberbg'], 'cyberbgaddr': links['cyberbgaddr'],
-            'ctype': ('HOA' if ftype == 'HOA' else 'Bank/Mortgage'), 'ftype': ftype, 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
+            # A TAX DEED IS NOT A BANK FORECLOSURE. This read 'Bank/Mortgage' for every Broward and
+            # Palm Beach tax deed — 140 rows whose card told the operator the wrong kind of case,
+            # and which no ctype-based tax-deed test could ever catch.
+            'ctype': ('Tax Deed' if st == 'TD' else 'HOA' if ftype == 'HOA' else 'Bank/Mortgage'),
+            'ftype': ftype, 'plaintiff': r.get('Plaintiff', ''), 'defs': '', 'named': [],
             # No per-case deep-link token (clerk CAPTCHA), but Docket MUST still show: same clerk Case
             # search as Cases — UI copies the case # so the operator lands on THIS foreclosure's filings.
             'docket': cfg['cases'], 'records': cfg['records'], 'cases': cfg['cases'],

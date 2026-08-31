@@ -635,8 +635,15 @@ def is_tax_deed_row(row):
     cross-module import in the flag path" property.
     """
     try:
+        # 'st' AND 'ctype' ARE LOAD-BEARING, and leaving them out made this whole flag dead code.
+        # make_tracker bakes the diligence gate onto the SLIM board row (foreclosure_leads.py:2513),
+        # and slim renames sale_type -> 'st' and case_type -> 'ctype'. Measured on the 2,050-row
+        # board twin: 174 rows carry st == 'TD', and the tuple below without 'st'/'ctype' fired on
+        # exactly 0 of them. The flag was shipped, committed, and protected nothing on any surface a
+        # human sees. 'st' is also the ONLY key that works for Broward/Palm Beach, whose county rows
+        # hardcode ctype 'Bank/Mortgage' on tax deeds (140 of the 174).
         u = ' '.join(_s(_d(row).get(k)) for k in
-                     ('sale_type', 'case_type', 'Auction Type', 'auction_type',
+                     ('sale_type', 'st', 'case_type', 'ctype', 'Auction Type', 'auction_type',
                       'clerk_case_type')).upper()
         return 'TAX DEED' in u or 'TAXDEED' in u.replace(' ', '') or bool(re.search(r'\bTD\b', u))
     except Exception:

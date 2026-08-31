@@ -183,8 +183,13 @@ def _junior_lien(row):
 
 def is_tax_deed(row):
     """True when this row is a TAX DEED sale, where the money figure is an OPENING BID."""
-    u = ' '.join(_s(row.get(k)) for k in ('sale_type', 'case_type', 'Auction Type',
-                                          'auction_type', 'clerk_case_type')).upper()
+    # 'st'/'ctype' are the SLIM board row's names for sale_type/case_type — without them this
+    # predicate misses every Broward/Palm Beach tax deed and every row that reaches it post-bake.
+    # Keep this tuple identical to diligence_flags.is_tax_deed_row(); the two are deliberately
+    # duplicated (no cross-import in the flag path) and must not drift.
+    u = ' '.join(_s(row.get(k)) for k in ('sale_type', 'st', 'case_type', 'ctype',
+                                          'Auction Type', 'auction_type',
+                                          'clerk_case_type')).upper()
     return 'TAX DEED' in u or 'TAXDEED' in u.replace(' ', '') or bool(re.search(r'\bTD\b', u))
 
 
