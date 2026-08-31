@@ -26,6 +26,12 @@ SIGNER = 'Alex Gonzalez'
 PHONE = '(786) 631-1823'
 
 
+def _first_of(signer):
+    """'Alejandro Gonzalez' -> 'Alejandro'. The bodies used to hardcode 'Alex' while the
+    signature came from sender.json, so one email carried two different names."""
+    return (str(signer or '').strip().split() or ['there'])[0]
+
+
 def _fmt_date(d):
     """'Wednesday, September 16' from a date or ISO/US string. '' when unknown."""
     if not d:
@@ -100,7 +106,12 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         "If no action is taken, it will be sold to the highest bidder—and you will lose any "
         "equity you have and could be forcefully evicted shortly after.",
         "But this does not have to happen.",
-        ("My name is Alex with the team at %s." % company) + ((' ' + ident) if ident else ''),
+        # Was the literal "Alex". The function already takes `signer`, so the body ignored it and no
+        # sender but Alex could ever introduce themselves correctly -- and because the SIGNATURE is
+        # built from sender.json, the shipped email said "My name is Alex" over "Alejandro Gonzalez".
+        # Two names, one email, on a message whose whole job is proving we are not a mass mailer.
+        ("My name is %s with the team at %s." % (_first_of(signer), company))
+        + ((' ' + ident) if ident else ''),
         "For over 30 years, our team has helped thousands of Florida homeowners just like you stop "
         "foreclosures, reduce debt, cash out their equity and regain peace of mind.",
         '',
@@ -151,7 +162,7 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         "If you do nothing, you lose your home, your equity, and face eviction.",
         "But this doesn't have to happen.",
         '',
-        ("I'm Alex with %s." % company) + ((' ' + ident) if ident else '') +
+        ("I'm %s with %s." % (_first_of(signer), company)) + ((' ' + ident) if ident else '') +
         " For 30+ years, we've stopped foreclosures for thousands of Florida "
         "homeowners—even cases just days from auction.",
         '',
@@ -284,7 +295,7 @@ def outreach_subject(street, sale_date='', td=False, lang='en', style='urgent'):
 # ---------------------------------------------------------------------------------------------
 # SMS — same offer, compressed. Statutory core + STOP.
 # ---------------------------------------------------------------------------------------------
-def sms(first='', sale_date=None, signer='Alex', phone=PHONE, company=COMPANY):
+def sms(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY):
     ds = _short_date(sale_date)
     who = ('%s, ' % first) if first else ''
     when = ('Your home is scheduled for foreclosure auction %s' % ds if ds
