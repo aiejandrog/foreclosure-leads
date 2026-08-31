@@ -328,6 +328,43 @@ rem  written to its own buybox_<key>.json for the morning digest.
 echo [buybox] Re-scanning standing acquisition criteria...
 python -u buybox.py >> "%LOG%" 2>&1
 
+rem  ---------------------------------------------------------------------------------------------
+rem  LOCAL ANALYSIS LANE (wired 2026-08-31). Every script below is read-only against files already
+rem  produced above: no network call, no captcha token, no provider spend, nothing sent to a human.
+rem  They existed and ran only when somebody remembered to type them, which for eleven days meant
+rem  never -- this whole tail was being killed by the scheduler's idle setting (see :end).
+rem  NONE OF THESE IS A GATE. They sit AFTER the publish on purpose: an analysis script must never
+rem  be able to stop the board from shipping.
+rem
+rem  jose_buybox.py is the deal-math ladder (70% entry / 85% DSCR), and it is where tax deeds
+rem  belong now that the homeowner ladder no longer ranks them -- it already lanes TD rows as
+rem  "competitive-auction, room = pre-auction negotiation window", which is the honest framing.
+echo [jose]   Ranking the acquisition lane - 70pct entry / 85pct DSCR...
+python -u jose_buybox.py >> "%LOG%" 2>&1
+
+rem  Jesse's 3-5 minute deep-dive worklist -- which leads must be checked BEFORE anyone is called.
+echo [dilig]  Building the deep-dive worklist...
+python -u diligence_list.py >> "%LOG%" 2>&1
+
+rem  The investor / hard-money refi lane (private-lender foreclosures with a reset sale date).
+echo [refi]   Refreshing the investor-refi lane...
+python -u investor_lane.py >> "%LOG%" 2>&1
+
+rem  Recovers phone numbers the morning worker retired by accident. Local JSON only; it never
+rem  deletes a mark, it restores one, and it prints the rebuild command rather than rebuilding.
+echo [phones] Auditing numbers retired by mistake...
+python -u badnum_audit.py >> "%LOG%" 2>&1
+
+rem  ADVISORY, NOT A GATE, and the distinction is deliberate. verify_status_coverage.py exits 1
+rem  when a lead carries an address and folio but was never classified, and there are real
+rem  offenders on the board today (Palm Beach rows). Wiring it as a pre-publish gate -- which is
+rem  where it was proposed -- would have blocked every publish starting tonight. It logs instead,
+rem  so the count is visible every morning and can be driven to zero before it is ever promoted
+rem  to a gate. It is the "populated field, wrong meaning" detector, which is precisely the bug
+rem  class that let a tax-deed opening bid rank as owner equity for weeks.
+echo [verify] Checking status coverage (advisory)...
+python -u verify_status_coverage.py >> "%LOG%" 2>&1
+
 :end
 rem  ROOT CAUSE FOUND 2026-08-31, and it was never a time limit. The task carried
 rem  IdleSettings.StopOnIdleEnd = True with RestartOnIdle = False, which tells Task Scheduler to
