@@ -329,10 +329,21 @@ echo [buybox] Re-scanning standing acquisition criteria...
 python -u buybox.py >> "%LOG%" 2>&1
 
 :end
+rem  ROOT CAUSE FOUND 2026-08-31, and it was never a time limit. The task carried
+rem  IdleSettings.StopOnIdleEnd = True with RestartOnIdle = False, which tells Task Scheduler to
+rem  TERMINATE the task the moment the machine stops being idle — i.e. the moment Alejandro sits
+rem  down at it. Hence exit code 255 (terminated), at a time of day that tracked when he woke up
+rem  rather than any elapsed duration. The date correlation is exact: done markers land every day
+rem  through 08/20 and then stop for ELEVEN CONSECUTIVE DAYS — he was fired 08/19, so before that
+rem  he was out driving in the mornings and the box stayed idle to completion. Raising
+rem  ExecutionTimeLimit to PT6H never helped because the run was never hitting it (it dies ~2h30m
+rem  into a 6h budget). StopOnIdleEnd is now False on this task and on every other DEALFLOW task,
+rem  all of which carried the same setting and survived only by being short.
+rem
 rem  REPORT FIRST, HEALTH SECOND (2026-08-27). Measured on this log: the refresh has STARTED on
-rem  time every single morning (5:30:02, seven days straight) and has not written a `done` marker
-rem  since 08/20 — it reaches the healthcheck ~1h50m in, then the process ends before the two
-rem  steps below it ever run. Consequence: DEALFLOW-STATUS.txt on the Desktop, the ONLY unattended
+rem  time every single morning (5:30:02, seven days straight) and had not written a `done` marker
+rem  since 08/20 — it reaches the healthcheck ~1h50m in, then the process ended before the two
+rem  steps below it ever ran. Keep this ordering anyway: it is the belt to the idle fix's braces. Consequence: DEALFLOW-STATUS.txt on the Desktop, the ONLY unattended
 rem  signal that the night worked, sat frozen at 08-20 for a week while the board published fine
 rem  every day. run_report.py itself is healthy (runs clean by hand in seconds), so it was never
 rem  the failure — it was just last in line behind the slowest step.

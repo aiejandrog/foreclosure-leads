@@ -83,7 +83,7 @@ PACING_SEC_MAX = 3.5
 # IMAP on the substring SUBJ_TAG = 'Regarding your property at'. Prefixes survive both. Anything
 # appended AFTER the street silently kills reply attribution for every owner who writes back from
 # an address we do not already have on file.
-SUBJECT_STYLE = 'urgent'
+SUBJECT_STYLE = 'measured'
 
 # ALEJANDRO'S COPY. outreach_copy.py is the one source of the words; this module renders the
 # template it bakes, and tracker_template.html's genEmail() renders the SAME baked template with

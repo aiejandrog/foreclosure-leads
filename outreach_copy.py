@@ -85,11 +85,14 @@ def _sig_lines(sig_block, signer, company, phone):
 # ---------------------------------------------------------------------------------------------
 def email_subject(sale_date=None, short=False):
     ds = _short_date(sale_date) if short else _fmt_date(sale_date)
+    # SWAP 3 (approved 2026-08-30). URGENT dropped. Bounce rate was pulled from 28-33% to 16.9%
+    # while the measured subject was shipping, URGENT is a known spam-filter trigger, and it is
+    # the rescue-scam silhouette. The sale date carries the urgency on its own.
     if not ds:
-        return 'URGENT: Foreclosure Sale of Your Home'
+        return 'Foreclosure Sale of Your Home'
     if short:
-        return 'URGENT: Foreclosure Sale of Your Home – %s' % ds
-    return 'URGENT: Foreclosure Sale of Your Home %s' % ds
+        return 'Foreclosure sale %s - your home' % ds
+    return 'Foreclosure sale %s - your home' % ds
 
 
 def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY,
@@ -103,8 +106,14 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         "about your property so I'll be brief and direct",
         '',
         "Your home is scheduled for foreclosure auction on %s." % ds,
-        "If no action is taken, it will be sold to the highest bidder—and you will lose any "
-        "equity you have and could be forcefully evicted shortly after.",
+        # SWAP 2 (approved 2026-08-30). Was: "...you will lose any equity you have and could be
+        # forcefully evicted shortly after." That is not a scare tactic, it is FALSE: surplus
+        # above the judgment belongs to the former owner under FS 45.032, and the drill pack
+        # already teaches reps to tell them that. Telling a consumer the opposite, in writing,
+        # about their own money, is the claim that turns an aggressive email into a deceptive
+        # one. Same dread, all of it true.
+        "If nothing changes before that date, the house is sold to the highest bidder and "
+        "every choice you have right now goes with it.",
         "But this does not have to happen.",
         # Was the literal "Alex". The function already takes `signer`, so the body ignored it and no
         # sender but Alex could ever introduce themselves correctly -- and because the SIGNATURE is
@@ -112,8 +121,15 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         # Two names, one email, on a message whose whole job is proving we are not a mass mailer.
         ("My name is %s with the team at %s." % (_first_of(signer), company))
         + ((' ' + ident) if ident else ''),
-        "For over 30 years, our team has helped thousands of Florida homeowners just like you stop "
-        "foreclosures, reduce debt, cash out their equity and regain peace of mind.",
+        # SWAP 1 (approved 2026-08-30). Was: "For over 30 years, our team has helped thousands
+        # of Florida homeowners just like you stop foreclosures..." Three problems in one
+        # sentence: "stop foreclosures" is near-verbatim the FS 501.1377 trigger ("stop, prevent
+        # or reverse"); "thousands" is a quantified performance claim with nothing behind it
+        # (FDUTPA); and "our team, 30 years" put the experience on a company filed 8/24/2026.
+        # Same weight, said about the person who actually earned it.
+        "Our senior advisor has spent over 30 years in mortgages and foreclosure workouts, and "
+        "he personally reviews your case. He has sat across from people in exactly your "
+        "position and walked them out of it with their equity intact.",
         '',
         "We specialize in Urgent Foreclosure Cases that are facing an auction in just a few days.",
         '',
@@ -159,12 +175,15 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         'Hi %s,' % (first or '[First Name]'),
         '',
         "Your home is scheduled for foreclosure auction on %s." % ds,
-        "If you do nothing, you lose your home, your equity, and face eviction.",
+        # SWAP 2, short body. Same false equity claim, compressed.
+        "If nothing changes before that date, the house is sold to the highest bidder and "
+        "every choice you have right now goes with it.",
         "But this doesn't have to happen.",
         '',
         ("I'm %s with %s." % (_first_of(signer), company)) + ((' ' + ident) if ident else '') +
-        " For 30+ years, we've stopped foreclosures for thousands of Florida "
-        "homeowners—even cases just days from auction.",
+        # SWAP 1, short body. Same three defects, plus an em dash.
+        " Our senior advisor has over 30 years in mortgages and foreclosure workouts and he "
+        "personally reviews your case, including cases only days from auction.",
         '',
         "I don't know if you already have a plan, but I'm offering you a free, no-obligation "
         "15-minute phone consultation. No tricks. No fees. No pressure.",
@@ -176,10 +195,10 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         "  • Give you a clear, honest path forward",
         '',
         "Here's all I need from you:",
-        "Reply with your phone number and best time to call—or call me directly at %s. I'll "
+        "Reply with your phone number and best time to call, or call me directly at %s. I'll "
         "give you my personal, undivided attention and help you find the fastest solution." % phone,
         '',
-        "There is still time to save your home or your equity—but not much.",
+        "There is still time to save your home or your equity, but not much.",
         "Reply now or call today.",
         '',
         "Warm regards,",
@@ -272,7 +291,7 @@ SUBJ_TAG_EN = 'Regarding your property at'
 SUBJ_TAG_ES = 'Referente a su propiedad en'
 
 
-def outreach_subject(street, sale_date='', td=False, lang='en', style='urgent'):
+def outreach_subject(street, sale_date='', td=False, lang='en', style='measured'):
     """'URGENT: Foreclosure sale 09/22/2026 - Regarding your property at 12535 SW 33 ST'.
 
     style='measured' drops the URGENT prefix and restores the pre-2026-08-30 date tag. See the
@@ -318,8 +337,9 @@ def letter(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY
         '',
         "I know this is a stressful time and you're getting a lot of mail, so I'll be brief.",
         '',
-        when + " If no action is taken it can be sold to the highest bidder, and any equity goes "
-        "with it. It doesn't have to go that way.",
+        # SWAP 2, letter. "any equity goes with it" is the same false statement as the email.
+        when + " If nothing changes it can be sold to the highest bidder, and the choices you "
+        "have right now go with it. It doesn't have to go that way.",
         '',
         "I'm %s with %s. I'm offering you a free 15-minute call, no obligation - I'll review your "
         "situation and lay out every option you have. No tricks, no fees, no pressure." % (signer, company),
