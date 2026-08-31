@@ -625,6 +625,24 @@ def _flag(code, sev, msg, action='', party=''):
     return {'code': code, 'sev': sev, 'msg': msg, 'action': action, 'party': party}
 
 
+def is_tax_deed_row(row):
+    """True when this lead is a TAX DEED sale rather than a mortgage foreclosure.
+
+    Reads the several field names the counties and scrapers actually use, because there is no one
+    canonical key: Miami-Dade's auction feed writes 'Auction Type': 'TAXDEED' and 'sale_type': 'TD',
+    while the enricher writes case_type 'Tax Deed'. buybox.is_tax_deed() is the same predicate for
+    the acquisition side; both are small and neither imports the other, so this file keeps its "no
+    cross-module import in the flag path" property.
+    """
+    try:
+        u = ' '.join(_s(_d(row).get(k)) for k in
+                     ('sale_type', 'case_type', 'Auction Type', 'auction_type',
+                      'clerk_case_type')).upper()
+        return 'TAX DEED' in u or 'TAXDEED' in u.replace(' ', '') or bool(re.search(r'\bTD\b', u))
+    except Exception:
+        return False
+
+
 def risk_flags(row):
     """Structured risk flags, most severe first. Never raises; returns [] on a malformed row.
 
@@ -655,6 +673,31 @@ def risk_flags(row):
                 'Stop. Mark it dead. If you want the story, find the OTHER case that issued the '
                 'certificate of title (%s).' % (links['clerk']),
                 who))
+
+        # ---- TAX_DEED_SALE — a different animal wearing a foreclosure lead's clothes.
+        # Nothing in the contact path tested for this until 2026-08-31: 34 rows on the board, 15 of
+        # them ranked TIER A, sitting in the dial pool. Three things are wrong with calling one:
+        #   1. The money figure is an OPENING BID (tax certificate + fees), not a payoff. It lands
+        #      in the same 'judgment' field a court-ordered number does, so value-minus-debt printed
+        #      up to 97% "equity" — $22.8M of room board-wide that does not exist. The senior
+        #      mortgage is not on the row at all.
+        #   2. The record owner is usually an LLC or an investor, not a distressed homeowner. The
+        #      advisor script — "I am not trying to buy your house", the MARS disclosure, the whole
+        #      language law — is written for a person about to lose the place they live in.
+        #   3. It is not a doorstep deal in the first place. It is a competitive cash auction that
+        #      bids toward market, and the winner still needs quiet title to resell.
+        # Every one of these rows already carried a `warning` field saying exactly this. The warning
+        # was written, displayed, and read by nothing that decides who gets called.
+        if is_tax_deed_row(r):
+            out.append(_flag(
+                'TAX_DEED_SALE', SEV_HIGH,
+                'This is a TAX DEED sale, not a mortgage foreclosure. The dollar figure on it is '
+                'the opening bid, not a payoff, so any equity number shown for it is meaningless — '
+                'the mortgage is not on this row. The owner of record is usually an LLC, not a '
+                'family losing their home, and the advisor script does not fit.',
+                'Do not dial it as a homeowner lead. If you want it, work it as an auction: pull '
+                'the surviving liens (IRS 120-day right of redemption, municipal, HOA) and price '
+                'the quiet title (%s).' % (links['clerk'])))
 
         # ---- SIBLING_CLAIMED — sibling_cases.py already found the case that took it (MD only today)
         if r.get('sibclaimed'):
@@ -904,8 +947,12 @@ def severity_of(row):
 # is meant to block on has to be blocking HERE first, or the gate silently cannot act on it. That
 # is exactly what happened when it was added to the gate alone: the flag fired, contact_gate said
 # hold, and the released row still went out because the code was never in this tuple.
+# TAX_DEED_SALE fires on the DATA (the auction type is on the row), so it belongs in this tuple and
+# not in _HOLD_ON_DIVE: a tax deed with no computed equity position is still the wrong pitch to the
+# wrong party, and dive-gating it would repeat the Sisavath mistake of asking whether a lead
+# "earned" a check before checking it.
 _HOLD_ALWAYS = ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
-                'SOLD_ABOVE_VALUE', 'EQ_UNRELIABLE')
+                'SOLD_ABOVE_VALUE', 'EQ_UNRELIABLE', 'TAX_DEED_SALE')
 _HOLD_ON_DIVE = ('HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED', 'PARTIES_UNAVAILABLE')
 
 
