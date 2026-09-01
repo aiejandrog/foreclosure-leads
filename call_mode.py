@@ -1239,8 +1239,18 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
    every card already handed out would be dialing a poisoned number. Set to 'tel' to fall back to
    the plain dialer (one character, next build).
    The GV deep link opens the Voice app on a phone that has it installed and signed into the
-   agonzalez account; the number after nc, is the DESTINATION — Voice supplies the caller id. */
-var DIALER='gv';
+   agonzalez account; the number after nc, is the DESTINATION — Voice supplies the caller id.
+   SWITCHED TO 'tel' 2026-09-01, SAME DAY, for Quo (786) 502-9550 — and the reasoning moved, not
+   died. Quo (OpenPhone rebranded) registers as the PHONE'S default calling app, so a plain tel:
+   link routes through Quo natively and the call originates from the Quo line. That beats a
+   per-vendor deep link three ways: no URL scheme to break when a vendor renames itself (Quo just
+   did), the outcome-logging page never navigates away (tel: opens the dialer OVER the page), and
+   swapping dialing vendors becomes a SETTING ON THE PHONE instead of a build. The spam-split
+   architecture is unchanged: published line (786) 631-1823 stays clean; the dialing line eats the
+   volume risk. Requires: Quo app installed + set as the phone's default calling app — without
+   that, tel: falls back to the carrier dialer and dials expose the published line, so CHECK THE
+   DEFAULT-APP SETTING before a dial session. Set 'gv' to route via Google Voice deep links. */
+var DIALER='tel';
 function dialHref(d){return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+String(d) : 'tel:+1'+String(d);}
 /* tel: opens the dialer OVER the page; an https link would navigate AWAY from it — and the whole
    outcome-logging flow (screenOutcome, the after-call bar) lives on this page. So GV dials open in
