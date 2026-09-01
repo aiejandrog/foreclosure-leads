@@ -117,6 +117,26 @@ SLOGAN = 'Every option, explained.'
 # call is RUN, not on the card.
 CONSULT = 'Free consultation'
 
+# ---- layout F: the single-sided card, modelled on the reference -------------------------------
+# Alejandro handed over Jesse's old "the FORECLOSURE CENTER" card and asked for this shape:
+# everything on ONE face, the company mark and wordmark owning the top, the person and their
+# numbers down the left, and a bulleted services list holding the right.
+# Single-sided is not only a style choice -- it removes the duplex flip from the 10-up sheet
+# entirely, which is the single most common way a home-printed card run gets ruined, and it
+# roughly halves the toner.
+ROLE = 'Sr. Consultant'           # only prints when --name is given
+OFFICE = ''                       # optional second number, e.g. an office line
+# The reference card's four services, kept. --bullets overrides the whole list.
+BULLETS = [
+    'Foreclosure prevention',
+    'Investment opportunities',
+    'Cash for your home',
+    'Short sale specialist',
+]
+# Layouts with no back. sheet()/build_sheet() consult this so a single-sided card never emits a
+# blank navy reverse or a second sheet page.
+SINGLE_SIDED = {'f'}
+
 # ---- QR --------------------------------------------------------------------------------------
 # Points at the SITE, not a tel: link. A tel: QR fires a dial the instant it is scanned, which is
 # the wrong first move for someone who has not decided to talk yet -- the whole offer is that
@@ -337,6 +357,49 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
 .e .slogan{font-size:7pt;font-weight:500;letter-spacing:.055em;color:%(steel)s;
            margin-top:.045in;text-align:center}
 
+/* --- F: single-sided, modelled on the reference card ---------------------------------------
+   Two columns inside the safe area. LEFT holds the mark then the person then the numbers;
+   RIGHT holds the services bullets, optically centred against the contact block rather than the
+   card, which is what makes the reference card's right column feel anchored instead of floating.
+   The divider is the same blue as the mark, so the two columns read as one system. */
+/* The LOCKUP owns the top third, exactly as the reference does: glyph left, wordmark right, with
+   BISCAYNE as the dominant word and SOLUTIONS GROUP letterspaced beneath it to the SAME measure.
+   That measure-match is the whole trick behind "FORECLOSURE / CENTER" -- it is what makes two
+   words of very different lengths read as one designed block instead of two stacked lines. The
+   tracking below is a computed starting point; the rendered widths are asserted, not eyeballed. */
+.f .safe{display:flex;flex-direction:column}
+.f .lock{display:flex;align-items:center;gap:.10in}
+.f .badgemark{height:.50in;width:auto;display:block;flex:0 0 auto}
+.f .wm1{font-size:21pt;font-weight:700;letter-spacing:.035em;color:%(navy)s;line-height:.98;
+        white-space:nowrap}
+.f .wm2{font-size:7.6pt;font-weight:600;color:%(steel)s;line-height:1;margin-top:2.5pt;
+        white-space:nowrap}
+.f .cols{display:flex;align-items:stretch;flex:1;margin-top:.085in}
+.f .lcol{width:1.72in;display:flex;flex-direction:column;justify-content:center;padding-right:.10in}
+.f .rcol{flex:1;display:flex;flex-direction:column;justify-content:center;padding-left:.14in;
+         border-left:1.5px solid rgba(27,95,170,.30)}
+.f .who{font-size:10.5pt;font-weight:700;color:%(navy)s;line-height:1.12;letter-spacing:.005em}
+.f .role{font-size:7.4pt;font-weight:500;color:%(steel)s;letter-spacing:.045em;
+         text-transform:uppercase;margin-top:1.5pt}
+.f .spec{font-size:7.2pt;font-weight:700;color:%(blue)s;letter-spacing:.055em;
+         text-transform:uppercase;margin-top:2pt}
+.f .rule{height:1.5px;flex:0 0 1.5px;background:%(blue)s;width:.30in;opacity:.55;margin:.055in 0}
+.f .cline{font-size:8.2pt;font-weight:600;color:%(ink)s;line-height:1.5;letter-spacing:.005em}
+.f .cline b{font-weight:700;color:%(navy)s}
+.f .web{font-size:8pt;font-weight:700;color:%(navy)s;letter-spacing:.015em;margin-top:1pt}
+.f .es{font-size:6.8pt;font-weight:600;color:%(steel)s;letter-spacing:.05em;
+       text-transform:uppercase;margin-top:2.5pt}
+/* Bullets: small caps at 7.4pt. The reference sets these ALL-CAPS at roughly 6pt, which plugs at
+   press -- 7.4pt with a tighter tracking reads the same at a glance and survives dot gain. */
+.f ul.svc{margin:0;padding:0;list-style:none}
+.f ul.svc li{font-size:7.4pt;font-weight:600;color:%(ink)s;letter-spacing:.035em;
+             text-transform:uppercase;line-height:1.32;margin:0 0 3.4pt;position:relative;
+             padding-left:.105in}
+.f ul.svc li:before{content:'';position:absolute;left:0;top:.036in;width:3.4px;height:3.4px;
+                    border-radius:50%%;background:%(blue)s}
+.f .qrf{position:absolute;right:0;bottom:0;width:.46in;height:.46in;background:#fff;padding:.02in}
+.f .qrf svg{display:block;width:100%%;height:100%%;shape-rendering:crispEdges}
+
 /* --- BACK --------------------------------------------------------------------------------- */
 .back{background:%(navy)s;color:#fff}
 .back .safe{display:flex;flex-direction:column;justify-content:center}
@@ -434,8 +497,65 @@ def mark_inline(mono='', cls='mark'):
         return ''
 
 
+def badge_inline(cls='badgemark'):
+    """The mark's GLYPH only -- skyline + horizon arc, no monogram, no wordmark.
+
+    Layout F needs a WIDE horizontal lockup (glyph left, type right), which is the silhouette of
+    the reference card. bsg_mark is a stacked square lockup and cannot make that shape: dropped
+    into a horizontal slot it either shrinks until the sub-wordmark is unreadable or eats the
+    column the type needs.
+
+    Nothing is redrawn. The full mark is viewBox 0 0 760 620. Measured off the actual geometry:
+        skyline blocks + tower   x 296-444, y  62-328   (the pole is M352 232 ... v96 -> y 328)
+        horizon arc              x 214-546, y 196-262
+        BSG monogram             baseline y 452 at 196pt -> CAPS TOP ~311
+        BISCAYNE / SOLUTIONS     baselines y 536 / 590
+
+    THE POLE AND THE MONOGRAM OVERLAP: the pole runs to 328, the monogram starts at 311. There is
+    no y that keeps all of the pole and none of the letters. A first crop to y 340 looked correct
+    in the numbers and printed the TOPS OF THE B, S AND G as three blue blobs under the skyline --
+    it read as a rendering fault, not a logo.
+    So the cut is at 308, just above the caps: the pole loses its bottom 17 units (~7% of the glyph
+    height, below the arc where it already reads as a taper) and no letterform can leak in.
+
+    Cropping rather than editing matters: the file in brand/ stays the single source of the mark,
+    so a new logo dropped there flows through here untouched.
+    """
+    svg = mark_inline('', cls)
+    if not svg:
+        return ''
+    if 'viewBox' in svg:
+        return re.sub(r'viewBox="[^"]*"', 'viewBox="200 48 360 260"', svg, count=1)
+    # a supplied raster cannot be cropped this way -- fall back to the whole mark rather than
+    # silently emitting a stretched or empty box
+    return svg
+
+
 def front(layout, logo):
     img = mark_inline('', 'brandmark')
+    if layout == 'f':
+        # Single-sided, in the shape of the reference card. Name and role print only when --name
+        # is passed: the universal run keeps the same silhouette and simply drops those two lines,
+        # so one layout serves both the personal card and the stack anyone can hand out.
+        who = ''
+        if NAME:
+            who = ('<div class="who">%s</div><div class="role">%s</div>'
+                   % (H.escape(NAME), H.escape(ROLE)))
+        office = ('<div class="cline">Office: %s</div>' % H.escape(OFFICE)) if OFFICE else ''
+        mail = ('<div class="cline">%s</div>' % H.escape(EMAIL)) if EMAIL else ''
+        bullets = ''.join('<li>%s</li>' % H.escape(b) for b in BULLETS)
+        return ('<div class="card f"><div class="safe">'
+                '<div class="lock">%s<div><div class="wm1">BISCAYNE</div>'
+                '<div class="wm2">SOLUTIONS GROUP</div></div></div>'
+                '<div class="cols">'
+                '<div class="lcol">%s<div class="rule"></div>'
+                '<div class="cline"><b>%s</b></div>%s%s'
+                '<div class="es">Call or text &middot; Hablo espa&ntilde;ol</div>'
+                '<div class="web">%s</div></div>'
+                '<div class="rcol"><ul class="svc">%s</ul></div>'
+                '</div></div></div>'
+                % (badge_inline(), who, H.escape(PHONE), office, mail,
+                   H.escape(WEB), bullets))
     if layout == 'e':
         # The mark, what we do, the promise. Still no name, no title, no phone, no QR -- those all
         # competed with the mark for the two seconds the card gets, and the back carries them.
@@ -540,7 +660,13 @@ def back(lang='en'):
 
 
 def back_for(layout):
-    """E gets the short back; a-d keep the long one they were designed around."""
+    """E gets the short back; a-d keep the long one they were designed around.
+
+    None for a single-sided layout -- and callers must honour that rather than substituting an
+    empty card, or F prints a blank navy reverse and doubles the toner for nothing.
+    """
+    if layout in SINGLE_SIDED:
+        return None
     return back_short() if layout == 'e' else back()
 
 
@@ -548,11 +674,14 @@ def sheet(layouts, logo, review=False):
     body = []
     for L in layouts:
         if review:
-            body.append('<div class="lbl">Layout %s &mdash; front</div>' % L.upper())
+            body.append('<div class="lbl">Layout %s &mdash; %s</div>'
+                        % (L.upper(), 'single-sided' if L in SINGLE_SIDED else 'front'))
         body.append(front(L, logo))
-        if review:
-            body.append('<div class="lbl">Layout %s &mdash; back</div>' % L.upper())
-        body.append(back_for(L))
+        b = back_for(L)
+        if b:
+            if review:
+                body.append('<div class="lbl">Layout %s &mdash; back</div>' % L.upper())
+            body.append(b)
     extra = ('' if not review else
              'body{background:#e9edf2;padding:16px}'
              '.card{margin:0 auto 6px;box-shadow:0 2px 10px rgba(11,23,48,.18)}'
@@ -625,9 +754,17 @@ def sheet_10up(layout, logo, side='front'):
 
 
 def build_sheet(layout, logo):
-    return ('<html><head><meta charset="utf-8"><style>%s%s</style></head><body>%s%s</body></html>'
-            % (CSS, SHEET_CSS, sheet_10up(layout, logo, 'front'),
-               sheet_10up(layout, logo, 'back')))
+    """One page for a single-sided layout, two (front + mirrored back) otherwise.
+
+    Emitting a back page for F would not merely waste a sheet -- it would invite a duplex run,
+    and a duplex run on a single-sided design is how you get ten cards backed with ten blanks and
+    a mis-registered trim. The whole point of the single-sided card is that this step disappears.
+    """
+    pages = sheet_10up(layout, logo, 'front')
+    if layout not in SINGLE_SIDED:
+        pages += sheet_10up(layout, logo, 'back')
+    return ('<html><head><meta charset="utf-8"><style>%s%s</style></head><body>%s</body></html>'
+            % (CSS, SHEET_CSS, pages))
 
 
 def main():
@@ -636,13 +773,23 @@ def main():
     ap.add_argument('--logo', default='', help='path to the brand mark PNG')
     ap.add_argument('--sheet', action='store_true',
                     help='10-up US Letter sheet: front page + mirrored back page, cut marks')
+    ap.add_argument('--office', default='', help='optional second phone line (layout f)')
+    ap.add_argument('--bullets', default='',
+                    help='comma-separated services list for layout f, overrides the default')
+    ap.add_argument('--role', default='', help='title under the name on layout f')
     ap.add_argument('--name', default='',
                     help='put a person on the card (default: universal company card)')
     a = ap.parse_args()
 
-    global _LOGO_PATH, NAME
+    global _LOGO_PATH, NAME, ROLE, OFFICE, BULLETS
     if a.name:
         NAME = a.name
+    if a.role:
+        ROLE = a.role
+    if a.office:
+        OFFICE = a.office
+    if a.bullets:
+        BULLETS = [b.strip() for b in a.bullets.split(',') if b.strip()]
     _LOGO_PATH = a.logo or find_logo()
     if _LOGO_PATH:
         print('logo: %s' % _LOGO_PATH)
@@ -682,8 +829,12 @@ def main():
         except Exception as e:
             print('(sheet PDF failed: %s)' % e)
         print()
-        print('PRINT: US Letter, ACTUAL SIZE / 100% scale (never "fit to page"), duplex')
-        print('       flip on the LONG edge. 10 cards per sheet. Cut on the tick marks.')
+        if lay in SINGLE_SIDED:
+            print('PRINT: US Letter, ACTUAL SIZE / 100% scale (never "fit to page").')
+            print('       SINGLE-SIDED - do NOT duplex. One page, 10 cards, cut on the ticks.')
+        else:
+            print('PRINT: US Letter, ACTUAL SIZE / 100% scale (never "fit to page"), duplex')
+            print('       flip on the LONG edge. 10 cards per sheet. Cut on the tick marks.')
         print('       Cardstock 65-110lb. This sheet has NO bleed by design -- a desktop')
         print('       printer cannot reach the paper edge, so a bleed would cut white slivers.')
         return sp, [sp]
