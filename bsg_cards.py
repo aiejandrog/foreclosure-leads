@@ -397,7 +397,13 @@ body{margin:0;font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;co
              padding-left:.105in}
 .f ul.svc li:before{content:'';position:absolute;left:0;top:.036in;width:3.4px;height:3.4px;
                     border-radius:50%%;background:%(blue)s}
-.f .qrf{position:absolute;right:0;bottom:0;width:.46in;height:.46in;background:#fff;padding:.02in}
+/* QR closes the lockup row: badge left, wordmark centre, code right, all on one baseline.
+   .50in and not smaller -- 29 modules across .50in gives .438mm per module, over the ~.40mm a
+   phone resolves at arm's length. .46in would look tidier and drops to .403mm, which is the
+   edge; a code that scans in four out of five hands is not a code.
+   NO white chip here, unlike the navy back of layout E: this face is already white, so the paper
+   IS the quiet zone. margin-left:auto pins it to the safe edge whatever the wordmark measures. */
+.f .qrf{margin-left:auto;flex:0 0 auto;width:.50in;height:.50in}
 .f .qrf svg{display:block;width:100%%;height:100%%;shape-rendering:crispEdges}
 
 /* --- BACK --------------------------------------------------------------------------------- */
@@ -559,7 +565,8 @@ def front(layout, logo):
         bullets = ''.join('<li>%s</li>' % H.escape(b) for b in BULLETS)
         return ('<div class="card f"><div class="safe">'
                 '<div class="lock">%s<div><div class="wm1">BISCAYNE</div>'
-                '<div class="wm2">SOLUTIONS GROUP</div></div></div>'
+                '<div class="wm2">SOLUTIONS GROUP</div></div>'
+                '<div class="qrf">%s</div></div>'
                 '<div class="cols">'
                 '<div class="lcol">%s<div class="rule"></div>'
                 '<div class="cline"><b>%s</b></div>%s%s'
@@ -567,7 +574,7 @@ def front(layout, logo):
                 '<div class="web">%s</div></div>'
                 '<div class="rcol"><ul class="svc">%s</ul></div>'
                 '</div></div></div>'
-                % (badge_inline(), who, H.escape(PHONE), office, mail,
+                % (badge_inline(), qr_svg(cls='qr'), who, H.escape(PHONE), office, mail,
                    H.escape(WEB), bullets))
     if layout == 'e':
         # The mark, what we do, the promise. Still no name, no title, no phone, no QR -- those all
