@@ -114,8 +114,13 @@ def _leads():
     st = _load(os.path.join(HERE, 'skiptrace_results.json'), {})
     for d in L:
         c = str(d.get('case') or d.get('cert') or '').strip()
-        if not (d.get('phones') or []) and c in st:
-            d['phones'] = (st.get(c) or {}).get('phones') or []
+        # UNION, not fallback. The board's card can show skiptrace numbers alongside the lead's own,
+        # and the dial log only keeps last-4 -- resolving it needs every number the card could have
+        # offered. Fallback-only left 111 of 186 logged dials unresolvable on the first live run.
+        have = {re.sub(r'\D', '', str(p))[-10:] for p in (d.get('phones') or [])}
+        extra = [p for p in ((st.get(c) or {}).get('phones') or [])
+                 if re.sub(r'\D', '', str(p))[-10:] not in have]
+        d['phones'] = (d.get('phones') or []) + extra
     return L
 
 
@@ -139,6 +144,12 @@ def dialed_numbers(days):
         notes = _load(f, {})
         if not isinstance(notes, dict):
             continue
+        # The phone's export wraps the ledger in an envelope: {_dealflow_notes, exported, device,
+        # notes:{case: {...}}, workerLog, sentArchive}. The per-case dials live under 'notes'.
+        # First version iterated the ENVELOPE and found zero dials in a file holding 238 cases
+        # with them -- unwrap when the marker key is present, accept the bare shape otherwise.
+        if '_dealflow_notes' in notes and isinstance(notes.get('notes'), dict):
+            notes = notes['notes']
         for case, n in notes.items():
             if not isinstance(n, dict):
                 continue
