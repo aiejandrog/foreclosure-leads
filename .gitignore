@@ -383,3 +383,4 @@ digest_state.json
 !_cardtest.py
 investor_lane.csv
 blueprint_pdf.py
+send_outreach_bundle.py
