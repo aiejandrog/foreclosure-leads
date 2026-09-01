@@ -1230,6 +1230,22 @@ var LS='fcLeadNotes', ROWS=[], PHIDX=null, lane='soon', i=0, cur=null, phIdx=0, 
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6):d;}
+/* WHICH LINE THE CALL GOES OUT ON (2026-09-01). 'gv' routes every dial through the Google Voice
+   app so the call originates from (786) 490-7825 — the DIALING line — instead of the phone's own
+   carrier line, (786) 631-1823. That split is deliberate and load-bearing: 631-1823 is the number
+   printed on the site, the cards and every letter, and 25-50 cold dials a day is exactly the
+   traffic pattern that gets a number tagged "Spam Likely" by the carriers. If the GV line gets
+   burned, Google swaps it for $10 and nothing printed changes; if the PUBLISHED line got burned,
+   every card already handed out would be dialing a poisoned number. Set to 'tel' to fall back to
+   the plain dialer (one character, next build).
+   The GV deep link opens the Voice app on a phone that has it installed and signed into the
+   agonzalez account; the number after nc, is the DESTINATION — Voice supplies the caller id. */
+var DIALER='gv';
+function dialHref(d){return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+String(d) : 'tel:+1'+String(d);}
+/* tel: opens the dialer OVER the page; an https link would navigate AWAY from it — and the whole
+   outcome-logging flow (screenOutcome, the after-call bar) lives on this page. So GV dials open in
+   a separate tab/app and this page stays put, same as tel: always behaved. */
+function dialTarget(){return DIALER==='gv' ? ' target="_blank" rel="noopener"' : '';}
 function today(){var d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
 function nowTS(){return new Date().toLocaleString();}
 /* WHO IS SPEAKING. The board keeps identity in SENDER_DEFAULTS + localStorage.fcSender; this page is
@@ -1831,7 +1847,7 @@ function screenLookup(prefill){
                   + esc(String(e.t).slice(0,16)) + ' &middot; ' + esc(e.w) + '</div>'; }).join('')
             : '<div class="mut" style="margin-top:8px;font-size:12px">no contact logged yet</div>')
         + '<div class="flinks" style="margin-top:10px">'
-        +   '<a href="tel:+1' + esc(h.num) + '">&#128222; Call back</a>'
+        +   '<a href="'+dialHref(esc(h.num))+'"'+dialTarget()+'>&#128222; Call back</a>'
         +   '<a href="sms:' + esc(h.num) + '">&#128172; Text</a>'
         +   fileLinks({fo:h.fo, ct:h.ct, o:h.owner, a:h.street, c:h.c}).map(function(x){
               return '<a href="' + esc(x[1]) + '" target="_blank" rel="noopener">' + esc(x[0]) + '</a>'; }).join('')
@@ -2131,7 +2147,7 @@ function screenLead(){
       + '🏷 LISTED with the sale '+(r.d!=null?r.d+'d':'weeks')+' out — MISCALCULATED DEAL. '
       + 'Gatekeeper play: <b>card 12</b> — full commission on the buy + the re-listing. Same property pays the agent twice.'
       + (r.zag ? '<br>Agent: <b>'+esc(r.zag)+'</b>' : '')
-      + (r.zap ? ' &middot; <a style="color:#F4E5A7;font-weight:800" href="tel:+1'+String(r.zap).replace(/^1/,'')+'">&#128222; call the agent</a>' : '')
+      + (r.zap ? ' &middot; <a style="color:#F4E5A7;font-weight:800" href="'+dialHref(String(r.zap).replace(/^1/,''))+'"'+dialTarget()+'>&#128222; call the agent</a>' : '')
       + '</div>';
   }
 
@@ -2154,7 +2170,7 @@ function screenLead(){
     +   band('THE MONEY', mny)
     +   band('WHO IS FORECLOSING', whoFc + prop + histLine(r))
     +   fileBand(r)
-    +   '<a class="dial" href="tel:+1'+d+'" id="dial">'+fmt(d)+'</a>'
+    +   '<a class="dial" href="'+dialHref(d)+'"'+dialTarget()+' id="dial">'+fmt(d)+'</a>'
     +   '<div class="sub">number '+(phIdx+1)+' of '+r.p.length
     +     (rk?(' &middot; '+(rk==='C'?'call first':rk==='O'?'ok':'last resort')):'')
     +     (r.k?(' &middot; '+r.k+' withheld, do-not-call flag on file'):'')+'</div>'
@@ -2369,7 +2385,7 @@ function screenOutcome(){
        hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
        the proven path (the main dial button), and returning from the dialer lands right back on
        this screen because the SCREEN guard defers any sync repaint. */
-    +'<a class="redial" href="tel:+1'+d+'" id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>'
+    +'<a class="redial" href="'+dialHref(d)+'"'+dialTarget()+' id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>'
     + talk
     +'<div class="oc" style="margin-top:10px">'+btns+'</div>'
     +'<div class="vm" id="vm" style="display:none"></div></div><div class="sheetpad"></div>';
