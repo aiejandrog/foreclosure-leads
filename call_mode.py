@@ -1738,12 +1738,17 @@ function pool(){
      silently absorb "belongs to the other caller" — two very different facts that must never
      share a counter. Counted separately and shown separately. */
   _SEATN = 0; _CLMN = 0;
-  if(_seat() && !SEAT_ALL){
-    keep = keep.filter(function(r){
-      if(!_seatMine(r)){ _SEATN++; return false; }
-      if(_clmOwner(r.c)){ _CLMN++; return false; }
-      return true; });
-  }
+  keep = keep.filter(function(r){
+    /* SEAT filter is conditional — it is MY setting, so turning it off must hand me the list back.
+       CLAIM filter is UNCONDITIONAL, and that difference is the point: a claim means a teammate is
+       on the phone with that person RIGHT NOW, which is true whether or not I have split my own
+       list. Gating it on _seat() meant switching myself to solo silently un-hid every lead Carlos
+       was actively working — the exact double-dial this feature exists to prevent, reachable by
+       tapping the one control that sounds harmless. Nothing writes a claim unless a seat is set,
+       so on a genuinely solo crew this costs nothing. */
+    if(_seat() && !SEAT_ALL && !_seatMine(r)){ _SEATN++; return false; }
+    if(_clmOwner(r.c)){ _CLMN++; return false; }
+    return true; });
   return keep;
 }
 var _SEATN = 0, _CLMN = 0;

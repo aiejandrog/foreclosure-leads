@@ -387,3 +387,5 @@ send_outreach_bundle.py
 send_cal_link.py
 quo.key
 quo_calls.json
+# call-mode team seats: guards the no-double-dial property — must survive a clone
+!_seattest.py
