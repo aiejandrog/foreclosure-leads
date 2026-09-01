@@ -186,6 +186,19 @@ _CNAM_EN = re.compile(r"\s*[\u2014-]?\s*just put [A-Za-z]{2,4},?\s*that'?s how i
 _CNAM_ES = re.compile(r"\s*[\u2014-]?\s*p[o\u00f3]ngale [A-Za-z]{2,4},?\s*as[i\u00ed] le sale en el identificador\.?", re.I)
 
 
+_QREC_LINE = ('RECORDING IS ON. Before anything else: "Quick thing before we start, I record '
+              'my calls so I have your file right. Is that okay with you?" A no means STOP '
+              'RECORDING, not hang up.')
+
+
+def _quo_recording():
+    try:
+        import entity
+        return bool(entity.sender().get('quo_record'))
+    except Exception:
+        return False
+
+
 def _cnam_ok():
     try:
         import entity
@@ -512,6 +525,26 @@ def _greet_name(d):
     return on[:40]
 
 
+def _quo_latest():
+    """case -> the most recent analyzed Quo call, from quo_sync.py's local ledger.
+
+    Local and gitignored (homeowner conversations; the repo is PUBLIC) -- it ships only inside the
+    encrypted payload, exactly like every other lead field. Missing file = empty dict, zero cost:
+    CI has no ledger and must not care."""
+    try:
+        led = json.load(open(os.path.join(HERE, 'quo_calls.json'), encoding='utf-8'))
+    except Exception:
+        return {}
+    out = {}
+    for rec in (led.get('calls') or {}).values():
+        c = str(rec.get('case') or '').strip()
+        if not c:
+            continue
+        if c not in out or str(rec.get('at') or '') > str(out[c].get('at') or ''):
+            out[c] = rec
+    return out
+
+
 def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     """-> (rows, total_qualified). Selection mirrors call_list.collect + _workerEligible.
 
@@ -572,6 +605,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     _ident_dropped = 0
     import diligence_gate as _DG
     _dg = _DG.Tally()
+    _quo = _quo_latest()
     for d in slim:
         case = d.get('case') or ''
         if not case or case in optouts or case in deads:
@@ -726,6 +760,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # ---- clock ----
             'sv': d.get('saleSurv'), 'sc': _n('saleSched'), 'sw': _s('saleWho', 6),
             'bk': _n('saleBK'), 'sl': _s('saleLift', 10), 'cs': _s('cstatus', 22),
+            # ---- last Quo call (transcript-backed). None on most rows; the null-strip removes it.
+            'qc': (lambda q: ({'w': str(q.get('at') or '')[:16], 'du': q.get('dur') or 0,
+                               's': ' '.join(q.get('summary') or [])[:180],
+                               'fl': (q.get('flags') or [])[:4]} if q else None))(_quo.get(case)),
             # ---- who is foreclosing ----
             'pl': _s('plaintiff', 46), 'ft': _s('ftype', 10),
             # ---- the person / property ----
@@ -859,6 +897,11 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'mars': MARS_BLOCK,
         'never': NEVER_SAY,
         'obj': load_objections(),
+        # Rendered in red under the opener ONLY when sender.json carries "quo_record": true.
+        # Florida is ALL-PARTY consent (FS 934.03, a felony statute) -- if Quo auto-records, the
+        # consent ask is not optional and it has to be ON the screen he reads from, not in a doc.
+        # quo_sync's coach pass then verifies the word "record" actually occurs in the transcript.
+        'rec': (_QREC_LINE if _quo_recording() else None),
     }
     return _PAGE.replace('__SYNCJS__', sync_js) \
                 .replace('__SCRIPT__', json.dumps(script, ensure_ascii=False)) \
@@ -2107,6 +2150,18 @@ function screenLead(){
 
   var who = '<div class="addr">'+esc(r.a||'(no address on file)')+'</div>'
           + '<div class="own">'+esc(r.o||'(owner unknown)')+'</div>';
+  /* LAST QUO CALL -- what happened last time, in front of him BEFORE he redials. Summary from
+     Quo's AI, flags from quo_sync's coach pass. Flags render red because every one of them is a
+     sentence that must not be said again on the call he is about to make. */
+  if(r.qc){
+    who += '<div style="margin-top:8px;padding:8px 10px;border:1px solid #2a3f6b;border-radius:10px;background:#0f1d3a">'
+        +  '<div class="ltag">LAST CALL &middot; '+esc(r.qc.w||'')+' &middot; '+(r.qc.du||0)+'s</div>'
+        +  (r.qc.s ? '<div class="mut" style="font-size:13px;margin-top:3px">'+esc(r.qc.s)+'</div>' : '')
+        +  ((r.qc.fl||[]).map(function(f){
+             return '<div style="color:#e07b6a;font-size:12.5px;margin-top:3px">&#9873; '+esc(f)+'</div>';
+           }).join(''))
+        +  '</div>';
+  }
   var wc='';
   if(r.ab) wc += '<span class="chip">absentee &middot; call, do not knock</span>';
   if(r.hs) wc += '<span class="chip ok">homestead &middot; they live there</span>';
@@ -2354,7 +2409,8 @@ function screenOutcome(){
      Florida you do not know which language you need until they pick up. The full apparatus — CIOC,
      objections, MARS — stays one tap away in the sheet below. */
   var named=!!firstName(r);
-  var talk = '<div class="ltag" style="margin-top:12px">WHEN THEY PICK UP '+langChips()+'</div>'
+  var talk = (SCRIPT.rec ? '<div class="nc" style="border-color:#e07b6a;color:#f2b8ad">'+esc(SCRIPT.rec)+'</div>' : '')
+    + '<div class="ltag" style="margin-top:12px">WHEN THEY PICK UP '+langChips()+'</div>'
     + say(named?SCRIPT.op.en:SCRIPT.op.aen, named?SCRIPT.op.es:SCRIPT.op.aes, r)
     + '<div class="mut" style="font-size:12px;margin-top:4px">Close with: <b>'
     + (lang()==='es' ? '&iquest;Verdad que s&iacute;?' : 'That&rsquo;s fair, right?')

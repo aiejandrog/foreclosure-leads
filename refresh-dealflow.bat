@@ -254,6 +254,13 @@ python -u county_plaintiffs.py --county broward --near >> "%LOG%" 2>&1
 echo [3o/5] Broward private-lender mortgages (AcclaimWeb, needs Schannel curl)...
 python -u fl_lp\broward_mortgages.py >> "%LOG%" 2>&1
 
+echo [3f/5] Quo call sync (transcripts + coach flags onto the leads)...
+rem  Pulls every Quo call for the numbers Call Mode logged as dialled, attaches transcript/summary,
+rem  runs the language-law coach pass, writes quo_calls.json (gitignored - homeowner conversations,
+rem  this repo is PUBLIC). The [4/5] build then bakes the latest call per lead into the encrypted
+rem  payload as row.qc. Gated on quo.key: no key, no step, zero noise.
+if exist quo.key python -u quo_sync.py --days 3 >> "%LOG%" 2>&1
+
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 
