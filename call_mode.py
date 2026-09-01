@@ -67,16 +67,23 @@ VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Biscayne Solutions Group, po
 # LANGUAGE LAW (playbook lines 13-18, binding): "our senior advisor" NEVER "my supervisor" · the one
 # experience sentence is his, never the company's · never "my/our clients" · we INTRODUCE licensed
 # lenders, never "place loans" · money side only on attorneys, never case merits.
-_OPEN_BODY_EN = ("My name is {sender}. I am not selling anything and I am not calling to buy your "
-                 "house. There is a court case with your address on it, and I am probably the only "
-                 "person calling you this week who is NOT trying to take the property. Two minutes, "
-                 "then I will get out of your hair. Fair?")
+# 2026-09-01 -- aligned to the email. Someone who got the email and then the call has to hear ONE
+# company. The email leads with their sale date, names the four nots, and asks for one small thing;
+# so does this now. What did NOT change is the shape or the length: a cold call has about fifteen
+# seconds before a hang-up, so this stays name, nots, reason, tiny ask, fairness close. The email
+# can afford four paragraphs. This cannot.
+# "Two minutes" is THIS call. "Five minutes" is the advisor consult (FIFTEEN_SEC, VOICEMAIL). Two
+# different things and both true -- do not "unify" them.
+_OPEN_BODY_EN = ("My name is {sender} with Biscayne Solutions Group. I am not your lender, not the "
+                 "government, and I am not calling to buy your house. There is a court case on "
+                 "{st1}{date}, and I am probably the only person calling you this week who is NOT "
+                 "trying to take the property. Two minutes, then I will get out of your hair. Fair?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
-_OPEN_BODY_ES = ("Mi nombre es {sender}. No le vengo a vender nada, ni a comprarle la casa. Hay un "
-                 "caso en la corte con su dirección, y posiblemente soy el único que le llama esta "
-                 "semana que NO anda detrás de la propiedad. Dos minutos y lo dejo tranquilo. "
-                 "¿Le parece?")
+_OPEN_BODY_ES = ("Mi nombre es {sender}, de Biscayne Solutions Group. No soy su prestamista, no soy "
+                 "del gobierno, y no le vengo a comprar la casa. Hay un caso en la corte sobre "
+                 "{st1}{date}, y posiblemente soy el único que le llama esta semana que NO anda "
+                 "detrás de la propiedad. Dos minutos y lo dejo tranquilo. ¿Le parece?")
 
 # Two variants, because greeting the wrong "name" is worse than not greeting one.
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
@@ -156,6 +163,17 @@ _DRILL = next((p for p in _DRILL_CANDIDATES if os.path.exists(p)), _DRILL_CANDID
 # The local build refreshes this file whenever the vault parses; CI just reads it. No new exposure:
 # the same content already ships in PLAINTEXT inside docs/call/index.html's __SCRIPT__ payload.
 _DRILL_CACHE = os.path.join(HERE, 'call_objections.json')
+
+# ON-THE-SPOT BOOKING. Sourced from outreach_copy so the link on the phone page and the link in the
+# email are one string. The whole point of booking DURING the call is that the moment they say yes
+# is the only moment you have -- "I'll send you a link" loses the ones who meant it when they said
+# it. Falls back to the bare page rather than raising: a broken import must cost the prefill, never
+# the phone page.
+try:
+    from outreach_copy import BOOKING_URL as _BOOK
+except Exception:
+    _BOOK = 'cal.com/bsgflorida/free-records-review'
+BOOKING_URL = 'https://' + _BOOK.replace('https://', '')
 
 
 # The close script tells the homeowner the company name "is how it shows on your caller ID". That is
@@ -825,6 +843,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     # exact expected count so a third copy (e.g. in a comment) still fails the build.
     for _ph, _want in (('__SYNCJS__', 1), ('__SCRIPT__', 1), ('__OUTCOMES__', 1), ('__PAYLOAD__', 1),
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
+                       ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
@@ -843,7 +862,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     }
     return _PAGE.replace('__SYNCJS__', sync_js) \
                 .replace('__SCRIPT__', json.dumps(script, ensure_ascii=False)) \
-                .replace('__OUTCOMES__', oc) \
+                .replace('__OUTCOMES__', oc)                 .replace('__BOOKURL__', BOOKING_URL) \
                 .replace('__PAYLOAD__', json.dumps(enc_payload)) \
                 .replace('__BUILT__', built) \
                 .replace('__SIG__', sig) \
@@ -1059,8 +1078,14 @@ button.big{background:#1d4ed8;color:#fff}
 .oc button.dnc{border-color:var(--bad);color:#ff8a80}
 /* After-call panel. Every control here is >=48px because it is tapped one-handed, often walking. */
 .afterlab{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin:16px 0 7px}
-#tx,#txy,#txn,#nx,#vmdone{display:block;width:100%;min-height:52px;border-radius:12px;border:1px solid #2a3f6b;
+#tx,#txy,#txn,#nx,#vmdone,a#bk{display:block;width:100%;min-height:52px;border-radius:12px;border:1px solid #2a3f6b;
      background:#1d4ed8;color:#fff;font-size:17px;font-weight:700;margin-top:8px;touch-action:manipulation}
+/* The book-it link is an <a>, not a <button>, because it opens Cal.com in a new tab while the call
+   page keeps its state -- he is mid-call and losing the screen would lose the lead. Anchors do not
+   inherit the button rules above, so it is named here and given the line-height/centering a button
+   gets for free. GOLD, not blue: on APPOINTMENT SET this is the only thing on screen that matters. */
+a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:center;
+     line-height:52px;padding:0 10px}
 #tx.ghost,#txn.ghost{background:#0f1d3a;color:var(--ink)}
 #nx{background:#0f1d3a;color:var(--ink)}
 .cbrow{display:flex;gap:8px}
@@ -1221,6 +1246,7 @@ button.big{background:#1d4ed8;color:#fff}
 <div class="peek" id="peek"></div><div class="body" id="sbody"></div></div>
 <script>
 var ENC=__PAYLOAD__, OUTCOMES=__OUTCOMES__, BUILT="__BUILT__", SIG="__SIG__", BSIG="__BSIG__";
+var BOOKURL="__BOOKURL__";
 /* Person-keyed send counts from the server ledger. Authoritative across DEVICES and across cases
    that never shipped to this phone — without it a fresh phone reads every owner as never-texted and
    restarts the 3-touch ladder at touch 1, which is exactly the shape of the August email incident. */
@@ -1309,6 +1335,11 @@ function fillScript(t, r){
        full "1240 NW 54 ST, MIAMI, FL 33142" costs a segment and sounds like a mail merge. Falls back
        to the whole string when there is no comma, and to 'your property' when there is nothing. */
     .split('{st1}').join(((r && r.a) || '').split(',')[0].trim() || 'your property')
+    /* {date} — the email's strongest line is the owner's own sale date, so the call says it too.
+       Renders the whole clause (with its leading space) or NOTHING: an LP lead has no auction date
+       and 9999 is the no-date sentinel, so a bare "{date}" would read as "sale date of ." aloud. */
+    .split('{date}').join(
+      (r && r.x && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
     .split('{phone}').join(SENDER.phone || '')
     .replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
 }
@@ -2556,9 +2587,28 @@ function afterCall(r, o, nextC){
   /* NAME THE NUMBER. The text button targets r.p[phIdx] — whichever number he actually dialled —
      but the panel never said which, so on a 3-number lead he was approving a message to an unnamed
      recipient. If it is going to someone's phone, he gets to see whose. */
+  /* BOOK IT WHILE THEY ARE STILL ON THE LINE. Only on APPOINTMENT SET, and first on the screen,
+     because this is the one action with an expiry: the moment they agree is the moment to put it
+     on a calendar. "I'll email you a link" is where booked calls go to die.
+     Prefilled with the name and THE NUMBER HE ACTUALLY DIALLED (r.p[phIdx], not phones[0]) so he is
+     not retyping a phone number while someone waits on the other end. attendeePhoneNumber is the
+     field slug Cal.com uses for the "Attendee phone number" location, which is how both event types
+     are configured -- the owner never joins a video call, we ring them. */
+  var book = '';
+  if(o.k === 'appt'){
+    var bq = 'name=' + encodeURIComponent(firstName(r) || r.o || '')
+           + '&attendeePhoneNumber=' + encodeURIComponent('+1' + String(num||'').replace(/\D/g,'').slice(-10))
+           + '&notes=' + encodeURIComponent((r.a||'') + (r.c ? (' | case ' + r.c) : ''));
+    book = '<div class="afterlab">Put it on the calendar</div>'
+         + '<a class="btn" id="bk" href="' + BOOKURL + '?' + bq + '" target="_blank" rel="noopener">'
+         + '&#128197; Book it now &mdash; they are still on the line</a>'
+         + '<div class="mut" style="font-size:12px;margin-top:6px">Their name and this number are '
+         + 'already filled in. Pick the slot, confirm, done.</div>';
+  }
   $('app').innerHTML = '<div class="card">'
     + '<div class="addr" style="font-size:17px">Logged: '+esc(o.t)+'</div>'
     + '<div class="own">'+esc(firstName(r)||r.o||'')+' &middot; '+fmt(num)+'</div>'
+    + book
     + '<div class="afterlab">Follow-up text</div>' + txt
     + '<div class="afterlab">Call them back</div>'
     + '<div class="cbrow">'
