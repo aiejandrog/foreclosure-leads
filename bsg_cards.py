@@ -103,11 +103,19 @@ WEB = 'BSGFlorida.com'
 # uppercase disclosure, a 3-day right to cancel and a bar on fees before full performance. Jesse's
 # "we stopped foreclosures for thousands" was refused on the email templates for this reason; the
 # card holds the same line.
-SPECIALTY = 'Pre-foreclosure & foreclosure'
+# WIDENED 8/31 on Jesse's meeting note, and the reasoning is Carlos: he is in a car all day
+# meeting first-time buyers, investors and lenders, and nobody at 1am volunteers that they are
+# losing their house. A card that says only "foreclosure" cannot be handed to anyone else, so it
+# never leaves his pocket. "Financing" opens every conversation; "foreclosure options" keeps the
+# original situation named for the person who needs it. Still a SITUATION, never an outcome --
+# the FS 501.1377 line above holds unchanged.
+SPECIALTY = 'Financing & foreclosure options'
 SLOGAN = 'Every option, explained.'
-# "5-10 minutes" instead of "5 minutes": it sets an honest ceiling. A homeowner who believes the
-# call is 5 minutes and finds it runs 9 feels handled; the same call promised as 5-10 does not.
-CONSULT = 'Free 5-10 minute consultation'
+# Jesse, 8/31 meeting, verbatim: "don't say 5 to 10 minute consultation, just free consultation."
+# He is right for a reason the old 5-10 rationale missed: a duration turns the offer into an
+# appointment. "Free consultation" is a standing door. The honest-ceiling concern lives in how the
+# call is RUN, not on the card.
+CONSULT = 'Free consultation'
 
 # ---- QR --------------------------------------------------------------------------------------
 # Points at the SITE, not a tel: link. A tel: QR fires a dial the instant it is scanned, which is
@@ -490,8 +498,11 @@ def back_short():
             # "Understand the timeline" -- WHICH timeline? The front answers that, but a card
             # lands back-up half the time and this side has to stand alone. "Foreclosure timeline"
             # names it and is three characters SHORTER, so it costs no width against the QR gutter.
-            '<div class="paths">Sell for cash &middot; Refinance &middot; Home equity<br>'
-            'List with a realtor &middot; Foreclosure timeline</div>'
+            # THE FULL MENU, 8/31. Two lines: line one is money coming IN (what a stranger in
+            # Carlos's car wants), line two is trouble going OUT (what the doorstep needs). Same
+            # character budget as the old two-liner, so the QR gutter is untouched.
+            '<div class="paths">First home &middot; Refinance &middot; Investor loans<br>'
+            'Credit lines &middot; Sell for cash &middot; Foreclosure options</div>'
             '<div class="ph2">%s</div>'
             '<div class="sub">CALL OR TEXT &middot; %s</div>'
             '<div class="web2">%s</div>'
