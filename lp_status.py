@@ -45,6 +45,11 @@ IN = os.path.join(HERE, 'lis_pendens.json')
 CACHE = os.path.join(HERE, '_lp_status_cache.json')
 
 # Terminal clerk statuses. On a lead with no sale scheduled these mean the case ended.
+# How long a clerk status is trusted before it is fetched again. Two weeks is a compromise:
+# short enough to catch a reinstatement while the lead is still being worked, long enough
+# that the nightly re-checks ~1/14th of the Miami-Dade book per run instead of all of it.
+STATUS_TTL_DAYS = 14
+
 TERMINAL = {'CLOSED', 'RECLOSED', 'PJREPINACT', 'DISPOSED'}
 # Docket codes that corroborate a true dismissal of the CASE. NVDU is deliberately excluded — it
 # dismisses UNKNOWN PARTIES, not the action, and appears in healthy cases (see the docstring).
@@ -102,13 +107,30 @@ def main():
     feed = [r for r in feed if (r.get('county') or 'MIAMI-DADE') == 'MIAMI-DADE']
     cases = [str(r.get('case') or '').strip() for r in feed]
     cases = [c for c in cases if c and '-' in c]          # skip synthesized LP-XXXX keys
-    todo = [c for c in cases if c not in cache]
-    print('%d LP case(s) · %d to check (%d cached)' % (len(cases), len(todo), len(cases) - len(todo)))
+    # STALE-CACHE RE-CHECK (2026-09-01). This was `c not in cache`, so a case checked ONCE as OPEN
+    # was never looked at again -- and reinstatement is most common in the first weeks after filing,
+    # exactly the window we then nurture for months. The board therefore kept showing owners who had
+    # already fixed it, which is what reps hear on the phone: "I paid that off." A status is a
+    # snapshot of a moving case, so it gets a shelf life.
+    now = time.time()
+    fresh = 0
+    todo = []
+    for c in cases:
+        rec = cache.get(c)
+        if rec is None:
+            todo.append(c)
+        elif (now - float(rec.get('at') or 0)) > STATUS_TTL_DAYS * 86400:
+            todo.append(c)                                   # re-check, do not trust the old answer
+        else:
+            fresh += 1
+    print('%d LP case(s) · %d to check (%d still fresh, TTL %dd)'
+          % (len(cases), len(todo), fresh, STATUS_TTL_DAYS))
 
     for i, c in enumerate(todo, 1):
         rec = check(c)
         if rec:
-            cache[c] = rec
+            rec['at'] = time.time()      # what the TTL above reads. Without it every entry is
+            cache[c] = rec               # permanently "fresh" and the re-check never fires.
         if i % 10 == 0 or i == len(todo):
             print('  %d/%d' % (i, len(todo)))
             json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=0)   # checkpoint
