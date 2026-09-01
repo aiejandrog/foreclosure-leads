@@ -273,11 +273,11 @@
   "ts": "2026-08-31"
  },
  "2025-009489-CA-01": {
-  "title_status": "unverified",
-  "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
-  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "title_status": "transferred",
+  "title_owner": "CAMILA BALEEIRO CHAMADOIRA; DOUGLAS A FERRARINI STRABELLI; RENATA FALCAO BALEEIRO",
+  "title_flag": "OWNERSHIP CHANGED — VERIFY",
+  "title_evidence": "LIVE appraiser owner 'CAMILA BALEEIRO CHAMADOIRA; DOUGLAS A FERRARINI STRABELLI; RENATA FALCAO BALEEIRO' is not the foreclosure defendant 'NMB Place Owner, LLC'",
+  "ts": "2026-09-01"
  },
  "502022CA006893XXXXMB": {
   "title_status": "clear",
@@ -305,7 +305,7 @@
   "title_owner": "LUKASIK GAIL DRAKE",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "live owner 'LUKASIK GAIL DRAKE' shares only a surname with the defendant 'DRAKE GARY EST' — verify it is the same household",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA004168XXXAMB": {
   "title_status": "clear",
@@ -417,7 +417,7 @@
   "title_owner": "CHRISTOPHER REGAN; LEONTE REGAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-017359-CA-01": {
   "title_status": "clear",
@@ -431,7 +431,7 @@
   "title_owner": "13925 OLD CUTLER ROAD LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-18-023358": {
   "title_status": "unverified",
@@ -445,35 +445,35 @@
   "title_owner": "ALUBI, NELSON BRIGHT",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-007278": {
   "title_status": "clear",
   "title_owner": "DISLA, JONATHAN ANTHONY DIPP, KIMBERLEY MARGARITA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-009405": {
   "title_status": "clear",
   "title_owner": "LEWIS, CHALEEMA & GARY ST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-013582": {
   "title_status": "clear",
   "title_owner": "LEXDEN MANAGEMENT LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-013679": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-000980": {
   "title_status": "clear",
@@ -487,35 +487,35 @@
   "title_owner": "HART, MICHAEL EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-005291": {
   "title_status": "clear",
   "title_owner": "WRIGHT, JAMES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-012333": {
   "title_status": "clear",
   "title_owner": "SAHAI CAPITAL MANAGEMENT LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-012338": {
   "title_status": "clear",
   "title_owner": "MF FINISHING REFINISHING LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-013711": {
   "title_status": "clear",
   "title_owner": "FRANCIS, ALLAKEY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-016631": {
   "title_status": "unverified",
@@ -536,14 +536,14 @@
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA003828XXXAMB": {
   "title_status": "clear",
   "title_owner": "MOLTIMER KARL Y & MOLTIMER YAMILEE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CC014550XXXASB": {
   "title_status": "clear",
@@ -564,21 +564,21 @@
   "title_owner": "KENNETH NISTICO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-015834": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-015843": {
   "title_status": "clear",
   "title_owner": "MOHAN18 INVESTMENTS LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-017722": {
   "title_status": "clear",
@@ -599,28 +599,28 @@
   "title_owner": "BRAZIER RANDI A",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009956XXXAMB": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CC020210XXXAMB": {
   "title_status": "clear",
   "title_owner": "ZEPHIRIN ASHLEY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00190": {
   "title_status": "clear",
   "title_owner": "HUDSON CHARTERS LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00205": {
   "title_status": "clear",
@@ -634,98 +634,98 @@
   "title_owner": "PLATINUM EDGE LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00209": {
   "title_status": "clear",
   "title_owner": "JACOB JUDGE &W ORALEA E",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00199": {
   "title_status": "clear",
   "title_owner": "ROBERTO R RODRIGUEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00195": {
   "title_status": "clear",
   "title_owner": "MARIA BRENAL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00196": {
   "title_status": "clear",
   "title_owner": "JOSE GOMEZ &W AURELIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00197": {
   "title_status": "clear",
   "title_owner": "MANUEL OROSA &W MARIA C",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00198": {
   "title_status": "clear",
   "title_owner": "LUISA A PEREZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00200": {
   "title_status": "clear",
   "title_owner": "ABELARDO FERRER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026A00201": {
   "title_status": "clear",
   "title_owner": "MIGUEL A BARRERA &W LIDIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-017560": {
   "title_status": "clear",
   "title_owner": "FRIEDLAND, DANIEL M H/E JEAN-JOSEPH, GUERLINE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-000364": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-002894": {
   "title_status": "clear",
   "title_owner": "GOLDMAN GROUP LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-003829": {
   "title_status": "clear",
   "title_owner": "OCON RE ACQUISITIONS LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-004176": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502023CA013120XXXXMB": {
   "title_status": "clear",
@@ -739,70 +739,70 @@
   "title_owner": "PAREDES WALTER A",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009790XXXAMB": {
   "title_status": "clear",
   "title_owner": "LAYTON RYAN M",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009901XXXAMB": {
   "title_status": "clear",
   "title_owner": "ARROGANTE JUDY R & HERNANDEZ CHERYL L & HERNANDEZ EMMANUEL P",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COWE-12-011377": {
   "title_status": "clear",
   "title_owner": "PORRELLO, LUIS & ELIZABETH H/E PORRELLO, PATRICIA MATILDE ET",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CC017325XXXAMB": {
   "title_status": "clear",
   "title_owner": "CANAVAN BRENDA & GUADAMUZ LUIS MIGUEL ARAYA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2018-025121-CA-01": {
   "title_status": "clear",
   "title_owner": "ALINA LEMUS LE; REM ALIMARY D L CARIDAD LEMUS; REM HERIBERTO LEMUS; REM JORGE ENRIQUE LEMUS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2021-005847-CA-01": {
   "title_status": "clear",
   "title_owner": "PAUL GREEN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2021-020292-CA-01": {
   "title_status": "clear",
   "title_owner": "LUIS NIETO EST OF",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2014-015252-CA-01": {
   "title_status": "clear",
   "title_owner": "KEVIN L DESIRE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2022-021281-CA-01": {
   "title_status": "clear",
   "title_owner": "JOSE SALDANA; LAURA SALDANA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-006425-CA-01": {
   "title_status": "clear",
@@ -816,21 +816,21 @@
   "title_owner": "CESAR M ROMAN; MARTHA C ROMAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-024100-CA-01": {
   "title_status": "clear",
   "title_owner": "Y RAMPRASAD RAO; SIMONE CRISTINA BEZZERA DA SILVA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-009333-CA-01": {
   "title_status": "clear",
   "title_owner": "EDWARD D MILLER &W LAURA K",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2021-002260-CA-01": {
   "title_status": "clear",
@@ -844,315 +844,315 @@
   "title_owner": "MILA 2209 LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-013835-CA-01": {
   "title_status": "clear",
   "title_owner": "D & A INVESTMENT GROUP ONE LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2013-021892-CA-01": {
   "title_status": "clear",
   "title_owner": "ROSA SOSA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2016-029192-CA-01": {
   "title_status": "clear",
   "title_owner": "NIDIA N MAGARINO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-013556-CA-01": {
   "title_status": "clear",
   "title_owner": "COREY PHILIP ROWTHAM",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-007229-CA-01": {
   "title_status": "clear",
   "title_owner": "VICTOR PRINSTEIN GUZMAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-012679-CA-01": {
   "title_status": "clear",
   "title_owner": "JUAN MIGUEL MARTINEZ MELEAN; KATIA QUINDELAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-022289-CA-01": {
   "title_status": "clear",
   "title_owner": "ROBERTO CARLOS SANCHEZ MARTELL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-017182-CA-01": {
   "title_status": "clear",
   "title_owner": "SILVIO LEONEL GALVEZ SR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-020875-CA-01": {
   "title_status": "clear",
   "title_owner": "LAMILA LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-002770-CA-01": {
   "title_status": "clear",
   "title_owner": "10867 NW 59TH ST DORAL FL 33178; LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-008073-CA-01": {
   "title_status": "clear",
   "title_owner": "PARAMOUNT WORLD 4008 BEATRIZ LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-010119-CA-01": {
   "title_status": "clear",
   "title_owner": "ANDREA FRANCESCO RICCHIUTO; NAZARENA ABRIL LERNER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-012745-CA-01": {
   "title_status": "clear",
   "title_owner": "MELISSA J OUAZANA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-019956-CA-01": {
   "title_status": "clear",
   "title_owner": "JOHAN C ACEVEDO GIRALDO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-024501-CA-01": {
   "title_status": "clear",
   "title_owner": "LOBE4 LLC TRS; URBANICK TRUST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-005786-CA-01": {
   "title_status": "clear",
   "title_owner": "D3N9 BAYSHORE HOLDINGS LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-009519-CA-01": {
   "title_status": "clear",
   "title_owner": "TATYANA PAULINE ARBOLEDA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-007090-CA-01": {
   "title_status": "clear",
   "title_owner": "EMPORIUM LOGISTICS LLC 1706 LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-022144-CA-01": {
   "title_status": "clear",
   "title_owner": "TONY V WILLIAMS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-017006-CA-01": {
   "title_status": "clear",
   "title_owner": "BUDRIX MONROE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-017395-CA-01": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-22-012088": {
   "title_status": "clear",
   "title_owner": "OROZCO AGUIRRE, PAOLA ALEXANDRA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-22-018878": {
   "title_status": "clear",
   "title_owner": "BAKER, DERRICK L",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-002137": {
   "title_status": "unverified",
   "title_owner": "KING, ALVIN",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "live owner 'KING, ALVIN' shares only a surname with the defendant 'ANTHONY KING' — verify it is the same household",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-007986": {
   "title_status": "clear",
   "title_owner": "BORELAND, CAROL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-011310": {
   "title_status": "clear",
   "title_owner": "FARRELL, GLENNYS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-012974": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-019914": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502018CA001390XXXXMB": {
   "title_status": "clear",
   "title_owner": "SABA PETER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502021CA012004XXXXMB": {
   "title_status": "clear",
   "title_owner": "DALLAL FARID",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA003253XXXAMB": {
   "title_status": "clear",
   "title_owner": "SANON OLICHA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA001116XXXAMB": {
   "title_status": "transferred",
   "title_owner": "AIKEN MIRANDA & JONES STANLEY E",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'AIKEN MIRANDA & JONES STANLEY E' is not the foreclosure defendant 'DP8484G LLC'",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA001688XXXAMB": {
   "title_status": "unverified",
   "title_owner": "DANTZLER LINDEN & HAGOPIAN ROSEMARIE TRUST FBO",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "live owner 'DANTZLER LINDEN & HAGOPIAN ROSEMARIE TRUST FBO' shares only a surname with the defendant 'DANTZLER GINA' — verify it is the same household",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA001782XXXAMB": {
   "title_status": "clear",
   "title_owner": "MCKINNEY MATTHEW O EST & MCKINNEY MIGUEL O",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA007670XXXAMB": {
   "title_status": "clear",
   "title_owner": "GARCIA BENIGNO EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA008239XXXAMB": {
   "title_status": "clear",
   "title_owner": "TRUST FINANCIAL LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009225XXXAMB": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009251XXXAMB": {
   "title_status": "clear",
   "title_owner": "SPANGLISH REALTY LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009304XXXAMB": {
   "title_status": "clear",
   "title_owner": "PROPEL HOME INVESTMENTS LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA010082XXXAMB": {
   "title_status": "clear",
   "title_owner": "ARCHER ROY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA010561XXXAMB": {
   "title_status": "clear",
   "title_owner": "TAGLIAFERRI ALBERT",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA011946XXXAMB": {
   "title_status": "clear",
   "title_owner": "FASANO NANCY E & KHARE DENNIS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012364XXXAMB": {
   "title_status": "clear",
   "title_owner": "ROONEY DENISE M",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA013009XXXAMB": {
   "title_status": "clear",
   "title_owner": "ARIAS ALBERY R CASTILLO & GARCIA RACIELLE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA000715XXXAMB": {
   "title_status": "unverified",
@@ -1166,700 +1166,700 @@
   "title_owner": "BARBARA EXPOSITO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-024086-CA-01": {
   "title_status": "clear",
   "title_owner": "ALICIA RIVERO; EMILY GAYLE MAZARIEGOS; NATHAN GARY MAZARIEGOS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-000691-CA-01": {
   "title_status": "clear",
   "title_owner": "JERI LYNN KLEMME ZAIAC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-047636-CC-25": {
   "title_status": "clear",
   "title_owner": "JAVIER CALVEIRA &W CELIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-023701-CA-01": {
   "title_status": "clear",
   "title_owner": "MARIA MOHEDANO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-020778-CA-01": {
   "title_status": "clear",
   "title_owner": "PLATINUM INVESTMENTS SERVICES LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-20-003482": {
   "title_status": "clear",
   "title_owner": "AQUINO, JOSE R & TERESA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-005992": {
   "title_status": "clear",
   "title_owner": "NIKITINA, OKSANA NIKITIN, ALEX",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-000582": {
   "title_status": "clear",
   "title_owner": "VANGEL LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-007250": {
   "title_status": "clear",
   "title_owner": "PERRY, HYACINTH EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-008884": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010887": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-011571": {
   "title_status": "clear",
   "title_owner": "BIRDSONG, JACQULYN K BRADY, FRANK J",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-015921": {
   "title_status": "clear",
   "title_owner": "COX, MAURICE ANTHONY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-018569": {
   "title_status": "clear",
   "title_owner": "MVA PROPERTIES INVESTOR LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-019324": {
   "title_status": "clear",
   "title_owner": "GELIN, MALIK SHABAZZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-001375": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-003943": {
   "title_status": "clear",
   "title_owner": "GAITAN, ARTURO & HERRERA, DANIA DEL CARMEN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-005471": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA005588XXXAMB": {
   "title_status": "clear",
   "title_owner": "SMALL INVESTMENTS GROUP LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA007281XXXAMB": {
   "title_status": "clear",
   "title_owner": "BUCKLEY PAULA P",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009950XXXAMB": {
   "title_status": "clear",
   "title_owner": "HARRIS JASON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA010106XXXAMB": {
   "title_status": "clear",
   "title_owner": "SCHARE MARK",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA010210XXXAMB": {
   "title_status": "clear",
   "title_owner": "MCKAY VINCENT",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA010873XXXAMB": {
   "title_status": "clear",
   "title_owner": "BRYSTE HOLDINGS LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA000863XXXAMB": {
   "title_status": "clear",
   "title_owner": "EMGE MONICA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA002392XXXAMB": {
   "title_status": "clear",
   "title_owner": "BOMTEMPO DIONE LOPES & BOMTEMPO JULIO MARIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA003278XXXAMB": {
   "title_status": "clear",
   "title_owner": "LEE HANG BAE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA003338XXXAMB": {
   "title_status": "clear",
   "title_owner": "DUCASSE SUZANNE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA003735XXXAMB": {
   "title_status": "clear",
   "title_owner": "LAURENT KATIANA & MARCELLIN JAMES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA005546XXXAMB": {
   "title_status": "transferred",
   "title_owner": "PENDERGAST SEAN & PENDERGAST TORONA M",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'PENDERGAST SEAN & PENDERGAST TORONA M' is not the foreclosure defendant 'HI-LAND PROPERTIES LLC'",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-19-009401": {
   "title_status": "clear",
   "title_owner": "BAIN, LEVARDO L BAIN, MARKEYA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-22-002853": {
   "title_status": "clear",
   "title_owner": "COBA, JOSE VICENTE ENSHIELD CORE TR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-017991": {
   "title_status": "clear",
   "title_owner": "CUERVAS, MARIA KATIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-006544": {
   "title_status": "clear",
   "title_owner": "MCLEAN, GARY ANTHONY SOMMERS, JANET ETAL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-006913": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-013583": {
   "title_status": "clear",
   "title_owner": "MICHEL, WISLYNE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-015125": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-000169": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-000539": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-002862": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-004648": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-006953": {
   "title_status": "clear",
   "title_owner": "TIMNEY, WARREN J JR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010103": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010474": {
   "title_status": "transferred",
   "title_owner": "SUTHERLAND, CLAUDETTE M",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'SUTHERLAND, CLAUDETTE M' is not the foreclosure defendant 'NORMA SINCLAIR'",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010782": {
   "title_status": "clear",
   "title_owner": "MONTEMAYOR, XAVIER & KAREN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-011038": {
   "title_status": "clear",
   "title_owner": "LATIMORE, TEMATHA & TERRANCE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-012593": {
   "title_status": "clear",
   "title_owner": "ULLOA, LISBETT H/E ULLOA, CARLOS A",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-013087": {
   "title_status": "clear",
   "title_owner": "DIPNARINE, VISHNU",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-013787": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-016249": {
   "title_status": "clear",
   "title_owner": "CROSBY, DENISE Y",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-017070": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-017774": {
   "title_status": "clear",
   "title_owner": "JACOB, VERNIECE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-019694": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-003494": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-004068": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COCE-26-003631": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CONO-25-059543": {
   "title_status": "clear",
   "title_owner": "PLUA MARISCAL, HUGO FRANCISCO H/E LOPEZ, LUIS GABRIEL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CONO-25-078184": {
   "title_status": "clear",
   "title_owner": "YATES, GILBERT",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CONO-25-085511": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CONO-25-091124": {
   "title_status": "clear",
   "title_owner": "PEREZ, NICHOLAS R",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COSO-26-001621": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COWE-26-021926": {
   "title_status": "clear",
   "title_owner": "LAPAIX, SUNSHINE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COWE-26-021931": {
   "title_status": "clear",
   "title_owner": "MALLARD, LAWRENCE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COWE-26-027639": {
   "title_status": "clear",
   "title_owner": "SAINT AMOUR, LICIA H/E SAINT AMOUR, JEAN C",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-019864-CA-01": {
   "title_status": "clear",
   "title_owner": "EDDIE SQUIRE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-002125-CA-01": {
   "title_status": "clear",
   "title_owner": "JOANNE MARIE JONES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-016738-CA-01": {
   "title_status": "clear",
   "title_owner": "SANDRA M AURICCHIO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-008949-CA-01": {
   "title_status": "clear",
   "title_owner": "MICHAEL PORTER &W; SHANDA PORTER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-022011-CA-01": {
   "title_status": "clear",
   "title_owner": "CARMEN ROSARIO &H; CARLOS TROCHEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-011937-CA-01": {
   "title_status": "clear",
   "title_owner": "BERTHA PUENTE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-020489-CA-01": {
   "title_status": "clear",
   "title_owner": "JESSICA PAULO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-024867-CA-01": {
   "title_status": "clear",
   "title_owner": "DIOVANNI MELLER &W; ADRIANA D SOARES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-003470-CA-01": {
   "title_status": "clear",
   "title_owner": "WINSTON CHIAO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2020-017725-CA-01": {
   "title_status": "clear",
   "title_owner": "YOSEF SASON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-016943-CA-01": {
   "title_status": "clear",
   "title_owner": "KETCHTECHIA GORDON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-024541-CA-01": {
   "title_status": "clear",
   "title_owner": "S J T K ENTERPRISE LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-025065-CA-01": {
   "title_status": "clear",
   "title_owner": "OSCAR P GARCIA EST OF",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-085123-CC-25": {
   "title_status": "clear",
   "title_owner": "NESTOR S ROJAS; ARIANA JIMENEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2015-011276-CA-01": {
   "title_status": "clear",
   "title_owner": "ABE EVANS &; ALBERTA WAGGONER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-003527-CA-01": {
   "title_status": "clear",
   "title_owner": "8925 COLLINS LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-014789-CA-01": {
   "title_status": "clear",
   "title_owner": "LOSADA LEHIGH INVESTMENT; GROUP LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-004452-CA-01": {
   "title_status": "clear",
   "title_owner": "EDHEL GUARDIOLA DE CASTRO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-007496-CA-01": {
   "title_status": "clear",
   "title_owner": "ANIXA MOREJON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-017868-CA-01": {
   "title_status": "clear",
   "title_owner": "DANIEL CALDERON; OLGA KHUDOLEI; MOHAMED YOUNESS ADLAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-003300-CA-01": {
   "title_status": "clear",
   "title_owner": "ORISLANDY DIAZ MARRERO JIMENEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-010706-CA-01": {
   "title_status": "clear",
   "title_owner": "WARREN ALLEN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-003935-CA-01": {
   "title_status": "clear",
   "title_owner": "GADI COHEN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-018063-CA-01": {
   "title_status": "clear",
   "title_owner": "JUDA TYRNAUER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-019128-CA-01": {
   "title_status": "clear",
   "title_owner": "THE STUDIO HOUSE LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-013517-CA-01": {
   "title_status": "clear",
   "title_owner": "ALBERTO BURON EST OF",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-024835-CA-01": {
   "title_status": "clear",
   "title_owner": "MONIQUE MORGAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-013365-CA-01": {
   "title_status": "clear",
   "title_owner": "SMITH AND JACKSON HOME; INVESTMENT LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-020414-CA-01": {
   "title_status": "clear",
   "title_owner": "TETIANA ZHYLENKO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-007592-CC-25": {
   "title_status": "clear",
   "title_owner": "MINERVA DELPLANCHE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-013373-CA-01": {
   "title_status": "clear",
   "title_owner": "NITZA FERRER; ZAYRE FERRER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502018CA016108XXXXMB": {
   "title_status": "clear",
   "title_owner": "MACKEY ELIZABETH L & ELIZABETH MACKEY TR TITL HLDR & MACKEY ELIZABETH L TR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA000122XXXAMB": {
   "title_status": "clear",
   "title_owner": "MONTAQUE AUDLEY L EST & ROLAND ANNETTA J EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA002976XXXAMB": {
   "title_status": "clear",
   "title_owner": "PAUL MARIE MIRLANDE F & PAUL OVIDE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA007179XXXAMB": {
   "title_status": "clear",
   "title_owner": "GAYDOS TAMMY & HOCKMAN SYBIL EST & HORNACKY EMIL & HORNACKY JOHN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA009313XXXAMB": {
   "title_status": "clear",
@@ -1873,623 +1873,623 @@
   "title_owner": "SAFKO CAROLINA & SAFKO JOHN T",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA006426XXXAMB": {
   "title_status": "clear",
   "title_owner": "KALIEVA FANIYA & KALIEVA RUMIYA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA006795XXXAMB": {
   "title_status": "clear",
   "title_owner": "KALTER RICHARD BARRY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA007842XXXAMB": {
   "title_status": "clear",
   "title_owner": "NOVIKOVA NATALYA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA010240XXXAMB": {
   "title_status": "clear",
   "title_owner": "RIESNER PHYLLIS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA011563XXXAMB": {
   "title_status": "clear",
   "title_owner": "RANDOLPH GARRY F",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012366XXXAMB": {
   "title_status": "clear",
   "title_owner": "KALANTARI REZA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012401XXXAMB": {
   "title_status": "clear",
   "title_owner": "BROWN DERREK P",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012761XXXAMB": {
   "title_status": "transferred",
   "title_owner": "INDIANA BETTER HOUSING LLC",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'INDIANA BETTER HOUSING LLC' is not the foreclosure defendant 'JONES SAUNDERS TIANA'",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA013468XXXAMB": {
   "title_status": "clear",
   "title_owner": "BLOSSOM STEPHANIE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CC011880XXXAMB": {
   "title_status": "clear",
   "title_owner": "SEPULVEDA RIGOBERTO JR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CC017581XXXASB": {
   "title_status": "clear",
   "title_owner": "VELEZ MARIA M",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA000479XXXAMB": {
   "title_status": "clear",
   "title_owner": "JACKSON CARSON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CC004965XXXASB": {
   "title_status": "clear",
   "title_owner": "GURITZKY SANFORD",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-016285-CA-01": {
   "title_status": "clear",
   "title_owner": "IVAN ALEJANDRO ONA RODRIGUEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-000557": {
   "title_status": "clear",
   "title_owner": "ZINGALE, JOHN C & ZINGALE, RACHEL P",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-005200": {
   "title_status": "clear",
   "title_owner": "HENDY, NORMA E H/E INGRAM, BRANDON & COPELAND, C",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-007513": {
   "title_status": "clear",
   "title_owner": "LULLY, ABNER EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-016060": {
   "title_status": "clear",
   "title_owner": "LEWIS, RODERICK J HUTCHINS, AMBER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-016105": {
   "title_status": "clear",
   "title_owner": "WALLACE, MICHAEL WILLIAM",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-001436": {
   "title_status": "clear",
   "title_owner": "RAY, RONNIE & STEPHANIE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-004685": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-016521-CA-01": {
   "title_status": "clear",
   "title_owner": "JESUS VALDES EST OF",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-021770-CA-01": {
   "title_status": "clear",
   "title_owner": "JONATHAN CHRISTOPHER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-010938-CA-01": {
   "title_status": "clear",
   "title_owner": "CLIFFORD JAMES HARRIS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-000342-CA-01": {
   "title_status": "clear",
   "title_owner": "ROBERT L CAULEY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-000769-CA-01": {
   "title_status": "clear",
   "title_owner": "ROSA F TRUJILLO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-014438-CA-01": {
   "title_status": "clear",
   "title_owner": "SMITH & JACKSON HOME; INVESTMENT LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-017337-CA-01": {
   "title_status": "clear",
   "title_owner": "SOLOMON FELDBRAND; CHAVA LEAH FELDBRAND",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-018268-CA-01": {
   "title_status": "clear",
   "title_owner": "MELVA MOORE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-004629-CA-01": {
   "title_status": "clear",
   "title_owner": "ROBERT LAVECCHIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-176496-CC-05": {
   "title_status": "clear",
   "title_owner": "CHRISTINE MARAGRET WICKHAM",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-017049-CA-01": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-014031": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-014339": {
   "title_status": "clear",
   "title_owner": "PORTILLO, PAMELA KAY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-000879": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-009494": {
   "title_status": "clear",
   "title_owner": "Y APARTMENTS LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010235": {
   "title_status": "clear",
   "title_owner": "MALLARD, LAWRENCE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010318": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010917": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-012166": {
   "title_status": "clear",
   "title_owner": "XCBC LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-014953": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-019213": {
   "title_status": "clear",
   "title_owner": "GREEN, ALLAN J",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-005839": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA009238XXXAMB": {
   "title_status": "clear",
   "title_owner": "DERICE ANCELOT & DERICE SIMONE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA012300XXXAMB": {
   "title_status": "clear",
   "title_owner": "RANJIJIFROODY HOMAYOUN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2658TD": {
   "title_status": "clear",
   "title_owner": "BROWN ROGER L & CARPENTER DANIEL T",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2661TD": {
   "title_status": "clear",
   "title_owner": "TARPON IV LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2666TD": {
   "title_status": "clear",
   "title_owner": "MALBEC II LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2686TD": {
   "title_status": "clear",
   "title_owner": "CANAL POINT LAND TRUST & HUNTINGTON JULIA TR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2718TD": {
   "title_status": "clear",
   "title_owner": "CANOPUS INVESTMENT GROUP LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2786TD": {
   "title_status": "clear",
   "title_owner": "HILL ANNIE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2816TD": {
   "title_status": "clear",
   "title_owner": "DUC NGUYEN TOAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2825TD": {
   "title_status": "clear",
   "title_owner": "SCHAEDLER LOUISE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2831TD": {
   "title_status": "clear",
   "title_owner": "ALISA INVESTMENT LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2835TD": {
   "title_status": "clear",
   "title_owner": "BENIES INVESTMENT GROUP",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2836TD": {
   "title_status": "unverified",
   "title_owner": "BATTICK LIVING TRUST & BATTICK MANDRE M TR & BATTICK MELISSA TR",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "live owner 'BATTICK LIVING TRUST & BATTICK MANDRE M TR & BATTICK MELISSA TR' shares only a surname with the defendant 'BATTICK ANDRE' — verify it is the same household",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2837TD": {
   "title_status": "clear",
   "title_owner": "CLEMENTS SHAWN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2838TD": {
   "title_status": "transferred",
   "title_owner": "AMERSON KIMBERLY & JARRETT LAMONT",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'AMERSON KIMBERLY & JARRETT LAMONT' is not the foreclosure defendant 'GAYLE MASON RENNIE BELL EST'",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2841TD": {
   "title_status": "clear",
   "title_owner": "ISLAND BEST RESTAURANT LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2842TD": {
   "title_status": "clear",
   "title_owner": "WANG YALI",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2844TD": {
   "title_status": "clear",
   "title_owner": "ONE COMMUNITY CHURCH INC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2845TD": {
   "title_status": "clear",
   "title_owner": "STEWARTS RESORT PROPERTIES LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2847TD": {
   "title_status": "clear",
   "title_owner": "INDIAN WELLS HMOWN ASSN INC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2853TD": {
   "title_status": "clear",
   "title_owner": "GELNIK ISIDORE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-2856TD": {
   "title_status": "clear",
   "title_owner": "LAKE EDWARD J TRUST & LAKE EDWARD J TR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-002302": {
   "title_status": "clear",
   "title_owner": "IBSTRKN LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-012073": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-002213": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-015034": {
   "title_status": "clear",
   "title_owner": "DIANA CHAVEZ INVESTMENTS CORP",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-007478": {
   "title_status": "clear",
   "title_owner": "JONES, VERONICA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-012096": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-012839": {
   "title_status": "clear",
   "title_owner": "HIGHLAND, DONALD LEE EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-017633": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-019912": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-004770": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-004849": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CC006407XXXAMB": {
   "title_status": "clear",
   "title_owner": "ATLANTIC PIONEER GROUP LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COCE-25-018211": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COCE-25-047212": {
   "title_status": "clear",
   "title_owner": "VIRGO, DOROTHY JEAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COCE-26-003308": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COCE-26-030843": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CONO-25-069601": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CONO-26-046833": {
   "title_status": "clear",
   "title_owner": "MARIGOLD TRUST LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COWE-24-017753": {
   "title_status": "clear",
   "title_owner": "SIMPSON, LESTINE W H/E SIMPSON, KAREN S",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COWE-25-015279": {
   "title_status": "clear",
   "title_owner": "BRADWELL, DEMARIUS H/E MONESTIME, QUANDA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CC008275XXXAMB": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-024487-CA-01": {
   "title_status": "clear",
   "title_owner": "FRANCISCO ABREU",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-003696-CA-01": {
   "title_status": "clear",
   "title_owner": "ROSA M MARTINEZ LE; REM JOHN CHRISTOPHER CARLSON JR; RAUL ALMEIDA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-017147-CA-01": {
   "title_status": "clear",
@@ -2503,280 +2503,280 @@
   "title_owner": "EVONNE JUDSON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-009415-CA-01": {
   "title_status": "clear",
   "title_owner": "OSCAR ALEXANDER ANDINO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-017447-CA-01": {
   "title_status": "clear",
   "title_owner": "SABRINA SALOMON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-000208-CA-01": {
   "title_status": "clear",
   "title_owner": "CARMEN VASQUEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-000472-CA-01": {
   "title_status": "clear",
   "title_owner": "MARTHA B CHARLES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-027264-CA-01": {
   "title_status": "clear",
   "title_owner": "JOHN MCCONNELL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-017186-CA-01": {
   "title_status": "clear",
   "title_owner": "ADLAI A WILSON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-002359-CA-01": {
   "title_status": "clear",
   "title_owner": "JORGE CABRERA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2021-007519-CA-01": {
   "title_status": "clear",
   "title_owner": "VINCENT DIMINO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-006213-CA-01": {
   "title_status": "clear",
   "title_owner": "ISABEL LLAMOSAS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-016135-CA-01": {
   "title_status": "clear",
   "title_owner": "VELIMA AUGUSTIN; JACOB AUGUSTIN; CITE LORISTON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-000483-CA-01": {
   "title_status": "clear",
   "title_owner": "JACOBY THOMAS; QUIANNA S SHERIFF",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-020672-CA-01": {
   "title_status": "clear",
   "title_owner": "JEWELL F JOHNSON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-011237-CA-01": {
   "title_status": "clear",
   "title_owner": "FRANCISCO HECHAVARRIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-023471-CA-01": {
   "title_status": "clear",
   "title_owner": "MARIAGRACIA ESSENWAGNER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-008367-CA-01": {
   "title_status": "clear",
   "title_owner": "VICTORY TAX SERVICES LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-010877-CA-01": {
   "title_status": "clear",
   "title_owner": "JIMMY RONALD CARRILLO OLIN; IVIS HITCHCOCK",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-016438-CA-01": {
   "title_status": "clear",
   "title_owner": "CESAR A MARTINEZ TRS; THE CESAR A MARTINEZ REV LIV TR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-021064-CA-01": {
   "title_status": "clear",
   "title_owner": "SARA CARDONA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-024235-CA-01": {
   "title_status": "clear",
   "title_owner": "MARTA R FAUSTINO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-001532-CA-01": {
   "title_status": "clear",
   "title_owner": "JUAN A MORALES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-008534-CA-01": {
   "title_status": "clear",
   "title_owner": "MARIA LETICIA MARTINEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-008840-CA-01": {
   "title_status": "clear",
   "title_owner": "VINCENT LEVITO; LAURA ROBLES ARENAS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-013836-CA-01": {
   "title_status": "clear",
   "title_owner": "YUNEURIC F PALACIOS CARRASQUEL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-019952-CA-01": {
   "title_status": "clear",
   "title_owner": "JORGE A OCHOA; REALTY FINANCIAL SERVICES CORP",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-021626-CA-01": {
   "title_status": "clear",
   "title_owner": "ERICK TURRUBIATES; AUREN DAIYANA MARTINEZ CASTILLO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-007325-CA-01": {
   "title_status": "clear",
   "title_owner": "HON INVESTMENT CORP",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-007818-CA-01": {
   "title_status": "clear",
   "title_owner": "VUKOTA COLORADO SPRINGS II LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-022541-CA-01": {
   "title_status": "clear",
   "title_owner": "BEST QUALITY ORGANIZATION; AND SERVICES CORP",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-020866-CA-01": {
   "title_status": "clear",
   "title_owner": "LUIS A HERNANDEZ SALAS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-007129-CA-01": {
   "title_status": "clear",
   "title_owner": "EMPORIUM LOGISTICS LLC 1706 LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-018243-CA-01": {
   "title_status": "clear",
   "title_owner": "FRANCISCO J ESCOBAR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-19-002281": {
   "title_status": "clear",
   "title_owner": "VEST, RICHARD A & MICHELLE H",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-022698": {
   "title_status": "clear",
   "title_owner": "VALDEZ, LUIS BAKER, DENISE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-006308": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010871": {
   "title_status": "clear",
   "title_owner": "SANCHEZ, LEONOR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-011073": {
   "title_status": "clear",
   "title_owner": "CHURCH, ANTHONY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-014829": {
   "title_status": "clear",
   "title_owner": "LABRIOLA, TONI ANN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-017065": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-017831": {
   "title_status": "clear",
   "title_owner": "CAJUSTE, JESSY C EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA001126XXXAMB": {
   "title_status": "unverified",
@@ -2790,133 +2790,133 @@
   "title_owner": "PICKENS DEVAUGHN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA003966XXXAMB": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA005012XXXAMB": {
   "title_status": "clear",
   "title_owner": "MARSHALL NICOLA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA007194XXXAMB": {
   "title_status": "clear",
   "title_owner": "AHMED JUNAID & AHMED SAMIYA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009620XXXAMB": {
   "title_status": "clear",
   "title_owner": "WHITE SUSAN EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA009680XXXAMB": {
   "title_status": "clear",
   "title_owner": "MORELLI SARAH L & MORELLI VINCENT A",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012135XXXAMB": {
   "title_status": "clear",
   "title_owner": "GOMEZ RAMONA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012309XXXAMB": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012568XXXAMB": {
   "title_status": "clear",
   "title_owner": "GRAVIUS EILEEN EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012746XXXAMB": {
   "title_status": "transferred",
   "title_owner": "ABARCA CONCEPCION R & RENDON MAURICIO S & RENDON WENDY S",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'ABARCA CONCEPCION R & RENDON MAURICIO S & RENDON WENDY S' is not the foreclosure defendant 'LIRANZO LUIS J'",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012783XXXAMB": {
   "title_status": "transferred",
   "title_owner": "URBAN AYDEN",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'URBAN AYDEN' is not the foreclosure defendant 'LEJISTE SAINVILLA'",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA013565XXXAMB": {
   "title_status": "clear",
   "title_owner": "BELINDA BLUE PROPERTY INC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA000415XXXAMB": {
   "title_status": "clear",
   "title_owner": "OTHMAN HUSAM",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA003005XXXAMB": {
   "title_status": "clear",
   "title_owner": "CONTRERAS JOHN L",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CC002072XXXASB": {
   "title_status": "clear",
   "title_owner": "SAVARY NICOLE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CC005362XXXASB": {
   "title_status": "transferred",
   "title_owner": "EAST COAST PROPERTY LIQUIDATION CORP",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'EAST COAST PROPERTY LIQUIDATION CORP' is not the foreclosure defendant '2944 LAND TRUST'",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CC008246XXXANB": {
   "title_status": "clear",
   "title_owner": "GALLAGHER MARY LOU",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-023462-CA-01": {
   "title_status": "clear",
   "title_owner": "MAURICIO ALBERTO VIGIL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2019-013056-CA-01": {
   "title_status": "clear",
   "title_owner": "EDUARDO I VALDES; MARLENE S VALDES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-026942-CA-01": {
   "title_status": "clear",
@@ -2930,175 +2930,175 @@
   "title_owner": "SALKEY SALKEY AND ASSOCIATES INC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-001970": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-016930": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA007102XXXAMB": {
   "title_status": "clear",
   "title_owner": "LEGAL AND ADMINISTRATIVE SERVICES LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA013486XXXAMB": {
   "title_status": "clear",
   "title_owner": "ABRAMS CHARLES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA013600XXXAMB": {
   "title_status": "clear",
   "title_owner": "JEANNITE MARIE M",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CC016313XXXAMB": {
   "title_status": "clear",
   "title_owner": "BARKAN JULIE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CC018497XXXAWB": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CA003619XXXAMB": {
   "title_status": "clear",
   "title_owner": "AGUIAR JOHN R",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CC000664XXXAMB": {
   "title_status": "clear",
   "title_owner": "MCGITTIGAN EDWARD & MCGITTIGAN FE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA005614XXXAMB": {
   "title_status": "clear",
   "title_owner": "DEUTSCH EDGARDO & DEUTSCH RAYNA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA011413XXXAMB": {
   "title_status": "clear",
   "title_owner": "GAILIS NATALIE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2009-074573-CA-01": {
   "title_status": "clear",
   "title_owner": "PEDRO HERNANDEZ; CRISTINA GARCIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2018-026274-CA-01": {
   "title_status": "clear",
   "title_owner": "RUGGIERO SCHIRALDI &W; FRANCIS I MENDEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-000195-CA-01": {
   "title_status": "clear",
   "title_owner": "DARIO J LUMBI; KATIA LUMBI",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-018984-CA-01": {
   "title_status": "clear",
   "title_owner": "Y RAMPRASAD RAO; SIMONE CRISTINA BEZZERA DA SILVA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-000201-CA-01": {
   "title_status": "clear",
   "title_owner": "AVA C MARKS; MIA SHEKINAH BROWN; AVIANNA JANAY CUMMINGS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-002500-CA-01": {
   "title_status": "clear",
   "title_owner": "GABRIEL MORALES; DORIS MARCELA FALLON DE MORALES; GABRIEL MATEO MORALES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-002567-CA-01": {
   "title_status": "clear",
   "title_owner": "SHANIER SOUFFRANT; GAMALIEL NEIL SOUFFRANT",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-013918-CA-01": {
   "title_status": "clear",
   "title_owner": "JOSEPH FRANCIS CLYNE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-014804-CA-01": {
   "title_status": "clear",
   "title_owner": "GUILLERMO BRACHO",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-020477-CA-01": {
   "title_status": "clear",
   "title_owner": "GIOVANNI BALAREZO FERREYRA; FABIANA MILAGROS MARTINEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-003068-CA-01": {
   "title_status": "clear",
   "title_owner": "RASHEED LEWIS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA003166XXXAMB": {
   "title_status": "clear",
   "title_owner": "DICKENS HOLLY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA006589XXXAMB": {
   "title_status": "clear",
   "title_owner": "DEL BARKER JEFFERY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA008285XXXAMB": {
   "title_status": "clear",
@@ -3112,140 +3112,140 @@
   "title_owner": "DIBARTOLO JAMES & DIBARTOLO MAUREEN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA011117XXXAMB": {
   "title_status": "clear",
   "title_owner": "JAMGOTCHIAN KATHRYN & JAMGOTCHIAN KIRK",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012600XXXAMB": {
   "title_status": "clear",
   "title_owner": "CHUA JONATHAN & CHUA VIRGINIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA013449XXXAMB": {
   "title_status": "clear",
   "title_owner": "RICHARDSON AALIYAH J & RICHARDSON DEREK K",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CC009427XXXASB": {
   "title_status": "clear",
   "title_owner": "PASIK WAYNE T",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502024CA011242XXXAMB": {
   "title_status": "clear",
   "title_owner": "KALIEVA RUMIYA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502024CA010265XXXAMB": {
   "title_status": "clear",
   "title_owner": "SISAVATH GATOR A & SISAVATH VANHNALY K",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502025CA003497XXXAMB": {
   "title_status": "clear",
   "title_owner": "DEVIA JOHN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502026CC009055XXXAMB": {
   "title_status": "clear",
   "title_owner": "MARIJAN DUNYA & MARIJAN MILICA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2023-019601-CA-01": {
   "title_status": "clear",
   "title_owner": "PETER GOLD; JANICE R GOLD",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2024-009534-CA-01": {
   "title_status": "clear",
   "title_owner": "WILLIE ZACKERY &W LYNETTE M",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2024-019627-CA-01": {
   "title_status": "clear",
   "title_owner": "ELIZABETH ANNE CHARLOT; ANNIE B CHARLOT; RONALD J CHARLOT",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2024-024069-CA-01": {
   "title_status": "clear",
   "title_owner": "TYRONE H ROBINSON EST OF",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2025-022121-CA-01": {
   "title_status": "clear",
   "title_owner": "RICHARD J VALCARCEL &W ELSA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2025-023669-CA-01": {
   "title_status": "clear",
   "title_owner": "DASHELL QUINTANA RIVERON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502022CA005951XXXXMB": {
   "title_status": "clear",
   "title_owner": "STANBURY MARJORIE L",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502023CA010028XXXXMB": {
   "title_status": "clear",
   "title_owner": "BROWN LETICIA EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502024CA007608XXXAMB": {
   "title_status": "clear",
   "title_owner": "INWALD JERRY & INWALD ZACHARY J",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502025CA009319XXXAMB": {
   "title_status": "clear",
   "title_owner": "LEITNER WILLIAM L EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502025CA009535XXXAMB": {
   "title_status": "clear",
   "title_owner": "SHEPHERD TAMEKA S",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502025CA011174XXXAMB": {
   "title_status": "clear",
@@ -3259,77 +3259,77 @@
   "title_owner": "SCHAAF SUSAN L",
   "title_flag": "OWNERSHIP CHANGED — VERIFY",
   "title_evidence": "LIVE appraiser owner 'SCHAAF SUSAN L' is not the foreclosure defendant 'LINDNER LISA EST'",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502025CA012284XXXAMB": {
   "title_status": "clear",
   "title_owner": "CONNELLY VIRGINIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502026CA000921XXXAMB": {
   "title_status": "clear",
   "title_owner": "HART JOHN K",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502026CA002800XXXAMB": {
   "title_status": "clear",
   "title_owner": "CALLAS JASON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502026CC006485XXXAWB": {
   "title_status": "clear",
   "title_owner": "MULLEN RYAN & MULLEN SELINA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2018-010724-CA-01": {
   "title_status": "clear",
   "title_owner": "JOSEPH CALDERON; MARTHA CALDERON",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2025-000229-CA-01": {
   "title_status": "clear",
   "title_owner": "JUSTIN M TOUBEAUX; ESTEPHANA R TOUBEAUX",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2024-015227-CA-01": {
   "title_status": "clear",
   "title_owner": "RICHARD FERRADAS &W IVONNE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502024CA006899XXXAMB": {
   "title_status": "clear",
   "title_owner": "TIMM KAITLIN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2026A00217": {
   "title_status": "clear",
-  "title_owner": "FREEMARKET CORP; C/O WILSON DONDO",
+  "title_owner": "FREEMARKET CORP",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2026A00249": {
   "title_status": "clear",
   "title_owner": "OCEAN SOLE 2401 LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "2026A00219": {
   "title_status": "clear",
@@ -3339,32 +3339,32 @@
   "ts": "2026-08-28"
  },
  "2026A00250": {
-  "title_status": "unverified",
-  "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
-  "title_evidence": "ownership-gate wall-clock budget exceeded — not checked",
-  "ts": "2026-08-27"
+  "title_status": "clear",
+  "title_owner": "PITU REAL ESTATE HOLDING LLC",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
  },
  "2026A00251": {
-  "title_status": "unverified",
-  "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
-  "title_evidence": "ownership-gate wall-clock budget exceeded — not checked",
-  "ts": "2026-08-27"
+  "title_status": "clear",
+  "title_owner": "SOUTH BEACH RESORT DEV LLC",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
  },
  "2026A00252": {
-  "title_status": "unverified",
-  "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
-  "title_evidence": "ownership-gate wall-clock budget exceeded — not checked",
-  "ts": "2026-08-27"
+  "title_status": "clear",
+  "title_owner": "SOUTH BEACH RESORT DEV LLC",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
  },
  "2026A00212": {
-  "title_status": "unverified",
-  "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
-  "title_evidence": "ownership-gate wall-clock budget exceeded — not checked",
-  "ts": "2026-08-27"
+  "title_status": "clear",
+  "title_owner": "LINNEA HOLDINGS LTD",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
  },
  "2026A00218": {
   "title_status": "unverified",
@@ -3374,11 +3374,11 @@
   "ts": "2026-08-27"
  },
  "2026A00215": {
-  "title_status": "unverified",
-  "title_owner": "",
-  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
-  "title_evidence": "ownership-gate wall-clock budget exceeded — not checked",
-  "ts": "2026-08-27"
+  "title_status": "clear",
+  "title_owner": "5838 ALTON ROAD LLC; C/O JOSEF TIMLICHMAN LAW PLLC",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
  },
  "2026A00216": {
   "title_status": "unverified",
@@ -3455,587 +3455,664 @@
   "title_owner": "COX, AMY COX, REGINA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502022CA012458XXXXMB": {
   "title_status": "clear",
   "title_owner": "GELLERT JUDITH & GELLERT JUDITH TR & JUDITH GELLERT TR TITL HLDR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502025CA012348XXXAMB": {
   "title_status": "clear",
   "title_owner": "MATATALL CHRISTOPHER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "502026CC004759XXXASB": {
   "title_status": "clear",
   "title_owner": "BALAN JOSEPH R",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-001074": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-009471-CA-01": {
   "title_status": "clear",
   "title_owner": "ELWALDO MCKOY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-007043-CA-01": {
   "title_status": "clear",
   "title_owner": "HUMBERTO E DIAZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-004188-CA-01": {
   "title_status": "clear",
   "title_owner": "MAE RENE TAYLOR EST OF",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2020-000151-CA-01": {
   "title_status": "clear",
   "title_owner": "PEDRO LUGO &W MARIA SIERRA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-000486-CA-01": {
   "title_status": "clear",
   "title_owner": "DIOEL LEON; NERISLEIDY HERNANDEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-019732-CA-01": {
   "title_status": "clear",
   "title_owner": "REBECCA E RODRIGUEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-005861-CA-01": {
   "title_status": "clear",
   "title_owner": "DANIELA VARGAS MORALES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-022625-CA-01": {
   "title_status": "clear",
   "title_owner": "DELL V SAVAGE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-010610-CA-01": {
   "title_status": "clear",
   "title_owner": "EMILIO DIAZ JR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-011701-CA-01": {
   "title_status": "clear",
   "title_owner": "OLUWAKEMI IBITOLA DEMETRIUS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-011174-CA-01": {
   "title_status": "clear",
   "title_owner": "ROBERTO MARTINEZ PENA; BEATRIZ ELENA FINOL MERCHAN",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2020-003623-CA-01": {
   "title_status": "clear",
   "title_owner": "LUIS G VASQUEZ; RAMONA VASQUEZ; LUIS MIGUEL VASQUEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2022-012065-CA-01": {
   "title_status": "clear",
   "title_owner": "BLUE WATER COAST SERVICE LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2023-020247-CA-01": {
   "title_status": "clear",
   "title_owner": "EDDIE M MCCRAY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-006803-CA-01": {
   "title_status": "clear",
   "title_owner": "ANGEL DEL ORO &W ROSA I PEREZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-009860-CA-01": {
   "title_status": "clear",
   "title_owner": "JUAN GALLO &W OLGA E",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-009959-CA-01": {
   "title_status": "clear",
   "title_owner": "EST OF LOUISE WALKER",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-013858-CA-01": {
   "title_status": "clear",
   "title_owner": "MARIA CARIDAD ALAMO HERRRERA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-014878-CA-01": {
   "title_status": "clear",
   "title_owner": "6828 NW 3 AVE LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2024-021227-CA-01": {
   "title_status": "clear",
   "title_owner": "LAND TRUST SERVICE CORP TRS; TRUST NO 721 114",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-001577-CA-01": {
   "title_status": "clear",
   "title_owner": "ELAINE PEREZ; GILFREDO TORRES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-004475-CA-01": {
   "title_status": "clear",
   "title_owner": "MOD OM 1 LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-014549-CA-01": {
   "title_status": "clear",
   "title_owner": "MARIO JOSE NOVOA JR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-021349-CA-01": {
   "title_status": "clear",
   "title_owner": "LARISBEL CASTRILLO MONTES",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-006521-CA-01": {
   "title_status": "clear",
   "title_owner": "MARKSSAFC LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-014656-CA-01": {
   "title_status": "clear",
   "title_owner": "JUAN CONTRERAS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-015248-CA-01": {
   "title_status": "clear",
   "title_owner": "HENRY MORAN; IVIS MARIA PEREZ RODRIGUEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-002335-CA-01": {
   "title_status": "clear",
   "title_owner": "LA 8 LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-001698-CA-01": {
   "title_status": "clear",
   "title_owner": "JUAN CARLOS VAAMONDE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2025-007696-CA-01": {
   "title_status": "clear",
   "title_owner": "LEE AARONS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "502025CA000619XXXAMB": {
   "title_status": "clear",
   "title_owner": "OWENS ALANA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-01"
  },
  "CACE-23-020164": {
   "title_status": "clear",
   "title_owner": "DALRIO, LORNA E BAILEY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-013181": {
   "title_status": "clear",
   "title_owner": "JORDAN, TONYA GREEN MARSHALL, BRENDA EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-021795": {
   "title_status": "clear",
   "title_owner": "TRAVELERS XPRESS SERVICES INC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-004199": {
   "title_status": "clear",
   "title_owner": "BUTLER, CAROLYN O",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-009911": {
   "title_status": "clear",
   "title_owner": "ESTERS, JEFFREY",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-012407": {
   "title_status": "unverified",
   "title_owner": "WRAY, MARIA CHRYSENSIA JONES, MICHAEL ANTHONY EST ETAL",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "live owner 'WRAY, MARIA CHRYSENSIA JONES, MICHAEL ANTHONY EST ETAL' shares only a surname with the defendant 'HERBERT H EST JONES' — verify it is the same household",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010994": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-014482": {
   "title_status": "clear",
   "title_owner": "LAPAIX, SUNSHINE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-017567": {
   "title_status": "clear",
   "title_owner": "JOASIL, CHERLINE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-018971": {
   "title_status": "clear",
   "title_owner": "BG VENTURES INVESTMENT REAL ESTATE LLC INC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-008626": {
   "title_status": "clear",
   "title_owner": "ZAMAR, YVETTE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-004433": {
   "title_status": "clear",
   "title_owner": "GREEN, OMAR",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-007430": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-009704": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010173": {
   "title_status": "clear",
   "title_owner": "ARONSON, BETH H/E ARONSON, DOUGLAS",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-013018": {
   "title_status": "clear",
   "title_owner": "DIANA HEAVEN REV TR HEAVEN, DIANA TRSTEE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-016452": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-016495": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-017801": {
   "title_status": "clear",
   "title_owner": "CR PROPERTY GROUP LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-018117": {
   "title_status": "unverified",
   "title_owner": "WITHERSPOON, TINA MARIE BERSH",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "live owner 'WITHERSPOON, TINA MARIE BERSH' shares only a surname with the defendant 'WILLIE JAME & T WITHERSPOON' — verify it is the same household",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-019890": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-002889": {
   "title_status": "clear",
   "title_owner": "GONZALEZ, ALEX E & CECILIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-26-004123": {
   "title_status": "clear",
   "title_owner": "PROGRESSIVE REALTY GROUP LLC",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-15-021344": {
   "title_status": "clear",
   "title_owner": "MORALES, ROSEMARY H/E PERALTA, EMMA MARIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-22-017327": {
   "title_status": "clear",
   "title_owner": "HAQUE, MAJEDUL HOQUE, SONIA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-015220": {
   "title_status": "clear",
   "title_owner": "EDWARDS, MARY J",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-23-016521": {
   "title_status": "clear",
   "title_owner": "AUGUSTIN, TAMARA H/E ROBERTY, RENAL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-005837": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-007738": {
   "title_status": "clear",
   "title_owner": "MORGAN, MONIQUE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-010865": {
   "title_status": "clear",
   "title_owner": "RABONOWITZ, LOTTIE EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-011211": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-014318": {
   "title_status": "clear",
   "title_owner": "ALEXANDER-DILLARD, RENEE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-24-018396": {
   "title_status": "clear",
   "title_owner": "WASHINGTON, IRENE EST",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-000697": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-000856": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-003936": {
   "title_status": "clear",
   "title_owner": "EVERSON, SHARON JAMES, ANCEL",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-010237": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-016095": {
   "title_status": "clear",
   "title_owner": "BERMUDEZ, HERNAN & JESSICA",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-018153": {
   "title_status": "clear",
   "title_owner": "ZEIGLER, RICHARD",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-019800": {
   "title_status": "clear",
   "title_owner": "RODRIGUEZ, SANTOS A",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CACE-25-019860": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COCE-25-059723": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COCE-25-088296": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COCE-26-028696": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CONO-26-005119": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "CONO-26-019993": {
   "title_status": "clear",
   "title_owner": "SANTOS, MILTON SANTANA SILVA SOUSA, ERICA ELAINE",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "COSO-26-017424": {
   "title_status": "unverified",
   "title_owner": "",
   "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
   "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
  },
  "2026-005277-CA-01": {
   "title_status": "clear",
   "title_owner": "NOEL SANCHEZ",
   "title_flag": "",
   "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-31"
+  "ts": "2026-09-01"
+ },
+ "CACE-25-016262": {
+  "title_status": "clear",
+  "title_owner": "MARCANO, MANUEL G ACOSTA ACOSTA, BRIGITTE CHIO",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2026A00097": {
+  "title_status": "clear",
+  "title_owner": "MRG GROUP INC",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2025-024180-CA-01": {
+  "title_status": "clear",
+  "title_owner": "KEVIN TAYLOR",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2025-002978-CA-01": {
+  "title_status": "clear",
+  "title_owner": "SANY VERAMENDI",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2025-011422-CA-01": {
+  "title_status": "clear",
+  "title_owner": "ALGORITHM RENOVATION SOLUTION LLC",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2025-003962-CA-01": {
+  "title_status": "clear",
+  "title_owner": "CARMEN L ORTIZ EST OF",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2024-247756-CC-23": {
+  "title_status": "clear",
+  "title_owner": "CHALOM ELHARRAR",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2026-060625-CC-25": {
+  "title_status": "clear",
+  "title_owner": "NELSON D J ARRIETA ROSALES",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2025-016007-CA-01": {
+  "title_status": "unverified",
+  "title_owner": "",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-01"
+ },
+ "CACE-25-003650": {
+  "title_status": "unverified",
+  "title_owner": "",
+  "title_flag": "OWNERSHIP UNVERIFIED — CHECK",
+  "title_evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-01"
+ },
+ "2025-019869-CA-01": {
+  "title_status": "clear",
+  "title_owner": "LEONIDAS ANTONIO FONSECA; ALICIA MARGARETH POLLACK",
+  "title_flag": "",
+  "title_evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
  }
 }

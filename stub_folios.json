@@ -1533,5 +1533,77 @@
   "miss": true,
   "county": "BROWARD",
   "when": "2026-08-29"
+ },
+ "2024-016425-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-09-01"
+ },
+ "2025-009489-CA-01": {
+  "folio": "3012310181210",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "when": "2026-09-01"
+ },
+ "2019-000113-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-09-01"
+ },
+ "2013-020140-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-09-01"
+ },
+ "2024-011001-CA-01": {
+  "folio": "3039520342000",
+  "county": "MIAMI-DADE",
+  "how": "owner-unique",
+  "when": "2026-09-01"
+ },
+ "2025-017147-CA-01": {
+  "miss": true,
+  "county": "MIAMI-DADE",
+  "when": "2026-09-01"
+ },
+ "CACE-25-010009": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-09-01"
+ },
+ "CACE-25-007635": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-09-01"
+ },
+ "CACE-25-007347": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-09-01"
+ },
+ "CACE-25-018351": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-09-01"
+ },
+ "CACE-25-016395": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-09-01"
+ },
+ "CACE-25-017944": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-09-01"
+ },
+ "CACE-22-017210": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-09-01"
+ },
+ "CACE-25-001932": {
+  "miss": true,
+  "county": "BROWARD",
+  "when": "2026-09-01"
  }
 }

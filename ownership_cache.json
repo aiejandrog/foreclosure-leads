@@ -550,7 +550,7 @@
   "current_owner": "MRG GROUP INC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-09-01"
  },
  "504014010490|AVENUESWTH|": {
   "title_status": "unverified",
@@ -5465,5 +5465,124 @@
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
   "ts": "2026-08-29"
+ },
+ "513925060620|ACOSTAMANUELMARCANO|": {
+  "title_status": "clear",
+  "current_owner": "MARCANO, MANUEL G ACOSTA ACOSTA, BRIGITTE CHIO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "1422350320070|KEVINTAYLOR|": {
+  "title_status": "clear",
+  "current_owner": "KEVIN TAYLOR",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "3058270002080|SANYVERAMENDI|": {
+  "title_status": "clear",
+  "current_owner": "SANY VERAMENDI",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "3040120110280|ALGORITHMRENOVATIONSOLUTION|": {
+  "title_status": "clear",
+  "current_owner": "ALGORITHM RENOVATION SOLUTION LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "0232340340070|CARMENORTIZ|": {
+  "title_status": "clear",
+  "current_owner": "CARMEN L ORTIZ EST OF",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "2822020292320|CHALOMELHARRAR|": {
+  "title_status": "clear",
+  "current_owner": "CHALOM ELHARRAR",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "1678230080730|ARRIETADJNELSONROSALES|": {
+  "title_status": "clear",
+  "current_owner": "NELSON D J ARRIETA ROSALES",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "MULTIPLE20PARCELS|JMH|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-01"
+ },
+ "484308CH0200|CHARLENEPENNINO|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-01"
+ },
+ "3022050021410|ALICIAANTONIOFONSECALEONIDASMARGARETHPOLLACK|": {
+  "title_status": "clear",
+  "current_owner": "LEONIDAS ANTONIO FONSECA; ALICIA MARGARETH POLLACK",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "3012310181210|NMBOWNERPLACE|": {
+  "title_status": "transferred",
+  "current_owner": "CAMILA BALEEIRO CHAMADOIRA; DOUGLAS A FERRARINI STRABELLI; RENATA FALCAO BALEEIRO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner 'CAMILA BALEEIRO CHAMADOIRA; DOUGLAS A FERRARINI STRABELLI; RENATA FALCAO BALEEIRO' is not the foreclosure defendant 'NMB Place Owner, LLC'",
+  "ts": "2026-09-01"
+ },
+ "0141391261580|LINNEA|": {
+  "title_status": "clear",
+  "current_owner": "LINNEA HOLDINGS LTD",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "0141390830370|FREEMARKET|": {
+  "title_status": "clear",
+  "current_owner": "FREEMARKET CORP",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "3122110800740|HOLDINGPITUREAL|": {
+  "title_status": "clear",
+  "current_owner": "PITU REAL ESTATE HOLDING LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "0232341930100|BEACHDEVRESORTSOUTH|": {
+  "title_status": "clear",
+  "current_owner": "SOUTH BEACH RESORT DEV LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "0232341930780|BEACHDEVRESORTSOUTH|": {
+  "title_status": "clear",
+  "current_owner": "SOUTH BEACH RESORT DEV LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
+ },
+ "0232020050560|ALTONLAWOJOSEFROADTIMLICHMAN|": {
+  "title_status": "clear",
+  "current_owner": "5838 ALTON ROAD LLC; C/O JOSEF TIMLICHMAN LAW PLLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-01"
  }
 }

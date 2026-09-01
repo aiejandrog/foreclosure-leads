@@ -25,6 +25,19 @@ COMPANY = 'Biscayne Solutions Group'
 SIGNER = 'Alex Gonzalez'
 PHONE = '(786) 631-1823'
 
+# THE PROMISE IS FIVE MINUTES. THE SLOT IS FIFTEEN. Both numbers are true and they must never
+# be stated as one number, because four surfaces say them out loud and they had already drifted:
+# email said 15 while the board's SMS and all three Call Mode scripts said 5. A homeowner who
+# gets the text and the email in the same week hears two different offers from the same person.
+# Five is what a guarded owner will agree to; fifteen is what actually gets blocked so nobody is
+# rushed off the phone. cal.com/bsgflorida already says exactly this. Change it HERE only.
+CALL_MINUTES = 'five'          # spoken/written promise -- matches smsMsg() and call_mode.py
+CALL_MINUTES_N = '5'           # SMS only. A text is capped at 320 chars for two segments and the
+                               # selftest enforces it; 'five-minute' blew the budget by 3 chars.
+SLOT_MINUTES = 'fifteen'       # what the calendar actually reserves
+BOOKING_URL = 'cal.com/bsgflorida/free-records-review'
+BOOKING_URL_INVESTOR = 'cal.com/bsgflorida/investor-refi-call'
+
 
 def _first_of(signer):
     """'Alejandro Gonzalez' -> 'Alejandro'. The bodies used to hardcode 'Alex' while the
@@ -134,7 +147,8 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         "We specialize in Urgent Foreclosure Cases that are facing an auction in just a few days.",
         '',
         "I don't know if you already have a plan, but I want to offer you something completely free "
-        "and without any obligation: a 15-minute private phone consultation.",
+        "and without any obligation: a private phone call. Most take about %s minutes; I block %s "
+        "so you are never rushed." % (CALL_MINUTES, SLOT_MINUTES),
         '',
         "During that call, we will:",
         '',
@@ -146,10 +160,9 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         '',
         "Here's what I need from you:",
         '',
-        "Simply reply to this email with the best phone number and times to call you, or call me "
-        "directly at %s and I'll personally take your call and give you my 100%% personal "
-        "attention. I promise to be objective and help you resolve your situation in the best and "
-        "fastest way possible." % phone,
+        "Pick a time that works for you at %s, or simply reply with the best phone number and "
+        "times to call you. You can also call me directly at %s and I'll take your call "
+        "personally." % (BOOKING_URL, phone),
         '',
         "There is still time to protect and save your home or equity, but the clock is ticking.",
         "Please don't wait.",
@@ -186,7 +199,8 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         "personally reviews your case, including cases only days from auction.",
         '',
         "I don't know if you already have a plan, but I'm offering you a free, no-obligation "
-        "15-minute phone consultation. No tricks. No fees. No pressure.",
+        "phone call. Most take about %s minutes; I block %s so you are never rushed. No tricks. "
+        "No fees. No pressure." % (CALL_MINUTES, SLOT_MINUTES),
         '',
         "On that call, I'll:",
         '',
@@ -195,8 +209,8 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         "  • Give you a clear, honest path forward",
         '',
         "Here's all I need from you:",
-        "Reply with your phone number and best time to call, or call me directly at %s. I'll "
-        "give you my personal, undivided attention and help you find the fastest solution." % phone,
+        "Book a time at %s, reply with your phone number and best time to call, or call me "
+        "directly at %s." % (BOOKING_URL, phone),
         '',
         "There is still time to save your home or your equity, but not much.",
         "Reply now or call today.",
@@ -319,10 +333,10 @@ def sms(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY):
     who = ('%s, ' % first) if first else ''
     when = ('Your home is scheduled for foreclosure auction %s' % ds if ds
             else 'Your home is scheduled for foreclosure auction')
-    return ("%sI'm %s with %s. %s. Free 15-min call, no obligation - I'll lay out every option you "
+    return ("%sI'm %s with %s. %s. Free %s-minute call, no obligation - I'll lay out every option you "
             "have. Call/text %s. We're not the government or your lender; your lender may not "
             "agree to change your loan. Reply STOP to opt out."
-            % (who, signer, company, when, phone))
+            % (who, signer, company, when, CALL_MINUTES_N, phone))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -341,10 +355,11 @@ def letter(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY
         when + " If nothing changes it can be sold to the highest bidder, and the choices you "
         "have right now go with it. It doesn't have to go that way.",
         '',
-        "I'm %s with %s. I'm offering you a free 15-minute call, no obligation - I'll review your "
-        "situation and lay out every option you have. No tricks, no fees, no pressure." % (signer, company),
+        "I'm %s with %s. I'm offering you a free call, no obligation - most take about %s minutes "
+        "and I block %s so you are never rushed. I'll review your situation and lay out every "
+        "option you have. No tricks, no fees, no pressure." % (signer, company, CALL_MINUTES, SLOT_MINUTES),
         '',
-        "Call or text me at %s." % phone,
+        "Call or text me at %s, or pick a time yourself at %s." % (phone, BOOKING_URL),
         '',
         D.mars_part('govt', 'may_agree', 'may_stop', lang='en', company=company, as_html=False),
         '',
@@ -355,8 +370,42 @@ def letter(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY
     ])
 
 
+def cross_surface_check():
+    """Every prospect-facing surface must promise the SAME call length.
+
+    This exists because they did not. The PDF says outreach_copy.py is one source for three
+    channels; it is one source for email and the letter. The board's smsMsg() and Call Mode's
+    scripts are separate code that no import ties to this file, and they had settled on five
+    minutes while email said fifteen. Nothing caught it because nothing was looking.
+
+    A conflicting number is not cosmetic: the text and the email reach the same homeowner in the
+    same week, and two different offers from one person reads as either sloppy or dishonest --
+    to an audience already being worked by people who are both.
+    """
+    import os
+    import re
+    here = os.path.dirname(os.path.abspath(__file__))
+    other = {'five', '5', 'fifteen', '15', 'ten', '10'} - {CALL_MINUTES, CALL_MINUTES_N}
+    pat = re.compile(r'(%s)[ -]?(?:free )?minutes?' % '|'.join(sorted(other)), re.I)
+    bad = []
+    for fn in ('call_mode.py', 'tracker_template.html', 'cadence.py'):
+        fp = os.path.join(here, fn)
+        if not os.path.exists(fp):
+            continue
+        for n, line in enumerate(open(fp, encoding='utf-8', errors='ignore'), 1):
+            if fn == 'tracker_template.html' and 'smsMsg' not in line and 'minutes' not in line:
+                continue
+            m = pat.search(line)
+            # 15-minute paperwork trial close and the "last ten minutes" sports metaphor are
+            # deliberate and are NOT the intro-call promise. See the 8/29 unification note.
+            if m and not re.search(r'wasted|last ten|plays matter|paperwork|drive|apart', line, re.I):
+                bad.append('%s:%d  %s' % (fn, n, m.group(0)))
+    return bad
+
+
 def selftest():
-    """The disclosure must be present on every channel, and SMS must fit two segments."""
+    """The disclosure must be present on every channel, SMS must fit two segments, and every
+    surface must promise the same call length."""
     d = dt.date(2026, 9, 16)
     fails = []
     for name, body, need in (
