@@ -521,6 +521,19 @@ def badge_inline(cls='badgemark'):
     Cropping rather than editing matters: the file in brand/ stays the single source of the mark,
     so a new logo dropped there flows through here untouched.
     """
+    # A PURPOSE-DRAWN BADGE BEATS ANY CROP, so look for one first. The crop below is a fallback
+    # that is always slightly wrong by construction: the stacked mark's pole and its monogram
+    # overlap in y, so every window either hangs a pole stub under the arc or leaks letter tops,
+    # and the stacked mark has only ONE arc where the emblem has two. Drop the real emblem at
+    # brand/bsg-badge.svg and it is used verbatim -- no crop, no compromise.
+    p = os.path.join(HERE, 'brand', 'bsg-badge.svg')
+    if os.path.exists(p):
+        try:
+            s = open(p, encoding='utf-8').read()
+            s = s[s.index('<svg'):]
+            return s.replace('<svg ', '<svg class="%s" ' % cls, 1)
+        except Exception:
+            pass
     svg = mark_inline('', cls)
     if not svg:
         return ''

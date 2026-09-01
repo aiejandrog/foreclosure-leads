@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 135" role="img"
+     aria-label="Biscayne Solutions Group emblem">
+  <!-- BSG emblem — the standalone glyph: skyline over a double horizon arc, no monogram,
+       no wordmark, and NO POLE below the arc.
+
+       Drawn from the reference Alejandro supplied. It is NOT a crop of bsg-logo.svg: that mark's
+       tower pole descends to y=328 and its BSG monogram caps start at y=311, so every viewBox
+       window either keeps a pole stub hanging under the arc or leaks the tops of the letters.
+       The reference has neither — the buildings sit cleanly ON the arc — and it carries a SECOND,
+       thinner grey arc beneath the blue one that the stacked mark does not have at all.
+
+       viewBox is tight to the artwork (220 x 135, aspect 1.63) so it drops into any slot without
+       the transparent padding that made the earlier badge sit high in its box.
+
+       IF THE ORIGINAL VECTOR TURNS UP, replace this file — badge_inline() reads this exact path
+       and prefers it over any crop, so nothing else needs to change. -->
+
+  <!-- skyline: left silver block, centre blue tower with the sliced top, right charcoal block -->
+  <path d="M63 57 h24 v48 h-24 z" fill="#8A8D91"/>
+  <path d="M123 50 l32 7 v48 h-32 z" fill="#33383F"/>
+  <path d="M88 105 V44 l34 -34 v95 z" fill="#1B5FAA"/>
+
+  <!-- horizon: the bold blue sweep, then a thinner silver sweep beneath it. The pair is what
+       gives the reference its motion; a single arc reads flat and static. -->
+  <path d="M3 125 Q110 70 213 123 Q110 92 3 125 z" fill="#1B5FAA"/>
+  <path d="M20 133 Q110 92 196 131 Q110 107 20 133 z" fill="#A8ABAF"/>
+</svg>
