@@ -265,3 +265,27 @@ its last good build — that is the intended behaviour, not a failure.
   references. No code, no data, no keys. The code lives here in git.
 - Origin has a stray Claude cloud branch `claude/phone-number-lookup-u4gvzm`. Merge or delete it;
   don't let it rot.
+
+---
+
+## Session coordination — 2026-09-02 (evening)
+
+Two Claude sessions are working this repo concurrently on the SAME main checkout. Division:
+
+- **DEALFLOW session** (WIP live in call_mode.py as of 17:26): no-means-no chain — notint 720h
+  + retroactive floor, pcs sibling suppression, person-keyed stopEverywhere, sync-key-from-phone
+  (576eaa0, local/unpushed). Owns the next rebuild+push.
+- **Takeover/Quo session**: teamRecheck already-called takeover (602dbad, pushed), quo_sync +
+  coach (f6c0238), `_cm_teamtest.js` (this commit).
+
+**`node _cm_teamtest.js` is the contract test** for "a logged NO disappears from tomorrow's
+queue, person-wide." It tests the BUILT page — rebuild before trusting a red. First run: 12
+pass / 3 fail; two fails were source-newer-than-page (guards saved 17:26, page built 17:20 —
+ship them by rebuilding), one is real and OPEN:
+
+- **`_teammateCall` does not walk `r.pcs`** — a teammate's call on a SIBLING case suppresses
+  the next queue build but does NOT take over the already-painted screen. Whoever lands last
+  on call_mode.py folds this in (one loop, same shape as suppressed()'s sibling walk).
+
+Also open: `origin/claude/call-mode-ready` (c690b98) forked from 07d6fad, BEFORE 602dbad —
+expect a small call_mode.py merge when it lands.
