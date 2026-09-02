@@ -167,7 +167,11 @@ def parse_address(s):
     s = re.sub(r'\s+', ' ', str(s or '')).strip().rstrip(',')
     if not s:
         return None
-    m = re.search(r'\b([A-Za-z]{2})\s+(\d{5})(?:-\d{4})?\s*$', s)
+    # [,\s]+ NOT \s+ : the county roll writes "MIAMI, FL, 33175" with a comma before the ZIP, so a
+    # whitespace-only separator rejected the address outright and MIAMI-DADE contributed ZERO letters
+    # to every batch ever sent. His own county was 100% dark, and the run summary prints skip COUNTS
+    # but never counties, so nothing ever surfaced it. (2026-09-01)
+    m = re.search(r'\b([A-Za-z]{2})[,\s]+(\d{5})(?:-\d{4})?\s*$', s)
     if not m:
         return None
     state, zip5 = m.group(1).upper(), m.group(2)
@@ -330,14 +334,33 @@ def build_letter_html(r, snd, lang='en'):
 <p>Respectfully,<br><br>{sig}</p>"""
         else:
             byp = f" by {plaintiff}" if plaintiff else ''
-            body = f"""<p>Dear {e(owner)},</p>
-<p>My name is {sN}, with Biscayne Solutions Group. We work with homeowners in exactly this situation, every option on one table. {D.identity('en')} Public records show your property at <b>{addr}</b> is in foreclosure{byp}{case_en}, with a sale scheduled for <b>{dt}</b>.</p>
-<p>I am not writing to talk you into anything. When owners ask what their options are, these are the <b>five exits</b> every Florida foreclosure homeowner has (from our field manual):</p>
-{exits_en}
-<p>My job is to make sure you know all five are on the table so the sale date does not sneak up. If a private cash sale is the path that fits, buying as-is before the deadline is one of the tools on the table. If another exit is better for you, I will say so, even when it does not involve me.</p>
-<p>{intake_en}</p>
-<p>There is no cost and no obligation to talk. Call or text me at <b>{sP}</b>.</p>
-<p>Respectfully,<br><br>{sig}</p>"""
+            # REVISED OUTREACH 2026-09-01 (Alejandro's copy, adopted verbatim in voice and order).
+            # Two mechanical changes only, because this is a LETTER and his draft was written for
+            # email: "reply to this email" becomes the call/text ask, and the sale TIME is dropped
+            # unless the row carries one (the board stores a date, not an hour — printing "at 9 am"
+            # on every letter would state a fact we do not have).
+            # The five-exit list is GONE. carlos_letter_packet.py:100-104 bans naming loan
+            # modification / short sale / bankruptcy in a homeowner letter — offering those needs
+            # licenses BSG does not hold, and bankruptcy advice from a non-lawyer is exactly what
+            # FS 501.1377 and the MARS rule exist to punish. The Lob letter was the only surface
+            # still printing them, and the only one that leaves a physical exhibit.
+            body = f"""<p>Dear {e(first)},</p>
+<p>As you probably already know, your home is scheduled for foreclosure auction on <b>{dt}</b>{byp}{case_en}.</p>
+<p>I'm not sure if you've taken any steps to solve this problem, but at present, your home is still on the auction block.</p>
+<p><b>There is still time and options to avoid losing your property.</b></p>
+<p>If you do nothing, the lender wins, you lose, and you, your family, pets and all your belongings can be forcefully evicted.</p>
+<p>Call us now and we will give you a free, no-obligation 15-minute review and consultation, and advise you of the options you still have. No fees. No pressure.</p>
+<p>On that call, we will:</p>
+<ul>
+<li>Review your case history and your situation</li>
+<li>Lay out the options you have, including ones you may not have heard of</li>
+<li>Give you a clear, honest path forward</li>
+</ul>
+<p>What I need: call or text me directly at <b>{sP}</b> with the best time to reach you. I'll give you my personal attention.</p>
+<p>There is still time to save your home or your equity, but not much.</p>
+<p>{D.identity('en')}</p>
+<p class="mars">{D.mars(llc, 'en', as_html=True)}</p>
+<p>Warm regards,<br><br>{sig}</p>"""
 
     today = datetime.date.today().strftime('%B %d, %Y')
     ret = '<br>'.join(e(x) for x in [snd.get('name'), _safe_llc(snd), snd.get('addr')] if x and str(x).strip())

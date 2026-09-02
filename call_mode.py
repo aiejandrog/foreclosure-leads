@@ -1713,6 +1713,128 @@ function _clmTake(c){
   try{ saveNotes(); }catch(e){}
   try{ if(typeof syncPushSoon==='function') syncPushSoon(); }catch(e){}
 }
+/* ═══════════════ TEAM WATCH — say it out loud when a teammate works a lead ═══════════════
+   Everything needed to KNOW a lead was already called was already here: every dial and text
+   writes `by: caller()`, suppressed() computes "called 3m ago by Carlos · No answer", and
+   screenRegistry() lists the whole log split mine-vs-team.
+
+   All of it was PULL. Nothing ever told him. syncPull merges a teammate's calls every 45s and
+   says nothing — only an opt-out violation toasts — so the only way to learn Carlos had worked
+   twenty leads was to go looking for a screen that says so. A recognition system nobody is
+   notified by is a filing cabinet.
+
+   Two things get announced, and the second is the one that matters:
+     1. A quiet running tally: "Carlos logged 3 calls".
+     2. THE LEAD ON HIS SCREEN RIGHT NOW. If a merge lands an outcome on the exact card he is
+        reading, he is about to dial someone his cousin just hung up with. That is the whole
+        double-dial problem, in the one moment where a count in a header is useless.
+
+   Dedup is by case+timestamp so a lead re-merged on every 45s tick announces ONCE. The very
+   first load seeds the seen-set silently — otherwise opening the page after a day off would
+   announce two hundred calls as if they had just happened. */
+var _TW_SEEN = 'fcTeamSeen', _TW_INIT = 'fcTeamSeenInit';
+function _twSeen(){ try{ return new Set(JSON.parse(localStorage.getItem(_TW_SEEN)||'[]')); }
+  catch(e){ return new Set(); } }
+function _twSave(s){ try{ var a=Array.from(s); localStorage.setItem(_TW_SEEN,
+  JSON.stringify(a.slice(-800))); }catch(e){}   // bounded: this grows forever otherwise
+}
+function teamWatch(){
+  var me = caller(), seen = _twSeen(), first = !localStorage.getItem(_TW_INIT), fresh = [];
+  Object.keys(notes || {}).forEach(function(c){
+    var lc = null; try{ lc = lastCall(notes[c]); }catch(e){}
+    if(!lc || !lc.by) return;
+    if(me && lc.by === me) return;                        // my own work is not news
+    var k = c + '|' + lc.ts;
+    if(seen.has(k)) return;
+    seen.add(k);
+    if(first) return;                                     // seed silently on the first load
+    if(Date.now() - lc.ts > 6*3600000) return;            // absorb anything genuinely old
+    fresh.push({c:c, by:lc.by, out:lc.out, ts:lc.ts});
+  });
+  _twSave(seen);
+  if(first){ localStorage.setItem(_TW_INIT, '1'); return 0; }
+  if(!fresh.length) return 0;
+
+  /* THE CARD HE IS LOOKING AT. Loud, specific, and it names the outcome — "no answer" and
+     "do not contact" mean opposite things for whether he should still dial. */
+  var here = cur && fresh.filter(function(f){ return f.c === cur.c; })[0];
+  if(here){
+    try{ toast('&#9742; ' + esc(here.by) + ' JUST called this one &mdash; ' + agoTxt(here.ts)
+        + (here.out ? ' &middot; ' + esc(here.out) : '') + '. Do not dial it again.',
+        {bad:true, ms:11000}); }catch(e){}
+    /* Repaint so the lead drops out of the queue under him. Guarded on SCREEN by render()
+       itself, so this can never stomp an outcome screen he is in the middle of. */
+    try{ render(); }catch(e){}
+  }
+  var others = fresh.filter(function(f){ return !here || f.c !== here.c; });
+  if(others.length){
+    var names = {}; others.forEach(function(f){ names[f.by] = (names[f.by]||0)+1; });
+    var bits = Object.keys(names).map(function(w){
+      return esc(w) + ' ' + names[w] + ' call' + (names[w]===1?'':'s'); });
+    try{ toast('&#128100; ' + bits.join(' &middot; ') + ' &mdash; already handled, pulled from your queue',
+        {ms:6000}); }catch(e){}
+  }
+  return fresh.length;
+}
+/* ════════ ALREADY-CALLED RECHECK — the one gap in the team defence (2026-09-02) ════════
+   The seat partition stops the same lead being in two queues; the claim greys a lead a teammate
+   just opened; suppressed() drops worked leads from the NEXT pool() pass. What nothing covered:
+   the lead ALREADY PAINTED on this screen when the teammate's outcome arrives. visibilitychange
+   ran syncPull -> loadNotes() and then went silent, so Alejandro comes back from one call, the
+   merge quietly writes "Carlos called this lead 3 minutes ago" into notes, and the person still
+   filling his screen gets dialled a second time. Field report 9/1: "we clash on repetitive
+   clients... it should say this person has already been called today, and move on."
+
+   teamRecheck() runs after every merge AND at screenLead paint. A teammate call inside the
+   cooldown paints an amber takeover with WHO and WHEN and auto-advances after 3.5s — tap STAY to
+   keep the lead (deliberate revisits are legitimate; silent auto-anything is how leads vanish).
+
+   MY OWN dials never trigger it: logging outcome then "Try their next number" returns to
+   screenLead on the SAME lead, now inside its own cooldown — auto-skipping there would rip a
+   multi-number sequence away mid-lead. Skip only when the last call's `by` is a DIFFERENT name
+   (or blank-but-not-me is impossible: `by` is stamped from caller() on every dial). */
+var _rcTimer=null;
+function _teammateCall(r){
+  var n=notes[r.c]||{}, lc=(typeof lastCall==='function')?lastCall(n):null;
+  if(!lc || !lc.by || lc.by===caller()) return null;
+  var coolH=(typeof n.cooldownH==='number' && n.cooldownH>=0)?n.cooldownH:24;
+  if((Date.now()-lc.ts) >= coolH*3600000) return null;
+  return lc;
+}
+function teamRecheck(){
+  if(SCREEN!=='lead' || !cur) return;
+  var lc=_teammateCall(cur);
+  if(!lc) return;
+  if(_rcTimer) return;                       // takeover already up
+  var app=$('app');
+  var msg='<div class="card" style="border:2px solid #c69a3a">'
+    + '<div class="ltag" style="color:#c69a3a">ALREADY CALLED</div>'
+    + '<div class="addr" style="font-size:17px">'+esc(cur.o||cur.a||'')+'</div>'
+    + '<div style="font-size:16px;margin-top:6px"><b>'+esc(lc.by)+'</b> called '
+    + esc(agoTxt(lc.ts)) + (lc.out?' &middot; '+esc(lc.out):'') + '</div>'
+    + '<div class="mut" style="margin-top:6px">Moving to the next lead so you two never double-dial. '
+    + 'Tap STAY if you are picking this one up on purpose.</div>'
+    + '<button id="rcgo" style="margin-top:14px">Next lead &rarr; <span id="rcn">3</span></button>'
+    + '<button id="rcstay" class="ghost" style="margin-top:8px">Stay on this lead</button>'
+    + '</div><div class="sheetpad"></div>';
+  app.innerHTML=msg;
+  var left=3;
+  var go=function(){ clearInterval(_rcTimer); _rcTimer=null;
+    var P=pool(), k; for(k=0;k<P.length;k++) if(P[k].c===cur.c){ i=k; break; }
+    /* pool() has already dropped this lead (it is suppressed now), so position i holds its
+       successor — render() paints them. When it was the LAST lead, render()'s own bounds
+       handling shows the done screen. */
+    render();
+  };
+  _rcTimer=setInterval(function(){ left--; var el=$('rcn');
+    if(el) el.textContent=String(left);
+    if(left<=0) go(); }, 1170);
+  $('rcgo').onclick=function(){ go(); };
+  $('rcstay').onclick=function(){ clearInterval(_rcTimer); _rcTimer=null;
+    /* Staying is a deliberate override — remember it for THIS lead so the recheck does not
+       re-takeover on the next repaint of the same screen. Cleared on advance. */
+    cur._rcStay=1; screenLead(); };
+}
 function pool(){
   /* Rebuilt here rather than in render() so EVERY caller gets a fresh index — advance() and
      screenOutcome() both call pool() outside a render, and a teammate's opt-out landing between
@@ -1782,6 +1904,7 @@ function start(){
    lead's own position when the intended successor is also gone, and holds position when both
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
+  if(cur) delete cur._rcStay;       // the stay override is per-visit, never per-lead-forever
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
@@ -2282,6 +2405,10 @@ function screenLead(){
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
   var r=cur, d=r.p[phIdx], rk=r.r[phIdx]||'';
+  /* Teammate already called this lead and the operator has not chosen to stay: take over the
+     paint entirely. Covers every arrival path — queue advance on a stale pool, the lookup jump,
+     the back path from a text panel — because they all end here. */
+  if(!r._rcStay && _teammateCall(r)){ setTimeout(teamRecheck, 0); }
   var when = r.lp ? ('lis pendens filed '+esc(r.x||''))
                   : ((r.d===0?'auction TODAY':(r.d===1?'auction TOMORROW':'auction in '+r.d+' days'))+(r.x?' &middot; '+esc(r.x):''));
 
@@ -3163,7 +3290,12 @@ document.addEventListener('visibilitychange',function(){
   freshCheck();
   /* Pull first (teammate opt-outs before the next dial), then PUSH: the push fired just before
      the dialer opened may have died when the tab backgrounded — returning is the retry moment. */
-  try{ if(localStorage.getItem('fcTeamKey')){ syncPull().then(function(){ loadNotes(); if(touched) return syncPush(); }).catch(function(){}); } }catch(e){}
+  try{ if(localStorage.getItem('fcTeamKey')){ syncPull().then(function(){ loadNotes();
+    /* THE POINT OF THE PULL. The merge just wrote whatever the other phone did while this one
+       was in the dialer — re-check the lead on screen before he dials it. Without this line the
+       fresh teammate outcome sits in notes and changes nothing until the next full repaint. */
+    try{ teamRecheck(); }catch(e){}
+    if(touched) return syncPush(); }).catch(function(){}); } }catch(e){}
 });
 boot();
 </script></body></html>
