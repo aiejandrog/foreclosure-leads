@@ -1,10 +1,11 @@
 {
-  "_comment": "Copy this to sender.json (gitignored) and fill it with JOSE'S tax-deed entity — this is who the letters come from. 'addr' MUST be a full return address ('LINE1, CITY, FL 33172') or --send is refused.",
+  "_comment": "Copy this to sender.json (gitignored) and fill it with JOSE'S tax-deed entity — this is who the letters come from. 'addr' MUST be a full return address ('LINE1, CITY, FL 33172') or --send is refused. 'quo_record': true once Quo auto-records calls -- it bakes the recording-consent ask onto Call Mode's dial screen (FS 934.03, all-party). Per-engine: the cloud runner carries the same flag as QUO_RECORD in refresh.yml.",
   "name": "Jose [Last Name]",
   "title": "",
   "llc": "[Jose's LLC]",
   "phone": "(786) 000-0000",
   "email": "",
   "addr": "231 NW 109TH AVE, MIAMI, FL 33172",
-  "web": ""
+  "web": "",
+  "quo_record": false
 }

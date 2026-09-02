@@ -106,6 +106,7 @@ Moving the runner means moving these. They are gitignored on purpose.
 | `worker_notes.json` | Resurrects leads Jose/Carlos already worked |
 | `leads_final.json` / `leads_raw.json` | The board itself |
 | `skiptrace_results.json` | Re-spends money on phones already bought |
+| `sender.json` | Per-engine identity **and flags**. `"quo_record": true` is what bakes the recording-consent ask onto Call Mode's dial screen; an engine without it publishes a dial screen with **no consent line while Quo keeps recording**. The cloud runner carries the same flag as `QUO_RECORD` in `refresh.yml` |
 
 **Secrets (never commit, never put in OneDrive):**
 `site.codes`, `captcha.key`, `tracerfy.key`, `tracerfy_mcp.url`, `gmail.key`, `streetview.key`,
