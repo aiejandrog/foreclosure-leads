@@ -56,6 +56,12 @@ jobs:
       # Skip the "Desktop tracker + daily CSV" write entirely on the runner (DEALFLOW_NO_DESKTOP
       # guard in foreclosure_leads.py — the OneDrive path only exists on Alejandro's machine).
       DEALFLOW_NO_DESKTOP: '1'
+      # Quo auto-records every call (on since 2026-09-01), so the dial screen must carry the
+      # recording-consent ask (FS 934.03, all-party). The laptop reads that flag from sender.json,
+      # which is gitignored and never reaches this runner -- without this line a cloud publish of
+      # docs/call silently drops the consent line while recording stays on (fefc312's own caveat).
+      # Repo variable QUO_RECORD overrides; set it to '0' only if auto-record is turned OFF in Quo.
+      QUO_RECORD: ${{ vars.QUO_RECORD || '1' }}
       # Same 8-min link-generator budget the local pipeline uses.
       GEN_DEADLINE: '480'
       # Keep pip/apt quiet.

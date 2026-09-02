@@ -192,6 +192,17 @@ _QREC_LINE = ('RECORDING IS ON. Before anything else: "Quick thing before we sta
 
 
 def _quo_recording():
+    """Is Quo auto-recording every call? Decides whether the consent ask is baked onto the dial screen.
+
+    Two sources, env FIRST, then sender.json -- the same order every scraper uses for its key.
+    sender.json is per-engine and gitignored, so it never reaches the cloud runner: the flag went on
+    there on 2026-09-01 (fefc312) and that same commit warned that a cloud publish of docs/call would
+    drop the consent line while recording stayed on. QUO_RECORD in refresh.yml is how the flag
+    travels. Fail-safe direction on purpose: asking for consent on a call that is not recorded costs
+    one sentence; recording a call without the ask is FS 934.03 (all-party, a felony statute)."""
+    v = os.environ.get('QUO_RECORD', '').strip().lower()
+    if v:
+        return v not in ('0', 'false', 'no', 'off')
     try:
         import entity
         return bool(entity.sender().get('quo_record'))
@@ -1342,7 +1353,10 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
    architecture is unchanged: published line (786) 631-1823 stays clean; the dialing line eats the
    volume risk. Requires: Quo app installed + set as the phone's default calling app — without
    that, tel: falls back to the carrier dialer and dials expose the published line, so CHECK THE
-   DEFAULT-APP SETTING before a dial session. Set 'gv' to route via Google Voice deep links. */
+   DEFAULT-APP SETTING before a dial session.
+   'gv' IS NO LONGER A FALLBACK (2026-09-02): the Google Voice subscription behind (786) 490-7825 was
+   cancelled on 2026-09-01, so a build with DIALER='gv' would route every dial to a dead line and the
+   caller would only find out when nothing rang. Leave 'tel'. */
 var DIALER='tel';
 function dialHref(d){return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+String(d) : 'tel:+1'+String(d);}
 /* tel: opens the dialer OVER the page; an https link would navigate AWAY from it — and the whole
@@ -1763,12 +1777,49 @@ function start(){
     var _lk = $('lkbtn');
     if(_lk){ _lk.style.display = 'block'; _lk.onclick = function(){ screenLookup(); }; }
   }catch(e){}
-  i=0; render(); freshCheck();
+  i=0; if(!_inflightResume()) render(); freshCheck();
   var k=null; try{k=localStorage.getItem('fcTeamKey');}catch(e){}
   if(!k){ $('sync').textContent='Team sync is off — outcomes log to this phone only. Turn it on in the board to reach the laptop.'; }
   else { $('sync').textContent='Team sync on'; try{ syncPull().then(function(){ loadNotes(); }); }catch(e){} }
 }
 
+/* THE CALL HE IS ON SURVIVES A RELOAD (2026-09-02). Tapping dial hands the phone to Quo for the
+   whole call, and iOS is free to evict the backgrounded Safari tab in the meantime; when it does,
+   the page comes back through boot() -> start() -> i=0 and paints lead #1. The person he just
+   spent ten minutes with then has no outcome screen and no dial in the ledger (n.dials is written
+   at OUTCOME time, not at tap time), and the only way back is the lookup. So the tap writes a small
+   in-flight record, start() reads it, and the page reopens on THAT lead's outcome screen with the
+   consent line and the script where he left them.
+   Cleared on the logged outcome and on advance(). Ignored when older than 3h, when the lead is no
+   longer in this phone's list at all, and when an outcome already landed for a dial made after the
+   tap -- from this phone or from a teammate's sync -- because re-asking a question that has been
+   answered is how a second "No answer" gets stamped on one call. A redial entry does NOT count as
+   answered: it is written at tap time and is outcome-pending by definition.
+   The lookup is ROWS, deliberately NOT pool(): a redial writes a dial for today, "dialled today" is
+   a suppression, and a suppressed lead is not in the pool -- so the one lead he most needs back
+   after a redial is precisely the one the pool would refuse to return. */
+var INFLIGHT_MS = 3*60*60*1000;
+function _inflightSet(r, k){ try{ localStorage.setItem('fcInflight', JSON.stringify({c:r.c, k:k, t:Date.now(), l:lane})); }catch(e){} }
+function _inflightClear(){ try{ localStorage.removeItem('fcInflight'); }catch(e){} }
+function _inflightResume(){
+  var f=null; try{ f=JSON.parse(localStorage.getItem('fcInflight')||'null'); }catch(e){}
+  if(!f || !f.c) return false;
+  if(!(Date.now()-(f.t||0) < INFLIGHT_MS)){ _inflightClear(); return false; }
+  var n=notes[f.c]||{};
+  if((n.dials||[]).some(function(x){ return x.oc!=='redial' && (x.tsu||0) >= (f.t||0); })){ _inflightClear(); return false; }
+  if(f.l) lane=f.l;
+  var r=null, k;
+  for(k=0;k<ROWS.length;k++) if(ROWS[k].c===f.c){ r=ROWS[k]; break; }
+  if(!r || !(r.p||[]).length){ _inflightClear(); return false; }
+  var P=pool();                     // position only; absence from the pool is NOT a reason to drop him
+  for(k=0;k<P.length;k++) if(P[k].c===f.c){ i=k; break; }
+  cur=r; phIdx=(f.k>=0 && f.k<r.p.length)?f.k:0;
+  _clmTake(r.c);
+  touched=true;                     // a resumed call is work in progress: freshCheck must not reload it away
+  try{ renderSheet(r); }catch(e){}
+  screenOutcome();
+  return true;
+}
 /* ADVANCE BY IDENTITY, NEVER BY `i++`.
 
    `i` indexes into pool(), and pool() is recomputed from live notes on every render. Logging an
@@ -1783,6 +1834,7 @@ function start(){
    vanished — because then everything at `i` has already shifted down. */
 function advance(workedC, nextC){
   SCREEN='lead';                    // leaving the interactive screen ON PURPOSE — render may paint
+  _inflightClear();                 // whatever he was on is over: logged, skipped or abandoned
   var P = pool(), k;
   if(nextC) for(k=0;k<P.length;k++) if(P[k].c===nextC){ i=k; return render(); }
   for(k=0;k<P.length;k++) if(P[k].c===workedC){ i=k+1; return render(); }
@@ -2418,6 +2470,7 @@ function screenLead(){
     // deploy landing during the first call of a session made freshCheck location.reload() the page
     // he was mid-call on. Three deploys shipped today while he was dialing.
     touched = true;
+    _inflightSet(cur, phIdx);
     setTimeout(screenOutcome,0);
   });
   /* Skip was the last raw i++ in the file — the same bug class already fixed for advance(), and
@@ -2631,6 +2684,7 @@ function screenOutcome(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
     n.dials.push({d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'redial'});
+    _inflightSet(r, phIdx);
     touched=true; saveNotes(); queueSync();
   });
   Array.prototype.forEach.call(document.querySelectorAll('.oc button'), function(b){
@@ -2916,6 +2970,7 @@ function logOutcome(r,o,digits){
   }
   n.dials=n.dials||[];
   n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()});
+  _inflightClear();
   n.cooldownH=o.h;
   if(o.k==='appt') n.status='Appointment';
   else if(o.k==='dnc'){ stopEverywhere(r, digits); }
