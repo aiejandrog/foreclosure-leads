@@ -1884,9 +1884,70 @@ function start(){
     if(_lk){ _lk.style.display = 'block'; _lk.onclick = function(){ screenLookup(); }; }
   }catch(e){}
   i=0; render(); freshCheck();
+  paintSync();
+}
+/* THE SYNC LINE, and it is now a BUTTON when sync is off.
+   It used to read "Turn it on in the board" — technically true (same origin, so the board's
+   fcTeamKey is this page's fcTeamKey) and useless in practice: the board is 6.4 MB, this page
+   exists precisely because that does not open on cell data, and the moment someone needs team
+   sync is the moment they are standing at a door holding the phone. Sending them to the heavy
+   surface to type eight characters is how a feature ends up switched off forever.
+   Everything needed was already here — startTeamSync, syncPush, syncPull, _deviceId. Only the
+   input was missing. */
+function paintSync(){
   var k=null; try{k=localStorage.getItem('fcTeamKey');}catch(e){}
-  if(!k){ $('sync').textContent='Team sync is off — outcomes log to this phone only. Turn it on in the board to reach the laptop.'; }
-  else { $('sync').textContent='Team sync on'; try{ syncPull().then(function(){ loadNotes(); }); }catch(e){} }
+  var el=$('sync'); if(!el) return;
+  /* Seat shown inline, from _seat() itself — I reached for a _seatTxt() helper that does not
+     exist, which would have thrown a ReferenceError on every paint of the one line that tells him
+     sync is working. {n,i,w}: w is the optional name, i is 0-based and reads 1-based. */
+  var _s=_seat(), seatTxt='';
+  if(_s && !SEAT_ALL) seatTxt=' · '+esc(_s.w||('Seat '+(_s.i+1)))+' of '+_s.n;
+  else if(_s && SEAT_ALL) seatTxt=' · ALL leads';
+  if(k){ el.textContent='Team sync ON'+seatTxt;
+    el.onclick=function(){ screenTeamKey(); };
+    try{ syncPull().then(function(){ loadNotes(); }); }catch(e){}
+    return; }
+  el.innerHTML='Team sync is OFF — outcomes log to this phone only. <b style="color:var(--gold)">Tap to turn it on</b>';
+  el.onclick=function(){ screenTeamKey(); };
+}
+function screenTeamKey(){
+  SCREEN='tkey';
+  var cur_k=''; try{ cur_k=localStorage.getItem('fcTeamKey')||''; }catch(e){}
+  $('app').innerHTML='<div class="card"><div class="ltag">TEAM SYNC</div>'
+    + '<div class="mut" style="margin:6px 0 10px">Everyone dialing types the SAME code. It is the '
+    + 'encryption key for your notes, not an account — nobody can read them without it, and there '
+    + 'is nothing to recover if it is lost.</div>'
+    /* THE FAILURE MODE, SAID OUT LOUD. A mistyped key is not an error — it is a valid team of one.
+       Both phones say "sync ON" and neither ever sees the other, because the server only ever
+       holds ciphertext it cannot compare. Nothing can detect this for them, so warn instead. */
+    + '<div class="mut" style="margin-bottom:10px"><b>Paste it, do not retype it.</b> A single wrong '
+    + 'character makes a second team that silently never syncs — both phones will still say ON.</div>'
+    + '<input id="tkin" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" '
+    + 'placeholder="team code (8+ characters)" value="'+esc(cur_k)+'" '
+    + 'style="width:100%;font-size:17px;padding:12px;border-radius:10px;border:1px solid #2c3a52;'
+    + 'background:#0e1626;color:#fff">'
+    + '<div id="tkerr" class="mut" style="color:#e0655f;margin-top:6px;display:none"></div>'
+    + '<button id="tkgo" style="margin-top:12px">Turn team sync on</button>'
+    + (cur_k?'<button id="tkoff" class="ghost" style="margin-top:8px">Turn sync OFF on this phone</button>':'')
+    + '<button class="ghost" style="margin-top:8px" onclick="SCREEN=\'lead\';render();paintSync()">Back</button>'
+    + '</div><div class="sheetpad"></div>';
+  var go=function(){
+    var v=($('tkin').value||'').trim();
+    /* 8 is the board's minimum and they MUST agree — a key this page accepts and the board
+       rejects would sync from the phone and silently never from the laptop. */
+    if(v.length<8){ var e=$('tkerr'); e.style.display='block';
+      e.textContent='Needs at least 8 characters — this is the encryption key.'; return; }
+    try{ localStorage.setItem('fcTeamKey', v); if(!localStorage.getItem('fcDevice')) _deviceId();
+      startTeamSync(); }catch(e){}
+    try{ toast('Team sync ON — logging as ' + esc(caller() || 'this phone'), {ms:5000}); }catch(e){}
+    SCREEN='lead'; render(); paintSync();
+  };
+  $('tkgo').onclick=go;
+  $('tkin').onkeydown=function(ev){ if(ev.key==='Enter') go(); };
+  if($('tkoff')) $('tkoff').onclick=function(){
+    try{ localStorage.removeItem('fcTeamKey'); }catch(e){}
+    SCREEN='lead'; render(); paintSync();
+  };
 }
 
 /* ADVANCE BY IDENTITY, NEVER BY `i++`.
