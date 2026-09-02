@@ -53,10 +53,21 @@ SENDER_FILE = os.path.join(HERE, 'sender.json')
 SENT_LEDGER = os.path.join(HERE, 'mail_letters_sent.json')
 PREVIEW_FILE = os.path.join(HERE, 'mail_preview.html')
 
-# Approximate all-in cost of one first-class, single-page B&W letter (print + postage + windowed envelope).
-# VERIFY the live number for your volume at https://help.lob.com/print-and-mail/ready-to-get-started/pricing-details
-# (July 2026: buyers typically see $0.70-$1.10/piece; a small desk without a volume plan trends to the high end).
-COST_PER_LETTER = 0.92
+# All-in cost of one first-class, single-page B&W letter (print + postage + windowed envelope).
+#
+# 0.92 -> 1.06 (2026-09-01, read off Lob's own pricing page, not an estimate). Lob prices by PLAN
+# TIER, and this desk is on the only tier that costs nothing to be on:
+#     Developer  $0/month, up to 500 pieces/month   B&W FC letter $1.060   4x6 postcard $0.905
+#     Startup    $260/month, up to 6,250/month      ...cheaper per piece, but the subscription is
+#     Growth     $550/month, up to 12,500/month        ~245 letters of postage before piece one.
+# At this volume Developer is correct and the subscription tiers are a trap, so 1.06 is OUR number.
+#
+# Why the old 0.92 mattered: this constant is the ONLY thing that answers "what will this batch
+# cost me". It ran 13% light, so a $200 budget looked like 217 letters and is really 188 — the
+# operator would have queued a batch he could not fund and found out at the API, mid-send.
+# Re-verify whenever the plan changes: https://help.lob.com/print-and-mail/ready-to-get-started/pricing-details
+COST_PER_LETTER = 1.06
+LOB_FREE_TIER_MONTHLY_CAP = 500      # Developer tier ceiling; above this a paid plan is required
 
 # Owners that are not distressed homeowners we can help -- skip them (matches the tracker's LLC-OWNED chip).
 _COMPANY_RE = re.compile(r'\b(LLC|L\.?L\.?C|INC|CORP|CORPORATION|TRUST|LP|LLP|COMPANY|CO\.|ASSOC|ASSOCIATION|BANK|HOLDINGS|PROPERTY|PROPERTIES|REALTY|REAL ESTATE|INVESTMENTS?|CAPITAL|FUND|ENTERPRISES|GROUP|VENTURES|PARTNERS|SERVICING|MORTGAGE|REO|MANAGEMENT)\b', re.I)
@@ -279,6 +290,10 @@ def build_letter_html(r, snd, lang='en'):
     sN = e(snd.get('name') or '[YOUR NAME]')
     sP = e(snd.get('phone') or '[YOUR PHONE]')
     sL = e(snd.get('llc') or '')
+    # _safe_llc, never snd['llc'] raw: it gates the ENTITY SUFFIX behind Sunbiz verification, so an
+    # unverified name can never print "LLC" on a homeowner's letter. Required by the MARS block
+    # below, which names the company making the disclosure.
+    llc = _safe_llc(snd)
     case_en = (f" (Certificate/Case No. {case_no})" if td else f" (Case No. {case_no})") if case_no else ''
     case_es = (f" (Núm. de certificado/caso {case_no})" if td else f" (Caso Núm. {case_no})") if case_no else ''
     sig = '<br>'.join(e(x) for x in _sig_lines(snd)) or sN
@@ -315,14 +330,27 @@ def build_letter_html(r, snd, lang='en'):
 <p>Respetuosamente,<br><br>{sig}</p>"""
         else:
             byp = f" por parte de {plaintiff}" if plaintiff else ''
+            # Same revised copy as EN, sentence for sentence. The ES letter carries the IDENTICAL
+            # disclosures — identity() AND mars() — because a Spanish-speaking homeowner is entitled
+            # to exactly the disclosure an English-speaking one gets, and a thinner ES version is how
+            # a translation quietly becomes a compliance gap.
             body = f"""<p>Estimado/a {e(first)},</p>
-<p>Mi nombre es {sN}, de Biscayne Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. {D.identity('es')} Los registros públicos muestran que su propiedad en <b>{addr}</b> está en ejecución hipotecaria{byp}{case_es}, con subasta el <b>{dt}</b>.</p>
-<p>No le escribo para convencerlo de nada. Cuando un dueño pregunta qué opciones tiene, estas son las <b>cinco salidas</b> de todo propietario en ejecución en Florida (de nuestro manual de campo):</p>
-{exits_es}
-<p>Mi trabajo es asegurarme de que sepa que las cinco están sobre la mesa para que la fecha de subasta no lo tome por sorpresa. Si una venta privada en efectivo es el camino, comprar tal cual antes de la fecha es una de las herramientas sobre la mesa. Si otra salida le conviene más, se lo diré, aunque no me incluya.</p>
-<p>{intake_es}</p>
-<p>No hay costo ni compromiso por conversar. Llámeme o escríbame al <b>{sP}</b>.</p>
-<p>Respetuosamente,<br><br>{sig}</p>"""
+<p>Como usted probablemente ya sabe, su casa está programada para subasta de ejecución hipotecaria el <b>{dt}</b>{byp}{case_es}.</p>
+<p>No sé si usted ya ha tomado algún paso para resolver este problema, pero al día de hoy su casa sigue en la lista de subasta.</p>
+<p><b>Todavía hay tiempo y hay opciones para evitar perder su propiedad.</b></p>
+<p>Si no hace nada, el prestamista gana, usted pierde, y usted, su familia, sus mascotas y todas sus pertenencias pueden ser desalojados por la fuerza.</p>
+<p>Llámenos ahora y le daremos una revisión y consulta gratuita de 15 minutos, sin ninguna obligación, y le informaremos de las opciones que todavía tiene. Sin honorarios. Sin presión.</p>
+<p>En esa llamada vamos a:</p>
+<ul>
+<li>Revisar el historial de su caso y su situación</li>
+<li>Explicarle las opciones que usted tiene, incluyendo algunas que quizá no conoce</li>
+<li>Darle un camino claro y honesto hacia adelante</li>
+</ul>
+<p>Lo que necesito: llámeme o escríbame directamente al <b>{sP}</b> con la mejor hora para comunicarme con usted. Le daré mi atención personal.</p>
+<p>Todavía hay tiempo para salvar su casa o su equidad, pero no mucho.</p>
+<p>{D.identity('es')}</p>
+<p class="mars">{D.mars(llc, 'es', as_html=True)}</p>
+<p>Cordialmente,<br><br>{sig}</p>"""
     else:
         if td:
             body = f"""<p>Dear {e(owner)},</p>
@@ -575,7 +603,12 @@ def main():
     ap = argparse.ArgumentParser(description='Batch-send compliant foreclosure/tax-deed letters via Lob.')
     ap.add_argument('--tier', default='A,B', help='comma tiers to include (default A,B; use "all" for every tier)')
     ap.add_argument('--lang', choices=['en', 'es'], default='en')
-    ap.add_argument('--min-days', type=int, default=5, help='only mail if the auction is >= N days out (letter must arrive)')
+    # 5 -> 10 (2026-09-01). Lob first-class transit is 9-13 CALENDAR days from submission, so a
+    # 5-day floor guaranteed the letter landed AFTER the gavel. Measured on a live --limit 5 dry
+    # run: 4 of 5 would have arrived after the sale and the 5th on auction day — that batch was
+    # 100% wasted postage, and the engine reported it as a clean success. 10 is the first floor
+    # inside Lob's own quoted window. Raise it, never lower it, unless Lob quotes faster.
+    ap.add_argument('--min-days', type=int, default=10, help='only mail if the auction is >= N days out (Lob transit is 9-13 days)')
     ap.add_argument('--suppress', default='', help='exported tracker notes JSON: skip DNC/opted-out cases')
     ap.add_argument('--limit', type=int, default=0, help='cap the batch size (0 = no cap)')
     ap.add_argument('--remail', action='store_true', help='include cases already in mail_sent.json')
@@ -624,6 +657,12 @@ def main():
     est = len(queue) * COST_PER_LETTER
     print(f"\nESTIMATED COST: {len(queue)} x ~${COST_PER_LETTER:.2f} = ~${est:,.2f}"
           f"  (first-class, 1-page B&W; verify at lob.com/pricing)")
+    # THE FREE TIER HAS A CEILING. Lob's Developer plan is $0/month up to 500 pieces/month; the next
+    # tier is $260/month. A batch that crosses 500 does not fail loudly at the API - it quietly moves
+    # this desk onto a subscription that costs more than the postage. Say it BEFORE the send.
+    if len(queue) > LOB_FREE_TIER_MONTHLY_CAP:
+        print(f"  !! {len(queue)} pieces EXCEEDS Lob's free Developer cap of {LOB_FREE_TIER_MONTHLY_CAP}/month."
+              f" The overflow forces a paid plan (Startup $260/mo). Split the batch or accept the plan.")
 
     # write a preview of the first letter so the copy/address can be eyeballed with no key/send
     if queue:
