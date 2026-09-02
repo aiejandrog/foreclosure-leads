@@ -349,7 +349,6 @@ def build_letter_html(r, snd, lang='en'):
 <p>Lo que necesito: llámeme o escríbame directamente al <b>{sP}</b> con la mejor hora para comunicarme con usted. Le daré mi atención personal.</p>
 <p>Todavía hay tiempo para salvar su casa o su equidad, pero no mucho.</p>
 <p>{D.identity('es')}</p>
-<p class="mars">{D.mars(llc, 'es', as_html=True)}</p>
 <p>Cordialmente,<br><br>{sig}</p>"""
     else:
         if td:
@@ -387,7 +386,6 @@ def build_letter_html(r, snd, lang='en'):
 <p>What I need: call or text me directly at <b>{sP}</b> with the best time to reach you. I'll give you my personal attention.</p>
 <p>There is still time to save your home or your equity, but not much.</p>
 <p>{D.identity('en')}</p>
-<p class="mars">{D.mars(llc, 'en', as_html=True)}</p>
 <p>Warm regards,<br><br>{sig}</p>"""
 
     today = datetime.date.today().strftime('%B %d, %Y')

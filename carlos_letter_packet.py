@@ -122,13 +122,11 @@ def letter_person(r):
         "What happened with the house? If selling is something you would even consider, call me and "
         "I will give you a straight answer about what it is worth and how fast it could be done. It "
         "costs nothing to talk and I am not going to pressure you.\n\n"
-        "%s\n\n"
         "%s — %s\n\n"
         "If you would rather not hear from us again, just call or write and say stop, and we will "
         "not contact you again."
         % (first if first != 'there' else 'Hello', SENDER['name'], SENDER['co'], st,
            who, (' (Case No. %s).' % case) if case else '.', when,
-           D.mars_part('may_agree', 'may_stop', as_html=False),
            SENDER['name'], SENDER['phone'])
     )
     es = (
@@ -147,13 +145,11 @@ def letter_person(r):
         "¿Qué pasó con la casa? Si vender es algo que consideraría, llámeme y le doy una respuesta "
         "directa de cuánto vale y qué tan rápido se podría hacer. Hablar no cuesta nada y no le voy "
         "a presionar.\n\n"
-        "%s\n\n"
         "%s — %s\n\n"
         "Si prefiere no recibir más cartas nuestras, llame o escriba y díganos que pare, y no lo "
         "volvemos a contactar."
         % (first if first != 'there' else 'Hola', SENDER['name'], SENDER['co'], st,
            whoES, (' (Caso Núm. %s).' % case) if case else '.', whenES,
-           D.mars_part('may_agree', 'may_stop', lang='es', as_html=False),
            SENDER['name'], SENDER['phone'])
     )
     return en, es

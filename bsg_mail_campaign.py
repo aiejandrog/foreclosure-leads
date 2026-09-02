@@ -251,11 +251,9 @@ def letter(r):
         "I'm not a lawyer, and I'm not asking you for any money.\n\n"
         "I saw the court filing on %s. If selling is something you'd consider, I buy houses in "
         "this situation, or I can help you sell before a sale date gets set.\n\n"
-        "%s\n\n"
         "If you'd rather I didn't write again, call me and say stop.\n\n"
         "%s\n%s"
         % (r['first'], SENDER['name'], SENDER['co'], street,
-           D.mars_part('may_agree', 'may_stop', as_html=False),
            SENDER['name'], contact_phone())
     )
 

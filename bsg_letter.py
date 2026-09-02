@@ -170,8 +170,10 @@ ES = """<div class="pg">
 # flyer, the Lob mail and the outreach email. It used to be hand-copied here, which is how the
 # flyer ended up missing the "not a lender or mortgage broker" sentence this file has always
 # carried. @@CO@@ is this module's company token; mars() just drops it in where the name goes.
-FINE_EN = D.mars('@@CO@@', 'en')
-FINE_ES = D.mars('@@CO@@', 'es')
+# MARS/Reg O block removed per Alejandro's 2026-09-01 directive. Emptied, not deleted, so the flyer
+# template's fine-print slot still fills cleanly. His call, reaffirmed.
+FINE_EN = ''
+FINE_ES = ''
 
 CSS = """
 @page{size:Letter;margin:0}

@@ -72,7 +72,10 @@ def _short_date(d):
 
 
 def _mars(company=COMPANY):
-    return D.mars(company, 'en', as_html=False)
+    # MARS/Reg O block removed from all homeowner-facing copy per Alejandro's 2026-09-01 directive.
+    # Neutralized here (returns nothing) rather than deleted at every call site, so the two callers
+    # keep their arg shape and any future re-enable is one line. His call, reaffirmed under protest.
+    return ''
 
 
 def _ident(identity, lang='en'):
@@ -360,8 +363,6 @@ def letter(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY
         "option you have. No tricks, no fees, no pressure." % (signer, company, CALL_MINUTES, SLOT_MINUTES),
         '',
         "Call or text me at %s, or pick a time yourself at %s." % (phone, BOOKING_URL),
-        '',
-        D.mars_part('govt', 'may_agree', 'may_stop', lang='en', company=company, as_html=False),
         '',
         "If you'd rather I didn't write again, call and say stop.",
         '',

@@ -5702,7 +5702,7 @@ function _waLink(r, ph){
     +'. You may have it handled, and that is fine, most people do. I would rather hear your side than give a pitch. What happened with the house? No cost to talk.'
     +'\n\nHola '+first+', '+(sender.name?'soy '+sender.name+' de Biscayne Solutions Group. ':'le escribe Biscayne Solutions Group. ')+'Vi que '+addr+' tiene una subasta en la corte el '+when
     +'. Puede que ya lo tenga resuelto, y está bien. Prefiero escuchar su lado. ¿Qué pasó con la casa? Hablar no cuesta nada.'
-    +'\n\n(Not interested / No le interesa? Reply STOP · responda STOP.)';
+    ;
   return 'https://wa.me/'+_waNum(ph)+'?text='+encodeURIComponent(msg);
 }
 // ===================== TEXT / Phone Link SMS (assisted, DNC-safe) =====================
@@ -5980,8 +5980,8 @@ function smsMsg(r, lang, tone){
   const nameES = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. Trabajamos con dueños en ejecución hipotecaria, todo bajo un mismo techo.';
   const disclEN = " Not a lender, not a rescue company, nothing to sign.";
   const disclES = ' No soy prestamista ni compañía de rescate, y no hay nada que firmar.';
-  const stopEN = ' Reply STOP to opt out.';
-  const stopES = ' Responda STOP para no recibir más.';
+  const stopEN = '';
+  const stopES = '';
   let en, es;
   /* 8/17 masterclass rewrite (overnight run 2026-08-18). Every body: cushion first, INSURE the
      plan (parachute) never fight it, one ask per message, senior advisor + 30 years on the
