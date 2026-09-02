@@ -1755,17 +1755,15 @@ function teamWatch(){
   if(first){ localStorage.setItem(_TW_INIT, '1'); return 0; }
   if(!fresh.length) return 0;
 
-  /* THE CARD HE IS LOOKING AT. Loud, specific, and it names the outcome — "no answer" and
-     "do not contact" mean opposite things for whether he should still dial. */
+  /* THE CARD HE IS LOOKING AT is teamRecheck()'s job, not this one's — it already owns that
+     moment with a full takeover: "ALREADY CALLED", who, when, the outcome, a 3s countdown and a
+     STAY button. Re-toasting over it would be two warnings for one event.
+     What teamRecheck could not do is FIRE ON ITS OWN. It was wired only to visibilitychange, so
+     it caught the return from the dialer and nothing else: sit reading a card for two minutes
+     while Carlos works that same lead, and the 45s pull lands his outcome in notes with the
+     screen unchanged. Handing it the background tick is the whole fix. */
   var here = cur && fresh.filter(function(f){ return f.c === cur.c; })[0];
-  if(here){
-    try{ toast('&#9742; ' + esc(here.by) + ' JUST called this one &mdash; ' + agoTxt(here.ts)
-        + (here.out ? ' &middot; ' + esc(here.out) : '') + '. Do not dial it again.',
-        {bad:true, ms:11000}); }catch(e){}
-    /* Repaint so the lead drops out of the queue under him. Guarded on SCREEN by render()
-       itself, so this can never stomp an outcome screen he is in the middle of. */
-    try{ render(); }catch(e){}
-  }
+  if(here){ try{ teamRecheck(); }catch(e){} }
   var others = fresh.filter(function(f){ return !here || f.c !== here.c; });
   if(others.length){
     var names = {}; others.forEach(function(f){ names[f.by] = (names[f.by]||0)+1; });
@@ -3295,8 +3293,18 @@ document.addEventListener('visibilitychange',function(){
        was in the dialer — re-check the lead on screen before he dials it. Without this line the
        fresh teammate outcome sits in notes and changes nothing until the next full repaint. */
     try{ teamRecheck(); }catch(e){}
+    try{ teamWatch(); }catch(e){}
     if(touched) return syncPush(); }).catch(function(){}); } }catch(e){}
 });
+/* THE BACKGROUND TICK. startTeamSync() already pulls every 45s, but nothing consumed the result
+   while the page stayed in the foreground — teamRecheck was wired to visibilitychange alone, so
+   a teammate's outcome only ever surfaced when he left the app and came back. Reading a card for
+   two minutes while Carlos worked that same lead showed him nothing.
+   This polls the merged notes instead of the network: no fetch, no extra sync traffic, just a
+   diff of what syncPull already wrote. 20s so a fresh outcome lands inside the window between
+   reading a card and tapping dial, and teamWatch's case+timestamp dedup means a tick with
+   nothing new is silent. */
+setInterval(function(){ try{ if(localStorage.getItem('fcTeamKey')) teamWatch(); }catch(e){} }, 20000);
 boot();
 </script></body></html>
 """
