@@ -310,3 +310,19 @@ the code.**
 - notint policy — 720h is a WINDOW, not a retirement. Whether an explicit "no" resurfaces at
   all is **Alejandro's decision, asked directly 2026-09-02 evening**, not a buried constant.
   Until he answers, the 30-day window in the DEALFLOW WIP stands.
+
+### notint policy — CONVERGED SPEC, awaiting Alejandro's yes (2026-09-02 late)
+
+Supervisor session and takeover/Quo session agree; do NOT implement until he answers.
+
+- **HARD NO** ("stop calling me"): its own outcome button -> permanent, person-keyed DNC.
+  Checked at queue build AND at dial time. No resurface, no exceptions. (Mostly exists:
+  stopEverywhere; the new part is splitting the BUTTON so reps stop logging hard nos as notint.)
+- **SOFT NO** ("we're set, thanks"): retire from the automatic rotation — NOT a cooldown.
+  Eligible for exactly ONE deliberate resurface, EVENT-driven, never calendar-driven:
+    * lead has a sale date -> resurface at T-14 before auction;
+    * LP lead (no date — where MOST nos happen, 1,115/1,471 rows) -> resurface when a sale
+      date APPEARS. Without this branch the feature is silently dead for the whole LP lane —
+      the succeeds-while-doing-nothing class, again.
+  After the one resurface: any second no of either kind = retired permanently.
+- Until he answers, the 720h window in the DEALFLOW WIP stands as the interim.
