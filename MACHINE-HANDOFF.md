@@ -289,3 +289,24 @@ ship them by rebuilding), one is real and OPEN:
 
 Also open: `origin/claude/call-mode-ready` (c690b98) forked from 07d6fad, BEFORE 602dbad —
 expect a small call_mode.py merge when it lands.
+
+### Red/green proof for the no-means-no guards (supervisor item, 2026-09-02 evening)
+
+| scenario | `_cm_teamtest.js` (BUILT page, 17:20) | `_cm_sourcecheck.js` (source, 17:26) |
+|---|---|---|
+| sibling-case suppression | **RED** — guard absent from page | **GREEN** |
+| retroactive 72h→720h floor | **RED** — guard absent from page | **GREEN** |
+| expired ordinary cooldown stays dialable | — | **GREEN** (fail-capability proof) |
+
+Reading: the guards are CORRECT in source and NOT YET on the phone. The pair separates
+"fix written" / "fix live" / "fix wrong" — one test alone cannot. **After the next rebuild,
+`node _cm_teamtest.js` must go green on both rows; if it does not, the build is broken, not
+the code.**
+
+**OWNED OPEN ITEMS**
+- `_teammateCall` pcs-walk (sibling-case teammate call must trigger the on-screen takeover):
+  **owner = takeover/Quo session**, lands immediately after DEALFLOW's next push, unless that
+  push already contains it. Not "whoever lands last" — named, with a trigger.
+- notint policy — 720h is a WINDOW, not a retirement. Whether an explicit "no" resurfaces at
+  all is **Alejandro's decision, asked directly 2026-09-02 evening**, not a buried constant.
+  Until he answers, the 30-day window in the DEALFLOW WIP stands.
