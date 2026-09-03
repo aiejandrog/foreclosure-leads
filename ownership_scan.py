@@ -38,7 +38,7 @@ OUT = os.path.join(HERE, 'ownership.json')
 # 'defendants' from the Clerk's party list while SKIPPING defs[0] — defs[0] is treated as the owner. So
 # 'defendants' is the CO-defendants: condo associations, lenders, the USA, spouses. Comparing the live
 # appraiser owner to that guarantees a mismatch on almost every MD lead (we were literally comparing the
-# homeowner to their own HOA and calling it a sale — e.g. Acosta's own GLA HOMES LLC flagged as sold).
+# homeowner to their own HOA and calling it a sale — e.g. an owner's own LLC flagged as the buyer).
 # 'owners' IS the right target: Miami-Dade already enriches from the live MD-PA at scrape time, so
 # stored-vs-live catches a transfer that happened SINCE our last scrape, and the Certificate-of-Title-
 # after-filing check catches the sold-via-a-separate-case pattern. Broward/PB stay on 'oname' because

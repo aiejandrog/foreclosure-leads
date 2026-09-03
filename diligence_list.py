@@ -30,8 +30,8 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Association names in the wild: "FAIRHAVEN 11 MAINTENANCE CORP", "COMMODORE PLAZA CONDOMINIUM
-# ASSOCIATION INC", "XYZ HOMEOWNERS ASSN", "L'HERMITAGE OWNERS ASSOCIATION INC", POA/master association.
+# Association names in the wild: "FAIRHAVEN 11 MAINTENANCE CORP", "XYZ HOMEOWNERS ASSN",
+# "L'HERMITAGE OWNERS ASSOCIATION INC", POA/master association.
 HOA_RX = re.compile(
     r'\b(CONDOMINIUM|CONDO|HOMEOWNERS?|HOME\s*OWNERS?|MAINTENANCE\s+CORP|PROPERTY\s+OWNERS?|'
     r'MASTER\s+ASSOCIATION|OWNERS\s+ASSOCIATION|TOWNHOMES?|VILLAGE|CIVIC\s+ASSOCIATION|'
@@ -44,9 +44,9 @@ def associations(defendants):
     """Association co-defendants on a case. '' / None safe.
 
     Prefers diligence_flags.hoa_parties() — the fuller detector built alongside this one, verified
-    live on Acosta's case (returns COMMODORE PLAZA CONDOMINIUM ASSOCIATION INC). Keeping two HOA
-    regexes in one repo guarantees they drift apart and start disagreeing about which leads are risky,
-    so this defers to that module and only falls back to the local pattern if it is unavailable.
+    live against a real condo case (returns the association co-defendant). Keeping two HOA regexes
+    in one repo guarantees they drift apart and start disagreeing about which leads are risky, so
+    this defers to that module and only falls back to the local pattern if it is unavailable.
     """
     try:
         import diligence_flags as _DF

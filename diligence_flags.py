@@ -143,7 +143,7 @@ _NOISE_PARTY = re.compile(
 
 # STRONG association tells — these words never appear in a bank or a person's name.
 #   FAIRHAVEN 11 MAINTENANCE CORP           -> MAINTENANCE + corp suffix
-#   COMMODORE PLAZA CONDOMINIUM ASSOC INC   -> CONDOMINIUM
+#   SEAWIND CONDOMINIUM ASSOC INC   -> CONDOMINIUM
 #   XYZ HOMEOWNERS ASSN                     -> HOMEOWNERS
 #   MUTINY ON THE BAY CONDO ASSOC INC       -> CONDO ASSOC
 #   Lago Mar Townhomes Association Inc      -> TOWNHOMES ASSOCIATION
@@ -1278,7 +1278,7 @@ def annotate(row, checklist_mode='none'):
 _ZOO = [
     # (party string, expect_match, note)
     ('FAIRHAVEN 11 MAINTENANCE CORP', True, 'maintenance corp, no ASSN word'),
-    ('COMMODORE PLAZA CONDOMINIUM ASSOCIATION INC', True, 'textbook condo'),
+    ('SEAWIND CONDOMINIUM ASSOCIATION INC', True, 'textbook condo'),
     ('XYZ HOMEOWNERS ASSN', True, 'homeowners assn'),
     ('SUNRISE POA', True, 'bare POA'),
     ('OAK RUN MASTER ASSOCIATION', True, 'master association'),

@@ -132,7 +132,6 @@ distinguishable (FS 605.0112) when the record appears.</div>
   <tr><td>Texting rule + no-recording rule</td><td class="done">WRITTEN &mdash; needs signatures only</td></tr>
   <tr><td>Public PII exposure on the repo</td><td class="done">CLOSED on HEAD (history purge still pending)</td></tr>
   <tr><td>LLC claims stripped from every asset</td><td class="done">DONE &mdash; auto-restores when the real name is set</td></tr>
-  <tr><td>Acosta position &amp; options report</td><td class="done">DRAFTED &mdash; needs scope confirm + estoppel</td></tr>
   <tr><td>Milouse lead + her back-taxes task</td><td class="done">CLOSED &mdash; she does not own the property</td></tr>
   <tr><td>Email bounce rate</td><td class="done">DIAGNOSED &mdash; it is a data ceiling, not a bug</td></tr>
 </table>
@@ -140,8 +139,6 @@ distinguishable (FS 605.0112) when the record appears.</div>
 <h2>4. Time-critical items that will not wait a week</h2>
 <table>
   <tr><th>What</th><th>Deadline</th><th>Why it cannot slip</th></tr>
-  <tr><td class="now">Acosta &mdash; get the Commodore Plaza estoppel</td><td>Sale 08/31 (@@ACOSTADAYS@@ days)</td>
-      <td>It is the number that decides whether his deal has any equity. Every option he has needs it first.</td></tr>
   <tr><td class="now">The 12 flagged deep-dive leads</td><td>Soonest auction: 3 days</td>
       <td>Each has an association as co-defendant and real equity. Jesse's 3&ndash;5 minute check, before anyone drives.</td></tr>
   <tr><td class="now">File the LLC</td><td>Sunbiz takes 2&ndash;5 days; A2P takes 2&ndash;3 weeks</td>
@@ -168,13 +165,12 @@ the <b>data/brief lane needs no licence and no homeowner contact at all.</b> 688
 2,814 investor notes are already identified. If the entity slips, that is the only lane that can still
 earn.</div>
 
-<h2>6. If you only do four things</h2>
+<h2>6. If you only do three things</h2>
 <table>
   <tr><th>#</th><th>Action</th><th>Cost</th><th>Unblocks</th></tr>
   <tr><td>1</td><td><b>Pick a name and file the LLC</b></td><td>$125</td><td>20 of 25 priorities</td></tr>
   <tr><td>2</td><td>EIN the day it approves, then start A2P immediately</td><td>free</td><td>Phone, DNC, bank</td></tr>
-  <tr><td>3</td><td>Call Commodore Plaza for the Acosta estoppel</td><td>free</td><td>The only paying client</td></tr>
-  <tr><td>4</td><td>Sign both operating rules; have Carlos sign too</td><td>free</td><td>Legal cover for every contact</td></tr>
+  <tr><td>3</td><td>Sign both operating rules; have Carlos sign too</td><td>free</td><td>Legal cover for every contact</td></tr>
 </table>
 
 <div class="note" style="margin-top:12pt"><b>Nothing in this document has been sent to anyone.</b> No
@@ -186,8 +182,7 @@ def main():
     days_gate = (GATE - TODAY).days
     doc = (DOC.replace('@@CSS@@', CSS)
               .replace('@@TODAY@@', TODAY.strftime('%B %d, %Y').replace(' 0', ' '))
-              .replace('@@GATEDAYS@@', str(days_gate))
-              .replace('@@ACOSTADAYS@@', str((datetime.date(2026, 8, 31) - TODAY).days)))
+              .replace('@@GATEDAYS@@', str(days_gate)))
     assert '@@' not in doc, 'unreplaced token'
     hp = os.path.join(HERE, 'BSG_Action_Plan_%s.html' % TODAY.isoformat())
     open(hp, 'w', encoding='utf-8').write(doc)

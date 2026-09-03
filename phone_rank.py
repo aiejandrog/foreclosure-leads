@@ -27,7 +27,7 @@ THE SCORE, and why each piece
 Deliberately NOT scored: area code. A 305/786 number is not more likely to be answered than a 407,
 and half of Miami has kept an out-of-state cell for a decade. Guessing there would only add noise.
 
-Run:  python phone_rank.py --case 2025-020389-CA-01     # ranking for one lead
+Run:  python phone_rank.py --case 50-2025-CA-000000     # ranking for one lead
       python phone_rank.py --stats                      # how the whole file scores
 """
 import argparse
