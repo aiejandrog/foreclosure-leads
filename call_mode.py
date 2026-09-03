@@ -39,7 +39,13 @@ CALL_OUTCOMES = [
     ('talked',    'Talked',                72, False),
     ('appt',      'APPOINTMENT SET',       72, False),
     ('wrong',     'Wrong number',           0, True),
-    ('notint',    'Not interested',        72, False),
+    # 720h = 30 DAYS, was 72h. Field report 9/2: "they're telling me no and I keep calling
+    # them". A no-answer coming back tomorrow is cadence; a human who SAID NO coming back in
+    # three days is harassment, and it was the outcome table doing it, not a bug downstream.
+    # 30 days rather than forever on purpose: sale dates move, situations collapse, and a
+    # September no can be an October "thank God you called" -- but nobody's October starts
+    # three days after their no.
+    ('notint',    'Not interested',       720, False),
     ('dnc',       'DNC — do not contact',   0, True),
 ]
 
@@ -1628,9 +1634,35 @@ function suppressed(r){
   var lc = lastCall(n);
   if(lc){
     var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 24;
+    /* NO MEANS NO, retroactively. Every notint logged BEFORE 2026-09-02 carries the old 72h in
+       its stored cooldownH, so raising the outcome table alone would have left every already-
+       collected "no" cycling back every three days until someone re-logged it. The STATUS is the
+       durable fact; read it directly and hold the same 30 days the new logs get. */
+    if(n.status === 'Not interested' && coolH < 720) coolH = 720;
     if((Date.now() - lc.ts) < coolH * 3600000){
       return 'called ' + agoTxt(lc.ts) + (lc.by ? ' by ' + lc.by : '')
            + (lc.out ? ' · ' + lc.out : '');
+    }
+  }
+  /* ONE HUMAN, MANY CASE ROWS. Suppression was case-keyed, and the feeds routinely carry the
+     same person twice -- an HOA case and a bank case on one condo, or two properties in the LP
+     lane. Calling row A logged the outcome on A while row B kept serving the identical human as
+     a fresh lead ("why am I still getting the same people"). r.pcs is the person's OTHER case
+     list, stamped at build for exactly this; read it. Sibling notes arrive over the same sync,
+     so this also covers Carlos having called the person on the sibling case. */
+  if(r.pcs && r.pcs.length){
+    for(var si=0; si<r.pcs.length; si++){
+      var sc = r.pcs[si];
+      if(!sc || sc === r.c) continue;
+      var sn = notes[sc] || {};
+      var slc = lastCall(sn);
+      if(!slc) continue;
+      var sCool = (typeof sn.cooldownH === 'number' && sn.cooldownH >= 0) ? sn.cooldownH : 24;
+      if(sn.status === 'Not interested' && sCool < 720) sCool = 720;
+      if((Date.now() - slc.ts) < sCool * 3600000){
+        return 'same person called ' + agoTxt(slc.ts) + (slc.by ? ' by ' + slc.by : '')
+             + (slc.out ? ' · ' + slc.out : '') + ' (their case ' + sc + ')';
+      }
     }
   }
   return '';
@@ -1793,11 +1825,18 @@ function teamWatch(){
    (or blank-but-not-me is impossible: `by` is stamped from caller() on every dial). */
 var _rcTimer=null;
 function _teammateCall(r){
-  var n=notes[r.c]||{}, lc=(typeof lastCall==='function')?lastCall(n):null;
-  if(!lc || !lc.by || lc.by===caller()) return null;
-  var coolH=(typeof n.cooldownH==='number' && n.cooldownH>=0)?n.cooldownH:24;
-  if((Date.now()-lc.ts) >= coolH*3600000) return null;
-  return lc;
+  /* Checks the lead AND every sibling case of the same person -- the takeover exists to stop a
+     human being double-dialled, and the human does not care which of their case numbers the
+     first call was logged under. */
+  var cases=[r.c].concat(r.pcs||[]);
+  for(var ci=0; ci<cases.length; ci++){
+    var n=notes[cases[ci]]||{}, lc=(typeof lastCall==='function')?lastCall(n):null;
+    if(!lc || !lc.by || lc.by===caller()) continue;
+    var coolH=(typeof n.cooldownH==='number' && n.cooldownH>=0)?n.cooldownH:24;
+    if(n.status==='Not interested' && coolH<720) coolH=720;
+    if((Date.now()-lc.ts) < coolH*3600000) return lc;
+  }
+  return null;
 }
 function teamRecheck(){
   if(SCREEN!=='lead' || !cur) return;
@@ -2673,13 +2712,13 @@ var TEXT_T = {
   cold:   'Hi{first}, this is {sender} with Biscayne Solutions Group. I just tried calling about {st1}. '
         + 'I am not selling anything and not trying to buy the house. If you have a plan, keep it. '
         + 'A free 5 minutes with our senior advisor, 30 plus years, gets you every option. '
-        + 'Reply YES, or STOP to opt out.',
+        + 'Reply YES.',
   follow: 'Hi{first}, {sender} with Biscayne Solutions Group again about {st1}. If your plan is moving, '
         + 'good, keep it. One question. Do you have it in writing yet? If not, our senior advisor '
-        + 'can be the backup, free, 5 minutes. Reply YES, or STOP to opt out.',
+        + 'can be the backup, free, 5 minutes. Reply YES.',
   final:  'Hi{first}, last text from me, {sender} with Biscayne Solutions Group about {st1}. I hope your '
         + 'plan lands on time. If anything slips, one free call with our senior advisor maps what '
-        + 'still works. Save this number even if you delete this text. Reply YES, or STOP to opt out.'
+        + 'still works. Save this number even if you delete this text. Reply YES.'
 };
 function textBody(r, stage){
   return fillScript(TEXT_T[stage] || TEXT_T.cold, r);
