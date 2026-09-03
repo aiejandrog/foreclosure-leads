@@ -560,7 +560,7 @@ def _compose_single(r, snd, lang='en'):
             f"work better with time on the clock. That's the whole reason for this note.\n\n"
             f'If you want a straight rundown of where you stand, call or text me. No cost, '
             f'no obligation.\n\n{sig}\n\n'
-            f'Reply STOP or ask me not to contact you again and I will honor it.'
+            f''
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
@@ -573,7 +573,6 @@ def _compose_single(r, snd, lang='en'):
             f'esta nota.\n\n'
             f'Si quiere un repaso directo de donde esta parado, llameme o mandeme un texto. '
             f'Sin costo, sin compromiso.\n\n{sig}\n\n'
-            f'Responda STOP o pidame no contactarlo y lo respeto.'
         )
     elif td:
         body_en = (
@@ -585,7 +584,7 @@ def _compose_single(r, snd, lang='en'):
             f"the surplus if it sells for more than what's owed.\n\n"
             f'Want to know which one fits? Call or text me. No cost, and if another path beats '
             f"selling, I'll say so.\n\n{sig}\n\n"
-            f'Reply STOP or ask me not to contact you again and I will honor it.'
+            f''
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
@@ -598,7 +597,6 @@ def _compose_single(r, snd, lang='en'):
             f'lo que se debe.\n\n'
             f'Quiere saber cual le conviene? Llameme o mandeme un texto. Sin costo, y si otro '
             f'camino es mejor que vender, se lo digo.\n\n{sig}\n\n'
-            f'Responda STOP o pidame no contactarlo y lo respeto.'
         )
     else:
         plaint_bit_en = f' by {plaintiff}' if plaintiff else ''
@@ -630,7 +628,7 @@ def _compose_single(r, snd, lang='en'):
             f'friends.\n\n'
             f'All I need is a reply with a good phone number and the best time to reach you. '
             f"Or call or text me and I'll set it up.\n\n"
-            f'{sig}\n\nReply STOP or ask me not to contact you again and I will honor it.'
+            f'{sig}\n\n'
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
@@ -651,7 +649,7 @@ def _compose_single(r, snd, lang='en'):
             f'y quedamos como amigos.\n\n'
             f'Lo unico que necesito es que me responda con un buen numero de telefono y la mejor '
             f'hora para llamarlo. O llameme o mandeme un texto y lo coordinamos.\n\n'
-            f'{sig}\n\nResponda STOP o pidame no contactarlo y lo respeto.'
+            f'{sig}'
         )
         # ---- ALEJANDRO'S COPY, ENGLISH COLD BODY -------------------------------------------
         # He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME
@@ -727,7 +725,6 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
         f"If it'd help, I can walk the numbers on any of them. No cost, no obligation -- and "
         f"if selling isn't your best move on a given property, I'll tell you that "
         f'straight.\n\n{sig}\n\n'
-        f'Reply STOP or ask me not to contact you again and I will honor it for every property above.'
     )
     body_es = (
         f"Hola {first},\n\nSoy {sN}, de Biscayne Solutions Group. "
@@ -742,7 +739,6 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
         f'Si le sirve, puedo repasar los numeros de cualquiera de ellas. Sin costo, sin '
         f'compromiso -- y si vender no es su mejor opcion en alguna, se lo digo tal '
         f'cual.\n\n{sig}\n\n'
-        f'Responda STOP o pidame no contactarlo y lo respetare para cada una de las propiedades arriba.'
     )
     return {
         'en': {'subj': subj_en, 'body': body_en},

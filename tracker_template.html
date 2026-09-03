@@ -11104,7 +11104,7 @@ function genAgentPitch(r){
     + 'this doesn’t go to auction, I can move quickly and close before the deadline.<br><br>'
     + 'No pressure either way — happy to just be a name on file if the timing gets tight.<br><br>'
     + 'Thanks,<br>'+esc(sN)+'<br>'+esc(sL)+(sP?'<br>'+esc(sP):'')+(sE?'<br>'+esc(sE):'')+'<br><br>'
-    + '<span style="color:#8a94a8;font-size:11.5px">Reply STOP and I will not contact you again about this listing.</span>';
+    + '';   // outbound STOP line removed 2026-09-02 (operator's call); opt-outs still honored via the ledger
   return {subj: subj, body: body, to: (r.zagentemail||'').trim()};
 }
 function openAgentPitch(caseId){
