@@ -123,8 +123,6 @@ def letter_person(r):
         "I will give you a straight answer about what it is worth and how fast it could be done. It "
         "costs nothing to talk and I am not going to pressure you.\n\n"
         "%s — %s\n\n"
-        "If you would rather not hear from us again, just call or write and say stop, and we will "
-        "not contact you again."
         % (first if first != 'there' else 'Hello', SENDER['name'], SENDER['co'], st,
            who, (' (Case No. %s).' % case) if case else '.', when,
            SENDER['name'], SENDER['phone'])
@@ -146,8 +144,6 @@ def letter_person(r):
         "directa de cuánto vale y qué tan rápido se podría hacer. Hablar no cuesta nada y no le voy "
         "a presionar.\n\n"
         "%s — %s\n\n"
-        "Si prefiere no recibir más cartas nuestras, llame o escriba y díganos que pare, y no lo "
-        "volvemos a contactar."
         % (first if first != 'there' else 'Hola', SENDER['name'], SENDER['co'], st,
            whoES, (' (Caso Núm. %s).' % case) if case else '.', whenES,
            SENDER['name'], SENDER['phone'])
@@ -172,7 +168,6 @@ def letter_entity(r):
         "If the property is something you would consider moving, or you just want a straight read "
         "on where the case stands, call me.\n\n"
         "%s — %s\n%s\n\n"
-        "Reply STOP or call and say stop and we will not contact you again."
         % (st, SENDER['name'], SENDER['co'], st, when,
            (' (Case No. %s)' % case) if case else '',
            SENDER['name'], SENDER['phone'], SENDER['email'])

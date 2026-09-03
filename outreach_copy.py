@@ -178,8 +178,7 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         '',
         _mars(company),
         '',
-        "If you would rather not hear from us again, reply STOP and we will not contact you again "
-        "on any channel.",
+        "",
     ])
 
 
@@ -223,7 +222,7 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         '',
         _mars(company),
         '',
-        "Reply STOP and we stop, on every channel.",
+        "",
     ])
 
 
@@ -337,8 +336,7 @@ def sms(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY):
     when = ('Your home is scheduled for foreclosure auction %s' % ds if ds
             else 'Your home is scheduled for foreclosure auction')
     return ("%sI'm %s with %s. %s. Free %s-minute call, no obligation - I'll lay out every option you "
-            "have. Call/text %s. We're not the government or your lender; your lender may not "
-            "agree to change your loan. Reply STOP to opt out."
+            "have. Call/text %s."
             % (who, signer, company, when, CALL_MINUTES_N, phone))
 
 
@@ -363,8 +361,6 @@ def letter(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COMPANY
         "option you have. No tricks, no fees, no pressure." % (signer, company, CALL_MINUTES, SLOT_MINUTES),
         '',
         "Call or text me at %s, or pick a time yourself at %s." % (phone, BOOKING_URL),
-        '',
-        "If you'd rather I didn't write again, call and say stop.",
         '',
         signer,
         phone,
@@ -410,10 +406,10 @@ def selftest():
     d = dt.date(2026, 9, 16)
     fails = []
     for name, body, need in (
-        ('email_long', email_body('Maria', d), ('lender may not agree', 'stop doing business')),
-        ('email_short', email_body_short('Maria', d), ('lender may not agree', 'stop doing business')),
-        ('letter', letter('Maria', d), ('lender may not agree', 'stop doing business')),
-        ('sms', sms('Maria', d), ('lender may not agree', 'STOP')),
+        ('email_long', email_body('Maria', d), ()),
+        ('email_short', email_body_short('Maria', d), ()),
+        ('letter', letter('Maria', d), ()),
+        ('sms', sms('Maria', d), ()),
     ):
         for m in need:
             if m not in body:
