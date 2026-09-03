@@ -461,6 +461,21 @@ rem  Never raises and always exits 0 by construction, so it cannot mask the heal
 echo [digest] Building the morning digest...
 python -u morning_digest.py >> "%LOG%" 2>&1
 
+rem  ENGINE DRIFT WATCHDOG (2026-09-03). Sits next to the digest for the same reason -- morning
+rem  signal, must survive a truncated tail from the 2h scheduler kill. Read-only; ALARMS but does
+rem  NOT block a publish (publish_guard handles the content-collapse case; this one names WHICH
+rem  engine and WHICH file went silent, which publish_guard cannot).
+rem  Exit 0 clean, 2 drift, 3 cannot-evaluate. Fail-loud rule: a case it cannot judge alarms
+rem  rather than passing quietly. The `if errorlevel 2` branch reports both drift and cannot-eval
+rem  because both should get eyes on the log.
+echo [drift]  Watching for two-engine drift...
+python -u engine_drift.py >> "%LOG%" 2>&1
+if errorlevel 2 (
+  echo     ^!^! DRIFT: engine_drift found inconsistency ^(or cannot evaluate^) - see leads-run.log.
+) else (
+  echo     drift check OK.
+)
+
 echo ==================== done %date% %time% ====================>> "%LOG%"
 
 echo [health] Checking shipped data + upstream sources...

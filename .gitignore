@@ -406,3 +406,7 @@ imghash.key
 *_Report_*.html
 *_Packet_*.html
 *_Action_Plan_*.html
+
+# engine identity — MUST NOT be committed. Naming this engine is a decision per-machine,
+# not a fact about the repo. Watchdog fails loud when absent (engine_drift.py).
+engine.id
