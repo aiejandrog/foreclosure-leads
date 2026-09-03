@@ -389,3 +389,20 @@ quo.key
 quo_calls.json
 # call-mode team seats: guards the no-double-dial property — must survive a clone
 !_seattest.py
+
+# image filename salt — MUST be identical on both engines (laptop + cloud);
+# losing this orphans docs/img entirely, since names cannot be recomputed from folios
+imghash.key
+
+# Client deliverables are OUTPUTS, never source — the repo is PUBLIC. *.pdf was already ignored
+# but *.html was not, which is how two Markey client HTMLs got committed (removed 2026-09-03).
+# tracker_template.html / design-preview.html do NOT match these patterns and stay tracked.
+*_Case_Brief_*.html
+*_Options_Memo_*.html
+*_Position_Report_*.html
+*_Strategy_Workup_*.html
+*_Brief_*.html
+*_Memo_*.html
+*_Report_*.html
+*_Packet_*.html
+*_Action_Plan_*.html

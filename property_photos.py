@@ -24,6 +24,52 @@ except Exception:                              # compressionQuality on export) ~
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 IMGDIR = os.path.join(HERE, 'docs', 'img')      # committed static images -> instant, no live dependency in the demo
+
+# ---- FILENAME OPAQUING ----------------------------------------------------------------------
+# docs/img was named by FOLIO in plaintext. docs/ is a PUBLIC repo and the row payload is
+# encrypted behind 12 access codes -- but `git ls-files docs/img/` returned all 1,772 folio
+# numbers, which each resolve on the county appraiser to owner+address+value. The encryption on
+# the payload was defeated by the filenames. Six weeks of exposure since 2026-07-17.
+#
+# Fix: hash the filename. `git ls-files` now yields opaque 16-hex-char names that reveal
+# nothing about which leads we work.
+#
+# SALT (imghash.key) raises this from anti-enumeration to anti-verification. Without a salt an
+# attacker who already has a folio in hand can compute hash(folio) and check whether the file
+# exists -- so they cannot enumerate the list but can confirm one lead at a time. Salted, they
+# cannot even do that without the key. The salt file is gitignored and MUST be identical on both
+# engines (laptop + cloud); a mismatch means each engine names the same photo differently and the
+# other engine's board shows broken images. Same operational constraint as sender.json.
+#
+# If no key is present we generate one, warn loud, and continue. Better to have a lopsided setup
+# with someone noticing than to hard-fail the nightly.
+import hashlib as _hashlib
+import secrets as _secrets
+
+def _img_salt():
+    p = os.path.join(HERE, 'imghash.key')
+    if os.path.exists(p):
+        try: return open(p, encoding='utf-8').read().strip()
+        except Exception: pass
+    try:
+        salt = _secrets.token_hex(32)
+        open(p, 'w', encoding='utf-8').write(salt)
+        print('!! imghash.key MISSING -- generated one at %s' % p)
+        print('   Copy this file to the OTHER engine before its next photo run,')
+        print('   or the two boards will name the same photo differently and images will break.')
+        return salt
+    except Exception as e:
+        print('!! imghash.key: could not read or generate (%s) -- falling back to EMPTY salt.' % e)
+        print('   This still opaques filenames, but an attacker with a folio can verify individual leads.')
+        return ''
+
+_IMG_SALT = _img_salt()
+
+def _fname_hash(folio):
+    """Opaque, stable filename for a lead's image assets. Returns '' when folio is empty."""
+    if not folio:
+        return ''
+    return _hashlib.sha256((_IMG_SALT + '\x00' + str(folio)).encode()).hexdigest()[:16]
 LEAD_FILES = ['leads_final.json', 'broward_leads.json', 'palmbeach_leads.json']
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
 CENSUS_BATCH = 'https://geocoding.geo.census.gov/geocoder/locations/addressbatch'
@@ -455,7 +501,8 @@ def main():
             r, folio, addr = job
             if not (addr and folio): return (r, '')
             s = requests.Session(); s.headers.update({'User-Agent': UA})
-            return (r, _download_streetview(addr, folio, svkey, s, cents.get(folio) or coords.get(addr)))
+            # HASH the fname; the real folio still routes API lookups but never appears on disk.
+            return (r, _download_streetview(addr, _fname_hash(folio), svkey, s, cents.get(folio) or coords.get(addr)))
         with ThreadPoolExecutor(max_workers=8) as ex:
             for i, (r, rel) in enumerate(ex.map(_dsv, todo), 1):
                 if rel: r['photos'] = [rel]; r['photo_kind'] = 'street'; n_sv += 1
@@ -472,7 +519,8 @@ def main():
     def _dpa(job):
         r, folio = job
         s = requests.Session(); s.headers.update({'User-Agent': UA})
-        return (r, _download_appraiser_bcpa(folio, folio, s))
+        # BCPA API takes the REAL folio (looks it up on the county site); fname is the hash on disk.
+        return (r, _download_appraiser_bcpa(folio, _fname_hash(folio), s))
     with ThreadPoolExecutor(max_workers=8) as ex:
         for i, (r, rel) in enumerate(ex.map(_dpa, todo), 1):
             if rel: r['photos'] = [rel]; r['photo_kind'] = 'appraiser'; n_bcpa += 1
@@ -487,7 +535,7 @@ def main():
         r, folio, c = job
         if not (c and folio): return (r, '')
         s = requests.Session(); s.headers.update({'User-Agent': UA})
-        return (r, _download_aerial(c[0], c[1], folio, s))
+        return (r, _download_aerial(c[0], c[1], _fname_hash(folio), s))
     with ThreadPoolExecutor(max_workers=16) as ex:
         for i, (r, rel) in enumerate(ex.map(_do, todo), 1):
             if rel: r['photos'] = [rel]; r['photo_kind'] = 'aerial'; n_aerial += 1
