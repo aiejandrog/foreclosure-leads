@@ -1582,6 +1582,31 @@ function optPhones(force){
 function caller(){
   try{ return localStorage.getItem('fcCaller') || ''; }catch(e){ return ''; }
 }
+/* Names of teammates whose dials or texts have merged into this phone's notes store.
+   PROOF the team key is right and someone else is actively working the same list. Empty means
+   either we are truly solo, or the team key does not match — we cannot tell those two apart from
+   this side (server holds ciphertext), but seeing NAMES here is the one signal that flips the
+   silent-fail into a visible one.
+
+   Bounded to 24h so a phone that once synced with someone months ago does not permanently claim
+   "team of 2". */
+function _teammatesSeen(){
+  var me = caller(), out = {}, cutoff = Date.now() - 86400000;
+  try{
+    Object.keys(notes || {}).forEach(function(c){
+      var n = notes[c] || {};
+      (n.touches || []).forEach(function(t){
+        var ts = +t.tsu || 0;
+        if(ts >= cutoff && t.by && t.by !== me) out[t.by] = 1;
+      });
+      (n.dials || []).forEach(function(d){
+        var ts = +d.tsu || 0;
+        if(ts >= cutoff && d.by && d.by !== me) out[d.by] = 1;
+      });
+    });
+  }catch(e){}
+  return Object.keys(out);
+}
 /* THE SHARED REGISTRY, read side. Newest CALL touch on this lead from ANY device, with who made
    it. Team sync merges teammates' notes into the same store, so this sees Carlos's dials too. */
 function lastCall(n){
@@ -1787,6 +1812,20 @@ function teamWatch(){
   if(first){ localStorage.setItem(_TW_INIT, '1'); return 0; }
   if(!fresh.length) return 0;
 
+  /* THE ONCE-PER-SESSION SEAT NAG. If a teammate's dial just merged in and we have NO seat,
+     both phones are reading the same queue — the exact bug the seat split exists to prevent.
+     Fire ONCE per session (not per tick) so it prompts but does not become the nag-of-the-day.
+     Guarded on presence of a team key so a lone-caller on an old note dump never sees this. */
+  try{
+    var _nag = 'fcSeatNagShown';
+    if(!_seat() && !sessionStorage.getItem(_nag) && localStorage.getItem('fcTeamKey')){
+      sessionStorage.setItem(_nag, '1');
+      var _by = fresh[0].by || 'A teammate';
+      toast('&#9888; ' + esc(_by) + ' is dialing this same list &mdash; set your SEAT so you '
+          + 'never double-dial. Tap the top bar to split.', {bad:true, ms:12000});
+    }
+  }catch(e){}
+
   /* THE CARD HE IS LOOKING AT is teamRecheck()'s job, not this one's — it already owns that
      moment with a full takeover: "ALREADY CALLED", who, when, the outcome, a 3s countdown and a
      STAY button. Re-toasting over it would be two warnings for one event.
@@ -1979,6 +2018,16 @@ function screenTeamKey(){
     try{ localStorage.setItem('fcTeamKey', v); if(!localStorage.getItem('fcDevice')) _deviceId();
       startTeamSync(); }catch(e){}
     try{ toast('Team sync ON — logging as ' + esc(caller() || 'this phone'), {ms:5000}); }catch(e){}
+    /* FORCE the seat picker if none is set. Not a nag — a required next step. A team key without
+       seats is the exact bug this whole feature exists to prevent: both phones read the same
+       queue and the split does nothing. The wizard now ends with the caller SET, not just with
+       sync ON. If they already have a seat (returning after turning sync off + back on), skip
+       straight to the queue — no reason to re-ask. */
+    if(!_seat()){
+      SCREEN='lead'; render(); paintSync();
+      setTimeout(function(){ try{ seatMenu(); }catch(e){} }, 250);
+      return;
+    }
     SCREEN='lead'; render(); paintSync();
   };
   $('tkgo').onclick=go;
@@ -2085,8 +2134,27 @@ function head(){
 }
 function seatChip(){
   var s=_seat();
-  if(!s) return '<div class="supn">Solo &mdash; whole list &middot; '
+  /* THE BUG STATE ALEJANDRO FLAGGED: a team key is on and no seat is set. Both phones read
+     the same queue and the whole partition is a decoration. The old chip said "Solo — whole
+     list", which reads as a valid choice, not a warning. Called out in red now, with the
+     evidence — how many teammates we've actually seen dialing — so it cannot be dismissed
+     as a cosmetic default. */
+  if(!s){
+    var hasKey = false; try{ hasKey = !!localStorage.getItem('fcTeamKey'); }catch(e){}
+    if(hasKey){
+      var mates = _teammatesSeen();
+      var who = mates.length
+        ? '<b>' + mates.slice(0,3).map(esc).join(', ') + '</b>'
+        : '';
+      return '<div class="supn" style="color:#e2645f;font-weight:600">'
+        + '&#9888; Team sync ON but no seat set &mdash; you and '
+        + (who || 'your teammate') + ' see the SAME leads &middot; '
+        + '<a href="#" onclick="seatMenu();return false" style="color:var(--gold)">split now</a>'
+        + '</div>';
+    }
+    return '<div class="supn">Solo &mdash; whole list &middot; '
     + '<a href="#" onclick="seatMenu();return false" style="color:var(--gold)">split with a teammate</a></div>';
+  }
   var bits = [];
   if(_SEATN) bits.push(_SEATN+' on the other phone'+(s.n>2?'s':''));
   if(_CLMN)  bits.push(_CLMN+' being worked now');
