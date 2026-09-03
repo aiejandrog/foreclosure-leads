@@ -106,21 +106,51 @@ def bucketize():
     return fresh, retry, blocked
 
 
+def _cache_snapshot(cases):
+    """Which of `cases` are currently in skiptrace_results.json — regardless of what they
+    returned. Used to distinguish 'actually spent' from 'someone else already cached'."""
+    try:
+        S = json.load(open(os.path.join(HERE, 'skiptrace_results.json'), encoding='utf-8'))
+    except Exception:
+        S = {}
+    return {c for c in cases if c in S}
+
+
 def _run_skiptrace(cases, provider):
     """Invoke skiptrace.py once per case. Failure of one call NEVER short-circuits — the caller
     already authorized the whole batch, and a mid-batch abort would leave the cache inconsistent
-    with the money already spent."""
-    n_ok = n_fail = 0
+    with the money already spent.
+
+    Returns (traced_this_run, already_cached, failed). The three-way split matters because
+    subprocess exit 0 lies about spend when the concurrent engine has already traced the case:
+    skiptrace.py sees it in cache, prints "0 eligible... nothing to trace", exits 0. A wrapper
+    that counts exit-0 as "1 ok" tells the operator they spent money when the console history
+    proves otherwise. Snapshot the cache BEFORE and AFTER each call and answer honestly."""
+    n_traced = n_already = n_fail = 0
     for c in cases:
+        was_cached = c in _cache_snapshot([c])
         args = [sys.executable, 'skiptrace.py', '--case', c]
         if provider:
             args += ['--provider', provider]
         r = subprocess.run(args, cwd=HERE)
-        if r.returncode == 0:
-            n_ok += 1
-        else:
+        if r.returncode != 0:
             n_fail += 1
-    return n_ok, n_fail
+            continue
+        now_cached = c in _cache_snapshot([c])
+        if now_cached and not was_cached:
+            n_traced += 1
+        elif was_cached:
+            n_already += 1
+            # Note the no-op explicitly. Operator scrolling the console 6 months from now needs
+            # to see this without opening the file. "no spend" is the fact.
+            print('   %s: already cached (no spend this run)' % c)
+        else:
+            # Exit 0, still not in cache -> the vendor was called and returned nothing to store,
+            # OR the case was rejected upstream (unknown to skiptrace.py's own eligibility). Both
+            # are legitimate no-cache outcomes and neither is a fail; count as "already" for
+            # spend-transparency purposes so the operator does not see a mystery "traced" number.
+            n_already += 1
+    return n_traced, n_already, n_fail
 
 
 def _est(cases, per_hit):
@@ -214,10 +244,16 @@ def main():
         print('\n  ABORTED by operator. Zero spent.')
         return 0
 
-    ok, fail = _run_skiptrace([_case(r) for r in target], provider)
-    print('  done. %d ok, %d failed. Rebuild the board so Call Mode picks them up:' % (ok, fail))
-    print('    python -c "import json, foreclosure_leads as F; '
-          'F.make_tracker(json.load(open(\'leads_final.json\',encoding=\'utf-8\')))"')
+    traced, already, fail = _run_skiptrace([_case(r) for r in target], provider)
+    print('  done. %d actually traced, %d already cached (no spend), %d failed.'
+          % (traced, already, fail))
+    real_spend = traced * per_hit
+    print('  approximate spend this run: $%.2f (of the $%.2f authorized upper bound)'
+          % (real_spend, est))
+    if traced:
+        print('  Rebuild the board so Call Mode picks them up:')
+        print('    python -c "import json, foreclosure_leads as F; '
+              'F.make_tracker(json.load(open(\'leads_final.json\',encoding=\'utf-8\')))"')
     return 0 if not fail else 1
 
 
