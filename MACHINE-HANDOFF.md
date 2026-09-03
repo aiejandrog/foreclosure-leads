@@ -359,3 +359,19 @@ item is CLOSED; no separate landing needed.
 **FLAG for DEALFLOW (not blocking):** the same WIP drops "or STOP to opt out" from all three
 `TEXT_T` templates. Confirm STOP is handled at the carrier/10DLC layer before that ships — an
 outreach text with no opt-out is the kind of thing FS 501.1377 / TCPA notices exist around.
+
+### Carlos = seat 2 (2026-09-02) — provisioned, tested, one on-phone step left
+
+- **Access code:** `Carlos 2 = DEALFLOW-GYFNF29J` (in site.codes, baked into the board). Carlos
+  unlocks the call page with this.
+- **Seat is per-PHONE localStorage (`fcSeat`), set on his device — no remote/URL setter exists,**
+  so this cannot be done from a laptop session. On Carlos's phone, in Call Mode: tap the team-sync
+  line → "how many calling" = **2** → "which seat is THIS phone" = **2** → name = **Carlos**. Both
+  phones must ALSO share the same team-sync code or the seats never see each other's calls.
+- **Partition proven** (`_cm_seatcheck.py`, local — `_*.py` is gitignored scratch): 1,142 unique
+  cases, n=2 → 564 / 578, **doubled=0, lost=0**; 3 and 4 seats also clean. The same person can
+  never be in both queues, and no lead falls off both. Re-run it whenever the feed or the sb hash
+  changes.
+- **Takeover proven** (`node _cm_teamtest.js`): 15/15 green on the built page — a teammate's call
+  fires the ALREADY-CALLED takeover, my own call does not (multi-number sequences survive), and
+  the sibling-case takeover now passes too (DEALFLOW's pcs-aware `_teammateCall` is built in).
