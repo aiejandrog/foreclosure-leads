@@ -326,3 +326,36 @@ Supervisor session and takeover/Quo session agree; do NOT implement until he ans
       the succeeds-while-doing-nothing class, again.
   After the one resurface: any second no of either kind = retired permanently.
 - Until he answers, the 720h window in the DEALFLOW WIP stands as the interim.
+
+### notint policy — CLOSED (Alejandro decided 2026-09-02): SPLIT IT
+
+Final, no longer open. The 30-day calendar cooldown is DEAD.
+
+- **HARD NO / "stop calling"** — permanent, person-keyed DNC. Checked at queue build AND dial
+  time. Never resurfaces, no exceptions. Its own outcome button (reps must stop logging hard
+  nos as "not interested"), and it behaves like `dnc` in the after-call panel (skips it).
+- **SOFT NO / "we're set, thanks"** — retired from automatic rotation, NOT a cooldown.
+  Eligible for exactly ONE deliberate resurface, event-driven:
+    * had a sale date at soft-no time  -> resurface at **T-14** before that auction;
+    * was LP / no date at soft-no time -> resurface when **a sale date appears** (covers the
+      1,115/1,471 LP rows the calendar version left dead).
+  One resurface only; the next no of either kind = permanent.
+
+**OWNERSHIP OF THE BUILD:** DEALFLOW owns `call_mode.py` WIP and lands the implementation.
+This session provides the acceptance gate and stands down on code in that file.
+
+**ACCEPTANCE GATE (this session, `_cm_notint_spec.js`):** RED today by design — 7 fail, and a
+do-nothing suppressor CANNOT turn it green (the "retired" cases demand suppression, the trigger
+cases demand release, so only a real implementation satisfies both). Covers all three required
+harness cases: hard-no never reappears (incl. dial-time); soft-no with a date resurfaces once
+inside T-14; soft-no LP lead resurfaces once when a date lands; plus the second-no-is-permanent
+and legacy-calendar-is-dead guards. State schema proposed in the file header — if DEALFLOW
+represents it differently, they update the test IN THE SAME COMMIT.
+
+**pcs-walk (`_teammateCall` sibling walk) — DONE by DEALFLOW** in their uncommitted WIP
+(2026-09-02): `_teammateCall` now iterates `[r.c].concat(r.pcs||[])`. This session's ownership
+item is CLOSED; no separate landing needed.
+
+**FLAG for DEALFLOW (not blocking):** the same WIP drops "or STOP to opt out" from all three
+`TEXT_T` templates. Confirm STOP is handled at the carrier/10DLC layer before that ships — an
+outreach text with no opt-out is the kind of thing FS 501.1377 / TCPA notices exist around.
