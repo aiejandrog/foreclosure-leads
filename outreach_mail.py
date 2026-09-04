@@ -423,6 +423,121 @@ p{{margin:0 0 6px}}
 </div></body></html>"""
 
 
+# ---- JESSE'S LETTER, VERBATIM (2026-09-03) ---------------------------------------------------
+# Alejandro's explicit ask: "wire jesses exact fucking letter dont change a damn thing." Copy is
+# unchanged except for two mechanical substitutions the placeholders were written FOR:
+#   [DATE]  -> the row's real auction date
+#   PHONE   -> the Quo published line (786) 502-9550, per bsg-phone-architecture memory
+#
+# Everything else -- the FINAL NOTICE header, "over 100 times", the attorney paragraph, the
+# realtor paragraph, "cash in 24 hours", the "actually stops it" clause, the foreclosure ER
+# metaphor -- ships as Jesse wrote it. My concerns about FS 501.1377 exposure on the "actually
+# stops it" clause were stated once, Alejandro reaffirmed, so per the honesty/decision protocol
+# I'm not relitigating.
+#
+# URGENT band on the first page: Lob's #10 double-window envelope doesn't take custom text,
+# so "URGENT" cannot go on the envelope itself. The next best surface is a full-width red band
+# at the top of page 1, ABOVE the letterhead -- opening the envelope shows URGENT first. Certified
+# mail (extra_service='certified') is the physically stronger option; it costs +$5 per piece and
+# is a separate spend decision, not wired here.
+QUO_PHONE = '(786) 502-9550'
+JESSE_LOGO = os.path.join(HERE, 'brand', 'bsg-logo-letterhead.png')
+
+
+def _jesse_logo_uri():
+    """The real BSG logo (Alejandro's PNG, padding-trimmed copy in brand/), inlined as base64.
+    The letter must be SELF-CONTAINED html — Lob renders it server-side, so a file:// or relative
+    src would print as a broken-image box on paid mail. Empty string when absent: the letter
+    degrades to text-only rather than shipping a broken box."""
+    for p in (JESSE_LOGO, os.path.join(HERE, 'brand', 'bsg-logo-full.png')):
+        if os.path.exists(p):
+            try:
+                return 'data:image/png;base64,' + base64.b64encode(open(p, 'rb').read()).decode()
+            except Exception:
+                pass
+    return ''
+
+
+def build_letter_html_jesse(r, snd, lang='en'):
+    """Jesse's copy VERBATIM. Only [DATE] and phone are substituted per lead.
+
+    Compliance framing kept minimal on purpose: the operator is the one shipping this and has
+    authorized the exact text. The one thing I refuse to override is the phone number -- a
+    letter with '786-123-4567' printed on it is $1.06 of wasted mail. Quo (786) 502-9550 goes in.
+    """
+    e = html.escape
+    dt = e(str(_g(r, 'auction', 'AuctionDate')) or '(sale date not on file)')
+    phone = QUO_PHONE
+
+    # JESSE'S BODY, VERBATIM. Kept in ONE string literal so a diff against the original ask is
+    # trivial to eyeball -- do not "clean up" this indentation or line breaks without checking
+    # the letter renders identically.
+    body = f"""
+<p class="uhead">FINAL NOTICE: SALE SCHEDULED</p>
+<p class="udate">YOUR HOUSE GOES ON THE BLOCK: {dt}</p>
+
+<p>We know you're getting a lot of mail right now. Most of it is probably scaring you, confusing you, or trying to sell you something you don't understand. We're not going to do that.</p>
+
+<p>Here's the truth: If you do nothing, the sale happens. The bank takes the house. You, your family, your pets, everything you own — it all gets moved out by the Sheriff. We're not saying this to scare you. We're saying it because it's reality, and pretending otherwise won't help anyone.</p>
+
+<p><b>WE ARE NOT a law firm. WE ARE NOT realtors. WE ARE a financial solutions company.</b> That means we solve money problems. And foreclosure is a money problem — not a crime, not a moral failure, not the end of your life. It's a math problem with a deadline. And math problems? We solve them. We've done it over 100 times in South Florida. We've helped people keep their homes. We've helped people walk away with cash and a fresh start. We do it fast — cash in 24 hours, loan fixes in days, not months. And we do it without judgment.</p>
+
+<p>If you have an attorney, that's smart. You want your rights protected. But attorneys are trained to fight legal battles, and this isn't a legal battle. It's a financial one. Most attorneys drag things out — and while they do, the bank adds more fees to what you owe. Delaying isn't the same as solving. If you listed your home with a realtor, especially if you owe more than it's worth, take a close look at who gets paid. The realtors get paid. The title company gets paid. The attorneys get paid. And you? You get to walk away with nothing but a "good luck" as you pack your things. That's not fair. And we think you deserve better.</p>
+
+<p><b>Here's what we offer: A 15-minute review and consultation.</b></p>
+
+<p>No cost. No obligation. Just clarity. A clear strategy that makes sense for YOUR situation — whether you want to stay or go. A plan that actually stops the sale — not "hopefully," not "maybe," but actually stops it. We don't promise anything we can't deliver. We tell you the truth, even when it's hard. And if we agree on a plan that works for both of us, we move fast. Because you don't have time to wait.</p>
+
+<p>We are willing to invest 15 minutes to help find a solution that truly works for you,</p>
+
+<p>Are you? If the answer is yes, we're here!</p>
+
+<p class="cta">CALL NOW: {phone}</p>
+
+<p><i>We're a foreclosure emergency room. We don't close.</i></p>
+"""
+    # Return-address block. Same construction as build_letter_html so recipients can identify the
+    # sender by legal name -- required for CAN-SPAM-adjacent good hygiene, and it is what Lob's
+    # envelope window shows on the return side.
+    ret = '<br>'.join(e(x) for x in [snd.get('name'), _safe_llc(snd), snd.get('addr')]
+                     if x and str(x).strip())
+
+    return f"""<!doctype html><html><head><meta charset="utf-8"><style>
+@page{{margin:0}}
+html,body{{margin:0;padding:0}}
+body{{font-family:Georgia,'Times New Roman',serif;color:#111;line-height:1.3;font-size:10.5pt}}
+.page{{width:8.5in;height:11in;box-sizing:border-box;padding:2.6in 0.75in 0.35in;position:relative}}
+.ret{{position:absolute;top:0.55in;left:0.9in;font-size:10pt;color:#333;line-height:1.35}}
+/* URGENT band. IN-FLOW, first thing under the 2.6in reserve — NOT absolute-positioned above it.
+   The first version sat at top:1.55in, which the preview rendered beautifully and Lob would have
+   COVERED with its white address overlay on the real, paid letter (address_placement
+   top_first_page owns everything above ~2.6in; the default letter's comment documents exactly
+   this trap). The preview cannot show Lob's overlay, which is why it looked fine — position
+   against the SPEC, not the screenshot. Bordered so it survives photocopy or fax. */
+.urgent{{background:#c8102e;color:#fff;text-align:center;margin:0 0 12px;
+  padding:8px 12px;font:900 14pt/1.15 'Helvetica Neue',Helvetica,Arial,sans-serif;
+  letter-spacing:.14em;text-transform:uppercase;
+  border:2px solid #7a0a1c;box-shadow:0 1px 0 #7a0a1c}}
+/* Letterhead: the real BSG logo, left, with clear space. 0.95in tall keeps the whole letter on
+   ONE page (Lob bills per page and .page is a fixed 11in box — overflow CLIPS, it does not
+   paginate, so a too-tall logo would silently amputate Jesse's closing lines). */
+.lh{{margin:0 0 10px}}
+.lh img{{height:0.85in;width:auto;display:block}}
+.uhead{{margin:0 0 4px;font:900 18pt/1.1 'Helvetica Neue',Helvetica,Arial,sans-serif;
+  color:#c8102e;letter-spacing:.02em}}
+.udate{{margin:0 0 14px;font:700 14pt/1.15 'Helvetica Neue',Helvetica,Arial,sans-serif;
+  color:#1A1A1A;letter-spacing:.01em}}
+.cta{{margin:14px 0;font:900 16pt/1.2 'Helvetica Neue',Helvetica,Arial,sans-serif;
+  color:#c8102e;text-align:center;letter-spacing:.02em}}
+p{{margin:0 0 7px}}
+</style></head><body><div class="page">
+<div class="ret">{ret}</div>
+{('<div class="lh"><img src="' + _jesse_logo_uri() + '" alt="Biscayne Solutions Group"></div>') if _jesse_logo_uri() else ''}
+<div class="urgent">URGENT &middot; TIME-SENSITIVE &middot; SALE DATE {dt}</div>
+{body}
+</div></body></html>"""
+
+
 def build_selection(leads, tiers, min_days, suppress, sent, remail, limit, trust_selection=False):
     """Apply every filter and return (queue, skip_reasons_counter).
 
@@ -577,6 +692,12 @@ def send_via_lob(key, to_addr, from_addr, file_html, use_type='marketing', mail_
         'to[address_state]': to_addr['address_state'],
         'to[address_zip]': to_addr['address_zip'],
         'from[name]': from_addr['name'][:40],
+        # from[company] is what prints through the TOP WINDOW of Lob's #10 double-window envelope
+        # under the sender name. On standard Lob stock the windows show ONLY the address text Lob
+        # itself prints — artwork can't reach them below custom-envelope minimums — so the company
+        # line IS the brand on the outside of the envelope. Populated from sender.json's llc via
+        # the caller; empty string is dropped by Lob.
+        'from[company]': (from_addr.get('company') or '')[:40],
         'from[address_line1]': from_addr['address_line1'],
         'from[address_city]': from_addr['address_city'],
         'from[address_state]': from_addr['address_state'],
@@ -612,6 +733,10 @@ def main():
     ap.add_argument('--remail', action='store_true', help='include cases already in mail_sent.json')
     ap.add_argument('--queue', default='', help="a mail-queue JSON from the tracker's 'Mail batch' button (pre-selected, opt-out-filtered)")
     ap.add_argument('--send', action='store_true', help='ACTUALLY send via Lob (needs lob.key + funded account)')
+    # 2026-09-03: Jesse's letter variant (FINAL NOTICE / URGENT). Alejandro's explicit ask, verbatim.
+    # 'default' = build_letter_html (Field Manual 5-exits copy); 'jesse' = build_letter_html_jesse.
+    ap.add_argument('--variant', choices=['default', 'jesse'], default='default',
+                    help='letter body: default (5-exits, Field Manual) or jesse (FINAL NOTICE, URGENT)')
     a = ap.parse_args()
 
     tiers = None if a.tier.lower() == 'all' else set(t.strip().upper() for t in a.tier.split(',') if t.strip())
@@ -663,10 +788,14 @@ def main():
               f" The overflow forces a paid plan (Startup $260/mo). Split the batch or accept the plan.")
 
     # write a preview of the first letter so the copy/address can be eyeballed with no key/send
+    # Variant dispatch. One line, both call sites use the same picker so a future variant only
+    # requires a new mapping entry -- no scattered `if a.variant == ...` branches to drift.
+    _builder = {'jesse': build_letter_html_jesse}.get(a.variant, build_letter_html)
     if queue:
         with open(PREVIEW_FILE, 'w', encoding='utf-8') as f:
-            f.write(build_letter_html(queue[0][0], snd, a.lang))
+            f.write(_builder(queue[0][0], snd, a.lang))
         print(f"preview of letter #1 -> {os.path.relpath(PREVIEW_FILE, HERE)} (open in a browser)")
+        print(f"letter variant: {a.variant}")
 
     if not snd:
         print("\n[!] sender.json not found — fill it (see sender.json.template) before a real send; using placeholders in the preview.")
@@ -683,14 +812,17 @@ def main():
     if not (snd and from_parsed):
         print("\nABORT: --send requires a complete sender.json with a parseable return address (name + addr).")
         sys.exit(1)
-    from_addr = dict(from_parsed, name=(snd.get('name') or _safe_llc(snd))[:40])
+    # name = the person, company = the Sunbiz-gated entity. Both reach the top envelope window —
+    # that is the only brand surface Lob's standard #10 stock exposes on the sealed envelope.
+    from_addr = dict(from_parsed, name=(snd.get('name') or _safe_llc(snd))[:40],
+                     company=_safe_llc(snd))
     live = key.startswith('live_')
     print(f"\nSending {len(queue)} letters via Lob ({'LIVE — real mail + real charges' if live else 'TEST key — no real mail'})...")
 
     ok_n = 0
     for r, addr in queue:
         to_addr = dict(addr, name=(_owner_name(r) or 'Current Resident')[:40])
-        letter = build_letter_html(r, snd, a.lang)
+        letter = _builder(r, snd, a.lang)
         try:
             ok, j = send_via_lob(key, to_addr, from_addr, letter)
         except Exception as ex:
