@@ -78,18 +78,55 @@ VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Biscayne Solutions Group, po
 # so does this now. What did NOT change is the shape or the length: a cold call has about fifteen
 # seconds before a hang-up, so this stays name, nots, reason, tiny ask, fairness close. The email
 # can afford four paragraphs. This cannot.
-# "Two minutes" is THIS call. "Five minutes" is the advisor consult (FIFTEEN_SEC, VOICEMAIL). Two
-# different things and both true -- do not "unify" them.
-_OPEN_BODY_EN = ("My name is {sender} with Biscayne Solutions Group. I am not your lender, not the "
-                 "government, and I am not calling to buy your house. There is a court case on "
-                 "{st1}{date}, and I am probably the only person calling you this week who is NOT "
-                 "trying to take the property. Two minutes, then I will get out of your hair. Fair?")
+# NEPQ rewrite 2026-09-04 (Alejandro): opener + question stack (Jeremy Miner). Lower status, ask for
+# help, then let the QUESTIONS do the work -- the homeowner talks themselves into the problem instead
+# of being pitched. The OPENER stays ~15 seconds (a cold call has that long before a hang-up); the
+# NEPQ_Q stack below only runs if they are still talking. "Five minutes" is the advisor consult
+# (matches FIFTEEN_SEC, VOICEMAIL, outreach_copy); do not introduce a conflicting ten/fifteen here,
+# cross_surface_check() greps this file for it.
+_OPEN_BODY_EN = ("It is {sender} with Biscayne Solutions Group. This might sound a little random, but "
+                 "I have a copy of the court paperwork on {st1}{date} right in front of me, and I was "
+                 "hoping you could help me out for a second. I am not your lender and I am not calling "
+                 "to buy the place. Can I ask you something real quick?")
 # usted register throughout — the playbook grades Spanish drills on it and every Spanish asset in the
 # repo (flyer, letter, voicemail) matches. Never tú.
-_OPEN_BODY_ES = ("Mi nombre es {sender}, de Biscayne Solutions Group. No soy su prestamista, no soy "
-                 "del gobierno, y no le vengo a comprar la casa. Hay un caso en la corte sobre "
-                 "{st1}{date}, y posiblemente soy el único que le llama esta semana que NO anda "
-                 "detrás de la propiedad. Dos minutos y lo dejo tranquilo. ¿Le parece?")
+_OPEN_BODY_ES = ("Le habla {sender}, de Biscayne Solutions Group. Puede sonar un poco raro, pero tengo "
+                 "una copia del papeleo de la corte sobre {st1}{date} aquí enfrente, y esperaba que me "
+                 "pudiera ayudar un momento. No soy su prestamista y no le vengo a comprar la casa. "
+                 "¿Le puedo hacer una pregunta rápida?")
+
+# THE QUESTION STACK -- NEPQ. Runs after the opener, only if they engage. Problem-awareness ->
+# consequence (money side only, no case merits, no promised outcome) -> solution-awareness + the
+# five-minute advisor ask + fairness close. Rendered as its own "GET THEM TALKING" block; ES is the
+# usted register to match every other Spanish asset in the repo.
+#
+# NO EITHER/OR THAT HANDS THEM AN EXIT (Jesse, 2026-09-04, on the "YOUR PITCH" email). Q3 shipped as
+# "...would you want to look at them, OR ARE YOU PRETTY SET on how you are handling it?" -- that
+# second half is a written invitation to hang up, and it was the single thing he called out. Ask
+# ASSUMED, then tie down ("Right?" / "That is fair, right?"). The only either/or allowed anywhere in
+# this call is two ways to say YES (a time, not a whether) and it lives in the CLOSE beat, not here.
+# Same reason Q1/Q2 never ask "are you the right person" -- the OPENER already settled that. Assume.
+NEPQ_Q_EN = [
+    "When the bank or the attorney talked to you about that sale date, did anybody actually explain "
+    "what happens to your balance every time that date gets pushed back?",
+    "That is what I hear from just about everyone. Every time it moves, the interest and the legal "
+    "fees keep stacking on top of what you already owe. Have you had a chance to see where that "
+    "number is really sitting today, or is it a bit of a moving target?",
+    "Before that date hits, you would want to at least see your real options laid out. Right? Our "
+    "senior advisor has over 30 years in mortgages and foreclosure workouts and he takes five minutes "
+    "and lays them out. Worst case, you know more than you did this morning. That is fair, right?",
+]
+NEPQ_Q_ES = [
+    "Cuando el banco o el abogado le habló de esa fecha de subasta, ¿alguien de verdad le explicó qué "
+    "le pasa a su saldo cada vez que esa fecha se pospone?",
+    "Eso es lo que escucho de casi todos. Cada vez que se mueve, los intereses y los gastos legales "
+    "se siguen sumando a lo que ya debe. ¿Ha tenido chance de ver en cuánto está ese número hoy, o es "
+    "un poco un blanco móvil?",
+    "Antes de que llegue esa fecha, usted querría por lo menos ver sus opciones reales sobre la mesa. "
+    "¿Verdad? Nuestro asesor principal tiene más de 30 años en hipotecas y en resolver casos de "
+    "ejecución, y en cinco minutos se las explica. En el peor de los casos, usted sabe más de lo que "
+    "sabía esta mañana. ¿Le parece justo?",
+]
 
 # Two variants, because greeting the wrong "name" is worse than not greeting one.
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
@@ -922,6 +959,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     script = {
         'op': {'en': PHONE_OPENER_EN, 'es': PHONE_OPENER_ES,
                'aen': PHONE_OPENER_ANON_EN, 'aes': PHONE_OPENER_ANON_ES},
+        'q': [{'en': _q_en, 'es': _q_es} for _q_en, _q_es in zip(NEPQ_Q_EN, NEPQ_Q_ES)],
         'cioc': [{'k': k, 'w': w, 's': sx} for k, w, sx in CIOC],
         'f15': FIFTEEN_SEC,
         'mars': MARS_BLOCK,
@@ -2773,20 +2811,23 @@ function textStage(r){
    OBJECT — a raw `+ SENDER +` renders "this is [object Object] with Biscayne Solutions Group", which is
    the same failure as the {sender} bug that already reached a live read-aloud script. Going through
    fillScript also inherits the Jose heal and the company-name heal for free. */
-/* 8/17 masterclass voice (overnight 2026-08-18): cushion + parachute, one ask, no em dashes
-   (reads as AI in a text), 'save this number' = drill card 14's read-back close at SMS size.
-   ES drafts exist (workflow wf_50663fa7) but TEXT_T is EN-only until a language path lands. */
+/* 2026-09-04 (Alejandro): the ladder is 1:1 human texts now. No confirm-CTA and no opt-out line in
+   the body -- his call as operator of record. Jeremy Miner / NEPQ voice: curiosity,
+   self-qualify, ONE soft question that earns a reply on its own. Still identifies the sender and
+   names the street; no em dashes (reads as AI in a text); 'keep my number' is drill card 14's
+   read-back close at SMS size. Run through fillScript -- SENDER is an OBJECT, a raw `+ SENDER +`
+   renders "[object Object]". Each body stays under two GSM segments. ES pending a language path. */
 var TEXT_T = {
-  cold:   'Hi{first}, this is {sender} with Biscayne Solutions Group. I just tried calling about {st1}. '
-        + 'I am not selling anything and not trying to buy the house. If you have a plan, keep it. '
-        + 'A free 5 minutes with our senior advisor, 30 plus years, gets you every option. '
-        + 'Reply YES.',
-  follow: 'Hi{first}, {sender} with Biscayne Solutions Group again about {st1}. If your plan is moving, '
-        + 'good, keep it. One question. Do you have it in writing yet? If not, our senior advisor '
-        + 'can be the backup, free, 5 minutes. Reply YES.',
-  final:  'Hi{first}, last text from me, {sender} with Biscayne Solutions Group about {st1}. I hope your '
-        + 'plan lands on time. If anything slips, one free call with our senior advisor maps what '
-        + 'still works. Save this number even if you delete this text. Reply YES.'
+  cold:   'Hi{first}, it is {sender} with Biscayne Solutions Group. I just tried calling about {st1}. '
+        + 'This might be off base so tell me if it is. I work with a few owners going through the same '
+        + 'court filing you have, and there is one part of it almost nobody gets told. Can I ask you '
+        + 'something about it?',
+  follow: 'Hi{first}, {sender} again about {st1}. Not trying to crowd you. If you already have a plan '
+        + 'you trust, honestly ignore me and I hope it works out. If you are not fully sure it will, '
+        + 'that is the part I would want a second set of eyes on for you. Worth a quick look?',
+  final:  'Hi{first}, last one from me, {sender} with Biscayne Solutions Group about {st1}. I really do '
+        + 'hope your plan lands on time. If anything slips before the sale date, one quick call with '
+        + 'our senior advisor lays out what still works. Either way, keep my number in your phone.'
 };
 function textBody(r, stage){
   return fillScript(TEXT_T[stage] || TEXT_T.cold, r);
@@ -3384,6 +3425,12 @@ function renderSheet(r){
   var b = '<div class="ltag">THE OPENER '+langChips()+'</div>'
         + say(opEN, opES, r)
         + (named ? '' : '<div class="noes">No usable first name on this lead &mdash; ask for the owner rather than guessing at one.</div>');
+
+  // NEPQ question stack -- only after the opener lands. Get them talking; the problem sells itself.
+  if(SCRIPT.q && SCRIPT.q.length){
+    b += '<div class="ltag">GET THEM TALKING</div>';
+    SCRIPT.q.forEach(function(q){ b += say(q.en, q.es, r); });
+  }
 
   // CIOC as nav — tap a beat, get its words.
   b += '<div class="cioc">';
