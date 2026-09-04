@@ -12939,11 +12939,14 @@ function genMorningWorker(lane, autostart){
     +   'var CALL_OUTCOMES=['
     +     '{k:"noanswer", t:"No answer",     hrs:24,  cls:"skip"},'
     +     '{k:"voicemail",t:"Left voicemail",hrs:24,  cls:"skip"},'
+    +     '{k:"callback", t:"Callback requested",hrs:6, cls:"done"},'
     +     '{k:"talked",   t:"Talked",        hrs:72,  cls:"done"},'
     +     '{k:"appt",     t:"APPOINTMENT SET", hrs:72, cls:"done"},'
+    +     '{k:"gate",     t:"Not the owner",  hrs:24,  cls:"skip"},'
+    +     '{k:"badnum",   t:"Bad number",     hrs:24,  cls:"skip"},'
+    +     '{k:"notint",   t:"Soft no (call back later)",hrs:720, cls:"warnb"},'
     +     '{k:"wrong",    t:"Wrong number",  hrs:0,   cls:"warnb", sup:true},'
-    +     '{k:"notint",   t:"Not interested",hrs:72,  cls:"warnb"},'
-    +     '{k:"dnc",      t:"DNC — do not contact", hrs:0, cls:"dnc", sup:true}'
+    +     '{k:"dnc",      t:"Hard no (do not call)", hrs:0, cls:"dnc", sup:true}'
     +   '];'
     +   'function doCall(r){'
     +     'if(!(r.phones && r.phones.length)){'
@@ -13687,6 +13690,10 @@ window.addEventListener('message', function(ev){
       n.status = 'Contacted';
     } else if(oc === 'notint' && !n.status){
       n.status = 'Not interested';
+    } else if(oc === 'callback' && !n.status){
+      n.status = 'Callback';
+    } else if(oc === 'gate' && !n.status){
+      n.status = 'Gatekeeper';
     }
     save();
     if(typeof render === 'function') render();

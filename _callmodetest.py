@@ -7,13 +7,13 @@ So "the phone isn't hitting" was an untestable feeling: nothing recorded what ha
 These checks defend the properties that make call outcomes trustworthy:
   * the Call button exists, is FIRST (it is the highest-converting, uncapped channel), and is
     disabled only when no phone is traced
-  * tapping it renders the seven-outcome disposition bar -- and does NOT navigate the tab away
+  * tapping it renders the ten-outcome disposition bar -- and does NOT navigate the tab away
     (an early build set window.location.href='tel:...', which tore the worker down mid-click
      and silently lost the lead)
   * each outcome writes a real touch with the real label, not a hardcoded default
   * DNC suppresses the owner immediately and permanently -- _workerEligible must go false
   * a wrong number suppresses too (it is a data problem, not a lead)
-  * cooldowns are outcome-aware: no-answer/voicemail 24h, talked/not-interested/appt 72h
+  * cooldowns are outcome-aware: no-answer/voicemail 24h, talked/appt 72h, soft-no 720h (30d)
   * calls NEVER touch the email/text daily cap
 
 Ledger vocabulary (2026-08 rename): a logged dial writes kind 'callout' to the durable worker
@@ -127,15 +127,15 @@ async def main():
         })""")
         rec('tapping Call renders the disposition bar', 'How did the call go' in disp['header'],
             disp['header'][:50])
-        rec('all seven outcomes render (incl. appt + dnc)',
-            disp['oc'] == ['noanswer','voicemail','talked','appt','wrong','notint','dnc'],
+        rec('all ten outcomes render (incl. appt + soft/hard no)',
+            disp['oc'] == ['noanswer','voicemail','callback','talked','appt','gate','badnum','notint','wrong','dnc'],
             disp['oc'])
         # REGRESSION: window.location.href='tel:' used to navigate the tab away before the bar
         # could render. The anchor-click dial must leave the document alone.
         rec('dialing does NOT navigate the worker tab away', w.url == url_before,
             {'before': url_before[:40], 'after': w.url[:40]})
         rec('DNC option is visibly the hard one',
-            any('do not contact' in (l or '').lower() for l in disp['labels']), disp['labels'])
+            any('hard no' in (l or '').lower() for l in disp['labels']), disp['labels'])
 
         # ---------- talked -> 72h, status Contacted ------------------------------------------
         await w.click('.mwoc[data-oc="talked"]')

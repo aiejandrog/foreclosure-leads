@@ -19,7 +19,7 @@ DESIGN RULES, each one load-bearing:
     SHARED with the board. That is what makes zero-typing onboarding and write-back possible.
   * DNC numbers are never serialized. Not styled, not flagged — absent. A number that is not in the
     payload cannot be rendered, cannot be tel:-linked, and cannot be recovered from view-source.
-  * The outcome vocabulary is COPIED from tracker_template.html's CALL_OUTCOMES (7 entries). A
+  * The outcome vocabulary is COPIED from tracker_template.html's CALL_OUTCOMES (10 entries). A
     fourth vocabulary would be a regression; there are already three in this codebase.
 
 NEVER let a failure here break the board. foreclosure_leads calls this inside a try/except: an
@@ -34,19 +34,26 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 # Copied verbatim from tracker_template.html CALL_OUTCOMES. Keep byte-identical: k, label, cooldown
 # hours, and whether it suppresses permanently. `appt` is the one a stale 6-entry copy drops.
 CALL_OUTCOMES = [
-    ('noanswer',  'No answer',             24, False),
-    ('voicemail', 'Left voicemail',        24, False),
-    ('talked',    'Talked',                72, False),
-    ('appt',      'APPOINTMENT SET',       72, False),
-    ('wrong',     'Wrong number',           0, True),
-    # 720h = 30 DAYS, was 72h. Field report 9/2: "they're telling me no and I keep calling
-    # them". A no-answer coming back tomorrow is cadence; a human who SAID NO coming back in
-    # three days is harassment, and it was the outcome table doing it, not a bug downstream.
-    # 30 days rather than forever on purpose: sale dates move, situations collapse, and a
-    # September no can be an October "thank God you called" -- but nobody's October starts
-    # three days after their no.
-    ('notint',    'Not interested',       720, False),
-    ('dnc',       'DNC — do not contact',   0, True),
+    ('noanswer',  'No answer',                24, False),
+    ('voicemail', 'Left voicemail',           24, False),
+    # NEW 2026-09-04: they answered and asked to be called back. 6h so it resurfaces the SAME day if
+    # he does not pin a time; the after-call panel's callback chips set an exact n.next on top.
+    ('callback',  'Callback requested',        6, False),
+    ('talked',    'Talked',                   72, False),
+    ('appt',      'APPOINTMENT SET',          72, False),
+    # NEW: reached a gatekeeper / not the decision-maker. Lead stays live; try their other number.
+    ('gate',      'Not the owner',            24, False),
+    # NEW: this NUMBER is bad/disconnected (distinct from 'wrong', which is the wrong PERSON). The
+    # person stays callable on their other numbers; the after-call panel offers the next one.
+    ('badnum',    'Bad number',               24, False),
+    # SOFT NO: 720h = 30 DAYS. Field report 9/2: "they're telling me no and I keep calling them".
+    # A no-answer coming back tomorrow is cadence; a human who SAID NO coming back in three days is
+    # harassment. 30 days rather than forever on purpose: sale dates move, and a September no can be
+    # an October "thank God you called" -- but nobody's October starts three days after their no.
+    ('notint',    'Soft no (call back later)', 720, False),
+    ('wrong',     'Wrong number',              0, True),
+    # HARD NO: permanent. "Stop calling me" is honoured immediately and forever (stopEverywhere).
+    ('dnc',       'Hard no (do not call)',     0, True),
 ]
 
 # 15-second voicemail, Copy Pack §5. He READS it — no prerecorded or ringless drop, which would
@@ -3113,7 +3120,9 @@ function stopEverywhere(r, digits){
 function afterCall(r, o, nextC){
   SCREEN='after';
   document.getElementById('sheet').classList.add('hid');   // same tap-thief reasoning as screenOutcome
-  var st = textStage(r), miss = (o.k==='noanswer'||o.k==='voicemail');
+  // 'miss' == show the "try their next number" button. badnum (this line is dead) and gate (reached
+  // the wrong person on this line) both want the NEXT number; callback/talked/appt do not.
+  var st = textStage(r), miss = (o.k==='noanswer'||o.k==='voicemail'||o.k==='badnum'||o.k==='gate');
   var num = r.p[phIdx];
   /* THREE GATES, all of which were missing. The text button shipped with only the ladder check.
      - Do-Not-Text: dntSet() was written and then never called anywhere, and n.dntph — the field
@@ -3283,6 +3292,9 @@ function logOutcome(r,o,digits){
   else if(o.k==='wrong'){ n.wrongown=n.wrongown||today(); n.status=n.status||'Wrong number'; }
   else if(o.k==='talked') n.status=n.status||'Contacted';
   else if(o.k==='notint') n.status=n.status||'Not interested';
+  else if(o.k==='callback') n.status=n.status||'Callback';
+  else if(o.k==='gate') n.status=n.status||'Gatekeeper';
+  // badnum sets no status: the NUMBER is bad, the person/lead is still callable on their others.
   // Retire it from the worker's queue on ANY logged outcome — same rule as the board's `callout`
   // dispatcher. Without this a lead worked here reappears in tomorrow's worker queue.
   retireFromWorkerQ(r.c);
