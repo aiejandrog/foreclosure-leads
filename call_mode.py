@@ -1227,7 +1227,7 @@ button.big{background:#1d4ed8;color:#fff}
 .oc button.dnc{border-color:var(--bad);color:#ff8a80}
 /* After-call panel. Every control here is >=48px because it is tapped one-handed, often walking. */
 .afterlab{font-size:11px;font-weight:800;letter-spacing:.08em;color:var(--gold);margin:16px 0 7px}
-#tx,#txy,#txn,#nx,#vmdone,a#bk{display:block;width:100%;min-height:52px;border-radius:12px;border:1px solid #2a3f6b;
+#tx,#txy,#txn,#nx,a#bk{display:block;width:100%;min-height:52px;border-radius:12px;border:1px solid #2a3f6b;
      background:#1d4ed8;color:#fff;font-size:17px;font-weight:700;margin-top:8px;touch-action:manipulation}
 /* The book-it link is an <a>, not a <button>, because it opens Cal.com in a new tab while the call
    page keeps its state -- he is mid-call and losing the screen would lose the lead. Anchors do not
@@ -2059,7 +2059,13 @@ function paintSync(){
   else if(_s && SEAT_ALL) seatTxt=' · ALL leads';
   if(k){ el.textContent='Team sync ON'+seatTxt;
     el.onclick=function(){ screenTeamKey(); };
-    try{ syncPull().then(function(){ loadNotes(); }); }catch(e){}
+    try{ syncPull().then(function(){ loadNotes();
+      /* 2026-09-04: RE-POOL after the pull. The initial paint (and a lane switch) built the queue
+         from pre-sync notes, so the first leads shown were ones a teammate or the other device had
+         ALREADY worked -- "as soon as I land it puts me on people I already called". render() only
+         repaints on the lead screen, so an in-progress call is never stomped. */
+      if(SCREEN==='lead'){ try{ render(); }catch(_e){} }
+    }); }catch(e){}
     return; }
   el.innerHTML='Team sync is OFF — outcomes log to this phone only. <b style="color:var(--gold)">Tap to turn it on</b>';
   el.onclick=function(){ screenTeamKey(); };
@@ -2994,7 +3000,7 @@ function screenOutcome(){
     +'<a class="redial" href="'+dialHref(d)+'"'+dialTarget()+' id="redial">&#8635;&nbsp; Redial '+fmt(d)+'</a>'
     + talk
     +'<div class="oc" style="margin-top:10px">'+btns+'</div>'
-    +'<div class="vm" id="vm" style="display:none"></div></div><div class="sheetpad"></div>';
+    +'</div><div class="sheetpad"></div>';
   /* A redial IS a dial — record it, or the dial-through count undercounts the actual work (the
      exact logging gap this page exists to close). oc:'redial' marks it as outcome-pending; the
      outcome he eventually taps logs its own entry for that attempt. */
@@ -3015,28 +3021,11 @@ function screenOutcome(){
          the details land in the error log (top bar) for a screenshot. */
       try{
       var o=OUTCOMES.filter(function(z){return z.k===b.dataset.oc;})[0];
-      /* The voicemail script must SURVIVE for him to read it. It renders into #vm, which lives
-         inside #app — and on a single-phone lead the flow fell straight through to afterCall(),
-         whose first statement replaces #app.innerHTML. The script he was told to read aloud was
-         destroyed in the same synchronous handler that created it, before the browser ever painted.
-         So: show it, and wait for him to say he is done. ONE language at a time (fcLang) — the
-         stacked EN+ES block was part of the "too many transcripts" pile-up. */
+      /* 2026-09-04: the voicemail script moved to the sheet ("IF NO ANSWER", renderSheet) so it is on
+         screen DURING the call, when he reads it into the machine, not gated behind a post-call
+         "Done reading" wall. "Left voicemail" now logs and advances exactly like No answer: no wall,
+         no limbo of disabled buttons waiting on a second tap. */
       var go;
-      /* The vm block repaints ITSELF on a language toggle — going through setLang() would rebuild
-         the whole outcome screen and wipe the script he is mid-way through reading aloud. */
-      function paintVM(){
-        $('vm').style.display='block';
-        $('vm').innerHTML='<b>Read this. Do not use a recording. '+langChips()+'</b>'
-          + say(VMEN, VMES, r)
-          + (go ? '<button id="vmdone" style="margin-top:14px">Done reading &rarr;</button>' : '');
-        if(go && $('vmdone')) $('vmdone').onclick = go;
-        Array.prototype.forEach.call($('vm').querySelectorAll('.lchip'), function(c){
-          c.onclick=function(ev){ ev.stopPropagation();
-            try{ localStorage.setItem('fcLang', c.dataset.lang); }catch(e){}
-            paintVM(); };
-        });
-      }
-      if(o.k==='voicemail') paintVM();
       if(o.k==='dnc' && !confirm('They asked to stop. This closes every channel, permanently, on every device. Continue?')){
         Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); return;
       }
@@ -3061,10 +3050,10 @@ function screenOutcome(){
            Cycling numbers is not lost: afterCall now carries a "try the next number" button. */
         go = function(){ _shield(); toast(_okmsg); afterCall(r,o,nextC); };
       }
-      // A voicemail script he has not finished reading must not be replaced out from under him.
-      // paintVM re-runs now that `go` exists, adding the Done button (and keeping it across
-      // language toggles).
-      if(o.k==='voicemail'){ paintVM(); } else go();
+      // 2026-09-04: voicemail no longer gates behind a post-call "Done reading" wall. The script now
+      // lives in the sheet ("IF NO ANSWER"), on screen DURING the call, so "Left voicemail" advances
+      // straight to the after-call panel like No answer -- same follow-up-text moment, no extra tap.
+      go();
       /* go() runs IMMEDIATELY now. The 650ms hold showed a screen of disabled buttons between every
          outcome and the next action — pure dead time, times a hundred dials a day. The toast (now
          z-60, above the sheet) is the confirmation, and it overlaps the next screen harmlessly. */
@@ -3379,7 +3368,13 @@ document.addEventListener('click', function(ev){
 window.addEventListener('unhandledrejection', function(ev){ logErr(ev.reason, 'promise'); });
 function wire(){
   Array.prototype.forEach.call(document.querySelectorAll('.lane button'), function(b){
-    b.onclick=function(){ lane=b.dataset.l; i=0; render(); };
+    b.onclick=function(){ lane=b.dataset.l; i=0; render();
+      /* 2026-09-04: switching lanes also pulls fresh team state, so a category he opens does not show
+         leads a teammate worked since the last 45s sync -- the "keeps bringing me back to people I've
+         done" complaint on the team side. The immediate render() is instant; the pull corrects it. */
+      if(localStorage.getItem('fcTeamKey')){ try{ syncPull().then(function(){ loadNotes();
+        if(SCREEN==='lead'){ try{ render(); }catch(_e){} } }); }catch(e){} }
+    };
   });
   // "see the call log" on the hidden-count line — the registry of who has been called, by whom
   var rl = $('reglink');
@@ -3425,10 +3420,7 @@ function lang(){ try{ return localStorage.getItem('fcLang')==='es' ? 'es' : 'en'
 function setLang(v){
   try{ localStorage.setItem('fcLang', v); }catch(e){}
   // repaint whichever script surfaces are up, without touching flow state.
-  // NOT while a voicemail script is visible: that block repaints itself, and a full rebuild here
-  // would wipe the script mid-read and re-enable buttons for an outcome already logged.
-  var vmUp = $('vm') && $('vm').style.display === 'block';
-  if(SCREEN==='outcome' && cur && !vmUp){ screenOutcome(); }
+  if(SCREEN==='outcome' && cur){ screenOutcome(); }
   else if(SCREEN==='lead' && cur){ screenLead(); }
   if(cur) renderSheet(cur);
 }
@@ -3480,6 +3472,13 @@ function renderSheet(r){
   }
 
   b += '<div class="ltag">IF YOU ONLY GET 15 SECONDS</div><div class="say">'+esc(fillScript(SCRIPT.f15, r))+'</div>';
+
+  /* VOICEMAIL script, in the sheet so it is one glance away DURING the call (the sheet stays open on
+     the outcome screen). Was gated behind a post-call "Done reading" wall; "Left voicemail" now just
+     logs and advances. Read live, never a recording (prerecorded/ringless drops need prior express
+     written consent under the TCPA). */
+  b += '<div class="ltag">IF NO ANSWER &mdash; LEAVE THIS (read it live, no recording)</div>'
+     + say(VMEN, VMES, r);
 
   // OBJECTIONS — tap what you are hearing.
   b += '<div class="ltag">THEY PUSHED BACK &mdash; tap what you heard</div>';
