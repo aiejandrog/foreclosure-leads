@@ -95,10 +95,11 @@ _OPEN_BODY_ES = ("Le habla {sender}, de Biscayne Solutions Group. Puede sonar un
                  "pudiera ayudar un momento. No soy su prestamista y no le vengo a comprar la casa. "
                  "¿Le puedo hacer una pregunta rápida?")
 
-# THE QUESTION STACK -- NEPQ. Runs after the opener, only if they engage. Problem-awareness ->
-# consequence (money side only, no case merits, no promised outcome) -> solution-awareness + the
-# five-minute advisor ask + fairness close. Rendered as its own "GET THEM TALKING" block; ES is the
-# usted register to match every other Spanish asset in the repo.
+# THE QUESTION STACK -- NEPQ. Runs after the opener, only if they engage. Situation -> problem
+# awareness -> consequence (money side only, no case merits, no promised outcome) -> what it has cost
+# -> consequence (personal) -> solution-awareness + the five-minute advisor ask + fairness close.
+# Rendered as its own "GET THEM TALKING" block; ES is the usted register to match every other Spanish
+# asset in the repo.
 #
 # NO EITHER/OR THAT HANDS THEM AN EXIT (Jesse, 2026-09-04, on the "YOUR PITCH" email). Q3 shipped as
 # "...would you want to look at them, OR ARE YOU PRETTY SET on how you are handling it?" -- that
@@ -106,27 +107,64 @@ _OPEN_BODY_ES = ("Le habla {sender}, de Biscayne Solutions Group. Puede sonar un
 # ASSUMED, then tie down ("Right?" / "That is fair, right?"). The only either/or allowed anywhere in
 # this call is two ways to say YES (a time, not a whether) and it lives in the CLOSE beat, not here.
 # Same reason Q1/Q2 never ask "are you the right person" -- the OPENER already settled that. Assume.
+#
+# SIX BEATS, in order, and the order is the point: you do not get to beat 6 by talking, you get there
+# by them answering 1 through 5. Beat 1 is the ISOLATE scalpel from CIOC ("what do you TRULY want")
+# moved to the FRONT -- their answer tells you which program you are even pitching. Beats 2-3 are the
+# money consequence, 4 is what it has already cost them, 5 is the personal one (the beat the 3-question
+# stack was missing entirely, and the one Miner builds the whole call around), 6 asks for the advisor.
 NEPQ_Q_EN = [
+    # 1 · SITUATION. Open, never a binary -- "hold it or are you past it?" is exactly the this-or-that
+    # Jesse killed. Let them say it in their own words; everything after is built on this answer.
+    "Before I get into any of it, what is it you are actually hoping happens with {st1}?",
+    # 2 · PROBLEM AWARENESS.
     "When the bank or the attorney talked to you about that sale date, did anybody actually explain "
     "what happens to your balance every time that date gets pushed back?",
+    # 3 · CONSEQUENCE, money side only (never the case, never its merits).
     "That is what I hear from just about everyone. Every time it moves, the interest and the legal "
     "fees keep stacking on top of what you already owe. Have you had a chance to see where that "
     "number is really sitting today, or is it a bit of a moving target?",
+    # 4 · WHAT IT HAS ALREADY COST. Time and effort, and it surfaces the plan they already have --
+    # which CIOC says you INSURE, never fight (the parachute frame).
+    "How long has this been hanging over you, and what have you already tried?",
+    # 5 · CONSEQUENCE, personal. Ends on an assumed statement plus a tie-down, NOT a question that
+    # offers them the option of not caring.
+    "Let me ask you straight. If nothing changes and that date comes and goes, where does that leave "
+    "you and your family? That is not something you are willing to just sit back and let happen. "
+    "Right?",
+    # 6 · SOLUTION + the advisor ask + fairness close, then the ONLY either/or in the whole call:
+    # two ways to say yes. A time, never a whether.
     "Before that date hits, you would want to at least see your real options laid out. Right? Our "
     "senior advisor has over 30 years in mortgages and foreclosure workouts and he takes five minutes "
-    "and lays them out. Worst case, you know more than you did this morning. That is fair, right?",
+    "and lays them out. Worst case, you know more than you did this morning. That is fair, right? "
+    "Let me get you on his calendar. Is later today better, or first thing tomorrow?",
 ]
 NEPQ_Q_ES = [
+    "Antes de meterme en nada, ¿qué es lo que usted de verdad quisiera que pasara con {st1}?",
     "Cuando el banco o el abogado le habló de esa fecha de subasta, ¿alguien de verdad le explicó qué "
     "le pasa a su saldo cada vez que esa fecha se pospone?",
     "Eso es lo que escucho de casi todos. Cada vez que se mueve, los intereses y los gastos legales "
     "se siguen sumando a lo que ya debe. ¿Ha tenido chance de ver en cuánto está ese número hoy, o es "
     "un poco un blanco móvil?",
+    "¿Cuánto tiempo lleva cargando con esto, y qué ha intentado ya?",
+    "Le pregunto de frente. Si nada cambia y esa fecha llega y pasa, ¿dónde lo deja a usted y a su "
+    "familia? Eso no es algo que usted esté dispuesto a dejar pasar así nomás. ¿Verdad?",
     "Antes de que llegue esa fecha, usted querría por lo menos ver sus opciones reales sobre la mesa. "
     "¿Verdad? Nuestro asesor principal tiene más de 30 años en hipotecas y en resolver casos de "
     "ejecución, y en cinco minutos se las explica. En el peor de los casos, usted sabe más de lo que "
-    "sabía esta mañana. ¿Le parece justo?",
+    "sabía esta mañana. ¿Le parece justo? Déjeme ponerlo en su calendario. ¿Le queda mejor hoy más "
+    "tarde, o mañana temprano?",
 ]
+
+# zip() TRUNCATES TO THE SHORTER LIST, silently. Add a beat to EN, forget the ES, and that beat just
+# vanishes from the page -- no error, no log line, the stack is simply one question shorter and looks
+# entirely normal. That is the same "succeeds while doing nothing" shape as the empty SCRIPT.q slot
+# this whole block exists to fill, so it fails LOUD at import instead of on a live call. CallModeError
+# is not defined until further down this file, hence the plain raise.
+if len(NEPQ_Q_EN) != len(NEPQ_Q_ES):
+    raise RuntimeError('call_mode: NEPQ stack is %d EN vs %d ES. zip() would silently drop the '
+                       'extras -- every beat needs both languages.'
+                       % (len(NEPQ_Q_EN), len(NEPQ_Q_ES)))
 
 # Two variants, because greeting the wrong "name" is worse than not greeting one.
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
