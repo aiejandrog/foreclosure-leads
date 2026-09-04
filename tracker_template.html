@@ -6002,21 +6002,21 @@ function smsMsg(r, lang, tone){
        ever weakened, delete this body in the same commit. "Save this number" is drill card 14
        (the read-back close) compressed to SMS — the save action is the thermometer. */
     en = 'Hi'+(first?' '+first:'')+', this is '+sN+' with Biscayne Solutions Group, my last text about '+stEN+'.'
-       + ' I hope your plan lands right on time. If anything slips, one free call with our senior'
-       + ' advisor, 30 plus years, maps what still works. Save this number even if you delete'
-       + ' this text.'+stopEN;
+       + ' I hope your plan lands right on time. If anything slips before the sale date, one free call'
+       + ' with our senior advisor, 30 plus years, maps what still works. Either way, keep my number'
+       + ' in your phone.'+stopEN;
     es = 'Hola'+(first?' '+first:'')+', soy '+sN+' de Biscayne Solutions Group, mi último mensaje sobre '+stES+'.'
-       + ' Ojalá su plan salga a tiempo. Si algo falla, una llamada gratis con nuestro asesor'
-       + ' principal, más de 30 años, le da opciones. Guarde este número aunque borre el'
-       + ' mensaje.'+stopES;
+       + ' Ojalá su plan salga a tiempo. Si algo falla antes de la fecha de subasta, una llamada gratis'
+       + ' con nuestro asesor principal, más de 30 años, le muestra lo que aún sirve. De cualquier'
+       + ' forma, guarde mi número en su teléfono.'+stopES;
   } else if(tone==='followup'){
     // The parachute card's scalpel: ONE question that tests the plan without attacking it.
-    en = 'Hi'+(first?' '+first:'')+', '+sN+' with Biscayne Solutions Group again about '+stEN+'. If your plan is set,'
-       + ' ignore this and I truly wish you the best. One question first. Is it in writing yet?'
-       + ' If not, a free 5 minutes with our senior advisor gives you a backup.'+stopEN;
-    es = 'Hola'+(first?' '+first:'')+', '+sN+' de Biscayne Solutions Group otra vez, por '+stES+'. Si su plan está en'
-       + ' marcha, ignore esto y le deseo lo mejor. Una pregunta. ¿Ya lo tiene por escrito? Si no,'
-       + ' 5 minutos gratis con nuestro asesor principal le dan un respaldo.'+stopES;
+    en = 'Hi'+(first?' '+first:'')+', '+sN+' with Biscayne Solutions Group again about '+stEN+'. Not trying to crowd you.'
+       + ' If you already have a plan you trust, honestly ignore me and I hope it works out. If you'
+       + ' are not fully sure it will, that is the part I would want a second set of eyes on. Worth a quick look?'+stopEN;
+    es = 'Hola'+(first?' '+first:'')+', '+sN+' de Biscayne Solutions Group otra vez, por '+stES+'. No quiero abrumarlo.'
+       + ' Si ya tiene un plan en el que confía, ignóreme y ojalá le funcione. Si no está del todo'
+       + ' seguro de que va a funcionar, esa es la parte en la que le daría una segunda opinión. ¿Vale la pena una mirada rápida?'+stopES;
   } else if(td){
     // Tax deed: the SURPLUS (FS 197.582) is the one concrete fact nobody tells them. "Paying the
     // back taxes stops it" is a statement of law about THEIR action, never an outcome we promise.
