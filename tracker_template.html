@@ -15270,6 +15270,15 @@ function _mergeLead(local, remote){
      what carries a DNT from the laptop to the phone, where the texts are actually sent. */
   const _nt = (local.dntph||[]).concat(remote.dntph||[]).filter((v,ix,a) => a.indexOf(v)===ix);
   if(_nt.length) out.dntph = _nt;
+  /* DEAD NUMBERS (`badph`): UNION, same rule and same reason as dntph directly above — it was simply
+     never merged. The worker has written this field since 2026-08 and Call Mode now writes it too
+     (its "Bad number" outcome), but the mark lived only on the device that made it: a number Carlos
+     proved dead was still first in Alejandro's dial order, and vice versa. Union only, so a merge can
+     never resurrect a number someone retired; badnum_audit.py remains the one path that restores. */
+  const _bp = (local.badph||[]).concat(remote.badph||[])
+    .map(v => String(v).replace(/\D/g,'')).filter(v => v)
+    .filter((v,ix,a) => a.indexOf(v)===ix);
+  if(_bp.length) out.badph = _bp;
   // status: DO NOT CONTACT wins over everything, then Dead, else the side with the more recent touch
   if(_DNC(local.status) || _DNC(remote.status)){ if(out.status !== 'DO NOT CONTACT'){ out.status = 'DO NOT CONTACT'; ch.status = true; } if(!out.optout){ out.optout = remote.optout || local.optout || _today(); ch.optout = ch.optout || !local.optout; }
     // teammate's opt-out just started suppressing on THIS device — stamp when, for the paper trail

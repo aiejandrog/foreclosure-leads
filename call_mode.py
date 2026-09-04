@@ -1729,6 +1729,11 @@ function hardSuppressed(r){
 function suppressed(r){
   var h = hardSuppressed(r);
   if(h) return h;
+  /* Every number this lead has is marked dead — there is nothing left to dial, so it must leave the
+     queue rather than serve a card whose only buttons are dead numbers. Counted in the visible
+     hidden tally like every other suppression (NO SILENT CAPS), and reversible: badnum_audit.py
+     restores the mark and the lead comes straight back. */
+  if((r.p||[]).length && nextLivePh(r, 0) < 0) return 'every number marked bad';
   var n = notes[r.c] || {};
   /* ALREADY WORKED — by me OR by a teammate. Without this, Carlos logs a call, the note syncs to
      this phone, and the lead still sits in the queue waiting to be dialled a second time by the
@@ -1779,6 +1784,43 @@ function suppressed(r){
    the one we put first. Kept separate from suppressed() on purpose. */
 function dntSet(){
   try{ return new Set(JSON.parse(localStorage.getItem('fcDNT')||'[]')); }catch(e){ return new Set(); }
+}
+/* ── DEAD NUMBERS — `badph`, the field the MORNING WORKER already writes ─────────────────────────
+   The worker's "bad number" control appends the digits to notes[case].badph and its card filter
+   drops them (_workerCard). Call Mode never read it, so a number retired on the laptop was still
+   dialled from the phone — and now that this page has its own "Bad number" outcome, both surfaces
+   must mean the same thing. Same field, one vocabulary.
+
+   WHY NOT FILTER r.p INTO A NEW ARRAY: phIdx indexes r.p AND the parallel rank array r.r, and
+   render() re-reads cur from pool() on every paint. Handing back a filtered CLONE would give `cur`
+   a new identity each render and silently drop cur._rcStay — the "Stay on this lead" override —
+   putting the already-called takeover into a loop. So the arrays stay intact and we simply never
+   LAND on a dead index. Same result, none of the index drift.
+
+   ⚠️ This mark is destructive and effectively permanent (badnum_audit.py exists because the worker's
+   version fired 61 times in one day, 20 inside a single minute, and killed a live number belonging
+   to an owner who texted in that evening asking to sell). Hence the confirm in screenOutcome and the
+   fact that nothing here ever DELETES a number — it is skipped, and badnum_audit.py can restore it. */
+function badSet(r){
+  var out = {};
+  try{
+    ((notes[r.c]||{}).badph||[]).forEach(function(b){
+      var d = String(b).replace(/\D/g,''); if(d) out[d] = 1;
+    });
+  }catch(e){}
+  return out;
+}
+function isBadPh(r, ix){
+  var p = (r.p||[])[ix]; if(!p) return false;
+  return !!badSet(r)[String(p).replace(/\D/g,'')];
+}
+/* First dialable index at or after `from`, or -1 when every remaining number is dead. */
+function nextLivePh(r, from){
+  var p = r.p||[], bad = badSet(r);
+  for(var k = Math.max(0, from|0); k < p.length; k++){
+    if(!bad[String(p[k]).replace(/\D/g,'')]) return k;
+  }
+  return -1;
 }
 
 /* pool() is the ONE place suppression is evaluated. Everything else reads what it left behind.
@@ -2179,6 +2221,11 @@ function render(){
      landing while he reads the card on number 2) must not snap him back to number 1. */
   var pc=cur&&cur.c, pp=phIdx;
   cur=P[i]; phIdx=(cur&&cur.c===pc&&pp<cur.p.length)?pp:0;
+  /* NEVER LAND ON A DEAD NUMBER. A lead can carry a number marked bad here or on the laptop's
+     worker card; without this the card offers it as the one to dial. pool() has already dropped
+     leads whose numbers are ALL bad, so this normally finds one — the second call is belt and
+     braces for a mark that landed between the pool pass and this paint. */
+  var _lv=nextLivePh(cur, phIdx); if(_lv<0) _lv=nextLivePh(cur, 0); if(_lv>=0) phIdx=_lv;
   /* Stake the claim on ARRIVAL at the lead, not on tapping dial. He reads the card, checks the
      file and rehearses the open before he dials — that whole stretch is exactly when the other
      phone must be told this one is taken. Claiming at dial-time would leave the most likely
@@ -3036,6 +3083,13 @@ function screenOutcome(){
       if(o.k==='dnc' && !confirm('They asked to stop. This closes every channel, permanently, on every device. Continue?')){
         Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); return;
       }
+      /* CONFIRM, BECAUSE THIS IS DESTRUCTIVE AND SITS IN THE TAP PATH. The worker's version of this
+         control had no confirmation and fired 61 times in one day -- 20 inside a single minute --
+         killing a live number whose owner texted in that evening asking to sell (badnum_audit.py).
+         Nobody establishes a number is dead in three seconds, so make the tap deliberate. */
+      if(o.k==='badnum' && !confirm('Mark ' + fmt(d) + ' as a dead number?\n\nIt stops being dialled on this phone and on the board. Their other numbers are unaffected.')){
+        Array.prototype.forEach.call(document.querySelectorAll('.oc button'),function(x){x.disabled=false;}); return;
+      }
       var _fresh = logOutcome(r,o,d);
       var _okmsg = _fresh ? ('✓ '+o.t+' — logged') : ('✓ dial counted — '+o.t+' already logged today');
       /* The shield arms INSIDE go() — at the actual screen swap — not at outcome-tap time. On the
@@ -3123,6 +3177,9 @@ function afterCall(r, o, nextC){
   // 'miss' == show the "try their next number" button. badnum (this line is dead) and gate (reached
   // the wrong person on this line) both want the NEXT number; callback/talked/appt do not.
   var st = textStage(r), miss = (o.k==='noanswer'||o.k==='voicemail'||o.k==='badnum'||o.k==='gate');
+  // The next LIVE number, computed after logOutcome has recorded any badnum mark — so the number he
+  // just declared dead is never the one offered next. -1 = nothing dialable left on this lead.
+  var _nextPh = nextLivePh(r, phIdx + 1);
   var num = r.p[phIdx];
   /* THREE GATES, all of which were missing. The text button shipped with only the ladder check.
      - Do-Not-Text: dntSet() was written and then never called anywhere, and n.dntph — the field
@@ -3181,9 +3238,11 @@ function afterCall(r, o, nextC){
     + '</div>'
     /* THE OTHER NUMBERS. no-answer/voicemail used to auto-jump here; now it is a deliberate tap,
        so the text offer above is never skipped past. Only shown when a number is actually left. */
-    + ((miss && phIdx + 1 < (r.p||[]).length)
+    /* Skips numbers marked bad (here or on the worker card) rather than counting blindly upward —
+       offering a dead line as "their next number" is the whole reason badnum exists. */
+    + ((miss && _nextPh >= 0)
         ? '<button id="nph" class="ghost" style="margin-top:14px">&#128222; Try their next number ('
-          + (phIdx + 2) + ' of ' + r.p.length + ')</button>'
+          + (_nextPh + 1) + ' of ' + r.p.length + ')</button>'
         : '')
     + '<button id="nx" style="margin-top:14px">Next lead &rarr;</button>'
     + '</div><div class="sheetpad"></div>';
@@ -3191,7 +3250,7 @@ function afterCall(r, o, nextC){
   $('nx').onclick = go;
   if($('nph')) $('nph').onclick = function(){
     window._tapShieldUntil = Date.now() + 400;
-    phIdx++; toast('Next number'); screenLead();
+    phIdx = _nextPh; toast('Next number'); screenLead();
   };
   Array.prototype.forEach.call(document.querySelectorAll('.cb'), function(b){
     b.onclick = function(){
@@ -3294,7 +3353,16 @@ function logOutcome(r,o,digits){
   else if(o.k==='notint') n.status=n.status||'Not interested';
   else if(o.k==='callback') n.status=n.status||'Callback';
   else if(o.k==='gate') n.status=n.status||'Gatekeeper';
-  // badnum sets no status: the NUMBER is bad, the person/lead is still callable on their others.
+  else if(o.k==='badnum'){
+    /* THE NUMBER is dead, not the person — no status, no opt-out, and the lead stays callable on
+       every other number it has. Written to `badph`, the SAME field the morning worker's bad-number
+       control uses, so one mark is honoured by both surfaces and badnum_audit.py can already read,
+       quarantine and restore it. Digits only (the worker stores and compares digits) and union only:
+       a suppression list may grow, never shrink. */
+    var _bd = String(digits||'').replace(/\D/g,'');
+    n.badph = n.badph || [];
+    if(_bd && n.badph.indexOf(_bd) < 0) n.badph.push(_bd);
+  }
   // Retire it from the worker's queue on ANY logged outcome — same rule as the board's `callout`
   // dispatcher. Without this a lead worked here reappears in tomorrow's worker queue.
   retireFromWorkerQ(r.c);
