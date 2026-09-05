@@ -114,6 +114,23 @@ def _optout_set():
     return cases, emails
 
 
+OPTOUT_MAX_AGE_DAYS = float(os.environ.get('DEALFLOW_OPTOUT_MAX_AGE_DAYS', '2'))
+
+
+def _optout_age_days():
+    """Age of the DO-NOT-CONTACT ledger in days, or None when the file is missing.
+
+    2026-09-05: the desktop bridge sent 746 emails across three send-days through an optouts.json
+    frozen at 08-22 — every laptop-side STOP recorded after that date was invisible to its gate.
+    The gate itself worked; it was reading a two-week-old ledger. Checking the ledger's AGE is the
+    guard that would have stopped all three send-days, and it needs no cross-machine sync to work.
+    Fail-closed: a MISSING ledger reads as infinitely stale, never as 'no opt-outs'."""
+    try:
+        return (time.time() - os.path.getmtime(OPTOUT_FILE)) / 86400.0
+    except OSError:
+        return None
+
+
 def _load_ledger():
     if not os.path.exists(SENT_LEDGER):
         return []
@@ -529,6 +546,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith('/health'):
             user, pw = _load_credentials()
             _bh = _bounce_health()
+            _oo_age = _optout_age_days()
             self._json(200, {
                 'ok': True,
                 'user': user or '(not configured)',
@@ -541,6 +559,11 @@ class Handler(BaseHTTPRequestHandler):
                 # Surfaced so the board can show list health next to the cap. `blocked` is the
                 # same verdict /send enforces, so the worker can say WHY before it starts a run
                 # instead of discovering it 403 by 403.
+                # Ledger staleness — the 2026-09-05 desktop incident guard. The board shows this
+                # next to the cap so a stale list is visible BEFORE a run 403s send-by-send.
+                'ledger_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
+                'optout_stale': (_oo_age is None or _oo_age > OPTOUT_MAX_AGE_DAYS),
+                'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
                 'bounce_blocked': _bh['rate'] > BOUNCE_CEILING,
                 # verified-only mode: while blocked, sends to proven-deliverable addresses
@@ -811,6 +834,21 @@ class Handler(BaseHTTPRequestHandler):
         if not subj or not body:
             return self._json(400, {'ok': False, 'err': 'subj and body required'})
 
+        # ---- LEDGER STALENESS (2026-09-05 desktop incident) — fail closed ----------------------
+        # A stale (or missing) optouts.json means the opt-out gate below is checking against a
+        # ledger that may lack recent STOPs. Refuse owner sends outright rather than send through
+        # it. meta.test sends (1:1 to the advisor/operator, never an owner) stay allowed — the
+        # email-level opt-out match below still applies to them.
+        _age = _optout_age_days()
+        _is_test = bool((meta or {}).get('test'))
+        if not _is_test and (_age is None or _age > OPTOUT_MAX_AGE_DAYS):
+            return self._json(200, {
+                'ok': False, 'blocked': 'optout_stale',
+                'err': ('DO-NOT-CONTACT ledger is %s (max %.0fd) — refresh optouts.json '
+                        '(optout_sync.py, or sync from the operator machine) before sending'
+                        % ('MISSING' if _age is None else '%.1f days old' % _age,
+                           OPTOUT_MAX_AGE_DAYS))})
+
         # ---- OPT-OUT BACKSTOP (2026-08-19 stress-test CRITICAL) --------------------------------
         # Refuse to email anyone on the DO-NOT-CONTACT ledger, matched by recipient email OR by the
         # meta.c case. meta.test sends are 1:1 to the advisor/operator (Brief Jesse, case workups),
@@ -821,7 +859,6 @@ class Handler(BaseHTTPRequestHandler):
         _every = [to] + [a.strip().lower() for a in bcc.split(',') if a.strip()]
         _hit_email = next((a for a in _every if a in _oo_emails), None)
         _case = str((meta or {}).get('c') or '').strip().lower()
-        _is_test = bool((meta or {}).get('test'))
         if _hit_email or (_case and _case in _oo_cases and not _is_test):
             return self._json(200, {
                 'ok': False, 'blocked': 'optout',
