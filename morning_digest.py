@@ -132,7 +132,121 @@ def collect():
     mail = _load('mail_sent.json')
     if mail is not ABSENT:
         m['mailed'] = len(mail)
+    m.update(funnel(mail, rep))
     return m
+
+
+# ---- funnel ----------------------------------------------------------------------------------
+def _stop_text(text):
+    """replies.is_stop_text when importable; a narrow fail-closed regex otherwise (same posture
+    as cadence._is_stop). Never re-implement the detector -- see the note in cadence.py."""
+    try:
+        from replies import is_stop_text
+        return bool(is_stop_text(text))
+    except Exception:
+        import re
+        return bool(re.search(r'\b(unsubscribe|remove me|do not contact|no contactar)\b',
+                              text or '', re.I))
+
+
+_AUTOREPLY = ('out of office', 'auto-reply', 'autoreply', 'automatic reply',
+              'acknowledgment notice', 'yahoo mail:', 'delivery status', 'undeliverable')
+
+
+def funnel(mail, rep):
+    """The numbers that say whether OUTREACH IS WORKING, not just whether it ran.
+
+    WHY (2026-09-05 audit). The digest reported 'mail pieces sent 3266' and 'replies logged 19',
+    and both numbers were wrong in the direction that flatters: mail_sent.json counts SENDS, and
+    the same 1,534 addresses had been sent to 3,266 times; replies.json keys every reply TWICE
+    (by case and by '@email'), so 19 entries were 10 humans, of whom 5 were warm. Meanwhile the
+    number that actually predicts the reply rate -- 222 of the 1,531 mailed addresses had
+    hard-bounced (15%; 544 dead addresses are known overall, the rest caught by the probe before a
+    send) -- lived only in bounced_emails.json and was in no report at all. And the phone, which
+    on the same ledger had turned 163 dials into 13 conversations and 3 appointments, had no line
+    at all next to 3,266 sends. A funnel you cannot see is a funnel you cannot fix, and 'replies'
+    that count auto-acknowledgments and 'house is sold' as inbound is the same lie as a count that
+    is not news.
+
+    Every value here is derived from files the nightly already writes. Absent stays absent (rule
+    2); every key lands in the baseline so tomorrow shows the delta.
+    """
+    f = {}
+    # distinct people reached, not sends. Lists AND strings appear in `to` across ledger versions.
+    if mail is not ABSENT and isinstance(mail, list):
+        addrs = set()
+        cases = set()
+        for it in mail:
+            if not isinstance(it, dict) or it.get('test_mode'):
+                continue
+            to = it.get('to')
+            for a in (to if isinstance(to, list) else [to]):
+                if a:
+                    addrs.add(str(a).strip().lower())
+            if it.get('case'):
+                cases.add(str(it['case']))
+        f['reached'] = len(addrs)
+        f['reached_cases'] = len(cases)
+        bounced = _load('bounced_emails.json')
+        if bounced is not ABSENT and isinstance(bounced, dict):
+            dead = {str(k).strip().lower() for k in bounced}
+            f['bounced'] = len(dead & addrs) if addrs else len(dead)
+            # bounce share of the addresses we actually mailed. Integer percent: a delta of
+            # "+1" on a percentage is readable; a delta on 0.3547 is not.
+            if addrs:
+                f['bounce_pct'] = int(round(100.0 * f['bounced'] / len(addrs)))
+    # replies: humans, deduped, split into the three things they can mean
+    if rep is not ABSENT and isinstance(rep, dict):
+        seen = set()
+        warm = stops = noise = 0
+        for k, v in rep.items():
+            if not isinstance(v, dict):
+                continue
+            key = (str(v.get('email') or '').lower(), str(v.get('when') or ''))
+            if key in seen:
+                continue
+            seen.add(key)
+            ex = str(v.get('excerpt') or '')
+            low = ex.lower()
+            if v.get('stop') or _stop_text(ex):
+                stops += 1
+            elif any(t in low for t in _AUTOREPLY) or 'house is sold' in low or 'already sold' in low:
+                noise += 1
+            else:
+                warm += 1
+        f['replies_people'] = len(seen)
+        f['replies_warm'] = warm
+        f['replies_stop'] = stops
+        f['replies_noise'] = noise
+    # cadence: the only sequence that auto-cancels on reply, so 'cancelled' IS its success count
+    cs = _load('cadence_state.json') if os.path.exists(os.path.join(HERE, 'cadence_state.json')) else ABSENT
+    if cs is not ABSENT and isinstance(cs, dict):
+        st = [str((v or {}).get('status') or '') for v in cs.values() if isinstance(v, dict)]
+        f['cadence_active'] = sum(1 for s in st if s == 'active')
+        f['cadence_replied'] = sum(1 for s in st if s in ('replied', 'cancelled'))
+    # dials: call touches logged through the board / Call Mode. The 6-dials-vs-hundreds finding
+    # (call_mode.py docstring) is why this is reported as its own line -- if it stays flat while
+    # sends climb, the operator is dialing off-book again and every funnel number is fiction.
+    wn = _load('worker_notes.json') if os.path.exists(os.path.join(HERE, 'worker_notes.json')) else ABSENT
+    if wn is not ABSENT and isinstance(wn, dict):
+        notes = wn.get('notes', wn) if isinstance(wn.get('notes'), dict) else wn
+        dials = talked = appts = 0
+        for k, v in notes.items():
+            if not isinstance(v, dict) or str(k).startswith('__'):
+                continue
+            for t in v.get('touches') or []:
+                if not isinstance(t, dict) or t.get('ch') != 'call':
+                    continue
+                dials += 1
+                out = str(t.get('out') or '').lower()
+                if 'talked' in out or 'appointment' in out or 'callback' in out:
+                    talked += 1
+                if 'appointment' in out:
+                    appts += 1
+        f['dials'] = dials
+        f['conversations'] = talked
+        f['appointments'] = appts
+    return f
 
 
 def buyboxes():
@@ -283,6 +397,27 @@ def render(m, base, boxes, fresh, today, prev_date):
     L.append('  INBOUND')
     line('replies logged', 'replies')
     line('mail pieces sent (total)', 'mailed')
+    L.append('')
+    L.append('  FUNNEL -- is outreach WORKING (people, not sends)')
+    line('people emailed (distinct)', 'reached')
+    line('cases emailed (distinct)', 'reached_cases')
+    line('hard-bounced addresses', 'bounced')
+    line('bounce share of mailed', 'bounce_pct', '%')
+    line('replies from humans', 'replies_people')
+    line('  warm (call these)', 'replies_warm')
+    line('  stop / opt-out', 'replies_stop')
+    line('  noise (auto, sold)', 'replies_noise')
+    line('cadence active', 'cadence_active')
+    line('cadence replied+cancelled', 'cadence_replied')
+    line('dials logged', 'dials')
+    line('conversations', 'conversations')
+    line('appointments', 'appointments')
+    if 'bounce_pct' in m and m['bounce_pct'] >= 20:
+        L.append('     -> %d%% of mailed addresses are dead. That is the skip-trace email source, '
+                 'not the copy: every 3 sends buys 2 inboxes.' % m['bounce_pct'])
+    if 'dials' in m and 'reached' in m and m['reached'] and m['dials'] * 10 < m['reached']:
+        L.append('     -> dials are under a tenth of people emailed. Email is the weak channel '
+                 'here; the phone list is where the replies came from.')
 
     L.append('')
     L.append('  BUY-BOXES')

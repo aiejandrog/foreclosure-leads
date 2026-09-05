@@ -113,6 +113,21 @@ tpl = F.subst_build_facts(open(os.path.join(HERE, "tracker_template.html"), enco
 tpl = tpl.replace('__MOTIONJS__', F._motion_js())   # our own code, not PII — ship the real thing
 for _tok, _val in PREVIEW_EMPTY.items():
     tpl = tpl.replace(_tok, _val)
+# Three more placeholders arrived after the list above was written (identity disclosure 08-2x,
+# Alejandro's cold-email copy 08-29) and make_tracker() substitutes them inline, so the preview
+# aborted on load again -- assert_no_placeholders caught it, nobody rebuilt the preview. None of
+# these is PII: they are OUR copy (disclaimer.py, outreach_copy.py), the same strings every
+# homeowner already receives, so the real values ship here. The substitutions are the same calls
+# make_tracker makes (foreclosure_leads.py, "IDENTITY DISCLOSURE -- ONE SOURCE, BAKED"), so the
+# preview's composer renders the sentence the board actually sends and cannot drift from it.
+try:
+    import disclaimer as _D
+    tpl = tpl.replace('__IDENT_EN__', F._esc_js(_D.identity('en', as_html=False)))
+    tpl = tpl.replace('__IDENT_ES__', F._esc_js(_D.identity('es', as_html=False)))
+except Exception as _e:
+    raise SystemExit('identity disclosure bake FAILED (%s) -- the preview would carry a literal '
+                     '__IDENT_EN__; fix disclaimer.py first.' % _e)
+tpl = F._bake_alex_email(tpl, 'design-preview.html')   # never raises; falls back loudly
 html = tpl.replace("__DATA__", F._esc_json(FAKE))
 F.assert_no_placeholders(html, 'design-preview.html')
 out = os.path.join(HERE, "design-preview.html")
