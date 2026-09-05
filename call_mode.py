@@ -3273,6 +3273,20 @@ function afterCall(r, o, nextC){
     var n = notes[r.c] = notes[r.c] || {status:'',note:''};
     n.textopen = today(); saveNotes(); queueSync();
     var openComposer = function(){
+      /* CLIPBOARD FIRST, ALWAYS. On the desktop this sms: link lands in Phone Link, and Phone Link
+         honours an activation only while it has NO window open: with its window up on the Messages
+         list it swallows the link outright. That is the whole "it locks and Re-open composer does
+         nothing" failure -- reproduced on DESKTOP-35NNMFL 2026-09-05 with Start-Process, OUTSIDE the
+         browser, so it is an OS-level behaviour this page cannot navigate around. What the page CAN
+         do is guarantee the words are never trapped in it: the body goes to the clipboard on every
+         open, so a composer that never appears (or appears blank) costs a paste instead of a lost
+         message. Fire-and-forget on purpose -- writeText rejects on a denied permission and the
+         send must not depend on it. */
+      try{
+        if(navigator.clipboard && navigator.clipboard.writeText){
+          navigator.clipboard.writeText(body).catch(function(){});
+        }
+      }catch(e){}
       location.href = 'sms:' + r.p[phIdx] + (/iPhone|iPad|Mac/.test(navigator.userAgent) ? '&' : '?')
         + 'body=' + encodeURIComponent(body);
     };
@@ -3285,7 +3299,10 @@ function afterCall(r, o, nextC){
       + esc(body) + '</div>'
       + '<button id="txy">&#10003; Yes, it sent</button>'
       + '<button id="txr" class="ghost">&#8635; Re-open composer (send again)</button>'
-      + '<button id="txn" class="ghost">No, I did not send it</button>';
+      + '<button id="txn" class="ghost">No, I did not send it</button>'
+      + '<div class="mut" style="font-size:12px;margin-top:8px">Text is on the clipboard. If the '
+      + 'composer stayed shut or came up blank, <b>close the Phone Link window</b> and tap Re-open '
+      + '&mdash; or open the thread and paste.</div>';
     $('txy').onclick = function(){
       var nn = notes[r.c] = notes[r.c] || {status:'',note:''};
       nn.touches = nn.touches || [];
@@ -3298,7 +3315,7 @@ function afterCall(r, o, nextC){
        is still not a delivery, and the Yes button remains the only thing that writes the touch. */
     $('txr').onclick = function(){
       openComposer();
-      toast('Composer re-opened — press send in Messages');
+      toast('Re-opened — text is on the clipboard');
       var c = $('txconf0'); if(c) c.textContent = 'Re-opened. Did it send this time?';
     };
     $('txn').onclick = function(){
