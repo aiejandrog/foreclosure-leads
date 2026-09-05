@@ -106,7 +106,20 @@ with sync_playwright() as p:
     # only by a hand probe, which is not a guard. Boundaries matter as much as the middle:
     # FTSA_HR_END is EXCLUSIVE, so 19:00 must send and 20:00 must not.
     win = pg.evaluate("""() => {
-      const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct);
+      /* THE LEAD HAS TO BE ABLE TO TEXT IN THE FIRST PLACE. This used to pick
+         `DATA.find(x => x.phones.length && !x.saleBkAct)` -- the first lead carrying ANY number.
+         When that lead's numbers are all DNC or all landline the send row renders EMPTY, so no
+         <a class="txsend"> and no <span class="txsend off"> exist at ANY hour, and both assertions
+         below fail while reporting the FTSA gate broken. The gate was never broken: on 2026-09-05
+         the same board, same minute, gave live=true at 8/10/19 and off=true at 7/20/23 on a lead
+         with a non-DNC mobile. A selector that cannot exercise the thing under test must not be
+         allowed to indict it -- same rule as the empty-lane message on the phone: an empty result
+         must never look like a failure. */
+      const lead = DATA.find(x => {
+        const ph = x.phones || [], d = x.phdnc || [], t = x.phtype || [];
+        if(!ph.length || x.saleBkAct) return false;
+        return ph.some((n, i) => !d[i] && (!t[i] || t[i] === 'mobile'));
+      });
       if(!lead) return null;
       const real = _flHour, out = {};
       [7, 8, 10, 19, 20, 23].forEach(h => {
@@ -121,7 +134,8 @@ with sync_playwright() as p:
       return out;
     }""")
     if not win:
-        rec('FTSA window: a textable lead exists to test', False, 'none on this board')
+        rec('FTSA window: a textable lead exists to test', False,
+            'no lead with a non-DNC mobile on this board -- the hours gate was NOT exercised')
     else:
         rec('FTSA window: 8am and 10am and 7pm CAN send',
             all(win[str(h)]['live'] for h in (8, 10, 19)),

@@ -401,6 +401,7 @@ class CallModeError(Exception):
     """
 
 
+_OUTCOMES_START = "var CALL_OUTCOMES=["
 _SYNC_START = "const _DNC = s => s === 'DO NOT CONTACT';"
 _SYNC_END = 'function startTeamSync()'
 
@@ -516,6 +517,69 @@ def _assert_page_provides(page):
             'call_mode: _PAGE_PROVIDES claims the page defines %s, but it does not. '
             'That claim is what silences the resolution guard, so a false entry re-opens the exact '
             'ReferenceError it exists to catch.' % ', '.join(missing))
+
+
+def board_call_outcomes(tracker_src):
+    """The board's CALL_OUTCOMES, parsed out of the worker document it builds as a JS string."""
+    i = tracker_src.find(_OUTCOMES_START)
+    if i < 0:
+        raise CallModeError('call_mode: CALL_OUTCOMES anchor not found in tracker_template.html — '
+                            'the board\'s outcome list moved; update _OUTCOMES_START')
+    j = tracker_src.find("'];'", i)
+    if j < 0:
+        raise CallModeError('call_mode: CALL_OUTCOMES list in tracker_template.html is unterminated '
+                            "— expected a \"'];'\" line after the entries")
+    block = tracker_src[i:j]
+    out = []
+    for m in re.finditer(r'\{k:"([A-Za-z0-9_]+)"\s*,\s*t:"([^"]*)"\s*,\s*hrs:(\d+)([^}]*)\}', block):
+        out.append((m.group(1), m.group(2), int(m.group(3)), 'sup:true' in m.group(4)))
+    if not out:
+        raise CallModeError('call_mode: found the CALL_OUTCOMES anchor but parsed ZERO entries — '
+                            'the entry shape changed; the comparison below would pass vacuously.')
+    return out
+
+
+def _assert_outcomes_match_board(tracker_src):
+    """The phone and the board must speak the SAME outcome vocabulary.
+
+    This file's own docstring has said since day one that CALL_OUTCOMES is COPIED from
+    tracker_template.html and must be kept byte-identical, and that a fourth copy would be a
+    regression. A docstring is not a guard. Two hand-maintained copies of the same list drift the
+    moment one is edited alone, and the failure is silent in the worst way: the phone logs
+    `badnum`, the board has never heard of `badnum`, and the outcome simply does not reconcile —
+    no error, no missing page, just a touch that quietly means nothing on the other side.
+
+    Extracting the list the way extract_sync_js extracts the merge block would be better still, but
+    the two live in different languages (a Python tuple list here, a JS string assembled inside the
+    board template there) and the board reads its own copy at runtime. So: keep both, and make
+    drift impossible to ship unnoticed.
+
+    SEVERITY IS SPLIT ON PURPOSE, because the two kinds of drift are not the same failure:
+      * keys, cooldowns or the suppress flag differ -> RAISE. An outcome that cannot round-trip is
+        a data-integrity break, and this file's standing rule is that shipping no Call Mode beats
+        shipping one that looks fine and logs nothing.
+      * only the human LABEL differs -> WARN loudly and build. A wording change is cosmetic; killing
+        the page he dials from over a renamed button would be the worse outage of the two.
+    """
+    board = board_call_outcomes(tracker_src)
+    mine = [(k, t, h, s) for k, t, h, s in CALL_OUTCOMES]
+
+    bkey = [(k, h, s) for k, _t, h, s in board]
+    mkey = [(k, h, s) for k, _t, h, s in mine]
+    if bkey != mkey:
+        raise CallModeError(
+            'call_mode: the outcome vocabulary has DIVERGED from the board.\n'
+            '  phone (call_mode.CALL_OUTCOMES): %r\n'
+            '  board (tracker_template.html)  : %r\n'
+            'Keys, cooldowns and the suppress flag must match exactly or an outcome logged on the '
+            'phone cannot reconcile on the board. Fix both lists, then rebuild.' % (mkey, bkey))
+
+    drifted = [(k, bt, mt) for (k, bt, _h, _s), (_k, mt, _h2, _s2) in zip(board, mine) if bt != mt]
+    if drifted:
+        print('call mode: WARNING — outcome LABELS differ between the phone and the board (keys and '
+              'cooldowns match, so outcomes still reconcile; only the wording on screen differs):')
+        for k, bt, mt in drifted:
+            print('   %-10s board=%r  phone=%r' % (k, bt, mt))
 
 
 def extract_sync_js(tracker_src):
@@ -1162,8 +1226,12 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     import hashlib
     sig = hashlib.sha256(json.dumps(payload, sort_keys=True).encode('utf-8')).hexdigest()[:12]
     _assert_page_provides(_PAGE)
-    sync_js = extract_sync_js(open(os.path.join(HERE, 'tracker_template.html'),
-                                   encoding='utf-8').read())
+    # Read the board template ONCE and hand the same text to both consumers. The outcome-vocabulary
+    # guard runs BEFORE the extraction so a divergence is reported as a divergence, rather than
+    # surfacing later as a confusing failure somewhere downstream of it.
+    _tracker_src = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
+    _assert_outcomes_match_board(_tracker_src)
+    sync_js = extract_sync_js(_tracker_src)
     _assert_no_dead_overrides(_PAGE, sync_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson)
     if guard:

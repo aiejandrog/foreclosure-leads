@@ -12950,10 +12950,18 @@ function genMorningWorker(lane, autostart){
     +     '};'
     +   '}'
     /* ---- CALL MODE ---------------------------------------------------------------------------
-       Six outcomes, mirroring the Dial-Ready tab's QUICKLOG bar so one vocabulary covers the whole
-       app. The cooldown differs per outcome, because a flat 72h rule is wrong for calls: a
-       voicemail should not retire a lead as long as an actual conversation does. `sup` marks the
-       two outcomes that suppress the lead permanently rather than for hours. */
+       Ten outcomes since 2026-09-04 (this comment still said six long after it was not), mirroring
+       the Dial-Ready tab's QUICKLOG bar so one vocabulary covers the whole app. The cooldown differs
+       per outcome, because a flat 72h rule is wrong for calls: a voicemail should not retire a lead
+       as long as an actual conversation does. `sup` marks the two outcomes that suppress the lead
+       permanently rather than for hours.
+
+       THIS LIST IS HALF OF A PAIR. call_mode.py keeps the same vocabulary in Python, and the phone
+       page logs against its copy while the board reconciles against this one, so a key that exists
+       on only one side produces a touch that silently means nothing on the other. They are held
+       together at build time by call_mode._assert_outcomes_match_board: change a key, a cooldown or
+       a suppress flag here and the next build fails until the other copy agrees. A label change
+       only warns -- wording is cosmetic and must not cost him the page he dials from. */
     +   'var CALL_OUTCOMES=['
     +     '{k:"noanswer", t:"No answer",     hrs:24,  cls:"skip"},'
     +     '{k:"voicemail",t:"Left voicemail",hrs:24,  cls:"skip"},'
