@@ -141,6 +141,12 @@ def main():
         b = load(os.path.join(REPO_DIR, name), None)
         if json.dumps(a, sort_keys=True) != json.dumps(b, sort_keys=True):
             raise SystemExit('FAIL-LOUD: %s differs between local and repo AFTER sync' % name)
+    # Freshness stamp (2026-09-05, desktop first run): send_server's staleness guard reads the
+    # optouts.json mtime. A sync that just PROVED local == repo is a fresh verification even when
+    # nothing changed - without this an unchanged-but-current ledger trips the guard (it did:
+    # 13.9 days, seconds after the repo was seeded) and a quiet week would do the same.
+    for name in FILES:
+        os.utime(os.path.join(HERE, name), None)
     print('SYNCED: local == repo for %s (local %s, repo %s)' % (', '.join(FILES), 'changed' if changed_local else 'unchanged', 'pushed' if changed_repo else 'unchanged'))
 
 
