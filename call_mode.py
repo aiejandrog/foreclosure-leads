@@ -173,6 +173,27 @@ if len(NEPQ_Q_EN) != len(NEPQ_Q_ES):
                        'extras -- every beat needs both languages.'
                        % (len(NEPQ_Q_EN), len(NEPQ_Q_ES)))
 
+# BEAT LABELS + PURPOSE, rendered above each question (2026-09-05). Mid-call he does not have time
+# to remember WHY beat 4 exists — the page says it, one line, the way CIOC's `w` column does. The
+# purpose lines are the NEPQ mechanics: tone, silence, who says the pain out loud.
+NEPQ_K = [
+    ('WHAT DO THEY WANT',
+     'Their answer picks the program. Open question, never a binary — everything after is built on this.'),
+    ('PROBLEM AWARENESS',
+     'Curious tone, slow down. When they say "no, nobody explained it" — let the silence sit.'),
+    ('THE MONEY CONSEQUENCE',
+     'Drop the fact, hand it straight back as a question. THEY say the number is a moving target, not you.'),
+    ('WHAT IT ALREADY COST',
+     'Surfaces the plan they already have. CIOC rule: INSURE it, never fight it — you are the parachute.'),
+    ('THE PERSONAL STAKES',
+     'The beat Miner builds the whole call around. Assumed statement + tie-down. Do NOT fill the silence.'),
+    ('THE COMMITMENT',
+     'Advisor ask + fairness close. The ONLY either/or allowed on the call: two ways to say yes — a time, never a whether.'),
+]
+if len(NEPQ_K) != len(NEPQ_Q_EN):
+    raise RuntimeError('call_mode: NEPQ_K has %d beat labels vs %d questions — zip() would silently '
+                       'drop the unlabeled beats.' % (len(NEPQ_K), len(NEPQ_Q_EN)))
+
 # Two variants, because greeting the wrong "name" is worse than not greeting one.
 # Measured on the fixture before this existed: "Hi, is this ACME?" (a company), "Hi, is this
 # UNKNOWN?" (a placeholder), and — worst — "Hi, is this OLD?" on the very lead whose card warns
@@ -183,6 +204,17 @@ PHONE_OPENER_ES = "Hola, ¿hablo con {first}? " + _OPEN_BODY_ES
 # aloud on a live call (2026-08-16, Evernia St) and sounds like a process server. Street only.
 PHONE_OPENER_ANON_EN = "Hi, am I speaking with the owner of {st1}? " + _OPEN_BODY_EN
 PHONE_OPENER_ANON_ES = "Hola, ¿hablo con el dueño de {st1}? " + _OPEN_BODY_ES
+
+# WARM opener (2026-09-05, Alejandro's own field style): when he already KNOWS the person — a prior
+# Talked / Appointment / Callback on this human — the cold disarm reads as amnesia. His open is just
+# the name, energy up: "Hector!" The page auto-picks this variant off the lead's own touch history
+# (isWarm() in the JS), so a familiar person is never greeted like a stranger.
+PHONE_OPENER_WARM_EN = ("{first}! It is {sender}... from Biscayne Solutions Group. How have you "
+                        "been? Listen, I was looking at your file on {st1} again and something "
+                        "jumped out that I wanted to run by you. You got a quick second?")
+PHONE_OPENER_WARM_ES = ("¡{first}! Le habla {sender}... de Biscayne Solutions Group. ¿Cómo ha "
+                        "estado? Oiga, estaba revisando otra vez su expediente de {st1} y me saltó "
+                        "algo que quería comentarle. ¿Tiene un segundito?")
 
 CIOC = [
     # Round two (8/17 masterclass) folded into each beat. The structure never changes; the canon
@@ -1067,8 +1099,10 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     oc = json.dumps([{'k': k, 't': t, 'h': h, 's': s} for k, t, h, s in CALL_OUTCOMES])
     script = {
         'op': {'en': PHONE_OPENER_EN, 'es': PHONE_OPENER_ES,
-               'aen': PHONE_OPENER_ANON_EN, 'aes': PHONE_OPENER_ANON_ES},
-        'q': [{'en': _q_en, 'es': _q_es} for _q_en, _q_es in zip(NEPQ_Q_EN, NEPQ_Q_ES)],
+               'aen': PHONE_OPENER_ANON_EN, 'aes': PHONE_OPENER_ANON_ES,
+               'wen': PHONE_OPENER_WARM_EN, 'wes': PHONE_OPENER_WARM_ES},
+        'q': [{'k': _k, 'w': _w, 'en': _q_en, 'es': _q_es}
+              for (_k, _w), _q_en, _q_es in zip(NEPQ_K, NEPQ_Q_EN, NEPQ_Q_ES)],
         'cioc': [{'k': k, 'w': w, 's': sx} for k, w, sx in CIOC],
         'f15': FIFTEEN_SEC,
         'mars': MARS_BLOCK,
@@ -1356,6 +1390,15 @@ a#bk{background:#A8720C;border-color:#c69a3a;text-decoration:none;text-align:cen
   text-transform:uppercase;color:var(--mut);margin-bottom:5px}
 #txr{background:#3d2c08;border-color:#A8720C;color:#F6E9C8}
 .supn{font-size:11px;color:var(--mut);text-align:center;padding:5px 8px 0}
+/* SESSION STRIP — today's work, on every screen. The counter moving on each logged outcome is the
+   visible proof the logging is happening ("I want to see if it's logging what I am doing"). */
+.sess{font-size:12.5px;color:var(--mut);background:#131f38;border:1px solid #2a3f6b;border-radius:9px;
+  padding:7px 10px;margin:8px 0;text-align:center}
+.sess b{color:#F4E5A7}
+/* Situational-text chips on the after-call panel */
+.txch{display:inline-block;margin:3px 5px 3px 0;padding:8px 12px;border:1px solid #2a3f6b;
+  border-radius:16px;background:#0e1626;color:var(--ink);font-size:12.5px;min-height:34px}
+.txch.on{border-color:var(--gold);color:var(--gold);font-weight:700}
 /* language chips: small but still thumb-safe; .on = the active language */
 .lchips{display:inline-flex;gap:4px;margin-left:8px;vertical-align:middle}
 .lchip{min-width:44px;min-height:30px;padding:2px 8px;border-radius:8px;border:1px solid #2a3f6b;
@@ -2265,6 +2308,9 @@ function advance(workedC, nextC){
    to merge yet) and everything after it "went faulty": his own first push guaranteed every later
    return had a change to merge. The data must land; the REPAINT must wait. */
 var SCREEN='lead';
+/* Last afterCall args, so a language toggle can repaint that panel in place (it is built from
+   closure args, not from `cur` alone the way the other screens are). */
+var _lastAfter=null;
 function render(){
   if(SCREEN!=='lead'){ return; }   // never stomp an interactive screen — advance() repaints fresh
   var P=pool();
@@ -2334,6 +2380,7 @@ function head(){
        was leads that felt stale. The bottom of the screen belongs to the sheet (fixed, z-40), which
        covers anything placed there; the top bar is the one strip nothing ever overlays. */
     +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+'</div>'
+    +sessStrip()
     +'</div>';
 }
 function seatChip(){
@@ -2423,6 +2470,47 @@ function histLine(r){
   var last = ts.length ? ts[ts.length-1] : null;
   return '<div class="hist">'+(out.length ? ('Already: '+out.join(' &middot; ')+(last?(' &middot; last '+esc(last.d)):''))
                                           : 'No contact logged yet.')+'</div>';
+}
+/* WARM or COLD. A person with a prior real conversation — Talked, Appointment, Callback — on ANY of
+   their cases gets the familiar opener ("Hector!"), not the stranger disarm. Reading the cold script
+   to someone he spoke with yesterday reads as amnesia and burns the rapport the last call built. */
+function isWarm(r){
+  var warm = false;
+  var chk = function(c){
+    var n = notes[c]||{};
+    if(/^(Contacted|Appointment|Callback)$/.test(n.status||'')) warm = true;
+    (n.touches||[]).forEach(function(t){
+      if(t.ch==='call' && /talked|appointment|callback/i.test(t.out||'')) warm = true;
+    });
+  };
+  chk(r.c);
+  (r.pcs||[]).forEach(chk);
+  return warm;
+}
+/* THE SESSION STRIP — on every screen. "How many calls have I made, how many people have I been
+   through" answered where he is looking, and the number MOVING on each logged outcome is the live
+   proof the logging works. Today = from notes (survives reloads, includes what synced in);
+   session = _WORKED (this open page). Person keys ('@'/'#') are ledger rows, not leads — skipped. */
+function sessStrip(){
+  var me = caller(), dials = 0, cases = {}, appts = 0, td = today();
+  Object.keys(notes||{}).forEach(function(c){
+    if(c.charAt(0)==='@' || c.charAt(0)==='#') return;
+    var n = notes[c]||{}, hit = false;
+    (n.dials||[]).forEach(function(x){
+      if(x.d===td && (!me || !x.by || x.by===me)){ dials++; hit = true; }
+    });
+    (n.touches||[]).forEach(function(t){
+      if(t.d===td && t.ch==='call' && (!me || !t.by || t.by===me)){
+        hit = true;
+        if(/APPOINTMENT/i.test(t.out||'')) appts++;
+      }
+    });
+    if(hit) cases[c] = 1;
+  });
+  var ppl = Object.keys(cases).length;
+  return '<div class="sess">TODAY: <b>'+dials+'</b> dial'+(dials===1?'':'s')+' &middot; <b>'+ppl+'</b> '
+    + (ppl===1?'person':'people') + (appts?(' &middot; <b>'+appts+'</b> appt'+(appts===1?'':'s')):'')
+    + ' &middot; this session: <b>'+_WORKED.length+'</b> worked</div>';
 }
 
 /* ===== THE CALL REGISTRY =========================================================================
@@ -2803,6 +2891,14 @@ function screenLead(){
   if(has(r,'W')) wc += '<span class="chip">elder signal</span>';
   if(wc) who += '<div class="chips">'+wc+'</div>';
   if(r.po) who += '<div class="warnbar">Roll owner is now <b>'+esc(r.po)+'</b> &mdash; do NOT open with the name above. Ask who you are speaking with.</div>';
+  /* DIALED TODAY, NO OUTCOME. The one hole cooldown suppression cannot cover: a dial with no logged
+     outcome starts no cooldown, so the lead resurfaces everywhere — which is exactly "why am I
+     calling the same people". Say it on the card instead of letting it happen silently. */
+  var _n0 = notes[r.c]||{};
+  var _dT = (_n0.dials||[]).filter(function(x){ return x.d===today(); }).length;
+  var _oT = (_n0.touches||[]).some(function(t){ return t.d===today() && t.ch==='call'; });
+  if(_dT && !_oT) who += '<div class="warnbar">You DIALED this lead today ('+_dT+'x) but no outcome '
+    + 'was logged &mdash; log one or this lead keeps coming back in every lane.</div>';
 
   var clock = '<div class="when">'+when+'</div><div class="chips">';
   if(r.sv!=null && r.sv>=2) clock += '<span class="chip bad">STALLER &middot; dodged '+r.sv+' sales</span>';
@@ -2995,8 +3091,81 @@ var TEXT_T = {
         + 'hope your plan lands on time. If anything slips before the sale date, one quick call with '
         + 'our senior advisor lays out what still works. Either way, keep my number in your phone.'
 };
+/* ES ladder (2026-09-05) — his first client was a Spanish speaker; Miami runs bilingual. Usted
+   register throughout, same NEPQ voice, no dashes, no confirm-CTA. Picked by the fcLang toggle
+   (the same EN|ES chips as the call script). */
+var TEXT_T_ES = {
+  cold:   'Hola{first}, le habla {sender} de Biscayne Solutions Group. Acabo de intentar llamarle por '
+        + '{st1}. Puede que esté equivocado, y si es así dígame. Trabajo con varios dueños que van por '
+        + 'el mismo proceso en la corte, y hay una parte que a casi nadie le explican. ¿Le puedo hacer '
+        + 'una pregunta sobre eso?',
+  follow: 'Hola{first}, {sender} otra vez por {st1}. No quiero presionarlo. Si ya tiene un plan en el '
+        + 'que confía, ignóreme y ojalá le funcione. Si no está cien por ciento seguro de que llega a '
+        + 'tiempo, esa es la parte que yo quisiera revisarle. ¿Vale la pena una mirada rápida?',
+  final:  'Hola{first}, último mensaje mío, {sender} de Biscayne Solutions Group por {st1}. De verdad '
+        + 'espero que su plan salga a tiempo. Si algo se atrasa antes de la fecha de subasta, una '
+        + 'llamada rápida con nuestro asesor principal le muestra lo que todavía funciona. De '
+        + 'cualquier forma, guarde mi número.'
+};
 function textBody(r, stage){
-  return fillScript(TEXT_T[stage] || TEXT_T.cold, r);
+  var T = (lang()==='es') ? TEXT_T_ES : TEXT_T;
+  return fillScript(T[stage] || T.cold, r);
+}
+/* ── SITUATIONAL TEXTS (2026-09-05) — sequences beyond the cold ladder ──────────────────────────
+   Appointment confirm/remind/no-show, post-conversation, callback-promised, and the self-serve
+   booking link. These are RESPONSIVE messages to a person who just engaged on a call — they are
+   offered by outcome on the after-call panel and still pass every hard gate (opt-out, DNT, FTSA
+   hours). Voice rules unchanged: identify, one ask, no dashes, name situations never outcomes,
+   "five minutes" is the advisor consult. {book} is the Cal.com link with their info prefilled. */
+var TEXT_SIT = {
+  apptconfirm:{ t:'Confirm appt',
+    en:'Hi{first}, it is {sender} with Biscayne Solutions Group. Good talking with you. You are set, '
+      +'our senior advisor will call you at this number. If your mortgage paperwork is nearby when he '
+      +'calls, even better. Anything changes, text me here.',
+    es:'Hola{first}, le habla {sender} de Biscayne Solutions Group. Un gusto hablar con usted. Ya '
+      +'quedó, nuestro asesor principal lo llamará a este número. Si tiene su papeleo de la hipoteca '
+      +'a la mano cuando llame, mejor. Cualquier cambio, escríbame aquí.'},
+  booklink:{ t:'Send booking link',
+    en:'Hi{first}, {sender} here. Easiest way, pick the time yourself and our senior advisor calls '
+      +'you right at it: {book} Takes 20 seconds and your info is already filled in.',
+    es:'Hola{first}, soy {sender}. Lo más fácil, escoja usted la hora y nuestro asesor principal lo '
+      +'llama justo a esa hora: {book} Toma 20 segundos y sus datos ya van puestos.'},
+  apptremind:{ t:'Appt reminder',
+    en:'Hi{first}, {sender} here. Quick reminder on your call with our senior advisor. He set that '
+      +'time aside just for your case on {st1}. If the time stopped working, tell me and we move it, '
+      +'no problem.',
+    es:'Hola{first}, soy {sender}. Un recordatorio de su llamada con nuestro asesor principal. Apartó '
+      +'ese tiempo solo para su caso de {st1}. Si la hora ya no le sirve, dígame y la movemos sin '
+      +'problema.'},
+  noshow:{ t:'Missed appt',
+    en:'Hi{first}, {sender} with Biscayne Solutions Group. We missed you for the advisor call. No '
+      +'worries at all, life happens. He has openings today and tomorrow. Which works better for you?',
+    es:'Hola{first}, {sender} de Biscayne Solutions Group. No pudimos conectarlo con el asesor. No se '
+      +'preocupe, pasa. Tiene espacio hoy y mañana. ¿Cuál le queda mejor?'},
+  aftertalk:{ t:'After the talk',
+    en:'Hi{first}, {sender} here. Appreciated you being straight with me today. One thing to keep in '
+      +'mind, the balance keeps growing every time that date moves. Whenever you want the real '
+      +'numbers, five minutes with our senior advisor gets them. I am here.',
+    es:'Hola{first}, soy {sender}. Le agradezco lo directo que fue hoy. Solo tenga presente que el '
+      +'saldo sigue creciendo cada vez que esa fecha se mueve. Cuando quiera los números reales, '
+      +'cinco minutos con nuestro asesor principal y los tiene. Aquí estoy.'},
+  cbtext:{ t:'Callback promised',
+    en:'Hi{first}, {sender} with Biscayne Solutions Group. You asked me to reach back out about '
+      +'{st1}, so this is me keeping my word. What time works for you today?',
+    es:'Hola{first}, {sender} de Biscayne Solutions Group. Me pidió que lo contactara de nuevo sobre '
+      +'{st1}, y aquí estoy cumpliendo. ¿A qué hora le queda bien hoy?'}
+};
+/* The prefilled Cal.com link, SMS-sized: name + the number he actually dialled. The full notes
+   payload (address, case, sale date) stays on HIS book-it button — a homeowner does not need their
+   own case number in a link, and a shorter URL survives SMS truncation. */
+function bookUrl(r){
+  return BOOKURL + '?name=' + encodeURIComponent(String(r.on||firstName(r)||'').trim())
+       + '&attendeePhoneNumber=' + encodeURIComponent('+1' + String(r.p[phIdx]||'').replace(/\D/g,'').slice(-10));
+}
+function sitBody(r, key){
+  var s = TEXT_SIT[key]; if(!s) return '';
+  var raw = (lang()==='es' && s.es) ? s.es : s.en;
+  return fillScript(raw.split('{book}').join(bookUrl(r)), r);
 }
 /* Callback. Writes n.next, the same field the board reads to re-surface a lead — so a promise made
    on the phone shows up on the laptop instead of living in his head. */
@@ -3046,9 +3215,16 @@ function screenOutcome(){
      Florida you do not know which language you need until they pick up. The full apparatus — CIOC,
      objections, MARS — stays one tap away in the sheet below. */
   var named=!!firstName(r);
+  /* WARM vs COLD, picked off the lead's own history. His field style: a person he has talked to
+     gets their NAME and energy ("Hector!"), never the stranger script. */
+  var warm = named && isWarm(r);
+  var _opE = warm ? SCRIPT.op.wen : (named ? SCRIPT.op.en : SCRIPT.op.aen);
+  var _opS = warm ? SCRIPT.op.wes : (named ? SCRIPT.op.es : SCRIPT.op.aes);
   var talk = (SCRIPT.rec ? '<div class="nc" style="border-color:#e07b6a;color:#f2b8ad">'+esc(SCRIPT.rec)+'</div>' : '')
-    + '<div class="ltag" style="margin-top:12px">WHEN THEY PICK UP '+langChips()+'</div>'
-    + say(named?SCRIPT.op.en:SCRIPT.op.aen, named?SCRIPT.op.es:SCRIPT.op.aes, r)
+    + '<div class="ltag" style="margin-top:12px">WHEN THEY PICK UP '
+    + (warm ? '<span style="color:#7ad48f">&middot; WARM &mdash; you two have talked</span> ' : '')
+    + langChips()+'</div>'
+    + say(_opE, _opS, r)
     + '<div class="mut" style="font-size:12px;margin-top:4px">Close with: <b>'
     + (lang()==='es' ? '&iquest;Verdad que s&iacute;?' : 'That&rsquo;s fair, right?')
     + '</b> &middot; CIOC + objections in the script drawer below.</div>';
@@ -3114,6 +3290,7 @@ function screenOutcome(){
     : '';
   $('app').innerHTML='<div class="card"><div class="addr" style="font-size:18px">How did it go with '+esc(firstName(r)||'them')+'?</div>'
     +'<div class="own">'+fmt(d)+'</div>'
+    +sessStrip()
     + refBlock
     /* REDIAL — same number, no outcome logged, place kept. For the dropped call, the accidental
        hang-up, the straight-to-voicemail retry. An ANCHOR, not a JS navigation: tel: via href is
@@ -3241,6 +3418,7 @@ function stopEverywhere(r, digits){
    back to the laptop to log it. Everything here writes to the SAME notes the board reads. */
 function afterCall(r, o, nextC){
   SCREEN='after';
+  _lastAfter=[r, o, nextC];
   document.getElementById('sheet').classList.add('hid');   // same tap-thief reasoning as screenOutcome
   // 'miss' == show the "try their next number" button. badnum (this line is dead) and gate (reached
   // the wrong person on this line) both want the NEXT number; callback/talked/appt do not.
@@ -3262,12 +3440,31 @@ function afterCall(r, o, nextC){
   try{ dnt = (JSON.parse(localStorage.getItem('fcDNT')||'[]')||[]).indexOf(num) >= 0; }catch(e){}
   if(!dnt) dnt = ((notes[r.c]||{}).dntph||[]).indexOf(num) >= 0;
   var fl = flClock();
+  /* SITUATIONAL TEXTS BY OUTCOME (2026-09-05). A person who just booked, asked for a callback, or
+     had a real conversation gets a RESPONSIVE message — confirm, booking link, recap — not another
+     rung of the cold ladder. The cold ladder stays exactly what it was, for the outcomes where the
+     person never engaged (no answer, voicemail, bad number, gatekeeper). Situational texts remain
+     available even when the ladder is retired/replied — "they replied, talk to them" is precisely
+     what an appointment-confirm text is. Hard gates (opt-out, DNT, FTSA hours) block EVERYTHING. */
+  var sitMap = { appt:['apptconfirm','booklink','apptremind','noshow'],
+                 callback:['cbtext'],
+                 talked:['aftertalk','booklink'],
+                 notint:['aftertalk'] };
+  var sitKeys = sitMap[o.k] || [];
+  var _txk = sitKeys.length ? sitKeys[0] : 'ladder';
+  var _chips = '';
   var txt = '';
   if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
+  else if(!fl.ok)           txt = '<div class="nc">It is '+esc(fl.txt)+' in Florida. FTSA texting hours are 8:00 AM to 8:00 PM Eastern — this will be here in the morning.</div>';
+  else if(sitKeys.length){
+    _chips = '<div>' + sitKeys.map(function(k, ix){
+      return '<button class="txch'+(ix===0?' on':'')+'" data-sit="'+k+'">'+esc(TEXT_SIT[k].t)+'</button>';
+    }).join('') + '</div>';
+    txt = '<button id="tx">Send: '+esc(TEXT_SIT[_txk].t)+'</button>';
+  }
   else if(st === 'retired') txt = '<div class="nc">Three messages already sent to this person. The ladder is closed — call only.</div>';
   else if(st === 'replied') txt = '<div class="nc">They have replied before. Do not send a cold-ladder text; talk to them.</div>';
-  else if(!fl.ok)           txt = '<div class="nc">It is '+esc(fl.txt)+' in Florida. FTSA texting hours are 8:00 AM to 8:00 PM Eastern — this will be here in the morning.</div>';
   else {
     var lbl = st==='cold' ? 'Send 1st text' : st==='follow' ? 'Send follow-up (2 of 3)' : 'Send final text (3 of 3)';
     txt = '<button id="tx" class="'+(miss?'':'ghost')+'">'+lbl+'</button>';
@@ -3284,9 +3481,12 @@ function afterCall(r, o, nextC){
      are configured -- the owner never joins a video call, we ring them. */
   var book = '';
   if(o.k === 'appt'){
-    var bq = 'name=' + encodeURIComponent(firstName(r) || r.o || '')
+    /* FULL name (r.on is the county roll flipped to FIRST LAST), the number he actually dialled,
+       and notes that give the advisor the whole picture in one glance: address, case, sale date. */
+    var bq = 'name=' + encodeURIComponent(String(r.on || firstName(r) || r.o || '').trim())
            + '&attendeePhoneNumber=' + encodeURIComponent('+1' + String(num||'').replace(/\D/g,'').slice(-10))
-           + '&notes=' + encodeURIComponent((r.a||'') + (r.c ? (' | case ' + r.c) : ''));
+           + '&notes=' + encodeURIComponent((r.a||'') + (r.c ? (' | case ' + r.c) : '')
+               + (r.x && r.d != null && r.d < 9000 ? (' | sale ' + r.x) : ''));
     book = '<div class="afterlab">Put it on the calendar</div>'
          + '<a class="btn" id="bk" href="' + BOOKURL + '?' + bq + '" target="_blank" rel="noopener">'
          + '&#128197; Book it now &mdash; they are still on the line</a>'
@@ -3296,8 +3496,9 @@ function afterCall(r, o, nextC){
   $('app').innerHTML = '<div class="card">'
     + '<div class="addr" style="font-size:17px">Logged: '+esc(o.t)+'</div>'
     + '<div class="own">'+esc(firstName(r)||r.o||'')+' &middot; '+fmt(num)+'</div>'
+    + sessStrip()
     + book
-    + '<div class="afterlab">Follow-up text</div>' + txt
+    + '<div class="afterlab">Follow-up text '+langChips()+'</div>' + _chips + txt
     + '<div class="afterlab">Call them back</div>'
     + '<div class="cbrow">'
     +   '<button class="cb" data-h="3">In 3 hours</button>'
@@ -3333,8 +3534,19 @@ function afterCall(r, o, nextC){
       if(!$('txy')) setTimeout(go, 450);
     };
   });
+  /* Chip taps swap which template the Send button fires. The button is re-labelled in place; the
+     body itself is computed at SEND time so a language toggle between tap and send is honoured. */
+  Array.prototype.forEach.call(document.querySelectorAll('.txch'), function(b){
+    b.onclick = function(){
+      _txk = b.dataset.sit;
+      Array.prototype.forEach.call(document.querySelectorAll('.txch'), function(x){ x.classList.remove('on'); });
+      b.classList.add('on');
+      var t = $('tx'); if(t) t.textContent = 'Send: ' + ((TEXT_SIT[_txk]||{}).t || '');
+    };
+  });
+  wireLang($('app'));
   if($('tx')) $('tx').onclick = function(){
-    var body = textBody(r, st);
+    var body = (_txk==='ladder') ? textBody(r, st) : sitBody(r, _txk);
     /* Log the OPEN, not a send. Opening a composer is not a delivery — the board draws this exact
        line (the worker's textopen posts confirmed:false) and blurring it is how the ladder burns a
        touch on a message that was never sent. He confirms below once it is actually gone. */
@@ -3363,7 +3575,7 @@ function afterCall(r, o, nextC){
        message that failed to send had no way back except leaving the lead. Now it shows the exact
        text that went out (the output) and keeps a RESEND button alive on every path. */
     $('tx').outerHTML = '<div class="txconf" id="txconf0">Composer opened. Did it actually send?</div>'
-      + '<div class="txbody" id="txbody"><span class="lbl">what was sent &middot; ' + esc(st) + '</span>'
+      + '<div class="txbody" id="txbody"><span class="lbl">what was sent &middot; ' + esc(_txk==='ladder' ? st : _txk) + '</span>'
       + esc(body) + '</div>'
       + '<button id="txy">&#10003; Yes, it sent</button>'
       + '<button id="txr" class="ghost">&#8635; Re-open composer (send again)</button>'
@@ -3374,7 +3586,8 @@ function afterCall(r, o, nextC){
     $('txy').onclick = function(){
       var nn = notes[r.c] = notes[r.c] || {status:'',note:''};
       nn.touches = nn.touches || [];
-      nn.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text', out:'Text sent — ' + st, by:caller()});
+      nn.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text',
+                       out:'Text sent — ' + (_txk==='ladder' ? st : _txk), by:caller()});
       saveNotes(); queueSync();
       if(!_ftsaCapToast(nn)) toast('Text logged');
       go();
@@ -3587,6 +3800,10 @@ function setLang(v){
   // repaint whichever script surfaces are up, without touching flow state.
   if(SCREEN==='outcome' && cur){ screenOutcome(); }
   else if(SCREEN==='lead' && cur){ screenLead(); }
+  /* The after-call panel too — its text templates are bilingual now, and a language toggle that
+     left the old body on screen would send the wrong language. Rebuilt from its own saved args;
+     repainting resets the chip selection to the default, which is the safe direction. */
+  else if(SCREEN==='after' && _lastAfter){ afterCall(_lastAfter[0], _lastAfter[1], _lastAfter[2]); }
   if(cur) renderSheet(cur);
 }
 function langChips(){
@@ -3609,8 +3826,9 @@ function renderSheet(r){
   // Named vs anonymous opener — see firstName(). No usable name means ask for the owner instead of
   // greeting a company, a placeholder, or a name the card just told him not to use.
   var named = !!firstName(r);
-  var opEN = named ? SCRIPT.op.en : SCRIPT.op.aen;
-  var opES = named ? SCRIPT.op.es : SCRIPT.op.aes;
+  var warm = named && isWarm(r);
+  var opEN = warm ? SCRIPT.op.wen : (named ? SCRIPT.op.en : SCRIPT.op.aen);
+  var opES = warm ? SCRIPT.op.wes : (named ? SCRIPT.op.es : SCRIPT.op.aes);
   // PEEK — the first thing out of his mouth, plus the close cue, always one glance away.
   var op = fillScript(opEN, r);
   $('peek').innerHTML = '<b>'+esc(op.split('.')[0])+'.</b> '
@@ -3623,8 +3841,12 @@ function renderSheet(r){
 
   // NEPQ question stack -- only after the opener lands. Get them talking; the problem sells itself.
   if(SCRIPT.q && SCRIPT.q.length){
-    b += '<div class="ltag">GET THEM TALKING</div>';
-    SCRIPT.q.forEach(function(q){ b += say(q.en, q.es, r); });
+    b += '<div class="ltag">GET THEM TALKING &mdash; '+SCRIPT.q.length+' BEATS, IN ORDER</div>';
+    SCRIPT.q.forEach(function(q, ix){
+      b += '<div class="ltag" style="margin-top:9px">'+(ix+1)+' &middot; '+esc(q.k||'')+'</div>'
+        + (q.w ? '<div class="mut" style="font-size:12px">'+esc(q.w)+'</div>' : '')
+        + say(q.en, q.es, r);
+    });
   }
 
   // CIOC as nav — tap a beat, get its words.
