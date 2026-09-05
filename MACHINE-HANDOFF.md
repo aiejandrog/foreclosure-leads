@@ -375,3 +375,12 @@ outreach text with no opt-out is the kind of thing FS 501.1377 / TCPA notices ex
 - **Takeover proven** (`node _cm_teamtest.js`): 15/15 green on the built page — a teammate's call
   fires the ALREADY-CALLED takeover, my own call does not (multi-number sequences survive), and
   the sibling-case takeover now passes too (DEALFLOW's pcs-aware `_teammateCall` is built in).
+
+## 2026-09-05 — email-safety build complete (laptop)
+Items 1-4 all shipped: d0f9044 (bridge refuses owner sends when optouts.json >2d old/missing),
+8dc22c8 (armed-runner gate on #worker=morning — default OFF, arm the scheduler machine only via
+localStorage.setItem('fcArmedRunner','true'); device audit labels via _devSrc(); ledger_sync.py).
+DESKTOP on next pull: (1) run `python ledger_sync.py` — unions your send history + case-keyed
+opt-outs into the shared private ledgers repo, no USB needed for these two files; (2) do NOT set
+fcArmedRunner here; (3) answer the device-label prompt "desktop" on first board open; (4) bridge
+may relaunch only after ledger_sync exits 0 — the staleness guard will block owner sends otherwise.
