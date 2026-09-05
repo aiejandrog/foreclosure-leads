@@ -111,6 +111,14 @@ def _optout_set():
             emails.add(s.lstrip('@'))
         else:
             cases.add(s)
+        # 2026-09-05 (desktop finding): a case-keyed opt-out can carry the person's email only in
+        # its VALUE (Hendy: live address in the note text, never a key). Keys-only harvesting left
+        # that person protected by case match alone — a second property or a re-scraped case id
+        # slips the email check entirely. Harvest every address in the value too; over-suppression
+        # is the correct failure direction for a DO-NOT-CONTACT list.
+        if isinstance(v, (dict, list)):
+            for m in re.findall(r'[\w.+-]+@[\w-]+(?:\.[\w-]+)+', json.dumps(v)):
+                emails.add(m.lower())
     return cases, emails
 
 

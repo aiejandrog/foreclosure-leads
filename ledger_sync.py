@@ -42,6 +42,27 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO_URL = 'https://github.com/aiejandrog/dealflow-ledgers-private.git'
 REPO_DIR = os.path.join(os.path.expanduser('~'), 'DEALFLOW', 'ledgers-private')
 FILES = ('optouts.json', 'mail_sent.json')
+# The command-center board twin rides the same private repo (2026-09-05 desktop finding: its twin
+# was 13 days stale — git can't refresh a generated file the public repo never carries, and the
+# safety gates only reach the desktop inside a fresh twin). Same PII class as the ledgers, so the
+# same private channel. Newer-mtime-wins is safe: only the laptop engine ever regenerates it.
+TWIN = os.path.join(os.path.expanduser('~'), 'DEALFLOW', 'Foreclosure Lead Tracker.html')
+
+
+def sync_twin():
+    import shutil
+    repo_twin = os.path.join(REPO_DIR, os.path.basename(TWIN))
+    lm = os.path.getmtime(TWIN) if os.path.exists(TWIN) else 0
+    rm = os.path.getmtime(repo_twin) if os.path.exists(repo_twin) else 0
+    if lm == 0 and rm == 0:
+        print('  twin: absent on both sides (nothing to sync)')
+        return False
+    if lm > rm + 1:
+        shutil.copy2(TWIN, repo_twin); print('  twin: local -> repo (%s newer by %.1fh)' % ('local', (lm-rm)/3600)); return True
+    if rm > lm + 1:
+        shutil.copy2(repo_twin, TWIN); print('  twin: repo -> local (fresh board twin installed)'); return False
+    print('  twin: in sync')
+    return False
 
 
 def run(args, cwd=None, ok_codes=(0,)):
@@ -124,6 +145,9 @@ def main():
             changed_repo = True; print('repo   updated:', name)
         n = len(union['notes']) if name == 'optouts.json' else len(union)
         print('  %s: %d entries in union' % (name, n))
+
+    if sync_twin():
+        changed_repo = True
 
     if changed_repo:
         run(['git', 'add', '-A'], cwd=REPO_DIR)
