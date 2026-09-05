@@ -3751,7 +3751,25 @@ function _nowTS(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); ret
 // FTSA compliance audit trail: append a timestamped opt-out/suppression event to a lead's ledger.
 // 'set-local' = an operator marked DO NOT CONTACT here; 'suppressed-here' = a teammate's opt-out
 // arrived via merge and started suppressing on THIS device. This is the paper trail for a lawyer.
-function _optLog(n, act, src){ n.optlog = n.optlog || []; n.optlog.push({ts:_nowTS(), tsu:Date.now(), act:act, src:src||(localStorage.getItem('fcDevice')||'this device')}); }
+/* Device label for the audit trail (2026-09-05): _ensureDeviceLabel() (boot) asks the human
+   once for a real machine name; _devSrc() — defined INSIDE the extracted opt-out block below so
+   Call Mode gets it too — stamps it on every audit event. */
+function _ensureDeviceLabel(){
+  try{
+    if(localStorage.getItem('fcDevice')) return;
+    var v = prompt('Name this device for the audit trail — who/what is this machine?\n(e.g. laptop / desktop / phone-alejandro / phone-carlos)');
+    v = (v||'').trim().toLowerCase().replace(/[^a-z0-9_-]+/g,'-').slice(0,24);
+    if(v) localStorage.setItem('fcDevice', v);
+    else _deviceId();   // declined: mint the stable random id so events still name a unique box
+  }catch(e){}
+}
+function _optLog(n, act, src){ n.optlog = n.optlog || []; n.optlog.push({ts:_nowTS(), tsu:Date.now(), act:act, src:src||_devSrc()}); }
+// Audit device stamp (2026-09-05): never the anonymous "this device" — three desktop send-days
+// took forensics to attribute because fcDevice was only set as a side effect of team sync.
+// Unlabeled machines stamp a stable per-machine id, so two boxes can never blend in the log.
+// Lives INSIDE the extracted opt-out block: Call Mode's page needs it too (its _optLog calls it).
+function _devSrc(){ try{ return localStorage.getItem('fcDevice') ||
+  ('unlabeled-' + (typeof _deviceId==='function' ? _deviceId() : 'unknown')); }catch(e){ return 'unlabeled-unknown'; } }
 // FTSA red flag: any outreach logged AFTER a lead's opt-out date is the exact violation a plaintiff
 // hunts for. The team merge makes this RETROACTIVE — a call you logged at 3pm, before a teammate's
 // 2pm opt-out synced onto your device at 9pm, becomes an after-opt-out contact the moment it merges.
@@ -8262,7 +8280,7 @@ function _docLog(caseId, key, lang){
     var n = notes[caseId] = notes[caseId] || {status:'', note:''};
     n.doclog = n.doclog || [];
     n.doclog.push({ts:_nowTS(), tsu:Date.now(), key:key, lang:lang||'en',
-                   src:(localStorage.getItem('fcDevice')||'this device')});
+                   src:_devSrc()});
     if(typeof save === 'function') save();
   } catch(e){}
 }
@@ -15282,7 +15300,7 @@ function _mergeLead(local, remote){
   // status: DO NOT CONTACT wins over everything, then Dead, else the side with the more recent touch
   if(_DNC(local.status) || _DNC(remote.status)){ if(out.status !== 'DO NOT CONTACT'){ out.status = 'DO NOT CONTACT'; ch.status = true; } if(!out.optout){ out.optout = remote.optout || local.optout || _today(); ch.optout = ch.optout || !local.optout; }
     // teammate's opt-out just started suppressing on THIS device — stamp when, for the paper trail
-    if(!_wasDNC){ out.optlog = out.optlog || []; out.optlog.push({ts:_nowTS(), tsu:Date.now(), act:'suppressed-here', src:(localStorage.getItem('fcDevice')||'this device')}); } }
+    if(!_wasDNC){ out.optlog = out.optlog || []; out.optlog.push({ts:_nowTS(), tsu:Date.now(), act:'suppressed-here', src:_devSrc()}); } }
   else if(_DEAD(local.status) || _DEAD(remote.status)){ if(!_DEAD(out.status)){ out.status = 'Dead'; ch.status = true; } }
   else if(remote.status && remote.status !== (local.status||'') && _lastTouchD(remote) >= _lastTouchD(local)){ out.status = remote.status; ch.status = true; }
   // contact log: union, dedupe by (date|channel|outcome)
@@ -17594,6 +17612,10 @@ async function boot(){
   syncFreshness();
   _favCountEls();                    // show the saved-count on the Saved button
   _openHashDeal();                   // shared #case= link opens straight to that property
+  // Ask once for a device name so the audit trail can say WHICH machine acted (2026-09-05).
+  // Deferred + best-effort: never blocks boot, and an unattended #worker=morning open must not
+  // hang on a prompt — skip it there; _devSrc() stamps the stable id until a human answers.
+  if(!/worker=morning/.test(location.hash||'')) setTimeout(_ensureDeviceLabel, 1500);
   // #worker=morning auto-opens the Morning Worker after boot. Lets Windows Task Scheduler
   // fire Chrome at 7 AM to the URL + fragment and land straight in the queue.
   // Opened BY the 8am Windows task -> auto-start the run (countdown + cancel inside the worker).
@@ -17617,7 +17639,23 @@ async function boot(){
     var _already = false;
     try { _already = !!localStorage.getItem(_asKey); } catch(e){}
     try { history.replaceState(null, '', location.pathname + location.search); } catch(e){}
-    if(_already){
+    /* ARMED-RUNNER DEVICE GATE (2026-09-05 incident). The deep link used to mean "nobody is
+       here, go" on WHATEVER machine opened it — and the desktop opened it three times with a
+       14-day-stale opt-out ledger (746 sends). The fragment is an intention, not an identity:
+       only a machine explicitly ARMED as the unattended runner may auto-send. Default OFF
+       everywhere; arm ONLY the scheduler machine, from its console:
+         localStorage.setItem('fcArmedRunner','true')   // disarm: remove the key
+       Manual Start stays available on every machine — this governs the unattended path only. */
+    var _armed = false;
+    try { _armed = localStorage.getItem('fcArmedRunner') === 'true'; } catch(e){}
+    if(!_armed){
+      setTimeout(function(){ try{
+        openMorningWorker('urgent', false);
+        if(typeof _shareToast === 'function')
+          _shareToast('AUTO-RUN BLOCKED: this machine is not the armed runner. Worker opened in MANUAL mode — press Start yourself, or arm this machine only if it is the scheduled sender.');
+      }catch(e){} }, 500);
+      try { console.info('[dealflow] #worker=morning ignored for auto-send — fcArmedRunner not set on this device.'); } catch(e){}
+    } else if(_already){
       // Opened again the same day: show the worker, but never auto-send. Say why, out loud.
       setTimeout(function(){ try{ openMorningWorker('urgent', false); }catch(e){} }, 500);
       try { console.info('[dealflow] auto-run already ran today — worker opened in MANUAL mode.'); } catch(e){}
