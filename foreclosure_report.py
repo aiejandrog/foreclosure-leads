@@ -167,7 +167,7 @@ def render_md(m):
       'depends on what the county file actually says. We read it with you, free, in English or Spanish. '
       'We are not attorneys, not a lender, and not affiliated with your lender, servicer, or any government agency.')
     A('')
-    A('**Book a free records review** or call (786) 502-9550.')
+    A('**Book a free records review** or call or text (786) 631-1823.')
     A('')
     A('## Methodology')
     A('')
@@ -232,7 +232,7 @@ def render_md_es(m):
       'usted, gratis, en español o en inglés. No somos abogados, no somos prestamistas y no estamos afiliados a su '
       'prestamista, a su administrador ni a ninguna agencia del gobierno.')
     A('')
-    A('**Reserve su revisión de registros gratis** o llame al (786) 502-9550.')
+    A('**Reserve su revisión de registros gratis** o llame o escriba al (786) 631-1823.')
     A('')
     A('## Metodología')
     A('')
