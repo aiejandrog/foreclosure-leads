@@ -448,6 +448,25 @@ rem  health.json — one run stale, which is worth far more than no report at al
 echo [report] Writing run status to Desktop + notification...
 python -u run_report.py >> "%LOG%" 2>&1
 
+rem  LEDGER + TWIN SYNC (wired 2026-09-06, desktop session's request). Unions optouts.json and
+rem  mail_sent.json through the private ledgers repo and carries the freshly-built board TWIN to the
+rem  command center. Without it the desktop's twin only refreshed when someone ran this by hand --
+rem  it sat on the 09-05 build while the chain rebuilt the board every morning, and the desk cannot
+rem  pull a twin the laptop never pushed.
+rem
+rem  PLACED BELOW :end ON PURPOSE, and that is the whole point of the placement: line 354 does
+rem  `goto :end` whenever the publish finds nothing changed, so anything in the analysis lane above
+rem  is SKIPPED on a quiet night. The ledgers do not track the board -- the nightly replies scan
+rem  writes opt-outs on nights the site never changes -- so a sync that only runs on publish nights
+rem  would silently let the desktop's do-not-contact list drift, which is the exact 14-day-stale
+rem  gate this whole ledger channel was built to end.
+rem
+rem  NOT A GATE. It runs after the publish and after the morning signal; a failure costs one night
+rem  of desktop freshness and can never stop the board shipping or delay run_report.
+echo [ledger] Syncing opt-out + mail ledgers and the board twin...
+python -u ledger_sync.py >> "%LOG%" 2>&1
+if errorlevel 1 echo     ^!^! ledger_sync failed - desktop twin/ledgers stay stale until next run.>> "%LOG%"
+
 rem  DIGEST SITS HERE FOR THE SAME REASON run_report.py DOES — see the :end note above. It is a
 rem  MORNING SIGNAL, so putting it last would put it exactly where the 2h scheduler kill lands and
 rem  it would be missing on precisely the mornings something went wrong. Everything it reads
