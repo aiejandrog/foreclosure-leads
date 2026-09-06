@@ -277,7 +277,11 @@ else:
             # and could never be tracked without publishing the code.
             # FTSA_HR_END is EXCLUSIVE: 19:00 sends, 20:00 does not.
             win = pg.evaluate("""() => {
-                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct);
+                // 2026-09-06: pick a lead the composer CAN text. Any-phones-at-all chose a lead whose 4 numbers were all
+                // untextable (0 textable) on the 09-06 board, so the window/cap checks failed for the wrong reason and
+                // the ladder checks passed vacuously (live was false before any send).
+                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct && !_textContactBlocked(x)
+                                          && textablePhones(x).length && !['retired','replied'].includes(_textStage(x)));
                 if(!lead) return null;
                 const real = _flHour, o = {};
                 [7, 8, 10, 19, 20, 23].forEach(h => {
@@ -312,7 +316,11 @@ else:
             # call+text touches in a rolling 24h; at FTSA_MAX_24H the composer stops offering send.
             # Seeded on a COPY of the note so the board's real notes are untouched.
             cap = pg.evaluate("""(maxN) => {
-                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct);
+                // 2026-09-06: pick a lead the composer CAN text. Any-phones-at-all chose a lead whose 4 numbers were all
+                // untextable (0 textable) on the 09-06 board, so the window/cap checks failed for the wrong reason and
+                // the ladder checks passed vacuously (live was false before any send).
+                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct && !_textContactBlocked(x)
+                                          && textablePhones(x).length && !['retired','replied'].includes(_textStage(x)));
                 if(!lead) return null;
                 const key = lead.case, saved = notes[key];
                 const mk = n => ({touches: Array.from({length:n}, () => ({ch:'call', tsu: Date.now()-3600000}))});
@@ -349,7 +357,11 @@ else:
             # The touches carry ch:'text' with no inbound marker; an inbound one ends the ladder
             # early and must NOT be counted as a send, which is asserted separately.
             lad = pg.evaluate("""(maxN) => {
-                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct);
+                // 2026-09-06: pick a lead the composer CAN text. Any-phones-at-all chose a lead whose 4 numbers were all
+                // untextable (0 textable) on the 09-06 board, so the window/cap checks failed for the wrong reason and
+                // the ladder checks passed vacuously (live was false before any send).
+                const lead = DATA.find(x => (x.phones||[]).length && !x.saleBkAct && !_textContactBlocked(x)
+                                          && textablePhones(x).length && !['retired','replied'].includes(_textStage(x)));
                 if(!lead) return null;
                 const key = lead.case, saved = notes[key];
                 const realHour = _flHour; _flHour = () => 10;   // isolate: window and burst cap open
