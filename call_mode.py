@@ -1542,8 +1542,16 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
    architecture is unchanged: published line (786) 631-1823 stays clean; the dialing line eats the
    volume risk. Requires: Quo app installed + set as the phone's default calling app — without
    that, tel: falls back to the carrier dialer and dials expose the published line, so CHECK THE
-   DEFAULT-APP SETTING before a dial session. Set 'gv' to route via Google Voice deep links. */
-var DIALER='tel';
+   DEFAULT-APP SETTING before a dial session. Set 'gv' to route via Google Voice deep links.
+   SWITCHED BACK TO 'gv' 2026-09-06: Quo dropped (Alejandro: "no more quo", back to 631-1823 as the
+   one published number). With no Quo default calling app a plain tel: link goes straight to the
+   carrier dialer -- the PUBLISHED line -- which is the exact failure this split exists to prevent.
+   'gv' keeps every cold dial on the Voice line: whichever GV number the signed-in Voice account
+   holds ((305) 999-5960 BSG Main Line on the Workspace account, or the personal (786) 490-7825) --
+   either way NOT the printed number. CHECK WHICH ACCOUNT THE VOICE APP IS SIGNED INTO before a dial
+   session; /u/0/ in the deep link means "first signed-in account" in a browser. Letters reverted to
+   631-1823 the same day (outreach_mail.py). */
+var DIALER='gv';
 function dialHref(d){return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+String(d) : 'tel:+1'+String(d);}
 /* tel: opens the dialer OVER the page; an https link would navigate AWAY from it — and the whole
    outcome-logging flow (screenOutcome, the after-call bar) lives on this page. So GV dials open in

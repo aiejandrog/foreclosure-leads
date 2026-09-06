@@ -427,7 +427,8 @@ p{{margin:0 0 6px}}
 # Alejandro's explicit ask: "wire jesses exact fucking letter dont change a damn thing." Copy is
 # unchanged except for two mechanical substitutions the placeholders were written FOR:
 #   [DATE]  -> the row's real auction date
-#   PHONE   -> the Quo published line (786) 502-9550, per bsg-phone-architecture memory
+#   PHONE   -> the published line (786) 631-1823 -- 2026-09-06: Quo dropped, back to the one
+#              number on the cards (the Quo line (786) 502-9550 was printed 09-01..09-06 only)
 #
 # Everything else -- the FINAL NOTICE header, "over 100 times", the attorney paragraph, the
 # realtor paragraph, "cash in 24 hours", the "actually stops it" clause, the foreclosure ER
@@ -440,7 +441,10 @@ p{{margin:0 0 6px}}
 # at the top of page 1, ABOVE the letterhead -- opening the envelope shows URGENT first. Certified
 # mail (extra_service='certified') is the physically stronger option; it costs +$5 per piece and
 # is a separate spend decision, not wired here.
-QUO_PHONE = '(786) 502-9550'
+# 2026-09-06: was QUO_PHONE = '(786) 502-9550' from 09-01 to 09-06. Alejandro dropped Quo and chose
+# NOT to port the number, so letters mailed in that window carry a line that dies when Quo lapses
+# (~09-08). Stated once, accepted. Everything printed from here on carries the number on the cards.
+CALLBACK_PHONE = '(786) 631-1823'
 JESSE_LOGO = os.path.join(HERE, 'brand', 'bsg-logo-letterhead.png')
 
 
@@ -463,11 +467,12 @@ def build_letter_html_jesse(r, snd, lang='en'):
 
     Compliance framing kept minimal on purpose: the operator is the one shipping this and has
     authorized the exact text. The one thing I refuse to override is the phone number -- a
-    letter with '786-123-4567' printed on it is $1.06 of wasted mail. Quo (786) 502-9550 goes in.
+    letter with '786-123-4567' printed on it is $1.06 of wasted mail. The published line
+    (786) 631-1823 goes in (Quo dropped 2026-09-06).
     """
     e = html.escape
     dt = e(str(_g(r, 'auction', 'AuctionDate')) or '(sale date not on file)')
-    phone = QUO_PHONE
+    phone = CALLBACK_PHONE
 
     # JESSE'S BODY, VERBATIM. Kept in ONE string literal so a diff against the original ask is
     # trivial to eyeball -- do not "clean up" this indentation or line breaks without checking
