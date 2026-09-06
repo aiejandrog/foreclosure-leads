@@ -7,7 +7,7 @@ REM No pause anywhere — a scheduled task can't answer one. NO git anything: th
 REM homeowner PII on a public repo; it stays local (BSG_* is gitignored).
 setlocal
 cd /d "%~dp0"
-set "STATUS=%USERPROFILE%\OneDrive\Desktop\DEALFLOW-ROUTES-STATUS.txt"
+set "STATUS=%USERPROFILE%\DEALFLOW\DEALFLOW-ROUTES-STATUS.txt"
 echo [%date% %time%] daily routes starting > "%STATUS%"
 REM PRICE THE MEDIUM ROWS FIRST — lp_upgrade.py adjudicates them against the PA record (natural
 REM person + homestead = knockable), and that needs value/dor/paOwners on the row. The 05:30

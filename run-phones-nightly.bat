@@ -10,7 +10,7 @@ rem                         | 5 shared daily budget spent mid-run (benign, rest 
 rem Night one clears the backlog (~$40); every night after only pays for NEW leads (cache dedupes the rest).
 cd /d "%~dp0"
 set "LOG=%~dp0phones-run.log"
-set "STATUS=%USERPROFILE%\OneDrive\Desktop\DEALFLOW-PHONES-STATUS.txt"
+set "STATUS=%USERPROFILE%\DEALFLOW\DEALFLOW-PHONES-STATUS.txt"
 set "STAMP=%date% %time%"
 
 echo ==== phones-nightly %STAMP% ==== >> "%LOG%"
