@@ -31,10 +31,12 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-DESKTOP = os.path.join(os.path.expanduser('~'), 'OneDrive', 'Desktop')
-if not os.path.isdir(DESKTOP):
-    DESKTOP = os.path.join(os.path.expanduser('~'), 'Desktop')
-OUTDIR = os.environ.get('DEALFLOW_DIR') or os.path.join(DESKTOP, 'DEALFLOW')
+# 2026-09-06: this module predated the OneDrive evacuation and kept writing call sheets (owner
+# names + phone numbers) into the SYNCED Desktop\DEALFLOW — 326 PII files re-accumulated in the
+# folder paths.py had already retired, and the board twin it reads came from the same stale spot.
+# One source of truth for the output root: paths.DEALFLOW_DIR (~/DEALFLOW, outside every sync root).
+import paths as _P
+OUTDIR = _P.DEALFLOW_DIR
 
 
 def _fmt_phone(p):
