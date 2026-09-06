@@ -53,7 +53,7 @@
   "current_owner": "HANS FELIX; MARIE CAROLLEFELIX",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-09-04"
  },
  "3040040801760|ANAHERNANDEZ|": {
   "title_status": "clear",
@@ -67,7 +67,7 @@
   "current_owner": "TYRONE H ROBINSON EST OF",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3060190090500|DAMASIZQUIERDOORLANDOOTANOREBECA|": {
   "title_status": "clear",
@@ -151,7 +151,7 @@
   "current_owner": "INWALD JERRY & INWALD ZACHARY J",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424534180000100|MARTINEZPEDRO|": {
   "title_status": "transferred",
@@ -424,7 +424,7 @@
   "current_owner": "MACKEY ELIZABETH L & ELIZABETH MACKEY TR TITL HLDR & MACKEY ELIZABETH L TR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "08434516120111020|KARENSTANLEY|": {
   "title_status": "transferred",
@@ -613,7 +613,7 @@
   "current_owner": "DORRIELAN DIEUSEUL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-09-03"
  },
  "513914101050|ADRIANJAGDEOSINGH|": {
   "title_status": "clear",
@@ -732,14 +732,14 @@
   "current_owner": "AVALO ENTERPRISES LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-09-04"
  },
  "3350280060240|ALBERTOMAURICIOVIGIL|": {
   "title_status": "clear",
   "current_owner": "MAURICIO ALBERTO VIGIL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3220240340060|HOMEINTERNATIONALPROJECT|": {
   "title_status": "clear",
@@ -879,7 +879,7 @@
   "current_owner": "DAVID SADAK",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-14"
+  "ts": "2026-09-02"
  },
  "0232020680050|AMPARPCORRECHAMARIAVENETIAN|": {
   "title_status": "clear",
@@ -935,7 +935,7 @@
   "current_owner": "HENRY MORAN; IVIS MARIA PEREZ RODRIGUEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1678250220380|LEEMINNSPERRY|": {
   "title_status": "clear",
@@ -1257,7 +1257,7 @@
   "current_owner": "HON INVESTMENT CORP",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0341080013800|BRUNELO|": {
   "title_status": "clear",
@@ -1292,7 +1292,7 @@
   "current_owner": "EDWARDS, MARY J",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514214011690|BIASIELLOMARLETH|": {
   "title_status": "clear",
@@ -1460,7 +1460,7 @@
   "current_owner": "WALLACE, MICHAEL WILLIAM",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "4941110050|OWNERSEARCHTITLEVIA|": {
   "title_status": "unverified",
@@ -1558,14 +1558,14 @@
   "current_owner": "DANIEL J RODRIGUEZ &W JUANA M",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-25"
+  "ts": "2026-09-04"
  },
  "3059020021360|ADRIANADIOVANNIDSOARESMELLER|": {
   "title_status": "clear",
   "current_owner": "DIOVANNI MELLER &W; ADRIANA D SOARES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3040150420760|GUSTAVORODA|": {
   "title_status": "clear",
@@ -1898,17 +1898,17 @@
  },
  "30424110340000790|DRAKEGARY|": {
   "title_status": "unverified",
-  "current_owner": "LUKASIK GAIL DRAKE",
+  "current_owner": "",
   "flip_date": "",
-  "evidence": "live owner 'LUKASIK GAIL DRAKE' shares only a surname with the defendant 'DRAKE GARY EST' — verify it is the same household",
-  "ts": "2026-08-26"
+  "evidence": "appraiser lookup failed (HTTPSConnectionPool(host='pbcpao.gov', port=443): Read timed out. (read timeout=) — VERIFY title before contact",
+  "ts": "2026-09-02"
  },
  "73414407050000870|JOHNULANOWSKI|": {
   "title_status": "clear",
   "current_owner": "ULANOWSKI JOHN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-26"
+  "ts": "2026-09-03"
  },
  "74434320056142080|LUTHERTIFFANY|": {
   "title_status": "transferred",
@@ -2230,7 +2230,7 @@
   "current_owner": "HUDSON CHARTERS LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0341200650860|RIM|": {
   "title_status": "clear",
@@ -2244,98 +2244,98 @@
   "current_owner": "PLATINUM EDGE LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1678240081050|JACOBJUDGEORALEA|": {
   "title_status": "clear",
   "current_owner": "JACOB JUDGE &W ORALEA E",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3088140000940|ROBERTORODRIGUEZ|": {
   "title_status": "clear",
   "current_owner": "ROBERTO R RODRIGUEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3099050000990|BRENALMARIA|": {
   "title_status": "clear",
   "current_owner": "MARIA BRENAL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3099050001170|AURELIAGOMEZJOSE|": {
   "title_status": "clear",
   "current_owner": "JOSE GOMEZ &W AURELIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3099050004851|MANUELMARIAOROSA|": {
   "title_status": "clear",
   "current_owner": "MANUEL OROSA &W MARIA C",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3099050004180|LUISAPEREZ|": {
   "title_status": "clear",
   "current_owner": "LUISA A PEREZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3099050000160|ABELARDOFERRER|": {
   "title_status": "clear",
   "current_owner": "ABELARDO FERRER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3099050000380|BARRERALIDIAMIGUEL|": {
   "title_status": "clear",
   "current_owner": "MIGUEL A BARRERA &W LIDIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494114100220|DANIELFRIEDLAND|": {
   "title_status": "clear",
   "current_owner": "FRIEDLAND, DANIEL M H/E JEAN-JOSEPH, GUERLINE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514208AB0250|MARGARETSCANIO|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "474231250130|GOLDMAN|": {
   "title_status": "clear",
   "current_owner": "GOLDMAN GROUP LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494224050680|ACQUISITIONSOCONRE|": {
   "title_status": "clear",
   "current_owner": "OCON RE ACQUISITIONS LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494106KJ0430|BERMANDOLORES|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00434506020360040|ANGELACASTRO|": {
   "title_status": "clear",
@@ -2349,7 +2349,7 @@
   "current_owner": "PAREDES WALTER A",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "38434427010910040|LAYTONRYAN|": {
   "title_status": "clear",
@@ -2363,28 +2363,28 @@
   "current_owner": "ARROGANTE JUDY R & HERNANDEZ CHERYL L & HERNANDEZ EMMANUEL P",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514018111070|ELIZABETHLUISPORRELLO|": {
   "title_status": "clear",
   "current_owner": "PORRELLO, LUIS & ELIZABETH H/E PORRELLO, PATRICIA MATILDE ET",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "74434404040170150|BRENDACANAVAN|": {
   "title_status": "clear",
   "current_owner": "CANAVAN BRENDA & GUADAMUZ LUIS MIGUEL ARAYA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0431060370710|ALIMARYALINACARIDADDLENRIQUEHERIBERTOJORGELEMUSLEREMREM|": {
   "title_status": "clear",
   "current_owner": "ALINA LEMUS LE; REM ALIMARY D L CARIDAD LEMUS; REM HERIBERTO LEMUS; REM JORGE ENRIQUE LEMUS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3421020120030|GREENPAUL|": {
   "title_status": "clear",
@@ -2398,21 +2398,21 @@
   "current_owner": "LUIS NIETO EST OF",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3411330280540|DESIREKEVIN|": {
   "title_status": "clear",
   "current_owner": "KEVIN L DESIRE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3059240250070|JOSELAURASALDANA|": {
   "title_status": "clear",
   "current_owner": "JOSE SALDANA; LAURA SALDANA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3078280001460|JOSEVIDAILLET|": {
   "title_status": "clear",
@@ -2426,21 +2426,21 @@
   "current_owner": "CESAR M ROMAN; MARTHA C ROMAN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3022040180960|BEZZERACRISTINADASILVARAMPRASADRAOSIMONE|": {
   "title_status": "clear",
   "current_owner": "Y RAMPRASAD RAO; SIMONE CRISTINA BEZZERA DA SILVA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0341190012811|DMILLEREDWARDLAURA|": {
   "title_status": "clear",
   "current_owner": "EDWARD D MILLER &W LAURA K",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0141150640250|CADAVIDVICTOR|": {
   "title_status": "clear",
@@ -2454,49 +2454,49 @@
   "current_owner": "MILA 2209 LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3040290020150|DAONE|": {
   "title_status": "clear",
   "current_owner": "D & A INVESTMENT GROUP ONE LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3031040033415|ROSASOSA|": {
   "title_status": "clear",
   "current_owner": "ROSA SOSA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3049130111040|MAGARINONIDIA|": {
   "title_status": "clear",
   "current_owner": "NIDIA N MAGARINO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1079160060450|COREYPHILIPROWTHAM|": {
   "title_status": "clear",
   "current_owner": "COREY PHILIP ROWTHAM",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3079070350260|GUZMANPRINSTEINVICTOR|": {
   "title_status": "clear",
   "current_owner": "VICTOR PRINSTEIN GUZMAN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1079210290270|JUANKATIAMARTINEZMELEANMIGUELQUINDELAN|": {
   "title_status": "clear",
   "current_owner": "JUAN MIGUEL MARTINEZ MELEAN; KATIA QUINDELAN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3079090150300|CARLOSMARTELLROBERTOSANCHEZ|": {
   "title_status": "clear",
@@ -2524,70 +2524,70 @@
   "current_owner": "10867 NW 59TH ST DORAL FL 33178; LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0131370393970|BEATRIZPARAMOUNTWORLD|": {
   "title_status": "clear",
   "current_owner": "PARAMOUNT WORLD 4008 BEATRIZ LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0141370780370|ABRILANDREAFRANCESCOLERNERNAZARENARICCHIUTO|": {
   "title_status": "clear",
   "current_owner": "ANDREA FRANCESCO RICCHIUTO; NAZARENA ABRIL LERNER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0232020081250|MELISSAOUAZANA|": {
   "title_status": "clear",
   "current_owner": "MELISSA J OUAZANA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1679190301610|ACEVEDOGIRALDOJOHAN|": {
   "title_status": "clear",
   "current_owner": "JOHAN C ACEVEDO GIRALDO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0131250200110|LOBEURBANICK|": {
   "title_status": "clear",
   "current_owner": "LOBE4 LLC TRS; URBANICK TRUST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0132180310740|BAYSHOREDN|": {
   "title_status": "clear",
   "current_owner": "D3N9 BAYSHORE HOLDINGS LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3059040712390|ARBOLEDAPAULINETATYANA|": {
   "title_status": "clear",
   "current_owner": "TATYANA PAULINE ARBOLEDA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "2230150650500|EMPORIUMLOGISTICS|": {
   "title_status": "clear",
   "current_owner": "EMPORIUM LOGISTICS LLC 1706 LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3059090461810|TONYWILLIAMS|": {
   "title_status": "clear",
   "current_owner": "TONY V WILLIAMS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1322270080210|AMENEIRODORAMARTINEZ|": {
   "title_status": "transferred",
@@ -2601,14 +2601,14 @@
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "504132020610|AGUIRREALEXANDRAOROZCOPAOLA|": {
   "title_status": "clear",
   "current_owner": "OROZCO AGUIRRE, PAOLA ALEXANDRA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "503911041210|BAKERDERRICK|": {
   "title_status": "clear",
@@ -2622,14 +2622,14 @@
   "current_owner": "KING, ALVIN",
   "flip_date": "",
   "evidence": "live owner 'KING, ALVIN' shares only a surname with the defendant 'ANTHONY KING' — verify it is the same household",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514129051370|BORELANDCAROL|": {
   "title_status": "clear",
   "current_owner": "BORELAND, CAROL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "504007080670|FARRELLGLENNYS|": {
   "title_status": "clear",
@@ -2650,84 +2650,84 @@
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424522110000490|PETERSABA|": {
   "title_status": "clear",
   "current_owner": "SABA PETER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "73424417020015860|DALLALFARID|": {
   "title_status": "clear",
   "current_owner": "DALLAL FARID",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "08434533030000520|OLICHASANON|": {
   "title_status": "clear",
   "current_owner": "SANON OLICHA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424517100001760|DP|": {
   "title_status": "transferred",
   "current_owner": "AIKEN MIRANDA & JONES STANLEY E",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'AIKEN MIRANDA & JONES STANLEY E' is not the foreclosure defendant 'DP8484G LLC'",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424407010000190|DANTZLERGINA|": {
   "title_status": "unverified",
   "current_owner": "DANTZLER LINDEN & HAGOPIAN ROSEMARIE TRUST FBO",
   "flip_date": "",
   "evidence": "live owner 'DANTZLER LINDEN & HAGOPIAN ROSEMARIE TRUST FBO' shares only a surname with the defendant 'DANTZLER GINA' — verify it is the same household",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "08434516370190070|MCKINNEYMIGUEL|": {
   "title_status": "clear",
   "current_owner": "MCKINNEY MATTHEW O EST & MCKINNEY MIGUEL O",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424622090041870|BENIGNOGARCIA|": {
   "title_status": "clear",
   "current_owner": "GARCIA BENIGNO EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "12424612140010840|FINANCIAL|": {
   "title_status": "clear",
   "current_owner": "TRUST FINANCIAL LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "73424417050006050|AHERNMATTHEW|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "74434320030150130|SPANGLISH|": {
   "title_status": "clear",
   "current_owner": "SPANGLISH REALTY LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "72414323220000180|HOMEPROPEL|": {
   "title_status": "clear",
   "current_owner": "PROPEL HOME INVESTMENTS LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "73414404010480010|ARCHERROY|": {
   "title_status": "clear",
@@ -2741,28 +2741,28 @@
   "current_owner": "TAGLIAFERRI ALBERT",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424615050013090|DENNISKHARE|": {
   "title_status": "clear",
   "current_owner": "FASANO NANCY E & KHARE DENNIS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "74424313100180021|DENISEROONEY|": {
   "title_status": "clear",
   "current_owner": "ROONEY DENISE M",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424515040010010|GARCIARACIELLE|": {
   "title_status": "clear",
   "current_owner": "ARIAS ALBERY R CASTILLO & GARCIA RACIELLE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424333060004130|GERMAINMARIE|": {
   "title_status": "unverified",
@@ -2776,112 +2776,112 @@
   "current_owner": "BARBARA EXPOSITO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0431060610010|ALICIAEMILYGARYGAYLEMAZARIEGOSNATHANRIVERO|": {
   "title_status": "clear",
   "current_owner": "ALICIA RIVERO; EMILY GAYLE MAZARIEGOS; NATHAN GARY MAZARIEGOS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3022320751190|JERIKLEMMELYNNZAIAC|": {
   "title_status": "clear",
   "current_owner": "JERI LYNN KLEMME ZAIAC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3530200360130|CALVEIRACELIAJAVIER|": {
   "title_status": "clear",
   "current_owner": "JAVIER CALVEIRA &W CELIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0531200300690|MARIAMOHEDANO|": {
   "title_status": "clear",
   "current_owner": "MARIA MOHEDANO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "2050150070060|PLATINUMSERVICES|": {
   "title_status": "clear",
   "current_owner": "PLATINUM INVESTMENTS SERVICES LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514120030040|AQUINOJOSETERESA|": {
   "title_status": "clear",
   "current_owner": "AQUINO, JOSE R & TERESA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484106020360|NIKITINAOKSANA|": {
   "title_status": "clear",
   "current_owner": "NIKITINA, OKSANA NIKITIN, ALEX",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514028080280|VANGEL|": {
   "title_status": "clear",
   "current_owner": "VANGEL LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494124050690|HYACINTHPERRY|": {
   "title_status": "clear",
   "current_owner": "PERRY, HYACINTH EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514226BB0250|DEBBRAGROSSJEAN|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494220BH0310|BENZINGERHARRIET|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484121380230|BIRDSONGJACQULYN|": {
   "title_status": "clear",
   "current_owner": "BIRDSONG, JACQULYN K BRADY, FRANK J",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494113310540|ANTHONYCOXMAURICE|": {
   "title_status": "clear",
   "current_owner": "COX, MAURICE ANTHONY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484127060010|INVESTOR|": {
   "title_status": "clear",
   "current_owner": "MVA PROPERTIES INVESTOR LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "504104490540|GELINMALIKSHABAZZ|": {
   "title_status": "clear",
   "current_owner": "GELIN, MALIK SHABAZZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "504216AC0120|AVRAMLIOR|": {
   "title_status": "unverified",
@@ -2895,490 +2895,490 @@
   "current_owner": "GAITAN, ARTURO & HERRERA, DANIA DEL CARMEN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "504104GG0020|GRANTKARLENE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424335270000180|SMALL|": {
   "title_status": "clear",
   "current_owner": "SMALL INVESTMENTS GROUP LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424622090157170|BUCKLEYPAULA|": {
   "title_status": "clear",
   "current_owner": "BUCKLEY PAULA P",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "73424417030002210|HARRISJASON|": {
   "title_status": "clear",
   "current_owner": "HARRIS JASON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00414712010070300|MARKSCHARE|": {
   "title_status": "clear",
   "current_owner": "SCHARE MARK",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "08434515190110070|MCKAYVINCENT|": {
   "title_status": "clear",
   "current_owner": "MCKAY VINCENT",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "73414416060002202|BRYSTE|": {
   "title_status": "clear",
   "current_owner": "BRYSTE HOLDINGS LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424421190008110|EMGEMONICA|": {
   "title_status": "clear",
   "current_owner": "EMGE MONICA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424730020110100|BOMTEMPOJULIOMARIA|": {
   "title_status": "clear",
   "current_owner": "BOMTEMPO DIONE LOPES & BOMTEMPO JULIO MARIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "74434310350024020|BAEHANGLEE|": {
   "title_status": "clear",
   "current_owner": "LEE HANG BAE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424708070034043|DUCASSESUZANNE|": {
   "title_status": "clear",
   "current_owner": "DUCASSE SUZANNE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00424708100124930|JAMESMARCELLIN|": {
   "title_status": "clear",
   "current_owner": "LAURENT KATIANA & MARCELLIN JAMES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "00434509110060400|HILAND|": {
   "title_status": "transferred",
   "current_owner": "PENDERGAST SEAN & PENDERGAST TORONA M",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'PENDERGAST SEAN & PENDERGAST TORONA M' is not the foreclosure defendant 'HI-LAND PROPERTIES LLC'",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494110181040|BAINLEVARDO|": {
   "title_status": "clear",
   "current_owner": "BAIN, LEVARDO L BAIN, MARKEYA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "503911073300|COBAJOSEVICENTE|": {
   "title_status": "clear",
   "current_owner": "COBA, JOSE VICENTE ENSHIELD CORE TR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514214013840|CUERVASKATIAMARIA|": {
   "title_status": "clear",
   "current_owner": "CUERVAS, MARIA KATIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494101400170|ANTHONYGARYMCLEAN|": {
   "title_status": "clear",
   "current_owner": "MCLEAN, GARY ANTHONY SOMMERS, JANET ETAL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494135EB0090|HAMILTONLEEMAUREEN|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484132016640|MICHELWISLYNE|": {
   "title_status": "clear",
   "current_owner": "MICHEL, WISLYNE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494235BK0170|DKIMBALLROBERT|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484203K90150|BRUNORAYMOND|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484133AA0150|MARGARETREILLY|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514014CE0930|COSTELLODLORETTA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494124JJ0450|ANTHONYMARGARET|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514206083950|TIMNEYWARREN|": {
   "title_status": "clear",
   "current_owner": "TIMNEY, WARREN J JR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494221AC2220|BONANNOSALVATORE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494102120690|NORMASINCLAIR|": {
   "title_status": "transferred",
   "current_owner": "SUTHERLAND, CLAUDETTE M",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'SUTHERLAND, CLAUDETTE M' is not the foreclosure defendant 'NORMA SINCLAIR'",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "474129053030|KARENMONTEMAYORXAVIER|": {
-  "title_status": "clear",
-  "current_owner": "MONTEMAYOR, XAVIER & KAREN",
+  "title_status": "transferred",
+  "current_owner": "RADIC, LJUBISA JEREMIAS, JOSEPH",
   "flip_date": "",
-  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "evidence": "LIVE appraiser owner 'RADIC, LJUBISA JEREMIAS, JOSEPH' is not the foreclosure defendant 'XAVIER & KAREN MONTEMAYOR'",
+  "ts": "2026-09-03"
  },
  "484226160490|LATIMORETEMATHATERRANCE|": {
   "title_status": "clear",
   "current_owner": "LATIMORE, TEMATHA & TERRANCE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514122071150|CARLOSULLOA|": {
   "title_status": "clear",
   "current_owner": "ULLOA, LISBETT H/E ULLOA, CARLOS A",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494206090780|DIPNARINEVISHNU|": {
   "title_status": "clear",
   "current_owner": "DIPNARINE, VISHNU",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494109AJ0110|CITIZENSHOMES|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484112102380|CROSBYDENISE|": {
   "title_status": "clear",
   "current_owner": "CROSBY, DENISE Y",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484203BS0030|INVESTORLIGHTNINGREAL|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514001070174|JACOBVERNIECE|": {
   "title_status": "clear",
   "current_owner": "JACOB, VERNIECE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484234080040|NWSTREET|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494126BD0050|FEDERICOSANTELLA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484129AE1120|CAMPBELLTIFFANY|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494109AM0150|BIDJAIKOEMARNANHOE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484211033860|FRANCISCOHUGOMARISCALPLUA|": {
   "title_status": "clear",
   "current_owner": "PLUA MARISCAL, HUGO FRANCISCO H/E LOPEZ, LUIS GABRIEL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494103040350|GILBERTYATES|": {
   "title_status": "clear",
   "current_owner": "YATES, GILBERT",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494203AD1650|PATRICIASCHNEIDER|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494035063380|NICHOLASPEREZ|": {
   "title_status": "clear",
   "current_owner": "PEREZ, NICHOLAS R",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "494126DK0420|KELLYMCLEAN|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514035141360|LAPAIXSUNSHINE|": {
   "title_status": "clear",
   "current_owner": "LAPAIX, SUNSHINE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514035131250|LAWRENCEMALLARD|": {
   "title_status": "clear",
   "current_owner": "MALLARD, LAWRENCE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "514035043510|AMOURLICIASAINT|": {
   "title_status": "clear",
   "current_owner": "SAINT AMOUR, LICIA H/E SAINT AMOUR, JEAN C",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1078130000542|EDDIESQUIRE|": {
   "title_status": "clear",
   "current_owner": "EDDIE SQUIRE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0232110400340|JOANNEJONESMARIE|": {
   "title_status": "clear",
   "current_owner": "JOANNE MARIE JONES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3040080051450|AURICCHIOSANDRA|": {
   "title_status": "clear",
   "current_owner": "SANDRA M AURICCHIO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0721120120140|MICHAELPORTERSHANDA|": {
   "title_status": "clear",
   "current_owner": "MICHAEL PORTER &W; SHANDA PORTER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3030530690150|CARLOSCARMENROSARIOTROCHEZ|": {
   "title_status": "clear",
   "current_owner": "CARMEN ROSARIO &H; CARLOS TROCHEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0131310270580|BERTHAPUENTE|": {
   "title_status": "clear",
   "current_owner": "BERTHA PUENTE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0141400500020|JESSICAPAULO|": {
   "title_status": "clear",
   "current_owner": "JESSICA PAULO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3049340204770|CHIAOWINSTON|": {
   "title_status": "clear",
   "current_owner": "WINSTON CHIAO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0132310521760|SASONYOSEF|": {
   "title_status": "clear",
   "current_owner": "YOSEF SASON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1079030270290|GORDONKETCHTECHIA|": {
   "title_status": "clear",
   "current_owner": "KETCHTECHIA GORDON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1079190210290|ENTERPRISE|": {
   "title_status": "clear",
   "current_owner": "S J T K ENTERPRISE LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3040040541000|GARCIAOSCAR|": {
   "title_status": "clear",
   "current_owner": "OSCAR P GARCIA EST OF",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3059230050070|ARIANAJIMENEZNESTORROJAS|": {
   "title_status": "clear",
   "current_owner": "NESTOR S ROJAS; ARIANA JIMENEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3021130050160|ABEALBERTAEVANSWAGGONER|": {
   "title_status": "clear",
   "current_owner": "ABE EVANS &; ALBERTA WAGGONER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1422350300370|COLLINS|": {
   "title_status": "clear",
   "current_owner": "8925 COLLINS LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "0132300800530|LEHIGHLOSADA|": {
   "title_status": "clear",
   "current_owner": "LOSADA LEHIGH INVESTMENT; GROUP LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3031150280070|DECASTROEDHELGUARDIOLA|": {
   "title_status": "clear",
   "current_owner": "EDHEL GUARDIOLA DE CASTRO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3031040035140|ANIXAMOREJON|": {
   "title_status": "clear",
   "current_owner": "ANIXA MOREJON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3012310181060|ADLANCALDERONDANIELKHUDOLEIMOHAMEDOLGAYOUNESS|": {
   "title_status": "clear",
   "current_owner": "DANIEL CALDERON; OLGA KHUDOLEI; MOHAMED YOUNESS ADLAN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "1079190281620|DIAZJIMENEZMARREROORISLANDY|": {
   "title_status": "clear",
   "current_owner": "ORISLANDY DIAZ MARRERO JIMENEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "3012311320560|ALLENWARREN|": {
   "title_status": "clear",
   "current_owner": "WARREN ALLEN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "2812340543390|COHENGADI|": {
   "title_status": "clear",
   "current_owner": "GADI COHEN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-27"
+  "ts": "2026-09-03"
  },
  "484203H50040|CLEVELANDMICHELLEWILLIAMS|": {
   "title_status": "unverified",
@@ -3413,70 +3413,70 @@
   "current_owner": "BUDRIX MONROE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0131320380030|FERRERNITZAZAYRE|": {
   "title_status": "clear",
   "current_owner": "NITZA FERRER; ZAYRE FERRER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0232140101630|JUDATYRNAUER|": {
   "title_status": "clear",
   "current_owner": "JUDA TYRNAUER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3411350390500|HOUSESTUDIO|": {
   "title_status": "clear",
   "current_owner": "THE STUDIO HOUSE LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0430020320160|ALBERTOBURON|": {
   "title_status": "clear",
   "current_owner": "ALBERTO BURON EST OF",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3021130230120|MONIQUEMORGAN|": {
   "title_status": "clear",
   "current_owner": "MONIQUE MORGAN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3069240000190|HOMEJACKSONSMITH|": {
   "title_status": "clear",
   "current_owner": "SMITH AND JACKSON HOME; INVESTMENT LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3122020340900|TETIANAZHYLENKO|": {
   "title_status": "clear",
   "current_owner": "TETIANA ZHYLENKO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0232342400050|DELPLANCHEMINERVA|": {
   "title_status": "clear",
   "current_owner": "MINERVA DELPLANCHE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434319020010220|AUDLEYMONTAQUE|": {
   "title_status": "clear",
   "current_owner": "MONTAQUE AUDLEY L EST & ROLAND ANNETTA J EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424705240001670|OVIDEPAUL|": {
   "title_status": "clear",
@@ -3490,7 +3490,7 @@
   "current_owner": "GAYDOS TAMMY & HOCKMAN SYBIL EST & HORNACKY EMIL & HORNACKY JOHN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "73414426050001610|HOLECHITIMISHEHUTAMID|": {
   "title_status": "clear",
@@ -3504,133 +3504,133 @@
   "current_owner": "SAFKO CAROLINA & SAFKO JOHN T",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424616310000110|FANIYAKALIEVA|": {
   "title_status": "clear",
   "current_owner": "KALIEVA FANIYA & KALIEVA RUMIYA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424733080034801|KALTERRICHARD|": {
   "title_status": "clear",
   "current_owner": "KALTER RICHARD BARRY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434307070181020|NATALYANOVIKOVA|": {
   "title_status": "clear",
   "current_owner": "NOVIKOVA NATALYA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00414636020000250|PHYLLISRIESNER|": {
   "title_status": "clear",
   "current_owner": "RIESNER PHYLLIS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "12434619060000020|GARRYRANDOLPH|": {
   "title_status": "clear",
   "current_owner": "RANDOLPH GARRY F",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434315420121205|CHRISTOPHERMATATALL|": {
   "title_status": "clear",
   "current_owner": "MATATALL CHRISTOPHER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "72414401080284610|KALANTARIREZA|": {
   "title_status": "clear",
   "current_owner": "KALANTARI REZA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424437050000470|BROWNDERREK|": {
   "title_status": "clear",
   "current_owner": "BROWN DERREK P",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424716040012405|JONESSAUNDERSTIANA|": {
   "title_status": "transferred",
   "current_owner": "INDIANA BETTER HOUSING LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'INDIANA BETTER HOUSING LLC' is not the foreclosure defendant 'JONES SAUNDERS TIANA'",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "06424703192592050|BLOSSOMSTEPHANIE|": {
   "title_status": "clear",
   "current_owner": "BLOSSOM STEPHANIE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "70424413440020010|RIGOBERTOSEPULVEDA|": {
   "title_status": "clear",
   "current_owner": "SEPULVEDA RIGOBERTO JR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "18424426080000314|MARIAVELEZ|": {
   "title_status": "clear",
   "current_owner": "VELEZ MARIA M",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424412150020190|CARSONJACKSON|": {
   "title_status": "clear",
   "current_owner": "JACKSON CARSON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424322220070703|BALANJOSEPH|": {
   "title_status": "clear",
   "current_owner": "BALAN JOSEPH R",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424622060030520|GURITZKYSANFORD|": {
   "title_status": "clear",
   "current_owner": "GURITZKY SANFORD",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1079150210220|ALEJANDROIVANONARODRIGUEZ|": {
   "title_status": "clear",
   "current_owner": "IVAN ALEJANDRO ONA RODRIGUEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514117060660|JOHNZINGALE|": {
   "title_status": "clear",
   "current_owner": "ZINGALE, JOHN C & ZINGALE, RACHEL P",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514032063060|HENDYNORMA|": {
   "title_status": "clear",
   "current_owner": "HENDY, NORMA E H/E INGRAM, BRANDON & COPELAND, C",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494222170720|ABNERLULLY|": {
   "title_status": "clear",
@@ -3644,98 +3644,98 @@
   "current_owner": "LEWIS, RODERICK J HUTCHINS, AMBER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494230050152|RAYRONNIESTEPHANIE|": {
   "title_status": "clear",
   "current_owner": "RAY, RONNIE & STEPHANIE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514117AA2640|EMILIOSANZANO|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3079070410140|JESUSVALDES|": {
   "title_status": "clear",
   "current_owner": "JESUS VALDES EST OF",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3022050390880|CHRISTOPHERJONATHAN|": {
   "title_status": "clear",
   "current_owner": "JONATHAN CHRISTOPHER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0131240010310|CLIFFORDHARRISJAMES|": {
   "title_status": "clear",
   "current_owner": "CLIFFORD JAMES HARRIS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3421160031550|CAULEYROBERT|": {
   "title_status": "clear",
   "current_owner": "ROBERT L CAULEY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3059040021470|ROSATRUJILLO|": {
   "title_status": "clear",
   "current_owner": "ROSA F TRUJILLO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3050160180330|HOMEJACKSONSMITH|": {
   "title_status": "clear",
   "current_owner": "SMITH & JACKSON HOME; INVESTMENT LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0722170170240|CHAVAFELDBRANDLEAHSOLOMON|": {
   "title_status": "clear",
   "current_owner": "SOLOMON FELDBRAND; CHAVA LEAH FELDBRAND",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0621260143080|MELVAMOORE|": {
   "title_status": "clear",
   "current_owner": "MELVA MOORE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0232140203290|LAVECCHIAROBERT|": {
   "title_status": "clear",
   "current_owner": "ROBERT LAVECCHIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3411360620080|CHRISTINEMARAGRETWICKHAM|": {
   "title_status": "clear",
   "current_owner": "CHRISTINE MARAGRET WICKHAM",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "MULTIPLE20PARCELS|SRCTD|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494204AK0330|DISPENZAROBERT|": {
   "title_status": "unverified",
@@ -3749,56 +3749,56 @@
   "current_owner": "PORTILLO, PAMELA KAY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494102BJ0370|ELLISPRISCILLA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514210070421|APARTMENTS|": {
   "title_status": "clear",
   "current_owner": "Y APARTMENTS LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494123BJ2010|MARCMARTIN|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494123BG0050|DOOKERANHARESH|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494223031190|XCBC|": {
   "title_status": "clear",
   "current_owner": "XCBC LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "484117AG0150|DARLINERENE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514127060870|ALLANGREEN|": {
   "title_status": "clear",
   "current_owner": "GREEN, ALLAN J",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "484330AE1330|DDICOMILLOHAZEL|": {
   "title_status": "unverified",
@@ -3812,63 +3812,63 @@
   "current_owner": "DERICE ANCELOT & DERICE SIMONE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424632090005670|HOMAYOUNRANJIJIFROODY|": {
   "title_status": "clear",
   "current_owner": "RANJIJIFROODY HOMAYOUN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "12434620130130130|BROWNROGER|": {
   "title_status": "clear",
   "current_owner": "BROWN ROGER L & CARPENTER DANIEL T",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434316020350080|TARPON|": {
   "title_status": "clear",
   "current_owner": "TARPON IV LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "56434229020070400|MALBEC|": {
   "title_status": "clear",
   "current_owner": "MALBEC II LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00374133010010010|CANALLANDPOINT|": {
   "title_status": "clear",
   "current_owner": "CANAL POINT LAND TRUST & HUNTINGTON JULIA TR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "38434421152500091|CANOPUS|": {
   "title_status": "clear",
   "current_owner": "CANOPUS INVESTMENT GROUP LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00374220020000040|ANNIEHILL|": {
   "title_status": "clear",
   "current_owner": "HILL ANNIE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "41414317013490040|DUCNGUYENTOAN|": {
   "title_status": "clear",
-  "current_owner": "DUC NGUYEN TOAN",
+  "current_owner": "DUC NGUYEN TOAN EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "68434217320003070|LOUISESCHAEDLER|": {
   "title_status": "clear",
@@ -3882,7 +3882,7 @@
   "current_owner": "ALISA INVESTMENT LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434304050240570|BENIES|": {
   "title_status": "clear",
@@ -3896,42 +3896,42 @@
   "current_owner": "BATTICK LIVING TRUST & BATTICK MANDRE M TR & BATTICK MELISSA TR",
   "flip_date": "",
   "evidence": "live owner 'BATTICK LIVING TRUST & BATTICK MANDRE M TR & BATTICK MELISSA TR' shares only a surname with the defendant 'BATTICK ANDRE' — verify it is the same household",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434317010520170|CLEMENTSSHAWN|": {
   "title_status": "clear",
   "current_owner": "CLEMENTS SHAWN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "04374331160000111|BELLGAYLEMASONRENNIE|": {
   "title_status": "transferred",
   "current_owner": "AMERSON KIMBERLY & JARRETT LAMONT",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'AMERSON KIMBERLY & JARRETT LAMONT' is not the foreclosure defendant 'GAYLE MASON RENNIE BELL EST'",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434409050005570|BESTISLANDRESTAURANT|": {
   "title_status": "clear",
   "current_owner": "ISLAND BEST RESTAURANT LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74424311070001010|WANGYALI|": {
   "title_status": "clear",
   "current_owner": "WANG YALI",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434403110000150|CHURCHCOMMUNITYONE|": {
   "title_status": "clear",
   "current_owner": "ONE COMMUNITY CHURCH INC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434322380099150|RESORTSTEWARTS|": {
   "title_status": "clear",
@@ -3945,7 +3945,7 @@
   "current_owner": "INDIAN WELLS HMOWN ASSN INC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424611070100180|GELNIKISIDORE|": {
   "title_status": "clear",
@@ -3966,7 +3966,7 @@
   "current_owner": "IBSTRKN LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494206CK0650|LADRUNECIAMCCUTCHEONSHANDRA|": {
   "title_status": "unverified",
@@ -3980,112 +3980,112 @@
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514227160560|CHAVEZDIANA|": {
   "title_status": "clear",
   "current_owner": "DIANA CHAVEZ INVESTMENTS CORP",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494024122120|JONESVERONICA|": {
   "title_status": "clear",
   "current_owner": "JONES, VERONICA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494129AC0200|BEGINNINGSNEW|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "484215052740|DONALDHIGHLANDLEE|": {
   "title_status": "clear",
   "current_owner": "HIGHLAND, DONALD LEE EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494103AB0340|GINAJOHNS|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494130MA0060|DIANEPERLMAN|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "504205130580|AVENW|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494106KC0190|BLOOMROBERTA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "70434418210022100|ATLANTICPIONEER|": {
   "title_status": "clear",
   "current_owner": "ATLANTIC PIONEER GROUP LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "484129AH0160|ADRIANALABRADOR|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494102200620|DOROTHYJEANVIRGO|": {
   "title_status": "clear",
   "current_owner": "VIRGO, DOROTHY JEAN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494130JJ0040|DECASTROSANDRA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514222AA0160|NEWMANSUSAN|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494123DB0010|CADWELLJOSEPHLAWANDA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "484110175020|MARIGOLD|": {
   "title_status": "clear",
   "current_owner": "MARIGOLD TRUST LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514030070550|LESTINESIMPSON|": {
   "title_status": "clear",
@@ -4099,28 +4099,28 @@
   "current_owner": "BRADWELL, DEMARIUS H/E MONESTIME, QUANDA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00414722050000880|RCK|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3049130110570|ABREUFRANCISCO|": {
   "title_status": "clear",
   "current_owner": "FRANCISCO ABREU",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3050320370110|ALMEIDACARLSONCHRISTOPHERJOHNLEREMMARTINEZRAULROSA|": {
   "title_status": "clear",
   "current_owner": "ROSA M MARTINEZ LE; REM JOHN CHRISTOPHER CARLSON JR; RAUL ALMEIDA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3021270010900|CHERISMASANDRA|": {
   "title_status": "clear",
@@ -4134,406 +4134,406 @@
   "current_owner": "EVONNE JUDSON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1079150170100|ALEXANDERANDINOOSCAR|": {
   "title_status": "clear",
   "current_owner": "OSCAR ALEXANDER ANDINO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3022050360270|SABRINASALOMON|": {
   "title_status": "clear",
   "current_owner": "SABRINA SALOMON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3059200081450|CARMENVASQUEZ|": {
   "title_status": "clear",
   "current_owner": "CARMEN VASQUEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3421050110280|CHARLESMARTHA|": {
   "title_status": "clear",
   "current_owner": "MARTHA B CHARLES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3040300160280|JOHNMCCONNELL|": {
   "title_status": "clear",
   "current_owner": "JOHN MCCONNELL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1079210263000|ADLAIWILSON|": {
   "title_status": "clear",
   "current_owner": "ADLAI A WILSON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3049120670140|CABRERAJORGE|": {
   "title_status": "clear",
   "current_owner": "JORGE CABRERA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0132310320130|DIMINOVINCENT|": {
   "title_status": "clear",
   "current_owner": "VINCENT DIMINO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1132060131000|ISABELLLAMOSAS|": {
   "title_status": "clear",
   "current_owner": "ISABEL LLAMOSAS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3022320150450|AUGUSTINCITEJACOBLORISTONVELIMA|": {
   "title_status": "clear",
   "current_owner": "VELIMA AUGUSTIN; JACOB AUGUSTIN; CITE LORISTON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3031110300040|JACOBYQUIANNASHERIFFTHOMAS|": {
   "title_status": "clear",
   "current_owner": "JACOBY THOMAS; QUIANNA S SHERIFF",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0131140160440|JEWELLJOHNSON|": {
   "title_status": "clear",
   "current_owner": "JEWELL F JOHNSON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3040310191440|FRANCISCOHECHAVARRIA|": {
   "title_status": "clear",
   "current_owner": "FRANCISCO HECHAVARRIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0132300900030|ESSENWAGNERMARIAGRACIA|": {
   "title_status": "clear",
   "current_owner": "MARIAGRACIA ESSENWAGNER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0722170060840|SERVICESTAXVICTORY|": {
   "title_status": "clear",
   "current_owner": "VICTORY TAX SERVICES LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3350330240850|CARRILLOHITCHCOCKIVISJIMMYOLINRONALD|": {
   "title_status": "clear",
   "current_owner": "JIMMY RONALD CARRILLO OLIN; IVIS HITCHCOCK",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0420350180320|CESARMARTINEZ|": {
   "title_status": "clear",
   "current_owner": "CESAR A MARTINEZ TRS; THE CESAR A MARTINEZ REV LIV TR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "2822030721580|CARDONASARA|": {
   "title_status": "clear",
   "current_owner": "SARA CARDONA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3069340214330|FAUSTINOMARTA|": {
   "title_status": "clear",
   "current_owner": "MARTA R FAUSTINO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3069240010030|JUANMORALES|": {
   "title_status": "clear",
   "current_owner": "JUAN A MORALES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3220240050220|LETICIAMARIAMARTINEZ|": {
   "title_status": "clear",
   "current_owner": "MARIA LETICIA MARTINEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0141400020020|ARENASLAURALEVITOROBLESVINCENT|": {
   "title_status": "clear",
   "current_owner": "VINCENT LEVITO; LAURA ROBLES ARENAS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3069230153550|CARRASQUELPALACIOSYUNEURIC|": {
   "title_status": "clear",
   "current_owner": "YUNEURIC F PALACIOS CARRASQUEL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1079210291530|FINANCIALJORGEOCHOASERVICES|": {
   "title_status": "clear",
   "current_owner": "JORGE A OCHOA; REALTY FINANCIAL SERVICES CORP",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1678250180810|AURENCASTILLODAIYANAERICKMARTINEZTURRUBIATES|": {
   "title_status": "clear",
   "current_owner": "ERICK TURRUBIATES; AUREN DAIYANA MARTINEZ CASTILLO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0141381612140|COLORADOSPRINGSVUKOTA|": {
   "title_status": "clear",
   "current_owner": "VUKOTA COLORADO SPRINGS II LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3049270150400|BESTORGANIZATIONQUALITYSERVICES|": {
   "title_status": "clear",
   "current_owner": "BEST QUALITY ORGANIZATION; AND SERVICES CORP",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3069240070140|HERNANDEZLUISSALAS|": {
   "title_status": "clear",
   "current_owner": "LUIS A HERNANDEZ SALAS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "2230150650510|EMPORIUMLOGISTICS|": {
   "title_status": "clear",
   "current_owner": "EMPORIUM LOGISTICS LLC 1706 LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "2822100144570|ESCOBARFRANCISCO|": {
   "title_status": "clear",
   "current_owner": "FRANCISCO J ESCOBAR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514214020010|MICHELLERICHARDVEST|": {
   "title_status": "clear",
   "current_owner": "VEST, RICHARD A & MICHELLE H",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494111AD2800|BAPTISTECURL|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514207063390|LUISVALDEZ|": {
   "title_status": "clear",
   "current_owner": "VALDEZ, LUIS BAKER, DENISE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514117BH0060|VELEZWILSON|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514015042210|LEONORSANCHEZ|": {
   "title_status": "clear",
   "current_owner": "SANCHEZ, LEONOR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "514103580380|ANTHONYCHURCH|": {
   "title_status": "clear",
   "current_owner": "CHURCH, ANTHONY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "484125050780|ANNLABRIOLATONI|": {
   "title_status": "clear",
   "current_owner": "LABRIOLA, TONI ANN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "484135C90020|CHARLESPADUA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494105161950|CAJUSTEJESSY|": {
   "title_status": "clear",
   "current_owner": "CAJUSTE, JESSY C EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "06434719080040070|DEVAUGHNPICKENS|": {
   "title_status": "clear",
   "current_owner": "PICKENS DEVAUGHN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00404328010001170|OWNERSEARCHTITLEVIA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434317160002040|MARSHALLNICOLA|": {
   "title_status": "clear",
   "current_owner": "MARSHALL NICOLA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424428300171020|AHMEDJUNAID|": {
   "title_status": "clear",
   "current_owner": "AHMED JUNAID & AHMED SAMIYA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424314060004910|SUSANWHITE|": {
   "title_status": "clear",
   "current_owner": "WHITE SUSAN EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424623050010230|MORELLIVINCENT|": {
   "title_status": "clear",
   "current_owner": "MORELLI SARAH L & MORELLI VINCENT A",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424623280021040|GOMEZRAMONA|": {
   "title_status": "clear",
   "current_owner": "GOMEZ RAMONA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424323000007090|ASSETRORE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424622090073340|EILEENGRAVIUS|": {
   "title_status": "clear",
   "current_owner": "GRAVIUS EILEEN EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424325030000500|LIRANZOLUIS|": {
   "title_status": "transferred",
   "current_owner": "ABARCA CONCEPCION R & RENDON MAURICIO S & RENDON WENDY S",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'ABARCA CONCEPCION R & RENDON MAURICIO S & RENDON WENDY S' is not the foreclosure defendant 'LIRANZO LUIS J'",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "18424422310001190|LEJISTESAINVILLA|": {
   "title_status": "transferred",
   "current_owner": "URBAN AYDEN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'URBAN AYDEN' is not the foreclosure defendant 'LEJISTE SAINVILLA'",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424630040001990|BELINDABLUEPROPERTY|": {
   "title_status": "clear",
   "current_owner": "BELINDA BLUE PROPERTY INC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "08434517030150580|HUSAMOTHMAN|": {
   "title_status": "clear",
   "current_owner": "OTHMAN HUSAM",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424134010010040|CONTRERASJOHN|": {
   "title_status": "clear",
   "current_owner": "CONTRERAS JOHN L",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "12434618100290040|NICOLESAVARY|": {
   "title_status": "clear",
   "current_owner": "SAVARY NICOLE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00434217020050020|LAND|": {
   "title_status": "transferred",
   "current_owner": "EAST COAST PROPERTY LIQUIDATION CORP",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'EAST COAST PROPERTY LIQUIDATION CORP' is not the foreclosure defendant '2944 LAND TRUST'",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424536220010010|GALLAGHERLOUMARY|": {
   "title_status": "clear",
   "current_owner": "GALLAGHER MARY LOU",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0232110620960|EDUARDOMARLENEVALDES|": {
   "title_status": "clear",
   "current_owner": "EDUARDO I VALDES; MARLENE S VALDES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0141381331600|BHALLARAHUL|": {
   "title_status": "clear",
@@ -4547,364 +4547,364 @@
   "current_owner": "SALKEY SALKEY AND ASSOCIATES INC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494123BH0020|ALVARANGARUSSELL|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "494220AB0050|ALBERTOMATOS|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00404328020002780|ADMINISTRATIVELEGALSERVI|": {
   "title_status": "clear",
   "current_owner": "LEGAL AND ADMINISTRATIVE SERVICES LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "38434421152220040|ABRAMSCHARLES|": {
   "title_status": "clear",
   "current_owner": "ABRAMS CHARLES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00434430200000240|JEANNITEMARIE|": {
   "title_status": "clear",
   "current_owner": "JEANNITE MARIE M",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424622170062470|BARKANJULIE|": {
   "title_status": "clear",
   "current_owner": "BARKAN JULIE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "73414414460052080|ANDREWSAPTPLSAINT|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434309060110180|AGUIARJOHN|": {
   "title_status": "clear",
   "current_owner": "AGUIAR JOHN R",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "08434533162450010|EDWARDMCGITTIGAN|": {
   "title_status": "clear",
   "current_owner": "MCGITTIGAN EDWARD & MCGITTIGAN FE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "06424722120010840|DEUTSCHEDGARDO|": {
   "title_status": "clear",
   "current_owner": "DEUTSCH EDGARDO & DEUTSCH RAYNA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "08434532030140170|GAILISNATALIE|": {
   "title_status": "clear",
   "current_owner": "GAILIS NATALIE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0131270370020|CRISTINAGARCIAHERNANDEZPEDRO|": {
   "title_status": "clear",
   "current_owner": "PEDRO HERNANDEZ; CRISTINA GARCIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0131240190810|ELWALDOMCKOY|": {
   "title_status": "clear",
   "current_owner": "ELWALDO MCKOY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0131250241910|DIAZHUMBERTO|": {
   "title_status": "clear",
   "current_owner": "HUMBERTO E DIAZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0131230150561|MAERENETAYLOR|": {
   "title_status": "clear",
   "current_owner": "MAE RENE TAYLOR EST OF",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3421020120100|CLYNEFRANCISJOSEPH|": {
   "title_status": "clear",
   "current_owner": "JOSEPH FRANCIS CLYNE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3220150180100|DARIOKATIALUMBI|": {
   "title_status": "clear",
   "current_owner": "DARIO J LUMBI; KATIA LUMBI",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3040150040610|LUGOMARIAPEDROSIERRA|": {
   "title_status": "clear",
   "current_owner": "PEDRO LUGO &W MARIA SIERRA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3069140160520|DIOELHERNANDEZLEONNERISLEIDY|": {
   "title_status": "clear",
   "current_owner": "DIOEL LEON; NERISLEIDY HERNANDEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0232100132610|REBECCARODRIGUEZ|": {
   "title_status": "clear",
   "current_owner": "REBECCA E RODRIGUEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3059040010020|DANIELAMORALESVARGAS|": {
   "title_status": "clear",
   "current_owner": "DANIELA VARGAS MORALES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3031150350290|AVAAVIANNABROWNCUMMINGSJANAYMARKSMIASHEKINAH|": {
   "title_status": "clear",
   "current_owner": "AVA C MARKS; MIA SHEKINAH BROWN; AVIANNA JANAY CUMMINGS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3022320531400|DELLSAVAGE|": {
   "title_status": "clear",
   "current_owner": "DELL V SAVAGE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0431050014800|DIAZEMILIO|": {
   "title_status": "clear",
   "current_owner": "EMILIO DIAZ JR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1121360211160|DEMETRIUSIBITOLAOLUWAKEMI|": {
   "title_status": "clear",
   "current_owner": "OLUWAKEMI IBITOLA DEMETRIUS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3530080051380|BEATRIZELENAFINOLMARTINEZMERCHANPENAROBERTO|": {
   "title_status": "clear",
   "current_owner": "ROBERTO MARTINEZ PENA; BEATRIZ ELENA FINOL MERCHAN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0141390052460|DEMORALESDORISFALLONGABRIELMARCELAMATEOMORALES|": {
   "title_status": "clear",
   "current_owner": "GABRIEL MORALES; DORIS MARCELA FALLON DE MORALES; GABRIEL MATEO MORALES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3530180310830|FRANCISMENDEZRUGGIEROSCHIRALDI|": {
   "title_status": "clear",
   "current_owner": "RUGGIERO SCHIRALDI &W; FRANCIS I MENDEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3049320121010|LUISMIGUELRAMONAVASQUEZ|": {
   "title_status": "clear",
   "current_owner": "LUIS G VASQUEZ; RAMONA VASQUEZ; LUIS MIGUEL VASQUEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3069350130200|BLUECOASTSERVICEWATER|": {
   "title_status": "clear",
   "current_owner": "BLUE WATER COAST SERVICE LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0821220160090|EDDIEMCCRAY|": {
   "title_status": "clear",
   "current_owner": "EDDIE M MCCRAY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3040180010860|ANGELDELOROPEREZROSA|": {
   "title_status": "clear",
   "current_owner": "ANGEL DEL ORO &W ROSA I PEREZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3049320342910|GALLOJUANOLGA|": {
   "title_status": "clear",
   "current_owner": "JUAN GALLO &W OLGA E",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3021330022930|LOUISEWALKER|": {
   "title_status": "clear",
   "current_owner": "EST OF LOUISE WALKER",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3040160120020|ALAMOCARIDADHERRRERAMARIA|": {
   "title_status": "clear",
   "current_owner": "MARIA CARIDAD ALAMO HERRRERA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0131130230831|AVENW|": {
   "title_status": "clear",
   "current_owner": "6828 NW 3 AVE LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1722310030721|LANDNOSERVICE|": {
   "title_status": "clear",
   "current_owner": "LAND TRUST SERVICE CORP TRS; TRUST NO 721 114",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3069350330360|ELAINEGILFREDOPEREZTORRES|": {
   "title_status": "clear",
   "current_owner": "ELAINE PEREZ; GILFREDO TORRES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3022320751420|GAMALIELNEILSHANIERSOUFFRANT|": {
   "title_status": "clear",
   "current_owner": "SHANIER SOUFFRANT; GAMALIEL NEIL SOUFFRANT",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3022070240080|MODOM|": {
   "title_status": "clear",
   "current_owner": "MOD OM 1 LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1079210286760|JOSEMARIONOVOA|": {
   "title_status": "clear",
   "current_owner": "MARIO JOSE NOVOA JR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3530180251260|BRACHOGUILLERMO|": {
   "title_status": "clear",
   "current_owner": "GUILLERMO BRACHO",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3411360110850|BALAREZOFABIANAFERREYRAGIOVANNIMARTINEZMILAGROS|": {
   "title_status": "clear",
   "current_owner": "GIOVANNI BALAREZO FERREYRA; FABIANA MILAGROS MARTINEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3079020230410|CASTRILLOLARISBELMONTES|": {
   "title_status": "clear",
   "current_owner": "LARISBEL CASTRILLO MONTES",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "2332090415890|LEWISRASHEED|": {
   "title_status": "clear",
   "current_owner": "RASHEED LEWIS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0132301082420|MARKSSAFC|": {
   "title_status": "clear",
   "current_owner": "MARKSSAFC LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1079190280520|CONTRERASJUAN|": {
   "title_status": "clear",
   "current_owner": "JUAN CONTRERAS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "2230150650520|LALLC|": {
   "title_status": "clear",
   "current_owner": "LA 8 LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0341170960190|CARLOSJUANVAAMONDE|": {
   "title_status": "clear",
   "current_owner": "JUAN CARLOS VAAMONDE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "68434217090040220|DICKENSHOLLY|": {
   "title_status": "clear",
   "current_owner": "DICKENS HOLLY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74424315110002500|DELBARKERJEFFERY|": {
   "title_status": "clear",
   "current_owner": "DEL BARKER JEFFERY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424522010001970|BRYANCORNER|": {
   "title_status": "clear",
@@ -4918,140 +4918,140 @@
   "current_owner": "DIBARTOLO JAMES & DIBARTOLO MAUREEN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434307040001314|JAMGOTCHIANKIRK|": {
-  "title_status": "clear",
-  "current_owner": "JAMGOTCHIAN KATHRYN & JAMGOTCHIAN KIRK",
+  "title_status": "transferred",
+  "current_owner": "MOLINA VANESSA",
   "flip_date": "",
-  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "evidence": "LIVE appraiser owner 'MOLINA VANESSA' is not the foreclosure defendant 'JAMGOTCHIAN KIRK'",
+  "ts": "2026-09-04"
  },
  "00424535270001410|CHUAJONATHAN|": {
   "title_status": "clear",
   "current_owner": "CHUA JONATHAN & CHUA VIRGINIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424411360001300|DEREKRICHARDSON|": {
   "title_status": "clear",
   "current_owner": "RICHARDSON AALIYAH J & RICHARDSON DEREK K",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "12434617610120100|PASIKWAYNE|": {
   "title_status": "clear",
   "current_owner": "PASIK WAYNE T",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "2050130031280|AARONSLEE|": {
   "title_status": "clear",
   "current_owner": "LEE AARONS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424632100007590|KALIEVARUMIYA|": {
   "title_status": "clear",
   "current_owner": "KALIEVA RUMIYA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "08434605170170040|ALANAOWENS|": {
   "title_status": "clear",
   "current_owner": "OWENS ALANA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74424301090001731|SISAVATHVANHNALY|": {
   "title_status": "clear",
   "current_owner": "SISAVATH GATOR A & SISAVATH VANHNALY K",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00414220000005970|DEVIAJOHN|": {
   "title_status": "clear",
   "current_owner": "DEVIA JOHN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "62434435100012100|DUNYAMARIJAN|": {
   "title_status": "clear",
   "current_owner": "MARIJAN DUNYA & MARIJAN MILICA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "2812350840400|GOLDJANICEPETER|": {
   "title_status": "clear",
   "current_owner": "PETER GOLD; JANICE R GOLD",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3660100230150|LYNETTEWILLIEZACKERY|": {
   "title_status": "clear",
   "current_owner": "WILLIE ZACKERY &W LYNETTE M",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "1678250240720|ANNEANNIECHARLOTELIZABETHRONALD|": {
   "title_status": "clear",
   "current_owner": "ELIZABETH ANNE CHARLOT; ANNIE B CHARLOT; RONALD J CHARLOT",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3040120070800|ELSARICHARDVALCARCEL|": {
   "title_status": "clear",
   "current_owner": "RICHARD J VALCARCEL &W ELSA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3020020010180|DASHELLQUINTANARIVERON|": {
   "title_status": "clear",
   "current_owner": "DASHELL QUINTANA RIVERON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424706060530080|MARJORIESTANBURY|": {
   "title_status": "clear",
   "current_owner": "STANBURY MARJORIE L",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "04374405080000010|BROWNLETICIA|": {
   "title_status": "clear",
   "current_owner": "BROWN LETICIA EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424623430012030|LEITNERWILLIAM|": {
   "title_status": "clear",
   "current_owner": "LEITNER WILLIAM L EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74424312210002010|SHEPHERDTAMEKA|": {
   "title_status": "clear",
   "current_owner": "SHEPHERD TAMEKA S",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "56434228690002008|ANDREASHOENIG|": {
   "title_status": "clear",
@@ -5065,63 +5065,63 @@
   "current_owner": "SCHAAF SUSAN L",
   "flip_date": "",
   "evidence": "LIVE appraiser owner 'SCHAAF SUSAN L' is not the foreclosure defendant 'LINDNER LISA EST'",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "56434227010000940|CONNELLYVIRGINIA|": {
   "title_status": "clear",
   "current_owner": "CONNELLY VIRGINIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74414224030000470|HARTJOHN|": {
   "title_status": "clear",
   "current_owner": "HART JOHN K",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424513130020670|CALLASJASON|": {
   "title_status": "clear",
   "current_owner": "CALLAS JASON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "00424503070000380|MULLENRYAN|": {
   "title_status": "clear",
   "current_owner": "MULLEN RYAN & MULLEN SELINA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3059200102220|CALDERONJOSEPHMARTHA|": {
   "title_status": "clear",
   "current_owner": "JOSEPH CALDERON; MARTHA CALDERON",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "2822100141220|ESTEPHANAJUSTINTOUBEAUX|": {
   "title_status": "clear",
   "current_owner": "JUSTIN M TOUBEAUX; ESTEPHANA R TOUBEAUX",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3049110380020|FERRADASIVONNERICHARD|": {
   "title_status": "clear",
   "current_owner": "RICHARD FERRADAS &W IVONNE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "74434333060050071|KAITLINTIMM|": {
   "title_status": "clear",
   "current_owner": "TIMM KAITLIN",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "0141390830370|DONDOFREEMARKETOWILSON|": {
   "title_status": "clear",
@@ -5135,7 +5135,7 @@
   "current_owner": "OCEAN SOLE 2401 LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-28"
+  "ts": "2026-09-04"
  },
  "3122020481940|EVANGELOSSAVIOLAKIS|": {
   "title_status": "clear",
@@ -5149,168 +5149,168 @@
   "current_owner": "DALRIO, LORNA E BAILEY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494228000321|GREENJORDANTONYA|": {
   "title_status": "clear",
   "current_owner": "JORDAN, TONYA GREEN MARSHALL, BRENDA EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494229040400|SERVICESTRAVELERSXPRESS|": {
   "title_status": "clear",
   "current_owner": "TRAVELERS XPRESS SERVICES INC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494136031150|CAROLYNOBUTLER|": {
   "title_status": "clear",
   "current_owner": "BUTLER, CAROLYN O",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484218221020|ESTERSJEFFREY|": {
   "title_status": "clear",
   "current_owner": "ESTERS, JEFFREY",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494035061230|HERBERTJONES|": {
   "title_status": "unverified",
   "current_owner": "WRAY, MARIA CHRYSENSIA JONES, MICHAEL ANTHONY EST ETAL",
   "flip_date": "",
   "evidence": "live owner 'WRAY, MARIA CHRYSENSIA JONES, MICHAEL ANTHONY EST ETAL' shares only a surname with the defendant 'HERBERT H EST JONES' — verify it is the same household",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494230AG0370|CALIXTEMARIE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494218330164|CHERLINEJOASIL|": {
   "title_status": "clear",
   "current_owner": "JOASIL, CHERLINE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494232010210|BGREAL|": {
   "title_status": "clear",
   "current_owner": "BG VENTURES INVESTMENT REAL ESTATE LLC INC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494101161650|YVETTEZAMAR|": {
   "title_status": "clear",
   "current_owner": "ZAMAR, YVETTE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484124022860|GREENOMAR|": {
   "title_status": "clear",
   "current_owner": "GREEN, OMAR",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514126AG3400|BARROWSMONICA|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494131AJ0160|RAIRHARDROSAS|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514205290011|ARONSONBETH|": {
   "title_status": "clear",
   "current_owner": "ARONSON, BETH H/E ARONSON, DOUGLAS",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494122180010|DIANAHEAVEN|": {
   "title_status": "clear",
   "current_owner": "DIANA HEAVEN REV TR HEAVEN, DIANA TRSTEE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494125DH0080|ACEVEDOVIVIAN|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494125GM0120|GAYLEJOSEPHINEJOYCE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494227110190|CRPROPERTY|": {
   "title_status": "clear",
   "current_owner": "CR PROPERTY GROUP LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514127120600|JAMEWILLIEWITHERSPOON|": {
   "title_status": "unverified",
   "current_owner": "WITHERSPOON, TINA MARIE BERSH",
   "flip_date": "",
   "evidence": "live owner 'WITHERSPOON, TINA MARIE BERSH' shares only a surname with the defendant 'WILLIE JAME & T WITHERSPOON' — verify it is the same household",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484122CM0560|RAMIRORICAURTE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "513913040770|ALEXCECILIAGONZALEZ|": {
   "title_status": "clear",
   "current_owner": "GONZALEZ, ALEX E & CECILIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484111040150|PROGRESSIVE|": {
   "title_status": "clear",
   "current_owner": "PROGRESSIVE REALTY GROUP LLC",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514032072530|MORALESROSEMARY|": {
   "title_status": "clear",
   "current_owner": "MORALES, ROSEMARY H/E PERALTA, EMMA MARIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484108140540|HAQUEMAJEDUL|": {
   "title_status": "clear",
   "current_owner": "HAQUE, MAJEDUL HOQUE, SONIA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "504023091280|AUGUSTINTAMARA|": {
   "title_status": "clear",
@@ -5324,147 +5324,147 @@
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514034070610|MONIQUEMORGAN|": {
   "title_status": "clear",
   "current_owner": "MORGAN, MONIQUE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494104350310|LOTTIERABONOWITZ|": {
   "title_status": "clear",
   "current_owner": "RABONOWITZ, LOTTIE EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494220CB0750|HARRYLANGLEY|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484226061310|ALEXANDERDILLARDRENEE|": {
   "title_status": "clear",
   "current_owner": "ALEXANDER-DILLARD, RENEE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514123073140|IRENEWASHINGTON|": {
   "title_status": "clear",
   "current_owner": "WASHINGTON, IRENE EST",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "504203AG0160|JOHNPAPAGNO|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494125GD0540|AUERWALTER|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514128020770|EVERSONSHARON|": {
   "title_status": "clear",
   "current_owner": "EVERSON, SHARON JAMES, ANCEL",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484220AH0590|ADDERLEYSHERENE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494307010170|BERMUDEZHERNANJESSICA|": {
   "title_status": "clear",
   "current_owner": "BERMUDEZ, HERNAN & JESSICA",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484125032790|RICHARDZEIGLER|": {
   "title_status": "clear",
   "current_owner": "ZEIGLER, RICHARD",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "504132041620|RODRIGUEZSANTOS|": {
   "title_status": "clear",
   "current_owner": "RODRIGUEZ, SANTOS A",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494220AG0470|CHRISTOPHERMONROE|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494124HC0360|DAVIDMIZRAHI|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "514224BC3590|BAPTISTAPARRARAFAEL|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "504105AE1500|AMEULIC|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "494202BD0050|BACCHUSZALIM|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "474129054160|MILTONSANTANASANTOS|": {
   "title_status": "clear",
   "current_owner": "SANTOS, MILTON SANTANA SILVA SOUSA, ERICA ELAINE",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "484201AC0290|DAVIDROBINTOWLES|": {
   "title_status": "unverified",
   "current_owner": "",
   "flip_date": "",
   "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "3049120461970|NOELSANCHEZ|": {
   "title_status": "clear",
   "current_owner": "NOEL SANCHEZ",
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
-  "ts": "2026-08-29"
+  "ts": "2026-09-05"
  },
  "513925060620|ACOSTAMANUELMARCANO|": {
   "title_status": "clear",
@@ -5584,5 +5584,544 @@
   "flip_date": "",
   "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
   "ts": "2026-09-01"
+ },
+ "484330AF1330|JOHNPRIO|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-02"
+ },
+ "4942060650|OWNERSEARCHTITLEVIA|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-02"
+ },
+ "3031020130480|DEBRASIMON|": {
+  "title_status": "clear",
+  "current_owner": "DEBRA SIMON",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "3012310181210|BALEEIROCAMILACHAMADOIRADOUGLASFALCAOFERRARINIRENATASTRABELLI|": {
+  "title_status": "clear",
+  "current_owner": "CAMILA BALEEIRO CHAMADOIRA; DOUGLAS A FERRARINI STRABELLI; RENATA FALCAO BALEEIRO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "3122020400350|MIKHAILOVNELLIEVYACHESLAV|": {
+  "title_status": "clear",
+  "current_owner": "VYACHESLAV MIKHAILOV &W NELLIE",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "0132300040030|REITVALLEYVIEW|": {
+  "title_status": "clear",
+  "current_owner": "VALLEYVIEW REIT LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "0131230340860|ADDRESSNAME|": {
+  "title_status": "clear",
+  "current_owner": "NAME OF ADDRESS",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "0132180040050|EDIBLEFRUITRARE|": {
+  "title_status": "clear",
+  "current_owner": "RARE & EDIBLE FRUIT CO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "3122020343820|ONLINETBS|": {
+  "title_status": "clear",
+  "current_owner": "TBS ONLINE CORP",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "3122020343590|BAYAKOA|": {
+  "title_status": "clear",
+  "current_owner": "BAYAKOA LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "00434509140000470|LUBERISSEMIRADIEU|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser lookup failed (HTTPSConnectionPool(host='pbcpao.gov', port=443): Read timed out. (read timeout=) — VERIFY title before contact",
+  "ts": "2026-09-02"
+ },
+ "74434305190030050|EFFIEJAMES|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser lookup failed (HTTPSConnectionPool(host='pbcpao.gov', port=443): Read timed out. (read timeout=) — VERIFY title before contact",
+  "ts": "2026-09-02"
+ },
+ "00424525110001040|JOHNOHARA|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser lookup failed (HTTPSConnectionPool(host='pbcpao.gov', port=443): Read timed out. (read timeout=) — VERIFY title before contact",
+  "ts": "2026-09-02"
+ },
+ "3039520331150|AUTRANJIMMYSHARON|": {
+  "title_status": "clear",
+  "current_owner": "JIMMY S AUTRAN &W SHARON J",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "0242031990120|JTRSLILIAMARIAMILANOTOME|": {
+  "title_status": "clear",
+  "current_owner": "MARIA S MILANO &; LILIA TOME JTRS",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "3031020021630|ANNBETTYLOCKWOOD|": {
+  "title_status": "clear",
+  "current_owner": "BETTY ANN LOCKWOOD",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "3040050362630|CONSUELOOBARBUSCIORUBEN|": {
+  "title_status": "clear",
+  "current_owner": "RUBEN O BARBUSCIO &W CONSUELO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "3059120190720|ALBERTOESPERANZALORENZONELSONPAEZRODRIGUEZSERRANOYVETTY|": {
+  "title_status": "clear",
+  "current_owner": "NELSON LORENZO; ESPERANZA RODRIGUEZ SERRANO; ALBERTO PAEZ; YVETTY LORENZO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-02"
+ },
+ "00424501140000970|EUGENEKING|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser lookup failed (HTTPSConnectionPool(host='pbcpao.gov', port=443): Read timed out. (read timeout=) — VERIFY title before contact",
+  "ts": "2026-09-02"
+ },
+ "73424418010005840|PLACESHEPARDSYLVAIN|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser lookup failed (HTTPSConnectionPool(host='pbcpao.gov', port=443): Read timed out. (read timeout=) — VERIFY title before contact",
+  "ts": "2026-09-02"
+ },
+ "38434416330000050|ESTEVEZWILLIAM|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser lookup failed (HTTPSConnectionPool(host='pbcpao.gov', port=443): Read timed out. (read timeout=) — VERIFY title before contact",
+  "ts": "2026-09-02"
+ },
+ "494132130390|ASHLEYGAMASARA|": {
+  "title_status": "clear",
+  "current_owner": "GAMA, SARA ASHLEY EST",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "514128AB0160|DAVIDHODGES|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-03"
+ },
+ "514230060430|CARDENASDANIEL|": {
+  "title_status": "clear",
+  "current_owner": "CARDENAS, DANIEL H/E CCORI, CARMEN ROSA FLOREZ",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "494202351770|GERMAINMARIE|": {
+  "title_status": "clear",
+  "current_owner": "GERMAIN, MARIE C",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "484219DD0360|ADRIANALOPEZ|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-03"
+ },
+ "494123GG0580|JOHNJUNIORMASIEUSTANLEY|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-03"
+ },
+ "484135G31330|ARONSONLAWRENCE|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-03"
+ },
+ "514013AD3720|CHRISPOWELL|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-03"
+ },
+ "484318AH1250|KATHLEENMAURO|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-03"
+ },
+ "484305BA0020|FERRANTEJOHN|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-03"
+ },
+ "3220150380130|FACENDAMERCEDES|": {
+  "title_status": "clear",
+  "current_owner": "MERCEDES R FACENDA; HECTOR FACENDA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "00424516070000650|KRAWITZRUTH|": {
+  "title_status": "clear",
+  "current_owner": "KRAWITZ RUTH EST",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "74424312210000970|BURRELLKAREN|": {
+  "title_status": "clear",
+  "current_owner": "BURRELL KAREN K",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "77404312100000390|KAEOLIVERTRINA|": {
+  "title_status": "clear",
+  "current_owner": "OLIVER TRINA KAE & SIELOFF TAMMY KAE",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "00424324000007270|STALLION|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-03"
+ },
+ "74424313080060061|MCLEODNICOLE|": {
+  "title_status": "clear",
+  "current_owner": "MCLEOD NICOLE J",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "52424201060000044|FELDMANROBERT|": {
+  "title_status": "clear",
+  "current_owner": "FELDMAN JOANNE G & FELDMAN ROBERT",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-03"
+ },
+ "504208031260|LUISVEGA|": {
+  "title_status": "clear",
+  "current_owner": "VEGA, LUIS",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3040040381330|GABRIELHULLMYRNA|": {
+  "title_status": "clear",
+  "current_owner": "GABRIEL HULL &W MYRNA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3079050240450|KARENLAASSANDRA|": {
+  "title_status": "clear",
+  "current_owner": "SANDRA KAREN LAAS",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0430021760790|JUANLUGOSERAPIA|": {
+  "title_status": "clear",
+  "current_owner": "JUAN V LUGO &W SERAPIA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3040060730150|AMAURYSIFREDO|": {
+  "title_status": "clear",
+  "current_owner": "AMAURY SIFREDO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3060180220170|ANNFELICIAHILL|": {
+  "title_status": "clear",
+  "current_owner": "FELICIA ANN HILL",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3069240030580|DIAZPADRONREINIER|": {
+  "title_status": "clear",
+  "current_owner": "REINIER PADRON DIAZ",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3020030170530|ALMANZAEMILZA|": {
+  "title_status": "clear",
+  "current_owner": "EMILZA ALMANZA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0131240012390|DAD|": {
+  "title_status": "clear",
+  "current_owner": "DAD 3531 INC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3049040031080|CAMPILLOLUIS|": {
+  "title_status": "clear",
+  "current_owner": "LUIS M CAMPILLO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0722100190110|SAUNDERSSILAS|": {
+  "title_status": "clear",
+  "current_owner": "SILAS S SAUNDERS JR",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0622290880940|FABIOLASANTANA|": {
+  "title_status": "clear",
+  "current_owner": "FABIOLA SANTANA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0131140270100|CENTERINTERNATIONALPRAISEVICTORYWORSHIP|": {
+  "title_status": "clear",
+  "current_owner": "VICTORY INTERNATIONAL PRAISE AND; WORSHIP CENTER INC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0621260140420|DAVISMGMTPROPERTY|": {
+  "title_status": "clear",
+  "current_owner": "DAVIS PROPERTY MGMT GROUP LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0821210011030|ARTAVIASMITH|": {
+  "title_status": "clear",
+  "current_owner": "ARTAVIA S SMITH",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0420350160060|JULIOQUESADA|": {
+  "title_status": "clear",
+  "current_owner": "JULIO QUESADA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "1079150030470|CARDONAMARYANN|": {
+  "title_status": "clear",
+  "current_owner": "MARYANN CARDONA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0132310700040|DOMESTICGREENHOUSE|": {
+  "title_status": "clear",
+  "current_owner": "GREEN HOUSE DOMESTIC HOLDINGS LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0141140154610|MILLARDRICHARD|": {
+  "title_status": "clear",
+  "current_owner": "RICHARD MILLARD",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "1222260292240|GUERRAKARELYENI|": {
+  "title_status": "clear",
+  "current_owner": "KAREL GUERRA &W; YENI GUERRA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0131230373740|FELDERJANNIE|": {
+  "title_status": "clear",
+  "current_owner": "JANNIE FELDER (EST OF)",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "0131370395210|BOXIONITOLL|": {
+  "title_status": "clear",
+  "current_owner": "IONI TOLL BOX LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3530210201410|ELOHIM|": {
+  "title_status": "clear",
+  "current_owner": "ELOHIM INVESTMENTS LLC",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "3220150380130|FACENDAHECTORMERCEDES|": {
+  "title_status": "clear",
+  "current_owner": "MERCEDES R FACENDA; HECTOR FACENDA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-04"
+ },
+ "484123AC0080|BRYANNEVILLE|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-04"
+ },
+ "494123BM1230|JOSEZEPEDA|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-05"
+ },
+ "494105CA0370|DONNAFLANAGAN|": {
+  "title_status": "unverified",
+  "current_owner": "",
+  "flip_date": "",
+  "evidence": "appraiser returned no current owner for the folio — VERIFY before contact",
+  "ts": "2026-09-05"
+ },
+ "0622300610300|ADELLBEAUBRUN|": {
+  "title_status": "clear",
+  "current_owner": "ADELL BEAUBRUN EST OF",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "3039520130170|FRANKROMERO|": {
+  "title_status": "clear",
+  "current_owner": "FRANK ROMERO",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "3660030344150|DELMAKOESSLERROBERT|": {
+  "title_status": "clear",
+  "current_owner": "ROBERT KOESSLER &W DELMA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "1678240200190|CARMENLLOYDMANUEL|": {
+  "title_status": "clear",
+  "current_owner": "MANUEL LLOYD &W CARMEN",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "3069340212510|ALCALAJOSHUA|": {
+  "title_status": "clear",
+  "current_owner": "JOSHUA ALCALA",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "0232341670120|AMANDABERMELMARIA|": {
+  "title_status": "clear",
+  "current_owner": "AMANDA MARIA BERMEL",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "0131250801690|TARASENKOVALERIY|": {
+  "title_status": "clear",
+  "current_owner": "VALERIY TARASENKO; OLHA CHERNII",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "3021270345070|CHINNONSOIGBOKWEOKORONKWO|": {
+  "title_status": "clear",
+  "current_owner": "CHINNONSO OKORONKWO IGBOKWE",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "18424415066290083|AMADORMICHAELSEMIDEY|": {
+  "title_status": "clear",
+  "current_owner": "RINCON JAIMES PAULA A & SEMIDEY AMADOR MICHAEL R",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "00424412220002070|IRWINMARY|": {
+  "title_status": "clear",
+  "current_owner": "IRWIN MARY & NIELSEN MATTHEW",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "68434204190040660|SMITHSTEVE|": {
+  "title_status": "clear",
+  "current_owner": "SMITH STEVE M",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-05"
+ },
+ "0131250801690|CHERNIIOLHATARASENKOVALERIY|": {
+  "title_status": "clear",
+  "current_owner": "VALERIY TARASENKO; OLHA CHERNII",
+  "flip_date": "",
+  "evidence": "LIVE appraiser owner still matches the defendant; no post-filing Certificate of Title",
+  "ts": "2026-09-06"
  }
 }

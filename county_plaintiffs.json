@@ -1327,5 +1327,695 @@
   "is_bank_first": false,
   "case_type": "Condominium Action",
   "defendant": "Diane Perlman, et al"
+ },
+ "CACE-26-004849": {
+  "plaintiff": "Granville Condominium A Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Roberta Milkman Bloom, as Co-Trustees of the David, et al"
+ },
+ "COCE-25-018211": {
+  "plaintiff": "CYPRESS M MASTER COMMUNITY ASSOCIATION, INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "Adriana Labrador, et al"
+ },
+ "COCE-25-047212": {
+  "plaintiff": "THE HAMPTONS OF NO. LAUDERDALE HOMEOWNERS ASSOC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "DOROTHY JEAN VIRGO"
+ },
+ "COCE-26-003308": {
+  "plaintiff": "SUNRISE LAKES CONDOMINIUM PHASE 4, INC.1, a Florid",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "SANDRA DE CASTRO, et al"
+ },
+ "COCE-26-030843": {
+  "plaintiff": "ATLANTIC SHORES CONDOMINIUM ASSOCIATION, INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "SUSAN NEWMAN"
+ },
+ "CONO-25-069601": {
+  "plaintiff": "Las Vistas in Inverrary Condominium Association",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $30,001 - $50,000",
+  "defendant": "Lawanda Cadwell Joseph, et al"
+ },
+ "CONO-26-046833": {
+  "plaintiff": "Coral Springs Professional Campus Master Associati",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "Marigold Trust LLC"
+ },
+ "COWE-24-017753": {
+  "plaintiff": "SILVERLAKES COMMUNITY ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "KAREN S SIMPSON, et al"
+ },
+ "COWE-25-015279": {
+  "plaintiff": "Southwind Cove Homeowners Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "Demarius Bradwell, et al"
+ },
+ "CACE-19-002281": {
+  "plaintiff": "Bank Of New York Mellon",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other =/>$250,000",
+  "defendant": "Richard A Vest, et al"
+ },
+ "CACE-23-001074": {
+  "plaintiff": "Shaker Village Condominium Association, Inc.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Curl H Baptiste"
+ },
+ "CACE-23-021795": {
+  "plaintiff": "US BANK TRUST COMPANY, N.A., as Trustee",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other Fore $250,000 or More",
+  "defendant": "Travelers Xpress Services, Inc., a Florida corp., et al"
+ },
+ "CACE-23-022698": {
+  "plaintiff": "The Mortgage Firm, Inc.",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "Luis Valdez, et al"
+ },
+ "CACE-24-004199": {
+  "plaintiff": "DEUTSCHE BANK NATIONAL TRUST COMPANY",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Carolyn O Butler, et al"
+ },
+ "CACE-24-009911": {
+  "plaintiff": "American Portfolio Mortgage Corporation",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Jeffrey L Esters, et al"
+ },
+ "CACE-24-012407": {
+  "plaintiff": "Longbridge Financial Llc",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "Herbert H. Jones, et al"
+ },
+ "CACE-25-010871": {
+  "plaintiff": "WILMINGTON SAVINGS FUND SOCIETY FSB",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "LEONOR A SANCHEZ, et al"
+ },
+ "CACE-25-011073": {
+  "plaintiff": "FREEDOM MORTGAGE CORPORATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "UNKNOWN SPOUSE OF ANTHONY M CHURCH, et al"
+ },
+ "CACE-25-014482": {
+  "plaintiff": "LAKEVIEW LOAN SERVICING, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Sunshine Lapaix, et al"
+ },
+ "CACE-25-017065": {
+  "plaintiff": "FREEDOM MORTGAGE CORPORATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K",
+  "defendant": "UNKNOWN SPOUSE OF CHARLES PADUA, et al"
+ },
+ "CACE-25-017567": {
+  "plaintiff": "PennyMac Loan Services, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Cherline Joasil, et al"
+ },
+ "CACE-25-017831": {
+  "plaintiff": "Carrington Mortgage Services LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "United States of America, et al"
+ },
+ "CACE-25-018971": {
+  "plaintiff": "Lakeview Loan Servicing, Llc",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "Bg Ventures Investment Real Estate Llc Inc, et al"
+ },
+ "CACE-26-006373": {
+  "plaintiff": "MARRIOTT OWNERSHIP RESORTS INC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Jonathan K Van patten, et al"
+ },
+ "CACE-24-008626": {
+  "plaintiff": "CARRINGTON MORTGAGE SERVICES LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Yvette Zamar, et al"
+ },
+ "CACE-25-001970": {
+  "plaintiff": "THE FALLS OF INVERRARY CONDOMINIUMS INC",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Russell Alvaranga"
+ },
+ "CACE-25-004433": {
+  "plaintiff": "WINTRUST MORTGAGE A DIVISION OF BARRINGTON BANK & TRUST COMPANY, N.A.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Omar Green, et al"
+ },
+ "CACE-25-007430": {
+  "plaintiff": "WILMINGTON SAVINGS FUND SOCIETY, FSB, NOT IN ITS INDIVIDUAL CAPACITY BUT SOLELY AS OWNER",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K",
+  "defendant": "MONICA BARROW, et al"
+ },
+ "CACE-25-009704": {
+  "plaintiff": "U S Bank Trust National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Rairhard A Rosas, et al"
+ },
+ "CACE-25-010173": {
+  "plaintiff": "THE BANK OF NEW YORK MELLON",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "BETH ARONSON, et al"
+ },
+ "CACE-25-013018": {
+  "plaintiff": "DEUTSCHE BANK NATIONAL TRUST COMPANY",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "CONTINENTAL HERITAGE INSURANCE COMPANY, et al"
+ },
+ "CACE-25-016452": {
+  "plaintiff": "NATIONSTAR MORTGAGE LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $50,000 or Less",
+  "defendant": "VIVIAN M. ACEVEDO, et al"
+ },
+ "CACE-25-018117": {
+  "plaintiff": "PNC BANK, NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Willie James Witherspoon, et al"
+ },
+ "CACE-25-019890": {
+  "plaintiff": "CORAL SPRINGS TOWER CLUB CONDOMINIUM ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "RAMIRO RICAURTE JR, et al"
+ },
+ "CACE-26-002889": {
+  "plaintiff": "Newrez LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Alex E Gonzalez, et al"
+ },
+ "CACE-26-004123": {
+  "plaintiff": "DOT FUND LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "PROGRESSIVE REALTY GROUP, LLC, et al"
+ },
+ "CACE-22-017327": {
+  "plaintiff": "DLC MORTGAGES II LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "Majedul Haque, et al"
+ },
+ "CACE-23-015220": {
+  "plaintiff": "U.S BANK TRUST NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Lloyd Edwards, et al"
+ },
+ "CACE-23-016521": {
+  "plaintiff": "Stonebrook Estates Community Association, Inc.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Renal Roberty, et al"
+ },
+ "CACE-24-005837": {
+  "plaintiff": "THE SECRETARY OF THE US DEPARTMENT OF HOUSING",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "Maselah Surmaty, et al"
+ },
+ "CACE-24-007738": {
+  "plaintiff": "U S BANK TRUST NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "BLUEGRASS LAKES COMMUNITY MASTER ASSOCIATION INC, et al"
+ },
+ "CACE-24-018396": {
+  "plaintiff": "SECRETARY OF THE US DEPT OF HOUSING AND URBAN DEVELOPMENT",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "UNKNOWN HEIRS, devisees, grantees, assignees, lienors, creditors, trustees, or other claimants claiming by, through, under or against Lillian Hicks, Deceased, et al"
+ },
+ "CACE-25-000697": {
+  "plaintiff": "NOLA LOFTS CONDOMINIUM ASSOCIATION I INC",
+  "is_bank_first": false,
+  "case_type": "Condominium Action",
+  "defendant": "John Papagno, et al"
+ },
+ "CACE-25-003936": {
+  "plaintiff": "Pentagon Federal Credit Union",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K",
+  "defendant": "Ancel James, et al"
+ },
+ "CACE-25-010237": {
+  "plaintiff": "POND APPLE PLACE IV CONDOMINIUM ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "SHERENE ADDERLEY, et al"
+ },
+ "CACE-25-011731": {
+  "plaintiff": "U.S. BANK NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "DAVID L HODGES, et al"
+ },
+ "CACE-25-016095": {
+  "plaintiff": "UMB Bank, National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Hernan O Bermudez, et al"
+ },
+ "CACE-25-018153": {
+  "plaintiff": "Freedom Mortgage Corporation",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K",
+  "defendant": "Richard Zeigler, et al"
+ },
+ "CACE-25-019800": {
+  "plaintiff": "MCLP Asset Company, Inc.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Santos A Rodriguez, et al"
+ },
+ "CACE-25-019860": {
+  "plaintiff": "SELENE FINANCE LP",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K",
+  "defendant": "CHRISTOPHER MONROE, et al"
+ },
+ "COCE-25-042543": {
+  "plaintiff": "LAKEBRIDGE HOMEOWNERS ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "MARIE C GERMAIN, et al"
+ },
+ "COCE-25-059723": {
+  "plaintiff": "TOPAZ NORTH CONDOMINIUM ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "DAVID MIZRAHI, et al"
+ },
+ "COCE-25-088296": {
+  "plaintiff": "QUADOMAIN CONDOMINIUM ASSOCIATION INC.",
+  "is_bank_first": false,
+  "case_type": "CC Damages more than $30,000 up to $50,000",
+  "defendant": "THE ESTATE OF RAFAEL A. BAPTISTA PARRA, et al"
+ },
+ "COCE-26-028696": {
+  "plaintiff": "Colonnades Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "AMEULIC LLC"
+ },
+ "CONO-26-005119": {
+  "plaintiff": "VILLAGE TOWNHOUSE POMPANO BEACH INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "ZALIM BACCHUS, et al"
+ },
+ "CONO-26-019993": {
+  "plaintiff": "Cascata at Mira Lago Neighborhood Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "Erica Elaine Silva Souza, et al"
+ },
+ "COSO-26-017424": {
+  "plaintiff": "NATURA CONDOMINIUM NO 3 ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $15,001 - $30,000",
+  "defendant": "Robin David Towles"
+ },
+ "CACE-21-020493": {
+  "plaintiff": "PNC Bank National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Leon K. Lewis, et al"
+ },
+ "CACE-22-013607": {
+  "plaintiff": "Mortgage Assets Management, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop NHmstd Res Fore $50K to $250K",
+  "defendant": "Yvonne Graves, et al"
+ },
+ "CACE-24-010887": {
+  "plaintiff": "Third Birch LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Adriana C Lopez, et al"
+ },
+ "CACE-25-009539": {
+  "plaintiff": "UNITED WHOLESALE MORTGAGE, LLC.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "VLADIMIR MOISE, et al"
+ },
+ "CACE-25-010009": {
+  "plaintiff": "Athene Annuity & Life Company",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Joseph Delice, et al"
+ },
+ "CACE-25-014325": {
+  "plaintiff": "PARKER DORADO CONDOMINIUM ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Sheva Fischtein, et al"
+ },
+ "CACE-25-017102": {
+  "plaintiff": "THE MANORS OF INVERRARY XI ASSOCIATION, INC",
+  "is_bank_first": false,
+  "case_type": "Condominium Action",
+  "defendant": "John junior Masieu, et al"
+ },
+ "CACE-25-019549": {
+  "plaintiff": "THE MONEY SOURCE, INC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "JO ANN BYRD, et al"
+ },
+ "CACE-26-000937": {
+  "plaintiff": "Operating Association for Palm Lakes Condominium",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Lawrence R Aronson, et al"
+ },
+ "CACE-22-011023": {
+  "plaintiff": "The Marquesa at Pembroke Condominium",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Chris Powell"
+ },
+ "CACE-22-015222": {
+  "plaintiff": "Bank Of New York Mellon",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Martha C Puerto Swinson, et al"
+ },
+ "CACE-22-018972": {
+  "plaintiff": "U.S. Bank NA",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "Pnc Bank NA As Successor In Interest To National C, et al"
+ },
+ "CACE-23-022042": {
+  "plaintiff": "GERALD HERTZ",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "ANASTASI MASONRY CONSTRUCTION, LLC, et al"
+ },
+ "CACE-25-003650": {
+  "plaintiff": "Overlook Condominium Association Inc",
+  "is_bank_first": false,
+  "case_type": "Condominium Action",
+  "defendant": "Charlene Pennino"
+ },
+ "CACE-25-007635": {
+  "plaintiff": "HELM BANK USA",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "AMENT INTERNATIONAL VENTURE ONE, LLC, et al"
+ },
+ "CACE-24-002257": {
+  "plaintiff": "Nations Direct Mortgage, Llc",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Luis Vega, et al"
+ },
+ "CACE-25-006308": {
+  "plaintiff": "TH MSR HOLDINGS LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "UNKNOWN TENANT IN POSSESSION OF THE SUBJECT PROPERTY, et al"
+ },
+ "CACE-25-010994": {
+  "plaintiff": "LONGBRIDGE FINANCIAL, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "VICTOR CALIXTE, et al"
+ },
+ "CACE-25-016495": {
+  "plaintiff": "CYPRESS CHASE CONDOMINIUM ASSOCIATION B INC",
+  "is_bank_first": false,
+  "case_type": "Condominium Action",
+  "defendant": "Joyce Gayle, et al"
+ },
+ "CACE-25-016930": {
+  "plaintiff": "LAKE EMERALD OWNERS ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore Between $50,000 and $250,000",
+  "defendant": "Alberto Matos"
+ },
+ "CACE-25-017801": {
+  "plaintiff": "DOT Fund, LLC.",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "CR Property Group, LLC., et al"
+ },
+ "CACE-15-021344": {
+  "plaintiff": "Bayview Loan Servicing LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore - >$50K - <$250,000",
+  "defendant": "Rosemary Morales, et al"
+ },
+ "CACE-24-010865": {
+  "plaintiff": "THE SECRETARY OF THE US DEPARTMENT OF HOUSING AND URBAN DEVELOPMENT",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "unknown heirs/against, Lottie Rabinowitz, et al"
+ },
+ "CACE-24-014318": {
+  "plaintiff": "Deutsche Bank National Trust Company",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Renee Dillard, et al"
+ },
+ "CACE-25-009518": {
+  "plaintiff": "PENNYMAC LOAN SERVICES, LLC, et al",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "JEAN CARLOS APONTE, et al"
+ },
+ "CACE-26-002964": {
+  "plaintiff": "JPMORGAN CHASE BANK NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Elizabeth Ortiz, et al"
+ },
+ "CACE-25-006826": {
+  "plaintiff": "Bank of America, N.A.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Martelli Shnidley Adeka, et al"
+ },
+ "CACE-25-012938": {
+  "plaintiff": "US BANK TRUST NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "RODNEY SANOIR, et al"
+ },
+ "CACE-25-016673": {
+  "plaintiff": "Truist Bank",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Pjerin Shkurti, et al"
+ },
+ "CACE-26-000968": {
+  "plaintiff": "NEWTEK BANK, NATIONAL ASSOCIATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other Fore $250,000 or More",
+  "defendant": "MUTI ENTERPRISE, INC., et al"
+ },
+ "CACE-26-009250": {
+  "plaintiff": "Everglades House Condominium Apartments Inc",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore Between $50,000 and $250,000",
+  "defendant": "Casa Grove Isle LLC"
+ },
+ "CACE-24-006029": {
+  "plaintiff": "Wells Fargo Bank N A",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Adrian Jagdeosingh, et al"
+ },
+ "CACE-25-008146": {
+  "plaintiff": "SECURITYNATIONAL MORTGAGE COMPANY",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "KRISTIE YAMBER, et al"
+ },
+ "CACE-25-013905": {
+  "plaintiff": "PLAZA SOUTH ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Condominium Action",
+  "defendant": "THOMAS CARNEVALE, et al"
+ },
+ "CACE-25-018351": {
+  "plaintiff": "OAKLAND CLUB, INC.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Eric Van Macklin, et al"
+ },
+ "CACE-26-002980": {
+  "plaintiff": "LIGHTHOUSE POINT PLAZA CONDOMINIUM APARTMENTS, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "KATHLEEN J MAURO"
+ },
+ "COCE-25-087427": {
+  "plaintiff": "SUNRISE LAKES CONDOMINIUM ASSOCIATION PHASE I INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "UNKNOWN HEIRS OF CHARLES ERVAY, et al"
+ },
+ "COCE-25-091196": {
+  "plaintiff": "Evergreen Lakes Home Owners Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $15,001 - $30,000",
+  "defendant": "Adrien Blackwell, et al"
+ },
+ "COCE-26-001593": {
+  "plaintiff": "APPLEWOOD VILLAGE IV CONDOMINIUM ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "TIFFANY LONGSTREET, et al"
+ },
+ "COCE-26-005749": {
+  "plaintiff": "SAN REMO HOMEOWNERS COMMUNITY ASSOCIATION, INC.",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "MEISHI S HARVEY, et al"
+ },
+ "COCE-26-041640": {
+  "plaintiff": "Westview Estate Homeowners Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "Eileen Perez, et al"
+ },
+ "CONO-25-051677": {
+  "plaintiff": "HILLSBORO LANDINGS CONDOMINIUM NO TWO INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $30,001 - $50,000",
+  "defendant": "JOHN FERRANTE"
+ },
+ "CONO-25-072217": {
+  "plaintiff": "The Lakes of Inverrary Condominiums Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $30,001 - $50,000",
+  "defendant": "Odiane Medacier, et al"
+ },
+ "CONO-26-013501": {
+  "plaintiff": "THE LAKES HOMEOWNERS ASSOCIATION INC",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $15,001 - $30,000",
+  "defendant": "BRYAN OCASIO, et al"
+ },
+ "COSO-25-077026": {
+  "plaintiff": "Les Chateaux Village Homes Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $15,001 - $30,000",
+  "defendant": "Dayanara Hernandez, et al"
+ },
+ "COWE-25-090207": {
+  "plaintiff": "Silverlakes Community Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "Andres Perez, et al"
+ },
+ "CACE-26-001498": {
+  "plaintiff": "HI GREENS OF INVERRARY, INC.",
+  "is_bank_first": true,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Jose N Zepeda, et al"
+ },
+ "CACE-26-001742": {
+  "plaintiff": "Wells Fargo Bank N A",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore Between $50,000 and $250,000",
+  "defendant": "Sissi Sinning, et al"
+ },
+ "COCE-26-040278": {
+  "plaintiff": "Weldon Condominium E Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Property/Mortgage Foreclosure $1 - $15,000",
+  "defendant": "Donna J Flanagan"
+ },
+ "CACE-18-014899": {
+  "plaintiff": "U.S. Bank Trust National Association as Trustee for ABS Loan Trust V",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore - >$50K - <$250,000",
+  "defendant": "Abdallah, et al"
+ },
+ "CACE-24-001280": {
+  "plaintiff": "Wilmington Savings Fund Society",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Marlon Fleming, et al"
+ },
+ "CACE-25-006038": {
+  "plaintiff": "WISTERIA COURT CONDOMINIUM ASSOCIATION",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore Between $50,000 and $250,000",
+  "defendant": "Robert D Kimball"
+ },
+ "CACE-25-011340": {
+  "plaintiff": "Plantation Club Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Gaffney Neptune, et al"
+ },
+ "CACE-25-014602": {
+  "plaintiff": "FREEDOM MORTGAGE CORPORATION",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "Antonella Marianna Amyach briceno, et al"
+ },
+ "CACE-25-015407": {
+  "plaintiff": "United Community Bank",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "Alperose LLC, et al"
+ },
+ "CACE-25-015418": {
+  "plaintiff": "U.S. Bank Trust Company, National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop NonHomestead Res Fore $250,000 or More",
+  "defendant": "Model FLip, LLC, et al"
+ },
+ "CACE-25-015430": {
+  "plaintiff": "U.S. Bank Trust Company, National Association",
+  "is_bank_first": true,
+  "case_type": "Real Prop Comm Fore $250,000 or More",
+  "defendant": "Walabe LLC, et al"
+ },
+ "CACE-25-016395": {
+  "plaintiff": "Ivanhoe West at Century Village, Condominium #II Association, Inc.",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Raymond Vigil, et al"
  }
 }
