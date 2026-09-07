@@ -21,7 +21,7 @@ Run `python cadence.py --dry-run` first: prints exactly what it would send, to w
 reply check would do — without touching the mail server. gmail.key = one line:  you@gmail.com:apppassword
 """
 import argparse, json, os, re, smtplib, ssl, sys, time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from email.utils import formataddr, parseaddr
 
@@ -33,6 +33,59 @@ QUEUE = os.path.join(HERE, 'cadence_queue.json')
 STATE = os.path.join(HERE, 'cadence_state.json')
 KEY = os.path.join(HERE, 'gmail.key')
 OPTOUTS = os.path.join(HERE, 'optouts.json')
+
+# ── LANE MAP (wired 2026-09-07) ────────────────────────────────────────────────────────────────
+# Until today this module sent every follow-up as whatever `gmail.key` held, which for a month was
+# the PERSONAL Gmail — so the same owner got a cold email from a BSG domain and its follow-up from
+# a personal address. Now it uses senders.json exactly like the bridge does.
+#
+# 🔴 THE REASON THIS IMPORTS INSTEAD OF COPYING. The per-alias warm-up cap is metered off
+# mail_sent.json by _alias_sent_today(): it counts rows whose `from` is the alias. cadence has never
+# written to that ledger at all, so a private copy of the lane logic would send from bsgfl.com while
+# the bridge still reported 0/5 — two independent senders on one warming alias, and the ramp becomes
+# a number nobody is enforcing. Sharing the FUNCTIONS is not enough; the ledger WRITE below is what
+# makes the cap real. Same reason the mail/text ledgers exist at all.
+#
+# send_server only binds a port under `if __name__ == '__main__'`, so importing it is side-effect
+# free. If the import ever fails this module falls back to its original behaviour rather than
+# breaking a scheduled job — announced loudly, because silence would look like the lanes are on.
+try:
+    import send_server as _ss
+    _LANES_OK = True
+except Exception as _e:                                    # pragma: no cover - defensive
+    _ss, _LANES_OK = None, False
+    print('cadence: send_server import failed (%s) — sending as the login, NO lane map, NO ledger '
+          'row, NO warm-up cap.' % (str(_e)[:80],))
+
+
+def _cadence_lane(entry, today):
+    """Sale-date proximity -> Morning Worker lane, so a follow-up leaves from the SAME domain the
+    lead's cold email did. Mirrors WORKER_LANES: urgent <=7d, active 8-45d, early otherwise.
+
+    'replied' is deliberately unreachable here: a reply CANCELS the sequence (status 'replied'), so
+    by construction nothing cadence sends is going to someone who wrote back. No auction date, or one
+    already passed, falls to `early` — the coldest lane and the slowest ramp, which is the
+    conservative direction for a lead whose timeline we cannot read."""
+    raw = str(entry.get('auction') or '').strip()
+    if not raw:
+        return 'early'
+    d = None
+    for f in ('%Y-%m-%d', '%m/%d/%Y', '%m-%d-%Y'):
+        try:
+            d = datetime.strptime(raw, f).date()
+            break
+        except ValueError:
+            continue
+    if not d:
+        return 'early'
+    days = (d - today).days
+    if days < 0:
+        return 'early'
+    if days <= 7:
+        return 'urgent'
+    if days <= 45:
+        return 'active'
+    return 'early'
 
 # STOP DETECTION IS NOT LOCAL ANY MORE. This module used to own the regex below, and earlier today
 # (d53955d) I made its verdict permanent: a detected stop now writes optouts.json and the
@@ -385,11 +438,21 @@ def main():
 
     # 2) send due steps
     sent = 0
+    capped = {}
     ctx = ssl.create_default_context()
     smtp = None
-    if cred and not args.dry_run:
+    # The legacy connection is only built when the lane path is unavailable — _smtp_send opens its
+    # own per message (what the bridge does), and the ramp caps bound the daily volume anyway.
+    if cred and not args.dry_run and not _LANES_OK:
         smtp = smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx)
         smtp.login(*cred)
+    _cfg = _ss._load_senders() if _LANES_OK else {}
+    # The map only applies when the LOGIN can send as the aliases (bsg_gmail.key). On the old
+    # personal gmail.key Google rewrites From, so senders_active is False and this stays as it was.
+    _map_on = bool(_LANES_OK and cred and _cfg and _ss._senders_active(cred[0], _cfg))
+    if _LANES_OK and cred and not _map_on:
+        print(f'  lane map OFF — login {cred[0]} cannot send as the aliases; '
+              f'everything leaves as the login (copy bsg_gmail.key to enable).')
     for c, s in active.items():
         due = s.get('next') or str(today)
         if due > str(today):
@@ -399,17 +462,58 @@ def main():
             s['status'] = 'completed'
             continue
         subj, body = steps(s, sender)[step]
+        lane = _cadence_lane(s, today)
+        alias = _ss._lane_from(_cfg, lane) if _map_on else ''
         if args.dry_run or not cred:
-            print(f"  [dry-run] {s['email']}  step {step+1}/4  '{subj}'")
+            _as = f'  [{lane} -> {alias}]' if alias else f'  [{lane} -> login]'
+            print(f"  [dry-run] {s['email']}  step {step+1}/4  '{subj}'{_as}")
             print('    ' + body.replace('\n', ' ')[:130] + '…')
             continue
-        msg = MIMEText(body, 'plain', 'utf-8')
-        msg['Subject'] = subj
-        msg['From'] = formataddr((sender.get('name') or cred[0], cred[0]))
-        msg['To'] = s['email']
-        smtp.send_message(msg)
+        # WARM-UP CAP, metered off the SHARED ledger so cadence and the bridge draw on one budget.
+        # Skipped WITHOUT advancing the step: the touch stays due and goes out tomorrow rather than
+        # being silently consumed. That is the whole difference between a paced ramp and a lost step.
+        if alias:
+            used, cap = _ss._alias_sent_today(alias), _ss._ramp_cap(_cfg, alias)
+            if used >= cap:
+                capped[alias] = capped.get(alias, 0) + 1
+                continue
+        mid = ''
+        if _LANES_OK:
+            # Reuses the bridge's own sender: alias in From AND the envelope, Message-ID stamped
+            # with the alias domain. from_addr=None reproduces the old login-From behaviour exactly.
+            mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
+                                 subj, body, from_addr=alias or None)
+        else:
+            msg = MIMEText(body, 'plain', 'utf-8')
+            msg['Subject'] = subj
+            msg['From'] = formataddr((sender.get('name') or cred[0], cred[0]))
+            msg['To'] = s['email']
+            smtp.send_message(msg)
         sent += 1
-        print(f"  sent step {step+1}/4 -> {s['email']}  ({s['owner']})")
+        # THE LEDGER ROW — same shape the bridge writes, and the reason the cap above can work at
+        # all. `from` is what _alias_sent_today counts; `message_id` is what makes the row count as
+        # a real send (_mail_ledger ignores rows without one). Never fatal: the mail is already
+        # delivered by this point, so a ledger failure is reported, not raised.
+        if _LANES_OK:
+            try:
+                _ss._append_ledger({
+                    'd': str(today),
+                    'ts_utc': datetime.now(timezone.utc).isoformat(),
+                    'ch': 'email',
+                    'from': alias or cred[0], 'to': s['email'], 'bcc': '',
+                    'login': cred[0],
+                    'owner': s.get('owner') or '', 'case': c, 'addr': s.get('addr') or '',
+                    'lang': 'en', 'portfolio': [],
+                    'subj': subj, 'body_len': len(body),
+                    'message_id': mid,
+                    'test_mode': False,
+                    'lane': 'cadence', 'wl': lane,
+                })
+            except Exception as e:
+                print(f'  WARNING: {s["email"]} was emailed (mid={mid}) but the ledger write '
+                      f'failed ({str(e)[:90]}) — this send will not count toward the alias cap.')
+        print(f"  sent step {step+1}/4 -> {s['email']}  ({s['owner']})"
+              + (f'  as {alias} [{lane}]' if alias else ''))
         s['log'].append({'d': str(today), 'ev': f'sent step {step+1}'})
         gaps = [0, 2, 2, 3]
         s['step'] = step + 1
@@ -419,6 +523,8 @@ def main():
             s['next'] = str(today + timedelta(days=gaps[s['step']]))
     if smtp:
         smtp.quit()
+    for a, n in sorted(capped.items()):
+        print(f'  warm-up cap reached on {a} — {n} step(s) held for tomorrow (not consumed).')
 
     json.dump(state, open(STATE, 'w', encoding='utf-8'), indent=1)
     print(f'done. {sent} sent, {sum(1 for s in state.values() if s.get("status")=="active")} active, '
