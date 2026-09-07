@@ -49,7 +49,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 KEY_FILE = os.path.join(HERE, 'gmail.key')
+# The company login (alejandro@bsgflorida.com + app password). Preferred over gmail.key when
+# present: it is the only login that can send AS the lane aliases in senders.json, because Gmail
+# signs DKIM with the alias domain only for aliases registered under that account's Send-mail-as.
+BSG_KEY_FILE = os.path.join(HERE, 'bsg_gmail.key')
 SENDER_FILE = os.path.join(HERE, 'sender.json')
+SENDERS_FILE = os.path.join(HERE, 'senders.json')     # lane -> From address + warm-up ramp
 SENT_LEDGER = os.path.join(HERE, 'mail_sent.json')
 OPTOUT_FILE = os.path.join(HERE, 'optouts.json')
 NOTES_FILE = os.path.join(HERE, 'worker_notes.json')
@@ -63,9 +68,11 @@ _NOTES_LOCK = threading.Lock()
 # ---------------------------------------------------------------- credential + sender loading
 def _load_credentials():
     env_pw = (os.environ.get('GMAIL_APP_PASSWORD') or '').strip()
-    if not os.path.exists(KEY_FILE):
+    key_file = BSG_KEY_FILE if os.path.exists(BSG_KEY_FILE) else KEY_FILE
+    if not os.path.exists(key_file):
         return None, env_pw or None
-    raw = open(KEY_FILE, encoding='utf-8').read().strip()
+    # PowerShell `echo "user:pw" > file` keeps the quotes; tolerate them rather than fail auth.
+    raw = open(key_file, encoding='utf-8').read().strip().strip('"').strip("'")
     if ':' in raw:
         user, pw = raw.split(':', 1)
         user, pw = user.strip().lower(), pw.strip()
@@ -83,6 +90,73 @@ def _load_sender():
         return json.load(open(SENDER_FILE, encoding='utf-8'))
     except Exception:
         return {}
+
+
+def _load_senders():
+    """senders.json: which From address each Morning Worker lane uses, and the warm-up ramp.
+
+    ADDED 2026-09-07. Until today every send left as the login account, which for a month was
+    Alejandro's PERSONAL Gmail — 247 cold sends in the last four days from the address that owns
+    Workspace admin, Search Console and the Business Profile. Two brand-adjacent domains now exist
+    as Workspace alias domains with their own SPF/DKIM/DMARC, verified end-to-end (DKIM d= is the
+    alias domain, no X-Google-Original-From). This map puts each lane on the domain whose
+    reputation it deserves: a reply and a sale-inside-7-days message from the brand, the bulk
+    ACTIVE lane from biscaynesolutionsgroup.com, the fresh-filing EARLY lane (largest, coldest)
+    from bsgfl.com. Absent file = old behaviour. Returns {} on any error; callers treat {} as off."""
+    if not os.path.exists(SENDERS_FILE):
+        return {}
+    try:
+        d = json.load(open(SENDERS_FILE, encoding='utf-8'))
+        return d if isinstance(d, dict) and isinstance(d.get('lanes'), dict) else {}
+    except Exception:
+        return {}
+
+
+def _senders_active(user, cfg):
+    """The lane map only applies when the LOGIN can send as the aliases. A personal-Gmail login
+    would have its From silently rewritten by Google, so the map is off for it — and /health
+    says so, rather than letting the operator believe the domains are in use."""
+    if not (user and cfg):
+        return False
+    main = str(cfg.get('main_domain') or 'bsgflorida.com').lower()
+    return user.lower().endswith('@' + main)
+
+
+def _ramp_cap(cfg, from_addr, today=None):
+    """Sends allowed today FROM this alias. Brand-domain addresses get the flat main_domain_cap;
+    warming aliases get the ramp step for (today - ramp_start). The ramp's last row holds."""
+    today = today or dt.date.today()
+    main = str(cfg.get('main_domain') or 'bsgflorida.com').lower()
+    if from_addr.lower().endswith('@' + main):
+        return int(cfg.get('main_domain_cap') or 40)
+    try:
+        start = dt.date.fromisoformat(str(cfg.get('ramp_start')))
+    except Exception:
+        start = today
+    day = max(1, (today - start).days + 1)
+    cap = 0
+    for row in cfg.get('ramp') or []:
+        cap = int(row.get('per_day') or 0)
+        if day <= int(row.get('through_day') or 0):
+            break
+    return cap
+
+
+def _lane_from(cfg, lane):
+    lanes = cfg.get('lanes') or {}
+    addr = lanes.get(str(lane or '').lower()) or lanes.get('default') or ''
+    return addr.strip().lower() if _EMAIL_RE.match(str(addr).strip()) else ''
+
+
+def _alias_sent_today(from_addr):
+    """Real (non-test, non-failed) sends that left FROM this alias today, off the ledger."""
+    today = dt.date.today().isoformat()
+    n = 0
+    for e in _load_ledger():
+        if (e.get('d') == today and str(e.get('from') or '').lower() == from_addr
+                and e.get('message_id') and not e.get('test_mode') and not e.get('error')):
+            n += 1
+    return n
 
 
 def _optout_set():
@@ -458,8 +532,12 @@ def _release_recipients(addrs):
 
 
 # ---------------------------------------------------------------- SMTP
-def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None):
+def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None, from_addr=None):
     """bcc carries the owner's OTHER traced addresses.
+
+    from_addr (2026-09-07): the lane alias to put in From: and the envelope. Login stays `user`;
+    Gmail accepts the alias because it is registered under that account's Send-mail-as and signs
+    DKIM with the alias domain. None = From is the login, exactly the old behaviour.
 
     Skiptrace returns several addresses per lead and only one is usually live, so reaching all of
     them materially raises the odds the owner ever sees the letter. They must be BCC, never a
@@ -474,13 +552,14 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None)
     and mailing a partner a link to a file on Alejandro's own Desktop is useless to them. Paths are
     resolved and read here; a missing/unreadable file raises so the caller sees a real 502 rather
     than silently mailing a workup with nothing attached."""
+    sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
-    msg['From'] = f'{from_display} <{user}>' if from_display else user
+    msg['From'] = f'{from_display} <{sender}>' if from_display else sender
     msg['To'] = to_addr
     if bcc:
         msg['Bcc'] = bcc
     msg['Subject'] = subj
-    msg['Message-ID'] = make_msgid(domain=user.split('@', 1)[-1])
+    msg['Message-ID'] = make_msgid(domain=sender.split('@', 1)[-1])
     msg['Date'] = formatdate(localtime=True)
     msg.set_content(body)
     for path in (attach or []):
@@ -496,7 +575,7 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None)
     ctx = ssl.create_default_context()
     with smtplib.SMTP_SSL('smtp.gmail.com', 465, context=ctx, timeout=60) as s:
         s.login(user, pw)
-        s.send_message(msg)
+        s.send_message(msg, from_addr=sender)
     return msg['Message-ID']
 
 
@@ -579,6 +658,14 @@ class Handler(BaseHTTPRequestHandler):
                 # banner uses this to say "N addresses still sendable" instead of "all stop".
                 'proven_pool': len(_proven_deliverable()) if _bh['rate'] > BOUNCE_CEILING else None,
                 'probe_quota_left': _probe_quota_left() if _bh['rate'] > BOUNCE_CEILING else None,
+                # Lane -> From map and today's per-alias warm-up use (senders.json). senders_active
+                # false = the login cannot send as the aliases (old personal gmail.key), so every
+                # send still leaves as `user`. The board shows this next to the cap.
+                'senders_active': _senders_active(user, _load_senders()),
+                'senders': (_load_senders().get('lanes') or {}),
+                'alias_today': {a: [_alias_sent_today(a), _ramp_cap(_load_senders(), a)]
+                                for a in sorted(set((_load_senders().get('lanes') or {}).values()))}
+                               if _senders_active(user, _load_senders()) else {},
             })
         else:
             self._json(404, {'ok': False, 'err': 'unknown path'})
@@ -977,9 +1064,33 @@ class Handler(BaseHTTPRequestHandler):
         snd = _load_sender()
         from_display = (snd.get('name') or '').strip()
 
+        # ---- LANE -> FROM ADDRESS + per-alias warm-up cap (senders.json, 2026-09-07) ----------
+        # meta.wl is the Morning Worker lane (replied/urgent/active/early). Test sends (advisor
+        # briefs, workups) are 1:1 and always leave from the login, never a warming alias.
+        _cfg = _load_senders()
+        from_addr = None
+        if _senders_active(user, _cfg) and not meta.get('test'):
+            _wl = str(meta.get('wl') or '').lower()
+            _cand = _lane_from(_cfg, _wl)
+            if _cand and _cand != user:
+                _acap = _ramp_cap(_cfg, _cand)
+                _asent = _alias_sent_today(_cand)
+                if _asent >= _acap:
+                    _release_recipients(_claimed)
+                    # 409+skip: the worker logs the sentence and advances to the next lead. It is a
+                    # skip, not a stop, because other lanes may still have room on their own alias.
+                    return self._json(409, {
+                        'ok': False, 'skip': True, 'alias_cap': True,
+                        'err': (f'{_cand} is at its warm-up cap for today ({_asent}/{_acap}) — '
+                                f'the {_wl or "default"} lane resumes tomorrow'),
+                        'sent_today': _sent_today_count(), 'cap': self.daily_cap})
+                from_addr = _cand
+            elif _cand == user:
+                from_addr = None      # brand-domain lanes: From is the login itself
+
         # ---- send ----
         try:
-            mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach)
+            mid = _smtp_send(user, pw, from_display, to, subj, body, bcc, attach, from_addr=from_addr)
         except smtplib.SMTPAuthenticationError as e:
             _release_recipients(_claimed)
             return self._json(401, {'ok': False, 'err': f'SMTP AUTH failed: {e}'})
@@ -1016,7 +1127,10 @@ class Handler(BaseHTTPRequestHandler):
                 # bcc is recorded because _recipients_today() meters Gmail's real limit off it.
                 # Without it every multi-address send would count as one recipient and the ceiling
                 # would never bind — the exact failure the ceiling exists to prevent.
-                'from': user, 'to': to, 'bcc': bcc,
+                # 'from' is the address the recipient SAW (the lane alias when one applied) —
+                # _alias_sent_today meters the per-alias warm-up cap off this field.
+                'from': from_addr or user, 'to': to, 'bcc': bcc,
+                'login': user,
                 'owner': meta.get('owner') or '',
                 'case': meta.get('c') or '',
                 'addr': meta.get('addr') or '',
@@ -1028,6 +1142,7 @@ class Handler(BaseHTTPRequestHandler):
                 # 'proven' = passed the breaker on acceptance evidence; 'probe' = one of
                 # today's quota of unknown-address verification sends. Absent on normal sends.
                 'lane': meta.get('lane') or '',
+                'wl': str(meta.get('wl') or ''),          # worker lane the send came from
             })
         except Exception as e:
             # Loud on the server side (operator can grep the log) — this is the one real gap the

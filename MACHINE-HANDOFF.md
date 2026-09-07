@@ -107,6 +107,16 @@ Moving the runner means moving these. They are gitignored on purpose.
 | `leads_final.json` / `leads_raw.json` | The board itself |
 | `skiptrace_results.json` | Re-spends money on phones already bought |
 
+**Sending identity (2026-09-07):** the bridge prefers `bsg_gmail.key`
+(`alejandro@bsgflorida.com:<app password>`, quotes tolerated) over `gmail.key`, and with it applies
+`senders.json` — Morning Worker lane → From alias (`replied`/`urgent` → alejandro@bsgflorida.com,
+`active` → alejandro@biscaynesolutionsgroup.com, `early` → alejandro@bsgfl.com) with a per-alias
+warm-up ramp (5/day on 09-07 → 100/day from day 29). The aliases are Workspace alias domains
+registered under that account's Send-mail-as; DKIM signs with the alias domain. **A machine
+without `bsg_gmail.key` keeps sending as its `gmail.key` login and `/health` reports
+`senders_active: false`** — copy the key file (never commit it) to arm the lanes there. The worker
+passes `meta.wl`; boards built before 09-07 send without it and fall to the `default` lane.
+
 **Secrets (never commit, never put in OneDrive):**
 `site.codes`, `captcha.key`, `tracerfy.key`, `tracerfy_mcp.url`, `gmail.key`, `streetview.key`,
 `whitepages.key`, `zerobounce.key`, `sheets_crm_webhook.url`

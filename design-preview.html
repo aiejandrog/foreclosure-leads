@@ -2709,8 +2709,8 @@ function _workQueue(){
 // the suffix is still withheld, and entity_check.py for what lifts it.
 // True only when entity_check.py has a strict, exact, ACTIVE Sunbiz match for the configured
 // company. Injected at build time -- the board is JS and cannot ask Python at runtime.
-const ENTITY_VERIFIED = false;
-const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Biscayne Solutions Group', phone:'(786) 631-1823',
+const ENTITY_VERIFIED = true;
+const SENDER_DEFAULTS = {name:'Alejandro Gonzalez', llc:'Biscayne Solutions Group LLC', phone:'(786) 631-1823',
                          addr:'231 NW 109th Ave, Miami, FL 33172', title:'Acquisitions',
                          email:'agonzalez0311707@gmail.com', web:'', partner:''};
 let sender = Object.assign({}, SENDER_DEFAULTS);
@@ -12824,7 +12824,10 @@ function genMorningWorker(lane, autostart){
     +       'advance();'
     +       'return;'
     +     '}'
-    +     'var payload = {to:to, bcc:bcc, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
+    // wl = WORKER LANE. The bridge picks the From address by lane (senders.json): replied/urgent
+    // leave from the brand domain, active from biscaynesolutionsgroup.com, early (fresh filings)
+    // from bsgfl.com. Distinct from meta.lane, which the SERVER sets for probe/proven verification.
+    +     'var payload = {to:to, bcc:bcc, subj:subj, body:body, meta:{c:r.c, owner:(r.first||r.owner||""), addr:(r.addr||""), lang:"en", wl:lane, portfolio:(r.portfolio||[]).map(function(p){return p.c;})}};'
     // NOTE: no pre-flight log line here. There used to be an addLog("email","trying bridge...")
     // before the fetch, and because addLog increments STATS[kind], a single successful send
     // charged the 50/day cap TWICE — effective ceiling 25 — and every failed attempt still
@@ -12839,7 +12842,9 @@ function genMorningWorker(lane, autostart){
     +           'setTimeout(function(){ advance(); }, 900);'
     +         '} else if(x.status===409 && x.j.skip){'
     +           'bridgeUp(true);'
-    +           'addLog("skip", r.first||r.owner, "already emailed inside 24h — deferred", "warn");'
+    // The bridge says WHY it deferred (24h dedupe, or the per-alias warm-up cap in senders.json);
+    // show its sentence rather than guessing, so a capped lane never reads as a duplicate.
+    +           'addLog("skip", r.first||r.owner, String(x.j.err||"already emailed inside 24h — deferred"), "warn");'
     +           'post("skip"); setTimeout(function(){ advance(); }, 700);'
     +         '} else if(x.status===429){'
     // Cap is a STOP, not a skip. Pausing surfaces it instead of silently grinding through the queue.
