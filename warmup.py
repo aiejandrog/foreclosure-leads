@@ -40,9 +40,12 @@ START_DATE = dt.date(2026, 9, 7)
 
 ALIASES = ['alejandro@biscaynesolutionsgroup.com', 'alejandro@bsgfl.com']
 # Company-owned only. Mixed providers on purpose: Workspace, consumer Gmail.
+# jesse@ and carlos@ were DELETED from Workspace on 2026-09-07 to save seats. A warm-up send to a
+# dead mailbox is a hard bounce from a brand-new domain — the exact signal this file exists to
+# avoid — so they are gone from this list. Add an address here only after it receives mail.
 RECIPIENTS = [
-    'alejandro@bsgflorida.com', 'jesse@bsgflorida.com', 'carlos@bsgflorida.com',
-    'help@bsgflorida.com', 'biscaynesolutionsgroup@gmail.com', 'agonzalez0311707@gmail.com',
+    'alejandro@bsgflorida.com', 'help@bsgflorida.com',
+    'biscaynesolutionsgroup@gmail.com', 'agonzalez0311707@gmail.com',
 ]
 SENDER_NAME = 'Alejandro Gonzalez'
 
