@@ -1550,8 +1550,14 @@ function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.sli
    holds ((305) 999-5960 BSG Main Line on the Workspace account, or the personal (786) 490-7825) --
    either way NOT the printed number. CHECK WHICH ACCOUNT THE VOICE APP IS SIGNED INTO before a dial
    session; /u/0/ in the deep link means "first signed-in account" in a browser. Letters reverted to
-   631-1823 the same day (outreach_mail.py). */
-var DIALER='gv';
+   631-1823 the same day (outreach_mail.py).
+   BACK TO 'tel' 2026-09-07, Alejandro's call: "change it to phone link ill get another phone
+   eventually when its right". tel: on the desktop routes to Windows Phone Link, which dials from
+   his cell -- the PUBLISHED line (786) 631-1823. The spam-split warning above was stated and he
+   accepted the risk until a business phone exists; do not flip this back without him. When that
+   phone arrives, the clean move is: keep 'tel' and make the NEW phone the one Phone Link is
+   paired with (or set 'gv' again), so the printed number never carries the cold-dial volume. */
+var DIALER='tel';
 function dialHref(d){return DIALER==='gv' ? 'https://voice.google.com/u/0/calls?a=nc,%2B1'+String(d) : 'tel:+1'+String(d);}
 /* tel: opens the dialer OVER the page; an https link would navigate AWAY from it — and the whole
    outcome-logging flow (screenOutcome, the after-call bar) lives on this page. So GV dials open in
