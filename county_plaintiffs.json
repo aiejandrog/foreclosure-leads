@@ -2017,5 +2017,23 @@
   "is_bank_first": false,
   "case_type": "Real Prop Other Fore $50,000 or Less",
   "defendant": "Raymond Vigil, et al"
+ },
+ "CACE-25-014553": {
+  "plaintiff": "LAKEVIEW LOAN SERVICING, LLC",
+  "is_bank_first": true,
+  "case_type": "Real Prop Homestead Res Fore $250,000 or More",
+  "defendant": "UNKNOWN TENANT IN POSSESSION OF THE SUBJECT PROPERTY, et al"
+ },
+ "CACE-26-000418": {
+  "plaintiff": "Kensington Green Homeowners Association Inc",
+  "is_bank_first": false,
+  "case_type": "Real Prop Other Fore $50,000 or Less",
+  "defendant": "Stanley B Lue Jr, et al"
+ },
+ "CACE-26-002923": {
+  "plaintiff": "Sunrise Lakes Condo Apts Phase 3 Inc 4",
+  "is_bank_first": false,
+  "case_type": "Condominium Action",
+  "defendant": "Marilyn Genser, et al"
  }
 }

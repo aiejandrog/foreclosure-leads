@@ -69,6 +69,16 @@
   "sale": "08/03/2026",
   "value": 1467620
  },
+ "2022-022559-CA-01": {
+  "addr": "8930 W FLAGLER ST 221, MIAMI, FL 33174",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "09/03/2026",
+  "checked": "2026-09-07",
+  "judg": 560018.44,
+  "sale": "08/20/2026",
+  "value": 326995
+ },
  "2022-022739-CA-01": {
   "addr": "15120 SW 156 AVE, MIAMI, FL 33196",
   "auction": "2026-08-10",
@@ -78,6 +88,26 @@
   "judg": 521770.31,
   "sale": "06/22/2026",
   "value": 697186
+ },
+ "2023-000766-CA-01": {
+  "addr": "14932 SW 23 WAY, MIAMI, FL 33185",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 761046.08,
+  "sale": "07/10/2026",
+  "value": 440000
+ },
+ "2023-000848-CA-01": {
+  "addr": "13225 SW 10 TER, MIAMI, FL 33184",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 397259.17,
+  "sale": "06/17/2026",
+  "value": 364021
  },
  "2023-001240-CA-01": {
   "addr": "1107 ALHAMBRA CIR, CORAL GABLES, FL 33134",
@@ -108,6 +138,16 @@
   "judg": 305348.62,
   "sale": "08/03/2026",
   "value": 945710
+ },
+ "2023-022182-CA-01": {
+  "addr": "9535 SW 46 TER, MIAMI, FL 33165",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 386719.04,
+  "sale": "05/16/2026",
+  "value": 486219
  },
  "2023-022632-CA-01": {
   "addr": "28701 SW 144 AVE, HOMESTEAD, FL 33033",
@@ -169,6 +209,26 @@
   "sale": "08/07/2026",
   "value": 201140
  },
+ "2023-027169-CA-01": {
+  "addr": "7910 HARBOR ISLAND DR 1106, NORTH BAY VILLAGE, FL 33141",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 546340.27,
+  "sale": "06/17/2026",
+  "value": 520146
+ },
+ "2024-000006-CA-01": {
+  "addr": "29490 SW 193RD AVE, HOMESTEAD, FL 33030",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 679576.48,
+  "sale": "08/17/2026",
+  "value": 0
+ },
  "2024-000401-CA-01": {
   "addr": "",
   "auction": "2026-08-10",
@@ -178,6 +238,16 @@
   "judg": 5774518.2,
   "sale": "08/13/2026",
   "value": 0
+ },
+ "2024-000935-CA-01": {
+  "addr": "8520 SW 27 LN, MIAMI, FL 33155",
+  "auction": "2026-08-17",
+  "buyer": "GLS & ASSOCIATES LLC",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 102860.05,
+  "sale": "08/20/2026",
+  "value": 489906
  },
  "2024-001544-CA-01": {
   "addr": "1899 SE 14 CT, HOMESTEAD, FL 33035",
@@ -269,6 +339,16 @@
   "sale": "08/03/2026",
   "value": 534530
  },
+ "2024-015967-CA-01": {
+  "addr": "11649 SW 244 ST, HOMESTEAD, FL 33032",
+  "auction": "2026-08-17",
+  "buyer": "GLOBAL PROPERTY CONSULTANTS LLC",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 316006.46,
+  "sale": "08/20/2026",
+  "value": 336001
+ },
  "2024-016654-CA-01": {
   "addr": "26149 SW 137 AVE, HOMESTEAD, FL 33032",
   "auction": "2026-08-05",
@@ -319,6 +399,16 @@
   "sale": "08/07/2026",
   "value": 225788
  },
+ "2024-021476-CA-01": {
+  "addr": "286 N BISCAYNE RIVER DR, MIAMI, FL 33169",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "09/03/2026",
+  "checked": "2026-09-07",
+  "judg": 972213.71,
+  "sale": "08/20/2026",
+  "value": 604180
+ },
  "2024-022762-CA-01": {
   "addr": "227 NE 2 ST 3106, MIAMI, FL 33132",
   "auction": "2026-08-04",
@@ -338,6 +428,36 @@
   "judg": 191445.55,
   "sale": "08/03/2026",
   "value": 856065
+ },
+ "2024-148444-CC-05": {
+  "addr": "6441 SW 116 CT E97, MIAMI, FL 33173",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 15471.78,
+  "sale": "08/10/2026",
+  "value": 295412
+ },
+ "2025-000672-CA-01": {
+  "addr": "14932 SW 23 WAY, MIAMI, FL 33185",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 362234.44,
+  "sale": "07/10/2026",
+  "value": 440000
+ },
+ "2025-002992-CA-01": {
+  "addr": "15206 NE 8 AVE, MIAMI, FL 33162",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 251484.87,
+  "sale": "06/18/2026",
+  "value": 552732
  },
  "2025-004597-CA-01": {
   "addr": "19380 COLLINS AVE 722, SUNNY ISLES BEACH, FL 33160",
@@ -388,6 +508,16 @@
   "judg": 720048.63,
   "sale": "08/07/2026",
   "value": 184156
+ },
+ "2025-008973-CA-01": {
+  "addr": "1230 NE 83 ST, MIAMI, FL 33138",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 2403531.94,
+  "sale": "08/14/2026",
+  "value": 1886156
  },
  "2025-009236-CA-01": {
   "addr": "20379 W COUNTRY CLUB DR 1635, AVENTURA, FL 33180",
@@ -459,6 +589,36 @@
   "sale": "",
   "value": 1281127
  },
+ "2025-013299-CA-01": {
+  "addr": "151 SE 15 RD 201, MIAMI, FL 33129",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 828069.1,
+  "sale": "08/20/2026",
+  "value": 524628
+ },
+ "2025-013301-CA-01": {
+  "addr": "151 SE 15 RD 203, MIAMI, FL 33129",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 804403.57,
+  "sale": "08/20/2026",
+  "value": 540405
+ },
+ "2025-013969-CA-01": {
+  "addr": "2022 SE 14 CT, HOMESTEAD, FL 33035",
+  "auction": "2026-08-17",
+  "buyer": "ALFONSO CHAVEZ\t, RONNIESKY",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 483360.13,
+  "sale": "08/20/2026",
+  "value": 341799
+ },
  "2025-014301-CA-01": {
   "addr": "12226 NW 24 PL, MIAMI, FL 33167",
   "auction": "2026-08-10",
@@ -519,6 +679,26 @@
   "sale": "",
   "value": 384750
  },
+ "2025-019896-CA-01": {
+  "addr": "14325 SW 57 LN 6-3, MIAMI, FL 33183",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 34173.36,
+  "sale": "",
+  "value": 335878
+ },
+ "2025-020082-CA-01": {
+  "addr": "14630 SW 132 CT, MIAMI, FL 33186",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 775808.54,
+  "sale": "08/06/2026",
+  "value": 678839
+ },
  "2025-021159-CA-01": {
   "addr": "2419 SE 11 ST, HOMESTEAD, FL 33035",
   "auction": "2026-08-10",
@@ -559,6 +739,16 @@
   "sale": "08/13/2026",
   "value": 121310
  },
+ "2025-022404-CA-01": {
+  "addr": "20281 E COUNTRY CLUB DR 305, AVENTURA, FL 33180",
+  "auction": "2026-08-17",
+  "buyer": "Ben-Nissan, Maer Mori",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 217910.77,
+  "sale": "08/20/2026",
+  "value": 342312
+ },
  "2025-022544-CA-01": {
   "addr": "257 NW 39 ST 257, MIAMI, FL 33127",
   "auction": "2026-08-04",
@@ -589,6 +779,16 @@
   "sale": "08/03/2026",
   "value": 276065
  },
+ "2025-024088-CA-01": {
+  "addr": "325 NW 56 ST, MIAMI, FL 33127",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 213955.91,
+  "sale": "",
+  "value": 410858
+ },
  "2025-074993-CC-05": {
   "addr": "1787 NE 174 ST, NORTH MIAMI BEACH, FL 33162",
   "auction": "2026-08-10",
@@ -609,6 +809,26 @@
   "sale": "08/03/2026",
   "value": 307000
  },
+ "2025-160930-CC-05": {
+  "addr": "445 NE 171 TER, NORTH MIAMI BEACH, FL 33162",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 10940.1,
+  "sale": "",
+  "value": 331316
+ },
+ "2026-000304-CA-01": {
+  "addr": "8861 W 35TH AVE, HIALEAH, FL 33018",
+  "auction": "2026-08-17",
+  "buyer": "72 GROUP LLC",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 516798.85,
+  "sale": "08/20/2026",
+  "value": 0
+ },
  "2026-001101-CA-01": {
   "addr": "3300 NE 192 ST PH16, AVENTURA, FL 33180",
   "auction": "08/03/2026",
@@ -618,6 +838,16 @@
   "judg": 329913.94,
   "sale": "08/03/2026",
   "value": 274402
+ },
+ "2026-001222-CA-01": {
+  "addr": "6749 NW 193 LN, HIALEAH, FL 33015",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 9988.87,
+  "sale": "08/13/2026",
+  "value": 302551
  },
  "2026-001478-CA-01": {
   "addr": "1750 NE 191 ST 225-4, MIAMI, FL 33179",
@@ -639,6 +869,16 @@
   "sale": "",
   "value": 462803
  },
+ "2026-003389-CA-01": {
+  "addr": "4600 SW 67 AVE 239, MIAMI, FL 33155",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 19963.71,
+  "sale": "07/09/2026",
+  "value": 278740
+ },
  "2026-007833-CA-01": {
   "addr": "860 NE 142 ST, NORTH MIAMI, FL 33161",
   "auction": "2026-08-10",
@@ -658,5 +898,15 @@
   "judg": 11734.25,
   "sale": "",
   "value": 250173
+ },
+ "2026-049623-CC-25": {
+  "addr": "12608 NW 7 LN, MIAMI, FL 33182",
+  "auction": "2026-08-17",
+  "buyer": "",
+  "cert": "",
+  "checked": "2026-09-07",
+  "judg": 10997.59,
+  "sale": "08/06/2026",
+  "value": 343470
  }
 }
