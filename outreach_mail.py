@@ -230,13 +230,27 @@ def _lh_header(snd, height_px=52):
     Every value comes from the sender profile; nothing about the operator is hardcoded."""
     e = html.escape
     llc = _safe_llc(snd)
-    # ONE-INK rendition here, not the colour emblem: send_via_lob() submits color:'false', so Lob
-    # prints this page in black and white. A straight grayscale of navy-field/gold-letters collapses
-    # to a single mid-gray mass and the letterforms disappear. MONO_BW_B64 is the same emblem with
-    # the field forced black and the mark knocked out white, which is what survives one-ink printing
-    # and fax. Flip to bsg_brand.MONO_B64 + mark_size() only if Lob is switched to colour (costs more
-    # per letter) — the two must move together or the letter prints a gray smear.
-    w = bsg_brand.mono_bw_size(height_px)
+    # REAL LOGO, NOT THE PALM SHIELD (2026-09-08, Alejandro: "that's not what our business
+    # represents"). This header used bsg_brand.MONO_BW_B64 — the letter-free teal shield picked in
+    # August so a rename could not invalidate the artwork. The actual BSG lockup has existed at
+    # brand/bsg-logo-letterhead.png since 09-04 and build_letter_html_jesse() was already using it;
+    # only this variant was still on the shield, so the two letter templates disagreed.
+    #
+    # ONE-INK IS FINE HERE, and it was NOT fine for the shield. send_via_lob() submits color:'false'.
+    # The shield was a solid dark field with a white knockout, which greys into a single mid-tone mass
+    # — hence the special MONO_BW rendition. This lockup is dark blue/charcoal letterforms on WHITE,
+    # and dark-on-white survives greyscale intact. No mono variant needed.
+    #
+    # Height-only sizing with width:auto — same approach the Jesse template already proves against
+    # Lob's server-side renderer. Falls back to a text wordmark if the PNG is ever missing, so the
+    # letterhead degrades to type rather than printing a broken-image box on paid mail.
+    uri = _jesse_logo_uri()
+    if uri:
+        mark = (f'<img src="{uri}" alt="{e(llc)}" '
+                f'style="height:{height_px}px;width:auto;display:block">')
+    else:
+        mark = (f'<span style="font:700 15px/1.15 Georgia,serif;letter-spacing:.02em;'
+                f'white-space:nowrap">{e(llc)}</span>')
     bits = []
     for k in ('addr', 'phone', 'email', 'web'):
         v = (snd.get(k) or '').strip()
@@ -244,7 +258,7 @@ def _lh_header(snd, height_px=52):
             bits.append('<span style="white-space:nowrap">' + e(v) + '</span>')
     lines = ['&nbsp;&middot;&nbsp;'.join(bits)] if bits else []
     return ('<table class="bsg-lh" role="presentation"><tr>'
-            f'<td class="bsg-lh-mark"><img src="{bsg_brand.MONO_BW_B64}" width="{w}" height="{height_px}" alt="{e(llc)}"></td>'
+            f'<td class="bsg-lh-mark" style="padding-right:14px">{mark}</td>'
             f'<td class="bsg-lh-meta">{"<br>".join(lines)}</td>'
             '</tr></table><div class="bsg-lh-rule"></div>')
 
@@ -269,10 +283,14 @@ def _lh_sign(snd, lang='en'):
     llc = _safe_llc(snd)
     who = [str(snd[k]).strip() for k in ('name', 'title', 'phone', 'email')
            if (snd.get(k) or '').strip()]
+    # SIG TAG REMOVED (2026-09-08, Alejandro): the footer no longer carries
+    # "Not a law firm. Not a HUD-approved housing counselor. Not a foreclosure-rescue company."
+    # D.sig_tag() still exists in disclaimer.py and is now called by nothing — left in place so it
+    # can be restored with one line rather than rewritten.
     return ('<div class="bsg-sig">'
             f'<span class="nm">{e(llc)}</span>'
-            + (e(' · '.join(who)) + '<br>' if who else '')
-            + D.sig_tag(lang) + '</div>')
+            + (e(' · '.join(who)) if who else '')
+            + '</div>')
 
 
 def build_letter_html(r, snd, lang='en'):
