@@ -11847,7 +11847,17 @@ var WORKER_LANES = {
   early:  {t:'EARLY',   ic:'🌱', d:'Fresh filing, no sale date yet — be the first call',
            // d<0 exclusion: an LP row that GAINS a sale date which then passes must not sit in
            // "be the first call" — with live _saleDays a stale tab can now produce negative d here
-           test:function(d,r){ return (d==null || r.st==='LP') && !(d!=null && d<0) && !_replyWaiting(r); }}
+           // r.st!=='BAL': a balloon row also has no sale date; without this guard it lands here as
+           // a "fresh filing" and gets the homeowner email. It has its own lane below.
+           test:function(d,r){ return (d==null || r.st==='LP') && r.st!=='BAL' && !(d!=null && d<0) && !_replyWaiting(r); }},
+  // BALLOON — the refi lane (hardmoney_balloon.py -> balloon_leads.py, st:'BAL'). LLC investors
+  // whose hard-money note is at or near its est. 24-month wall. NOT a homeowner: the copy is the
+  // Refi Lane investor email (vault, 2026-08-30) via genBalloonEmail, the From is the advisor
+  // (sender.balloon_signer), the alias is senders.json 'balloon'. Sorted soonest-maturity first in
+  // _workerQueue. A REPLIED balloon row goes to REPLIED like everyone else — an investor who wrote
+  // back outranks a countdown too.
+  balloon:{t:'BALLOON', ic:'🎈', d:'Hard-money note maturing — investor refi, the advisor\'s pitch',
+           test:function(d,r){ return r.st==='BAL' && !_replyWaiting(r); }}
 };
 // Serializable copy for the worker tab. JSON.stringify would silently drop the `test` functions
 // anyway; doing it explicitly means a future field added to WORKER_LANES does not leak by accident.
@@ -11979,8 +11989,10 @@ function _workerQueue(lane){
   var TR = {A:0, B:1, C:2};
   function _qsort(list){
     return list.sort(function(a,b){
-      var da=_saleDays(a); da=(da==null)?99999:da;
-      var db=_saleDays(b); db=(db==null)?99999:db;
+      // Balloon rows carry no auction; their clock is the note's est. maturity (bal.days, may be
+      // negative = past the 24-month wall = hottest). Everyone else sorts on the sale date.
+      var da=(a.st==='BAL'&&a.bal)?a.bal.days:_saleDays(a); da=(da==null)?99999:da;
+      var db=(b.st==='BAL'&&b.bal)?b.bal.days:_saleDays(b); db=(db==null)?99999:db;
       if(da!==db) return da-db;
       var ta=TR[a.tier]!=null?TR[a.tier]:3, tb=TR[b.tier]!=null?TR[b.tier]:3;
       if(ta!==tb) return ta-tb;
@@ -12116,10 +12128,20 @@ function _cardMail(r){
     };
   } catch(e){ return EMPTY; }
 }
+// BALLOON chip — the note's est. maturity in the same shape _urgencyChip returns, so the worker tab
+// renders it with zero changes. Negative = past the 24-month wall, which for a refi is the HOTTEST
+// state (the borrower is extending or refinancing right now), the opposite of a passed auction.
+function _balloonChip(days){
+  if(days==null) return {t:'Maturity not estimated', c:'#5b6472', bg:'#f6f8fa'};
+  if(days<0)     return {t:'NOTE PAST 24-MO WALL · '+(-days)+'d', c:'#fff', bg:'#8a1c1c'};
+  if(days<=30)   return {t:'NOTE MATURES IN '+days+' DAYS', c:'#fff', bg:'#a13a1c'};
+  if(days<=90)   return {t:'matures in '+days+' days (est.)', c:'#7a5a10', bg:'#f4e5a7'};
+  return {t:'est. maturity in '+days+' days', c:'#5b6472', bg:'#f6f8fa'};
+}
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
 function _workerCard(r){
-  var f = _docFields(r); var days = _saleDays(r); var chip = _urgencyChip(days);
+  var f = _docFields(r); var days = _saleDays(r); var chip = (r.st==='BAL' && r.bal) ? _balloonChip(r.bal.days) : _urgencyChip(days);
   var _badph = ((notes[r.case]||{}).badph||[]).map(function(b){ return String(b).replace(/\D/g,''); });
   var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]) && _badph.indexOf(String(p).replace(/\D/g,''))<0; }).slice(0,3);
   // Reply state rides the card. If skiptrace never found a number but the owner TYPED one into
@@ -12131,6 +12153,9 @@ function _workerCard(r){
   var M = _cardMail(r);
   return {
     c: r.case, addr: r.addr||'', owner: r.oname||(r.owners||'').split(';')[0]||'',
+    // balloon lane: lender / amount / est. maturity ride the card so the worker tab can say what
+    // this row IS instead of a blank sale date. null on every other row; JSON drops nothing extra.
+    st: r.st||'', bal: (r.st==='BAL' ? (r.bal||null) : null),
     first: (f.ownerFirst==='__blank__'?'':f.ownerFirst),
     days: days, saleDate: r.auction||'',
     chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
@@ -12142,6 +12167,9 @@ function _workerCard(r){
     // the card lets the WORKER tab open Phone Link / Messages on the operator's own click.
     smsHref: (function(){
       try {
+        // No homeowner SMS to an investor. The balloon text is the advisor's own, from HIS phone
+        // (vault: Refi Lane note — "the entire asset is that these people already know him").
+        if(r.st==='BAL') return '';
         var tp = (typeof textablePhones === 'function') ? textablePhones(r) : [];
         if(!tp.length || typeof smsMsg !== 'function' || typeof _smsHref !== 'function') return '';
         return _smsHref(tp[0], smsMsg(r, 'both', _defaultTextTone(r)));
@@ -12442,7 +12470,10 @@ function genMorningWorker(lane, autostart){
     // the worker tab regains focus, the send is finished, so advance ~1.5s later. The timer is only
     // a fallback for when he never comes back (walked away, or the composer never opened).
     +   'var i=0, auto=false, paceMs=8000, tick=null, healing=null, awaitingReturn=false, sentAt=0;'
-    +   'var autoAll=false, LANE_ORDER=["replied","urgent","active","early"];'
+    // balloon appended 2026-09-08 (investor refi lane). LAST on purpose: it shares an alias ramp
+    // with `active`, so active's homeowner cold sends take the daily cap first and balloon gets
+    // the remainder (409 alias_cap = skip, not stop). auto-run's next-lane walk skips empty lanes.
+    +   'var autoAll=false, LANE_ORDER=["replied","urgent","active","early","balloon"];'
     +   'function laneCount(k){ return (LANES[k]||[]).length; }'
     +   'function allTotal(){ var n=0; LANE_ORDER.forEach(function(k){ n+=laneCount(k); }); return n; }'
     +   'var main=document.getElementById("mwmain"), prog=document.getElementById("mwprog"),'
@@ -14575,6 +14606,82 @@ function _mailableList(r){ return ((r&&r.emails)||[]).filter(_mailable); }
    appended AFTER the street becomes part of the captured address, matches no lead, and every reply
    from an address not already on file silently stops being attributed. */
 var SUBJECT_STYLE = 'measured';
+/* ══════════ BALLOON / REFI LANE — investor email (vault: "Refi Lane — investor email + text", 2026-08-30) ══════════
+   Audience inversion, stated once: everything the homeowner composer protects AGAINST is the target
+   here. Work mailboxes are the RIGHT address for an LLC officer (the consumer allowlist is bypassed on
+   purpose); "say the number and say it hard" is correct because a rate is a business decision, not a
+   family's home; no MARS framing, no FS 501.1377 rescue-consultant question. What stays identical:
+   the contact gate (opt-out/DNC), the 3-stage cadence (_mailStage) so a second identical pitch never
+   lands, the STOP line, and the CAN-SPAM signature (physical address). Signer = sender.balloon_signer
+   (the advisor); the send bridge sets the From DISPLAY to the same name for wl:'balloon', so header
+   and body agree. Spanish: the vault carries no ES email for this lane — ES mirrors EN by design. */
+function genBalloonEmail(r, quiet){
+  var _blk = _textContactBlocked(r);
+  if(_blk){ return quiet ? null : _openDoc(_composerBlockedDoc(r, _blk, 'email')); }
+  var B = r.bal || {};
+  var signer = String(sender.balloon_signer||sender.name||'[YOUR NAME]').trim();
+  var sP = String(sender.balloon_phone||sender.phone||'[YOUR PHONE]').trim();
+  var sA = String(sender.addr||'').trim();
+  // Greet the HUMAN (Sunbiz officer / decision-maker), never the LLC.
+  var who = String(r.oname||'').trim();
+  var first = who ? who.split(/\s+/)[0] : '';
+  first = first ? first.charAt(0).toUpperCase()+first.slice(1).toLowerCase() : '';
+  var llc = String((r.owners||'').split(';')[0]||'').trim();
+  var street = String((r.addr||'').split(',')[0]||'').trim();
+  var amt = +B.amt || 0;
+  // THEIR number, not the $400k example: monthly gap between 12% and 7% interest-only on the
+  // recorded amount. Rounded to $50 so it reads as an estimate, which it is (their rate is unknown).
+  var gap = amt ? Math.round(amt*(0.12-0.07)/12/50)*50 : 0;
+  var money = function(n){ return '$'+Math.round(n).toLocaleString(); };
+  var lender = String(B.lender||'').trim();
+  var mat = B.maturity||'';
+  var past = (B.days!=null && B.days<0), soon = (B.days!=null && B.days>=0 && B.days<=90);
+  var whenTxt = past ? 'is past the two-year mark' : (soon ? ('looks to be coming up around '+mat) : 'has a maturity coming');
+  var propTxt = street ? ('the property at '+street) : (llc ? ('the '+llc+' property') : 'that property');
+  var stage = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
+  var subjCold = "You're paying 12% on that property. You don't have to be.";
+  var subjFollow = 'Before you extend that note';
+  var reSubj = 'Re: ' + subjCold;
+  var hi = 'Hi'+(first?' '+first:'')+',';
+  var sig = [signer, 'Biscayne Solutions Group', sP ? ('Phone: '+sP) : '', 'BSGflorida.com', sA].filter(function(x){ return x; }).join('\n');
+  var stop = "\n\nIf this isn't relevant, reply STOP and I won't write again.";
+  var gapLine = amt
+    ? ('On the '+money(amt)+' note'+(lender?(' with '+lender):'')+', the gap between 12% and 7% is about '+money(gap)+' a month, roughly '+money(gap*12)+' a year, going to a lender instead of staying in your pocket.')
+    : ('On a $400,000 balance the gap between 12% and 7% is about $1,700 a month. Twenty thousand a year, going to a lender instead of staying in your pocket.');
+  var bodyCold = hi+'\n\n'
+    + "If you're carrying hard money at 11, 12, 13 percent on "+propTxt+", you already know what it costs you every month. "+gapLine
+    + ((amt && lender) ? (' And if that note '+whenTxt+', you are about to either refinance it or extend it at the same rate or worse.') : '')
+    + "\n\nThat's the problem. Here's the fix.\n\n"
+    + "We place DSCR loans at 6 to 8 percent on rental and investment property, 70 to 80 percent LTV, no tax returns and no personal income documents. The property's rent qualifies the loan, not your W-2. Typical close is about two weeks. If you need speed more than price, we also do hard equity at 60 to 70 percent LTV that funds in five to ten business days.\n\n"
+    + "Fifteen minutes, free, no commitment. Reply with your best number and a time, or call me directly at "+sP+". If I can't beat what you're already holding, I'll tell you that in the first five minutes and you've lost nothing but the call.\n\n"
+    + sig + stop;
+  var bodyFollow = hi+'\n\n'
+    + "Quick one. If you've got a bridge or hard-money note coming up on its maturity date"+(lender?(', the '+lender+' note'):'')+", the default move is to extend with the same lender at the same rate, because it's the path of least resistance and they know it.\n\n"
+    + "Before you do that, let me price it. DSCR, 6 to 8 percent, 70 to 80 LTV, no tax returns, about two weeks to close. If the property cash flows, it qualifies. Your personal income never comes into it.\n\n"
+    + "Worst case I confirm you already have the best deal available and you extend with confidence. Fifteen minutes, free. "+sP+" or reply with a good time.\n\n"
+    + sig + stop;
+  var bodyFinal = hi+'\n\n'
+    + 'Last note from me on '+propTxt+'. If the refinance is handled, ignore this and good luck with it.\n\n'
+    + "If it isn't, the offer stands: DSCR at 6 to 8 percent or hard equity in five to ten days, priced in a fifteen-minute call at "+sP+". I won't email again either way.\n\n"
+    + sig;
+  var isFinal = (stage==='final' || stage==='done'), isFollow = (stage==='follow' || stage==='replied');
+  var D = isFinal  ? {en:{subj:reSubj,     body:bodyFinal},  es:{subj:reSubj,     body:bodyFinal}}
+        : isFollow ? {en:{subj:subjFollow, body:bodyFollow}, es:{subj:subjFollow, body:bodyFollow}}
+        :            {en:{subj:subjCold,   body:bodyCold},   es:{subj:subjCold,   body:bodyCold}};
+  // Work mailboxes are the target here (see header). First address on the row; the rest ride BCC
+  // exactly as the homeowner path does, so a stale officer address does not cost the send.
+  var ems = (r.emails||[]).filter(function(e){ return e && /@/.test(String(e)); }).slice(0,4);
+  var to = ems[0]||'', bcc = ems.slice(1).join(', ');
+  try { window.__lastEmail = {c:r.case, to:to, bcc:bcc, addr:r.addr||'', who:(who||llc),
+                              subj:D.en.subj, body:D.en.body, subjES:D.es.subj, bodyES:D.es.body,
+                              stage:stage, at:Date.now(), lane:'balloon'}; } catch(e){}
+  if(quiet) return D;
+  // Manual path: open Gmail compose with the staged body — the same URL shape _cardMail bakes.
+  var gurl = 'https://mail.google.com/mail/?view=cm&fs=1&to='+encodeURIComponent(to)
+           + '&su='+encodeURIComponent(D.en.subj)+'&body='+encodeURIComponent(D.en.body);
+  try { window.open(gurl, '_blank', 'noopener'); } catch(e){}
+  return D;
+}
 function _subjLine(street, dt, td, lang){
   var d = String(dt||'').trim(), tag;
   var urgent = (String(SUBJECT_STYLE||'urgent').toLowerCase() !== 'measured');
@@ -14616,6 +14723,10 @@ function _alexFill(t, v){
 }
 
 function genEmail(r, quiet){
+  // BALLOON ROWS ARE A DIFFERENT AUDIENCE. An LLC investor with a maturing hard-money note gets the
+  // Refi Lane pitch, not the homeowner letter — see genBalloonEmail. Branch before anything below
+  // reads auction/plaintiff/case fields that a balloon row does not carry.
+  if(r && r.st==='BAL') return genBalloonEmail(r, quiet);
   // Contact gate BEFORE composing (2026-08-11 deep sweep). quiet=true is the worker/batch path that
   // stages a send — returning null there means "no email for this lead", which every caller already
   // handles. Non-quiet opens the suppression page instead of a composer.

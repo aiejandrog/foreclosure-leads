@@ -81,10 +81,18 @@ def main():
     ap.add_argument('--months', type=int, default=24, help='origin window: keep mortgages recorded within N months')
     ap.add_argument('--min-months', type=int, default=0, help='and no NEWER than this many months (0=off)')
     a = ap.parse_args()
+    candidates(months=a.months, min_months=a.min_months, report=True)
 
+
+def candidates(months=24, min_months=0, report=False):
+    """The balloon universe as rows (`uniq` below): LLC borrower, hard-money lender, amount, origin,
+    age, Sunbiz human, BCPA address, LTV verdict. IMPORTABLE on purpose (2026-09-08): balloon_leads.py
+    turns these into board rows so the Morning Worker's BALLOON lane and Call Mode's Balloon lane
+    work the exact list this one-pager shows — one definition, no drift. `report=True` also writes the
+    HTML book, which is what `python hardmoney_balloon.py` has always done."""
     today = datetime.date.today()
-    lo = (today - datetime.timedelta(days=int(a.months * 30.4))).isoformat()
-    hi = (today - datetime.timedelta(days=int(a.min_months * 30.4))).isoformat() if a.min_months else today.isoformat()
+    lo = (today - datetime.timedelta(days=int(months * 30.4))).isoformat()
+    hi = (today - datetime.timedelta(days=int(min_months * 30.4))).isoformat() if min_months else today.isoformat()
 
     # property context (owner / address / value / county) keyed by case + folio
     board = {}
@@ -208,11 +216,12 @@ def main():
             uniq.append(h)
 
     print('HARD-MONEY BALLOON CANDIDATES: %d' % len(uniq))
-    print('(open mortgage · hard-money lender · LLC owner · originated %s..%s)' % (lo, hi))
-    for h in uniq[:40]:
-        print('  %-9s | %5.1fmo | $%9s | %-32s | %s'
-              % (h['origin'], h['age_mo'], format(int(h['amt'] or 0), ','),
-                 h['lender'][:32], h['owner'][:30]))
+    if report:
+        print('(open mortgage · hard-money lender · LLC owner · originated %s..%s)' % (lo, hi))
+        for h in uniq[:40]:
+            print('  %-9s | %5.1fmo | $%9s | %-32s | %s'
+                  % (h['origin'], h['age_mo'], format(int(h['amt'] or 0), ','),
+                     h['lender'][:32], h['owner'][:30]))
     lenders = {}
     for h in uniq:
         lenders[h['lender']] = lenders.get(h['lender'], 0) + 1
@@ -224,7 +233,8 @@ def main():
     # FUNDABLE FIRST, then urgency, then size. Ordering by size alone put a $2M loan at 140% LTV —
     # which nobody can refinance — above a $300k loan at 61% that closes. The verdict has to lead.
     zone.sort(key=lambda h: (bool(h.get('fits')), (20 <= h['age_mo'] <= 30), h['amt']), reverse=True)
-    _write_report(uniq, zone[:150], lenders, lo, hi, a.months)
+    if report:
+        _write_report(uniq, zone[:150], lenders, lo, hi, months)
     return uniq
 
 

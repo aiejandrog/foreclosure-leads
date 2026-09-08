@@ -105,7 +105,10 @@ def load_all_leads():
     leads = list(json.load(open(LEADS, encoding='utf-8')))
     for f in sorted(_glob.glob(os.path.join(HERE, '*_leads.json'))):
         bn = os.path.basename(f)
-        if bn in ('leads_final.json', 'leads_raw.json') or bn.startswith('_'):
+        # balloon_leads.json is the investor refi lane (LLC borrowers). Never skiptrace it from here:
+        # Tracerfy on an LLC name returns strangers, paid per hit, and the lane's contacts come from
+        # balloon_contacts.json (GetLeads decision-maker lookup) — a deliberate, separate, paid step.
+        if bn in ('leads_final.json', 'leads_raw.json', 'balloon_leads.json') or bn.startswith('_'):
             continue
         try: leads.extend(json.load(open(f, encoding='utf-8')))
         except Exception as e: print(f"skip {bn}: {e}")

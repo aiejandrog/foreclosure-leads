@@ -133,7 +133,12 @@ def _ramp_cap(cfg, from_addr, today=None):
         start = dt.date.fromisoformat(str(cfg.get('ramp_start')))
     except Exception:
         start = today
-    day = max(1, (today - start).days + 1)
+    if today < start:
+        # Before the ramp opens the alias is warming only (warmup.py, company mailboxes). Zero cold
+        # mail. Without this, a future ramp_start computed as "day 1" and allowed 5 a day at once —
+        # which is exactly what pushing the date out was meant to stop (2026-09-08).
+        return 0
+    day = (today - start).days + 1
     cap = 0
     for row in cfg.get('ramp') or []:
         cap = int(row.get('per_day') or 0)
@@ -1063,9 +1068,14 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(500, {'ok': False, 'err': 'no gmail.key credentials'})
         snd = _load_sender()
         from_display = (snd.get('name') or '').strip()
+        # BALLOON LANE SIGNS AS THE ADVISOR (2026-09-08). The investor refi pitch's whole asset is
+        # Jesse's name (vault: Refi Lane note). From display and body signature must be the SAME
+        # person or the mail reads as forged; both read sender.json balloon_signer. Alias unchanged.
+        if str(meta.get('wl') or '').lower() == 'balloon' and (snd.get('balloon_signer') or '').strip():
+            from_display = str(snd['balloon_signer']).strip()
 
         # ---- LANE -> FROM ADDRESS + per-alias warm-up cap (senders.json, 2026-09-07) ----------
-        # meta.wl is the Morning Worker lane (replied/urgent/active/early). Test sends (advisor
+        # meta.wl is the Morning Worker lane (replied/urgent/active/early/balloon). Test sends (advisor
         # briefs, workups) are 1:1 and always leave from the login, never a warming alias.
         _cfg = _load_senders()
         from_addr = None

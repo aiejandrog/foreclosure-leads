@@ -58,6 +58,10 @@ def build(top=40):
 
 
 def _render(rows, total, top):
+    # The sheet is the HOMEOWNER dial order (Alejandro, evenings). Balloon-refi rows are LLC
+    # investors worked by the advisor from Call Mode's Balloon lane with a different script; on
+    # this page they would read as a distressed owner with "n/k" equity. Same rows, different desk.
+    rows = [r for r in rows if r.get('st') != 'BAL']
     today = datetime.date.today()
     ver = sum(1 for r in rows if r.get('eqv'))
     L = []
@@ -110,7 +114,14 @@ def main():
     if not os.path.exists(board):
         raise SystemExit('call_sheet: no plaintext board at %s — run the nightly first' % board)
     src = open(board, encoding='utf-8', errors='replace').read()
-    m = re.search(r'const DATA\s*=\s*(\[.*?\]);\n', src, re.S)
+    # 2026-09-08: the board gained an encrypted-payload path, and `DATA` became a derived binding
+    # (`let DATA = Array.isArray(RAW) ? RAW : []`) that no longer holds a literal array. The rows
+    # live in `RAW`. The old const-DATA regex matched nothing and the standalone sheet silently
+    # froze at the last good build (09-05) while the board kept rebuilding. Read RAW, fall back to
+    # a literal DATA for older boards. If RAW is an encrypted blob this correctly finds nothing —
+    # in that case the sheet has to come from the nightly, which builds rows before they are sealed.
+    m = (re.search(r'(?:const|let|var)\s+RAW\s*=\s*(\[.*?\]);\n', src, re.S)
+         or re.search(r'(?:const|let|var)\s+DATA\s*=\s*(\[.*?\]);\n', src, re.S))
     if not m:
         raise SystemExit('call_sheet: could not read DATA from the board')
     rows, total = CM.call_rows(json.loads(m.group(1)))
