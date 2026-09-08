@@ -213,7 +213,7 @@ def _sig_lines(snd):
     return [x.strip() for x in order if x and str(x).strip()]
 
 
-def _lh_header(snd, height_px=52):
+def _lh_header(snd, height_px=68):
     """BSG letterhead block — mark left, contact right, black rule under.
 
     The company name is NOT in this header. The shield carries BSG; `_lh_sign()` spells the entity
@@ -364,7 +364,7 @@ def build_letter_html(r, snd, lang='en'):
 <li>Explicarle las opciones que usted tiene, incluyendo algunas que quizá no conoce</li>
 <li>Darle un camino claro y honesto hacia adelante</li>
 </ul>
-<p>Lo que necesito: llámeme o escríbame directamente al <b>{sP}</b> con la mejor hora para comunicarme con usted. Le daré mi atención personal.</p>
+<p class="cta">Lo que necesito: llámeme o escríbame directamente al <b>{sP}</b> con la mejor hora para comunicarme con usted. Le daré mi atención personal.</p>
 <p>Todavía hay tiempo para salvar su casa o su equidad, pero no mucho.</p>
 <p>{D.identity('es')}</p>
 <p>Cordialmente,<br><br>{sig}</p>"""
@@ -401,7 +401,7 @@ def build_letter_html(r, snd, lang='en'):
 <li>Lay out the options you have, including ones you may not have heard of</li>
 <li>Give you a clear, honest path forward</li>
 </ul>
-<p>What I need: call or text me directly at <b>{sP}</b> with the best time to reach you. I'll give you my personal attention.</p>
+<p class="cta">What I need: call or text me directly at <b>{sP}</b> with the best time to reach you. I'll give you my personal attention.</p>
 <p>There is still time to save your home or your equity, but not much.</p>
 <p>{D.identity('en')}</p>
 <p>Warm regards,<br><br>{sig}</p>"""
@@ -413,6 +413,12 @@ def build_letter_html(r, snd, lang='en'):
     # The BSG letterhead therefore goes BELOW that reserve, as the first thing in the content area — a
     # logo inside the window band would print underneath Lob's own address overlay and ruin real,
     # paid-for mail. Everything above 2.6in stays Lob's.
+    # FOLD CLEARANCE, LANGUAGE-AWARE. The sheet tri-folds at 3.67in and 7.33in; measured, the
+    # crease was landing straight through the bold phone number. Pushing the callout down
+    # clears it, but ES copy runs ~0.4in longer than EN and the same push overflows the page
+    # (_pagefittest goes WARN). EN can afford it, ES cannot -- so the gap is per-language
+    # rather than one value that is wrong for one of them.
+    _cta_gap = 30 if str(lang or 'en').lower().startswith('en') else 8
     return f"""<!doctype html><html><head><meta charset="utf-8"><style>
 @page{{margin:0}}
 html,body{{margin:0;padding:0}}
@@ -422,6 +428,16 @@ body{{font-family:Georgia,'Times New Roman',serif;color:#111;line-height:1.31;fo
 .date{{margin:0 0 10px;color:#333}}
 ul{{margin:10px 0}}
 p{{margin:0 0 6px}}
+/* THE CTA IS THE ONE LINE THAT MUST SURVIVE THE FOLD. An 8.5x11 tri-folds at 3.67in and
+   7.33in, and letter length varies per lead (owner + plaintiff names wrap differently), so
+   the crease lands somewhere different on every letter -- measured on letter #1 it ran
+   straight through the bold phone number at 7.32-7.48in. A fixed nudge would fix one letter
+   and break the next. Containing it instead: a ruled, padded block reads as deliberate
+   whether or not a crease crosses it, and the border gives the eye a target on a page of
+   even grey type. Keep it short enough to fit inside one 3.67in panel. */
+.cta{{margin:{_cta_gap}px 0 8px;padding:7px 11px;border:1.2pt solid #1A1A1A;border-radius:2px;
+  background:#F7F8FA;font-size:10.8pt;line-height:1.30;page-break-inside:avoid;
+  break-inside:avoid}}
 .bsg-lh{{width:100%;border-collapse:collapse;margin:0;table-layout:fixed}}
 .bsg-lh td{{vertical-align:middle;padding:0;border:0}}
 .bsg-lh-mark{{width:1%;white-space:nowrap;padding-right:14px}}
