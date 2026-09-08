@@ -184,6 +184,18 @@ def _tier(r):
 
 
 def _days(r):
+    """Days to the sale, recomputed LIVE from the auction date when the row carries one. The baked
+    `days` integer in the raw lead files is frozen at scrape time; on 2026-09-08 it still put a
+    09/01 sale in the 8-45 day lane and let it past the 'auction already passed' drop. Same rule
+    the board applies (_saleDays). Falls back to the baked integer when the date does not parse."""
+    dt_s = _sale_date(r)
+    m = re.match(r'^(\d{1,2})/(\d{1,2})/(\d{4})', dt_s) if dt_s else None
+    if m:
+        try:
+            sale = datetime.date(int(m.group(3)), int(m.group(1)), int(m.group(2)))
+            return (sale - datetime.date.today()).days
+        except ValueError:
+            pass
     try:
         return int(_g(r, 'days', 'days_to_auction', default=0))
     except Exception:
@@ -192,6 +204,46 @@ def _days(r):
 
 def _sale_date(r):
     return str(_g(r, 'auction', 'AuctionDate')).strip()
+
+
+def _filed_key(r):
+    """Sortable filing recency (negate for newest-first). The board bakes `filed` as epoch ms, but
+    lp_leads.json ships it as an 'M/D/YYYY' string on every row (879 of 879, 2026-09-08), and the
+    grouping sort did int() on it — so this sender crashed on its first fresh-filing row and could
+    not run at all. Accept a number, ISO, or M/D/YYYY; anything else sorts as unknown (0)."""
+    v = r.get('filed')
+    if v in (None, '', 0):
+        return 0
+    if isinstance(v, (int, float)):
+        return int(v)
+    s = str(v).strip()
+    for fmt in ('%m/%d/%Y', '%Y-%m-%d'):
+        try:
+            return int(datetime.datetime.strptime(s[:10], fmt).timestamp() * 1000)
+        except ValueError:
+            continue
+    try:
+        return int(float(s))
+    except ValueError:
+        return 0
+
+
+def _lane_of(r):
+    """The Morning Worker lane this row would sit in — the SAME rule as WORKER_LANES in the tracker,
+    so a category leaves from the same alias whether the browser worker or this sender mails it.
+      no sale date        -> early   (fresh filing)
+      sale in 0-7 days    -> urgent
+      sale in 8-45 days   -> active
+      sale beyond 45 days -> active  (the worker never emails these; here they are still a cold
+                                     sale-date lead, and the corporate alias is the cold lane)
+    Balloon rows never reach this sender (excluded by file in _load_leads), so no 'balloon' here.
+    'replied' is a state, not a schedule — _eligible already drops replied owners entirely."""
+    if not _sale_date(r):
+        return 'early'
+    d = _days(r)
+    if 0 <= d <= 7:
+        return 'urgent'
+    return 'active'
 
 
 def _plaintiff(r):
@@ -208,7 +260,20 @@ def _is_company_owner(r):
 
 # ---------------------------------------------------------------- load side
 def _load_credentials():
-    """Returns (user_email, app_password) or (None, None) if unavailable. Never logs the pw."""
+    """Returns (user_email, app_password) or (None, None) if unavailable. Never logs the pw.
+
+    2026-09-08: delegates to send_server._load_credentials, which prefers bsg_gmail.key (the
+    company login that can send AS the lane aliases) over the personal gmail.key. Until this
+    change the unattended sender read gmail.key only, so every category left from the personal
+    address no matter what senders.json said. One credential rule, in one place. The old local
+    parser stays as the fallback for a box where send_server cannot import."""
+    try:
+        import send_server as _SS
+        user, pw = _SS._load_credentials()
+        if user and pw:
+            return user, pw
+    except Exception:
+        pass
     env_pw = (os.environ.get('GMAIL_APP_PASSWORD') or '').strip()
     if os.path.exists(KEY_FILE):
         raw = open(KEY_FILE, encoding='utf-8').read().strip()
@@ -496,14 +561,14 @@ def _group_by_recipient(leads):
     for em, rows in buckets.items():
         rows.sort(key=lambda r: (_days(r) if _days(r) > 0 else 99999,
                                  tier_rank.get(_tier(r), 3),
-                                 -(int(r.get('filed') or 0))))
+                                 -_filed_key(r)))
         head = dict(rows[0])
         head['_portfolio'] = rows[1:] if len(rows) > 1 else []
         head['_primary_email'] = em
         grouped.append(head)
     grouped.sort(key=lambda r: (_days(r) if _days(r) > 0 else 99999,
                                 tier_rank.get(_tier(r), 3),
-                                -(int(r.get('filed') or 0))))
+                                -_filed_key(r)))
     return grouped
 
 
@@ -751,14 +816,19 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
 
 
 # ---------------------------------------------------------------- SMTP
-def _smtp_send(user, pw, from_display, to_addr, subj, body):
+def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     """Sends a text/plain email via Gmail SMTP over SSL. Raises on failure.
-    Returns (message_id, server_response)."""
+    Returns (message_id, server_response).
+
+    from_addr (2026-09-08): the lane alias for From: and the Message-ID domain — same contract as
+    send_server._smtp_send. Login stays `user`; Gmail accepts the alias because it is registered
+    under that account's Send-mail-as and signs DKIM with the alias domain. None = the login."""
+    sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
-    msg['From'] = f'{from_display} <{user}>' if from_display else user
+    msg['From'] = f'{from_display} <{sender}>' if from_display else sender
     msg['To'] = to_addr
     msg['Subject'] = subj
-    msg['Message-ID'] = make_msgid(domain=user.split('@', 1)[-1])
+    msg['Message-ID'] = make_msgid(domain=sender.split('@', 1)[-1])
     msg['Date'] = formatdate(localtime=True)
     msg.set_content(body)
 
@@ -856,6 +926,7 @@ def main():
             'body': msg['body'],
             'portfolio': [_case(x) for x in siblings],
             'lang': args.lang,
+            'lane': _lane_of(head),
             '_actual_owner_email': head['_primary_email'],
         })
 
@@ -866,6 +937,22 @@ def main():
     print(f'  portfolio-fold  {len(eligible) - len(grouped):5} rows folded into peers')
     print(f'  queued          {len(entries):5}')
     print(f'  daily-cap room  {room:5}  (already sent today: {sent_today}, cap {DAILY_MAX})')
+    # LANE -> ALIAS PLAN, shown on the dry run too, so "where does each category leave from" is
+    # answered before anything is sent. Uses the bridge's own helpers (senders.json) — one map.
+    try:
+        import send_server as _SS
+        from collections import Counter as _Counter
+        _cfgp = _SS._load_senders()
+        _userp = (creds[0] or '') if creds else ''
+        _actp = _SS._senders_active(_userp, _cfgp)
+        for _ln, _n in sorted(_Counter(e.get('lane', '') for e in entries).items()):
+            _al = _SS._lane_from(_cfgp, _ln) if _actp else ''
+            _capnote = f'  (alias cap today {_SS._ramp_cap(_cfgp, _al)})' if _al else ''
+            print(f'  lane {_ln:8} {_n:5}  -> from {(_al or _userp or "?")}{_capnote}')
+        if not _actp:
+            print('  lane map OFF for this login (not the company account) — everything leaves as the login')
+    except Exception as _le:
+        print(f'  (lane plan unavailable: {str(_le)[:70]})')
     if args.test_to:
         print(f'  !! test mode: all sends will be re-routed to {args.test_to}')
     print()
@@ -879,7 +966,7 @@ def main():
         print('\n  top of queue:')
         for e in entries[:10]:
             pf = f' [+{len(e["portfolio"])}]' if e['portfolio'] else ''
-            print(f'    -> {e["to"]:35}  {e["owner"][:26]:26} case {e["case"][:22]:22} sale {e["sale"]:12}{pf}')
+            print(f'    -> {e["to"]:35}  {e["owner"][:26]:26} case {e["case"][:22]:22} sale {e["sale"]:12} lane {e.get("lane", ""):7}{pf}')
 
     _write_preview(entries)
     print(f'\n  preview -> {PREVIEW_FILE}')
@@ -901,16 +988,44 @@ def main():
         return 2
 
     from_display = (snd.get('name') or '').strip()
+    # ---- LANE -> FROM ALIAS (senders.json): the same map the browser worker gets via the bridge.
+    # Before 2026-09-08 this sender put every category on the login, whatever the map said.
+    # _senders_active is False for a personal-Gmail login (Google would rewrite the From anyway):
+    # then everything leaves as the login exactly as before, and the line below says so.
+    # Per-alias warm-up caps come from the ledger through _alias_sent_today, which re-reads the
+    # file each call, and _append_ledger writes after every send — so the count is live.
+    _cfg, _active = {}, False
+    try:
+        import send_server as _SS
+        _cfg = _SS._load_senders()
+        _active = _SS._senders_active(user, _cfg)
+    except Exception as _se:
+        print(f'  (lane map unavailable: {str(_se)[:60]} — sending as the login)')
     ok, fail = 0, 0
-    print(f'\nSending as {user}  (display: "{from_display or user}")')
+    print(f'\nSending as {user}  (display: "{from_display or user}")'
+          + ('  · lane map ON' if _active else '  · lane map OFF (login cannot send as the aliases)'))
     for i, e in enumerate(entries, 1):
+        lane = e.get('lane') or ''
+        from_addr = None
+        if _active:
+            _cand = _SS._lane_from(_cfg, lane)
+            if _cand and _cand != user:
+                _cap = _SS._ramp_cap(_cfg, _cand)
+                _sent = _SS._alias_sent_today(_cand)
+                if _sent >= _cap:
+                    # skip, not stop: another lane's alias may still have room today
+                    print(f'  [{i:3}/{len(entries)}] SKIP -> {e["to"]}  {_cand} at its warm-up cap for today '
+                          f'({_sent}/{_cap}) — the {lane} lane resumes tomorrow')
+                    continue
+                from_addr = _cand
         try:
-            mid, resp = _smtp_send(user, pw, from_display, e['to'], e['subj'], e['body'])
+            mid, resp = _smtp_send(user, pw, from_display, e['to'], e['subj'], e['body'], from_addr=from_addr)
             _append_ledger({
                 'd': datetime.date.today().isoformat(),
                 'ts_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
                 'ch': 'email',
-                'from': user,
+                'from': from_addr or user,
+                'lane': lane,
                 'to': e['to'],
                 'owner': e['owner'],
                 'case': e['case'],

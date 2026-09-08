@@ -133,7 +133,12 @@ def _ramp_cap(cfg, from_addr, today=None):
         start = dt.date.fromisoformat(str(cfg.get('ramp_start')))
     except Exception:
         start = today
-    day = max(1, (today - start).days + 1)
+    if today < start:
+        # Before the ramp opens the alias is warming only (warmup.py, company mailboxes). Zero cold
+        # mail. Without this, a future ramp_start computed as "day 1" and allowed 5 a day at once —
+        # which is exactly what pushing the date out was meant to stop (2026-09-08).
+        return 0
+    day = (today - start).days + 1
     cap = 0
     for row in cfg.get('ramp') or []:
         cap = int(row.get('per_day') or 0)
