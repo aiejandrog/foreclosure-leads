@@ -340,7 +340,7 @@ def build_letter_html(r, snd, lang='en'):
     if lang == 'es':
         if td:
             body = f"""<p>Estimado/a {e(first)},</p>
-<p>Mi nombre es {sN}, de Biscayne Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. {D.identity('es')} Los registros del condado muestran que su propiedad en <b>{addr}</b> tiene una <b>subasta de tax deed el {dt}</b>{case_es} por impuestos sin pagar.</p>
+<p>Mi nombre es {sN}, de Biscayne Solutions Group. Trabajamos con dueños de casa en exactamente esta situación, con todas las opciones sobre la mesa. Los registros del condado muestran que su propiedad en <b>{addr}</b> tiene una <b>subasta de tax deed el {dt}</b>{case_es} por impuestos sin pagar.</p>
 <p>Antes de esa fecha, los dueños suelen mirar tres caminos: pagar los impuestos atrasados y conservarla; vender en privado en efectivo antes de la subasta; o, si se vende por más de lo adeudado, reclamar el excedente que la ley permita. Con gusto repasamos cuál aún le sirve — sin costo ni compromiso.</p>
 <p>Si una venta privada resulta ser lo correcto, comprar tal cual y en efectivo antes de la fecha es una de las cosas que podemos hacer. Si otro camino es mejor, se lo diré con honestidad.</p>
 <p>{intake_es}</p>
@@ -366,12 +366,11 @@ def build_letter_html(r, snd, lang='en'):
 </ul>
 <p class="cta">Lo que necesito: llámeme o escríbame directamente al <b>{sP}</b> con la mejor hora para comunicarme con usted. Le daré mi atención personal.</p>
 <p>Todavía hay tiempo para salvar su casa o su equidad, pero no mucho.</p>
-<p>{D.identity('es')}</p>
 <p>Cordialmente,<br><br>{sig}</p>"""
     else:
         if td:
             body = f"""<p>Dear {e(owner)},</p>
-<p>My name is {sN}, with Biscayne Solutions Group. We work with homeowners in exactly this situation, every option on one table. {D.identity('en')} County records show your property at <b>{addr}</b> is scheduled for a <b>tax deed sale on {dt}</b>{case_en} due to unpaid property taxes.</p>
+<p>My name is {sN}, with Biscayne Solutions Group. We work with homeowners in exactly this situation, every option on one table. County records show your property at <b>{addr}</b> is scheduled for a <b>tax deed sale on {dt}</b>{case_en} due to unpaid property taxes.</p>
 <p>Before that date, owners usually look at three paths: pay the back taxes and keep it; sell privately for cash before the sale; or, if it sells for more than the taxes owed, claim any surplus the law allows. I am glad to walk through which of those still fits — at no cost and no obligation.</p>
 <p>If a private sale turns out to be the right move, buying as-is for cash before the deadline is one of the things we can do. If another path is better, I will tell you honestly.</p>
 <p>{intake_en}</p>
@@ -403,7 +402,6 @@ def build_letter_html(r, snd, lang='en'):
 </ul>
 <p class="cta">What I need: call or text me directly at <b>{sP}</b> with the best time to reach you. I'll give you my personal attention.</p>
 <p>There is still time to save your home or your equity, but not much.</p>
-<p>{D.identity('en')}</p>
 <p>Warm regards,<br><br>{sig}</p>"""
 
     today = datetime.date.today().strftime('%B %d, %Y')
