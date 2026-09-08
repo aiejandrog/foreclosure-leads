@@ -60,12 +60,16 @@ except Exception as _e:                                    # pragma: no cover - 
 
 def _cadence_lane(entry, today):
     """Sale-date proximity -> Morning Worker lane, so a follow-up leaves from the SAME domain the
-    lead's cold email did. Mirrors WORKER_LANES: urgent <=7d, active 8-45d, early otherwise.
+    lead's cold email did. Mirrors WORKER_LANES: urgent <=7d, active 8d and beyond, early = no date.
 
     'replied' is deliberately unreachable here: a reply CANCELS the sequence (status 'replied'), so
-    by construction nothing cadence sends is going to someone who wrote back. No auction date, or one
-    already passed, falls to `early` — the coldest lane and the slowest ramp, which is the
-    conservative direction for a lead whose timeline we cannot read."""
+    by construction nothing cadence sends is going to someone who wrote back. No auction date, an
+    unparseable one, or one already passed falls to `early` — the coldest lane and the slowest ramp,
+    the conservative direction for a lead whose timeline we cannot read.
+
+    2026-09-08: a sale beyond 45 days is ACTIVE, not early. It is still a dated, cold sale-date lead;
+    `early` is for fresh filings with no date at all. outreach_email._lane_of makes the same call, so
+    a lead's cold email and its follow-ups leave from the same alias whichever path sends them."""
     raw = str(entry.get('auction') or '').strip()
     if not raw:
         return 'early'
@@ -83,9 +87,7 @@ def _cadence_lane(entry, today):
         return 'early'
     if days <= 7:
         return 'urgent'
-    if days <= 45:
-        return 'active'
-    return 'early'
+    return 'active'          # 8 days and beyond, 45 included — see docstring
 
 # STOP DETECTION IS NOT LOCAL ANY MORE. This module used to own the regex below, and earlier today
 # (d53955d) I made its verdict permanent: a detected stop now writes optouts.json and the
