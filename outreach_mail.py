@@ -713,6 +713,17 @@ def send_via_lob(key, to_addr, from_addr, file_html, use_type='marketing', mail_
         'use_type': use_type,
         'mail_type': mail_type,
     }
+    # PMB GOES ON LINE 2, NOT FOLDED INTO LINE 1 (Lob US-verification, 2026-09-07).
+    # Lob's own CASS parse of the Doral box splits it as
+    #     secondary_designator "Ste" / secondary_number "310"   -> primary_line
+    #     pmb_designator "PMB"       / pmb_number "2008"        -> secondary_line
+    # DPV returned "Y" with footnote RR (CMRA confirmed, PMB present) for that split. Cramming both
+    # onto address_line1 also verified, but this is the mapping Lob itself returns, so use it.
+    # Sent ONLY when present -- Lob rejects an empty address_line2 on some endpoints, and every
+    # recipient address in this pipeline is single-line.
+    _l2 = (from_addr.get('address_line2') or '').strip()
+    if _l2:
+        data['from[address_line2]'] = _l2
     resp = requests.post('https://api.lob.com/v1/letters',
                          headers={'Authorization': 'Basic ' + auth}, data=data, timeout=45)
     ok = resp.status_code in (200, 201)
@@ -821,6 +832,16 @@ def main():
     # that is the only brand surface Lob's standard #10 stock exposes on the sealed envelope.
     from_addr = dict(from_parsed, name=(snd.get('name') or _safe_llc(snd))[:40],
                      company=_safe_llc(snd))
+    # SENDER-ONLY structured overrides. parse_address() serves 2,000+ messy county recipient
+    # addresses and deliberately emits ONE line and a 5-digit ZIP; it is not the place to bolt on
+    # PMB/ZIP+4 handling. The return address is a single known-good string that has been
+    # CASS-verified, so it carries its exact parts explicitly instead of being re-derived.
+    #   addr_line2 -> the PMB (Lob's own parse puts it on secondary_line)
+    #   addr_zip   -> ZIP+4 (33122-2006); parse_address matches the +4 but keeps only the 5
+    if snd.get('addr_line2'):
+        from_addr['address_line2'] = str(snd['addr_line2']).strip()
+    if snd.get('addr_zip'):
+        from_addr['address_zip'] = str(snd['addr_zip']).strip()
     live = key.startswith('live_')
     print(f"\nSending {len(queue)} letters via Lob ({'LIVE — real mail + real charges' if live else 'TEST key — no real mail'})...")
 
