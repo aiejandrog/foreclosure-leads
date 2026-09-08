@@ -780,7 +780,16 @@ def main():
     ap.add_argument('--limit', type=int, default=0, help='cap the batch size (0 = no cap)')
     ap.add_argument('--remail', action='store_true', help='include cases already in mail_sent.json')
     ap.add_argument('--queue', default='', help="a mail-queue JSON from the tracker's 'Mail batch' button (pre-selected, opt-out-filtered)")
-    ap.add_argument('--send', action='store_true', help='ACTUALLY send via Lob (needs lob.key + funded account)')
+    ap.add_argument('--send', action='store_true', help='ACTUALLY send (needs the chosen vendor\'s credentials + a funded account)')
+    # VENDOR CHOICE. Lob is the default (largest install base here, address verification, etc).
+    # Click2Mail is the 9/08 second source added because Lob's new-account review paused live writes
+    # while 73 letters had a sale-date deadline. Same letter, same envelope, same return address --
+    # the vendor swap is a routing decision, not a copy decision. --prod is a click2mail-only flag
+    # (Lob's live/test is decided by the key prefix, not a CLI arg).
+    ap.add_argument('--vendor', choices=['lob', 'c2m'], default='lob',
+                    help="direct-mail vendor: 'lob' (default) or 'c2m' (Click2Mail)")
+    ap.add_argument('--prod', action='store_true',
+                    help='c2m only: hit PRODUCTION (default: staging = free, no real mail)')
     # 2026-09-03: Jesse's letter variant (FINAL NOTICE / URGENT). Alejandro's explicit ask, verbatim.
     # 'default' = build_letter_html (Field Manual 5-exits copy); 'jesse' = build_letter_html_jesse.
     ap.add_argument('--variant', choices=['default', 'jesse'], default='default',
@@ -853,10 +862,26 @@ def main():
         return
 
     # ---- real send path ----
-    key = _load_key()
-    if not key:
-        print("\nABORT: --send requires a Lob API key in lob.key (gitignored). Create it, then re-run.")
-        sys.exit(1)
+    # VENDOR-AWARE CREDENTIAL CHECK. Fail LOUD before touching the loop, with the exact fix path.
+    key = None
+    if a.vendor == 'c2m':
+        # Import lazily so a Lob-only send is not blocked by a missing click2mail install/module.
+        try:
+            import click2mail as _c2m
+            _probe = _c2m.check_credentials(prod=a.prod)
+        except Exception as ex:
+            print("\nABORT: --vendor c2m needs click2mail.py + a click2mail.key JSON "
+                  "({\"username\":...,\"password\":...,\"env\":\"stage\"}). Details: %s" % ex)
+            sys.exit(1)
+        if not _probe.get('ok'):
+            print("\nABORT: Click2Mail credentials rejected (%s): %s" % (_probe.get('env'), _probe.get('reason')))
+            sys.exit(1)
+        print("  Click2Mail auth ok — env=%s, balance=%s" % (_probe.get('env'), _probe.get('balance')))
+    else:
+        key = _load_key()
+        if not key:
+            print("\nABORT: --send --vendor lob requires a Lob API key in lob.key (gitignored). Create it, then re-run.")
+            sys.exit(1)
     if not (snd and from_parsed):
         print("\nABORT: --send requires a complete sender.json with a parseable return address (name + addr).")
         sys.exit(1)
@@ -874,15 +899,31 @@ def main():
         from_addr['address_line2'] = str(snd['addr_line2']).strip()
     if snd.get('addr_zip'):
         from_addr['address_zip'] = str(snd['addr_zip']).strip()
-    live = key.startswith('live_')
-    print(f"\nSending {len(queue)} letters via Lob ({'LIVE — real mail + real charges' if live else 'TEST key — no real mail'})...")
+    # LIVE flag: Lob is decided by key prefix, Click2Mail by --prod. Same intent, different signal.
+    if a.vendor == 'c2m':
+        live = bool(a.prod)
+        vendor_label = 'Click2Mail (%s)' % ('PROD — real mail + real charges' if live else 'STAGING — no real mail')
+    else:
+        live = key.startswith('live_')
+        vendor_label = 'Lob (%s)' % ('LIVE — real mail + real charges' if live else 'TEST key — no real mail')
+    print(f"\nSending {len(queue)} letters via {vendor_label}...")
 
     ok_n = 0
     for r, addr in queue:
         to_addr = dict(addr, name=(_owner_name(r) or 'Current Resident')[:40])
         letter = _builder(r, snd, a.lang)
         try:
-            ok, j = send_via_lob(key, to_addr, from_addr, letter)
+            if a.vendor == 'c2m':
+                # send_letter returns a dict; adapt to the (ok, response_dict) shape the ledger writer
+                # expects. job_id maps to Lob's letter id in the ledger — same purpose, cross-vendor.
+                res = _c2m.send_letter(letter, to_addr, from_addr,
+                                       name='DealFlow ' + _case(r),
+                                       prod=a.prod)
+                ok, j = True, {'id': res.get('job_id', ''),
+                               'expected_delivery_date': '',
+                               'vendor': 'click2mail', 'env': res.get('env', '')}
+            else:
+                ok, j = send_via_lob(key, to_addr, from_addr, letter)
         except Exception as ex:
             ok, j = False, {'error': {'message': str(ex)}}
         if ok:
