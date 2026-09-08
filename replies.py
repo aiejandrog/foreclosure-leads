@@ -327,7 +327,10 @@ def owner_emails():
         if ems:
             out.setdefault(case, [])
             out[case].extend(ems)
-    for fn in ('leads_final.json', 'broward_leads.json', 'palmbeach_leads.json'):
+    # balloon_leads.json (2026-09-08): the investor refi lane. Its emails come from balloon_contacts
+    # (GetLeads / skiptrace), and PASS 1 must search FROM them too — the balloon subject line is not
+    # "Regarding your property at", so PASS 2's subject match can never catch an investor's reply.
+    for fn in ('leads_final.json', 'broward_leads.json', 'palmbeach_leads.json', 'balloon_leads.json'):
         d = _load_json(fn, [])
         rows = d if isinstance(d, list) else d.get('leads', d)
         if not isinstance(rows, list):

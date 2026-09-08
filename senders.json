@@ -1,5 +1,5 @@
 {
-  "_comment": "Which FROM address the send bridge uses per Morning Worker lane, and how many cold sends each alias may carry per day while it warms. Read by send_server.py on every /send (no restart needed). All aliases send through the ONE login in bsg_gmail.key (alejandro@bsgflorida.com + app password); Gmail signs DKIM with the alias domain because each alias is registered under Send-mail-as. If the login is NOT a bsgflorida.com account (old gmail.key), the map is ignored and everything goes out as the login, exactly as before. Lane keys match WORKER_LANES in tracker_template.html; the worker passes meta.wl. Strategy: the closer a lead is to a real conversation, the closer to the brand domain. replied = they wrote back, urgent = sale inside 7 days (small, time-critical, personalized) -> bsgflorida.com, capped. active = sale 8-45 days, the bulk cold lane -> biscaynesolutionsgroup.com. early = fresh lis pendens, largest and coldest -> bsgfl.com. Ramp is days since ramp_start -> sends per alias per day; the last entry holds forever. main_domain_cap protects bsgflorida.com regardless of ramp.",
+  "_comment": "Which FROM address the send bridge uses per Morning Worker lane, and how many cold sends each alias may carry per day while it warms. Read by send_server.py on every /send (no restart needed). All aliases send through the ONE login in bsg_gmail.key (alejandro@bsgflorida.com + app password); Gmail signs DKIM with the alias domain because each alias is registered under Send-mail-as. If the login is NOT a bsgflorida.com account (old gmail.key), the map is ignored and everything goes out as the login, exactly as before. Lane keys match WORKER_LANES in tracker_template.html; the worker passes meta.wl. Strategy: the closer a lead is to a real conversation, the closer to the brand domain. replied = they wrote back, urgent = sale inside 7 days (small, time-critical, personalized) -> bsgflorida.com, capped. active = sale 8-45 days, the bulk cold lane -> biscaynesolutionsgroup.com. early = fresh lis pendens, largest and coldest -> bsgfl.com. Ramp is days since ramp_start -> sends per alias per day; the last entry holds forever. main_domain_cap protects bsgflorida.com regardless of ramp. balloon (2026-09-08) = the investor refi lane (hardmoney_balloon -> balloon_leads.json, st:BAL): a B2B rate pitch, so it rides the corporate-sounding alias and SHARES that alias's daily ramp with the active lane. The From DISPLAY for this lane is sender.json balloon_signer (the advisor), set by send_server, because the body signs as him too.",
   "ramp_start": "2026-09-07",
   "ramp": [
     {"through_day": 3, "per_day": 5},
@@ -16,6 +16,7 @@
     "urgent": "alejandro@bsgflorida.com",
     "active": "alejandro@biscaynesolutionsgroup.com",
     "early": "alejandro@bsgfl.com",
+    "balloon": "alejandro@biscaynesolutionsgroup.com",
     "default": "alejandro@bsgflorida.com"
   }
 }

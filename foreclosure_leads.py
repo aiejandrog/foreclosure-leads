@@ -1859,6 +1859,15 @@ def make_tracker(leads):
         d['county'] = 'MIAMI-DADE'
         slim.append(d)
 
+    # BALLOON LANE (2026-09-08): refresh balloon_leads.json from hardmoney_balloon so the county merge
+    # below picks it up like any other <county>_leads.json (st:'BAL', county-tagged, slim). Fail-soft
+    # on purpose — a broken balloon build must never take the homeowner board down with it.
+    try:
+        import balloon_leads as _BL
+        _BL.build(write=True)
+    except Exception as _ble:
+        print('balloon lane: SKIPPED (%s) — board unaffected' % str(_ble)[:100])
+
     # Merge other counties: any <county>_leads.json (produced by county_leads.py — already slim + county-tagged).
     import glob as _glob
     for _xf in sorted(_glob.glob(os.path.join(HERE, '*_leads.json'))):
@@ -2522,6 +2531,12 @@ def make_tracker(leads):
         _dg_tally = _DG_BAKE.Tally()
         _dg_baked = 0
         for _d in slim:
+            if _d.get('st') == 'BAL':
+                # A balloon-refi row is an LLC investor with a maturing note, not a distressed
+                # homeowner: every diligence code (owner gone, debt eats value, paid above today's
+                # price, equity off a judgment) asks about a foreclosure that does not exist here.
+                # Running the gate would HOLD the whole lane on PARTIES_UNAVAILABLE. Not gated.
+                continue
             try:
                 _d.update(_DF_BAKE.annotate(_d))              # flags/severity/dive, for display
                 _d.update(_BB_BAKE.annotate(_d) if _BB_BAKE else {})   # standing buy-box tag

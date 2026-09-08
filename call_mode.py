@@ -319,6 +319,17 @@ def _quo_recording():
         return False
 
 
+def _balloon_signer():
+    """sender.json balloon_signer -> the call page (SENDER.bsigner), so the investor lane's opener and
+    voicemail introduce the ADVISOR — the same name genBalloonEmail signed and send_server put on the
+    From line. Empty when unset: fillScript then falls back to the caller's own name."""
+    try:
+        import entity
+        return str(entity.sender().get('balloon_signer') or '').strip()
+    except Exception:
+        return ''
+
+
 def _cnam_ok():
     try:
         import entity
@@ -794,6 +805,11 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         case = d.get('case') or ''
         if not case or case in optouts or case in deads:
             continue
+        # BALLOON rows (balloon_leads.py, st:'BAL'): an LLC investor with a maturing hard-money
+        # note. Three homeowner gates below do not apply and would silently drop the whole lane:
+        # the diligence gate (asks about a foreclosure that does not exist), the auction-window
+        # gate (no auction — the clock is the note's est. maturity) and the sale-passed gate.
+        is_bal = (d.get('st') == 'BAL')
         if _identity_opted(d):
             _ident_dropped += 1
             continue
@@ -805,7 +821,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # it on purpose: both are "this lead is not what the card says it is", both are decided at
         # build time, and neither is a preference. Sits BEFORE the equity floor and the phone-pair
         # work below so a held lead never pays for a rank translation it will not use.
-        _dgv = _dg.check(d)
+        _dgv = _dg.check(d) if not is_bal else {'hold': False}
         if _dgv['hold']:
             continue
         # EQUITY FLOOR. A KNOWN, deeply underwater lead is a call with no possible win: no equity to
@@ -854,7 +870,12 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         except (TypeError, ValueError):
             days = 9999
         is_lp = (d.get('st') == 'LP')
-        if not is_lp and (days < 0 or days > max_days):     # auction already passed, or too far out
+        if is_bal:
+            # the clock is the note's est. maturity (balloon_leads.py). Negative = past the 24-month
+            # wall = HOTTEST, so it must not read as "auction already passed" below.
+            _bd = (d.get('bal') or {}).get('days')
+            days = int(_bd) if isinstance(_bd, (int, float)) else 9999
+        if not is_lp and not is_bal and (days < 0 or days > max_days):     # auction already passed, or too far out
             continue
         # An LP row that GAINED a sale date which then passed is a sold property, not a fresh
         # filing — the board's EARLY lane closed this exact hole; mirror it here (audit 2026-08-18).
@@ -998,6 +1019,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         if not row['k']:
             row.pop('k')
         # ---- flags: one packed string instead of a dozen booleans ----
+        if is_bal:
+            # Ship the note on the row so the phone can lane on it and render THE NOTE band. `d` is
+            # already the maturity countdown (above); `x` is the est. date the card prints.
+            _b = d.get('bal') or {}
+            row['st'] = 'BAL'
+            row['lp'] = 0
+            row['x'] = _b.get('maturity') or ''
+            row['bal'] = {k: _b.get(k) for k in ('lender', 'amt', 'origin', 'age_mo', 'maturity', 'days',
+                                                 'ltv', 'verdict', 'why', 'fits') if _b.get(k) is not None}
         fl = ''
         if d.get('eqfake'): fl += 'E'          # equity is a gross upper bound
         if d.get('ju'): fl += 'J'              # judgment not posted
@@ -1051,6 +1081,12 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # fields are stripped above, so `e` is often absent; unknown equity sorts after known and must
     # never masquerade as 0 (the not-checked-is-not-zero rule).
     def _band(r):
+        # BALLOON rows: the clock is a note maturity, not an auction, and "0-4 days" is the HOTTEST
+        # state (the borrower must refinance or extend THIS week) — the opposite of a foreclosure at
+        # 0-4 days. Prime band, soonest first via `d`. They never mix with homeowner rows on the
+        # phone (own lane) and the sheet drops them; this only keeps the shared sort honest.
+        if r.get('st') == 'BAL':
+            return 0
         d = r.get('d', 9999)
         if d <= 4:
             return 3
@@ -1090,7 +1126,8 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     for _ph, _want in (('__SYNCJS__', 1), ('__SCRIPT__', 1), ('__OUTCOMES__', 1), ('__PAYLOAD__', 1),
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
-                       ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1)):
+                       ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
+                       ('__BSIGNER__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
             raise CallModeError('call_mode: placeholder %s occurs %d times in _PAGE (expected %d — '
@@ -1108,6 +1145,10 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'mars': MARS_BLOCK,
         'never': NEVER_SAY,
         'obj': load_objections(),
+        # BALLOON / REFI LANE — the investor script (vault: Refi Lane note, 2026-08-30). Read by
+        # renderSheet for st:'BAL' rows only; same keys as the homeowner script so the page has ONE
+        # renderer. `rec` copied from the main script: all-party consent applies to an investor too.
+        'bal': dict(BALLOON_SCRIPT, rec=(_QREC_LINE if _quo_recording() else None)),
         # Rendered in red under the opener ONLY when sender.json carries "quo_record": true.
         # Florida is ALL-PARTY consent (FS 934.03, a felony statute) -- if Quo auto-records, the
         # consent ask is not optional and it has to be ON the screen he reads from, not in a doc.
@@ -1125,6 +1166,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__TOTAL__', str(total)) \
                 .replace('__VMEN__', json.dumps(VOICEMAIL_EN)) \
                 .replace('__VMES__', json.dumps(VOICEMAIL_ES)) \
+                .replace('__BSIGNER__', json.dumps(_balloon_signer())) \
                 .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson)))
 
 
@@ -1225,6 +1267,71 @@ def phone_index(slim):
         for p in phones:
             digits.setdefault(p, seen[case])       # first lead wins; a number is one person
     return {'t': table, 'd': digits}
+
+
+# ---- BALLOON / REFI LANE SCRIPT ------------------------------------------------------------------
+# Source: vault "Refi Lane — investor email + text (hard money to DSCR)", 2026-08-30, Jesse's 8/29
+# structure. B2B, unregulated pitch: an investor paying 12% is making a business decision about a
+# rate. Fifteen minutes on purpose, not five — "an investor discussing a $400k refinance expects a
+# real conversation; five minutes reads as unserious." Tokens: {first} {sender} {st1} {phone} and
+# {gap} (fillScript — THEIR monthly 12%-vs-7% gap off the recorded note, never the example figure).
+BALLOON_SCRIPT = {
+    'op': {
+        'en': "Hi{first}, this is {sender} with Biscayne Solutions Group. I'm calling about the hard-money note on {st1}. Quick question: are you planning to extend it with the same lender, or refinance it?",
+        'es': "Hola{first}, le habla {sender} de Biscayne Solutions Group. Le llamo por el préstamo privado sobre {st1}. Pregunta rápida: ¿piensa extenderlo con el mismo prestamista, o refinanciarlo?",
+        'aen': "Hi, this is {sender} with Biscayne Solutions Group. I'm trying to reach whoever handles the financing on {st1}. Who would that be?",
+        'aes': "Hola, le habla {sender} de Biscayne Solutions Group. Busco a la persona que maneja el financiamiento de {st1}. ¿Quién sería?",
+        'wen': "Hi{first}, {sender} again from Biscayne Solutions Group. Did you get a minute to look at the note on {st1}?",
+        'wes': "Hola{first}, {sender} otra vez de Biscayne Solutions Group. ¿Tuvo un momento para ver lo del préstamo sobre {st1}?",
+    },
+    'q': [
+        {'k': 'THE RATE', 'w': 'Get the number out of their mouth. Twelve is the usual answer.',
+         'en': "What are you paying on it right now, roughly?", 'es': "¿Más o menos qué tasa está pagando ahora?"},
+        {'k': 'THE WALL', 'w': 'The maturity is the clock. Our 24-month date is a proxy; theirs is real.',
+         'en': "And when does it come due?", 'es': "¿Y cuándo vence?"},
+        {'k': 'THE PLAN', 'w': 'Extension at the same rate is the default. Name it so they hear it.',
+         'en': "Were you just going to extend with them at the same rate?", 'es': "¿Iba a extenderlo con ellos a la misma tasa?"},
+        {'k': 'THE MATH', 'w': 'Say THEIR number, from the card. Not the $400k example.',
+         'en': "On that balance the gap between twelve and seven is about {gap} a month. That's what the extension costs you.",
+         'es': "Con ese saldo, la diferencia entre doce y siete es como {gap} al mes. Eso es lo que le cuesta la extensión."},
+        {'k': 'THE ASK', 'w': 'Fifteen minutes. Not five. An investor at $400k expects a real conversation.',
+         'en': "Give me fifteen minutes to price it. If I can't beat what you've got, I'll tell you in the first five and you've lost nothing.",
+         'es': "Deme quince minutos para cotizarlo. Si no puedo mejorar lo que tiene, se lo digo en los primeros cinco y no perdió nada."},
+    ],
+    'cioc': [
+        ('DSCR', 'The product. Rent qualifies the loan, not their W-2.',
+         "DSCR loans, six to eight percent, seventy to eighty LTV. No tax returns, no personal income docs. The property's rent qualifies it. About two weeks to close."),
+        ('HARD EQUITY', 'When speed beats price.',
+         "If you need it faster than that, hard equity at sixty to seventy LTV funds in five to ten business days. Three to five points, ten to twelve percent, but it closes."),
+        ('WORST CASE', 'The close. Take the risk off the table.',
+         "Worst case I confirm you already have the best deal available, and you extend with confidence. That's fair, right?"),
+    ],
+    'f15': "{sender}, Biscayne Solutions Group. You're paying twelve on {st1}; I can likely get you seven. Fifteen minutes to price it, no commitment. {phone}.",
+    'mars': "B2B, unregulated pitch: a business talking to a business about a rate. No rescue framing, no homeowner disclaimers — but every number you quote is a program RANGE from the sheet, never a promise on THEIR file until it is priced.",
+    'never': [
+        'Never quote a rate as a promise. "Six to eight" is a program range; their number comes after pricing.',
+        'Never state the maturity date as fact. Ours is origin + 24 months. Ask theirs.',
+        'Never pitch the LLC. Pitch the human on the card; if that is not the decision-maker, get the name.',
+        'Never run the foreclosure script. There is no sale, no plaintiff, no equity rescue here.',
+    ],
+    'obj': [
+        {'t': "I'll just extend", 'w': 'The default. Price the cost of the default.',
+         's': "Sure, and most people do. It costs about {gap} a month more than it has to. Let me at least put a number next to it before you sign the extension."},
+        {'t': 'Rate is fine', 'w': 'Nobody thinks 12 is fine. They think the hassle is not worth it.',
+         's': "Fair. Then this is a fifteen-minute call that ends with you knowing you have the best deal. That's worth fifteen minutes."},
+        {'t': 'Send me something', 'w': 'Brush-off. Trade it for a time.',
+         's': "Happy to. It'll be more useful once I know your balance and maturity. What's a good time tomorrow for ten minutes?"},
+        {'t': 'Who are you', 'w': 'Identity, straight.',
+         's': "{sender}, Biscayne Solutions Group, Miami. We place DSCR and hard-equity loans on investment property. Your note on {st1} is public record; that's how I found you."},
+    ],
+    # Voicemail for the investor lane. The homeowner one ("maps your free backup... a day is
+    # everything") is a rescue message and reads absurd left for an LLC manager about a rate.
+    'vm': {
+        'en': "Hi{first}, this is {sender} with Biscayne Solutions Group, about the hard-money note on {st1}. If you're paying twelve on it, I can likely get you seven. Fifteen minutes to price it, no commitment, and if I can't beat it I'll say so. {phone}. Thanks.",
+        'es': "Hola{first}, le habla {sender} de Biscayne Solutions Group, por el préstamo privado sobre {st1}. Si está pagando doce, probablemente le consigo siete. Quince minutos para cotizarlo, sin compromiso, y si no lo mejoro se lo digo. {phone}. Gracias.",
+    },
+    'rec': None,
+}
 
 
 def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=None, guard=None,
@@ -1570,7 +1677,7 @@ function nowTS(){return new Date().toLocaleString();}
    Two heals copied from the board because both were real: a company name saved into `name` renders
    "this is Biscayne Solutions Group with Biscayne Solutions Group", and the legacy auto-injected "Jose"
    must not win over the real identity. Empty saved values must never clobber the default. */
-var SENDER = {name:'Alejandro Gonzalez', phone:'(786) 631-1823'};
+var SENDER = {name:'Alejandro Gonzalez', phone:'(786) 631-1823', bsigner:__BSIGNER__};   /* bsigner: sender.json balloon_signer, investor lane only */
 try{
   var _sv = JSON.parse(localStorage.getItem('fcSender')||'{}');
   if(_sv.name === 'Jose') delete _sv.name;
@@ -1588,6 +1695,13 @@ var _NOTNAME = ['UNKNOWN','OWNER','TENANT','OCCUPANT','ESTATE','TRUST','TRUSTEE'
                 'SEARCH','VIA','THE','LLC','INC','CORP','COMPANY','PROPERTIES','HOLDINGS'];
 function firstName(r){
   if(!r) return '';
+  /* BALLOON rows: the owner IS a company (flag C) but `on` carries the Sunbiz officer / decision-
+     maker, and that human is who answers. Greet them; the company rule below is for owners we
+     could not put a person behind. */
+  if(r.st==='BAL' && r.on){
+    var _t = String(r.on).replace(/[^A-Za-z '-]/g,' ').trim().split(/\s+/)[0]||'';
+    return _t ? _t.charAt(0).toUpperCase()+_t.slice(1).toLowerCase() : '';
+  }
   if(has(r,'C')) return '';                 // company / trust owner
   if(r.po) return '';                       // roll owner changed — the card says do not use this name
   /* Prefer `on` (owner_clean), which the pipeline has ALREADY flipped from the county roll's
@@ -1610,7 +1724,10 @@ function fillScript(t, r){
   var first = firstName(r);
   return String(t||'')
     .split('{first}').join(first ? (' ' + first).trimEnd() : '')
-    .split('{sender}').join(SENDER.name || '')
+    /* {sender} — balloon rows introduce the ADVISOR (sender.json balloon_signer, injected as
+       SENDER.bsigner): the refi pitch's asset is his name, and the email the same row received was
+       signed by him. Every other row introduces the caller. */
+    .split('{sender}').join((r && r.st==='BAL' && SENDER.bsigner) ? SENDER.bsigner : (SENDER.name || ''))
     .split('{street}').join((r && r.a) || 'your property')
     /* Street line only. A text is 160-char segments and reads aloud in the recipient's head — the
        full "1240 NW 54 ST, MIAMI, FL 33142" costs a segment and sounds like a mail merge. Falls back
@@ -1622,6 +1739,9 @@ function fillScript(t, r){
     .split('{date}').join(
       (r && r.x && r.d != null && r.d < 9000) ? (' with a sale date of ' + r.x) : '')
     .split('{phone}').join(SENDER.phone || '')
+    /* {gap} — balloon lane only: THEIR monthly 12%-vs-7% gap off the recorded amount, or the $400k
+       example when the amount is unknown. Rounded to $50 because their rate is an assumption. */
+    .split('{gap}').join((r && r.bal && +r.bal.amt) ? ('$'+(Math.round((+r.bal.amt)*0.05/12/50)*50).toLocaleString()) : '$1,700')
     .replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
 }
 
@@ -1964,6 +2084,10 @@ var _WORKED = [];
    by hand is a promise that breaks the first time only one copy is edited, and adding the
    tax-deed test was exactly that edit. */
 function isBuyBox(r){ return !!r.bb && r.bbs !== 'UNDERWATER' && !r.bbtd; }
+/* BALLOON LANE (2026-09-08) — hardmoney_balloon.py rows (st:'BAL'): an LLC investor whose hard-money
+   note is at/near its est. 24-month wall. Different desk, different script (SCRIPT.bal), different
+   card (_balCard). Never in soon/lp: those are homeowner lanes and would read them the rescue script. */
+function isBalloon(r){ return r.st==='BAL'; }
 /* ══════════════════ TEAM SEATS — two phones, one list, nobody dialled twice ══════════════════
    fcSeat = {n: <how many callers>, i: <which one am I, 0-based>, w: <my name>}. Absent or n<=1
    means solo and every filter below is a no-op, so a lone caller sees exactly what he saw before.
@@ -2178,7 +2302,10 @@ function pool(){
      not a candidate. Showing it here is how a $222k-underwater lead got ranked #2 on a hand-built
      sheet under the heading "most runway". */
   else if(lane==='bb'){ base = ROWS.filter(isBuyBox); }
-  else base = ROWS.filter(function(r){ return lane==='soon' ? !r.lp : !!r.lp; });
+  else if(lane==='bal'){ base = ROWS.filter(isBalloon); }
+  /* soon/lp both exclude balloon rows: a balloon row has no lis pendens (lp=0) and would otherwise
+     surface under "Sale soon" — an investor pitched the foreclosure script. Its lane is above. */
+  else base = ROWS.filter(function(r){ return !isBalloon(r) && (lane==='soon' ? !r.lp : !!r.lp); });
   var n = 0;
   var keep = base.filter(function(r){ if(suppressed(r)){ n++; return false; } return true; });
   _SUPN = n;
@@ -2366,6 +2493,7 @@ function head(){
   /* Buy-box count. Same predicate as the lane filter, so the number on the button and the list
      behind it can never disagree — a count derived a second way is a count that drifts. */
   var bbn = ROWS.filter(isBuyBox).length;
+  var bln = ROWS.filter(isBalloon).length;   /* Balloon lane, same rule: count on the button, hidden at zero */
   /* NO SILENT CAPS. Suppression is correct, but a list that quietly shrank looks identical to a list
      that was always that size — the exact confusion that hid 466 callable leads behind call_list's
      --max 30. Say the number out loud.
@@ -2380,6 +2508,7 @@ function head(){
        assumed to be whatever it was last time. Hidden only when the box matches nothing, so an
        empty buy-box never reads as a broken build. */
     +(bbn?('<button data-l="bb" class="'+(lane==='bb'?'on':'')+'">Buy-box &middot; '+bbn+'</button>'):'')
+    +(bln?('<button data-l="bal" class="'+(lane==='bal'?'on':'')+'">Balloon &middot; '+bln+'</button>'):'')
     +'</div>'
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
           +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')
@@ -2873,6 +3002,42 @@ function wireBrief(root, r){
     };
   });
 }
+/* BALLOON CARD — the same four bands as a homeowner card, different facts: the clock is the note's
+   est. maturity, the money is the loan + LTV verdict, "who is foreclosing" becomes THE NOTE. Kept in
+   its own builder so the homeowner branches in screenLead stay untouched. */
+function _balCard(r){
+  var B = r.bal||{};
+  var mny_ = function(n){ return (n==null||n==='') ? '<span class="nc">not known</span>' : ('$'+Math.round(+n).toLocaleString()); };
+  var dd = (B.days==null) ? null : +B.days;
+  var when = ((dd==null) ? 'note maturity not estimated'
+           : (dd<0 ? ('note PAST its 24-month wall by '+(-dd)+' days') : (dd===0 ? 'note matures TODAY' : ('note matures in '+dd+' days'))))
+           + (B.maturity ? (' &middot; est. '+esc(B.maturity)) : '');
+  var who = '<div class="addr">'+esc(r.a||'(property address not resolved)')+'</div>'
+          + '<div class="own">'+esc(r.on||'(no officer on file — ask for whoever handles the financing)')
+          + (r.o ? (' <span class="mut">&middot; '+esc(r.o)+'</span>') : '')+'</div>'
+          + '<div class="chips"><span class="chip">investor &middot; LLC borrower</span>'
+          + (B.fits ? ('<span class="chip ok">FITS &middot; '+esc(B.verdict||'DSCR')+'</span>') : (B.verdict ? ('<span class="chip">'+esc(B.verdict)+'</span>') : ''))
+          + '</div>';
+  var clock = '<div class="when">'+when+'</div><div class="chips">'
+            + (B.age_mo!=null ? ('<span class="chip">'+B.age_mo+' months since origin'+(B.origin?(' &middot; '+esc(B.origin)):'')+'</span>') : '')
+            + '<span class="chip">24-mo balloon is a PROXY &mdash; ask the real maturity</span>'
+            + ((dd!=null && dd<=30) ? '<span class="chip hot">extend-or-refi decision is NOW</span>' : '')
+            + '</div>';
+  var gap = B.amt ? Math.round((+B.amt)*(0.12-0.07)/12/50)*50 : 0;
+  var mny = '<div class="grid">'
+    + kv('Recorded note', mny_(B.amt))
+    + kv('Lender', B.lender ? esc(B.lender) : '<span class="nc">unknown</span>', 1)
+    + kv('Property value', mny_(r.v))
+    + kv('LTV', B.ltv ? (Math.round(B.ltv)+'%') : '<span class="nc">not priced</span>')
+    + kv('12% vs 7%, per month', gap ? ('~$'+gap.toLocaleString()) : '<span class="nc">n/a</span>')
+    + '</div>'
+    + (B.why ? ('<div class="chips"><span class="chip">'+esc(B.why)+'</span></div>') : '');
+  var whoFc = '<div class="grid">'
+    + kv('Program', 'DSCR 6&ndash;8% &middot; 70&ndash;80 LTV &middot; ~2 wk close', 1)
+    + kv('Or', 'Hard equity 60&ndash;70 LTV &middot; 5&ndash;10 business days', 1)
+    + '</div>';
+  return {when:when, who:who, clock:clock, mny:mny, whoFc:whoFc};
+}
 function screenLead(){
   SCREEN='lead';
   document.getElementById('sheet').classList.remove('hid');   // the script belongs to the call screen
@@ -3001,6 +3166,10 @@ function screenLead(){
     '<div class="warnbar">FL FTSA &mdash; solicitation calling hours are 8:00 AM to 8:00 PM Eastern. '
     + 'It is ' + esc(fl.txt) + ' there. Dialing anyway is your call; a callback they asked for is different from a cold dial.</div>';
 
+  /* Balloon rows swap the four bands' CONTENT (see _balCard); layout, dial link, file band and the
+     outcome flow are shared. Done last so nothing above has to know the lane exists. */
+  var _isBal = (r.st==='BAL');
+  if(_isBal){ var _B=_balCard(r); who=_B.who; clock=_B.clock; mny=_B.mny; whoFc=_B.whoFc; }
   $('app').innerHTML = head()
     + '<div class="card">'
     +   ftsaBar
@@ -3008,7 +3177,7 @@ function screenLead(){
     +   band('WHO', who)
     +   band('THE CLOCK', clock)
     +   band('THE MONEY', mny)
-    +   band('WHO IS FORECLOSING', whoFc + prop + histLine(r))
+    +   band(_isBal ? 'THE NOTE' : 'WHO IS FORECLOSING', whoFc + prop + histLine(r))
     +   fileBand(r)
     +   '<a class="dial" href="'+dialHref(d)+'"'+dialTarget()+' id="dial">'+fmt(d)+'</a>'
     +   '<div class="sub">number '+(phIdx+1)+' of '+r.p.length
@@ -3801,6 +3970,7 @@ async function freshCheck(){
    The lead's numbers stay visible behind it — that is the whole point of a sheet rather than an
    overlay. It lives outside #app so advancing a lead never destroys it mid-sentence. */
 var SCRIPT=__SCRIPT__, ciocIdx=-1, objIdx=-1;
+var SCRIPT_ALL=SCRIPT;   /* the full payload; renderSheet shadows SCRIPT per lane (homeowner vs SCRIPT_ALL.bal) */
 function sheetToggle(){ $('sheet').classList.toggle('open'); }
 
 /* ONE LANGUAGE AT A TIME. Every script block used to render EN and ES stacked — on the call screen
@@ -3837,6 +4007,10 @@ function say(en, es, r){
 }
 
 function renderSheet(r){
+  /* BALLOON rows read the investor script (SCRIPT_ALL.bal, from the vault Refi Lane note). Shadowing
+     the global with a local of the same name keeps every SCRIPT.* line below untouched — one switch,
+     not fourteen edits, and the homeowner script cannot leak onto an investor call. */
+  var SCRIPT = (r && r.st==='BAL' && SCRIPT_ALL.bal) ? SCRIPT_ALL.bal : SCRIPT_ALL;
   // Named vs anonymous opener — see firstName(). No usable name means ask for the owner instead of
   // greeting a company, a placeholder, or a name the card just told him not to use.
   var named = !!firstName(r);
@@ -3879,7 +4053,9 @@ function renderSheet(r){
      logs and advances. Read live, never a recording (prerecorded/ringless drops need prior express
      written consent under the TCPA). */
   b += '<div class="ltag">IF NO ANSWER &mdash; LEAVE THIS (read it live, no recording)</div>'
-     + say(VMEN, VMES, r);
+     /* the investor lane carries its own voicemail (SCRIPT.vm); the homeowner rescue message is
+        the page-level VMEN/VMES and stays exactly what it was for every other row */
+     + (SCRIPT.vm ? say(SCRIPT.vm.en, SCRIPT.vm.es, r) : say(VMEN, VMES, r));
 
   // OBJECTIONS — tap what you are hearing.
   b += '<div class="ltag">THEY PUSHED BACK &mdash; tap what you heard</div>';
@@ -3907,7 +4083,8 @@ function renderSheet(r){
     }
   }
 
-  b += '<div class="ltag">MARS &mdash; say this at the TOP of any advisor consult</div>'
+  b += '<div class="ltag">'+(SCRIPT===SCRIPT_ALL ? 'MARS &mdash; say this at the TOP of any advisor consult'
+                                                 : 'THE FRAME &mdash; a business talking to a business about a rate')+'</div>'
      + '<div class="say">'+esc(SCRIPT.mars)+'</div>';
 
   b += '<div class="never"><b>NEVER SAY</b><br>';

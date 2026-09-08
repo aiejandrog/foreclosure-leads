@@ -125,7 +125,9 @@ def _load_leads():
     leads = []
     for path in [os.path.join(HERE, 'leads_final.json')] + sorted(glob.glob(os.path.join(HERE, '*_leads.json'))):
         base = os.path.basename(path)
-        if base.startswith('_') or 'raw' in base:
+        # the digest counts HOMEOWNER leads; the investor refi lane (balloon_leads.json) reports its
+        # own line in the build log and would otherwise inflate every funnel number here by ~2,000.
+        if base.startswith('_') or 'raw' in base or base == 'balloon_leads.json':
             continue
         try:
             leads += json.load(open(path, encoding='utf-8'))

@@ -256,7 +256,11 @@ def _load_leads():
             pass
     for xf in sorted(glob.glob(os.path.join(HERE, '*_leads.json'))):
         base = os.path.basename(xf)
-        if base.startswith('_') or base in ('leads_raw.json',):
+        # balloon_leads.json (investor refi lane) is EXCLUDED from the unattended sender. This path
+        # composes the homeowner letter; an investor must only ever receive the balloon pitch, which
+        # lives in the Morning Worker (genBalloonEmail, wl:'balloon', advisor-signed). Left in, the
+        # first morning after balloon_contacts.json lands would mail LLC officers a foreclosure notice.
+        if base.startswith('_') or base in ('leads_raw.json', 'balloon_leads.json'):
             continue
         try:
             leads += json.load(open(xf, encoding='utf-8'))

@@ -1482,7 +1482,8 @@ def _scan():
     import glob
     tot = {}
     files = ['leads_final.json'] + [os.path.basename(f) for f in
-                                    sorted(glob.glob(os.path.join(HERE, '*_leads.json')))]
+                                    sorted(glob.glob(os.path.join(HERE, '*_leads.json')))
+                                    if os.path.basename(f) != 'balloon_leads.json']   # investor lane: never diligence-gated
     print('%-26s %6s %6s %6s %6s %6s %6s %6s'
           % ('file', 'rows', 'dive', 'now', 'hoa', 'hold', 'crit', 'high'))
     for bn in files:
@@ -1537,6 +1538,8 @@ def _print(s):
 def _one(case):
     import glob
     for f in ['leads_final.json'] + sorted(glob.glob(os.path.join(HERE, '*_leads.json'))):
+        if os.path.basename(f) == 'balloon_leads.json':
+            continue                                  # investor lane: the checklist is a homeowner checklist
         for r in _load(os.path.basename(f)):
             if case_of(r).upper() == _s(case).upper():
                 _print(checklist(r)['text'])
