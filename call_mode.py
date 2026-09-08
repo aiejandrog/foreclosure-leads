@@ -3194,6 +3194,23 @@ function screenLead(){
     // deploy landing during the first call of a session made freshCheck location.reload() the page
     // he was mid-call on. Three deploys shipped today while he was dialing.
     touched = true;
+    /* RECORD THE ATTEMPT AT DIAL TIME, not just on the tapped outcome (2026-09-08 field report:
+       "me and my cousin keep getting people we already called"). A call he never tags an outcome
+       for -- distracted, or iOS backgrounds the tab the instant the dialer opens on a 100-dial
+       day -- used to write NOTHING: no touch, no dial row, no cooldown, no sync. So the lead stayed
+       in pool() (suppressed() saw no lastCall) AND nothing pushed to the teammate, and the same
+       person resurfaced on BOTH phones -- the double-dial this whole team layer exists to stop.
+       A 'pending' dial gives lastCall()/suppressed()/teamRecheck() something to hold on (a short 6h
+       cooldown, set ONLY when no real outcome cooldown already exists) and queueSync() pushes it to
+       the cousin immediately. logOutcome() replaces this trailing 'pending' when the real outcome is
+       tapped, so the dial-through count stays one row per attempt, never doubled. */
+    try{
+      var n = notes[r.c] = notes[r.c] || {status:'',note:''};
+      n.dials = n.dials || [];
+      n.dials.push({d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'pending', by:caller()});
+      if(typeof n.cooldownH !== 'number') n.cooldownH = 6;
+      saveNotes(); queueSync();
+    }catch(e){ try{ logErr(e,'dial-prelog'); }catch(_e){} }
     setTimeout(screenOutcome,0);
   });
   /* Skip was the last raw i++ in the file — the same bug class already fixed for advance(), and
@@ -3490,7 +3507,7 @@ function screenOutcome(){
   $('redial').addEventListener('click', function(){
     var n=notes[r.c]=notes[r.c]||{status:'',note:''};
     n.dials=n.dials||[];
-    n.dials.push({d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'redial'});
+    n.dials.push({d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'redial', by:caller()});
     touched=true; saveNotes(); queueSync();
   });
   Array.prototype.forEach.call(document.querySelectorAll('.oc button'), function(b){
@@ -3638,6 +3655,7 @@ function afterCall(r, o, nextC){
   var _chips = '';
   var txt = '';
   if(hardSuppressed(r))     txt = '<div class="nc">This lead is suppressed ('+esc(hardSuppressed(r))+'). Do not text.</div>';
+  else if(o.k==='badnum')   txt = '<div class="nc">Bad number &mdash; nothing to text here. Try their next number below.</div>';
   else if(dnt)              txt = '<div class="nc">This number is on the do-not-text list. Call only.</div>';
   else if(!fl.ok)           txt = '<div class="nc">It is '+esc(fl.txt)+' in Florida. FTSA texting hours are 8:00 AM to 8:00 PM Eastern — this will be here in the morning.</div>';
   else if(sitKeys.length){
@@ -3825,6 +3843,14 @@ function logOutcome(r,o,digits){
     _ftsaCapToast(n);
   }
   n.dials=n.dials||[];
+  /* If this attempt was pre-logged as 'pending' at dial time (screenLead's dial handler), REPLACE
+     that marker instead of stacking a second dials row for one call -- keeps the dial count = one
+     row per attempt, not doubled. Matched on same number + same day so it never eats a genuinely
+     separate earlier attempt. */
+  var _lastD = n.dials[n.dials.length-1];
+  if(_lastD && _lastD.oc==='pending' && _lastD.d===today() && _lastD.ph4===String(digits).slice(-4)){
+    n.dials.pop();
+  }
   n.dials.push({d:today(),ts:nowTS(),tsu:Date.now(),ph4:String(digits).slice(-4),oc:o.k,by:caller()});
   n.cooldownH=o.h;
   if(o.k==='appt') n.status='Appointment';
