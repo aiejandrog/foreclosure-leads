@@ -372,7 +372,7 @@ outreach text with no opt-out is the kind of thing FS 501.1377 / TCPA notices ex
 
 ### Carlos = seat 2 (2026-09-02) — provisioned, tested, one on-phone step left
 
-- **Access code:** `Carlos 2 = DEALFLOW-GYFNF29J` (in site.codes, baked into the board). Carlos
+- **Access code:** `Carlos 2 = <REDACTED — see site.codes (gitignored)>` (in site.codes, baked into the board). Carlos
   unlocks the call page with this.
 - **Seat is per-PHONE localStorage (`fcSeat`), set on his device — no remote/URL setter exists,**
   so this cannot be done from a laptop session. On Carlos's phone, in Call Mode: tap the team-sync
