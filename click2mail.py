@@ -77,8 +77,20 @@ def _load_creds(prod=False):
             'click2mail: no credentials at %s. Create it as JSON:\n'
             '  {"username": "...", "password": "...", "env": "stage"}\n'
             'and make sure .gitignore covers it (the *.key rule already does).' % KEY_FILE)
+    # utf-8-sig strips Notepad's UTF-8 BOM transparently -- without this, a file saved from Notepad
+    # produces a "line 1 column 1 char 0" JSONDecodeError that reads as if it's totally empty when
+    # actually it just has three invisible bytes in front. Learned 2026-09-08.
     try:
-        d = json.load(io.open(KEY_FILE, encoding='utf-8'))
+        raw = io.open(KEY_FILE, encoding='utf-8-sig').read().strip()
+    except Exception as e:
+        raise ClickMailError('click2mail: cannot read %s (%s).' % (KEY_FILE, e))
+    if not raw:
+        raise ClickMailError(
+            'click2mail: %s exists but is EMPTY -- the file was created but never saved with '
+            'content. Put a JSON object in it:\n  {"username":"...","password":"...","env":"prod"}'
+            % KEY_FILE)
+    try:
+        d = json.loads(raw)
     except Exception as e:
         raise ClickMailError('click2mail: %s is not valid JSON (%s).' % (KEY_FILE, e))
     if not d.get('username') or not d.get('password'):
