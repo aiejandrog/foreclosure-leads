@@ -943,7 +943,8 @@ def main():
 
     print(f"\nDONE: {ok_n}/{len(queue)} letters sent. Ledger -> {os.path.relpath(SENT_LEDGER, HERE)}")
     if live:
-        print(f"Real charges incurred: ~${ok_n * COST_PER_LETTER:,.2f} (confirm on your Lob dashboard).")
+        _dash = 'Lob dashboard' if a.vendor == 'lob' else 'Click2Mail dashboard (users.click2mail.com)'
+        print(f"Real charges incurred: ~${ok_n * COST_PER_LETTER:,.2f} (confirm on your {_dash}).")
 
 
 if __name__ == '__main__':
