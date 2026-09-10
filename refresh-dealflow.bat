@@ -14,6 +14,32 @@ set "LOG=leads-run.log"
 echo.>> "%LOG%"
 echo ==================== REFRESH %date% %time% ====================>> "%LOG%"
 
+rem  [0/4] PULL THE CODE BEFORE BUILDING WITH IT.
+rem  Until 2026-09-10 the only pull in this file was the one before the push, at the BOTTOM. So a
+rem  run built whatever code the checkout happened to have, committed the result, and only then
+rem  rebased the day's new commits into history. The repo therefore looked fully up to date while
+rem  the published pages were built from yesterday's code, and nothing anywhere reported a problem.
+rem  Measured that morning: two commits pushed from the desktop the night before (the baked seat
+rem  split, the duplicate-calendar fix) were ancestors of the nightly commit and present in
+rem  origin/main, yet docs/call/index.html shipped with no seat and docs/call/carlos/ - a whole
+rem  page - was never created at all. Every push from the other machine landed a DAY LATE.
+rem
+rem  --ff-only ON PURPOSE, and NOT `--rebase --autostash -X theirs` like the pre-push pull below.
+rem  That combination is the one this repo already took an outage from (2026-08-19): the autostash
+rem  reapply can write CONFLICT MARKERS straight into docs/index.html, and a board beginning with
+rem  "<<<<<<<" renders as a blank site. Here there is nothing of ours to replay - we want the newest
+rem  code and nothing else - so a fast-forward is the whole job, and it can neither merge nor
+rem  conflict nor stash. If the tree is dirty or has local commits, git refuses and changes nothing.
+rem
+rem  NON-FATAL. A network blip must never cancel the nightly. On failure we build with the code
+rem  already on disk, which is exactly what happened every night before this block existed.
+echo [0/4] Updating code before the build...
+git pull --ff-only origin main >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     note: code pull skipped ^(offline, dirty tree, or local commits^) - building with the>> "%LOG%"
+  echo     code already on disk. Anything pushed from another machine lands on the NEXT run.>> "%LOG%"
+)
+
 echo [1/4] Pulling new auction leads (scrape + enrich)...
 python -u foreclosure_leads.py >> "%LOG%" 2>&1
 if errorlevel 1 (

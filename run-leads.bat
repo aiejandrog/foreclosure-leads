@@ -1,6 +1,15 @@
 @echo off
 cd /d "%~dp0"
 echo ==== run %date% %time% ==== >> leads-run.log
+rem  PULL THE CODE BEFORE BUILDING WITH IT (2026-09-10). Same fix, same reason as
+rem  refresh-dealflow.bat: the only pull here was the one before the push at the bottom, so a run
+rem  built yesterday's code, committed the result, and then rebased the new commits into history -
+rem  leaving the repo looking current while the published pages were stale, with no error anywhere.
+rem  --ff-only, never `--autostash -X theirs`: that is the combination whose stash reapply wrote
+rem  conflict markers into docs/index.html on 2026-08-19. Non-fatal - if it cannot fast-forward,
+rem  build with the code on disk.
+git pull --ff-only origin main >> leads-run.log 2>&1
+if errorlevel 1 (echo note: code pull skipped - building with the code already on disk >> leads-run.log)
 python foreclosure_leads.py >> leads-run.log 2>&1
 if errorlevel 1 (echo SCRAPE FAILED - skipping commit/push, live site left intact >> leads-run.log & goto :done)
 rem  2026-08-19 stress-test CRITICAL: this was `git add -A`, which stages EVERYTHING not gitignored -
