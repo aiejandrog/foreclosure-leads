@@ -1547,6 +1547,10 @@ body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system
      background:#0f1d3a;padding:4px 6px;line-height:1.2;
      color:var(--mut);font-size:14px;font-weight:600}
 .lane button.on{background:var(--gold);color:#0b1730;border-color:var(--gold)}
+/* A lane with rows but nothing callable right now — every one suppressed. Shown, not hidden:
+   hiding it would be the silent cap this page refuses to ship. Dimmed so it never competes with
+   a lane that has work in it. */
+.lane button.dim{opacity:.45}
 .card{background:var(--card);border:1px solid #2a3f6b;border-radius:14px;padding:16px;margin-top:12px}
 .addr{font-size:22px;font-weight:700;line-height:1.2}
 .own{font-size:15px;color:var(--mut);margin-top:2px}
@@ -2104,6 +2108,55 @@ function hardSuppressed(r){
   for(var j=0;j<p.length;j++) if(ph[p[j]]) return 'this number opted out';
   return '';
 }
+/* ═══════════════════ WHY A LEAD IS NOT ON THE LIST — three tiers, 2026-09-10 ═══════════════════
+   Returns {k:'hard'|'cool'|'soft'|'', t:<the sentence shown to the caller>}.
+
+   THE TIERS ARE NOT ONE RULE, and collapsing them is what produced "why am I still getting leads
+   I already contacted":
+     hard — may we contact this person AT ALL? Opt-out, DNC, wrong number, dead, every number bad.
+     cool — did we CALL them recently? Full outcome cooldown, in EVERY lane, email included. Once
+            you have actually spoken to someone, no lane may re-serve them.
+     soft — did we reach them on ANOTHER channel recently? Until today this tier did not exist:
+            lastCall() drops every touch whose ch is not 'call', so an emailed lead was, to this
+            page, a lead nobody had ever contacted. 684 of 1069 leads had outreach and no call.
+            The board has always suppressed on any channel (_lastTouchMs); the phone did not, so
+            two surfaces read one notes store and gave opposite answers.
+
+   THE ONE EXEMPTION: soft does not apply in the lane whose own predicate IS that channel. The
+   "Emailed / replied" lane exists precisely to CALL the people we emailed; a blanket "any touch
+   hides it" would empty the one lane built for the job. A TEXT still hides a lead in the email
+   lane — only a lane's own channel is exempt.
+
+   laneK is a PARAMETER, never the module global: head() evaluates eight lanes in a single paint,
+   which a global cannot express, and that is exactly how a button came to read 40 while the lane
+   behind it held 3. */
+function supReason(r, laneK){
+  var h = hardSuppressed(r);
+  if(h) return {k:'hard', t:h};
+  if((r.p||[]).length && nextLivePh(r, 0) < 0) return {k:'hard', t:'every number marked bad'};
+  var _n = notes[r.c] || {};
+  var _open = _replyOpen(r);
+  if(!_open){
+    var _c = suppressed(r);
+    if(_c) return {k:'cool', t:_c};
+    /* TIER 3 — reached on another channel. Same 30-day floor a logged "no" gets, because a soft
+       no is a soft no whichever way it arrived. */
+    var laneCh = (laneDef(laneK || lane) || {}).ch || '';
+    var lo = lastOutreach(r), soft = null;
+    var softH = (_n.status === 'Not interested') ? 720 : COOL_DEFAULT_H;
+    for(var chK in lo){
+      if(chK === 'call' || chK === laneCh) continue;   // tier 2 owns 'call'; a lane owns its own
+      if((Date.now() - lo[chK].ts) >= softH * 3600000) continue;
+      if(!soft || lo[chK].ts > soft.ts) soft = {ch:chK, ts:lo[chK].ts, by:lo[chK].by};
+    }
+    if(soft) return {k:'soft', t:'we already sent a ' + soft.ch + ' ' + agoTxt(soft.ts)
+                                 + (soft.by ? ' — ' + soft.by : '')};
+  }
+  return {k:'', t:''};
+}
+/* TIER 2 only — a call or a dial. Kept as its own function because afterCall(), _teammateCall()
+   and the registry all ask specifically "have we CALLED this person", which is a different
+   question from "have we contacted them". */
 function suppressed(r){
   var h = hardSuppressed(r);
   if(h) return h;
@@ -2124,7 +2177,10 @@ function suppressed(r){
      moment to send one (2026-08-19 field report). afterCall gates on hardSuppressed(). */
   var lc = lastCall(n);
   if(lc){
-    var coolH = (typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : 24;
+    /* A 'pending' dial is one we started and never tagged. Short hold, read from here rather than
+       from n.cooldownH, so an abandoned dial is retryable today and nothing syncs. */
+    var coolH = (lc.out === 'pending') ? PENDING_HOLD_H
+              : ((typeof n.cooldownH === 'number' && n.cooldownH >= 0) ? n.cooldownH : COOL_DEFAULT_H);
     /* NO MEANS NO, retroactively. Every notint logged BEFORE 2026-09-02 carries the old 72h in
        its stored cooldownH, so raising the outcome table alone would have left every already-
        collected "no" cycling back every three days until someone re-logged it. The STATUS is the
@@ -2148,7 +2204,7 @@ function suppressed(r){
       var sn = notes[sc] || {};
       var slc = lastCall(sn);
       if(!slc) continue;
-      var sCool = (typeof sn.cooldownH === 'number' && sn.cooldownH >= 0) ? sn.cooldownH : 24;
+      var sCool = (typeof sn.cooldownH === 'number' && sn.cooldownH >= 0) ? sn.cooldownH : COOL_DEFAULT_H;
       if(sn.status === 'Not interested' && sCool < 720) sCool = 720;
       if((Date.now() - slc.ts) < sCool * 3600000){
         return 'same person called ' + agoTxt(slc.ts) + (slc.by ? ' by ' + slc.by : '')
@@ -2209,6 +2265,25 @@ function nextLivePh(r, from){
    its own full pass over ROWS to count hidden leads, doubling the per-paint cost for a number pool()
    already knew. Both problems disappear if there is exactly one evaluator. */
 var _SUPN = 0;
+/* TIER 3 gets its OWN counter. "Suppressed for a compliance reason or already called" and "we
+   emailed them on Tuesday" are different facts and must never share a number — the same rule that
+   already keeps _SEATN and _CLMN separate. */
+var _SUPT = 0;
+/* Per-lane {raw, net} counts, filled by pool() in one pass so head()'s buttons and the list behind
+   them are the same number. */
+var _LANEN = {};
+/* ONE NUMBER, BOTH SURFACES. The board has defaulted to 72h since it shipped (_workerEligible,
+   _laneStats); this page defaulted to 24 in three places. 433 of 1069 leads carry no stored
+   cooldownH at all — every lead nobody has logged an outcome on — so they came back on the phone
+   two days before the board agreed they were due. This is the FALLBACK only: the per-outcome table
+   (CALL_OUTCOMES) is unchanged and a no-answer still returns tomorrow, which is deliberate. */
+var COOL_DEFAULT_H = 72;
+/* A dial with no logged outcome is an ATTEMPT, not a contact. It must hold the lead briefly (a
+   double-tap, or the other caller dialing the same second) and it must be retryable the same day.
+   It must NOT be written to n.cooldownH: that field is the CONTACT cooldown, it syncs to the board
+   on a bare-date tie, and the board's clock never reads dials — so a 6 written there suppressed
+   nothing there, it just sat on the note and rescaled the NEXT real outcome. Read-side only now. */
+var PENDING_HOLD_H = 6;
 /* Case ids that got at least one logged outcome this session. Deduped, because a lead dialled on
    three numbers is one lead worked, not three. */
 var _WORKED = [];
@@ -2232,6 +2307,55 @@ function liveDays(r){
   if(!m) return (typeof r.d==='number' && r.d<9000) ? r.d : null;
   var t=new Date(+m[3],+m[1]-1,+m[2]), td=new Date(); td.setHours(0,0,0,0);
   return Math.round((t-td)/864e5);
+}
+/* ═════════════ WHAT COUNTS AS "WE ALREADY CONTACTED THIS PERSON" (2026-09-10) ═════════════
+   Byte-for-byte the board's own vocabulary, tracker_template.html:3780. `worker` is deliberately
+   ABSENT: a morning-batch worked/skipped breadcrumb is TRIAGE, not a message to a human — the
+   board even gives a skip its own separate 24h. Counting it would suppress leads nobody wrote to. */
+var OUTREACH_CH = {call:1, text:1, email:1, letter:1, door:1};
+/* INBOUND is THEIR contact with US, not ours with them. _markReplied writes {ch:'email',
+   out:'OWNER REPLIED'} and the phone's own reply button writes a 'text' touch reading
+   "THEY REPLIED (inbound)". Treating either as outreach buries every lead who wrote back, for
+   three days, on the strength of their own reply — the exact inversion the board's _replyWaiting
+   exists to prevent. Same /replied|inbound/ convention isEmailFU already uses. */
+function _inbound(t){ return /replied|inbound/i.test(String((t && t.out) || '')); }
+/* Newest OUTBOUND touch per channel, across this case AND every sibling case of the same person
+   (r.pcs — one human, many case rows, same reason the call cooldown already walks it).
+   Returns {ch: {ts, by, out, c}}. One pass, because this now runs per row per lane per paint. */
+function lastOutreach(r){
+  var best = {}, cs = [r.c].concat(r.pcs || []);
+  for(var k=0;k<cs.length;k++){
+    var T = (notes[cs[k]] || {}).touches || [];
+    for(var j=0;j<T.length;j++){
+      var t = T[j];
+      if(!OUTREACH_CH[t.ch] || _inbound(t)) continue;
+      var ts = +t.tsu || +new Date(t.ts || t.d || 0) || 0;
+      if(!ts) continue;
+      var b = best[t.ch];
+      if(!b || ts > b.ts) best[t.ch] = {ts:ts, by:t.by||'', out:t.out||'', c:cs[k]};
+    }
+  }
+  return best;
+}
+/* THEY ANSWERED US. A reply inverts the whole rationale of a cooldown: it exists so we do not
+   pester someone we just contacted, and a person who wrote back is asking to be called. Open until
+   we send something outbound after their reply. Mirrors the board's _replyWaiting without its
+   MAILLOG dependency, which this page does not have. Bypasses the cooldowns ONLY — an opt-out,
+   a DNC or a wrong number still hides the lead, because those are not about timing. */
+function _replyOpen(r){
+  var cs = [r.c].concat(r.pcs || []);
+  for(var k=0;k<cs.length;k++){
+    var n = notes[cs[k]] || {};
+    if(!n.replied) continue;
+    var w = +new Date(n.replied) || 0;
+    if(!w) return true;
+    var answered = (n.touches||[]).some(function(t){
+      if(!OUTREACH_CH[t.ch] || _inbound(t)) return false;
+      return (+t.tsu || +new Date(t.ts || t.d || 0) || 0) > w;
+    });
+    if(!answered) return true;
+  }
+  return false;
 }
 /* Any touch on THIS case or a sibling case (r.pcs) inside `days`, matching pred(touch, note). */
 function _touchesWithin(r, days, pred){
@@ -2262,9 +2386,13 @@ function isEmailFU(r){
 }
 function _dayLane(r, lo, hi){ if(r.lp || isBalloon(r)) return false;
   var d=liveDays(r); return d!==null && d>=lo && d<=hi; }
+/* `ch` marks the two lanes whose predicate IS a channel. supReason exempts a lane from the soft
+   (other-channel) tier for its OWN channel only — the Emailed lane exists to call the people we
+   emailed, so suppressing them there would empty the one lane built for the job. A TEXT still
+   hides a lead in the email lane. Every other lane has no `ch` and is exempt from nothing. */
 var LANES = [
-  {k:'email',  lbl:'Emailed / replied', pred:isEmailFU,  hide0:true},
-  {k:'worker', lbl:'Worker',            pred:isWorker,   hide0:true},
+  {k:'email',  lbl:'Emailed / replied', pred:isEmailFU,  hide0:true, ch:'email'},
+  {k:'worker', lbl:'Worker',            pred:isWorker,   hide0:true, ch:'worker'},
   {k:'urgent', lbl:'Urgent 0-7',        pred:function(r){ return _dayLane(r,0,7); },   hide0:true},
   {k:'soon',   lbl:'Sale soon 8-45',    pred:function(r){ return _dayLane(r,8,45); },  hide0:false},
   {k:'late',   lbl:'46-60',             pred:function(r){ return _dayLane(r,46,60); }, hide0:true},
@@ -2436,7 +2564,7 @@ function _teammateCall(r){
   for(var ci=0; ci<cases.length; ci++){
     var n=notes[cases[ci]]||{}, lc=(typeof lastCall==='function')?lastCall(n):null;
     if(!lc || !lc.by || lc.by===caller()) continue;
-    var coolH=(typeof n.cooldownH==='number' && n.cooldownH>=0)?n.cooldownH:24;
+    var coolH=(typeof n.cooldownH==='number' && n.cooldownH>=0)?n.cooldownH:COOL_DEFAULT_H;
     if(n.status==='Not interested' && coolH<720) coolH=720;
     if((Date.now()-lc.ts) < coolH*3600000) return lc;
   }
@@ -2494,9 +2622,28 @@ function pool(){
        clock, and it is still one lead with one cooldown in suppressed(). */
   if(lane==='wq') lane='worker';                       // legacy key from an older stored state
   var base = ROWS.filter(laneDef(lane).pred);
-  var n = 0;
-  var keep = base.filter(function(r){ if(suppressed(r)){ n++; return false; } return true; });
-  _SUPN = n;
+  var n = 0, s = 0;
+  var keep = base.filter(function(r){
+    var sr = supReason(r, lane);
+    if(sr.k === 'soft'){ s++; return false; }          // reached on another channel — its own count
+    if(sr.k){ n++; return false; }                     // compliance, or already called
+    return true; });
+  _SUPN = n; _SUPT = s;
+  /* ONE PASS, EIGHT LANES. head() reads this instead of re-deriving its button numbers: a count
+     derived a second way is a count that drifts, and this one drifted badly — the buttons used a
+     bare ROWS.filter(pred) with NO suppression, so "Emailed / replied · 40" could sit above a lane
+     holding three. Every row is evaluated per lane because the soft tier is lane-dependent by
+     design; hard and cool short-circuit before any per-lane work. */
+  _LANEN = {};
+  LANES.forEach(function(L){
+    var raw = 0, net = 0;
+    ROWS.forEach(function(r){
+      if(!L.pred(r)) return;
+      raw++;
+      if(!supReason(r, L.k).k) net++;
+    });
+    _LANEN[L.k] = {raw:raw, net:net};
+  });
   /* SEAT FILTER LAST, so _SUPN keeps meaning "suppressed for a compliance reason" and does not
      silently absorb "belongs to the other caller" — two very different facts that must never
      share a counter. Counted separately and shown separately. */
@@ -2519,11 +2666,15 @@ function start(){
   /* The worker's queue is the DEFAULT when it has anything in it. Those leads were triaged this
      morning and are phone-only — the worker could not reach them any other way, so they are the
      highest-intent list on the device. Sale-soon and Fresh-filings stay one tap away. */
-  /* 2026-09-09: lanes are a table now. A warm reply outranks everything (same rule as the board's
-     Replies button), then this morning's worker touches, then Sale soon. */
-  if(ROWS.some(isEmailFU)) lane = 'email';
-  else if(ROWS.some(isWorker)) lane = 'worker';
-  else lane = 'soon';
+  /* NEVER OPEN ON 'email'. It shipped as the default on 2026-09-09 and that was wrong: it is a
+     follow-up list — by definition people we have already written to — so opening on it put him
+     straight onto leads he had already contacted, which is the complaint that produced this whole
+     change. The lane stays, one tap away. Chosen on the NET count so we also never open on a lane
+     whose every row is suppressed and land on "Nothing in this lane". */
+  lane = lane || 'soon';
+  pool();                                              // fills _LANEN for the choice below
+  var _net = function(k){ return (_LANEN[k] || {}).net || 0; };
+  lane = _net('worker') ? 'worker' : 'soon';
   if(SEAT){
     try{ localStorage.removeItem('fcSeat'); }catch(e){}          // legacy per-phone seat is dead here
     try{ var _cw = caller();
@@ -2561,6 +2712,22 @@ function paintSync(){
   if(k){ el.textContent='Team sync ON'+seatTxt;
     el.onclick=function(){ screenTeamKey(); };
     try{ syncPull().then(function(){ loadNotes();
+      /* THE WRONG-KEY TELL. A mistyped team code is a perfectly valid team of one; the server holds
+         ciphertext and can never detect it, so this line said "Team sync ON" forever while nothing
+         arrived. What IS detectable: a full list of leads with almost no history behind it. Real
+         state carries a touch on most leads (1050 of 1069 at the last good backup), so a near-empty
+         notes store against a full ROWS means the history did not land — wrong code, cleared
+         storage, or a genuine first run. Checked AFTER the pull so a cold start does not flash it. */
+      try{
+        var _nk = 0; try{ _nk = Object.keys(notes||{}).length; }catch(_e){}
+        if(ROWS.length > 50 && _nk < Math.max(10, ROWS.length * 0.05)){
+          el.innerHTML = '&#9888; <b style="color:#e2645f">NO LEAD HISTORY LOADED</b> &mdash; '+_nk
+            + ' notes for '+ROWS.length+' leads. Every lead will look fresh and nothing will be '
+            + 'hidden. Check the team code &mdash; one wrong character makes a silent team of one. '
+            + '<b style="color:var(--gold)">Tap to check it</b>';
+          el.onclick=function(){ screenTeamKey(); };
+        }
+      }catch(_e){}
       /* 2026-09-04: RE-POOL after the pull. The initial paint (and a lane switch) built the queue
          from pre-sync notes, so the first leads shown were ones a teammate or the other device had
          ALREADY worked -- "as soon as I land it puts me on people I already called". render() only
@@ -2692,11 +2859,17 @@ function head(){
   /* Every button counts with the SAME predicate pool() filters with — a count derived a second way
      is a count that drifts. Zero-count lanes are hidden (except Sale soon / Fresh filings, which
      always show so an empty build never reads as a broken build). */
+  /* Read pool()'s per-lane pass rather than re-deriving. The old line here was
+     `ROWS.filter(L.pred).length` — the same predicate but a DIFFERENT pipeline, with no
+     suppression in it, so a button could read 40 above a lane that held 3.
+     Hidden only at raw 0 (an empty build must never read as a broken build); a lane whose rows are
+     all suppressed shows a dimmed 0, because hiding it would be exactly the silent cap the line
+     below forbids. */
   var laneBtns = LANES.map(function(L){
-    var cnt = ROWS.filter(L.pred).length;
-    if(!cnt && L.hide0) return '';
-    return '<button data-l="'+L.k+'" class="'+(lane===L.k?'on':'')+'">'+L.lbl
-         + (cnt ? ' &middot; '+cnt : '')+'</button>';
+    var C = _LANEN[L.k] || {raw:0, net:0};
+    if(!C.raw && L.hide0) return '';
+    return '<button data-l="'+L.k+'" class="'+(lane===L.k?'on':'')+(C.raw && !C.net?' dim':'')+'">'
+         + L.lbl + (C.raw ? ' &middot; '+C.net : '')+'</button>';
   }).join('');
   /* NO SILENT CAPS. Suppression is correct, but a list that quietly shrank looks identical to a list
      that was always that size — the exact confusion that hid 466 callable leads behind call_list's
@@ -2707,6 +2880,11 @@ function head(){
   return '<div class="top"><div class="lane">'+laneBtns+'</div>'
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
           +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')
+    /* TIER 3, on its own line and never folded into the number above it. "Opted out" and "we
+       emailed them Tuesday" are different facts; a caller who cannot tell them apart cannot tell
+       whether the list is short because it is clean or short because it is stale. */
+    +(_SUPT?('<div class="supn">'+_SUPT+' more hidden &mdash; <b>we already reached them another way</b> '
+          +'(email, text, letter or door) within '+COOL_DEFAULT_H+'h</div>'):'')
     /* SEAT CHIP. Always rendered, even solo, because "am I splitting the list right now" is a
        question the caller must be able to answer without opening a menu — a partition you cannot
        see is one you assume is on when it is off, and that is the whole bug he asked to fix.
@@ -2807,6 +2985,24 @@ function band(lbl,inner){ return '<div class="band"><div class="blab">'+lbl+'</d
 
 /* What we have already said to this person, from the SAME notes store the board writes.
    n.dials is the only thing separating "3 dials, no answer" from "never tried". */
+/* "YOU HAVE ALREADY REACHED OUT TO THIS PERSON" — the thing a cooldown expiry must never hide.
+   histLine below answers a different question (how many, what status) and lives in the FOURTH band,
+   below the fold on a phone. This one is the FIRST thing in the card, above even the FTSA bar,
+   because it changes the opening SENTENCE of the call, not merely the decision to make it.
+   Deliberately NOT gated on the cooldown: the whole point is the lead that came back legitimately
+   after its cooldown expired and now looks brand new. */
+function priorBar(r){
+  var lo = lastOutreach(r), best = null;
+  for(var k in lo){ if(!best || lo[k].ts > best.ts) best = {ch:k, ts:lo[k].ts, by:lo[k].by}; }
+  if(!best) return '';
+  var chips = Object.keys(lo).sort(function(a,b){ return lo[b].ts - lo[a].ts; })
+    .map(function(k){ return '<span class="chip bad">'+esc(k)+' &middot; '+esc(agoTxt(lo[k].ts))
+        + (lo[k].by ? ' &middot; '+esc(lo[k].by) : '')+'</span>'; }).join('');
+  return '<div class="warnbar">&#9888; <b>ALREADY CONTACTED</b> &mdash; '+esc(best.ch)+' '
+       + esc(agoTxt(best.ts)) + (best.by ? ' by <b>'+esc(best.by)+'</b>' : '')
+       + '. Not a fresh lead &mdash; open like someone you have already reached out to.'
+       + '<div class="chips">'+chips+'</div></div>';
+}
 function histLine(r){
   var n=notes[r.c]||{}, ts=n.touches||[], dl=n.dials||[], out=[], byCh={};
   ts.forEach(function(t){ byCh[t.ch]=(byCh[t.ch]||0)+1; });
@@ -3382,6 +3578,7 @@ function screenLead(){
   if(_isBal){ var _B=_balCard(r); who=_B.who; clock=_B.clock; mny=_B.mny; whoFc=_B.whoFc; }
   $('app').innerHTML = head()
     + '<div class="card">'
+    +   priorBar(r)
     +   ftsaBar
     +   mlBan
     +   band('WHO', who)
@@ -3418,7 +3615,11 @@ function screenLead(){
       var n = notes[r.c] = notes[r.c] || {status:'',note:''};
       n.dials = n.dials || [];
       n.dials.push({d:today(), ts:nowTS(), tsu:Date.now(), ph4:String(d).slice(-4), oc:'pending', by:caller()});
-      if(typeof n.cooldownH !== 'number') n.cooldownH = 6;
+      /* 2026-09-10: this used to write n.cooldownH = 6. That field is the CONTACT cooldown and it
+         SYNCS — it reached the board on a bare-date tie, where the clock never reads dials, so the
+         6 suppressed nothing there and instead sat on the note permanently, rescaling the next
+         real outcome. The hold is read-side now: suppressed() sees oc:'pending' and holds
+         PENDING_HOLD_H. Same protection, nothing written, nothing propagated. */
       saveNotes(); queueSync();
     }catch(e){ try{ logErr(e,'dial-prelog'); }catch(_e){} }
     setTimeout(screenOutcome,0);

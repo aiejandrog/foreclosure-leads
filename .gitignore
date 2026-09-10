@@ -397,6 +397,9 @@ quo_calls.json
 # auction date; both failure modes it guards (the same human dialed twice, and a SOONER sale
 # date silently dropped) are invisible from the board.
 !_dupetest.py
+# ...and the "already contacted" suppression. Every property it guards is silent when it breaks:
+# the dial list just looks shorter, or a lane looks empty, and nothing says why.
+!_contactsuptest.py
 
 # image filename salt — MUST be identical on both engines (laptop + cloud);
 # losing this orphans docs/img entirely, since names cannot be recomputed from folios

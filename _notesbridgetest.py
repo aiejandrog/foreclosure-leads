@@ -113,20 +113,24 @@ def main():
         if not os.path.exists(SNAP):
             fails.append('daily snapshot was not written')
 
-        # A POORER push must be REFUSED — and must SAY SO. Until 2026-08-26 the server answered
-        # 200/saved:true for these, so 17 real device pushes were silently dropped this month (one
-        # holding 496 notes) while each device believed it had backed up. Refusing is right;
-        # reporting it as a save is not.
+        # A THIN push MERGES (2026-09-10). It used to be REFUSED, on the theory that a near-empty
+        # browser must not clobber the real history. Right worry, wrong instrument: richness is a
+        # total order over a partial one, so with two devices legitimately holding different work
+        # (measured: 645 cases on one side, 390 on the other, neither a superset) a single winner
+        # had to destroy real outcomes whichever way it went. It duly refused EVERY push for three
+        # weeks and the backup froze. The new contract is the one that satisfies both goals:
+        #   a thin push SAVES, it ADDS its own unique rows, and it DESTROYS nothing.
         poor = _post(f'http://127.0.0.1:{PORT}/notes',
                      {'_dealflow_notes': True, 'device': MARKER + '-poor',
                       'notes': {'ONLY-1': {'status': 'x'}}, 'workerLog': []})
-        if poor.get('saved') is not False:
-            fails.append(f'a poorer push was not refused (clobber guard): {poor}')
-        if not poor.get('refused'):
-            fails.append(f'a refused push did not explain itself: {poor}')
+        if poor.get('saved') is False:
+            fails.append(f'a thin push was refused instead of merged: {poor}')
         after_poor = json.load(open(NOTES, encoding='utf-8'))
-        if 'ONLY-1' in (after_poor.get('notes') or {}):
-            fails.append('the poorer push OVERWROTE the backup')
+        _an = after_poor.get('notes') or {}
+        if 'ONLY-1' not in _an:
+            fails.append('the thin push did not contribute its own row')
+        if 'TEST-000-CA-01' not in _an:
+            fails.append('the thin push DESTROYED the richer side — the whole point of the merge')
 
         # junk must be rejected
         try:
@@ -145,10 +149,25 @@ def main():
                 cur = json.load(open(NOTES, encoding='utf-8'))
                 if cur.get('device') == MARKER:
                     os.remove(NOTES)
+            # startswith, not ==: since the server MERGES (2026-09-10) the day snapshot carries the
+            # device of the LAST push, which is MARKER + '-poor', and an equality check left this
+            # suite's synthetic rows sitting in a real snapshot. Same for the incoming-push
+            # snapshots the merge writes so it stays reversible.
             if os.path.exists(SNAP):
                 snap = json.load(open(SNAP, encoding='utf-8'))
-                if snap.get('device') == MARKER:
+                if str(snap.get('device') or '').startswith(MARKER):
                     os.remove(SNAP)
+            _sd = os.path.dirname(SNAP)
+            for _f in (os.listdir(_sd) if os.path.isdir(_sd) else []):
+                if not _f.startswith('incoming_'):
+                    continue
+                _p = os.path.join(_sd, _f)
+                try:
+                    if str((json.load(open(_p, encoding='utf-8')) or {}).get('device')
+                           or '').startswith(MARKER):
+                        os.remove(_p)
+                except Exception:
+                    pass
         except Exception as e:
             fails.append(f'cleanup problem (check files by hand): {e}')
     finally:

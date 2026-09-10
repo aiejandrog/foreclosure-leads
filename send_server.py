@@ -255,6 +255,124 @@ def _append_ledger(entry):
                 time.sleep(0.15 * (attempt + 1))
 
 
+def _note_time(n):
+    """Newest activity on one case note, as an epoch-ms int. Reads MAX over touches and dials
+    rather than the last array element: the client sorts touches by a bare `d` date, which shoves
+    every undated touch to index 0 and can make the 'last' entry OLDER than one before it."""
+    best = 0
+    if not isinstance(n, dict):
+        return 0
+    for arr in (n.get('touches') or [], n.get('dials') or []):
+        for x in arr:
+            if not isinstance(x, dict):
+                continue
+            try:
+                t = int(x.get('tsu') or 0)
+            except Exception:
+                t = 0
+            if t > best:
+                best = t
+    return best
+
+
+_ARRAY_KEYS = (
+    ('touches', lambda t: (str(t.get('ts') or t.get('d') or ''), str(t.get('ch') or ''),
+                           str(t.get('out') or ''))),
+    ('dials',   lambda d: (str(d.get('ts') or ''), str(d.get('ph4') or ''))),
+    ('optlog',  lambda o: (str(o.get('ts') or ''), str(o.get('act') or ''), str(o.get('src') or ''))),
+)
+_STATUS_RANK = {'DO NOT CONTACT': 3, 'Dead': 2}
+
+
+def _merge_note(cur, inc):
+    """Union one case's note. Mirrors the client's _mergeLead: additive arrays, sticky suppression
+    flags, and a scalar only ever taken from the side with newer activity. Nothing is ever deleted —
+    a merge that can drop a touch is a merge that can un-suppress someone who opted out."""
+    cur = cur if isinstance(cur, dict) else {}
+    inc = inc if isinstance(inc, dict) else {}
+    out = dict(cur)
+    added = 0
+    for field, keyf in _ARRAY_KEYS:
+        a = [x for x in (cur.get(field) or []) if isinstance(x, dict)]
+        b = [x for x in (inc.get(field) or []) if isinstance(x, dict)]
+        if not a and not b:
+            continue
+        seen, merged = set(), []
+        for x in a + b:
+            try:
+                k = keyf(x)
+            except Exception:
+                k = repr(x)
+            if k in seen:
+                continue
+            seen.add(k)
+            merged.append(x)
+        added += max(0, len(merged) - len(a))
+        out[field] = merged
+    for field in ('badph', 'dntph'):
+        a, b = cur.get(field) or [], inc.get(field) or []
+        if a or b:
+            # UNION ONLY. A merge must never resurrect a number someone retired.
+            out[field] = sorted({str(x) for x in list(a) + list(b)})
+    for field in ('optout', 'wrongown'):
+        a, b = cur.get(field), inc.get(field)
+        if a and b:
+            out[field] = min(a, b) if (isinstance(a, str) and isinstance(b, str)) else (a or b)
+        elif a or b:
+            out[field] = a or b
+    ct, it = _note_time(cur), _note_time(inc)
+    cs, ins_ = str(cur.get('status') or ''), str(inc.get('status') or '')
+    cr, ir = _STATUS_RANK.get(cs, 1 if cs else 0), _STATUS_RANK.get(ins_, 1 if ins_ else 0)
+    # A hard suppression outranks anything; otherwise the side with newer activity wins.
+    if ir > cr or (ir == cr and ins_ and it > ct):
+        out['status'] = ins_
+    if inc.get('cooldownH') is not None and (it >= ct or cur.get('cooldownH') is None):
+        out['cooldownH'] = inc.get('cooldownH')
+    for k, v in inc.items():
+        if k in out or k in ('touches', 'dials', 'optlog', 'badph', 'dntph', 'status', 'cooldownH'):
+            continue
+        out[k] = v
+    return out, added
+
+
+def _merge_payload(cur, inc):
+    """Union two whole note payloads. Returns (merged, stats)."""
+    cn = (cur or {}).get('notes') or {}
+    inn = (inc or {}).get('notes') or {}
+    merged_notes = dict(cn)
+    new_cases, new_rows = 0, 0
+    for case, n in inn.items():
+        if case not in merged_notes:
+            merged_notes[case] = n
+            new_cases += 1
+            if isinstance(n, dict):
+                new_rows += len(n.get('touches') or []) + len(n.get('dials') or [])
+            continue
+        merged_notes[case], added = _merge_note(merged_notes[case], n)
+        new_rows += added
+    out = dict(cur or {})
+    out.update({k: v for k, v in (inc or {}).items() if k not in ('notes',)})
+    out['notes'] = merged_notes
+    for field, keyf in (('workerLog', lambda x: json.dumps(x, sort_keys=True)),
+                        ('sentArchive', lambda x: json.dumps(x, sort_keys=True))):
+        a = (cur or {}).get(field) or []
+        b = (inc or {}).get(field) or []
+        if not a and not b:
+            continue
+        seen, merged = set(), []
+        for x in a + b:
+            try:
+                k = keyf(x)
+            except Exception:
+                k = repr(x)
+            if k in seen:
+                continue
+            seen.add(k)
+            merged.append(x)
+        out[field] = merged
+    return out, {'new_cases': new_cases, 'new_rows': new_rows}
+
+
 def _richness(payload):
     """A rough 'how much real call history is in here' score. An empty / fresh browser still carries
     ~1 note (the opt-out ledger auto-bakes on every load), so counting notes alone isn't enough —
@@ -263,7 +381,9 @@ def _richness(payload):
     touches = 0
     for n in notes.values():
         if isinstance(n, dict):
-            touches += len(n.get('touches') or [])
+            # dials counted too (2026-09-10): a phone whose whole contribution is 193 dial rows
+            # scored ZERO here, so its push could never win and its work never reached disk.
+            touches += len(n.get('touches') or []) + len(n.get('dials') or [])
     return len(notes) + touches + len((payload or {}).get('workerLog') or []) \
         + len((payload or {}).get('sentArchive') or [])
 
@@ -278,58 +398,70 @@ _WROTE = {'ok': True, 'cur': 0, 'inc': 0}
 def _write_notes(payload):
     """Atomic write of the tracker's localStorage state + one snapshot file per day.
 
-    RICHEST-WINS, not last-write-wins. 127.0.0.1 keeps LAN/internet out, but it does NOT keep out a
-    second browser profile, a fresh browser with empty localStorage, or an automated test tab on the
-    SAME machine — any of those pushes near-empty state, and plain last-write-wins would let it CLOBBER
-    a backup that holds the real call history (demonstrated 2026-08-03: Playwright test tabs overwrote
-    it). So: overwrite the primary backup only when the incoming push is at least as rich as what's on
-    disk, OR it comes from the same device (a device updating itself — even a legit deletion — wins),
-    OR there is no backup yet. A poorer push from a different/blank device is ignored for the primary
-    file (its real data is already safe) but still snapshotted for audit. Same guard on the day
-    snapshot so a poor push can't clobber a rich same-day snapshot either. Mirrors the opt-out
-    ledger's safety-first, never-lose-data posture.
+    MERGE, not richest-wins and not last-write-wins (changed 2026-09-10).
+
+    127.0.0.1 keeps the LAN out, but it does not keep out a second browser profile, a fresh browser
+    with empty localStorage, or an automated test tab on the same machine — any of those pushes
+    near-empty state, and plain last-write-wins lets it CLOBBER the real call history (that happened
+    on 2026-08-03). The fix was richest-wins: accept a push only if `_richness(inc) >= _richness(cur)`.
+
+    That guard was wrong in a way that took three weeks to show. Richness is a TOTAL ORDER imposed on
+    a PARTIAL one. Two devices legitimately hold different work — measured here on 2026-09-10, the
+    incoming push carried ~390 cases the backup did not have while the backup held ~645 the push did
+    not, so NEITHER was a superset and a single winner had to destroy real outcomes either way. The
+    comparison duly refused every push from 2026-08-20 onward; the backup froze for three weeks and
+    the only trace was a pile of rejected_*.json nobody reads.
+
+    Union instead. Additive touches/dials/optlog, unioned badph/dntph, sticky optout/wrongown, and a
+    scalar only ever taken from the side with newer activity. Nothing is deleted, so a thin push can
+    contribute its new outcomes without being able to erase anything — which is what the richness
+    guard was protecting against in the first place. A deliberate deletion sets `allow_shrink` and
+    replaces wholesale. The incoming payload is snapshotted before every merge, so it is reversible.
     """
     with _NOTES_LOCK:
         os.makedirs(NOTES_SNAP_DIR, exist_ok=True)
-        raw = json.dumps(payload, indent=1, ensure_ascii=False)
-        inc_rich = _richness(payload)
-        inc_dev = str((payload or {}).get('device') or '')
-        # decide whether this push may replace the primary backup
-        wins = True
+        inc = payload or {}
+        inc_rich = _richness(inc)
+        inc_dev = str(inc.get('device') or '')
+        # cur_rich MUST be bound before the try: it used to be assigned only inside
+        # `if os.path.exists(NOTES_FILE)` and read unconditionally below, so the FIRST push on any
+        # machine without a backup yet raised NameError -> 500 'write failed'. A fresh laptop never
+        # backed up at all, and the failure looked like a network problem.
+        cur, cur_rich = {}, 0
         try:
             if os.path.exists(NOTES_FILE):
-                cur = json.load(open(NOTES_FILE, encoding='utf-8'))
+                cur = json.load(open(NOTES_FILE, encoding='utf-8')) or {}
                 cur_rich = _richness(cur)
-                cur_dev = str((cur or {}).get('device') or '')
-                same_device = bool(inc_dev) and inc_dev == cur_dev
-                # same-device bypass removed 2026-08-10: a stale second tab on the SAME machine
-                # was the normal clobber case (the Acosta Appointment wipe on 08-09) — richer
-                # state must win regardless of device. Rejected pushes still land in
-                # rejected_*.json for audit; a deliberate shrink can add an allow_shrink flag.
-                wins = inc_rich >= cur_rich
         except Exception:
-            wins = True   # unreadable/corrupt backup — a good push should be allowed to heal it
-        _WROTE['ok'] = bool(wins)
+            cur, cur_rich = {}, 0     # unreadable/corrupt backup — a good push should heal it
+        # Snapshot the INCOMING push before touching anything, so every merge is reversible.
+        try:
+            inb = os.path.join(NOTES_SNAP_DIR, 'incoming_%s_%s.json'
+                               % (dt.date.today().isoformat(), (inc_dev or 'nodev')[:24]))
+            with open(inb, 'w', encoding='utf-8') as f:
+                f.write(json.dumps(inc, indent=1, ensure_ascii=False))
+        except Exception:
+            pass
+        if inc.get('allow_shrink') or not cur:
+            merged, stats = inc, {'new_cases': 0, 'new_rows': 0}
+        else:
+            merged, stats = _merge_payload(cur, inc)
+        raw = json.dumps(merged, indent=1, ensure_ascii=False)
+        _WROTE['ok'] = True
         _WROTE['cur'] = cur_rich
         _WROTE['inc'] = inc_rich
-        if wins:
-            tmp = NOTES_FILE + '.tmp'
-            with open(tmp, 'w', encoding='utf-8') as f:
-                f.write(raw)
-            os.replace(tmp, NOTES_FILE)
-            snap = os.path.join(NOTES_SNAP_DIR, 'worker_notes_%s.json' % dt.date.today().isoformat())
-            tmp2 = snap + '.tmp'
-            with open(tmp2, 'w', encoding='utf-8') as f:
-                f.write(raw)
-            os.replace(tmp2, snap)
-        else:
-            # keep the richer primary + winning snapshot untouched; record the rejected push for audit
-            rej = os.path.join(NOTES_SNAP_DIR, 'rejected_%s.json' % dt.date.today().isoformat())
-            try:
-                with open(rej, 'w', encoding='utf-8') as f:
-                    f.write(raw)
-            except Exception:
-                pass
+        _WROTE['out'] = _richness(merged)
+        _WROTE['new_cases'] = stats['new_cases']
+        _WROTE['new_rows'] = stats['new_rows']
+        tmp = NOTES_FILE + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(raw)
+        os.replace(tmp, NOTES_FILE)
+        snap = os.path.join(NOTES_SNAP_DIR, 'worker_notes_%s.json' % dt.date.today().isoformat())
+        tmp2 = snap + '.tmp'
+        with open(tmp2, 'w', encoding='utf-8') as f:
+            f.write(raw)
+        os.replace(tmp2, snap)
     return len(raw)
 
 
@@ -866,6 +998,11 @@ class Handler(BaseHTTPRequestHandler):
                          n_notes, len(payload.get('workerLog') or []), size // 1024,
                          'saved' if saved else 'REFUSED (poorer than the backup on disk)')
         out = {'ok': True, 'saved': saved, 'notes_count': n_notes, 'bytes': size}
+        # What actually LANDED, not just what was sent. Under the merge a push always saves, so the
+        # useful number is how much of it was new.
+        out['merged_cases'] = _WROTE.get('new_cases', 0)
+        out['merged_rows'] = _WROTE.get('new_rows', 0)
+        out['disk_richness'] = _WROTE.get('out', 0)
         if not saved:
             # 200, not an error: the SERVER did the right thing. But the client must be able to
             # tell "backed up" from "refused" — it could not before, and 17 refusals this month

@@ -3880,6 +3880,14 @@ function contactChip(r){
   return h;
 }
 function _setNext(n, days){ if(days===0){ n.next=''; return; } const d=new Date(); d.setDate(d.getDate()+days); n.next=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+/* WHO SENT IT. The board has no identity of its own — it is one operator's laptop — but it shares
+   an ORIGIN with Call Mode, which stores the name from the access code in fcCaller. Read that, so a
+   touch logged here and a touch logged on the phone are attributed the same way and the phone's
+   ALREADY CONTACTED banner can name a person for email and text, not only for calls. Empty string
+   when nobody has ever unlocked the phone on this browser, which is honest and harmless. */
+function _touchBy(){
+  try{ return localStorage.getItem('fcCaller') || ''; }catch(e){ return ''; }
+}
 function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=notes[caseId]||{status:'',note:''};
   // PREVENTIVE FTSA guard (dial-time): block logging an outreach touch on a lead ALREADY opted out —
   // unless this very touch is the one recording the opt-out ("Said STOP"). Shifts the tool from
@@ -3902,7 +3910,12 @@ function logTouch(caseId, ch, out, opt){ opt=opt||{}; const n=notes[caseId]=note
   if(_isWrongOwner(n) && _OUTREACH_CH[ch] && !opt.wrongOwner){
     if(typeof confirm === 'function' && !window.__replaying && !confirm('🚫 WRONG PERSON was reported on this lead ('+(n.wrongown||'')+').\n\nThe numbers/name on file do NOT belong to the owner. Contacting them again is harassment of an uninvolved person — and it is how an innocent party ends up with ten investors calling daily.\n\nRe-verify the owner (appraiser + deed) before contacting anyone. Log this '+ch+' anyway?')) return false;
   }
-  n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), tsu:Date.now(), ch:ch, out:out});
+  /* STAMP WHO. This writer covers every channel, and until 2026-09-10 it recorded no `by` at all —
+     so all 1304 email and 204 text touches on file are anonymous, and the phone's "already
+     contacted" banner can name a person for calls and for nothing else. Same field logOutcome
+     writes, so the two agree. */
+  n.touches=n.touches||[]; n.touches.push({d:_today(), ts:_nowTS(), tsu:Date.now(), ch:ch, out:out,
+    by:(opt.by || _touchBy())});
   // record the identity failure in the same audit ledger the opt-out uses, so it survives a status
   // change and syncs to every teammate's device (nobody re-dials what someone else disproved).
   if(opt.wrongOwner && !n.wrongown){ n.wrongown = _today(); _optLog(n, 'wrong-owner'); }
@@ -15054,7 +15067,20 @@ function genPortfolioEmail(r, siblings, quiet){
   return docHtml;
 }
 const toISO = mdY => { const p = String(mdY||'').split('/'); return p.length===3 ? p[2]+'-'+p[0]+'-'+p[1] : ''; };
-function save(){ try { localStorage.setItem(LS, JSON.stringify(notes)); } catch(e) {} if(typeof syncPushSoon==='function') syncPushSoon(); if(typeof notesBridgePushSoon==='function') notesBridgePushSoon(); }
+function save(){
+  try { localStorage.setItem(LS, JSON.stringify(notes)); }
+  catch(e){
+    /* A SWALLOWED WRITE IS A LOST DAY. This was a bare `catch(e){}`: on a QuotaExceededError every
+       outcome after it went nowhere while the UI kept stamping its green checks, and the leads came
+       back tomorrow looking untouched. Reachable, not theoretical — notes + sentArchive + workerLog
+       are ~1.5MB of JSON here, and localStorage counts UTF-16, so ~3MB of a ~5MB budget is already
+       spent. The phone has warned loudly on exactly this since it shipped (saveNotes); the board,
+       which is where almost every touch is actually logged, said nothing. */
+    try{ _nbWarn('NOT SAVED — this browser refused to write (storage full or blocked). Nothing you '
+              + 'log is being kept. Export your notes, then clear space.'); }catch(_e){}
+    try{ console.error('[save] localStorage write failed', e); }catch(_e){}
+  }
+  if(typeof syncPushSoon==='function') syncPushSoon(); if(typeof notesBridgePushSoon==='function') notesBridgePushSoon(); }
 // TWO-TAB CLOBBER FIX (2026-08-10): `notes` is an in-memory snapshot; a second board tab's
 // save() wholesale-reverted every touch this tab wrote (that is how Acosta's Appointment
 // vanished on 08-09). The storage event fires in every OTHER same-origin tab — merge the
