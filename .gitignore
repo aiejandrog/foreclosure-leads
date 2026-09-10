@@ -393,6 +393,10 @@ quo_calls.json
 # _seattest: the properties it asserts (disjoint payloads, no lost lead, no way to change a
 # baked seat, live day-lanes) are all silent when they break, and it must survive a clone.
 !_carlostest.py
+# ...and the one-row-per-case invariant. The county calendars list a case on more than one
+# auction date; both failure modes it guards (the same human dialed twice, and a SOONER sale
+# date silently dropped) are invisible from the board.
+!_dupetest.py
 
 # image filename salt — MUST be identical on both engines (laptop + cloud);
 # losing this orphans docs/img entirely, since names cannot be recomputed from folios

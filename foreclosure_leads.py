@@ -2043,6 +2043,35 @@ def make_tracker(leads):
         except Exception as e:
             print(f"skip {_xf}: {e}")
 
+    # ---- ONE ROW PER CASE (2026-09-10) ---------------------------------------------------------
+    # The county calendars post a single case on more than one auction date — each posting its own
+    # calendar line with its own AITEM/AID — so the same case arrives here twice, with two
+    # different sale dates and (usually) only one of the two enriched. Where both copies carry a
+    # folio it MATCHES, so this is one parcel calendared twice, not a case foreclosing on two.
+    #
+    # This has to happen on the merged list, before anything downstream reads it, because every
+    # surface splits on it: the worker lanes put one case in TWO lanes at once (_lanetest catches
+    # CACE-25-012839 in urgent via 09/17 AND active via 10/06), which lets the Morning Worker mail
+    # the same owner twice — and the FTSA/TCPA touch ladder counts per HUMAN, not per row.
+    # Call Mode runs the same pass again on its own rows; that one is now a no-op by design.
+    #
+    # Fail-soft: a broken dedupe must not take the board down, and the un-deduped list is exactly
+    # what shipped before today.
+    try:
+        import call_mode as _CMD
+        slim, _dupn, _dups = _CMD.dedupe_calendar_rows(slim, key='case', days='days',
+                                                       date='auction')
+        if _dupn:
+            # Say it out loud — a list that quietly shrank looks like a list that was always this
+            # size, and this one removes rows that look perfectly real on the board.
+            print('merge: %d duplicate calendar row(s) collapsed — same case posted on more than '
+                  'one auction date; kept the fullest row%s'
+                  % (_dupn, (', %d now carry an EARLIER sale date to verify' % _dups)
+                     if _dups else ''))
+    except Exception as _dde:
+        print('merge: dedupe SKIPPED (%s) — duplicate calendar rows may reach the board'
+              % str(_dde)[:100])
+
     # bake code-enforcement liens (code_liens.py, free Miami-Dade CCVIOL ArcGIS, folio-keyed). A code
     # lien is a JUNIOR lien that never shows in the mortgage chain, so a lead reading "90% equity" can
     # be quietly underwater once the county's accrued fines attach. codeliens = [{case,st,stLabel,

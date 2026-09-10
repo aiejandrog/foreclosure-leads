@@ -1103,6 +1103,20 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     out.sort(key=lambda r: (_band(r), 0 if r.get('eqv') else 1,
                             0 if r.get('e') is not None else 1, -(r.get('e') or 0),
                             r.get('d', 9999)))
+    # ---- ONE ROW PER CASE (2026-09-10) --------------------------------------------------------
+    # A case listed on two auction dates is two rows, which put the same HUMAN on the phone twice
+    # with two different sale dates. Rationale, evidence and the sooner-date rule live on
+    # dedupe_calendar_rows. The merge in foreclosure_leads runs the same pass, so this is normally
+    # a no-op — kept because call_rows is called directly (call_sheet, the tests, any future
+    # caller) and the dial list is the surface where a double-serve is a double-dial.
+    out, _collapsed, _sooner = dedupe_calendar_rows(out, key='c', days='d', date='x')
+    if _collapsed:
+        # Say it out loud, same rule as every other suppression here: a list that quietly shrank
+        # looks exactly like a list that was always that size.
+        print('call mode: %d duplicate calendar row(s) collapsed — same case listed on more than '
+              'one auction date; kept the fullest row%s'
+              % (_collapsed, (', %d of which now carry an EARLIER sale date to verify' % _sooner)
+                 if _sooner else ''))
     if _ident_dropped:
         # Say it out loud. A suppression that removes people silently is indistinguishable from a
         # queue that was always this size, and this one drops leads that LOOK perfectly callable.
@@ -1344,6 +1358,66 @@ BALLOON_SCRIPT = {
 # To go back to one undivided list, set this to [None] — seat=None builds the whole list.
 # Every n here must match, and every i must be distinct, or leads land on two phones or on none.
 CALL_SEATS = [(2, 0, 'Alejandro'), (2, 1, 'Carlos')]
+
+
+def dedupe_calendar_rows(rows, key='c', days='d', date='x'):
+    """One row per case. Returns (rows, collapsed, sooner).
+
+    THE DATA: the county calendars list a single case on MORE THAN ONE auction date, each as its
+    own calendar line with its own AITEM/AID. Measured on the 2026-09-06 twin: 5 such cases. Where
+    both copies are enriched enough to compare, the FOLIO matches — so this is one parcel
+    calendared twice (a reset/rescheduled sale), not a case foreclosing on two properties. It is
+    visible in the raw Miami-Dade scrape too: 2024-017395-CA-01 as AID 1512352 (09/08) and AID
+    1512353 (09/28).
+
+    WHY IT MATTERS ON EVERY SURFACE, not just the phone:
+      * Call Mode served the same human twice, on two cards showing two different sale dates.
+      * The board's worker lanes put ONE case in TWO lanes at once — _lanetest's mutual-exclusivity
+        check fails on CACE-25-012839 (urgent via 09/17, active via 10/06) — so the Morning Worker
+        can email the same owner from two lanes, and the FTSA/TCPA touch ladder counts per HUMAN.
+
+    KEEP THE FULLEST ROW. The second posting is usually the county's newer one and is not enriched
+    yet: no address, no folio. Keeping it would put a card with no property on the phone and a
+    blank row on the board. Completeness is the count of populated fields.
+
+    NEVER SILENTLY DROP A SOONER SALE. Completeness and earliest-date agree on all five real cases,
+    but they need not in general, and telling a homeowner the sale is 39 days out when it is 17 is
+    the one error on these calls that cannot be walked back. When a dropped copy is calendared
+    EARLIER than the one kept, the kept row carries that date in `dupd` (and `dupn` counts what was
+    collapsed) so the surface can say the sale may be sooner and to verify it with the clerk.
+    """
+    def _full(r):
+        return sum(1 for v in r.values() if v not in (None, '', [], {}))
+
+    def _d(r):
+        v = r.get(days)
+        return v if isinstance(v, (int, float)) else 9999
+
+    groups, order = {}, []
+    for r in rows:
+        k = r.get(key)
+        if not k:
+            order.append([r])                      # caseless: never merged into anything
+            continue
+        if k not in groups:
+            groups[k] = []
+            order.append(groups[k])
+        groups[k].append(r)
+    out, collapsed, sooner = [], 0, 0
+    for grp in order:
+        if len(grp) == 1:
+            out.append(grp[0])
+            continue
+        best = max(grp, key=lambda r: (_full(r), -_d(r)))
+        others = [r for r in grp if r is not best]
+        collapsed += len(others)
+        best['dupn'] = len(others)
+        early = [r for r in others if _d(r) < _d(best)]
+        if early:
+            best['dupd'] = min(early, key=_d).get(date) or ''
+            sooner += 1
+        out.append(best)
+    return out, collapsed, sooner
 
 
 def seat_rows(rows, n, i):
@@ -3209,6 +3283,13 @@ function screenLead(){
     + 'was logged &mdash; log one or this lead keeps coming back in every lane.</div>';
 
   var clock = '<div class="when">'+when+'</div><div class="chips">';
+  /* THE SAME CASE IS ON THE CALENDAR TWICE, and the copy we dropped sells SOONER than the one on
+     this card. call_rows keeps the fullest row (the newer posting is usually un-enriched: no
+     address, no folio) and stamps the earlier date here rather than discarding it. FIRST chip,
+     red, because "your sale is 39 days out" when it is really 17 is the one thing said on these
+     calls that a homeowner cannot recover from. Verify against the clerk before quoting a date. */
+  if(r.dupd) clock += '<span class="chip bad">ALSO CALENDARED ' + esc(r.dupd)
+    + ' &mdash; SOONER than above. Verify the sale date before you quote it.</span>';
   if(r.sv!=null && r.sv>=2) clock += '<span class="chip bad">STALLER &middot; dodged '+r.sv+' sales</span>';
   else if(r.sv===0)         clock += '<span class="chip ok">FRESH &middot; first sale</span>';
   /* Sales SCHEDULED, the counterpart to sales survived. `sc` shipped on every lead and nothing read
