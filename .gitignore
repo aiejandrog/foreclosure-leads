@@ -389,6 +389,10 @@ quo.key
 quo_calls.json
 # call-mode team seats: guards the no-double-dial property — must survive a clone
 !_seattest.py
+# ...and the suite that guards the BUILD-TIME seat split + the lane table. Same rule as
+# _seattest: the properties it asserts (disjoint payloads, no lost lead, no way to change a
+# baked seat, live day-lanes) are all silent when they break, and it must survive a clone.
+!_carlostest.py
 
 # image filename salt — MUST be identical on both engines (laptop + cloud);
 # losing this orphans docs/img entirely, since names cannot be recomputed from folios

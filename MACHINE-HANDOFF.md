@@ -370,21 +370,42 @@ item is CLOSED; no separate landing needed.
 `TEXT_T` templates. Confirm STOP is handled at the carrier/10DLC layer before that ships — an
 outreach text with no opt-out is the kind of thing FS 501.1377 / TCPA notices exist around.
 
-### Carlos = seat 2 (2026-09-02) — provisioned, tested, one on-phone step left
+### Carlos = seat 2 — the split is BAKED now (2026-09-09), no on-phone step
 
-- **Access code:** `Carlos 2 = <REDACTED — see site.codes (gitignored)>` (in site.codes, baked into the board). Carlos
-  unlocks the call page with this.
-- **Seat is per-PHONE localStorage (`fcSeat`), set on his device — no remote/URL setter exists,**
-  so this cannot be done from a laptop session. On Carlos's phone, in Call Mode: tap the team-sync
-  line → "how many calling" = **2** → "which seat is THIS phone" = **2** → name = **Carlos**. Both
-  phones must ALSO share the same team-sync code or the seats never see each other's calls.
-- **Partition proven** (`_cm_seatcheck.py`, local — `_*.py` is gitignored scratch): 1,142 unique
-  cases, n=2 → 564 / 578, **doubled=0, lost=0**; 3 and 4 seats also clean. The same person can
-  never be in both queues, and no lead falls off both. Re-run it whenever the feed or the sb hash
-  changes.
-- **Takeover proven** (`node _cm_teamtest.js`): 15/15 green on the built page — a teammate's call
-  fires the ALREADY-CALLED takeover, my own call does not (multi-number sequences survive), and
-  the sibling-case takeover now passes too (DEALFLOW's pcs-aware `_teammateCall` is built in).
+**The on-phone step is gone.** `fcSeat` + the three `prompt()` boxes are dead: they depended on two
+people typing matching numbers into two devices, and every way that goes wrong is silent (both pick
+seat 1 and the UI still says the split is on; one picks n=2 and the other n=3 and you get overlap
+AND lost leads at once; "show all" reverts on reload). The partition moved to build time.
+
+- **`call_mode.CALL_SEATS`** in call_mode.py is the whole declaration:
+  `[(2, 0, 'Alejandro'), (2, 1, 'Carlos')]` — `(n, i, label)`, and the label is the URL segment.
+  The nightly builds ONE PAGE PER SEAT from one `call_rows()` call, each with its own encrypted
+  payload holding only that seat's rows.
+- **URLs:** Alejandro `…/foreclosure-leads/call/` (unchanged, still what the board's Call Mode
+  button opens). Carlos `…/foreclosure-leads/call/carlos/` — Add to Home Screen on his phone.
+  The board now has a second button, **Call Mode · Carlos**, next to the first.
+- **Access code:** unchanged — `Carlos 2` in site.codes (gitignored). The code is what stamps `by`
+  on every dial, so he must still unlock with his own. Either code opens either page (`fcPw` is
+  per-origin); the page warns if the name on the code does not match the seat it was built for.
+- **Team sync key still matters.** The partition prevents the double-dial; the 45s note sync is
+  what makes each phone show "already called by Carlos" on shared/sibling cases. Both phones need
+  the same `fcTeamKey`.
+- **To change the crew:** edit `CALL_SEATS`, rebuild. One caller again = `[None]` (whole list, one
+  page). Three callers = three entries with the same `n` and distinct `i`. `python _carlostest.py`
+  asserts n agrees, indices are distinct and cover `0..n-1`, and the built payloads are disjoint
+  and reunite to the whole list.
+- **Categories on both pages (2026-09-09):** Emailed/replied · Worker · Urgent 0-7 · Sale soon 8-45
+  · 46-60 · Fresh filings · Balloon · Buy-box. One `LANES` table drives both the buttons and the
+  filter, and day-lanes recompute the countdown from the baked auction date on every paint — the
+  frozen `r.d` used to keep a passed sale sitting under "Urgent" on a page left open overnight.
+  Emailed/replied and Worker read the SYNCED notes, so they populate on a phone that never opened
+  the board.
+- **Proven:** `python _carlostest.py` (49 checks: partition, built-payload disjointness, the baked
+  seat cannot be changed or escaped, all eight lane predicates, fail-soft). `python _seattest.py`
+  (14) still green. `node _cm_teamtest.js` takeover unchanged.
+- **Fail-soft:** each extra seat builds in its own try/except. Carlos's page failing prints
+  `call mode/carlos: SKIPPED (…)` and costs nothing else — not Alejandro's page, not the call
+  sheet, not the board.
 
 ## 2026-09-05 — email-safety build complete (laptop)
 Items 1-4 all shipped: d0f9044 (bridge refuses owner sends when optouts.json >2d old/missing),

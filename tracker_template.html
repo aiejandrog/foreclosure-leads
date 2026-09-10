@@ -339,8 +339,8 @@ button>svg{width:13px;height:13px;flex:0 0 auto}
 #freshlp.abtn:hover{background:rgba(22,101,52,.08)}
 #freshlp.abtn.active{background:var(--green-ink,#166534);color:#fff;border-color:var(--green-ink,#166534);box-shadow:var(--sh-2)}
 /* Call Mode — green like the phone itself; it is the one button that starts real conversations */
-#callmodebtn.abtn{border:1.5px solid rgba(40,108,52,.55);color:#286c34;font-weight:700;background:var(--surface,#fff)}
-#callmodebtn.abtn:hover{background:rgba(40,108,52,.08);border-color:#286c34}
+#callmodebtn.abtn,#callmodebtn2.abtn{border:1.5px solid rgba(40,108,52,.55);color:#286c34;font-weight:700;background:var(--surface,#fff)}
+#callmodebtn.abtn:hover,#callmodebtn2.abtn:hover{background:rgba(40,108,52,.08);border-color:#286c34}
 /* Miscalculated deals — amber (a live listing burning its own clock) */
 #mislist.abtn{border:1.5px solid rgba(168,114,12,.55);color:var(--amber-ink,#6B4A08);font-weight:700;background:var(--surface,#fff)}
 #mislist.abtn:hover{background:rgba(168,114,12,.08)}
@@ -1901,11 +1901,13 @@ body.compact .dg-v{font-size:14.5px}
      phone was exactly backwards (2026-08-18: the button shipped, then vanished under 430px with
      the rest of the cluster). order:-2 puts it ahead of Filters and Plan today, because at a door
      or in the car the first thing he wants is the dialer, not a filter. */
-  .controls.mcol > #callmodebtn{display:inline-flex !important;order:-2;
+  .controls.mcol > #callmodebtn,
+  .controls.mcol > #callmodebtn2{display:inline-flex !important;order:-2;
     min-height:46px;padding:11px 16px;touch-action:manipulation;
     background:#286c34;color:#fff;border-color:#286c34;font-weight:800;
     -webkit-tap-highlight-color:rgba(40,108,52,.25)}
-  .controls.mcol > #callmodebtn svg{stroke:#fff}
+  .controls.mcol > #callmodebtn svg,
+  .controls.mcol > #callmodebtn2 svg{stroke:#fff}
   .mfiltbtn{display:inline-flex;align-items:center;gap:6px;order:-1;
     min-height:44px;padding:10px 14px;touch-action:manipulation}
   #plan.abtn{min-height:44px;padding:10px 14px;touch-action:manipulation;
@@ -2214,6 +2216,7 @@ body.compact .dg-v{font-size:14.5px}
 <button id="replybtn" class="abtn" onclick="openReplyInbox()" title="REPLY INBOX — every owner who wrote back, STOP requests first, then soonest sale. A reply outranks every score and tier on this board. Fills from your own ✉ They replied flags, and automatically from replies.py once gmail.key holds a real App Password."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8l9 6 9-6"/><rect x="3" y="5" width="18" height="14" rx="2"/></svg>Replies<span class="replyn"></span></button>
 <button id="proofbtn" class="abtn" onclick="openProofSheet('today')" title="PROOF SHEET — the receipt of what actually went out. Reprints the VERBATIM subject and body of every message sent, timestamped, with reply status beside each one, plus the full activity log. Printable. Shift-click for all-time instead of today."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12h6M9 16h6M9 8h2"/><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z"/></svg>Proof sheet</button>
 <button id="callmodebtn" class="abtn callmode-btn" onclick="openCallMode()" title="CALL MODE — the phone page. Every dialable lead, one tap to dial, one tap to log the outcome, the full CIOC objection deck (14 cards, EN + ES) in the script drawer, and the after-call text panel. Outcomes sync back to this board. Built for the phone: open it there with the same access code."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2z"/></svg>Call Mode</button>
+<button id="callmodebtn2" class="abtn callmode-btn" onclick="openCallMode('carlos')" title="CALL MODE &middot; CARLOS &mdash; Carlos's half of the dialable list. The split is fixed at BUILD time (call_mode.CALL_SEATS): his page holds only his rows, this one holds only Alejandro's, so the same homeowner is never on both phones. Same outcomes, same 45s team sync, same access gate."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1 1 .3 1.9.6 2.8a2 2 0 0 1-.4 2.1L8 9.9a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.8.6a2 2 0 0 1 1.7 2z"/><circle cx="18" cy="6" r="3" fill="currentColor" stroke="none"/></svg>Call Mode &middot; Carlos</button>
 <button id="workerbtn" class="abtn" onclick="openMorningWorker()" title="Morning outreach worker — three lanes by urgency: URGENT (sale inside 7 days), ACTIVE (8-45 days), EARLY (fresh filing, no auction date yet). All tiers, contactable leads not touched in 72 hours. One card at a time: tap Email / Text / WP-lookup, or press Start auto-run to walk the whole queue and send by itself through the local bridge (nothing opens a composer unless the bridge is offline). Daily send cap warns at 240 and hard-stops at 300 messages, OR 450 recipients - whichever binds first, which in practice is recipients at roughly 234 messages because each send BCCs the owner's alternates. The badge shows whichever is closer to its ceiling. Calls are never capped. Deep-link auto-open: append #worker=morning to the URL."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Morning Worker<span id="mcapbadge" class="mcapbadge" title="Today's send count — live from the bridge that actually enforces it, not this board's own log."></span></button>
 <button id="freshlp" class="abtn lp-btn" title="FRESH FILINGS — foreclosures just FILED (Lis Pendens), 8-14 months before the auction crowd. Nobody is calling these owners yet. Be the first contact, not the tenth. No sale date is set — this is the nurture lane, worked over months."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v6l4-2M12 2 8 4"/><circle cx="12" cy="14" r="8"/><path d="M12 10v4l3 2"/></svg>Fresh filings</button>
 <button id="mislist" class="abtn" title="MISCALCULATED DEALS — properties ACTIVELY LISTED (or pending) while the foreclosure sale is ≤21 days out. The listing agent is protecting a fantasy price while the clock runs out on their own client. The gatekeeper play (drill card 12): full commission on the buy + the re-listing after — the same property pays the agent twice, and BSG gets the deal. Red chip = listed ABOVE the cadastral value."><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12l-8 8-8-8V4h8z"/><circle cx="9" cy="8" r="1.5"/></svg>Listed + sale</button>
@@ -6212,31 +6215,34 @@ function openBulkText(){
    right there; opened as the Desktop plaintext twin (file://) there is no ./call/ next to it, so
    fall back to the live site. Anything else (localhost preview) also gets the live site. */
 var _CALL_FALLBACK = 'https://aiejandrog.github.io/foreclosure-leads/call/';
-function _callModeUrl(){
+/* `sub` is a seat page: 'carlos' -> call/carlos/. Sanitised because it is pasted straight into a
+   URL. No arg = the main seat, which is the path already bookmarked on Alejandro's phone. */
+function _seatSeg(sub){ return sub ? String(sub).replace(/[^a-z0-9-]/gi,'').toLowerCase()+'/' : ''; }
+function _callModeUrl(sub){
   try{
-    if(location.protocol === 'http:' || location.protocol === 'https:') return 'call/';
+    if(location.protocol === 'http:' || location.protocol === 'https:') return 'call/'+_seatSeg(sub);
   }catch(e){}
-  return _CALL_FALLBACK;
+  return _CALL_FALLBACK + _seatSeg(sub);
 }
 /* ABSOLUTE form — REQUIRED for anything baked into a child Blob document. A blob: document's base
    is the opaque blob URL, so a relative 'call/' inside the Morning Worker resolves to
    blob:https://host/call/ and dead-ends. Caught by opening the built worker in a browser, not by
    any guard. Board-scope buttons may use the relative form; baked docs must use this one. */
-function _callModeUrlAbs(){
+function _callModeUrlAbs(sub){
   try{
     if(location.protocol === 'http:' || location.protocol === 'https:')
-      return new URL('call/', location.href).href;
+      return new URL('call/'+_seatSeg(sub), location.href).href;
   }catch(e){}
-  return _CALL_FALLBACK;
+  return _CALL_FALLBACK + _seatSeg(sub);
 }
-function openCallMode(){
+function openCallMode(sub){
   var w = null;
-  try{ w = window.open(_callModeUrl(), '_blank', 'noopener'); }catch(e){}
+  try{ w = window.open(_callModeUrl(sub), '_blank', 'noopener'); }catch(e){}
   if(!w){
     // popup-blocked (same class as the worker's openHere fix): a real anchor click cannot be blocked
     try{
       var a = document.createElement('a');
-      a.href = _callModeUrl(); a.target = '_blank'; a.rel = 'noopener';
+      a.href = _callModeUrl(sub); a.target = '_blank'; a.rel = 'noopener';
       a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
     }catch(e){}
   }

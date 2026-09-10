@@ -2979,13 +2979,35 @@ def make_tracker(leads):
     # raise CallModeError, never SystemExit.
     try:
         import call_mode
+        # ONE row set, cut two ways. Both seat pages and the call sheet come from this single
+        # call_rows(), so the two phones can never disagree about a cooldown, an opt-out or a
+        # diligence hold — a second call_rows() would be a second chance to drift.
+        _built_ts = datetime.now().strftime('%Y-%m-%dT%H:%M')
+        _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads)
         _cm_rows, _cm_total = call_mode.make_callmode(
-            slim, codes, _encrypt_multi,
-            datetime.now().strftime('%Y-%m-%dT%H:%M'), _cov.get('sig', ''),
-            optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper)
+            slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
+            optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
+            seat=call_mode.CALL_SEATS[0], subdir='', rows=_cm_all)
         if _cm_rows:
             print('call mode: %d dialable lead(s) of %d qualifying -> docs/call/  (%s)'
                   % (_cm_rows, _cm_total, 'encrypted' if codes else 'STUB — no site.codes'))
+        # SECOND SEAT (2026-09-09). Carlos's half, its own page, its own encrypted payload — the
+        # split is fixed HERE rather than by two people typing matching numbers into prompt() boxes
+        # on two phones, which is how the same homeowner got dialled twice. Additive on top of an
+        # additive artifact, so it gets its OWN handler: Carlos's page failing must not cost
+        # Alejandro's page or the call sheet.
+        for _seat in call_mode.CALL_SEATS[1:]:
+            try:
+                _sr, _st = call_mode.make_callmode(
+                    slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
+                    optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
+                    seat=_seat, subdir=_seat[2], rows=_cm_all)
+                if _sr:
+                    print('call mode/%s: %d dialable lead(s) of %d qualifying -> docs/call/%s/'
+                          % (_seat[2].lower(), _sr, _st, _seat[2].lower()))
+            except Exception as _cce:
+                print('call mode/%s: SKIPPED (%s) — the main Call Mode page and the board are '
+                      'unaffected' % (_seat[2].lower(), str(_cce)[:100]))
         # DESKTOP CALL SHEET. Both the board and Call Mode require a decision to OPEN them, and
         # on 2026-08-27 that was the whole funnel: 133 leads with verified equity, a phone and a
         # clean gate — zero touched, one text sent in nine days. A plain file that is simply
@@ -2993,8 +3015,10 @@ def make_tracker(leads):
         # Same rows Call Mode just built, so the sheet and the phone can never disagree.
         try:
             import call_sheet
-            _cs_rows, _cs_total = call_mode.call_rows(slim, optouts=_optouts, deads=_deads)
-            call_sheet.write(_cs_rows, _cs_total)
+            # UNSPLIT on purpose: the sheet is the desktop evening list, not a phone queue, and it
+            # already drops BAL rows itself. If it should ever match Alejandro's phone instead, wrap
+            # this in call_mode.seat_rows(_cm_all[0], *call_mode.CALL_SEATS[0][:2]).
+            call_sheet.write(*_cm_all)
         except Exception as _cse:
             print('call sheet: SKIPPED (%s) — board is unaffected' % str(_cse)[:100])
     except Exception as _cme:

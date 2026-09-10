@@ -1114,7 +1114,8 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     return out[:cap], len(out)
 
 
-def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None):
+def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
+               seat=None):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -1127,7 +1128,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
-                       ('__BSIGNER__', 1)):
+                       ('__BSIGNER__', 1), ('__SEAT__', 1)):
         _n_ph = _PAGE.count(_ph)
         if _n_ph != _want:
             raise CallModeError('call_mode: placeholder %s occurs %d times in _PAGE (expected %d — '
@@ -1167,6 +1168,8 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
                 .replace('__VMEN__', json.dumps(VOICEMAIL_EN)) \
                 .replace('__VMES__', json.dumps(VOICEMAIL_ES)) \
                 .replace('__BSIGNER__', json.dumps(_balloon_signer())) \
+                .replace('__SEAT__', json.dumps({'n': seat[0], 'i': seat[1], 'w': str(seat[2] or '')[:18]}
+                                                if seat else None)) \
                 .replace('__TEXTPERSON__', json.dumps(_tp_slim(textperson)))
 
 
@@ -1334,19 +1337,48 @@ BALLOON_SCRIPT = {
 }
 
 
+# WHO IS ON THE PHONES, and therefore how the list is cut. (n, i, label) per seat; the label is
+# also the URL segment, so seat 0 = docs/call/ and 'Carlos' = docs/call/carlos/.
+# SEAT 0 MUST STAY FIRST AND MUST STAY subdir '' — that is the URL already bookmarked on
+# Alejandro's phone and linked from the board's Call Mode button.
+# To go back to one undivided list, set this to [None] — seat=None builds the whole list.
+# Every n here must match, and every i must be distinct, or leads land on two phones or on none.
+CALL_SEATS = [(2, 0, 'Alejandro'), (2, 1, 'Carlos')]
+
+
+def seat_rows(rows, n, i):
+    """BUILD-TIME seat partition (2026-09-09). Rows whose stable bucket lands on seat i of n.
+
+    Before this the split lived on the phone (fcSeat, three prompt() boxes) and depended on both
+    callers typing matching numbers — nothing stopped two phones both choosing seat 1, and "show
+    all" silently reverted on reload. Splitting HERE means each page's encrypted payload holds only
+    its half: there is no setting to get wrong and no escape hatch to leak the other half.
+    An unstamped row (no 'sb') goes to seat 0 so a lead is never absent from EVERY page — the same
+    rule the page's _seatMine keeps. call_rows skips caseless rows, so in practice this is a guard.
+    """
+    return [r for r in rows if (r.get('sb', 0) % n) == i]
+
+
 def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=None, guard=None,
-                  textperson=None):
-    """Write docs/call/index.html. `encrypt` is foreclosure_leads._encrypt_multi and `guard` is its
-    _js_guard — both INJECTED rather than re-implemented, so the crypto and the parse check can
-    never drift from the board's.
+                  textperson=None, seat=None, subdir='', rows=None):
+    """Write docs/call/<subdir>/index.html. `encrypt` is foreclosure_leads._encrypt_multi and
+    `guard` is its _js_guard — both INJECTED rather than re-implemented, so the crypto and the
+    parse check can never drift from the board's.
+
+    seat   : None (whole list, legacy) or (n, i, label) — e.g. (2, 1, 'Carlos') bakes seat 2 of 2.
+    subdir : '' -> docs/call/, 'carlos' -> docs/call/carlos/.
+    rows   : optional (rows, total) from ONE shared call_rows() call, so two seat pages and the
+             call sheet are cut from the identical list and can never disagree on a gate.
 
     The guard runs BEFORE the write. A page whose script fails to parse still loads — it just loads
     with every button dead, which is the precise fail-silent shape this whole effort exists to
     remove. Better to ship no Call Mode than a Call Mode that looks fine and logs nothing.
     """
-    outdir = os.path.join(HERE, 'docs', 'call')
+    subdir = re.sub(r'[^a-z0-9-]', '', str(subdir or '').lower())
+    outdir = os.path.join(HERE, 'docs', 'call', subdir) if subdir else os.path.join(HERE, 'docs', 'call')
     os.makedirs(outdir, exist_ok=True)
     dest = os.path.join(outdir, 'index.html')
+    _where = 'docs/call/' + (subdir + '/' if subdir else '')
     if not codes:
         # No codes means no encryption. Call Mode has no meaningful degraded form: it exists to put
         # dialable numbers on a phone. Ship a stub rather than plaintext PII, and do NOT leave last
@@ -1359,10 +1391,21 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         # SAY IT OUT LOUD. Replacing a working encrypted page with a stub is deliberate (see above),
         # but returning 0 made the caller's `if _cm_rows:` false, so the build log printed NOTHING —
         # the phone page silently became a dead-end and the only signal was discovering it mid-call.
-        print('call mode: NO site.codes — docs/call/ replaced with a stub. The phone page is DOWN '
-              'until a build runs with access codes present.')
+        print('call mode: NO site.codes — %s replaced with a stub. The phone page is DOWN '
+              'until a build runs with access codes present.' % _where)
         return 0, 0
-    rows, total = call_rows(slim, optouts, deads)
+    if rows is None:
+        rows, total = call_rows(slim, optouts, deads)
+    else:
+        rows, total = rows
+    if seat:
+        _sn, _si, _sw = seat
+        if not (_sn > 1 and 0 <= _si < _sn):
+            raise CallModeError('call_mode: bad seat %r (want n>1, 0<=i<n)' % (seat,))
+        rows = seat_rows(rows, _sn, _si)
+    # total stays the CREW-WIDE qualifying count on purpose: "N qualifying" describes the funnel,
+    # not this phone. SHOWN (len(rows)) is what this seat actually carries.
+    # phone_index stays FULL on both seats: "Who texted me?" must resolve a number from either half.
     payload = encrypt(json.dumps({'r': rows, 'x': phone_index(slim)}), codes)
     import hashlib
     sig = hashlib.sha256(json.dumps(payload, sort_keys=True).encode('utf-8')).hexdigest()[:12]
@@ -1374,7 +1417,7 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_outcomes_match_board(_tracker_src)
     sync_js = extract_sync_js(_tracker_src)
     _assert_no_dead_overrides(_PAGE, sync_js)
-    html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson)
+    html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson, seat=seat)
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -1417,9 +1460,17 @@ _PAGE = r"""<!doctype html><html lang="en"><head>
 body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 -apple-system,system-ui,sans-serif;
      padding:0 0 env(safe-area-inset-bottom)}
 .wrap{max-width:560px;margin:0 auto;padding:14px 14px 40px}
-.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
-.lane{display:flex;gap:6px}
-.lane button{flex:1;min-height:44px;border-radius:10px;border:1px solid #2a3f6b;background:#0f1d3a;
+/* COLUMN, not a row (2026-09-09). .top holds the lane buttons AND the status lines under them
+   (hidden count, seat chip, build stamp, session strip) — every one of which is written as a
+   full-width centered .supn line. As a flex ROW with space-between that only looked right while
+   there were two or three lane buttons: at eight the buttons ate the width and squeezed "Carlos —
+   seat 2 of 2" into a 60px column of single words. */
+.top{display:flex;flex-direction:column;align-items:stretch;gap:8px;margin-bottom:10px}
+.lane{display:flex;flex-wrap:wrap;gap:6px}
+/* flex-basis 0 + wrap = equal-width buttons that reflow onto as many rows as the labels need,
+   never a horizontal scroll and never a 3-line-tall button. */
+.lane button{flex:1 1 82px;min-width:82px;min-height:44px;border-radius:10px;border:1px solid #2a3f6b;
+     background:#0f1d3a;padding:4px 6px;line-height:1.2;
      color:var(--mut);font-size:14px;font-weight:600}
 .lane button.on{background:var(--gold);color:#0b1730;border-color:var(--gold)}
 .card{background:var(--card);border:1px solid #2a3f6b;border-radius:14px;padding:16px;margin-top:12px}
@@ -1625,6 +1676,10 @@ var BOOKURL="__BOOKURL__";
    that never shipped to this phone — without it a fresh phone reads every owner as never-texted and
    restarts the 3-touch ladder at touch 1, which is exactly the shape of the August email incident. */
 var TEXTPERSON=__TEXTPERSON__;
+/* BAKED SEAT (2026-09-09). null on a whole-list build; {n,i,w} on a seat page whose payload
+   already holds ONLY that seat's rows (call_mode.seat_rows). When set, fcSeat is ignored, the
+   seat prompts are inert and "show all" does not exist — the other half is not on this phone. */
+var SEAT=__SEAT__;
 var SHOWN=__SHOWN__, TOTAL=__TOTAL__, VMEN=__VMEN__, VMES=__VMES__;
 var LS='fcLeadNotes', ROWS=[], PHIDX=null, lane='soon', i=0, cur=null, phIdx=0, notes={};
 function $(id){return document.getElementById(id);}
@@ -1824,6 +1879,10 @@ function b2u(b64){var s=atob(b64),a=new Uint8Array(s.length);for(var i=0;i<s.len
 
 async function boot(){
   loadNotes();
+  /* Say whose page this is BEFORE the code prompt. Two seat pages look identical otherwise, and the
+     one thing a caller must never be unsure about is which list is in front of him. */
+  if(SEAT && SEAT.w){ try{ document.title='Call Mode · '+SEAT.w;
+    var _gh=document.querySelector('.gate h2'); if(_gh) _gh.textContent='Call Mode · '+SEAT.w; }catch(e){} }
   /* PAYLOAD SHAPE. It used to be a bare rows array; it is now {r:rows, x:phoneIndex} so the lookup
      can resolve numbers that are NOT among the dialable rows (67% of them). Accept BOTH shapes —
      an older decrypted copy can still be sitting in this device's cache. */
@@ -2088,6 +2147,58 @@ function isBuyBox(r){ return !!r.bb && r.bbs !== 'UNDERWATER' && !r.bbtd; }
    note is at/near its est. 24-month wall. Different desk, different script (SCRIPT.bal), different
    card (_balCard). Never in soon/lp: those are homeowner lanes and would read them the rescue script. */
 function isBalloon(r){ return r.st==='BAL'; }
+/* ═══════════════ LANES (2026-09-09) — one table, one predicate per button ═══════════════
+   r.d is FROZEN at build (the "9999 days out" bug the board already fixed with _saleDays); a page
+   left open past midnight would keep a passed sale in Urgent. Recompute from the baked date string
+   r.x with the board's own regex. LP rows have no sale date and BAL rows count down to maturity on
+   r.d — neither goes through liveDays. */
+function liveDays(r){
+  if(r.lp || isBalloon(r)) return null;
+  var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(!m) return (typeof r.d==='number' && r.d<9000) ? r.d : null;
+  var t=new Date(+m[3],+m[1]-1,+m[2]), td=new Date(); td.setHours(0,0,0,0);
+  return Math.round((t-td)/864e5);
+}
+/* Any touch on THIS case or a sibling case (r.pcs) inside `days`, matching pred(touch, note). */
+function _touchesWithin(r, days, pred){
+  var cut=Date.now()-days*86400000, cases=[r.c].concat(r.pcs||[]);
+  for(var k=0;k<cases.length;k++){ var n=notes[cases[k]]||{}, T=n.touches||[];
+    for(var j=0;j<T.length;j++){ var ts=+T[j].tsu||+new Date(T[j].ts||T[j].d||0)||0;
+      if(ts>=cut && pred(T[j],n)) return true; } }
+  return false;
+}
+/* WORKER lane: this morning's queue, plus anything the worker actually touched in the last 7 days.
+   workerQ() is the ONE authority on "queued" — it already unions this device's fcCallQueue with the
+   synced .wq flag and honours the .wqx retire tombstone, so re-deriving that here would be a second
+   copy of a rule this codebase has already broken twice. Cached per pool() pass: it parses
+   localStorage, and this predicate runs once per row per lane count. */
+var _WQSET = null;
+function wqSet(){ if(_WQSET) return _WQSET;
+  var s={}; try{ workerQ().forEach(function(c){ s[c]=1; }); }catch(e){}
+  _WQSET=s; return s; }
+function isWorker(r){
+  if(wqSet()[r.c]) return true;
+  return _touchesWithin(r, 7, function(t){ return t.ch==='worker'; });
+}
+/* EMAIL lane: warm follow-up — the owner replied, or an outreach email went out in the last 30 days. */
+function isEmailFU(r){
+  var n=notes[r.c]||{};
+  if(n.replied) return true;
+  return _touchesWithin(r, 30, function(t){ return t.ch==='email' || /replied|inbound/i.test(t.out||''); });
+}
+function _dayLane(r, lo, hi){ if(r.lp || isBalloon(r)) return false;
+  var d=liveDays(r); return d!==null && d>=lo && d<=hi; }
+var LANES = [
+  {k:'email',  lbl:'Emailed / replied', pred:isEmailFU,  hide0:true},
+  {k:'worker', lbl:'Worker',            pred:isWorker,   hide0:true},
+  {k:'urgent', lbl:'Urgent 0-7',        pred:function(r){ return _dayLane(r,0,7); },   hide0:true},
+  {k:'soon',   lbl:'Sale soon 8-45',    pred:function(r){ return _dayLane(r,8,45); },  hide0:false},
+  {k:'late',   lbl:'46-60',             pred:function(r){ return _dayLane(r,46,60); }, hide0:true},
+  {k:'lp',     lbl:'Fresh filings',     pred:function(r){ return !!r.lp && !isBalloon(r); }, hide0:false},
+  {k:'bal',    lbl:'Balloon',           pred:isBalloon,  hide0:true},
+  {k:'bb',     lbl:'Buy-box',           pred:isBuyBox,   hide0:true}
+];
+function laneDef(k){ for(var q=0;q<LANES.length;q++) if(LANES[q].k===k) return LANES[q]; return laneDef('soon'); }
 /* ══════════════════ TEAM SEATS — two phones, one list, nobody dialled twice ══════════════════
    fcSeat = {n: <how many callers>, i: <which one am I, 0-based>, w: <my name>}. Absent or n<=1
    means solo and every filter below is a no-op, so a lone caller sees exactly what he saw before.
@@ -2107,9 +2218,13 @@ function isBalloon(r){ return r.st==='BAL'; }
    again — the silent-suppression failure this codebase keeps re-learning. 90 minutes, and an
    outcome clears it outright. */
 var SEAT_TTL_MS = 90*60*1000, SEAT_ALL = false;
-function _seat(){ try{ var s=JSON.parse(localStorage.getItem('fcSeat')||'{}');
+/* Baked seat wins outright. fcSeat is shared per-origin with the other seat's page, so a value
+   left there by an old test could otherwise hide EVERYTHING on a page that already holds one half. */
+function _seat(){ if(SEAT) return SEAT;
+    try{ var s=JSON.parse(localStorage.getItem('fcSeat')||'{}');
     return (s && s.n>1 && s.i>=0 && s.i<s.n) ? s : null; }catch(e){ return null; } }
 function _seatSet(n, i, w){
+  if(SEAT) return;                                   // fixed at build; nothing on the phone may move it
   if(!n || n<=1){ localStorage.removeItem('fcSeat'); }
   else localStorage.setItem('fcSeat', JSON.stringify({n:n, i:i, w:(w||'').slice(0,18)}));
   i=0; try{ render(); }catch(e){}
@@ -2195,7 +2310,9 @@ function teamWatch(){
     if(!_seat() && !sessionStorage.getItem(_nag) && localStorage.getItem('fcTeamKey')){
       sessionStorage.setItem(_nag, '1');
       var _by = fresh[0].by || 'A teammate';
-      toast('&#9888; ' + esc(_by) + ' is dialing this same list &mdash; set your SEAT so you '
+      /* PLAIN TEXT — toast() sets textContent, so this line used to render the literal characters
+         "&#9888;" and "&mdash;" on the phone instead of the warning sign and the dash. */
+      toast('⚠ ' + _by + ' is dialing this same list — set your SEAT so you '
           + 'never double-dial. Tap the top bar to split.', {bad:true, ms:12000});
     }
   }catch(e){}
@@ -2291,21 +2408,18 @@ function pool(){
      paints would otherwise be missed. 0.05ms for 900 note keys; the O(rows x notes) version this
      replaced measured 36.8ms per pass at 400 rows, twice per paint. */
   optPhones(true);
-  var base;
-  if(lane==='wq'){ var s={}; workerQ().forEach(function(c){ s[c]=1; }); base = ROWS.filter(function(r){ return s[r.c]; }); }
-  /* BUY-BOX LANE. Everything matching a standing acquisition criterion, in either board state —
-     a 4-bedroom in Miami Gardens is worth the call whether its sale is next week or unscheduled,
-     so this deliberately does NOT split on r.lp the way the other two lanes do.
-     UNDERWATER rows are dropped from this lane specifically. They stay reachable everywhere else
-     (an upside-down owner still deserves the advisor call, and short sales are real work) — but
-     this lane answers "which of these could we ACQUIRE", and a house worth less than its liens is
-     not a candidate. Showing it here is how a $222k-underwater lead got ranked #2 on a hand-built
-     sheet under the heading "most runway". */
-  else if(lane==='bb'){ base = ROWS.filter(isBuyBox); }
-  else if(lane==='bal'){ base = ROWS.filter(isBalloon); }
-  /* soon/lp both exclude balloon rows: a balloon row has no lis pendens (lp=0) and would otherwise
-     surface under "Sale soon" — an investor pitched the foreclosure script. Its lane is above. */
-  else base = ROWS.filter(function(r){ return !isBalloon(r) && (lane==='soon' ? !r.lp : !!r.lp); });
+  _WQSET = null;                                       // fresh queue read once per pass, not per row
+  /* ONE predicate per lane, shared with head()'s button counts so the number on the button and the
+     list behind it can never disagree. Notes on the individual lanes:
+     BUY-BOX — everything matching a standing acquisition criterion, in either board state, so it
+       deliberately does NOT split on r.lp. UNDERWATER rows are dropped from this lane only (an
+       upside-down owner still deserves the advisor call, but this lane answers "could we ACQUIRE").
+     Date lanes / lp both exclude balloon rows: a balloon row has no lis pendens (lp=0) and would
+       otherwise surface under "Sale soon" — an investor pitched the foreclosure script.
+     email / worker overlap the date lanes on purpose: a follow-up is a follow-up regardless of the
+       clock, and it is still one lead with one cooldown in suppressed(). */
+  if(lane==='wq') lane='worker';                       // legacy key from an older stored state
+  var base = ROWS.filter(laneDef(lane).pred);
   var n = 0;
   var keep = base.filter(function(r){ if(suppressed(r)){ n++; return false; } return true; });
   _SUPN = n;
@@ -2331,8 +2445,20 @@ function start(){
   /* The worker's queue is the DEFAULT when it has anything in it. Those leads were triaged this
      morning and are phone-only — the worker could not reach them any other way, so they are the
      highest-intent list on the device. Sale-soon and Fresh-filings stay one tap away. */
-  var _wq = workerQ();
-  if(_wq.length && ROWS.some(function(r){ return _wq.indexOf(r.c) >= 0; })) lane = 'wq';
+  /* 2026-09-09: lanes are a table now. A warm reply outranks everything (same rule as the board's
+     Replies button), then this morning's worker touches, then Sale soon. */
+  if(ROWS.some(isEmailFU)) lane = 'email';
+  else if(ROWS.some(isWorker)) lane = 'worker';
+  else lane = 'soon';
+  if(SEAT){
+    try{ localStorage.removeItem('fcSeat'); }catch(e){}          // legacy per-phone seat is dead here
+    try{ var _cw = caller();
+      /* PLAIN TEXT. toast() sets textContent, so markup and HTML entities appear literally —
+         tags here rendered as "<b>Carlos</b>" on the phone. */
+      if(_cw && SEAT.w && _cw.toLowerCase() !== String(SEAT.w).toLowerCase())
+        toast('This page is built for ' + SEAT.w + ' but you unlocked as ' + _cw
+            + '. Calls will log under ' + _cw + '.', {bad:true, ms:9000}); }catch(e){}
+  }
   // the lookup only exists once the payload is open — show it here, not in the gate
   try{
     var _lk = $('lkbtn');
@@ -2406,7 +2532,7 @@ function screenTeamKey(){
        queue and the split does nothing. The wizard now ends with the caller SET, not just with
        sync ON. If they already have a seat (returning after turning sync off + back on), skip
        straight to the queue — no reason to re-ask. */
-    if(!_seat()){
+    if(!_seat() && !SEAT){
       SCREEN='lead'; render(); paintSync();
       setTimeout(function(){ try{ seatMenu(); }catch(e){} }, 250);
       return;
@@ -2489,27 +2615,22 @@ function render(){
   screenLead();
 }
 function head(){
-  var wq = workerQ().length;
-  /* Buy-box count. Same predicate as the lane filter, so the number on the button and the list
-     behind it can never disagree — a count derived a second way is a count that drifts. */
-  var bbn = ROWS.filter(isBuyBox).length;
-  var bln = ROWS.filter(isBalloon).length;   /* Balloon lane, same rule: count on the button, hidden at zero */
+  /* Every button counts with the SAME predicate pool() filters with — a count derived a second way
+     is a count that drifts. Zero-count lanes are hidden (except Sale soon / Fresh filings, which
+     always show so an empty build never reads as a broken build). */
+  var laneBtns = LANES.map(function(L){
+    var cnt = ROWS.filter(L.pred).length;
+    if(!cnt && L.hide0) return '';
+    return '<button data-l="'+L.k+'" class="'+(lane===L.k?'on':'')+'">'+L.lbl
+         + (cnt ? ' &middot; '+cnt : '')+'</button>';
+  }).join('');
   /* NO SILENT CAPS. Suppression is correct, but a list that quietly shrank looks identical to a list
      that was always that size — the exact confusion that hid 466 callable leads behind call_list's
      --max 30. Say the number out loud.
      Read from pool()'s last count rather than re-deriving it: this is THIS LANE's hidden count, and
      head() always renders downstream of a pool() call. */
   var sup = _SUPN;
-  return '<div class="top"><div class="lane">'
-    +(wq?('<button data-l="wq" class="'+(lane==='wq'?'on':'')+'">Worker &middot; '+wq+'</button>'):'')
-    +'<button data-l="soon" class="'+(lane==='soon'?'on':'')+'">Sale soon</button>'
-    +'<button data-l="lp" class="'+(lane==='lp'?'on':'')+'">Fresh filings</button>'
-    /* Count in the label, same rule as the Worker lane: a lane whose size is invisible gets
-       assumed to be whatever it was last time. Hidden only when the box matches nothing, so an
-       empty buy-box never reads as a broken build. */
-    +(bbn?('<button data-l="bb" class="'+(lane==='bb'?'on':'')+'">Buy-box &middot; '+bbn+'</button>'):'')
-    +(bln?('<button data-l="bal" class="'+(lane==='bal'?'on':'')+'">Balloon &middot; '+bln+'</button>'):'')
-    +'</div>'
+  return '<div class="top"><div class="lane">'+laneBtns+'</div>'
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
           +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')
     /* SEAT CHIP. Always rendered, even solo, because "am I splitting the list right now" is a
@@ -2528,6 +2649,12 @@ function head(){
 }
 function seatChip(){
   var s=_seat();
+  if(SEAT){
+    /* Baked page: no "change", no "show all" — the other seat's rows are not in this payload. */
+    var bb2 = []; if(_CLMN) bb2.push(_CLMN+' being worked now');
+    return '<div class="supn"><b>'+esc(SEAT.w||('Seat '+(SEAT.i+1)))+'</b> &mdash; seat '+(SEAT.i+1)
+      +' of '+SEAT.n+' (built in)'+(bb2.length?' &middot; '+bb2.join(' &middot; '):'')+'</div>';
+  }
   /* THE BUG STATE ALEJANDRO FLAGGED: a team key is on and no seat is set. Both phones read
      the same queue and the whole partition is a decoration. The old chip said "Solo — whole
      list", which reads as a valid choice, not a warning. Called out in red now, with the
@@ -2564,6 +2691,8 @@ function seatChip(){
 /* Deliberately a prompt() and not a styled modal: this is set once per phone and then never
    touched, and a wizard for it would be more code to break than the feature itself. */
 function seatMenu(){
+  if(SEAT){ alert('This page is built for '+(SEAT.w||'seat '+(SEAT.i+1))+' (seat '+(SEAT.i+1)+' of '+SEAT.n
+      +').\n\nThe split is fixed at build time — the other half lives on the other page.'); return; }
   var s=_seat()||{n:1,i:0,w:''};
   var n = parseInt(prompt('How many people are calling this list?\n\n1 = solo (you get everything)\n2 = you and one teammate\n3 or 4 also work.\n\nEVERY caller must enter the SAME number.', String(s.n)), 10);
   if(!n || n<1){ return; }
