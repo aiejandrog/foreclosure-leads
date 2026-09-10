@@ -689,6 +689,12 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
     and mailing a partner a link to a file on Alejandro's own Desktop is useless to them. Paths are
     resolved and read here; a missing/unreadable file raises so the caller sees a real 502 rather
     than silently mailing a workup with nothing attached."""
+    # LAST CHECK BEFORE IT LEAVES. The board's worker batch and cadence both arrive here, so this
+    # is the one place every generated message must pass. Refuses an unfilled placeholder or a
+    # value that rendered empty — "my last note about ." and "My name is [YOUR NAME]" both reached
+    # real homeowners and both SUCCEEDED at the SMTP layer, so nothing downstream could see them.
+    import mail_guard as _MG
+    _MG.assert_sendable(subj, body, to_addr)
     sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender

@@ -400,6 +400,10 @@ quo_calls.json
 # ...and the "already contacted" suppression. Every property it guards is silent when it breaks:
 # the dial list just looks shorter, or a lane looks empty, and nothing says why.
 !_contactsuptest.py
+# ...and the outreach-email guard. Two broken messages reached real homeowners ("my last note
+# about ." and "My name is [YOUR NAME]") and BOTH succeeded at the SMTP layer, so no existing
+# check could see them. This suite is the only thing that can.
+!_mailguardtest.py
 
 # image filename salt — MUST be identical on both engines (laptop + cloud);
 # losing this orphans docs/img entirely, since names cannot be recomputed from folios

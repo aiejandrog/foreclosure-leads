@@ -39,6 +39,7 @@ import glob
 import json
 
 import diligence_gate as _DG
+import mail_guard as _MG
 import disclaimer as D
 import os
 import random
@@ -585,14 +586,17 @@ def _compose_single(r, snd, lang='en'):
     """Mirrors the tracker's genEmail() single-lead body."""
     owner = _owner_name(r) or 'Property Owner'
     first = _first_name(r) or owner
-    addr = _g(r, 'addr', 'Address')
+    # safe_addr, not the raw field: a whitespace- or comma-only address used to survive every
+    # `or` fallback as truthy and then render EMPTY, which is how a homeowner received a letter
+    # whose subject stopped at "Regarding your property at". Never empty now.
+    addr = _MG.safe_addr(_g(r, 'addr', 'Address'))
     dt = _sale_date(r)
     td = _is_tax_deed(r)
     plaintiff = _plaintiff(r)
     case_no = _case(r)
     case_tag_en = (f' (Certificate/Case No. {case_no})' if td else f' (Case No. {case_no})') if case_no else ''
     case_tag_es = (f' (Número de certificado/caso {case_no})' if td else f' (Caso Número {case_no})') if case_no else ''
-    street = (addr.split(',')[0] or addr).strip()
+    street = _MG.safe_street(_g(r, 'addr', 'Address'))
     sig = _sig(snd)
     sN = snd.get('name') or '[YOUR NAME]'
 
@@ -823,6 +827,13 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     from_addr (2026-09-08): the lane alias for From: and the Message-ID domain — same contract as
     send_server._smtp_send. Login stays `user`; Gmail accepts the alias because it is registered
     under that account's Send-mail-as and signs DKIM with the alias domain. None = the login."""
+    # LAST CHECK BEFORE IT LEAVES. Refuses a message carrying an unfilled placeholder or a value
+    # that rendered empty — the class of failure that put "my last note about ." and
+    # "My name is [YOUR NAME]" in front of real homeowners, both of which SUCCEEDED at the SMTP
+    # layer and so were invisible to every existing check. Raising here means the caller's step is
+    # not consumed and the lead goes out correctly tomorrow.
+    import mail_guard as _MG
+    _MG.assert_sendable(subj, body, to_addr)
     sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender

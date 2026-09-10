@@ -27,6 +27,7 @@ from email.utils import formataddr, parseaddr
 
 import entity
 import outreach_email as _oe
+import mail_guard as _MG
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE = os.path.join(HERE, 'cadence_queue.json')
@@ -56,6 +57,16 @@ except Exception as _e:                                    # pragma: no cover - 
     _ss, _LANES_OK = None, False
     print('cadence: send_server import failed (%s) — sending as the login, NO lane map, NO ledger '
           'row, NO warm-up cap.' % (str(_e)[:80],))
+
+
+def _save_state(state):
+    """Atomic write of cadence_state.json. tmp + os.replace, the same shape the opt-out ledger
+    uses: this file is now written after EVERY send, so a crash mid-write must never be able to
+    leave a truncated state behind — that would lose the whole sequence, not one step."""
+    tmp = STATE + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(state, f, indent=1)
+    os.replace(tmp, STATE)
 
 
 def _cadence_lane(entry, today):
@@ -138,13 +149,12 @@ def steps(lead, sender):
     # The board stores addresses as "455 NE 210 TER, MIAMI, FL- 33179". That stray hyphen after the
     # state, and the shouted city, appear in every message and are the most machine-looking thing on
     # the page. Nobody writes their own address that way. Tidy it for display only.
-    addr = lead.get('addr') or 'your property'
-    if addr != 'your property':
-        addr = re.sub(r',\s*([A-Z]{2})-\s*', r', \1 ', addr)
-        parts = [p.strip() for p in addr.split(',')]
-        if len(parts) >= 2 and parts[1].isupper():
-            parts[1] = parts[1].title()
-        addr = ', '.join(p for p in parts if p)
+    # FALLBACK AFTER THE CLEAN, NOT BEFORE. This block used to open `addr = lead.get('addr') or
+    # 'your property'` and then tidy it — but a whitespace- or comma-only address is TRUTHY, so the
+    # fallback never fired, and the tidy's own `if p` filter then dropped every part and left an
+    # empty string. That is what sent a homeowner "This is my last note about ." on 2026-09-07.
+    # safe_addr does the same tidying and decides afterwards whether anything survived.
+    addr = _MG.safe_addr(lead.get('addr'))
     auc = lead.get('auction') or 'the scheduled date'
     sn = sender.get('name') or ''
     sp = sender.get('phone') or ''
@@ -193,10 +203,11 @@ def steps(lead, sender):
           f"sale happens the options close with it.\n\nWhatever you decide, including deciding to let "
           f"it go, decide it with your own numbers in front of you instead of the bank's. If a 10 "
           f"minute call helps, I'm around." + sig + disc + unsub)
-    subj = [f"About {addr.split(',')[0]} before the auction date",
-            f"the part of {addr.split(',')[0]} that belongs to you",
-            f"3 options before {auc} for {addr.split(',')[0]}",
-            f"last note on {addr.split(',')[0]} before {auc}"]
+    _street = _MG.safe_street(lead.get('addr'))
+    subj = [f"About {_street} before the auction date",
+            f"the part of {_street} that belongs to you",
+            f"3 options before {auc} for {_street}",
+            f"last note on {_street} before {auc}"]
     es = ("\n\n---\n\n(ES) Hablo español con gusto. Si le es más cómodo, respóndame en español "
           "y seguimos por escrito o por teléfono. No soy su prestamista, no soy del gobierno, "
           "no soy una empresa de rescate de ejecuciones, y no soy abogado; esto no es asesoría "
@@ -470,6 +481,12 @@ def main():
             _as = f'  [{lane} -> {alias}]' if alias else f'  [{lane} -> login]'
             print(f"  [dry-run] {s['email']}  step {step+1}/4  '{subj}'{_as}")
             print('    ' + body.replace('\n', ' ')[:130] + '…')
+            # The guard lives in _smtp_send, which a dry run never reaches — so without this the
+            # one command whose entire job is "show me what would go out" was the one command that
+            # could not see a hole in it. Report here, do not raise: a dry run should list every
+            # problem in the batch, not stop at the first.
+            for _why in _MG.check(subj, body, s['email']):
+                print(f'    !! WOULD BE REFUSED — {_why}')
             continue
         # WARM-UP CAP, metered off the SHARED ledger so cadence and the bridge draw on one budget.
         # Skipped WITHOUT advancing the step: the touch stays due and goes out tomorrow rather than
@@ -523,12 +540,25 @@ def main():
             s['status'] = 'completed'
         else:
             s['next'] = str(today + timedelta(days=gaps[s['step']]))
+        # PERSIST AFTER EVERY SEND, not once at the end of the run.
+        # The step advance above was in MEMORY only, and the single json.dump lived past the end of
+        # this loop — so a run that died, was killed, hit an SMTP error or was closed mid-batch
+        # threw away the record of every mail it had already delivered, and the next run re-sent
+        # them. That is not hypothetical: one owner received the identical step-2 follow-up on
+        # 2026-08-25 16:14 and again on 2026-08-26 12:39. The mail is already gone by this line, so
+        # the only question is whether we remember it, and a write failure here must be LOUD rather
+        # than leave a delivered mail unrecorded.
+        try:
+            _save_state(state)
+        except Exception as e:
+            print(f'  !! {s["email"]} WAS EMAILED but cadence_state.json could not be written '
+                  f'({str(e)[:80]}) — this step may be RE-SENT on the next run. Fix the file now.')
     if smtp:
         smtp.quit()
     for a, n in sorted(capped.items()):
         print(f'  warm-up cap reached on {a} — {n} step(s) held for tomorrow (not consumed).')
 
-    json.dump(state, open(STATE, 'w', encoding='utf-8'), indent=1)
+    _save_state(state)
     print(f'done. {sent} sent, {sum(1 for s in state.values() if s.get("status")=="active")} active, '
           f'{sum(1 for s in state.values() if s.get("status")=="replied")} replied-cancelled, '
           f'{sum(1 for s in state.values() if s.get("status")=="suppressed")} suppressed, '
