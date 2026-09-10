@@ -8,6 +8,29 @@ worker state. That asymmetry is the whole reason this file exists.
 
 ---
 
+## 0. Code you push from the other machine now takes effect the SAME night (2026-09-10)
+
+Until today both runners had exactly one `git pull`, at the bottom, right before the push. A run
+therefore **built with whatever code the checkout was holding**, committed the result, and only then
+rebased the day's new commits into history — so the repo came out looking current while the
+published pages were built from yesterday's code, with nothing in the log to say so.
+
+Caught the morning of 09-10: two commits pushed from the desktop the night before were ancestors of
+the 05:42 nightly commit and present in `origin/main`, yet `docs/call/index.html` shipped with no
+baked seat and `docs/call/carlos/` was never created. It self-corrected only because the 06:00
+phones task rebuilt after the 05:42 run's rebase had updated the checkout. Luck, not a mechanism.
+
+`refresh-dealflow.bat` and `run-leads.bat` now open with `git pull --ff-only origin main`, non-fatal.
+**`--ff-only` is deliberate** — NOT the `--rebase --autostash -X theirs` form used before the push.
+That is the combination this repo took the 2026-08-19 outage from: the autostash reapply can write
+conflict markers into `docs/index.html`, and a board beginning with `<<<<<<<` renders as a blank
+site. At the top of a run there is nothing of ours to replay, so a fast-forward is the whole job and
+it cannot merge, conflict or stash. A dirty tree or local commits make git refuse and change nothing,
+and the run continues on the code already on disk.
+
+Practical effect: push code from either box, and the next scheduled run builds with it. No more
+day-late lag, and no more "the commit is in main so the site must have it".
+
 ## 1. Who is the runner RIGHT NOW
 
 | Machine | Role today | Tasks |
