@@ -409,12 +409,39 @@ def _load_ledger():
 
 
 def _append_ledger(entry):
+    """Append one row to the send ledger, atomically, RETRYING through Windows file locks.
+
+    WHY THE RETRY (2026-09-11). os.replace() onto an open file is legal on POSIX and a hard
+    PermissionError on Windows. send_server.py runs continuously as pythonw.exe and reads this same
+    ledger, so any moment it happens to hold mail_sent.json open, this raises WinError 5.
+
+    That is not a cosmetic crash. The email has ALREADY been handed to SMTP by the time we get
+    here, so an unrecoverable failure at this line means a homeowner was mailed and the ledger does
+    not know it -- and the ledger is the only thing stopping the next run from mailing them again.
+    On 09-11 it killed a 19-lead batch after 6 sends. Duplicate cold mail to a distressed owner is
+    the single worst output this pipeline has.
+
+    The lock is transient (a read, not a write), so a short backoff clears it. If every attempt
+    fails we raise -- but only after leaving the .tmp in place, which holds the complete ledger
+    INCLUDING this row and can be promoted by hand.
+    """
     log = _load_ledger()
     log.append(entry)
     tmp = SENT_LEDGER + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(log, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, SENT_LEDGER)
+    last = None
+    for attempt in range(6):
+        try:
+            os.replace(tmp, SENT_LEDGER)
+            return
+        except PermissionError as e:          # Windows: target held open by another process
+            last = e
+            time.sleep(0.25 * (attempt + 1))  # 0.25s .. 1.5s, ~5s total
+    raise RuntimeError(
+        'mail_sent.json is locked by another process (%s). The send ALREADY went out; this row is '
+        'in %s and must be promoted so the lead is not mailed twice. Usually the culprit is the '
+        'running send_server (pythonw.exe).' % (last, os.path.basename(tmp)))
 
 
 def _recently_emailed_hours(ledger, addr, hours):

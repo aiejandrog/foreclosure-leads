@@ -100,6 +100,26 @@ def main():
             tmp = OPTOUTS + '.tmp'
             json.dump(opt, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
             os.replace(tmp, OPTOUTS)
+        else:
+            # A CLEAN SYNC IS STILL A FRESH SYNC -- touch the mtime even with zero new opt-outs.
+            #
+            # The send bridge refuses to send when optouts.json is older than 2 days, and it reads
+            # the file's MTIME to decide. But this function only wrote the file when `added` was
+            # non-empty, so a run that correctly confirmed "nobody new opted out" left the
+            # timestamp untouched. Two quiet days and the pipeline blocks ITSELF: on 2026-09-11
+            # the morning worker failed ~150 leads in a row with "DO-NOT-CONTACT ledger is 4.0
+            # days old", and re-running this script did not clear it because there was nothing to
+            # add. "No news" was indistinguishable from "sync is broken" -- and the failure mode
+            # was silence on the outreach that pays for everything.
+            #
+            # utime rather than a rewrite: the CONTENT is unchanged and re-serialising a file the
+            # bridge trusts buys nothing. What changed is our knowledge that it is current, and
+            # that is exactly what an mtime records.
+            try:
+                os.utime(OPTOUTS, None)
+            except OSError as e:
+                print('  !! could not refresh %s mtime (%s) -- the send bridge may still treat '
+                      'the ledger as stale.' % (os.path.basename(OPTOUTS), e))
         if sup_new:
             json.dump(sup, open(SUPPRESS, 'w', encoding='utf-8'), indent=0, ensure_ascii=False)
 

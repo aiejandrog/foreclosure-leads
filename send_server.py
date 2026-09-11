@@ -147,10 +147,39 @@ def _ramp_cap(cfg, from_addr, today=None):
     return cap
 
 
-def _lane_from(cfg, lane):
+def _lane_from(cfg, lane, today=None):
+    """The From address for this lane -- falling back to the main domain while the lane's own
+    alias is still frozen at zero.
+
+    WHY THE FALLBACK EXISTS (2026-09-11). ramp_start is 2026-09-21, so until then _ramp_cap()
+    returns 0 for every warming alias. That is correct for reputation, but it silently took the
+    LEADS down with it: on 09-11 twenty owners were eligible and nineteen were skipped with
+    "biscaynesolutionsgroup.com at its warm-up cap for today (0/0)" -- while bsgflorida.com, which
+    is warmed and allowed 40/day, had sent exactly ONE. The queue was not full. The domain was not
+    hot. The lane map just pointed at a mailbox that cannot open for another ten days, and some of
+    those owners have auctions inside that window.
+
+    A lane whose alias is hard-zero today is not a deliverability decision, it is an outage. Route
+    it to the main domain instead, where the 40/day cap still applies and still protects us.
+
+    This is deliberately self-reverting: the moment ramp_start passes and _ramp_cap() returns a
+    real number for the alias, the condition stops firing and each lane resumes its own domain
+    with no config edit and nothing to remember. The main domain's own cap is unchanged, so this
+    can never push bsgflorida.com past 40 -- it only stops us mailing NOBODY on days when the
+    warming domains are shut.
+    """
     lanes = cfg.get('lanes') or {}
-    addr = lanes.get(str(lane or '').lower()) or lanes.get('default') or ''
-    return addr.strip().lower() if _EMAIL_RE.match(str(addr).strip()) else ''
+    addr = (lanes.get(str(lane or '').lower()) or lanes.get('default') or '').strip().lower()
+    if not _EMAIL_RE.match(addr):
+        return ''
+    main = str(cfg.get('main_domain') or 'bsgflorida.com').lower()
+    if not addr.endswith('@' + main) and _ramp_cap(cfg, addr, today) == 0:
+        fallback = (lanes.get('default') or '').strip().lower()
+        # Only fall back to something that IS on the main domain; otherwise we would just swap one
+        # frozen alias for another and report a confusing From address.
+        if _EMAIL_RE.match(fallback) and fallback.endswith('@' + main):
+            return fallback
+    return addr
 
 
 def _alias_sent_today(from_addr):
