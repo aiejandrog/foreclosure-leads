@@ -56,6 +56,7 @@ KEY_FILE = os.path.join(HERE, 'gmail.key')
 SENDER_FILE = os.path.join(HERE, 'sender.json')
 SENT_LEDGER = os.path.join(HERE, 'mail_sent.json')
 OPTOUT_FILE = os.path.join(HERE, 'optouts.json')
+BOUNCED_FILE = os.path.join(HERE, 'bounced_emails.json')   # hard-bounce suppression (bounces.py)
 PREVIEW_FILE = os.path.join(HERE, 'email_preview.html')
 
 DAILY_MAX = 50
@@ -398,6 +399,32 @@ def _load_optouts():
     return set()
 
 
+_BOUNCED = None
+
+
+def _load_bounced():
+    """Addresses that HARD-bounced once -- permanent suppression (bounces.py writes the file).
+
+    2026-09-13: the send bridge and the board (make_tracker) both strip these, but this CLI reads
+    the RAW *_leads.json files, which are NOT board-baked, so until now it could re-send to a known
+    dead mailbox and manufacture the exact bounce this list exists to prevent. Cached like the
+    optout set; envelope shapes tolerated (bounces.py writes a flat {email: {...}} dict)."""
+    global _BOUNCED
+    if _BOUNCED is not None:
+        return _BOUNCED
+    _BOUNCED = set()
+    if os.path.exists(BOUNCED_FILE):
+        try:
+            data = json.load(open(BOUNCED_FILE, encoding='utf-8'))
+            if isinstance(data, dict):
+                _BOUNCED = {str(k).strip().lower() for k in data.keys()}
+            elif isinstance(data, list):
+                _BOUNCED = {str(x).strip().lower() for x in data}
+        except Exception:
+            _BOUNCED = set()
+    return _BOUNCED
+
+
 def _load_ledger():
     if not os.path.exists(SENT_LEDGER):
         return []
@@ -566,6 +593,8 @@ def _eligible(r, ledger, optouts, min_hours):
         return False, 'no primary email'
     if em.strip().lower() in optouts:
         return False, 'opted out'
+    if em.strip().lower() in _load_bounced():
+        return False, 'hard-bounced previously (suppressed)'
     if _recently_emailed_hours(ledger, em, min_hours):
         return False, f'emailed within {min_hours}h'
     days = _days(r)

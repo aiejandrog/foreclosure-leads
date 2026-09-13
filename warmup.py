@@ -45,7 +45,11 @@ ALIASES = ['alejandro@biscaynesolutionsgroup.com', 'alejandro@bsgfl.com']
 # avoid — so they are gone from this list. Add an address here only after it receives mail.
 RECIPIENTS = [
     'alejandro@bsgflorida.com', 'help@bsgflorida.com',
-    'biscaynesolutionsgroup@gmail.com', 'agonzalez0311707@gmail.com',
+    # biscaynesolutionsgroup@gmail.com REMOVED 2026-09-13: it is a dead account ("Address not
+    # found" — the switcher shows it Session expired). It was hard-bouncing ~1 of every 4 warm-up
+    # sends off biscaynesolutionsgroup.com and bsgfl.com, i.e. souring the exact domains this file
+    # warms. Same reason jesse@/carlos@ were pulled (see note above). Re-add only if it receives.
+    'agonzalez0311707@gmail.com',
 ]
 SENDER_NAME = 'Alejandro Gonzalez'
 

@@ -208,6 +208,37 @@ def _ledger_stops(found):
     return written, already
 
 
+def _stamp_optout_verified(mailbox, days):
+    """Record that the DNC ledger was VERIFIED against the inbox just now (non-destructive).
+
+    send_server gates EVERY /send on optouts.json's AGE (its mtime), fail-closed: a ledger older
+    than 2 days blocks all sends, because a frozen ledger once let the bridge email 746 people who
+    may have said stop (2026-09-05). But _ledger_stops only rewrites the file when it finds a NEW
+    stop -- so a clean scan, which is itself PROOF the ledger is current, never cleared the block.
+    Re-stamp after any successful scan so 'age' means 'last verified against the inbox we send
+    from', which is what the guard is actually trying to measure. One-way: notes are untouched;
+    only a provenance record is added, so a hand-written STOP with more context always survives.
+    """
+    p = os.path.join(HERE, 'optouts.json')
+    try:
+        raw = json.load(open(p, encoding='utf-8')) if os.path.exists(p) else {}
+    except Exception:
+        return False
+    if not isinstance(raw, dict):
+        return False
+    raw.setdefault('_dealflow_notes', 1)
+    raw['optout_verified'] = {
+        'ts': datetime.now().isoformat(timespec='minutes'),
+        'mailbox': mailbox, 'window_days': days,
+        'src': 'replies.py scan (no unledgered STOP found)',
+    }
+    try:
+        json.dump(raw, open(p, 'w', encoding='utf-8'), indent=1)
+        return True
+    except Exception:
+        return False
+
+
 def is_stop_text(text):
     """True when the writer is telling US to stop — not asking us to stop the foreclosure.
 
@@ -353,8 +384,36 @@ def owner_emails():
     return out
 
 
+def _cred_map():
+    """Every (mailbox -> app password) pair this box holds, COMPANY INBOX FIRST.
+
+    2026-09-13: replies (and bounces, which reuse this loader) land in whichever inbox the outreach
+    was SENT from. Since the 2026-09-08 sender migration that is the Workspace login in
+    bsg_gmail.key (alejandro@bsgflorida.com); the personal gmail.key is the OLDER inbox where
+    pre-migration outreach -- and its late replies -- still arrive. Before today both scanners
+    defaulted to gmail.key ONLY, so every reply to a company-domain send was invisible and both
+    replies.json and optouts.json went stale (optouts.json is refreshed as a side effect of this
+    scan detecting STOP words). Company first as the default; --account still forces one mailbox.
+    """
+    out = {}
+    for fn in ('bsg_gmail.key', 'gmail.key'):     # order == default preference: company, then personal
+        p = os.path.join(HERE, fn)
+        if not os.path.exists(p):
+            continue
+        try:
+            raw = open(p, encoding='utf-8').read().strip().strip('"').strip("'")
+        except Exception:
+            continue
+        if ':' in raw:
+            u, _, pw = raw.partition(':')
+            u, pw = u.strip().lower(), pw.strip()
+            if u and pw and u not in out:
+                out[u] = pw
+    return out
+
+
 def load_key(account_override=None):
-    """gmail.key holds 'user:app_password'. --account swaps the mailbox without editing the file.
+    """(user, app_password) for the mailbox to scan, or None. --account swaps the mailbox.
 
     WHY THE OVERRIDE EXISTS (found the hard way 2026-07-30): an App Password is minted against
     whichever Google account you were signed into, and with several accounts open it is easy to
@@ -362,7 +421,9 @@ def load_key(account_override=None):
     spaces -- and Gmail still returned AUTHENTICATIONFAILED, because the password belonged to the
     personal Gmail rather than the Workspace address in the same file. Rather than rewrite the
     credential file to chase that, point the run at the mailbox the password actually opens.
-    Also the more correct default: replies land in whichever inbox the outreach was SENT from.
+    Also the more correct default: replies land in whichever inbox the outreach was SENT from --
+    since 2026-09-08 that is the company account, so the default now prefers bsg_gmail.key and
+    falls back to the personal gmail.key (see _cred_map).
     """
     # ENV FIRST, FILE SECOND — the same contract every other scraper here uses (batchdata.key,
     # tracerfy.key, captcha.key all check env then fall back to a gitignored file). On GitHub
@@ -374,18 +435,22 @@ def load_key(account_override=None):
         if ':' in env:
             user, _, pw = env.partition(':')
         else:
-            # password-only secret — the mailbox must then come from --account or gmail.key
+            # password-only secret — the mailbox must then come from --account or a key file
             user, pw = '', env
         user = (account_override or user or os.environ.get('GMAIL_ACCOUNT', '')).strip()
         if user and pw:
             return user, pw.strip()
-    if not os.path.exists(KEY):
+    cmap = _cred_map()
+    if account_override:
+        acc = account_override.strip().lower()
+        if acc in cmap:
+            return acc, cmap[acc]
+        # named a mailbox we hold no password for: fail loudly rather than silently authenticate
+        # the wrong inbox (the exact 2026-07-30 failure this loader was built to prevent).
         return None
-    raw = open(KEY, encoding='utf-8').read().strip()
-    if ':' not in raw:
-        return None
-    user, _, pw = raw.partition(':')
-    return (account_override or user).strip(), pw.strip()
+    for u, pw in cmap.items():         # company inbox first, personal second
+        return u, pw
+    return None
 
 
 def _decode(s):
@@ -425,7 +490,8 @@ def main():
         return
 
     if dry:
-        print(f'[dry-run] would IMAP-search the last {days} days for mail FROM {len(all_emails)} addresses')
+        print(f'[dry-run] would sweep the last {days} days of INBOX once and match senders against '
+              f'{len(all_emails)} owner addresses (PASS 1), plus a subject search (PASS 2)')
         for e in all_emails[:12]:
             print('   ', e)
         if len(all_emails) > 12:
@@ -436,27 +502,56 @@ def main():
     print(f'checking mailbox: {user}')
     since = (datetime.now() - timedelta(days=days)).strftime('%d-%b-%Y')
     prior = _load_json('replies.json', {})
-    found = {}
+    # MERGE, don't overwrite. Before 2026-09-13 `found` started empty and line ~554 dumped ONLY the
+    # current 30-day window, so (a) scanning a second inbox (company + personal) erased the first,
+    # and (b) any lean run silently discarded warm replies that had simply aged out of the window --
+    # the same reply-data-loss this file's history calls the cardinal sin. is_new still compares
+    # against the untouched `prior`, so NEW-reply alerts are unchanged.
+    found = dict(prior)
     new_alerts = []
     try:
         M = imaplib.IMAP4_SSL('imap.gmail.com')
         M.login(user, pw)
         M.select('INBOX')
-        # ---- PASS 1: FROM a known owner address -------------------------------------------------
-        for addr in all_emails:
-            typ, data = M.search(None, f'(SINCE {since} FROM "{addr}")')
-            if typ != 'OK' or not data or not data[0]:
+        # ---- PASS 1: replies FROM a known owner address (rewritten 2026-09-13) -------------------
+        # The old PASS 1 fired one IMAP SEARCH per owner address -- 4,306 of them on 2026-09-13 --
+        # every run. That O(owners) loop is what blew the scheduled task's PT30M limit and left
+        # replies.json frozen for weeks (killed mid-scan = nothing written). Same result now at
+        # O(inbox): ONE search for the window, then BATCHED header fetches (one round trip per 500
+        # messages), and match senders locally. Full RFC822 is still pulled -- for STOP scan +
+        # excerpt -- but only for the handful of owner addresses that actually wrote in. PASS 2
+        # (unchanged, below) still catches replies from addresses NOT on file, by subject.
+        owner_set = set(all_emails)
+        typ, data = M.search(None, f'(SINCE {since})')
+        win_ids = data[0].split() if (typ == 'OK' and data and data[0]) else []
+        print(f'  sweeping {len(win_ids)} inbox message(s) since {since}')
+        sender_mids = {}      # bare-email -> [seq-id, ...], ascending == oldest -> newest
+        for _i in range(0, len(win_ids), 500):
+            chunk = b','.join(win_ids[_i:_i + 500])
+            typh, hdata = M.fetch(chunk, '(BODY.PEEK[HEADER.FIELDS (FROM)])')
+            if typh != 'OK' or not hdata:
                 continue
-            ids = data[0].split()
-            typ, msg_data = M.fetch(ids[-1], '(RFC822)')
+            for item in hdata:
+                if not (isinstance(item, tuple) and item[0] and item[1]):
+                    continue
+                mseq = re.match(rb'(\d+)', item[0])
+                if not mseq:
+                    continue
+                hmsg = email.message_from_bytes(item[1])
+                snd = (parseaddr(str(hmsg.get('From') or ''))[1] or '').lower().strip()
+                if snd:
+                    sender_mids.setdefault(snd, []).append(mseq.group(1).decode())
+        for addr in sorted(owner_set & set(sender_mids)):
+            mids = sender_mids[addr]
+            typ, msg_data = M.fetch(mids[-1], '(RFC822)')     # newest message from this owner
             raw = msg_data[0][1] if (typ == 'OK' and msg_data and msg_data[0]) else b''
             subj, when, fresh, is_stop, _snd = _read_msg(raw)
-            rec = {'email': addr, 'n': len(ids), 'subject': subj, 'when': when,
+            rec = {'email': addr, 'n': len(mids), 'subject': subj, 'when': when,
                    'stop': is_stop,
                    'excerpt': ' '.join(fresh.split())[:220],
                    'checked': datetime.now().isoformat(timespec='minutes')}
             # NEW means the message count for this address grew since the last run, not just "the
-            # key is new" -- with days=30 the same reply reappears in this search every day for a
+            # key is new" -- with days=30 the same reply reappears in this window every day for a
             # month, and a returning replier's SECOND message should still alert even though the
             # address itself was already known.
             is_new = rec['n'] > ((prior.get('@' + addr) or {}).get('n') or 0)
@@ -467,7 +562,7 @@ def main():
                     found[case] = rec
                     case_hit = case
             flag = '  [STOP WORD IN SUBJECT]' if rec['stop'] else ''
-            print(f'  REPLY from {addr} — {len(ids)} msg(s) · {subj[:52]}{flag}')
+            print(f'  REPLY from {addr} — {len(mids)} msg(s) · {subj[:52]}{flag}')
             if is_new:
                 new_alerts.append({'case': case_hit, 'email': addr, 'when': when,
                                     'stop': is_stop, 'excerpt': rec['excerpt']})
@@ -556,14 +651,22 @@ def main():
     stops = len([v for k, v in found.items() if k.startswith('@') and v.get('stop')])
     print(f'\nreplies.json written — {replies} address(es) replied'
           + (f', {stops} contain a STOP word' if stops else ''))
+    _wrote_optout = False
     if stops:
         _ledgered, _already = _ledger_stops(found)
+        _wrote_optout = bool(_ledgered)
         if _ledgered:
             print(f'  {_ledgered} STOP repl(ies) written to optouts.json automatically'
                   + (f' ({_already} already there)' if _already else ''))
         else:
             print(f'  {_already} STOP repl(ies) already on the opt-out ledger.')
         print('  Review them, but they are already suppressed — no manual step is required.')
+    if not _wrote_optout:
+        # No NEW stop to record, but the scan SUCCEEDED — so the DNC ledger is verified current.
+        # Re-stamp its freshness, or send_server's fail-closed age gate keeps blocking every send.
+        if _stamp_optout_verified(user, days):
+            print(f'  opt-out ledger re-stamped verified now against {user} '
+                  f'— clears send_server\'s stale-optout block.')
     print('Rebuild the board to surface them:  python -c "import json,foreclosure_leads as F;'
           ' F.make_tracker(json.load(open(\'leads_final.json\',encoding=\'utf-8\')))"')
 
