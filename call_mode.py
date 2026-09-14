@@ -260,6 +260,74 @@ NEVER_SAY = [
     'An argument. Calls end warm.',
 ]
 
+# ── NEPQ BLACK BOOK ADDITIONS (2026-09-13, Alejandro) ──────────────────────────────────────────────
+# Mined from Jeremy Miner's NEPQ Black Book of Questions (7th Level, 2024). The 2026-09-04 pass built
+# the opener + 6-beat stack + CIOC from working knowledge of Miner; these four pieces are the ones the
+# actual book has that the page was missing. Each is additive and lane-guarded in renderSheet (the
+# balloon lane has none of these keys, so `if(SCRIPT.frame)` etc. leave the investor call untouched).
+# COPY LAW still binds every line: "options" not outcomes, INTRODUCE the advisor, five-minute consult
+# (no new time figure — cross_surface_check greps for conflicting ten/fifteen), no either/or exit.
+# Verbal fill-ins use [square brackets] on purpose: fillScript only resolves {curly} tokens, so a
+# {free text} would render literally on screen. [brackets] pass through as coaching cues he fills live.
+
+# STATUS FRAME — Connection stage, read straight after the opener lands and BEFORE any question. The
+# single highest-impact NEPQ move the page lacked: it lowers the "he's about to pitch me" pressure and
+# their "yes, that'd help" is the first micro-commitment. Neutral, expert, unhurried tonality.
+STATUS_FRAME_EN = ("Honestly, this is pretty basic — I'm really just trying to understand where things "
+                   "stand on {st1} right now... compared to where you'd want them to land... so we can "
+                   "see what that gap looks like. And toward the end, if you feel it might be worth it, "
+                   "we can talk about a couple of possible next steps. Would that help you?")
+STATUS_FRAME_ES = ("La verdad, esto es bien sencillo — solo quiero entender cómo está la situación con "
+                   "{st1} ahora mismo... comparado con dónde a usted le gustaría que quedara... para ver "
+                   "cómo se ve esa diferencia. Y al final, si usted siente que pudiera valer la pena, "
+                   "hablamos de un par de posibles pasos a seguir. ¿Le parece que le ayudaría?")
+
+# PROBING RAIL — Miner's actual engine. When the homeowner goes vague, echo their last words back as a
+# question and get specific. Short one-liners he drops in anywhere, not a fixed sequence. EN/ES paired
+# by index; the length check below fails loud (same reason as the NEPQ_Q zip guard).
+PROBE_EN = [
+    'Not 100%?...  (echo whatever they just said)',
+    'What do you mean by that?',
+    "How long's that been going on?",
+    'Has that had an impact on you?...  In what way, though?',
+    "You don't sound so sure — what is it you don't like about how it's going?",
+    'Can you give me a specific example of when that happened?',
+]
+PROBE_ES = [
+    '¿No 100%?...  (repita lo que acaban de decir)',
+    '¿Qué quiere decir con eso?',
+    '¿Cuánto tiempo lleva pasando eso?',
+    '¿Eso le ha afectado?...  ¿De qué manera?',
+    'No lo escucho muy seguro — ¿qué es lo que no le gusta de cómo va la cosa?',
+    '¿Me puede dar un ejemplo específico de cuándo pasó eso?',
+]
+if len(PROBE_EN) != len(PROBE_ES):
+    raise RuntimeError('call_mode: PROBE has %d EN vs %d ES — zip/index pairing would drop the extras.'
+                       % (len(PROBE_EN), len(PROBE_ES)))
+
+# BRIDGE — the Transition Formula (their words + their emotion), read to tie the call together right
+# before the advisor ask. [brackets] are live fill-ins he speaks, not tokens.
+BRIDGE_EN = ("Okay... based on everything you just told me, this is exactly the kind of thing we can "
+             "actually help with. Because you said you want [what they want]... and the way that date "
+             "keeps moving has you feeling [stressed / worried / stuck] — I think you mentioned that a "
+             "couple times. So here's the one thing I'd want for you before that date hits...")
+BRIDGE_ES = ("Bueno... con todo lo que me acaba de decir, esto es justo lo que sí podemos ayudarle a "
+             "resolver. Porque usted dijo que quiere [lo que quieren]... y la forma en que esa fecha se "
+             "sigue moviendo lo tiene [estresado / preocupado / atascado] — creo que lo mencionó un par "
+             "de veces. Así que esto es lo único que quisiera para usted antes de que llegue esa fecha...")
+
+# BUSY / NEPQ CALENDAR COMMITMENT — the "I'm busy / call me back" objection, handled by flipping status:
+# YOUR time is the scarce thing. Distinct from the CIOC/drill-pack cards on purpose so it is one glance
+# away next to the objections without touching the vault parse. {phone} resolves to SENDER.phone.
+BUSY_EN = ("No problem at all... here's what I'll do — I'll give you my number, and you'd have to call "
+           "ME back later to catch me. What's your timeframe on getting back to me, just to see if I'd "
+           "even be free?  ·  Or if you've got your calendar handy, I'll pull mine and we'll lock a "
+           "specific time so neither of us is chasing the other. My number is {phone}.")
+BUSY_ES = ("No hay problema... mire, esto es lo que hago — le doy mi número y usted tendría que "
+           "llamarme A MÍ más tarde para alcanzarme. ¿Cuál es su horario para regresarme la llamada, "
+           "nada más para ver si yo estaría libre?  ·  O si tiene su calendario a mano, saco el mío y "
+           "fijamos una hora específica para que ninguno ande persiguiendo al otro. Mi número es {phone}.")
+
 # Where the Core 10 lives. Read at BUILD time so the page stays in step with the canon instead of
 # carrying a copy that silently rots.
 #
@@ -1159,6 +1227,12 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'f15': FIFTEEN_SEC,
         'mars': MARS_BLOCK,
         'never': NEVER_SAY,
+        # NEPQ Black Book additions (2026-09-13). Homeowner lane only — the balloon dict has none of
+        # these, so renderSheet's `if(SCRIPT.frame)` guards leave the investor call exactly as it was.
+        'frame': {'en': STATUS_FRAME_EN, 'es': STATUS_FRAME_ES},
+        'probe': {'en': PROBE_EN, 'es': PROBE_ES},
+        'bridge': {'en': BRIDGE_EN, 'es': BRIDGE_ES},
+        'busy': {'en': BUSY_EN, 'es': BUSY_ES},
         'obj': load_objections(),
         # BALLOON / REFI LANE — the investor script (vault: Refi Lane note, 2026-08-30). Read by
         # renderSheet for st:'BAL' rows only; same keys as the homeowner script so the page has ONE
@@ -4464,6 +4538,13 @@ function renderSheet(r){
         + say(opEN, opES, r)
         + (named ? '' : '<div class="noes">No usable first name on this lead &mdash; ask for the owner rather than guessing at one.</div>');
 
+  // STATUS FRAME (NEPQ) — read straight after the opener, before any question. Lowers the "he's about
+  // to pitch me" pressure; their "yes, that'd help" is the first micro-commitment. Homeowner lane only.
+  if(SCRIPT.frame){
+    b += '<div class="ltag">THE FRAME &mdash; set this BEFORE any question</div>'
+       + say(SCRIPT.frame.en, SCRIPT.frame.es, r);
+  }
+
   // NEPQ question stack -- only after the opener lands. Get them talking; the problem sells itself.
   if(SCRIPT.q && SCRIPT.q.length){
     b += '<div class="ltag">GET THEM TALKING &mdash; '+SCRIPT.q.length+' BEATS, IN ORDER</div>';
@@ -4472,6 +4553,21 @@ function renderSheet(r){
         + (q.w ? '<div class="mut" style="font-size:12px">'+esc(q.w)+'</div>' : '')
         + say(q.en, q.es, r);
     });
+  }
+
+  // PROBING RAIL (NEPQ) — echo their last words back as a question whenever they go vague. Not a
+  // sequence; one-liners he drops in. Homeowner lane only.
+  if(SCRIPT.probe && SCRIPT.probe.en && SCRIPT.probe.en.length){
+    b += '<div class="ltag">WHEN THEY GET VAGUE &mdash; echo it back, get specific</div>';
+    SCRIPT.probe.en.forEach(function(p, ix){
+      b += say(p, (SCRIPT.probe.es && SCRIPT.probe.es[ix]) || p, r);
+    });
+  }
+
+  // BRIDGE (NEPQ Transition Formula) — tie their words + emotion together right before the advisor ask.
+  if(SCRIPT.bridge){
+    b += '<div class="ltag">THE BRIDGE &mdash; then hand off to the advisor</div>'
+       + say(SCRIPT.bridge.en, SCRIPT.bridge.es, r);
   }
 
   // CIOC as nav — tap a beat, get its words.
@@ -4493,6 +4589,13 @@ function renderSheet(r){
      /* the investor lane carries its own voicemail (SCRIPT.vm); the homeowner rescue message is
         the page-level VMEN/VMES and stays exactly what it was for every other row */
      + (SCRIPT.vm ? say(SCRIPT.vm.en, SCRIPT.vm.es, r) : say(VMEN, VMES, r));
+
+  // BUSY / CALL ME BACK (NEPQ Calendar Commitment) — the most common early bail. Flip status: YOUR
+  // time is the scarce thing. Its own block so it's one glance away, not buried in the drill pack.
+  if(SCRIPT.busy){
+    b += '<div class="ltag">&ldquo;I&rsquo;M BUSY / CALL ME BACK&rdquo; &mdash; flip it, don&rsquo;t chase</div>'
+       + say(SCRIPT.busy.en, SCRIPT.busy.es, r);
+  }
 
   // OBJECTIONS — tap what you are hearing.
   b += '<div class="ltag">THEY PUSHED BACK &mdash; tap what you heard</div>';

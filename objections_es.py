@@ -264,4 +264,22 @@ ES.update({
         ],
         'one': 'Si lo lee de vuelta completo esta dentro — si "se acabo la tinta", no lo esta.',
     },
+    # Not Interested (The Reflex Brush-Off) — NEPQ 2026-09-13. Disarm the reflex, curious reopen, no exit.
+    15: {
+        'say': 'No estoy interesado.',
+        'reb': [
+            'No hay ningún problema — la verdad, ni esperaba que lo estuviera. Casi todas las personas con '
+            'las que hablo sobre una casa como la suya me dicen exactamente lo mismo cuando llamo la primera '
+            'vez, así que está en buena compañía. No le vengo a inscribir en nada, y no le llamo para '
+            'comprarle la casa. Rapidito, nada más para no ser la persona número doce que le quita la tarde: '
+            '¿alguien ya se sentó con usted y le mostró qué le pasa a su saldo cada vez que empujan esa fecha '
+            'de la subasta... o eso todavía es una interrogante?',
+            'Porque esa es la única razón por la que llamé — no para venderle un préstamo. Nuestro asesor '
+            'principal, más de 30 años en hipotecas y en resolver casos de ejecución, le pone sus opciones '
+            'reales sobre la mesa en unos cinco minutos, gratis, y usted decide qué hacer con ellas. En el '
+            'peor de los casos, sabe más de lo que sabía esta mañana, y quedamos como amigos. ¿Verdad que sí?',
+        ],
+        'one': 'No le pido que esté interesado — le pregunto si vale cinco minutos gratis conocer sus '
+               'opciones antes de que llegue esa fecha.',
+    },
 })
