@@ -2585,10 +2585,10 @@ function landChips(r){ let o='';
   if(r.co){
     var _lp = (r.llcppl||[]).length;
     o += _lp
-      ? '<span class="chip vnone" title="COMPANY-OWNED — but Sunbiz gave up '+_lp+' human'+(_lp>1?'s':'')+' behind it (manager/officers'+(r.llcstat==='INACTIVE'?'; entity DISSOLVED':'')+'). Open Deal analysis — names, addresses and people-search links are inside.">LLC-OWNED · '+_lp+' 🧑</span>'
+      ? '<span class="chip vnone" title="COMPANY-OWNED — but Sunbiz gave up '+_lp+' human'+(_lp>1?'s':'')+' behind it (manager/officers'+(r.llcstat==='INACTIVE'?'; entity DISSOLVED':'')+'). Open Deal analysis — names, addresses and people-search links are inside.">'+_entKind(r)+'-OWNED · '+_lp+' 🧑</span>'
       : r.llcnf
-        ? '<span class="chip vnone" title="COMPANY-OWNED and NOT registered in Florida under this name — no Sunbiz managers or agent. Open Deal analysis: the deed names whoever signed for the entity, and the search links are there.">LLC-OWNED · via deed</span>'
-        : '<span class="chip vnone" title="COMPANY-OWNED (LLC/Corp/Trust). Not a distressed homeowner — likely a sophisticated investor who knows the value; different negotiation, no FS 501.1377 homeowner protections. Context only, not a red flag.">LLC-OWNED</span>';
+        ? '<span class="chip vnone" title="COMPANY-OWNED and NOT registered in Florida under this name — no Sunbiz managers or agent. Open Deal analysis: the deed names whoever signed for the entity, and the search links are there.">'+_entKind(r)+'-OWNED · via deed</span>'
+        : '<span class="chip vnone" title="COMPANY-OWNED (LLC/Corp/Trust). Not a distressed homeowner — likely a sophisticated investor who knows the value; different negotiation, no FS 501.1377 homeowner protections. Context only, not a red flag.">'+_entKind(r)+'-OWNED</span>';
   }
   return o; }
 // Real equity — nets out a CHAIN-VERIFIED surviving mortgage (orsurv) when we have one. The raw `eq`
@@ -2948,6 +2948,16 @@ function setVerdict(r, x){
       +(s.title?' — Certificate of Title issued '+s.title:'')
       +(s.tpb?' to '+s.tpb:'')+'. The lead case here will likely be dismissed or reduced to a surplus fight. Do not route a door-knock or spend outreach on it.';
     return; }
+  // COMMERCIAL / INDUSTRIAL / AGRICULTURAL (r.comm from the county use code) — the residential flip &
+  // homeowner-rescue model does not apply. These price on $/SF, cap rate / NOI and zoning, not a
+  // comp-$/sqft ARV and a 75%-of-value offer, and an old industrial parcel carries environmental risk
+  // no residential comp can see. Never print a residential profit/ROI/STRONG off that math — route to
+  // manual underwriting. (2165 NW 19 ST: a use-48 warehouse was rendering STRONG on residential comps.)
+  if(r.comm){
+    r._profit=null; r._roi=null; r._equity=null; r._verdict='VERIFY'; r._vrank=2;
+    r._whyShort='COMMERCIAL — underwrite manually, not the residential model';
+    r._why='County use code is commercial / industrial / agricultural, not 1-4 unit residential. The residential model here (comp $/sqft ARV, 75%-of-value offer, homeowner rescue) cannot price it: underwrite by $/SF or cap rate / NOI, confirm zoning and environmental, and get a broker or commercial comp. No residential profit or ROI is shown, by design.';
+    return; }
   // never show a profit we can't stand behind
   if(r.ju){ r._profit=null; r._roi=null; r._verdict='VERIFY'; r._vrank=2; r._whyShort='Judgment not posted — verify on docket';
     r._why='Final judgment not posted — the debt is unknown. Confirm it on the docket before trusting any profit.'; return; }
@@ -2976,6 +2986,22 @@ function setVerdict(r, x){
   // chain-fed survivor math never graduates to STRONG on a LOW-confidence chain: the number came
   // from records, but a common-name owner means it might be a stranger's mortgage. Verify, then it can.
   if(r._chainSurv && r.orconf==='low' && rank>2){ rank=2; v='MARGINAL'; why='Surviving-mortgage math comes from a LOW-confidence lien chain (common owner name — could include a stranger\'s records). The equity is accounted for; verify the chain in Official Records before trusting it as STRONG.'; }
+  // SERIAL BANKRUPTCY / SERIAL STALLER — never STRONG. A borrower with 2+ BK filings, or who has already
+  // dodged 2+ scheduled sales, can re-file and freeze the next sale under the automatic stay, so the
+  // auction date and the whole "deal" are unreliable. These already hard-suppress contact and drop the
+  // lead from closers (_isCloser); the headline verdict must reflect the same risk so the board can't
+  // print STRONG on a staller. Data note: saleBK/saleSurv are parsed from the Miami-Dade docket only —
+  // BW/PB rows don't carry them yet, so this gate is a no-op there until county docket parsing lands.
+  if(((+r.saleBK||0) >= 2 || (+r.saleSurv||0) >= 2) && rank>2){
+    rank=2; v='MARGINAL';
+    why=((+r.saleBK||0)>=2 ? r.saleBK+' bankruptcy filings on this docket' : r.saleSurv+' scheduled sales already dodged')
+      + ' — the automatic stay can freeze the sale again at any time. Treat the auction date as unreliable; do not count on closing on schedule.'; }
+  // JUDGMENT UNDER ATTACK — an unresolved motion to set aside / vacate the judgment (or to stay
+  // enforcement) means the debt this whole deal is priced on may be reopened. Never STRONG while it is
+  // live. (r.setAside is populated once docket parsing flags it; read defensively — undefined = no-op.)
+  if(r.setAside && rank>2){
+    rank=2; v='MARGINAL';
+    why='A motion to set aside / vacate the judgment (or stay enforcement) is pending and unresolved — the debt this deal is priced on could be reopened. Verify the docket outcome before trusting any number.'; }
   r._verdict=v; r._vrank=rank; r._why=why;
 }
 // PLAY — the money-making angle that fits THIS deal, INDEPENDENT of buy-equity. Jose's rule: no deal is
@@ -6536,16 +6562,35 @@ function _ptype(r){
     if(/APARTMENT|APT\b/.test(d)) return 'Apartment';
     if(/MOBILE|MANUFACTURED/.test(d)) return 'Mobile Home';
     if(/SINGLE\s*FAMILY|SFR\b|SFH\b/.test(d)) return 'Single Family';
+    if(/WAREHOUS|DISTRIB/.test(d)) return 'Warehouse';
+    if(/\bOFFICE\b/.test(d)) return 'Office';
+    if(/RETAIL|\bSTORE\b|\bSHOP\b/.test(d)) return 'Retail';
+    if(/RESTAURANT/.test(d)) return 'Restaurant';
+    if(/\bHOTEL\b|\bMOTEL\b/.test(d)) return 'Hotel/Motel';
     if(/COMMERCIAL/.test(d)) return 'Commercial';
-    if(/INDUSTRIAL/.test(d)) return 'Industrial';
-    if(/AGRICULTURAL|FARM/.test(d)) return 'Agricultural';
+    if(/INDUSTRIAL|MANUFACTUR/.test(d)) return 'Industrial';
+    if(/AGRICULTURAL|FARM|GROVE/.test(d)) return 'Agricultural';
     // Fallback: take the first colon-segment, cap 22 chars
     return d.split(':')[0].trim().slice(0,22).toLowerCase()
       .replace(/\b\w/g, function(c){return c.toUpperCase();});
   }
+  if(r && r.comm) return 'Commercial';
   if(r && r.vac) return 'Vacant Land';
   if(r && r.condo) return 'Condo';
   return '';
+}
+// Owner entity KIND from the recorded name suffix, so a corporation reads "CORP-OWNED" not "LLC-OWNED"
+// (the register distinguishes them and the strategy differs — a corp/LP has no LLC charter to pierce
+// the same way). Display only; `r.co` still decides whether the chip shows at all.
+function _entKind(r){
+  var o = String((r&&(r.owners||r.oname))||'').toUpperCase();
+  if(/\bL\.?L\.?L\.?P\b|\bLLP\b/.test(o)) return 'LLLP';
+  if(/\bLLC\b|L\.L\.C/.test(o)) return 'LLC';
+  if(/\bINC\b|INCORPORATED/.test(o)) return 'INC';
+  if(/\bCORP\b|CORPORATION/.test(o)) return 'CORP';
+  if(/\bLP\b|\bLTD\b|LIMITED PARTNERSHIP/.test(o)) return 'LP';
+  if(/\bTRUST\b/.test(o)) return 'TRUST';
+  return 'ENTITY';
 }
 function _ptypeChip(r){
   var t = _ptype(r);
@@ -15259,7 +15304,13 @@ function exportDispoPack(caseId){
   var hp = $('pvHeroPhoto');
   var photoUrl = (r.photos||[])[0] || r.aurl || '';
   if(photoUrl){
-    hp.innerHTML = '<img src="'+esc(photoUrl)+'" alt="property photo" onerror="this.parentNode.innerHTML=\'<div class=&quot;pv-nophoto&quot;>Photo pending — drive-by scheduled before showing</div>\'"><div class="pv-verified">RECORDS VERIFIED · '+new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'})+'</div>';
+    // Only claim "RECORDS VERIFIED" on the client-facing pack when the records ACTUALLY are: a
+    // confidence-'ok' recorded lien chain AND a posted judgment. It used to stamp the badge on any lead
+    // that merely had a photo, dating it today — a false verification claim to a cash buyer on leads
+    // whose financials were never checked. No claim is safer than a false one, so when it isn't verified
+    // the badge is omitted rather than downgraded to scary "PARTIAL" text on a marketing sheet.
+    var _rvOK = (r.orconf==='ok' && !r.ju);
+    hp.innerHTML = '<img src="'+esc(photoUrl)+'" alt="property photo" onerror="this.parentNode.innerHTML=\'<div class=&quot;pv-nophoto&quot;>Photo pending — drive-by scheduled before showing</div>\'">'+(_rvOK?'<div class="pv-verified">RECORDS VERIFIED · '+new Date().toLocaleDateString('en-US',{month:'2-digit',day:'2-digit',year:'2-digit'})+'</div>':'');
   } else {
     hp.innerHTML = '<div class="pv-nophoto">Photo pending — drive-by scheduled before showing</div>';
   }
@@ -16481,7 +16532,7 @@ function render(){
     gDo.push(_viewedBtn(r));
     gDo.push('<a href="#" class="logbtn" data-c="'+esc(r.case)+'" title="Log a call/email/letter/door knock, set a follow-up date, and see the contact history for this lead">Log</a>');
     const summary = [r.owners, r.addr, 'Mailing: '+(r.mail||r.addr), 'Case '+r.case, 'Auction '+r.auction,
-      'Value '+fmtK(r.value)+' / Owed '+fmtK(r.judg)+(r.plaintiff?' / vs '+r.plaintiff:''),
+      'Value '+fmtK(r.value)+' / Owed '+fmtK(_payoffOf(r))+(r.plaintiff?' / vs '+r.plaintiff:''),
       r.auc?'Verify sale: '+r.auc:'',
       r.addr?'Map: https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(String(r.addr).replace(/FL-\s*/i,'FL ')):''
     ].filter(Boolean).join('\n');
@@ -16557,7 +16608,7 @@ function render(){
           ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
           : '<span class="clamp2 legalline">no address on the filing</span>');
     const prop = '<div class="addrline">'+_addrLine+'</div>'+
-      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -16626,7 +16677,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((+r.judg||0)?fmtK(r.judg)+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+

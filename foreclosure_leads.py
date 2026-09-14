@@ -1726,6 +1726,12 @@ def make_tracker(leads):
             # false-positives for the homeowner-rescue model; badged in the UI so a big-equity vacant
             # lot / LLC (e.g. Ocean Breeze 777 LLC's $2.1M raw lots) can't masquerade as a live lead.
             'vac': bool(re.search(r'VACANT', str(r.get('dor_desc','') or ''), re.I)),
+            # COMMERCIAL / INDUSTRIAL / AGRICULTURAL — the residential-flip / homeowner-rescue model
+            # doesn't price these ($/SF, cap rate/NOI, zoning, environmental instead). Gated to manual
+            # underwriting in the board (setVerdict) so a warehouse/office can't render a fantasy STRONG
+            # off residential comp-ARV math. MD carries the full dor_desc string, so match on it the same
+            # way condo/vac do; BW/PB set `comm` from the numeric use code in county_leads.to_slim().
+            'comm': bool(re.search(r'COMMERCIAL|INDUSTRIAL|WAREHOUS|\bOFFICE\b|RETAIL|\bSTORE\b|\bSHOP\b|RESTAURANT|\bMOTEL\b|\bHOTEL\b|SERVICE STATION|\bPARKING\b|AGRICULT|\bFARM\b|\bGROVE\b|MANUFACTUR|DISTRIB', str(r.get('dor_desc','') or ''), re.I)),
             'co': bool(re.search(r'\b(LLC|CORP|INC|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|PROPERT|REALTY|CAPITAL|GROUP|INVEST|EQUIT)\b', str(r.get('owners','') or ''), re.I)),
             'zillow': r.get('zillow_url',''), 'pa': r.get('pa_url',''),
             # property photos (from property_photos.py). County leads pass through via slim.extend, but the

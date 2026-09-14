@@ -230,7 +230,7 @@ def to_slim(county, cfg, base, items):
         # leads) or, when the run's FIRST lead had no match, raised UnboundLocalError and killed
         # the entire county scrape: 8 silent aborts 08/01-08/13 that kept stale files while the
         # refresh reported success.
-        val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''; vac = False; opart = False; assv = 0
+        val = 0; owner = ''; hs = False; mail = ''; bprice = 0; bought = 0; condo = False; oname = ''; vac = False; opart = False; assv = 0; comm = False
         info = None; vsrc = ''
         if folio:
             try: info = fl_cadastral.enrich(parcel_id=folio)
@@ -261,6 +261,15 @@ def to_slim(county, cfg, base, items):
             # land value = a systematic false-positive for the homeowner-rescue model.
             _uc = str(info.get('use_code', '') or '').strip()
             vac = (_uc.lstrip('0') == '') and _uc != '' or _uc in ('10', '1000', '40', '4000', '70', '7000')
+            # COMMERCIAL / INDUSTRIAL / AGRICULTURAL (BUILT — vacant is caught above). FDOR use code
+            # families 10-39 commercial, 40-49 industrial, 50-69 agricultural. The homeowner-rescue /
+            # residential-flip model can't price these (they run on $/SF, cap rate/NOI, zoning and
+            # environmental, not comp-$/sqft ARV), so the board gates them to manual underwriting instead
+            # of printing a fantasy residential profit. 00-09 = residential; 0400 condo is residential.
+            # Root cause of the 2165 NW 19 ST false STRONG: a use-48 warehouse with condo=vac=False had
+            # no type signal reaching the browser, so it ran straight through the residential math.
+            _uc2 = _uc[:2] if _uc[:2].isdigit() else ''
+            comm = (not condo) and (not vac) and _uc2 != '' and 10 <= int(_uc2) <= 69
             oname = _clean_owner(owner)
             opart = _owner_partial(owner)   # co-owner dropped / 30-char roll clip -> never treat as a full name
         try:
@@ -303,7 +312,7 @@ def to_slim(county, cfg, base, items):
             'county': county, 'tier': m['tier'], 'score': m['score'], 'auction': r.get('AuctionDate', ''), 'days': days,
             'case': r.get('Case #', ''), 'owners': owner or '(owner via title search)', 'oname': oname, 'rname': _rec_name(owner),
             'addr': addr, 'mail': mail, 'value': val, 'assessed_value': assv, 'judg': judg, 'eq': m['eq'], 'eqfake': m['eqfake'], 'hs': hs, 'condo': condo,
-            'vac': vac, 'co': bool(COMPANY_RE.search(owner or '')), 'opart': opart, 'vsrc': vsrc,
+            'vac': vac, 'comm': comm, 'co': bool(COMPANY_RE.search(owner or '')), 'opart': opart, 'vsrc': vsrc,
             # TAX DEED: the opening bid (certs + fees) and certificate number are the deal inputs —
             # map them so the TD branch of the deal model (winbid off obid) and the row's Certificate #
             # both work for BW/PB just like Miami-Dade. FC leads have neither and stay 0/''.
