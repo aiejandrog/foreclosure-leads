@@ -71,6 +71,19 @@ VOICEMAIL_ES = ("Hola {first}, le habla {sender} de Biscayne Solutions Group, po
                 "todo. Nuestro asesor principal, más de treinta años, le arma su respaldo gratis "
                 "en cinco minutos. Llámeme a cualquier hora al {phone}. Gracias.")
 
+# HOW TO LEAVE IT — the tonality cue rendered right under the voicemail (2026-09-14, Alejandro). A
+# voicemail lives or dies on delivery, not words: NEPQ leaves it low-status, unhurried and a little
+# detached so it reads as a note, not a pitch — that softness is what earns the callback. Rendered as
+# a muted coaching line above the script (like the NEPQ beat-purpose lines), NOT spoken aloud.
+VM_TONE_EN = ("HOW TO SAY IT — low and unhurried, like a neighbor leaving a note, not a salesman. "
+              "Pause on every '...'. Sound a little detached, almost unsure you've even got the right "
+              "person — that softness is what earns the callback. Warm, never urgent, and slow down "
+              "on the phone number so they can write it.")
+VM_TONE_ES = ("CÓMO DECIRLO — bajo y sin prisa, como un vecino que deja un recado, no un vendedor. Haga "
+              "pausa en cada '...'. Suene un poco desapegado, casi como si no estuviera seguro de tener "
+              "a la persona correcta — esa suavidad es la que gana la llamada de vuelta. Cálido, nunca "
+              "con urgencia, y despacio con el número de teléfono para que lo puedan anotar.")
+
 
 # ── THE SCRIPT ───────────────────────────────────────────────────────────────────────────────────
 # The Jesse System has NO canonical outbound phone opener — the playbook's opener is a DOOR opener
@@ -540,18 +553,66 @@ NOT_INTERESTED_CARD = {
 }
 
 
-def objection_cards():
-    """load_objections() + the hard-coded 'Not interested' card, appended once.
+# "Wrong number" + instant hang-up (2026-09-14, field report). DISTINCT from card 8 "The Wrong House
+# (Denial)": that one denies the FORECLOSURE and stays on the line to argue; this one denies the
+# NUMBER and hangs up in ~2 seconds, and half the time it is a dodge by the actual owner. So the whole
+# card is built for SPEED — a fast, apologetic, low-status catch delivered BEFORE the click, then one
+# ownership question that reopens WITHOUT tripping the never-say rule ("foreclosure" to a non-owner):
+# it says "county paperwork," never the word, and only after they engage as the owner. Honors a real
+# wrong number — reb2 lets them go warm; a genuine no is logged 'wrong' and never argued (that is
+# harassment and burns the number). Hard-coded for the same durability reason as NOT_INTERESTED_CARD.
+WRONG_NUMBER_CARD = {
+    'n': 16,
+    't': 'Wrong Number (+ Instant Hang-Up)',
+    'say': "You've got the wrong number.  [click]",
+    'reb': [
+        "Oh — my apologies, I may have dialed wrong. One quick second so I'm not bothering the wrong "
+        "person: I'm just trying to reach the owner of the property on my paperwork here... that's "
+        "not you, is it?",
+        "If it's honestly not you — no problem at all, I'll let you go, sorry to have bothered you. "
+        "But if it IS your place, this is worth thirty seconds: I've got county paperwork on it, and "
+        "the people who look at it early are the ones who keep their choices. Five free minutes with "
+        "an advisor who's done this thirty years — and if it turns out to be nothing, we part as "
+        "friends. Fair enough?",
+    ],
+    'one': "Sorry — I think I may have dialed wrong. I'm just trying to reach the owner of the "
+           "property on my paperwork... that's not you, is it?",
+    'es': {
+        'say': 'Tiene el número equivocado.  [cuelga]',
+        'reb': [
+            'Ay — disculpe, capaz marqué mal. Un segundito para no estar molestando a la persona '
+            'equivocada: nada más estoy tratando de localizar al dueño de la propiedad que tengo aquí '
+            'en mi papeleo... ¿ese no es usted, verdad?',
+            'Si de verdad no es usted — no hay ningún problema, lo dejo ir, disculpe la molestia. Pero '
+            'si SÍ es su propiedad, esto vale treinta segundos: tengo papeleo del condado sobre ella, y '
+            'las personas que lo revisan temprano son las que se quedan con opciones. Cinco minutos '
+            'gratis con un asesor que lleva treinta años en esto — y si resulta no ser nada, quedamos '
+            'como amigos. ¿Le parece justo?',
+        ],
+        'one': 'Disculpe — creo que marqué mal. Nada más busco al dueño de la propiedad que tengo en mi '
+               'papeleo... ¿ese no es usted, verdad?',
+    },
+}
 
-    Dedup by number AND title so a vault copy of the same card (this desktop still had one before the
-    2026-09-14 revert; a future one could reappear) never double-renders — the vault version wins if
-    present, the constant fills in when it is not. Either way exactly one 'Not interested' card ships.
+# Cards that must ship on EVERY build regardless of the vault. Appended by objection_cards() below.
+_HARDCODED_CARDS = [NOT_INTERESTED_CARD, WRONG_NUMBER_CARD]
+
+
+def objection_cards():
+    """load_objections() + the hard-coded cards (_HARDCODED_CARDS), each appended at most once.
+
+    Dedup by number AND title so a vault copy of the same card (this desktop had 'Not interested' in
+    the vault before the 2026-09-14 revert; a future one could reappear) never double-renders — the
+    vault version wins if present, the constant fills in when it is not. Exactly one of each ships.
     """
     cards = load_objections()
     nums = {c.get('n') for c in cards}
     titles = {(c.get('t') or '').strip().lower() for c in cards}
-    if 15 not in nums and NOT_INTERESTED_CARD['t'].lower() not in titles:
-        cards.append(NOT_INTERESTED_CARD)
+    for hc in _HARDCODED_CARDS:
+        if hc['n'] not in nums and hc['t'].strip().lower() not in titles:
+            cards.append(hc)
+            nums.add(hc['n'])
+            titles.add(hc['t'].strip().lower())
     return cards
 
 
@@ -1296,6 +1357,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'probe': {'en': PROBE_EN, 'es': PROBE_ES},
         'bridge': {'en': BRIDGE_EN, 'es': BRIDGE_ES},
         'busy': {'en': BUSY_EN, 'es': BUSY_ES},
+        'vmtone': {'en': VM_TONE_EN, 'es': VM_TONE_ES},   # delivery cue under the voicemail
         # load_objections() + the hard-coded 'Not interested' card, so a vault-less/stale-vault runner
         # can never drop it (see objection_cards / NOT_INTERESTED_CARD).
         'obj': objection_cards(),
@@ -4651,6 +4713,11 @@ function renderSheet(r){
      logs and advances. Read live, never a recording (prerecorded/ringless drops need prior express
      written consent under the TCPA). */
   b += '<div class="ltag">IF NO ANSWER &mdash; LEAVE THIS (read it live, no recording)</div>'
+     /* Delivery cue (NEPQ tonality) above the words — a voicemail lives on HOW it's said. Muted,
+        not spoken; tracks the EN/ES toggle. Homeowner lane only (balloon dict has no vmtone). */
+     + (SCRIPT.vmtone ? '<div class="mut" style="font-size:12px;margin:2px 0 7px">'
+                        + esc(lang()==='es' && SCRIPT.vmtone.es ? SCRIPT.vmtone.es : SCRIPT.vmtone.en)
+                        + '</div>' : '')
      /* the investor lane carries its own voicemail (SCRIPT.vm); the homeowner rescue message is
         the page-level VMEN/VMES and stays exactly what it was for every other row */
      + (SCRIPT.vm ? say(SCRIPT.vm.en, SCRIPT.vm.es, r) : say(VMEN, VMES, r));
