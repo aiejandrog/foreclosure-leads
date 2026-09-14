@@ -84,6 +84,37 @@ VM_TONE_ES = ("CÓMO DECIRLO — bajo y sin prisa, como un vecino que deja un re
               "a la persona correcta — esa suavidad es la que gana la llamada de vuelta. Cálido, nunca "
               "con urgencia, y despacio con el número de teléfono para que lo puedan anotar.")
 
+# TONALITY — how to say ALL of it (2026-09-14, from a live debrief: the words landed, the delivery
+# killed the call). Rendered as a COLLAPSED reference at the top of the sheet (one tap), so it trains
+# without pushing the opener down. These are the NEPQ delivery laws, in the order that fixes the most:
+# the #1 cause of "sounding robotic" is lifting your voice at the end of a question, and filler words
+# ("um/like/so") come from rushing to fill space you should be leaving as silence. EN only — coaching,
+# not spoken script; a Spanish caller reads these fine and they are universal.
+TONALITY = [
+    ('End questions going DOWN, not up',
+     'Drop your pitch on the last word — "...isn\'t it." not "...okay?" Up = needy salesman. Down = calm '
+     'authority. This one fix kills half of "sounding robotic."'),
+    ('The "..." means STOP',
+     'Pause a full second. It feels long to you, normal to them. Pauses REPLACE filler — you say '
+     '"um/like/so" because you\'re rushing to fill space. Leave it silent instead.'),
+    ('Curious — most of the call',
+     'Sound genuinely puzzled and interested, like you\'re working it out WITH them, not reading a form.'),
+    ('Concerned — on the pain',
+     'Problem and consequence beats: softer, slower, caring. A doctor delivering news, not a closer.'),
+    ('Never explain — ASK',
+     'The second you\'re TELLING them the interest concept, you\'ve lost. Drop ONE fact, hand it back '
+     'as a question, then STOP. THEY say the pain out loud, not you. (This is the beat you over-talked.)'),
+    ('One tie-down, then shut up',
+     '"That\'s fair, right?" — then SILENCE. Never stack "right?...right?...fair?" — that reads '
+     'desperate. Ask once, stop, let them answer first.'),
+    ('Cushion before you ever push',
+     'When they say "I\'ve got it handled" — AGREE first ("Good, keep working that — puts you ahead of '
+     'most people I talk to..."), then ONE question. Steamroll them and you earn the reflex "no."'),
+    ('Match their energy, then lower it',
+     'Start near their pace, then slow yours down. They follow you. If they\'re guarded, go slower, not '
+     'louder.'),
+]
+
 
 # ── THE SCRIPT ───────────────────────────────────────────────────────────────────────────────────
 # The Jesse System has NO canonical outbound phone opener — the playbook's opener is a DOOR opener
@@ -195,13 +226,15 @@ NEPQ_K = [
     ('PROBLEM AWARENESS',
      'Curious tone, slow down. When they say "no, nobody explained it" — let the silence sit.'),
     ('THE MONEY CONSEQUENCE',
-     'Drop the fact, hand it straight back as a question. THEY say the number is a moving target, not you.'),
+     'Drop the fact, hand it straight back as a question, then STOP. Do NOT explain it — the moment you '
+     'lecture the interest concept you sound robotic and they tune out. THEY say the number is a moving target.'),
     ('WHAT IT ALREADY COST',
      'Surfaces the plan they already have. CIOC rule: INSURE it, never fight it — you are the parachute.'),
     ('THE PERSONAL STAKES',
      'The beat Miner builds the whole call around. Assumed statement + tie-down. Do NOT fill the silence.'),
     ('THE COMMITMENT',
-     'Advisor ask + fairness close. The ONLY either/or allowed on the call: two ways to say yes — a time, never a whether.'),
+     'EARN IT FIRST — beats 1-5 must land and THEY must say the pain. Fire this into a cold "no" and it '
+     'dies. Advisor ask + fairness close. The ONLY either/or allowed: two ways to say yes — a time, never a whether.'),
 ]
 if len(NEPQ_K) != len(NEPQ_Q_EN):
     raise RuntimeError('call_mode: NEPQ_K has %d beat labels vs %d questions — zip() would silently '
@@ -1358,6 +1391,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'bridge': {'en': BRIDGE_EN, 'es': BRIDGE_ES},
         'busy': {'en': BUSY_EN, 'es': BUSY_ES},
         'vmtone': {'en': VM_TONE_EN, 'es': VM_TONE_ES},   # delivery cue under the voicemail
+        'tone': [{'k': k, 'v': v} for k, v in TONALITY],  # collapsed tonality reference at top of sheet
         # load_objections() + the hard-coded 'Not interested' card, so a vault-less/stale-vault runner
         # can never drop it (see objection_cards / NOT_INTERESTED_CARD).
         'obj': objection_cards(),
@@ -4661,7 +4695,19 @@ function renderSheet(r){
     + '<span class="mut">&hellip; tap for the full script</span>'
     + '<div class="mut" style="margin-top:4px">Close with: <b>That&rsquo;s fair, right?</b></div>';
 
-  var b = '<div class="ltag">THE OPENER '+langChips()+'</div>'
+  var b = '';
+  // TONALITY reference — collapsed by default (one tap), so it trains without pushing the opener down.
+  // Homeowner lane only (the balloon dict has no `tone`). Native <details>, no JS state needed.
+  if(SCRIPT.tone && SCRIPT.tone.length){
+    b += '<details style="margin:0 0 8px;border:1px solid #2a3f6b;border-radius:8px;background:#0f1c38;padding:6px 10px">'
+       + '<summary style="cursor:pointer;color:var(--gold);font-weight:700;font-size:12px;letter-spacing:.05em">TONALITY &mdash; how to say all of this (tap)</summary>';
+    SCRIPT.tone.forEach(function(t){
+      b += '<div style="margin:8px 0;font-size:13px;line-height:1.4"><b style="color:#e7c98a">'
+         + esc(t.k) + '</b><br><span class="mut">' + esc(t.v) + '</span></div>';
+    });
+    b += '</details>';
+  }
+  b += '<div class="ltag">THE OPENER '+langChips()+'</div>'
         + say(opEN, opES, r)
         + (named ? '' : '<div class="noes">No usable first name on this lead &mdash; ask for the owner rather than guessing at one.</div>');
 
