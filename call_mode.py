@@ -492,6 +492,69 @@ def load_objections(path=None):
     return _strip_cnam(out)
 
 
+# "Not interested" — the reflex brush-off, and the single most common early hang-up. HARD-CODED here
+# rather than parsed from the vault drill pack (2026-09-14) so it CANNOT be dropped by a build that
+# reads a vault-less or stale vault: load_objections rewrites call_objections.json from whatever the
+# local vault holds, so a runner whose vault lacks this card would silently strip it from the shipped
+# cache. As a constant it is on every machine's build, vault or not. Same card shape load_objections
+# emits (n, t, say, reb[], one, es{}), so renderSheet needs no change. No {tokens}: objection
+# rebuttals render through esc() with no fillScript, so a token would print literally. Guardrails
+# kept: "options" not outcomes, INTRODUCE the advisor, five-minute consult, not buying the house,
+# no either/or exit, ends warm. ES is usted. NEPQ voice (disarm the reflex, curious reopen).
+NOT_INTERESTED_CARD = {
+    'n': 15,
+    't': 'Not Interested (The Reflex Brush-Off)',
+    'say': "I'm not interested.",
+    'reb': [
+        "That's not a problem at all — honestly, I wasn't expecting you to be. Almost everybody I "
+        "reach about a place like yours says the exact same thing when I first call, so you're in "
+        "good company. I'm not here to sign you up for anything, and I'm not calling to buy the "
+        "house. Real quick though, just so I'm not the twelfth person wasting your afternoon — has "
+        "anybody actually sat down and shown you what happens to your balance every time that sale "
+        "date gets pushed... or is that still kind of a question mark for you?",
+        "Because that's the only reason I called — not to pitch you a loan. Our senior advisor, "
+        "30-plus years in mortgages and foreclosure workouts, just lays your real options out in "
+        "about five minutes, free, and you decide what to do with them. Worst case, you know more "
+        "than you did this morning, and we part friends. That's fair, right?",
+    ],
+    'one': "I'm not asking you to be interested — I'm asking if it's worth five free minutes to know "
+           "your options before that date hits.",
+    'es': {
+        'say': 'No estoy interesado.',
+        'reb': [
+            'No hay ningún problema — la verdad, ni esperaba que lo estuviera. Casi todas las personas '
+            'con las que hablo sobre una casa como la suya me dicen exactamente lo mismo cuando llamo la '
+            'primera vez, así que está en buena compañía. No le vengo a inscribir en nada, y no le llamo '
+            'para comprarle la casa. Rapidito, nada más para no ser la persona número doce que le quita '
+            'la tarde: ¿alguien ya se sentó con usted y le mostró qué le pasa a su saldo cada vez que '
+            'empujan esa fecha de la subasta... o eso todavía es una interrogante?',
+            'Porque esa es la única razón por la que llamé — no para venderle un préstamo. Nuestro asesor '
+            'principal, más de 30 años en hipotecas y en resolver casos de ejecución, le pone sus '
+            'opciones reales sobre la mesa en unos cinco minutos, gratis, y usted decide qué hacer con '
+            'ellas. En el peor de los casos, sabe más de lo que sabía esta mañana, y quedamos como '
+            'amigos. ¿Verdad que sí?',
+        ],
+        'one': 'No le pido que esté interesado — le pregunto si vale cinco minutos gratis conocer sus '
+               'opciones antes de que llegue esa fecha.',
+    },
+}
+
+
+def objection_cards():
+    """load_objections() + the hard-coded 'Not interested' card, appended once.
+
+    Dedup by number AND title so a vault copy of the same card (this desktop still had one before the
+    2026-09-14 revert; a future one could reappear) never double-renders — the vault version wins if
+    present, the constant fills in when it is not. Either way exactly one 'Not interested' card ships.
+    """
+    cards = load_objections()
+    nums = {c.get('n') for c in cards}
+    titles = {(c.get('t') or '').strip().lower() for c in cards}
+    if 15 not in nums and NOT_INTERESTED_CARD['t'].lower() not in titles:
+        cards.append(NOT_INTERESTED_CARD)
+    return cards
+
+
 def _digits(v):
     return re.sub(r'\D', '', str(v or ''))
 
@@ -1233,7 +1296,9 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'probe': {'en': PROBE_EN, 'es': PROBE_ES},
         'bridge': {'en': BRIDGE_EN, 'es': BRIDGE_ES},
         'busy': {'en': BUSY_EN, 'es': BUSY_ES},
-        'obj': load_objections(),
+        # load_objections() + the hard-coded 'Not interested' card, so a vault-less/stale-vault runner
+        # can never drop it (see objection_cards / NOT_INTERESTED_CARD).
+        'obj': objection_cards(),
         # BALLOON / REFI LANE — the investor script (vault: Refi Lane note, 2026-08-30). Read by
         # renderSheet for st:'BAL' rows only; same keys as the homeowner script so the page has ONE
         # renderer. `rec` copied from the main script: all-party consent applies to an investor too.
