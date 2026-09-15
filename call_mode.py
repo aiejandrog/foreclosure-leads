@@ -3766,7 +3766,7 @@ function fileLinks(r){
   }
   L.push(['Court docket', ct === 'PA' ? 'https://appsgp.mypalmbeachclerk.com/eCaseView/'
         : ct === 'BR' ? 'https://www.browardclerk.org/Web2/CaseSearchECA/'
-        : 'https://www2.miamidadeclerk.gov/ocs/']);   # /ocs/Search.aspx retired -> 404 (2026-09-15)
+        : 'https://www2.miamidadeclerk.gov/ocs/']);
   var nm = String(r.o || '').replace(/[,&]/g, ' ').replace(/\s+/g, ' ').trim();
   if(nm) L.push(['People search', 'https://www.truepeoplesearch.com/results?name='
         + encodeURIComponent(nm) + (r.z ? '&citystatezip=' + encodeURIComponent(r.z) : '')]);
