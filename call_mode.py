@@ -4920,8 +4920,10 @@ function say(en, es, r){
    sheet renders), never a second vocabulary. Additive GUIDED/FULL toggle; objection cards are detours
    with "continue where I was"; end states press the SAME .oc outcome button the card uses. Any throw
    falls back to the full sheet (logErr). Homeowner lane only (the balloon dict carries no `flow`). */
-var _g = {on:false, step:'greet', stack:[], ret:null, kase:null};
-try{ _g.on = localStorage.getItem('fcGuided')==='1'; }catch(e){}
+/* GUIDED is THE view (2026-09-15, Alejandro: "make it the main view"). Default ON; only an explicit
+   tap on "view full script" (stored '0') turns it off, and that sticks per device. */
+var _g = {on:true, step:'greet', stack:[], ret:null, kase:null};
+try{ if(localStorage.getItem('fcGuided')==='0') _g.on=false; }catch(e){}
 function _gSave(){ try{ localStorage.setItem('fcGuided', _g.on?'1':'0'); }catch(e){} }
 function secondName(r){
   /* (p1b) the co-owner on the card. r.o is "OWNER1; OWNER2"; the county roll may be "LAST,FIRST". */
@@ -5024,8 +5026,14 @@ function renderSheet(r){
   var opES = warm ? SCRIPT.op.wes : (named ? SCRIPT.op.es : SCRIPT.op.aes);
   // PEEK — the first thing out of his mouth, plus the close cue, always one glance away.
   var op = fillScript(opEN, r);
+  // The peek is the doorway. In GUIDED mode it says so in gold — the first line of the opener plus
+  // "tap to start" — so the guided call is impossible to miss (the toggle used to hide in the drawer).
+  var _guidedOn = !!(SCRIPT.flow && SCRIPT.flow.length && _g.on);
   $('peek').innerHTML = '<b>'+esc(op.split('.')[0])+'.</b> '
-    + '<span class="mut">&hellip; tap for the full script</span>'
+    + (_guidedOn
+        ? '<span class="mut">&hellip;</span> <b style="color:var(--gold)">&#9654; TAP TO START THE CALL</b>'
+          + '<span class="mut"> &middot; guided, one line at a time</span>'
+        : '<span class="mut">&hellip; tap for the full script</span>')
     + '<div class="mut" style="margin-top:4px">Close with: <b>That&rsquo;s fair, right?</b></div>';
 
   var b = '';
@@ -5033,9 +5041,17 @@ function renderSheet(r){
   // Reset to the opener whenever the LEAD changes — never mid-call.
   if(SCRIPT.flow && SCRIPT.flow.length){
     if(r && r.c!==_g.kase){ _g.kase=r.c; _g.step='greet'; _g.stack=[]; _g.ret=null; }
-    b += '<div class="cioc" style="grid-template-columns:1fr 1fr;margin:0 0 8px">'
-       + '<button data-gmode="1"'+(_g.on?' class="on"':'')+'>GUIDED &mdash; one line at a time</button>'
-       + '<button data-gmode="0"'+(!_g.on?' class="on"':'')+'>FULL SCRIPT</button></div>';
+    // GUIDED is the main view: a gold header + a small "view full script" escape hatch. In FULL mode
+    // the way back is one big gold button — the full sheet is the secondary view now, not a peer.
+    if(_g.on){
+      b += '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin:0 0 6px">'
+         + '<b style="color:var(--gold);font-size:13px;letter-spacing:.06em">&#9654; GUIDED CALL</b>'
+         + '<button data-gmode="0" style="min-height:36px;padding:0 12px;border-radius:999px;border:1px solid #2a3f6b;background:#0f1d3a;color:var(--mut);font-size:12px;font-weight:700;touch-action:manipulation">view full script</button>'
+         + '</div>';
+    } else {
+      b += '<div class="cioc" style="grid-template-columns:1fr;margin:0 0 8px">'
+         + '<button data-gmode="1" class="on">&#9664; BACK TO GUIDED CALL &mdash; one line at a time</button></div>';
+    }
     if(_g.on){
       try{
         b += renderGuided(r, SCRIPT, named, warm);
