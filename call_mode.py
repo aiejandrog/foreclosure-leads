@@ -509,7 +509,9 @@ def load_objections(path=None):
         card = {
             'n': int(num),
             't': title.strip(),
-            'say': say.group(1).strip().strip('"'),
+            # strip straight AND curly quotes: the vault authors “…”, and both renderers wrap the
+            # value in &ldquo;&rdquo; again, which printed a doubled ““quote”” on every card.
+            'say': say.group(1).strip().strip('"“”'),
             # the two paragraphs are CUSHION+ISOLATE then OVERCOME+CLOSE — keep the break
             'reb': [p.strip() for p in reb.group(1).strip().split('\n\n') if p.strip()],
             'one': (one.group(1).strip().strip('*') if one else ''),
@@ -647,6 +649,239 @@ def objection_cards():
             nums.add(hc['n'])
             titles.add(hc['t'].strip().lower())
     return cards
+
+
+# ── GUIDED CALL FLOW (2026-09-15, Alejandro) ─────────────────────────────────────────────────────
+# "Every line, one at a time: the line -> the tonality -> WAIT -> what they might say -> go that route,
+# all the way to the end." A second RENDERER over the SAME payload, never a second vocabulary: every
+# spoken line below is the existing constant (openers, the six NEPQ beats, frame, bridge, busy, f15,
+# voicemail, objection cards). The only NEW copy is the handful of short lines that the 09-14 drills
+# proved were missing (the "what do you do?" answer, the "you buying my house?" defuse, "send me
+# something", "let me think", the booking read-back, the gatekeeper, a tougher consequence rail) —
+# all additive, all inside the copy law. Rendered by renderGuided() as an additive GUIDED/FULL toggle;
+# the FULL sheet is untouched and the balloon lane (no `flow`) never sees it.
+#
+# Why this shape fixes the leaks the drills exposed: LISTEN is a rendered step, so the pause is the
+# move instead of a gap to fill with "um / real quick"; the branches are pre-loaded so he is never
+# scrambling for words; every line carries its tone; and the advisor ask is UNREACHABLE except through
+# beats 1-5 — the flow itself will not let him run to the close.
+#
+# No {tokens} in the new lines except {phone}/{st1}, which fillScript resolves. Verbal fill-ins are
+# [square brackets] (rendered literally as coaching cues — fillScript only touches {curly}).
+INTRO_30_EN = ("Fair question. Honestly, all I do is — I get a copy of the court file on a place, and before "
+               "that date hits I help the owner see what options they've actually got. That's it. Most "
+               "people don't know they have any... does that make sense?")
+INTRO_30_ES = ("Buena pregunta. La verdad, lo único que hago es esto: consigo una copia del expediente de la "
+               "corte sobre una propiedad, y antes de que llegue esa fecha ayudo al dueño a ver qué opciones "
+               "tiene de verdad. Eso es todo. La mayoría no sabe que tiene alguna... ¿tiene sentido?")
+DEFUSE_BUY_EN = "No — I'm not buying anything, I promise. That's not what this is."
+DEFUSE_BUY_ES = "No — no le vengo a comprar nada, se lo prometo. Esto no es eso."
+CONSEQ_EN = [
+    "Do you want to have to go through all that... if you... if you didn't have to?",
+    "Can you afford to take that risk?",
+    "Why look at fixing this now? Why not just push it down the road like a lot of people do... who end "
+    "up losing the house they could've kept?",
+]
+CONSEQ_ES = [
+    "¿Usted quiere tener que pasar por todo eso... si... si no tuviera que hacerlo?",
+    "¿Se puede dar el lujo de correr ese riesgo?",
+    "¿Por qué ver cómo resolver esto ahora? ¿Por qué no dejarlo para después como hace mucha gente... que "
+    "termina perdiendo la casa que pudo haber conservado?",
+]
+SENDINFO_EN = ("Yeah, I can do that for sure... now, just so I send you the right thing and not a stack of "
+               "junk — what specifically would you want it to show you?")
+SENDINFO_ES = ("Claro, con gusto... ahora, para mandarle lo correcto y no un montón de papeles: ¿qué "
+               "específicamente quisiera que le mostrara?")
+THINK_EN = ("That's fair — most people want to. Just so I make sure I actually answered it... what "
+            "specifically do you want to think over?")
+THINK_ES = ("Es justo — la mayoría quiere pensarlo. Nada más para asegurarme de haberle respondido bien... "
+            "¿qué específicamente quiere pensar?")
+BOOK_EN = ("Perfect — I've got you down for [the time they picked]. Do me one favor before we hang up: "
+           "save my number right now... it's {phone}. ... Now read it back to me, so I know you've got it "
+           "right.")
+BOOK_ES = ("Perfecto — lo tengo anotado para [la hora que escogió]. Hágame un favor antes de colgar: "
+           "guarde mi número ahora mismo... es el {phone}. ... Ahora léamelo de vuelta, para saber que lo "
+           "tiene bien.")
+# Gatekeeper / not the owner: "the property on {st1}", never the word foreclosure (NEVER_SAY).
+GATE_EN = ("No problem at all — when's usually a good time to catch them? ... Or if it's easier, could I "
+           "leave my number with you? It's {phone}, and it's about the property on {st1}.")
+GATE_ES = ("No hay problema — ¿a qué hora suele estar? ... O si es más fácil, ¿le puedo dejar mi número? "
+           "Es el {phone}, y es sobre la propiedad en {st1}.")
+
+
+def _beat(i):
+    """The i-th NEPQ beat (label, purpose, EN, ES) — the SAME strings the full sheet renders."""
+    k, w = NEPQ_K[i]
+    return k, w, NEPQ_Q_EN[i], NEPQ_Q_ES[i]
+
+
+def _flow():
+    """The guided call as a list of steps. Each: id, k (label), en/es (the line) OR rail (a list of
+    short lines), tone, listen, br (branches: [what they said, target]), ret (where a detour to an
+    objection card returns to). Targets: a step id · 'obj:N' (objection card) · 'end:<outcome k>'."""
+    q1, q2, q3, q4, q5, q6 = (_beat(i) for i in range(6))
+    return [
+        {'id': 'greet', 'k': 'THE OPENER',
+         'en': 'Hi, is this {first}?', 'es': 'Hola, ¿hablo con {first}?',
+         'aen': 'Hi, am I speaking with the owner of {st1}?', 'aes': 'Hola, ¿hablo con el dueño de {st1}?',
+         'tone': 'Warm and casual, voice DOWN on the name — like you half-know them. Then STOP.',
+         'listen': 'Wait. Let them answer. Do not fill the gap.',
+         'br': [['Yes / that\'s me', 'disarm'], ['Who\'s this? / who\'s asking?', 'disarm'],
+                ['Wrong number', 'obj:16'], ['Not here / can I take a message?', 'gate'],
+                ['Straight to voicemail', 'vm'], ['Hung up on me', 'end:notint']],
+         'ret': 'disarm'},
+        {'id': 'disarm', 'k': 'THE DISARM',
+         'en': _OPEN_BODY_EN, 'es': _OPEN_BODY_ES,
+         'tone': 'Confused, low-status, slow. Say your FIRST name... pause... then full name + company, '
+                 'like they should already know you. Slow on the two NOTS. Then STOP.',
+         'listen': 'They will test you here. Whatever they say, do not get defensive.',
+         'br': [['Okay / sure / what?', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
+                ['You buying my house?', 'defusebuy'], ['Not interested', 'obj:15'],
+                ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
+                ['Don\'t call me again', 'end:dnc']],
+         'ret': 'frame'},
+        {'id': 'intro30', 'k': 'WHAT DO YOU DO? — one humble line',
+         'en': INTRO_30_EN, 'es': INTRO_30_ES,
+         'tone': 'Humble, one breath, zero pitch. Answer it and hand it back.',
+         'listen': 'A skeptic asked. Answer, then stop.',
+         'br': [['Okay, go ahead', 'frame'], ['Not interested', 'obj:15'], ['I\'m good, it\'s handled', 'obj:1']],
+         'ret': 'frame'},
+        {'id': 'defusebuy', 'k': 'KILL THE BUYING FEAR',
+         'en': DEFUSE_BUY_EN, 'es': DEFUSE_BUY_ES,
+         'tone': 'Flat and fast, then a beat. Kill the fear — never argue it.',
+         'listen': 'Let it land.',
+         'br': [['Okay... so what is it?', 'frame'], ['Still not interested', 'obj:15']],
+         'ret': 'frame'},
+        {'id': 'frame', 'k': 'THE FRAME — set it before any question',
+         'en': STATUS_FRAME_EN, 'es': STATUS_FRAME_ES,
+         'tone': 'Neutral, expert, unhurried. You are setting the table, not pitching.',
+         'listen': 'Their "yeah, that\'d help" is the first micro-yes.',
+         'br': [['Sure / that\'d help', 'q1'], ['What kind of options? (do NOT present — ask)', 'q1'],
+                ['I\'ve got it handled', 'obj:1'], ['Not interested', 'obj:15']],
+         'ret': 'q1'},
+        {'id': 'q1', 'k': '1 · ' + q1[0], 'en': q1[2], 'es': q1[3],
+         'tone': 'Curious. Open question. ' + q1[1],
+         'listen': 'Their answer picks the program. Do not fill the silence.',
+         'br': [['Keep the house', 'q2'], ['Sell / get out / start fresh', 'q2'], ['I don\'t know', 'probe'],
+                ['It\'s handled / bank / mod', 'obj:1'], ['My lawyer\'s on it', 'obj:2']],
+         'ret': 'q2'},
+        {'id': 'probe', 'k': 'THEY WENT VAGUE — echo it back',
+         'rail': {'en': PROBE_EN, 'es': PROBE_ES},
+         'tone': 'Mirror their last words as a question. Get specific. One at a time.',
+         'listen': 'Pick ONE. Then wait.',
+         'br': [['They opened up', 'q2'], ['Still won\'t engage', 'f15']],
+         'ret': 'q2'},
+        {'id': 'q2', 'k': '2 · ' + q2[0], 'en': q2[2], 'es': q2[3],
+         'tone': 'Curious, slow. When they say "no, nobody explained it" — LET THE SILENCE SIT. Do NOT explain.',
+         'listen': 'Wait for the "no". It is your opening — do not fill it.',
+         'br': [['No, nobody explained it', 'q3'], ['Yeah, they told me (ask: what\'d they tell you?)', 'q3'],
+                ['It\'ll just get pushed again', 'obj:3']],
+         'ret': 'q3'},
+        {'id': 'q3', 'k': '3 · ' + q3[0], 'en': q3[2], 'es': q3[3],
+         'tone': 'Concerned — a doctor, not a closer. Drop the fact, hand it back, STOP. You are not allowed to lecture here.',
+         'listen': 'THEY say the number is a moving target. Not you.',
+         'br': [['Moving target / no idea', 'q4'], ['I know the number', 'q4'],
+                ['I\'m fine, don\'t worry about it', 'obj:13']],
+         'ret': 'q4'},
+        {'id': 'q4', 'k': '4 · ' + q4[0], 'en': q4[2], 'es': q4[3],
+         'tone': 'Curious. Whatever plan they name — INSURE it, never fight it. You are the parachute.',
+         'listen': 'This surfaces the plan they already have. Cushion it before anything else.',
+         'br': [['Bank mod', 'obj:1'], ['Lawyer', 'obj:2'], ['Money\'s coming (check / family)', 'obj:4'],
+                ['Bankruptcy', 'obj:6'], ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
+         'ret': 'q5'},
+        {'id': 'q5', 'k': '5 · ' + q5[0], 'en': q5[2], 'es': q5[3],
+         'tone': 'Concerned, low, slow. Assumed statement + ONE tie-down, voice DOWN. Then SILENCE — do not rescue it.',
+         'listen': 'They must say the pain out loud. If they do, you have EARNED the close.',
+         'br': [['They said the pain (kids / wreck me / no plan B)', 'bridge'],
+                ['"I\'m fine, it\'ll work out" (flat)', 'conseq'], ['Too late, nothing I can do', 'obj:9']],
+         'ret': 'bridge'},
+        {'id': 'conseq', 'k': 'STILL FLAT — push, with care',
+         'rail': {'en': CONSEQ_EN, 'es': CONSEQ_ES},
+         'tone': 'Challenging but caring — lean in. Pick ONE, voice down, then silence.',
+         'listen': 'You want them to defend why they need to act. Let them.',
+         'br': [['They felt it', 'bridge'], ['Still flat / not moving', 'f15']],
+         'ret': 'bridge'},
+        {'id': 'bridge', 'k': 'THE BRIDGE — their words back to them',
+         'en': BRIDGE_EN, 'es': BRIDGE_ES,
+         'tone': 'Calm, voice DOWN. Repeat what THEY want and what THEY feel. Then straight into the ask.',
+         'listen': 'No pause needed — flow into the commitment.',
+         'br': [['Continue to the ask →', 'q6']],
+         'ret': 'q6'},
+        {'id': 'q6', 'k': '6 · ' + q6[0], 'en': q6[2], 'es': q6[3],
+         'tone': 'EARNED IT? Then: calm, voice DOWN on "right". ONE tie-down, then the time. A when — never a whether. No promises.',
+         'listen': 'Two ways to say yes. Wait for the time.',
+         'br': [['Later today', 'book'], ['Tomorrow morning', 'book'], ['Just send me something', 'sendinfo'],
+                ['Let me think about it', 'think'], ['I\'m busy right now', 'busy'], ['No thanks, I\'m good', 'f15']],
+         'ret': 'q6'},
+        {'id': 'sendinfo', 'k': '"JUST SEND ME SOMETHING"',
+         'en': SENDINFO_EN, 'es': SENDINFO_ES,
+         'tone': 'Agreeable, then ONE question. Whatever they say next is their real concern.',
+         'listen': 'Never send blind — that is how you never hear back.',
+         'br': [['They told me what they want to see → back to the questions', 'q1'],
+                ['They named a concern → handle it, re-ask', 'q6'], ['Fine, just send it', 'end:talked']],
+         'ret': 'q6'},
+        {'id': 'think', 'k': '"LET ME THINK ABOUT IT"',
+         'en': THINK_EN, 'es': THINK_ES,
+         'tone': 'Unbothered, curious. Isolate the real concern — do not re-pitch.',
+         'listen': 'They will name the thing. Then answer THAT and re-ask.',
+         'br': [['They named the concern → answer it, re-ask', 'q6'], ['Still stalling', 'f15']],
+         'ret': 'q6'},
+        {'id': 'busy', 'k': '"I\'M BUSY / CALL ME BACK" — flip it',
+         'en': BUSY_EN, 'es': BUSY_ES,
+         'tone': 'Unbothered. YOUR time is the scarce one. Get a timeframe or a calendar slot — never "sure, whenever".',
+         'listen': 'Wait for a time. If they give one, lock it.',
+         'br': [['Gave me a time', 'end:callback'], ['Booked a slot', 'end:callback'], ['Brushed me off', 'end:notint']],
+         'ret': 'q6'},
+        {'id': 'f15', 'k': 'THE 15-SECOND OUT',
+         'en': FIFTEEN_SEC, 'es': FIFTEEN_SEC,
+         'tone': 'Totally relaxed. You are leaving, not chasing. One line, voice down, then let go.',
+         'listen': 'Takeaway. Sometimes the door opens on the way out.',
+         'br': [['Okay, fine — five minutes', 'book'], ['No', 'end:notint'], ['Stop calling me', 'end:dnc']],
+         'ret': 'f15'},
+        {'id': 'book', 'k': 'BOOK IT — read-back test',
+         'en': BOOK_EN, 'es': BOOK_ES,
+         'tone': 'Slow on the number. A clean read-back means it is real. "Pen ran out of ink" = do not count it. '
+                 'Advisor consult: he reads the MARS block first.',
+         'listen': 'Listen for the read-back.',
+         'br': [['Read it back clean ✓', 'end:appt'], ['Fumbled it / "pen ran out" (log it, count it soft)', 'end:appt'],
+                ['Backed out', 'f15']],
+         'ret': 'book'},
+        {'id': 'gate', 'k': 'NOT THE OWNER — gatekeeper',
+         'en': GATE_EN, 'es': GATE_ES,
+         'tone': 'Easy, friendly. Never say "foreclosure" to anyone but the owner — "the property" only.',
+         'listen': 'Get a time or leave the number. Nothing else.',
+         'br': [['Got a callback time', 'end:callback'], ['Left my number', 'end:gate'], ['Hung up', 'end:gate']],
+         'ret': 'gate'},
+        {'id': 'vm', 'k': 'VOICEMAIL — read it live',
+         'en': VOICEMAIL_EN, 'es': VOICEMAIL_ES,
+         'tone': VM_TONE_EN,
+         'listen': 'Hang up after "Thanks." Do not ramble.',
+         'br': [['Left it', 'end:voicemail']],
+         'ret': 'vm'},
+    ]
+
+
+FLOW = _flow()
+
+# FAIL LOUD AT IMPORT, like the NEPQ zip guards: a branch that points at a step that does not exist,
+# an unknown outcome, or a non-numeric objection card would ship as a dead button on a live call.
+_FLOW_IDS = {s['id'] for s in FLOW}
+_OUT_KEYS = {k for k, _t, _h, _s in CALL_OUTCOMES}
+for _s in FLOW:
+    if len(_FLOW_IDS) != len(FLOW):
+        raise RuntimeError('call_mode: duplicate step id in FLOW')
+    if not (('en' in _s and 'es' in _s) or 'rail' in _s):
+        raise RuntimeError('call_mode: FLOW step %r has no en/es line and no rail' % _s['id'])
+    for _lbl, _tgt in _s['br']:
+        if _tgt.startswith('obj:'):
+            int(_tgt[4:])                      # ValueError = fail loud
+        elif _tgt.startswith('end:'):
+            if _tgt[4:] not in _OUT_KEYS:
+                raise RuntimeError('call_mode: FLOW step %r branches to unknown outcome %r' % (_s['id'], _tgt))
+        elif _tgt not in _FLOW_IDS:
+            raise RuntimeError('call_mode: FLOW step %r branches to missing step %r' % (_s['id'], _tgt))
+    if _s.get('ret') and _s['ret'] not in _FLOW_IDS:
+        raise RuntimeError('call_mode: FLOW step %r returns to missing step %r' % (_s['id'], _s['ret']))
 
 
 def _digits(v):
@@ -1392,6 +1627,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'busy': {'en': BUSY_EN, 'es': BUSY_ES},
         'vmtone': {'en': VM_TONE_EN, 'es': VM_TONE_ES},   # delivery cue under the voicemail
         'tone': [{'k': k, 'v': v} for k, v in TONALITY],  # collapsed tonality reference at top of sheet
+        'flow': FLOW,                                      # guided call flow (renderGuided) — homeowner only
         # load_objections() + the hard-coded 'Not interested' card, so a vault-less/stale-vault runner
         # can never drop it (see objection_cards / NOT_INTERESTED_CARD).
         'obj': objection_cards(),
@@ -4678,6 +4914,103 @@ function say(en, es, r){
        + (lang()==='es' && !es ? '<div class="noes">No Spanish version of this line yet.</div>' : '');
 }
 
+/* ══════════════ GUIDED CALL FLOW (2026-09-15) ══════════════
+   One line at a time: the line -> TONE -> LISTEN -> tap what they said -> it routes you, opener to
+   booked. A second renderer over the SAME payload (SCRIPT.flow references the constants the full
+   sheet renders), never a second vocabulary. Additive GUIDED/FULL toggle; objection cards are detours
+   with "continue where I was"; end states press the SAME .oc outcome button the card uses. Any throw
+   falls back to the full sheet (logErr). Homeowner lane only (the balloon dict carries no `flow`). */
+var _g = {on:false, step:'greet', stack:[], ret:null, kase:null};
+try{ _g.on = localStorage.getItem('fcGuided')==='1'; }catch(e){}
+function _gSave(){ try{ localStorage.setItem('fcGuided', _g.on?'1':'0'); }catch(e){} }
+function secondName(r){
+  /* (p1b) the co-owner on the card. r.o is "OWNER1; OWNER2"; the county roll may be "LAST,FIRST". */
+  try{
+    var parts=String((r&&r.o)||'').split(';'); if(parts.length<2) return '';
+    var s=parts[1]; if(s.indexOf(',')>=0) s=s.split(',').slice(1).join(' ');
+    var tok=s.replace(/[^A-Za-z '-]/g,' ').trim().split(/\s+/)[0]||'';
+    if(tok.length<2 || _NOTNAME.indexOf(tok.toUpperCase())>=0) return '';
+    return tok.charAt(0).toUpperCase()+tok.slice(1).toLowerCase();
+  }catch(e){ return ''; }
+}
+function _gStep(S,id){ for(var k=0;k<S.flow.length;k++){ if(S.flow[k].id===id) return S.flow[k]; } return null; }
+function _gObj(S,n){ for(var k=0;k<S.obj.length;k++){ if(S.obj[k].n===n) return S.obj[k]; } return null; }
+function _gBtn(label,to){ return '<button data-gto="'+esc(to)+'">'+esc(label)+'</button>'; }
+function _gTone(t){ return t ? '<div class="mut" style="font-size:12px;margin-top:6px"><b style="color:#e7c98a">TONE</b> &middot; '+esc(t)+'</div>' : ''; }
+function _gListen(t){
+  return '<div style="margin:10px 0 4px;padding:8px 10px;border:1px dashed var(--gold);border-radius:8px;color:var(--gold);font-weight:800;font-size:12px;letter-spacing:.06em">&#9679; LISTEN'
+       + (t ? ' &mdash; <span style="font-weight:400;letter-spacing:0;color:#e7c98a">'+esc(t)+'</span>' : '') + '</div>';
+}
+function renderGuided(r, S, named, warm){
+  var b='', st=_g.step, es=(lang()==='es');
+  b+='<div class="ltag">GUIDED '+langChips()+' <span class="mut" style="font-weight:400;letter-spacing:0">&middot; step '+(_g.stack.length+1)+'</span></div>';
+  /* ---- objection detour */
+  if(st.indexOf('obj:')===0){
+    var n=+st.slice(4), o=_gObj(S,n), oe=(es&&o&&o.es)?o.es:o;
+    b+='<div class="ltag">THEY PUSHED BACK &mdash; '+(o?esc(o.t):'card '+n)+'</div>';
+    if(!o){ b+='<div class="noes">This objection card is not in this build. Cushion, isolate, ONE reframe, then continue.</div>'; }
+    else{
+      b+='<div class="mut" style="font-size:12px;margin-top:6px">They say: &ldquo;'+esc(oe.say)+'&rdquo;</div>';
+      b+=_gTone('Cushion FIRST — agree, normalize ("most people I talk to say the same"). Then ONE reframe. Never argue. Voice down.');
+      oe.reb.forEach(function(p){ b+='<div class="say'+(es&&o.es?' es':'')+'">'+esc(p)+'</div>'; });
+      if(oe.one) b+='<div class="ltag">IF YOU ONLY GET ONE SENTENCE</div><div class="say'+(es&&o.es?' es':'')+'">'+esc(oe.one)+'</div>';
+    }
+    b+=_gListen('Let it land. Do not stack a second reframe.');
+    b+='<div class="ltag">THEN</div><div class="objs">'+_gBtn('↩ Continue where I was','ret')+_gBtn('Still pushing back → 15-second out','f15')+_gBtn('Stop calling me','end:dnc')+'</div>';
+    b+='<div class="objs" style="margin-top:4px">'+_gBtn('◀ Back','back')+'</div>';
+    return b;
+  }
+  /* ---- end state: log it with the SAME button the card uses */
+  if(st.indexOf('end:')===0){
+    var k=st.slice(4), oc=null; for(var j=0;j<OUTCOMES.length;j++){ if(OUTCOMES[j].k===k) oc=OUTCOMES[j]; }
+    b+='<div class="ltag">CALL OVER &mdash; LOG IT</div><div class="say">'+esc(oc?oc.t:k)+'</div>';
+    b+='<div class="mut" style="font-size:12px;margin:6px 0">One tap logs it (the same as the outcome button on the card) and moves you to the next lead.</div>';
+    b+='<div class="objs">'+_gBtn('✓ Log: '+(oc?oc.t:k),'log:'+k)+_gBtn('◀ Back','back')+'</div>';
+    return b;
+  }
+  var s=_gStep(S,st); if(!s){ _g.step='greet'; s=_gStep(S,'greet'); }
+  if(!s) throw new Error('guided: flow has no greet step');
+  var en=s.en, esl=s.es, br=s.br, tone=s.tone, listen=s.listen;
+  if(s.id==='greet'){
+    if(warm){ en=S.op.wen; esl=S.op.wes; tone='Energy UP on the name — you KNOW this person. Then hand it to them and wait.';
+              br=[['Glad to hear from me','frame'],['Not a good time','busy'],['Voicemail','vm']]; }
+    else if(!named){ en=s.aen||en; esl=s.aes||esl; }
+  }
+  b+='<div class="ltag">'+esc(s.k||s.id)+'</div>';
+  if(s.id==='greet' && named && !warm){ var sn=secondName(r); if(sn) b+='<div class="noes">Co-owner on the card: <b>'+esc(sn)+'</b> &mdash; if that is who picked up, use their name.</div>'; }
+  if(s.rail){
+    var rl=(es&&s.rail.es)?s.rail.es:s.rail.en;
+    rl.forEach(function(p){ b+='<div class="say'+(es&&s.rail.es?' es':'')+'">'+esc(fillScript(p,r))+'</div>'; });
+  } else { b+=say(en, esl, r); }
+  b+=_gTone(tone)+_gListen(listen);
+  b+='<div class="ltag">THEY SAID&hellip; tap it</div><div class="objs">';
+  br.forEach(function(x){ b+=_gBtn(x[0],x[1]); });
+  b+='</div><div class="objs" style="margin-top:4px">'+(_g.stack.length?_gBtn('◀ Back','back'):'')+_gBtn('↻ Restart','restart')+'</div>';
+  return b;
+}
+function _gGo(to){
+  var S=(cur && cur.st==='BAL' && SCRIPT_ALL.bal)?SCRIPT_ALL.bal:SCRIPT_ALL;
+  if(to==='back'){ _g.step=_g.stack.pop()||'greet'; }
+  else if(to==='restart'){ _g.step='greet'; _g.stack=[]; _g.ret=null; }
+  else if(to==='ret'){ _g.stack.push(_g.step); _g.step=_g.ret||'greet'; _g.ret=null; }
+  else if(to.indexOf('log:')===0){
+    var k=to.slice(4), btn=document.querySelector('.oc button[data-oc="'+k+'"]');
+    if(btn){ btn.click(); } else { toast('Tap the phone number to start the call first — outcomes log from the call screen.'); }
+    return;
+  } else {
+    var here=_gStep(S,_g.step);
+    _g.stack.push(_g.step);
+    if(to.indexOf('obj:')===0) _g.ret=(here&&here.ret)||_g.step;
+    _g.step=to;
+  }
+  renderSheet(cur);
+}
+function _gWire(){
+  Array.prototype.forEach.call($('sbody').querySelectorAll('[data-gto]'), function(el){ el.onclick=function(){ _gGo(el.dataset.gto); }; });
+  Array.prototype.forEach.call($('sbody').querySelectorAll('[data-gmode]'), function(el){ el.onclick=function(){ _g.on=(el.dataset.gmode==='1'); _gSave(); renderSheet(cur); }; });
+  wireLang($('sbody'));
+}
+
 function renderSheet(r){
   /* BALLOON rows read the investor script (SCRIPT_ALL.bal, from the vault Refi Lane note). Shadowing
      the global with a local of the same name keeps every SCRIPT.* line below untouched — one switch,
@@ -4696,6 +5029,25 @@ function renderSheet(r){
     + '<div class="mut" style="margin-top:4px">Close with: <b>That&rsquo;s fair, right?</b></div>';
 
   var b = '';
+  // GUIDED / FULL toggle + the guided renderer. Homeowner lane only (the balloon dict has no `flow`).
+  // Reset to the opener whenever the LEAD changes — never mid-call.
+  if(SCRIPT.flow && SCRIPT.flow.length){
+    if(r && r.c!==_g.kase){ _g.kase=r.c; _g.step='greet'; _g.stack=[]; _g.ret=null; }
+    b += '<div class="cioc" style="grid-template-columns:1fr 1fr;margin:0 0 8px">'
+       + '<button data-gmode="1"'+(_g.on?' class="on"':'')+'>GUIDED &mdash; one line at a time</button>'
+       + '<button data-gmode="0"'+(!_g.on?' class="on"':'')+'>FULL SCRIPT</button></div>';
+    if(_g.on){
+      try{
+        b += renderGuided(r, SCRIPT, named, warm);
+        $('sbody').innerHTML = b;
+        _gWire();
+        return;
+      }catch(e){
+        logErr(e,'guided');
+        b += '<div class="noes">Guided mode hit an error and fell back to the full script (see the error chip).</div>';
+      }
+    }
+  }
   // TONALITY reference — collapsed by default (one tap), so it trains without pushing the opener down.
   // Homeowner lane only (the balloon dict has no `tone`). Native <details>, no JS state needed.
   if(SCRIPT.tone && SCRIPT.tone.length){
@@ -4816,6 +5168,10 @@ function renderSheet(r){
   });
   Array.prototype.forEach.call($('sbody').querySelectorAll('[data-obj]'), function(el){
     el.onclick=function(){ objIdx = (objIdx===+el.dataset.obj) ? -1 : +el.dataset.obj; renderSheet(cur); };
+  });
+  // GUIDED / FULL toggle is rendered in the full sheet too — wire it here as well.
+  Array.prototype.forEach.call($('sbody').querySelectorAll('[data-gmode]'), function(el){
+    el.onclick=function(){ _g.on=(el.dataset.gmode==='1'); _gSave(); renderSheet(cur); };
   });
   wireLang($('sbody'));
 }

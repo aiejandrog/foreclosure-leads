@@ -2,7 +2,7 @@
  {
   "n": 1,
   "t": "The Bank Mod Shield",
-  "say": "“The bank is already working with me on a modification. I don't want to mess that up by talking to anyone else.”",
+  "say": "The bank is already working with me on a modification. I don't want to mess that up by talking to anyone else.",
   "reb": [
    "Good — you should absolutely keep working that modification, and nothing we do touches it. Let me ask you one thing: if talking to me couldn't interfere with the mod at all, is there any other reason not to spend five minutes?",
    "Here's what most people don't know: in Florida the mod review and the foreclosure case run on separate tracks. The court date keeps moving while the bank 'reviews,' and denial letters routinely land two or three weeks before the sale — with no time left to react. It's like driving with a spare in the trunk: you don't need it until the tire blows on the highway. What if that denial comes 20 days out — what's your move that day? The consult is free, no fees ever, no commitment. If the mod comes through, we shake hands and part friends."
@@ -20,7 +20,7 @@
  {
   "n": 2,
   "t": "The Lawyer Shield",
-  "say": "“My attorney is handling it. Talk to him, not me.”",
+  "say": "My attorney is handling it. Talk to him, not me.",
   "reb": [
    "Keep your attorney — seriously, we work WITH counsel, never around them, and having defense in place puts you ahead of most people I talk to. One question though: your lawyer is defending the case. Has anyone sat down with you and shown what happens to your equity when the defense runs out?",
    "Defense buys time; it doesn't decide what you do with the time. Meanwhile the bank's fees and daily interest run against your equity every month the case drags. Your attorney is playing defense — but nobody's playing offense on your money. What if the judge rules against you at the next hearing and you've got weeks, not months — is there a plan for that day, or just the appeal? Five free minutes with a senior advisor, 30-plus years, coordinated with your lawyer, no fees ever. If your counsel says we're not needed, we shake hands and part friends."
@@ -38,7 +38,7 @@
  {
   "n": 3,
   "t": "The Postponement Gambler",
-  "say": "“That sale date doesn't mean anything. It's been cancelled twice already. It always gets pushed.”",
+  "say": "That sale date doesn't mean anything. It's been cancelled twice already. It always gets pushed.",
   "reb": [
    "You're right that sales get reset — you've lived it twice, so I'm not going to tell you deadlines never move. But let me ask: do you know WHY those two got pushed? Because each cancellation had a reason — a review, a motion — and those reasons run out.",
    "And here's the part nobody mentions: every push was billed to you. Post-judgment interest runs daily — call it $70-plus a day on a $300k judgment — plus new attorney fees each reset, all coming out of your equity. When one finally holds, the certificate of title can issue about ten days after the auction, and every option collapses to zero. It's the hurricane that turned away twice — the third one doesn't care about your track record. What if this is the date that sticks and you've got ten days? Having the plan ready costs you nothing — free, no fees, no commitment. If it pushes again, we've lost nothing and we part friends."
@@ -56,7 +56,7 @@
  {
   "n": 4,
   "t": "The Incoming Check",
-  "say": "“I'm waiting on my tax refund and a settlement check. Once that comes in, I'll catch everything up.”",
+  "say": "I'm waiting on my tax refund and a settlement check. Once that comes in, I'll catch everything up.",
   "reb": [
    "Money on the way is a real asset — I'm not dismissing it. Let me isolate one thing: if that check clears before the sale date, you're fine. So the only question is what happens if it doesn't. Fair?",
    "Here's the problem: your check runs on the IRS's clock or an insurance adjuster's clock — no deadline, slips for months, can get offset. The foreclosure runs on a court clock with a judge attached. You're racing a train to the crossing, and only one of you has a schedule. And remember, the payoff grows daily while you wait, so the check has to beat the clock AND cover a bigger number. What if it lands two weeks after the sale? At that point the money arrives and the house is already gone — after the sale it can't buy it back. Let's map the backup for free, no fees ever. If the check wins the race, use it and we part friends."
@@ -74,7 +74,7 @@
  {
   "n": 5,
   "t": "The Family Money",
-  "say": "“My brother is lending me the money. We're handling it inside the family.”",
+  "say": "My brother is lending me the money. We're handling it inside the family.",
   "reb": [
    "That's the best kind of help — family money with no strings. One question: is the only thing standing between you and fixing this the money arriving, or has anyone actually pulled the exact reinstatement figure from the bank yet?",
    "Here's the trap: that number isn't your missed payments. It's payments plus late fees plus the bank's attorney fees plus daily interest — on a $300k judgment that's roughly $70 to $80 a day — and the quote itself takes the bank 5 to 10 business days to issue and then expires. It's like a flight: being at the airport doesn't matter if the doors close before you're in the seat. What if the real number comes back $10k higher than your brother planned for, two weeks before the sale? Let's get the real figure and a backup option on paper — free, no fees ever. If your brother's wire clears in time, we shake hands and part friends."
@@ -92,7 +92,7 @@
  {
   "n": 6,
   "t": "The Bankruptcy Pause Button",
-  "say": "“My lawyer is filing bankruptcy. That stops all of this, so there's nothing to talk about.”",
+  "say": "My lawyer is filing bankruptcy. That stops all of this, so there's nothing to talk about.",
   "reb": [
    "Smart move to have that option ready — the automatic stay is real and it does pause the sale. Just so I understand: if the bankruptcy only pauses this instead of ending it, would it be worth five minutes to know what happens on the other side?",
    "Bankruptcy is a pause button, not an eraser. The lender typically files a motion for relief from stay, and those get heard in 30 to 60 days — then the clock restarts exactly where it stopped, with the arrears still owed. In a Chapter 13 you're paying the full arrears back on top of the regular payment. It's like pausing a movie: when you hit play, you're at the same scene. What if the stay lifts in 45 days — do you want your equity options mapped before or after that? Free consult, no fee ever. If the plan holds, great — we part friends."
@@ -110,7 +110,7 @@
  {
   "n": 7,
   "t": "The Scam Fatigue Wall",
-  "say": "“I already talked to three of you people. You all want the same thing. Get off my porch.”",
+  "say": "I already talked to three of you people. You all want the same thing. Get off my porch.",
   "reb": [
    "Honestly? You should be suspicious — most of the people knocking want to buy your house cheap, today, with a contract in their hand. Let me ask you straight: if I'm not here to buy your house and there's nothing to sign, is there another reason not to talk?",
    "We start with a free consultation with a senior advisor — 30-plus years doing this — and we lay out three to five options, including ones where you keep the house: refinance, modification through counsel, selling with your equity. No fees, ever, by law and by policy. Three bad mechanics doesn't mean the engine fixes itself. What if the fourth conversation is the one where someone finally shows you the option that protects your equity instead of taking it? Five minutes, nothing to sign. Worst case, we shake hands and part friends — that's the actual deal."
@@ -128,7 +128,7 @@
  {
   "n": 8,
   "t": "The Wrong House (Denial)",
-  "say": "“You've got the wrong house. We're not in any foreclosure.”",
+  "say": "You've got the wrong house. We're not in any foreclosure.",
   "reb": [
    "I hope I do have the wrong house — honestly, that would be the best news of my day. Can I ask you one thing, though, just so I can leave you in peace: if a case had been filed at the courthouse under this address, would you want to be the first to know, or the last?",
    "Because a filing isn't a verdict on you — it's a clock, and the people who look at it early are the ones who keep choices. It's like a lab result sitting in a drawer: reading it doesn't make you sick, it tells you what's treatable. What if five free minutes with an advisor who's done this for thirty years showed you three or four ways this ends on your terms? If nothing's filed, wonderful — we shake hands and part friends. Is it fair to at least look together?"
@@ -146,7 +146,7 @@
  {
   "n": 9,
   "t": "It's Too Late (Hopelessness)",
-  "say": "“There's a sale date already. It's over — there's nothing anybody can do now.”",
+  "say": "There's a sale date already. It's over — there's nothing anybody can do now.",
   "reb": [
    "I hear you — and after months of this, being tired makes all the sense in the world. But let me ask just one thing: is it that nothing can be done, or that you're done? Those are two different things, and only one of them is true.",
    "A sale date is a deadline, not a verdict — sales get postponed, cases get reworked, and even on the hardest path there's a world of difference between walking out with cash for your keys and time to land, versus being put out with nothing. It's like the two-minute warning in a game: that's not when you leave the stadium, that's when the plays matter most. What if the last ten minutes you spend on this house are the ones that decide how your family walks out of it? You've fought this long — isn't it fair to yourself to hear what's still on the table?"
@@ -164,7 +164,7 @@
  {
   "n": 10,
   "t": "She Doesn't Know (Family Secret)",
-  "say": "“My wife doesn't know how bad it is. You have to go before she comes out here.”",
+  "say": "My wife doesn't know how bad it is. You have to go before she comes out here.",
   "reb": [
    "I'll step back — and I want you to know I understand why you've carried this alone; you were trying to protect her. One quiet question before I go: would you rather she hear it from you, with a plan in your hand — or from a notice taped to the door?",
    "Because a secret like this has a deadline, and the court sets it, not you. Telling her with options is like a pilot announcing turbulence along with the route around it — scary for a second, then everyone breathes. Telling her at the end is the crash landing. What if ten free, private minutes — just you and an advisor, before any conversation at home — gave you the words and the plan to bring to her? Isn't it fair that when she finds out, she finds out you were already fighting for her?"
@@ -182,7 +182,7 @@
  {
   "n": 11,
   "t": "Worn Out — \"Just take it, I'm done\"",
-  "say": "“Honestly I'm fed up. I'm worn out. I don't think I can afford this even if a miracle came down from heaven. I'd be better off walking away from all this stress.”",
+  "say": "Honestly I'm fed up. I'm worn out. I don't think I can afford this even if a miracle came down from heaven. I'd be better off walking away from all this stress.",
   "reb": [
    "I hear you, and the majority of people we speak to hit that exact wall — they just want to get away from all the problems, and that's fair. Everybody gets there at some point. Let me ask you one thing: what is it that you TRULY want to do with this property?",
    "If you've truly had it, then rather than the bank taking the house AND whatever equity you have, I'm sure you'd rather walk out with cash in your pocket, on your own timeline, with dignity — instead of a sheriff putting your things on the street on a date you don't control. We have a program for exactly this — Cash for Keys. We agree on a set figure; you get half the money up front when we sign, and you pick your exit window: 30, 60 or 90 days. The longer you stay the number adjusts a little — not a lot — because our money sits parked. At the end you hand over the keys, the house is clear of your personal things, and you receive the other half that same day. You pick the date. You pick the time. You run the show.",
@@ -220,7 +220,7 @@
  {
   "n": 13,
   "t": "The Parachute Frame (universal — any rescue plan they believe in)",
-  "say": "“I've got it handled — the bank's reviewing my modification / my money arrives tomorrow / my cousin is wiring it.” Any plan they're emotionally invested in, 7–10 days out.",
+  "say": "I've got it handled — the bank's reviewing my modification / my money arrives tomorrow / my cousin is wiring it.” Any plan they're emotionally invested in, 7–10 days out.",
   "reb": [
    "I'm applauding you — you did the right thing, and I commend you for getting the ball rolling. Keep doing exactly what you're doing. One question, though: do you have the approval in writing? Because a lot of banks drag the review out and deny two or three days before the sale — and the denial can go straight to their attorneys without you ever seeing it. As much as neither of us wants to look at it, you'd agree that's a real possibility, right?",
    "So here's what I'm proposing — I don't want to be your bank, and I don't want to be your middleman. I want to be your parachute. You're betting your house on that plan landing on time; let us work on postponing the sale in parallel, so if the money or the approval comes a day late, the extra time is already in motion and your plan still saves the house. If your plan works, beautiful — I did you a favor and you owe me one. And the no-cost version: give me a third-party authorization — just permission to speak to your bank, nothing else, no fees — I'll make one courtesy call and get the bottom line on where your file really is. Based on that, we decide if we work together at all. Fair?"
