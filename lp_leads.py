@@ -100,7 +100,7 @@ def build():
         nm = C._people_name(owner)
         people = ('https://www.truepeoplesearch.com/results?name=' + requests.utils.quote(nm)) if (nm and not is_co and not ent) else ''
         # case-number deep links (docket + records) — the LP has no auction/folio yet
-        docket = ('https://www2.miamidadeclerk.gov/ocs/Search.aspx') if case else ''
+        docket = ('https://www2.miamidadeclerk.gov/ocs/') if case else ''   # /ocs/Search.aspx retired -> 404 (2026-09-15)
 
         # ---- resolved address, gated on confidence -------------------------------------------
         a = addrs.get(case) or {}
@@ -198,10 +198,10 @@ def build():
             'tax': F._tax_url_from_folio({'folio': folio, 'county': _cty}),
             'people': people, 'peopleaddr': '', 'cyberbg': F.cyberbg_url(nm, '') if (nm and not is_co and not ent) else '',
             'cyberbgaddr': '',
-            'records': ('https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch'
+            'records': ('https://onlineservices.miamidadeclerk.gov/officialrecords/'
                         if _cty == 'MIAMI-DADE'
                         else 'https://officialrecords.broward.org/AcclaimWeb/' if _cty == 'BROWARD' else ''),
-            'cases': ('https://www2.miamidadeclerk.gov/ocs/Search.aspx' if _cty == 'MIAMI-DADE'
+            'cases': ('https://www2.miamidadeclerk.gov/ocs/' if _cty == 'MIAMI-DADE'
                       else 'https://www.browardclerk.org/Web2' if _cty == 'BROWARD' else ''),
             'docket': (docket if _cty == 'MIAMI-DADE' else ''),
             'ctype': 'Bank/Mortgage', 'ftype': 'MORTGAGE',

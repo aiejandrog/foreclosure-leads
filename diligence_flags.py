@@ -173,8 +173,8 @@ _SPLIT = re.compile(r'\s*[;|]\s*|\s+AND\s+(?=[A-Z0-9])')
 
 _COUNTY_LINKS = {
     'MIAMI-DADE': {
-        'cases':   'https://www2.miamidadeclerk.gov/ocs/search.aspx',
-        'records': 'https://onlineservices.miamidadeclerk.gov/officialrecords/StandardSearch.aspx',
+        'cases':   'https://www2.miamidadeclerk.gov/ocs/',                          # /ocs/search.aspx retired -> 404 (2026-09-15)
+        'records': 'https://onlineservices.miamidadeclerk.gov/officialrecords/',    # StandardSearch.aspx retired -> 404 (2026-09-15)
         'pa':      'https://www.miamidade.gov/Apps/PA/propertysearch/',
         'clerk':   'Miami-Dade Clerk (OCS) party-name search',
     },

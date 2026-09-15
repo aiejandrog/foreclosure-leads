@@ -6541,6 +6541,16 @@ const CTY_LINKS = {
     records:'https://erec.mypalmbeachclerk.com/search/index?theme=.blue&section=searchCriteriaName&quickSearchSelection=', cases:'https://appsgp.mypalmbeachclerk.com/eCaseView/', place:'PALM BEACH COUNTY FL',
     ownerSearch:o=>'https://pbcpao.gov/Property/SearchByOwner?ownerName='+encodeURIComponent(o) },
 };
+// 2026-09-15: Miami-Dade retired /ocs/Search.aspx and /officialrecords/StandardSearch(.aspx) — both 404.
+// 380+ already-baked leads still carry those dead URLs in r.docket/r.cases/r.records; map them to the live
+// base so a click opens the working search page, not an error. MD has no per-case docket deep-link, so the
+// base (with the case # copied to the clipboard by the link) is the best available.
+function liveClerkURL(u){
+  u = String(u||'');
+  if(/\/ocs\/Search\.aspx/i.test(u)) return 'https://www2.miamidadeclerk.gov/ocs/';
+  if(/officialrecords\/StandardSearch(\.aspx)?/i.test(u)) return 'https://onlineservices.miamidadeclerk.gov/officialrecords/';
+  return u;
+}
 const COPY_SVG = '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
 const copyBtn = (text, label) => '<button class="cpy" type="button" data-copy="'+esc(text)+'" title="Copy '+(label||'')+'">'+COPY_SVG+'</button>';
 // Normalize whatever property-type signal we have into a short human label for the row chip.
@@ -16474,13 +16484,13 @@ function render(){
     // COURT & SALE — evaluate the deal in one navy cluster (same color, same row). Never bury Docket
     // inside People-search gold links. Broward/PB have no per-case deep link → clerk Case search is Docket.
     if(r.recqs) gEval.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+esc(r.recqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
-    else if(r.records) gEval.push('<a class="dig recsearch" href="'+esc(r.records)+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
+    else if(r.records) gEval.push('<a class="dig recsearch" href="'+esc(liveClerkURL(r.records))+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
     else if(r.oname) gEval.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
     if(r.ocsqs) gEval.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
-    else if(r.cases) gEval.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' court case search — case # '+r.case+' copied to clipboard. On the search page: Case Number tab → Ctrl+V → Enter. (Their site requires a CAPTCHA-tokened session so we cannot deep-link past the search form.)')+'">Cases</a>');
+    else if(r.cases) gEval.push('<a class="dig recsearch" href="'+esc(liveClerkURL(r.cases))+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' court case search — case # '+r.case+' copied to clipboard. On the search page: Case Number tab → Ctrl+V → Enter. (Their site requires a CAPTCHA-tokened session so we cannot deep-link past the search form.)')+'">Cases</a>');
     else if(r.oname) gEval.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
-    if(r.docket) gEval.push('<a class="dig" href="'+esc(r.docket)+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
-    else if(r.cases && r.case) gEval.push('<a class="dig recsearch" href="'+esc(r.cases)+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ case # copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' clerk — no deep-link docket for this county. Case # '+r.case+' copied: open Case Number search → paste → Enter to pull THIS foreclosure\'s filings / final judgment.')+'">Docket</a>');
+    if(r.docket && !/\/ocs\/Search\.aspx/i.test(r.docket)) gEval.push('<a class="dig" href="'+esc(liveClerkURL(r.docket))+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
+    else if(r.cases && r.case) gEval.push('<a class="dig recsearch" href="'+esc(liveClerkURL(r.cases))+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ case # copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' clerk — no deep-link docket for this county. Case # '+r.case+' copied: open Case Number search → paste → Enter to pull THIS foreclosure\'s filings / final judgment.')+'">Docket</a>');
     if(r.pa) gEval.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
     else if(r.addr) gEval.push('<a href="'+esc(_countySearchURL(r, 'appraiser'))+'" target="_blank" rel="noopener" title="No folio resolved for this parcel — opens the COUNTY APPRAISER\'S OWN address search (not a web search). Type or paste the street number and it will find the parcel.">Appraiser&nbsp;⌕</a>');
     if(r.tax) gEval.push('<a href="'+esc(r.tax)+'" target="_blank" rel="noopener" title="Opens this parcel\'s live tax bill + any delinquent taxes / certificates — the same page the county appraiser\'s Tax Collector link goes to.">Taxes</a>');
