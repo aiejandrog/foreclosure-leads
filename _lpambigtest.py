@@ -279,6 +279,109 @@ chk('cache: a settled no is not re-read for 30 days', not BP._due({'status': 'no
 chk('cache: a settled no is re-read after 30 days', BP._due({'status': 'no-pin', 'd': '2026-08-01'}, '2026-09-16', 30))
 chk('cache: a transient failure is re-read next run', BP._due({'status': 'unreadable', 'd': '2026-09-16'}, '2026-09-16', 30))
 
+# --- 7. fl_lp.broward_pin: a lis pendens that names no mortgage settles by its LEGAL DESCRIPTION -----------
+# FAKE developments, folios and addresses. The shapes are real: the filing prints "Lot / Block / <name>,
+# according to the plat ... Plat Book N, Page M" or "Unit N, <name>, a Condominium"; the FDOR roll legal
+# names the development ("<NAME> 990-98 B") and never the lot or unit.
+LC = [{'folio': '123401210050', 'addr': '100 FIRST ST'}, {'folio': '123434CB0170', 'addr': '9 SAMPLE CT'}]
+LP_PLAT = ('... seeking to foreclose a lien encumbering LOT 91, BLOCK 97, SAMPLE HEIGHTS HOMES, ACCORDING TO THE MAP '
+           'OR PLAT THEREOF, AS RECORDED IN PLAT BOOK 990, PAGE 98, OF THE PUBLIC RECORDS OF BROWARD COUNTY, FLORIDA')
+LP_CONDO = ('THAT CERTAIN CONDOMINIUM PARCEL, COMPOSED OF UNIT 902, THE CYPRESS AT SAMPLEWOOD 111, A CONDOMINIUM AND '
+            'AN UNDIVIDED SHARE IN THE COMMON ELEMENTS')
+ROLL = {'123401210050': 'SAMPLE HEIGHTS HOMES 990-98 B', '123434CB0170': 'OTHER PLACE CONDO'}
+
+d = BP.decide_legal(LP_PLAT, LC, ROLL)
+chk('legal: same plat book/page on exactly one candidate -> promoted by plat',
+    d['status'] == 'promoted' and d['cand']['folio'] == '123401210050' and 'plat book 990 page 98' in d['by'])
+d = BP.decide_legal(LP_CONDO, LC, {'123401210050': 'SAMPLE HEIGHTS HOMES 990-98 B', '123434CB0170': 'CYPRESS AT SAMPLEWOOD III'})
+chk('legal: condo name matches through OCR roman numerals ("111" = III) -> promoted by name',
+    d['status'] == 'promoted' and d['cand']['folio'] == '123434CB0170')
+chk('legal: "SECTION THREE" in the filing equals "SEC 3" on the roll',
+    BP.decide_legal('LOT 94, BLOCK 947, SAMPLE PARK SECTION THREE, ACCORDING TO THE PLAT THEREOF', LC,
+                    {'123401210050': 'SAMPLE PARK SEC 3', '123434CB0170': 'OTHER PLACE CONDO'})['status'] == 'promoted')
+chk('legal: two candidates in the same development -> ambiguous (the roll legal has no lot or unit)',
+    BP.decide_legal(LP_PLAT, LC, {'123401210050': 'SAMPLE HEIGHTS HOMES 990-98 B',
+                                  '123434CB0170': 'SAMPLE HEIGHTS HOMES 990-98 B'})['status'] == 'ambiguous')
+chk('legal: a disagreeing plat rules a candidate out even when the name agrees',
+    BP.decide_legal(LP_PLAT, LC, {'123401210050': 'SAMPLE HEIGHTS HOMES 991-9 B',
+                                  '123434CB0170': 'OTHER PLACE CONDO'})['status'] == 'no-match')
+chk('legal: a bare city name in the filing never names a parcel',
+    BP.decide_legal('LOT 3, BLOCK 2, ACCORDING TO THE PLAT THEREOF, PEMBROKE PINES, FLORIDA', LC,
+                    {'123401210050': 'PEMBROKE PINES', '123434CB0170': 'OTHER PLACE CONDO'})['status'] == 'no-match')
+chk('legal: a one-word development name without a plat is not enough',
+    BP.decide_legal('UNIT 5, SAMPLEWOOD, A CONDOMINIUM', LC,
+                    {'123401210050': 'SAMPLEWOOD', '123434CB0170': 'OTHER PLACE CONDO'})['status'] == 'no-match')
+chk('legal: the name must sit inside the legal description, not elsewhere in the filing',
+    BP.decide_legal('PLAINTIFF SAMPLE HEIGHTS LENDING LLC ' + 'X ' * 150 + 'UNIT 5 OF A CONDOMINIUM', LC,
+                    {'123401210050': 'SAMPLE HEIGHTS', '123434CB0170': 'OTHER PLACE CONDO'})['status'] == 'no-match')
+chk('legal: a candidate the roll has no legal for blocks promotion (it cannot be ruled out)',
+    BP.decide_legal(LP_PLAT, LC, {'123401210050': 'SAMPLE HEIGHTS HOMES 990-98 B', '123434CB0170': ''})['status'] == 'no-roll-legal')
+chk('legal: an a/k/a address naming ANOTHER candidate -> conflict',
+    BP.decide_legal(LP_PLAT + ' A/K/A 9 SAMPLE CT, SAMPLE CITY', LC, ROLL)['status'] == 'conflict')
+d = BP.decide_legal(LP_PLAT + ' A/K/A 100 FIRST STREET, SAMPLE CITY', LC, ROLL)
+chk('legal: an a/k/a address naming the same candidate corroborates', d['status'] == 'promoted' and d['corroborated'])
+chk('legal: a filing that prints no legal description -> no-legal',
+    BP.decide_legal('NOTICE OF LIS PENDENS. PLAINTIFF V. DEFENDANT. CASE NO. 000', LC, ROLL)['status'] == 'no-legal')
+chk('legal: roll legal key splits the plat off the development name',
+    BP.roll_legal_key('SAMPLE HEIGHTS SEC 3 945-98 B') == ({(945, 98)}, ['SAMPLE', 'HEIGHTS', 'SEC', '3']))
+chk('legal: "Plat Book 952, Page(s) 98" is read', (952, 98) in BP.lp_legal('LOT K-95, SAMPLE LAKES, PLAT BOOK 952, PAGE(S) 98, OF')['plats'])
+
+hit = BP.decide_legal(LP_PLAT, LC, ROLL)
+tmpd = _tf.mkdtemp()
+path = tmpd + '/lp_addresses.json'
+_json.dump({'CACE-26-900011': dict(ELIG, case='CACE-26-900011', candidates=LC)}, open(path, 'w', encoding='utf-8'))
+done = BP.apply_promotions(path, {'CACE-26-900011': (hit, ['900000011'], '')}, '2026-09-16')
+r = _json.load(open(path, encoding='utf-8'))['CACE-26-900011']
+chk('legal apply: promoted with rung lp-legal to the matched parcel',
+    done == ['CACE-26-900011'] and r['rung'] == 'lp-legal' and r['confidence'] == 'high' and r['folio'] == '123401210050')
+chk('legal apply: evidence says LP-LEGAL, quotes the roll legal, and admits the unit is unproven',
+    'LP-LEGAL' in r['evidence'] and 'SAMPLE HEIGHTS HOMES 990-98 B' in r['evidence'] and 'not the unit' in r['evidence'])
+cached_legal = {'how': 'legal', 'by': 'plat book 990 page 98', 'roll_legal': 'SAMPLE HEIGHTS HOMES 990-98 B',
+                'corroborated': False, 'via': 'legal', 'mtg': None, 'page': None, 'pin': 'plat book 990 page 98',
+                'folio': '123401210050'}
+rb = BP._hit_from_cache(dict(ELIG, candidates=LC), cached_legal)
+chk('legal cache: an interrupted run\'s legal promotion rebuilds with legal evidence',
+    rb and 'LP-LEGAL' in BP.evidence_legal('2026-09-16', ['1'], rb, 2))
+chk('legal cache: a no-link cached BEFORE the matcher existed is read once more',
+    BP._due({'status': 'no-link', 'd': '2026-09-15'}, '2026-09-16', 30))
+chk('legal cache: a no-link the matcher already read stays settled',
+    not BP._due({'status': 'no-link', 'd': '2026-09-15', 'legal': 'none-found'}, '2026-09-16', 30))
+chk('legal cache: a candidate without a roll legal is a settled answer',
+    not BP._due({'status': 'no-roll-legal', 'd': '2026-09-15', 'legal': 'no-roll-legal'}, '2026-09-16', 30))
+
+# recall rules, each with the refusal that keeps it honest (FAKE data)
+chk('legal: a trailing letter is part of the development name ("SAMPLEMONT CONDOMINIUM B")',
+    BP.decide_legal('CONDOMINIUM UNIT NO. 901 OF SAMPLEMONT CONDOMINIUM B, A CONDOMINIUM', LC,
+                    {'123401210050': 'OTHER PLACE CONDO', '123434CB0170': 'SAMPLEMONT CONDOMINIUM B'})['status'] == 'promoted')
+TWIN = [{'folio': '123401210180', 'addr': '9526 NW 96 CT'}, {'folio': '123401210160', 'addr': '9534 NW 96 CT'}]
+TWIN_ROLL = {'123401210180': 'SAMPLE PINE ESTATES 969-96 B', '123401210160': 'SAMPLE PINE ESTATES 969-96 B'}
+LP_TWIN = ('PROPERTY DESCRIBED BELOW: 9526 NW 96TH COURT SAMPLE CITY FLORIDA 33000 LOT 98, OF SAMPLE PINE ESTATES, '
+           'ACCORDING TO THE PLAT THEREOF, AS RECORDED IN PLAT BOOK 969, PAGE 96')
+d = BP.decide_legal(LP_TWIN, TWIN, TWIN_ROLL)
+chk('legal: two parcels on one plat - the street address printed with the legal picks one ("96TH" = "96")',
+    d['status'] == 'promoted' and d['cand']['folio'] == '123401210180' and d['corroborated'])
+FAR = ('TO: JANE DOE, 9534 NW 96 CT, SAMPLE CITY FL 33000. ' + 'YOU ARE NOTIFIED THAT AN ACTION HAS BEEN FILED. ' * 12
+       + 'LOT 98, OF SAMPLE PINE ESTATES, ACCORDING TO THE PLAT THEREOF, AS RECORDED IN PLAT BOOK 969, PAGE 96')
+chk('legal: a defendant\'s home address far up in the caption never breaks the tie',
+    BP.decide_legal(FAR, TWIN, TWIN_ROLL)['status'] == 'ambiguous')
+UNITS = [{'folio': '123434CB0906', 'addr': '1 SAMPLE WAY #906'}, {'folio': '123434CB0910', 'addr': '1 SAMPLE WAY #910'}]
+d = BP.decide_legal('UNIT 906, BUILDING 92 OF SAMPLE TOWERS, A CONDOMINIUM', UNITS,
+                    {'123434CB0906': 'SAMPLE TOWERS CONDO', '123434CB0910': 'SAMPLE TOWERS CONDO'})
+chk('legal: two units in one condo - the unit number printed with the legal picks one',
+    d['status'] == 'promoted' and d['cand']['folio'] == '123434CB0906')
+chk('legal: two units in one condo and no unit number -> still ambiguous',
+    BP.decide_legal('THAT CONDOMINIUM PARCEL IN SAMPLE TOWERS, A CONDOMINIUM', UNITS,
+                    {'123434CB0906': 'SAMPLE TOWERS CONDO', '123434CB0910': 'SAMPLE TOWERS CONDO'})['status'] == 'ambiguous')
+VIS = [{'folio': '123401DD0410', 'addr': '9774 SAMPLEWOOD BLVD #901P'}, {'folio': '123401210999', 'addr': '9 OTHER ST'}]
+VIS_ROLL = {'123401DD0410': 'SAMPLE VISTAS X-Y IN SAMPLEWOOD', '123401210999': 'OTHER PLACE 12-3 B'}
+LP_VIS = 'THE CONDOMINIUM PARCEL KNOWN AS APARTMENT X-901, IN CONDOMINIUM X-Y IN SAMPLE VISTAS IN SAMPLEWOOD, THE CONDOMINIUM'
+chk('legal: development words in another order are NOT enough on their own',
+    BP.decide_legal(LP_VIS, VIS, VIS_ROLL)['status'] == 'no-match')
+chk('legal: ...the same words plus the parcel\'s own street address are',
+    BP.decide_legal(LP_VIS + ' PROPERTY ADDRESS: 9774 NW SAMPLEWOOD BLVD', VIS, VIS_ROLL)['status'] == 'promoted')
+chk('legal: the legal fits one parcel but ANOTHER candidate\'s address is printed with it -> conflict',
+    BP.decide_legal(LP_PLAT + ', 9 SAMPLE CT', LC, ROLL)['status'] == 'conflict')
+
 if fails:
     for f in fails:
         print('FAIL:', f)

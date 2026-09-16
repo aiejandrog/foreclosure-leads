@@ -22,6 +22,16 @@ candidates named, or page 3's property address naming a DIFFERENT candidate than
 becomes `confidence: high, rung: mortgage-pin`, with evidence citing both instruments. Only rows whose
 rung is `pass2-revoked`, or a broward_resolve `low`, are ever touched — never a human-verified row.
 
+WHEN THE FILING NAMES NO MORTGAGE (rung `lp-legal`). ~155 of these lis pendens neither link nor name the
+mortgage, so there is no PIN to read — but the filing still DESCRIBES the land ("Lot 91, Block 97, SAMPLE
+HEIGHTS HOMES ... Plat Book 990, Page 98" / "Unit 902, THE CYPRESS AT SAMPLEWOOD III, a Condominium"). The
+FDOR state roll's legal for each candidate parcel names its subdivision or condominium ("SAMPLE HEIGHTS HOMES
+990-98 B") but NOT the lot or unit, so a match proves the DEVELOPMENT, never the unit. Promote only when every
+candidate's roll legal was read and exactly ONE candidate is in the development the filing describes: same
+plat book/page, or (no plat on one side) the development's name as a contiguous phrase of 2+ words inside the
+legal-description text (never a bare city name). A plat book/page that disagrees rules a candidate out even if
+the name agrees; an "a/k/a" address naming a DIFFERENT candidate is a conflict.
+
 NETWORK. Reuses broward_liens.start_session()/_curl() — System32 curl is the only fingerprint Cloudflare
 passes. A PDF download that comes back as a challenge page (no %PDF- header) is retried briefly and then
 left for another run; nothing here tries to defeat a challenge. Results are cached per case
@@ -61,7 +71,7 @@ RETRY_DAYS = 30
 MAX_PAGES = 14           # OCR at most this many pages of one document: pages 1-6, the last 6, then 2 more. The PIN
                          # sits in the Form 3010 header (p1-4 behind cover sheets) or Exhibit A (near the end); a
                          # document with none there has none at all, and reading all 30 pages cost ~50 s a row
-SETTLED = {'promoted', 'no-link', 'not-mortgage', 'no-pin', 'no-match', 'ambiguous', 'conflict'}
+SETTLED = {'promoted', 'no-link', 'not-mortgage', 'no-pin', 'no-match', 'ambiguous', 'conflict', 'no-roll-legal'}
 TOKEN_RE = re.compile(r'id="hdnTransactionItemId"\s+value=\'([^\']+)\'')
 # "...foreclose a note and mortgage ... at Instrument Number 1 23456789." (OCR splits digits with spaces)
 _INST_TEXT_RE = re.compile(r'INSTRUMENT\s*(?:NUMBER|NO\.?|#)?\s*[:#.]?\s*((?:\d\s?){7,8}\d)(?!\s?\d)')
@@ -215,6 +225,197 @@ def decide(readings, candidates):
     return dict(hit, status='promoted', cand=cands[key], corroborated=key in addr_named, addr=addr_seen)
 
 
+# ---- legal-description match (a lis pendens that links and names no mortgage) --------------------------
+_LEGAL_ANCHOR_RE = re.compile(r'\b(?:LOTS?|BLOCK|BLK|UNIT|CONDOMINIUM|PLAT\s+BOOK|ACCORDING\s+TO\s+THE\s+'
+                              r'(?:MAP\s+OR\s+)?PLAT|DECLARATION\s+OF\s+CONDOMINIUM|SUBDIVISION)\b')
+# "PLAT BOOK 990, PAGE 98" / "Plat Book 952, Page(s) 98" / "P.B. 912, PG. 93"
+_LP_PLAT_RE = re.compile(r'(?:PLAT\s+BOOK|P\.\s?B\.)\s*(\d{1,3})\s*[,.]?\s*(?:AT\s+)?(?:PAGES?|PGS?\.?)\s*'
+                         r'(?:\(S\))?\s*(\d{1,3})(?!\d)')
+_ROLL_PLAT_RE = re.compile(r'(?<![\d-])(\d{1,3})-(\d{1,3})(?![\d-])')      # FDOR Broward: "SAMPLE HOMES 990-98 B"
+_AKA_RE = re.compile(r'(?:A\s*/\s*K\s*/\s*A|ALSO\s+KNOWN\s+AS|PROPERTY\s+ADDRESS)\s*:?\s*(\d{1,6}\s+[A-Z0-9 .]{3,60})')
+_ROMAN = {'I': 1, 'II': 2, 'III': 3, 'IV': 4, 'V': 5, 'VI': 6, 'VII': 7, 'VIII': 8, 'IX': 9, 'X': 10}
+_WORDNUM = {'ONE': 1, 'TWO': 2, 'THREE': 3, 'FOUR': 4, 'FIVE': 5, 'SIX': 6, 'SEVEN': 7, 'EIGHT': 8, 'NINE': 9,
+            'TEN': 10, 'FIRST': 1, 'SECOND': 2, 'THIRD': 3, 'FOURTH': 4, 'FIFTH': 5,
+            '1ST': 1, '2ND': 2, '3RD': 3, '4TH': 4, '5TH': 5}
+_SYN = {'SECTION': 'SEC', 'CONDOMINIUM': 'CONDO', 'CONDOMINIUMS': 'CONDO', 'ADDITION': 'ADD', 'PHASE': 'PH',
+        'SUBDIVISION': 'SUB', 'ESTATES': 'ESTS', 'VILLAGE': 'VLG', 'GARDENS': 'GDNS'}
+# 'B' is NOT filler: the " B" after a roll plat ("990-98 B") is already cut off by roll_legal_key, and a letter is
+# often part of the name ("SAMPLEMONT CONDOMINIUM B").
+_STOP = {'A', 'AN', 'AT', 'OF', 'THE', 'AND', 'NO', 'NUMBER', 'CONDO', 'SUB', 'AS', 'IN', 'TO'}
+_UNIT_RE = re.compile(r'\b(?:UNIT|APARTMENT|APT|VILLA)\s*(?:NO\.?|NUMBER|#)?\s*([A-Z]?-?\d{1,5}[A-Z]?)\b')
+_ADDR_REACH = 160          # an address counts as the property's only this close to the legal description
+_BROWARD_CITIES = {
+    'COCONUT CREEK', 'COOPER CITY', 'CORAL SPRINGS', 'DANIA BEACH', 'DAVIE', 'DEERFIELD BEACH', 'FORT LAUDERDALE',
+    'HALLANDALE BEACH', 'HILLSBORO BEACH', 'HOLLYWOOD', 'LAUDERDALE LAKES', 'LAUDERHILL', 'LIGHTHOUSE POINT',
+    'MARGATE', 'MIRAMAR', 'NORTH LAUDERDALE', 'OAKLAND PARK', 'PARKLAND', 'PEMBROKE PARK', 'PEMBROKE PINES',
+    'PLANTATION', 'POMPANO BEACH', 'SEA RANCH LAKES', 'SOUTHWEST RANCHES', 'SUNRISE', 'TAMARAC', 'WEST PARK',
+    'WESTON', 'WILTON MANORS', 'LAUDERDALE BY THE SEA', 'LAZY LAKE', 'BROWARD COUNTY', 'FLORIDA'}
+
+
+def _canon(tok):
+    """One comparison token. Both sides go through this, so abbreviations, number words and OCR'd roman
+    numerals ("111" for III) land on the same spelling."""
+    t = str(tok or '').upper().strip('.,;:()"\'')
+    if not t:
+        return ''
+    t = _SYN.get(t, t)
+    if t in _WORDNUM:
+        return str(_WORDNUM[t])
+    if t in _ROMAN:
+        return str(_ROMAN[t])
+    if re.fullmatch(r'[1IL|]{1,3}', t):
+        return str(len(t))                     # OCR of a roman numeral: 1 / 11 / 111 / Il / lII
+    return t
+
+
+def _toks(text):
+    return [c for c in (_canon(t) for t in re.findall(r'[A-Z0-9|]+', str(text or '').upper())) if c and c not in _STOP]
+
+
+def _contains(hay, needle):
+    n = len(needle)
+    return n > 0 and any(hay[i:i + n] == needle for i in range(len(hay) - n + 1))
+
+
+def lp_legal(text):
+    """The legal description a lis pendens prints -> {'plats': {(book, page)}, 'toks': [...], 'aka': [...]}, or
+    None when it prints none. Tokens come only from windows around legal anchors (LOT / BLOCK / UNIT / PLAT
+    BOOK / CONDOMINIUM ...), so a caption or a mailing line far from the description cannot name a parcel."""
+    flat = ' '.join(str(text or '').upper().split())
+    anchors = [m.start() for m in _LEGAL_ANCHOR_RE.finditer(flat)]
+    if not anchors:
+        return None
+    spans = []
+    for a in anchors:
+        lo, hi = max(0, a - 220), a + 220
+        if spans and lo <= spans[-1][1]:
+            spans[-1][1] = max(spans[-1][1], hi)
+        else:
+            spans.append([lo, hi])
+    region = ' | '.join(flat[lo:hi] for lo, hi in spans)
+    return {'plats': {(int(b), int(p)) for b, p in _LP_PLAT_RE.findall(flat)},
+            'toks': _toks(region),
+            'aka': [m.group(1).strip() for m in _AKA_RE.finditer(flat)],
+            'units': {re.sub(r'\D', '', u) for u in _UNIT_RE.findall(region) if re.sub(r'\D', '', u)},
+            'flat': flat, 'anchors': anchors}
+
+
+def _addr_near_legal(addr, flat, anchors, reach=_ADDR_REACH):
+    """Is this candidate's street address (house number + street word; "96TH" = "96") printed within `reach`
+    characters of the legal description? A defendant's home address in a caption or service list sits far
+    from it, and must not decide which of two units is the foreclosed one."""
+    k = _addr_key(addr)
+    if not k:
+        return False
+    num, word = k
+    pat = re.compile(r'(?<!\d)' + re.escape(num) + r'\s+(?:[NSEW]{1,2}\.?\s+)?' + re.escape(word)
+                     + (r'(?:ST|ND|RD|TH)?' if word.isdigit() else '') + r'\b')
+    return any(abs(m.start() - a) <= reach for m in pat.finditer(flat) for a in anchors)
+
+
+def _unit_of(addr):
+    """'9371 S SAMPLE DR #906' -> '906'; no unit suffix -> ''."""
+    m = re.search(r'#\s*([A-Z0-9-]+)\s*$', str(addr or '').upper())
+    return re.sub(r'\D', '', m.group(1)) if m else ""
+
+
+def roll_legal_key(legal):
+    """FDOR roll legal -> ({(book, page)}, [development-name tokens]). "SAMPLE HEIGHTS SEC 3 945-98 B" ->
+    ({(945, 98)}, ['SAMPLE', 'HEIGHTS', 'SEC', '3'])."""
+    up = str(legal or '').upper()
+    m = _ROLL_PLAT_RE.search(up)
+    plats = {(int(b), int(p)) for b, p in _ROLL_PLAT_RE.findall(up)}
+    return plats, _toks(up[:m.start()] if m else up)
+
+
+def decide_legal(text, candidates, roll_legals):
+    """text: the lis pendens OCR. roll_legals: {folio key: FDOR S_LEGAL ('' = the roll holds no legal for it)}.
+    -> dict with 'status' (promoted / ambiguous / no-match / conflict / no-roll-legal / no-legal) and 'why';
+    promoted also carries 'cand', 'how'='legal', 'by', 'roll_legal', 'corroborated'."""
+    lg = lp_legal(text)
+    if not lg:
+        return {'status': 'no-legal', 'why': 'the lis pendens prints no legal description'}
+    cands = {}
+    for c in candidates or []:
+        k = _key(c.get('folio'))
+        if k:
+            cands[k] = c
+    blind = [k for k in cands if not str(roll_legals.get(k) or '').strip()]
+    if blind:
+        return {'status': 'no-roll-legal', 'why': 'the state roll carries no legal for candidate folio %s, so it '
+                'cannot be ruled out' % cands[blind[0]].get('folio')}
+    # which candidates' own street address the filing prints AS THE PROPERTY: an a/k/a / "property address"
+    # phrase, or the address standing right beside the legal description
+    aka_named = {k for a in lg['aka'] for k, c in cands.items() if _addr_key(a) and _addr_key(a) == _addr_key(c.get('addr'))}
+    printed = {k: (k in aka_named) or _addr_near_legal(c.get('addr'), lg['flat'], lg['anchors']) for k, c in cands.items()}
+    matched = {}
+    for k, c in cands.items():
+        plats, name = roll_legal_key(roll_legals[k])
+        if plats and lg['plats']:
+            if plats & lg['plats']:
+                b, p = sorted(plats & lg['plats'])[0]
+                matched[k] = 'plat book %d page %d' % (b, p)
+            continue                           # a disagreeing plat rules the candidate out, name or not
+        if len(name) < 2 or ' '.join(name) in _BROWARD_CITIES:
+            continue
+        if _contains(lg['toks'], name):
+            matched[k] = 'the development "%s"' % ' '.join(name)
+        elif printed[k] and set(name) <= set(lg['toks']):
+            # the filing words the development in another order ("X-Y IN SAMPLE VISTAS" vs the roll's "SAMPLE
+            # VISTAS X-Y") - accepted only because it ALSO prints this parcel's own street address
+            matched[k] = 'the development words "%s" and its own street address' % ' '.join(name)
+    if len(matched) > 1:
+        # several of the defendant's parcels sit in one development: the roll legal has no lot or unit, so only
+        # the property's own street address or unit number, printed with the legal description, can pick one
+        by_addr = [k for k in matched if printed[k]]
+        by_unit = [k for k in matched if _unit_of(cands[k].get('addr')) and _unit_of(cands[k].get('addr')) in lg['units']]
+        pick = by_addr if len(by_addr) == 1 else (by_unit if len(by_unit) == 1 else [])
+        if not pick:
+            return {'status': 'ambiguous', 'why': 'the legal description fits %d of the defendant\'s parcels (same '
+                    'development; the roll legal carries no lot or unit)' % len(matched)}
+        n_tied = len(matched)
+        key = pick[0]
+        matched = {key: matched[key] + '; of %d parcels in that development only this one\'s %s is printed with it'
+                   % (n_tied, 'street address' if len(by_addr) == 1 else 'unit number')}
+    if not matched:
+        return {'status': 'no-match', 'why': 'the legal description fits none of the candidate parcels\' roll legals'}
+    key, by = next(iter(matched.items()))
+    others_printed = [k for k in cands if k != key and printed[k]]
+    if others_printed and not printed[key]:
+        return {'status': 'conflict', 'why': 'the legal description fits %s but the filing prints another candidate\'s '
+                'address as the property' % cands[key].get('addr')}
+    unit_ok = bool(_unit_of(cands[key].get('addr'))) and _unit_of(cands[key].get('addr')) in lg['units']
+    return {'status': 'promoted', 'cand': cands[key], 'how': 'legal', 'by': by, 'roll_legal': roll_legals[key],
+            'corroborated': printed[key] or unit_ok, 'mtg': None, 'page': None, 'pin': by}
+
+
+def evidence_legal(today, lp_insts, hit, n_cands):
+    return ('LP-LEGAL %s: lis pendens instr %s names no mortgage but describes the land; its legal description '
+            'matches %s, and the state roll legal of folio %s reads "%s" - the only one of the %d parcels carrying '
+            'the defendant\'s name in that development%s. The roll legal names the development, not the unit.'
+            % (today, '/'.join(lp_insts), hit.get('by'), str(hit['cand'].get('folio') or '').strip(),
+               hit.get('roll_legal'), n_cands,
+               '; the filing also prints this parcel\'s own address or unit number' if hit.get('corroborated') else ''))
+
+
+def _roll_legals(candidates):
+    """{folio key: S_LEGAL} off the FDOR roll, exact PARCEL_ID only (letters kept). '' = the roll answered with
+    no such parcel or no legal; None = the lookup failed (transient)."""
+    import fl_cadastral as FC
+    out = {}
+    for c in candidates or []:
+        k = _key(c.get('folio'))
+        if not k or k in out:
+            continue
+        try:
+            hits = [h for h in FC._q("PARCEL_ID='%s'" % k.replace("'", "''"), 2) if _key(h.get('PARCEL_ID')) == k]
+            out[k] = str(hits[0].get('S_LEGAL') or '').strip() if len(hits) == 1 else ''
+        except Exception:
+            out[k] = None
+        time.sleep(0.3)
+    return out
+
+
 def evidence(today, lp_insts, hit, n_cands):
     return ('MORTGAGE-PIN %s: lis pendens instr %s %s the mortgage it forecloses, instr %s; OCR of '
             'that mortgage (page %s) reads %s %s = folio %s, one of the %d parcels carrying the defendant\'s '
@@ -231,8 +432,12 @@ def promote(row, hit, lp_insts, today, zipc=''):
     row.update({'folio': str(c.get('folio') or '').strip(), 'addr': str(c.get('addr') or '').strip(),
                 'city': str(c.get('city') or '').strip(), 'zip': zipc or '',
                 'paOwner': str(c.get('owner') or '').strip(), 'ownerMismatch': False,
-                'confidence': 'high', 'rung': 'mortgage-pin', 'needsHuman': False,
-                'evidence': evidence(today, lp_insts, hit, len(row.get('candidates') or []))})
+                'confidence': 'high', 'needsHuman': False})
+    n = len(row.get('candidates') or [])
+    if hit.get('how') == 'legal':
+        row.update({'rung': 'lp-legal', 'evidence': evidence_legal(today, lp_insts, hit, n)})
+    else:
+        row.update({'rung': 'mortgage-pin', 'evidence': evidence(today, lp_insts, hit, n)})
     for k in ('value', 'hs'):
         row.pop(k, None)                       # lp_values prices the parcel that is now named
     return row
@@ -401,19 +606,38 @@ def resolve_case(row, lp_insts, today):
         if not readings:
             # No DocLink to a MORTGAGE (none at all, or only a lien / notice): many lis pendens still NAME the
             # mortgage in words. Read the (1-3 page) filing.
-            via, named = 'text', []
+            via, named, lp_texts = 'text', [], []
             for lp, html_ in lp_html.items():
                 pdf = _pdf_of(html_, lp, workdir)
                 if pdf is None:
                     return dict(entry, status='unreadable', why='lis pendens %s image did not download' % lp)
                 text = '\n'.join(read_pdf(pdf, workdir, max_pages=4).values())
+                lp_texts.append(text)
                 for inst in instruments_named(text, exclude=lp_insts):
                     if inst not in named and inst not in parents:
                         named.append(inst)
             if not named and not parents:
-                # an association / construction-lien lis pendens links its claim of lien [LIE], not a mortgage
-                return dict(entry, status='no-link', why='the lis pendens links and names no mortgage%s'
-                            % ((' (it links %s)' % ', '.join(others[:3])) if others else ''))
+                # an association / construction-lien lis pendens links its claim of lien [LIE], not a mortgage.
+                # No PIN to read - but the filing usually DESCRIBES the land. Match that to the roll legals.
+                no_link = dict(entry, status='no-link', legal='none-found',
+                               why='the lis pendens links and names no mortgage%s'
+                               % ((' (it links %s)' % ', '.join(others[:3])) if others else ''))
+                text_all = '\n'.join(lp_texts)
+                if not lp_legal(text_all):
+                    return no_link
+                rl = _roll_legals(row.get('candidates') or [])
+                if any(v is None for v in rl.values()):
+                    return dict(entry, status='unreadable', why='the state roll did not answer for a candidate legal')
+                got = decide_legal(text_all, row.get('candidates') or [], rl)
+                entry.update({'via': 'legal', 'legal': got['status'], 'legals': rl,
+                              'status': got['status'], 'why': got.get('why', '')})
+                if got['status'] == 'promoted':
+                    entry['why'] = 'legal description matches ' + got['by']
+                    entry['hit'] = {'how': 'legal', 'by': got['by'], 'roll_legal': got['roll_legal'],
+                                    'corroborated': got['corroborated'], 'via': 'legal', 'mtg': None, 'page': None,
+                                    'pin': got['by'], 'folio': str(got['cand'].get('folio') or '').strip()}
+                    entry['_hit'] = got
+                return entry
             readings, err = read_mortgages(named)
             if err:
                 return err
@@ -459,6 +683,8 @@ def _due(entry, today, retry_days):
         return True
     if entry.get('status') not in SETTLED:
         return True                              # transient: ask again next run
+    if entry.get('status') == 'no-link' and 'legal' not in entry:
+        return True                              # settled before the legal-description matcher existed
     try:
         age = (datetime.date.fromisoformat(today) - datetime.date.fromisoformat(entry.get('d') or '')).days
     except ValueError:
@@ -543,7 +769,11 @@ def main():
         streak = streak + 1 if entry['status'] == 'unreadable' else 0
         hit = entry.pop('_hit', None)
         tally[entry['status']] = tally.get(entry['status'], 0) + 1
-        if hit:
+        if hit and hit.get('how') == 'legal':
+            print('  [%d/%d] PROMOTE %-16s -> %s (folio %s) lis pendens legal: %s%s' % (
+                i, len(rows), case, hit['cand'].get('addr'), hit['cand'].get('folio'), hit.get('by'),
+                ' +a/k/a' if hit.get('corroborated') else ''))
+        elif hit:
             print('  [%d/%d] PROMOTE %-16s -> %s (folio %s) mortgage %s p%s %s via %s%s' % (
                 i, len(rows), case, hit['cand'].get('addr'), hit['cand'].get('folio'), hit['mtg'], hit['page'],
                 hit['how'], hit.get('via'), ' +address' if hit.get('corroborated') else ''))
