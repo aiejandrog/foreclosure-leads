@@ -6275,15 +6275,18 @@ function _callModeUrlAbs(sub){
   return _CALL_FALLBACK + _seatSeg(sub);
 }
 function openCallMode(sub){
-  var w = null;
-  try{ w = window.open(_callModeUrl(sub), '_blank', 'noopener'); }catch(e){}
-  if(!w){
-    // popup-blocked (same class as the worker's openHere fix): a real anchor click cannot be blocked
-    try{
-      var a = document.createElement('a');
-      a.href = _callModeUrl(sub); a.target = '_blank'; a.rel = 'noopener';
-      a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    }catch(e){}
+  /* ONE tab, not two (2026-09-16). window.open(url,'_blank','noopener') returns null BY SPEC (the
+     opener is severed, so there is no handle to return), which the old "if(!w) popup-blocked
+     fallback" read as a blocked popup and opened the page a SECOND time on every click. A synthetic
+     anchor click from a user gesture cannot be popup-blocked and opens exactly one tab, so it is now
+     the only path; window.open is the last resort and its return value is never consulted. */
+  var url = _callModeUrl(sub);
+  try{
+    var a = document.createElement('a');
+    a.href = url; a.target = '_blank'; a.rel = 'noopener';
+    a.style.display = 'none'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }catch(e){
+    try{ window.open(url, '_blank'); }catch(_e){}
   }
 }
 function _mislisted(r){
