@@ -28,6 +28,7 @@ import argparse
 import glob
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -38,7 +39,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'leads_final.json')
 CACHE = os.path.join(HERE, 'dockets.json')
 MAX_ENTRIES = 40            # newest N filings; bounds the baked payload (a long case runs 100+)
-THROTTLE_S = 1.1            # one polite request pair per case
+THROTTLE_S = float(os.environ.get('DOCKET_THROTTLE', '2.2'))   # one polite request pair per case
+RETRIES = 3                 # per case, with backoff — the clerk rate-limits a sustained burst
+COOL_AFTER = 5              # consecutive failures before a long cool-off
+COOL_S = 90
 DEADLINE_S = int(os.environ.get('DOCKET_DEADLINE', '600'))   # never eat the nightly's 30-min kill
 # Miami-Dade civil/county case formats: 2026-017502-CA-01, 2024-024069-CC-05 ...
 MD_CASE = re.compile(r'^\d{4}-\d{6}-(CA|CC)-\d{2}$', re.I)
@@ -100,6 +104,21 @@ def compact(j):
     }
 
 
+def _pull_retry(case, tries=RETRIES):
+    """Pull with backoff. MEASURED 2026-09-15: a 527-case run at 1.1s went 23 ok / 504 failed, every
+    failure 'Max retries exceeded' — and a single pull seconds later answered in 0.18s. So the clerk
+    rate-limits a sustained burst rather than blocking; the cases were fine. Retrying with a widening,
+    jittered gap turns those 504 write-offs back into records instead of permanently-missing dockets."""
+    last = None
+    for a in range(tries):
+        try:
+            return D.pull(case)
+        except Exception as e:
+            last = e
+            time.sleep(2.5 * (a + 1) + random.uniform(0, 1.5))
+    raise last
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--limit', type=int, default=120)
@@ -147,14 +166,20 @@ def main():
     if not todo:
         return 0
 
-    ok = fail = 0
+    ok = fail = consec = 0
     start = time.time()
     for i, c in enumerate(todo, 1):
         if time.time() - start > DEADLINE_S:
             print(f'  .. {DEADLINE_S}s budget hit; stopping (rest resume next run)')
             break
+        # A wall of consecutive failures is the clerk throttling us, not 500 bad cases. Sit out a
+        # cool-off instead of burning through the queue writing every remaining case off as failed.
+        if consec >= COOL_AFTER:
+            print(f'  .. {consec} consecutive failures — cooling off {COOL_S}s (clerk is throttling)')
+            time.sleep(COOL_S)
+            consec = 0
         try:
-            j = D.pull(c)
+            j = _pull_retry(c)
             if not j or (j.get('caseID', -1) == -1 and not (j.get('dockets') or [])):
                 print(f'  [{i:3}/{len(todo)}] --   {c}  no record')
                 fail += 1
@@ -164,10 +189,12 @@ def main():
                 ok += 1
                 print(f'  [{i:3}/{len(todo)}] ok   {c}  {rec["n"]} entr(ies) · {rec["status"]} · {rec["type"][:28]}')
                 json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=1)   # save as we go
+                consec = 0                      # a success clears the throttle streak
         except Exception as e:
             fail += 1
+            consec += 1
             print(f'  [{i:3}/{len(todo)}] ERR  {c}  {str(e)[:70]}')
-        time.sleep(THROTTLE_S)
+        time.sleep(THROTTLE_S + random.uniform(0, 0.6))   # jitter — a metronome reads as a bot
 
     json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=1)
     print(f'\nDONE: {ok} pulled, {fail} failed -> dockets.json ({len(cache)} cached). '
