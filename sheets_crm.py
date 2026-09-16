@@ -184,11 +184,22 @@ def _prospect_block(r, n, st, pbl, brl, mdl):
     # broward_liens / records_liens rows are {d, amt, party, st}: reading only holder/grantee/date
     # printed a bare "lien $85,500" — no lender, no date, and no SATISFIED, so paid-off mortgages
     # read as live debt on the tab the team quotes from.
-    for li in ((src or {}).get('liens') or [])[:8]:
+    # OPEN first, then newest: the chain is stored oldest-first, and a long Broward chain's first eight rows
+    # were all 1990s payoffs, so the loans that matter never reached the tab. A linked satisfaction names
+    # its release instrument (broward_liens pairs releases by the recorder's own links since 2026-09-16).
+    _chain = sorted(((src or {}).get('liens') or []), key=lambda li: str(li.get('d') or ''), reverse=True)
+    _chain = ([li for li in _chain if str(li.get('st') or '').upper() == 'OPEN']
+              + [li for li in _chain if str(li.get('st') or '').upper() != 'OPEN'])
+    for li in _chain[:8]:
         kv((li.get('type') or 'lien'), ' '.join(str(x) for x in (
             li.get('holder') or li.get('grantee') or li.get('party') or '', _money(li.get('bal') or li.get('amt')),
-            li.get('rec') or li.get('date') or li.get('d') or '', li.get('st') or '') if x).strip())
+            li.get('rec') or li.get('date') or li.get('d') or '', li.get('st') or '',
+            ('(release %s)' % li['rel']) if li.get('rel') else '') if x).strip())
     for li in (r.get('orliens') or [])[:8]:
+        # the board bakes a records/broward chain into orliens too ({d, amt, party, st}); this loop reads
+        # BatchData's shape and printed every such row as "BD mortgage OPEN", satisfied loans included.
+        if 'st' in li and 'party' in li:
+            continue
         kv('BD ' + str(li.get('t') or 'mortgage'),
            ' '.join(str(x) for x in (li.get('h') or '', _money(li.get('bal')),
                                      ('SATISFIED ' + str(li.get('sat'))) if li.get('sat') else 'OPEN') if x).strip())
