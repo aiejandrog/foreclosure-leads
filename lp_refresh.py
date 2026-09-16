@@ -6,7 +6,8 @@ with whole-row replacement, which strips everything lp_values wrote; running lp_
 that puts value=0 / dor_desc='' / hs=False on the board and silently kills equity ranking for
 every LP lead. The order is load-bearing and nothing enforced it — so now this does:
 
-    lis_pendens  ->  lp_resolve  ->  lp_resolve2  ->  lp_values  ->  lp_status  ->  lp_leads
+    lis_pendens  ->  lp_resolve  ->  lp_resolve2  ->  broward_resolve  ->  broward_pin  ->  lp_values
+                 ->  lp_status  ->  lp_leads
 
 Each step is fail-fast: a non-zero exit stops the chain so a half-updated lis_pendens.json is
 never promoted onto the board. `--rebuild` tacks make_tracker on the end. `--no-sweep` skips
@@ -59,6 +60,11 @@ def main():
     # name ladder is their only path to an address. Runs before lp_values on purpose: it writes
     # its own value/homestead from the cadastral, and lp_values' MD cache would skip them anyway.
     run('RESOLVE BROWARD (BCPA name ladder)', [os.path.join('fl_lp', 'broward_resolve.py')])
+    # The name ladder (and lp_resolve2's revocations) leave a defendant who owns several parcels at `low`.
+    # The mortgage the lis pendens forecloses prints the parcel: OCR its PIN and promote only on an exact
+    # folio match. Bounded (40 rows / 15 min, cached per case) and optional — it exits 2 when AcclaimWeb or
+    # Windows OCR is unavailable, which must not stop the chain. Before lp_values so a promoted row is priced.
+    run('RESOLVE BROWARD PARCEL (mortgage PIN)', [os.path.join('fl_lp', 'broward_pin.py')], ok=(0, 2))
     run('VALUE (lp_values)', ['lp_values.py'])
     run('CASE STATUS (lp_status)', ['lp_status.py'])
     run('BOARD ROWS (lp_leads)', ['lp_leads.py'])
