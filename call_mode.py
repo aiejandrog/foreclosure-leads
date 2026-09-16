@@ -1431,6 +1431,16 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
                                'fl': (q.get('flags') or [])[:4]} if q else None))(_quo.get(case)),
             # ---- who is foreclosing ----
             'pl': _s('plaintiff', 46), 'ft': _s('ftype', 10),
+            # ---- live docket (gen_dockets.py -> slim row.dk). TRIMMED HARD for the handset: the
+            # STATUS and the newest filings answer "what actually happened on this case?" on the
+            # phone; shipping 199 entries per lead to a pocket device is payload for no decision.
+            # Status is the one that ends arguments — a CLOSED/RECLOSED case means the owner really
+            # did resolve it, which is the "ya no tiene problema" answer, verified instead of guessed.
+            # None when not pulled; the null-strip drops the key entirely.
+            'dk': (lambda k: ({'s': (k.get('status') or '')[:14], 't': (k.get('type') or '')[:28],
+                               'f': k.get('filed') or '', 'n': k.get('n') or 0,
+                               'e': [{'d': e.get('d', ''), 'x': (e.get('x') or '')[:60]}
+                                     for e in (k.get('ents') or [])[-12:]]} if k else None))(d.get('dk')),
             # ---- the person / property ----
             # booleans only when TRUE — an absent key reads as false in the renderer, so shipping
             # `"hs":0` on 1,300 rows is pure payload for no information
@@ -4011,7 +4021,26 @@ function screenLead(){
   var whoFc = '<div class="grid">'
     + kv('Plaintiff', r.pl ? esc(r.pl) : '<span class="nc">not resolved</span>', 1)
     + kv('Type', r.ft ? esc(r.ft) : '<span class="nc">unknown</span>', 1)
+    + (r.dk ? kv('Court status', '<b>' + esc(r.dk.s || '?') + '</b>'
+        + (r.dk.t ? ' &middot; ' + esc(r.dk.t) : '')
+        + (r.dk.f ? ' &middot; filed ' + esc(r.dk.f) : ''), 1) : '')
     + '</div>';
+  /* LIVE DOCKET on the handset (gen_dockets.py -> row.dk). The clerk's site cannot be deep-linked
+     to a case from a URL, so the filings RIDE WITH THE ROW instead of being a link the caller has
+     to go retype a case number into mid-dial. Newest first: the last thing that happened is what
+     decides the call — a stay motion, a certificate of title, a dismissal. Collapsed by default so
+     it never pushes the dial buttons off the first screen. */
+  if(r.dk && (r.dk.e || []).length){
+    var _de = r.dk.e.slice().reverse();
+    whoFc += '<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px;opacity:.85">'
+      + 'Docket &mdash; newest ' + _de.length + ' of ' + esc(String(r.dk.n || _de.length)) + ' filings</summary>'
+      + '<div style="margin-top:4px;max-height:220px;overflow:auto">'
+      + _de.map(function(e){
+          return '<div style="font-size:11px;padding:3px 0;border-top:1px solid rgba(255,255,255,.08)">'
+               + '<b>' + esc(e.d || '') + '</b> ' + esc(e.x || '') + '</div>';
+        }).join('')
+      + '</div></details>';
+  }
   var fc='';
   if(has(r,'S')) fc += '<span class="chip bad">SECOND CASE on this property</span>';
   if(has(r,'H')) fc += '<span class="chip">open HOA lien</span>';
