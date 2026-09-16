@@ -107,16 +107,26 @@ def _fetch_one(folio):
 
 
 def _fetch_cad(folio):
-    """Non-Miami-Dade folio -> the same fields, off the FDOR cadastral roll. {} on any failure (cached
-    as an explicit miss, same as _fetch_one)."""
-    # The cadastral PARCEL_ID join strips non-digits, so a condo-format folio ('494134CB0170') can
-    # match a DIFFERENT parcel (fl_lp/broward_resolve.py caps those at medium for this reason).
-    # A wrong price is worse than none.
-    if re.search(r'[A-Za-z]', folio):
-        return {}
+    """Non-Miami-Dade folio -> the same fields, off the FDOR cadastral roll.
+
+    {} = a failure worth retrying (network, throttle). {'miss': 'cadastral-exact'} = the roll answered and
+    holds no parcel with exactly this condo-format id; that one is cached and not asked again."""
+    raw = str(folio or '').strip().upper()
     try:
         import fl_cadastral as FC
-        c = FC.enrich(parcel_id=folio) or {}
+        if re.search(r'[A-Z]', raw):
+            # CONDO-FORMAT folio ('494134CB0170'). The roll stores these WITH the letters (fl_cadastral
+            # verified 4/4 live), so ask for that exact PARCEL_ID and accept only an exact echo. Never
+            # FC.enrich(): its digits-only fallback can name a DIFFERENT unit, and a wrong price is worse
+            # than none. This used to refuse letter folios outright, which left every mortgage-pin condo
+            # promotion (7 on 2026-09-16) without a value.
+            hits = [h for h in FC._q("PARCEL_ID='%s'" % raw.replace("'", "''"), 2)
+                    if str(h.get('PARCEL_ID') or '').strip().upper() == raw]
+            if len(hits) != 1:
+                return {'miss': 'cadastral-exact'}
+            c = FC._norm(hits[0])
+        else:
+            c = FC.enrich(parcel_id=raw) or {}
     except Exception as e:
         print('  cadastral %s failed: %s' % (folio, str(e)[:90]))
         return {}
@@ -125,6 +135,16 @@ def _fetch_cad(folio):
     return {'value': int(c.get('market_value') or 0), 'hs': bool(c.get('homestead')),
             'sqft': c.get('living_sqft') or 0, 'built': c.get('year_built') or 0,
             'paOwners': str(c.get('owner') or '')}
+
+
+def _cad_needs(folio, cache):
+    """Ask the cadastral for this folio? Absent from the cache = yes. A cached {} on a condo-format folio
+    is the OLD refusal (or a transient failure), not an answer from the roll, so it is asked again; a
+    {'miss': ...} is a real answer and is not. Numeric folios keep the old rule: any cached entry stands."""
+    key = 'cad:' + folio
+    if key not in cache:
+        return True
+    return bool(re.search(r'[A-Za-z]', folio)) and cache[key] == {}
 
 
 def _is_md(rec):
@@ -164,7 +184,7 @@ def main():
     want, cad_want = _plan(addrs, cache, every)
 
     todo = sorted({f for f in want.values() if f not in cache})
-    cad_todo = sorted({f for f in cad_want.values() if ('cad:' + f) not in cache})
+    cad_todo = sorted({f for f in cad_want.values() if _cad_needs(f, cache)})
     print(f'{len(want)} resolved Miami-Dade parcel(s) in scope · {len(todo)} need a value '
           f'({len(want) - len(todo)} cached) · {len(cad_want)} other-county parcel(s) without a value, '
           f'{len(cad_todo)} to ask the cadastral')

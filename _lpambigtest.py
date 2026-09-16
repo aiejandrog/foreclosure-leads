@@ -109,6 +109,48 @@ chk('values: a value-less Broward folio goes to the cadastral, not Miami-Dade',
     cad == {'CACE-26-900100': '555501210310'})
 chk('values: an old MD-proxy $0 miss does not block the cadastral lookup', 'CACE-26-900100' in cad)
 
+# Condo-format folios: priced from the exact roll parcel only, never the digits-only fallback. FAKE folios.
+import fl_cadastral as _FC   # noqa: E402
+_real_q, _real_enrich = _FC._q, _FC.enrich
+_calls = {'q': [], 'enrich': 0}
+
+
+def _fake_roll(rows):
+    def _q(where, n=5, _tries=3):
+        _calls['q'].append(where)
+        return rows
+    return _q
+
+
+def _no_enrich(**kw):
+    _calls['enrich'] += 1
+    return {'market_value': 999999}
+
+
+try:
+    _FC.enrich = _no_enrich
+    _FC._q = _fake_roll([{'PARCEL_ID': '555501AB0170', 'JV': 321000, 'JV_HMSTD': 50000, 'OWN_NAME': 'ROE MARY'}])
+    _got = LV._fetch_cad('555501ab0170')
+    chk('values: a condo folio is priced from the exact roll parcel',
+        _got.get('value') == 321000 and _got.get('hs') is True)
+    chk('values: the condo lookup asks for the letters, not the digits',
+        bool(_calls['q']) and "PARCEL_ID='555501AB0170'" in _calls['q'][-1])
+    _FC._q = _fake_roll([{'PARCEL_ID': '5555010170', 'JV': 111000}])
+    chk('values: a roll row with a different parcel id is refused',
+        LV._fetch_cad('555501AB0170') == {'miss': 'cadastral-exact'})
+    _FC._q = _fake_roll([])
+    chk('values: no exact parcel on the roll is a recorded miss',
+        LV._fetch_cad('555501AB0170') == {'miss': 'cadastral-exact'})
+    chk('values: condo folios never use the digits-only fallback', _calls['enrich'] == 0)
+finally:
+    _FC._q, _FC.enrich = _real_q, _real_enrich
+chk('values: an old refusal {} on a condo folio is asked again',
+    LV._cad_needs('555501AB0170', {'cad:555501AB0170': {}}))
+chk('values: a recorded condo miss is not asked again',
+    not LV._cad_needs('555501AB0170', {'cad:555501AB0170': {'miss': 'cadastral-exact'}}))
+chk('values: a cached numeric miss keeps the old rule',
+    not LV._cad_needs('555501210310', {'cad:555501210310': {}}))
+
 # --- 5. Sheets CRM: no fake zeros, no auction section, no 9999 on a lis pendens ---------------------
 lp_row = {'case': 'CACE-26-900100', 'st': 'LP', 'stage': 'LP', 'addr': '20 WEST ST, Sample City, FL 33068',
           'owners': 'ROE,MARY', 'county': 'BROWARD', 'value': 0, 'judg': 0, 'auction': '', 'days': 9999,
