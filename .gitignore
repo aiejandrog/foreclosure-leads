@@ -430,3 +430,6 @@ engine.id
 # live case dockets pulled from the MD clerk OCS JSON API (gen_dockets.py) — public record, but
 # same posture as cases_qs.json/*_liens.json: the board ships it inside the ENCRYPTED payload.
 dockets.json
+
+# three_day.py output (per-machine lane snapshot, carries phones)
+three_day_lane.json

@@ -1480,6 +1480,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # None when not pulled; the null-strip drops the key entirely.
             'dk': (lambda k: ({'s': (k.get('status') or '')[:14], 't': (k.get('type') or '')[:28],
                                'f': k.get('filed') or '', 'n': k.get('n') or 0,
+                               # attorney(s) of record for the DEFENDANT side — '' when none
+                               'a': ', '.join(sorted({(p.get('a') or '').strip() for p in (k.get('parties') or [])
+                                                      if str(p.get('t') or '').upper().startswith('DEFEND')
+                                                      and (p.get('a') or '').strip()}))[:60],
                                'e': [{'d': e.get('d', ''), 'x': (e.get('x') or '')[:60]}
                                      for e in (k.get('ents') or [])[-12:]]} if k else None))(d.get('dk')),
             # ---- the person / property ----
@@ -2912,7 +2916,28 @@ function _dayLane(r, lo, hi){ if(r.lp || isBalloon(r)) return false;
    (other-channel) tier for its OWN channel only — the Emailed lane exists to call the people we
    emailed, so suppressing them there would empty the one lane built for the job. A TEXT still
    hides a lead in the email lane. Every other lane has no `ch` and is exempt from nothing. */
+/* 3-DAY (Jesse, 2026-09-16): sale within 3 BUSINESS days, equity at face value (county value above
+   the debt as posted), case filed 2024+. Python twin: three_day.is_three_day() — keep in step. */
+function _bizDays(r){
+  var m = String(r.x||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); if(!m) return null;
+  var t=new Date(+m[3],+m[1]-1,+m[2]), cur=new Date(); cur.setHours(0,0,0,0);
+  if(t<cur) return -1;
+  var n=0; while(cur<t){ cur.setDate(cur.getDate()+1); if(cur.getDay()>0 && cur.getDay()<6) n++; }
+  return n;
+}
+function _caseYear(c){ c=String(c||'').toUpperCase(); var m;
+  if((m=c.match(/^(\d{4})-\d/))) return +m[1];
+  if((m=c.match(/^[A-Z]{4}-(\d{2})-/))) return 2000+(+m[1]);
+  if((m=c.match(/^50(\d{4})[A-Z]{2}/))) return +m[1];
+  return 0; }
+function isThreeDay(r){
+  if(r.lp || isBalloon(r)) return false;
+  var b=_bizDays(r); if(b===null || b<0 || b>3) return false;
+  var owed=(+r.py||0)||(+r.jg||0); if(!(+r.v>0) || !(owed>0) || +r.v<=owed) return false;
+  return _caseYear(r.c) >= 2024;
+}
 var LANES = [
+  {k:'d3',     lbl:'3-DAY',             pred:isThreeDay, hide0:true},
   {k:'email',  lbl:'Emailed / replied', pred:isEmailFU,  hide0:true, ch:'email'},
   {k:'worker', lbl:'Worker',            pred:isWorker,   hide0:true, ch:'worker'},
   {k:'urgent', lbl:'Urgent 0-7',        pred:function(r){ return _dayLane(r,0,7); },   hide0:true},
@@ -4065,6 +4090,8 @@ function screenLead(){
     + (r.dk ? kv('Court status', '<b>' + esc(r.dk.s || '?') + '</b>'
         + (r.dk.t ? ' &middot; ' + esc(r.dk.t) : '')
         + (r.dk.f ? ' &middot; filed ' + esc(r.dk.f) : ''), 1) : '')
+    /* Jesse's first question on a 3-day lead: does the owner have a lawyer? The docket parties say. */
+    + (r.dk ? kv('Owner’s attorney', r.dk.a ? '<b>'+esc(r.dk.a)+'</b>' : '<span class="nc">none of record</span>', 1) : '')
     + '</div>';
   /* LIVE DOCKET on the handset (gen_dockets.py -> row.dk). The clerk's site cannot be deep-linked
      to a case from a URL, so the filings RIDE WITH THE ROW instead of being a link the caller has

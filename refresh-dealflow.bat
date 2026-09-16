@@ -180,6 +180,10 @@ rem  kept coming back: only 291 leads were ever workable and 82.5% of those had 
 rem  skiptrace.py still enforces its own --max-spend and the shared bd_budget daily dollar cap, so
 rem  this raises the throughput ceiling without removing the spend guard.
 python -u skiptrace.py --all --limit 100 >> "%LOG%" 2>&1
+rem  3-DAY lane (Jesse, 2026-09-16): sales within 3 business days with face equity and a 2024+ case get
+rem  their phones FIRST (the tier cap above spent on Tier A while 15 of 18 Tuesday leads had no phone),
+rem  and the morning list lands in %USERPROFILE%\DEALFLOW\3DAY-<date>.md for Jesse.
+python -u three_day.py --trace --max-spend 3 >> "%LOG%" 2>&1
 
 rem [3a-2] Whitepages Pro - DISABLED 2026-08-16 by Alejandro's call. The plan quota has been
 rem exhausted since 08-08 (nine straight nights of first-call 429s, zero results, last success

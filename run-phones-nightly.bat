@@ -34,6 +34,8 @@ rem    ($0.15/lookup), so it makes real progress nightly instead of refusing out
 rem    ~26 nights at this rate -- raise --limit (and the bd_budget.py cap that gates it) if that's too slow.
 python skiptrace.py --all --limit 6 --max-spend 1 >> "%LOG%" 2>&1
 set "RC=%errorlevel%"
+rem 3-DAY lane first (three_day.py): phones for sales within 3 business days, then the morning list.
+python three_day.py --trace --max-spend 2 >> "%LOG%" 2>&1
 
 rem    FIXED 2026-08-07: a skiptrace failure used to `exit /b` here, so the board was never rebuilt
 rem    or pushed. That froze the ENTIRE refresh on an unrelated problem: on 08/07 BatchData returned

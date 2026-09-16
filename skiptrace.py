@@ -250,6 +250,21 @@ def _officer_target(case, llcs):
     return None, None
 
 
+_CASES_FILE_CACHE = {}
+
+
+def _cases_from_file(path):
+    if path not in _CASES_FILE_CACHE:
+        try:
+            with open(path, encoding='utf-8') as f:
+                d = json.load(f)
+            _CASES_FILE_CACHE[path] = {str(c) for c in (d.get('cases') if isinstance(d, dict) else d)}
+        except Exception as e:
+            print('cases-file unreadable (%s): tracing nothing' % str(e)[:80])
+            _CASES_FILE_CACHE[path] = set()
+    return _CASES_FILE_CACHE[path]
+
+
 def select(leads, args, llcs=None):
     """Attach a trace target to every eligible lead. Human owners trace their own mailing address;
     company owners trace the Sunbiz officer/agent behind the LLC (r['_trace_*']), so a company-owned
@@ -271,6 +286,10 @@ def select(leads, args, llcs=None):
                 continue
         elif args.case:
             if _case(r) != args.case:
+                continue
+        elif getattr(args, 'cases_file', ''):
+            # an explicit case list (three_day.py: sale within 3 business days) — outranks the tier
+            if _case(r) not in _cases_from_file(args.cases_file):
                 continue
         elif not args.all:
             if (r.get('tier', '') or '') != args.tier:
@@ -376,6 +395,8 @@ def main():
     ap.add_argument('--tier', default='A')
     ap.add_argument('--all', action='store_true')
     ap.add_argument('--case', default='')
+    ap.add_argument('--cases-file', default='', help='JSON list (or {"cases":[...]}) of case numbers to trace, '
+                                                   'ignoring tier (three_day.py writes one)')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--lp-fresh', type=int, default=0, metavar='DAYS',
                     help='FAST LANE: trace ONLY fresh lis pendens filings (st=LP) with a resolved '
