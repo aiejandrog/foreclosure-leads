@@ -64,6 +64,20 @@ def _statuses():
         return {}
 
 
+def _candidates_guess(a):
+    """(addrGuess, addrWhy) for a row whose defendant's name sits on SEVERAL parcels and nothing picks
+    one (broward_resolve `low`, lp_resolve2 `pass2-revoked`). Every candidate goes in the UNCONFIRMED
+    chip — never one of them as the address: picking one is the coin flip that sent CACE-26-013184's
+    outreach to the owner's homestead while the lis pendens was on her rental (2026-09-16)."""
+    cands = [c for c in (a.get('candidates') or []) if str(c.get('addr') or '').strip()]
+    if len(cands) < 2:
+        return '', ''
+    shown = ' · '.join(str(c['addr']).strip() for c in cands[:4]) + (' …' if len(cands) > 4 else '')
+    ev = str(a.get('evidence') or '')
+    why = ev if ev.upper().startswith('AMBIGUOUS') else 'AMBIGUOUS — ' + ev
+    return 'ONE OF %d PARCELS: %s' % (len(cands), shown), why[:180]
+
+
 def _full_addr(a):
     """'430 NW 72 AVE, Miami, FL 33126' from the resolver's parts. Skiptrace parses this shape."""
     street = str(a.get('addr') or '').strip()
@@ -118,6 +132,10 @@ def build():
             addr_guess = full
             addr_why = '%s confidence — %s' % (conf, str(a.get('evidence') or '')[:180])
             nadv += 1
+        else:
+            addr_guess, addr_why = _candidates_guess(a)
+            if addr_guess:
+                nadv += 1
         mismatch = bool(a.get('ownerMismatch')) and bool(addr or addr_guess)
         if mismatch:
             nmismatch += 1

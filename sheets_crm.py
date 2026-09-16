@@ -45,6 +45,7 @@ DESK = P.DEALFLOW_DIR
 TWIN = os.path.join(DESK, 'Foreclosure Lead Tracker.html')
 WEBHOOK_F = os.path.join(HERE, 'sheets_crm_webhook.url')
 DOOR_MIN_EQ = 30000
+NO_SALE = 9999          # lp_leads' "no auction date" sentinel (tracker_template NO_SALE) — never a day count
 
 HEADERS = ['Status', 'Address', 'Owner', 'Best phone', 'More phones', 'County', 'Case',
            'Auction', 'Days', 'Value', 'Judgment owed', 'Net equity', 'Equity %',
@@ -119,10 +120,14 @@ CONSULT_STATUSES = {'APPOINTMENT', 'OFFER MADE', 'UNDER CONTRACT', 'CONTACTED', 
 
 
 def _money(v):
+    # A $0 in these fields is a number nobody filled (value not priced, no judgment yet), never a
+    # real zero. Printing it is how a fresh lis pendens read "Market value $0 / Judgment $0" to the
+    # team (2026-09-16, CACE-26-013184). '' lets kv() drop it or the caller say what is missing.
     try:
-        return '${:,.0f}'.format(float(v))
+        f = float(v)
     except Exception:
         return ''
+    return '${:,.0f}'.format(f) if f else ''
 
 
 def _prospect_block(r, n, st, pbl, brl, mdl):
@@ -142,19 +147,28 @@ def _prospect_block(r, n, st, pbl, brl, mdl):
     kv('Homestead', 'YES' if r.get('hs') else '')
     kv('Bought', ('%s for %s' % (r.get('bought'), _money(r.get('bprice')))) if r.get('bought') else '')
     kv('Listing status', r.get('zstatus'))
+    is_lp = r.get('st') == 'LP' or r.get('stage') == 'LP'
     sec('MONEY')
-    kv('Market value', _money(r.get('value')))
+    kv('Market value', _money(r.get('value')) or 'not priced yet')
     kv('Assessed value', _money(r.get('assessed_value')))
     kv('Est. annual tax', _money(r.get('etax')))
-    kv('Judgment', _money(r.get('judg')) or ('UNKNOWN' if r.get('ju') else ''))
+    kv('Judgment', _money(r.get('judg')) or ('UNKNOWN' if r.get('ju') else '')
+       or ('none yet - lis pendens stage, no judgment until the lender wins' if is_lp else ''))
     if r.get('value') and r.get('judg'):
         kv('Net equity', _money(float(r['value']) - float(r['judg'])))
         kv('Equity %', str(r.get('eq') or round((float(r['value']) - float(r['judg'])) / float(r['value']) * 100)) + '%')
     kv('Opening bid', _money(r.get('obid')))
     kv('VALUE WARNING', r.get('warn'))
-    sec('AUCTION')
-    kv('Sale date', r.get('auction'))
-    kv('Days out', r.get('days'))
+    # A lis pendens has no sale: it was filed under AUCTION with "Days out 9999" (the no-sale sentinel).
+    if is_lp:
+        sec('CASE - LIS PENDENS (just filed, no sale date yet)')
+        kv('Filed', r.get('filed') or r.get('filedDate'))
+    else:
+        sec('AUCTION')
+        kv('Sale date', r.get('auction'))
+    _d = r.get('days')
+    if not (isinstance(_d, (int, float)) and _d >= NO_SALE):
+        kv('Days out', _d)
     kv('Plaintiff', r.get('plaintiff'))
     kv('Case status', r.get('cstatus'))
     if r.get('saleBkAct'):
@@ -167,10 +181,13 @@ def _prospect_block(r, n, st, pbl, brl, mdl):
         if e.get('liens'):
             src = e
             break
+    # broward_liens / records_liens rows are {d, amt, party, st}: reading only holder/grantee/date
+    # printed a bare "lien $85,500" — no lender, no date, and no SATISFIED, so paid-off mortgages
+    # read as live debt on the tab the team quotes from.
     for li in ((src or {}).get('liens') or [])[:8]:
         kv((li.get('type') or 'lien'), ' '.join(str(x) for x in (
-            li.get('holder') or li.get('grantee') or '', _money(li.get('bal') or li.get('amt')),
-            li.get('rec') or li.get('date') or '') if x).strip())
+            li.get('holder') or li.get('grantee') or li.get('party') or '', _money(li.get('bal') or li.get('amt')),
+            li.get('rec') or li.get('date') or li.get('d') or '', li.get('st') or '') if x).strip())
     for li in (r.get('orliens') or [])[:8]:
         kv('BD ' + str(li.get('t') or 'mortgage'),
            ' '.join(str(x) for x in (li.get('h') or '', _money(li.get('bal')),
@@ -250,6 +267,10 @@ def _chain_note(r, pbl):
         bits.append('mortgage chain records-verified')
     elif r.get('orconf') == 'bd':
         bits.append('chain via BatchData (HOA/code/IRS not checked)')
+    elif r.get('st') == 'LP' or r.get('stage') == 'LP':
+        # lp_leads sets eqfake on every priced LP row (whole value vs a debt nobody has posted yet);
+        # the branch below would call a first-mortgage foreclosure a "JUNIOR-LIEN case".
+        bits.append('LIS PENDENS - no judgment yet, debt not posted; the value is the whole property, not equity')
     elif r.get('eqfake') or r.get('mr'):
         bits.append('JUNIOR-LIEN case - shown equity is gross, a senior mortgage may survive')
     if r.get('warn'):
@@ -329,7 +350,7 @@ def build_rows(rows_src, notes, st, pbl):
             r.get('county') or '',
             case,
             r.get('auction') or '',
-            r.get('days') if r.get('days') is not None else '',
+            '' if _d is None or (isinstance(_d, (int, float)) and _d >= NO_SALE) else _d,
             round(val) if val else '',
             round(judg) if judg else '',
             neq,

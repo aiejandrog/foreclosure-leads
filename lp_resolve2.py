@@ -7,7 +7,8 @@ knock to an innocent stranger. But 40 rows sit unusable, and reading them one by
 failures are NOT all ambiguity — several are mechanical:
   * the legal description literally CONTAINS the street address ("7135 COLLINS AVE APT 1523 ...")
   * a single candidate whose parcel LEGAL carries the SAME unit AND building as the LP legal
-  * a candidate whose owner of record IS the LP defendant, by name, independently of the legal
+  * a candidate FOUND BY THE LEGAL whose owner of record IS the LP defendant, by name — exactly one
+    (owner_rule; a candidate list built from the name itself never qualifies — see its docstring)
 
 Each of those is two independent signals agreeing — the same bar lp_resolve.py calls `high`.
 Anything short of two signals stays blank, exactly as before. This script NEVER overwrites a
@@ -110,6 +111,67 @@ def norm_street(s):
     return s
 
 
+R2_EVIDENCE = 'owner of record IS the LP defendant'
+
+
+def owner_rule(legal, lp_owner, cands):
+    """RULE 2 -> (candidate, why) or None.
+
+    Owner agreement is a SECOND signal only when the candidate list came from an INDEPENDENT key —
+    the legal description. Broward LP rows carry no legal: fl_lp/broward_resolve.py built their
+    candidate list BY the defendant's name and graded it `low` because more than one parcel carries
+    that name. Every candidate there "agrees" by construction, and "the legal does not contradict" is
+    vacuous with no legal — so this rule used to promote the FIRST one: one signal counted twice, a
+    coin flip marked high (2026-09-16: CACE-26-013184 got the defendant's homestead; the mortgage the
+    lis pendens forecloses is her rental two streets over. 121 of 126 pass2 rows had this shape).
+    So: a legal must exist, and exactly ONE candidate may agree without its unit contradicting."""
+    if not str(legal or '').strip():
+        return None
+    lu = unit_of(legal)
+    agree = []
+    for c in cands or []:
+        if not owner_agrees(lp_owner, c.get('owner', '')):
+            continue
+        # owner agreement alone is one signal; a candidate whose unit contradicts the legal is out
+        cu = unit_of(c.get('legal', ''))
+        if not lu or not cu or lu == cu:
+            agree.append(c)
+    if len(agree) != 1:
+        return None
+    return (agree[0], 'the parcel owner of record IS the LP defendant by full name (%s), '
+                      'and the unit/legal does not contradict' % agree[0].get('owner', ''))
+
+
+def revoke_ambiguous(data, stamp=None):
+    """Self-heal for rows the old RULE 2 promoted: re-ask the fixed rule, and revoke any promotion it
+    would not make. lp_addresses.json is gitignored per-machine data, so fixing the rule alone would
+    leave every past coin flip standing as `high`. Only `rung == 'pass2'` RULE-2 rows are considered —
+    a human-verified row, or any other rung, is never touched. Returns the revoked case numbers."""
+    stamp = stamp or time.strftime('%Y-%m-%d')
+    revoked = []
+    for r in data.values():
+        if not isinstance(r, dict) or r.get('rung') != 'pass2' or R2_EVIDENCE not in str(r.get('evidence') or ''):
+            continue
+        cands = r.get('candidates') or []
+        hit = owner_rule(r.get('legal') or '', r.get('lpOwner') or '', cands)
+        if hit and str(hit[0].get('folio') or '').strip() == str(r.get('folio') or '').strip():
+            continue
+        owned = [c for c in cands if c.get('addr')]
+        names = ' · '.join(str(c['addr']).strip() for c in owned[:6]) + (' …' if len(owned) > 6 else '')
+        for k in ('folio', 'addr', 'city', 'zip', 'paOwner', 'value', 'hs', 'beds', 'baths', 'sqft',
+                  'built', 'dor', 'paOwners'):
+            r.pop(k, None)
+        r['confidence'] = 'low'
+        r['needsHuman'] = True
+        r['rung'] = 'pass2-revoked'
+        r['evidence'] = ('AMBIGUOUS (pass2 promotion revoked %s): %d parcels carry the defendant\'s name '
+                         '— %s — and the name cannot pick one. The lis pendens forecloses one recorded '
+                         'mortgage (AcclaimWeb LP details -> DocLink); that mortgage names the parcel.'
+                         % (stamp, len(cands), names or 'no addresses on file'))
+        revoked.append(r.get('case'))
+    return revoked
+
+
 def promote(row, folio, addr, city, zipc, why, owner=''):
     row['folio'] = folio
     row['addr'] = addr
@@ -128,7 +190,11 @@ def main():
     args = ap.parse_args()
 
     data = json.load(open(ADDR, encoding='utf-8'))
-    todo = [r for r in data.values() if r.get('confidence') in ('low', 'none')]
+    revoked = revoke_ambiguous(data)
+    print('revoked %d ambiguous pass2 promotion(s) back to needs-a-human%s\n'
+          % (len(revoked), (': ' + ', '.join(revoked[:8]) + (' …' if len(revoked) > 8 else '')) if revoked else ''))
+    todo = [r for r in data.values() if r.get('confidence') in ('low', 'none')
+            and r.get('case') not in set(revoked)]
     print('second pass over %d unresolved row(s)\n' % len(todo))
     won = 0
 
@@ -170,16 +236,8 @@ def main():
                     won += 1
                     continue
 
-        # ---- RULE 2: candidate whose OWNER is the LP defendant ---------------------------
-        hit = None
-        for c in cands:
-            if owner_agrees(lpo, c.get('owner', '')):
-                # owner agreement alone is one signal; require the legal's unit to agree too
-                cu = unit_of(c.get('legal', ''))
-                if not lu or not cu or lu == cu:
-                    hit = (c, 'the parcel owner of record IS the LP defendant by full name (%s), '
-                              'and the unit/legal does not contradict' % c.get('owner', ''))
-                    break
+        # ---- RULE 2: exactly ONE legal-found candidate whose OWNER is the LP defendant ------
+        hit = owner_rule(legal, lpo, cands)
         # ---- RULE 3: single candidate whose UNIT *and* BLDG both match -------------------
         if not hit and lu:
             for c in cands:
@@ -261,7 +319,7 @@ def main():
     if args.dry_run:
         print('(dry run — nothing written)')
         return
-    if won:
+    if won or revoked:
         tmp = ADDR + '.tmp'
         json.dump(data, open(tmp, 'w', encoding='utf-8'), indent=1, ensure_ascii=False)
         os.replace(tmp, ADDR)
