@@ -1557,6 +1557,14 @@ def make_tracker(leads):
     if os.path.exists(_rqf):
         try: rq = json.load(open(_rqf, encoding='utf-8'))
         except Exception: rq = {}
+    # LIVE DOCKET per case (gen_dockets.py, gitignored). Miami-Dade only. Baked so the board can show
+    # the FILINGS inline: the clerk's SPA refuses to render a case from a URL, so a "go straight to the
+    # docket" LINK is impossible on all three counties — pulling it and shipping it is the way.
+    dkc = {}
+    _dkf = os.path.join(HERE, 'dockets.json')
+    if os.path.exists(_dkf):
+        try: dkc = json.load(open(_dkf, encoding='utf-8'))
+        except Exception: dkc = {}
     # recorded open-mortgage chain per lead (produced by records_liens.py, gitignored) — turns the equity
     # number from a guess into fact by surfacing the real surviving 2nd mortgage.
     rl = {}
@@ -1782,6 +1790,7 @@ def make_tracker(leads):
             'cstatus': r.get('case_status',''), 'mr': bool(r.get('mortgage_risk')) or _ft == 'HOA', 'ftype': _ft,
             'ip': bool(r.get('indiv_plaintiff')), 'oname': r.get('owner_clean',''),
             'ocsqs': cq.get(r.get('owner_clean',''), ''), 'recqs': rq.get(r.get('owner_clean',''), ''),
+            'dk': dkc.get(r.get('Case #','')) or '',   # live docket (gen_dockets.py) -> rendered inline, no clerk round-trip
             'etax': r.get('est_annual_tax',0),
             'ju': bool(r.get('judgment_unknown')),
             'st': r.get('sale_type','FC'), 'obid': r.get('opening_bid',0) or 0,
@@ -2077,6 +2086,20 @@ def make_tracker(leads):
     except Exception as _dde:
         print('merge: dedupe SKIPPED (%s) — duplicate calendar rows may reach the board'
               % str(_dde)[:100])
+
+    # LIVE DOCKET onto EVERY row that has one (gen_dockets.py -> dockets.json), whichever path the
+    # row arrived by. Attaching it HERE rather than only in the Miami-Dade dict above is the whole
+    # point: the FRESH LIS PENDENS lane comes in through slim.extend of lp_leads.json, so a dict-only
+    # attach gave the newest, most workable leads no filings at all — the exact lane the operator
+    # opens Docket on. Case-keyed, so it lands wherever the case is. Never fatal: no cache = no chips.
+    if dkc:
+        _dkn = 0
+        for _r in slim:
+            _c = str(_r.get('case') or '').strip()
+            if _c and not _r.get('dk') and _c in dkc:
+                _r['dk'] = dkc[_c]
+                _dkn += 1
+        print(f'live dockets: {_dkn} lead(s) ship their filings inline (of {len(dkc)} cached)')
 
     # bake code-enforcement liens (code_liens.py, free Miami-Dade CCVIOL ArcGIS, folio-keyed). A code
     # lien is a JUNIOR lien that never shows in the mortgage chain, so a lead reading "90% equity" can

@@ -425,3 +425,8 @@ imghash.key
 # engine identity — MUST NOT be committed. Naming this engine is a decision per-machine,
 # not a fact about the repo. Watchdog fails loud when absent (engine_drift.py).
 engine.id
+.webskip_profile/
+
+# live case dockets pulled from the MD clerk OCS JSON API (gen_dockets.py) — public record, but
+# same posture as cases_qs.json/*_liens.json: the board ships it inside the ENCRYPTED payload.
+dockets.json

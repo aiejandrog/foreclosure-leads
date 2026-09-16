@@ -11287,6 +11287,54 @@ function openDocketSnapshot(caseId){
 }
 
 /* ============================================================================================
+   LIVE DOCKET — the filings themselves, baked onto the row as r.dk by gen_dockets.py.
+
+   WHY THIS EXISTS (2026-09-15) AND WHY IT IS NOT A LINK: a "click Docket, land on the docket"
+   URL cannot be built on any of the three counties. Miami-Dade retired /ocs/Search.aspx, and
+   their replacement SPA deliberately refuses to render a case from a URL — the case-number token
+   mints ("Case Number encrypted successfully") but GetMultipleCaseResult / GetSingleCaseResult
+   both answer empty for it. Broward and Palm Beach publish no case deep-link at all. What DOES
+   work is the OCS JSON API (encrypt -> GetSingleCaseResult, POST, body ""), which answers plain
+   requests even though the web view blocks automation. So we PULL the docket nightly and show it
+   here instead of pointing at a search box the operator then has to retype the case into.
+   Miami-Dade only; Broward/PB rows keep the clerk search link below. */
+function genLiveDocket(r){
+  var d = r && r.dk;
+  if(!d) return _docShell('Docket', '<div class="doc"><p>No docket pulled for this case yet.</p></div>', {key:'docket-live'});
+  var ents = (d.ents || []).slice().reverse();   // newest first — the last filing is the one that matters
+  var h = '<div class="doc"><h1>Docket — ' + esc(r.case || '') + '</h1>';
+  if(d.style) h += '<p style="font-weight:700;margin:2px 0 8px">' + esc(d.style) + '</p>';
+  h += '<p><b>Type:</b> ' + esc(d.type || '—') + ' &nbsp;·&nbsp; <b>Status:</b> ' + esc(d.status || '—')
+     + ' &nbsp;·&nbsp; <b>Filed:</b> ' + esc(d.filed || '—') + '</p>';
+  if((d.parties || []).length){
+    h += '<h3>Parties</h3><ul style="margin:4px 0 10px;padding-left:18px">';
+    d.parties.forEach(function(p){
+      h += '<li><b>' + esc(p.t || '') + '</b> — ' + esc(p.n || '')
+         + (p.a ? ' <span style="opacity:.7">(atty: ' + esc(p.a) + ')</span>' : '') + '</li>';
+    });
+    h += '</ul>';
+  }
+  h += '<h3>Filings <span style="font-weight:400;opacity:.7">(' + esc(String(d.n || ents.length)) + ' total'
+     + ((d.n && d.n > ents.length) ? ', newest ' + ents.length + ' shown' : '') + ')</span></h3>';
+  h += '<table style="width:100%;border-collapse:collapse;font-size:12px"><tbody>';
+  ents.forEach(function(e){
+    h += '<tr style="border-top:1px solid rgba(0,0,0,.08)">'
+       + '<td style="white-space:nowrap;vertical-align:top;padding:4px 10px 4px 0"><b>' + esc(e.d || '') + '</b></td>'
+       + '<td style="padding:4px 0">' + esc(e.x || '')
+       + (e.c ? '<div style="opacity:.7;font-size:11px">' + esc(e.c) + '</div>' : '') + '</td></tr>';
+  });
+  h += '</tbody></table>';
+  h += '<p style="opacity:.7;font-size:11px;margin-top:10px">Pulled ' + esc(d.ts || '')
+     + ' from the Miami-Dade Clerk (OCS). Verify at <a href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener">the clerk</a> — case # ' + esc(r.case || '') + '.</p></div>';
+  return _docShell('Docket — ' + (r.case || ''), h, {key:'docket-live'});
+}
+function openLiveDocket(caseId){
+  var r = DATA.find(function(x){ return x.case === caseId; });
+  if(!r || !r.dk) return;
+  return _openDoc(genLiveDocket(r));
+}
+
+/* ============================================================================================
    OWNER INFORMATION SHEET — bilingual, statute-quote only. NO computed private-sale net range,
    NO reinstatement quote — deleted per legal review. Only Scenario B (surplus) survives, as
    a statutory framework quote. Signed tear-off receipt at bottom for the owner's own records
@@ -16489,7 +16537,8 @@ function render(){
     if(r.ocsqs) gEval.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
     else if(r.cases) gEval.push('<a class="dig recsearch" href="'+esc(liveClerkURL(r.cases))+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' court case search — case # '+r.case+' copied to clipboard. On the search page: Case Number tab → Ctrl+V → Enter. (Their site requires a CAPTCHA-tokened session so we cannot deep-link past the search form.)')+'">Cases</a>');
     else if(r.oname) gEval.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
-    if(r.docket && !/\/ocs\/Search\.aspx/i.test(r.docket)) gEval.push('<a class="dig" href="'+esc(liveClerkURL(r.docket))+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
+    if(r.dk) gEval.push('<a class="dig" href="#" onclick="openLiveDocket(\''+esc(r.case)+'\');return false;" title="THIS case\'s docket — parties, case type, status and the filing history, pulled from the clerk and shown right here. No search box, no retyping the case number (their site cannot be deep-linked).">Docket</a>');
+    else if(r.docket && !/\/ocs\/Search\.aspx/i.test(r.docket)) gEval.push('<a class="dig" href="'+esc(liveClerkURL(r.docket))+'" target="_blank" rel="noopener" title="THIS foreclosure\'s docket — parties, filings, final judgment for this one case. (“Cases” = ALL the owner’s court cases.)">Docket</a>');
     else if(r.cases && r.case) gEval.push('<a class="dig recsearch" href="'+esc(liveClerkURL(r.cases))+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ case # copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' clerk — no deep-link docket for this county. Case # '+r.case+' copied: open Case Number search → paste → Enter to pull THIS foreclosure\'s filings / final judgment.')+'">Docket</a>');
     if(r.pa) gEval.push('<a href="'+esc(r.pa)+'" target="_blank" rel="noopener" title="'+esc(ctyName(r.county)+' Property Appraiser record')+'">Appraiser</a>');
     else if(r.addr) gEval.push('<a href="'+esc(_countySearchURL(r, 'appraiser'))+'" target="_blank" rel="noopener" title="No folio resolved for this parcel — opens the COUNTY APPRAISER\'S OWN address search (not a web search). Type or paste the street number and it will find the parcel.">Appraiser&nbsp;⌕</a>');

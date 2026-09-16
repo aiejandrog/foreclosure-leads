@@ -287,6 +287,16 @@ rem  this repo is PUBLIC). The [4/5] build then bakes the latest call per lead i
 rem  payload as row.qc. Gated on quo.key: no key, no step, zero noise.
 if exist quo.key python -u quo_sync.py --days 3 >> "%LOG%" 2>&1
 
+echo [3p/5] Live dockets (Miami-Dade OCS JSON API) - the FILINGS, shown inline on the board...
+rem  A "click Docket, land on the docket" LINK is impossible: MD retired /ocs/Search.aspx and their
+rem  SPA refuses to render a case from a URL (the case-number token mints but resolves empty);
+rem  Broward/PB publish no case deep-link at all. The OCS JSON API answers plain requests though, so
+rem  pull the docket and BAKE it (row.dk) instead of pointing at a search box. Incremental + capped:
+rem  --stale 21 re-pulls anything older than three weeks so an active case's new filings show up.
+rem  MUST run before the [4/5] rebuild, which reads dockets.json. Never a gate: a clerk outage costs
+rem  the inline docket, never the publish.
+python -u gen_dockets.py --limit 120 --stale 21 >> "%LOG%" 2>&1
+
 echo [4/5] Rebuilding the site (cases + phones + photos baked in)...
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> "%LOG%" 2>&1
 
