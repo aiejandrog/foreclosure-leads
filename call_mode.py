@@ -709,6 +709,26 @@ GATE_ES = ("No hay problema — ¿a qué hora suele estar? ... O si es más fác
            "Es el {phone}, y es sobre la propiedad en {st1}.")
 
 
+# "ARE YOU AN INVESTOR?" (2026-09-16 field debrief, 9107 NW 182 TER). Answered "we specialize in
+# pre-foreclosures" -> a realtor-owner heard a wholesaler and hung up. The honest line is the script's
+# own: "not calling to buy your house". NEVER claim BSG is not an investor (it does flip / cash-for-keys).
+INVESTOR_EN = ("Fair question. No, I'm not calling to buy your house. What I do is help owners see every option "
+               "they've got before that case moves, so whatever you decide, you decide it with all the facts. "
+               "Can I ask you one thing?")
+INVESTOR_ES = ("Buena pregunta. No, no le llamo para comprarle la casa. Lo que hago es ayudar a los dueños a ver "
+               "todas las opciones que tienen antes de que ese caso avance, para que lo que decida, lo decida con "
+               "toda la información. ¿Le puedo preguntar una cosa?")
+# "I'M A REALTOR / SELLING IT MYSELF" — same call. Insure the plan (card 13, the Parachute), never
+# compete with it, and never quote an agent their own home's value ("do your research"). The question
+# lets THEM find the gap between "under contract" and "closed" while the case keeps moving.
+REALTOR_EN = ("Honestly, selling it is a smart move, and you know that market, so I'm not going to throw a "
+              "number at you. One question, though... when you say sell it soon, do you mean under contract, "
+              "or closed?")
+REALTOR_ES = ("La verdad, venderla es una buena jugada, y usted conoce ese mercado, así que no le voy a tirar un "
+              "número. Una pregunta, eso sí... cuando dice venderla pronto, ¿quiere decir bajo contrato, o ya "
+              "cerrada?")
+
+
 def _beat(i):
     """The i-th NEPQ beat (label, purpose, EN, ES) — the SAME strings the full sheet renders."""
     k, w = NEPQ_K[i]
@@ -736,7 +756,8 @@ def _flow():
                  'like they should already know you. Slow on the two NOTS. Then STOP.',
          'listen': 'They will test you here. Whatever they say, do not get defensive.',
          'br': [['Okay / sure / what?', 'frame'], ['What\'s this about? / what do you do?', 'intro30'],
-                ['You buying my house?', 'defusebuy'], ['Not interested', 'obj:15'],
+                ['You buying my house?', 'defusebuy'], ['Are you an investor?', 'investor'],
+                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'],
                 ['I\'m busy, call me back', 'busy'], ['I\'ve got a lawyer / the bank', 'obj:1'],
                 ['Don\'t call me again', 'end:dnc']],
          'ret': 'frame'},
@@ -744,25 +765,45 @@ def _flow():
          'en': INTRO_30_EN, 'es': INTRO_30_ES,
          'tone': 'Humble, one breath, zero pitch. Answer it and hand it back.',
          'listen': 'A skeptic asked. Answer, then stop.',
-         'br': [['Okay, go ahead', 'frame'], ['Not interested', 'obj:15'], ['I\'m good, it\'s handled', 'obj:1']],
+         'br': [['Okay, go ahead', 'frame'], ['Are you an investor?', 'investor'],
+                ["I'm a realtor / selling it myself", 'realtor'], ['Not interested', 'obj:15'], ['I\'m good, it\'s handled', 'obj:1']],
          'ret': 'frame'},
         {'id': 'defusebuy', 'k': 'KILL THE BUYING FEAR',
          'en': DEFUSE_BUY_EN, 'es': DEFUSE_BUY_ES,
          'tone': 'Flat and fast, then a beat. Kill the fear — never argue it.',
          'listen': 'Let it land.',
-         'br': [['Okay... so what is it?', 'frame'], ['Still not interested', 'obj:15']],
+         'br': [['Okay... so what is it?', 'frame'], ["I'm a realtor / selling it myself", 'realtor'],
+                ['Still not interested', 'obj:15']],
          'ret': 'frame'},
+        {'id': 'investor', 'k': '"ARE YOU AN INVESTOR?" — the honest answer',
+         'en': INVESTOR_EN, 'es': INVESTOR_ES,
+         'tone': "Calm and unbothered: it's a fair question, not an accusation. Say the true line, 'I'm not calling "
+                 "to buy your house.' NEVER claim we're not investors, and never say 'we specialize in pre-foreclosures'.",
+         'listen': 'If they relax, set the frame. If they keep probing, stay honest and short. Never dodge.',
+         'br': [['Okay, what is it?', 'frame'], ["I'm a realtor / selling it myself", 'realtor'],
+                ['Still not interested', 'obj:15'], ["Don't call me again", 'end:dnc']],
+         'ret': 'frame'},
+        {'id': 'realtor', 'k': "I'M A REALTOR / SELLING IT MYSELF — insure the plan",
+         'en': REALTOR_EN, 'es': REALTOR_ES,
+         'tone': "Back their plan: you're the parachute, not the competition. NEVER quote their home's value to an "
+                 "agent; ask theirs. Curious on the question, then silence.",
+         'listen': 'Let THEM notice the gap between under contract and closed. If they mention illness or family, '
+                   'stop and be human first.',
+         'br': [['"Closed" in a month (tight)', 'obj:13'], ['"Under contract", plenty of time', 'q2'],
+                ["It's handled, don't worry", 'obj:13'], ['Not interested', 'obj:15']],
+         'ret': 'q2'},
         {'id': 'frame', 'k': 'THE FRAME — set it before any question',
          'en': STATUS_FRAME_EN, 'es': STATUS_FRAME_ES,
          'tone': 'Neutral, expert, unhurried. You are setting the table, not pitching.',
          'listen': 'Their "yeah, that\'d help" is the first micro-yes.',
          'br': [['Sure / that\'d help', 'q1'], ['What kind of options? (do NOT present — ask)', 'q1'],
-                ['I\'ve got it handled', 'obj:1'], ['Not interested', 'obj:15']],
+                ['I\'ve got it handled', 'obj:1'], ['Are you an investor?', 'investor'], ["I'm a realtor / selling it myself", 'realtor'],
+                ['Not interested', 'obj:15']],
          'ret': 'q1'},
         {'id': 'q1', 'k': '1 · ' + q1[0], 'en': q1[2], 'es': q1[3],
          'tone': 'Curious. Open question. ' + q1[1],
          'listen': 'Their answer picks the program. Do not fill the silence.',
-         'br': [['Keep the house', 'q2'], ['Sell / get out / start fresh', 'q2'], ['I don\'t know', 'probe'],
+         'br': [['Keep the house', 'q2'], ['Sell / get out / start fresh', 'q2'], ["Selling it myself / I'm a realtor", 'realtor'], ['I don\'t know', 'probe'],
                 ['It\'s handled / bank / mod', 'obj:1'], ['My lawyer\'s on it', 'obj:2']],
          'ret': 'q2'},
         {'id': 'probe', 'k': 'THEY WENT VAGUE — echo it back',
@@ -787,7 +828,7 @@ def _flow():
          'tone': 'Curious. Whatever plan they name — INSURE it, never fight it. You are the parachute.',
          'listen': 'This surfaces the plan they already have. Cushion it before anything else.',
          'br': [['Bank mod', 'obj:1'], ['Lawyer', 'obj:2'], ['Money\'s coming (check / family)', 'obj:4'],
-                ['Bankruptcy', 'obj:6'], ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
+                ['Bankruptcy', 'obj:6'], ["Listing it / I'm a realtor", 'realtor'], ['Nothing / haven\'t really tried', 'q5'], ['Tried a lot, nothing worked', 'q5']],
          'ret': 'q5'},
         {'id': 'q5', 'k': '5 · ' + q5[0], 'en': q5[2], 'es': q5[3],
          'tone': 'Concerned, low, slow. Assumed statement + ONE tie-down, voice DOWN. Then SILENCE — do not rescue it.',
