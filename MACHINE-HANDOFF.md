@@ -1,6 +1,6 @@
 # MACHINE HANDOFF — read this before you work on DEALFLOW from a different computer
 
-Last updated: **2026-08-26** (ninth task found and disabled; cadence send path hardened)
+Last updated: **2026-09-17** (§1 CONTRADICTED BY THE COMMITS — read the warning in §1 before trusting it; ninth task found and disabled 2026-08-26)
 
 This repo is worked from more than one machine and is also refreshed by GitHub Actions.
 Git carries the **code and the published site**. It does **not** carry the data, the secrets, or the
@@ -33,6 +33,36 @@ day-late lag, and no more "the commit is in main so the site must have it".
 
 ## 1. Who is the runner RIGHT NOW
 
+> ### ⚠ THIS TABLE IS OUT OF DATE. TWO MACHINES ARE PUBLISHING. (2026-09-17)
+>
+> The table below says the desktop is fully stood down. **The commits say otherwise**, and nobody has
+> yet confirmed which machine is supposed to be armed. Until Alejandro says, treat "who is the
+> runner" as an OPEN QUESTION and do not rely on the row below.
+>
+> **The proof, from git alone.** Two builds stamped the same minute with different data — read the
+> census on line 1 of `docs/index.html` (`<!-- DEALFLOW-COVERAGE {...} -->`) at each commit:
+>
+> | build stamp | leads | phones | authored | committed |
+> |---|---|---|---|---|
+> | `2026-09-17T06:45` | 2,297 | 1,148 | 09-17 06:45 | 09-17 **16:42** |
+> | `2026-09-17T06:45` | 2,266 | 737 | 09-17 06:45 | 09-17 06:45 |
+>
+> One build cannot produce two censuses. One machine had been committing locally since 09-14 without
+> reaching origin (three commits authored 09-14/09-16/09-17 at 06:00, all committed 09-17 16:42), so
+> **whichever machine pushes last wins the live site.** The two hold different data: one is frozen at
+> 1,148 phones (its skiptrace has failed nightly since 09-13), the other skip-traces fine but off a
+> much smaller cache (709 → 714 → 719 → 737 → 739 over five days) and so publishes a board ~409
+> dialable numbers poorer.
+>
+> **It cost real things, twice in one day.** 439 phone numbers were stripped off the live board on
+> 09-15 through the then-ungated `run-replies-daily.bat` (see CLAUDE.md §"Publish gates"), and that
+> evening `main` itself was overwritten and emptied by a stray publish from a checkout that had lost
+> its history — recovered from `rescue/main-ad1643f-2026-09-17`, with history rehashed.
+>
+> **Before arming or disarming anything, re-read §0 and the NINTH TASK warning below**: the installer
+> cannot see `DealFlow Cadence`, so a handoff done exactly as §2 describes leaves outreach running on
+> the machine it just disarmed.
+
 | Machine | Role today | Tasks |
 |---|---|---|
 | **Laptop** | **ARMED — the live runner** | 8 pipeline tasks enabled |
@@ -41,6 +71,10 @@ day-late lag, and no more "the commit is in main so the site must have it".
 
 Evidence the laptop is live: commits `9ff826b`/`43ed370`/`8efda91` (08-24) and `f7492a5`/`e0ab111`/
 `b8b771e` (08-25) — the full nightly chain, plus `github-actions[bot]` on both days.
+
+**That evidence is from 08-24/08-25 and no longer describes 09-14 onward.** It is kept because it
+shows what the laptop's nightly chain looks like in the log, which is how you will recognise which
+machine produced any given commit.
 
 ### ⚠ There is a NINTH task, and the installer cannot see it (found 2026-08-26)
 
