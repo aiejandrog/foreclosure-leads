@@ -48,6 +48,16 @@ def rec(name, ok, detail=''):
     print(('  ok   ' if ok else '  FAIL ') + name + (('  — ' + str(detail)[:130]) if detail else ''))
 
 
+def _raises(fn):
+    """True when fn() refuses. A guard that fails open is the bug this whole file exists about."""
+    try:
+        fn()
+        return False
+    except G.UnsendableError:
+        return True
+
+
+
 # ---- 1. the two messages that actually shipped -------------------------------------------------
 print('\nTHE REAL ONES')
 real_bad = [
@@ -150,6 +160,85 @@ rec('a failed state write is announced, not swallowed',
     'WAS EMAILED but cadence_state.json could not be written' in src_c)
 rec('the old single end-of-run dump is gone',
     "json.dump(state, open(STATE, 'w', encoding='utf-8'), indent=1)" not in src_c)
+
+# ---- 7. every commercial message offers a way out ----------------------------------------------
+# CAN-SPAM 15 U.S.C. 7704(a)(3). Before 2026-09-17 nothing in the system offered one: stopEN and
+# stopES in tracker_template.html render empty, and Alejandro's cold body never carried a line at
+# all. The opt-out the machine understood ("stop", "unsubscribe" -> replies.is_stop_text) was real
+# and worked; no homeowner was ever told it existed.
+print('\nOPT-OUT')
+rec('a send with neither header nor body line is refused',
+    bool(G.check('Subject here', 'A perfectly ordinary sales letter.', 'a@b.com', unsub='')))
+rec('...the List-Unsubscribe header alone satisfies it',
+    not G.check('Subject here', 'A perfectly ordinary sales letter.', 'a@b.com',
+                unsub='<mailto:x@y.com?subject=unsubscribe>'))
+rec('...and a sentence in the body alone satisfies it',
+    not G.check('Subject here', 'Reply unsubscribe and I will take you off the list.',
+                'a@b.com', unsub=''))
+# The reason the rule is opt-in rather than always-on: a hand-typed reply mid-conversation goes
+# through the same choke point, and an unsubscribe footer does not belong on one.
+rec('a caller that passes no unsub at all is not judged on it',
+    not G.check('Re: your property', 'Hey Toni, are you free Thursday?', 'a@b.com'))
+
+rec('the header carries the mailto arm that today actually suppresses',
+    G.unsubscribe_header('alejandro@bsgflorida.com')
+    == '<mailto:alejandro@bsgflorida.com?subject=unsubscribe>')
+rec('...https first when a page exists (RFC 8058 order)',
+    G.unsubscribe_header('a@b.com', 'https://bsgflorida.com/u')
+    == '<https://bsgflorida.com/u>, <mailto:a@b.com?subject=unsubscribe>')
+rec('no login, no header -- refused rather than silently unsubscribable',
+    G.unsubscribe_header('') == '')
+# One-click POSTs to the https arm. Advertising it beside a mailto-only header points Gmail at an
+# endpoint that does not exist, which is worse than not advertising it.
+rec('One-Click is advertised only beside an https arm', G.one_click_post('') == ''
+    and G.one_click_post('https://bsgflorida.com/u') == 'List-Unsubscribe=One-Click')
+
+# The word the mailto subject uses has to be one the existing detector already matches, or the
+# unsubscribe lands in the inbox and nothing happens. This is the whole reason the arm is mailto.
+try:
+    import replies as _R
+    rec('"unsubscribe" is already an opt-out to replies.is_stop_text()', _R.is_stop_text('unsubscribe'))
+except Exception as _e:
+    rec('"unsubscribe" is already an opt-out to replies.is_stop_text()', False, str(_e)[:60])
+
+# ---- 8. the physical mailing address ------------------------------------------------------------
+# 15 U.S.C. 7704(a)(5). _sig() builds the signature by dropping empty fields, so a missing addr
+# leaves a letter that reads completely normal and is missing the one line the statute requires.
+print('\nPOSTAL ADDRESS')
+rec('a populated sender.json without addr is refused',
+    _raises(lambda: G.require_sender_address({'name': 'Alex', 'phone': '(786) 631-1823'})))
+rec('...and with one is fine',
+    G.require_sender_address({'name': 'Alex', 'addr': '1 Main St, Miami, FL 33101'}))
+rec('an EMPTY config is left alone (preview/dry-run path)', G.require_sender_address({}))
+
+# ---- 9. wiring: the headers reach the wire ------------------------------------------------------
+print('\nOPT-OUT WIRING')
+for mod in ('outreach_email.py', 'send_server.py'):
+    src = io.open(os.path.join(HERE, mod), encoding='utf-8').read()
+    fn = src.split('def _smtp_send(', 1)[1].split('\ndef ', 1)[0] if 'def _smtp_send(' in src else ''
+    rec('%s: sets List-Unsubscribe' % mod, "msg['List-Unsubscribe'] = unsub" in fn)
+    rec('%s: passes the header into the guard' % mod, 'unsub=unsub' in fn)
+    rec('%s: One-Click only via one_click_post()' % mod,
+        "msg['List-Unsubscribe-Post']" in fn and '_MG.one_click_post(' in fn)
+src_o = io.open(os.path.join(HERE, 'outreach_email.py'), encoding='utf-8').read()
+rec('outreach_email checks the postal address before a real send',
+    '_MG.require_sender_address(snd)' in src_o)
+
+# ---- 10. the copy itself carries the line -------------------------------------------------------
+print('\nCOPY')
+import outreach_copy as _OC
+for _name in ('email_body', 'email_body_short'):
+    _b = getattr(_OC, _name)(first='Maria', sale_date='2026-09-30')
+    rec('%s() carries an opt-out sentence' % _name, bool(G._OPTOUT_SENTENCE.search(_b)))
+rec('the baked template carries it too (the board renders from this exact string)',
+    bool(G._OPTOUT_SENTENCE.search(_OC.email_body_template())))
+rec('...and still holds every required token', _OC.missing_tokens(_OC.email_body_template()) == ())
+# UNSUB_URL is the one-line switch from the reply-based opt-out to the hosted page. Empty today
+# because nothing in this system serves HTTP; a link that records nothing is a broken promise.
+rec('UNSUB_URL empty renders the reply line, set renders the link',
+    'unsubscribe' in _OC._unsub('').lower()
+    and _OC._unsub('https://bsgflorida.com/u').endswith('https://bsgflorida.com/u'))
+
 
 print('\n%d passed, %d failed' % (len(PASS), len(FAIL)))
 for f in FAIL:

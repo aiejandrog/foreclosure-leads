@@ -876,6 +876,16 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
 
 
 # ---------------------------------------------------------------- SMTP
+def _unsub_url():
+    """outreach_copy.UNSUB_URL, or '' when the copy module could not be imported. One source: the
+    sentence in the body and the header arm here must never disagree about whether a page exists."""
+    try:
+        import outreach_copy as _OC
+        return str(getattr(_OC, 'UNSUB_URL', '') or '').strip()
+    except Exception:
+        return ''
+
+
 def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     """Sends a text/plain email via Gmail SMTP over SSL. Raises on failure.
     Returns (message_id, server_response).
@@ -889,7 +899,8 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     # layer and so were invisible to every existing check. Raising here means the caller's step is
     # not consumed and the lead goes out correctly tomorrow.
     import mail_guard as _MG
-    _MG.assert_sendable(subj, body, to_addr)
+    unsub = _MG.unsubscribe_header(user, _unsub_url())
+    _MG.assert_sendable(subj, body, to_addr, unsub=unsub)
     sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
@@ -897,6 +908,15 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     msg['Subject'] = subj
     msg['Message-ID'] = make_msgid(domain=sender.split('@', 1)[-1])
     msg['Date'] = formatdate(localtime=True)
+    # The opt-out Gmail and Outlook render as their OWN button at the top of the message, which is
+    # both more visible than anything in the body and more trusted, because it is the mail client's
+    # UI rather than a link from a stranger. Costs two headers and no HTML, so the body stays
+    # text/plain. The mailto arm lands in the scanned mailbox where is_stop_text() already reads it.
+    if unsub:
+        msg['List-Unsubscribe'] = unsub
+        _post = _MG.one_click_post(_unsub_url())
+        if _post:
+            msg['List-Unsubscribe-Post'] = _post
     msg.set_content(body)
 
     ctx = ssl.create_default_context()
@@ -953,6 +973,12 @@ def main():
     # ---- load
     creds = _load_credentials()
     snd = _load_sender()
+    # Checked here rather than in _smtp_send: by then the batch is composed and half of it may
+    # already have gone out. sender.json is gitignored, so this is the only thing in the system
+    # that can notice the address is missing. Dry runs and previews pass an empty snd and are
+    # deliberately unaffected.
+    if args.send:
+        _MG.require_sender_address(snd)
     leads = _load_leads()
     optouts = _load_optouts()
     ledger = _load_ledger()
