@@ -1748,7 +1748,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
 
 
 def coverage_rows(slim, dial_cases, optouts=None, deads=None):
-    """-> (rows, dropped_pii) : one SLIM row for every lead the dial queue does not carry.
+    """-> (rows, n_suppressed) : one SLIM row for every lead the dial queue does not carry.
 
     WHY (2026-09-17, Alejandro): the board's nine funnel lanes cover all 2,297 leads; Call Mode
     carried ~400. TRACE alone is 1,068 leads — 46% of the book — and none of it was reachable from
@@ -2670,7 +2670,10 @@ function fillScript(t, r){
     .replace(/\s{2,}/g, ' ').replace(/\s+,/g, ',').trim();
 }
 
-function loadNotes(){try{notes=JSON.parse(localStorage.getItem(LS)||'{}');}catch(e){notes={};}}
+function loadNotes(){try{notes=JSON.parse(localStorage.getItem(LS)||'{}');}catch(e){notes={};}
+  /* A teammate's merge lands here, not through save() — see _FCGEN. Without this bump the lane
+     counts would keep reporting the state from before the pull. */
+  if(typeof _FCGEN === 'number') _FCGEN++;}
 function saveNotes(){try{localStorage.setItem(LS,JSON.stringify(notes));}catch(e){
   /* A swallowed setItem failure (private mode, quota) lost every log while the UI kept stamping
      green checks. Say it, loudly, and put it in the error chip. */
@@ -2683,7 +2686,10 @@ function saveNotes(){try{localStorage.setItem(LS,JSON.stringify(notes));}catch(e
    first time a teammate's DO-NOT-CONTACT merges in: the merge dies, the opt-out never lands, and the
    only symptom is a lead that stays dialable. Caught by exercising _mergeLead in a browser — it is
    invisible to `node --check`, which is why the parse guard alone is not enough here. */
-function save(){ saveNotes(); }
+/* _FCGEN (declared with the cache it invalidates, down in the board-lane block) is bumped here
+   because save() is the one place this page's own note writes land. loadNotes() bumps it too, for
+   the writes that arrive as a teammate's merge. */
+function save(){ _FCGEN++; saveNotes(); }
 function _nowTS(){ return nowTS(); }
 function _today(){ return today(); }
 /* syncFreshness paints a staleness class onto the board's #syncbtn. The phone has no such button,
@@ -2759,9 +2765,26 @@ function funnelOf(r){
    dial list and excludes every case already in it, so the two sets are disjoint by construction. */
 function allLeads(){ return ROWS.concat(COV); }
 
+/* MEMOISED, because head() runs it on EVERY paint and the whole book is now 2,297 leads, not the
+   dial queue's 400. Measured at 6.6 ms a call on desktop node over a realistic 2,297-lead mix —
+   several times that on the handset this page is written for, on every outcome tap. The board
+   carries its own comment about a 36.8 ms-per-paint pass being worth deleting; this one is cheaper
+   to keep correct than to re-earn.
+   INVALIDATED ON TWO THINGS, and it has to be both:
+     _FCGEN  — any note write, ours (save) or a teammate's (loadNotes). Lanes turn on touches.
+     the DAY  — _saleDays recomputes days-to-auction live, so a tab left open past midnight must
+                not keep yesterday's URGENT. Re-keying on the date costs one Date() per paint. */
+/* DECLARED HERE, with the cache it guards, rather than beside save(). `var` hoists across the
+   whole script so the bump in save() resolves either way — but keeping the counter next to the
+   thing it invalidates is what makes the pair reviewable, and it keeps this block testable on
+   its own (_funnelparitytest.py evaluates exactly this region). */
+var _FCGEN = 0, _FCC = null, _FCCK = '';
 function funnelCounts(){
+  var key = _FCGEN + '|' + new Date().toDateString() + '|' + ROWS.length + '|' + COV.length;
+  if(_FCC && _FCCK === key) return _FCC;
   var c = {}; FUNNEL_ORDER.forEach(function(k){ c[k] = 0; });
   allLeads().forEach(function(r){ var s = funnelOf(r); if(s && c[s] != null) c[s]++; });
+  _FCC = c; _FCCK = key;
   return c;
 }
 function funnelRows(k){
