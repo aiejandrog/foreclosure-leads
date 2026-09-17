@@ -303,6 +303,23 @@ was rebuilt locally every morning while `DEALFLOW-PHONES-STATUS.txt` said `OK - 
 `publish_verify.bat` now asks the remote whether `HEAD` is an ancestor of `origin/main` and writes
 the status file from the answer. A push that did not land says so, loudly, and does not retry.
 
+**A publish run from the wrong folder destroyed the GitHub copy of the repo (2026-09-17, ~17:41).**
+A publish was run on the desktop from a directory that was **not** the project checkout — it held the
+built site and little else. Its `git push origin main` replaced main on GitHub with a single commit,
+`ec8bf31` "site: first publish of the built DEALFLOW pages": `docs/` and a README, **318 source
+modules, every `.bat` and the whole commit history gone from the remote in one push.** Recovered
+only because a cloud session happened to be holding a clone from eighteen minutes earlier; main is
+back at the real history and the docs-only commit is kept on `docs-first-publish-ec8bf31`.
+
+`repo_guard.bat` now runs first in `refresh-dealflow.bat`, `run-phones-nightly.bat` and
+`run-leads.bat`. It refuses to build or publish unless the pipeline's own files are present
+(`foreclosure_leads.py`, `tracker_template.html`, `paths.py`, `CLAUDE.md`), the checkout is a git
+work tree, **the history is more than 20 commits**, and origin is this project. The history check is
+the one that matters: a built-site folder is a perfectly valid git repo pointing at the right
+remote — the offending directory passed every git check there is — and the only thing that
+distinguished it was that the code was absent and its history was one commit deep. The guard only
+ever refuses; it never resets or re-clones.
+
 The cloud watchdog was blind to all of this because it read the `Updated` stamp on the live page,
 which is the **build** time — and the 06:00/06:45 jobs rebuild every morning whether or not any new
 data arrived. `freshness-watchdog.yml` now also reads what reached `origin/main` and alarms on two

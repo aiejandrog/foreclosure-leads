@@ -10,6 +10,11 @@ rem                         | 5 shared daily budget spent mid-run (benign, rest 
 rem Night one clears the backlog (~$40); every night after only pays for NEW leads (cache dedupes the rest).
 cd /d "%~dp0"
 set "LOG=%~dp0phones-run.log"
+
+rem  REPO GUARD FIRST. A publish job is the most destructive command in this project and
+rem  until 2026-09-17 none of them checked what they were about to push. See repo_guard.bat.
+call repo_guard.bat "%~dp0" "%LOG%"
+if errorlevel 1 exit /b 1
 set "STATUS=%USERPROFILE%\DEALFLOW\DEALFLOW-PHONES-STATUS.txt"
 set "STAMP=%date% %time%"
 

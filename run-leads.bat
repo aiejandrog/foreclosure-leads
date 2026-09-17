@@ -1,6 +1,11 @@
 @echo off
 cd /d "%~dp0"
 echo ==== run %date% %time% ==== >> leads-run.log
+
+rem  REPO GUARD FIRST. A publish job is the most destructive command in this project and
+rem  until 2026-09-17 none of them checked what they were about to push. See repo_guard.bat.
+call repo_guard.bat "%~dp0" "leads-run.log"
+if errorlevel 1 exit /b 1
 rem  PULL THE CODE BEFORE BUILDING WITH IT (2026-09-10). Same fix, same reason as
 rem  refresh-dealflow.bat: the only pull here was the one before the push at the bottom, so a run
 rem  built yesterday's code, committed the result, and then rebased the new commits into history -

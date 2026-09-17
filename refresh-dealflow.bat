@@ -11,6 +11,11 @@ rem  phone failure never blocks the leads; only pushes when data changed.
 rem =====================================================================
 cd /d "%~dp0"
 set "LOG=leads-run.log"
+
+rem  REPO GUARD FIRST. A publish job is the most destructive command in this project and
+rem  until 2026-09-17 none of them checked what they were about to push. See repo_guard.bat.
+call repo_guard.bat "%~dp0" "%LOG%"
+if errorlevel 1 exit /b 1
 echo.>> "%LOG%"
 echo ==================== REFRESH %date% %time% ====================>> "%LOG%"
 
