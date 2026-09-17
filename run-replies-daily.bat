@@ -41,6 +41,44 @@ if errorlevel 1 (
   echo REBUILD FAILED - board not published, replies still on disk only >> "%LOG%"
   goto :end
 )
+REM ===================== GATE BEFORE PUBLISH (added 2026-09-17) =====================
+REM This path published the live board with NO GATES AT ALL. refresh-dealflow.bat has run
+REM healthcheck + publish_guard before its push since 2026-08-19; run-leads.bat runs
+REM publish_guard. This one rebuilt docs/index.html and docs/call and pushed them straight to
+REM the site, every morning at 7:00, with nothing between the build and the world.
+REM
+REM IT FIRED. Commit 2d6f36d, 2026-09-15 19:11, "replies: morning scan baked into board (auto)":
+REM 2,266 leads / 709 phones published over a live board carrying 2,297 / 1,148. publish_guard's
+REM phones rule is (ratio 0.85, floor 25) -- 709 is below 1,148 x 0.85 = 976 and the drop is 439,
+REM so BOTH conditions were met and it would have blocked. It was never invoked. 439 dialable
+REM numbers came off the live site and off both call pages, and the log said success.
+REM
+REM Same tiered gate as refresh-dealflow.bat, deliberately identical down to the ordering:
+REM   healthcheck exit 2 = COMPLIANCE/systemic (lost 362 stay flags, >=2 sources down) -> HARD stop
+REM   healthcheck exit 1 = coverage floor only -> ADVISORY, publish_guard decides
+REM   publish_guard  exit 2 = corrupt page, or materially poorer than live -> HARD stop
+REM `if errorlevel 2` matches exit>=2, so it MUST be tested before `if errorlevel 1`.
+REM
+REM A BLOCKED PUBLISH IS NOT A LOST REPLY. replies.py and optout_sync.py have already run above,
+REM so the reply is on disk and the opt-out is in the ledger before this gate is reached. The only
+REM thing skipped is overwriting a good live board with a worse one -- which CLAUDE.md names as
+REM correct behaviour, not a bug to route around.
+echo [gate] healthcheck + publish guard before anything goes live... >> "%LOG%"
+python -u healthcheck.py >> "%LOG%" 2>&1
+if errorlevel 2 (
+  echo     !! GATE: healthcheck COMPLIANCE fail - publish SKIPPED, replies still saved. >> "%LOG%"
+  goto :end
+)
+if errorlevel 1 (
+  echo     !! GATE: healthcheck coverage below floor - ADVISORY, publish_guard decides. >> "%LOG%"
+)
+python -u publish_guard.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     !! GATE: publish_guard BLOCKED the build - publish SKIPPED, replies still saved. >> "%LOG%"
+  goto :end
+)
+REM ==================================================================================
+
 git add docs/index.html docs/call >> "%LOG%" 2>&1
 git commit -m "replies: morning scan baked into board (auto)" >> "%LOG%" 2>&1
 if not errorlevel 1 (
