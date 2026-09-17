@@ -28,7 +28,7 @@ Run:  python replies.py            # check the last 30 days
       python replies.py --days 90
       python replies.py --dry-run  # show what it would search, touch nothing
 """
-import os, sys, json, re, imaplib, email
+import os, sys, json, re, imaplib, email, time
 from email.header import decode_header, make_header
 from email.utils import parseaddr
 from datetime import datetime, timezone, timedelta
@@ -510,8 +510,32 @@ def main():
     found = dict(prior)
     new_alerts = []
     try:
-        M = imaplib.IMAP4_SSL('imap.gmail.com')
-        M.login(user, pw)
+        # Connect with a bounded retry on TRANSIENT network faults only (added 2026-09-17).
+        # The 06:45 scheduled run died on `[Errno 11001] getaddrinfo failed` -- DNS, not
+        # credentials -- and the broad `except` at the bottom of this block does `return` BEFORE
+        # the write, so a single blip at that hour silently skipped the entire scan while the task
+        # still exited 0. That is how replies.json sat frozen at 09-11 for six days. Wi-Fi is
+        # frequently not up yet at 05:30-06:45; the network deserves a second look, the password
+        # does not. imaplib.IMAP4.error (AUTHENTICATIONFAILED) is NOT an OSError, so a bad app
+        # password still falls straight through to the handler below on the first try -- no
+        # pointless retries against an account that could lock.
+        M = None
+        for attempt, pause in enumerate((5, 15, 0), 1):
+            try:
+                M = imaplib.IMAP4_SSL('imap.gmail.com', timeout=45)
+                M.login(user, pw)
+                break
+            except OSError as e:
+                if M is not None:
+                    try:
+                        M.shutdown()
+                    except Exception:
+                        pass
+                    M = None
+                if not pause:
+                    raise
+                print(f'  IMAP attempt {attempt} failed ({str(e)[:70]}) — retrying in {pause}s')
+                time.sleep(pause)
         M.select('INBOX')
         # ---- PASS 1: replies FROM a known owner address (rewritten 2026-09-13) -------------------
         # The old PASS 1 fired one IMAP SEARCH per owner address -- 4,306 of them on 2026-09-13 --
