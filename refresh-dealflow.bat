@@ -70,6 +70,7 @@ rem  run still reported success. -X theirs mirrors .github/workflows/refresh.yml
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
 git push origin main >> "%LOG%" 2>&1
   if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
+  python -u publish_site.py >> "%LOG%" 2>&1
   echo     fresh leads pushed - enrichment continues below.>> "%LOG%"
 )
 :afterearly
@@ -370,6 +371,19 @@ rem  FAIL could never stop a bad board from going live from this machine; and pu
 rem  corrupt-page + enrichment-regression check that stopped the conflict-marker outage in CI) was
 rem  never in this bat at all. Same gates as the cloud workflow now: either one failing skips the
 rem  push, the board stays on its last good build, and the run still writes its report.
+rem  [4c/5] HARD-MONEY BALLOON BOOK (Jesse's refi play). Moved off GitHub Actions 2026-09-17.
+rem  It ran in the cloud only because the cloud used to publish; now that this repo is private and
+rem  the site is a separate public repo, keeping it there would mean metered Actions minutes AND a
+rem  book built from broward_mortgages.json as last COMMITTED (2026-09-06) while this machine
+rem  refreshed the real file nightly and never pushed it. Here it reads today's sweep.
+rem  Never fatal: this is an additive page and must not cost the board.
+echo [4c/5] Hard-money balloon book (sweep -^> enrich -^> price -^> publish)...
+python -u fl_lp/broward_mortgages.py --months 2 >> "%LOG%" 2>&1
+python -u hardmoney_enrich.py --limit 120 >> "%LOG%" 2>&1
+python -u hardmoney_values.py >> "%LOG%" 2>&1
+python -u hardmoney_balloon.py --months 30 >> "%LOG%" 2>&1
+if errorlevel 1 (echo     note: balloon book step failed - board publish continues.>> "%LOG%")
+
 echo [gate] healthcheck + publish guard before anything goes live...
 rem  TIERED GATE (2026-08-20). healthcheck exit 2 = COMPLIANCE/systemic fail (lost §362 stay flags,
 rem  or >=2 upstream sources down) -> HARD block. exit 1 = coverage-floor fail only (value/lien %) ->
@@ -392,7 +406,7 @@ if errorlevel 1 (
   goto :end
 )
 echo [5/5] Publishing to the live site...
-git add docs/index.html docs/call >> "%LOG%" 2>&1
+git add docs/index.html docs/call docs/hm-balloon-q7v3n8 >> "%LOG%" 2>&1
 git commit -m "refresh: auto lead + phone update" >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo     nothing changed - site already current.>> "%LOG%"
@@ -410,6 +424,10 @@ if errorlevel 1 (
   timeout /t 6 /nobreak >nul
   git push origin main >> "%LOG%" 2>&1
 )
+rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo is private now, so the
+rem  lead data and history are no longer world-readable; docs/ still commits here (it is
+rem  publish_guard's baseline) and publish_site.py mirrors the pages Pages actually serves.
+python -u publish_site.py >> "%LOG%" 2>&1
 echo     Pushed - live site updates in ~1-2 min.>> "%LOG%"
 echo     DONE - pushed. Refresh the site in ~1-2 min.
 

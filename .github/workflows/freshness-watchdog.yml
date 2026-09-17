@@ -21,7 +21,7 @@ jobs:
         with:
           script: |
             const STALE_DAYS = 3;   // 1-day misses (PC asleep, catches up) don't alarm; 3+ = broken
-            const URL = 'https://aiejandrog.github.io/foreclosure-leads/';
+            const URL = 'https://aiejandrog.github.io/dealflow-board/';
             const res = await fetch(URL, { cache: 'no-store' });
             if (!res.ok) { core.setFailed(`Site fetch failed: HTTP ${res.status}`); return; }
             const html = await res.text();

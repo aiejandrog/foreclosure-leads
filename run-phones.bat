@@ -20,5 +20,7 @@ rem  4 commits stacked up and the live site sat frozen at 08-14 for two days whi
 rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
 git pull --rebase --autostash -X theirs origin main
 git push origin main || (timeout /t 6 /nobreak >nul & git push origin main)
+rem  publish the built pages to the PUBLIC site repo (see publish_site.py)
+python -u publish_site.py
 echo ==== done - live site updates in ~1-2 min ====
 pause

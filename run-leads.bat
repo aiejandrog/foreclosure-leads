@@ -29,5 +29,9 @@ rem  4 commits stacked up and the live site sat frozen at 08-14 for two days whi
 rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
 git pull --rebase --autostash -X theirs origin main >> leads-run.log 2>&1
 git push origin main >> leads-run.log 2>&1
+rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo went private so the lead
+rem  data and history stop being world-readable; docs/ still lands here for publish_guard's
+rem  baseline, and publish_site.py mirrors the built pages to the repo Pages actually serves.
+python -u publish_site.py >> leads-run.log 2>&1
 :done
 echo ==== done ==== >> leads-run.log

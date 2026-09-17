@@ -78,6 +78,10 @@ rem  4 commits stacked up and the live site sat frozen at 08-14 for two days whi
 rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
 git push origin main >> "%LOG%" 2>&1 || (timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1)
+rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo is private now, so the
+rem  lead data and history are no longer world-readable; docs/ still commits here (it is
+rem  publish_guard's baseline) and publish_site.py mirrors the pages Pages actually serves.
+python -u publish_site.py >> "%LOG%" 2>&1
 
 rem The status file must state the phones outcome honestly. It previously always said "phones
 rem refreshed", which would now be a lie on any degraded run.

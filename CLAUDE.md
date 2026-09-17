@@ -56,7 +56,7 @@ ledger before every send, and identity keys publish hashed via `'@' + _addr_key(
 
 ## The website
 
-Live: https://aiejandrog.github.io/foreclosure-leads/ (GitHub Pages from `docs/`)
+Live: https://aiejandrog.github.io/dealflow-board/ (GitHub Pages from `docs/`)
 
 - **Design source of truth is `tracker_template.html`** — the `<style>` blocks + `render()`.
 - Preview loop: edit `tracker_template.html` → `python build_preview.py` → open `design-preview.html`

@@ -6270,7 +6270,7 @@ function openBulkText(){
 /* CALL MODE URL, one definition for every surface. Served from GitHub Pages the sibling folder is
    right there; opened as the Desktop plaintext twin (file://) there is no ./call/ next to it, so
    fall back to the live site. Anything else (localhost preview) also gets the live site. */
-var _CALL_FALLBACK = 'https://aiejandrog.github.io/foreclosure-leads/call/';
+var _CALL_FALLBACK = 'https://aiejandrog.github.io/dealflow-board/call/';
 /* `sub` is a seat page: 'carlos' -> call/carlos/. Sanitised because it is pasted straight into a
    URL. No arg = the main seat, which is the path already bookmarked on Alejandro's phone. */
 function _seatSeg(sub){ return sub ? String(sub).replace(/[^a-z0-9-]/gi,'').toLowerCase()+'/' : ''; }
@@ -13404,7 +13404,7 @@ function genMorningWorker(lane, autostart){
     // is not inside a user gesture is popup-blocked, which is exactly what stalled this worker three
     // times on 2026-08-16 (see the blocked-popup rescue above and _openDoc's reason for existing).
     +       'if(CALLQ.length){'
-    +         'main.innerHTML+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'https://aiejandrog.github.io/foreclosure-leads/call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
+    +         'main.innerHTML+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'https://aiejandrog.github.io/dealflow-board/call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
     +       '}'
     // textContent does NOT decode HTML entities — writing "&#x2713;" here printed the raw
     // seven characters on screen ("34 of 34 &#x2713;") instead of a checkmark. Every OTHER
