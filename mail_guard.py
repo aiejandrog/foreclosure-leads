@@ -53,8 +53,13 @@ _EMPTY_MONEY = re.compile(r'\$\s*(?=[.,;:!?)]|$)')
 # An opt-out the recipient can actually see in the words of the message. CAN-SPAM wants the notice
 # to be clear and conspicuous; a List-Unsubscribe header alone renders as the mail client's own
 # button, which is good but is not under our control and does not always show.
+# Both languages: the Spanish bodies carry their own sentence and an English-only pattern would
+# read them as having none. Accented and unaccented both, because the bodies are written without
+# accents and a human composing on the board will type them.
 _OPTOUT_SENTENCE = re.compile(r'\bunsubscribe\b|\bopt[\s-]?out\b|\btake you off\b'
-                              r'|\bremove you\b|\bstop receiving\b', re.I)
+                              r'|\bremove you\b|\bstop receiving\b'
+                              r'|\bquitar\b|\bno recibir m[aá]s\b'
+                              r'|\bcancele su suscripci[oó]n\b|\bsaco de la lista\b', re.I)
 
 
 def unsubscribe_header(login, url=''):

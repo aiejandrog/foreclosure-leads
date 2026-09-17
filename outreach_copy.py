@@ -58,9 +58,21 @@ BOOKING_URL_INVESTOR = 'cal.com/bsgflorida/investor-refi-call'
 UNSUB_URL = ''
 
 
-def _unsub(url=None):
-    """The opt-out sentence. Never empty -- that is the whole point of this function."""
+def _unsub(url=None, lang='en'):
+    """The opt-out sentence. Never empty -- that is the whole point of this function.
+
+    The word each language asks for is one replies.is_stop_text() already matches: "unsubscribe"
+    hits OPTOUT_PHRASES directly, and so does a bare "quitar". Naming a word the detector does not
+    know would be the worst outcome available here -- an opt-out the owner believes they sent and
+    that nothing in the system ever acts on. Spanish stays unaccented to match the bodies it sits
+    under.
+    """
     u = UNSUB_URL if url is None else url
+    if lang == 'es':
+        if u:
+            return 'Para dejar de recibir estos correos, cancele su suscripcion aqui: %s' % u
+        return ('Si prefiere no recibir mas mensajes mios, responda con la palabra QUITAR '
+                'y lo saco de la lista.')
     if u:
         return 'To stop receiving these emails, unsubscribe here: %s' % u
     return ("If you'd rather not hear from me again, reply with the word unsubscribe "

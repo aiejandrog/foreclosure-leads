@@ -654,6 +654,10 @@ def _compose_single(r, snd, lang='en'):
     case_tag_es = (f' (Número de certificado/caso {case_no})' if td else f' (Caso Número {case_no})') if case_no else ''
     street = _MG.safe_street(_g(r, 'addr', 'Address'))
     sig = _sig(snd)
+    # Every body below ends on the signature, so the opt-out rides with it in the body's own
+    # language. The cold body does NOT use these -- it comes from outreach_copy's baked template,
+    # which carries its own _unsub() after the SIG token, and adding one here would print two.
+    sig_en, sig_es = sig + '\n\n' + _OC_unsub('en'), sig + '\n\n' + _OC_unsub('es')
     sN = snd.get('name') or '[YOUR NAME]'
 
     # SUBJECT -- prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of
@@ -688,7 +692,7 @@ def _compose_single(r, snd, lang='en'):
             f'Catch up the loan, rework it, sell on your terms, or fight the case -- they all '
             f"work better with time on the clock. That's the whole reason for this note.\n\n"
             f'If you want a straight rundown of where you stand, call or text me. No cost, '
-            f'no obligation.\n\n{sig}\n\n'
+            f'no obligation.\n\n{sig_en}\n\n'
             f''
         )
         body_es = (
@@ -701,7 +705,7 @@ def _compose_single(r, snd, lang='en'):
             f'caso -- todo funciona mejor con tiempo en el reloj. Ese es el unico punto de '
             f'esta nota.\n\n'
             f'Si quiere un repaso directo de donde esta parado, llameme o mandeme un texto. '
-            f'Sin costo, sin compromiso.\n\n{sig}\n\n'
+            f'Sin costo, sin compromiso.\n\n{sig_es}\n\n'
         )
     elif td:
         body_en = (
@@ -712,7 +716,7 @@ def _compose_single(r, snd, lang='en'):
             f"before the date (we can buy as-is and close fast if that's the fit), or claim "
             f"the surplus if it sells for more than what's owed.\n\n"
             f'Want to know which one fits? Call or text me. No cost, and if another path beats '
-            f"selling, I'll say so.\n\n{sig}\n\n"
+            f"selling, I'll say so.\n\n{sig_en}\n\n"
             f''
         )
         body_es = (
@@ -725,7 +729,7 @@ def _compose_single(r, snd, lang='en'):
             f'cerrar rapido si eso le sirve), o reclamar el excedente si se vende por mas de '
             f'lo que se debe.\n\n'
             f'Quiere saber cual le conviene? Llameme o mandeme un texto. Sin costo, y si otro '
-            f'camino es mejor que vender, se lo digo.\n\n{sig}\n\n'
+            f'camino es mejor que vender, se lo digo.\n\n{sig_es}\n\n'
         )
     else:
         plaint_bit_en = f' by {plaintiff}' if plaintiff else ''
@@ -757,7 +761,7 @@ def _compose_single(r, snd, lang='en'):
             f'friends.\n\n'
             f'All I need is a reply with a good phone number and the best time to reach you. '
             f"Or call or text me and I'll set it up.\n\n"
-            f'{sig}\n\n'
+            f'{sig_en}\n\n'
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
@@ -778,7 +782,7 @@ def _compose_single(r, snd, lang='en'):
             f'y quedamos como amigos.\n\n'
             f'Lo unico que necesito es que me responda con un buen numero de telefono y la mejor '
             f'hora para llamarlo. O llameme o mandeme un texto y lo coordinamos.\n\n'
-            f'{sig}'
+            f'{sig_es}'
         )
         # ---- ALEJANDRO'S COPY, ENGLISH COLD BODY -------------------------------------------
         # He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME
@@ -815,6 +819,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
     owner = _owner_name(head) or 'Property Owner'
     first = _first_name(head) or owner
     sig = _sig(snd)
+    sig_en, sig_es = sig + '\n\n' + _OC_unsub('en'), sig + '\n\n' + _OC_unsub('es')
     sN = snd.get('name') or '[YOUR NAME]'
     n = len(all_leads)
 
@@ -853,7 +858,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
         f'conversation.\n\n'
         f"If it'd help, I can walk the numbers on any of them. No cost, no obligation -- and "
         f"if selling isn't your best move on a given property, I'll tell you that "
-        f'straight.\n\n{sig}\n\n'
+        f'straight.\n\n{sig_en}\n\n'
     )
     body_es = (
         f"Hola {first},\n\nSoy {sN}, de Biscayne Solutions Group. "
@@ -867,12 +872,23 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
         f'una sola conversacion.\n\n'
         f'Si le sirve, puedo repasar los numeros de cualquiera de ellas. Sin costo, sin '
         f'compromiso -- y si vender no es su mejor opcion en alguna, se lo digo tal '
-        f'cual.\n\n{sig}\n\n'
+        f'cual.\n\n{sig_es}\n\n'
     )
     return {
         'en': {'subj': subj_en, 'body': body_en},
         'es': {'subj': subj_es, 'body': body_es},
     }[lang]
+
+
+def _OC_unsub(lang):
+    """outreach_copy._unsub for this language, or '' if the copy module is unavailable -- the same
+    degrade-do-not-crash contract _ALEX_TPL_EN uses above. An empty tail loses the sentence, never
+    the send; the List-Unsubscribe header still carries the mechanism."""
+    try:
+        import outreach_copy as _OC2
+        return _OC2._unsub(lang=lang)
+    except Exception:
+        return ''
 
 
 # ---------------------------------------------------------------- SMTP

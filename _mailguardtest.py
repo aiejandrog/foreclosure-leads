@@ -195,11 +195,8 @@ rec('One-Click is advertised only beside an https arm', G.one_click_post('') == 
 
 # The word the mailto subject uses has to be one the existing detector already matches, or the
 # unsubscribe lands in the inbox and nothing happens. This is the whole reason the arm is mailto.
-try:
-    import replies as _R
-    rec('"unsubscribe" is already an opt-out to replies.is_stop_text()', _R.is_stop_text('unsubscribe'))
-except Exception as _e:
-    rec('"unsubscribe" is already an opt-out to replies.is_stop_text()', False, str(_e)[:60])
+import replies as _R
+rec('"unsubscribe" is already an opt-out to replies.is_stop_text()', _R.is_stop_text('unsubscribe'))
 
 # ---- 8. the physical mailing address ------------------------------------------------------------
 # 15 U.S.C. 7704(a)(5). _sig() builds the signature by dropping empty fields, so a missing addr
@@ -238,6 +235,46 @@ rec('...and still holds every required token', _OC.missing_tokens(_OC.email_body
 rec('UNSUB_URL empty renders the reply line, set renders the link',
     'unsubscribe' in _OC._unsub('').lower()
     and _OC._unsub('https://bsgflorida.com/u').endswith('https://bsgflorida.com/u'))
+
+
+# ---- 11. every body, both languages, exactly one opt-out -----------------------------------------
+# outreach_email.py carries eight inline bodies of its own (early / follow-final / portfolio, EN and
+# ES) that outreach_copy never touches. They had no opt-out line either, and two of them are the
+# only Spanish a homeowner ever gets. Rendering is the only honest check here: wiring {sig} to the
+# wrong tail, or letting the cold body take a sentence it already has from the baked template, both
+# look fine in the source and are obvious the moment a body is built.
+print('\nEVERY BODY')
+import outreach_email as _OE
+_SND = {'name': 'Alex Gonzalez', 'title': 'Acquisitions', 'llc': 'Biscayne Solutions Group LLC',
+        'phone': '(786) 631-1823', 'email': 'alejandro@bsgflorida.com',
+        'addr': '1 SE 2nd Ave Ste 2000, Miami, FL 33131', 'web': 'BSGflorida.com'}
+_LEADS = {
+    'early': {'case': 'CACE-25-001', 'addr': '123 MAIN ST, MIAMI, FL- 33101', 'owners': 'Maria Lopez'},
+    'cold': {'case': 'CACE-25-002', 'addr': '456 OAK AVE, MIAMI, FL- 33102', 'owners': 'Jose Ruiz',
+             'saleDate': '2026-09-30'},
+    'tax deed': {'case': 'TD-25-003', 'addr': '789 PINE RD, MIAMI, FL- 33103', 'owners': 'Ana Diaz',
+                 'saleDate': '2026-09-30', 'type': 'TD'},
+}
+for _label, _r in _LEADS.items():
+    for _lang in ('en', 'es'):
+        _body = _OE._compose_single(_r, _SND, lang=_lang)['body']
+        # the EXACT sentence, not a regex hit: one sentence matches the pattern more than once
+        rec('%s/%s carries exactly one opt-out' % (_label, _lang),
+            _body.count(_OC._unsub(lang=_lang)) == 1)
+        rec('%s/%s opt-out is visible to the guard' % (_label, _lang),
+            bool(G._OPTOUT_SENTENCE.search(_body)))
+for _lang in ('en', 'es'):
+    _body = _OE._compose_portfolio(_LEADS['cold'], [_LEADS['early']], _SND, lang=_lang)['body']
+    rec('portfolio/%s carries exactly one opt-out' % _lang,
+        _body.count(_OC._unsub(lang=_lang)) == 1)
+
+# The Spanish body must not name a word the detector has never heard of. An opt-out the owner
+# believes they sent and that nothing acts on is worse than no opt-out sentence at all.
+rec('the ES sentence names a word replies.is_stop_text() matches',
+    _R.is_stop_text('QUITAR') and _R.is_stop_text('quitar'))
+rec('...and the EN sentence does too', _R.is_stop_text('unsubscribe'))
+rec('the guard reads Spanish, not only English',
+    bool(G._OPTOUT_SENTENCE.search(_OC._unsub(lang='es'))))
 
 
 print('\n%d passed, %d failed' % (len(PASS), len(FAIL)))
