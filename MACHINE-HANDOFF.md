@@ -33,6 +33,54 @@ day-late lag, and no more "the commit is in main so the site must have it".
 
 ## 1. Who is the runner RIGHT NOW
 
+> ### ⚠ DISPUTED as of 2026-09-17 — the table below does NOT match what origin/main shows
+>
+> **Two machines are armed and both are publishing the board.** This is not an inference from
+> config; it is in the commit log. On 09-16 and again on 09-17 the 06:45 reply bake committed
+> **twice**, at the same trigger minute, and the 06:00 phones job committed twice the same day:
+>
+> | day | job | commit A | commit B |
+> |---|---|---|---|
+> | 09-16 | reply bake | `9d2c500` 06:45 | `fd0ff4f` 06:45 |
+> | 09-16 | phones | `1b5e7c2` 06:00 | `c91eb0d` 07:20 |
+> | 09-17 | reply bake | `e5ff186` 06:45 | `c2d596f` 06:45 |
+> | 09-17 | phones | `bade50f` 06:00 | `24b5155` 09:29 |
+>
+> They are carrying **different boards**, and the coverage census on line 1 of `docs/index.html`
+> says so: one machine publishes **2,297 leads / 1,148 phones**, the other **2,266 / 737**.
+> Whichever pushes last wins the live site, which is why the counts flip under you.
+>
+> **Which box is which is NOT settled by git** — both commit as
+> `Alejandro Gonzalez <agonzalez0311707@gmail.com>` in `-0400` (§6.4), so the metadata is
+> identical. What distinguishes them is behaviour, and it cuts both ways:
+>
+> - **The punctual one** fires at exactly 06:00:19 and 06:45:17 every day. Its skip-trace is
+>   **dead** — exit 2 on 09-13 (provider rejected the key) and exit 3 since — so its phone count
+>   has been frozen at 1,148 for five days. Its pushes stopped landing on 09-14 and six commits
+>   sat on it until 09-17 16:42.
+> - **The late one** fires whenever it wakes (09-15 19:11, 09-16 07:20, 09-17 09:29). Its
+>   skip-trace **works** — 709 → 714 → 719 → 737 → 739 across those runs. It has 31 fewer leads.
+>
+> Punctual-and-never-late reads like the desktop (§6.3: never sleeps, no battery). Late-and-
+> catching-up reads like the laptop (§4: `StartWhenAvailable`, and its 05:30/06:00 tasks landed
+> at 10:21/10:33 on 08-22). But the *stale* board is the late one's, and §3 predicts the stale
+> board on the **desktop**. The two readings contradict, so do not act on either.
+>
+> **Settle it in one command, on each box:**
+>
+> ```
+> pwsh -c "Get-ScheduledTask | ? TaskName -like '*ealFlow*' | ft TaskName,State"
+> ```
+>
+> Nine rows. Whichever box shows `Ready` is armed. Then disarm the loser **before** copying §3
+> state, or the disarmed box's ledgers overwrite the winner's.
+>
+> Correction to the paragraph below: `install-tasks.ps1 -DisableLocal` **does** catch
+> `DealFlow Cadence` now — it enumerates live tasks with `-match '^(DEALFLOW|DealFlow)'` rather
+> than working from its list of eight. `-Enable` still does **not** bring it back up, because that
+> path only walks `desktop-setup/tasks/*.xml`. So disarming is complete and arming is not: after
+> `-Enable`, turn cadence on by name or outreach stays off.
+
 | Machine | Role today | Tasks |
 |---|---|---|
 | **Laptop** | **ARMED — the live runner** | 8 pipeline tasks enabled |
@@ -238,6 +286,29 @@ Two settings decide whether the eight actually fire:
 
 Both gates run before the push in `refresh-dealflow.bat`. If a gate blocks, the live site stays on
 its last good build — that is the intended behaviour, not a failure.
+
+**They did not run everywhere, and that made them optional (fixed 2026-09-17).** `refresh-dealflow.bat`
+was the only runner with both. `run-phones-nightly.bat` had neither and `run-leads.bat` had no
+healthcheck, so the compliance hard block was walkable: refresh refuses to publish on exit 2 but
+leaves the rebuilt board on disk, and the phones job rebuilt from the same `leads_final.json` and
+published it 30 minutes later with nothing asking. Measured on 09-15: the reply bake put a 709-phone
+board over the live 1,148-phone one at 19:11 and the phones job put 714 over it at 19:12 — both
+drops publish_guard would have blocked. Both jobs now run healthcheck (exit 2 blocks) then
+publish_guard, the same order and the same advisory treatment of exit 1.
+
+**And no runner ever checked that its push landed.** Every one of them ended with `git push`, an
+optional 6s retry, and then an unconditional "published, live in ~1-2 min" — neither exit code was
+read. That cost two multi-day blackouts a month apart (08-16, and 09-14→09-17) in which the board
+was rebuilt locally every morning while `DEALFLOW-PHONES-STATUS.txt` said `OK - published`.
+`publish_verify.bat` now asks the remote whether `HEAD` is an ancestor of `origin/main` and writes
+the status file from the answer. A push that did not land says so, loudly, and does not retry.
+
+The cloud watchdog was blind to all of this because it read the `Updated` stamp on the live page,
+which is the **build** time — and the 06:00/06:45 jobs rebuild every morning whether or not any new
+data arrived. `freshness-watchdog.yml` now also reads what reached `origin/main` and alarms on two
+runners publishing the same job in one day, on commits that sat unpushed, and on the 05:30 refresh
+going quiet. `node _watchdogtest.js` is its contract test (it extracts the shipped script out of the
+YAML rather than re-typing it); `--live` runs it against this repo's current log.
 
 ---
 

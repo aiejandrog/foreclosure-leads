@@ -70,7 +70,9 @@ rem  run still reported success. -X theirs mirrors .github/workflows/refresh.yml
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
 git push origin main >> "%LOG%" 2>&1
   if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
-  echo     fresh leads pushed - enrichment continues below.>> "%LOG%"
+  rem  Neither push's exit code was read here, so "fresh leads pushed" printed whether or not
+  rem  anything reached origin. publish_verify.bat asks the remote instead of assuming.
+  call publish_verify.bat "%LOG%" "-" "fresh leads (early publish)"
 )
 :afterearly
 
@@ -410,8 +412,10 @@ if errorlevel 1 (
   timeout /t 6 /nobreak >nul
   git push origin main >> "%LOG%" 2>&1
 )
-echo     Pushed - live site updates in ~1-2 min.>> "%LOG%"
-echo     DONE - pushed. Refresh the site in ~1-2 min.
+rem  "Pushed - live site updates in ~1-2 min" used to print unconditionally: the retry's exit code
+rem  was discarded, so a run whose push never landed ended by announcing a successful publish. That
+rem  is how the 2026-08-16 and 2026-09-14 blackouts both stayed invisible for days. Ask the remote.
+call publish_verify.bat "%LOG%" "-" "nightly board + phones"
 
 rem  STANDING BUY-BOXES. Jose asked for "Miami Gardens, 4+ bed / 2+ bath, for my son" and that got
 rem  answered ONCE, by hand, as a dated HTML sheet. Two more matching cases were filed inside the

@@ -1,8 +1,9 @@
 name: DEALFLOW freshness watchdog
 
-# Runs in the FREE GitHub cloud (can reach the published site; the county scrape stays on the
-# residential PC where it isn't IP-blocked). Every day it checks how old the live data is and, if
-# the refresh silently failed, opens/updates a GitHub issue -> GitHub emails Alejandro. No secrets.
+# Runs in the cloud on purpose: it is the ONLY observer that neither runner can lie to. Both PCs
+# report their own health into files on their own desktops, and when a runner's push stops landing
+# it keeps writing "OK - published" to that file every morning. This job reads what the world can
+# actually see - the live page, and what reached origin/main.
 
 on:
   schedule:
@@ -11,6 +12,7 @@ on:
 
 permissions:
   issues: write                # so it can open/comment the alert issue with the built-in token
+  contents: read               # listCommits, for the runner-behaviour checks below
 
 jobs:
   check:
@@ -48,3 +50,166 @@ jobs:
               await github.rest.issues.update({ owner, repo, issue_number: open.data[0].number, state: 'closed' });
               core.info(`Data fresh again (${days}d) — closed the stale-data alert.`);
             }
+
+      # ------------------------------------------------------------------------------------------
+      # The check above cannot see the failure that actually happened, and that is why this one
+      # exists. `upddate` is the BUILD time, not the DATA time. The 06:00 phones job and the 06:45
+      # reply bake rebuild the board from leads_final.json every single morning, so the stamp reads
+      # fresh every single morning — whether or not a new lead, a new phone number or a new lien
+      # ever entered the file. A pipeline that has stopped producing looks identical to a healthy
+      # one from the front of the page.
+      #
+      # So this step ignores the page and reads what reached origin/main. Commit metadata alone —
+      # message, author date, committer date, author login — is enough to catch all three failures
+      # found on 2026-09-17, and it costs one API call:
+      #
+      #   1. TWO RUNNERS. MACHINE-HANDOFF.md §1 allows exactly one armed machine. On 09-16 and
+      #      09-17 the 06:45 reply bake committed TWICE, same message, same trigger minute, from
+      #      two machines with two different boards (2,297 leads/1,148 phones vs 2,266/737).
+      #      Whichever pushed last won the live site, so the counts flipped under Alejandro.
+      #   2. A PUSH THAT NEVER LANDED. The 09-14, 09-16 and 09-17 nightlies committed on time and
+      #      did not reach origin until 09-17 16:42 — visible as a committer date days after the
+      #      author date. For three mornings the desktop status file said "OK - published".
+      #   3. THE ENRICHMENT JOB GOING QUIET. The 05:30 refresh is the only job that scrapes new
+      #      leads; the other two just republish what is already on disk. It last published on
+      #      09-13, and nothing anywhere noticed, because the other two kept the date stamp fresh.
+      #
+      # FAIL-LOUD: a check that cannot be evaluated alarms rather than passing quietly. That rule
+      # is the whole point — see engine_drift.py, which was written after the same lesson.
+      - name: Check the runners are behaving
+        if: always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const LOOKBACK_DAYS = 4;
+            const ENRICH_SILENT_DAYS = 3;   // no "refresh:" publish in this many days = the scrape job is not publishing
+            // Committer date this far past author date = the push did not land when it was built.
+            // On a healthy run the two are seconds apart — the pre-push rebase replays the commit
+            // immediately — so 6h is ~2000x normal and still catches a same-day blackout.
+            const PUSH_LATE_HOURS = 6;
+            const { owner, repo } = context.repo;
+            // `since` filters on the COMMITTER date, which is what makes check 2 possible at all:
+            // a board built on the 14th and pushed on the 17th enters the window on the day it
+            // landed, still carrying the 14th as its author date.
+            const since = new Date(Date.now() - LOOKBACK_DAYS * 86400000).toISOString();
+
+            let commits;
+            try {
+              const r = await github.rest.repos.listCommits({ owner, repo, sha: 'main', since, per_page: 100 });
+              commits = r.data;
+            } catch (e) {
+              core.setFailed(`Cannot read the commit log (${e.message}) — refusing to report healthy on an unchecked repo.`);
+              return;
+            }
+            if (!commits.length) {
+              core.setFailed(`No commits on main in the last ${LOOKBACK_DAYS} days. Every runner is silent.`);
+              return;
+            }
+
+            // The scheduled jobs and the exact message each one commits. Anything else is a human
+            // or the cloud balloon book, and is none of this check's business.
+            const JOBS = [
+              { key: 'phones',  job: 'the 06:00 phones job (run-phones-nightly.bat)',  re: /^phones: nightly refresh/ },
+              { key: 'replies', job: 'the 06:45 reply bake (run-replies-daily.bat)',   re: /^replies: morning scan/ },
+              { key: 'refresh', job: 'the 05:30 refresh (refresh-dealflow.bat)',       re: /^refresh: (auto lead|fresh leads)/ },
+            ];
+            const classify = (msg) => (JOBS.find(j => j.re.test(msg)) || {}).key || null;
+            const jobOf = (key) => (JOBS.find(j => j.key === key) || {}).job || key;
+
+            const scheduled = commits
+              .filter(c => c.author?.login !== 'github-actions[bot]')
+              .map(c => ({
+                sha: c.sha.slice(0, 7),
+                msg: (c.commit.message || '').split('\n')[0],
+                authored: new Date(c.commit.author.date),
+                committed: new Date(c.commit.committer.date),
+              }))
+              .map(c => ({ ...c, key: classify(c.msg) }))
+              .filter(c => c.key);
+
+            const problems = [];
+
+            // 1. the same scheduled job publishing twice in one day = a second armed machine
+            const byDay = new Map();
+            for (const c of scheduled) {
+              const k = `${c.key}|${c.authored.toISOString().slice(0, 10)}`;
+              if (!byDay.has(k)) byDay.set(k, []);
+              byDay.get(k).push(c);
+            }
+            for (const [k, group] of byDay) {
+              if (group.length < 2) continue;
+              const [key, day] = k.split('|');
+              const when = group.map(c => `\`${c.sha}\` at ${c.authored.toISOString().slice(11, 16)}Z`).join(', ');
+              problems.push(
+                `**Two runners.** ${jobOf(key)} published **${group.length} times on ${day}** (${when}). ` +
+                `That job runs once per machine per day, so two commits means two machines are armed — ` +
+                `against MACHINE-HANDOFF.md §1. Their worker state (\`optouts.json\`, \`worker_notes.json\`, ` +
+                `\`skiptrace_results.json\`) is gitignored and therefore forked, and whichever pushes last ` +
+                `wins the live board. If you deliberately re-ran that job by hand that day, ignore this line.`
+              );
+            }
+
+            // 2. a commit that sat on a machine instead of reaching origin
+            const late = scheduled.filter(c => (c.committed - c.authored) / 3600000 > PUSH_LATE_HOURS);
+            if (late.length) {
+              const rows = late.map(c =>
+                `\`${c.sha}\` ${c.msg} — built ${c.authored.toISOString().slice(0, 16)}Z, reached origin ${c.committed.toISOString().slice(0, 16)}Z`
+              ).join('\n');
+              problems.push(
+                `**A runner's push was not landing.** ${late.length} scheduled commit(s) sat on a machine ` +
+                `for more than ${PUSH_LATE_HOURS}h after they were built before reaching origin:\n\n${rows}\n\n` +
+                `While that was true the board was rebuilt locally every morning and the live site did not ` +
+                `move. Check \`git log origin/main..HEAD\` and \`git status\` on that machine for a rebase ` +
+                `left in progress.`
+              );
+            }
+
+            // 3. the only job that scrapes new leads has gone quiet
+            const lastRefresh = scheduled.filter(c => c.key === 'refresh')
+              .sort((a, b) => b.authored - a.authored)[0];
+            const refreshAgeDays = lastRefresh
+              ? Math.floor((Date.now() - lastRefresh.authored.getTime()) / 86400000)
+              : LOOKBACK_DAYS;
+            if (refreshAgeDays >= ENRICH_SILENT_DAYS) {
+              problems.push(
+                `**No new leads are being published.** ${jobOf('refresh')} is the only job that scrapes and ` +
+                `enriches; the phones job and the reply bake just rebuild the board from the leads already on ` +
+                `disk. Its last publish was ` +
+                (lastRefresh ? `\`${lastRefresh.sha}\`, ${refreshAgeDays} day(s) ago` : `more than ${LOOKBACK_DAYS} days ago`) +
+                `, yet the board has been republished since — which is why the "Updated" stamp on the site still ` +
+                `looks current. Check \`leads-run.log\` on the armed machine: does the newest ` +
+                `\`==== REFRESH ====\` banner have a matching \`==== done ====\`?`
+              );
+            }
+
+            const existing = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: 'runner-drift' });
+
+            if (!problems.length) {
+              core.info('Runners look healthy: one publish per job per day, pushes landing, refresh publishing.');
+              if (existing.data.length) {
+                await github.rest.issues.update({
+                  owner, repo, issue_number: existing.data[0].number, state: 'closed' });
+                core.info('Closed the open runner-drift alert.');
+              }
+              return;
+            }
+
+            const body =
+              `The cloud watchdog looked at what actually reached \`origin/main\` in the last ` +
+              `${LOOKBACK_DAYS} days and found:\n\n` +
+              problems.map(p => `- ${p}`).join('\n\n') +
+              `\n\n---\n_The "Updated" stamp on the live board cannot catch any of these: it is the BUILD ` +
+              `time, and the 06:00 and 06:45 jobs rebuild the board every morning whether or not any new ` +
+              `data arrived. This check re-runs daily and closes itself when the runners are clean._`;
+
+            if (existing.data.length) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: existing.data[0].number, body });
+            } else {
+              await github.rest.issues.create({
+                owner, repo,
+                title: `⚠️ DEALFLOW runners: ${problems.length} problem(s) on origin/main`,
+                body, labels: ['runner-drift'] });
+            }
+            core.setFailed(`${problems.length} runner problem(s) — see the runner-drift issue.`);

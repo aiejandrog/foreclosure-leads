@@ -18,6 +18,14 @@ rem  workups) were NOT gitignored, so one run of this bat would have published f
 rem  numbers to a PUBLIC repo. Now: rebuild, gate, and add ONLY the two built site paths - never -A.
 rem  Same contract as refresh-dealflow.bat.
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> leads-run.log 2>&1
+rem  healthcheck runs FIRST, and it was missing entirely: this file had publish_guard but not the
+rem  compliance gate, so it could publish a board that had lost its 362 bankruptcy-stay flags.
+rem  publish_guard only compares counts against the live board - it cannot see a compliance fail,
+rem  and it says so itself (bkstay is deliberately not one of its fields, because duplicating a
+rem  blocking rule in two files means fixing one and believing you fixed both). Exit 2 blocks;
+rem  exit 1 is the coverage floor only and stays advisory, same as refresh-dealflow.bat.
+python healthcheck.py >> leads-run.log 2>&1
+if errorlevel 2 (echo GATE: healthcheck COMPLIANCE fail - publish SKIPPED, live site left intact >> leads-run.log & goto :done)
 python publish_guard.py >> leads-run.log 2>&1
 if errorlevel 1 (echo PUBLISH GUARD BLOCKED - live site left intact >> leads-run.log & goto :done)
 git add docs/index.html docs/call >> leads-run.log 2>&1
@@ -29,5 +37,7 @@ rem  4 commits stacked up and the live site sat frozen at 08-14 for two days whi
 rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
 git pull --rebase --autostash -X theirs origin main >> leads-run.log 2>&1
 git push origin main >> leads-run.log 2>&1
+rem  This file did not even have the 6s retry, let alone a check that the push landed. Ask the remote.
+call publish_verify.bat "leads-run.log" "-" "weekly lead refresh"
 :done
 echo ==== done ==== >> leads-run.log
