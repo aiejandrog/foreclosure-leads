@@ -2722,9 +2722,23 @@ def make_tracker(leads):
     if _rp_leaked:
         raise SystemExit('docs/index.html: %d reply key(s) still carry an email address and would be '
                          'published in plaintext: %s' % (len(_rp_leaked), ', '.join(_rp_leaked)[:200]))
-    tpl = tpl.replace('__REPLIES__', _esc_json(_replies))
+    # THE WORDS SHIP SEALED (2026-09-17). Redacting addresses out of the excerpt was never enough:
+    # the excerpt is the owner's own message (one of them wrote out a personal phone number) and the
+    # subject line prints their property address, and both sat in the clear on a PUBLIC page, beside
+    # the encrypted payload that exists to prevent exactly this. _side_rp rides INSIDE that payload
+    # and is merged back by _applyPayload() on unlock; the published ledger keeps only what a LOCKED
+    # page must still act on (stop/when/n/checked), so a STOP reply suppresses either way.
+    # The Desktop twin, written from `tpl` below, is a local plaintext file and keeps the full text.
+    _RP_SEALED = ('subject', 'excerpt', 'note')
+    _side_rp = {_c: {_f: _v[_f] for _f in _RP_SEALED if _f in _v} for _c, _v in _replies.items()}
+    _side_rp = {_c: _d for _c, _d in _side_rp.items() if _d}
+    _rp_js_full = _esc_json(_replies)
+    _rp_js_pub = _esc_json({_c: {_f: _x for _f, _x in _v.items() if _f not in _RP_SEALED}
+                            for _c, _v in _replies.items()})
+    tpl = tpl.replace('__REPLIES__', _rp_js_full)
     if _replies:
-        print(f'replies: {len(_replies)} owner reply/replies merged')
+        print(f'replies: {len(_replies)} owner reply/replies merged '
+              f'({len(_side_rp)} with text sealed inside the encrypted payload)')
     if _rp_unresolved:
         print(f'replies: {_rp_unresolved} email-keyed reply/replies match no lead on the board — '
               f'not baked (their addresses are never published).')
@@ -2877,9 +2891,16 @@ def make_tracker(leads):
                                   'cases': [str(x) for x in (_n.get('cases') or []) if x][:6]}
         except Exception as e:
             print(f'deads.json unreadable ({e}) — board falls back to device-local dead marks only')
-    tpl = tpl.replace('__DEADS__', _esc_json(_deads))
+    # `why` is written by a human and names names ("Owner Bill Lacroix replied by email ... "). Same
+    # treatment as the reply text above: sealed inside the encrypted payload, merged back on unlock.
+    # status/d/folio/cases stay plaintext so a locked page still retires the case on every device.
+    _side_dw = {_c: _d['why'] for _c, _d in _deads.items() if _d.get('why')}
+    _dd_js_full = _esc_json(_deads)
+    _dd_js_pub = _esc_json({_c: {_f: _x for _f, _x in _d.items() if _f != 'why'} for _c, _d in _deads.items()})
+    tpl = tpl.replace('__DEADS__', _dd_js_full)
     if _deads:
-        print(f'dead ledger: {len(_deads)} case(s) baked in (retired on EVERY device)')
+        print(f'dead ledger: {len(_deads)} case(s) baked in (retired on EVERY device)'
+              + (f'; {len(_side_dw)} reason(s) sealed' if _side_dw else ''))
 
     # FINAL BOUNCE SWEEP — must run before ANY output is written, twin included.
     # The strip at the skiptrace merge is correct but not sufficient: emails are re-merged from more
@@ -2976,7 +2997,11 @@ def make_tracker(leads):
     }
     # (the final bounce sweep runs ABOVE, before the Desktop twin is written — one sweep, not two)
     if codes:
-        _payload = json.dumps(_encrypt_multi(json.dumps(slim), codes))
+        # {rows, side} since 2026-09-17 — `side` carries the reply text and dead reasons that used to
+        # ship in the clear (see _side_rp above). _applyPayload() in the template unwraps both shapes,
+        # so an older cached page holding a plain array still opens.
+        _payload = json.dumps(_encrypt_multi(
+            json.dumps({'rows': slim, 'side': {'rp': _side_rp, 'dw': _side_dw}}), codes))
     else:
         nophone = [{k: v for k, v in d.items() if k not in ('phones','phdnc','emails')} for d in slim]
         _payload = _esc_json(nophone)
@@ -3021,7 +3046,28 @@ def make_tracker(leads):
                          'emails would carry a literal __IDENT_EN__ placeholder.' % _e)
     # ALEJANDRO'S COLD-EMAIL COPY -- see _bake_alex_email(). Never raises.
     tpl = _bake_alex_email(tpl, 'docs/index.html')
-    _page = _marker + tpl.replace('__DATA__', _payload)
+    # PUBLISHED COPY ONLY: swap the two ledgers for their text-free versions. `tpl` still holds the
+    # full ones because the Desktop twin was written from it above (local file, Alejandro's own
+    # machine). Each blob is one unique substituted JSON string, so an exact-count check is a real
+    # assertion that the swap hit the ledger and nothing else.
+    _pub = tpl
+    for _full_js, _pub_js, _what in ((_rp_js_full, _rp_js_pub, 'REPLIES'), (_dd_js_full, _dd_js_pub, 'SERVER_DEADS')):
+        if _full_js == _pub_js:
+            continue
+        if _pub.count(_full_js) != 1:
+            raise SystemExit('docs/index.html: the %s ledger appears %d times — refusing to publish '
+                             'rather than leave owner text in the clear.' % (_what, _pub.count(_full_js)))
+        _pub = _pub.replace(_full_js, _pub_js)
+    _page = _marker + _pub.replace('__DATA__', _payload)
+    # NOTHING SEALED MAY APPEAR IN THE FILE. The swap above is the mechanism; this is the proof, run
+    # against the finished bytes. The encrypted payload is base64, so a hit here means real owner
+    # text is sitting in the clear on a page that gets committed to a public repo.
+    _sealed_txt = [str(_x) for _v in _side_rp.values() for _x in _v.values() if _x] + \
+                  [str(_x) for _x in _side_dw.values() if _x]
+    _leaked_txt = [_t for _t in _sealed_txt if len(_t) >= 12 and _t in _page]
+    if _leaked_txt:
+        raise SystemExit('docs/index.html: %d sealed owner text fragment(s) still ship in plaintext, '
+                         'e.g. %r — refusing to publish.' % (len(_leaked_txt), _leaked_txt[0][:80]))
     # Last gate before the board the business runs on goes to disk. A surviving __TOKEN__ is a
     # top-level ReferenceError that kills every declaration after it, and the page still serves a
     # 200 while doing nothing -- which is exactly how design-preview.html stayed dead unnoticed.

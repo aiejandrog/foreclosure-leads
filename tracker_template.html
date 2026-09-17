@@ -2478,8 +2478,25 @@ const SERVER_DEADS = __DEADS__;
     });
     if(n_dead && typeof save === 'function') save();
     if(n_dead) console.info('[dealflow] '+n_dead+' dead case(s) applied from the server ledger');
+    _applyServerDeadNotes();
   } catch(e){}
 })();
+/* The REASON a case died is sealed inside the encrypted payload (see _applyPayload), so on a locked
+   page the loop above retires the case with no `why` to copy into the note. Seeding the note is
+   therefore its own idempotent pass, run again the moment the text arrives. Never overwrites a note
+   a human has already written, and the second run is a no-op when nothing was sealed. */
+function _applyServerDeadNotes(){
+  try{
+    var n_note = 0;
+    Object.keys(SERVER_DEADS || {}).forEach(function(c){
+      var srv = SERVER_DEADS[c] || {}, n = notes[c];
+      if(!n || !srv.why || n.note) return;
+      n.note = '[server] ' + srv.why;
+      n_note++;
+    });
+    if(n_note && typeof save === 'function') save();
+  }catch(e){}
+}
 const expanded = new Set();   // case #s whose Deal-analysis panel is open (survives re-render)
 let tier = 'ALL', q = '', sortK = '_fresh', sortD = -1;   // default = ALL + First-mover (2026-08-11): freshest uncontested leads land on top (fresh LP is tier C — an A default hid it)
 let fy1 = '', fy2 = '', ad1 = '', ad2 = '';
@@ -17733,6 +17750,34 @@ async function decryptPayload(enc, password){
   const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv: dec(enc.iv)}, key, dec(enc.ct));
   return JSON.parse(new TextDecoder().decode(pt));
 }
+/* ---- SEALED FREE TEXT ---------------------------------------------------------------------------
+   What a homeowner WROTE to us, and why we retired their case, are the two pieces of personal text
+   this page carries outside the lead payload. Until 2026-09-17 both shipped in the clear, in a
+   public repo, beside the encrypted payload that exists precisely so they would not: REPLIES
+   carried each owner's subject line (which prints their property address) and an excerpt of their
+   own words -- one of them handed over a personal phone number -- and SERVER_DEADS carried a `why`
+   naming the owner and quoting their email. Same class of leak as the 1,438 plaintext addresses in
+   MAILTO, and the same answer: the text now rides INSIDE the encrypted payload and is merged back
+   onto the ledgers the moment a code opens the page.
+
+   The ledgers themselves stay plaintext on purpose. Everything the suppression logic reads -- stop,
+   optout, status, counts, timestamps -- must apply on a LOCKED page too, so a STOP reply keeps
+   suppressing a lead whether or not anyone unlocks. Only the words come sealed.
+
+   Shape: {rows:[...], side:{rp:{case:{subject,excerpt,note}}, dw:{case:'why'}}}. A plain array is
+   the pre-2026-09-17 payload (and the plaintext Desktop twin), which still has its text inline. */
+function _applyPayload(pl){
+  if(Array.isArray(pl)) return pl;                 // legacy payload: nothing sealed, nothing to merge
+  const side = (pl && pl.side) || {};
+  try{
+    const rp = side.rp || {};
+    Object.keys(rp).forEach(c => { if(REPLIES && REPLIES[c]) Object.assign(REPLIES[c], rp[c]); });
+    const dw = side.dw || {};
+    Object.keys(dw).forEach(c => { if(SERVER_DEADS && SERVER_DEADS[c]) SERVER_DEADS[c].why = dw[c]; });
+    if(Object.keys(dw).length) _applyServerDeadNotes();   // the reason only exists now — seed the note
+  }catch(e){ /* a merge failure must never cost the unlock — the board still opens, text-free */ }
+  return (pl && pl.rows) || [];
+}
 function _greetWord(){
   try{ const h = new Date().getHours(); return h<12 ? 'Good morning' : h<18 ? 'Good afternoon' : 'Good evening'; }
   catch(e){ return 'Welcome back'; }
@@ -17795,7 +17840,7 @@ async function boot(){
     // ceremony belonged to a shared-key mode we never used; typing a phrase into it just made
     // every real code look wrong. Now: type your code, you're in.
     const tryPw = async (pw) => {
-      try { DATA = await decryptPayload(RAW, pw); return true; } catch(e){ return false; }
+      try { DATA = _applyPayload(await decryptPayload(RAW, pw)); return true; } catch(e){ return false; }
     };
     const tryUnlock = async (code) => (await tryPw(code)) ? code : null;
     // device-remember: once unlocked on this device it stays unlocked (localStorage, not per-tab)
