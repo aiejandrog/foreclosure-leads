@@ -1,16 +1,28 @@
 name: DEALFLOW Daily Refresh
 
-# Runs the same pipeline refresh-dealflow.bat does on Alejandro's Windows machine, but on
-# GitHub-hosted Ubuntu. Fires daily at 13:00 UTC (09:00 EDT / 08:00 EST — DST-drifts by 1h
-# in winter, still hits morning) and can be manually kicked from the Actions tab.
+# TRIMMED 2026-09-16 to the ONE artifact the cloud actually delivers: the hard-money balloon book.
 #
-# This is the durable replacement for the "DEALFLOW Refresh" Windows Task Scheduler entry that
-# timed out and killed the pipeline on 2026-07-18. Every step's failure surfaces via GitHub's
-# built-in workflow-failure email — no more silent rot on the live site.
+# Why. The desktop is the sole DealFlow runner (refresh-dealflow.bat, "\DEALFLOW Refresh" 5:30 AM) and
+# runs every board step this workflow used to run. In the cloud those steps were pure cost: ~95 min
+# a day (~2,840 Actions minutes / 30 days) building a board that publish_guard blocked EVERY day for
+# thin enrichment (no board commit from this workflow in 30 days), while the balloon book, the only
+# output that reached main, took under 30 seconds. The repo is going private, where Actions minutes
+# are metered (GitHub Pro includes 3,000/month), so the dead weight had to go.
 #
-# Sequencing matches the bat exactly, including the "publish fresh leads NOW, then enrich, then
-# publish again" two-phase pattern that guarantees SOMETHING lands on docs/index.html even if a
-# later slow step (skiptrace, photos) hangs.
+# What stays here and why:
+#  * [4c/5] balloon book (fl_lp/broward_mortgages.py -> hardmoney_enrich -> hardmoney_values ->
+#    hardmoney_balloon) - hardmoney_enrich/values/balloon run NOWHERE else.
+#  * the state cache - hardmoney_values.json + hardmoney_enriched.json + llc_officers.json are
+#    gitignored PII caches whose ONLY persistence is actions/cache. The restore/save PATH LISTS
+#    ARE UNCHANGED ON PURPOSE: actions/cache derives an internal version hash from the path list,
+#    and editing it orphans every existing cache (one cold run, every Sunbiz human re-fetched).
+#    Unused paths are simply re-saved as restored, which also keeps the old full pipeline's
+#    state warm if it is ever restored.
+#
+# What moved nowhere (already on the desktop): MD/BW/PB scrapes, liens, comps, taxes, photos,
+# lis pendens chain, skip-trace, replies.py + optout_sync.py (run-replies-daily.bat, 7:00 AM),
+# auction archive + cash buyers, sale history, judgment dates, healthcheck, board publish.
+# The full pipeline definition is in git history (the commit before this trim) if it is ever needed.
 
 on:
   schedule:
@@ -21,51 +33,21 @@ permissions:
   contents: write
 
 concurrency:
-  # Only one refresh at a time — never let a manual run collide with the daily cron and
-  # step on itself with two concurrent pushes.
   group: dealflow-refresh
   cancel-in-progress: false
 
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    # 90 was the original budget and the pipeline outgrew it — see the step timings in the
-    # 2026-08-09 diagnosis. A cancelled job SKIPS the publish step, so an undersized window turns a
-    # 95%-complete run into a total loss. Re-measure before lowering this.
-    timeout-minutes: 180
+    # The balloon chain measured < 1 min; the budget covers a slow Sunbiz/BCPA night and a cold cache.
+    timeout-minutes: 30
     env:
-      # Every scraper checks env FIRST, then falls back to a gitignored *.key file. On GHA
-      # only env is available; on Alejandro's local machine only files are.
-      GOOGLE_STREET_VIEW_KEY: ${{ secrets.GOOGLE_STREET_VIEW_KEY }}
-      TRACERFY_API_KEY: ${{ secrets.TRACERFY_API_KEY }}
-      # BATCHDATA EXITED (BATCHDATA-EXIT.md, 2026-08-11; cloud spend was already dead 2026-08-02).
-      # The lien feed is frozen: batchdata_liens.json is COMMITTED to the repo (bought data, no new
-      # purchases), county scrapers own new chains, and skip-trace runs on Tracerfy. Do not
-      # re-introduce a BATCHDATA_API_KEY here — an ungoverned cloud spender on the shared wallet
-      # is exactly how $50 vanished in five minutes (see bd_budget.py's docstring).
-      # accept whatever the WP Pro secret is named in the repo settings
-      WHITEPAGES_KEY: ${{ secrets.WHITEPAGES_KEY || secrets.WHITEPAGES_API_KEY || secrets.WP_PRO_KEY }}
-      # Gmail App Password for reply detection. Accept "user@domain:apppassword" in one secret, or
-      # a password-only secret plus GMAIL_ACCOUNT. NOT a Google account password — an App Password
-      # (myaccount.google.com -> Security -> App passwords), which is revocable on its own.
-      GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD || secrets.GMAIL_KEY }}
-      GMAIL_ACCOUNT: ${{ secrets.GMAIL_ACCOUNT }}
-      # accept whatever you named the 2Captcha secret — no need to match one exact name
-      CAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY || secrets.TWOCAPTCHA_KEY || secrets.CAPTCHA || secrets.TWO_CAPTCHA_KEY || secrets.TWOCAPTCHA }}
-      TWOCAPTCHA_KEY: ${{ secrets.CAPTCHA_KEY || secrets.TWOCAPTCHA_KEY || secrets.CAPTCHA || secrets.TWO_CAPTCHA_KEY || secrets.TWOCAPTCHA }}
-      # Skip the "Desktop tracker + daily CSV" write entirely on the runner (DEALFLOW_NO_DESKTOP
-      # guard in foreclosure_leads.py — the OneDrive path only exists on Alejandro's machine).
-      DEALFLOW_NO_DESKTOP: '1'
-      # Same 8-min link-generator budget the local pipeline uses.
-      GEN_DEADLINE: '480'
-      # Keep pip/apt quiet.
       PIP_DISABLE_PIP_VERSION_CHECK: '1'
 
     steps:
       - name: Checkout (with push token)
         uses: actions/checkout@v4
         with:
-          # Needed so the later `git push` uses a token with contents:write on THIS repo.
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 1
 
@@ -75,32 +57,15 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
+      # No Playwright browser install: the balloon chain is plain HTTP (requests / curl).
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install Playwright Chromium
-        run: python -m playwright install --with-deps chromium
-
-      # State persistence — CRITICAL. Runners start from a bare checkout, but the pipeline's
-      # per-day state files are gitignored by design. Without this cache:
-      #  - skiptrace_results.json empty -> skiptrace.py would RE-PAY to re-trace ~640 leads
-      #    every single run (~$60-95/day of pure waste)
-      #  - broward/palmbeach_leads.json missing -> a bot-walled county day publishes the site
-      #    WITHOUT that county instead of keeping last-good data
-      #  - records_liens --cached-only has no cache -> Miami-Dade lien chains silently vanish
-      #  - broward/palmbeach_liens.json missing -> every run re-traces the WHOLE county book
-      #    (and the rebuilt site ships with zero Broward/PB chains until it finishes)
-      # Saved on green runs; a failed day just restores the previous day's state.
-      # RESTORE ONLY. The save half is a separate step at the very END with `if: always()`.
-      # Why: actions/cache@v4's implicit post-save runs ONLY when the job succeeds. That produced a
-      # death spiral — the Health step failed on thin coverage, which failed the job, which SKIPPED
-      # the cache save, so the next run restored the same thin cache and failed identically. Seven of
-      # the last nine scheduled runs died this way and it could not self-heal, because every scraper
-      # output here is gitignored and lives ONLY in this cache (CI has no 2Captcha key, so Miami-Dade
-      # liens can never be regenerated in the cloud — the cache is their sole source).
-      - name: Restore pipeline state (leads, phones, liens, link tokens)
+      # RESTORE ONLY; the save is the always() step at the end. PATH LIST MUST STAY IDENTICAL to the
+      # save step and to every earlier v14 cache (see the header).
+      - name: Restore pipeline state (balloon caches + the rest, unchanged)
         id: statecache
         uses: actions/cache/restore@v4
         with:
@@ -142,440 +107,25 @@ jobs:
             llc_officers.json
             health.json
             full.json
-          # v8 namespace: actions/cache derives an internal VERSION hash from the `path:` list, and a
-          # cache saved under a different path list is invisible even to a matching restore-key prefix.
-          # Adding whitepages_lookup.json silently orphaned every earlier cache — the restore logged
-          # "Cache not found for input keys: dealflow-state-…, dealflow-state-" while a 0.2MB
-          # dealflow-state cache sat right there in the repo. Bump this suffix ON PURPOSE whenever the
-          # path list changes, so the invalidation is deliberate and greppable instead of a mystery.
-          # v12 -> v13 (2026-08-12): added hardmoney_values.json — the balloon book's parcel-value
-          # cache. It is gitignored (public repo) so the cache is its ONLY persistence; without
-          # this line every nightly run would re-query ~1,500 parcels from scratch.
-          # v11 -> v12 (2026-08-11): REMOVED batchdata_liens.json — BatchData exit froze the file and it
-          # is now COMMITTED to the repo (like sale_history_cache.json), so the checkout is its one
-          # source of truth and the cache must not shadow it with a stale runner copy.
-          # v10 -> v11 (2026-08-04): added auction_archive.json + cash_buyers.json (self-building buyer list).
-          # v9 -> v10 (2026-08-04): added judgment_dates.json (post-judgment interest entry dates).
-          # v2 -> v5 (all 2026-07-30, before any of them ran — still ONE cold run, not four): v3 added the lis-pendens address
-          # resolver caches (lp_addresses.json, _lp_pagis_cache.json, _lp_values_cache.json) so the
-          # parcel roll is not re-queried cold every morning; v4 added replies.json so a day with no
-          # new reply keeps yesterday's rather than blanking the Reply Inbox.
-          # v8 -> v9 (2026-08-02): added redfin_cache.json (Redfin Estimate sidecar).
-          # EXPECT ONE COLD RUN after this lands — that is the bump working, not a failure.
-          # v13 -> v14 (2026-08-14): added hardmoney_enriched.json + llc_officers.json. These are the
-          # two PII caches (1,442 LLCs + Sunbiz officers, with home/agent addresses) that were being
-          # COMMITTED to this PUBLIC repo as warm-state. Moved to cache-only persistence like
-          # hardmoney_values.json above, and UNTRACKED from git. EXPECT ONE COLD RUN — enrich/officers
-          # rebuild under their --limit caps over a few nights (Sunbiz + BCPA are free; no BatchData).
-          # Do NOT re-add either file to any `git add` line: naming an ignored file in `git add`
-          # force-adds it and re-publishes the PII.
           key: dealflow-state-v14-${{ github.run_id }}
           restore-keys: dealflow-state-v14-
-      # sale_history_cache.json is deliberately NOT in the actions/cache list above: it is COMMITTED
-      # to the repo (local Claude/Kimi runs keep it current), and the restore step was SHADOWING the
-      # fresh committed copy with a stale runner copy — which could ship the site with partial
-      # stay-compliance coverage. One source of truth: the checked-out file.
-
-      # Access codes — CRITICAL. make_tracker encrypts docs/index.html with the per-person codes
-      # from site.codes (gitignored, never committed). If this file is absent on the runner,
-      # _load_codes() returns [] and the build goes out PUBLIC + PHONE-FREE + GATELESS — silently
-      # downgrading the live site for all 6 code holders. Abort instead.
-      - name: Access codes for the encrypted build (site.codes from secret)
-        run: |
-          printf '%s\n' "${{ secrets.SITE_CODES }}" > site.codes
-          test -s site.codes || { echo "::error::SITE_CODES secret is missing — refusing to publish an UNENCRYPTED build. Add it in repo Settings -> Secrets."; exit 1; }
-
-      # Scrapers read a gitignored *.key file first (or the env var). Materialize the key files from the
-      # repo secrets so the CLOUD run has the SAME capability as the local machine: 2Captcha (Turnstile +
-      # Broward reCAPTCHA), BatchData (phones + Palm Beach liens), Tracerfy (cheaper phones).
-      - name: API keys for the scrapers (secrets -> gitignored *.key)
-        run: |
-          [ -n "$TRACERFY_API_KEY"  ] && printf '%s' "$TRACERFY_API_KEY"  > tracerfy.key  || true
-          [ -n "$CAPTCHA_KEY"       ] && printf '%s' "$CAPTCHA_KEY"       > captcha.key   || true
-          # replies.py reads env directly, but write the file too so a local-style run inside CI
-          # behaves identically to Alejandro's machine — one code path, not two.
-          [ -n "$GMAIL_APP_PASSWORD" ] && printf '%s' "$GMAIL_APP_PASSWORD" > gmail.key    || true
-          echo "keys -> tracerfy=$([ -s tracerfy.key ] && echo Y || echo N) captcha=$([ -s captcha.key ] && echo Y || echo N)"
 
       - name: Configure git identity
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      # ---- [1/5] Miami-Dade scrape + enrich + first tracker rebuild -------------------------
-      - name: '[1/5] Pull new auction leads (MD scrape + enrich)'
-        run: python foreclosure_leads.py
-
-      # ---- [1b/5] Publish fresh leads immediately (mirrors the bat) ------------------------
-      # Rationale: if a later enrichment step (skiptrace, photos, county merge) hangs, at
-      # least the newest MD leads already landed on docs/index.html. Same reasoning the local
-      # bat uses.
-      - name: '[1b/5] Publish fresh leads NOW'
-        run: |
-          # COMPLIANCE FIRST: the fresh scrape has no sale-history fields yet, so the build [1/5]
-          # just produced would ship every stay-active lead (67 on 2026-07-21) with LIVE outreach
-          # buttons — §362 landmines — until the final publish ~40 min later. Apply the committed
-          # cache fetch-free and rebuild, THEN publish: yesterday's stay flags beat a naked board.
-          python sale_history.py --cache-only
-          python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))"
-          # Same guard as [5/5], and it matters MORE here: this build runs before any enrichment
-          # step, so on a cold cache it is the nakedest board of the whole run — it is what produced
-          # the 1.5MB commit that replaced a 3.6MB live board. Blocking costs nothing in compliance
-          # terms: the live board stays as it was, and it already carries yesterday's stay flags.
-          if ! python publish_guard.py; then
-            echo "::warning::Early publish SKIPPED — build lacks enrichment vs the live board. Site left untouched; the final publish will retry after enrichment."
-            exit 0
-          fi
-          git add docs/index.html docs/call
-          if git diff --staged --quiet; then
-            echo "no change — nothing to publish yet"
-          else
-            git commit -m "refresh: fresh leads (auto)"
-            # Three writers hit main (Claude, Kimi, this pipeline) — a bare push loses the race the
-            # moment anyone lands a commit mid-run (2026-07-21: run died here, all enrichment
-            # skipped). Rebase-with-retry; on a docs/index.html conflict the freshly built file
-            # wins (-X theirs during rebase = OUR replayed commit — generated artifact, newest is truth).
-            for i in 1 2 3; do
-              git pull --rebase --autostash -X theirs origin main && git push origin HEAD:main && break
-              [ "$i" = 3 ] && exit 1
-              sleep 10
-            done
-          fi
-
-      # ---- [1c/5] Broward + Palm Beach scrape ---------------------------------------------
-      # Per-county try/except: a thin/blocked county keeps its last-good *_leads.json
-      # (make_tracker glob-merges every *_leads.json at rebuild time, so a broken county just
-      # falls back to yesterday's data instead of blanking the site).
-      - name: '[1c/5] Broward + Palm Beach scrape'
-        continue-on-error: true
-        run: |
-          set +e
-          python county_leads.py --county broward
-          bw=$?
-          python county_leads.py --county "palm beach"
-          pb=$?
-          echo "broward exit=$bw · palm beach exit=$pb"
-          # Never fail the whole workflow on one blocked county.
-          exit 0
-
-      # ---- [2/5] Link generators (bounded by GEN_DEADLINE) --------------------------------
-      - name: '[2/5] Generate court-case + records-search links'
-        continue-on-error: true
-        run: |
-          python gen_cases_qs.py --limit 40
-          python gen_records_qs.py --limit 40
-
-      # ---- [2c/5] Deep per-parcel tax links (Broward; Algolia-minted account URLs) --------
-      - name: '[2c/5] Deep tax links (Broward parcels)'
-        continue-on-error: true
-        run: python gen_tax_links.py --limit 60
-
-      # ---- [2d/5] Radius comps -> ARV (ALL 3 counties) ------------------------------------
-      # comps.py enriches every county: Broward + Palm Beach off the FL statewide cadastral, and
-      # Miami-Dade off the county's OWN MD_ComparableSales layer (gisweb.miamidade.gov). New-only
-      # + cached in comps.json, so future scrapes keep every new lead in ARV coverage automatically.
-      # Do NOT scope this back to BW+PB — MD leads would silently lose their ARV. The healthcheck
-      # RULE: ARV-comp coverage assertion goes RED (emails the owner) if this ever regresses.
-      - name: '[2d/5] Radius comps -> ARV (Miami-Dade + Broward + Palm Beach)'
-        continue-on-error: true
-        run: python comps.py --limit 120
-
-      # ---- [2b/5] Recorded mortgage chains -------------------------------------------------
-      - name: '[2b/5] Recorded mortgage chains + senior-survives classification'
-        continue-on-error: true
-        run: |
-          # With the 2Captcha key present, MD mints NEW Turnstile chains (not just cached); caps bound spend.
-          if [ -s captcha.key ]; then python records_liens.py --all --limit 60; else python records_liens.py --all --cached-only; fi
-          # Broward is captcha-free but Cloudflare-fingerprint-gated, and broward_liens.py pins
-          # System32's Schannel curl on Windows, falling back to bare `curl` everywhere else — which
-          # its own docstring says is the fingerprint Cloudflare blocks. On this Ubuntu runner it
-          # therefore likely aborts after six backoff retries (300s) having traced nothing, and
-          # until 2026-08-26 it returned 0 while doing it, so the step looked clean. Run #45's
-          # [2b/5] took 362s, which is about those 300s plus MD's cached-only pass.
-          # Exit 2 now means "no AcclaimWeb session". Surface it instead of swallowing it.
-          if [ -f broward_leads.json ]; then
-            BW_BEFORE=$(python -c "import json,os;print(len(json.load(open('broward_liens.json'))) if os.path.exists('broward_liens.json') else 0)")
-            python broward_liens.py --all; BW_RC=$?
-            BW_AFTER=$(python -c "import json,os;print(len(json.load(open('broward_liens.json'))) if os.path.exists('broward_liens.json') else 0)")
-            echo "Broward lien chains: $BW_BEFORE -> $BW_AFTER (exit $BW_RC)"
-            echo "Broward lien chains: **$BW_BEFORE → $BW_AFTER** (+$((BW_AFTER-BW_BEFORE)), exit $BW_RC)" >> $GITHUB_STEP_SUMMARY
-            if [ "$BW_RC" = "2" ]; then
-              echo "::warning::Broward liens traced NOTHING — Cloudflare refused an AcclaimWeb session on this runner. The curl fingerprint that works on Windows does not work here; Broward coverage cannot move in the cloud until the transport is portable."
-              echo "### ⚠ Broward liens blocked in CI — Cloudflare refused the session" >> $GITHUB_STEP_SUMMARY
-            fi
-          fi
-          # BatchData lien feed exited 2026-08-11 — frozen cache is committed; counties own new chains.
-          # Broward plaintiff -> bank-1st(clean) vs junior/HOA(senior survives).
-          # MOVED TO THE LAPTOP 2026-08-31. The Broward path pins C:\Windows\System32\curl.exe
-          # (broward_plaintiff.py) for Schannel TLS — the same Cloudflare wall this workflow already
-          # documents for AcclaimWeb. On the laptop it prints "BRO ok"; here it buys a Turnstile
-          # token for a page that never returns. Removing it is a spend cut, not a coverage cut.
-          #   if [ -s captcha.key ] && [ -f broward_leads.json ]; then python county_plaintiffs.py --county broward --near --limit 60; fi
-
-      # ---- [2b1/5] Code-enforcement liens (free Miami-Dade CCVIOL ArcGIS, folio-keyed) ---------
-      # A code lien is a junior lien invisible to the mortgage chain — the thing that turns a
-      # "90% equity" lead into a loss. Free, no key, no captcha; cross-references every MD folio.
-      - name: '[2b1/5] Code-enforcement liens (Miami-Dade)'
-        continue-on-error: true
-        run: python code_liens.py
-
-      # ---- [2b4/5] Palm Beach lien chains ------------------------------------------------------
-      # ADDED 2026-08-26. PB lien coverage was 33% (94/284) against Broward's 64%, and this workflow
-      # was the reason: it ran MD and Broward chains and skipped Palm Beach entirely. The step above
-      # used to explain why — "PB is headed-browser (--pb) = local only" — and that stopped being
-      # true on 2026-08-22, when palmbeach_liens.py gained a 2Captcha reCAPTCHA-v2 path and stopped
-      # needing a human to click a checkbox. The comment was never updated, so the cloud kept
-      # skipping a county it had been able to trace for four days.
-      #
-      # (Not to be confused with ROADMAP-TO-9's "2Captcha RULED OUT" note — that was Miami-Dade's
-      # reCAPTCHA v3, where the county rejects solved tokens on score. Landmark is v2 checkbox,
-      # which 2Captcha solves outright. Different wall, different verdict.)
-      #
-      # THE CLOUD IS THE RIGHT HOME FOR THIS, and the laptop is not. Every Landmark search burns a
-      # one-shot token and a v2 solve takes 60-180s, so refresh-dealflow.bat caps the nightly at
-      # --limit 6 to keep the morning window under ~18 minutes. Six a night never clears a 190-lead
-      # backlog. Here there is no morning window: --workers 8 keeps 8 solves in flight, which is what
-      # makes --limit 60 finish in roughly the time --limit 6 takes serially.
-      #
-      # Cost is bounded and small: ~2 solves/lead x $0.003 = ~$0.36 for a full 60-lead run, on a
-      # balance that sits around $6. --all skips anything already in palmbeach_liens.json, so once
-      # the backlog is cleared these runs go near-free and only touch genuinely new leads. The cache
-      # is already restored and saved by this workflow (see the state cache steps) — it just had
-      # nothing writing to it.
-      - name: '[2b4/5] Palm Beach lien chains (Landmark, parallel 2Captcha)'
-        continue-on-error: true
-        timeout-minutes: 45
-        run: |
-          # A SKIP HERE MUST BE LOUD. Three comments in this file still assert "CI has no 2Captcha
-          # key" while the API-keys step above writes captcha.key from ${{ secrets.CAPTCHA_KEY }} and
-          # the MD lien step branches on it — so either the secret was added later and those comments
-          # are stale, or it was never configured and every captcha-gated step in the cloud has been
-          # quietly taking its --cached-only path. Whichever it is, a step that prints one line and
-          # exits 0 into a 3000-line log is indistinguishable from a step that worked. Warn into the
-          # job summary so the answer is on the run's front page instead of buried.
-          if [ ! -s captcha.key ]; then
-            echo "::warning::PB liens SKIPPED — no 2Captcha key in CI. Set the CAPTCHA_KEY repo secret or Palm Beach coverage stays frozen."
-            echo "### ⚠ Palm Beach liens skipped — no 2Captcha key" >> $GITHUB_STEP_SUMMARY
-            echo "Landmark is reCAPTCHA-v2 gated and there is no \`CAPTCHA_KEY\` secret, so PB lien coverage cannot move in the cloud." >> $GITHUB_STEP_SUMMARY
-            exit 0
-          fi
-          if [ ! -f palmbeach_leads.json ]; then
-            echo "::warning::PB liens skipped — no palmbeach_leads.json (the [1c/5] county scrape produced nothing)"
-            exit 0
-          fi
-          BEFORE=$(python -c "import json,os;print(len(json.load(open('palmbeach_liens.json'))) if os.path.exists('palmbeach_liens.json') else 0)")
-          # --deadline stops cleanly and reports what is left; the 45-min step timeout above is a
-          # hard kill that would cut a run mid-lead. Keep the deadline comfortably under it.
-          python -u palmbeach_liens.py --all --limit 120 --workers 8 --deadline 2100
-          AFTER=$(python -c "import json,os;print(len(json.load(open('palmbeach_liens.json'))) if os.path.exists('palmbeach_liens.json') else 0)")
-          echo "PB lien chains: $BEFORE -> $AFTER"
-          echo "Palm Beach lien chains: **$BEFORE → $AFTER** (+$((AFTER-BEFORE)) this run)" >> $GITHUB_STEP_SUMMARY
-          # Zero progress with a key present means the portal refused us — most likely an Azure-IP
-          # or fingerprint block on erec.mypalmbeachclerk.com, which no amount of captcha budget
-          # fixes. That is a different failure from "no key" and must not read as success.
-          if [ "$AFTER" -le "$BEFORE" ]; then
-            echo "::warning::PB liens traced ZERO new chains despite a 2Captcha key — check for a Landmark session/IP block in the log above."
-          fi
-
-      # ---- [2c/5] Fresh LIS PENDENS front-of-funnel -------------------------------------------
-      # The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
-      # file most foreclosures over a rolling ISO window, keep the LIS PENDENS, dedupe -> the owner the
-      # DAY their case is filed. lp_leads.py shapes them into st='LP' board leads (Fresh-filings lane).
-      # lp_resolve.py sits BETWEEN the sweep and lp_leads.py on purpose. A lis pendens names the
-      # property by legal description, never by folio or street address, so without this step every
-      # LP lead lands on the board with addr='' — un-skiptraceable, un-mappable, un-mailable, and the
-      # Morning Worker's EARLY lane reads 0 workable. lp_resolve matches the legal description against
-      # the free Miami-Dade parcel roll (MDC.PaGis, no key, no captcha) and grades every hit; lp_leads
-      # then fills addr/folio from the `high` rows ONLY. Ordering matters — lp_leads reads the file
-      # lp_resolve writes, so a swap here silently reverts us to blank addresses.
-
-      # ---- [2b2/5] Delinquent property taxes, Miami-Dade + Broward (Playwright past Cloudflare) --
-      # First-priority lien that survives foreclosure (FS 197.122), invisible to the mortgage chain.
-      # The cap is deliberately SMALL: short runs render ~83% at ~9.3s/parcel, but a 202-parcel run
-      # degraded to 24% at 41.7s/parcel because the county throttles sustained load. Chipping away
-      # 60/morning beats one long run. Unrendered parcels are never cached, so they simply retry.
-      # Palm Beach is not on this platform (see county_taxes.py) and never gets a false $0.
-      - name: '[2b2/5] County back-taxes MD+BW (verified, capped)'
-        continue-on-error: true
-        run: python county_taxes.py --limit 60 --conc 4
-
-      # ---- [2b3/5] Judgment ENTRY DATES -> post-judgment interest (FS 55.03) ---------------------
-      # A judgment is frozen at entry; the real payoff keeps accruing at the rate the FJ recites and
-      # RESETS every January 1. The counties publish the amount but never the date, so without this
-      # step the bake cannot accrue and every new lead publishes a frozen — i.e. overstated — equity
-      # number until someone runs it by hand. The first full pull was worth $15.3M of unseen debt
-      # across 298 rows and flipped 10 verdicts, one of them a STRONG that was really a PASS.
-      # Incremental by design: judgment_interest.py caches HITS AND MISSES in judgment_dates.json and
-      # skips anything already there, so a normal night pulls only the handful of new cases.
-      # continue-on-error: a clerk outage must never block the rebuild — undated rows just stay
-      # labeled "as entered" rather than guessing a payoff (NO DATE -> NO ACCRUAL, EVER).
-      - name: '[2b3/5] Judgment entry dates (Miami-Dade docket) -> post-judgment interest'
-        continue-on-error: true
-        run: python judgment_interest.py --all --limit 120
-
-      - name: '[2c/5] Fresh Lis Pendens (lender-sweep -> resolve addresses -> lp_leads.json)'
-        continue-on-error: true
-        run: |
-          if [ -s captcha.key ]; then python lis_pendens.py --days 30; fi
-          if [ -f lis_pendens.json ]; then python lp_resolve.py; fi
-          # TWO RESOLVERS WERE MISSING HERE, and between them they are most of the board.
-          # The laptop runs this chain through lp_refresh.py, which calls lp_resolve2 and the
-          # Broward BCPA ladder; this hand-rolled copy omitted both and nobody noticed because a
-          # short lp_leads.json looks identical to a complete one.
-          #   lp_resolve2   free ArcGIS second pass; it is what promotes a row to
-          #                 confidence='high', and 'high' is the only tier lp_values.py prices.
-          #   broward_resolve  771 of the 1,423 LP rows are BROWARD and this chain could resolve
-          #                 NONE of them. Plain requests against BCPA — a different host and stack
-          #                 from the AcclaimWeb wall, and pa_values.py already POSTs the same
-          #                 endpoint from CI, so it is expected to work here.
-          if [ -f lp_addresses.json ]; then python lp_resolve2.py; fi
-          if [ -f lp_addresses.json ]; then python fl_lp/broward_resolve.py; fi
-          if [ -f lp_addresses.json ]; then python lp_values.py; fi
-          # Is the case still alive? A lis pendens stays recorded forever, so nothing in the feed
-          # says the foreclosure ended. 8 of the current 125 are voluntarily dismissed — without
-          # this they sit in the EARLY lane looking fresh and somebody calls a homeowner about a
-          # case that no longer exists. Must run BEFORE lp_leads.py, which reads its cache.
-          if [ -f lis_pendens.json ]; then python lp_status.py; fi
-          if [ -f lis_pendens.json ]; then python lp_leads.py; fi
-
-      # ---- [2d/5] Geocode leads (keyless US Census) -> lat/lng for the origin-anchored door route -----
-      - name: '[2d/5] Geocode leads (US Census) -> lat/lng'
-        continue-on-error: true
-        run: python geo_enrich.py
-
-      # ---- [3/5] Skip-trace phones (only if a key is present) -----------------------------
-      - name: '[3/5] Humans behind LLCs (Sunbiz) + skip-trace phones (all tiers, capped)'
-        if: env.TRACERFY_API_KEY != '' || env.BATCHDATA_API_KEY != ''
-        continue-on-error: true
-        run: |
-          python llc_officers.py --limit 60
-          python skiptrace.py --all --limit 120
-
-      # ---- [3a2/5] Whitepages Pro — DISABLED 2026-08-16 (operator decision). The plan quota has
-      # been exhausted since 08-08: nine consecutive runs produced first-call 429s and zero results
-      # (last success 2026-08-07 09:51) while still consuming a slot of the shared bd_budget daily
-      # cap. Real cost when live: $0.22/call, not the $0.10 the old comment claimed. Cached results
-      # keep baking into the board. To RE-ENABLE after renewing the plan, restore the step:
-      #   - name: '[3a2/5] Whitepages Pro household lookups'
-      #     if: env.WHITEPAGES_KEY != ''
-      #     continue-on-error: true
-      #     run: |
-      #       echo -n "${WHITEPAGES_KEY}" > whitepages.key
-      #       python whitepages_lookup.py --all --limit 30
-
-      # ---- [3b/5] Property photos (Zillow + Street View + aerials) ------------------------
-      - name: '[3b/5] Property photos'
-        continue-on-error: true
-        run: python property_photos.py --zillow
-
-      # ---- [3c/5] Property types (BCPA + PBCPAO -> dor_desc for BW/PB) --------------------
-      # Miami-Dade already gets dor_desc from apps.miamidadepa.gov via county_leads.py. BW/PB
-      # need a separate fetch — the county scrapes don't include use codes. Cached per folio in
-      # property_types_cache.json (via the actions/cache step above) so we only pay for BRAND-NEW
-      # leads each day. Fail-soft: any parse/HTTP error leaves dor_desc blank on that lead and
-      # the tracker renders no ptype chip; never blocks the workflow.
-      - name: '[3c/5] Property types (Broward + Palm Beach)'
-        continue-on-error: true
-        run: python property_types.py
-
-      # ---- [3d/5] Zillow listing status (LISTED / PENDING / SOLD / RENTAL / OFF-MARKET) ----
-      # 7-day TTL cache (listing_status_cache.json) so only ~1/7th of leads re-check daily.
-      # --limit 120 caps a cold-cache day at ~5 min so this step can never eat the job window.
-      - name: '[3d/5] Zillow listing status'
-        continue-on-error: true
-        run: python listing_status.py --limit 120
-
-      # ---- [3d2/5] Redfin Estimate (advisory AVM cross-check) -------------------------------------
-      # BEST-EFFORT in the cloud: Redfin, like Zillow (see the photo_seed note in foreclosure_leads.py),
-      # will likely block this datacenter IP — that's fine. Failures are never cached, so a blocked
-      # cloud run costs nothing; the real fetching happens in the LOCAL nightly (residential IP,
-      # refresh-dealflow.bat) and its 21-day cache — restored below — still bakes the values here.
-      - name: '[3d2/5] Redfin Estimate (advisory)'
-        continue-on-error: true
-        run: python redfin_value.py --limit 100
-
-      # ---- [3e/5] Sale-history survival count (the REAL staller signal, Miami-Dade docket) --------
-      # Counts how many scheduled foreclosure sales each owner has already dodged (cancelled/reset),
-      # straight from the MD Clerk OCS docket — free, same endpoint the clerk-enrich already hits.
-      # 7-day TTL (the count changes when a new sale is set/cancelled). Feeds the FRESH/STALLER chip
-      # and keeps serial stallers OUT of the Closers list. Broward/PB fall back to the filing-year proxy.
-      - name: '[3e/5] Sale-history survival count (Miami-Dade)'
-        continue-on-error: true
-        run: python sale_history.py --limit 150
-
-      # ---- [3f/5] Humans behind LLC-owned leads (Sunbiz officers/RA) -----------------------
-      # llc_officers.json is COMMITTED (same single-source rule as the stay cache); only new
-      # cases hit Sunbiz. Fail-soft: a blocked day keeps yesterday's humans.
-      - name: '[3f/5] LLC officers (Sunbiz)'
-        continue-on-error: true
-        run: python llc_officers.py --limit 40
-
-      # ---- [3g/5] Owner replies (IMAP) ----------------------------------------------------
-      # MUST run before [4/5]: make_tracker bakes replies.json into the page, so a reply detected
-      # after the rebuild would not surface until the NEXT day's run. This was the last enrichment
-      # step that only existed on Alejandro's machine — the Reply Inbox went stale between manual
-      # runs, and a reply is the single warmest signal on the board. A STOP word in a reply is also
-      # an opt-out we are legally obliged to honour (FTSA/TCPA), so detecting it a day late is not
-      # a cosmetic delay.
-      # Fail-soft: no secret, or Gmail refusing the login, leaves yesterday's replies.json in place
-      # and the board keeps saying "awaiting reply" — the honest state, never a fabricated one.
-      - name: '[3g/5] Owner replies (Gmail IMAP -> replies.json)'
-        if: env.GMAIL_APP_PASSWORD != ''
-        continue-on-error: true
-        run: |
-          python replies.py --days 30
-          # DETECTION IS NOT SUPPRESSION. replies.py only writes stop:true into replies.json; until
-          # 2026-08-13 nothing carried that into optouts.json, so a detected opt-out stayed armed
-          # (gil_sosa asked us to stop on 08-08 and was still mailable on 08-13 — five days). This
-          # step is what makes the detection binding. It only ever ADDS; re-running is a no-op.
-          python optout_sync.py
-          python -c "import json,os; d=json.load(open('replies.json',encoding='utf-8')) if os.path.exists('replies.json') else {}; a=[k for k in d if k.startswith('@')]; s=[k for k in a if str((d[k] or {}).get('stop')).lower() in ('true','1','yes')]; print('::notice::replies: %d address(es) replied, %d with a STOP word (auto-ledgered by optout_sync)' % (len(a), len(s)))"
-
-      # ---- [4/5] Final rebuild with everything baked in -----------------------------------
-      # ENTITY GATE. Re-verify the company against the Florida register BEFORE the board is
-      # built, so a filing that has just indexed starts printing its " LLC" on this run.
-      # `|| true`: exit 1 means NOT VERIFIED, which is the guard working as designed and
-      # must never fail the workflow. entity.py fails closed either way.
-      - name: '[3j/5] Verify company entity against Sunbiz'
-        run: python entity_check.py --quiet || true
-        continue-on-error: true
-
-      - name: '[4/5] Rebuild site (cases + phones + photos + liens)'
-        run: |
-          python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))"
-
-      # ---- [4b/5] Remember today's calendar, then harvest matured sales for BUYERS -------------
-      # The pipeline used to forget every sale the moment it closed: a sold property drops off the
-      # next scrape and takes its case number with it. On 2026-08-04 that left 15 recoverable cases
-      # out of an entire summer of Miami-Dade auctions.
-      # auction_archive.py appends every sale we see (append-only, a few hundred KB/yr) so the case
-      # numbers survive. cash_buyers.py then reads back the ones whose sale is >21 days old — the
-      # observed lag before a certificate of title issues (Martin condo: sale 05/27 -> cert 06/16) —
-      # and records the third-party bidder named on it.
-      # Net effect: the proven-cash-buyer list accumulates on its own, every night, with no operator
-      # action. It yields nothing for the first three weeks by design, then compounds.
-      # Order matters: snapshot AFTER the rebuild so the archive captures the enriched board.
-      - name: '[4b/5] Archive the auction calendar + harvest cert-of-title buyers'
-        continue-on-error: true
-        run: |
-          python auction_archive.py
-          python cash_buyers.py --days 120 --limit 60
-
       # ---- [4c/5] Hard-money balloon book (Jesse's refi play) ---------------------------------
       # Jesse's son funds DSCR refis (70-80 LTV, 6-8%, 30yr fixed). This chain finds Broward
       # investors sitting on 10-12% hard-money paper with a 1-2 year balloon coming due, prices
       # each one against the county roll, and publishes only the ones that fit his box.
-      #
-      # Why each piece is capped the way it is:
-      #  * sweep --months 2 --- the FULL 30-month sweep is ~73k mortgages and is a one-off run
-      #    (already committed in broward_mortgages.json). Nightly only needs the NEW recordings,
-      #    and the sweeper MERGES rather than replaces, so a short window never truncates history.
-      #  * enrich --limit 120 - Sunbiz + BCPA are free but rate-limited and slow (~0.7s/LLC).
-      #    Chipping away 120/night compounds; a full pass would eat the job window.
-      #  * values ------------- free ArcGIS, 40 parcels per POST, cached per folio in
-      #    hardmoney_values.json. A warm cache is a no-op; only brand-new folios cost anything.
-      # continue-on-error throughout: this book is an ADJACENT product. Nothing here may ever
-      # block the foreclosure board's publish, which is the revenue-critical artifact.
+      #  * sweep --months 2 --- nightly only needs NEW recordings; the sweeper MERGES rather than
+      #    replaces, so a short window never truncates history.
+      #  * enrich --limit 120 - Sunbiz + BCPA are free but rate-limited (~0.7s/LLC); chips away nightly.
+      #  * values ------------- free ArcGIS, cached per folio in hardmoney_values.json.
+      # Only the redacted docs/ copy is ever staged: hardmoney_values.json / hardmoney_enriched.json
+      # join parcel values to named LLC borrowers and ride the actions/cache. Never name them in
+      # `git add` (naming an ignored file force-adds it).
       - name: '[4c/5] Hard-money balloon book (sweep -> enrich -> price -> publish)'
         continue-on-error: true
         run: |
@@ -584,87 +134,24 @@ jobs:
           python hardmoney_enrich.py --limit 120
           python hardmoney_values.py
           python hardmoney_balloon.py --months 30
-          # COMMITS ITSELF, on purpose, instead of riding along in [5/5]. That step aborts with
-          # `exit 0` whenever publish_guard blocks a thin board build — which would silently take
-          # this book down with it on exactly the days the board had a bad scrape. The book's data
-          # is independent of the board's, so it publishes independently.
-          # ONLY the redacted docs/ copy is staged. hardmoney_values.json is gitignored on purpose
-          # (this repo is public; that file joins parcel values to named LLC borrowers) and rides
-          # the actions/cache instead. broward_mortgages.json + hardmoney_enriched.json are already
-          # tracked from earlier commits — see the exposure note in BATCHDATA-EXIT.md; untracking
-          # them is a separate call because a cold cache would lose every Sunbiz human.
           git add docs/hm-balloon-q7v3n8
           if git diff --staged --quiet; then
             echo "hard-money book unchanged"
           else
             git commit -m "refresh: hard-money balloon book (auto)"
-            # POISON ORIGIN of the 2026-08-19 outage. This step commits only the balloon book, but
-            # the pull below AUTOSTASHES the already-rebuilt docs/index.html. `-X theirs` applies to
-            # the REBASE and never to the stash pop, so a conflicted pop writes
-            # `<<<<<<< Updated upstream` markers straight into docs/index.html; the final publish
-            # then committed them and the site shipped 12.34MB of two glued builds that would not
-            # load. publish_guard.py now refuses any page carrying conflict markers or >1 coverage
-            # stamp, so the worst case is a skipped publish (board stays on its last good build).
             for i in 1 2 3; do
               git pull --rebase --autostash -X theirs origin main && git push origin HEAD:main && break
               [ "$i" = 3 ] && break
               sleep 10
             done
-            # Fail loud AT THE ORIGIN rather than 30 minutes later at publish: if the pop poisoned
-            # the board artifact, restore it from the commit we just made. It is a build artifact —
-            # the committed copy is authoritative and the final step rebuilds anyway.
-            if grep -qE '^(<<<<<<< |>>>>>>> )' docs/index.html 2>/dev/null; then
-              echo "::warning::stash-pop poisoned docs/index.html with conflict markers — restoring from HEAD"
-              git checkout HEAD -- docs/index.html || true
-            fi
           fi
           python -c "import hardmoney_values as HV; r=HV.priced(zone_only=True); f=[x for x in r if x['fits']]; v=sum(x['amt'] for x in f); print('::notice::hard-money book: %d of %d zone loans fit the DSCR box (\$%.1fM)'%(len(f),len(r),v/1e6))"
           exit 0
 
-      # ---- [5/5] Publish final ------------------------------------------------------------
-      - name: '[5/5] Publish final docs/index.html'
-        run: |
-          # PUBLISH GUARD. The runner cannot regenerate most enrichment — no 2Captcha key (MD lien
-          # chains run --cached-only) and the BatchData balance is exhausted (no skip-trace phones,
-          # no PB liens). With a cold restore cache it therefore builds a CORRECT but GUTTED board
-          # and used to publish it straight over the enrichment-rich local build. Measured on real
-          # commits: local ships ~3.6MB, the CI builds that overwrote it shipped 2.7MB and 1.5MB —
-          # the daily run was quietly stripping lien chains and phone numbers off the live site.
-          # A green workflow that degrades the product is worse than a red one that does nothing.
-          if ! python publish_guard.py; then
-            echo "::warning::Publish SKIPPED — this build would strip enrichment from the live board. Site left untouched."
-            echo "### ⚠ Publish skipped — enrichment regression" >> $GITHUB_STEP_SUMMARY
-            echo "The runner built a board with materially less lien/phone data than what is already live, so the publish was blocked and the site was left as-is. See the publish-guard output in the log." >> $GITHUB_STEP_SUMMARY
-            exit 0
-          fi
-          # docs/img/ also picks up new photos this run — stage them too. sale_history_cache.json
-          # is committed as well: it is the SINGLE SOURCE for stay-compliance (no actions/cache
-          # copy anymore), so the daily [3e] refresh must flow back into the repo.
-          git add docs/index.html docs/call docs/img sale_history_cache.json judgment_dates.json auction_archive.json cash_buyers.json
-          if git diff --staged --quiet; then
-            echo "nothing changed — site already current"
-          else
-            git commit -m "refresh: auto lead + phone + photo update"
-            # same race-proofing as [1b/5]: rebase-with-retry, fresh build wins conflicts
-            for i in 1 2 3; do
-              git pull --rebase --autostash -X theirs origin main && git push origin HEAD:main && break
-              [ "$i" = 3 ] && exit 1
-              sleep 10
-            done
-          fi
-
-      # ---- Save pipeline state BEFORE the health gate ---------------------------------------
-      # This runs with `if: always()` and sits AHEAD of Health on purpose. A day of scraping —
-      # lien chains, skip-traced phones, comps, geocodes, Whitepages households — is expensive and
-      # in several cases IRREPLACEABLE in CI (no 2Captcha key in the cloud). It must never be thrown
-      # away because a coverage report card came back red. This is the step whose absence created
-      # the death spiral: the old implicit post-save was skipped on failure, so the cache froze on
-      # 2026-07-21 and every run afterwards restored the same empty state.
-      - name: Save pipeline state (always — even if a later step fails)
+      # Save even on failure: the balloon caches are irreplaceable in CI (see the header). A lost save
+      # just means one slower night, so a hiccup here must not fail the run.
+      - name: Save pipeline state (always)
         if: always()
-        # A transient cache-save hiccup must not fail the run — that is the exact shape of the bug
-        # this step exists to kill. If a save is ever lost, the next run reports 'lien cache COLD'
-        # as a WARN and re-seeds itself.
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
@@ -708,21 +195,9 @@ jobs:
             full.json
           key: dealflow-state-v14-${{ github.run_id }}
 
-      # ---- Health ------------------------------------------------------------------------
-      # healthcheck.py exits non-zero on any FAIL — that fails this step, which fails the
-      # workflow, which fires GitHub's built-in workflow-failure email to the repo owner.
-      # No Twilio / SMS wiring needed; the notification path is already there for free.
-      # Runs AFTER the cache save so a red report can never cost us the day's data again.
-      - name: 'Health'
-        # Report, never a gate. DEGRADED is the normal steady state (lien + phone coverage warns),
-        # and a non-zero exit here used to mark a run that had already published as a failure.
-        continue-on-error: true
-        run: python healthcheck.py
-
-      # Always-on run summary (visible in the Actions UI without opening logs)
       - name: Run summary
         if: always()
         run: |
-          echo "### DEALFLOW refresh summary" >> $GITHUB_STEP_SUMMARY
-          python -c "import json,os; load=lambda fn: (json.load(open(fn,encoding='utf-8')) if os.path.exists(fn) else []); md=load('leads_final.json'); bw=load('broward_leads.json'); pb=load('palmbeach_leads.json'); st=load('skiptrace_results.json'); st=st if isinstance(st,dict) else {}; ph=sum(1 for v in st.values() if isinstance(v,dict) and v.get('phones')); kb=os.path.getsize('docs/index.html')//1024 if os.path.exists('docs/index.html') else 0; print(f'- Miami-Dade **{len(md)}** - Broward **{len(bw)}** - Palm Beach **{len(pb)}**'); print(f'- Owners with phones **{ph}**'); print(f'- docs/index.html **{kb} KB**')" >> $GITHUB_STEP_SUMMARY
-          echo "- Red run = email alert (Actions notifications). Green runs need no attention." >> $GITHUB_STEP_SUMMARY
+          echo "### DEALFLOW cloud run (balloon book only)" >> $GITHUB_STEP_SUMMARY
+          echo "- Board, call pages, liens, phones and replies run on the desktop (refresh-dealflow.bat, run-replies-daily.bat)." >> $GITHUB_STEP_SUMMARY
+          echo "- Balloon caches restored: ${{ steps.statecache.outputs.cache-matched-key || 'COLD (no prior cache)' }}" >> $GITHUB_STEP_SUMMARY
