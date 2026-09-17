@@ -3846,6 +3846,20 @@ function fileLinks(r){
   var nm = String(r.o || '').replace(/[,&]/g, ' ').replace(/\s+/g, ' ').trim();
   if(nm) L.push(['People search', 'https://www.truepeoplesearch.com/results?name='
         + encodeURIComponent(nm) + (r.z ? '&citystatezip=' + encodeURIComponent(r.z) : '')]);
+  /* WHITEPAGES. Call Mode shipped with none — the board has three Whitepages links on every row
+     and the phone had zero, so standing on a doorstep the reverse-ADDRESS page (the one whose FREE
+     tier prints the household's shared landline unmasked, plus residents and relatives by name and
+     age) was unreachable. Same two URL shapes the board builds in _wpSlug/_wpAddrUrl/_wpNameUrl,
+     derived here from the seed fields the row already carries (r.a, r.o) rather than shipping two
+     more long strings per lead. The /property/{id} deep-link is deliberately NOT here: the id is
+     per-lead, so it would be exactly the per-row string this band exists to avoid. */
+  var wpSlug = function(s){ return String(s || '').replace(/[^A-Za-z0-9 ]/g, ' ').trim().replace(/\s+/g, '-'); };
+  var ap = String(r.a || '').split(',');
+  var wpCity = ap.length >= 2 ? wpSlug(ap[1]) : '';
+  if(ap[0] && wpCity)
+    L.push(['Whitepages addr', 'https://www.whitepages.com/address/' + wpSlug(ap[0]) + '/' + wpCity + '-FL']);
+  if(nm && wpSlug(nm))
+    L.push(['Whitepages', 'https://www.whitepages.com/name/' + wpSlug(nm) + '/' + (wpCity ? wpCity + '-FL' : 'FL')]);
   if(r.a) L.push(['Map', 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(r.a)]);
   return L;
 }
