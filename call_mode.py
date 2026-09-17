@@ -956,6 +956,33 @@ _SYNC_END = 'function startTeamSync()'
 _OPT_START = 'function _optLog(n, act, src)'
 _OPT_END = 'function _dneg(iso)'
 
+# ═══════════════ THE BOARD'S OWN FUNNEL CLASSIFIER (2026-09-17) ═══════════════
+# Alejandro reads nine lane counts off the board — WARM / URGENT / CALL / WRITE / LETTER / DOOR /
+# TRACE / WAITING / OUT — and could not find those lanes on the phone at all. Call Mode had nine
+# lanes of its own (3-DAY, Emailed, Worker, Urgent 0-7, Sale soon, 46-60, Fresh filings, Balloon,
+# Buy-box) over a DIFFERENT, much smaller population, so no lead could be followed from one surface
+# to the other and no two numbers agreed.
+#
+# EXTRACTED, NOT COPIED, for exactly the reason extract_sync_js gives: a second copy of
+# _funnelStage would be a fourth lane vocabulary in a codebase whose own CLAUDE.md records what the
+# third one cost. The classifier is one function on the board; it stays one function.
+#
+# Four regions, because the pieces _funnelStage calls are scattered across 8,000 lines of the
+# template. Each is anchored on a line that already existed (no marker comments to be helpfully
+# tidied away) and each is asserted by name after extraction, so a move fails the build loudly
+# instead of shipping a page whose lanes silently read zero.
+_CLOCK_START = 'const NO_SALE = 9999;'          # NO_SALE + _hasClock + _aucPassed
+_CLOCK_END = 'function _clockTxt(r){'
+_SALEDAYS_START = 'function _saleDays(r){'      # live days-to-auction, recomputed not baked
+_SALEDAYS_END = 'var WORKER_LANES = {'
+_WRONGOWNER_START = 'function _isWrongOwner(n){'  # reads the audit ledger, not the n.wrongown scalar
+_WRONGOWNER_END = 'function _clearWrongOwner(c){'
+_FUNNEL_START = 'var MAIL_FLOOR_DAYS  = 7;'     # the thresholds + FUNNEL + FUNNEL_ORDER + _funnelStage
+# Stops BEFORE _funnelRows on purpose: that one sorts by _netEqOf, which pulls the whole
+# _basisOf/_payoffOf/_slien/_jlien enrichment chain the phone does not carry. Call Mode needs the
+# CLASSIFIER (which lane is this lead in), never the board's ordering inside a lane.
+_FUNNEL_END = 'function _funnelRows(stage){'
+
 # Names the BOARD ITSELF calls defensively, so an absent definition cannot throw. Allow-listed
 # individually rather than by loosening the resolution guard — each entry states why it is safe, and
 # anything not listed still fails the build.
@@ -1020,6 +1047,12 @@ def free_identifiers(js, provided):
 # the ReferenceError rather than fixing it. _assert_page_provides() below now verifies every entry.
 _PAGE_PROVIDES = ('save', '_nowTS', '_today', 'render', 'esc', 'toast', '$',
                   'syncFreshness', 'syncStatus', 'loadNotes', 'saveNotes')
+
+# Names the FUNNEL block needs that the page supplies from its own state rather than from a
+# `function`/`var X =` declaration _assert_page_provides can see. `notes` rides a multi-declarator
+# `var LS=..., notes={};` line, so it is listed here instead of there — the assertion regex would
+# report it missing and the build would fail on a name that demonstrably exists.
+_FUNNEL_PROVIDES = ('notes',)
 
 
 def _assert_no_dead_overrides(page, block):
@@ -1170,6 +1203,71 @@ def extract_sync_js(tracker_src):
             '  add it to _PAGE_PROVIDES if the page genuinely defines it.'
             % (len(unresolved), ', '.join(unresolved)))
     return opt_block + '\n' + block
+
+
+def _region(src, start, end, what):
+    """One anchored slice of the board template, or a loud build failure. Shared by every funnel
+    region below so a moved anchor always reports WHICH region moved and what to update."""
+    i = src.find(start)
+    if i < 0:
+        raise CallModeError('call_mode: %s anchor START not found in tracker_template.html — '
+                            'the block moved; update the anchor (%r)' % (what, start))
+    j = src.find(end, i)
+    if j < 0:
+        raise CallModeError('call_mode: %s anchor END not found after START — update the anchor '
+                            '(%r)' % (what, end))
+    return src[i:j]
+
+
+def extract_funnel_js(tracker_src):
+    """Pull the board's nine-lane funnel CLASSIFIER verbatim out of the template.
+
+    Returns the concatenated regions, ready to inject into the Call Mode page. See the anchor
+    constants above for why this is extracted rather than reimplemented.
+
+    What comes across, and why each piece is needed by _funnelStage:
+      NO_SALE / _hasClock / _aucPassed  the 9999 sentinel rule and "the auction already happened"
+      _saleDays                          LIVE days-to-auction (r.days is frozen at build; a page
+                                         left open overnight would keep yesterday's lane)
+      _isWrongOwner                      reads the audit LEDGER, so it survives a status change
+      MAIL_*/URGENT_*/FUNNEL/_funnelStage  the thresholds, the lane table and the classifier
+
+    Deliberately NOT extracted: _funnelRows (sorts by _netEqOf — see _FUNNEL_END) and
+    _funnelCounts (a forEach over the board's DATA global; the phone counts its own array).
+    """
+    clock = _region(tracker_src, _CLOCK_START, _CLOCK_END, 'clock')
+    saled = _region(tracker_src, _SALEDAYS_START, _SALEDAYS_END, 'saleDays')
+    wrong = _region(tracker_src, _WRONGOWNER_START, _WRONGOWNER_END, 'wrongOwner')
+    funl = _region(tracker_src, _FUNNEL_START, _FUNNEL_END, 'funnel')
+    block = '\n'.join((clock, saled, wrong, funl))
+    # PRESENCE IS NOT ENOUGH, same lesson as extract_sync_js: an anchor can still match while the
+    # thing it was pointing at has moved out of the slice. Name every definition we are relying on.
+    for need in ('const NO_SALE', 'function _hasClock', 'function _aucPassed',
+                 'function _saleDays', 'function _isWrongOwner',
+                 'var FUNNEL ', 'var FUNNEL_ORDER', 'function _fDays', 'function _funnelStage'):
+        if need not in block:
+            raise CallModeError(
+                'call_mode: the extracted funnel block is missing %r. The lane counts on the phone '
+                'come from this block; shipping it incomplete would put a lead in the wrong lane '
+                'or in none, which is the exact drift the extraction exists to prevent.' % need)
+    # The nine lane keys are the contract with Alejandro's board. If the board ever renames one,
+    # fail here rather than on a phone at a door with a lane button that counts nothing.
+    # A BOUNDARY, not a substring: `'trace:' in funl` is also satisfied by `skiptrace:`, so renaming
+    # a lane to a name that merely ENDS in the old one would have sailed past this check — which is
+    # the likeliest way a rename actually happens.
+    for key in ('warm', 'urgent', 'call', 'write', 'letter', 'door', 'trace', 'wait', 'out'):
+        if not re.search(r'(?<![A-Za-z0-9_$])%s\s*:' % key, funl):
+            raise CallModeError('call_mode: FUNNEL lane %r is gone from the board template. Call '
+                                'Mode mirrors the board\'s nine lanes; reconcile them deliberately '
+                                'rather than letting the phone drop a lane.' % key)
+    unresolved = [n for n in free_identifiers(block, _PAGE_PROVIDES + _FUNNEL_PROVIDES)
+                  if n not in _GUARDED_OPTIONAL]
+    if unresolved:
+        raise CallModeError(
+            'call_mode: the extracted funnel block calls %d name(s) that nothing defines: %s\n'
+            '  Every one throws ReferenceError at run time and is INVISIBLE to node --check.'
+            % (len(unresolved), ', '.join(unresolved)))
+    return block
 
 
 _COMPANY_RE = re.compile(r'\b(LLC|INC|CORP|TRUST|ASSOC|ASSN|BANK|COMPANY|HOLDINGS|LP|LTD|EST)\b', re.I)
@@ -1442,6 +1540,12 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             'r': [(rank[keep_oi[k]][:1].upper()
                    if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '') for k in order],
             'k': withheld,
+            # EMAIL COUNT, never the addresses. The board's funnel splits WRITE from TRACE on
+            # whether a lead is reachable by email at all, so the phone needs the fact and not the
+            # data. Shipping the addresses would put 1,400 homeowner emails on a handset to answer
+            # a yes/no question (and this page's whole DNC discipline is that what is not in the
+            # payload cannot leak). None on the common no-email row; the null-strip drops the key.
+            'ne': (len([e for e in (d.get('emails') or []) if str(e or '').strip()]) or None),
             'pk': d.get('pkey') or ('C' + case),
             # every case this person owns, when there is more than one — see _groups above.
             # None for singletons, and the null-strip below removes it: the common case costs 0 bytes.
@@ -1643,8 +1747,132 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     return out[:cap], len(out)
 
 
+def coverage_rows(slim, dial_cases, optouts=None, deads=None):
+    """-> (rows, dropped_pii) : one SLIM row for every lead the dial queue does not carry.
+
+    WHY (2026-09-17, Alejandro): the board's nine funnel lanes cover all 2,297 leads; Call Mode
+    carried ~400. TRACE alone is 1,068 leads — 46% of the book — and none of it was reachable from
+    the phone, so "what still needs skip-tracing" was a question only the laptop could answer. Same
+    for the LETTER and DOOR backlogs past the dial queue's 60-day window.
+
+    These rows exist to be COUNTED, SORTED and HANDED OFF — never dialled. That is enforced by what
+    is in them rather than by a flag the renderer has to remember to check:
+
+      * NO PHONE NUMBERS. Not masked, not DNC-filtered — absent. `np` is a COUNT of usable numbers
+        so the funnel can tell TRACE (nothing to call) from LETTER (a number exists, the auction is
+        just too far out to make the dial queue). A count cannot be tel:-linked.
+      * NO EMAIL ADDRESSES, same rule, same reason — `ne` is a count.
+      * `oo:1` where the BUILD already holds a suppression verdict (the case is in optouts.json /
+        bounced, or the person matched the identity ledger). The page routes those straight to OUT
+        without asking the classifier, because a ledger opt-out outranks anything notes can say.
+
+    Everything else is the shape the board's own _funnelStage reads, under the board's own key
+    names, so the extracted classifier runs on these rows unmodified. See extract_funnel_js.
+    """
+    optouts, deads = (optouts or {}), (deads or {})
+    dial = set(dial_cases or ())
+    out, seen, suppressed = [], set(), 0
+    # The identity-ledger check is call_rows' own, reused rather than re-derived: CLAUDE.md reserves
+    # everything that PRODUCES a suppression verdict for the desktop session. This reads one.
+    _id_opted = _identity_opted_fn(slim, optouts)
+    for d in slim:
+        case = (d.get('case') or '').strip()
+        if not case or case in dial or case in seen:
+            continue
+        seen.add(case)
+        oo = 1 if (case in optouts or case in deads or _id_opted(d)) else 0
+        if oo:
+            suppressed += 1
+        # `np` COUNTS DNC-FLAGGED NUMBERS, deliberately, and this is the one place these rows do
+        # not take the safer reading.
+        #
+        # The board's _funnelStage asks `(r.phones||[]).length > 0` and never looks at phdnc, so a
+        # lead whose every number carries a do-not-call flag sits in the board's CALL lane as
+        # reachable. Excluding them here read better and made the phone disagree with the board —
+        # which is the one thing these rows exist to stop. The nine counts are Alejandro's, read off
+        # the board; a lane that says 610 there has to say 610 here or the parity is decorative.
+        #
+        # ⚠️ THE BOARD-SIDE GAP IS REAL AND IS DELIBERATELY NOT FIXED HERE. CLAUDE.md reserves the
+        # suppression surface for the DESKTOP-35NNMFL session and is explicit that a suppression bug
+        # found from another session gets REPORTED, not repaired: two uncoordinated fixes on this
+        # surface is the documented failure mode and the blast radius is dialing someone who said do
+        # not call. Reported to Alejandro 2026-09-17.
+        #
+        # Nothing becomes dialable because of this. Coverage rows ship no numbers at all, and
+        # call_rows still drops every DNC number from the dial queue. This count feeds a LANE LABEL.
+        phdnc = d.get('phdnc') or []
+        _valid = [i for i, ph in enumerate(d.get('phones') or []) if len(_digits(ph)) == 10]
+        np = len(_valid)
+        # ...and carry how many of those are do-not-call, so the card can say WHY a lead that has a
+        # number on file is not in the dial queue. A count, never the numbers.
+        kd = sum(1 for i in _valid if (phdnc[i] if i < len(phdnc) else False))
+        days = d.get('days')
+        try:
+            days = int(days)
+        except (TypeError, ValueError):
+            days = None
+        # BUDGETED TO ~150 BYTES A ROW. This page's founding rule is that it opens on cell data at a
+        # door — ~490 rows in ~100 KB against the board's 6.4 MB — and coverage adds ~1,900 rows to
+        # it. Every field here is one a caller reads off the list or a skip-tracer needs to work the
+        # lead; there is no room for anything else. `o` (the full owner string with co-owners) is
+        # dropped whenever `on` can stand in, which is most rows, saving ~25 B each.
+        _on = _greet_name(d)
+        _o = (d.get('owners') or '').strip()[:70]
+        _ne = len([e for e in (d.get('emails') or []) if str(e or '').strip()])
+        row = {
+            'c': case,
+            'o': (None if _on else _o),
+            'on': _on,
+            'a': (d.get('addr') or '')[:60],
+            # BOARD KEY NAMES from here down — _funnelStage reads these verbatim.
+            'auction': (d.get('auction') or ''),
+            'days': days,
+            # 0 ships as None so the null-strip drops the key: "no phones" is the common case and
+            # `"np":0` on a thousand rows is payload carrying no information.
+            'np': np or None,
+            'kd': kd or None,
+            'ne': _ne or None,
+            'st': d.get('st') or '',
+            'e': (lambda v: v if isinstance(v, (int, float)) else None)(d.get('eq')),
+            'ct': (str(d.get('county') or 'MIAMI-DADE').strip().upper()[:2] or None),
+            'fo': re.sub(r'[^0-9A-Za-z]', '', str(d.get('folio') or '')).upper()[:26] or None,
+        }
+        if oo:
+            row['oo'] = 1
+        for k in ('sibclaimed', 'saleBkAct', 'lpDismissed'):
+            if d.get(k):
+                row[k] = 1
+        out.append({k: v for k, v in row.items() if v is not None and v != '' and v != []})
+    return out, suppressed
+
+
+def _identity_opted_fn(slim, optouts):
+    """call_rows' identity-ledger test, lifted to a standalone closure so coverage_rows can reuse
+    the SAME reader instead of growing a second one. Returns a predicate; a no-op when the ledger
+    carries no identity keys."""
+    _oo_ident = {str(k) for k in (optouts or {}) if str(k)[:1] in ('@', '#')}
+    if not _oo_ident:
+        return lambda lead: False
+    try:
+        from foreclosure_leads import _addr_key as _ak    # circular at module scope; see call_rows
+    except Exception:
+        return lambda lead: False
+
+    def _test(lead):
+        for _e in (lead.get('emails') or []):
+            _e = str(_e or '').strip().lower()
+            if _e and (('@' + _e) in _oo_ident or ('@' + _ak(_e)) in _oo_ident):
+                return True
+        for _p in (lead.get('phones') or []):
+            _p = re.sub(r'\D', '', str(_p or ''))
+            if _p and (('#' + _p) in _oo_ident or ('#' + _ak(_p)) in _oo_ident):
+                return True
+        return False
+    return _test
+
+
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
-               seat=None):
+               seat=None, funnel_js=''):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -1653,7 +1881,8 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     # __SIG__ is 2 BY DESIGN: the byte-42 head marker freshCheck range-reads, plus the JS var.
     # Both must receive the same value, so replace-all is correct there — the guard just pins the
     # exact expected count so a third copy (e.g. in a comment) still fails the build.
-    for _ph, _want in (('__SYNCJS__', 1), ('__SCRIPT__', 1), ('__OUTCOMES__', 1), ('__PAYLOAD__', 1),
+    for _ph, _want in (('__SYNCJS__', 1), ('__FUNNELJS__', 1),
+                       ('__SCRIPT__', 1), ('__OUTCOMES__', 1), ('__PAYLOAD__', 1),
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
                        ('__TOTAL__', 1), ('__VMEN__', 1), ('__VMES__', 1), ('__TEXTPERSON__', 1),
@@ -1697,6 +1926,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
         'rec': (_QREC_LINE if _quo_recording() else None),
     }
     return _PAGE.replace('__SYNCJS__', sync_js) \
+                .replace('__FUNNELJS__', funnel_js) \
                 .replace('__SCRIPT__', json.dumps(script, ensure_ascii=False)) \
                 .replace('__OUTCOMES__', oc)                 .replace('__BOOKURL__', BOOKING_URL) \
                 .replace('__PAYLOAD__', json.dumps(enc_payload)) \
@@ -1998,6 +2228,9 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         rows, total = call_rows(slim, optouts, deads)
     else:
         rows, total = rows
+    # BEFORE the seat split — see the coverage-rows note below. A lead carried by the OTHER seat is
+    # still carried, and must not reappear here as uncovered work.
+    _dial_all = list(rows)
     if seat:
         _sn, _si, _sw = seat
         if not (_sn > 1 and 0 <= _si < _sn):
@@ -2006,7 +2239,37 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     # total stays the CREW-WIDE qualifying count on purpose: "N qualifying" describes the funnel,
     # not this phone. SHOWN (len(rows)) is what this seat actually carries.
     # phone_index stays FULL on both seats: "Who texted me?" must resolve a number from either half.
-    payload = encrypt(json.dumps({'r': rows, 'x': phone_index(slim)}), codes)
+    #
+    # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead the dial queue
+    # drops (no traced number, auction past the 60-day window, over the cap) as a countable,
+    # sortable, un-dialable row. Cut from the CREW-WIDE dial list, never the seat's: the nine board
+    # lane counts describe the business, and halving them per phone would make two callers read two
+    # different books. See coverage_rows for what is deliberately absent from them.
+    _cov, _cov_sup = coverage_rows(slim, [r.get('c') for r in _dial_all], optouts, deads)
+    # EVERY LEAD, OR SAY WHICH ONES ARE MISSING. The whole promise of the board lanes on the phone
+    # is that they count the same book the board counts; a lead that falls out of BOTH the dial
+    # queue and the coverage set makes a lane read low, and a lane reading low is indistinguishable
+    # from a lane that is genuinely short. That is the silent-cap failure this file already carries
+    # three comments about, so it is a build failure here rather than a surprise on a handset.
+    _all_cases = {(d.get('case') or '').strip() for d in slim if (d.get('case') or '').strip()}
+    _shipped = {r.get('c') for r in _dial_all} | {r.get('c') for r in _cov}
+    _lost = sorted(_all_cases - _shipped)
+    if _lost:
+        raise CallModeError(
+            'call_mode: %d lead(s) are in neither the dial queue nor the coverage set, so the board '
+            'lanes on the phone would under-count the book: %s%s\n'
+            '  A new gate in call_rows drops leads; coverage_rows has to pick them up.'
+            % (len(_lost), ', '.join(_lost[:8]), ' ...' if len(_lost) > 8 else ''))
+    _plain = json.dumps({'r': rows, 'b': _cov, 'x': phone_index(slim)})
+    # SAY THE PAYLOAD SIZE OUT LOUD, every build. This page exists to open on cell data at a door
+    # (~100 KB was the founding budget) and coverage roughly doubles it. A number in the log is what
+    # makes the next person's addition to these rows a decision rather than an accident.
+    print('call mode: %d dialable row(s) + %d coverage row(s) = %d leads on the phone, %.0f KB '
+          'before encryption (board lanes now count the whole book, not just the dial queue)%s'
+          % (len(rows), len(_cov), len(rows) + len(_cov), len(_plain) / 1024.0,
+             ('; %d coverage row(s) carry a ledger opt-out and ship with no number at all'
+              % _cov_sup) if _cov_sup else ''))
+    payload = encrypt(_plain, codes)
     import hashlib
     sig = hashlib.sha256(json.dumps(payload, sort_keys=True).encode('utf-8')).hexdigest()[:12]
     _assert_page_provides(_PAGE)
@@ -2016,8 +2279,11 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _tracker_src = open(os.path.join(HERE, 'tracker_template.html'), encoding='utf-8').read()
     _assert_outcomes_match_board(_tracker_src)
     sync_js = extract_sync_js(_tracker_src)
+    funnel_js = extract_funnel_js(_tracker_src)
     _assert_no_dead_overrides(_PAGE, sync_js)
-    html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson, seat=seat)
+    _assert_no_dead_overrides(_PAGE, funnel_js)
+    html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
+                      seat=seat, funnel_js=funnel_js)
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -2432,6 +2698,83 @@ function syncFreshness(){}
    Storage key is the board's own `fcLeadNotes` on the same origin, so there is one store, not two. */
 __SYNCJS__
 /* ══════════════════════════════════════════════════════════════════════════════════════════ */
+/* ══════ THE BOARD'S NINE FUNNEL LANES — also extracted VERBATIM, same rule ══════
+   WARM / URGENT / CALL / WRITE / LETTER / DOOR / TRACE / WAITING / OUT. These are the counts
+   Alejandro reads off the board, and until 2026-09-17 they did not exist on the phone at all:
+   Call Mode had nine lanes of its OWN, over a different and much smaller population, so the two
+   surfaces never agreed on a single number and no lead could be followed from one to the other.
+   _funnelStage now runs HERE as the same bytes it runs as on the board. See extract_funnel_js. */
+__FUNNELJS__
+/* ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+/* COVERAGE ROWS — the rest of the book (coverage_rows in call_mode.py). Every lead the dial queue
+   drops: no traced number, auction past the 60-day window, or over the cap. They carry NO phone
+   numbers and NO email addresses, only counts, so nothing here can be dialled or written to by
+   accident — see the docstring on the Python side for why that is structural and not a flag. */
+var COV = [], BLANE = null;      /* BLANE: null = the dial queue; a FUNNEL key = the board-lane view */
+
+/* THE ADAPTER, and the ONLY thing standing between the two row shapes. It maps FIELDS. It decides
+   nothing: which lane a lead is in is _funnelStage's answer, on the board and here, from the same
+   extracted bytes. Keep it that way — the moment a rule lives in this function the two surfaces
+   have begun to drift again, which is the entire failure this file already carries three scars from. */
+function _bView(r){
+  if(r._bv) return r._bv;
+  var isCov = (r.np !== undefined || r.days !== undefined);
+  /* AUCTION IS BLANK FOR LP AND BALLOON ROWS, deliberately. On a dial row `x` is
+     `auction or filedDate or filed` — so a fresh lis pendens carries its FILING date there and a
+     balloon row carries the note's estimated maturity. Handing either to _saleDays as an auction
+     date would invent a countdown the property does not have and drop the lead into URGENT.
+     A coverage row already ships `auction` as the auction and nothing else. */
+  var auc = isCov ? (r.auction || '') : ((r.lp || r.st === 'BAL') ? '' : (r.x || ''));
+  var dys = isCov ? (typeof r.days === 'number' ? r.days : NO_SALE)
+                  : (typeof r.d === 'number' ? r.d : NO_SALE);
+  /* Arrays of the right LENGTH and nothing else: _funnelStage asks these two questions and only
+     these two — "is there a number to dial" and "is there anywhere to write". Length answers both.
+     Filling them with the actual numbers would put 1,148 dialable numbers on every coverage row. */
+  var nph = isCov ? (r.np || 0) : ((r.p && r.p.length) || 0);
+  var v = {
+    case: r.c, auction: auc, days: dys,
+    phones: new Array(nph), emails: new Array(r.ne || 0),
+    sibclaimed: r.sibclaimed || 0, saleBkAct: r.saleBkAct || 0, lpDismissed: r.lpDismissed || 0
+  };
+  try { Object.defineProperty(r, '_bv', {value:v, enumerable:false}); } catch(e){ r._bv = v; }
+  return v;
+}
+
+/* WHICH BOARD LANE IS THIS LEAD IN. One wrapper, one authority underneath it.
+   `oo` short-circuits to OUT: it means the BUILD already held a suppression verdict for this
+   person — the case is in optouts.json, it is on the bounced list, or the identity ledger matched
+   an email/phone that said stop with no case attached. The board reaches the same verdict through
+   its own baked notes; the phone cannot, because a ledger keyed by a hashed address is not
+   something notes carry. Answering OUT without asking is therefore not a second classifier, it is
+   the same verdict arriving by the only route this surface has — and it errs toward suppression,
+   never away from it. */
+function funnelOf(r){
+  if(!r) return null;
+  if(r.oo) return 'out';
+  try { return _funnelStage(_bView(r)); } catch(e){ return null; }
+}
+
+/* THE WHOLE BOOK, dial queue first. Not de-duplicated here: coverage_rows is handed the crew-wide
+   dial list and excludes every case already in it, so the two sets are disjoint by construction. */
+function allLeads(){ return ROWS.concat(COV); }
+
+function funnelCounts(){
+  var c = {}; FUNNEL_ORDER.forEach(function(k){ c[k] = 0; });
+  allLeads().forEach(function(r){ var s = funnelOf(r); if(s && c[s] != null) c[s]++; });
+  return c;
+}
+function funnelRows(k){
+  return allLeads().filter(function(r){ return funnelOf(r) === k; }).sort(function(a, b){
+    var ea = (typeof a.e === 'number') ? a.e : -1e9, eb = (typeof b.e === 'number') ? b.e : -1e9;
+    if(eb !== ea) return eb - ea;                        /* money first, same rule as the board */
+    var da = _bView(a).days, db = _bView(b).days;
+    return (da == null ? 99999 : da) - (db == null ? 99999 : db);
+  });
+}
+/* Is this row actually dialable from this page? A coverage row is not, and that is the honest
+   answer to give at the top of its card rather than a dead Call button. */
+function _dialable(r){ return !!(r && r.p && r.p.length); }
 /* syncStatus writes a one-line status into the page. The board targets its own element; here it goes
    to the same #sync line the gate and queueSync already use, so a sync failure is VISIBLE rather than
    swallowed. Guarded because syncPull calls it before #sync exists on the very first paint.
@@ -2491,8 +2834,11 @@ async function boot(){
      can resolve numbers that are NOT among the dialable rows (67% of them). Accept BOTH shapes —
      an older decrypted copy can still be sitting in this device's cache. */
   var take=function(p){ if(!p) return null;
-    if(Array.isArray(p)){ ROWS=p; PHIDX=null; return p; }
-    ROWS=p.r||[]; PHIDX=p.x||null; return ROWS; };
+    if(Array.isArray(p)){ ROWS=p; PHIDX=null; COV=[]; return p; }
+    /* `b` is the coverage set (2026-09-17). Absent on an older decrypted copy sitting in this
+       device's cache, in which case the board lanes count only the dial queue and say so, rather
+       than quietly reporting a book two thirds the size of the one on the laptop. */
+    ROWS=p.r||[]; PHIDX=p.x||null; COV=p.b||[]; return ROWS; };
   var saved=null; try{saved=localStorage.getItem('fcPw');}catch(e){}
   if(saved){ var r=await unwrap(saved); if(take(r)){ return start(); } }
   $('go').onclick=async function(){
@@ -3368,6 +3714,9 @@ var SCREEN='lead';
 var _lastAfter=null;
 function render(){
   if(SCREEN!=='lead'){ return; }   // never stomp an interactive screen — advance() repaints fresh
+  /* BOARD-LANE VIEW. Sits in front of the dial queue rather than filtering it: these lanes cover
+     leads with no phone at all, which pool() cannot express and must not be taught to. */
+  if(BLANE){ $('app').innerHTML = boardList(); wire(); return; }
   var P=pool();
   /* An emptied lane and a never-populated lane are NOT the same event, and until now they printed the
      same words. Work every lead and the pool drains to zero, so a finished session was reporting
@@ -3425,6 +3774,7 @@ function head(){
      head() always renders downstream of a pool() call. */
   var sup = _SUPN;
   return '<div class="top"><div class="lane">'+laneBtns+'</div>'
+    + boardBar()
     +(sup?('<div class="supn">'+sup+' hidden &mdash; wrong number, opted out, dead, or <b>already called</b> '
           +'(by you or a teammate) &middot; <a href="#" id="reglink" style="color:var(--gold)">see the call log</a></div>'):'')
     /* TIER 3, on its own line and never folded into the number above it. "Opted out" and "we
@@ -3445,6 +3795,84 @@ function head(){
     +'<div class="supn">list built '+esc(BUILT.replace('T',' '))+errChip()+'</div>'
     +sessStrip()
     +'</div>';
+}
+/* ══════════════ THE BOARD'S NINE LANES, ON THE PHONE (2026-09-17) ══════════════
+   A second strip under the dial lanes, not a replacement for them. The lanes above answer "who do I
+   dial next"; these answer "where does the whole book stand", which is the question the laptop was
+   the only place to ask. Same nine keys, same classifier, same counts — so a lane that reads 129 on
+   the board reads 129 here, and tapping it lists the same 129 leads.
+
+   COLLAPSED BY DEFAULT to one summary line. Nine more buttons permanently above the card would push
+   the opener down the screen, and this page's whole reason for existing is that the thing he needs
+   is reachable in one tap on a handset. */
+var BBAR_OPEN = false;
+function boardBar(){
+  var c = funnelCounts(), tot = 0;
+  FUNNEL_ORDER.forEach(function(k){ tot += c[k]; });
+  if(!tot) return '';
+  if(!BBAR_OPEN){
+    /* The summary line names the two lanes that are ACTIONABLE-BUT-NOT-DIALABLE, because those are
+       the ones that were invisible here before and they are the bulk of the book: TRACE is work for
+       the skip-tracer, LETTER is work for the mail run. */
+    var bits = [];
+    if(c.trace)  bits.push(c.trace + ' to skip-trace');
+    if(c.letter) bits.push(c.letter + ' to mail');
+    if(c.door)   bits.push(c.door + ' to knock');
+    return '<div class="supn"><a href="#" onclick="BBAR_OPEN=true;render();return false" '
+         + 'style="color:var(--gold)">Board lanes &middot; ' + tot + ' leads</a>'
+         + (bits.length ? ' &mdash; ' + bits.join(' &middot; ') : '') + '</div>';
+  }
+  var btns = FUNNEL_ORDER.map(function(k){
+    var F = FUNNEL[k];
+    return '<button data-b="' + k + '" class="' + (BLANE === k ? 'on' : '')
+         + (c[k] ? '' : ' dim') + '">' + F.ic + ' ' + esc(F.t) + ' &middot; ' + c[k] + '</button>';
+  }).join('');
+  return '<div class="lane" style="margin-top:2px">' + btns + '</div>'
+       + '<div class="supn">Every lead on the board, in the board\'s own lanes &middot; '
+       + '<a href="#" onclick="BBAR_OPEN=false;BLANE=null;i=0;render();return false" '
+       + 'style="color:var(--gold)">hide</a></div>';
+}
+
+/* The list behind a board-lane button. Read-only on purpose for the rows that are not dialable:
+   the point of putting TRACE on the phone is to be able to SEE and HAND OFF the 1,068 leads nobody
+   can call yet, not to invent a way to call them. */
+function boardList(){
+  var k = BLANE, F = FUNNEL[k] || {t:k, ic:'', d:''}, rows = funnelRows(k);
+  var head_ = '<div class="card"><b>' + F.ic + ' ' + esc(F.t) + ' &middot; ' + rows.length + '</b>'
+            + '<div class="sub">' + esc(F.d) + '</div></div>';
+  if(!rows.length){
+    return head() + head_ + '<div class="card">Nothing in this lane.</div><div class="sheetpad"></div>';
+  }
+  /* CAPPED AT 200 ROWS PER PAINT, and it says so. 1,068 rows of DOM on a handset is a locked tab,
+     and a list that silently stopped at 200 is the same silent cap this file already carries two
+     comments about. The COUNT above is always the true one. */
+  var CAP = 200, shown = rows.slice(0, CAP);
+  var body = shown.map(function(r){
+    var dial = _dialable(r), bv = _bView(r);
+    var clock = (!bv.auction) ? 'no sale date'
+              : (bv.days == null || bv.days >= NO_SALE) ? esc(bv.auction)
+              : (bv.days < 0 ? 'sale passed' : 'sale in ' + bv.days + 'd');
+    var eq = (typeof r.e === 'number') ? (r.e + '% equity') : 'equity not checked';
+    /* WHAT IS ACTUALLY BLOCKING THIS LEAD, named. "Not callable" is not an answer a caller can act
+       on; "no traced number" sends it to the skip-tracer and "sale is 94 days out" does not. */
+    /* NAME THE BLOCKER. "Not callable" is not something a caller can act on; "the only number on
+       file is do-not-call" and "the sale is 94 days out" send the lead to two different places. */
+    var why = dial ? ''
+      : (r.kd && r.kd >= bv.phones.length) ? 'do-not-call on every number — mail or door only'
+      : bv.phones.length ? 'not in today\'s dial queue'
+      : bv.emails.length ? 'no phone — email only'
+      : 'no phone, no email — skip-trace first';
+    return '<div class="card"' + (dial ? ' data-open="' + esc(r.c) + '" style="cursor:pointer"' : '')
+         + '><b>' + esc(r.on || r.o || r.c) + '</b>'
+         + '<div class="sub">' + esc(r.a || '') + '</div>'
+         + '<div class="sub">' + clock + ' &middot; ' + eq
+         + (why ? ' &middot; ' + why : ' &middot; <b style="color:var(--gold)">tap to call</b>') + '</div></div>';
+  }).join('');
+  var more = rows.length > CAP
+    ? '<div class="card"><b>' + (rows.length - CAP) + ' more in this lane.</b><div class="sub">'
+      + 'Showing the first ' + CAP + ' by equity. The count above is the whole lane — the rest are '
+      + 'on the board.</div></div>' : '';
+  return head() + head_ + body + more + '<div class="sheetpad"></div>';
 }
 function seatChip(){
   var s=_seat();
@@ -4933,13 +5361,43 @@ document.addEventListener('click', function(ev){
 }, true);
 window.addEventListener('unhandledrejection', function(ev){ logErr(ev.reason, 'promise'); });
 function wire(){
-  Array.prototype.forEach.call(document.querySelectorAll('.lane button'), function(b){
-    b.onclick=function(){ lane=b.dataset.l; i=0; render();
+  /* [data-l] NOT '.lane button'. The board-lane strip reuses the .lane class for its layout and its
+     buttons carry data-b, so the bare selector matched them too and set `lane=undefined` — which
+     laneDef() silently resolves to 'soon'. Tapping "TRACE" would have quietly switched the DIAL
+     queue to Sale-soon and looked like nothing happened. Select on the attribute that means it. */
+  Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-l]'), function(b){
+    b.onclick=function(){ lane=b.dataset.l; BLANE=null; i=0; render();
       /* 2026-09-04: switching lanes also pulls fresh team state, so a category he opens does not show
          leads a teammate worked since the last 45s sync -- the "keeps bringing me back to people I've
          done" complaint on the team side. The immediate render() is instant; the pull corrects it. */
       if(localStorage.getItem('fcTeamKey')){ try{ syncPull().then(function(){ loadNotes();
         if(SCREEN==='lead'){ try{ render(); }catch(_e){} } }); }catch(e){} }
+    };
+  });
+  /* BOARD LANES. Tapping the lane you are already in closes the view and hands the dial queue
+     back — otherwise the only way out is the "hide" link, which is one more thing to find. */
+  Array.prototype.forEach.call(document.querySelectorAll('.lane button[data-b]'), function(b){
+    b.onclick=function(){ BLANE = (BLANE === b.dataset.b) ? null : b.dataset.b; i=0; render(); };
+  });
+  /* A DIALABLE row inside a board lane opens the normal card, in the dial lane that actually holds
+     it. Jumping straight to the lead without moving `lane` would leave advance() walking a pool
+     this lead is not in, so "next" would land somewhere unrelated. Find its lane first, then seek.
+     Rows with no phone carry no data-open at all, so there is nothing here to tap. */
+  Array.prototype.forEach.call(document.querySelectorAll('[data-open]'), function(el){
+    el.onclick=function(){
+      var c = el.getAttribute('data-open');
+      for(var q=0;q<LANES.length;q++){
+        var L=LANES[q]; var hit=-1;
+        if(!ROWS.some(function(r){ return r.c===c && L.pred(r); })) continue;
+        lane=L.k; BLANE=null;
+        var P=pool();
+        for(var j=0;j<P.length;j++) if(P[j].c===c){ hit=j; break; }
+        if(hit>=0){ i=hit; render(); return; }
+      }
+      /* In no dial lane we can open — suppressed, claimed by the other phone, or on the other
+         seat. Say which rather than doing nothing when tapped. */
+      toast(_clmOwner(c) ? 'A teammate is on this lead right now'
+                         : 'Not in a dial lane right now \u2014 suppressed, or on the other phone');
     };
   });
   // "see the call log" on the hidden-count line — the registry of who has been called, by whom
