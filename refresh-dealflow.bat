@@ -339,6 +339,12 @@ echo [4d/5] Team CRM (Desktop CSV always; Google Sheets when sheets_crm_webhook.
 rem  Reads the Desktop twin's RAW payload, so it MUST run after the [4/5] rebuild above.
 python -u sheets_crm.py >> "%LOG%" 2>&1
 
+echo [4d2/5] Deal desk — every open YES ranked by how long it has gone stale + how close the sale is...
+rem  The 2026-09-16 audit: the business loses deals AFTER the yes, not at the pitch (5 appointments
+rem  booked and abandoned, a retainer never chased, an offer that sat until the sale passed). This
+rem  surfaces every advanced-stage lead with its ONE next action and days idle -> DEALFLOW\DEAL-DESK-<date>.md.
+python -u deal_desk.py >> "%LOG%" 2>&1
+
 echo [4e/5] Contact trust — do the traced phones/emails belong to the OWNER?
 rem  WHY THIS RUNS EVERY NIGHT (2026-08-23). Twice in one week a stranger was one dial away from
 rem  being told his home was in foreclosure. 1400 Saint Charles Pl "#107" does not exist on the
