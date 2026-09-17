@@ -47,6 +47,8 @@ if not errorlevel 1 (
   git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
   git push origin main >> "%LOG%" 2>&1
   if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
+  rem  mirror the rebuilt board to the PUBLIC site repo (see publish_site.py)
+  python -u publish_site.py >> "%LOG%" 2>&1
 )
 :end
 endlocal

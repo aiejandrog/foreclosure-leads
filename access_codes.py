@@ -15,7 +15,7 @@ import os, sys, secrets, json, subprocess, time
 HERE = os.path.dirname(os.path.abspath(__file__))
 CODES = os.path.join(HERE, 'site.codes')
 LEADS = os.path.join(HERE, 'leads_final.json')
-URL = 'https://aiejandrog.github.io/foreclosure-leads/'
+URL = 'https://aiejandrog.github.io/dealflow-board/'
 ALPH = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789'   # no I O 0 1 L -> easy to read aloud / text
 BAR = '=' * 48
 

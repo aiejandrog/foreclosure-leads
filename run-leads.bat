@@ -42,6 +42,12 @@ rem  4 commits stacked up and the live site sat frozen at 08-14 for two days whi
 rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
 git pull --rebase --autostash -X theirs origin main >> leads-run.log 2>&1
 git push origin main >> leads-run.log 2>&1
+rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo went private so the lead
+rem  data and history stop being world-readable; docs/ still lands here for publish_guard's
+rem  baseline, and publish_site.py mirrors the built pages to the repo Pages actually serves.
+rem  It runs BEFORE the verify below: a failed push to THIS repo must not keep a board that
+rem  already passed the gates off the public site.
+python -u publish_site.py >> leads-run.log 2>&1
 rem  This file did not even have the 6s retry, let alone a check that the push landed. Ask the remote.
 call publish_verify.bat "leads-run.log" "-" "weekly lead refresh"
 :done

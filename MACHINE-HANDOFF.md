@@ -144,7 +144,7 @@ PowerShell 5.1 reads it as CP1252, turns each em-dash into a smart quote, and di
 
 ## 2. The website — where the design actually lives
 
-Live site: **https://aiejandrog.github.io/foreclosure-leads/** (GitHub Pages, served from `docs/`)
+Live site: **https://aiejandrog.github.io/dealflow-board/** (GitHub Pages, served from `docs/`)
 
 ```
 tracker_template.html      <- THE DESIGN. <style> blocks + render(). Edit THIS.

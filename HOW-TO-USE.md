@@ -1,6 +1,6 @@
 # How to Use the Foreclosure Lead Tool 🏠
 
-**The website:** https://aiejandrog.github.io/foreclosure-leads/
+**The website:** https://aiejandrog.github.io/dealflow-board/
 
 ---
 
