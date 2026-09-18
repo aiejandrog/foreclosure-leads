@@ -1469,17 +1469,30 @@ def subst_build_facts(tpl, updated):
                        of the same literal in three files.
       __EMBLEM_W/H__   the emblem's real pixel aspect, from the payload actually embedded.
                        Hardcoding it meant a logo swap stretched the mark on every letterhead.
+      __BOARDURL__     where the published board lives (board_url.BOARD_URL). Call Mode's absolute
+                       fallback and the Morning Worker's "Call these N now" button are baked from
+                       it. Hardcoded, they survived the 2026-09-17 move inside a board that was
+                       already built -- so the live site kept offering the retired address until
+                       something rebuilt it, which nothing did. A baked value cannot do that,
+                       because check_board_urls() below refuses to ship a page carrying any other.
     """
     import entity as _entity
     import bsg_brand as _brand
+    import board_url as _burl
     name, _doc, _warn = _entity.display_llc()
     snd = _entity.sender()
-    return (tpl.replace('__UPDATED__', updated)
-               .replace('__ENTITY_VERIFIED__', 'true' if _entity.verified() else 'false')
-               .replace('__ENTITY_LLC__', _js(name))
-               .replace('__CLIENT_EMAIL__', _js(snd.get('client_email')))
-               .replace('__EMBLEM_W__', str(_brand.NATIVE_W))
-               .replace('__EMBLEM_H__', str(_brand.NATIVE_H)))
+    out = (tpl.replace('__UPDATED__', updated)
+              .replace('__ENTITY_VERIFIED__', 'true' if _entity.verified() else 'false')
+              .replace('__ENTITY_LLC__', _js(name))
+              .replace('__CLIENT_EMAIL__', _js(snd.get('client_email')))
+              .replace('__EMBLEM_W__', str(_brand.NATIVE_W))
+              .replace('__EMBLEM_H__', str(_brand.NATIVE_H))
+              .replace('__BOARDURL__', _burl.BOARD_URL))
+    # Both template readers go through here, so this is the one place that sees every built page
+    # before it is written. A retired address anywhere in it is a stale build, and a stale build is
+    # exactly what published a dead "Call these 30 now" button on 2026-09-18.
+    _burl.check_board_urls(out, 'the built board')
+    return out
 
 
 def make_tracker(leads):

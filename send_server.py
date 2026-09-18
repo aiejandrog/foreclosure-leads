@@ -852,7 +852,15 @@ class Handler(BaseHTTPRequestHandler):
                 # instead of discovering it 403 by 403.
                 # Ledger staleness — the 2026-09-05 desktop incident guard. The board shows this
                 # next to the cap so a stale list is visible BEFORE a run 403s send-by-send.
+                #
+                # `ledger_age_days` is the OPT-OUT ledger's age, not mail_sent.json's. The name
+                # does not say so, and on 2026-09-18 that cost two people forty minutes: a reader
+                # compared it against mail_sent.json's mtime, saw 0.22 days against 4.7, and
+                # reasonably concluded the bridge was reading a different folder. `optout_age_days`
+                # below is the same number under a name that cannot be misread. The old key stays
+                # because the board reads it; remove it only with the board in the same commit.
                 'ledger_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
+                'optout_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
                 'optout_stale': (_oo_age is None or _oo_age > OPTOUT_MAX_AGE_DAYS),
                 'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
@@ -1286,7 +1294,21 @@ class Handler(BaseHTTPRequestHandler):
         if _senders_active(user, _cfg) and not meta.get('test'):
             _wl = str(meta.get('wl') or '').lower()
             _cand = _lane_from(_cfg, _wl)
-            if _cand and _cand != user:
+            # THE CAP IS METERED ON THE ADDRESS, NOT ON WHETHER IT IS THE LOGIN (fixed 2026-09-18).
+            #
+            # This check used to live inside `if _cand != user`, so the one address that is BOTH a
+            # lane target and the login -- alejandro@bsgflorida.com -- was the only address in the
+            # system with no daily ceiling but the global 300. That mattered from 2026-09-11, when
+            # _lane_from() started routing every lane to the main domain while the warming aliases
+            # sit at zero: from that day every lane resolved to the login and every send took the
+            # uncapped branch. On the morning of 2026-09-18 the Morning Worker delivered 182
+            # messages from a domain senders.json caps at 40, in sixteen minutes, and nothing
+            # refused one. _lane_from's own docstring promised "this can never push bsgflorida.com
+            # past 40" -- it was true of the routing and false of the enforcement.
+            #
+            # `from_addr` still stays None when the lane address IS the login (there is nothing to
+            # rewrite in the From: header), but the ceiling is now read and enforced either way.
+            if _cand:
                 _acap = _ramp_cap(_cfg, _cand)
                 _asent = _alias_sent_today(_cand)
                 if _asent >= _acap:
@@ -1295,12 +1317,12 @@ class Handler(BaseHTTPRequestHandler):
                     # skip, not a stop, because other lanes may still have room on their own alias.
                     return self._json(409, {
                         'ok': False, 'skip': True, 'alias_cap': True,
-                        'err': (f'{_cand} is at its warm-up cap for today ({_asent}/{_acap}) — '
+                        'err': (f'{_cand} is at its daily cap ({_asent}/{_acap}) — '
                                 f'the {_wl or "default"} lane resumes tomorrow'),
                         'sent_today': _sent_today_count(), 'cap': self.daily_cap})
-                from_addr = _cand
-            elif _cand == user:
-                from_addr = None      # brand-domain lanes: From is the login itself
+                # Only rewrite From: when the lane address differs from the login. Same address =
+                # nothing to rewrite, but it was still metered above.
+                from_addr = _cand if _cand != user else None
 
         # ---- send ----
         try:
