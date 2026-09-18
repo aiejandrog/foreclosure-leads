@@ -1286,7 +1286,21 @@ class Handler(BaseHTTPRequestHandler):
         if _senders_active(user, _cfg) and not meta.get('test'):
             _wl = str(meta.get('wl') or '').lower()
             _cand = _lane_from(_cfg, _wl)
-            if _cand and _cand != user:
+            # THE CAP IS METERED ON THE ADDRESS, NOT ON WHETHER IT IS THE LOGIN (fixed 2026-09-18).
+            #
+            # This check used to live inside `if _cand != user`, so the one address that is BOTH a
+            # lane target and the login -- alejandro@bsgflorida.com -- was the only address in the
+            # system with no daily ceiling but the global 300. That mattered from 2026-09-11, when
+            # _lane_from() started routing every lane to the main domain while the warming aliases
+            # sit at zero: from that day every lane resolved to the login and every send took the
+            # uncapped branch. On the morning of 2026-09-18 the Morning Worker delivered 182
+            # messages from a domain senders.json caps at 40, in sixteen minutes, and nothing
+            # refused one. _lane_from's own docstring promised "this can never push bsgflorida.com
+            # past 40" -- it was true of the routing and false of the enforcement.
+            #
+            # `from_addr` still stays None when the lane address IS the login (there is nothing to
+            # rewrite in the From: header), but the ceiling is now read and enforced either way.
+            if _cand:
                 _acap = _ramp_cap(_cfg, _cand)
                 _asent = _alias_sent_today(_cand)
                 if _asent >= _acap:
@@ -1295,12 +1309,12 @@ class Handler(BaseHTTPRequestHandler):
                     # skip, not a stop, because other lanes may still have room on their own alias.
                     return self._json(409, {
                         'ok': False, 'skip': True, 'alias_cap': True,
-                        'err': (f'{_cand} is at its warm-up cap for today ({_asent}/{_acap}) — '
+                        'err': (f'{_cand} is at its daily cap ({_asent}/{_acap}) — '
                                 f'the {_wl or "default"} lane resumes tomorrow'),
                         'sent_today': _sent_today_count(), 'cap': self.daily_cap})
-                from_addr = _cand
-            elif _cand == user:
-                from_addr = None      # brand-domain lanes: From is the login itself
+                # Only rewrite From: when the lane address differs from the login. Same address =
+                # nothing to rewrite, but it was still metered above.
+                from_addr = _cand if _cand != user else None
 
         # ---- send ----
         try:
