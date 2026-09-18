@@ -33,6 +33,17 @@ day-late lag, and no more "the commit is in main so the site must have it".
 
 ## 1. Who is the runner RIGHT NOW
 
+> ### ⚠️ CORRECTION 2026-09-18 ~15:45 — the block below was wrong about the desktop
+>
+> Read on DESKTOP-35NNMFL itself (`hostname` checked) at 15:40: **9 DealFlow tasks were `Ready`
+> and had all run that day** (Refresh 05:30, Phones 06:00, Replies 06:45, SendServer 07:45, Morning
+> Worker 08:00, Cadence 09:00, Sheets CRM 14:05). Its reflog holds `24b5155`, `c2d596f`, `c91eb0d`,
+> `fd0ff4f` — so the 09-16/09-17 duplicate publishes really were two armed machines. The "re-verified
+> on the box" check below was not run on this box. Disarmed at 15:45 with
+> `install-tasks.ps1 -DisableLocal` (pwsh); all DealFlow tasks now `Disabled`, `BSG Warmup` still
+> `Ready`. The laptop is now the only armed machine. The watchdog issue should close on its own once
+> the 4-day window rolls past 09-18.
+
 > ### ✅ SETTLED 2026-09-18 — the laptop is the only armed machine. The table below is right.
 >
 > This block said the opposite for a day, so the correction and the evidence that forced it both
