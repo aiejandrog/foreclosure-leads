@@ -894,6 +894,26 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
     msg['To'] = to_addr
+    # REPLY-TO: WHERE A HOMEOWNER'S ANSWER LANDS (2026-09-17).
+    # From: is a lane alias on biscaynesolutionsgroup.com or bsgfl.com, and nothing set Reply-To,
+    # so an owner hitting Reply writes to the alias. Whether that reaches the ONE mailbox
+    # replies.py opens depends on how those domains are attached to Workspace -- an alias DOMAIN
+    # delivers into alejandro@bsgflorida.com, a secondary domain with its own user does not, and
+    # this repo never proved which. Pinning Reply-To at the scanned mailbox makes the answer stop
+    # mattering: the reply lands where the scanner looks either way.
+    # It also matches the lane strategy already in senders.json -- replied/urgent ride the brand
+    # domain because a live conversation belongs there, and a reply IS the conversation.
+    # Config-driven and absent-safe: no `reply_to` in senders.json = the old behaviour exactly.
+    # Reply-To does not affect SPF or DKIM, so each alias keeps building its own reputation.
+    # Same rule as send_server._smtp_send, read from the same file. Two senders, one contract --
+    # a homeowner must not get a different reply address depending on which one mailed them.
+    try:
+        import send_server as _SS
+        _rt = str(_SS._load_senders().get('reply_to') or '').strip().lower()
+    except Exception:
+        _rt = ''
+    if _rt and _rt != sender:
+        msg['Reply-To'] = _rt
     msg['Subject'] = subj
     msg['Message-ID'] = make_msgid(domain=sender.split('@', 1)[-1])
     msg['Date'] = formatdate(localtime=True)
