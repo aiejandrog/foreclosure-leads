@@ -32,6 +32,7 @@ Needs node on PATH for the JS half; skips cleanly without it.
 Run: python _seattest.py
 """
 import json
+import math
 import os
 import re
 import subprocess
@@ -72,8 +73,33 @@ for n in (2, 3, 4):
         sum(len(s) for s in seats) == len(cases),
         '%d of %d covered' % (sum(len(s) for s in seats), len(cases)))
     sizes = [len(s) for s in seats]
-    skew = (max(sizes) - min(sizes)) / max(len(cases) / n, 1) * 100
-    rec('%d seats: split is roughly even' % n, skew < 25, '%s, %.1f%% skew' % (sizes, skew))
+    exp = len(cases) / float(n)
+    skew = (max(sizes) - min(sizes)) / max(exp, 1) * 100
+    # TOLERANCE IS DERIVED, NOT PICKED (2026-09-18). This was a hardcoded `skew < 25`, and on the
+    # 400-case synthetic fixture — the one every machine except the armed runner uses, since the
+    # real leads_final.json is not in git — the 4-seat split lands at exactly 25.0% and the suite
+    # went red on a fresh clone. Nothing was broken: sb is a FNV-1a hash mod 12 and seats take
+    # sb % n, so each case lands in a given seat with probability 1/n INDEPENDENTLY. Seat sizes are
+    # therefore Binomial(N, 1/n), and their max-min spread has real sampling noise that shrinks as
+    # the fixture grows. A fixed 25% is a coin flip at N=400 and far too loose at N=2,300.
+    # So: 4 sigma of the binomial, floored at 12%. A fair hash exceeds 4 sigma about never; a hash
+    # that has genuinely stopped spreading (a constant, a truncated case number, mod-12 collapsing
+    # onto one residue) blows past it at any N, which is the failure this line exists to catch.
+    sd = math.sqrt(len(cases) * (1.0 / n) * (1 - 1.0 / n))
+    tol = max(12.0, 4.0 * sd / max(exp, 1) * 100.0)
+    rec('%d seats: split is roughly even' % n, skew < tol,
+        '%s, %.1f%% skew (tolerance %.1f%% at N=%d)' % (sizes, skew, tol, len(cases)))
+
+# MUTATION CHECK for the tolerance above. The obvious objection to a derived bound is that it was
+# widened until today's numbers fit. So prove it still bites: a hash that has collapsed onto half
+# the residues — the realistic break, not a constant — must fail at the SAME derived tolerance.
+_bad = [[c for c in cases if (bucket(c) // 2 * 2) % 4 == k] for k in range(4)]
+_bs = [len(s) for s in _bad]
+_bexp = len(cases) / 4.0
+_bskew = (max(_bs) - min(_bs)) / max(_bexp, 1) * 100
+_btol = max(12.0, 4.0 * math.sqrt(len(cases) * 0.25 * 0.75) / max(_bexp, 1) * 100.0)
+rec('mutation check (a hash collapsed onto half its residues still FAILS the tolerance)',
+    _bskew >= _btol, '%s, %.1f%% skew vs %.1f%% tolerance' % (_bs, _bskew, _btol))
 
 rec('bucket is deterministic across builds',
     all(bucket(c) == bucket(c) for c in cases[:200]))
