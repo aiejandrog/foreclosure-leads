@@ -17,6 +17,10 @@ call repo_guard.bat "%~dp0" "%LOG%"
 if errorlevel 1 exit /b 1
 set "STATUS=%USERPROFILE%\DEALFLOW\DEALFLOW-PHONES-STATUS.txt"
 set "STAMP=%date% %time%"
+rem  MIRRORFAIL carries the site-mirror outcome to the exit code at the bottom. Logging a failure
+rem  the scheduler never sees is half a fix, and rc=0-while-broken is precisely the pattern that
+rem  cost three days on the scrape, three on the push, and 31 hours on the mirror.
+set "MIRRORFAIL=0"
 
 echo ==== phones-nightly %STAMP% ==== >> "%LOG%"
 
@@ -125,6 +129,7 @@ if errorlevel 1 (
   echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
   echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
   echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+  set "MIRRORFAIL=1"
 )
 
 rem The status file must state the phones outcome honestly. It previously always said "phones
@@ -139,6 +144,17 @@ call publish_verify.bat "%LOG%" "%STATUS%" "%PHONESNOTE%"
 if errorlevel 1 (
   echo ==== done - NOT PUBLISHED %date% %time% ==== >> "%LOG%"
   exit /b 1
+)
+rem  THE ENGINE PUSH LANDED, BUT DID THE LIVE SITE MOVE? publish_verify only asks about origin/main
+rem  in THIS repo - it says so itself - and since the 09-17 split that is not what GitHub Pages
+rem  serves. So a run whose mirror failed reached this line with rc=0 and the status file reading
+rem  OK, which is the 09-17-to-09-18 frozen site exactly: a loud log line nobody opens, and a clean
+rem  result everywhere anybody looks. rc=5 = the board is committed and pushed here, the live site
+rem  is still the previous one. The status file has to say the same, or it contradicts the code.
+if "%MIRRORFAIL%"=="1" (
+  echo [%STAMP%] ^!^! Board pushed to the engine repo, but the LIVE SITE IS UNCHANGED - the mirror did not publish. %PHONESNOTE%.> "%STATUS%"
+  echo ==== done - ENGINE PUBLISHED, LIVE SITE NOT %date% %time% ==== >> "%LOG%"
+  exit /b 5
 )
 echo ==== done %date% %time% ==== >> "%LOG%"
 exit /b 0

@@ -126,6 +126,10 @@ git push origin main >> "%LOG%" 2>&1
     echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
     echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
     echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+    rem  ...and carry it to the exit code, exactly as the final publish does at [5/5]. Logging a
+    rem  failure the scheduler never sees is half a fix: rc=0-while-broken is the pattern that cost
+    rem  three days on the scrape and 31 hours on this mirror. An earlier fault keeps priority.
+    if "%RUNEXIT%"=="0" set "RUNEXIT=5"
   )
   rem  Neither push's exit code was read here, so "fresh leads pushed" printed whether or not
   rem  anything reached origin. publish_verify.bat asks the remote instead of assuming, and it

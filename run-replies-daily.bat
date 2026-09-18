@@ -15,6 +15,8 @@ REM %TEMP%\dealflow_replies_last.txt evaporated with Windows temp cleanup — ve
 REM the 08-25 run exited 0 and its output file already no longer existed anywhere, so a bad morning
 REM would have been undiagnosable by afternoon.
 set "LOG=%~dp0replies-run.log"
+rem  MIRRORFAIL carries the site-mirror outcome to this file's exit code at :end.
+set "MIRRORFAIL=0"
 echo ==== replies-daily %date% %time% ==== >> "%LOG%"
 
 REM  REPO GUARD FIRST (2026-09-18). This was the LAST publish path with no guard. It is also the
@@ -105,6 +107,7 @@ if not errorlevel 1 (
     echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
     echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
     echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+    set "MIRRORFAIL=1"
   )
   rem  ...and then ASK THE REMOTE whether that push landed, instead of ending the run silently.
   rem  The blind `timeout 6 & push again` above is the same push six seconds later: when the first
@@ -115,4 +118,9 @@ if not errorlevel 1 (
   call publish_verify.bat "%LOG%" "-" "replies: morning scan baked into board"
 )
 :end
-endlocal
+rem  ...and carry it out. This file ended at `endlocal` with no exit code, so a run whose mirror
+rem  never published - and whose live site therefore did not move - returned 0 like any other.
+rem  rc=5 = the reply was saved, the board was gated and pushed here, the live site is unchanged.
+rem  `endlocal & exit /b` on one line: both halves are parsed before endlocal discards the variable.
+if "%MIRRORFAIL%"=="1" (endlocal & exit /b 5)
+endlocal & exit /b 0
