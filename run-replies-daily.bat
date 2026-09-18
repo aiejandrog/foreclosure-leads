@@ -96,8 +96,11 @@ git add docs/index.html docs/call >> "%LOG%" 2>&1
 git commit -m "replies: morning scan baked into board (auto)" >> "%LOG%" 2>&1
 if not errorlevel 1 (
   git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
+  rem  %SystemRoot% path on timeout.exe, not a bare `timeout`: under a git-bash PATH the bare
+  rem  name resolves to GNU coreutils timeout, which rejects /t and drops the retry backoff
+  rem  entirely. Same root cause as the `find` note in repo_guard.bat.
   git push origin main >> "%LOG%" 2>&1
-  if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
+  if errorlevel 1 ( "%SystemRoot%\System32\timeout.exe" /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
   rem  mirror the rebuilt board to the PUBLIC site repo (see publish_site.py)
   python -u publish_site.py >> "%LOG%" 2>&1
   rem  READ ITS EXIT CODE (2026-09-18). publish_site.py exits 1 when it cannot find the site clone,

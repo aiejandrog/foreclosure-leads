@@ -73,6 +73,34 @@ def _propagates(text):
     return sets and exits
 
 
+# Windows externals that a git-bash PATH shadows with a GNU build. Git for Windows offers "Use Git
+# and optional Unix tools from the Command Prompt", which puts its /usr/bin AHEAD of System32 -- so
+# a bare `find` is GNU find. It reads /i as a start path, exits non-zero, and repo_guard.bat then
+# refuses a perfectly good checkout with "wrong origin remote": every publish path aborts at its
+# first line for a reason that is not true. `timeout` is the same shadow, milder -- GNU timeout
+# rejects /t, so the push retry loses its backoff. Both are fixed by naming System32 outright.
+SHADOWED = ('find', 'findstr', 'timeout', 'sort', 'more')
+
+# Every .bat in the publish path, including the two helpers the runners `call`.
+GUARDED = RUNNERS + ('repo_guard.bat', 'publish_verify.bat', 'run-phones.bat')
+
+
+def _bare_externals(text):
+    """-> sorted names invoked by bare name at a command position. Command positions are the start
+    of a line and whatever follows | & ( -- which covers `a || b`, `a & b` and `if x ( cmd )`. A
+    fully qualified or quoted call (\"%SystemRoot%\\System32\\find.exe\") is not a bare name and does
+    not match."""
+    hits = set()
+    for ln in text.splitlines():
+        st = ln.strip()
+        if not st or st.lower().startswith('rem ') or st.lower().startswith('::'):
+            continue
+        for frag in st.replace('|', '\n').replace('&', '\n').replace('(', '\n').split('\n'):
+            tok = frag.strip().split(' ')[0].strip().lower()
+            if tok in SHADOWED:
+                hits.add(tok)
+    return sorted(hits)
+
 def _layout(root, *dirs):
     """Make <root>/engine plus a git work tree for each named sibling. Returns the engine path,
     which is what publish_site.HERE stands in for."""
@@ -160,6 +188,30 @@ def main():
             check(f'{name} calls the mirror', 'publish_site.py' in text, True)
             check(f'  {name} reads its exit code', _reads_mirror_exit(text), True)
             check(f'  {name} carries it to the process exit code', _propagates(text), True)
+
+
+        # ---- PATH shadowing (2026-09-18) ---------------------------------------------------
+        # Confirmed on the laptop: under a git-bash PATH `repo_guard.bat` refused the real DEALFLOW
+        # checkout, so refresh-dealflow.bat died on its first line and nothing ran. The guard failed
+        # CLOSED, which is the right direction to fail -- but a guard that blocks every publish for
+        # a reason that is not true costs exactly as many boards as one that is simply broken.
+        print()
+        for name in GUARDED:
+            check(f'{name} invokes no PATH-shadowed external by bare name',
+                  _bare_externals(_bat(name)), [])
+
+        # The fix has to be the qualified path, not a rename. Assert the resolver by name so a
+        # future edit cannot satisfy the check above by hiding a bare `find` behind a variable.
+        guard = _bat('repo_guard.bat')
+        check('repo_guard resolves find.exe from System32',
+              '%SystemRoot%\\System32\\find.exe' in guard, True)
+        check('  and still matches the origin remote case-insensitively',
+              '/i "foreclosure-leads"' in guard, True)
+
+        # MUTATION CHECK. Put the bare names back and confirm the scan goes red - otherwise it is
+        # asserting something true of any file that happens not to shell out.
+        check('mutation check (restore the bare names and the scan catches them)',
+              _bare_externals(guard.replace('| "%RGFIND%" /i', '| find /i')), ['find'])
 
         # MUTATION CHECK. Strip the propagation out of each runner in memory and confirm the check
         # above goes red - otherwise it is asserting something that is true of any file.

@@ -117,7 +117,10 @@ rem  "retry" below is the SAME push 6s later, which fails identically. Measured 
 rem  4 commits stacked up and the live site sat frozen at 08-14 for two days while every
 rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
-git push origin main >> "%LOG%" 2>&1 || (timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1)
+rem  %SystemRoot% path on timeout.exe, not a bare `timeout`: under a git-bash PATH the bare
+rem  name resolves to GNU coreutils timeout, which rejects /t and drops the retry backoff
+rem  entirely. Same root cause as the `find` note in repo_guard.bat.
+git push origin main >> "%LOG%" 2>&1 || ("%SystemRoot%\System32\timeout.exe" /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1)
 rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo is private now, so the
 rem  lead data and history are no longer world-readable; docs/ still commits here (it is
 rem  publish_guard's baseline) and publish_site.py mirrors the pages Pages actually serves.
