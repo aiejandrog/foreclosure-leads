@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  DealFlow Cadence - the 4-touch homeowner email sequence (cadence.py), daily at 09:00.
+
+  THIS FILE IS A TEMPLATE, NOT AN EXPORT, AND THAT IS THE WHOLE POINT.
+  desktop-setup/tasks/ is gitignored (see .gitignore line 301): a Windows-exported task XML carries
+  the exporting machine's principal SID and its user paths, so those travel in the transfer bundle
+  and never in git. That is correct, and it is also exactly why "DealFlow Cadence" was never in the
+  installer's set: there was nowhere in the repo to put a task. This directory is that place.
+  install-tasks.ps1 reads templates from here, substitutes the three placeholders below against the
+  machine it is running on, and registers them alongside anything found in tasks/. An export in
+  tasks/ with the same task name always wins - it carries hardening won on a live box.
+
+  Placeholders, substituted by install-tasks.ps1:
+      __REPO__     the resolved checkout on this machine
+      __PROFILE__  this machine's %USERPROFILE%
+      __USER__     DOMAIN\user, also passed to Register-ScheduledTask -User
+
+  SETTINGS THAT ARE DELIBERATE:
+
+  * StartWhenAvailable is TRUE, with WakeToRun. MACHINE-HANDOFF.md section 4 records that the four
+    tasks with StartWhenAvailable=false are silently skipped forever if the machine is asleep at the
+    trigger. A skipped cadence run is not neutral: a due step just does not go out, and the owner's
+    sequence stalls mid-sequence. So it catches up - and cadence-daily.bat refuses to send outside
+    08:00-20:00, which is what makes catching up safe. Do not set this false without deleting that
+    guard, and do not delete that guard while this is true.
+  * DisallowStartIfOnBatteries / StopIfGoingOnBatteries are FALSE. Six of the eight pipeline tasks
+    have them true, which on the armed LAPTOP means skipped on battery and killed mid-run if you
+    unplug. Killed mid-run here means some owners mailed, some not, and the state file half written.
+  * MultipleInstancesPolicy IgnoreNew. Two cadence runs at once would both read cadence_state.json,
+    both decide the same steps are due, and mail them twice.
+  * The Command is cadence-daily.bat, NEVER cadence-run.bat. cadence-run.bat ends in `pause`.
+  * ExecutionTimeLimit PT2H. The run polls IMAP once per enrolled owner, so it is not instant; PT2H
+    is slack, not an expectation. PT6H is for the rebuild/publish jobs and is wrong here - an
+    outreach job that has been running six hours is a job to kill.
+-->
+<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Author>__USER__</Author>
+    <URI>\DealFlow Cadence</URI>
+    <Description>DealFlow: send the day's due 4-touch follow-up steps (cadence.py) and poll for replies. Sends real email to homeowners. Only the armed machine may run this - see MACHINE-HANDOFF.md section 1.</Description>
+  </RegistrationInfo>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-09-19T09:00:00</StartBoundary>
+      <Enabled>true</Enabled>
+      <ScheduleByDay>
+        <DaysInterval>1</DaysInterval>
+      </ScheduleByDay>
+    </CalendarTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <UserId>__USER__</UserId>
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <AllowHardTerminate>true</AllowHardTerminate>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <RunOnlyIfNetworkAvailable>true</RunOnlyIfNetworkAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>false</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <AllowStartOnDemand>true</AllowStartOnDemand>
+    <Enabled>true</Enabled>
+    <Hidden>false</Hidden>
+    <RunOnlyIfIdle>false</RunOnlyIfIdle>
+    <WakeToRun>true</WakeToRun>
+    <ExecutionTimeLimit>PT2H</ExecutionTimeLimit>
+    <Priority>7</Priority>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <Command>__REPO__\cadence-daily.bat</Command>
+      <WorkingDirectory>__REPO__</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>
