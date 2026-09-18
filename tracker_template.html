@@ -12301,7 +12301,14 @@ function _workerCard(r){
     first: (f.ownerFirst==='__blank__'?'':f.ownerFirst),
     days: days, saleDate: r.auction||'',
     chip: chip, plaintiff: r.plaintiff||'', judg: r.judg||0, value: r.value||0,
-    phones: phList, emails: emList, wpUrl: r.peopleaddr || r.people || '',
+    // The worker tab's "🔎 Lookup / find contact" step opens this. It used to be TruePeopleSearch
+    // ONLY, so a lead with no TPS URL (company owner, PO-box mailing, unparseable address — the
+    // leads with no phone, which are precisely the ones that reach this step) rendered the button
+    // greyed out with "no people-search URL available" and the step was a dead end. Whitepages
+    // needs nothing but the fields every lead already carries, so fall through to the reverse-
+    // ADDRESS page (household landline, residents, relatives) and then the NAME page.
+    phones: phList, emails: emList,
+    wpUrl: r.peopleaddr || r.people || _wpAddrUrl(r) || _wpNameUrl(r) || '',
     // SMS BAKED PER CARD, for exactly the reason the Gmail URL is (see below). The old text step
     // posted to the board and the BOARD opened a modal — so the composer appeared on a tab the
     // operator was not looking at, the log literally said "switch tabs to send", and he never
@@ -16551,10 +16558,19 @@ function render(){
     if(r.cyberbgaddr) gPeople.push('<a class="dig" href="'+esc(r.cyberbgaddr)+'" target="_blank" rel="noopener" title="CyberBackgroundChecks by ADDRESS — pinpoints who actually lives there now, distinct from a name search. Often reveals if the owner has moved (absentee — mail/calls to the property may not reach them), surfaces phones the name search misses, and confirms family/relatives at the address.">CyberBG&nbsp;addr</a>');
     // COURT & SALE — evaluate the deal in one navy cluster (same color, same row). Never bury Docket
     // inside People-search gold links. Broward/PB have no per-case deep link → clerk Case search is Docket.
-    if(r.recqs) gEval.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+esc(r.recqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
+    // recqs/ocsqs are RAW clerk search tokens (records_liens.py unquotes the qs off the wire before
+    // caching it), so they can carry '+', '/' and '=' — dropping them into a query string with only
+    // esc() applied turned a '+' into a space at the clerk's end and the deep-link opened an EMPTY
+    // search instead of the owner's records. encodeURIComponent, the way the Call Sheet has always
+    // built the same two links. The Miami-Dade gate is the Call Sheet's too: both tokens are
+    // Miami-Dade-minted and records_qs.json is keyed by owner name with NO county, so a Broward or
+    // Palm Beach owner could be handed a Miami-Dade token for a same-named stranger. Those counties
+    // fall through to their own clerk below.
+    var _qsCty = (r.county || 'MIAMI-DADE').toUpperCase();
+    if(r.recqs && _qsCty === 'MIAMI-DADE') gEval.push('<a class="dig" href="https://onlineservices.miamidadeclerk.gov/officialrecords/SearchResults?qs='+esc(encodeURIComponent(r.recqs))+'" target="_blank" rel="noopener" title="Opens this owner\'s recorded MORTGAGES, liens & judgments directly — the real 1st/2nd mortgage is here. Common names return several people; match by address.">Records</a>');
     else if(r.records) gEval.push('<a class="dig recsearch" href="'+esc(liveClerkURL(r.records))+'" target="_blank" rel="noopener" data-o="'+esc(r.rname||r.oname)+'" title="'+esc(ctyName(r.county)+' Official Records — opens the NAME search. The owner is copied (last-first) — PASTE it and search for mortgages/liens/judgments.')+'">Records</a>');
     else if(r.oname) gEval.push('<a class="dig recsearch" href="https://onlineservices.miamidadeclerk.gov/officialrecords/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="Official Records — mortgages/liens/judgments. On the site click Name/Document and PASTE the owner (this click copied it).">Records</a>');
-    if(r.ocsqs) gEval.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(r.ocsqs)+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
+    if(r.ocsqs && _qsCty === 'MIAMI-DADE') gEval.push('<a class="dig" href="https://www2.miamidadeclerk.gov/ocs/searchResults?qs='+esc(encodeURIComponent(r.ocsqs))+'" target="_blank" rel="noopener" title="Opens this owner\'s COURT cases directly — other foreclosures, lawsuits, judgments, probate, divorce. Common names return several; match by case.">Cases</a>');
     else if(r.cases) gEval.push('<a class="dig recsearch" href="'+esc(liveClerkURL(r.cases))+'" target="_blank" rel="noopener" data-o="'+esc(r.case)+'" data-flash="✓ copied · Ctrl+V + Enter" title="'+esc(ctyName(r.county)+' court case search — case # '+r.case+' copied to clipboard. On the search page: Case Number tab → Ctrl+V → Enter. (Their site requires a CAPTCHA-tokened session so we cannot deep-link past the search form.)')+'">Cases</a>');
     else if(r.oname) gEval.push('<a class="dig recsearch" href="https://www2.miamidadeclerk.gov/ocs/" target="_blank" rel="noopener" data-o="'+esc(r.oname)+'" title="COURT cases — on the site pick Party Name and PASTE the owner (this click copied it).">Cases</a>');
     if(r.dk) gEval.push('<a class="dig" href="#" onclick="openLiveDocket(\''+esc(r.case)+'\');return false;" title="THIS case\'s docket — parties, case type, status and the filing history, pulled from the clerk and shown right here. No search box, no retyping the case number (their site cannot be deep-linked).">Docket</a>');

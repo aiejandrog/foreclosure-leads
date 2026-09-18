@@ -2304,6 +2304,10 @@ def make_tracker(leads):
     #                 haven't looked yet (the call sheet uses this to distinguish gaps from misses)
     # Opaque property.whitepages.com /property/{id} deep-links (manual or cookie-resolved).
     # Safe to commit the id map — no phones/PII, just public property page slugs.
+    try:
+        from whitepages_lookup import normalize_prop_id as _wp_norm_id
+    except Exception:
+        def _wp_norm_id(p): return (p or '').strip()
     _wp_ids = {}
     _wp_id_path = os.path.join(HERE, 'wp_prop_ids.json')
     if os.path.exists(_wp_id_path):
@@ -2342,8 +2346,12 @@ def make_tracker(leads):
                 return 0 if 'mob' in t else (1 if 'land' in t else 2)
             for _r in slim:
                 _case = _r.get('case', '')
-                # Deep-link id: cache _prop_id wins, then committed wp_prop_ids.json
-                _pid = ((_wp.get(_case) or {}).get('_prop_id') or _wp_ids.get(_case) or '').strip()
+                # Deep-link id: cache _prop_id wins, then committed wp_prop_ids.json. BOTH go through
+                # whitepages_lookup.normalize_prop_id -- the map (and every cache entry stamped from
+                # it before 2026-09-17) holds the id HEX-ENCODED, and baking the hex shipped a
+                # /property/{id} link to a page that does not exist. One normalizer, imported rather
+                # than copied, so the decode rules cannot drift from the module that owns the map.
+                _pid = _wp_norm_id(((_wp.get(_case) or {}).get('_prop_id') or _wp_ids.get(_case) or ''))
                 if _pid:
                     _r['wpPropId'] = _pid
                     _wid += 1
