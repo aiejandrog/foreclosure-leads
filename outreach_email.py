@@ -654,6 +654,10 @@ def _compose_single(r, snd, lang='en'):
     case_tag_es = (f' (Número de certificado/caso {case_no})' if td else f' (Caso Número {case_no})') if case_no else ''
     street = _MG.safe_street(_g(r, 'addr', 'Address'))
     sig = _sig(snd)
+    # Every body below ends on the signature, so the opt-out rides with it in the body's own
+    # language. The cold body does NOT use these -- it comes from outreach_copy's baked template,
+    # which carries its own _unsub() after the SIG token, and adding one here would print two.
+    sig_en, sig_es = sig + '\n\n' + _OC_unsub('en'), sig + '\n\n' + _OC_unsub('es')
     sN = snd.get('name') or '[YOUR NAME]'
 
     # SUBJECT -- prefix first, address LAST, ALWAYS. Alejandro's URGENT framing rides in front of
@@ -688,7 +692,7 @@ def _compose_single(r, snd, lang='en'):
             f'Catch up the loan, rework it, sell on your terms, or fight the case -- they all '
             f"work better with time on the clock. That's the whole reason for this note.\n\n"
             f'If you want a straight rundown of where you stand, call or text me. No cost, '
-            f'no obligation.\n\n{sig}\n\n'
+            f'no obligation.\n\n{sig_en}\n\n'
             f''
         )
         body_es = (
@@ -701,7 +705,7 @@ def _compose_single(r, snd, lang='en'):
             f'caso -- todo funciona mejor con tiempo en el reloj. Ese es el unico punto de '
             f'esta nota.\n\n'
             f'Si quiere un repaso directo de donde esta parado, llameme o mandeme un texto. '
-            f'Sin costo, sin compromiso.\n\n{sig}\n\n'
+            f'Sin costo, sin compromiso.\n\n{sig_es}\n\n'
         )
     elif td:
         body_en = (
@@ -712,7 +716,7 @@ def _compose_single(r, snd, lang='en'):
             f"before the date (we can buy as-is and close fast if that's the fit), or claim "
             f"the surplus if it sells for more than what's owed.\n\n"
             f'Want to know which one fits? Call or text me. No cost, and if another path beats '
-            f"selling, I'll say so.\n\n{sig}\n\n"
+            f"selling, I'll say so.\n\n{sig_en}\n\n"
             f''
         )
         body_es = (
@@ -725,7 +729,7 @@ def _compose_single(r, snd, lang='en'):
             f'cerrar rapido si eso le sirve), o reclamar el excedente si se vende por mas de '
             f'lo que se debe.\n\n'
             f'Quiere saber cual le conviene? Llameme o mandeme un texto. Sin costo, y si otro '
-            f'camino es mejor que vender, se lo digo.\n\n{sig}\n\n'
+            f'camino es mejor que vender, se lo digo.\n\n{sig_es}\n\n'
         )
     else:
         plaint_bit_en = f' by {plaintiff}' if plaintiff else ''
@@ -757,7 +761,7 @@ def _compose_single(r, snd, lang='en'):
             f'friends.\n\n'
             f'All I need is a reply with a good phone number and the best time to reach you. '
             f"Or call or text me and I'll set it up.\n\n"
-            f'{sig}\n\n'
+            f'{sig_en}\n\n'
         )
         body_es = (
             f'Hola {first},\n\n{intro_es}\n\n'
@@ -778,7 +782,7 @@ def _compose_single(r, snd, lang='en'):
             f'y quedamos como amigos.\n\n'
             f'Lo unico que necesito es que me responda con un buen numero de telefono y la mejor '
             f'hora para llamarlo. O llameme o mandeme un texto y lo coordinamos.\n\n'
-            f'{sig}'
+            f'{sig_es}'
         )
         # ---- ALEJANDRO'S COPY, ENGLISH COLD BODY -------------------------------------------
         # He wrote it 2026-08-28, reviewed it, and it ships as written. Rendered from the SAME
@@ -815,6 +819,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
     owner = _owner_name(head) or 'Property Owner'
     first = _first_name(head) or owner
     sig = _sig(snd)
+    sig_en, sig_es = sig + '\n\n' + _OC_unsub('en'), sig + '\n\n' + _OC_unsub('es')
     sN = snd.get('name') or '[YOUR NAME]'
     n = len(all_leads)
 
@@ -853,7 +858,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
         f'conversation.\n\n'
         f"If it'd help, I can walk the numbers on any of them. No cost, no obligation -- and "
         f"if selling isn't your best move on a given property, I'll tell you that "
-        f'straight.\n\n{sig}\n\n'
+        f'straight.\n\n{sig_en}\n\n'
     )
     body_es = (
         f"Hola {first},\n\nSoy {sN}, de Biscayne Solutions Group. "
@@ -867,7 +872,7 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
         f'una sola conversacion.\n\n'
         f'Si le sirve, puedo repasar los numeros de cualquiera de ellas. Sin costo, sin '
         f'compromiso -- y si vender no es su mejor opcion en alguna, se lo digo tal '
-        f'cual.\n\n{sig}\n\n'
+        f'cual.\n\n{sig_es}\n\n'
     )
     return {
         'en': {'subj': subj_en, 'body': body_en},
@@ -875,7 +880,28 @@ def _compose_portfolio(head, siblings, snd, lang='en'):
     }[lang]
 
 
+def _OC_unsub(lang):
+    """outreach_copy._unsub for this language, or '' if the copy module is unavailable -- the same
+    degrade-do-not-crash contract _ALEX_TPL_EN uses above. An empty tail loses the sentence, never
+    the send; the List-Unsubscribe header still carries the mechanism."""
+    try:
+        import outreach_copy as _OC2
+        return _OC2._unsub(lang=lang)
+    except Exception:
+        return ''
+
+
 # ---------------------------------------------------------------- SMTP
+def _unsub_url():
+    """outreach_copy.UNSUB_URL, or '' when the copy module could not be imported. One source: the
+    sentence in the body and the header arm here must never disagree about whether a page exists."""
+    try:
+        import outreach_copy as _OC
+        return str(getattr(_OC, 'UNSUB_URL', '') or '').strip()
+    except Exception:
+        return ''
+
+
 def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     """Sends a text/plain email via Gmail SMTP over SSL. Raises on failure.
     Returns (message_id, server_response).
@@ -889,14 +915,44 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, from_addr=None):
     # layer and so were invisible to every existing check. Raising here means the caller's step is
     # not consumed and the lead goes out correctly tomorrow.
     import mail_guard as _MG
-    _MG.assert_sendable(subj, body, to_addr)
+    unsub = _MG.unsubscribe_header(user, _unsub_url())
+    _MG.assert_sendable(subj, body, to_addr, unsub=unsub)
     sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
     msg['To'] = to_addr
+    # REPLY-TO: WHERE A HOMEOWNER'S ANSWER LANDS (2026-09-17).
+    # From: is a lane alias on biscaynesolutionsgroup.com or bsgfl.com, and nothing set Reply-To,
+    # so an owner hitting Reply writes to the alias. Whether that reaches the ONE mailbox
+    # replies.py opens depends on how those domains are attached to Workspace -- an alias DOMAIN
+    # delivers into alejandro@bsgflorida.com, a secondary domain with its own user does not, and
+    # this repo never proved which. Pinning Reply-To at the scanned mailbox makes the answer stop
+    # mattering: the reply lands where the scanner looks either way.
+    # It also matches the lane strategy already in senders.json -- replied/urgent ride the brand
+    # domain because a live conversation belongs there, and a reply IS the conversation.
+    # Config-driven and absent-safe: no `reply_to` in senders.json = the old behaviour exactly.
+    # Reply-To does not affect SPF or DKIM, so each alias keeps building its own reputation.
+    # Same rule as send_server._smtp_send, read from the same file. Two senders, one contract --
+    # a homeowner must not get a different reply address depending on which one mailed them.
+    try:
+        import send_server as _SS
+        _rt = str(_SS._load_senders().get('reply_to') or '').strip().lower()
+    except Exception:
+        _rt = ''
+    if _rt and _rt != sender:
+        msg['Reply-To'] = _rt
     msg['Subject'] = subj
     msg['Message-ID'] = make_msgid(domain=sender.split('@', 1)[-1])
     msg['Date'] = formatdate(localtime=True)
+    # The opt-out Gmail and Outlook render as their OWN button at the top of the message, which is
+    # both more visible than anything in the body and more trusted, because it is the mail client's
+    # UI rather than a link from a stranger. Costs two headers and no HTML, so the body stays
+    # text/plain. The mailto arm lands in the scanned mailbox where is_stop_text() already reads it.
+    if unsub:
+        msg['List-Unsubscribe'] = unsub
+        _post = _MG.one_click_post(_unsub_url())
+        if _post:
+            msg['List-Unsubscribe-Post'] = _post
     msg.set_content(body)
 
     ctx = ssl.create_default_context()
@@ -953,6 +1009,12 @@ def main():
     # ---- load
     creds = _load_credentials()
     snd = _load_sender()
+    # Checked here rather than in _smtp_send: by then the batch is composed and half of it may
+    # already have gone out. sender.json is gitignored, so this is the only thing in the system
+    # that can notice the address is missing. Dry runs and previews pass an empty snd and are
+    # deliberately unaffected.
+    if args.send:
+        _MG.require_sender_address(snd)
     leads = _load_leads()
     optouts = _load_optouts()
     ledger = _load_ledger()

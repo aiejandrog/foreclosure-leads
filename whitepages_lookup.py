@@ -53,6 +53,9 @@ CONCURRENCY = max(1, int(os.environ.get('WP_CONCURRENCY', '1')))     # trial key
 THROTTLE_S  = float(os.environ.get('WP_THROTTLE_S', '0.6'))          # polite delay between calls (single-worker mode)
 THIN_PHONES = 5                                     # Property returned <5 phones on top owner -> add Person
 COMPANY_RE  = re.compile(r'\b(LLC|INC\b|CORP|COMPANY|CO\.|LTD|LP\b|LLP|ASSN|ASSOCIATION|CONDOMINIUM|CHURCH|TRUST|BANK|HOLDINGS)\b', re.I)
+# wp_prop_ids.json stores hex-encoded ids; see normalize_prop_id() for why and for the decode rules.
+_HEX_RE     = re.compile(r'^(?:[0-9a-fA-F]{2})+$')
+_WP_ID_RE   = re.compile(r'^pro-[A-Za-z0-9_-]{4,}$')
 # County → default city for Person Search when LP/upcoming has no property address yet
 COUNTY_CITY = {
     'MIAMI-DADE': 'Miami', 'MIAMIDADE': 'Miami', 'MD': 'Miami',
@@ -256,13 +259,40 @@ def _owner_names_from_property(prop_response):
     return names
 
 
+def normalize_prop_id(pid):
+    """wp_prop_ids.json -> the id property.whitepages.com actually serves.
+
+    THE BUG THIS EXISTS FOR (2026-09-17). Every value in wp_prop_ids.json is stored as HEX-ENCODED
+    ASCII, not as the id itself: "70726f2d52564d4b45706135587a4b" is the hex of "pro-RVMKEpa5XzK".
+    Nothing in the repo ever decoded it, so make_tracker baked the hex blob onto the lead as
+    wpPropId and the board's _wpPropUrl() shipped
+
+        https://property.whitepages.com/property/70726f2d52564d4b45706135587a4b#owner
+
+    on all 60 leads that have an id -- exactly the leads where the "direct" deep-link was supposed
+    to beat the ?address= search fallback. The page does not exist, so the one link on the board
+    advertised as landing ON the owner's Property Intel page landed nowhere.
+
+    Decode is deliberately conservative: hex only, even length, and only when the decoded bytes are
+    printable ASCII that looks like a Whitepages id ("pro-..."). A plain id is returned untouched,
+    so this is safe to run over an already-correct map and safe to run twice (idempotent)."""
+    pid = (pid or '').strip()
+    if not pid or not _HEX_RE.match(pid):
+        return pid
+    try:
+        dec = bytes.fromhex(pid).decode('ascii')
+    except Exception:
+        return pid
+    return dec if _WP_ID_RE.match(dec) else pid
+
+
 def _stamp_prop_id(entry, case):
     """Preserve / stamp opaque property.whitepages.com /property/{id} from wp_prop_ids.json."""
     if entry.get('_prop_id'):
         return
     try:
         ids = json.load(open(WP_IDS, encoding='utf-8')) if os.path.exists(WP_IDS) else {}
-        pid = (ids.get(case) or '').strip()
+        pid = normalize_prop_id(ids.get(case) or '')
         if pid:
             entry['_prop_id'] = pid
     except Exception:
@@ -536,6 +566,7 @@ def main():
     stamped = 0
     for case, pid in (ids or {}).items():
         if not case or case.startswith('addr:') or not pid: continue
+        pid = normalize_prop_id(pid)            # hex map value -> the id WP actually serves
         entry = cache.get(case) or {}
         if entry.get('_prop_id') != pid:
             entry['_prop_id'] = pid

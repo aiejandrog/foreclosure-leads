@@ -38,6 +38,46 @@ SLOT_MINUTES = 'fifteen'       # what the calendar actually reserves
 BOOKING_URL = 'cal.com/bsgflorida/free-records-review'
 BOOKING_URL_INVESTOR = 'cal.com/bsgflorida/investor-refi-call'
 
+# CAN-SPAM 15 U.S.C. 7704(a)(3): every commercial message needs a clear, working way to opt out.
+# It had none. `stopEN`/`stopES` in tracker_template.html render empty and Alejandro's cold body
+# never carried one, so the only opt-out route was a homeowner guessing that the word "stop" would
+# be read by a machine -- which it is (replies.is_stop_text), but nobody told them.
+#
+# WHY REPLY-BASED AND NOT A LINK, TODAY. A link has to land somewhere that writes optouts.json,
+# and nothing in this system serves HTTP: docs/ is a static GitHub Pages site and bsgflorida.com
+# is hosted off-repo. An unsubscribe link that records nothing is worse than no link -- the
+# mechanism has to work for 30 days after the send and the request honored within 10 business
+# days, so a dead link converts a missing disclosure into a broken promise. The reply path works
+# end to end TODAY: replies.py scans the inbox, is_stop_text() matches "unsubscribe" outright,
+# optout_sync.py ledgers it the same night.
+#
+# TO SWITCH TO THE LINK: set UNSUB_URL to the live page. That one line changes the sentence here
+# AND adds the https arm to the List-Unsubscribe header in both send paths. The page must record
+# the address into optouts.json (the reserved suppression surface -- hand that piece to the
+# desktop session) and must not require the recipient to log in or type anything.
+UNSUB_URL = ''
+
+
+def _unsub(url=None, lang='en'):
+    """The opt-out sentence. Never empty -- that is the whole point of this function.
+
+    The word each language asks for is one replies.is_stop_text() already matches: "unsubscribe"
+    hits OPTOUT_PHRASES directly, and so does a bare "quitar". Naming a word the detector does not
+    know would be the worst outcome available here -- an opt-out the owner believes they sent and
+    that nothing in the system ever acts on. Spanish stays unaccented to match the bodies it sits
+    under.
+    """
+    u = UNSUB_URL if url is None else url
+    if lang == 'es':
+        if u:
+            return 'Para dejar de recibir estos correos, cancele su suscripcion aqui: %s' % u
+        return ('Si prefiere no recibir mas mensajes mios, responda con la palabra QUITAR '
+                'y lo saco de la lista.')
+    if u:
+        return 'To stop receiving these emails, unsubscribe here: %s' % u
+    return ("If you'd rather not hear from me again, reply with the word unsubscribe "
+            "and I'll take you off the list.")
+
 
 def _first_of(signer):
     """'Alejandro Gonzalez' -> 'Alejandro'. The bodies used to hardcode 'Alex' while the
@@ -176,6 +216,8 @@ def email_body(first='', sale_date=None, signer=SIGNER, phone=PHONE, company=COM
         '',
     ] + _sig_lines(sig_block, signer, company, phone) + [
         '',
+        _unsub(),
+        '',
         _mars(company),
         '',
         "",
@@ -219,6 +261,8 @@ def email_body_short(first='', sale_date=None, signer=SIGNER, phone=PHONE, compa
         '',
         "Warm regards,",
     ] + _sig_lines(sig_block, signer, company, phone) + [
+        '',
+        _unsub(),
         '',
         _mars(company),
         '',

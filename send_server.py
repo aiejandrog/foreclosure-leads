@@ -698,6 +698,15 @@ def _release_recipients(addrs):
 
 
 # ---------------------------------------------------------------- SMTP
+def _unsub_url():
+    """outreach_copy.UNSUB_URL, or '' when the copy module could not be imported."""
+    try:
+        import outreach_copy as _OC
+        return str(getattr(_OC, 'UNSUB_URL', '') or '').strip()
+    except Exception:
+        return ''
+
+
 def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None, from_addr=None):
     """bcc carries the owner's OTHER traced addresses.
 
@@ -723,16 +732,39 @@ def _smtp_send(user, pw, from_display, to_addr, subj, body, bcc='', attach=None,
     # value that rendered empty — "my last note about ." and "My name is [YOUR NAME]" both reached
     # real homeowners and both SUCCEEDED at the SMTP layer, so nothing downstream could see them.
     import mail_guard as _MG
-    _MG.assert_sendable(subj, body, to_addr)
+    unsub = _MG.unsubscribe_header(user, _unsub_url())
+    _MG.assert_sendable(subj, body, to_addr, unsub=unsub)
     sender = (from_addr or user).strip().lower()
     msg = EmailMessage()
     msg['From'] = f'{from_display} <{sender}>' if from_display else sender
     msg['To'] = to_addr
+    # REPLY-TO: WHERE A HOMEOWNER'S ANSWER LANDS (2026-09-17).
+    # From: is a lane alias on biscaynesolutionsgroup.com or bsgfl.com, and nothing set Reply-To,
+    # so an owner hitting Reply writes to the alias. Whether that reaches the ONE mailbox
+    # replies.py opens depends on how those domains are attached to Workspace -- an alias DOMAIN
+    # delivers into alejandro@bsgflorida.com, a secondary domain with its own user does not, and
+    # this repo never proved which. Pinning Reply-To at the scanned mailbox makes the answer stop
+    # mattering: the reply lands where the scanner looks either way.
+    # It also matches the lane strategy already in senders.json -- replied/urgent ride the brand
+    # domain because a live conversation belongs there, and a reply IS the conversation.
+    # Config-driven and absent-safe: no `reply_to` in senders.json = the old behaviour exactly.
+    # Reply-To does not affect SPF or DKIM, so each alias keeps building its own reputation.
+    _rt = str(_load_senders().get('reply_to') or '').strip().lower()
+    if _rt and _rt != sender:
+        msg['Reply-To'] = _rt
     if bcc:
         msg['Bcc'] = bcc
     msg['Subject'] = subj
     msg['Message-ID'] = make_msgid(domain=sender.split('@', 1)[-1])
     msg['Date'] = formatdate(localtime=True)
+    # Same two headers as outreach_email._smtp_send. Every board send and every worker batch comes
+    # through here, so this is what puts an opt-out on the bodies whose stopEN/stopES still render
+    # empty in tracker_template.html.
+    if unsub:
+        msg['List-Unsubscribe'] = unsub
+        _post = _MG.one_click_post(_unsub_url())
+        if _post:
+            msg['List-Unsubscribe-Post'] = _post
     msg.set_content(body)
     for path in (attach or []):
         p = os.path.abspath(os.path.expanduser(str(path)))
