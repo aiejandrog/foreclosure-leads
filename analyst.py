@@ -20,6 +20,7 @@ Writes:
 
 Run:    python analyst.py            # writes + opens the scorecard
         python analyst.py --no-open  # scheduled/silent
+        python analyst.py --mail     # send ledger per day / per sending address, read-only
 Schedule: "DealFlow Weekly Analyst" (setup-analyst-automation.ps1), Sundays 7:30 AM.
 """
 import argparse
@@ -565,11 +566,136 @@ def render(m, prev):
 </div></body></html>'''
 
 
+_SPAM_NOTE = '''
+WHAT THIS CANNOT SHOW. A ledger entry means Gmail accepted the message, not that it reached an
+inbox. Spam placement is decided at the RECEIVING provider and is never reported to the sender.
+The three things that can answer it:
+
+  1. Google Postmaster Tools -- the only source for this domain's real spam rate and reputation.
+     Free, verified by a DNS TXT record on a domain already under our control. It needs sustained
+     volume before it reports anything, and its data lags a day or two.
+  2. A seed send -- mail the real cold template to our own accounts on gmail / yahoo / outlook /
+     aol and look at where it lands. verify_inbox.py --from-key does the external version. A pass
+     is evidence, not proof: our own mail meets less filtering than a stranger's does.
+  3. The bounce rate above. A double-digit rate is itself a spam-folder cause, and it is the one
+     number here we can move -- see verify_emails.py and bounces.py.'''
+
+
+# ---------------------------------------------------------------- the mail ledger, plainly
+def mail_report(now=None, days=14):
+    """Print what the send ledger actually contains, per day and per sending address.
+
+    WHY THIS EXISTS (2026-09-18). The Morning Worker reported "delivered 182" and the question that
+    followed was "did those land in spam?". Nothing here could answer even the easier half of it --
+    how many went out, from which address, on which day. compute() rolls email into three 7-day
+    numbers, which is the right altitude for a weekly grade and useless for a sending-reputation
+    question, where WHICH ADDRESS and HOW MANY IN ONE DAY are the whole point.
+
+    WHAT THIS CANNOT TELL YOU, and nothing on this side can: whether a message landed in an inbox
+    or a spam folder. A message_id in the ledger means Gmail ACCEPTED the message for delivery.
+    Placement is decided at the RECEIVING provider and is never reported back to the sender. The
+    three things that do answer it are named at the bottom of the output.
+
+    Read-only: opens no browser, writes no file, sends nothing.
+    """
+    now = now or _now()
+    mail = MP._load_json('mail_sent.json', [])
+    bounced = MP._load_json('bounced_emails.json', {})
+    replies = MP._load_json('replies.json', {})
+    if not mail:
+        print('mail_sent.json is empty or missing. It is a gitignored ledger that exists only on '
+              'the machine that sends -- run this there.')
+        return 1
+
+    sends = _real_sends(mail)
+    bounced_set = {a.lower() for a in bounced} if isinstance(bounced, dict) else set()
+    rep_cases = {str(k) for k, v in replies.items()
+                 if not str(k).startswith('@') and not str(k).startswith('_') and isinstance(v, dict)}
+
+    # Per-alias caps come from the bridge, not a second copy of the rule.
+    caps = {}
+    try:
+        import send_server as _SS
+        _cfg = _SS._load_senders()
+        for _a in sorted(set((_cfg.get('lanes') or {}).values())):
+            caps[_a.lower()] = _SS._ramp_cap(_cfg, _a, now.date())
+    except Exception as _e:
+        print('(per-alias caps unavailable: %s)' % str(_e)[:70])
+
+    window = [e for e in sends if _in_last(days, e.get('ts_utc') or '', now)]
+    print('SEND LEDGER -- last %d days, %d real send(s) (test sends and failures excluded)\n'
+          % (days, len(window)))
+
+    def _from(e):
+        return str(e.get('from') or e.get('login') or '?').lower()
+
+    # ---- by day, so a spike is visible as a spike --------------------------------------------
+    by_day = {}
+    for e in window:
+        by_day.setdefault(str(e.get('d') or '')[:10], []).append(e)
+    print('%-12s %7s %9s %8s   %s' % ('DAY', 'SENDS', 'BOUNCED', 'RCPTS', 'FROM (by domain)'))
+    for d in sorted(by_day, reverse=True):
+        rows = by_day[d]
+        b = sum(1 for e in rows if str(e.get('to', '')).lower() in bounced_set)
+        # Gmail meters RECIPIENTS, and every send here can carry up to five bcc'd addresses, so a
+        # message count understates the limit that actually binds. _recipients_today() in the
+        # bridge counts the same way.
+        rcpt = sum(1 + len([x for x in str(e.get('bcc') or '').split(',') if x.strip()]) for e in rows)
+        froms = {}
+        for e in rows:
+            froms[_from(e)] = froms.get(_from(e), 0) + 1
+        who = ', '.join('%s x%d' % (a.split('@')[-1], n)
+                        for a, n in sorted(froms.items(), key=lambda kv: -kv[1]))
+        print('%-12s %7d %9d %8d   %s' % (d, len(rows), b, rcpt, who))
+
+    # ---- by sending address, against the cap that address is allowed --------------------------
+    today = now.strftime('%Y-%m-%d')
+    print('\nBY SENDING ADDRESS (today %s)' % today)
+    addrs = {}
+    for e in window:
+        v = addrs.setdefault(_from(e), {'n': 0, 'today': 0, 'b': 0, 'lanes': {}})
+        v['n'] += 1
+        if str(e.get('d') or '')[:10] == today:
+            v['today'] += 1
+        if str(e.get('to', '')).lower() in bounced_set:
+            v['b'] += 1
+        wl = str(e.get('wl') or '-')
+        v['lanes'][wl] = v['lanes'].get(wl, 0) + 1
+    for a in sorted(addrs, key=lambda x: -addrs[x]['n']):
+        v = addrs[a]
+        cap = caps.get(a)
+        tail = ''
+        if cap is not None:
+            tail = '  cap %d/day' % cap + ('  <-- OVER TODAY' if v['today'] > cap else '')
+        print('  %-42s %4d in %dd, %3d today%s' % (a, v['n'], days, v['today'], tail))
+        print('       lanes  : %s' % ', '.join('%s %d' % (k, n) for k, n in
+                                               sorted(v['lanes'].items(), key=lambda kv: -kv[1])))
+        print('       bounced: %d (%.1f%%)' % (v['b'], 100.0 * v['b'] / v['n'] if v['n'] else 0.0))
+
+    # ---- the numbers a provider actually judges ------------------------------------------------
+    nb = sum(1 for e in window if str(e.get('to', '')).lower() in bounced_set)
+    rate = 100.0 * nb / len(window) if window else 0.0
+    cases = {str(e.get('case') or '') for e in window if e.get('case')}
+    got = len(cases & rep_cases)
+    print('\nBOUNCE RATE %.1f%%  (%d of %d)   -- providers tolerate ~2%%, throttle near 5%%'
+          % (rate, nb, len(window)))
+    print('REPLIES     %d of %d case(s) mailed in this window have a reply on file' % (got, len(cases)))
+    print(_SPAM_NOTE)
+    return 0
+
+
 # ---------------------------------------------------------------- main
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--no-open', action='store_true', help='write files without opening the browser')
+    ap.add_argument('--mail', action='store_true',
+                    help='print the send ledger per day and per sending address, then exit. '
+                         'Read-only: no scorecard, no browser, nothing sent.')
+    ap.add_argument('--days', type=int, default=14, help='window for --mail (default 14)')
     args = ap.parse_args()
+
+    if args.mail:
+        return mail_report(days=args.days)
 
     os.makedirs(OUT_DIR, exist_ok=True)
     m = compute()

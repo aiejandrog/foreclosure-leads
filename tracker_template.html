@@ -6283,7 +6283,11 @@ function openBulkText(){
 /* CALL MODE URL, one definition for every surface. Served from GitHub Pages the sibling folder is
    right there; opened as the Desktop plaintext twin (file://) there is no ./call/ next to it, so
    fall back to the live site. Anything else (localhost preview) also gets the live site. */
-var _CALL_FALLBACK = 'https://aiejandrog.github.io/dealflow-board/call/';
+/* BAKED, not typed. The address moved once (2026-09-17) and the hand-edit landed in the
+   template while the board that was already built kept the old string and stayed live —
+   see board_url.py. subst_build_facts() fills the placeholder below and check_board_urls()
+   refuses to publish a page carrying any other address. */
+var _CALL_FALLBACK = '__BOARDURL__call/';
 /* `sub` is a seat page: 'carlos' -> call/carlos/. Sanitised because it is pasted straight into a
    URL. No arg = the main seat, which is the path already bookmarked on Alejandro's phone. */
 function _seatSeg(sub){ return sub ? String(sub).replace(/[^a-z0-9-]/gi,'').toLowerCase()+'/' : ''; }
@@ -13451,7 +13455,7 @@ function genMorningWorker(lane, autostart){
     // is not inside a user gesture is popup-blocked, which is exactly what stalled this worker three
     // times on 2026-08-16 (see the blocked-popup rescue above and _openDoc's reason for existing).
     +       'if(CALLQ.length){'
-    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'https://aiejandrog.github.io/dealflow-board/call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
+    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'__BOARDURL__call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
     +       '}'
     +       'main.innerHTML=doneHtml;'
     // textContent does NOT decode HTML entities — writing "&#x2713;" here printed the raw
@@ -14872,6 +14876,48 @@ function genBalloonEmail(r, quiet){
   try { window.open(gurl, '_blank', 'noopener'); } catch(e){}
   return D;
 }
+/* NEVER-EMPTY property address — the JS mirror of mail_guard.safe_addr / safe_street, which
+   outreach_email.py already routes every unattended send through (_compose_single). Keep the two
+   behaviours identical: they compose the same subject for the same homeowner and replies.py
+   matches on it.
+
+   WHY (2026-09-18). The Morning Worker is the OTHER caller, and it had no such guard: it took
+   `(addr.split(',')[0]||addr).trim()` raw. Nine sends that morning were refused by mail_guard at
+   the bridge -- "the subject ends on 'at' with nothing after it" and "a value that rendered EMPTY
+   near 'about .'" -- because those leads carry an address that is blank, whitespace, or
+   punctuation only. The guard did its job and nothing reached a homeowner; but the lead is
+   skipped every single morning and the step is never consumed, so it fails again tomorrow.
+   Refusing to send is the backstop, not the fix. This is the fix.
+
+   Order matters and is the bug this function encodes: tidy FIRST, then decide whether anything
+   survived. `raw || fallback` passes a whitespace-only address through as truthy and the cleaner
+   then drops every part of it, which is how "my last note about ." reached a homeowner. */
+function _safeAddr(raw, fallback){
+  fallback = fallback || 'your property';
+  var s = String(raw == null ? '' : raw).trim();
+  if(s){
+    s = s.replace(/,\s*([A-Z]{2})-\s*/g, ', $1 ');
+    var parts = s.split(',').map(function(p){ return p.trim(); });
+    // Python's str.isupper() is False when there are no cased characters, hence the letter test;
+    // and str.title() capitalises EVERY word, so "MIAMI BEACH" must become "Miami Beach", not
+    // "Miami beach". The two builders are compared case by case in _boardurltest.py.
+    if(parts.length >= 2 && parts[1] === parts[1].toUpperCase() && /[A-Za-z]/.test(parts[1])){
+      parts[1] = parts[1].toLowerCase().replace(/[A-Za-z]+/g, function(w){
+        return w.charAt(0).toUpperCase() + w.slice(1);
+      });
+    }
+    s = parts.filter(function(p){ return p; }).join(', ');
+  }
+  return /[A-Za-z0-9]/.test(s) ? s : fallback;   // punctuation-only ("," "-") is not an address
+}
+/* Just the street line, for a subject. Never empty, never a bare comma. */
+function _safeStreet(raw, fallback){
+  fallback = fallback || 'your property';
+  var s = _safeAddr(raw, fallback);
+  if(s === fallback) return fallback;
+  var head = String(s.split(',')[0] || '').trim();
+  return /[A-Za-z0-9]/.test(head) ? head : s;
+}
 function _subjLine(street, dt, td, lang){
   var d = String(dt||'').trim(), tag;
   var urgent = (String(SUBJECT_STYLE||'urgent').toLowerCase() !== 'measured');
@@ -14927,7 +14973,10 @@ function genEmail(r, quiet){
   const owner = _ownerName((r.owners||'').split(';')[0].trim(), r);
   const first = _firstName(owner);
   const addr = r.addr||'', dt = r.auction||'', td = (r.st==='TD');
-  const street = (addr.split(',')[0]||addr).trim();
+  // _safeStreet, not a raw split: a blank / whitespace / punctuation-only address rendered an
+  // empty slot into the subject and the final-note body, and mail_guard refused the send at the
+  // bridge. Same fallback string outreach_email.py uses, so both surfaces say the same thing.
+  const street = _safeStreet(addr);
   const plaintiff = (r.plaintiff||'').trim();   // the bank / association foreclosing — personalizes it
   // A real, verifiable case/certificate number the owner can look up themselves on the county clerk's
   // site — a concrete credibility signal — included wherever the tool actually has one, never fabricated.
