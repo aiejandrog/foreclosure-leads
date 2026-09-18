@@ -95,9 +95,28 @@ that carries a name or number inline, gitignore it in the same commit.
 ## Publish gates — never bypass
 
 `healthcheck.py` (exit 2 = compliance hard block, exit 1 = advisory) and `publish_guard.py`
-(refuses a board materially poorer than the live one) both run before the push in
-`refresh-dealflow.bat`. A blocked publish leaving the site on its last good build is correct
+(refuses a board materially poorer than the live one) run before the push in **every path that
+publishes the board**. A blocked publish leaving the site on its last good build is correct
 behaviour, not a bug to route around.
+
+**Three paths publish, and all three are gated (the third only since 2026-09-17):**
+
+| path | when | gates |
+|---|---|---|
+| `refresh-dealflow.bat` | nightly 5:30 | healthcheck + publish_guard |
+| `run-leads.bat` | manual | healthcheck + publish_guard |
+| `run-replies-daily.bat` | daily 7:00 | healthcheck + publish_guard |
+
+`run-replies-daily.bat` had **no gates at all** until 2026-09-17, and it is the one that rebuilds and
+pushes `docs/index.html` + `docs/call` fastest — so it was the shortest route from a bad local build
+to the live site. On 09-15 19:11 it published a 709-phone board over a live 1,148 (commit subject
+"replies: morning scan baked into board (auto)"). publish_guard would have refused it. The compounding
+part is the part to remember: **that publish became `origin/main`, so it moved the baseline every
+later gate compared against**, and subsequent poorer builds then passed legitimately. One ungated
+publish does not cost one board, it costs the reference.
+
+If you add a fourth publish path, gate it in the same commit. `grep -l publish_guard *.bat` is the
+check — anything that does `git add docs/` and pushes, and is not in that list, is a hole.
 
 ## Scheduled tasks
 

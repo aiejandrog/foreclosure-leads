@@ -436,3 +436,8 @@ three_day_lane.json
 
 deal_desk.json
 !_netreadytest.py
+# ADDED 2026-09-17: the board-lane parity suite. It uses a synthetic fixture and no real data (that
+# is the point — it runs on a checkout with no leads_final.json, which is every machine but the
+# armed runner), so there is nothing here to keep out of git. Untracked it would be the one check
+# that the phone and the board still agree on nine lane counts, living on a single laptop.
+!_funnelparitytest.py

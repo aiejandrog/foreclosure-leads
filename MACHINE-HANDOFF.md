@@ -1,6 +1,6 @@
 # MACHINE HANDOFF — read this before you work on DEALFLOW from a different computer
 
-Last updated: **2026-08-26** (ninth task found and disabled; cadence send path hardened)
+Last updated: **2026-09-17** (§1 CONTRADICTED BY THE COMMITS — read the warning in §1 before trusting it; ninth task found and disabled 2026-08-26)
 
 This repo is worked from more than one machine and is also refreshed by GitHub Actions.
 Git carries the **code and the published site**. It does **not** carry the data, the secrets, or the
@@ -35,6 +35,10 @@ day-late lag, and no more "the commit is in main so the site must have it".
 
 > ### ⚠ DISPUTED as of 2026-09-17 — the table below does NOT match what origin/main shows
 >
+> The table below says the desktop is fully stood down. **The commits say otherwise**, and nobody has
+> yet confirmed which machine is supposed to be armed. Until Alejandro says so, treat "who is the
+> runner" as an OPEN QUESTION and do not rely on the row below.
+>
 > **Two machines are armed and both are publishing the board.** This is not an inference from
 > config; it is in the commit log. On 09-16 and again on 09-17 the 06:45 reply bake committed
 > **twice**, at the same trigger minute, and the 06:00 phones job committed twice the same day:
@@ -46,9 +50,17 @@ day-late lag, and no more "the commit is in main so the site must have it".
 > | 09-17 | reply bake | `e5ff186` 06:45 | `c2d596f` 06:45 |
 > | 09-17 | phones | `bade50f` 06:00 | `24b5155` 09:29 |
 >
-> They are carrying **different boards**, and the coverage census on line 1 of `docs/index.html`
-> says so: one machine publishes **2,297 leads / 1,148 phones**, the other **2,266 / 737**.
-> Whichever pushes last wins the live site, which is why the counts flip under you.
+> **The proof that they carry different boards** is the census on line 1 of `docs/index.html`
+> (`<!-- DEALFLOW-COVERAGE {...} -->`), read at each commit:
+>
+> | build stamp | leads | phones | authored | committed |
+> |---|---|---|---|---|
+> | `2026-09-17T06:45` | 2,297 | 1,148 | 09-17 06:45 | 09-17 **16:42** |
+> | `2026-09-17T06:45` | 2,266 | 737 | 09-17 06:45 | 09-17 06:45 |
+>
+> One build cannot produce two censuses. One machine had been committing locally since 09-14 without
+> reaching origin (three commits authored 09-14/09-16/09-17 at 06:00, all committed 09-17 16:42), so
+> **whichever machine pushes last wins the live site**, which is why the counts flip under you.
 >
 > **Which box is which is NOT settled by git** — both commit as
 > `Alejandro Gonzalez <agonzalez0311707@gmail.com>` in `-0400` (§6.4), so the metadata is
@@ -59,12 +71,18 @@ day-late lag, and no more "the commit is in main so the site must have it".
 >   has been frozen at 1,148 for five days. Its pushes stopped landing on 09-14 and six commits
 >   sat on it until 09-17 16:42.
 > - **The late one** fires whenever it wakes (09-15 19:11, 09-16 07:20, 09-17 09:29). Its
->   skip-trace **works** — 709 → 714 → 719 → 737 → 739 across those runs. It has 31 fewer leads.
+>   skip-trace **works** — 709 → 714 → 719 → 737 → 739 across those runs. It has 31 fewer leads,
+>   and publishes a board ~409 dialable numbers poorer.
 >
 > Punctual-and-never-late reads like the desktop (§6.3: never sleeps, no battery). Late-and-
 > catching-up reads like the laptop (§4: `StartWhenAvailable`, and its 05:30/06:00 tasks landed
 > at 10:21/10:33 on 08-22). But the *stale* board is the late one's, and §3 predicts the stale
 > board on the **desktop**. The two readings contradict, so do not act on either.
+>
+> **It cost real things, twice in one day.** 439 phone numbers were stripped off the live board on
+> 09-15 through the then-ungated `run-replies-daily.bat` (see CLAUDE.md §"Publish gates"), and that
+> evening `main` itself was overwritten and emptied by a stray publish from a checkout that had lost
+> its history — recovered from `rescue/main-ad1643f-2026-09-17`, with history rehashed.
 >
 > **Settle it in one command, on each box:**
 >
@@ -75,11 +93,12 @@ day-late lag, and no more "the commit is in main so the site must have it".
 > Nine rows. Whichever box shows `Ready` is armed. Then disarm the loser **before** copying §3
 > state, or the disarmed box's ledgers overwrite the winner's.
 >
-> Correction to the paragraph below: `install-tasks.ps1 -DisableLocal` **does** catch
-> `DealFlow Cadence` now — it enumerates live tasks with `-match '^(DEALFLOW|DealFlow)'` rather
-> than working from its list of eight. `-Enable` still does **not** bring it back up, because that
-> path only walks `desktop-setup/tasks/*.xml`. So disarming is complete and arming is not: after
-> `-Enable`, turn cadence on by name or outreach stays off.
+> **Before arming or disarming anything, re-read §0 and the NINTH TASK warning below.** Correction
+> to the paragraph below: `install-tasks.ps1 -DisableLocal` **does** catch `DealFlow Cadence` now —
+> it enumerates live tasks with `-match '^(DEALFLOW|DealFlow)'` rather than working from its list of
+> eight. `-Enable` still does **not** bring it back up, because that path only walks
+> `desktop-setup/tasks/*.xml`. So disarming is complete and arming is not: after `-Enable`, turn
+> cadence on by name or outreach stays off.
 
 | Machine | Role today | Tasks |
 |---|---|---|
@@ -89,6 +108,10 @@ day-late lag, and no more "the commit is in main so the site must have it".
 
 Evidence the laptop is live: commits `9ff826b`/`43ed370`/`8efda91` (08-24) and `f7492a5`/`e0ab111`/
 `b8b771e` (08-25) — the full nightly chain, plus `github-actions[bot]` on both days.
+
+**That evidence is from 08-24/08-25 and no longer describes 09-14 onward.** It is kept because it
+shows what the laptop's nightly chain looks like in the log, which is how you will recognise which
+machine produced any given commit.
 
 ### ⚠ There is a NINTH task, and the installer cannot see it (found 2026-08-26)
 
