@@ -121,6 +121,12 @@ foreach ($f in @(Get-ChildItem -Path $tplDir -Filter *.xml -ErrorAction Silently
     $srcs += [pscustomobject]@{ File = $f; Raw = (Get-Content -Path $f.FullName -Raw -Encoding UTF8); Kind = 'template' }
 }
 if (-not $srcs) { throw "No task XMLs in '$xmlDir' and no templates in '$tplDir'." }
+if (-not @($srcs | Where-Object { $_.Kind -eq 'export' })) {
+    # Before task-templates/ existed this case was a throw, and a throw is what made it obvious.
+    # Now it installs cleanly and under-installs silently, which on a machine being set up from
+    # scratch means one task where eight were expected. Say so.
+    $warn += "no exports in '$xmlDir' — only the tracked template(s) will be installed. The other tasks travel in the transfer bundle; unzip it here to get the full set."
+}
 
 # resolve each source's real task name now, so the export-beats-template rule can be applied by name
 foreach ($s in $srcs) {
