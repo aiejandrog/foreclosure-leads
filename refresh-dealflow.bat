@@ -451,7 +451,7 @@ rem  to price, and blocking a build publish_guard already proved is RICHER than 
 rem  board stale. `if errorlevel 2` matches exit>=2, so it must be tested BEFORE `if errorlevel 1`.
 python -u healthcheck.py >> "%LOG%" 2>&1
 if errorlevel 2 (
-  echo     ^!^! GATE: healthcheck COMPLIANCE fail (^&sect;362 stays / sources down) - publish SKIPPED.>> "%LOG%"
+  echo     ^!^! GATE: healthcheck COMPLIANCE fail ^(^&sect;362 stays / sources down^) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: healthcheck COMPLIANCE fail - publish SKIPPED. See leads-run.log.
   goto :end
 )
@@ -460,7 +460,7 @@ if errorlevel 1 (
 )
 python -u publish_guard.py >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo     ^!^! GATE: publish_guard BLOCKED the build (regression or corruption) - publish SKIPPED.>> "%LOG%"
+  echo     ^!^! GATE: publish_guard BLOCKED the build ^(regression or corruption^) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: publish_guard BLOCKED the build - publish SKIPPED. See leads-run.log.
   goto :end
 )
