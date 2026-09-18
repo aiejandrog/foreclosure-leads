@@ -33,6 +33,7 @@ ENDPOINTS:
 import argparse
 import datetime as dt
 import json
+import math
 import mimetypes
 import os
 import re
@@ -502,6 +503,24 @@ def _sent_today_count():
 
 BOUNCE_WINDOW_DAYS = 7
 BOUNCE_CEILING = 0.10     # refuse bulk outreach above this trailing hard-bounce rate
+BOUNCE_Z = 1.96           # 95% one-sided-ish confidence for the lower bound below
+
+
+def _wilson_lower(dead, mailed, z=BOUNCE_Z):
+    """Lower bound of the Wilson score interval for dead/mailed.
+
+    Plain English: "given what we have actually observed, the true bounce rate is at least
+    this." It collapses toward 0 as the sample shrinks, so a handful of sends can never on
+    their own prove a problem -- and it stays high when a small sample is damning enough
+    (8 of 21 is not noise, whatever the raw ratio's volatility suggests).
+    """
+    if mailed <= 0:
+        return 0.0
+    p = dead / mailed
+    z2 = z * z
+    centre = p + z2 / (2 * mailed)
+    spread = z * math.sqrt(p * (1 - p) / mailed + z2 / (4 * mailed * mailed))
+    return max(0.0, (centre - spread) / (1 + z2 / mailed))
 
 
 def _bounce_health():
@@ -516,12 +535,29 @@ def _bounce_health():
     This is deliberately measured on OBSERVED bounces only. It under-reports when bounces.py has
     not run recently, which is the safe direction for a kill switch: it can be too permissive from
     stale data, never too strict from invented data. The error text says so.
+
+    THE DENOMINATOR IS PER-MACHINE, AND UNTIL 2026-09-18 NOTHING SAID SO. mail_sent.json is
+    gitignored, so each box counts only its OWN sends while both read the same shared bounce
+    list. On 09-18 that produced two irreconcilable readings of one list: the laptop, which had
+    barely sent, reported 38.1% (8 of 21) and refused to mail; this desktop, which had sent
+    everything, reported 0.9% (2 of 222) and mailed 182 messages. Neither number was a lie and
+    neither was a measurement -- the raw ratio simply has no idea how much evidence is behind it,
+    so the idle machine screams and the busy one looks clean.
+
+    The verdict is therefore taken on the Wilson LOWER BOUND, not the raw ratio: block only when
+    the observed sample is strong enough that the true rate is over the ceiling even on a
+    pessimistic reading. A flat minimum-sample floor was the obvious fix and it is the wrong one
+    -- a floor of 50 would have let the laptop's 8-of-21 through, which is the one reading that
+    turned out to be real. `rate` stays in the payload untouched because the board prints it; it
+    is a display number now, and `blocked` is the decision.
     """
+    thin = {'rate': 0.0, 'lb': 0.0, 'mailed': 0, 'dead': 0, 'known': 0,
+            'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING, 'blocked': False}
     try:
         bounced = {str(k).lower() for k in json.load(open(
             os.path.join(HERE, 'bounced_emails.json'), encoding='utf-8'))}
     except Exception:
-        return {'rate': 0.0, 'mailed': 0, 'dead': 0, 'known': 0, 'window': BOUNCE_WINDOW_DAYS}
+        return dict(thin)
     cutoff = (dt.date.today() - dt.timedelta(days=BOUNCE_WINDOW_DAYS)).isoformat()
     mailed = dead = 0
     for e in _load_ledger():
@@ -536,8 +572,11 @@ def _bounce_health():
             mailed += 1
             if a in bounced:
                 dead += 1
-    return {'rate': (dead / mailed) if mailed else 0.0, 'mailed': mailed, 'dead': dead,
-            'known': len(bounced), 'window': BOUNCE_WINDOW_DAYS}
+    lb = _wilson_lower(dead, mailed)
+    return {'rate': (dead / mailed) if mailed else 0.0, 'lb': lb,
+            'mailed': mailed, 'dead': dead, 'known': len(bounced),
+            'window': BOUNCE_WINDOW_DAYS, 'ceiling': BOUNCE_CEILING,
+            'blocked': lb > BOUNCE_CEILING}
 
 
 PROVEN_MIN_AGE_DAYS = 2   # a hard bounce DSNs within minutes-to-hours; 48h of silence ≈ delivered
@@ -864,12 +903,12 @@ class Handler(BaseHTTPRequestHandler):
                 'optout_stale': (_oo_age is None or _oo_age > OPTOUT_MAX_AGE_DAYS),
                 'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
-                'bounce_blocked': _bh['rate'] > BOUNCE_CEILING,
+                'bounce_blocked': _bh['blocked'],
                 # verified-only mode: while blocked, sends to proven-deliverable addresses
                 # (accepted mail >= 48h ago, never bounced) still go through. The worker
                 # banner uses this to say "N addresses still sendable" instead of "all stop".
-                'proven_pool': len(_proven_deliverable()) if _bh['rate'] > BOUNCE_CEILING else None,
-                'probe_quota_left': _probe_quota_left() if _bh['rate'] > BOUNCE_CEILING else None,
+                'proven_pool': len(_proven_deliverable()) if _bh['blocked'] else None,
+                'probe_quota_left': _probe_quota_left() if _bh['blocked'] else None,
                 # Lane -> From map and today's per-alias warm-up use (senders.json). senders_active
                 # false = the login cannot send as the aliases (old personal gmail.key), so every
                 # send still leaves as `user`. The board shows this next to the cap.
@@ -1199,7 +1238,7 @@ class Handler(BaseHTTPRequestHandler):
         # deliverability would be the wrong trade, and one message cannot move the rate.
         if not meta.get('test'):
             _hb = _bounce_health()
-            if _hb['rate'] > BOUNCE_CEILING:
+            if _hb['blocked']:
                 # PROVEN-DELIVERABLE LANE: while the trailing rate is over the ceiling, a send
                 # may still go out if EVERY recipient has direct acceptance evidence (see
                 # _proven_deliverable). One unproven recipient blocks the whole send — bcc
@@ -1249,8 +1288,9 @@ class Handler(BaseHTTPRequestHandler):
                         'proven_pool': len(_proven),
                         'unproven': _unproven[:8],
                         'err': (f"BLOCKED: {_hb['dead']} of {_hb['mailed']} addresses mailed in the last "
-                                f"{_hb['window']} days are confirmed dead ({_hb['rate']*100:.0f}%). The safe "
-                                f"ceiling is {BOUNCE_CEILING*100:.0f}% and providers start blocking near 5%. "
+                                f"{_hb['window']} days are confirmed dead ({_hb['rate']*100:.0f}%, and at "
+                                f"least {_hb['lb']*100:.0f}% once the size of that sample is accounted for). "
+                                f"The safe ceiling is {BOUNCE_CEILING*100:.0f}% and providers start blocking near 5%. "
                                 f"Verified-only mode is ON: follow-ups to addresses that already accepted "
                                 f"mail still send; this one has {len(_unproven)} recipient(s) with no "
                                 f"acceptance evidence ({', '.join(_unproven[:3])}...). They unblock when "
