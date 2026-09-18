@@ -46,18 +46,33 @@ def _is_runner():
     if not any(os.path.exists(os.path.join(HERE, f))
                for f in ('leads-run.log', 'phones-run.log', 'cloud-run.log')):
         return False, 'no pipeline log on this machine — it has never run a refresh here'
-    # 2) Otherwise compare the local board data against the published board's last COMMIT. On the
-    #    runner these move together. Elsewhere the commits keep arriving and the ledger does not.
+    # 2) Otherwise compare the published board's last COMMIT against when this box last RAN.
+    #
+    #    FIXED 2026-09-18 — this measured "last ran" from leads_final.json's mtime, and that is not
+    #    when the box ran, it is when the box last SCRAPED SUCCESSFULLY. The two come apart exactly
+    #    when something is wrong. On 09-14/16/17 the laptop had no DNS at 05:30, the scrape died in
+    #    seconds, leads_final.json stayed frozen at 09-13 — and the later jobs kept rebuilding and
+    #    committing the board from that stale file. So the gap grew past 2 days and this printed
+    #    "!! NOT THE RUNNER — another machine is the runner" on the machine that was, in fact, the
+    #    only runner. A watchdog that accuses the healthy box of being the wrong box during an
+    #    outage sends whoever reads it hunting the wrong machine, which is worse than silence.
+    #
+    #    The pipeline logs are the honest clock: every runner appends to one on EVERY run, whether
+    #    the night worked or not, so their mtime says "this box ran" without also asserting "and it
+    #    succeeded". A box that genuinely is not the runner still has stale logs and is still
+    #    caught. Uses the newest of the three, since not every job writes every log.
     try:
         import subprocess
         out = subprocess.run(['git', 'log', '-1', '--format=%ct', '--', 'docs/index.html'],
                              cwd=HERE, capture_output=True, text=True, timeout=15)
         committed = int((out.stdout or '0').strip() or 0)
-        local = os.path.getmtime(os.path.join(HERE, 'leads_final.json'))
-        gap_d = (committed - local) / 86400.0
-        if committed and gap_d > 2:
+        ran = max((os.path.getmtime(os.path.join(HERE, f))
+                   for f in ('leads-run.log', 'phones-run.log', 'cloud-run.log')
+                   if os.path.exists(os.path.join(HERE, f))), default=0)
+        gap_d = (committed - ran) / 86400.0
+        if committed and ran and gap_d > 2:
             return False, (f'the published board was committed {gap_d:.0f}d after this box last '
-                           f'built leads_final.json — another machine is the runner')
+                           f'ran the pipeline — another machine is the runner')
     except Exception:
         pass
     return True, ''

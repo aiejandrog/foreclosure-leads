@@ -6,6 +6,14 @@ rem  REPO GUARD FIRST. A publish job is the most destructive command in this pro
 rem  until 2026-09-17 none of them checked what they were about to push. See repo_guard.bat.
 call repo_guard.bat "%~dp0" "leads-run.log"
 if errorlevel 1 exit /b 1
+rem  NETWORK NEXT. Same 09-14/16/17 fault as refresh-dealflow.bat: this file scrapes too, and a box
+rem  with no DNS runs it to completion in seconds while reporting nothing wrong. net_ready.py waits
+rem  ~4 minutes and refuses the run if the network never arrives. See its header for the post-mortem.
+python -u net_ready.py >> leads-run.log 2>&1
+if errorlevel 1 (
+  echo     ^!^! NETWORK NOT UP - refusing to start. Nothing scraped, live site untouched.>> leads-run.log
+  exit /b 3
+)
 rem  PULL THE CODE BEFORE BUILDING WITH IT (2026-09-10). Same fix, same reason as
 rem  refresh-dealflow.bat: the only pull here was the one before the push at the bottom, so a run
 rem  built yesterday's code, committed the result, and then rebased the new commits into history -

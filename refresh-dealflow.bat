@@ -19,6 +19,33 @@ if errorlevel 1 exit /b 1
 echo.>> "%LOG%"
 echo ==================== REFRESH %date% %time% ====================>> "%LOG%"
 
+rem  RUNEXIT carries the run's verdict to :end. Until 2026-09-18 this file exited 0 no matter what
+rem  happened - Task Scheduler recorded `rc=0` on 09-17 for a run that scraped nothing, published
+rem  nothing and left the board 94 hours stale. An exit code that is 0 whether the night worked or
+rem  not is not a signal, it is noise, and it is what made three dead mornings look identical to
+rem  three good ones. Codes: 0 clean | 1 scrape failed | 2 healthcheck COMPLIANCE fail | 3 network
+rem  never came up | 4 healthcheck says DOWN (advisory).
+set "RUNEXIT=0"
+
+rem  [0/5] NETWORK FIRST, and this is not defensive padding - it is the 09-14/16/17 post-mortem.
+rem  The task fired at 05:30 on all three mornings and was finished in THIRTY SECONDS, because the
+rem  laptop could not resolve a hostname at that hour: ERR_NAME_NOT_RESOLVED on realforeclose,
+rem  "Could not resolve host: github.com" on the pull below, the same on ledger_sync, and the
+rem  healthcheck correctly calling 4 upstream sources down at once. The scrape then exited non-zero
+rem  and this file printed "scrape failed or too few leads" - which reads like the county came back
+rem  thin, and is the reason that fault survived three days looking like a data problem.
+rem  net_ready.py waits ~4 minutes for the network and REFUSES the run if it never arrives. It
+rem  cannot fix a box with no DNS at 05:30 - that is a sleep / Wi-Fi power-management problem on the
+rem  machine - but it turns a silent thirty-second no-op into a run that says what is wrong.
+echo [0/5] Waiting for the network...
+python -u net_ready.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     ^!^! NETWORK NOT UP - refusing to start. Nothing scraped, live site untouched.>> "%LOG%"
+  echo     NETWORK NOT UP - see leads-run.log. Nothing ran.
+  set "RUNEXIT=3"
+  goto :end
+)
+
 rem  [0/4] PULL THE CODE BEFORE BUILDING WITH IT.
 rem  Until 2026-09-10 the only pull in this file was the one before the push, at the BOTTOM. So a
 rem  run built whatever code the checkout happened to have, committed the result, and only then
@@ -48,8 +75,15 @@ if errorlevel 1 (
 echo [1/4] Pulling new auction leads (scrape + enrich)...
 python -u foreclosure_leads.py >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo     ^!^! scrape failed or too few leads - live site left intact, nothing pushed.>> "%LOG%"
+  rem  This line said "scrape failed OR TOO FEW LEADS" and that ambiguity cost three days: on
+  rem  09-14/16/17 it was neither - the scrape never reached the county at all. net_ready.py above
+  rem  now rules the network out before we get here, so reaching this point means the scrape itself
+  rem  failed. foreclosure_leads.py prints scrape_guard's own ABORT line when the county came back
+  rem  thin; if that line is not in the log above, the scraper crashed instead.
+  echo     ^!^! scrape failed - see the lines above for whether the county came back thin>> "%LOG%"
+  echo        ^(scrape_guard prints "ABORT MIAMI-DADE"^) or the scraper itself died. Nothing pushed.>> "%LOG%"
   echo     SCRAPE FAILED - live site unchanged. See leads-run.log.
+  set "RUNEXIT=1"
   goto :end
 )
 
@@ -578,11 +612,27 @@ echo ==================== done %date% %time% ====================>> "%LOG%"
 
 echo [health] Checking shipped data + upstream sources...
 python -u healthcheck.py >> "%LOG%" 2>&1
-if errorlevel 1 (
+rem  errorlevel 2 is the compliance block, 1 the advisory - test 2 first, because batch's
+rem  `if errorlevel N` means ">= N". A scrape or network failure already set RUNEXIT and keeps
+rem  priority: it is the earlier and more specific fault, and overwriting it with a health code
+rem  would hide which end of the run actually broke.
+if errorlevel 2 (
+  echo     ^!^! HEALTH: COMPLIANCE FAIL - see leads-run.log.
+  if "%RUNEXIT%"=="0" set "RUNEXIT=2"
+) else if errorlevel 1 (
   echo     ^!^! HEALTH: a source is DOWN or the data looks wrong - see leads-run.log.
+  if "%RUNEXIT%"=="0" set "RUNEXIT=4"
 ) else (
   echo     health OK.
 )
 rem  (report + done marker moved ABOVE the healthcheck — see the note at :end)
 echo     health check complete - see leads-run.log.
-endlocal
+
+rem  EXIT WITH THE VERDICT. Task Scheduler's "Last Run Result" is the only unattended signal that
+rem  survives when nobody opens the log, and until 2026-09-18 it was 0 on every outcome. It is now
+rem  the answer to "did the night work", which is what anyone reading it already assumed it was.
+rem  Do NOT read this the other way round either: a 0 here means this file finished its work, not
+rem  that the data is fresh - 09-17 exited 0 precisely because the run aborted before the
+rem  healthcheck ever ran. That is the hole this closes.
+if not "%RUNEXIT%"=="0" echo ==== REFRESH ENDED rc=%RUNEXIT% %date% %time% ====>> "%LOG%"
+endlocal & exit /b %RUNEXIT%
