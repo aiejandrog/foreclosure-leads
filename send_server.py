@@ -852,7 +852,15 @@ class Handler(BaseHTTPRequestHandler):
                 # instead of discovering it 403 by 403.
                 # Ledger staleness — the 2026-09-05 desktop incident guard. The board shows this
                 # next to the cap so a stale list is visible BEFORE a run 403s send-by-send.
+                #
+                # `ledger_age_days` is the OPT-OUT ledger's age, not mail_sent.json's. The name
+                # does not say so, and on 2026-09-18 that cost two people forty minutes: a reader
+                # compared it against mail_sent.json's mtime, saw 0.22 days against 4.7, and
+                # reasonably concluded the bridge was reading a different folder. `optout_age_days`
+                # below is the same number under a name that cannot be misread. The old key stays
+                # because the board reads it; remove it only with the board in the same commit.
                 'ledger_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
+                'optout_age_days': (round(_oo_age, 2) if _oo_age is not None else None),
                 'optout_stale': (_oo_age is None or _oo_age > OPTOUT_MAX_AGE_DAYS),
                 'optout_max_age_days': OPTOUT_MAX_AGE_DAYS,
                 'bounce': _bh, 'bounce_ceiling': BOUNCE_CEILING,
