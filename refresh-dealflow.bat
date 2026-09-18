@@ -24,7 +24,10 @@ rem  happened - Task Scheduler recorded `rc=0` on 09-17 for a run that scraped n
 rem  nothing and left the board 94 hours stale. An exit code that is 0 whether the night worked or
 rem  not is not a signal, it is noise, and it is what made three dead mornings look identical to
 rem  three good ones. Codes: 0 clean | 1 scrape failed | 2 healthcheck COMPLIANCE fail | 3 network
-rem  never came up | 4 healthcheck says DOWN (advisory).
+rem  never came up | 4 healthcheck says DOWN (advisory) | 5 the board built, gated and committed
+rem  here, but the mirror to the public site repo did not publish, so the LIVE SITE still shows the
+rem  previous board - a materially different morning from a clean run, and it went unreported from
+rem  the 09-17 repo split until 09-18 because nobody read publish_site.py's exit code.
 set "RUNEXIT=0"
 
 rem  [0/5] NETWORK FIRST, and this is not defensive padding - it is the 09-14/16/17 post-mortem.
@@ -112,6 +115,18 @@ git push origin main >> "%LOG%" 2>&1
   rem  The site repo first - see the split note at the final publish. A failed push to THIS repo
   rem  must not keep the freshly built board off the public site.
   python -u publish_site.py >> "%LOG%" 2>&1
+  rem  READ ITS EXIT CODE (2026-09-18). This call discarded it, and publish_site.py exits 1 the
+  rem  moment it cannot find the site clone - which it could not, because it looked for a sibling
+  rem  named `foreclosure-site` while the public repo is named `dealflow-board`. From the 09-17
+  rem  repo split to 09-18, three boards were built, gated, committed and pushed to THIS repo while
+  rem  the live site served the 2026-09-17T06:45 build throughout - and every run reported a
+  rem  successful publish. Not fatal: the board is safe here and publish_verify still runs. But
+  rem  never again silent.
+  if errorlevel 1 (
+    echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
+    echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
+    echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+  )
   rem  Neither push's exit code was read here, so "fresh leads pushed" printed whether or not
   rem  anything reached origin. publish_verify.bat asks the remote instead of assuming, and it
   rem  prints the outcome itself - which is why the unconditional echo that sat here is gone.
@@ -474,6 +489,18 @@ rem  publish_guard's baseline) and publish_site.py mirrors the pages Pages actua
 rem  It runs BEFORE the verify: a failed push to THIS repo must not stop the public site getting
 rem  a board that already cleared both gates.
 python -u publish_site.py >> "%LOG%" 2>&1
+rem  READ ITS EXIT CODE (2026-09-18). See the note at the early publish above: this call discarded
+rem  it, publish_site.py exits 1 when it cannot find the site clone, and that is exactly what
+rem  happened on every run between the 09-17 repo split and 09-18 - silently, because nothing here
+rem  looked. RUNEXIT 5 means the board is good and committed but the LIVE SITE is still the old one,
+rem  which is a different morning from a clean run and the task's exit code should say so. An
+rem  earlier fault keeps priority, same rule as the health codes below.
+if errorlevel 1 (
+  echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
+  echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
+  echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+  if "%RUNEXIT%"=="0" set "RUNEXIT=5"
+)
 rem  "Pushed - live site updates in ~1-2 min" used to print unconditionally: the retry's exit code
 rem  was discarded, so a run whose push never landed ended by announcing a successful publish. That
 rem  is how the 2026-08-16 and 2026-09-14 blackouts both stayed invisible for days. Ask the remote.

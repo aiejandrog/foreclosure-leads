@@ -98,6 +98,14 @@ if not errorlevel 1 (
   if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
   rem  mirror the rebuilt board to the PUBLIC site repo (see publish_site.py)
   python -u publish_site.py >> "%LOG%" 2>&1
+  rem  READ ITS EXIT CODE (2026-09-18). publish_site.py exits 1 when it cannot find the site clone,
+  rem  and every caller discarded that - so between the 09-17 repo split and 09-18 the live site sat
+  rem  on one build while three newer boards were published to this repo and every run said success.
+  if errorlevel 1 (
+    echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
+    echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
+    echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+  )
   rem  ...and then ASK THE REMOTE whether that push landed, instead of ending the run silently.
   rem  The blind `timeout 6 & push again` above is the same push six seconds later: when the first
   rem  one failed for a reason six seconds does not fix, the second fails identically and nothing

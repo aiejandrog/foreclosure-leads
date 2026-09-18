@@ -51,9 +51,15 @@ if errorlevel 1 goto :vfail
 rem  the trailing period is load-bearing: a label ending in a digit followed directly by
 rem  ">" is parsed by cmd as a file-handle redirect, not as text. run-phones-nightly.bat
 rem  passes "...skiptrace exit 3, see phones-run.log" through here.
-echo     publish CONFIRMED on origin/main - %VLABEL%.>> "%VLOG%"
-if not "%VSTATUS%"=="-" echo [%date% %time%] OK - published to the live site. %VLABEL%.> "%VSTATUS%"
-echo     Published - live site updates in ~1-2 min.
+rem  IT VERIFIES THIS REPO, NOT THE LIVE SITE (2026-09-18). Since the 09-17 split the live board is
+rem  a SEPARATE public repo (dealflow-board), mirrored by publish_site.py. This file only asks
+rem  whether HEAD reached origin/main HERE, so the old wording - "published to the live site",
+rem  "live site updates in ~1-2 min" - was the very kind of unearned claim this file exists to
+rem  remove, one repo further out. It was true until 09-17 and false every run after. The caller
+rem  reports the mirror separately; this says only what it actually checked.
+echo     publish CONFIRMED on origin/main (engine repo) - %VLABEL%.>> "%VLOG%"
+if not "%VSTATUS%"=="-" echo [%date% %time%] OK - board pushed to the engine repo. Live site depends on the mirror step. %VLABEL%.> "%VSTATUS%"
+echo     Pushed to the engine repo - the live site follows only if the mirror step above published.
 endlocal & exit /b 0
 
 :vfail
