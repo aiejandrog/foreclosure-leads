@@ -1,6 +1,19 @@
 @echo off
 cd /d "%~dp0"
 echo ==== run %date% %time% ==== >> leads-run.log
+
+rem  REPO GUARD FIRST. A publish job is the most destructive command in this project and
+rem  until 2026-09-17 none of them checked what they were about to push. See repo_guard.bat.
+call repo_guard.bat "%~dp0" "leads-run.log"
+if errorlevel 1 exit /b 1
+rem  NETWORK NEXT. Same 09-14/16/17 fault as refresh-dealflow.bat: this file scrapes too, and a box
+rem  with no DNS runs it to completion in seconds while reporting nothing wrong. net_ready.py waits
+rem  ~4 minutes and refuses the run if the network never arrives. See its header for the post-mortem.
+python -u net_ready.py >> leads-run.log 2>&1
+if errorlevel 1 (
+  echo     ^!^! NETWORK NOT UP - refusing to start. Nothing scraped, live site untouched.>> leads-run.log
+  exit /b 3
+)
 rem  PULL THE CODE BEFORE BUILDING WITH IT (2026-09-10). Same fix, same reason as
 rem  refresh-dealflow.bat: the only pull here was the one before the push at the bottom, so a run
 rem  built yesterday's code, committed the result, and then rebased the new commits into history -
@@ -18,6 +31,14 @@ rem  workups) were NOT gitignored, so one run of this bat would have published f
 rem  numbers to a PUBLIC repo. Now: rebuild, gate, and add ONLY the two built site paths - never -A.
 rem  Same contract as refresh-dealflow.bat.
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json',encoding='utf-8')))" >> leads-run.log 2>&1
+rem  healthcheck runs FIRST, and it was missing entirely: this file had publish_guard but not the
+rem  compliance gate, so it could publish a board that had lost its 362 bankruptcy-stay flags.
+rem  publish_guard only compares counts against the live board - it cannot see a compliance fail,
+rem  and it says so itself (bkstay is deliberately not one of its fields, because duplicating a
+rem  blocking rule in two files means fixing one and believing you fixed both). Exit 2 blocks;
+rem  exit 1 is the coverage floor only and stays advisory, same as refresh-dealflow.bat.
+python healthcheck.py >> leads-run.log 2>&1
+if errorlevel 2 (echo GATE: healthcheck COMPLIANCE fail - publish SKIPPED, live site left intact >> leads-run.log & goto :done)
 python publish_guard.py >> leads-run.log 2>&1
 if errorlevel 1 (echo PUBLISH GUARD BLOCKED - live site left intact >> leads-run.log & goto :done)
 git add docs/index.html docs/call >> leads-run.log 2>&1
@@ -32,6 +53,10 @@ git push origin main >> leads-run.log 2>&1
 rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo went private so the lead
 rem  data and history stop being world-readable; docs/ still lands here for publish_guard's
 rem  baseline, and publish_site.py mirrors the built pages to the repo Pages actually serves.
+rem  It runs BEFORE the verify below: a failed push to THIS repo must not keep a board that
+rem  already passed the gates off the public site.
 python -u publish_site.py >> leads-run.log 2>&1
+rem  This file did not even have the 6s retry, let alone a check that the push landed. Ask the remote.
+call publish_verify.bat "leads-run.log" "-" "weekly lead refresh"
 :done
 echo ==== done ==== >> leads-run.log

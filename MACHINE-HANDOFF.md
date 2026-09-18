@@ -33,41 +33,73 @@ day-late lag, and no more "the commit is in main so the site must have it".
 
 ## 1. Who is the runner RIGHT NOW
 
-> ### ⚠ THIS TABLE IS OUT OF DATE. TWO MACHINES ARE PUBLISHING. (2026-09-17)
+> ### ✅ SETTLED 2026-09-18 — the laptop is the only armed machine. The table below is right.
 >
-> The table below says the desktop is fully stood down. **The commits say otherwise**, and nobody has
-> yet confirmed which machine is supposed to be armed. Until Alejandro says, treat "who is the
-> runner" as an OPEN QUESTION and do not rely on the row below.
+> This block said the opposite for a day, so the correction and the evidence that forced it both
+> stay here: an inference that reads as proof is worth more as a worked example than as a deletion.
 >
-> **The proof, from git alone.** Two builds stamped the same minute with different data — read the
-> census on line 1 of `docs/index.html` (`<!-- DEALFLOW-COVERAGE {...} -->`) at each commit:
+> **What was claimed:** two machines are armed and both are publishing. **What settled it:** the
+> desktop's own task list, read on the machine. Every DealFlow task is `Disabled` except
+> `BSG Warmup`, most with `last=11/30/1999` — the never-run sentinel. There is nothing to disarm,
+> and there has not been since 2026-08-26. `engine.id` on the live box reads `laptop`.
+>
+> **Why the commit log looked like two machines.** The evidence was real; the conclusion was not.
+> On 09-16 and 09-17 the same scheduled job committed twice, and two commits stamped the same build
+> minute carried different censuses:
+>
+> | day | job | commit A | commit B |
+> |---|---|---|---|
+> | 09-16 | reply bake | `9d2c500` 06:45 | `fd0ff4f` 06:45 |
+> | 09-16 | phones | `1b5e7c2` 06:00 | `c91eb0d` 07:20 |
+> | 09-17 | reply bake | `e5ff186` 06:45 | `c2d596f` 06:45 |
+> | 09-17 | phones | `bade50f` 06:00 | `24b5155` 09:29 |
 >
 > | build stamp | leads | phones | authored | committed |
 > |---|---|---|---|---|
 > | `2026-09-17T06:45` | 2,297 | 1,148 | 09-17 06:45 | 09-17 **16:42** |
 > | `2026-09-17T06:45` | 2,266 | 737 | 09-17 06:45 | 09-17 06:45 |
 >
-> One build cannot produce two censuses. One machine had been committing locally since 09-14 without
-> reaching origin (three commits authored 09-14/09-16/09-17 at 06:00, all committed 09-17 16:42), so
-> **whichever machine pushes last wins the live site.** The two hold different data: one is frozen at
-> 1,148 phones (its skiptrace has failed nightly since 09-13), the other skip-traces fine but off a
-> much smaller cache (709 → 714 → 719 → 737 → 739 over five days) and so publishes a board ~409
-> dialable numbers poorer.
+> One build cannot produce two censuses, and that is still true. But it does not take two machines
+> to produce two commits — it takes **one machine whose pushes stopped landing**. This box's pushes
+> had not reached origin since 09-14, so local auto-commits stacked up (three authored 09-14/09-16/
+> 09-17 at 06:00, all committed 09-17 16:42) and then collided with its own earlier pushes on
+> origin. The runners pull with `--rebase --autostash -X theirs` before pushing, which is how a
+> replayed commit can carry an older board under a newer build stamp. A ten-hour gap between author
+> date and committer date is the signature of exactly that, and it is one of the three things
+> `freshness-watchdog.yml` now alarms on.
 >
-> **It cost real things, twice in one day.** 439 phone numbers were stripped off the live board on
-> 09-15 through the then-ungated `run-replies-daily.bat` (see CLAUDE.md §"Publish gates"), and that
-> evening `main` itself was overwritten and emptied by a stray publish from a checkout that had lost
-> its history — recovered from `rescue/main-ad1643f-2026-09-17`, with history rehashed.
+> **The lesson worth keeping:** author-vs-committer skew and duplicate same-day publishes are a
+> genuine alarm, but they are evidence of *a push not landing*, which a second machine is only one
+> possible cause of. Read the skew first and count machines second. `Get-ScheduledTask` on the box
+> is the only thing that settles the machine question; git cannot.
 >
-> **Before arming or disarming anything, re-read §0 and the NINTH TASK warning below**: the installer
-> cannot see `DealFlow Cadence`, so a handoff done exactly as §2 describes leaves outreach running on
-> the machine it just disarmed.
+> **It still cost real things.** 439 phone numbers were stripped off the live board on 09-15 by the
+> then-ungated `run-replies-daily.bat` (see CLAUDE.md §"Publish gates"), and that publish became
+> `origin/main`, moving the baseline every later gate compared against. That evening `main` itself
+> was overwritten and emptied by a stray publish from a checkout that had lost its history,
+> recovered from `rescue/main-ad1643f-2026-09-17`. Neither needed a second machine either.
+>
+> **To re-check the machine question at any time, on each box:**
+>
+> ```
+> pwsh -c "Get-ScheduledTask | ? TaskName -like '*ealFlow*' | ft TaskName,State"
+> ```
+>
+> Nine rows. Whichever box shows `Ready` is armed. If that is ever two boxes, disarm the loser
+> **before** copying §3 state, or the disarmed box's ledgers overwrite the winner's.
+>
+> **Before arming or disarming anything, re-read §0 and the NINTH TASK warning below.** Correction
+> to the paragraph below: `install-tasks.ps1 -DisableLocal` **does** catch `DealFlow Cadence` now —
+> it enumerates live tasks with `-match '^(DEALFLOW|DealFlow)'` rather than working from its list of
+> eight. `-Enable` still does **not** bring it back up, because that path only walks
+> `desktop-setup/tasks/*.xml`. So disarming is complete and arming is not: after `-Enable`, turn
+> cadence on by name or outreach stays off.
 
 | Machine | Role today | Tasks |
 |---|---|---|
-| **Laptop** | **ARMED — the live runner** | 8 pipeline tasks enabled |
-| **DESKTOP-35NNMFL** (Gigabyte B450M) | Runner-in-waiting, fully stood down | **all 9 tasks Disabled** (as of 2026-08-26) |
-| **GitHub Actions** | Backup / watchdog | `refresh.yml` 13:00 UTC daily, `freshness-watchdog.yml` 15:00 UTC |
+| **Laptop** | **ARMED — the live runner** | 8 pipeline tasks enabled; `engine.id` = `laptop` |
+| **DESKTOP-35NNMFL** (Gigabyte B450M) | Runner-in-waiting, dark | all DealFlow tasks `Disabled` except `BSG Warmup` (re-verified on the box 2026-09-18; most read `last=11/30/1999`) |
+| **GitHub Actions** | Watchdog only — **it does not publish** | `freshness-watchdog.yml`. `refresh.yml` is gone; `.github/workflows/` holds nothing else |
 
 Evidence the laptop is live: commits `9ff826b`/`43ed370`/`8efda91` (08-24) and `f7492a5`/`e0ab111`/
 `b8b771e` (08-25) — the full nightly chain, plus `github-actions[bot]` on both days.
@@ -272,6 +304,46 @@ Two settings decide whether the eight actually fire:
 
 Both gates run before the push in `refresh-dealflow.bat`. If a gate blocks, the live site stays on
 its last good build — that is the intended behaviour, not a failure.
+
+**They did not run everywhere, and that made them optional (fixed 2026-09-17).** `refresh-dealflow.bat`
+was the only runner with both. `run-phones-nightly.bat` had neither and `run-leads.bat` had no
+healthcheck, so the compliance hard block was walkable: refresh refuses to publish on exit 2 but
+leaves the rebuilt board on disk, and the phones job rebuilt from the same `leads_final.json` and
+published it 30 minutes later with nothing asking. Measured on 09-15: the reply bake put a 709-phone
+board over the live 1,148-phone one at 19:11 and the phones job put 714 over it at 19:12 — both
+drops publish_guard would have blocked. Both jobs now run healthcheck (exit 2 blocks) then
+publish_guard, the same order and the same advisory treatment of exit 1.
+
+**And no runner ever checked that its push landed.** Every one of them ended with `git push`, an
+optional 6s retry, and then an unconditional "published, live in ~1-2 min" — neither exit code was
+read. That cost two multi-day blackouts a month apart (08-16, and 09-14→09-17) in which the board
+was rebuilt locally every morning while `DEALFLOW-PHONES-STATUS.txt` said `OK - published`.
+`publish_verify.bat` now asks the remote whether `HEAD` is an ancestor of `origin/main` and writes
+the status file from the answer. A push that did not land says so, loudly, and does not retry.
+
+**A publish run from the wrong folder destroyed the GitHub copy of the repo (2026-09-17, ~17:41).**
+A publish was run on the desktop from a directory that was **not** the project checkout — it held the
+built site and little else. Its `git push origin main` replaced main on GitHub with a single commit,
+`ec8bf31` "site: first publish of the built DEALFLOW pages": `docs/` and a README, **318 source
+modules, every `.bat` and the whole commit history gone from the remote in one push.** Recovered
+only because a cloud session happened to be holding a clone from eighteen minutes earlier; main is
+back at the real history and the docs-only commit is kept on `docs-first-publish-ec8bf31`.
+
+`repo_guard.bat` now runs first in `refresh-dealflow.bat`, `run-phones-nightly.bat` and
+`run-leads.bat`. It refuses to build or publish unless the pipeline's own files are present
+(`foreclosure_leads.py`, `tracker_template.html`, `paths.py`, `CLAUDE.md`), the checkout is a git
+work tree, **the history is more than 20 commits**, and origin is this project. The history check is
+the one that matters: a built-site folder is a perfectly valid git repo pointing at the right
+remote — the offending directory passed every git check there is — and the only thing that
+distinguished it was that the code was absent and its history was one commit deep. The guard only
+ever refuses; it never resets or re-clones.
+
+The cloud watchdog was blind to all of this because it read the `Updated` stamp on the live page,
+which is the **build** time — and the 06:00/06:45 jobs rebuild every morning whether or not any new
+data arrived. `freshness-watchdog.yml` now also reads what reached `origin/main` and alarms on two
+runners publishing the same job in one day, on commits that sat unpushed, and on the 05:30 refresh
+going quiet. `node _watchdogtest.js` is its contract test (it extracts the shipped script out of the
+YAML rather than re-typing it); `--live` runs it against this repo's current log.
 
 ---
 

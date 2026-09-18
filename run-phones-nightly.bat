@@ -10,6 +10,11 @@ rem                         | 5 shared daily budget spent mid-run (benign, rest 
 rem Night one clears the backlog (~$40); every night after only pays for NEW leads (cache dedupes the rest).
 cd /d "%~dp0"
 set "LOG=%~dp0phones-run.log"
+
+rem  REPO GUARD FIRST. A publish job is the most destructive command in this project and
+rem  until 2026-09-17 none of them checked what they were about to push. See repo_guard.bat.
+call repo_guard.bat "%~dp0" "%LOG%"
+if errorlevel 1 exit /b 1
 set "STATUS=%USERPROFILE%\DEALFLOW\DEALFLOW-PHONES-STATUS.txt"
 set "STAMP=%date% %time%"
 
@@ -62,8 +67,39 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem 3b) THE GATES. This job published with none of them until 2026-09-17, and it is the job that
+rem     runs most reliably -- so it was the easiest way to put a bad board on the live site.
+rem
+rem     Measured: on 09-15 at 19:11 the reply bake published a 709-phone board over the live
+rem     1,148-phone one, and ONE MINUTE LATER this job published 714 over the same board. Both
+rem     drops clear publish_guard's phones rule (709 and 714 are both under 1,148 x 0.85, and the
+rem     ~435 lost numbers are far over its floor of 25), so the guard would have blocked both --
+rem     neither job was asking it. Gating only the reply bake leaves this one-minute-later path
+rem     open, which is the whole reason this block is here and not just there.
+rem
+rem     The healthcheck check matters more than it looks. refresh-dealflow.bat treats exit 2
+rem     (lost 362 bankruptcy-stay flags / 2+ upstream sources down) as a HARD publish block and
+rem     stops. But it leaves the rebuilt board sitting on disk, and this job rebuilds from the
+rem     same leads_final.json 30 minutes later -- so an ungated publish here re-publishes the
+rem     exact board the compliance gate just refused. A gate one job can walk around is not a gate.
+python -u healthcheck.py >> "%LOG%" 2>&1
+if errorlevel 2 (
+  echo [%STAMP%] BLOCKED - healthcheck COMPLIANCE fail. Board NOT published; live site left on its last good build. See phones-run.log.> "%STATUS%"
+  echo GATE: healthcheck COMPLIANCE fail - publish skipped. >> "%LOG%"
+  exit /b 2
+)
+rem  exit 1 is the coverage floor only: advisory, publish_guard decides -- same as refresh-dealflow.bat.
+python -u publish_guard.py >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo [%STAMP%] BLOCKED - publish_guard refused a board poorer than the live one. Live site unchanged. See phones-run.log.> "%STATUS%"
+  echo GATE: publish_guard BLOCKED the build - publish skipped. >> "%LOG%"
+  exit /b 2
+)
+
 rem 4) publish. ONLY the encrypted board + public Sunbiz officers -- NEVER `git add -A`
 rem    (skiptrace_results.json / leads_final.json are gitignored PII and must stay off the public repo).
+rem    llc_officers.json is gitignored too, so this add reports it and stages the rest; harmless,
+rem    but it means the officers file never travels between machines -- each one builds its own.
 git add docs/index.html docs/call llc_officers.json
 git commit -m "phones: nightly refresh (%PHONESNOTE%)" >> "%LOG%" 2>&1
 if errorlevel 1 (
@@ -85,6 +121,16 @@ python -u publish_site.py >> "%LOG%" 2>&1
 
 rem The status file must state the phones outcome honestly. It previously always said "phones
 rem refreshed", which would now be a lie on any degraded run.
-echo [%STAMP%] OK - board rebuilt + published (%PHONESNOTE%). Live in ~1-2 min.> "%STATUS%"
+rem
+rem It also always said "published", which was a lie for three days straight (09-14 to 09-17):
+rem the push was failing, the commits stacked up locally, and this line still wrote "OK - board
+rem rebuilt + published. Live in ~1-2 min." every morning. Neither push's exit code was ever
+rem read. publish_verify.bat asks the remote whether HEAD actually landed and writes the status
+rem file from the answer, so this can no longer claim a publish that did not happen.
+call publish_verify.bat "%LOG%" "%STATUS%" "%PHONESNOTE%"
+if errorlevel 1 (
+  echo ==== done - NOT PUBLISHED %date% %time% ==== >> "%LOG%"
+  exit /b 1
+)
 echo ==== done %date% %time% ==== >> "%LOG%"
 exit /b 0
