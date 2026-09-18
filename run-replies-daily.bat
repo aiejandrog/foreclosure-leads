@@ -16,6 +16,17 @@ REM the 08-25 run exited 0 and its output file already no longer existed anywher
 REM would have been undiagnosable by afternoon.
 set "LOG=%~dp0replies-run.log"
 echo ==== replies-daily %date% %time% ==== >> "%LOG%"
+
+REM  REPO GUARD FIRST (2026-09-18). This was the LAST publish path with no guard. It is also the
+REM  fastest route from a local build to the live site - replies.py runs, the board is rebuilt, and
+REM  docs/index.html + docs/call are pushed, all inside a couple of minutes. On 2026-09-17 a publish
+REM  from a directory that was NOT this checkout replaced origin/main with one docs-only commit and
+REM  wiped 318 modules off the remote; the offending tree was a valid work tree with a clean index
+REM  and the correct origin URL, so git itself had nothing to object to. repo_guard.bat checks the
+REM  four things git cannot: the pipeline's own files are here, this is a work tree, the history is
+REM  deeper than a stub, and origin is this project. It only ever refuses.
+call repo_guard.bat "%~dp0" "%LOG%"
+if errorlevel 1 exit /b 1
 python -u replies.py >> "%LOG%" 2>&1
 
 REM DETECTION IS NOT SUPPRESSION. replies.py only writes stop:true into replies.json; optout_sync.py
@@ -87,6 +98,13 @@ if not errorlevel 1 (
   if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
   rem  mirror the rebuilt board to the PUBLIC site repo (see publish_site.py)
   python -u publish_site.py >> "%LOG%" 2>&1
+  rem  ...and then ASK THE REMOTE whether that push landed, instead of ending the run silently.
+  rem  The blind `timeout 6 & push again` above is the same push six seconds later: when the first
+  rem  one failed for a reason six seconds does not fix, the second fails identically and nothing
+  rem  here notices. That is how six commits - 09-14/09-16/09-17 phones and replies - sat unpushed
+  rem  until 09-17 16:42 while every run reported a good morning. publish_verify.bat asks whether
+  rem  HEAD is an ancestor of origin/main right now, which is the only honest form of the question.
+  call publish_verify.bat "%LOG%" "-" "replies: morning scan baked into board"
 )
 :end
 endlocal
