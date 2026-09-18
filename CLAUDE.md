@@ -99,13 +99,14 @@ that carries a name or number inline, gitignore it in the same commit.
 publishes the board**. A blocked publish leaving the site on its last good build is correct
 behaviour, not a bug to route around.
 
-**Three paths publish, and all three are gated (the third only since 2026-09-17):**
+**Four paths publish, and all four are gated (the last two only since 2026-09-17):**
 
 | path | when | gates |
 |---|---|---|
 | `refresh-dealflow.bat` | nightly 5:30 | healthcheck + publish_guard |
 | `run-leads.bat` | manual | healthcheck + publish_guard |
 | `run-replies-daily.bat` | daily 7:00 | healthcheck + publish_guard |
+| `run-phones-nightly.bat` | nightly 6:00 | healthcheck + publish_guard |
 
 `run-replies-daily.bat` had **no gates at all** until 2026-09-17, and it is the one that rebuilds and
 pushes `docs/index.html` + `docs/call` fastest — so it was the shortest route from a bad local build
