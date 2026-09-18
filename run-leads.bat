@@ -56,6 +56,14 @@ rem  baseline, and publish_site.py mirrors the built pages to the repo Pages act
 rem  It runs BEFORE the verify below: a failed push to THIS repo must not keep a board that
 rem  already passed the gates off the public site.
 python -u publish_site.py >> leads-run.log 2>&1
+rem  READ ITS EXIT CODE (2026-09-18). publish_site.py exits 1 when it cannot find the site clone,
+rem  and every caller discarded that - so between the 09-17 repo split and 09-18 the live site sat
+rem  on one build while three newer boards were published to this repo and every run said success.
+if errorlevel 1 (
+  echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> leads-run.log
+  echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> leads-run.log
+  echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See leads-run.log.
+)
 rem  This file did not even have the 6s retry, let alone a check that the push landed. Ask the remote.
 call publish_verify.bat "leads-run.log" "-" "weekly lead refresh"
 :done

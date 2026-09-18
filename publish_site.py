@@ -40,7 +40,35 @@ import time
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS = os.path.join(HERE, 'docs')
-SITE = os.environ.get('DEALFLOW_SITE_REPO') or os.path.join(os.path.dirname(HERE), 'foreclosure-site')
+# WHERE THE SITE CLONE IS, and why this is a list (2026-09-18)
+# This read `os.path.join(os.path.dirname(HERE), 'foreclosure-site')` and nothing else. The public
+# repo is named dealflow-board, so `git clone .../dealflow-board` beside the engine produces
+# `dealflow-board` — a name this file never looked for. It therefore exited on its first line of
+# main() with "no site repo", every single run, and since NO runner read its exit code the failure
+# was silent: between 2026-09-17 18:20 and 2026-09-18 13:30 the engine repo published three boards
+# (09-17 21:08, 09-18 05:41 and one before them) and the live site served the 2026-09-17T06:45 build
+# throughout, with every run reporting a successful publish.
+# So: try the repo's own name first, keep the old name as a fallback for a clone that already used
+# it, and when none of them is a git work tree say EVERY path that was tried — a resolver that
+# reports only its last guess cannot be debugged from a log.
+SITE_DIRS = ('dealflow-board', 'foreclosure-site')
+
+
+def _find_site():
+    """-> (path, tried). Env var wins outright; otherwise the first sibling that is a git work tree;
+    otherwise the first candidate, so the error names something actionable."""
+    env = os.environ.get('DEALFLOW_SITE_REPO')
+    if env:
+        return env, [env]
+    parent = os.path.dirname(HERE)
+    tried = [os.path.join(parent, n) for n in SITE_DIRS]
+    for p in tried:
+        if os.path.isdir(os.path.join(p, '.git')):
+            return p, tried
+    return tried[0], tried
+
+
+SITE, SITE_TRIED = _find_site()
 SITE_DOCS = os.path.join(SITE, 'docs')
 KEEP = {'.nojekyll'}          # lives only in the site repo; never mirrored away
 
@@ -130,7 +158,15 @@ def main():
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
     if not os.path.isdir(os.path.join(SITE, '.git')):
-        raise SystemExit('publish_site: no site repo at %s (set DEALFLOW_SITE_REPO) — nothing published.' % SITE)
+        raise SystemExit(
+            'publish_site: NO SITE REPO FOUND - THE LIVE SITE WAS NOT UPDATED.\n'
+            '  tried: %s\n'
+            '  The live board is https://github.com/aiejandrog/dealflow-board (GitHub Pages serves\n'
+            '  it, not this repo). Clone it beside this one:\n'
+            '      git clone https://github.com/aiejandrog/dealflow-board\n'
+            '  ...or point DEALFLOW_SITE_REPO at an existing clone. The board that was just built\n'
+            '  is committed and safe in this repo either way; it simply is not published yet.'
+            % '\n         '.join(SITE_TRIED))
     guard()
     copied, removed = mirror(dry=a.dry_run)
     print('publish_site: %d page(s) changed, %d removed' % (copied, removed))

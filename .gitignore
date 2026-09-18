@@ -442,3 +442,8 @@ deal_desk.json
 # armed runner), so there is nothing here to keep out of git. Untracked it would be the one check
 # that the phone and the board still agree on nine lane counts, living on a single laptop.
 !_funnelparitytest.py
+# ...and the suite that guards publish_site.py's resolver for the PUBLIC site repo. It looked for a
+# directory name nothing creates, so the live site froze for 31 hours while every run reported a
+# successful publish. Untracked, the one check that the mirror can find its target would live on
+# a single laptop.
+!_sitemirrortest.py

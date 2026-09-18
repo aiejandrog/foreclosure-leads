@@ -118,6 +118,14 @@ rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo is private 
 rem  lead data and history are no longer world-readable; docs/ still commits here (it is
 rem  publish_guard's baseline) and publish_site.py mirrors the pages Pages actually serves.
 python -u publish_site.py >> "%LOG%" 2>&1
+rem  READ ITS EXIT CODE (2026-09-18). publish_site.py exits 1 when it cannot find the site clone,
+rem  and every caller discarded that - so between the 09-17 repo split and 09-18 the live site sat
+rem  on one build while three newer boards were published to this repo and every run said success.
+if errorlevel 1 (
+  echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
+  echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
+  echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+)
 
 rem The status file must state the phones outcome honestly. It previously always said "phones
 rem refreshed", which would now be a lie on any degraded run.
