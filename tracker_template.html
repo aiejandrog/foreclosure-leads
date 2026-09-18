@@ -3426,7 +3426,7 @@ function _contactLineHtml(r, ph, opts){
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
     : (isMob ? '' : ' <span class="cttag">landline</span>');
   // DNC numbers stay dialable (manual single dial about their own foreclosure); Text/WA stay off.
-  const call = '<a class="ctact ctact-call" href="tel:'+esc(digits)+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':'Call this number (8am–8pm ET)')+'">Call</a>';
+  const call = '<a class="ctact ctact-call" href="'+esc(_telNum(digits))+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':'Call this number (8am–8pm ET)')+'">Call</a>';
   const text = canTxt
     ? '<a href="#" class="ctact ctact-text textgen" data-c="'+esc(r.case)+'" data-ph="'+esc(digits)+'" title="Text via Phone Link / Messages — bilingual SMS you copy or open with sms: pre-filled">Text</a>'
     : '';
@@ -4459,9 +4459,9 @@ function _wpHousehold(r){
     var atProp = !o.absentee;
     var phList = (o.phones||[]).map(function(p){
       var digits = String(p.n||'').replace(/\D/g,'');
-      if(_isDnc(digits)) return '<a class="wpph wpdnc" href="tel:'+esc(digits)+'" title="DNC — manual single dial only, no text/autodial">'+esc(fmtPh(p.n))+'</a>'
+      if(_isDnc(digits)) return '<a class="wpph wpdnc" href="'+esc(_telNum(digits))+'" title="DNC — manual single dial only, no text/autodial">'+esc(fmtPh(p.n))+'</a>'
         + '<span class="cttag dnc">DNC · call only</span>';
-      return '<a class="wpph'+(p.type && p.type.indexOf('mob')>-1 ? ' wpmob' : '')+'" href="tel:'+esc(digits)+'">'+esc(fmtPh(p.n))+'</a>'
+      return '<a class="wpph'+(p.type && p.type.indexOf('mob')>-1 ? ' wpmob' : '')+'" href="'+esc(_telNum(digits))+'">'+esc(fmtPh(p.n))+'</a>'
         + '<span class="wpt">'+esc(p.type||'?')+'</span>';
     }).join(' ');
     var emList = (o.emails||[]).slice(0,4).map(function(e){
@@ -4486,9 +4486,9 @@ function _wpHousehold(r){
       + resid.map(function(o){
           var ph = (o.phones||[]).map(function(p){
             var digits = String(p.n||'').replace(/\D/g,'');
-            if(_isDnc(digits)) return '<a class="wpph wpdnc" href="tel:'+esc(digits)+'" title="DNC — manual single dial only, no text/autodial">'+esc(fmtPh(p.n))+'</a>'
+            if(_isDnc(digits)) return '<a class="wpph wpdnc" href="'+esc(_telNum(digits))+'" title="DNC — manual single dial only, no text/autodial">'+esc(fmtPh(p.n))+'</a>'
               + '<span class="cttag dnc">DNC · call only</span>';
-            return '<a class="wpph'+(p.type && p.type.indexOf('mob')>-1 ? ' wpmob' : '')+'" href="tel:'+esc(digits)+'">'+esc(fmtPh(p.n))+'</a>'
+            return '<a class="wpph'+(p.type && p.type.indexOf('mob')>-1 ? ' wpmob' : '')+'" href="'+esc(_telNum(digits))+'">'+esc(fmtPh(p.n))+'</a>'
               + '<span class="wpt">'+esc(p.type||'?')+'</span>';
           }).join(' ');
           var em = (o.emails||[]).slice(0,2).map(function(e){
@@ -4732,7 +4732,7 @@ function _callSheet(r){
     (_nameBroken(r)?' <span class="cstag warn">name incomplete</span>':'')+'</div>'+
     '<div class="cscase">Case '+esc(r.case)+' · '+esc(r.county||'MIAMI-DADE')+' · folio '+esc(r.folio||'—')+'</div>'+_csScout(r)+'</div>';
   if(tt) who += '<div class="cstalk">🗣 <b>TALK TO '+esc(tt.name.toUpperCase())+'</b>'+(tt.rel?' — '+esc(tt.rel):'')+
-    (tt.phone?' · <a href="tel:'+esc(tt.phone.replace(/\D/g,''))+'">'+esc(tt.phone)+'</a>':'')+
+    (tt.phone?' · <a href="'+esc(_telNum(tt.phone))+'">'+esc(tt.phone)+'</a>':'')+
     (tt.note?'<div class="cstn">'+esc(tt.note)+'</div>':'')+
     '<button type="button" class="csedit" onclick="_editTalkTo(\''+esc(r.case)+'\')">edit</button></div>';
   else who += '<div class="cstalkadd"><button type="button" class="csedit" onclick="_editTalkTo(\''+esc(r.case)+'\')">+ Someone else is handling this (daughter, POA, attorney…)</button></div>';
@@ -5788,6 +5788,19 @@ function _waLink(r, ph){
 // time, human reviews + taps send. Also a one-tap Copy for paste-anywhere. Hard-skips DNC / opt-out /
 // Do-Not-Text; FTSA 8am–8pm ET + 3/24h gate; every body carries STOP.
 function _smsNum(ph){ const d=String(ph||'').replace(/\D/g,''); if(d.length===10) return '+1'+d; if(d.length===11 && d[0]==='1') return '+'+d; return d?('+'+d.replace(/^\+/,'')): ''; }
+/* DIAL LINKS ARE E.164 FOR THE SAME REASON SMS LINKS ARE (2026-09-18, reported by Alejandro:
+   "the other buttons its not linked to the phone link"). Windows Phone Link, the iOS dialer and
+   Android all accept 'tel:+1XXXXXXXXXX' on every path; the two shapes this file was actually
+   emitting are the ones they handle inconsistently:
+     'tel:'   + digits  -- a bare 10-digit body, and an 11-digit '19545551234' passed through whole
+     'tel:+1' + digits  -- '+119545551234' the moment the number ALREADY carries its country code,
+                           which is an invalid number the dialer drops, and a live 'tel:+1' that
+                           dials nothing when the number is empty.
+   Operator-typed numbers (the Talk-to prompt, the notes phone field) and scraped Whitepages rows
+   both arrive 11-digit, so both shapes were reachable from the board. _smsNum already got this
+   right and the sms: links have always worked -- this is that one normalization, not a second
+   copy of it. Returns '' for an empty number so callers render no link rather than a dead one. */
+function _telNum(ph){ const n=_smsNum(ph); return n ? 'tel:'+n : ''; }
 const FTSA_TZ='America/New_York', FTSA_HR_START=8, FTSA_HR_END=20, FTSA_MAX_24H=3;
 function _flHour(){ try{ const h=parseInt(new Intl.DateTimeFormat('en-US',{timeZone:FTSA_TZ,hour:'2-digit',hour12:false}).format(new Date()),10); return h===24?0:h; }catch(e){ return new Date().getHours(); } }
 function _flClock(){ try{ return new Intl.DateTimeFormat('en-US',{timeZone:FTSA_TZ,hour:'numeric',minute:'2-digit',hour12:true}).format(new Date()); }catch(e){ return ''; } }
@@ -6881,7 +6894,7 @@ function _wqShow(){
     + '<span class="wbaddr">'+esc((r.addr||r.case).split(',')[0])+'</span>'
     + '<span class="wbwhy">'+esc(item.why)+(_hasClock(r)?' · auction in '+r.days+'d':'')+'</span>'
     + (tel
-        ? '<a class="wbcall" href="tel:'+esc(tel)+'">☎ '+esc(ph[0])+'</a>'
+        ? '<a class="wbcall" href="'+esc(_telNum(tel))+'">☎ '+esc(ph[0])+'</a>'
         : '<a class="wbcall wbfind" href="'+esc(_wpNameUrl ? _wpNameUrl(r) : '#')+'" target="_blank" rel="noopener noreferrer">🔎 Find a number</a>')
     + '<button type="button" class="wbskip">Skip →</button>'
     + '<button type="button" class="wbx" title="Close the queue">✕</button>';
@@ -10473,13 +10486,13 @@ function genDialReady(r){
   rows.sort(function(a,b){ return (a.dnc?1:0)-(b.dnc?1:0) || (a.mobile?0:1)-(b.mobile?0:1); });
   function dialBtnEN(x){
     var d = String(x.num||'').replace(/\D/g,'');
-    return '<a href="tel:+1'+esc(d)+'" class="drdial'+(x.dnc?' dnc':'')+'">'
+    return '<a href="'+esc(_telNum(d))+'" class="drdial'+(x.dnc?' dnc':'')+'">'
       + '📞 '+esc(fmtPhone(d))+(x.dnc?'<div class="drmini">DNC — do not call</div>':(x.mobile?'<div class="drmini">mobile · dial now</div>':'<div class="drmini">landline</div>'))
       + '</a>';
   }
   function dialBtnES(x){
     var d = String(x.num||'').replace(/\D/g,'');
-    return '<a href="tel:+1'+esc(d)+'" class="drdial'+(x.dnc?' dnc':'')+'">'
+    return '<a href="'+esc(_telNum(d))+'" class="drdial'+(x.dnc?' dnc':'')+'">'
       + '📞 '+esc(fmtPhone(d))+(x.dnc?'<div class="drmini">NO LLAMAR</div>':(x.mobile?'<div class="drmini">móvil · marcar ahora</div>':'<div class="drmini">línea fija</div>'))
       + '</a>';
   }
@@ -11577,7 +11590,7 @@ function genReplyInbox(){
       + '</div>'
       + (rep.note ? '<div class="rbnote">'+esc(String(rep.note).slice(0,200))+'</div>' : '')
       + '<div class="rbacts">'
-      +   (ph ? '<a class="rbbtn call" href="tel:+1'+esc(String(ph).replace(/\D/g,''))+'">&#128222; Call '+esc(fmtPhone(ph))+'</a>' : '<span class="rbbtn dis">no phone traced</span>')
+      +   (ph ? '<a class="rbbtn call" href="'+esc(_telNum(ph))+'">&#128222; Call '+esc(fmtPhone(ph))+'</a>' : '<span class="rbbtn dis">no phone traced</span>')
       +   (em ? '<a class="rbbtn" href="mailto:'+esc(em)+'">&#9993; '+esc(em)+'</a>' : '')
       +   '<a class="rbbtn" href="#case='+esc(r.case)+'" onclick="closeReplyInbox&&closeReplyInbox()">Open call sheet &rarr;</a>'
       + '</div></div>';
@@ -12858,7 +12871,15 @@ function genMorningWorker(lane, autostart){
        never hold more than one lead. */
     +   'var CALLQ=[], TEXTQ=[];'
     +   'function _esc2(s){return String(s==null?"":s).replace(/[&<>\"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\\"":"&quot;"}[c];});}'
-    +   'function _telHref(p){return "tel:+1"+String(p||"").replace(/\\D/g,"");}'
+    // The worker tab is a Blob document with its own global scope -- the board's _telNum is not
+    // reachable here, so the same normalization lives once in this string and is asserted against
+    // the board copy by _textbatchtest. The old body was "tel:+1"+digits with no normalization at
+    // all: a number that already carried its country code became tel:+119545551234 (invalid, the
+    // dialer drops it) and a lead with no number became a live "tel:+1" that dials nothing.
+    +   'function _telHref(p){var d=String(p||"").replace(/\\D/g,"");'
+    +     'if(d.length===10) return "tel:+1"+d;'
+    +     'if(d.length===11 && d.charAt(0)==="1") return "tel:+"+d;'
+    +     'return d ? "tel:+"+d : "";}'
     +   'function callQAdd(r){'
     +     'if(CALLQ.some(function(x){return x.c===r.c;})) return;'
     +     'CALLQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
@@ -12907,7 +12928,9 @@ function genMorningWorker(lane, autostart){
     +     'if(n) n.textContent=TEXTQ.length+" ready · you press send";'
     +     'if(b) b.textContent="\\u25B6 Start text batch ("+TEXTQ.length+")";'
     +     'list.innerHTML=TEXTQ.map(function(x){'
-    +       'return _qrow(x, "<a href=\'"+_telHref(x.phone)+"\' data-qcall=\'"+_esc2(x.c)+"\' style=\'background:#eaf5ec;color:#1a5a2b;border:1px solid #cfe6d4;border-radius:7px;padding:7px 10px;text-decoration:none;font-weight:700;font-size:12.5px\'>&#9742;</a>"'
+    // renderCallQ has always guarded this; renderTextQ did not, so a queued lead whose number was
+    // dropped between bakes rendered a dial anchor with an empty href.
+    +       'return _qrow(x, (_telHref(x.phone)?"<a href=\'"+_telHref(x.phone)+"\' data-qcall=\'"+_esc2(x.c)+"\' style=\'background:#eaf5ec;color:#1a5a2b;border:1px solid #cfe6d4;border-radius:7px;padding:7px 10px;text-decoration:none;font-weight:700;font-size:12.5px\'>&#9742;</a>":"")'
     +         '+"<button data-qtext=\'"+_esc2(x.c)+"\' style=\'background:#eef3fa;color:#3c5b8a;border:1px solid #d4e0f2;border-radius:7px;padding:7px 11px;font-weight:700;font-size:12.5px;cursor:pointer\'>&#9993; Text</button>");'
     +     '}).join("");'
     +   '}'
@@ -13175,7 +13198,7 @@ function genMorningWorker(lane, autostart){
     +     'callOutcome(r);'
     +     'try {'
     +       'var a=document.createElement("a");'
-    +       'a.href="tel:"+String(r.phones[0]).replace(/[^0-9+]/g,"");'
+    +       'a.href=_telHref(r.phones[0]);'
     +       'a.style.display="none"; document.body.appendChild(a);'
     +       'a.click(); document.body.removeChild(a);'
     +     '} catch(e){}'
@@ -13398,12 +13421,29 @@ function genMorningWorker(lane, autostart){
     +     'if(i>=Q.length){'
     // Calls and DELIVERED emails lead the summary — those are the two numbers that mean work
     // happened. "Email" here is attempts, shown small, because an attempt is not an outcome.
-    +       'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'><b>Dialed "+(STATS.callout||0)+"</b> &middot; replies waiting "+((LANES.replied||[]).length)+" &middot; call list "+CALLQ.length+"<br>Worked <b>"+Q.length+"</b> leads<br>&#128222; Calls <b>"+(STATS.call||0)+"</b> · &#9993; Delivered <b>"+(STATS.sent||0)+"</b> · Text <b>"+(STATS.text||0)+"</b><br><span style=\'font-size:12px;opacity:.75\'>attempts "+(STATS.email||0)+" · lookups "+(STATS.wp||0)+" · skipped "+(STATS.skip||0)+"</span></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
-    // queue done → if texts were batched, offer the station right here (the panels below survive
-    // this render because it only rewrites #mwmain).
+    +       'var doneHtml="<div class=\'mwdone\'><h2>&#x2705; Queue clear</h2><div class=\'stats\'><b>Dialed "+(STATS.callout||0)+"</b> &middot; replies waiting "+((LANES.replied||[]).length)+" &middot; call list "+CALLQ.length+"<br>Worked <b>"+Q.length+"</b> leads<br>&#128222; Calls <b>"+(STATS.call||0)+"</b> · &#9993; Delivered <b>"+(STATS.sent||0)+"</b> · Text <b>"+(STATS.text||0)+"</b><br><span style=\'font-size:12px;opacity:.75\'>attempts "+(STATS.email||0)+" · lookups "+(STATS.wp||0)+" · skipped "+(STATS.skip||0)+"</span></div><p>Every action is logged below and on the board. Reopen tomorrow for a fresh queue.</p></div>";'
+    /* QUEUE DONE -> if texts were batched, offer the station right here (the panels below survive
+       this render because it only rewrites #mwmain).
+
+       THE BUTTON WAS DEAD, AND IT WAS DEAD ON EVERY NORMAL MORNING (2026-09-18, reported by
+       Alejandro: "the buttons of the start text batch to work ... doesnt work"). The old code
+       appended this button with `main.innerHTML+=` and then assigned `dtb.onclick=textBatchStart`
+       -- and the CALL-MODE block immediately below did `main.innerHTML+=` again. Assigning
+       innerHTML re-serializes and re-parses EVERY child of #mwmain, so that second append threw
+       away the button node the handler was attached to and rebuilt a fresh, handler-less copy of
+       it. CALLQ is non-empty on essentially every run (it is seeded at open from the durable
+       fcCallQueue, and every phone-only lead that is not textable lands there), so the second
+       append almost always ran: he pressed "Start text batch" and nothing happened, with no log
+       line, because no handler existed to write one. That is the whole "texts 0" morning.
+
+       Two changes, either of which alone would have been enough, both kept because this screen
+       has now grown an append twice:
+         1. build the whole screen in ONE string and assign #mwmain once, so nothing is re-parsed;
+         2. carry the button on `data-textbatch` and let the panel click delegate below run it, the
+            way #mwtextqgo already works. A delegate on `document` cannot be detached by a re-parse,
+            so a third block appended here later cannot silently kill it again. */
     +       'if(TEXTQ.length && !tbOn){'
-    +         'main.innerHTML+="<div style=\'text-align:center;margin-top:6px\'><button id=\'mwdonetext\' class=\'mwbtn text\' style=\'width:100%\'>&#128241; Start text batch ("+TEXTQ.length+")<span class=\'sub\'>pre-filled &middot; you press send &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</span></button></div>";'
-    +         'var dtb=document.getElementById("mwdonetext"); if(dtb) dtb.onclick=textBatchStart;'
+    +         'doneHtml+="<div style=\'text-align:center;margin-top:6px\'><button id=\'mwdonetext\' data-textbatch=\'1\' class=\'mwbtn text\' style=\'width:100%\'>&#128241; Start text batch ("+TEXTQ.length+")<span class=\'sub\'>pre-filled &middot; you press send &middot; "+Math.max(0,CAP.max-sentToday())+" cap left</span></button></div>";'
     +       '}'
     // CALL MODE HAND-OFF. The worker's whole output for a phone-only lead is a CALLQ entry, and
     // until now there was nowhere to take it — this morning it queued 40 and produced 0 dials.
@@ -13411,8 +13451,9 @@ function genMorningWorker(lane, autostart){
     // is not inside a user gesture is popup-blocked, which is exactly what stalled this worker three
     // times on 2026-08-16 (see the blocked-popup rescue above and _openDoc's reason for existing).
     +       'if(CALLQ.length){'
-    +         'main.innerHTML+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'https://aiejandrog.github.io/dealflow-board/call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
+    +         'doneHtml+="<div style=\'text-align:center;margin-top:8px\'><a id=\'mwdonecall\' class=\'mwbtn done\' style=\'width:100%;display:block;text-decoration:none\' target=\'_blank\' rel=\'noopener\' href=\'https://aiejandrog.github.io/dealflow-board/call/\'>&#128222; Call these "+CALLQ.length+" now<span class=\'sub\'>opens Call Mode &middot; same code &middot; outcomes sync back</span></a></div>";'
     +       '}'
+    +       'main.innerHTML=doneHtml;'
     // textContent does NOT decode HTML entities — writing "&#x2713;" here printed the raw
     // seven characters on screen ("34 of 34 &#x2713;") instead of a checkmark. Every OTHER
     // prog write on this element is textContent too, so switching this one to innerHTML would
@@ -13522,7 +13563,7 @@ function genMorningWorker(lane, autostart){
     +     'addLog("skip", bc, "bad number "+bph+" pulled off the lead and queued for a fresh skip-trace. It comes back with a new number for a second message.");'
     +     'return;'
     +   '}'
-    +     'var go=e.target.closest&&e.target.closest("#mwtextqgo");'
+    +     'var go=e.target.closest&&e.target.closest("#mwtextqgo,[data-textbatch]");'
     +     'if(go){ e.preventDefault(); return textBatchStart(); }'
     +     'var tb=e.target.closest&&e.target.closest("[data-qtext]");'
     +     'if(tb){'

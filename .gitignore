@@ -11,6 +11,7 @@ _*.py
 !_gatetest.py
 !_suppressiontest.py
 !_wplinktest.py
+!_textbatchtest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html
