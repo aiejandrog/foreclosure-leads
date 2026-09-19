@@ -1,6 +1,9 @@
 @echo off
 cd /d "%~dp0"
 echo ==== run %date% %time% ==== >> leads-run.log
+rem  MIRRORFAIL carries the site-mirror outcome to this file's exit code. This file has no
+rem  `setlocal`, so it is initialized explicitly rather than inherited from whatever ran before.
+set "MIRRORFAIL=0"
 
 rem  REPO GUARD FIRST. A publish job is the most destructive command in this project and
 rem  until 2026-09-17 none of them checked what they were about to push. See repo_guard.bat.
@@ -63,8 +66,14 @@ if errorlevel 1 (
   echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> leads-run.log
   echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> leads-run.log
   echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See leads-run.log.
+  set "MIRRORFAIL=1"
 )
 rem  This file did not even have the 6s retry, let alone a check that the push landed. Ask the remote.
 call publish_verify.bat "leads-run.log" "-" "weekly lead refresh"
 :done
 echo ==== done ==== >> leads-run.log
+rem  ...and say so in the exit code. This file used to fall off the end, so its result was whatever
+rem  the last `echo` returned: 0, always, including on a run whose mirror never published and whose
+rem  live site therefore did not move. rc=5 = built, gated and pushed here, live site unchanged.
+if "%MIRRORFAIL%"=="1" exit /b 5
+exit /b 0

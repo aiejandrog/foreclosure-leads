@@ -27,14 +27,79 @@ import publish_site
 
 
 FAILS = []
+RUN = []
+HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Every runner that publishes the board. The list is the point: a fifth publish path added without
+# these two properties is a hole, and CLAUDE.md already says to gate one in the same commit.
+RUNNERS = ('refresh-dealflow.bat', 'run-leads.bat', 'run-phones-nightly.bat',
+           'run-replies-daily.bat')
 
 
 def check(name, got, want):
+    RUN.append(name)
     ok = got == want
     print(f'  {"pass" if ok else "FAIL"}  {name}' + ('' if ok else f'   got {got!r}, want {want!r}'))
     if not ok:
         FAILS.append(name)
 
+
+def _bat(name):
+    with open(os.path.join(HERE, name), encoding='utf-8', errors='replace') as f:
+        return f.read()
+
+
+def _reads_mirror_exit(text):
+    """Is the FIRST thing after the publish_site call a check of its exit code? Comments and blank
+    lines are skipped; anything else executing in between means the code walked on, which is the
+    09-17 bug verbatim. `if errorlevel N` is used rather than %ERRORLEVEL% on purpose: inside a
+    parenthesized block the percent form expands at parse time and would always read stale."""
+    lines = text.splitlines()
+    for i, ln in enumerate(lines):
+        if 'publish_site.py' in ln and ln.strip().lower().startswith('python'):
+            for nxt in lines[i + 1:]:
+                t = nxt.strip().lower()
+                if not t or t.startswith('rem '):
+                    continue
+                return t.startswith('if errorlevel')
+    return False
+
+
+def _propagates(text):
+    """Does a mirror failure reach the process exit code? Either via this file's RUNEXIT verdict or
+    via a MIRRORFAIL flag returned as rc=5. A log line the scheduler never sees is half a fix."""
+    sets = 'set "RUNEXIT=5"' in text or 'set "MIRRORFAIL=1"' in text
+    exits = 'exit /b 5' in text or 'exit /b %RUNEXIT%' in text
+    return sets and exits
+
+
+# Windows externals that a git-bash PATH shadows with a GNU build. Git for Windows offers "Use Git
+# and optional Unix tools from the Command Prompt", which puts its /usr/bin AHEAD of System32 -- so
+# a bare `find` is GNU find. It reads /i as a start path, exits non-zero, and repo_guard.bat then
+# refuses a perfectly good checkout with "wrong origin remote": every publish path aborts at its
+# first line for a reason that is not true. `timeout` is the same shadow, milder -- GNU timeout
+# rejects /t, so the push retry loses its backoff. Both are fixed by naming System32 outright.
+SHADOWED = ('find', 'findstr', 'timeout', 'sort', 'more')
+
+# Every .bat in the publish path, including the two helpers the runners `call`.
+GUARDED = RUNNERS + ('repo_guard.bat', 'publish_verify.bat', 'run-phones.bat')
+
+
+def _bare_externals(text):
+    """-> sorted names invoked by bare name at a command position. Command positions are the start
+    of a line and whatever follows | & ( -- which covers `a || b`, `a & b` and `if x ( cmd )`. A
+    fully qualified or quoted call (\"%SystemRoot%\\System32\\find.exe\") is not a bare name and does
+    not match."""
+    hits = set()
+    for ln in text.splitlines():
+        st = ln.strip()
+        if not st or st.lower().startswith('rem ') or st.lower().startswith('::'):
+            continue
+        for frag in st.replace('|', '\n').replace('&', '\n').replace('(', '\n').split('\n'):
+            tok = frag.strip().split(' ')[0].strip().lower()
+            if tok in SHADOWED:
+                hits.add(tok)
+    return sorted(hits)
 
 def _layout(root, *dirs):
     """Make <root>/engine plus a git work tree for each named sibling. Returns the engine path,
@@ -112,8 +177,52 @@ def main():
         check('mutation check (the old single-path resolver would MISS the real clone)',
               os.path.isdir(os.path.join(old, '.git')), False)
 
+        # ---- the runners must ACT on what this resolver reports ------------------------------
+        # A correct resolver that every caller ignores is what the 09-17-to-09-18 frozen site was
+        # made of: publish_site.py exited 1 on every run, the runners walked straight past it, and
+        # Task Scheduler recorded rc=0 while the live board sat 31 hours stale. Both halves are
+        # asserted here because fixing either one alone still leaves a silent failure.
         print()
-        print(f'{7 - len(FAILS)} pass / {len(FAILS)} fail')
+        for name in RUNNERS:
+            text = _bat(name)
+            check(f'{name} calls the mirror', 'publish_site.py' in text, True)
+            check(f'  {name} reads its exit code', _reads_mirror_exit(text), True)
+            check(f'  {name} carries it to the process exit code', _propagates(text), True)
+
+
+        # ---- PATH shadowing (2026-09-18) ---------------------------------------------------
+        # Confirmed on the laptop: under a git-bash PATH `repo_guard.bat` refused the real DEALFLOW
+        # checkout, so refresh-dealflow.bat died on its first line and nothing ran. The guard failed
+        # CLOSED, which is the right direction to fail -- but a guard that blocks every publish for
+        # a reason that is not true costs exactly as many boards as one that is simply broken.
+        print()
+        for name in GUARDED:
+            check(f'{name} invokes no PATH-shadowed external by bare name',
+                  _bare_externals(_bat(name)), [])
+
+        # The fix has to be the qualified path, not a rename. Assert the resolver by name so a
+        # future edit cannot satisfy the check above by hiding a bare `find` behind a variable.
+        guard = _bat('repo_guard.bat')
+        check('repo_guard resolves find.exe from System32',
+              '%SystemRoot%\\System32\\find.exe' in guard, True)
+        check('  and still matches the origin remote case-insensitively',
+              '/i "foreclosure-leads"' in guard, True)
+
+        # MUTATION CHECK. Put the bare names back and confirm the scan goes red - otherwise it is
+        # asserting something true of any file that happens not to shell out.
+        check('mutation check (restore the bare names and the scan catches them)',
+              _bare_externals(guard.replace('| "%RGFIND%" /i', '| find /i')), ['find'])
+
+        # MUTATION CHECK. Strip the propagation out of each runner in memory and confirm the check
+        # above goes red - otherwise it is asserting something that is true of any file.
+        broken = [n for n in RUNNERS
+                  if not _propagates(_bat(n).replace('set "RUNEXIT=5"', '')
+                                            .replace('set "MIRRORFAIL=1"', ''))]
+        check('mutation check (drop the propagation and every runner fails)',
+              sorted(broken), sorted(RUNNERS))
+
+        print()
+        print(f'{len(RUN) - len(FAILS)} pass / {len(FAILS)} fail')
         return 1 if FAILS else 0
     finally:
         shutil.rmtree(root, ignore_errors=True)

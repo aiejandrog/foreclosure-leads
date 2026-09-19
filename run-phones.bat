@@ -19,7 +19,10 @@ rem  "retry" below is the SAME push 6s later, which fails identically. Measured 
 rem  4 commits stacked up and the live site sat frozen at 08-14 for two days while every
 rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
 git pull --rebase --autostash -X theirs origin main
-git push origin main || (timeout /t 6 /nobreak >nul & git push origin main)
+rem  %SystemRoot% path on timeout.exe, not a bare `timeout`: under a git-bash PATH the bare
+rem  name resolves to GNU coreutils timeout, which rejects /t and drops the retry backoff
+rem  entirely. Same root cause as the `find` note in repo_guard.bat.
+git push origin main || ("%SystemRoot%\System32\timeout.exe" /t 6 /nobreak >nul & git push origin main)
 rem  publish the built pages to the PUBLIC site repo (see publish_site.py)
 python -u publish_site.py
 echo ==== done - live site updates in ~1-2 min ====
