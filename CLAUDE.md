@@ -105,7 +105,7 @@ that carries a name or number inline, gitignore it in the same commit.
 publishes the board**. A blocked publish leaving the site on its last good build is correct
 behaviour, not a bug to route around.
 
-**Four paths publish, and all four are gated (the last two only since 2026-09-17):**
+**Five paths publish, and all five are gated (the last three only since 2026-09-17):**
 
 | path | when | gates |
 |---|---|---|
@@ -113,6 +113,12 @@ behaviour, not a bug to route around.
 | `run-leads.bat` | manual | healthcheck + publish_guard |
 | `run-replies-daily.bat` | daily 7:00 | healthcheck + publish_guard |
 | `run-phones-nightly.bat` | nightly 6:00 | healthcheck + publish_guard |
+| `run-phones.bat` | manual one-click | healthcheck + publish_guard (since 2026-09-19) |
+
+`run-phones.bat` was missing from this table entirely, which is how it stayed an ungated publish
+path for a month after the other four were gated. It is the manual twin of `run-phones-nightly.bat`
+and does the same rebuild, but it rebases onto `main` with `-X theirs` before pushing, so a poorer
+local board wins the merge. The table is the memory; a path absent from it does not get audited.
 
 `run-replies-daily.bat` had **no gates at all** until 2026-09-17, and it is the one that rebuilds and
 pushes `docs/index.html` + `docs/call` fastest — so it was the shortest route from a bad local build
@@ -128,4 +134,31 @@ check — anything that does `git add docs/` and pushes, and is not in that list
 ## Scheduled tasks
 
 Register/enable/disable only via `pwsh .\desktop-setup\install-tasks.ps1` — **`pwsh`, not
-`powershell`** (the file is BOM-less UTF-8; 5.1 misparses the em-dashes at line 53).
+`powershell`** (the file is BOM-less UTF-8; 5.1 misparses the em-dashes in the header).
+
+**Nine tasks, from two directories.** `desktop-setup/tasks/` holds Windows exports and is
+**gitignored** — an export embeds the exporting machine's principal SID and user paths, so those
+travel in the transfer bundle. `desktop-setup/task-templates/` is the **tracked** half: SID-free XML
+with `__REPO__` / `__PROFILE__` / `__USER__` placeholders the installer substitutes at install time.
+An export wins over a template of the same task name. **A new task goes in `task-templates/`** — put
+one in `tasks/` and it exists only on the box that made it.
+
+That split exists because of `DealFlow Cadence`. It is the only **unattended** outreach sender in
+the project (09:00 daily, `cadence.py` over SMTP, real email to homeowners) and for three weeks it
+was registered by hand, outside the installer. `-DisableLocal` caught it — that path enumerates live
+tasks by name match — but `-Enable` walked `tasks/*.xml` only, so **disarming was complete and
+arming was not**: every handoff done exactly as documented left outreach off, silently. Closed
+2026-09-18 by `task-templates/DealFlow_Cadence.xml`.
+
+- The task runs **`cadence-daily.bat`**, never `cadence-run.bat` — that one ends in `pause` and a
+  scheduled task cannot answer a prompt.
+- `cadence-daily.bat` repo-guards the folder and **refuses to send outside 08:00–20:00**. The task
+  is `StartWhenAvailable=true` so a run missed while the laptop slept is caught up rather than lost;
+  without the window, that catch-up mails homeowners at whatever hour the machine woke. Do not
+  remove one without the other. The window lives in the `.bat` and not in `cadence.py` on purpose —
+  `cadence.py` is the reserved suppression surface above.
+- `-Only <pattern>` scopes every mode to matching tasks, which is how one task is added or armed on
+  a machine whose others are already live:
+  `pwsh .\desktop-setup\install-tasks.ps1 -Only Cadence -Enable`.
+- **Audit by enumerating, never from a list in a file:**
+  `pwsh -c "Get-ScheduledTask | ? TaskName -like '*ealFlow*' | ft TaskName,State"`
