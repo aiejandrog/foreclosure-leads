@@ -455,3 +455,4 @@ deal_desk.json
 # says so — it needs no browser, no board and no real data, so untracked it would be a check that
 # only ever ran on one machine.
 !_texttpltest.py
+!_queuechurntest.py
