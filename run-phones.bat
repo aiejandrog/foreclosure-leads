@@ -10,6 +10,19 @@ python skiptrace.py
 if errorlevel 1 (echo TRACE FAILED - nothing rebuilt or pushed & pause & exit /b 1)
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json', encoding='utf-8')))"
 if errorlevel 1 (echo REBUILD FAILED - nothing pushed & pause & exit /b 1)
+rem  PUBLISH GATES. CLAUDE.md: every path that pushes docs/ runs healthcheck.py and
+rem  publish_guard.py first. This one was the fifth path and had neither, while it does the
+rem  most dangerous version of the publish: it rebuilds the board, then rebases onto main with
+rem  -X theirs and pushes. That combination is how 09-15 put a 709-phone board over a live
+rem  1,148 one from run-replies-daily.bat, and because the bad build became origin/main it also
+rem  moved the baseline every later gate compared against. A blocked publish here is correct:
+rem  the traced numbers stay in leads_final.json and the next gated run publishes them.
+rem  errorlevel 2 is tested first because `if errorlevel N` matches exit^>=N.
+python -u healthcheck.py
+if errorlevel 2 (echo GATE: healthcheck COMPLIANCE fail - nothing published. Live site left on its last good build. & pause & exit /b 2)
+rem  healthcheck exit 1 is the advisory coverage floor only - publish_guard decides, same as refresh-dealflow.bat.
+python -u publish_guard.py
+if errorlevel 1 (echo GATE: publish_guard refused a board poorer than the live one - nothing published. & pause & exit /b 2)
 git add docs/index.html docs/call
 git commit -m "phones: refresh skip-traced numbers"
 if errorlevel 1 (echo no changes to push - done & pause & exit /b 0)
