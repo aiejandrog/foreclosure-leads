@@ -130,9 +130,19 @@ jobs:
             const problems = [];
 
             // 1. the same scheduled job publishing twice in one day = a second armed machine
+            //
+            // Bucket on the RUNNERS' day, not UTC. Every job here is scheduled in Eastern local
+            // time, so anything run by hand in the evening carries a UTC date of the next day and
+            // was grouped with the next morning's real run. Measured 2026-09-19: `92b8247` (21:09
+            // ET on 09-17) and `2794d6b` (05:41 ET on 09-18, the actual 05:30 job) both stamp
+            // 09-18 in UTC, and this check reported "the 05:30 refresh published 2 times on
+            // 2026-09-18 ... two machines are armed" for one machine on two different days. A
+            // watchdog that cries wolf is one the operator learns to skip, and this is the only
+            // observer neither PC can lie to.
+            const dayET = (d) => d.toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
             const byDay = new Map();
             for (const c of scheduled) {
-              const k = `${c.key}|${c.authored.toISOString().slice(0, 10)}`;
+              const k = `${c.key}|${dayET(c.authored)}`;
               if (!byDay.has(k)) byDay.set(k, []);
               byDay.get(k).push(c);
             }

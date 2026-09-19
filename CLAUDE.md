@@ -105,7 +105,7 @@ that carries a name or number inline, gitignore it in the same commit.
 publishes the board**. A blocked publish leaving the site on its last good build is correct
 behaviour, not a bug to route around.
 
-**Four paths publish, and all four are gated (the last two only since 2026-09-17):**
+**Five paths publish, and all five are gated (the last three only since 2026-09-17):**
 
 | path | when | gates |
 |---|---|---|
@@ -113,6 +113,12 @@ behaviour, not a bug to route around.
 | `run-leads.bat` | manual | healthcheck + publish_guard |
 | `run-replies-daily.bat` | daily 7:00 | healthcheck + publish_guard |
 | `run-phones-nightly.bat` | nightly 6:00 | healthcheck + publish_guard |
+| `run-phones.bat` | manual one-click | healthcheck + publish_guard (since 2026-09-19) |
+
+`run-phones.bat` was missing from this table entirely, which is how it stayed an ungated publish
+path for a month after the other four were gated. It is the manual twin of `run-phones-nightly.bat`
+and does the same rebuild, but it rebases onto `main` with `-X theirs` before pushing, so a poorer
+local board wins the merge. The table is the memory; a path absent from it does not get audited.
 
 `run-replies-daily.bat` had **no gates at all** until 2026-09-17, and it is the one that rebuilds and
 pushes `docs/index.html` + `docs/call` fastest — so it was the shortest route from a bad local build
