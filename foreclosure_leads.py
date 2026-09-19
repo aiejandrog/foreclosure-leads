@@ -167,6 +167,14 @@ CAL_JS = """
 
 AUCTION_HORIZON_DAYS = int(os.environ.get('DEALFLOW_AUCTION_HORIZON_DAYS', '120'))
 
+# WHOSE NUMBER IS ON THE ROW, and how many of them survive the build. Split out the way
+# phone_rank.py is: make_tracker cannot be imported without Playwright, so anything defined in
+# this file is only reachable by running a full build against real homeowner data — which is
+# exactly the code that never gets a test. See phone_src.py for the reasoning behind each tag.
+from phone_src import (MAX_PHONES, SHARED_PHONE_MIN_OWNERS, PHSRC_TRACE, PHSRC_WP,
+                       PHSRC_HOUSEHOLD, PHSRC_NAME, PHSRC_AGENT, PHSRC_SHARED, PHSRC_NOT_OWNER,
+                       tag_shared_numbers, tag_listing_agents)   # noqa: F401
+
 
 def _month_starts(start, horizon_days):
     """First-of-month for every calendar month overlapping [start, start+horizon_days]."""
@@ -1842,10 +1850,14 @@ def make_tracker(leads):
             def _pk(p):
                 mob = (p.get('type') or '').lower().startswith('mob')
                 return (1 if p.get('dnc') else 0, 0 if mob else 1)
-            _phs = sorted([p for p in hit['phones'] if p.get('number')], key=_pk)[:4]
+            _phs = sorted([p for p in hit['phones'] if p.get('number')], key=_pk)[:MAX_PHONES]
             d['phones'] = [p.get('number') for p in _phs]
             d['phdnc'] = [bool(p.get('dnc')) for p in _phs]
             d['phtype'] = ['mobile' if (p.get('type') or '').lower().startswith('mob') else 'landline' for p in _phs]
+            # Every number on this path came from an ADDRESS match on the subject property, which is
+            # the strongest owner signal the pipeline has. Tag it so the Whitepages numbers appended
+            # later (household members, namesakes) are distinguishable from it on the row.
+            d['phsrc'] = [PHSRC_TRACE] * len(_phs)
             # WHICH number to dial first. Every signal is already here (type/carrier/dnc) — it was just
             # never ranked, so the first dial was a coin flip between the owner's cell, a dead landline
             # and a number the registry says never to call. phrank[i] labels each number; phbest is the
@@ -2050,7 +2062,15 @@ def make_tracker(leads):
                     # output shifted every flag after it onto the WRONG number: a DNC-flagged phone
                     # read as clean and dialable, a clean one as DNC. Parallel arrays must be drawn
                     # from the same list or they are not parallel.
-                    _sph = [p for p in _ph['phones'] if p.get('number')][:4]
+                    # SORT BEFORE CUTTING, the same key the Miami-Dade merge uses. This path took
+                    # the provider's RAW order and then kept the first four — so a lead whose first
+                    # four numbers were landlines (or DNC-flagged) lost its mobile at build time,
+                    # and the phone_rank pass further down could only rank what had survived. The
+                    # ranker cannot recover a number that is no longer in the array.
+                    def _pk_c(p):
+                        mob = (p.get('type') or '').lower().startswith('mob')
+                        return (1 if p.get('dnc') else 0, 0 if mob else 1)
+                    _sph = sorted([p for p in _ph['phones'] if p.get('number')], key=_pk_c)[:MAX_PHONES]
                     _d['phones'] = [p.get('number') for p in _sph]
                     _d['phdnc'] = [bool(p.get('dnc')) for p in _sph]
                     # phtype was dropped here while the Miami-Dade merge above (line ~1110) kept it.
@@ -2062,6 +2082,7 @@ def make_tracker(leads):
                     # landline". Same expression as the MD path so the two cannot drift again.
                     _d['phtype'] = ['mobile' if (p.get('type') or '').lower().startswith('mob') else 'landline'
                                     for p in _sph]
+                    _d['phsrc'] = [PHSRC_TRACE] * len(_sph)
                     _d['emails'] = (_ph.get('emails') or [])[:3]
             slim.extend(xl)
             _nl = sum(1 for _d in xl if _d.get('orliens'))
@@ -2462,18 +2483,30 @@ def make_tracker(leads):
                     _ph  = list(_r.get('phones') or [])
                     _pt  = list(_r.get('phtype') or [])
                     _pd  = list(_r.get('phdnc') or [])
+                    _ps  = list(_r.get('phsrc') or [])
                     # keep the parallel arrays aligned with any pre-existing phones before extending
                     while len(_pt) < len(_ph): _pt.append('')
                     while len(_pd) < len(_ph): _pd.append(False)
+                    # a number already on the lead with no tag came off the skip trace
+                    while len(_ps) < len(_ph): _ps.append(PHSRC_TRACE)
                     for p in _new:
                         _ph.append(p['n'])
                         _pt.append('mobile' if 'mob' in p['type'] else ('landline' if 'land' in p['type'] else ''))
                         # Whitepages returns no DNC/TCPA flag — record unknown (False = "not flagged"),
                         # never a positive claim that the number is scrubbed.
                         _pd.append(False)
-                    _r['phones'] = _ph[:8]
-                    _r['phtype'] = _pt[:8]
-                    _r['phdnc']  = _pd[:8]
+                        # WHO THIS NUMBER ACTUALLY BELONGS TO. _all_ph already carries `resident`
+                        # and `source` (set where residents and the Person layer are collected
+                        # above) and they were being thrown away here — every Whitepages number
+                        # arrived on the row looking exactly like the owner's own cell. A household
+                        # member and a same-name stranger are both worth dialling, but not with the
+                        # same opening line, and not ahead of the owner.
+                        _ps.append(PHSRC_HOUSEHOLD if p.get('resident')
+                                   else (PHSRC_NAME if p.get('source') == 'person' else PHSRC_WP))
+                    _r['phones'] = _ph[:MAX_PHONES]
+                    _r['phtype'] = _pt[:MAX_PHONES]
+                    _r['phdnc']  = _pd[:MAX_PHONES]
+                    _r['phsrc']  = _ps[:MAX_PHONES]
                     _wpn += len(_new)
                 if _all_em:
                     _cur_em = set((e or '').lower() for e in (_r.get('emails') or []))
@@ -2490,6 +2523,14 @@ def make_tracker(leads):
         except Exception as _e:
             print('WhitepagesPro merge skipped:', _e)
 
+    # Both passes are module-level functions (defined above) so `_phonesrctest.py` can exercise
+    # them on fixtures — they were inline here and therefore only reachable by running a full
+    # build against real homeowner data, which is exactly the code that never gets a test.
+    _shn, _shared_n = tag_shared_numbers(slim)
+    print('shared-number check: %d number(s) sit on %d+ different owners, tagged on %d lead(s)'
+          % (_shared_n, SHARED_PHONE_MIN_OWNERS, _shn))
+    print('listing-agent cross-check: %d lead(s) carry their own listing agent in the dial list'
+          % tag_listing_agents(slim))
     # ---- PHONE RANKING, after every phone mutation is done ---------------------------------------
     # "Put the ranked-best number first" was a silent no-op for most of the board. Only the
     # Miami-Dade enrichment path set phrank/phbest (line ~1560); the Broward / Palm Beach county
@@ -2517,17 +2558,28 @@ def make_tracker(leads):
             try:
                 _pd = list(_r.get('phdnc') or [])
                 _pt = list(_r.get('phtype') or [])
+                # `src` is why this pass matters more than it used to: a lead whose Whitepages
+                # numbers outnumber its traced ones could hand "CALL FIRST" to a household member's
+                # mobile over the owner's own landline, purely on the mobile bonus. The MD merge
+                # ranks with carrier data this pass does not have, so it is left alone — and every
+                # lead the Whitepages merge touched falls through to here anyway, because that merge
+                # appends numbers without extending phrank.
+                _ps = list(_r.get('phsrc') or [])
                 _objs = [{'number': n,
                           'dnc': bool(_pd[i]) if i < len(_pd) else False,
-                          'type': _pt[i] if i < len(_pt) else ''} for i, n in enumerate(_ph)]
+                          'type': _pt[i] if i < len(_pt) else '',
+                          'src': _ps[i] if i < len(_ps) else PHSRC_TRACE} for i, n in enumerate(_ph)]
                 _ranked, _blocked = _PR.rank(_objs)
                 _lbl = {}
                 for _x in _ranked + _blocked:
                     _lbl[str(_x.get('number'))] = _x.get('label')
                 _r['phrank'] = [_lbl.get(n, '') for n in _ph]
-                _top = _ranked[0]['number'] if _ranked else None
+                _bst = _PR.best(_objs)
+                _top = _bst['number'] if _bst else None
                 # None when every number is DNC-flagged. On those leads the correct number of
-                # dials is ZERO, and Call Mode drops them entirely.
+                # dials is ZERO, and Call Mode drops them entirely. Also None when the only number
+                # left is one best() refuses to put first (the lead's own listing agent) — that
+                # lead has no owner number, and no reordering can invent one.
                 _r['phbest'] = next((i for i, n in enumerate(_ph) if n == str(_top)), None) if _top else None
                 _rk += 1
             except Exception:
@@ -3024,7 +3076,13 @@ def make_tracker(leads):
         _payload = json.dumps(_encrypt_multi(
             json.dumps({'rows': slim, 'side': {'rp': _side_rp, 'dw': _side_dw}}), codes))
     else:
-        nophone = [{k: v for k, v in d.items() if k not in ('phones','phdnc','emails')} for d in slim]
+        # phsrc joins the strip for the same reason phdnc is here: with `phones` gone it describes
+        # nothing, and "this lead had two household numbers" is still a fact about a real household
+        # on the unencrypted public build. (`phtype` was already leaking the same way before this
+        # change and is left alone here — a one-word fix, but not one to smuggle into a phone PR
+        # without checking what the public-payload tests assert.)
+        nophone = [{k: v for k, v in d.items()
+                    if k not in ('phones', 'phdnc', 'phsrc', 'emails')} for d in slim]
         _payload = _esc_json(nophone)
     # BUILD SIGNATURE — identifies this build by its CONTENT, not by the clock. 'built' is
     # minute-resolution, so two builds inside the same minute (a code added just as the nightly

@@ -3421,10 +3421,30 @@ function _contactLineHtml(r, ph, opts){
   // isMob gates Text/WA too: the line already renders a "landline" tag, but Text stayed live next to
   // it — an SMS to a landline goes nowhere and reads to the operator as a delivered message. Keep
   // Call (a landline is perfectly dialable); withhold Text/WA.
-  const canTxt = !r.saleBkAct && !isDnc && isMob && !_isDNT(digits) && !_textContactBlocked(r);
+  // A NUMBER THAT IS NOT THE OWNER DOES NOT GET THE OWNER'S TEXT. The prefilled body names the
+  // property and says a case was filed at the courthouse — sending that to a tenant, a namesake
+  // or a listing agent discloses this homeowner's foreclosure to a third party who never asked.
+  // Call stays live on all of them (reaching the owner through the household is the whole point
+  // of keeping these numbers); only the written, owner-addressed message is withheld.
+  const _srcOwner = ['hh','nm','ag','xl'].indexOf(String(opts.src||'')) < 0;
+  const canTxt = !r.saleBkAct && !isDnc && isMob && _srcOwner && !_isDNT(digits) && !_textContactBlocked(r);
   const tag = isDnc
     ? ' <span class="cttag dnc" title="Do-Not-Call — manual dial only; do not text">DNC · call only</span>'
     : (isMob ? '' : ' <span class="cttag">landline</span>');
+  // WHOSE NUMBER THIS IS. Every number used to render identically, so a Whitepages household
+  // member and the property's listing agent both read as the homeowner and got the homeowner's
+  // opening line. 'st' (address-matched skip trace) and 'wp' (a named deed owner) are the owner
+  // and stay unlabelled — a tag on every line is a tag nobody reads.
+  const src = String(opts.src||'');
+  const stag = src==='ag'
+    ? ' <span class="cttag dnc" title="This number is also the listing agent on this property (Listing panel). Not the homeowner — do not open the homeowner script on it.">listing agent</span>'
+    : src==='xl'
+    ? ' <span class="cttag dnc" title="The same number sits on three or more different owners\' leads on this board. A homeowner\'s cell does not do that — this is an office: a realtor, a property manager, a defense firm. Not the homeowner.">shared number</span>'
+    : src==='hh'
+      ? ' <span class="cttag" title="Whitepages places this person at the address but the deed does not name them — spouse, adult child, tenant. Ask for the owner by name; do not greet them as the owner.">household</span>'
+      : src==='nm'
+        ? ' <span class="cttag" title="Matched on the owner\'s NAME only, not the property address. A namesake in the same city looks identical here — confirm the address before saying anything about the case.">name match</span>'
+        : '';
   // DNC numbers stay dialable (manual single dial about their own foreclosure); Text/WA stay off.
   const call = '<a class="ctact ctact-call" href="'+esc(_telNum(digits))+'" title="'+(isDnc?'DNC — manual single dial only, no text/autodial':'Call this number (8am–8pm ET)')+'">Call</a>';
   const text = canTxt
@@ -3439,7 +3459,7 @@ function _contactLineHtml(r, ph, opts){
         ? '<a class="ctact ctact-wa" href="'+esc(_waLink(r, digits))+'" target="_blank" rel="noopener" title="WhatsApp — prefilled message you review and send">'+_waSvg()+' WA</a>'
         : '<span class="ctact ctact-wa" style="opacity:.45;cursor:not-allowed" title="Outside the FL FTSA texting window (8am-8pm ET'+((typeof _flClock==='function')?', now '+esc(_flClock()):'')+'). WhatsApp is a text — $500-$1,500 statutory damages per message sent outside the window. Call instead, or queue it for the morning.">'+_waSvg()+' WA &middot; after 8am</span>')
     : '';
-  return '<div class="ctline"><span class="ctnum">'+esc(fmtPhone(digits))+tag+'</span><span class="ctacts">'+call+text+wa+'</span></div>';
+  return '<div class="ctline"><span class="ctnum">'+esc(fmtPhone(digits))+tag+stag+'</span><span class="ctacts">'+call+text+wa+'</span></div>';
 }
 function _messagesBarHtml(r){
   if(_textContactBlocked(r)) return '';
@@ -3457,8 +3477,11 @@ function _messagesBarHtml(r){
     // Has numbers, but none can receive a text. Say WHICH reason so the operator knows the next move:
     // a landline is still worth DIALING, whereas a DNC number means call-only-manually / mail / door.
     const _t = (r.phtype||[]), _d = (r.phdnc||[]);
-    const _allLand = (r.phones||[]).slice(0,4).every((p,i)=> String(_t[i]||'').toLowerCase().indexOf('land')>-1 || _d[i]);
-    const _anyLand = (r.phones||[]).slice(0,4).some((p,i)=> String(_t[i]||'').toLowerCase().indexOf('land')>-1);
+    // ALL of them, not the first four. This line tells the operator "landline only — call it, no
+    // text", and a verdict computed over four numbers on a lead that carries ten is a verdict
+    // about a different lead.
+    const _allLand = (r.phones||[]).every((p,i)=> String(_t[i]||'').toLowerCase().indexOf('land')>-1 || _d[i]);
+    const _anyLand = (r.phones||[]).some((p,i)=> String(_t[i]||'').toLowerCase().indexOf('land')>-1);
     const _anyDnc  = _d.some(Boolean);
     const msg = (_anyLand && !_anyDnc) ? '☎ Landline only — call it, no text'
               : (_anyLand && _anyDnc)  ? '🚫 Landline / DNC only — call or door'
@@ -3482,11 +3505,16 @@ function _contactBlockHtml(r){
   if(block==='optout') return '<div class="csbad">⛔ OPTED OUT — all contact suppressed</div>';
   if(block==='bk') return '<div class="csbad">⛔ ACTIVE BK STAY — no contact</div>';
   const lines = [];
-  (r.phones||[]).slice(0,4).forEach((ph,i)=>{
+  // NO slice(0,4) HERE. The build already caps the array (foreclosure_leads.MAX_PHONES) after
+  // ranking it, so slicing again threw away numbers that had already survived that cut — and
+  // because the ranker puts the best number first, the ones dropped here were the household and
+  // second-owner numbers you reach for precisely when the first four did not answer.
+  (r.phones||[]).forEach((ph,i)=>{
     if(String(ph||'').replace(/\D/g,'').length < 10) return;   // a blank/garbage entry rendered as an empty white pill
     lines.push(_contactLineHtml(r, ph, {
       dnc: !!((r.phdnc||[])[i]),
-      mobile: (((r.phtype||[])[i])||'mobile')==='mobile'
+      mobile: (((r.phtype||[])[i])||'mobile')==='mobile',
+      src: ((r.phsrc||[])[i])||''
     }));
   });
   if(String(nn.phone||'').replace(/\D/g,'').length >= 10) lines.push(_contactLineHtml(r, nn.phone, { dnc:false, mobile:true }));
@@ -4581,7 +4609,15 @@ function _advisorBrief(r){
   if(r.pa) L.push('Appraiser: ' + r.pa);
   if(r.tax) L.push('Taxes: ' + r.tax);
   if(r.docket) L.push('Docket: ' + r.docket);
-  if(r.phones && r.phones.length) L.push('Phones: ' + r.phones.slice(0, 4).join(' | '));
+  // Jesse's brief gets every number, each marked when it is not the owner's. He is being asked to
+  // work a lead, and "call this one, it is the tenant" is the difference between a useful handoff
+  // and one that burns the only conversation the household will give us.
+  if(r.phones && r.phones.length) L.push('Phones: ' + r.phones.map(function(p,i){
+    var s = (r.phsrc||[])[i] || '';
+    var note = s==='hh' ? ' (household, not the owner)' : s==='nm' ? ' (name match only)'
+             : s==='ag' ? ' (LISTING AGENT)' : s==='xl' ? ' (shared office number)' : '';
+    return fmtPhone(p) + note;
+  }).join(' | '));
   return L.join('\n').slice(0, 2500);
 }
 function briefJesse(caseId){
@@ -5838,9 +5874,22 @@ function textablePhones(r){
   // Send button. Drop ONLY numbers explicitly typed as a landline — an unknown type (the majority,
   // from older skip-trace rows) stays textable, because dropping those would lose real contacts.
   // The number itself is still shown and still CALLABLE in the contact block; only Text is withheld.
+  //
+  // THE slice(0,4) STAYS HERE, and only here. The display paths dropped theirs so the numbers the
+  // build already ranked and capped all reach the row — reading a number costs nothing. This is
+  // the SEND path: the Morning Worker's text batch takes its recipients from here, so widening it
+  // would multiply outbound SMS per lead against a $500-$1,500-per-message statute and the
+  // bridge's daily ceiling. Widening the send list is a decision to take deliberately, not a
+  // side effect of showing more numbers.
   (r.phones||[]).slice(0,4).forEach((ph,i)=>{
     if((r.phdnc||[])[i]) return;
     if(String((r.phtype||[])[i]||'').toLowerCase().indexOf('land') > -1) return;
+    // NOT-THE-OWNER GATE, same shape as the landline gate above and for a sharper reason. The
+    // batch body names the property and says a case was filed at the courthouse. A household
+    // member, a namesake, the listing agent or a shared office number is not the person that
+    // message is written to, and sending it there discloses this homeowner's foreclosure to
+    // somebody who never asked. Untagged numbers (every pre-phsrc build) stay textable.
+    if(['hh','nm','ag','xl'].indexOf(String((r.phsrc||[])[i]||'')) > -1) return;
     // check BOTH the device Set and the synced per-lead list — a teammate's (or this owner's own
     // phone-side) DNT arrives in n.dntph long before it could ever reach this device's localStorage
     const d=String(ph).replace(/\D/g,'');
@@ -16638,10 +16687,13 @@ function render(){
     } else if(r.saleBkAct){
       gCall.push('<span class="phone dncgate" title="Active bankruptcy stay — no call, text, or WhatsApp.">⛔ BK STAY — no contact</span>');
     } else {
-      (r.phones||[]).slice(0,4).forEach((ph,i) => {
+      // no slice(0,4) — same reason as _contactBlockHtml: the build already capped and ranked this
+      // array, and the numbers this cut threw away were the ones you want when the first four fail.
+      (r.phones||[]).forEach((ph,i) => {
         const line = _contactLineHtml(r, ph, {
           dnc: !!((r.phdnc||[])[i]),
-          mobile: (((r.phtype||[])[i])||'mobile')==='mobile'
+          mobile: (((r.phtype||[])[i])||'mobile')==='mobile',
+          src: ((r.phsrc||[])[i])||''
         });
         if(line) gCall.push(line);
       });
