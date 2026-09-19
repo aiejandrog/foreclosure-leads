@@ -12,6 +12,7 @@ _*.py
 !_suppressiontest.py
 !_wplinktest.py
 !_textbatchtest.py
+!_batsyntaxtest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html
@@ -455,3 +456,4 @@ deal_desk.json
 # only ever ran on one machine.
 !_texttpltest.py
 !_phonesrctest.py
+!_queuechurntest.py

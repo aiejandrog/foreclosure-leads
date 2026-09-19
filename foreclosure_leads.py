@@ -3084,11 +3084,25 @@ def make_tracker(leads):
         nophone = [{k: v for k, v in d.items()
                     if k not in ('phones', 'phdnc', 'phsrc', 'emails')} for d in slim]
         _payload = _esc_json(nophone)
-    # BUILD SIGNATURE — identifies this build by its CONTENT, not by the clock. 'built' is
-    # minute-resolution, so two builds inside the same minute (a code added just as the nightly
-    # refresh runs) share a stamp, and the gate's stale-copy check would conclude "same build" —
-    # exactly the false negative it exists to prevent. The signature moves whenever the payload or
-    # the access-code set changes, which is precisely when a cached page has gone stale.
+    # BUILD SIGNATURE — identifies this build, and NOT by the clock. 'built' is minute-resolution,
+    # so two builds inside the same minute (a code added just as the nightly refresh runs) share a
+    # stamp, and the gate's stale-copy check would conclude "same build" — exactly the false
+    # negative it exists to prevent.
+    #
+    # WHAT IT ACTUALLY IS, because the comment here used to say "content signature" and that sent a
+    # reader looking for a collision that cannot happen (2026-09-18). On the ENCRYPTED path this
+    # hashes the envelope, and _encrypt_multi draws a fresh random master key, IV and per-code salt
+    # every call — so this is a per-build NONCE, not a digest of the content. It therefore moves on
+    # every build whether or not a lead, a phone or an access code changed. For the gate that is
+    # the safe direction: it can never miss a stale page, at the cost of a cached tab treating a
+    # re-publish of identical data as a new build. Measured that day: two consecutive builds of the
+    # same leads file inside the same minute gave dec7a8206feb and 5cc4ed0e6a99.
+    #
+    # The plaintext fallback below (no site.codes) is the opposite — _esc_json of the rows is
+    # deterministic, so two same-minute builds of unchanged data DO share a signature, and a newly
+    # issued code does not move it at all (codes are not in the payload). Harmless only because a
+    # plaintext board has no gate to heal. Do not read this line as content-addressed on either
+    # path; call_mode's own __SIG__ (sha256 over the sorted plaintext payload) is the one that is.
     _cov['sig'] = hashlib.sha256(_payload.encode('utf-8')).hexdigest()[:12]
     _marker = '<!-- DEALFLOW-COVERAGE ' + json.dumps(_cov, separators=(',', ':')) + ' -->\n'
     print('coverage: ' + json.dumps(_cov, separators=(',', ':')))

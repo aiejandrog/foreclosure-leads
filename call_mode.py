@@ -25,6 +25,7 @@ DESIGN RULES, each one load-bearing:
 NEVER let a failure here break the board. foreclosure_leads calls this inside a try/except: an
 exception costs the phone page, not the thing the business runs on.
 """
+import datetime as _dt
 import json
 import os
 import re
@@ -1828,7 +1829,39 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # Same rule, same reason — and the diligence holds are the ones that look MOST callable of all,
     # because a held lead's card still shows equity, a phone and an auction date.
     _dg.report('call mode', indent='')
-    return out[:cap], len(out)
+    # ---- THE CAP IS A WINDOW, NOT A CEILING (2026-09-19) --------------------------------------
+    # `out[:cap]` shipped the top `cap` rows of a FULLY DETERMINISTIC sort (band, equity verified,
+    # equity, days). Nothing in that key moves day to day except `days`, which only ever counts
+    # down — so the same ~400 rows shipped every night and every lead ranked past the cap was
+    # unreachable from the phone for as long as it stayed there. Alejandro, 2026-09-19: "why is it
+    # the same people over and over again never new people to text?" The board's own worker queue
+    # had already learned this lesson twice (the EARLY-lane _filedMs tie, the phone-only bucket
+    # rotation); this is the same defect on the dial list.
+    #
+    # The head is PROTECTED because the head is the point: a sale 7-45 days out with proven equity
+    # is what the session should open on, and rotating that away would trade one complaint for a
+    # worse one. Only the REMAINDER of the cap rotates, by day of month, so the whole qualified
+    # pool reaches the phone over a month instead of never. Deterministic within a day (same build,
+    # same list) and needs no stored cursor.
+    head_n = max(0, min(cap, int(os.environ.get('CALLMODE_HEAD', '200'))))
+    total = len(out)
+    if total > cap:
+        head, tail = out[:head_n], out[head_n:]
+        slots = cap - head_n
+        if slots > 0 and tail:
+            # Stride by the window, not by a small constant: a stride smaller than the window
+            # overlaps consecutive days almost completely, which is the bug it is meant to fix.
+            rot = (_dt.date.today().day * slots) % len(tail)
+            tail = tail[rot:] + tail[:rot]
+            out = head + tail[:slots]
+        else:
+            out = head[:cap]
+        # NO SILENT CAPS. A list that quietly shrank looks exactly like a list that was always
+        # this size — the same rule the dedupe and identity-drop notices above follow.
+        print('call mode: %d qualified, %d shipped — top %d by rank always, the remaining %d slots '
+              'rotate daily through the other %d so the tail reaches the phone'
+              % (total, len(out), head_n, max(0, cap - head_n), len(out) - head_n))
+    return out[:cap], total
 
 
 def coverage_rows(slim, dial_cases, optouts=None, deads=None):

@@ -239,7 +239,7 @@ else:
       function inLane(k){ var L=laneDef(k); return R.filter(L.pred).map(function(r){return r.c;}).sort().join(','); }
       out.urgent=inLane('urgent'); out.soon=inLane('soon'); out.late=inLane('late');
       out.lp=inLane('lp'); out.bal=inLane('bal'); out.bb=inLane('bb');
-      out.email=inLane('email'); out.worker=inLane('worker');
+      out.email=inLane('email'); out.worker=inLane('worker'); out.d3=inLane('d3');
       WQ=['P']; _WQSET=null; out.workerQueued=inLane('worker');
       out.lanes=LANES.map(function(L){return L.k;}).join(',');
       out.liveVsFrozen=liveDays({c:'P',x:at(-1),d:0});
@@ -266,8 +266,16 @@ else:
         rec('chip names the caller and offers no escape',
             'Carlos' in (o.get('chip') or '') and 'show all' not in (o.get('chip') or '')
             and 'change' not in (o.get('chip') or ''), o.get('chip'))
-        rec('all eight lanes present',
-            o.get('lanes') == 'email,worker,urgent,soon,late,lp,bal,bb', o.get('lanes'))
+        rec('all nine lanes present, 3-DAY first',
+            o.get('lanes') == 'd3,email,worker,urgent,soon,late,lp,bal,bb', o.get('lanes'))
+        # The 3-DAY lane (c15c69e, 2026-09-16) shipped with no suite and broke this list, which
+        # had pinned eight. It demands face equity: v > the payoff or judgment, both present and
+        # positive. None of these rows carries v/py/jg, so every one of them is correctly refused
+        # even when the sale is days away -- the guard that keeps Jesse's list to real equity.
+        # A positive row is deliberately NOT pinned here: isThreeDay counts BUSINESS days, so a
+        # fixture that qualifies on a Tuesday stops qualifying on a Friday. Lane parity between
+        # the board and the phone is covered by _funnelparitytest.py.
+        rec('3-DAY refuses rows with no face equity', o.get('d3') == '', o.get('d3'))
         rec('urgent = 0-7 days only', o.get('urgent') == 'U', o.get('urgent'))
         rec('sale soon = 8-45', o.get('soon') == 'S,X', o.get('soon'))
         rec('late = 46-60', o.get('late') == 'L', o.get('late'))
