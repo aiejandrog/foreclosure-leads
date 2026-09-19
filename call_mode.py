@@ -1454,6 +1454,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
 
     out = []
     _ident_dropped = 0
+    _notowner_dropped = 0        # numbers kept off the dial queue as not-the-owner (see below)
     import diligence_gate as _DG
     _dg = _DG.Tally()
     _quo = _quo_latest()
@@ -1501,12 +1502,24 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         # list mislabels numbers. Drop one DNC number and every rank label after it slides up one:
         # the page would print "CALL FIRST" over a number the ranker had put last, which is worse
         # than no label at all because he trusts it.
+        # NOT-THE-OWNER NUMBERS DO NOT ENTER THE DIAL QUEUE. This page is one screen, one script,
+        # one person: it opens "Hi <first name>" and talks about their foreclosure. A listing agent
+        # or an office number that sits on three other owners' leads is worth a call, but not this
+        # call, and there is nowhere on this page to say so. The board still shows them on the row,
+        # tagged and dialable, which is where a call to the agent belongs.
+        # `hh`/`nm` (household member, namesake) stay — reaching the owner through the household is
+        # the reason those numbers were kept — and phone_rank has already scored them below the
+        # owner's own, so they never lead the queue.
+        phsrc = (d.get('phsrc') or [])
         pairs = []
         n_dnc = 0
         for oi, p in enumerate(phones):
             if phdnc[oi] if oi < len(phdnc) else False:
                 n_dnc += 1
                 continue                                   # DNC numbers are dropped, never flagged
+            if (phsrc[oi] if oi < len(phsrc) else '') in ('ag', 'xl'):
+                _notowner_dropped += 1
+                continue
             dg = _digits(p)
             if len(dg) == 10:
                 pairs.append((oi, dg))
@@ -1596,6 +1609,15 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # rank is indexed by the ORIGINAL phones position, recovered via keep_oi.
             'r': [(rank[keep_oi[k]][:1].upper()
                    if keep_oi[k] < len(rank) and rank[keep_oi[k]] else '') for k in order],
+            # WHOSE NUMBER (foreclosure_leads.PHSRC_*), same index as `p`. Only the two that change
+            # what the caller SAYS ship: 'hh' (a household member at the address) and 'nm' (matched
+            # on the owner's name only, so possibly a namesake). An owner number ships '' and costs
+            # one byte. 'ag'/'xl' never appear — those numbers are filtered out of `keep` above.
+            # Without this the page opens "Hi <first name>" on the owner's spouse or on a stranger
+            # with the same name, and the caller has no way to know from the screen.
+            'ps': ([(phsrc[keep_oi[k]] if keep_oi[k] < len(phsrc)
+                     and phsrc[keep_oi[k]] in ('hh', 'nm') else '') for k in order]
+                   if any(x in ('hh', 'nm') for x in phsrc) else None),
             'k': withheld,
             # EMAIL COUNT, never the addresses. The board's funnel splits WRITE from TRACE on
             # whether a lead is reachable by email at all, so the phone needs the fact and not the
@@ -1793,6 +1815,12 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
               'one auction date; kept the fullest row%s'
               % (_collapsed, (', %d of which now carry an EARLIER sale date to verify' % _sooner)
                  if _sooner else ''))
+    if _notowner_dropped:
+        # Out loud, like every other suppression on this page. These numbers look perfectly
+        # dialable on the board and vanish here, so a silent drop is indistinguishable from a
+        # skip trace that simply returned less.
+        print('call mode: %d number(s) kept out of the dial queue — the lead\'s own listing agent, '
+              'or a number sitting on three or more different owners' % _notowner_dropped)
     if _ident_dropped:
         # Say it out loud. A suppression that removes people silently is indistinguishable from a
         # queue that was always this size, and this one drops leads that LOOK perfectly callable.
@@ -2647,6 +2675,16 @@ var LS='fcLeadNotes', ROWS=[], PHIDX=null, lane='soon', i=0, cur=null, phIdx=0, 
 function $(id){return document.getElementById(id);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmt(d){d=String(d||'');return d.length===10?'('+d.slice(0,3)+') '+d.slice(3,6)+'-'+d.slice(6):d;}
+/* WHOSE NUMBER r.p[i] IS, in the caller's words. r.ps is the parallel source array built in
+   call_rows and only ever carries 'hh' or 'nm' — the listing-agent and shared-office numbers are
+   filtered out of the queue upstream, so they can never reach this page. '' for an owner number,
+   which is the overwhelming majority and the case that needs no words at all. */
+function _phSrcNote(r, i){
+  var s = (r.ps||[])[i] || '';
+  if(s==='hh') return 'Not the owner — Whitepages places this person at the address (spouse, adult child, tenant). Ask if ' + (r.on||'the owner') + ' is home. Do not discuss the case with them.';
+  if(s==='nm') return 'Matched on the NAME only, not the address — this may be a different ' + (r.on||'person') + '. Confirm the address before you mention the filing.';
+  return '';
+}
 /* WHICH LINE THE CALL GOES OUT ON (2026-09-01). 'gv' routes every dial through the Google Voice
    app so the call originates from (786) 490-7825 — the DIALING line — instead of the phone's own
    carrier line, (786) 631-1823. That split is deliberate and load-bearing: 631-1823 is the number
@@ -4713,7 +4751,13 @@ function screenLead(){
     +   fileBand(r)
     +   '<a class="dial" href="'+dialHref(d)+'"'+dialTarget()+' id="dial">'+fmt(d)+'</a>'
     +   '<div class="sub">number '+(phIdx+1)+' of '+r.p.length
-    +     (rk?(' &middot; '+(rk==='C'?'call first':rk==='O'?'ok':'last resort')):'')
+    /* 'N' (not the owner) is new; an unmapped letter used to fall through to "last resort", which
+       reads as a bad number rather than a different person. */
+    +     (rk?(' &middot; '+(rk==='C'?'call first':rk==='O'?'ok':rk==='N'?'not the owner':'last resort')):'')
+    /* WHOSE NUMBER THIS IS, above the fold and next to the dial button, because it changes the
+       first sentence out of your mouth. The script on this page greets the owner by first name;
+       on these two it is "is <owner> home?" instead. */
+    +     (_phSrcNote(r, phIdx) ? '<br><b>'+_phSrcNote(r, phIdx)+'</b>' : '')
     +     (r.k?(' &middot; '+r.k+' withheld, do-not-call flag on file'):'')+'</div>'
     +   '<button class="big" id="skip" style="background:#2a3f6b">Skip</button>'
     + '</div>'
