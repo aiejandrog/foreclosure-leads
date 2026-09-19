@@ -40,6 +40,15 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 VOIP_RX = re.compile(r'VOIP|VOICE\s?OVER|IP\s?PHONE|BANDWIDTH|TWILIO|ONVOY|PEERLESS|INTELIQUENT|'
                      r'LEVEL\s?3|TELEPORT|SINCH|VONAGE|MAGICJACK|GOOGLE', re.I)
 
+# TWO SENTINELS, and the difference between them is the whole point.
+#   BLOCKED (-999)     do not dial at all. Only a DNC flag earns it, and rank() puts these in a
+#                      separate list so no ordering mistake can surface one.
+#   NEVER_FIRST (-998) dialable, but never the number best() hands back as "call this first".
+#                      A listing agent is a real party to the deal; opening a homeowner script on
+#                      them is the failure, not calling them.
+BLOCKED = -999
+NEVER_FIRST = -998
+
 
 def _is_mobile(t):
     return str(t or '').strip().lower().startswith('mob')
@@ -54,12 +63,25 @@ def _is_landline(t):
 def score_phone(p, idx=0):
     """(score, label, reasons[]) for one phone dict. Higher = dial this sooner."""
     if not isinstance(p, dict):
-        return -999, 'bad', ['not a phone record']
+        return BLOCKED, 'bad', ['not a phone record']
     reasons, s = [], 0
     typ, car = p.get('type'), str(p.get('carrier') or '')
 
     if p.get('dnc'):
-        return -999, 'DO NOT CALL', ['on the Do Not Call registry']
+        return BLOCKED, 'DO NOT CALL', ['on the Do Not Call registry']
+
+    # WHOSE NUMBER IS IT (foreclosure_leads.PHSRC_*). Added 2026-09-19 after a 561 number on an
+    # owner queue was dialled and answered by the property's Compass listing agent. The type/carrier
+    # score below cannot see this: a household member's mobile on a good carrier outscores the
+    # owner's own landline every time, so without it the ranker actively pushes the wrong person to
+    # the top of the queue. Returned as a LABEL, not a drop — these are real, dialable people, they
+    # are just not the homeowner and must never be what "CALL FIRST" points at.
+    src = str(p.get('src') or '').strip().lower()
+    if src == 'ag':
+        return NEVER_FIRST, 'NOT THE OWNER', ["this lead's own listing agent, not the homeowner"]
+    if src == 'xl':
+        return NEVER_FIRST, 'NOT THE OWNER', ['the same number is on three or more different '
+                                              "owners' leads — an office, not a homeowner"]
 
     if _is_mobile(typ):
         s += 40; reasons.append('mobile (the person, and textable)')
@@ -72,6 +94,16 @@ def score_phone(p, idx=0):
         s -= 25; reasons.append('VOIP/IP carrier — often dead or a forward')
     elif not car.strip():
         s -= 10; reasons.append('no carrier on file — thin record')
+
+    # NOT-THE-OWNER PENALTIES, sized to beat the mobile bonus rather than to look tidy. A household
+    # member's mobile scores 40 and the owner's own landline scores 15, so anything smaller than 25
+    # here leaves the ranker still handing "CALL FIRST" to the wrong person — which is the entire
+    # defect. These stay ranked (they are worth dialling after the owner's own numbers) but they
+    # can no longer lead.
+    if src == 'hh':
+        s -= 30; reasons.append('household member at the address, not the owner on the deed')
+    elif src == 'nm':
+        s -= 35; reasons.append('matched on the owner NAME only — could be a namesake')
 
     s -= idx * 2                      # weak: providers return their best match first
     label = 'CALL FIRST' if s >= 35 else ('ok' if s >= 10 else 'last resort')
@@ -86,14 +118,20 @@ def rank(phones):
         rec = {'number': (p or {}).get('number'), 'type': (p or {}).get('type'),
                'carrier': (p or {}).get('carrier'), 'score': s, 'label': label, 'why': why}
         scored.append(rec)
-    blocked = [r for r in scored if r['score'] == -999]
-    ok = sorted([r for r in scored if r['score'] != -999], key=lambda r: -r['score'])
+    blocked = [r for r in scored if r['score'] <= BLOCKED]
+    ok = sorted([r for r in scored if r['score'] > BLOCKED], key=lambda r: -r['score'])
     return ok, blocked
 
 
 def best(phones):
-    """The one number to dial first, or None if every number is blocked/absent."""
+    """The one number to dial first, or None if every number is blocked/absent.
+
+    A NEVER_FIRST number (today: the lead's own listing agent) is returned by rank() — it stays on
+    the row and stays dialable — but it is never the answer here. A lead whose ONLY number is the
+    listing agent has no owner number, and saying so is the honest result; pointing the opening
+    line at the agent is the bug this exists to stop."""
     ok, _ = rank(phones)
+    ok = [r for r in ok if r['score'] > NEVER_FIRST]
     return ok[0] if ok else None
 
 
@@ -138,7 +176,11 @@ def main():
             print('  %d. %-16s %-10s %-12s  %s' % (i, _fmt(r['number']), r['type'] or '?',
                                                    r['label'], '; '.join(r['why'])))
         for r in blocked:
-            print('  XX %-16s %-10s DO NOT CALL   on the Do Not Call registry' % (_fmt(r['number']), r['type'] or '?'))
+            # print the record's OWN label and reason. This line used to hardcode "DO NOT CALL / on
+            # the Do Not Call registry", which was true while DNC was the only way into the blocked
+            # list and becomes a false statement the moment it is not.
+            print('  XX %-16s %-10s %-13s %s' % (_fmt(r['number']), r['type'] or '?',
+                                                 r['label'], '; '.join(r['why'])))
         if not ok and not blocked:
             print('  (no phones on file)')
         return 0
