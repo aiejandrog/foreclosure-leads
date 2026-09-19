@@ -1,6 +1,6 @@
 # MACHINE HANDOFF — read this before you work on DEALFLOW from a different computer
 
-Last updated: **2026-09-17** (§1 CONTRADICTED BY THE COMMITS — read the warning in §1 before trusting it; ninth task found and disabled 2026-08-26)
+Last updated: **2026-09-18** (§1 settled — the laptop is the only armed machine; the ninth task, `DealFlow Cadence`, is managed by the installer as of 2026-09-18, see §1 and §4)
 
 This repo is worked from more than one machine and is also refreshed by GitHub Actions.
 Git carries the **code and the published site**. It does **not** carry the data, the secrets, or the
@@ -105,6 +105,13 @@ day-late lag, and no more "the commit is in main so the site must have it".
 > eight. `-Enable` still does **not** bring it back up, because that path only walks
 > `desktop-setup/tasks/*.xml`. So disarming is complete and arming is not: after `-Enable`, turn
 > cadence on by name or outreach stays off.
+>
+> **Second correction, 2026-09-18:** `-Enable` brings it back up now. The asymmetry was real for
+> three weeks — disarming complete, arming silently incomplete — and it is closed by
+> `desktop-setup/task-templates/DealFlow_Cadence.xml`, a tracked, SID-free template the installer
+> substitutes and registers alongside the gitignored exports in `tasks/`. Arming a machine now arms
+> outreach with the rest of the pipeline. **Read that as a change in blast radius, not just a fix:**
+> `-Enable` on the wrong box used to leave outreach off by accident. It will not do that again.
 
 | Machine | Role today | Tasks |
 |---|---|---|
@@ -119,7 +126,7 @@ Evidence the laptop is live: commits `9ff826b`/`43ed370`/`8efda91` (08-24) and `
 shows what the laptop's nightly chain looks like in the log, which is how you will recognise which
 machine produced any given commit.
 
-### ⚠ There is a NINTH task, and the installer cannot see it (found 2026-08-26)
+### ⚠ There is a NINTH task — the installer could not see it (2026-08-26, closed 2026-09-18)
 
 For four days this section said "8 tasks registered, all Disabled" for the desktop. True, and it hid
 the thing that mattered: **`DealFlow Cadence`** is a ninth task, registered outside
@@ -130,9 +137,27 @@ last touched 08-22. It had put 59 owners through steps 2–3 of the 4-touch sequ
 **It was disabled on 2026-08-26**, so the desktop is now genuinely stood down. Keep it that way
 unless the desktop becomes the armed runner.
 
-`install-tasks.ps1 -DisableLocal` / `-Enable` **do not know this task exists.** They will neither
-stand it down nor bring it up, so a handoff done exactly as the sequence below describes leaves
-outreach running on the machine it just disarmed. Handle it by name, on both boxes:
+**CLOSED 2026-09-18.** `install-tasks.ps1` manages it with the other eight now, from
+`desktop-setup/task-templates/DealFlow_Cadence.xml`. The task it registers runs `cadence-daily.bat`
+(not `cadence-run.bat`, which ends in `pause`), and that wrapper repo-guards the folder and refuses
+to send outside 08:00–20:00. The window is not decoration: the task is `StartWhenAvailable=true` so
+a run missed while the laptop slept is caught up rather than lost, and without a window that
+catch-up is a batch of homeowner follow-ups going out at 22:40.
+
+To add or arm it on ONE machine without re-registering that machine's other live tasks:
+
+```
+pwsh .\desktop-setup\install-tasks.ps1 -Only Cadence            # register, left disabled
+pwsh .\desktop-setup\install-tasks.ps1 -Only Cadence -Enable    # arm it
+```
+
+**The history below is kept because the shape of it recurs.** For three weeks the installer's two
+halves were asymmetric about this task: `-DisableLocal` enumerates live tasks by name match so it
+*did* stand it down, while `-Enable` walked `desktop-setup/tasks/*.xml` so it did *not* bring it
+up. A handoff done exactly as the sequence below describes therefore disarmed outreach and never
+re-armed it, with nothing in any output to say so. Nor could it be fixed by exporting the task into
+`tasks/` — that directory is gitignored precisely because a Windows export embeds the exporting
+machine's principal SID. Handling it by name still works and is still the right audit:
 
 ```
 pwsh -c "Get-ScheduledTask | ? TaskName -like '*ealFlow*' | ft TaskName,State"   # audit — 9 rows
@@ -269,29 +294,38 @@ develop and push today. Three gaps remain, all needing a copy from the laptop:
 
 ## 4. Scheduled tasks
 
-The eight below are the ones `install-tasks.ps1` registers, enables and disables as a set. They are
-identical on both machines.
+The nine below are the ones `install-tasks.ps1` registers, enables and disables as a set — eight
+until 2026-09-18, see the NINTH TASK block in §1. They are identical on both machines.
 
-| Task | Time | Cadence |
-|---|---|---|
-| DEALFLOW Refresh | 05:30 | daily |
-| DEALFLOW Phones | 06:00 | daily |
-| DealFlow Replies | 06:45 | daily |
-| DEALFLOW Daily Scrape | 07:00 | weekly |
-| DealFlow Weekly Analyst | 07:30 | weekly |
-| DealflowSendServerDaily | 07:45 | daily |
-| DEALFLOW Morning Worker | 08:00 | daily |
-| DealFlow Sheets CRM | 08:05 | daily |
+| Task | Time | Cadence | Definition |
+|---|---|---|---|
+| DEALFLOW Refresh | 05:30 | daily | `tasks/` export |
+| DEALFLOW Phones | 06:00 | daily | `tasks/` export |
+| DealFlow Replies | 06:45 | daily | `tasks/` export |
+| DEALFLOW Daily Scrape | 07:00 | weekly | `tasks/` export |
+| DealFlow Weekly Analyst | 07:30 | weekly | `tasks/` export |
+| DealflowSendServerDaily | 07:45 | daily | `tasks/` export |
+| DEALFLOW Morning Worker | 08:00 | daily | `tasks/` export |
+| DealFlow Sheets CRM | 08:05 | daily | `tasks/` export |
+| **DealFlow Cadence** | 09:00 | daily | `task-templates/` — tracked in git |
 
-**Outside that set, and outside the installer entirely:**
+`tasks/` is gitignored: a Windows export embeds the exporting machine's principal SID and user
+paths, so those definitions travel in the transfer bundle. `task-templates/` is the tracked,
+SID-free half — `__REPO__` / `__PROFILE__` / `__USER__` placeholders substituted at install time.
+An export always wins over a template of the same task name.
+
+**DealFlow Cadence sends real email to homeowners.** It runs `cadence-daily.bat`, which repo-guards
+the folder, refuses to send outside 08:00–20:00, then runs `python -u cadence.py`. Log:
+`~\DEALFLOW\cadence-run.log`. Status file: `~\DEALFLOW\DEALFLOW-CADENCE-STATUS.txt`. Both sit
+outside the repo because the log carries homeowner email addresses.
+
+**Outside the installer entirely:**
 
 | Task | Time | Cadence | Where |
 |---|---|---|---|
-| **DealFlow Cadence** | 09:00 | daily | Disabled on DESKTOP-35NNMFL since 2026-08-26 (§1) |
+| BSG Warmup | 09:15 | daily | `warmup.py`, company-owned mailboxes only — the one task deliberately left running on the disarmed desktop |
 
-Runs `python -u cadence.py`, logs to `~\DEALFLOW\cadence-run.log`. It sends real email to
-homeowners. Because the installer does not manage it, every arm/disarm has to name it explicitly,
-and a runner audit has to enumerate tasks rather than trust the list of eight — see §1.
+A runner audit still has to **enumerate** tasks rather than trust any list in this file — see §1.
 
 Two settings decide whether the eight actually fire:
 
