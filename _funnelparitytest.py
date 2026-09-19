@@ -30,6 +30,7 @@ which is every machine this repo is checked out on except the armed runner.
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -166,7 +167,16 @@ def page_glue(page):
     i = page.find('*/', i) + 2
     j = page.find("THE BOARD'S NINE LANES, ON THE PHONE")
     assert j > i, 'the board-lane UI marker moved; update page_glue'
-    return page[i:page.rfind('/*', i, j)]
+    glue = page[i:page.rfind('/*', i, j)]
+    # A __PLACEHOLDER__ in this window is a block injected between the funnel code and the board-lane
+    # UI. node gets it as a bare identifier and dies with a module-loader stack that says nothing
+    # about why — so name the cause here instead. Move the injection out of this window, or widen
+    # the slice deliberately and glue that block in too.
+    stray = re.findall(r'__[A-Z0-9_]+__', glue)
+    assert not stray, ('page_glue sliced an uninjected placeholder (%s) — something new is being '
+                       'injected into _PAGE between __FUNNELJS__ and the board-lane UI. This runs '
+                       'under node, so a placeholder token here is a syntax error.' % ', '.join(sorted(set(stray))))
+    return glue
 
 
 def main():
