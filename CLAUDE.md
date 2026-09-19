@@ -134,4 +134,31 @@ check — anything that does `git add docs/` and pushes, and is not in that list
 ## Scheduled tasks
 
 Register/enable/disable only via `pwsh .\desktop-setup\install-tasks.ps1` — **`pwsh`, not
-`powershell`** (the file is BOM-less UTF-8; 5.1 misparses the em-dashes at line 53).
+`powershell`** (the file is BOM-less UTF-8; 5.1 misparses the em-dashes in the header).
+
+**Nine tasks, from two directories.** `desktop-setup/tasks/` holds Windows exports and is
+**gitignored** — an export embeds the exporting machine's principal SID and user paths, so those
+travel in the transfer bundle. `desktop-setup/task-templates/` is the **tracked** half: SID-free XML
+with `__REPO__` / `__PROFILE__` / `__USER__` placeholders the installer substitutes at install time.
+An export wins over a template of the same task name. **A new task goes in `task-templates/`** — put
+one in `tasks/` and it exists only on the box that made it.
+
+That split exists because of `DealFlow Cadence`. It is the only **unattended** outreach sender in
+the project (09:00 daily, `cadence.py` over SMTP, real email to homeowners) and for three weeks it
+was registered by hand, outside the installer. `-DisableLocal` caught it — that path enumerates live
+tasks by name match — but `-Enable` walked `tasks/*.xml` only, so **disarming was complete and
+arming was not**: every handoff done exactly as documented left outreach off, silently. Closed
+2026-09-18 by `task-templates/DealFlow_Cadence.xml`.
+
+- The task runs **`cadence-daily.bat`**, never `cadence-run.bat` — that one ends in `pause` and a
+  scheduled task cannot answer a prompt.
+- `cadence-daily.bat` repo-guards the folder and **refuses to send outside 08:00–20:00**. The task
+  is `StartWhenAvailable=true` so a run missed while the laptop slept is caught up rather than lost;
+  without the window, that catch-up mails homeowners at whatever hour the machine woke. Do not
+  remove one without the other. The window lives in the `.bat` and not in `cadence.py` on purpose —
+  `cadence.py` is the reserved suppression surface above.
+- `-Only <pattern>` scopes every mode to matching tasks, which is how one task is added or armed on
+  a machine whose others are already live:
+  `pwsh .\desktop-setup\install-tasks.ps1 -Only Cadence -Enable`.
+- **Audit by enumerating, never from a list in a file:**
+  `pwsh -c "Get-ScheduledTask | ? TaskName -like '*ealFlow*' | ft TaskName,State"`
