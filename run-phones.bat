@@ -5,6 +5,12 @@ rem PREREQ: a provider key present (gitignored) - tracerfy.key (no minimum) or b
 rem   skiptrace.py auto-detects whichever key exists (tracerfy preferred).
 rem To change how many you spend on: add  --limit N  or  --tier B  after skiptrace.py below.
 cd /d "%~dp0"
+rem  REPO GUARD FIRST, and before the skip-trace spend. This was the only publish path with no
+rem  `call repo_guard.bat` - the other four have had it since 2026-09-17, the day a publish run
+rem  from a folder that was not the checkout replaced main on GitHub with one commit. Running it
+rem  ahead of skiptrace.py also means a wrong-folder run costs nothing at the provider.
+call repo_guard.bat "%~dp0" "phones-run.log"
+if errorlevel 1 (echo REPO GUARD refused this checkout - nothing traced, built or pushed. & pause & exit /b 1)
 echo ==== phones run %date% %time% ====
 python skiptrace.py
 if errorlevel 1 (echo TRACE FAILED - nothing rebuilt or pushed & pause & exit /b 1)
