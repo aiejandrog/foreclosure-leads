@@ -448,3 +448,9 @@ deal_desk.json
 # successful publish. Untracked, the one check that the mirror can find its target would live on
 # a single laptop.
 !_sitemirrortest.py
+# ...and the suite that guards the text SCRIPT. The board's batch and Call Mode used to compose from
+# two different sets of bodies, so the homeowner got one script from the laptop and another from the
+# phone; the bodies are now extracted from tracker_template.html at build time. This suite is what
+# says so — it needs no browser, no board and no real data, so untracked it would be a check that
+# only ever ran on one machine.
+!_texttpltest.py

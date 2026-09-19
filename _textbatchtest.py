@@ -96,7 +96,13 @@ def node(js):
         f.write(js)
         p = f.name
     try:
-        r = subprocess.run(['node', p], capture_output=True, text=True, timeout=60)
+        # encoding= is NOT optional. text=True alone decodes with the locale codec, which on
+        # this Windows runner is cp1252, and the board HTML this test feeds through node carries
+        # bytes cp1252 has no mapping for -- the reader thread dies, stdout comes back None, and
+        # the failure surfaces as a baffling "JSON object must be str, not NoneType" three frames
+        # away. The .js file is already written utf-8 above; read the answer back the same way.
+        r = subprocess.run(['node', p], capture_output=True, text=True, timeout=60,
+                           encoding='utf-8', errors='replace')
         if r.returncode != 0:
             raise SystemExit('node failed:\n' + (r.stderr or '')[:3000])
         return json.loads(r.stdout)

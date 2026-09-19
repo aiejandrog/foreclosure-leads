@@ -110,8 +110,11 @@ rem  "retry" below is the SAME push 6s later, which fails identically. Measured 
 rem  4 commits stacked and the LIVE SITE SAT FROZEN AT 08-14 for two days while every local
 rem  run still reported success. -X theirs mirrors .github/workflows/refresh.yml exactly.
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
+rem  %SystemRoot% path on timeout.exe, not a bare `timeout`: under a git-bash PATH the bare
+rem  name resolves to GNU coreutils timeout, which rejects /t and drops the retry backoff
+rem  entirely. Same root cause as the `find` note in repo_guard.bat.
 git push origin main >> "%LOG%" 2>&1
-  if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
+  if errorlevel 1 ( "%SystemRoot%\System32\timeout.exe" /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
   rem  The site repo first - see the split note at the final publish. A failed push to THIS repo
   rem  must not keep the freshly built board off the public site.
   python -u publish_site.py >> "%LOG%" 2>&1
@@ -126,6 +129,10 @@ git push origin main >> "%LOG%" 2>&1
     echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
     echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
     echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+    rem  ...and carry it to the exit code, exactly as the final publish does at [5/5]. Logging a
+    rem  failure the scheduler never sees is half a fix: rc=0-while-broken is the pattern that cost
+    rem  three days on the scrape and 31 hours on this mirror. An earlier fault keeps priority.
+    if "%RUNEXIT%"=="0" set "RUNEXIT=5"
   )
   rem  Neither push's exit code was read here, so "fresh leads pushed" printed whether or not
   rem  anything reached origin. publish_verify.bat asks the remote instead of assuming, and it
@@ -444,6 +451,13 @@ python -u hardmoney_balloon.py --months 30 >> "%LOG%" 2>&1
 if errorlevel 1 (echo     note: balloon book step failed - board publish continues.>> "%LOG%")
 
 echo [gate] healthcheck + publish guard before anything goes live...
+rem  ATTRIBUTION CORRECTED 2026-09-18. Commit 7b4d61b escaped the parens on the two GATE echoes
+rem  below and its message blamed e310696. That is WRONG: e310696^ already carries them inside
+rem  this same multi-line block. git blame puts them at 244121c7 (08-20 10:01) -- the very commit
+rem  this TIERED GATE note announces. Corroborated by history: the final [5/5] stage last landed
+rem  a commit on 08-18 (b809314, 42 of them before that) and not once in the 31 days after, while
+rem  the [1b/5] early publish kept going. So this broke the final publish for a month, and
+rem  docs/hm-balloon-q7v3n8 -- staged ONLY here -- went unpublished that whole time.
 rem  TIERED GATE (2026-08-20). healthcheck exit 2 = COMPLIANCE/systemic fail (lost §362 stay flags,
 rem  or >=2 upstream sources down) -> HARD block. exit 1 = coverage-floor fail only (value/lien %) ->
 rem  ADVISORY: a fresh-filing-heavy day dips below the value floor because new MD leads have no folio
@@ -451,7 +465,7 @@ rem  to price, and blocking a build publish_guard already proved is RICHER than 
 rem  board stale. `if errorlevel 2` matches exit>=2, so it must be tested BEFORE `if errorlevel 1`.
 python -u healthcheck.py >> "%LOG%" 2>&1
 if errorlevel 2 (
-  echo     ^!^! GATE: healthcheck COMPLIANCE fail (^&sect;362 stays / sources down) - publish SKIPPED.>> "%LOG%"
+  echo     ^!^! GATE: healthcheck COMPLIANCE fail ^(^&sect;362 stays / sources down^) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: healthcheck COMPLIANCE fail - publish SKIPPED. See leads-run.log.
   goto :end
 )
@@ -460,7 +474,7 @@ if errorlevel 1 (
 )
 python -u publish_guard.py >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo     ^!^! GATE: publish_guard BLOCKED the build (regression or corruption) - publish SKIPPED.>> "%LOG%"
+  echo     ^!^! GATE: publish_guard BLOCKED the build ^(regression or corruption^) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: publish_guard BLOCKED the build - publish SKIPPED. See leads-run.log.
   goto :end
 )
@@ -480,7 +494,7 @@ rem  run still reported success. -X theirs mirrors .github/workflows/refresh.yml
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
 git push origin main >> "%LOG%" 2>&1
 if errorlevel 1 (
-  timeout /t 6 /nobreak >nul
+  "%SystemRoot%\System32\timeout.exe" /t 6 /nobreak >nul
   git push origin main >> "%LOG%" 2>&1
 )
 rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo is private now, so the

@@ -17,6 +17,10 @@ call repo_guard.bat "%~dp0" "%LOG%"
 if errorlevel 1 exit /b 1
 set "STATUS=%USERPROFILE%\DEALFLOW\DEALFLOW-PHONES-STATUS.txt"
 set "STAMP=%date% %time%"
+rem  MIRRORFAIL carries the site-mirror outcome to the exit code at the bottom. Logging a failure
+rem  the scheduler never sees is half a fix, and rc=0-while-broken is precisely the pattern that
+rem  cost three days on the scrape, three on the push, and 31 hours on the mirror.
+set "MIRRORFAIL=0"
 
 echo ==== phones-nightly %STAMP% ==== >> "%LOG%"
 
@@ -113,7 +117,10 @@ rem  "retry" below is the SAME push 6s later, which fails identically. Measured 
 rem  4 commits stacked up and the live site sat frozen at 08-14 for two days while every
 rem  local run reported success. -X theirs mirrors what .github/workflows/refresh.yml does.
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
-git push origin main >> "%LOG%" 2>&1 || (timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1)
+rem  %SystemRoot% path on timeout.exe, not a bare `timeout`: under a git-bash PATH the bare
+rem  name resolves to GNU coreutils timeout, which rejects /t and drops the retry backoff
+rem  entirely. Same root cause as the `find` note in repo_guard.bat.
+git push origin main >> "%LOG%" 2>&1 || ("%SystemRoot%\System32\timeout.exe" /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1)
 rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo is private now, so the
 rem  lead data and history are no longer world-readable; docs/ still commits here (it is
 rem  publish_guard's baseline) and publish_site.py mirrors the pages Pages actually serves.
@@ -125,6 +132,7 @@ if errorlevel 1 (
   echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
   echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
   echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+  set "MIRRORFAIL=1"
 )
 
 rem The status file must state the phones outcome honestly. It previously always said "phones
@@ -139,6 +147,17 @@ call publish_verify.bat "%LOG%" "%STATUS%" "%PHONESNOTE%"
 if errorlevel 1 (
   echo ==== done - NOT PUBLISHED %date% %time% ==== >> "%LOG%"
   exit /b 1
+)
+rem  THE ENGINE PUSH LANDED, BUT DID THE LIVE SITE MOVE? publish_verify only asks about origin/main
+rem  in THIS repo - it says so itself - and since the 09-17 split that is not what GitHub Pages
+rem  serves. So a run whose mirror failed reached this line with rc=0 and the status file reading
+rem  OK, which is the 09-17-to-09-18 frozen site exactly: a loud log line nobody opens, and a clean
+rem  result everywhere anybody looks. rc=5 = the board is committed and pushed here, the live site
+rem  is still the previous one. The status file has to say the same, or it contradicts the code.
+if "%MIRRORFAIL%"=="1" (
+  echo [%STAMP%] ^!^! Board pushed to the engine repo, but the LIVE SITE IS UNCHANGED - the mirror did not publish. %PHONESNOTE%.> "%STATUS%"
+  echo ==== done - ENGINE PUBLISHED, LIVE SITE NOT %date% %time% ==== >> "%LOG%"
+  exit /b 5
 )
 echo ==== done %date% %time% ==== >> "%LOG%"
 exit /b 0

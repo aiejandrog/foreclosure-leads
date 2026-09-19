@@ -32,7 +32,14 @@ import mail_guard as _MG
 HERE = os.path.dirname(os.path.abspath(__file__))
 QUEUE = os.path.join(HERE, 'cadence_queue.json')
 STATE = os.path.join(HERE, 'cadence_state.json')
-KEY = os.path.join(HERE, 'gmail.key')
+# Prefer the company login, exactly as send_server.py:72 does (added 2026-09-18). This constant is
+# why the 2026-09-07 lane wiring below was only half a fix: the lane MAP came from senders.json,
+# but the LOGIN still came from whatever gmail.key happened to hold. If gmail.key ever points back
+# at a non-bsgflorida account, send_server._senders_active flips false, the lane map silently
+# disengages, and every follow-up leaves as the login address again — the same split 09-07 fixed.
+# Reading bsg_gmail.key first makes that impossible rather than merely unlikely.
+_BSG_KEY = os.path.join(HERE, 'bsg_gmail.key')
+KEY = _BSG_KEY if os.path.exists(_BSG_KEY) else os.path.join(HERE, 'gmail.key')
 OPTOUTS = os.path.join(HERE, 'optouts.json')
 
 # ── LANE MAP (wired 2026-09-07) ────────────────────────────────────────────────────────────────

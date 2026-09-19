@@ -983,6 +983,18 @@ _FUNNEL_START = 'var MAIL_FLOOR_DAYS  = 7;'     # the thresholds + FUNNEL + FUNN
 # CLASSIFIER (which lane is this lead in), never the board's ordering inside a lane.
 _FUNNEL_END = 'function _funnelRows(stage){'
 
+# THE TEXT BODIES (2026-09-18, Alejandro: "the script on the text batch i need that text template
+# for the call mode py aswell"). The board's text batch bakes smsMsg() into every TEXTQ row; this
+# page had a THIRD set of bodies of its own (TEXT_T / TEXT_T_ES, the after-call ladder), so the
+# script he approves on the laptop was not the script leaving the phone. Same rule as the two
+# extractions above: one source, lifted at build time, never copied.
+#
+# The region is the two PURE functions only — _textTone (which rung) and _textBodies (the words).
+# Everything row-shaped is resolved by the caller, because the board row (r.owners/r.addr) and the
+# phone row (r.on/r.a) are different shapes and always will be.
+_TEXTTPL_START = 'function _textTone(stage, days, isLP){'
+_TEXTTPL_END = 'function _smsHref(ph, msg){'
+
 # Names the BOARD ITSELF calls defensively, so an absent definition cannot throw. Allow-listed
 # individually rather than by loosening the resolution guard — each entry states why it is safe, and
 # anything not listed still fails the build.
@@ -1267,6 +1279,50 @@ def extract_funnel_js(tracker_src):
             'call_mode: the extracted funnel block calls %d name(s) that nothing defines: %s\n'
             '  Every one throws ReferenceError at run time and is INVISIBLE to node --check.'
             % (len(unresolved), ', '.join(unresolved)))
+    return block
+
+
+def extract_text_js(tracker_src):
+    """Pull the board's TEXT BODIES verbatim out of the template.
+
+    Two functions, both pure:
+      _textTone(stage, days, isLP)   which rung of the ladder this lead is on
+      _textBodies({first, sender, stEN, stES, td, lp, tone})   -> {en, es}
+
+    Why extracted and not copied is the whole point of the change: the phone already carried its own
+    after-call ladder (TEXT_T / TEXT_T_ES), so the board batch said "A case was just filed at the
+    courthouse on <street>" while the phone said something else entirely to the same homeowner on the
+    same case. A copy would have made that two copies to keep in step; this makes it one.
+
+    Assertions below are PRESENCE BY NAME, same lesson as the other two extractors: an anchor can
+    still match after the thing it pointed at has moved out of the slice, and the symptom of a
+    half-extracted block here is a text that goes out with a missing branch rather than a crash.
+    """
+    block = _region(tracker_src, _TEXTTPL_START, _TEXTTPL_END, 'textTemplates')
+    for need in ('function _textTone', 'function _textBodies', 'return {en: en, es: es};'):
+        if need not in block:
+            raise CallModeError(
+                'call_mode: the extracted text-body block is missing %r. The phone composes its '
+                'batch text from this block; shipping it incomplete would put a different script '
+                'in front of the homeowner than the one the board sends.' % need)
+    # Every tone the board can select must have a body in the slice, in BOTH languages. A missing
+    # branch is silent: _textBodies would return {en: undefined} and the composer would open with
+    # the literal word "undefined" in a message to a homeowner.
+    for tone in ("'urgent'", "'t3'", "'followup'"):
+        if tone not in block:
+            raise CallModeError('call_mode: tone %s has no body in the extracted text block' % tone)
+    for need in ('Hola', 'Hi', 'Biscayne Solutions Group'):
+        if need not in block:
+            raise CallModeError('call_mode: the extracted text block has no %r — the Spanish and '
+                                'English bodies must both come across (Alejandro texts both).'
+                                % need)
+    unresolved = [n for n in free_identifiers(block, _PAGE_PROVIDES)
+                  if n not in _GUARDED_OPTIONAL]
+    if unresolved:
+        raise CallModeError(
+            'call_mode: the extracted text block calls %d name(s) that nothing defines: %s\n'
+            '  These functions are meant to be PURE — if one now reads a board row, the extraction '
+            'cannot work and the region has to be re-cut.' % (len(unresolved), ', '.join(unresolved)))
     return block
 
 
@@ -1872,7 +1928,7 @@ def _identity_opted_fn(slim, optouts):
 
 
 def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', textperson=None,
-               seat=None, funnel_js=''):
+               seat=None, funnel_js='', text_js=''):
     """The page. Deliberately one file, no framework, no external fetch."""
     # Every placeholder must occur EXACTLY once. str.replace substitutes ALL occurrences — a
     # placeholder token mentioned in a comment gets the full replacement value injected into the
@@ -1881,7 +1937,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     # __SIG__ is 2 BY DESIGN: the byte-42 head marker freshCheck range-reads, plus the JS var.
     # Both must receive the same value, so replace-all is correct there — the guard just pins the
     # exact expected count so a third copy (e.g. in a comment) still fails the build.
-    for _ph, _want in (('__SYNCJS__', 1), ('__FUNNELJS__', 1),
+    for _ph, _want in (('__SYNCJS__', 1), ('__FUNNELJS__', 1), ('__TEXTTPLJS__', 1),
                        ('__SCRIPT__', 1), ('__OUTCOMES__', 1), ('__PAYLOAD__', 1),
                        ('__BUILT__', 1), ('__SIG__', 2), ('__BSIG__', 1), ('__SHOWN__', 1),
                        ('__BOOKURL__', 1),
@@ -1927,6 +1983,7 @@ def build_html(rows, total, enc_payload, built, sig, board_sig, sync_js='', text
     }
     return _PAGE.replace('__SYNCJS__', sync_js) \
                 .replace('__FUNNELJS__', funnel_js) \
+                .replace('__TEXTTPLJS__', text_js) \
                 .replace('__SCRIPT__', json.dumps(script, ensure_ascii=False)) \
                 .replace('__OUTCOMES__', oc)                 .replace('__BOOKURL__', BOOKING_URL) \
                 .replace('__PAYLOAD__', json.dumps(enc_payload)) \
@@ -2280,10 +2337,12 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
     _assert_outcomes_match_board(_tracker_src)
     sync_js = extract_sync_js(_tracker_src)
     funnel_js = extract_funnel_js(_tracker_src)
+    text_js = extract_text_js(_tracker_src)
     _assert_no_dead_overrides(_PAGE, sync_js)
     _assert_no_dead_overrides(_PAGE, funnel_js)
+    _assert_no_dead_overrides(_PAGE, text_js)
     html = build_html(rows, total, payload, built, sig, board_sig, sync_js, textperson,
-                      seat=seat, funnel_js=funnel_js)
+                      seat=seat, funnel_js=funnel_js, text_js=text_js)
     if guard:
         guard(html)          # raises on a parse error; the caller's try/except keeps the board safe
     # Assert the promise the page makes about itself: no dialable number outside the ciphertext.
@@ -4710,6 +4769,16 @@ function textStage(r){
   if(sends >= TEXT_MAX_TOTAL) return 'retired';
   return ['cold','follow','final'][sends] || 'retired';
 }
+/* ══════ THE TEXT BODIES — extracted VERBATIM too, same rule again ══════
+   _textTone (which rung) + _textBodies (the words, EN and ES). This page used to hold a THIRD set
+   of bodies: the board sent "A case was just filed at the courthouse on <street>" from the text
+   batch while the phone sent its own after-call ladder to the same homeowner about the same case.
+   Both scripts are still here on purpose — the after-call ladder opens with "I just tried calling",
+   which is true only on this screen — but the BATCH script is now the board's own bytes rather than
+   a copy of them. See call_mode.extract_text_js. */
+__TEXTTPLJS__
+/* ══════════════════════════════════════════════════════════════════════════════════════════ */
+
 /* Bodies are the board's t1/t2/t3 shapes. Compliance rides along: identify, one ask, opt-out on
    every message (the FTSA 15-day cure safe harbor is worthless if the STOP line is missing).
 
@@ -4810,6 +4879,44 @@ function sitBody(r, key){
   var s = TEXT_SIT[key]; if(!s) return '';
   var raw = (lang()==='es' && s.es) ? s.es : s.en;
   return fillScript(raw.split('{book}').join(bookUrl(r)), r);
+}
+/* ── THE BOARD'S BATCH SCRIPT, on the phone (2026-09-18, Alejandro) ─────────────────────────────
+   Same words the Morning Worker's text batch sends, because they are the same bytes: _textBodies is
+   extracted from tracker_template.html at build time (call_mode.extract_text_js), not copied. This
+   function is only the ADAPTER — it resolves what the board resolves from a board row (r.owners,
+   r.addr, r.days) out of a phone row (r.on, r.a, r.d) and hands it over.
+
+   Differences from the board's own call, both deliberate:
+     - ONE LANGUAGE, not both. The batch bakes EN + ES together because it cannot know which the
+       owner reads. On the phone he has just spoken to them, and the EN|ES chips above this button
+       already say which — sending both after a conversation reads like a blast.
+     - The street falls back INSIDE _textBodies, which picks the fallback in the right language
+       ('su propiedad', not 'your property' in a Spanish body). So pass '' and let it choose. */
+function boardTextBody(r){
+  var st1 = String((r && r.a) || '').split(',')[0].trim();
+  var B = _textBodies({
+    first:  firstName(r),
+    sender: SENDER.name || '',
+    stEN:   st1, stES: st1,
+    td:     (r && r.st === 'TD'),
+    lp:     (r && r.st === 'LP'),
+    /* The rung comes from THIS device's stage count fed through the board's own rule, so touch 2
+       gets the follow-up body and touch 3 gets the one that promises it is the last. */
+    tone:   _textTone(textStage(r), (r && r.d), (r && r.st === 'LP'))
+  });
+  return (lang() === 'es') ? B.es : B.en;
+}
+/* The label on the send button, and the label written into the touch log. Each was built inline in
+   two places (the initial render and the chip handler), and adding a third script to choose from is
+   exactly when those two drift apart. One function, called from both. */
+function txLabel(k, st){
+  if(k === 'ladder') return st === 'cold' ? 'Send 1st text'
+                          : st === 'follow' ? 'Send follow-up (2 of 3)' : 'Send final text (3 of 3)';
+  if(k === 'batch')  return 'Send the board script';
+  return 'Send: ' + ((TEXT_SIT[k] || {}).t || '');
+}
+function txKind(k, st){
+  return k === 'ladder' ? st : k === 'batch' ? ('board script, ' + st) : k;
 }
 /* Callback. Writes n.next, the same field the board reads to re-surface a lead — so a promise made
    on the phone shows up on the laptop instead of living in his head. */
@@ -5106,13 +5213,24 @@ function afterCall(r, o, nextC){
     _chips = '<div>' + sitKeys.map(function(k, ix){
       return '<button class="txch'+(ix===0?' on':'')+'" data-sit="'+k+'">'+esc(TEXT_SIT[k].t)+'</button>';
     }).join('') + '</div>';
-    txt = '<button id="tx">Send: '+esc(TEXT_SIT[_txk].t)+'</button>';
+    txt = '<button id="tx">'+esc(txLabel(_txk, st))+'</button>';
   }
   else if(st === 'retired') txt = '<div class="nc">Three messages already sent to this person. The ladder is closed — call only.</div>';
   else if(st === 'replied') txt = '<div class="nc">They have replied before. Do not send a cold-ladder text; talk to them.</div>';
   else {
-    var lbl = st==='cold' ? 'Send 1st text' : st==='follow' ? 'Send follow-up (2 of 3)' : 'Send final text (3 of 3)';
-    txt = '<button id="tx" class="'+(miss?'':'ghost')+'">'+lbl+'</button>';
+    /* TWO COLD SCRIPTS, ONE RUNG. "After the call" is this page's own ladder and opens with "I just
+       tried calling", which is true only here. "Board script" is the text batch's body for this
+       lead — the just-filed one for an LP, the tax-deed one for a TD, the sale-date one otherwise.
+       Both spend the SAME touch: whichever he sends writes one ch:'text' touch, so textStage counts
+       it and the 3-message lifetime ladder cannot be walked around by switching chips.
+       BAL rows get no chip: the batch bodies are homeowner-foreclosure copy and the balloon lane is
+       an investor with no sale date, so the board would have nothing to say to them here. */
+    var lbl = txLabel('ladder', st);
+    if(!(r && r.st === 'BAL')){
+      _chips = '<div><button class="txch on" data-sit="ladder">After the call</button>'
+             + '<button class="txch" data-sit="batch">Board script</button></div>';
+    }
+    txt = '<button id="tx" class="'+(miss?'':'ghost')+'">'+esc(lbl)+'</button>';
   }
   /* NAME THE NUMBER. The text button targets r.p[phIdx] — whichever number he actually dialled —
      but the panel never said which, so on a 3-number lead he was approving a message to an unnamed
@@ -5186,12 +5304,14 @@ function afterCall(r, o, nextC){
       _txk = b.dataset.sit;
       Array.prototype.forEach.call(document.querySelectorAll('.txch'), function(x){ x.classList.remove('on'); });
       b.classList.add('on');
-      var t = $('tx'); if(t) t.textContent = 'Send: ' + ((TEXT_SIT[_txk]||{}).t || '');
+      var t = $('tx'); if(t) t.textContent = txLabel(_txk, st);
     };
   });
   wireLang($('app'));
   if($('tx')) $('tx').onclick = function(){
-    var body = (_txk==='ladder') ? textBody(r, st) : sitBody(r, _txk);
+    var body = (_txk==='ladder') ? textBody(r, st)
+             : (_txk==='batch')  ? boardTextBody(r)
+             : sitBody(r, _txk);
     /* Log the OPEN, not a send. Opening a composer is not a delivery — the board draws this exact
        line (the worker's textopen posts confirmed:false) and blurring it is how the ladder burns a
        touch on a message that was never sent. He confirms below once it is actually gone. */
@@ -5220,7 +5340,7 @@ function afterCall(r, o, nextC){
        message that failed to send had no way back except leaving the lead. Now it shows the exact
        text that went out (the output) and keeps a RESEND button alive on every path. */
     $('tx').outerHTML = '<div class="txconf" id="txconf0">Composer opened. Did it actually send?</div>'
-      + '<div class="txbody" id="txbody"><span class="lbl">what was sent &middot; ' + esc(_txk==='ladder' ? st : _txk) + '</span>'
+      + '<div class="txbody" id="txbody"><span class="lbl">what was sent &middot; ' + esc(txKind(_txk, st)) + '</span>'
       + esc(body) + '</div>'
       + '<button id="txy">&#10003; Yes, it sent</button>'
       + '<button id="txr" class="ghost">&#8635; Re-open composer (send again)</button>'
@@ -5232,7 +5352,7 @@ function afterCall(r, o, nextC){
       var nn = notes[r.c] = notes[r.c] || {status:'',note:''};
       nn.touches = nn.touches || [];
       nn.touches.push({d:today(), ts:nowTS(), tsu:Date.now(), ch:'text',
-                       out:'Text sent — ' + (_txk==='ladder' ? st : _txk), by:caller()});
+                       out:'Text sent — ' + txKind(_txk, st), by:caller()});
       saveNotes(); queueSync();
       if(!_ftsaCapToast(nn)) toast('Text logged');
       go();

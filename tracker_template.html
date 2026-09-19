@@ -5874,12 +5874,10 @@ function _smsStreet(r, lang){
    'final' maps to the t3 body, which is written as a genuine last message; the retire ledger is
    what lets that promise be true rather than a line of copy. */
 function _defaultTextTone(r){
-  const st=_textStage(r);
-  if(st==='follow') return 'followup';                      // touch 2
-  if(st==='final')  return 't3';                            // touch 3 — the last one
-  if(st==='retired'||st==='replied') return st;             // callers must refuse to compose
-  if(typeof r.days==='number' && r.days>=0 && r.days<=14 && r.st!=='LP') return 'urgent';
-  return 'cold';                                            // touch 1
+  /* The RULE moved next to the bodies it selects (_textTone), so Call Mode picks the same rung
+     from its own stage count instead of re-deriving one. This function stays the board's entry
+     point: it is what knows how to read a board row. */
+  return _textTone(_textStage(r), r.days, r.st==='LP');
 }
 /* Email retargeting counterpart of _defaultTextTone. Counts confirmed OUTBOUND email touches and
    spots an inbound reply (the OWNER REPLIED marker shares ch:'email' — it is inbound, not a send).
@@ -6070,6 +6068,43 @@ function smsMsg(r, lang, tone){
   const nameES = 'Hola'+(first?' '+first:'')+', le escribe '+sN+' de Biscayne Solutions Group. Trabajamos con dueños en ejecución hipotecaria, todo bajo un mismo techo.';
   const disclEN = " Not a lender, not a rescue company, nothing to sign.";
   const disclES = ' No soy prestamista ni compañía de rescate, y no hay nada que firmar.';
+  /* THE BODIES THEMSELVES LIVE IN _textBodies, one level down and PURE — no row, no notes, no
+     sender store. That is what lets Call Mode run these exact bytes: call_mode.extract_text_js()
+     lifts the region at build time, the same way extract_funnel_js lifts the lane classifier. A
+     second copy of this copy on the phone would be a fourth text vocabulary; the phone already
+     carries its own after-call ladder, and the batch script has to be the SAME script. */
+  const B = _textBodies({first: first, sender: sN, stEN: stEN, stES: stES,
+                         td: td, lp: lp, tone: tone});
+  if(lang==='en') return B.en;
+  if(lang==='es') return B.es;
+  return B.en+'\n\n'+B.es;
+}
+/* ══════ TEXT BODIES — ONE SOURCE FOR THE BOARD AND THE PHONE ══════════════════════════════════
+   EXTRACTED, NOT COPIED (call_mode.extract_text_js, anchored on the two function lines below).
+   The board's text batch bakes smsMsg() into every TEXTQ row; Call Mode's batch chip calls
+   _textBodies directly with its own row accessors. Both run these bytes, so the script Alejandro
+   approves on the laptop is the script that leaves the phone.
+
+   PURE ON PURPOSE. Everything row-shaped (owner name, street, sale date, filing type, stage) is
+   resolved by the CALLER and passed in — the board from r.owners/r.addr/r.st, the phone from
+   r.on/r.a/r.st. Adding a row lookup in here is what would break the extraction, because the two
+   pages do not share a row shape and never will. */
+/* Which body a lead gets. Split out of _defaultTextTone so the phone picks the same rung from its
+   own stage count: the board passes _textStage(r), Call Mode passes textStage(r), and both hand in
+   days-to-sale plus whether the filing is a lis pendens. 'retired'/'replied' pass straight through
+   because both callers must REFUSE to compose, not quietly fall back to the cold body. */
+function _textTone(stage, days, isLP){
+  if(stage==='follow') return 'followup';                    // touch 2
+  if(stage==='final')  return 't3';                          // touch 3 — the last one
+  if(stage==='retired'||stage==='replied') return stage;     // callers must refuse to compose
+  if(typeof days==='number' && days>=0 && days<=14 && !isLP) return 'urgent';
+  return 'cold';                                             // touch 1
+}
+function _textBodies(o){
+  o = o || {};
+  const sN = o.sender || '', first = o.first || '', tone = o.tone || 'cold';
+  const stEN = o.stEN || 'your property', stES = o.stES || 'su propiedad';
+  const td = !!o.td, lp = !!o.lp;
   const stopEN = '';
   const stopES = '';
   let en, es;
@@ -6134,9 +6169,7 @@ function smsMsg(r, lang, tone){
        + ' más de 30 años, le da opciones gratis en 5 minutos. ¿Qué quiere hacer con la'
        + ' casa?'+stopES;
   }
-  if(lang==='en') return en;
-  if(lang==='es') return es;
-  return en+'\n\n'+es;
+  return {en: en, es: es};
 }
 function _smsHref(ph, msg){
   // Phone Link (Windows) + iOS/Android Messages: sms:+1…?body=
