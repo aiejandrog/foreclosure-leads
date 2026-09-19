@@ -12388,12 +12388,46 @@ function _balloonChip(days){
   if(days<=90)   return {t:'matures in '+days+' days (est.)', c:'#7a5a10', bg:'#f4e5a7'};
   return {t:'est. maturity in '+days+' days', c:'#5b6472', bg:'#f6f8fa'};
 }
+// WHICH NUMBERS THE MORNING WORKER MAY DIAL. The card's first phone is what doCall() dials, what
+// the Call list hands him and what PERSISTQ re-bakes tomorrow -- so it has to be the OWNER's
+// number. The build already knows which one that is: r.phsrc tags every number's source ('ag' the
+// lead's own listing agent, 'xl' an office number sitting on 3+ different owners, 'hh' a household
+// member, 'nm' a namesake) and r.phbest is the index phone_rank put first. This path read NEITHER,
+// so it dialed phones[0] whatever phones[0] happened to be -- on 2026-09-19 a 561 number
+// skip-traced onto a lead reached Andre, a Compass listing agent, while the card showed the
+// homeowner's name and the script opens "Hi <first name>".
+//
+// Same rule call_mode.py:1520 already applies to the phone page's dial queue, quoted here so the
+// two cannot drift: drop 'ag'/'xl' outright, KEEP 'hh'/'nm' (reaching the owner through the
+// household is the reason those numbers were kept at all, and phone_rank has already scored them
+// below the owner's own), then lead with phbest. textablePhones() enforced this for the SEND path
+// on 2026-09-19; the dial path was left on the old rule, which is the half that reaches a person.
+//
+// A lead whose only numbers are an agent's now has NO phone here, which is correct and not a loss:
+// channels() falls it through to the Lookup / skip-trace step instead of parking it in a call queue
+// it cannot honestly serve. The board row still shows every number, tagged and dialable -- a call
+// to the listing agent belongs there.
+function _workerPhones(r){
+  var _badph = ((notes[r.case]||{}).badph||[]).map(function(b){ return String(b).replace(/\D/g,''); });
+  var keep = [];
+  (r.phones||[]).forEach(function(p, ix){
+    if(!p) return;
+    if((r.phdnc||[])[ix]) return;
+    if(_badph.indexOf(String(p).replace(/\D/g,'')) > -1) return;
+    if(['ag','xl'].indexOf(String((r.phsrc||[])[ix]||'')) > -1) return;
+    keep.push({i:ix, p:p});
+  });
+  // phbest FIRST, the rest in build order. Array.sort is stable, so this moves exactly one entry.
+  var b = r.phbest;
+  if(b!=null && keep.some(function(x){ return x.i===b; }))
+    keep.sort(function(x,y){ return (y.i===b?1:0) - (x.i===b?1:0); });
+  return keep.map(function(x){ return x.p; }).slice(0,3);
+}
 // One lead -> the slim card object the worker tab renders. Kept deliberately small: three lanes
 // of these get serialized into the document, so anything not on screen stays out.
 function _workerCard(r){
   var f = _docFields(r); var days = _saleDays(r); var chip = (r.st==='BAL' && r.bal) ? _balloonChip(r.bal.days) : _urgencyChip(days);
-  var _badph = ((notes[r.case]||{}).badph||[]).map(function(b){ return String(b).replace(/\D/g,''); });
-  var phList = (r.phones||[]).filter(function(p,i){ return p && !((r.phdnc||[])[i]) && _badph.indexOf(String(p).replace(/\D/g,''))<0; }).slice(0,3);
+  var phList = _workerPhones(r);
   // Reply state rides the card. If skiptrace never found a number but the owner TYPED one into
   // their reply, that number becomes the card's phone — it is the freshest, most consented
   // number the system will ever hold for this person.
@@ -12497,7 +12531,14 @@ function genMorningWorker(lane, autostart){
       var r = byCase[x.c];
       if(!r || !_workerEligible(r)) return;                 // dead/optout/passed leads drop off
       var _psms=''; try{ var _tp=textablePhones(r); if(_tp.length) _psms=_smsHref(_tp[0], smsMsg(r,'both',_defaultTextTone(r))); }catch(e){}
-      persistq.push({c:x.c, name:x.nm||x.c, phone:x.ph||((r.phones||[])[0]||''), addr:(r.addr||''), sms:_psms, judg:(r.judg||0), wp:(r.peopleaddr||r.people||''), _lt:_lastTouchMs(x.c), _ts:(+x.ts||0)});
+      // THE QUEUED NUMBER IS RE-VETTED, not trusted. fcCallQueue is durable and add-only, so a row
+      // queued by a pre-phsrc build carries whatever phones[0] was that day -- a listing agent's
+      // number included. Keep x.ph only when the current build still lists it among this owner's
+      // numbers (_workerPhones); otherwise fall to the owner's best, or to none at all, which the
+      // queue row already renders as "no number, use Lookup".
+      var _wph = _workerPhones(r), _xd = String(x.ph||'').replace(/\D/g,'');
+      var _qph = (_xd && _wph.some(function(n){ return String(n).replace(/\D/g,'')===_xd; })) ? x.ph : (_wph[0]||'');
+      persistq.push({c:x.c, name:x.nm||x.c, phone:_qph, addr:(r.addr||''), sms:_psms, judg:(r.judg||0), wp:(r.peopleaddr||r.people||''), _lt:_lastTouchMs(x.c), _ts:(+x.ts||0)});
     });
   } catch(e){}
   /* LEAST-RECENTLY-CONTACTED FIRST — the other half of the carousel. ---------------------------
@@ -12621,6 +12662,25 @@ function genMorningWorker(lane, autostart){
     +   '.mwbridge.up{background:#eaf5ec;border:1px solid #bfe0c8;color:#286c34}'
     +   '.mwbridge.down{background:#fffdf3;border:1px solid #eadb9f;color:#7a5a10}'
     +   '.mwbridge code{background:rgba(0,0,0,.06);padding:1px 5px;border-radius:3px;font-size:11.5px}'
+    // ---- RUN CONTROL BAR. Lives OUTSIDE #mwmain on purpose: #mwmain is rewritten on every lead,
+    // every pace screen and every confirm screen, so a Stop button inside it would disappear for
+    // most of the run -- which is exactly why there was nowhere to put one before.
+    +   '.mwrun{display:flex;align-items:center;gap:10px;flex-wrap:wrap;border-radius:10px;'
+    +     'padding:10px 13px;margin:0 0 14px;font:12.5px/1.45 "Segoe UI",Arial,sans-serif;'
+    +     'background:#fff;border:1px solid #e2e6ee}'
+    +   '.mwrun.on{background:#f3f7ff;border-color:#9fc0f5;box-shadow:0 0 0 3px rgba(29,78,216,.10)}'
+    +   '.mwrun .rtx{flex:1 1 200px;min-width:0;color:#334155}'
+    +   '.mwrun .rtx b{color:#0e1b33}'
+    +   '.mwrun button{border:1px solid #d5dae4;border-radius:8px;background:#fff;color:#0e1b33;'
+    +     'font:800 12.5px "Segoe UI",Arial,sans-serif;padding:9px 14px;cursor:pointer}'
+    +   '.mwrun button:hover{border-color:#0B1730}'
+    +   '.mwrun button[disabled]{opacity:.38;cursor:default}'
+    +   '.mwrun button.go{background:#c6a14b;border-color:#c6a14b;color:#0B1730}'
+    +   '.mwrun button.all{background:linear-gradient(180deg,#1d4ed8,#1e3a8a);border-color:#3b82f6;color:#fff}'
+    +   '.mwrun button.stop{background:#b3372f;border-color:#b3372f;color:#fff}'
+    +   '.mwrun .dot{width:9px;height:9px;border-radius:50%;flex:none;background:#c6cbd6}'
+    +   '.mwrun.on .dot{background:#1d4ed8;animation:mwpulse 1.1s infinite}'
+    +   '@keyframes mwpulse{0%,100%{opacity:1}50%{opacity:.25}}'
     // Call button + disposition bar. Green like Text (both are phone channels), but full-width
     // and first so the eye lands on it before email.
     +   '.mwbtn.call{background:#1f7a44;color:#fff;border-color:#1f7a44}'
@@ -12693,6 +12753,11 @@ function genMorningWorker(lane, autostart){
     // attempting a send and watching it fail — so the operator could work a whole queue in
     // Gmail-compose mode without realising the terminal was closed. Now it says so up front.
     +   '<div id="mwbridge" class="mwbridge probing">checking send bridge&hellip;</div>'
+    // START / STOP. Outside #mwmain so neither a lead repaint nor a confirm screen can take it
+    // away mid-run, and its buttons are driven by the document-level click delegate (data-run),
+    // never by a property handler on a node innerHTML will re-parse -- the 2026-09-18 dead-button
+    // class. Painted by renderRunBar().
+    +   '<div id="mwrunbar" class="mwrun"></div>'
     +   '<div id="mwmain"></div>'
     // CALL LIST — phone-only leads the auto-run CANNOT email and must NOT auto-text (no browser
     // sends SMS; auto-texting cold leads is an FTSA/TCPA violation). Auto-run parks them here as
@@ -12739,10 +12804,35 @@ function genMorningWorker(lane, autostart){
     // the worker tab regains focus, the send is finished, so advance ~1.5s later. The timer is only
     // a fallback for when he never comes back (walked away, or the composer never opened).
     +   'var i=0, auto=false, paceMs=8000, tick=null, healing=null, awaitingReturn=false, sentAt=0;'
+    /* IS A SEND STILL OUT THERE? A fetch to /send cannot be recalled, so Stop deliberately lets an
+       in-flight message finish and record itself truthfully. That opens one narrow hole: Stop, then
+       Start again before the bridge answers, re-works the SAME lead -- a second /send for the same
+       person and two advance() calls, so one lead is emailed twice and the next is skipped entirely.
+       That is the 2026-08-13 duplicate-send shape (51 people got the same message twice) arriving
+       by a different door, and this file's whole posture is that a duplicate to a homeowner in
+       foreclosure reads as a bot. The bridge's own 24h dedupe would probably catch it with a 409,
+       but "probably, on the server" is not where this belongs.
+       Time-boxed rather than timer-cleared: a fetch that never settles must not wedge Start for the
+       rest of the morning, and 30s is well past any real bridge response. */
+    +   'var sending=false, sendingAt=0;'
+    +   'function sendInFlight(){ return sending && (Date.now()-sendingAt) < 30000; }'
+    // EVERY TIMER THAT CAN RESTART THE LOOP HAS A HANDLE, because Stop has to be able to cancel it.
+    // advance() schedules the next lead 700ms out and hopNextLane() 900ms out; before this they
+    // were fire-and-forget, so a Stop pressed inside that window was overtaken by its own pending
+    // timer and the run carried on into the next lead. runOne() re-checks `auto` as well -- belt
+    // and braces, because a missed handle here means an unstoppable sender.
+    +   'var nextStep=null, ASTIMER=null, ASBOX=null;'
     // balloon appended 2026-09-08 (investor refi lane). LAST on purpose: it shares an alias ramp
     // with `active`, so active's homeowner cold sends take the daily cap first and balloon gets
     // the remainder (409 alias_cap = skip, not stop). auto-run's next-lane walk skips empty lanes.
-    +   'var autoAll=false, LANE_ORDER=["replied","urgent","active","early","balloon"];'
+    // ...and LANE_ORDER is FILTERED BY WHAT IS ACTUALLY BAKED. genMorningWorker bakes four queues
+    // (replied/urgent/active/early); `balloon` has a WORKER_LANES entry, a _workerQueue sort and a
+    // senders.json alias but is not in the bake, so LANES.balloon is undefined. Walking a name that
+    // does not exist is harmless in the hop (laneCount returns 0) but it made "Auto-run ALL lanes"
+    // a claim the code could not keep, and LMETA lookups on a missing lane are one edit away from
+    // throwing mid-run. Derive the order from the bake so the label and the walk always agree.
+    +   'var autoAll=false, LANE_ALL=["replied","urgent","active","early","balloon"];'
+    +   'var LANE_ORDER=LANE_ALL.filter(function(k){ return !!LANES[k]; });'
     +   'function laneCount(k){ return (LANES[k]||[]).length; }'
     +   'function allTotal(){ var n=0; LANE_ORDER.forEach(function(k){ n+=laneCount(k); }); return n; }'
     +   'var main=document.getElementById("mwmain"), prog=document.getElementById("mwprog"),'
@@ -12819,7 +12909,9 @@ function genMorningWorker(lane, autostart){
     +       'For one-click, run <code>python send_server.py</code> and reopen this tab.";'
     +     '}'
     +   '}'
-    +   'function bridgeUp(ok){ if(BRIDGE_OK!==ok){ BRIDGE_OK=ok; renderBridge(); } }'
+    // renderRunBar too: the Start buttons are disabled until the bridge is confirmed up, so the
+    // bar has to change the moment the probe answers or it offers a button that refuses to run.
+    +   'function bridgeUp(ok){ if(BRIDGE_OK!==ok){ BRIDGE_OK=ok; renderBridge(); renderRunBar(); } }'
     +   'function probeBridge(){'
     +     'var ac = (typeof AbortController!=="undefined") ? new AbortController() : null;'
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
@@ -13050,10 +13142,15 @@ function genMorningWorker(lane, autostart){
     +   'function textBatchStart(){'
     +   'if(!TEXTQ.length){ addLog("fail","batch","text queue is empty — leads join it during a run (phone-only with a textable number)","warn"); return; }'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — texting is closed. Call instead, or run the batch after 8 AM ET.","warn"); return; }'
-    +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; textBatchStep();'
+    +     'tbOn=true; TBI=0; TBSENT=0; TBSKIP=0; renderRunBar(); textBatchStep();'
     +   '}'
     +   'function textBatchStep(){'
+    // A Stop clears tbOn and has already repainted the screen and written the log line, so a step
+    // queued behind it (the confirm-screen handlers call back into here) must not resurrect the
+    // batch on top of it.
+    +     'if(!tbOn) return;'
     +     'if(TBI>=TEXTQ.length) return textBatchDone();'
+    +     'renderRunBar();'
     +     'var g=_wftsa(); if(!g.safe){ addLog("fail","batch","⏰ "+g.label+" — batch stopped mid-run. Resume after 8 AM ET.","warn"); return textBatchDone(); }'
     +     'if(sentToday()>=CAP.max){ addLog("fail","batch","⛔ daily send cap reached ("+CAP.max+") — stop texting, keep calling.","warn"); return textBatchDone(); }'
     +     'var x=TEXTQ[TBI], body="";'
@@ -13079,7 +13176,7 @@ function genMorningWorker(lane, autostart){
     +     'tbOn=false;'
     +     'main.innerHTML="<div class=\'mwdone\'><h2>&#x2705; Text batch done</h2><div class=\'stats\'>Sent <b>"+TBSENT+"</b> &middot; skipped <b>"+TBSKIP+"</b><br><span style=\'font-size:12px;opacity:.75\'>Skipped leads stay in tomorrow&rsquo;s queue.</span></div></div>";'
     +     'addLog("done","batch","text batch finished — "+TBSENT+" sent, "+TBSKIP+" skipped");'
-    +     'renderTextQ();'
+    +     'renderTextQ(); renderRunBar();'
     +   '}'
     // OPEN FROM THIS TAB, VERIFY IT ACTUALLY OPENED. The old flow posted to the board tab and let
     // IT call window.open — but the user's click happened HERE, so the board tab had no user
@@ -13142,9 +13239,11 @@ function genMorningWorker(lane, autostart){
     // before the fetch, and because addLog increments STATS[kind], a single successful send
     // charged the 50/day cap TWICE — effective ceiling 25 — and every failed attempt still
     // charged 1. Log only what actually resolved.
+    +     'sending=true; sendingAt=Date.now();'
     +     'fetch("http://127.0.0.1:8823/send", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)})'
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
+    +         'sending=false;'
     +         'if(x.status===200 && x.j.ok){'
     +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
     +           'post("sent", {mid:x.j.message_id||"", via:"bridge", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
@@ -13194,6 +13293,7 @@ function genMorningWorker(lane, autostart){
     +         '}'
     +       '})'
     +       '.catch(function(err){'
+    +         'sending=false;'
     +         'bridgeUp(false);'
     // AUTO-RUN: never open a Gmail composer or wait on a confirm click — that is precisely the
     // "composer emails" experience the operator told us to stop producing. The bridge going down
@@ -13476,8 +13576,16 @@ function genMorningWorker(lane, autostart){
     +   'document.addEventListener("visibilitychange", function(){ if(!document.hidden) onBack(); });'
     +   'function advance(){'
     +     'i++;'
-    +     'if(auto && i<Q.length){ setTimeout(runOne, 700); return; }'
+    +     'if(auto && i<Q.length){ nextStep=setTimeout(runOne, 700); return; }'
     +     'if(auto && autoAll && i>=Q.length && hopNextLane()) return;'
+    /* THE RUN IS OVER, SO SAY SO. `auto` was set by Start and cleared by a lane switch, by pause()
+       and by the cap card -- but NOT by reaching the end of the queue. So after a lane finished
+       normally, `auto` stayed true forever, and the re-entrancy gate in startRun then refused every
+       later Start with "already running — ignored a duplicate start" on a run that had ended. The
+       gate's own comment claimed `auto` is cleared by "stop/lane-switch/queue-end"; queue-end was
+       the one that was not true. Surfaced by driving the loop under node (_autorunstoptest 3a):
+       six leads out of six delivered and `auto` still set. */
+    +     'if(auto && i>=Q.length){ auto=false; autoAll=false; }'
     +     'render();'
     +   '}'
     +   'function hopNextLane(){'
@@ -13491,11 +13599,134 @@ function genMorningWorker(lane, autostart){
     +     'var sub=document.querySelector(".mwtitle .sub");'
     +     'if(sub) sub.textContent=LMETA[nxt].ic+" "+LMETA[nxt].t+" \u00b7 "+LMETA[nxt].d+" \u00b7 all tiers \u00b7 not touched in 72h";'
     +     'addLog("open","ALL LANES","✓ "+LMETA[prev].t+" lane clear → moving to "+LMETA[nxt].t+" ("+Q.length+" queued)");'
-    +     'render(); setTimeout(runOne, 900); return true;'
+    +     'render(); nextStep=setTimeout(runOne, 900); return true;'
     +   '}'
-    +   'function pause(){ auto=false; render(); }'
-    +   'function runOne(){ if(i>=Q.length) return render(); var r=Q[i]; prog.textContent=(i+1)+" of "+Q.length; attempt(r,0,0); }'
-    +   'function render(){'
+    // ---- THE RUN BAR -------------------------------------------------------------------------
+    // What is running, what is left, and the one control that stops it. Painted into #mwrunbar,
+    // which sits OUTSIDE #mwmain, so it survives every lead repaint, pace screen and confirm
+    // screen -- the reason a Stop button had nowhere to live before.
+    +   'function renderRunBar(){'
+    +     'var box=document.getElementById("mwrunbar"); if(!box) return;'
+    +     'var left=Math.max(0,Q.length-i), capLeft=Math.max(0,CAP.max-sentToday()), txt, btns;'
+    +     'if(ASTIMER){'
+    +       'txt="<b>Auto-run is about to start by itself</b> &middot; "+Q.length+" queued in "+esc(LMETA[lane].t)+".";'
+    +       'btns="<button class=\'stop\' data-run=\'stop\'>&#9632; Cancel</button>";'
+    +     '} else if(tbOn){'
+    +       'txt="<b>Text batch running</b> &middot; "+Math.min(TBI+1,TEXTQ.length)+" of "+TEXTQ.length'
+    +         '+" &middot; "+TBSENT+" sent, "+TBSKIP+" skipped &middot; "+capLeft+" of today’s cap left.";'
+    +       'btns="<button class=\'stop\' data-run=\'stop\'>&#9632; Stop the batch</button>";'
+    +     '} else if(auto){'
+    +       'txt="<b>Auto-run "+(autoAll?"ALL lanes":esc(LMETA[lane].t))+"</b> &middot; lead "'
+    +         '+Math.min(i+1,Q.length)+" of "+Q.length+" &middot; "+left+" left in this lane &middot; "'
+    +         '+capLeft+" of today’s cap left.";'
+    +       'btns="<button class=\'stop\' data-run=\'stop\'>&#9632; STOP the run</button>";'
+    +     '} else {'
+    +       'var off=(BRIDGE_OK!==true);'
+    +       'txt=Q.length ? ("<b>"+left+" to work in "+esc(LMETA[lane].t)+"</b>"+((i&&left)?" (resumes at lead "+(i+1)+")":"")+" &middot; "+capLeft+" of today’s cap left.")'
+    +         ': ("<b>Nothing queued in "+esc(LMETA[lane].t)+".</b> Pick another lane above.");'
+    +       'if(off) txt+=" <span style=\'color:#8a6d1f\'>Send bridge is not up, so auto-run cannot start &mdash; run <code>send_server.py</code>.</span>";'
+    +       'btns="<button class=\'go\' data-run=\'lane\'"+((!left||off)?" disabled":"")+">&#9654; Auto-run this lane</button>"'
+    +         '+"<button class=\'all\' data-run=\'all\'"+((!allTotal()||off)?" disabled":"")+">&#9654;&#9654; All lanes ("+allTotal()+")</button>";'
+    +     '}'
+    +     'box.className="mwrun"+((auto||tbOn||ASTIMER)?" on":"");'
+    +     'box.innerHTML="<span class=\'dot\'></span><span class=\'rtx\'>"+txt+"</span>"+btns;'
+    +   '}'
+    /* ---- startRun: ONE start path ------------------------------------------------------------
+       The bridge gate, the re-entrancy gate and the log lines used to live inline inside the
+       .mwbtn delegate, reachable only from the lead card. The run bar needs the identical gates,
+       and a second copy of them is how two paths drift -- so the block is extracted here and both
+       callers go through it. Re-entrancy is checked FIRST now: a double-tap while a run is going
+       should say "already running", not complain about the bridge.
+
+       RE-ENTRANCY GATE, carried over verbatim in intent. Without it, a second click -- a double-tap,
+       an impatient second press, or one click with the listener bound twice -- starts a SECOND loop
+       over the same Q with the same shared index, and both loops send to the same lead. Measured
+       live 2026-08-13: two "auto-run ALL started" lines one second apart, then 146 sends that
+       reached only 200 unique recipients because 51 people were emailed the SAME message twice. A
+       duplicate to a homeowner in foreclosure reads as a bot and burns the daily cap at double rate
+       for no extra coverage. One run at a time, always. `auto` is cleared by stopRun, pause, the
+       lane switch and the end of the queue, so this cannot wedge.
+
+       BRIDGE GATE. Auto-run must never degrade into a wall of Gmail-compose-and-confirm popups --
+       the exact "composer emails" experience the operator told us to stop producing. If the bridge
+       is not confirmed up, refuse to start and say how to fix it. */
+    +   'function startRun(all, src){'
+    +     'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
+    +     'if(tbOn){ addLog("fail","auto-run","the text batch is running — stop it first, then start the lane run","warn"); return; }'
+    +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight from the last run — it will finish and be recorded on its own. Press Start again in a moment.","warn"); return; }'
+    +     'if(BRIDGE_OK!==true){'
+    +       'addLog("fail","auto-run","⛔ send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.","warn");'
+    +       'return;'
+    +     '}'
+    +     'if(i>=Q.length){ addLog("fail","auto-run","nothing left to work in "+LMETA[lane].t+" — pick a lane with leads in it.","warn"); return; }'
+    +     'if(sentToday()>=CAP.max){ addLog("fail","auto-run","⛔ daily send cap already reached — auto-run NOT started. Keep calling; calls are not capped.","warn"); return; }'
+    +     'autoAll=!!all; auto=true;'
+    +     'if(autoAll){ addLog("open","ALL LANES","▶▶ auto-run ALL started ("+(src||"button")+") — "+LMETA[lane].t+" first, then the rest: "+LANE_ORDER.map(function(k){return LMETA[k].t+" ("+laneCount(k)+")";}).join(" → ")+"."); }'
+    +     'else { addLog("open", (Q[i]&&(Q[i].first||Q[i].owner))||"", "auto-run started ("+(src||"button")+") — "+LMETA[lane].t+" ONLY, "+Math.max(0,Q.length-i)+" leads queued"); }'
+    +     'renderRunBar();'
+    +     'runOne();'
+    +   '}'
+    /* ---- stopRun: halt cleanly, between items ------------------------------------------------
+       There was NO stop control. Once a run started, the only ways out were switching lane (which
+       throws away your place in the queue), letting the lane run to the end, or closing the tab --
+       and pause() existed but was only ever reached by doSend's cap / auth / bridge-offline
+       branches. Alejandro asked for the button; this is it, plus the guarantee it has to carry.
+
+       WHAT STOP DOES NOT DO IS INVENT OR LOSE A RECORD.
+         - A /send already in flight cannot be recalled: that message really is going, so its own
+           .then still posts "sent" with the cap charge it earned, and advance() then finds
+           auto=false and simply renders. The ledger stays true.
+         - Everything that has not reached the bridge stays exactly as it was: no post("sent"), no
+           post("text"), no autoLog, no cap charge, no retire. Every unworked lead is still owed a
+           contact and comes back on the next open, in the #31 least-recently-contacted order.
+         - Stopping on a confirm screen is the same: the composer-open was already logged as an
+           ATTEMPT, and declining to confirm it is the honest outcome, not a lost send.
+       `i` is preserved, so Start resumes from the lead the run stopped on rather than the top. */
+    +   'function stopRun(src){'
+    +     'var wasAuto=!!(auto||autoAll), wasBatch=!!tbOn, wasStarting=!!ASTIMER;'
+    +     'auto=false; autoAll=false; awaitingReturn=false; tbOn=false;'
+    +     'clearInterval(tick); tick=null;'
+    +     'if(healing){ clearTimeout(healing); healing=null; }'
+    +     'if(nextStep){ clearTimeout(nextStep); nextStep=null; }'
+    +     'try{ clearTimeout(window.__cfWatch); }catch(e){}'
+    +     'if(ASTIMER){ clearInterval(ASTIMER); ASTIMER=null; }'
+    +     'if(ASBOX){ try{ ASBOX.remove(); }catch(e){} ASBOX=null; }'
+    +     'if(wasStarting){ addLog("skip","auto-start","auto-run cancelled before it started ("+(src||"stop")+") — the queue is untouched, press Start when you are ready"); }'
+    +     'else if(wasBatch){ addLog("skip","batch","■ text batch STOPPED ("+(src||"stop")+") — "+TBSENT+" sent, "+TBSKIP+" skipped, "+Math.max(0,TEXTQ.length-TBI)+" still queued. Nothing was marked sent that was not."); }'
+    +     'else if(wasAuto){ addLog("skip","auto-run","■ auto-run STOPPED ("+(src||"stop")+") at lead "+Math.min(i+1,Q.length)+" of "+Q.length+" in "+LMETA[lane].t+" — "+Math.max(0,Q.length-i)+" left, still queued. Nothing was marked sent that was not. Press Start to resume from here."+(sendInFlight()?" One email was already handed to the bridge and will finish sending — it is logged when it lands.":"")); }'
+    +     'else { addLog("info","auto-run","stop pressed with nothing running"); }'
+    +     'render();'
+    +   '}'
+    // pause() is stop's quiet sibling: the run halted itself (cap, SMTP auth, bridge offline) and
+    // the caller has already written the sentence explaining why. Clear the pending next-lead timer
+    // for the same reason stopRun does, or the 700ms hop restarts the run the caller just stopped.
+    +   'function pause(){ auto=false; autoAll=false; if(nextStep){ clearTimeout(nextStep); nextStep=null; } render(); }'
+    +   'function runOne(){'
+    // STOP IS AUTHORITATIVE. advance() and hopNextLane() schedule the next lead on a timer; if the
+    // operator stops inside that window the timer still fires, so the loop has to re-check here
+    // rather than trust that nothing is pending. Same guard covers the cap card and a lane switch.
+    +     'if(!auto) return render();'
+    +     'if(i>=Q.length) return render();'
+    /* REPAINT THE LEAD BEING WORKED. #mwmain was written once, when the run started, and then never
+       again for the rest of the run: doSend() resolves without touching it, and the callq and wp
+       branches return straight through advance(). So an entire auto-run sat on the FIRST lead's card
+       while the log scrolled behind it. Two consequences, both of which read as "the auto run
+       buttons don't work":
+         1. the screen looked frozen -- the only moving part was the progress chip in the header;
+         2. the stale card's own buttons were live and read Q[i] from the delegate, so pressing Call
+            under lead 1's name and phone number dialled whichever lead the run had actually reached.
+       Rendering per lead also re-runs render()'s cap check, so a run that crosses the ceiling
+       mid-queue stops on the lead that crosses it. */
+    +     'render();'
+    +     'if(!auto) return;'                      // render() hit the cap, showed the card, cleared auto
+    +     'var r=Q[i]; if(!r) return render();'
+    +     'attempt(r,0,0);'
+    +   '}'
+    // render() is wrapped: _renderMain() paints #mwmain and returns from a dozen places, and the
+    // run bar has to follow the same state on every one of them. One wrapper beats a renderRunBar()
+    // call before each return -- the shape that lets one branch quietly keep a stale bar.
+    +   'function render(){ _renderMain(); renderRunBar(); }'
+    +   'function _renderMain(){'
     +     'clearInterval(tick); if(healing) clearTimeout(healing);'
     +     'if(BOUNCE && BOUNCE.blocked && !document.getElementById("mwbounceban")){'
     +     'var bb=document.createElement("div"); bb.id="mwbounceban";'
@@ -13596,8 +13827,14 @@ function genMorningWorker(lane, autostart){
     +         '+"<div><div class=\'k\'>Phone / Email</div><div class=\'v\'>"+ph+" · "+em+"</div></div>"'
     +       '+"</div>"'
     +       '+"<div class=\'mwacts\'>"'
-    +         '+"<button id=\'mw-auto\' class=\'mwbtn done\' data-fn=\'auto\' style=\'grid-column:1/-1\'>&#9654; Auto-run THIS lane — "+LMETA[lane].t+"<span class=\'sub\'>"+Q.length+" queued · stops when this lane is clear</span></button>"'
-    +         '+"<button id=\'mw-autoall\' class=\'mwbtn done\' data-fn=\'autoall\' style=\'grid-column:1/-1;background:linear-gradient(180deg,#1d4ed8,#1e3a8a);border-color:#3b82f6\'>&#9654;&#9654; Auto-run ALL lanes<span class=\'sub\'>"+LMETA.urgent.ic+laneCount("urgent")+" &rarr; "+LMETA.active.ic+laneCount("active")+" &rarr; "+LMETA.early.ic+laneCount("early")+" · "+allTotal()+" total · one run, all logged here</span></button>"'
+    // Start and Stop are never both on the card: while a run is going the same slot carries STOP,
+    // so the only auto control on screen is the one that applies. The run bar above carries the
+    // same pair and is the copy that survives a repaint -- this one is here because the card is
+    // where the eye already is.
+    +         '+(auto'
+    +           '? "<button id=\'mw-stop\' class=\'mwbtn dnc\' data-fn=\'stop\' style=\'grid-column:1/-1\'>&#9632; STOP the run<span class=\'sub\'>halts after this lead · nothing already sent is undone · resumes where it stopped</span></button>"'
+    +           ': "<button id=\'mw-auto\' class=\'mwbtn done\' data-fn=\'auto\' style=\'grid-column:1/-1\'>&#9654; Auto-run THIS lane — "+LMETA[lane].t+"<span class=\'sub\'>"+Math.max(0,Q.length-i)+" queued · stops when this lane is clear</span></button>"'
+    +             '+"<button id=\'mw-autoall\' class=\'mwbtn done\' data-fn=\'autoall\' style=\'grid-column:1/-1;background:linear-gradient(180deg,#1d4ed8,#1e3a8a);border-color:#3b82f6\'>&#9654;&#9654; Auto-run ALL lanes<span class=\'sub\'>"+LANE_ORDER.map(function(k){return LMETA[k].ic+laneCount(k);}).join(" &rarr; ")+" · "+allTotal()+" total · one run, all logged here</span></button>")'
     // CALL FIRST — full width, above email. Calling is the highest-converting channel and the
     // only one with no daily cap, yet the worker had no call button at all: r.phones sat on the
     // card unused while `done` hardcoded the outcome "Called - no answer" whether or not anyone
@@ -13637,6 +13874,17 @@ function genMorningWorker(lane, autostart){
     +     'addLog("info","copy","call list copied — "+rows.length+" lead(s)");'
     +   '}'
     +   'document.addEventListener("click", function(e){'
+    // THE RUN BAR IS DRIVEN FROM HERE, not by property handlers on its own nodes. renderRunBar()
+    // rewrites #mwrunbar on every state change, so anything assigned as .onclick on those buttons
+    // would die on the next repaint -- the exact 2026-09-18 dead-button class this delegate exists
+    // to close. First in the chain because Stop must work from any screen.
+    +   'var rb=e.target.closest&&e.target.closest("[data-run]");'
+    +   'if(rb){ e.preventDefault();'
+    +     'if(rb.hasAttribute("disabled")) return;'
+    +     'var rk=String(rb.getAttribute("data-run")||"");'
+    +     'if(rk==="stop") return stopRun("run bar");'
+    +     'return startRun(rk==="all", "run bar");'
+    +   '}'
     +   'var cpl=e.target.closest&&e.target.closest("#mwcopylog");'
     +   'if(cpl){ e.preventDefault(); return _copyDay(cpl); }'
     +   'var cpq=e.target.closest&&e.target.closest("#mwcopycallq");'
@@ -13709,29 +13957,17 @@ function genMorningWorker(lane, autostart){
     +   '});'
     +   'document.addEventListener("click", function(e){'
     +     'var b=e.target.closest(".mwbtn"); if(!b||b.classList.contains("disabled"))return;'
-    +     'var fn=b.dataset.fn; if(!fn)return; var r=Q[i]; if(!r)return;'
-    // BRIDGE GATE. Auto-run must never degrade into a wall of Gmail-compose-and-confirm popups —
-    // that is the exact "composer emails" experience the operator told us to stop showing him. If
-    // the bridge is not confirmed up, refuse to start (same posture as the FTSA gate below) and
-    // say exactly how to fix it, instead of starting a run that will beg for a click on every lead.
-    +     'if(fn==="auto"||fn==="autoall"){'
-    +       'if(BRIDGE_OK!==true){'
-    +         'addLog("fail", "auto-run", "⛔ send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.", "warn");'
-    +         'return;'
-    +       '}'
-    // RE-ENTRANCY GATE. Without this, a second click — a double-tap, an impatient second press, or
-    // one click with this listener bound twice — started a SECOND loop over the same Q with the same
-    // shared index. Both loops then sent to the same lead. Measured live 2026-08-13: two "auto-run
-    // ALL started" lines one second apart, then 146 sends that reached only 200 unique recipients
-    // because 51 people were emailed the SAME message twice. A duplicate to a homeowner in
-    // foreclosure reads as a bot, and it burns the daily cap at double rate for zero extra coverage.
-    // One run at a time, always. `auto` is cleared by stop/lane-switch/queue-end, so this cannot wedge.
-    +       'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
-    +       'autoAll=(fn==="autoall"); auto=true;'
-    +       'if(autoAll){ addLog("open","ALL LANES","▶▶ auto-run ALL started — "+LMETA[lane].t+" first, then the rest. "+allTotal()+" leads across all lanes."); }'
-    +       'else { addLog("open", r.first||r.owner, "auto-run started — "+LMETA[lane].t+" ONLY, "+Q.length+" leads queued"); }'
-    +       'return runOne();'
-    +     '}'
+    +     'var fn=b.dataset.fn; if(!fn)return;'
+    // RUN CONTROLS FIRST, ABOVE THE CURRENT-LEAD GUARD. `var r=Q[i]; if(!r) return;` sat here and
+    // swallowed everything below it, which would have made a Stop button on the queue-clear screen
+    // or the cap screen silently dead -- there is no Q[i] on either. The run controls do not need a
+    // current lead; the per-lead buttons below still do.
+    +     'if(fn==="stop"){ return stopRun("card button"); }'
+    +     'if(fn==="auto"||fn==="autoall"){ return startRun(fn==="autoall", "card button"); }'
+    +     'var r=Q[i]; if(!r)return;'
+    // The bridge gate and the re-entrancy gate that used to sit inline here now live in startRun(),
+    // because the run bar starts runs too and two copies of a gate is how two paths drift. Their
+    // reasoning is kept with the code, above.
     // CALL is handled before the email/text/wp guard below — it is not one of those channels and
     // must not be filtered by their availability check.
     +     'if(fn==="call"){ return doCall(r); }'
@@ -13791,9 +14027,15 @@ function genMorningWorker(lane, autostart){
     +       'box.innerHTML="<div style=\'flex:1\'><b>Auto-run starts in <span id=\'mwcd\'>20</span>s</b> — "+Q.length+" leads queued. Emails will send automatically.</div>"'
     +         '+"<button id=\'mwcancel\' style=\'padding:9px 18px;border:0;border-radius:7px;background:#b3372f;color:#fff;font-weight:700;cursor:pointer;font-size:14px\'>Cancel</button>";'
     +       'document.body.appendChild(box);'
-    +       'var t=setInterval(function(){'
+    // COUNTDOWN STATE GOES IN THE SHARED HANDLES. The interval used to be a local `t` reachable only
+    // from this box's own Cancel button, so the run bar's Stop could not touch it: stopping during
+    // the 20s window looked like it worked and then the countdown fired anyway and started the run.
+    // ASTIMER/ASBOX put the countdown under the same stop as everything else, and renderRunBar reads
+    // ASTIMER to show Cancel while it runs.
+    +       'ASBOX=box; renderRunBar();'
+    +       'var t=ASTIMER=setInterval(function(){'
     +         'left--; var el=document.getElementById("mwcd"); if(el) el.textContent=left;'
-    +         'if(left<=0){ clearInterval(t); box.remove();'
+    +         'if(left<=0){ clearInterval(t); ASTIMER=null; ASBOX=null; box.remove(); renderRunBar();'
     // BRIDGE GATE (mirrors the manual Start-Auto button). probeBridge() fired 20s ago and its
     // 1.5s-timeout result is long since settled, so BRIDGE_OK is trustworthy here. Without this,
     // a bridge that is down at 8am does not just fail quietly — it opens a real Gmail composer
@@ -13801,15 +14043,14 @@ function genMorningWorker(lane, autostart){
     // the exact failure the operator told us to stop producing.
     +           'if(BRIDGE_OK!==true){'
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
-    +             'return;'
+    +             'renderRunBar(); return;'
     +           '}'
     +           'auto=true; addLog("open","auto-start","▶ auto-run started automatically — "+Q.length+" leads queued (8am scheduler)");'
-    +           'runOne(); }'
+    +           'renderRunBar(); runOne(); }'
     +       '},1000);'
-    +       'document.getElementById("mwcancel").addEventListener("click",function(){'
-    +         'clearInterval(t); box.remove();'
-    +         'addLog("skip","auto-start","auto-run cancelled by operator — queue is still here, press Start when ready");'
-    +       '});'
+    // Cancel goes through stopRun so the unattended start and a hand-pressed Stop leave exactly the
+    // same state behind -- one path, one set of cleared timers, one log line.
+    +       'document.getElementById("mwcancel").addEventListener("click",function(){ stopRun("countdown Cancel"); });'
     +     '})();'
     +   '}'
     + '})();<\/script>';
