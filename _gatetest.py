@@ -16,7 +16,7 @@ Builds two fixtures that differ ONLY by one access code, restores site.codes byt
 asserts the three behaviours that matter. site.codes is never left modified — the restore is in a
 finally block and the suite verifies the hash matches before reporting.
 """
-import os, re, json, shutil, hashlib, subprocess, threading, functools
+import os, re, sys, json, shutil, hashlib, subprocess, threading, functools
 import http.server
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from playwright.sync_api import sync_playwright
@@ -39,11 +39,85 @@ def rec(name, ok, note=''):
 
 def _sha(p): return hashlib.sha256(open(p, 'rb').read()).hexdigest()
 
-def _build():
+def _abort(why):
+    """A precondition this suite cannot test around. Say exactly what is wrong and STOP — never run
+    the browser phase on fixtures already known to be wrong. Exit 2 (not 1) so a caller can tell
+    "the gate is broken" from "this suite could not be run here"."""
+    print('\nABORT: ' + why)
+    raise SystemExit(2)
+
+
+def _preflight():
+    """Both inputs are gitignored and live only in the engine root, so this suite cannot run from a
+    worktree or a fresh clone — and every way it fails there is misleading. Without leads_final.json
+    make_tracker dies outright; without site.codes _load_codes() returns [] and the board builds
+    PLAINTEXT with no gate at all. Say so once, here, instead of letting it surface as a gate bug."""
+    missing = [n for n in ('site.codes', 'leads_final.json')
+               if not os.path.exists(os.path.join(HERE, n))]
+    if missing:
+        _abort('missing ' + ' and '.join(missing) + ' in ' + HERE + '.\n'
+               'Both are gitignored and exist only in the engine root, so the gate suite cannot run '
+               'from a worktree or a fresh clone. Run it from the engine checkout.')
+
+
+def _build(restoring=False):
+    """Rebuild docs/index.html from leads_final.json — and PROVE a board was actually written.
+
+    THE SECOND TIME THIS FILE CRIED WOLF. This ran with capture_output=True and neither the return
+    code nor stderr was ever read. On 2026-09-18 it was run from a test worktree, where
+    leads_final.json does not exist: make_tracker died on FileNotFoundError, docs/index.html was
+    left exactly as git checked it out, and BOTH fixtures became byte-identical copies of the
+    committed board. The suite said nothing about that and reported instead:
+
+        build signature distinguishes two builds made in the same minute | 87f4cec09e16 vs 87f4cec09e16
+        stale page tells the truth instead of blaming the code           | Wrong code…
+        stale page reloads itself exactly once                           | 0 navigation(s)
+        …then a 15s Playwright timeout waiting for the new code to unlock
+
+    87f4cec09e16 is the signature of the board committed to git at 05:41 that morning — the suite
+    was comparing the checked-in page against itself. The signature and the gate were both fine.
+    Every one of those four reds was this function returning quietly.
+
+    Same lesson as the fixed-port bug documented at PORT above: a test that cries wolf on the one
+    guard protecting against a real lockout is worse than no test. So: fail loud, with the child's
+    own stderr, and never hand a caller a fixture it did not get.
+
+    restoring=True is the rebuild in make_fixtures' finally block, which exists to leave
+    docs/index.html matching the RESTORED site.codes. It warns instead of aborting, for two
+    reasons: an abort raised from a finally silently replaces the real diagnosis that sent us
+    there, and the hazard it leaves behind needs saying out loud rather than as an exit code —
+    a failed restore leaves the fixture board, with ZZTESTHEALCODE01 baked into it, sitting in
+    docs/index.html where the next publish path would ship it.
+    """
+    out = os.path.join(HERE, 'docs', 'index.html')
+    before = _sha(out) if os.path.exists(out) else None
     e = dict(os.environ); e['DEALFLOW_NO_DESKTOP'] = '1'
-    subprocess.run(['python', '-c',
+    # sys.executable, not 'python': the interpreter running this suite is the one that has
+    # playwright and cryptography installed, and on Windows bare 'python' can resolve to the Store
+    # shim or another venv — a build that fails for a reason that has nothing to do with the gate.
+    r = subprocess.run([sys.executable, '-c',
         "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json', encoding='utf-8')))"],
-        cwd=HERE, env=e, capture_output=True)
+        cwd=HERE, env=e, capture_output=True, text=True, errors='replace')
+    if r.returncode != 0:
+        tail = '\n'.join((r.stderr or '').strip().splitlines()[-12:]) or '(no stderr)'
+        why = ('make_tracker exited %d — no board was built, so there are no fixtures to test.\n'
+               '--- make_tracker stderr (last 12 lines) ---\n%s' % (r.returncode, tail))
+        if restoring:
+            print('\nWARNING: site.codes is restored, but the rebuild that follows it failed:\n'
+                  + why + '\n>>> docs/index.html still holds the fixture board, which has '
+                  + TEST_CODE + ' baked in. Rebuild before publishing.')
+            return
+        _abort(why)
+    if not os.path.exists(out):
+        _abort('make_tracker exited 0 but docs/index.html does not exist.')
+    if restoring:
+        return
+    if before is not None and _sha(out) == before:
+        # _preflight() guarantees site.codes, so every build takes the ENCRYPTED path, whose
+        # envelope carries a fresh random master key, IV and per-code salt. Two real builds can
+        # never be byte-identical. If they are, make_tracker returned without rewriting the file.
+        _abort('make_tracker exited 0 and left docs/index.html byte-identical. No new board was '
+               'written, so both fixtures would be the same page.')
 
 def _sig(path):
     txt = open(path, encoding='utf-8', errors='replace').read(400)
@@ -52,6 +126,7 @@ def _sig(path):
 
 def make_fixtures():
     """pageA = today's access list. pageB = pageA plus one newly issued code."""
+    _preflight()          # before we touch site.codes, not after
     codes = os.path.join(HERE, 'site.codes')
     bak = os.path.join(T, 'site.codes.gatetest.bak')
     before = _sha(codes)
@@ -62,7 +137,7 @@ def make_fixtures():
             f.write('\nTest Heal = ' + TEST_CODE + '\n')
         _build(); shutil.copy(os.path.join(HERE, 'docs/index.html'), os.path.join(T, 'pageB.html'))
     finally:
-        shutil.copy(bak, codes); os.remove(bak); _build()
+        shutil.copy(bak, codes); os.remove(bak); _build(restoring=True)
     rec('site.codes restored byte-identical after fixture build', _sha(codes) == before)
     return _sig(os.path.join(T, 'pageA.html')), _sig(os.path.join(T, 'pageB.html'))
 
@@ -91,6 +166,18 @@ def main():
     # content signature. If this ever collapses, the stale check silently stops working.
     rec('build signature distinguishes two builds made in the same minute',
         bool(sigA) and bool(sigB) and sigA != sigB, f'{sigA} vs {sigB}')
+    # THE FIXTURES ARE A PRECONDITION, NOT A RESULT. Every check below asks what the gate does when
+    # a tab holds an OLDER build than the server serves. If pageA and pageB are the same build there
+    # is no such thing to observe, and the stale-page checks report the fixture bug wearing the
+    # gate's name — which is exactly what happened on 2026-09-18 (see _build). Stop here instead.
+    if not (sigA and sigB):
+        _abort('a fixture has no DEALFLOW-COVERAGE signature on its first line. docs/index.html was '
+               'built by an older make_tracker, or is not a generated board at all.')
+    if sigA == sigB:
+        _abort('the two fixtures are the same build (both sig %s), so there is no stale page to '
+               'test. The added access code did not change the payload, or docs/index.html was not '
+               'rebuilt between the two copies. Nothing below this line would be about the gate.'
+               % sigA)
 
     srv = ThreadingHTTPServer(('127.0.0.1', PORT), _H)
     port = srv.server_address[1]          # the port actually bound, never a guess
