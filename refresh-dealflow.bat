@@ -110,8 +110,11 @@ rem  "retry" below is the SAME push 6s later, which fails identically. Measured 
 rem  4 commits stacked and the LIVE SITE SAT FROZEN AT 08-14 for two days while every local
 rem  run still reported success. -X theirs mirrors .github/workflows/refresh.yml exactly.
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
+rem  %SystemRoot% path on timeout.exe, not a bare `timeout`: under a git-bash PATH the bare
+rem  name resolves to GNU coreutils timeout, which rejects /t and drops the retry backoff
+rem  entirely. Same root cause as the `find` note in repo_guard.bat.
 git push origin main >> "%LOG%" 2>&1
-  if errorlevel 1 ( timeout /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
+  if errorlevel 1 ( "%SystemRoot%\System32\timeout.exe" /t 6 /nobreak >nul & git push origin main >> "%LOG%" 2>&1 )
   rem  The site repo first - see the split note at the final publish. A failed push to THIS repo
   rem  must not keep the freshly built board off the public site.
   python -u publish_site.py >> "%LOG%" 2>&1
@@ -126,6 +129,10 @@ git push origin main >> "%LOG%" 2>&1
     echo     ^!^! MIRROR DID NOT PUBLISH - board committed here, LIVE SITE UNCHANGED.>> "%LOG%"
     echo     ^!^! The live board is the dealflow-board repo, not this one. See publish_site above.>> "%LOG%"
     echo     ^!^! MIRROR DID NOT PUBLISH - the live site is unchanged. See the run log.
+    rem  ...and carry it to the exit code, exactly as the final publish does at [5/5]. Logging a
+    rem  failure the scheduler never sees is half a fix: rc=0-while-broken is the pattern that cost
+    rem  three days on the scrape and 31 hours on this mirror. An earlier fault keeps priority.
+    if "%RUNEXIT%"=="0" set "RUNEXIT=5"
   )
   rem  Neither push's exit code was read here, so "fresh leads pushed" printed whether or not
   rem  anything reached origin. publish_verify.bat asks the remote instead of assuming, and it
@@ -487,7 +494,7 @@ rem  run still reported success. -X theirs mirrors .github/workflows/refresh.yml
 git pull --rebase --autostash -X theirs origin main >> "%LOG%" 2>&1
 git push origin main >> "%LOG%" 2>&1
 if errorlevel 1 (
-  timeout /t 6 /nobreak >nul
+  "%SystemRoot%\System32\timeout.exe" /t 6 /nobreak >nul
   git push origin main >> "%LOG%" 2>&1
 )
 rem  THE LIVE SITE IS A SEPARATE PUBLIC REPO (2026-09-17). This repo is private now, so the

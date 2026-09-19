@@ -42,6 +42,17 @@ if "%RGDIR:~-1%"=="\" set "RGDIR=%RGDIR:~0,-1%"
 set "RGLOG=%~2"
 if "%RGLOG%"=="" set "RGLOG=nul"
 
+rem  FULLY QUALIFY the Windows externals this file shells out to. Git for Windows offers an
+rem  install option ("Use Git and optional Unix tools from the Command Prompt") that puts GNU
+rem  coreutils on %PATH% AHEAD of System32 -- so a bare `find` is GNU find, which reads /i as a
+rem  start path, finds no such directory and exits non-zero. This guard then refuses a perfectly
+rem  good checkout with "wrong origin remote", and every publish path aborts at its first line.
+rem  It fails CLOSED, so nothing unsafe happens -- it just stops all publishing for a reason that
+rem  is not true, which is the most expensive kind of wrong a guard can be. Confirmed 2026-09-18
+rem  on the laptop under a git-bash PATH.
+set "RGFIND=%SystemRoot%\System32\find.exe"
+if not exist "%RGFIND%" set "RGFIND=find"
+
 rem  1. the pipeline's own files. tracker_template.html is the design source, paths.py owns every
 rem     output path, CLAUDE.md is the repo contract - a built-site folder has none of them.
 for %%F in (foreclosure_leads.py tracker_template.html paths.py CLAUDE.md) do (
@@ -74,7 +85,7 @@ if %RGN% LSS 20 (
 rem  4. origin is this project
 set "RGURL="
 for /f "delims=" %%U in ('git -C "%RGDIR%" config --get remote.origin.url 2^>nul') do set "RGURL=%%U"
-echo %RGURL% | find /i "foreclosure-leads" >nul
+echo %RGURL% | "%RGFIND%" /i "foreclosure-leads" >nul
 if errorlevel 1 (
   echo     ^!^! REPO GUARD: origin is "%RGURL%", not the foreclosure-leads remote. REFUSING.>> "%RGLOG%"
   echo     ^!^! REPO GUARD: wrong origin remote - refusing to publish.
