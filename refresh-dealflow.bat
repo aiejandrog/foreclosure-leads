@@ -444,6 +444,13 @@ python -u hardmoney_balloon.py --months 30 >> "%LOG%" 2>&1
 if errorlevel 1 (echo     note: balloon book step failed - board publish continues.>> "%LOG%")
 
 echo [gate] healthcheck + publish guard before anything goes live...
+rem  ATTRIBUTION CORRECTED 2026-09-18. Commit 7b4d61b escaped the parens on the two GATE echoes
+rem  below and its message blamed e310696. That is WRONG: e310696^ already carries them inside
+rem  this same multi-line block. git blame puts them at 244121c7 (08-20 10:01) -- the very commit
+rem  this TIERED GATE note announces. Corroborated by history: the final [5/5] stage last landed
+rem  a commit on 08-18 (b809314, 42 of them before that) and not once in the 31 days after, while
+rem  the [1b/5] early publish kept going. So this broke the final publish for a month, and
+rem  docs/hm-balloon-q7v3n8 -- staged ONLY here -- went unpublished that whole time.
 rem  TIERED GATE (2026-08-20). healthcheck exit 2 = COMPLIANCE/systemic fail (lost §362 stay flags,
 rem  or >=2 upstream sources down) -> HARD block. exit 1 = coverage-floor fail only (value/lien %) ->
 rem  ADVISORY: a fresh-filing-heavy day dips below the value floor because new MD leads have no folio
