@@ -12253,10 +12253,19 @@ function _workerQueue(lane){
     var sendable = boxes && MS !== 'replied' && MS !== 'done';
     (sendable ? _em : _ph).push(r);
   });
-  // Rotate the call-bucket window daily: callq parking writes no touch (by design), so a fixed
-  // head meant leads 61+ NEVER surfaced. A day-keyed rotation walks the whole bucket over time.
-  if(_ph.length > 60){
-    var _rot = (new Date().getDate() * 7) % _ph.length;
+  /* Rotate the call-bucket window daily: callq parking writes no touch (by design), so a fixed
+     head meant leads 61+ NEVER surfaced. A day-keyed rotation walks the whole bucket over time.
+
+     THE STRIDE MUST BE THE WINDOW, NOT SEVEN. The window handed to the operator is the first
+     _PH_WINDOW entries; stepping the offset by 7 a day moved it by 7 while it was 60 wide, so
+     consecutive mornings overlapped by 53 of 60 — 88% the same faces, which is indistinguishable
+     from no rotation at all from the operator's chair, and is most of why this reads as "never new
+     people". Stepping by the window size makes consecutive days DISJOINT and still walks the whole
+     bucket, just eight times faster. Day-of-month keyed, so it is stable across reopens of the
+     same day and needs no stored cursor. */
+  var _PH_WINDOW = 60;
+  if(_ph.length > _PH_WINDOW){
+    var _rot = (new Date().getDate() * _PH_WINDOW) % _ph.length;
     _ph = _ph.slice(_rot).concat(_ph.slice(0, _rot));
   }
   /* BOUND THE EMAIL QUEUE BY BOTH CEILINGS.
@@ -12274,7 +12283,7 @@ function _workerQueue(lane){
     if(_used + _need > _rLeft) break;
     _out.push(_em[_qi]); _used += _need;
   }
-  return _out.concat(_ph.slice(0, 60));
+  return _out.concat(_ph.slice(0, _PH_WINDOW));
 }
 /* COMPOSE THE MESSAGE ON THE BOARD — the worker tab cannot do it. --------------------------------
    The worker is a Blob document with its own global scope: DATA, genEmail, genPortfolioEmail and
@@ -12439,9 +12448,21 @@ function genMorningWorker(lane, autostart){
       var r = byCase[x.c];
       if(!r || !_workerEligible(r)) return;                 // dead/optout/passed leads drop off
       var _psms=''; try{ var _tp=textablePhones(r); if(_tp.length) _psms=_smsHref(_tp[0], smsMsg(r,'both',_defaultTextTone(r))); }catch(e){}
-      persistq.push({c:x.c, name:x.nm||x.c, phone:x.ph||((r.phones||[])[0]||''), addr:(r.addr||''), sms:_psms, judg:(r.judg||0), wp:(r.peopleaddr||r.people||'')});
+      persistq.push({c:x.c, name:x.nm||x.c, phone:x.ph||((r.phones||[])[0]||''), addr:(r.addr||''), sms:_psms, judg:(r.judg||0), wp:(r.peopleaddr||r.people||''), _lt:_lastTouchMs(x.c), _ts:(+x.ts||0)});
     });
   } catch(e){}
+  /* LEAST-RECENTLY-CONTACTED FIRST — the other half of the carousel. ---------------------------
+     PERSISTQ seeds TEXTQ and CALLQ before a single card is worked, and it used to arrive in
+     fcCallQueue INSERTION order, which is append-only and therefore frozen. The batch text station
+     walks TEXTQ from index 0 and stops at the daily cap, so the same head was served every morning
+     and anyone who joined later sat behind it permanently. The retire fix above removes a lead once
+     it is actually reached; this decides who is served FIRST among the ones still owed a contact,
+     and the honest answer is the person we have gone longest without contacting. A lead with no
+     touch at all reads 0 and sorts first, which is what puts new blood at the top of the morning.
+     Ties fall back to queue age, so the order stays deterministic within one open. */
+  persistq.sort(function(a, b){ return (a._lt - b._lt) || (a._ts - b._ts); });
+  // sort keys are scratch — drop them before the list is JSON-baked into the worker document.
+  persistq.forEach(function(x){ delete x._lt; delete x._ts; });
   // Deliverability state bakes in at open. The server refuses bulk sends past the ceiling anyway
   // (403), but the operator deserves the red screen BEFORE burning a morning, not 403-by-403.
   var bounceBaked = null;
@@ -13822,6 +13843,33 @@ window.addEventListener('message', function(ev){
   var d = ev && ev.data && ev.data.editAssignTerms; if(!d || !d.c) return;
   try{ openAssignPackage(d.c, true); }catch(e){}
 });
+/* RETIRE A CASE FROM THE DURABLE CALL QUEUE. ---------------------------------------------------
+   fcCallQueue is add-only and, until 2026-09-19, only a logged CALL OUTCOME or a bad-number report
+   ever took an entry out of it. Every other confirmed contact left the entry in place forever.
+
+   That is the whole of "why do I keep texting the same people". genMorningWorker re-bakes this
+   ledger into PERSISTQ on every open, and PERSISTQ seeds TEXTQ FIRST and IN INSERTION ORDER, so
+   the batch text station always started at the same faces in the same order. A confirmed text
+   wrote a touch (autoLog), which hid the lead for its 72h cooldown -- and then returned it to the
+   identical position at the head of the list. Same for a delivered email. New leads only ever
+   joined at the TAIL, past the daily cap, so they were never reached at all.
+
+   One helper, called from every branch that establishes a confirmed contact, so the four callers
+   can never disagree about what retires an entry. `wqx` is the tombstone that carries the retire
+   to the other devices (a deleted `wq` cannot survive _mergeLead's add-only merge). */
+function _callqRetire(caseId, n){
+  var removed = false;
+  try {
+    var q = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
+    var q2 = q.filter(function(x){ return x.c !== caseId; });
+    if(q2.length !== q.length){ localStorage.setItem('fcCallQueue', JSON.stringify(q2)); removed = true; }
+  } catch(e){}
+  try {
+    n = n || notes[caseId];
+    if(n && n.wq) n.wqx = _today();
+  } catch(e){}
+  return removed;
+}
 // listen for Morning Worker actions. The worker tab does NOT send anything itself — it posts
 // {workerAct:{c, k}} and this parent listener opens the REAL tool (genEmail / openBulkText /
 // Whitepages) in a new tab, or logs skip/done. That keeps the send flow identical to what the
@@ -13928,6 +13976,10 @@ window.addEventListener('message', function(ev){
     // A delivered email restores the full 72h pacing even if an earlier skip shortened the
     // lead's cooldown to 24h — skips govern skips, sends govern sends.
     try { (notes[r.case] = notes[r.case] || {}).cooldownH = 72; } catch(e){}
+    // ...and it retires the durable call-queue entry, for the reason in _callqRetire. A lead that
+    // was parked as "phone-only, queue to call" and has since been REACHED BY EMAIL is no longer
+    // an un-worked call; leaving it in fcCallQueue kept re-serving it ahead of everyone new.
+    try { _callqRetire(r.case, notes[r.case]); save(); } catch(e){}
 
   /* ---- 'callout' = a real call outcome -------------------------------------------------------
      Replaces the old behaviour where `done` blind-stamped every lead 'Called - no answer' whether
@@ -13952,14 +14004,9 @@ window.addEventListener('message', function(ev){
     // no-answer come back tomorrow instead of in three days, which is how a call list should work.
     n.cooldownH = hrs;
     // Any logged call outcome retires the lead from the persistent Call queue — the dial happened.
-    try {
-      var _cq2 = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
-      var _cq3 = _cq2.filter(function(x){ return x.c!==r.case; });
-      if(_cq3.length !== _cq2.length) localStorage.setItem('fcCallQueue', JSON.stringify(_cq3));
-    } catch(e){}
-    // ...and from the SYNCED queue marker, so the retire reaches every other device. Deleting
-    // n.wq cannot survive the add-only merge; the wqx tombstone can (see _mergeLead).
-    if(n.wq) n.wqx = _today();
+    // Through the shared helper, which also stamps the wqx tombstone so the retire reaches every
+    // other device (deleting n.wq cannot survive _mergeLead's add-only merge).
+    try { _callqRetire(r.case, n); } catch(e){}
     if(oc === 'appt'){
       // The single best outcome a dial can produce. Writing the status here is what makes the
       // scorecard's Appointments row move without leaving the worker — the exact gap Zuckerberg
@@ -14005,6 +14052,12 @@ window.addEventListener('message', function(ev){
     var ph = (r.phones||[])[0] || '';
     _wlog(r.case, 'text', 'confirmed sent by hand'+(ph ? ' → '+(typeof fmtPhone==='function'?fmtPhone(ph):ph) : ''), true);
     try { autoLog(r, 'text', 'texted (morning batch)'); } catch(e){}
+    // A CONFIRMED TEXT RETIRES THE DURABLE CALL-QUEUE ENTRY. It did not before, and that single
+    // omission is what made the batch text station a carousel: the entry survived the send, the
+    // 72h cooldown expired, and PERSISTQ put the same person back at the head of TEXTQ. See
+    // _callqRetire. The lead is not lost — it re-enters through a normal lane the moment it is
+    // due again; what it stops doing is jumping the whole queue every three days.
+    try { _callqRetire(r.case, (notes[r.case] = notes[r.case] || {status:'', note:''})); save(); } catch(e){}
   } else if(d.k === 'wp'){
     // The worker tab already opened the lookup on the user's own click — opening it here too
     // either double-opens or gets popup-blocked in this background tab. This side only logs.
@@ -14042,12 +14095,8 @@ window.addEventListener('message', function(ev){
     var nb = notes[r.case] = notes[r.case] || {status:'', note:''};
     nb.badph = nb.badph || [];
     if(bph && nb.badph.indexOf(bph) < 0) nb.badph.push(bph);
-    try {
-      var _cqB = JSON.parse(localStorage.getItem('fcCallQueue')||'[]');
-      localStorage.setItem('fcCallQueue', JSON.stringify(_cqB.filter(function(x){ return x.c!==r.case; })));
-    } catch(e){}
     // synced-marker retire too — a bad number must clear the lane on the phone, not just here
-    if(nb.wq) nb.wqx = _today();
+    try { _callqRetire(r.case, nb); } catch(e){}
     _wlog(r.case, 'skip', 'bad number '+bph+' recorded — queued for re-trace; lead re-enters when a new number lands', true);
     try {
       fetch('http://127.0.0.1:8823/retrace', {method:'POST', headers:{'Content-Type':'application/json'},
