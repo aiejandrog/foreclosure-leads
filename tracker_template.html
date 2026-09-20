@@ -13107,18 +13107,69 @@ function genMorningWorker(lane, autostart){
     +     'TEXTQ.push({c:r.c, name:r.first||r.owner||r.c, phone:(r.phones&&r.phones[0])||"", sms:r.smsHref||"", first:r.first, owner:r.owner, addr:r.addr||"", judg:r.judg||0, wp:r.wpUrl||""});'
     +     'renderTextQ();'
     +   '}'
+    /* THE CALL ROW KEEPS ITS DETAILS WHILE HE IS ON THE PHONE. -----------------------------------
+       Reported 2026-09-20: "WHEN I PRESS ON THE CALL KEEP THE DETAILS OF THE PROPERTY THERE FOR ME
+       TO READ OFF IT BECAUSE WHEN I PREWSS ON IT IT DISAPPEARS AND I CANNOT SEE ANYTHING."
+       He was right and it was literal. The data-qcall branch of the click delegate did
+       `row.innerHTML = "<case> - what happened?" + CALL_OUTCOMES buttons` 700ms after the tap --
+       row being qc.closest("div"), which is this whole flex row. Name, phone, address, judgment
+       chip and the WP button were all destroyed the moment the dialer opened, and what replaced
+       them was the CASE NUMBER, which is the one field on the row nobody reads to a homeowner.
+       So the operator was on a live call with a blank screen.
+       The disposition strip is now a SIBLING of the detail block, rendered by _qrow from CALLQ/
+       TEXTQ data and remembered in QCALLOPEN, not written over the row by the click handler. Two
+       consequences that matter: the details cannot be lost because nothing overwrites them, and
+       the strip SURVIVES a renderCallQ() repaint (a bad-number mark, a new lead joining the queue)
+       instead of vanishing halfway through the call. */
+    +   'var QCALLOPEN={};'
+    +   'function _qoutStrip(x){'
+    +     'if(typeof CALL_OUTCOMES==="undefined") return "";'
+    +     'return "<div data-qoutfor=\'"+_esc2(x.c)+"\' style=\'flex:0 0 100%;display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:9px;padding-top:9px;border-top:1px dashed #e0d7bb\'>"'
+    +       '+"<div style=\'flex:0 0 100%;font:700 11px/1.4 Segoe UI,Arial;color:#8a6d1f;margin-bottom:3px\'>&#128222; On the call &mdash; the details above stay up. How did it go?</div>"'
+    +       '+CALL_OUTCOMES.map(function(o){ return "<button data-qout=\'"+_esc2(x.c)+"|"+o.k+"\' style=\'margin:1px;padding:6px 9px;border:1px solid #ccd;border-radius:6px;background:#f6f8fc;cursor:pointer;font-size:12px\'>"+o.t+"</button>"; }).join("")'
+    +       '+"<button data-qoutlater=\'"+_esc2(x.c)+"\' title=\'Put the buttons away and leave this lead in the queue. Nothing is logged.\' style=\'margin:1px;padding:6px 9px;border:1px solid #dfe3ea;border-radius:6px;background:#fff;color:#6b7280;cursor:pointer;font-size:12px\'>Still reading &mdash; hide these</button>"'
+    +     '+"</div>";'
+    +   '}'
     +   'function _qrow(x, btns){'
     +     'var meta = (x.judg? "$"+Math.round(+x.judg).toLocaleString() : "");'
-    +     'return "<div style=\'display:flex;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid #eef0f5\'>"'
+    +     'var onCall = !!QCALLOPEN[x.c];'
+    +     'return "<div data-qrow=\'"+_esc2(x.c)+"\' style=\'display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:9px 14px;border-top:1px solid #eef0f5"+(onCall?";background:#fffdf4;box-shadow:inset 3px 0 0 #d9b641":"")+"\'>"'
     +       '+"<div style=\'flex:1;min-width:0\'>"'
     +         '+"<div style=\'font-weight:700;color:#0e1b33\'>"+_esc2(x.name)+(meta?" <span style=\'font:700 10.5px Arial;color:#8a6d1f;background:#fbf3dc;border-radius:8px;padding:1px 7px;vertical-align:1px\'>"+_esc2(meta)+" judgment</span>":"")+"</div>"'
-    +         '+"<div style=\'font:12px/1.3 monospace;color:#5b6472\'>"+_esc2(x.phone||"no number, use Lookup")+"</div>"'
-    +         '+(x.addr?"<div style=\'font:11.5px/1.3 Arial;color:#6b7280\'>"+_esc2(x.addr)+"</div>":"")'
+    // ...and while the call is open the number and the address are what he is READING ALOUD, so
+    // they come up from 12px/11.5px grey to something legible at arm's length. The row is already
+    // the tallest thing on screen at that moment; there is nothing to crowd.
+    +         '+"<div style=\'font:"+(onCall?"700 15px/1.35":"12px/1.3")+" monospace;color:"+(onCall?"#1a5a2b":"#5b6472")+"\'>"+_esc2(x.phone||"no number, use Lookup")+"</div>"'
+    +         '+(x.addr?"<div style=\'font:"+(onCall?"600 13.5px/1.4":"11.5px/1.3")+" Arial;color:"+(onCall?"#243349":"#6b7280")+"\'>"+_esc2(x.addr)+"</div>":"")'
     +       '+"</div>"'
     +       '+(x.wp?"<a href=\'"+_esc2(x.wp)+"\' target=\'_blank\' style=\'background:#f3eefc;color:#5b2d8f;border:1px solid #e2d6f5;border-radius:7px;padding:7px 10px;text-decoration:none;font-weight:700;font-size:12px\'>&#128269; WP</a>":"")'
     +       '+btns'
     +       '+(x.phone?"<button data-qbad=\'"+_esc2(x.c)+"|"+_esc2(x.phone)+"\' title=\'Wrong or dead number: pulls it off this lead and queues a fresh skip-trace. When a new number lands, the lead comes back for a second message.\' style=\'background:#fdecea;color:#8a1c1c;border:1px solid #f2c6c0;border-radius:7px;padding:7px 9px;font-weight:700;font-size:12px;cursor:pointer\'>&#10007;</button>":"")'
+    +       '+(onCall?_qoutStrip(x):"")'
     +     '+"</div>";'
+    +   '}'
+    /* SCROLL POSITION SURVIVES THE REPAINT. #mwcallqlist is a 320px scroller holding 25+ rows, and
+       every one of these renderers rebuilds it with innerHTML, which resets scrollTop to 0. That
+       was survivable while a repaint only happened on a queue change; now that pressing Call
+       repaints (to hang the outcome strip under the row), losing the scroll position would throw
+       him back to the top of the list on every single call. Save it, put it back. */
+    +   'function _keepScroll(el, fn){'
+    +     'var t = el ? el.scrollTop : 0; fn(); if(el) el.scrollTop = t;'
+    +   '}'
+    // ...and bring the row he just dialled fully into view, strip and all, WITHOUT moving the page:
+    // the adjustment is clamped to the list's own scroll box.
+    +   'function _qrowIntoView(c){'
+    +     'try{'
+    +       'var rows=document.querySelectorAll("[data-qrow]");'
+    +       'for(var k=0;k<rows.length;k++){'
+    +         'if(String(rows[k].getAttribute("data-qrow"))!==String(c)) continue;'
+    +         'var row=rows[k], box=row.parentNode; if(!box) return;'
+    +         'var top=row.offsetTop-box.offsetTop, bot=top+row.offsetHeight;'
+    +         'if(bot>box.scrollTop+box.clientHeight) box.scrollTop=Math.max(0, bot-box.clientHeight);'
+    +         'else if(top<box.scrollTop) box.scrollTop=top;'
+    +         'return;'
+    +       '}'
+    +     '}catch(e){}'
     +   '}'
     +   'function renderCallQ(){'
     +     'var wrap=document.getElementById("mwcallq"), list=document.getElementById("mwcallqlist"), n=document.getElementById("mwcallqn");'
@@ -13126,9 +13177,11 @@ function genMorningWorker(lane, autostart){
     +     'if(!CALLQ.length){ wrap.style.display="none"; return; }'
     +     'wrap.style.display="block";'
     +     'if(n) n.textContent=CALLQ.length+" to call · not capped";'
+    +     '_keepScroll(list, function(){'
     +     'list.innerHTML=CALLQ.map(function(x){'
     +       'return _qrow(x, x.phone?"<a href=\'"+_telHref(x.phone)+"\' data-qcall=\'"+_esc2(x.c)+"\' style=\'background:#eaf5ec;color:#1a5a2b;border:1px solid #cfe6d4;border-radius:7px;padding:8px 12px;text-decoration:none;font-weight:700;font-size:13px\'>&#9742; Call</a>":"");'
     +     '}).join("");'
+    +     '});'
     +   '}'
     +   'function renderTextQ(){'
     +     'var wrap=document.getElementById("mwtextq"), list=document.getElementById("mwtextqlist"), n=document.getElementById("mwtextqn"), b=document.getElementById("mwtextqgo");'
@@ -13137,12 +13190,14 @@ function genMorningWorker(lane, autostart){
     +     'wrap.style.display="block";'
     +     'if(n) n.textContent=TEXTQ.length+" ready · you press send";'
     +     'if(b) b.textContent="\\u25B6 Start text batch ("+TEXTQ.length+")";'
+    +     '_keepScroll(list, function(){'
     +     'list.innerHTML=TEXTQ.map(function(x){'
     // renderCallQ has always guarded this; renderTextQ did not, so a queued lead whose number was
     // dropped between bakes rendered a dial anchor with an empty href.
     +       'return _qrow(x, (_telHref(x.phone)?"<a href=\'"+_telHref(x.phone)+"\' data-qcall=\'"+_esc2(x.c)+"\' style=\'background:#eaf5ec;color:#1a5a2b;border:1px solid #cfe6d4;border-radius:7px;padding:7px 10px;text-decoration:none;font-weight:700;font-size:12.5px\'>&#9742;</a>":"")'
     +         '+"<button data-qtext=\'"+_esc2(x.c)+"\' style=\'background:#eef3fa;color:#3c5b8a;border:1px solid #d4e0f2;border-radius:7px;padding:7px 11px;font-weight:700;font-size:12.5px;cursor:pointer\'>&#9993; Text</button>");'
     +     '}).join("");'
+    +     '});'
     +   '}'
     /* BATCH TEXT STATION. Walks TEXTQ one lead at a time: tap -> Messages/Phone Link opens with the
        bilingual body PRE-FILLED -> he presses send there -> confirmSend() asks "did it send?" ->
@@ -13429,11 +13484,23 @@ function genMorningWorker(lane, autostart){
     +     'var btns = CALL_OUTCOMES.map(function(o){'
     +       'return "<button class=\'mwbtn "+o.cls+" mwoc\' data-oc=\'"+o.k+"\'>"+o.t+"</button>";'
     +     '}).join("");'
+    /* THE SAME "it disappeared" COMPLAINT, on the card path. This screen replaces the whole lead
+       card, and it used to carry only the name and phones[0] -- so the address, the judgment, the
+       plaintiff and the sale date were gone the instant the dialer opened, which is the half of
+       the card an operator actually reads off while the homeowner is on the line. They are cheap
+       to keep and they are what the call is about; the outcome buttons sit under them now. */
+    +     'var _pj = r.judg? "$"+Math.round(+r.judg).toLocaleString()+" judgment" : "";'
+    +     'var _pd = [r.plaintiff||"", _pj, (r.saleDate? "sale "+r.saleDate : "")].filter(function(s){return s;}).join(" &middot; ");'
     +     'main.innerHTML="<div class=\'mwpace\'>"'
     +       '+"<div class=\'h\'>&#128222; How did the call go?</div>"'
-    +       '+"<div class=\'s\'>"+esc(r.first||r.owner)+" &middot; "+esc(r.phones[0])+"<br>'
-    +         'Every outcome is logged to the lead. This is the data that tells us whether the phone '
-    +         'is working &mdash; guessing has never worked.</div>"'
+    +       '+"<div style=\'background:#fffdf4;border:1px solid #ece2c4;border-left:3px solid #d9b641;border-radius:9px;padding:11px 13px;margin:10px 0 4px;text-align:left\'>"'
+    +         '+"<div style=\'font:700 15px/1.25 Segoe UI,Arial;color:#0e1b33\'>"+esc(r.first||r.owner)+"</div>"'
+    +         '+"<div style=\'font:14px/1.4 monospace;color:#1a5a2b\'>"+esc(r.phones[0])+"</div>"'
+    +         '+(r.addr?"<div style=\'font:12.5px/1.45 Segoe UI,Arial;color:#334155;margin-top:3px\'>"+esc(r.addr)+"</div>":"")'
+    +         '+(_pd?"<div style=\'font:11.5px/1.45 Segoe UI,Arial;color:#6b7280;margin-top:2px\'>"+_pd+"</div>":"")'
+    +       '+"</div>"'
+    +       '+"<div class=\'s\'>Every outcome is logged to the lead. This is the data that tells us '
+    +         'whether the phone is working &mdash; guessing has never worked.</div>"'
     +       '+"<div class=\'mwocwrap\'>"+btns+"</div>"'
     +     '+"</div>";'
     +     'Array.prototype.forEach.call(document.querySelectorAll(".mwoc"), function(b){'
@@ -13930,6 +13997,7 @@ function genMorningWorker(lane, autostart){
     +     'if(!confirm("Mark "+bph+" as a BAD NUMBER?\\n\\nThis is permanent: the number is pulled off this lead and removed from every future build. Only do this if you actually tried it and it failed (disconnected, wrong person, not in service).\\n\\nTo just move on without killing the number, press Cancel and use Skip.")) return;'
     +     'window.__badTimes.push(Date.now());'
     +     'CALLQ=CALLQ.filter(function(x){return x.c!==bc;}); TEXTQ=TEXTQ.filter(function(x){return x.c!==bc;});'
+    +     'delete QCALLOPEN[bc];'
     +     'renderCallQ(); renderTextQ();'
     +     'post("badnum",{qc:bc, ph:bph});'
     +     'addLog("skip", bc, "bad number "+bph+" pulled off the lead and queued for a fresh skip-trace. It comes back with a new number for a second message.");'
@@ -13952,11 +14020,23 @@ function genMorningWorker(lane, autostart){
     +       'return;'
     +     '}'
     // the panel Call links stay plain tel: anchors (calls are never capped) — just log the breadcrumb.
+    // WHAT THIS BRANCH MUST NOT DO: write over the row. It used to, 700ms after the tap, replacing
+    // name/phone/address/judgment/WP with the case number and ten buttons — so the screen went
+    // blank at exactly the moment the homeowner picked up. Mark the lead as on-call and let the
+    // renderers rebuild the row FROM THE QUEUE DATA with the strip appended; the details are
+    // re-rendered from CALLQ/TEXTQ rather than preserved by luck, so there is nothing to lose.
     +     'var qc=e.target.closest&&e.target.closest("[data-qcall]");'
-    +     'if(qc){ var cc=qc.getAttribute("data-qcall")||""; addLog("call", cc, "dialer opened from the queue panel");'
-    +     'var row=qc.closest("div");'
-    +     'if(row){ setTimeout(function(){ row.innerHTML="<div style=\'flex:1;font:600 12px Arial\'>"+_esc2(cc)+" — what happened?</div>"+CALL_OUTCOMES.map(function(o){return "<button data-qout=\'"+_esc2(cc)+"|"+o.k+"\' style=\'margin:2px;padding:6px 9px;border:1px solid #ccd;border-radius:6px;background:#f6f8fc;cursor:pointer;font-size:12px\'>"+o.t+"</button>";}).join(""); }, 700); }'
+    +     'if(qc){ var cc=qc.getAttribute("data-qcall")||""; addLog("call", cc, "dialer opened from the queue panel — details stay on screen, log the outcome under the row");'
+    +     'QCALLOPEN[cc]=1;'
+    // the delay is the old one and it is still worth keeping: the outcome buttons must not appear
+    // under a thumb that is still travelling from the Call button.
+    +     'setTimeout(function(){ renderCallQ(); renderTextQ(); _qrowIntoView(cc); }, 700);'
     +     'return; }'
+    // "Still reading — hide these" puts the strip away WITHOUT logging anything. The lead stays in
+    // the queue and Call re-opens the strip. Nothing here touches the ledger.
+    +     'var ql=e.target.closest&&e.target.closest("[data-qoutlater]");'
+    +     'if(ql){ e.preventDefault(); var lc=ql.getAttribute("data-qoutlater")||"";'
+    +     'delete QCALLOPEN[lc]; renderCallQ(); renderTextQ(); return; }'
     +     'var qo=e.target.closest&&e.target.closest("[data-qout]");'
     +     'if(qo){ var pp=String(qo.getAttribute("data-qout")||"").split("|"), oc=null;'
     +     'CALL_OUTCOMES.forEach(function(o){ if(o.k===pp[1]) oc=o; });'
@@ -13968,6 +14048,7 @@ function genMorningWorker(lane, autostart){
     // the text batch and the batch would text a person who just said stop (2026-08-19 stress test,
     // CONFIRMED — an FTSA/FDUTPA violation our own UI manufactured). oc.sup marks the STOP outcome.
     +     'CALLQ=CALLQ.filter(function(x){return x.c!==pp[0];});'
+    +     'delete QCALLOPEN[pp[0]];'
     +     'if(oc.sup){ TEXTQ=TEXTQ.filter(function(x){return x.c!==pp[0];}); renderTextQ(); }'
     +     'renderCallQ(); }'
     +     'return; }'
