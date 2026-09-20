@@ -221,7 +221,17 @@ rec('no "tel:+1"+digits concatenation survives',
 #   - #mwmain is assigned EXACTLY ONCE. A second assignment is a re-parse, and a re-parse is what
 #     detached the button's handler. Counting assignments is the regression itself, not a proxy.
 #   - both the text-batch button and the Call-Mode link survive into that single assignment.
-at = WORKER_JS.index('if(i>=Q.length){')
+# ANCHOR FROM _renderMain, not from the top of the file. This used to be
+# `WORKER_JS.index('if(i>=Q.length){')` -- the FIRST occurrence anywhere in the blob script -- and
+# the 2026-09-19 run-control work added an identical guard inside startRun(), which sits earlier.
+# The test then extracted startRun's one-line guard, fed it to node, and died three frames away on
+# an undefined stub. An anchor that means "the queue-clear branch of the render function" should
+# say so; "the first one of these in 50k characters" is a coincidence, not an anchor.
+_rm = WORKER_JS.find('function _renderMain(')
+if _rm < 0:
+    raise SystemExit('ANCHOR GONE: function _renderMain() (render()\'s body) is not in the blob '
+                     'script. It was renamed -- update this test with it.')
+at = WORKER_JS.index('if(i>=Q.length){', _rm)
 depth, done_branch = 0, None
 for k in range(WORKER_JS.index('{', at), len(WORKER_JS)):
     if WORKER_JS[k] == '{':
