@@ -648,6 +648,59 @@ rec('call_mode still drops exactly ag/xl from its dial queue',
     'if the phone page changes its rule, this pairing has to be revisited')
 
 
+# ============================================================ 5b. the BALLOON lane is reachable
+# Baked in 2026-09-20 on Alejandro's go-ahead. Everything except the bake already existed, which is
+# why the lane could sit dead for twelve days while "Auto-run ALL lanes" claimed to walk it.
+rec('genMorningWorker bakes every lane from one list, not four names',
+    "var LANE_KEYS = ['replied','urgent','active','early','balloon'];" in GMW,
+    'anchor: LANE_KEYS -- queues, laneStats, laneCounts and the tab row all read it')
+rec('the balloon lane gets a baked queue',
+    'LANE_KEYS.forEach(function(k){ queues[k] = _workerQueue(k).map(_workerCard); });' in GMW)
+rec('the balloon lane gets a tab the operator can click',
+    '+     LANE_KEYS.map(function(k){' in GMW,
+    'the tab row was a hardcoded four, so there was no way to open the lane')
+rec('the lane stats cover it too', 'laneStats[k] = _laneStats(k)' in GMW)
+rec('the blob LANE_ALL still lists balloon last',
+    'LANE_ALL=["replied","urgent","active","early","balloon"]' in WORKER_JS.replace(' ', ''),
+    'last on purpose: it shares an alias ramp with active, which takes the cap first')
+rec('the empty-lane screen offers every baked lane, not a hardcoded four',
+    'var others=LANE_ORDER.filter' in WORKER_JS)
+# The title is in the _docShell call AFTER the script close, so GMW (which stops at that marker)
+# does not reach it -- take the whole function by balanced braces for this one.
+GMW_FULL = extract(TPL_SRC, 'genMorningWorker')
+rec('the document title counts the lanes instead of claiming three',
+    "' lane'+(_laneN===1?'':'s')" in GMW_FULL and 'leads across 3 lanes' not in GMW_FULL,
+    'it said "3 lanes" while four were baked')
+
+# THE HOLE THIS OPENED, and the reason baking the lane in was not a one-liner. genEmail() branches
+# BAL rows to genBalloonEmail; genPortfolioEmail does NOT. _workerQueue groups by primary email, so
+# an LLC holding several parcels on one mailbox is a "portfolio" by that definition -- and until the
+# lane was baked, no BAL row ever reached _cardMail to find out.
+CM = extract(TPL_SRC, '_cardMail')
+rec('_cardMail refuses the portfolio composer for a balloon row',
+    "r.st !== 'BAL'" in CM,
+    'otherwise an LLC investor gets "Regarding N properties in your name" -- the HOMEOWNER letter, '
+    'with the homeowner MARS/Reg-O disclaimers, under the wrong signer')
+GE = extract(TPL_SRC, 'genEmail')
+rec('genEmail still branches balloon rows to the refi composer',
+    "if(r && r.st==='BAL') return genBalloonEmail(r, quiet);" in GE,
+    'the branch _cardMail relies on to get the right copy')
+GP = extract(TPL_SRC, 'genPortfolioEmail')
+rec('genPortfolioEmail has no balloon branch, which is why _cardMail must gate it',
+    'genBalloonEmail' not in GP,
+    'if this ever gains one, revisit the gate rather than leaving two rules')
+rec('the balloon composer signs as the advisor, not the homeowner sender',
+    'balloon_signer' in extract(TPL_SRC, 'genBalloonEmail'))
+rec('a balloon lead is still never texted',
+    "if(r.st==='BAL') return '';" in TPL_SRC,
+    "anchor: _workerCard's smsHref guard -- no homeowner SMS script to an investor")
+# The card must not promise a consolidated letter over copy that consolidates nothing.
+_banner = TPL_SRC[TPL_SRC.index('mwport'):]
+rec('the portfolio banner tells a balloon row the truth',
+    'notes on this contact' in TPL_SRC and 'pitches the soonest-maturing one' in TPL_SRC,
+    'the homeowner banner promises "one consolidated email"; the refi pitch covers the head note')
+
+
 # ============================================== 6. the reserved suppression surface is not touched
 # CLAUDE.md reserves opt-outs, STOP detection, the send-time gates and cadence.py for the desktop
 # session. Everything above READS a verdict (smsHref is baked by textablePhones, _workerEligible

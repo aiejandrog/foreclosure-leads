@@ -12355,8 +12355,18 @@ function _cardMail(r){
     var MS = (typeof _mailStage === 'function') ? _mailStage(r) : 'cold';
     if(MS === 'replied'){ var E1={gurl:'',to:'',subj:'',body:'',mailWhy:'replied'}; return E1; }
     if(MS === 'done'){    var E2={gurl:'',to:'',subj:'',body:'',mailWhy:'done'};    return E2; }
-    // If _workerQueue attached a portfolio, compose the CONSOLIDATED email; else the single.
-    var isPort = r._portfolio && r._portfolio.length;
+    /* A BALLOON ROW NEVER TAKES THE PORTFOLIO COMPOSER. genEmail() branches BAL rows to
+       genBalloonEmail (the Refi Lane investor pitch, signed by the advisor via
+       sender.balloon_signer) -- but genPortfolioEmail has NO such branch, and _workerQueue groups
+       the queue by primary email, so an LLC holding several parcels on one mailbox IS a portfolio
+       by that definition. Before the balloon lane was baked in (2026-09-20) nothing reached this
+       path, because no BAL row was ever in a baked queue. The moment it was, the multi-parcel LLCs
+       -- the most valuable rows in the lane, and the likeliest to hold several notes -- would have
+       been sent "Regarding N properties in your name", the HOMEOWNER foreclosure letter with the
+       homeowner MARS/Reg-O disclaimers, under the wrong signer's name.
+       One email per mailbox is still right, so the grouping stays; only the composer changes. The
+       pitch covers the head note (soonest maturity, _workerQueue's sort) and the card says so. */
+    var isPort = r._portfolio && r._portfolio.length && r.st !== 'BAL';
     var composer = (isPort && typeof genPortfolioEmail === 'function')
       ? function(){ return genPortfolioEmail(r, r._portfolio, true); }
       : (typeof genEmail === 'function' ? function(){ return genEmail(r, true); } : null);
@@ -12505,17 +12515,18 @@ function genMorningWorker(lane, autostart){
   lane = lane || (_laneCount('replied') ? 'replied' : 'urgent');
   var cap = _capState();
   var laneMeta = WORKER_LANES[lane] || WORKER_LANES.urgent;
-  var laneStats  = {replied:_laneStats('replied'), urgent:_laneStats('urgent'), active:_laneStats('active'), early:_laneStats('early')};
-  var laneCounts = {replied:laneStats.replied.n, urgent:laneStats.urgent.n, active:laneStats.active.n, early:laneStats.early.n};
+  // BALLOON JOINED THE BAKE 2026-09-20, on Alejandro's go-ahead. It had a WORKER_LANES entry, a
+  // _workerQueue sort keyed to bal.days, a _laneStats that handles it generically, a senders.json
+  // alias and a place in LANE_ORDER since 2026-09-08 -- everything except a baked queue and a tab,
+  // so there was no way to open it and "Auto-run ALL lanes" walked a name that resolved to nothing.
+  var LANE_KEYS = ['replied','urgent','active','early','balloon'];
+  var laneStats = {}, laneCounts = {};
+  LANE_KEYS.forEach(function(k){ laneStats[k] = _laneStats(k); laneCounts[k] = laneStats[k].n; });
   // ALL THREE lanes are baked in, so switching lanes is instant and offline. Reopening the doc to
   // change lane would lose the in-tab activity log and the operator's place in the run — the two
   // things the worker exists to keep.
-  var queues = {
-    replied: _workerQueue('replied').map(_workerCard),
-    urgent:  _workerQueue('urgent').map(_workerCard),
-    active:  _workerQueue('active').map(_workerCard),
-    early:   _workerQueue('early').map(_workerCard)
-  };
+  var queues = {};
+  LANE_KEYS.forEach(function(k){ queues[k] = _workerQueue(k).map(_workerCard); });
   // Oldest reply first — a 13-day wait outranks a 2-day wait, the exact reverse of "newest first".
   queues.replied.sort(function(a,b){ return (b.repAge||0) - (a.repAge||0); });
   // THE CALL LIST SURVIVES THE TAB NOW. callq used to live only in `var CALLQ=[]` inside the Blob
@@ -12719,7 +12730,7 @@ function genMorningWorker(lane, autostart){
     // LANE TABS — counts are the WHOLE lane, not the truncated queue, so he can see what is waiting
     // behind today's send budget instead of thinking the lane is empty.
     +   '<div class="mwlanes">'
-    +     ['replied','urgent','active','early'].map(function(k){
+    +     LANE_KEYS.map(function(k){
           var L = WORKER_LANES[k], st = laneStats[k];
           // A bare "0" on a lane that holds 125 leads reads as broken. Show the workable count,
           // and when it is zero say what the pool is so the number is explainable at a glance.
@@ -13752,7 +13763,7 @@ function genMorningWorker(lane, autostart){
     +       'if(!s.pool) why="No leads match this lane on the current board at all.";'
     +       'else if(s.noContact && s.noContact>=s.pool-s.suppressed) why="<b>"+s.pool+" leads sit in this lane, and not one has a traced phone or email.</b> That is a data gap, not an empty pipeline &mdash; the outreach tools have nothing to send to. Run <code>skiptrace.py</code> against these, then rebuild the board.";'
     +       'else why="Every lead here was worked in the last 3 days, has no traced phone or email ("+(s.noContact||0)+"), or is opted-out / claimed / in an active bankruptcy stay ("+(s.suppressed||0)+").";'
-    +       'var others=["replied","urgent","active","early"].filter(function(k){return k!==lane && (LANES[k]||[]).length;});'
+    +       'var others=LANE_ORDER.filter(function(k){return k!==lane && (LANES[k]||[]).length;});'
     +       'main.innerHTML="<div class=\'mwnone\'><b>Nothing to work in "+esc(LMETA[lane].t)+".</b><br><br>"+why'
     +         '+(others.length?"<br><br>Still open: <b>"+others.map(function(k){return LMETA[k].ic+" "+LMETA[k].t+" ("+LANES[k].length+")";}).join(" &middot; ")+"</b> &mdash; tap a lane above.":"<br><br>Come back after the next refresh.")'
     +       '+"</div>"; prog.textContent="0 of 0"; renderLog(); return; }'
@@ -13813,7 +13824,13 @@ function genMorningWorker(lane, autostart){
     // one card, list the sibling properties so the operator sees, before clicking Email, that
     // a single Gmail compose is going to cover a stack of parcels. The Email button label below
     // also flips to reflect this.
-    +       '+((r.portfolio&&r.portfolio.length)?"<div class=\'mwport\'>&#127775; <b>Portfolio owner &mdash; "+(r.portfolio.length+1)+" properties</b> on this contact&rsquo;s inbox. One consolidated email will go out, not "+(r.portfolio.length+1)+" separate messages.<ul><li>"+esc(r.addr)+(r.saleDate?" &mdash; sale "+esc(r.saleDate):"")+"</li>"+r.portfolio.map(function(p){return \"<li>\"+esc(p.addr)+(p.saleDate?\" &mdash; sale \"+esc(p.saleDate):\"\")+(p.plaintiff?\" &middot; \"+esc(String(p.plaintiff).slice(0,32)):\"\")+\"</li>\";}).join(\"\")+\"</ul></div>\":\"\")'
+    // A BALLOON row's banner says something different, because its email is different: the Refi
+    // Lane pitch covers the HEAD note, it does not enumerate the parcels the way the homeowner
+    // portfolio letter does. Promising "one consolidated email" over investor copy that consolidates
+    // nothing is the banner lying about the send sitting one button away.
+    +       '+((r.portfolio&&r.portfolio.length)?(r.st==="BAL"'
+    +         '? "<div class=\'mwport\'>&#127775; <b>"+(r.portfolio.length+1)+" notes on this contact&rsquo;s inbox.</b> The refi email pitches the soonest-maturing one below; the others are here for context, and one message goes to this mailbox, not "+(r.portfolio.length+1)+".<ul><li>"+esc(r.addr)+"</li>"+r.portfolio.map(function(p){return \"<li>\"+esc(p.addr)+\"</li>\";}).join(\"\")+\"</ul></div>\"'
+    +         ': "<div class=\'mwport\'>&#127775; <b>Portfolio owner &mdash; "+(r.portfolio.length+1)+" properties</b> on this contact&rsquo;s inbox. One consolidated email will go out, not "+(r.portfolio.length+1)+" separate messages.<ul><li>"+esc(r.addr)+(r.saleDate?" &mdash; sale "+esc(r.saleDate):"")+"</li>"+r.portfolio.map(function(p){return \"<li>\"+esc(p.addr)+(p.saleDate?\" &mdash; sale \"+esc(p.saleDate):\"\")+(p.plaintiff?\" &middot; \"+esc(String(p.plaintiff).slice(0,32)):\"\")+\"</li>\";}).join(\"\")+\"</ul></div>\"):"")'
     // The worker is a rapid-fire queue — it is exactly where a stale name gets used without
     // thinking. Say it on the card, before the Email/Text buttons, not in a tooltip.
     +       '+(r.mismatch?"<div class=\'mwmm\'>&#9888; County roll shows a DIFFERENT owner"+(r.paOwner?" — <b>"+esc(r.paOwner)+"</b>":"")+". Title moved after this case was filed — confirm who you have before using "+esc(r.first||r.owner)+"&rsquo;s name.</div>":"")'
@@ -14054,7 +14071,11 @@ function genMorningWorker(lane, autostart){
     +     '})();'
     +   '}'
     + '})();<\/script>';
-  return _docShell('Morning worker · '+(laneCounts.urgent+laneCounts.active+laneCounts.early)+' leads across 3 lanes',
+  // Counted from LANE_KEYS rather than three names: the old string said "3 lanes" while four were
+  // baked and five now are, and a title that undercounts is how a lane stays invisible.
+  var _laneTot = 0, _laneN = 0;
+  LANE_KEYS.forEach(function(k){ _laneTot += laneCounts[k]; if(laneCounts[k]) _laneN++; });
+  return _docShell('Morning worker · '+_laneTot+' lead'+(_laneTot===1?'':'s')+' across '+_laneN+' lane'+(_laneN===1?'':'s'),
                    body, {key:'worker'});
 }
 function openMorningWorker(lane, autostart){
