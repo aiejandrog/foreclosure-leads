@@ -459,3 +459,8 @@ deal_desk.json
 !_texttpltest.py
 !_phonesrctest.py
 !_queuechurntest.py
+
+# publish_watch.py is the only guard in this repo that checks the PUBLISHED site rather than the
+# local build, so it is also the only one that can run from a machine that is not the laptop. Its
+# suite needs no network, no board and no keys precisely so it runs wherever the watch does.
+!_publishwatchtest.py
