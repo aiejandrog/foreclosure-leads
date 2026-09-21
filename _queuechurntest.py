@@ -325,14 +325,80 @@ rec('a book under the cap ships whole, in pure rank order, with no rotation',
     stotal == 120 and cases(small) == ['C%04d' % i for i in range(120)], len(small))
 
 # The head is env-tunable, and a head of 0 means the whole cap rotates.
+# Pinned to day 2: on day 21 the offset is 21*400 % 600 == 0, so an unpinned run of this check
+# fails one day a month for a reason that has nothing to do with the code.
 os.environ['CALLMODE_HEAD'] = '0'
 try:
+    call_mode._dt.date = type('D2', (_FakeDate,), {'day': 2})
     with contextlib.redirect_stdout(io.StringIO()):
         allrot, _ = call_mode.call_rows(slim(600))
 finally:
+    call_mode._dt.date = real
     os.environ.pop('CALLMODE_HEAD', None)
 rec('CALLMODE_HEAD=0 rotates the whole cap', len(allrot) == 400 and cases(allrot)[0] != 'C0000',
     cases(allrot)[:2])
+
+
+# FRESH FILINGS (2026-09-21). On the live 09-21 book, 30 of the 32 leads filed in the last week sat
+# at ranks 222-251 — the front of the tail — and the rotation skipped that front two days in three,
+# so they were on neither phone. A lead filed within CALLMODE_FRESH_DAYS must ship EVERY day.
+def _fresh_book(today=None):
+    today = today or dt.date.today()
+    b = slim(600)
+    for i in range(230, 262):                      # just past the head, like the real book
+        b[i]['filedDate'] = (today - dt.timedelta(days=3)).strftime('%m/%d/%Y')
+    b[500]['filedDate'] = '1/5/2024'               # an old filing is NOT pinned
+    return b
+
+
+class _RealFakeDate(dt.date):
+    """A real date (so date arithmetic works) whose today() is the day under test."""
+    pinned = dt.date(2026, 9, 1)
+
+    @classmethod
+    def today(cls):
+        return cls.pinned
+
+
+fresh_cases = {'C%04d' % i for i in range(230, 262)}
+missed_days = []
+try:
+    call_mode._dt.date = _RealFakeDate
+    for d in range(1, 29):
+        _RealFakeDate.pinned = _RealFakeDate(2026, 9, d)
+        with contextlib.redirect_stdout(io.StringIO()):
+            r, _ = call_mode.call_rows(_fresh_book(dt.date(2026, 9, d)))
+        if not fresh_cases <= set(cases(r)) or len(r) != 400:
+            missed_days.append(d)
+finally:
+    call_mode._dt.date = real
+rec('a lead filed in the last CALLMODE_FRESH_DAYS ships every day of the month, never waiting on '
+    'its rotation day', not missed_days, 'missed on days %s' % missed_days[:5])
+with contextlib.redirect_stdout(io.StringIO()):
+    fr, _ = call_mode.call_rows(_fresh_book())
+rec('the pinned fresh filings ride directly behind the head, in rank order',
+    cases(fr)[200:232] == ['C%04d' % i for i in range(230, 262)], cases(fr)[200:203])
+rec('pinning does not touch the protected head', cases(fr)[:200] == ['C%04d' % i for i in range(200)])
+# Pins are capped at half the slots, so a flood of fresh filings cannot freeze the rotation.
+_flood = slim(600)
+for _r in _flood[200:]:
+    _r['filedDate'] = dt.date.today().strftime('%m/%d/%Y')
+try:
+    call_mode._dt.date = _RealFakeDate
+    _RealFakeDate.pinned = _RealFakeDate(2026, 9, 2)      # day 2: rotation offset is non-zero
+    for _r in _flood[200:]:
+        _r['filedDate'] = '9/1/2026'
+    with contextlib.redirect_stdout(io.StringIO()):
+        fl, _ = call_mode.call_rows(_flood)
+finally:
+    call_mode._dt.date = real
+rec('fresh pins are capped at half the rotating slots', len(fl) == 400 and cases(fl)[300] != 'C0300',
+    cases(fl)[299:302])
+# The cap scales: a two-seat crew passes cap=800 and the head scales with it.
+with contextlib.redirect_stdout(io.StringIO()):
+    big, _ = call_mode.call_rows(slim(1000), cap=800)
+rec('cap=800 ships 800 with a 400-row protected head',
+    len(big) == 800 and cases(big)[:400] == ['C%04d' % i for i in range(400)], len(big))
 
 
 # ══════════════════════════════════════════════════════════════════════════════════════════════

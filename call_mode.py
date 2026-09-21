@@ -1843,24 +1843,54 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # worse one. Only the REMAINDER of the cap rotates, by day of month, so the whole qualified
     # pool reaches the phone over a month instead of never. Deterministic within a day (same build,
     # same list) and needs no stored cursor.
-    head_n = max(0, min(cap, int(os.environ.get('CALLMODE_HEAD', '200'))))
+    # Head defaults to HALF the cap (200 of the historical 400), so a caller that scales the cap
+    # with the number of seats scales the protected head with it.
+    head_n = max(0, min(cap, int(os.environ.get('CALLMODE_HEAD', str(cap // 2)))))
     total = len(out)
     if total > cap:
         head, tail = out[:head_n], out[head_n:]
         slots = cap - head_n
+        n_fresh = 0
         if slots > 0 and tail:
-            # Stride by the window, not by a small constant: a stride smaller than the window
-            # overlaps consecutive days almost completely, which is the bug it is meant to fix.
-            rot = (_dt.date.today().day * slots) % len(tail)
-            tail = tail[rot:] + tail[:rot]
-            out = head + tail[:slots]
+            # ---- FRESH FILINGS ARE PINNED, NOT ROTATED (2026-09-21) ------------------------------
+            # A brand-new LP has no sale date and no priced equity, so the rank puts it just PAST
+            # the head (ranks 222-251 on the 09-21 book) — which is exactly the front of the tail.
+            # The rotation then skipped that front two days in three: on 09-21, 30 of the 32 leads
+            # filed in the last 7 days were on NEITHER phone. The first call on a fresh filing is
+            # the whole first-mover edge; a lead that waits for its rotation day has lost it.
+            # So tail leads filed within CALLMODE_FRESH_DAYS ride right behind the head, in rank
+            # order, capped at half the slots so the rotation still walks the rest of the book.
+            fresh_days = max(0, int(os.environ.get('CALLMODE_FRESH_DAYS', '14')))
+            _age = {}
+            if fresh_days:
+                _today = _dt.date.today()
+                for d in slim:
+                    c = (d.get('case') or '').strip()
+                    v = str(d.get('filedDate') or '').strip()
+                    try:
+                        _age[c] = (_today - _dt.datetime.strptime(v, '%m/%d/%Y').date()).days
+                    except ValueError:
+                        pass
+            fresh = [r for r in tail if 0 <= _age.get(r.get('c'), -1) <= fresh_days][:slots // 2]
+            _pinned = {id(r) for r in fresh}
+            rest = [r for r in tail if id(r) not in _pinned]
+            n_fresh = len(fresh)
+            left = slots - n_fresh
+            if rest and left > 0:
+                # Stride by the window, not by a small constant: a stride smaller than the window
+                # overlaps consecutive days almost completely, which is the bug it is meant to fix.
+                rot = (_dt.date.today().day * left) % len(rest)
+                rest = rest[rot:] + rest[:rot]
+            out = head + fresh + rest[:max(0, left)]
         else:
             out = head[:cap]
         # NO SILENT CAPS. A list that quietly shrank looks exactly like a list that was always
         # this size — the same rule the dedupe and identity-drop notices above follow.
-        print('call mode: %d qualified, %d shipped — top %d by rank always, the remaining %d slots '
-              'rotate daily through the other %d so the tail reaches the phone'
-              % (total, len(out), head_n, max(0, cap - head_n), len(out) - head_n))
+        print('call mode: %d qualified, %d shipped — top %d by rank always, %d fresh filing(s) '
+              'pinned, the remaining %d slots rotate daily through the other %d so the tail '
+              'reaches the phone'
+              % (total, len(out), len(head), n_fresh, len(out) - len(head) - n_fresh,
+                 max(0, total - len(head) - n_fresh)))
     return out[:cap], total
 
 

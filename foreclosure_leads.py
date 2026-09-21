@@ -3275,7 +3275,11 @@ def make_tracker(leads):
         # call_rows(), so the two phones can never disagree about a cooldown, an opt-out or a
         # diligence hold — a second call_rows() would be a second chance to drift.
         _built_ts = datetime.now().strftime('%Y-%m-%dT%H:%M')
-        _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads)
+        # THE CAP SCALES WITH THE CREW (2026-09-21). The 400 cap was sized for ONE phone; the seat
+        # split then cut that same 400 in half, so each caller got 200 and 390 of 790 qualified
+        # leads were on no phone at all. Each seat gets the full per-phone budget now.
+        _cm_seats = len([s for s in call_mode.CALL_SEATS if s]) or 1
+        _cm_all = call_mode.call_rows(slim, optouts=_optouts, deads=_deads, cap=400 * _cm_seats)
         _cm_rows, _cm_total = call_mode.make_callmode(
             slim, codes, _encrypt_multi, _built_ts, _cov.get('sig', ''),
             optouts=_optouts, deads=_deads, guard=_js_guard, textperson=_tper,
