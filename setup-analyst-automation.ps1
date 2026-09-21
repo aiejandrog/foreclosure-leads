@@ -1,3 +1,17 @@
+param([switch]$Force)
+# =====================================================================
+#  SUPERSEDED 2026-09-21 - same class of problem as setup-automation.ps1;
+#  read that file's header. Registers the weekly analyst + daily replies
+#  tasks with New-ScheduledTaskSettingsSet and no -IdleSettings, so
+#  StopOnIdleEnd returns to its default of true.
+#  Use: pwsh .\desktop-setup\install-tasks.ps1 -Only Analyst [-Enable]
+# =====================================================================
+if (-not $Force) {
+    Write-Host "setup-analyst-automation.ps1 is superseded - see the header of this file." -ForegroundColor Yellow
+    Write-Host "Use instead:  pwsh .\desktop-setup\install-tasks.ps1 -Only Analyst -Enable"
+    exit 1
+}
+
 # Registers the standing business-analyst automation. Mirrors setup-phones-automation.ps1.
 #   - "DealFlow Weekly Analyst": Sundays 7:30 AM -> run-analyst-weekly.bat
 #       (fresh replies.py pull, then analyst.py -> Desktop\DealFlow-Scorecard\YYYY-MM-DD_scorecard.html)

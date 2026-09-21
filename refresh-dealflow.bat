@@ -28,6 +28,11 @@ rem  never came up | 4 healthcheck says DOWN (advisory) | 5 the board built, gat
 rem  here, but the mirror to the public site repo did not publish, so the LIVE SITE still shows the
 rem  previous board - a materially different morning from a clean run, and it went unreported from
 rem  the 09-17 repo split until 09-18 because nobody read publish_site.py's exit code.
+rem  6 = a pre-publish GATE refused the board. Added 2026-09-21: both gate branches below did
+rem  `goto :end` without touching RUNEXIT, so a publish_guard block - a content regression, the one
+rem  thing healthcheck does not grade - ended the run at rc=0 with "health OK" on the console. Every
+rem  other fault in this list was given a code precisely so the morning could not lie; these two
+rem  were the hole left in that work.
 set "RUNEXIT=0"
 
 rem  [0/5] NETWORK FIRST, and this is not defensive padding - it is the 09-14/16/17 post-mortem.
@@ -103,6 +108,13 @@ if errorlevel 1 (
 )
 git add docs/index.html docs/call >> "%LOG%" 2>&1
 git commit -m "refresh: fresh leads" >> "%LOG%" 2>&1
+rem  SAY SO WHEN THERE IS NOTHING TO SAY (2026-09-21). A failing commit here - nothing staged,
+rem  because the scrape produced an identical board - skipped the whole push block and wrote not one
+rem  line to the log. The [5/5] publish logs "nothing changed - site already current" for exactly the
+rem  same case. Two mornings that read identically - no early-publish lines at all - are a commit
+rem  that found nothing and a run that never reached this point, and telling those apart from the log
+rem  alone is most of a morning. The line goes in an `else`, not in a second `if errorlevel` test:
+rem  any command between the commit and the test is one more thing that can move ERRORLEVEL.
 if not errorlevel 1 (
   rem  PULL BEFORE PUSH. Without this the push is rejected non-fast-forward the moment GitHub
 rem  Actions pushes anything (it publishes the balloon book on its own schedule), and the
@@ -138,6 +150,8 @@ git push origin main >> "%LOG%" 2>&1
   rem  anything reached origin. publish_verify.bat asks the remote instead of assuming, and it
   rem  prints the outcome itself - which is why the unconditional echo that sat here is gone.
   call publish_verify.bat "%LOG%" "-" "fresh leads (early publish)"
+) else (
+  echo     early publish: nothing staged - the board is unchanged since the last run.>> "%LOG%"
 )
 :afterearly
 
@@ -467,6 +481,11 @@ python -u healthcheck.py >> "%LOG%" 2>&1
 if errorlevel 2 (
   echo     ^!^! GATE: healthcheck COMPLIANCE fail ^(^&sect;362 stays / sources down^) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: healthcheck COMPLIANCE fail - publish SKIPPED. See leads-run.log.
+  rem  CARRY IT TO THE EXIT CODE, 2026-09-21. This branch skipped the publish and then fell into
+  rem  :end with RUNEXIT still 0. It survived only because the tail healthcheck runs a SECOND time
+  rem  and sets 2 - so a source that came back up during the three-hour enrichment produced rc=0 on
+  rem  a morning that published nothing. Set it here, where the decision is made.
+  set "RUNEXIT=2"
   goto :end
 )
 if errorlevel 1 (
@@ -476,6 +495,13 @@ python -u publish_guard.py >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo     ^!^! GATE: publish_guard BLOCKED the build ^(regression or corruption^) - publish SKIPPED.>> "%LOG%"
   echo     ^!^! GATE: publish_guard BLOCKED the build - publish SKIPPED. See leads-run.log.
+  rem  THE WORST rc=0 LEFT IN THIS FILE, 2026-09-21. publish_guard refuses a board materially
+  rem  poorer than the live one - a content regression, which is precisely the fault healthcheck
+  rem  does NOT grade. So this branch skipped the publish, fell into :end, the tail healthcheck
+  rem  printed "health OK", and the task recorded rc=0. A blocked morning was byte-identical to a
+  rem  clean one in Task Scheduler and in DEALFLOW-STATUS.txt, which is the exact signal-is-noise
+  rem  pattern the RUNEXIT block at the top of this file was written to end.
+  set "RUNEXIT=6"
   goto :end
 )
 echo [5/5] Publishing to the live site...
