@@ -461,3 +461,9 @@ deal_desk.json
 !_phonesrctest.py
 !_queuechurntest.py
 !_audit12test.py
+
+# _seatcoveragetest: a seat page shipped its own half of the dial queue plus coverage cut against
+# the CREW list, so the other seat's rows were on neither list and just vanished off the page.
+# make_callmode's own "every lead, or say which ones are missing" guard asserted over the crew
+# union, not over what the page ships -- a guard over a superset proves nothing about the subset.
+!_seatcoveragetest.py
