@@ -64,7 +64,87 @@ def _gsr_rows(res):
     return res or []
 
 
-def _doctype_payload(d_from, d_to, doctype_id=LP_DOCTYPE_ID, count='200'):
+# How many records the criteria object asks Landmark for, and how many grid rows we pull per
+# page. Kept as one number so the truncation test below compares like with like.
+CRITERIA_COUNT = 200
+PAGE = 250
+MAX_SPLIT_DEPTH = 3        # 30 days -> at worst 8 sub-windows; each one costs a captcha
+
+
+def _gsr_total(res):
+    """How many records Landmark says the search matched, or None if it did not say.
+
+    The DataTables envelope carries this next to `data` and nothing ever read it (audit
+    2026-09-21, defect 8). Without it, `len(rows)` is the only signal, and a full page is
+    indistinguishable from a complete result -- which is how a capped 200 could be reported as
+    the whole window. Line 41 of this file records the measurement that should have been the
+    tell: "doctype=20 -> 200 records", exactly the cap that was asked for.
+    """
+    if not isinstance(res, dict):
+        return None
+    for k in ('recordsFiltered', 'recordsTotal', 'iTotalDisplayRecords', 'iTotalRecords'):
+        v = res.get(k)
+        if isinstance(v, bool):
+            continue
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str) and v.strip().lstrip('-').isdigit():
+            return int(v.strip())
+    return None
+
+
+def _page_all(get, total=None, page=PAGE, limit=40):
+    """Pull the whole grid, not just its first window.
+
+    `get(length, start)` is palmbeach_liens.get_search_results. Stops when the declared total is
+    reached, when a short page proves the end, or when nothing new arrives. `limit` bounds the
+    loop so a server that ignores `start` cannot spin forever.
+
+    Returns (rows, complete). `complete` is False when the source said there were more records
+    than we managed to pull -- an honest "this window is partial", which the caller turns into
+    a narrower query rather than a silent undercount.
+    """
+    rows, start, seen = [], 0, 0
+    while seen < limit:
+        seen += 1
+        res = get(page, start)
+        batch = _gsr_rows(res)
+        if total is None:
+            total = _gsr_total(res)
+        if not batch:
+            break
+        rows += batch
+        if len(batch) < page:
+            break                      # a short page is the end of the grid, positively
+        start += len(batch)
+        if total is not None and len(rows) >= total:
+            break
+    complete = (total is not None and len(rows) >= total)
+    return rows, complete
+
+
+def _split_window(d_from, d_to):
+    """['m/d/Y','m/d/Y'] -> the two halves of that inclusive date range, or None if it is one day.
+
+    The audit's remedy for an unprovable window: narrow the query until each one is provably
+    complete. A single day that still overflows cannot be split further and is reported as such
+    rather than silently truncated.
+    """
+    try:
+        a = datetime.datetime.strptime(d_from, '%m/%d/%Y').date()
+        b = datetime.datetime.strptime(d_to, '%m/%d/%Y').date()
+    except Exception:
+        return None
+    if a >= b:
+        return None
+    mid = a + datetime.timedelta(days=(b - a).days // 2)
+    if mid < a or mid >= b:
+        return None
+    return ((a.strftime('%m/%d/%Y'), mid.strftime('%m/%d/%Y')),
+            ((mid + datetime.timedelta(days=1)).strftime('%m/%d/%Y'), b.strftime('%m/%d/%Y')))
+
+
+def _doctype_payload(d_from, d_to, doctype_id=LP_DOCTYPE_ID, count=str(CRITERIA_COUNT)):
     """Byte-for-byte the object Landmark's own SetCriteria() builds for a Document Type search.
     Note there is no `name` field at all — this is a whole-window doctype sweep, not a name search."""
     return (LP_ENDPOINT, [('doctype', doctype_id),
@@ -147,6 +227,61 @@ def _rows_to_canonical(docs):
     return _dedupe(out)
 
 
+def _sweep_window(d_from, d_to, depth=0):
+    """One date window, pulled to completion. -> canonical rows, or None if it never ran.
+
+    WHY THIS IS NOT ONE REQUEST ANY MORE (audit 2026-09-21, defect 8). The sweep asked Landmark
+    for 200 records, read the first grid page, and returned it as the window's answer. It never
+    read `recordsFiltered` from the envelope it was already parsing, so it could not tell a
+    30-day window that genuinely held 180 filings from one that held 900 and got cut at the cap.
+    Palm Beach LP coverage would simply have been short, every night, with nothing in the log
+    saying so.
+
+    Now: page the grid to the declared total, and when the SOURCE says the criteria cap truncated
+    the match, halve the date window and sweep each half. A window that still overflows at one
+    day wide is reported rather than quietly truncated -- an undercount we know about is a
+    different thing from one we do not.
+    """
+    for attempt in range(3):
+        tok = P.solve_token_2captcha()
+        if not tok:
+            return None
+        body = P.search(_doctype_payload(d_from, d_to), token=tok)
+        if body is None:
+            continue                            # transient rejection — same query, fresh token
+        rows, complete = _page_all(P.get_search_results)
+        if not rows:
+            continue
+        truncated = (not complete) or len(rows) >= CRITERIA_COUNT
+        if truncated and depth < MAX_SPLIT_DEPTH:
+            halves = _split_window(d_from, d_to)
+            if halves:
+                print('PALM BEACH: %s..%s returned %d with more on the server — splitting'
+                      % (d_from, d_to, len(rows)))
+                out = []
+                ran = False
+                for lo, hi in halves:
+                    part = _sweep_window(lo, hi, depth + 1)
+                    if part is not None:
+                        ran = True
+                        out += part
+                if ran:
+                    return out
+        docs = P.gsr_rows_to_docs(rows)
+        out = _rows_to_canonical(docs)
+        # Report all three counts. "0 homeowner LP" alone cannot distinguish a quiet window from
+        # a broken parse or an over-tight filter — and that ambiguity is exactly what hid the
+        # envelope bug. raw>0 with out==0 means the FILTER dropped them, not the portal.
+        print('PALM BEACH: %s..%s doctype=%s -> %d raw / %d parsed / %d homeowner LP%s'
+              % (d_from, d_to, LP_DOCTYPE_ID, len(rows), len(docs), len(out),
+                 '  [PARTIAL — source has more than this window returned]' if truncated else ''))
+        if truncated:
+            print('PALM BEACH: %s..%s is INCOMPLETE — %d rows pulled, source reports more and the '
+                  'window cannot be narrowed further.' % (d_from, d_to, len(rows)), file=sys.stderr)
+        return out
+    return None
+
+
 def sweep(days=30, deep=False):
     """-> canonical rows, or None when the portal is down/blocked (None != empty)."""
     ok = False
@@ -166,23 +301,9 @@ def sweep(days=30, deep=False):
     # frequently returns Landmark's error page, and P.search() now detects that and returns None.
     # The old loop treated a transient rejection as "wrong vocabulary" and moved on, burning a
     # captcha per attempt on values that were never going to work anyway.
-    for attempt in range(3):
-        tok = P.solve_token_2captcha()
-        if not tok:
-            return None
-        body = P.search(_doctype_payload(d_from, d_to), token=tok)
-        if body is None:
-            continue                            # transient rejection — same query, fresh token
-        rows = _gsr_rows(P.get_search_results(250, 0))
-        if rows:
-            docs = P.gsr_rows_to_docs(rows)
-            out = _rows_to_canonical(docs)
-            # Report all three counts. "0 homeowner LP" alone cannot distinguish a quiet window from
-            # a broken parse or an over-tight filter — and that ambiguity is exactly what hid the
-            # envelope bug. raw>0 with out==0 means the FILTER dropped them, not the portal.
-            print('PALM BEACH: %s..%s doctype=%s -> %d raw / %d parsed / %d homeowner LP'
-                  % (d_from, d_to, LP_DOCTYPE_ID, len(rows), len(docs), len(out)))
-            return out
+    got = _sweep_window(d_from, d_to, depth=0)
+    if got is not None:
+        return got
     if not deep:
         print('PALM BEACH: one-token sweep rejected; rerun with --deep for the plaintiff sweep '
               '(~1 captcha per plaintiff, slow)', file=sys.stderr)

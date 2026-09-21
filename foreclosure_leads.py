@@ -249,10 +249,21 @@ def scrape_date(page, d, saletype='FC', attempt=1, base=BASE):
     # pager text is unreliable headless — click Next until the first case stops changing
     seen_firsts = {items[0].get('Case #','') if items else ''}
     pages = 1
-    for _ in range(25):
+    # THREE WAYS THIS LOOP ENDS, and they used to be one (audit 2026-09-21, defect 9).
+    #   no Next button      -> the last page, positively proven. Fine.
+    #   clicked, no advance -> EITHER the last page OR the grid did not repaint inside 8s.
+    #   ran out of clicks   -> the 25-page cap, which proves nothing at all.
+    # All three did the same bare `break` and printed the same confident "N pending (pages=P)",
+    # so a day truncated by a slow repaint looked exactly like a day that was fully read.
+    # scrape_guard only catches a LARGE per-county collapse; losing the tail of one date is
+    # well inside its tolerance.
+    why = 'last page'
+    for _ in range(MAX_PAGE_CLICKS):
         cur_first = data['items'][0].get('Case #', '') if data['items'] else ''
         clicked = page.evaluate("() => { const b = document.querySelector('.Head_W .PageRight'); if (!b) return false; b.click(); return true; }")
-        if not clicked: break
+        if not clicked:
+            why = 'last page'
+            break
         advanced = False
         for _ in range(16):
             time.sleep(0.5)
@@ -262,12 +273,23 @@ def scrape_date(page, d, saletype='FC', attempt=1, base=BASE):
                 seen_firsts.add(first)
                 items += data['items']; pages += 1; advanced = True
                 break
-        if not advanced: break
+        if not advanced:
+            why = 'unproven: Next was clickable but the grid never showed a new first case'
+            break
+    else:
+        why = f'cap: stopped after {MAX_PAGE_CLICKS} page clicks with more possibly left'
+    if not why.startswith('last page'):
+        PAGING_UNPROVEN.append(f'{d} [{saletype}] {pages}p/{len(items)} rows — {why}')
     for rec in items:
         rec['AuctionDate'] = d
         rec['sale_type'] = saletype
-    print(f"{d} [{saletype}]: {len(items)} pending (pages={pages})")
+    print(f"{d} [{saletype}]: {len(items)} pending (pages={pages}, end={why})")
     return items
+
+# A page click is cheap; an undetected truncation is not. The old 25 was low enough to be
+# reachable on a heavy auction day, and hitting it was indistinguishable from finishing.
+MAX_PAGE_CLICKS = 60
+PAGING_UNPROVEN = []      # auction dates whose traversal did not positively reach the last page
 
 PROFILE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'browser-profile')
 
@@ -287,6 +309,13 @@ def scrape():
         for d, saletype in discover_dates(page):
             leads += scrape_date(page, d, saletype)
         browser.close()
+    if PAGING_UNPROVEN:
+        # Say it where the nightly log will carry it. A short scrape that nobody knows is short
+        # becomes tomorrow's baseline, and publish_guard then compares against the short number.
+        print('\n!! PAGINATION NOT PROVEN COMPLETE on %d auction date(s):' % len(PAGING_UNPROVEN),
+              file=sys.stderr)
+        for line in PAGING_UNPROVEN:
+            print('     ' + line, file=sys.stderr)
     seen, out = set(), []
     for r in leads:
         k = (r.get('Case #') or r.get('Address','')) + r.get('AuctionDate','')
@@ -401,47 +430,113 @@ def classify(case_type, plaintiff):
         return 'Mortgage/Other'
     return 'Other'
 
+def _party_tokens(nm):
+    """'Martin, Milagros J.' -> {'MILAGROS','MARTIN'} for identity comparison (sibling_cases:96)."""
+    return {t for t in re.sub(r'[.,]', ' ', str(nm or '')).upper().split() if len(t) > 1}
+
+
+def _same_party(a, b):
+    """Two party strings naming the same person/entity. Position in the clerk's list is NOT
+    identity: we compare name tokens, and the shorter name must be wholly inside the longer
+    ('SMITH, JOHN' is 'SMITH, JOHN A'; it is not 'SMITH, JANE')."""
+    ta, tb = _party_tokens(a), _party_tokens(b)
+    if not ta or not tb:
+        return False
+    return ta <= tb or tb <= ta
+
+
 def enrich_clerk(leads):
     """Miami-Dade Clerk OCS API: plaintiff, defendants, case type + a deep-link that lands
-    directly on the case page (parties, dockets, final judgment). Fully public, no login."""
+    directly on the case page (parties, dockets, final judgment). Fully public, no login.
+
+    TWO CORRECTIONS (audit 2026-09-21, defects 2 and 3).
+
+    A FAILED REFRESH IS NOT AN EMPTY CASE. This used to blank plaintiff/defendants/docket_url on
+    entry, then `continue` out of a timeout, a rejected encrypt, a caseID of -1 or any exception --
+    so a clerk outage rewrote every Miami-Dade lead as a case with no parties, indistinguishable
+    from one genuinely unlisted. Nothing downstream could tell the difference, and the association
+    co-defendant screen (diligence_flags) reads exactly these fields. Prior values are now kept and
+    marked `clerk_stale`, and only a SUCCESSFUL lookup overwrites them.
+
+    A DEFENDANT IS NOT DROPPED BY POSITION. `defs[1:]` assumed defendant zero is always the owner
+    already shown. When it is not -- a spouse, a second owner, an association listed first -- that
+    name left the pipeline entirely and no amount of downstream cleaning could recover it. The
+    owner is now removed by NAME MATCH against the Property Appraiser owner, and the full
+    role-labelled list is retained as `parties` (gitignored leads file only; the board bakes an
+    explicit field whitelist, so this costs the published payload nothing).
+    """
     s = requests.Session()
     s.headers.update({'User-Agent': UA, 'Referer': CLERK + '/ocs/'})
-    ok = 0
+    ok = stale = 0
     for i, r in enumerate(leads):
         case = (r.get('Case #') or '').strip()
-        r['plaintiff'] = r['defendants'] = r['docket_url'] = ''
         # tax-deed cases (e.g. 2026A00097) aren't in the civil OCS system - skip
         if r.get('sale_type') == 'TD' or not re.match(r'\d{4}-\d+-\w+-\d+', case):
+            r.setdefault('plaintiff', '')
+            r.setdefault('defendants', '')
+            r.setdefault('docket_url', '')
             continue
+        why = ''
         try:
             enc = s.get(f"{CLERK}/ocs/api/CaseInfo/encrypt/{case}", timeout=20).json()
             qs = enc.get('qs')
-            if not qs: continue
-            d = s.post(f"{CLERK}/ocs/api/CaseInfo/GetSingleCaseResult?qs={qs}",
-                       headers={'Content-Type': 'application/json'}, data='""', timeout=20).json()
-            if not d or d.get('caseID', -1) == -1:
-                continue
-            parties = d.get('parties', []) or []
-            plaintiffs = [p.get('partyName','').strip() for p in parties if 'PLAINTIFF' in (p.get('partyTypeDesc','') or '').upper()]
-            defs = [p.get('partyName','').strip() for p in parties if 'DEFENDANT' in (p.get('partyTypeDesc','') or '').upper()]
-            r['plaintiff'] = plaintiffs[0] if plaintiffs else ''
-            # skip the first defendant (that's the owner, already shown) -> "also named"
-            extra = [x for x in defs[1:] if x][:6]
-            r['defendants'] = '; '.join(extra)
-            # PA owner needs a folio; a folio-less case still names the owner as the 1st defendant,
-            # so recover it instead of showing a blank owner on an otherwise real, workable lead.
-            if not (r.get('owners') or '').strip() and defs and defs[0]:
-                r['owners'] = defs[0]
-            r['clerk_case_type'] = d.get('caseType','')
-            r['case_status'] = d.get('caseStatus','')
-            r['docket_url'] = f"{CLERK}/ocs/searchResults?qs={qs}"
-            r['case_type'] = classify(d.get('caseType',''), r['plaintiff'])
-            ok += 1
-        except Exception:
-            pass
+            if not qs:
+                why = 'no qs from encrypt'
+            else:
+                d = s.post(f"{CLERK}/ocs/api/CaseInfo/GetSingleCaseResult?qs={qs}",
+                           headers={'Content-Type': 'application/json'}, data='""', timeout=20).json()
+                if not d or d.get('caseID', -1) == -1:
+                    why = 'case not found'
+                else:
+                    parties = d.get('parties', []) or []
+                    plaintiffs = [p.get('partyName','').strip() for p in parties if 'PLAINTIFF' in (p.get('partyTypeDesc','') or '').upper()]
+                    defs = [p.get('partyName','').strip() for p in parties if 'DEFENDANT' in (p.get('partyTypeDesc','') or '').upper()]
+                    defs = [x for x in defs if x]
+                    r['plaintiff'] = plaintiffs[0] if plaintiffs else ''
+                    # PA owner needs a folio; a folio-less case still names the owner as the 1st
+                    # defendant, so recover it instead of showing a blank owner on a real lead.
+                    owner = (r.get('owners') or '').strip()
+                    if not owner and defs:
+                        owner = defs[0]
+                        r['owners'] = owner
+                    # "also named" = every defendant who is NOT the owner, by name, not by index.
+                    # No owner to compare against (both blank) is the one case where position is
+                    # all we have, and it is recorded rather than silently assumed.
+                    if owner:
+                        extra = [x for x in defs if not _same_party(x, owner)]
+                    else:
+                        extra = defs[1:]
+                        r['defs_by_position'] = True
+                    r['defendants'] = '; '.join(extra[:6])
+                    if len(extra) > 6:
+                        r['defs_more'] = len(extra) - 6      # how many the display string omits
+                    # the full role-labelled list, so nothing leaves the pipeline by truncation
+                    r['parties'] = [{'t': (p.get('partyTypeDesc') or '').strip(),
+                                     'n': (p.get('partyName') or '').strip()}
+                                    for p in parties if (p.get('partyName') or '').strip()]
+                    r['clerk_case_type'] = d.get('caseType','')
+                    r['case_status'] = d.get('caseStatus','')
+                    r['docket_url'] = f"{CLERK}/ocs/searchResults?qs={qs}"
+                    r['case_type'] = classify(d.get('caseType',''), r['plaintiff'])
+                    r['clerk_ts'] = time.strftime('%Y-%m-%d %H:%M')
+                    r.pop('clerk_stale', None)
+                    r.pop('clerk_err', None)
+                    ok += 1
+        except Exception as e:
+            why = type(e).__name__ + ': ' + str(e)[:80]
+        if why:
+            # keep whatever the last good lookup wrote; say plainly that today's refresh failed
+            r.setdefault('plaintiff', '')
+            r.setdefault('defendants', '')
+            r.setdefault('docket_url', '')
+            r['clerk_err'] = why
+            if r.get('clerk_ts'):
+                r['clerk_stale'] = True
+                stale += 1
         if (i+1) % 40 == 0: print(f"clerk {i+1}/{len(leads)} ({ok} matched)")
         time.sleep(0.25)
-    print(f"clerk enrichment: {ok}/{len(leads)} cases resolved")
+    print(f"clerk enrichment: {ok}/{len(leads)} cases resolved"
+          + (f", {stale} kept last-good after a failed refresh" if stale else ""))
     return leads
 
 def qualify(leads):

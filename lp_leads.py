@@ -25,6 +25,7 @@ Run:  python lp_leads.py           # reads lis_pendens.json (+ lp_addresses.json
 import json
 import os
 import re
+import time
 
 import requests
 
@@ -151,6 +152,17 @@ def build():
 
         # ---- is the case still alive? ------------------------------------------------------
         _s = stats.get(case) or {}
+        # Was this case's status ACTUALLY looked up? An unchecked row and a row checked-and-OPEN
+        # both arrive here as an empty dict, and both used to render as a live fresh filing
+        # (audit 2026-09-21, defect 10). Only Miami-Dade has a case-status adapter today, so
+        # every Broward and Palm Beach LP row is unchecked -- say so on the row.
+        lp_checked = bool(_s)
+        lp_asof = ''
+        if _s.get('at'):
+            try:
+                lp_asof = time.strftime('%Y-%m-%d', time.localtime(float(_s['at'])))
+            except Exception:
+                lp_asof = ''
         lp_status = str(_s.get('status') or '')
         lp_dismissed = bool(_s.get('dismissed'))
         # terminal WITHOUT a dismissal docket: the case ended some other way (likely judgment).
@@ -198,6 +210,9 @@ def build():
             'filed': lp.get('date', ''), 'filedDate': lp.get('date', ''),   # the Fresh-filings sort keys on filedDate
             'lpkind': lp.get('kind', ''), 'legal': lp.get('legal', ''),
             'cstatus': lp_status, 'lpDismissed': lp_dismissed, 'lpClosed': lp_closed,
+            # an old lis pendens is not evidence the case is still live; these two say whether
+            # anyone checked, and when.
+            'lpStatusChecked': lp_checked, 'lpStatusAsOf': lp_asof,
             'bookpage': lp.get('bookpage', ''),
             'zillow': '',
             # deep links are per-recorder — a Broward owner deep-linked into Miami-Dade's PA
