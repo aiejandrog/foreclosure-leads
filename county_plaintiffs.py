@@ -21,6 +21,7 @@ Run:
   python county_plaintiffs.py --case CACE-24-005649
 """
 import argparse
+import datetime
 import json
 import os
 import re
@@ -121,6 +122,44 @@ def resolve_pb(cases, headless=False):
     return out
 
 
+def days_of(r):
+    """The lead's days-to-auction as an int, or None when it is genuinely unknown.
+
+    `(r.get('days') or -1)` mapped a real ZERO -- today's auction, the most urgent case on the
+    board -- onto the same -1 it used for missing (audit 2026-09-21, defect 4). The 0..30 window
+    then rejected it. A count and a sentinel must not share a value; None means unknown.
+    """
+    d = (r or {}).get('days')
+    if isinstance(d, bool) or not isinstance(d, int):
+        return None
+    return d
+
+
+def is_stale(entry, days, max_age=21, today=None):
+    """Is a cached case-detail entry due for another look? (audit 2026-09-21, defect 5)
+
+    The cache was write-once -- `if c in cache and not --refresh: continue` -- and the nightly
+    Broward caller passes no --refresh, so an entry resolved in August was still being served
+    weeks later. Plaintiffs change: substitution of counsel, assignment, dismissal and refiling.
+
+    Entries written before this existed carry no `ts`, and re-resolving all of them at once would
+    spend real 2Captcha money on cases nobody is about to call. So an undated entry is refreshed
+    only when the auction is IMMINENT, which is where a wrong plaintiff does its damage.
+    """
+    if not isinstance(entry, dict):
+        return True
+    if not max_age:
+        return False
+    ts = str(entry.get('ts') or '')
+    if not ts:
+        return days is not None and 0 <= days <= 7
+    try:
+        when = datetime.date(*map(int, ts[:10].split('-')))
+    except Exception:
+        return True
+    return ((today or datetime.date.today()) - when).days >= max_age
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--all', action='store_true')
@@ -129,6 +168,10 @@ def main():
     ap.add_argument('--case', default='')
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--refresh', action='store_true')
+    ap.add_argument('--max-age', type=int, default=21, dest='max_age',
+                    help='re-resolve a cached case whose detail is older than N days (0 = never). '
+                         'A plaintiff is not a permanent fact: cases get reassigned, substituted '
+                         'and dismissed, and nothing here ever looked again.')
     ap.add_argument('--pb', action='store_true',
                     help="ALSO resolve Palm Beach (opens a HEADED browser + is anti-bot-flaky, ~1/45; OFF by default). "
                          "Broward runs silently via 2Captcha and is the reliable path.")
@@ -136,6 +179,9 @@ def main():
     near = a.near or (not a.all and not a.case)
 
     cache = json.load(open(CACHE, encoding='utf-8')) if os.path.exists(CACHE) else {}
+
+    def _stale(case_key, days):
+        return is_stale(cache.get(case_key), days, a.max_age)
     leadsets = {}
     for cty, fn in FILES.items():
         p = os.path.join(HERE, fn)
@@ -153,14 +199,22 @@ def main():
                 continue
             if a.case and c != a.case:
                 continue
+            # `days` is a COUNT, and 0 is a real one -- today's auction. `or -1` mapped it to -1
+            # and the 0..30 window then rejected the single most urgent case on the board
+            # (audit 2026-09-21, defect 4). None means unknown, which is not zero.
+            days = days_of(r)
             if not a.case:
-                if c in cache and not a.refresh:
+                if c in cache and not a.refresh and not _stale(c, days):
                     continue
-                if near and not (0 <= (r.get('days') or -1) <= 30):
+                if near and not (days is not None and 0 <= days <= 30):
                     continue
                 if r.get('st') == 'TD':                     # tax deeds: no mortgage survives a tax sale
                     continue
-            pick[cty].append(c)
+            pick[cty].append((999 if days is None else days, c))
+    # soonest auction first, so a --limit cap spends the captcha budget on the cases being called
+    # this week rather than on whatever happened to sit at the top of the file.
+    for _cty in pick:
+        pick[_cty] = [c for _, c in sorted(pick[_cty], key=lambda t: t[0])]
     if a.limit:
         # split the cap across the two counties, near-auction first (already filtered)
         pick['BROWARD'] = pick['BROWARD'][:a.limit]
@@ -175,6 +229,12 @@ def main():
     got.update(resolve_broward(pick['BROWARD']))
     if pick['PALM BEACH']:
         got.update(resolve_pb(pick['PALM BEACH']))
+    # `got` holds successes only, so a failed re-resolve leaves the previous answer in place --
+    # ageing a case must never cost us the data we already had.
+    _today = datetime.date.today().isoformat()
+    for _c, _d in got.items():
+        if isinstance(_d, dict):
+            _d['ts'] = _today
     cache.update(got)
     json.dump(cache, open(CACHE, 'w', encoding='utf-8'), indent=1)
 

@@ -28,20 +28,55 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+DEGRADED = []      # steps that returned a benign-but-not-clean code; reported at the end
+
+
 def run(label, args_, ok=(0,)):
     """Run one chain step. `ok` lists exit codes that are NOT failures — the LP phone step exits 5
     when the shared daily spend cap is used up, which is the budget working as designed, not a
-    broken chain: the board must still rebuild with the leads it already has."""
+    broken chain: the board must still rebuild with the leads it already has.
+
+    "Benign" is not the same as "clean" (audit 2026-09-21, defect 7). A benign code used to print
+    one line and vanish, so a night where the sweep only reached one county in three ended with
+    the same exit 0 as a night where all three swept. Benign non-zero codes are collected and
+    surfaced in this script's own exit code, so the batch above can report a degraded refresh."""
     print(f'\n===== {label} =====', flush=True)
     r = subprocess.run([sys.executable, '-u'] + args_, cwd=HERE)
     if r.returncode in ok:
         if r.returncode:
+            DEGRADED.append(f'{label} (exit {r.returncode})')
             print(f'({label} exited {r.returncode} — benign, chain continues)', flush=True)
         return
     if r.returncode != 0:
         print(f'\nCHAIN STOPPED at {label} (exit {r.returncode}) — nothing after it ran, '
               f'the board was NOT touched.', file=sys.stderr)
         sys.exit(r.returncode)
+
+
+def _newest_filing(rows):
+    """Newest filing date across LP rows, as an ISO string ('' when none parse).
+
+    This was `max(x['date'] for x in lp)` over raw M/D/YYYY TEXT (audit 2026-09-21, defect 12).
+    Lexicographic order on that format is not chronological order: '9/9/2026' > '9/18/2026'
+    because '9' > '1' at the second character, and every October date loses to every September
+    one because '1' < '9'. So the stamp reported the freshest filing as older than it was, and
+    got worse the closer the file came to a month boundary.
+
+    Nothing currently reads lp_meta.json -- healthcheck.py parses lis_pendens.json itself and is
+    correct -- so this fixed nothing downstream today. It is fixed because the stamp exists to be
+    read, and the next reader would have inherited a wrong number with no reason to doubt it.
+    The stored value is ISO so the next reader CAN compare it as text.
+    """
+    best = None
+    for x in rows or []:
+        try:
+            m, d, y = str((x or {}).get('date') or '').split('/')
+            got = datetime.date(int(y), int(m), int(d))
+        except Exception:
+            continue
+        if best is None or got > best:
+            best = got
+    return best.isoformat() if best else ''
 
 
 def main():
@@ -52,8 +87,13 @@ def main():
     a = ap.parse_args()
 
     if not a.no_sweep:
+        # 4 = PARTIAL sweep: at least one county ran, at least one was blocked (lis_pendens.py's
+        # EXIT_PARTIAL). Benign for the CHAIN -- the counties that did sweep are worth resolving
+        # and the board should still rebuild -- but the run is not clean, so it is carried to our
+        # own exit code at the end rather than swallowed here. 3 = nothing got through anywhere,
+        # which is NOT benign and stops the chain on the spot.
         run('SWEEP (lis_pendens, all 3 counties)',
-            ['lis_pendens.py', '--days', str(a.days), '--county', 'all'])
+            ['lis_pendens.py', '--days', str(a.days), '--county', 'all'], ok=(0, 4))
     run('RESOLVE (lp_resolve)', ['lp_resolve.py'])
     run('RESOLVE PASS 2 (lp_resolve2)', ['lp_resolve2.py'])
     # Broward rows carry no legal description, so the MD ladder above skips them — the BCPA
@@ -82,13 +122,18 @@ def main():
     # freshness stamp for healthcheck + anything that wants the as-of date
     try:
         lp = json.load(open(os.path.join(HERE, 'lis_pendens.json'), encoding='utf-8'))
-        newest = max((x.get('date') or '' for x in lp), default='')
+        newest = _newest_filing(lp)
         json.dump({'ran': datetime.datetime.now().isoformat(timespec='seconds'),
                    'records': len(lp), 'newest_filing': newest},
                   open(os.path.join(HERE, 'lp_meta.json'), 'w', encoding='utf-8'), indent=1)
-        print(f'\nCHAIN DONE: {len(lp)} LP records, newest filing {newest}')
+        print(f'\nCHAIN DONE: {len(lp)} LP records, newest filing {newest or "unknown"}')
     except Exception as e:
         print(f'meta stamp skipped: {e}')
+    if DEGRADED:
+        print('\nDEGRADED RUN — the chain finished, but not everything ran:')
+        for d in DEGRADED:
+            print(f'  - {d}')
+        sys.exit(4)
 
 
 if __name__ == '__main__':
