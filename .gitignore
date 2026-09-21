@@ -172,6 +172,7 @@ worker_notes_snapshots/
 !_skiptracetest.py
 !_phonepagetest.py
 !_autorunstoptest.py
+!_balloonlanetest.py
 # BatchData shared spend ledger + cap config (local money state, not code)
 batchdata_spend.json
 bd_budget.json
