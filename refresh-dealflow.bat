@@ -214,7 +214,20 @@ rem  value=0 / hs=False and equity ranking was silently dead for the freshest la
 rem  It also never ran lp_resolve2 or fl_lp/broward_resolve at all. lp_refresh.py IS the canonical
 rem  chain (sweep -> resolve -> resolve2 -> broward_resolve -> values -> status -> leads -> phones),
 rem  fail-fast, and stamps lp_meta.json so healthcheck can age it. One line replaces five.
+rem  READ THE LP CHAIN'S EXIT CODE (audit 2026-09-21, defect 7). lp_refresh.py is fail-fast and
+rem  stops the moment a step returns a code it does not consider benign - and this line threw that
+rem  away, so a chain that died at RESOLVE looked identical to one that swept three counties clean.
+rem  Codes from lis_pendens.py: 3 = every source blocked, nothing got through anywhere; 4 = PARTIAL,
+rem  some counties swept and some did not. Neither stops the refresh - the board still rebuilds on
+rem  the leads already on file, which is the right availability call - but the night is no longer
+rem  reported as clean. RUNEXIT 7 ^(6 is taken by the publish-guard gate^); an earlier fault wins.
+set "LPEXIT=0"
 if exist captcha.key python -u lp_refresh.py --days 30 >> "%LOG%" 2>&1
+if exist captcha.key call :lpcode
+if not "%LPEXIT%"=="0" echo     ^!^! LP CHAIN exit %LPEXIT% - pre-foreclosure lane did NOT fully refresh.>> "%LOG%"
+if not "%LPEXIT%"=="0" echo     ^!^! LP CHAIN exit %LPEXIT% - see leads-run.log. Board still rebuilds on file data.
+if not "%LPEXIT%"=="0" if "%RUNEXIT%"=="0" set "RUNEXIT=7"
+
 
 echo [2d/5] Geocoding new leads (keyless US Census) -> lat/lng for the origin-anchored door route...
 python -u geo_enrich.py >> "%LOG%" 2>&1
@@ -677,3 +690,10 @@ rem  that the data is fresh - 09-17 exited 0 precisely because the run aborted b
 rem  healthcheck ever ran. That is the hole this closes.
 if not "%RUNEXIT%"=="0" echo ==== REFRESH ENDED rc=%RUNEXIT% %date% %time% ====>> "%LOG%"
 endlocal & exit /b %RUNEXIT%
+
+rem  BELOW THE FINAL EXIT ON PURPOSE. A subroutine placed in the body is not inert: control
+rem  falls into its label, runs it, and `goto :eof` ends the script - which would have skipped
+rem  :end, the healthcheck and the verdict exit code entirely. Only `call` reaches it here.
+:lpcode
+set "LPEXIT=%errorlevel%"
+goto :eof

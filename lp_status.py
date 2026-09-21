@@ -43,6 +43,12 @@ import sibling_cases as S    # reuse the working, un-captcha'd OCS request chain
 HERE = os.path.dirname(os.path.abspath(__file__))
 IN = os.path.join(HERE, 'lis_pendens.json')
 CACHE = os.path.join(HERE, '_lp_status_cache.json')
+COVERAGE = os.path.join(HERE, '_lp_status_coverage.json')
+
+# Counties this script can actually ask about. Broward and Palm Beach need their own clerk
+# clients; until one exists, their rows must read as UNCHECKED rather than inherit the
+# empty-status shape that means "verified and fine" everywhere else.
+COUNTY_ADAPTERS = ('MIAMI-DADE',)
 
 # Terminal clerk statuses. On a lead with no sale scheduled these mean the case ended.
 # How long a clerk status is trusted before it is fetched again. Two weeks is a compromise:
@@ -104,7 +110,35 @@ def main():
 
     # OCS is a Miami-Dade system (sibling_cases.py:14) — a BROWARD case number queried against
     # it returns junk, not a docket. Non-MD rows wait for their county's case-status client.
-    feed = [r for r in feed if (r.get('county') or 'MIAMI-DADE') == 'MIAMI-DADE']
+    #
+    # THE EXCLUSION IS CORRECT; BEING SILENT ABOUT IT WAS NOT (audit 2026-09-21, defect 10).
+    # A Broward LP row was simply dropped here, so lp_leads found no status for it, and a row
+    # with no status renders exactly like a row verified OPEN: cstatus '', lpDismissed False,
+    # lpClosed False. The lane that exists to stop us calling a homeowner whose case already
+    # ended was therefore running on one county in three, and nothing on the board said so.
+    # Coverage is now written out and stamped onto the row, so "verified live today" is
+    # distinguishable from "never checkable here".
+    by_county = {}
+    for r in feed:
+        by_county.setdefault(str(r.get('county') or 'MIAMI-DADE').upper(), 0)
+        by_county[str(r.get('county') or 'MIAMI-DADE').upper()] += 1
+    covered = sorted(c for c in by_county if c in COUNTY_ADAPTERS)
+    uncovered = sorted(c for c in by_county if c not in COUNTY_ADAPTERS)
+    try:
+        json.dump({'ran': time.strftime('%Y-%m-%d %H:%M'),
+                   'ttl_days': STATUS_TTL_DAYS,
+                   'counties': by_county,
+                   'checked': covered,
+                   'no_adapter': uncovered},
+                  open(COVERAGE, 'w', encoding='utf-8'), indent=1)
+    except Exception as e:
+        print('coverage not written: %s' % e)
+    if uncovered:
+        print('NO CASE-STATUS ADAPTER for %s — %d LP row(s) cannot be checked for dismissal here. '
+              'They are stamped unchecked, not assumed live.'
+              % (', '.join(uncovered), sum(by_county[c] for c in uncovered)))
+
+    feed = [r for r in feed if str(r.get('county') or 'MIAMI-DADE').upper() in COUNTY_ADAPTERS]
     cases = [str(r.get('case') or '').strip() for r in feed]
     cases = [c for c in cases if c and '-' in c]          # skip synthesized LP-XXXX keys
     # STALE-CACHE RE-CHECK (2026-09-01). This was `c not in cache`, so a case checked ONCE as OPEN

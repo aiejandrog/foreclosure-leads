@@ -33,13 +33,18 @@ survives. It is a CEILING, and it renders as one.
 
 THE STATES (one field, `eqstate`, on every lead — never absent):
 
-    clear      chain traced, nothing survives            -> equity is a FACT
-    priced     chain traced, surviving debt with amounts -> equity is a FACT (net of `surv`)
-    unpriced   instruments exist, amounts unpublished    -> equity is a CEILING (PB)
+    clear      anchored search, nothing survives         -> equity is a FACT
+    priced     every surviving instrument has an amount  -> equity is a FACT (net of `surv`)
+    unpriced   instruments exist, total not established  -> equity is a CEILING
     none       chain attempted, could not establish      -> equity is a GUESS
     unchecked  no chain pulled yet                       -> equity is a GUESS
 
-Only `clear` and `priced` may be spoken as fact to a homeowner or to Jose.
+Only `clear` and `priced` may be spoken as fact to a homeowner or to Jose. Two states that used
+to reach that pair no longer do -- a low-confidence empty search, and a part-priced lien list.
+See `state_of` for why each one was manufacturing certainty it did not have.
+
+`priced` is still RECORDED amounts, never a current payoff. Nothing in a county index knows what
+a borrower owes today; interest, arrears and fees are not in the instrument.
 """
 
 FACT = ('clear', 'priced')
@@ -47,7 +52,7 @@ FACT = ('clear', 'priced')
 LABEL = {
     'clear':     'VERIFIED CLEAR — chain traced, no surviving mortgage found',
     'priced':    'VERIFIED — surviving debt traced and priced',
-    'unpriced':  'CEILING ONLY — mortgage(s) recorded but Palm Beach publishes no amounts',
+    'unpriced':  'CEILING ONLY — mortgage(s) recorded, surviving total not established',
     'none':      'UNVERIFIED — the recorded chain could not be established',
     'unchecked': 'NOT CHECKED — no recorded chain pulled for this lead yet',
 }
@@ -57,26 +62,46 @@ SHORT = {'clear': 'CLEAR', 'priced': 'VERIFIED', 'unpriced': 'CEILING',
 
 def state_of(chain):
     """chain = the per-case record from records_liens / broward_liens / palmbeach_liens
-    (or None). Returns one of the five states above. Never raises, never guesses upward."""
+    (or None). Returns one of the five states above. Never raises, never guesses upward.
+
+    TWO WAYS THIS USED TO GUESS UPWARD (audit 2026-09-21, defects list item 1):
+
+    1. `conf='low'` + an empty lien list returned 'clear', i.e. VERIFIED CLEAR. But 'low' is set
+       (records_liens.py) when the search could not be anchored to the parcel or matched more
+       than 45 name models -- a search that unreliable cannot prove a NEGATIVE. An empty result
+       from it is indistinguishable from having looked in the wrong place, which is the exact
+       false hope this module was written to kill. 199 Miami-Dade and 16 Broward cached chains
+       sat in that state. Low confidence now reaches 'none' (UNVERIFIED), never a FACT.
+
+       Note the asymmetry, which is deliberate: low + liens FOUND stays priceable. A wrong
+       anchor there overstates debt and costs us a lead, which is the safe direction to fail;
+       `eqlow` still flags it. Understating debt is what reaches a homeowner.
+
+    2. ONE lien carrying an amount returned 'priced' for the WHOLE list, before `conf='unpriced'`
+       was even consulted. A list we cannot total is a CEILING, not a priced chain, so a partial
+       or wholly amountless list is 'unpriced' now. `priced` means every surviving instrument is
+       accounted for -- and it still means RECORDED amounts, never a current payoff balance.
+    """
     if not chain or not isinstance(chain, dict):
         return 'unchecked'
     conf = str(chain.get('conf') or '').strip().lower()
-    liens = chain.get('liens') or []
-    # priced: we hold actual dollar figures for surviving debt
-    if liens and any((l or {}).get('amt') for l in liens if isinstance(l, dict)):
-        return 'priced'
+    liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
+    # The source publishes no amounts at all -> a ceiling, whatever any single row happens to carry.
     if conf == 'unpriced':
         return 'unpriced'
-    # PB shape: instruments counted but never priced, even when conf says otherwise
-    if not liens and (chain.get('mtg_open_unpriced') or 0) > 0:
-        return 'unpriced'
-    if conf in ('ok', 'low') and not liens:
-        # searched the index and found nothing surviving. 'low' = common owner name, so the
-        # search itself is less certain -> still a fact, but the operator sees the caveat.
-        return 'clear'
     if liens:
-        return 'priced'
-    if conf == 'none':
+        # priced ONLY when every surviving instrument carries a figure. Any gap and the total is
+        # unknowable, so the honest answer is the ceiling, not a number the operator would quote.
+        if all(l.get('amt') for l in liens):
+            return 'priced'
+        return 'unpriced'
+    # PB shape: instruments counted but never priced, even when conf says otherwise
+    if (chain.get('mtg_open_unpriced') or 0) > 0:
+        return 'unpriced'
+    if conf == 'ok':
+        # searched the index against a real anchor and found nothing surviving. THAT is the fact.
+        return 'clear'
+    if conf in ('low', 'none'):
         return 'none'
     return 'unchecked' if not conf else 'none'
 
@@ -96,7 +121,14 @@ def apply(lead, chain):
         if chain.get('chain_note'):
             lead['eqnote'] = chain.get('chain_note')
         if st == 'unpriced':
-            lead['eqopen'] = chain.get('mtg_open_unpriced') or 0
+            # how many instruments we know survive but cannot total. PB reports the count itself;
+            # a part-priced list from any county has to be counted here, or the lead renders a
+            # CEILING of 0 and reads like a clear one.
+            _liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
+            lead['eqopen'] = (chain.get('mtg_open_unpriced') or 0) or len(_liens)
+            _gap = [l for l in _liens if not l.get('amt')]
+            if _gap:
+                lead['eqgap'] = len(_gap)   # instruments with no published figure
         if str(chain.get('conf') or '').lower() == 'low':
             lead['eqlow'] = True     # common-name search: the trace is less certain
     return st

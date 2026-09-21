@@ -212,6 +212,21 @@ $0.20 / $420 Miami-Dade figures, the Broward document-download exclusion, and th
 contents carry the original reviewer's September 21 check and nothing more. Confirm them before any
 money is committed.
 
+### Status of the work order, September 21
+
+All twelve are fixed on this branch, with `_audit12test.py` (88 checks) carrying the audit's own
+failing inputs. Four of the twelve are only partly closed, and the honest boundary is:
+
+| | what was fixed | what was NOT |
+|---|---|---|
+| 8 Palm Beach | the sweep reads the declared total, pages the grid and halves a window it cannot prove | never exercised against the live Landmark portal from here |
+| 9 auction paging | the three ways the loop ends are told apart and reported; cap raised to 60 | no reconciliation against a timed source snapshot; needs a browser to exercise |
+| 10 LP status | the gap is now data: uncovered counties are stamped unchecked, not assumed live | no Broward or Palm Beach case-status adapter was written |
+| 5 cache aging | entries are timestamped and age out; imminent auctions go first | undated legacy entries only re-resolve inside 7 days of auction, to bound the captcha spend |
+
+Item 4 of the work order — piloting county feed products — is procurement, not code, and is
+untouched.
+
 One scope note for whoever picks up the work: `cadence.py` and everything else listed under the
 reserved suppression surface in `CLAUDE.md` are untouched by these findings, and none of the twelve
 corrections requires editing them.

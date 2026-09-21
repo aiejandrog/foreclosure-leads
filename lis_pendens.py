@@ -214,6 +214,9 @@ def normalize(rec, lender=''):
     }
 
 
+SWEEP_BLOCKED = []        # Miami-Dade plaintiff names whose fetch never got through this run
+
+
 def lp_sweep(days=30, tries=3):
     """Fresh LIS PENDENS from Miami-Dade Official Records WITHOUT the walled docket sweep: name-search
     each major foreclosure plaintiff over an ISO date window and keep the LIS PENDENS docs, unioned +
@@ -244,6 +247,7 @@ def lp_sweep(days=30, tries=3):
                 break
             time.sleep(1)
         if recs is None:
+            SWEEP_BLOCKED.append(name)
             print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} (blocked)'); continue
         lp = [r for r in recs if 'LIS' in (r.get('doC_TYPE') or '').upper()
               and 'CANCEL' not in (r.get('doC_TYPE') or '').upper()]
@@ -256,6 +260,25 @@ def lp_sweep(days=30, tries=3):
             kept += 1
         print(f'  [{i}/{len(PLAINTIFFS)}] {name:26} {len(recs)} recs -> {kept} homeowner LP')
     return list(out.values())
+
+
+# A PARTIAL sweep is not a failure of the run, but it is not a success either: some counties
+# produced and some did not. lp_refresh treats 4 as benign-and-continue (its `ok` tuple) so the
+# board still rebuilds, while run_report and the status file can say which lane is missing.
+# 3 = nothing got through anywhere, which stops the chain.
+EXIT_PARTIAL = 4
+
+
+def sweep_verdict(status):
+    """{county: 'ok'|'failed'} -> (counties that ran, counties that failed).
+
+    An empty list from a sweep that RAN is a verified-empty window and counts as ok; None from a
+    blocked sweep is a failure. Collapsing the two is what let a fully blocked morning exit 0
+    (audit 2026-09-21, defect 6).
+    """
+    counties = {k: v for k, v in (status or {}).items() if not k.endswith('_blocked_plaintiffs')}
+    return (sorted(k for k, v in counties.items() if v == 'ok'),
+            sorted(k for k, v in counties.items() if v == 'failed'))
 
 
 def _merge_key(x):
@@ -278,25 +301,58 @@ def main():
     a = ap.parse_args()
     if a.probe:
         probe(); return
+    # PER-COUNTY VERDICT (audit 2026-09-21, defect 6). "Found nothing" and "never got through"
+    # are opposite facts and this script used to return 0 for both, so a morning where every
+    # captcha was refused reported a clean sweep and the wrapper carried on over yesterday's
+    # data. A county is 'ok' only when its sweep actually ran -- an EMPTY list from a sweep that
+    # ran is a verified-empty window and stays ok; None means blocked.
     out = []
+    status = {}
     if a.county in ('miami-dade', 'all'):
-        out += lp_sweep(days=a.days) or []
+        md = lp_sweep(days=a.days) or []
+        out += md
+        # MD has no single blocked signal: it sweeps a list of plaintiffs. All of them refused
+        # and nothing found = we learned nothing, whatever the empty list looks like.
+        status['MIAMI-DADE'] = ('failed' if (SWEEP_BLOCKED and not md) else 'ok')
+        if SWEEP_BLOCKED:
+            status['MIAMI-DADE_blocked_plaintiffs'] = len(SWEEP_BLOCKED)
     if a.county in ('broward', 'all'):
         from fl_lp import broward as _bw
         bw = _bw.sweep(days=a.days)
         if bw is None:
+            status['BROWARD'] = 'failed'
             print('BROWARD sweep blocked — other counties (if any) still merge.')
         else:
+            status['BROWARD'] = 'ok'
             out += bw
     if a.county in ('palm-beach', 'all'):
         from fl_lp import palmbeach as _pb
         pb = _pb.sweep(days=a.days)
         if pb is None:
+            status['PALM BEACH'] = 'failed'
             print('PALM BEACH sweep blocked/portal down — other counties (if any) still merge.')
         else:
+            status['PALM BEACH'] = 'ok'
             out += pb
+
+    ran, failed = sweep_verdict(status)
+    try:
+        json.dump({'ran': datetime.datetime.now().isoformat(timespec='seconds'),
+                   'days': a.days, 'requested': a.county, 'counties': status,
+                   'new_rows': len(out), 'failed': failed},
+                  open(os.path.join(HERE, 'lp_sweep_status.json'), 'w', encoding='utf-8'), indent=1)
+    except Exception as e:
+        print(f'sweep status not written: {e}')
+
+    if not ran:
+        # nothing got through anywhere. The existing file is untouched and still valid data --
+        # this is a FAILED REFRESH, not an empty county, and the chain must hear about it.
+        print('\nno LP sweep completed — every source blocked. lis_pendens.json left as it was.')
+        sys.exit(3)
     if not out:
-        print('\nno LP filings — every search blocked (captcha) or empty window. Retry.'); return
+        print('\nsweep ran, no new filings in the window.'
+              + (f' FAILED: {", ".join(failed)}' if failed else ''))
+        sys.exit(EXIT_PARTIAL if failed else 0)
     # MERGE, never overwrite (2026-08-11). The sweep only sees its own date window; the file
     # holds every filing being worked. Overwriting made a 30-day sweep silently delete every
     # older LP lead — the resolved, valued, on-the-board ones included. Union by the same
@@ -322,6 +378,10 @@ def main():
     json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
     print(f"\nDONE: {fresh} NEW filing(s) this sweep, {len(out)} total ({dict(kinds)}) -> lis_pendens.json")
     print("Front of the funnel — the owner the day their foreclosure was filed. Board play = LP-EARLY (be first).")
+    if failed:
+        print(f'\nPARTIAL SWEEP: {", ".join(failed)} did not run. The rows above are from '
+              f'{", ".join(ran)} only; the missing counties keep whatever was already on file.')
+        sys.exit(EXIT_PARTIAL)
 
 
 if __name__ == '__main__':
