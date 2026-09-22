@@ -104,14 +104,19 @@ def _trace_provider_ready():
     costs $0.15/hit against Tracerfy's $0.10; refresh-dealflow.bat's [3b/5] gate was narrowed to
     `if exist tracerfy.key` precisely because a Tracerfy key problem used to fail over to the
     provider we left. A preflight that passed `--provider batchdata` here would rebuild that bug.
+
+    NOTHING IS CAUGHT HERE, ALSO ON PURPOSE (2026-09-22, second Greptile P1). This function briefly
+    wrapped the whole body in `except Exception: return ''`, which quietly turned a broken skiptrace
+    import, or an unreadable key file, into "no key" — a degraded run instead of the loud stop those
+    deserve. That is the same trade this entire commit argues against: it is how the stale stamp
+    went unnoticed for four days. The ONLY routine answer is `load_key()` returning empty, which is
+    a machine with no key configured. Anything that RAISES is a defect in the environment, and
+    skiptrace.py would die on it in the subprocess a moment later anyway, so it stops the chain with
+    a traceback that names the real cause. Do not add a catch here.
     """
-    try:
-        import skiptrace
-        provider = skiptrace.pick_provider()
-        return provider if skiptrace.load_key(provider) else ''
-    except Exception as e:                       # a broken import must not take the chain with it
-        print(f'(skip-trace preflight failed, treating as no key: {e})')
-        return ''
+    import skiptrace
+    provider = skiptrace.pick_provider()
+    return provider if skiptrace.load_key(provider) else ''
 
 
 def _stamp():

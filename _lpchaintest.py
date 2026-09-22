@@ -158,7 +158,16 @@ rec('the preflight does not re-implement the key filenames',
 rec('the preflight does not override the provider skiptrace picked',
     '--provider' not in _pre,
     'BatchData was exited 2026-08-11 at $0.15/hit; failing over to it is a bug the bat already fixed')
-rec('a broken import is treated as no key, not as a crash', 'except Exception' in _pre)
+# INVERTED 2026-09-22 (second Greptile P1). This check used to assert the opposite — that a blanket
+# `except Exception` made a broken import read as "no key". That was wrong, and wrong in the exact
+# way this whole commit is about: it converted a real environment defect into a degraded run. The
+# only routine answer is load_key() returning empty; anything that RAISES is a defect and must stop
+# the chain with a traceback naming it.
+rec('the preflight catches nothing', 'except' not in _pre,
+    'a catch here turns a broken skiptrace import or an unreadable key file into "no key"')
+rec('and its only quiet answer is an empty load_key()',
+    re.search(r"return provider if skiptrace\.load_key\(provider\) else ''", _pre) is not None,
+    'the routine case is a machine with no key configured, nothing else')
 
 print('\n-- benign is reported, never swallowed --')
 run_src = SRC.split('def run(')[-1].split('\ndef ')[0]
