@@ -333,6 +333,13 @@ outside the repo because the log carries homeowner email addresses.
 |---|---|---|---|
 | BSG Warmup | 09:15 | daily | `warmup.py`, company-owned mailboxes only — the one task deliberately left running on the disarmed desktop |
 
+**`warmup.py` does not write `mail_sent.json`, and that is correct** — warm-up mail goes to
+company-owned mailboxes, so counting it as outreach would corrupt every reply and bounce rate here.
+But every cap in the project meters off that one ledger, so an alias's real daily volume is not
+visible anywhere. `python ramp_status.py` adds the two back together; `--days N` also prints the
+date the cold ramp first matches the warm-up quota, which is the first day stopping BSG Warmup
+does not cut a warming alias's volume. Read-only.
+
 A runner audit still has to **enumerate** tasks rather than trust any list in this file — see §1.
 
 The tracked installer templates set `DisallowStartIfOnBatteries=false`,
