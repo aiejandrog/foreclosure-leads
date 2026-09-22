@@ -195,12 +195,16 @@ def steps(lead, sender):
     # NOTHING ELSE IN THIS FILE IS TOUCHED. The pre-send sweep, the ledger re-read and the stop
     # detection are the reserved suppression surface (CLAUDE.md) and are exactly as they were.
     #
-    # !! FLAG, NOT FIXED -- FOR ALEJANDRO. Unlike outreach_email.py and send_server.py, the send
-    # loop below sets Subject/From/To and NO List-Unsubscribe header. Those two paths keep their
-    # header, so the sentence going leaves them with a visible Unsubscribe control in Gmail and
-    # Outlook. This path now has neither the header nor the sentence, so a cadence email offers
-    # no opt-out at all. Adding the header here is one line beside msg['To'] -- deliberately not
-    # done in this commit because that is a logic change on the reserved surface.
+    # WHAT STILL CARRIES THE OPT-OUT HERE: the List-Unsubscribe header. The normal path sends
+    # through send_server._smtp_send, which sets it and runs mail_guard.assert_sendable against
+    # it, so cadence has always had the header on that path. The legacy fallback in the send loop
+    # (reached only when `import send_server` failed) built its message by hand and set no header;
+    # it does now.
+    #
+    # !! STILL OPEN -- FOR ALEJANDRO. That same fallback skips mail_guard.assert_sendable
+    # entirely, so an unfilled placeholder or an empty-rendered value could leave on it. Not
+    # fixed here: adding a gate that can REFUSE a send is a behaviour change on the surface
+    # CLAUDE.md reserves, and it is a different bug from the one being fixed.
     s0 = (f"Hi {first},\n\nMy name is {sn}. I work with a small local team that helps owners in "
           f"foreclosure. Your property at {addr} has an auction scheduled for {auc}.\n\n"
           f"I'm not calling to pressure you. I just want to make sure you've seen your options before "
@@ -523,10 +527,20 @@ def main():
             mid = _ss._smtp_send(cred[0], cred[1], sender.get('name') or '', s['email'],
                                  subj, body, from_addr=alias or None)
         else:
+            # LEGACY FALLBACK -- reached only when `import send_server` failed at the top of this
+            # file. The lane path above goes through _ss._smtp_send, which sets List-Unsubscribe
+            # itself; this branch built the message by hand and set nothing. That cost nothing
+            # while the bodies carried an opt-out sentence. They no longer do (2026-09-22), so
+            # without this the fallback is the one path that can mail a homeowner with no way out
+            # at all. The LOGIN, not a lane alias: unsubscribe_header's mailto arm has to land in
+            # the mailbox replies.py actually opens, and this branch sends as the login anyway.
             msg = MIMEText(body, 'plain', 'utf-8')
             msg['Subject'] = subj
             msg['From'] = formataddr((sender.get('name') or cred[0], cred[0]))
             msg['To'] = s['email']
+            _unsub_hdr = _MG.unsubscribe_header(cred[0])
+            if _unsub_hdr:
+                msg['List-Unsubscribe'] = _unsub_hdr
             smtp.send_message(msg)
         sent += 1
         # THE LEDGER ROW — same shape the bridge writes, and the reason the cap above can work at

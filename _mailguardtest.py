@@ -161,6 +161,22 @@ rec('a failed state write is announced, not swallowed',
 rec('the old single end-of-run dump is gone',
     "json.dump(state, open(STATE, 'w', encoding='utf-8'), indent=1)" not in src_c)
 
+# BOTH cadence send paths offer a way out, now that no body carries a sentence (2026-09-22).
+# The lane path inherits the header from send_server._smtp_send. The legacy fallback -- reached
+# only when `import send_server` failed -- builds its message by hand and used to set nothing,
+# which made it the one path that could mail a homeowner with no opt-out at all.
+_fallback = src_c.split("msg = MIMEText(body, 'plain', 'utf-8')", 1)[-1].split('sent += 1', 1)[0]
+rec('cadence\'s legacy fallback sets List-Unsubscribe',
+    "msg['List-Unsubscribe'] = _unsub_hdr" in _fallback
+    and '_MG.unsubscribe_header(cred[0])' in _fallback)
+rec('...off the LOGIN, so the mailto arm lands where replies.py scans',
+    '_MG.unsubscribe_header(cred[0])' in _fallback
+    and '_MG.unsubscribe_header(alias' not in _fallback)
+rec('...and the lane path still goes through send_server, which sets it too',
+    '_ss._smtp_send(' in src_c
+    and "msg['List-Unsubscribe'] = unsub" in io.open(
+        os.path.join(HERE, 'send_server.py'), encoding='utf-8').read())
+
 # ---- 7. every commercial message offers a way out ----------------------------------------------
 # CAN-SPAM 15 U.S.C. 7704(a)(3). The guard itself is UNCHANGED and still refuses a send that has
 # neither a header nor a body sentence -- that rule is what makes the 2026-09-22 wording removal
