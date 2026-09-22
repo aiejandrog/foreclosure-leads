@@ -162,11 +162,17 @@ def probe(subject, pause=2.0, keep_raw=False):
         # A shape whose only distinguishing value is empty proves nothing; skip it and say so,
         # rather than recording a rejection the subject caused.
         if not any(str(v).strip() for k, v in params.items() if k != 'searchtype'):
+            # SAID OUT LOUD. The 2026-09-22 desktop run printed three lines and a headline of
+            # NOTHING CONFIRMED, while four shapes had been skipped for want of a CFN and a folio.
+            # A shape nobody tried is not a shape that failed, and a summary that cannot tell them
+            # apart overstates its own result.
+            print('  %-58s -> not probed (%s)' % (label[:58], 'no subject value for this shape'))
             results.append({'capability': capability, 'label': label, 'outcome': 'not_probed',
                             'why': 'no subject value available for this shape'})
             continue
         token, why = mint_token()
         if not token:
+            print('  %-58s -> not probed (%s)' % (label[:58], why))
             results.append({'capability': capability, 'label': label, 'outcome': 'not_probed',
                             'why': why})
             continue
@@ -260,13 +266,25 @@ def main(argv=None):
         json.dump(verdict, fh, indent=1, sort_keys=True)
     caps = verdict['capabilities']
     good = [k for k, v in caps.items() if v.get('confirmed')]
+    tried = [r for r in verdict['shapes'] if r.get('outcome') != 'not_probed']
+    skipped = [r for r in verdict['shapes'] if r.get('outcome') == 'not_probed']
     print('\n-> %s' % CAPS)
+    print('%d shape(s) tried, %d not probed.' % (len(tried), len(skipped)))
+    for row in skipped:
+        print('  NOT PROBED: %s - %s' % (row['label'], row.get('why')))
     if good:
         print('CONFIRMED: %s. document_walk can now resolve a cited instrument directly.'
               % ', '.join(sorted(good)))
         return 0
-    print('NOTHING CONFIRMED. Every shape was rejected or returned the subject-less empty set.')
-    print('That is a real answer: the walk stays on the name-expansion route, which is proven.')
+    if not tried:
+        print('NOTHING WAS PROBED. This run proves nothing about the endpoint.')
+        return 3
+    print('NOTHING CONFIRMED among the %d shape(s) tried. That is a real answer for those shapes '
+          'and only those: the walk stays on the index and the name-expansion route.' % len(tried))
+    if skipped:
+        print('The shapes above were never tried. Re-run with --cfn and --folio from a recorded '
+              'instrument that HAS both (the pilot judgment is indexed at folio 0, so it cannot '
+              'answer the folio question - use a recorded MORTGAGE off the same parcel).')
     return 2
 
 

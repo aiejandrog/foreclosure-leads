@@ -320,6 +320,203 @@ class PartyCandidateTest(unittest.TestCase):
         self.assertEqual(plan['skipped'], len(plan['candidates']))
 
 
+class FakeSearcher:
+    """A NameSearcher stand-in. `answers` maps a name to models, or to None for "not reached"."""
+
+    def __init__(self, answers):
+        self.answers = answers
+        self.asked = []
+        self.spent_free = self.spent_paid = 0
+
+    def search(self, name):
+        self.asked.append(name)
+        answer = self.answers.get(name, [])
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+
+PRIOR_OWNER_MORTGAGE = model('27000', '500', cfn='M1', doc_type='MORTGAGE',
+                             folio='3059130020010', second='COUNTRYWIDE HOME LOANS')
+ELSEWHERE = model('27100', '10', cfn='M2', doc_type='MORTGAGE', folio='9999999999999',
+                  second='SOME OTHER BANK')
+RELEASED = model('27200', '20', cfn='M3', doc_type='SATISFACTION OF MORTGAGE',
+                 folio='3059130020010')
+
+
+class NameSearchTest(unittest.TestCase):
+    def setUp(self):
+        self.index = W.RecordIndex(os.path.join(_TMP, 'names-%s.json'
+                                                % self.id().rsplit('.', 1)[-1]))
+
+    def plan(self):
+        return [{'name': 'ROSALES MARIA', 'why': 'deed on the subject folio (grantor)',
+                 'source_ref': 'official_records/20000-1'}]
+
+    def test_a_prior_owners_mortgage_on_this_parcel_is_reported(self):
+        searcher = FakeSearcher({'ROSALES MARIA': [PRIOR_OWNER_MORTGAGE]})
+        out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010')
+        found = out['found_under_other_names']
+        self.assertEqual(len(found), 1)
+        self.assertEqual(found[0]['under_name'], 'ROSALES MARIA')
+        self.assertEqual(found[0]['anchored_by'], 'folio')
+
+    def test_a_mortgage_on_a_different_property_is_not_reported(self):
+        searcher = FakeSearcher({'ROSALES MARIA': [ELSEWHERE]})
+        out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010')
+        self.assertEqual(out['found_under_other_names'], [])
+
+    def test_a_satisfaction_is_not_an_encumbrance(self):
+        searcher = FakeSearcher({'ROSALES MARIA': [RELEASED]})
+        out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010')
+        self.assertEqual(out['found_under_other_names'], [])
+
+    def test_an_unreachable_county_is_never_reported_as_a_clean_name(self):
+        # An empty search that prints like a clean title check is the most dangerous output this
+        # repo can produce. None means "not reached" and must say so.
+        searcher = FakeSearcher({'ROSALES MARIA': None})
+        out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010')
+        self.assertEqual(out['searched'][0]['outcome'], 'not_reached')
+        self.assertEqual(out['found_under_other_names'], [])
+
+    def test_a_throwing_search_is_recorded_not_raised(self):
+        searcher = FakeSearcher({'ROSALES MARIA': RuntimeError('turnstile down')})
+        out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010')
+        self.assertEqual(out['searched'][0]['outcome'], 'error')
+        self.assertIn('turnstile down', out['searched'][0]['reason'])
+
+    def test_what_a_name_search_returns_is_indexed_for_the_citation_pass(self):
+        searcher = FakeSearcher({'ROSALES MARIA': [PRIOR_OWNER_MORTGAGE]})
+        W.run_name_searches(self.plan(), self.index, searcher, '3059130020010')
+        self.assertIsNotNone(self.index.get('27000', '500'))
+
+    def test_subdivision_anchors_a_record_that_carries_no_folio(self):
+        no_folio = model('27300', '7', cfn='M4', doc_type='MORTGAGE',
+                         subdiv='GARDEN LAKE TOWERS')
+        searcher = FakeSearcher({'ROSALES MARIA': [no_folio]})
+        out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010',
+                                  subdivision='GARDEN LAKE TOWERS')
+        self.assertEqual(out['found_under_other_names'][0]['anchored_by'], 'subdivision')
+
+    def test_no_plan_means_no_search_is_run(self):
+        searcher = FakeSearcher({})
+        out = W.run_name_searches([], self.index, searcher, '3059130020010')
+        self.assertEqual(searcher.asked, [])
+        self.assertEqual(out['searched'], [])
+
+
+class WalkWithNamesTest(unittest.TestCase):
+    """Names run BEFORE the citation pass, so what they index can resolve a citation this run."""
+
+    def setUp(self):
+        # Per-test file: the index PERSISTS on save, so a shared path would let one test's
+        # name-search result resolve the next test's citation and hide the very thing it asserts.
+        self.index = W.RecordIndex(os.path.join(_TMP, 'walknames-%s.json'
+                                                % self.id().rsplit('.', 1)[-1]))
+        self.caps = os.path.join(_TMP, 'caps-absent.json')
+        self.fetched = []
+        import miami_judgment
+        self._real = miami_judgment.collect_recorded
+        miami_judgment.collect_recorded = self._fake
+
+    def tearDown(self):
+        import miami_judgment
+        miami_judgment.collect_recorded = self._real
+
+    def _fake(self, case, records, **kw):
+        out = []
+        for record in records:
+            self.fetched.append((record['reC_BOOK'], record['reC_PAGE']))
+            out.append({'source_ref': 'official_records/%s-%s'
+                                      % (record['reC_BOOK'], record['reC_PAGE']),
+                        'status': 'stored', 'reading': reading(['MORTGAGE', 'no citations'])})
+        return out
+
+    def test_a_name_search_makes_a_cited_instrument_addressable_this_run(self):
+        rows = [row_citing('official_records/35287-4642',
+                           ['SATISFACTION', 'the mortgage in O.R.B. 28001 at Page 1234'])]
+        searcher = FakeSearcher({'ROSALES MARIA': [model('28001', '1234', cfn='FOUND')]})
+        _new, report = W.walk('C1', rows, index=self.index, caps_path=self.caps,
+                              name_plan=[{'name': 'ROSALES MARIA', 'why': 'grantor',
+                                          'source_ref': 'x'}],
+                              name_searcher=searcher, folio='3059130020010')
+        self.assertEqual(self.fetched, [('28001', '1234')])
+        self.assertEqual(report['unresolved'], [])
+        self.assertEqual(searcher.asked, ['ROSALES MARIA'])
+
+    def test_without_a_searcher_the_same_citation_stays_unresolved(self):
+        rows = [row_citing('official_records/35287-4642',
+                           ['SATISFACTION', 'the mortgage in O.R.B. 28001 at Page 1234'])]
+        _new, report = W.walk('C1', rows, index=self.index, caps_path=self.caps)
+        self.assertEqual(self.fetched, [])
+        self.assertEqual(len(report['unresolved']), 1)
+
+
+class StoredRowsTest(unittest.TestCase):
+    """Reading back what another tool already fetched and read."""
+
+    def setUp(self):
+        import document_store as DS
+        self.DS = DS
+        self.case = 'STORE-%s' % self.id().rsplit('.', 1)[-1]
+        self.folder = DS.case_dir('MIAMI-DADE', self.case)
+        self.folder.mkdir(parents=True, exist_ok=True)
+
+    def _store(self, key, pages, read_status='read', with_text=True):
+        manifest = {'county': 'MIAMI-DADE', 'case': self.case, 'document_key': key,
+                    'source_ref': 'official_records/35287-4642', 'doc_name': 'DADE COURT PAPER',
+                    'pages': len(pages), 'path': str(self.folder / (key[:16] + '.pdf'))}
+        self.DS._atomic_write_text(self.folder / (key[:16] + '.json'),
+                                   json.dumps(manifest) + '\n')
+        if with_text:
+            reading = {'pages': [{'page': i + 1, 'text': t, 'chars': len(t), 'outcome': 'ocr_text',
+                                  'text_source': 'ocr'} for i, t in enumerate(pages)],
+                       'read_status': read_status, 'reader_version': 3}
+            self.DS.save_page_text(manifest, reading)
+        return manifest
+
+    def test_a_document_read_by_another_tool_yields_its_citations(self):
+        self._store('a' * 40, CITER)
+        rows = W.stored_rows('MIAMI-DADE', self.case)
+        self.assertEqual(len(rows), 1)
+        cites = {(c['book'], c['page_no']) for c in rows[0]['cited_instruments']}
+        self.assertEqual(cites, {('28001', '1234'), ('29500', '77')})
+
+    def test_a_stored_but_unread_document_is_reported_not_skipped(self):
+        # "fetched and unread" and "not here" are different states and must not collapse.
+        self._store('b' * 40, ['x', 'y'], with_text=False)
+        rows = W.stored_rows('MIAMI-DADE', self.case)
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]['read_status'], 'not_read_back')
+        self.assertEqual(rows[0]['cited_instruments'], [])
+
+    def test_a_case_with_nothing_stored_is_empty_not_an_error(self):
+        self.assertEqual(W.stored_rows('MIAMI-DADE', 'NEVER-SEEN-CASE'), [])
+
+    def test_a_superseded_copy_is_not_read_back_twice(self):
+        manifest = self._store('c' * 40, CITER)
+        manifest['document_key'] = 'd' * 40
+        manifest['superseded'] = True
+        self.DS._atomic_write_text(self.folder / ('d' * 16 + '.json'),
+                                   json.dumps(manifest) + '\n')
+        self.assertEqual(len(W.stored_rows('MIAMI-DADE', self.case)), 1)
+
+
+class OffListCaseTest(unittest.TestCase):
+    """A named case that was dropped from the live lead file."""
+
+    def test_a_case_only_on_the_lp_board_is_still_selectable(self):
+        import run_documents as RD
+        rows = RD._lead_rows(only='NOPE-000')
+        self.assertIsInstance(rows, list)
+
+    def test_pick_cases_still_filters_to_miami_and_a_named_owner(self):
+        import run_documents as RD
+        leads = [{'Case #': 'X', 'owner_clean': 'A B', 'county': 'BROWARD'},
+                 {'Case #': 'Y', 'owner_clean': 'A B'}]
+        self.assertEqual([p['case'] for p in RD.pick_cases(leads, {}, 0)], ['Y'])
+
+
 class ProbeVerdictTest(unittest.TestCase):
     def test_no_probe_file_means_no_capability(self):
         ok, shape = RP.confirmed('book_page', os.path.join(_TMP, 'nope.json'))
@@ -350,6 +547,14 @@ class ProbeVerdictTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             RP.main([])
 
+    def test_a_shape_with_no_subject_value_is_not_probed_rather_than_failed(self):
+        # The 2026-09-22 desktop run printed three results and NOTHING CONFIRMED while four shapes
+        # had been skipped for want of a CFN and a folio. Those are different statements.
+        verdict = RP.probe({'book': '1', 'page': '1', 'cfn': '', 'folio': ''},
+                           pause=0)
+        skipped = [r for r in verdict['shapes'] if r['outcome'] == 'not_probed']
+        self.assertTrue(any('no subject value' in (r.get('why') or '') for r in skipped))
+
 
 class DossierTest(unittest.TestCase):
     """The walk reaches the dossier as evidence at rung c, and never moves rung d."""
@@ -379,6 +584,24 @@ class DossierTest(unittest.TestCase):
         dossier = self._dossier({'followed': [], 'documents_fetched': 2, 'unresolved': [],
                                  'stopped_because': 'budget: 2 document(s)'})
         self.assertTrue(any('stopped early' in g for g in dossier['open_gaps']))
+
+    def test_an_instrument_found_under_another_name_becomes_an_open_gap(self):
+        dossier = self._dossier({
+            'followed': [], 'documents_fetched': 0, 'unresolved': [],
+            'names': {'searched': [], 'found_under_other_names': [
+                {'doc_type': 'MORTGAGE', 'rec_date': '5/14/2019', 'under_name': 'ROSALES MARIA',
+                 'anchored_by': 'folio'}]}})
+        self.assertTrue(any('ROSALES MARIA' in g and 'NOT in the owner-name search' in g
+                            for g in dossier['open_gaps']))
+
+    def test_a_name_the_county_could_not_be_asked_about_is_an_open_gap(self):
+        dossier = self._dossier({
+            'followed': [], 'documents_fetched': 0, 'unresolved': [],
+            'names': {'found_under_other_names': [],
+                      'searched': [{'name': 'ROSALES MARIA', 'outcome': 'not_reached',
+                                    'reason': 'no search token could be obtained'}]}})
+        self.assertTrue(any('never searched' in g and 'ROSALES MARIA' in g
+                            for g in dossier['open_gaps']))
 
     def test_unsearched_parcel_names_are_an_open_gap_in_words(self):
         dossier = self._dossier({'followed': [], 'documents_fetched': 0, 'unresolved': [],

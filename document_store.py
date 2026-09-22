@@ -709,6 +709,73 @@ def save_page_text(manifest, reading):
     return str(folder)
 
 
+def stored_documents(county, case):
+    """Every document already stored for this case, with the text we already read off it.
+
+    WHY THIS EXISTS (2026-09-22). The pilot CLI fetched and read the Garden Lake Towers judgment
+    four times into the case folder, wrote the page text beside it, and then every other tool in
+    the project started from zero — `document_walk` could not see a single word of it, because the
+    only way to get a reading was to fetch and read the document again. Text that cost a clerk
+    fetch and an OCR pass is evidence on disk; reading it back is not a new capability, it is the
+    one that was missing.
+
+    Returns [(manifest, reading)] in a stable order. `reading` is the same shape `read_pages`
+    returns, rebuilt from the saved `pNN.txt` files, so anything that consumes a reading —
+    `document_classify`, `cited_instruments`, `judgment_amount_candidates` — works on it unchanged.
+    A document stored but never read yields a reading with no page text and says so; it is not
+    skipped, because "fetched and unread" is a different state from "not here".
+    """
+    folder = case_dir(county, case)
+    out = []
+    for meta_path in sorted(folder.glob('*.json')):
+        try:
+            manifest = json.loads(meta_path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(manifest, dict) or not manifest.get('document_key'):
+            continue
+        if manifest.get('superseded'):
+            continue
+        manifest.setdefault('meta_path', str(meta_path))
+        out.append((manifest, _read_back(folder, manifest)))
+    return out
+
+
+def _read_back(folder, manifest):
+    """The saved page text for one stored document, as a reading. Never raises."""
+    stem = (manifest.get('document_key') or manifest.get('sha256') or '')[:16]
+    text_dir = folder / (stem + '-text')
+    try:
+        index = json.loads((text_dir / 'pages.json').read_text(encoding='utf-8'))
+        rows = index['pages']
+    except (OSError, ValueError, KeyError, TypeError):
+        # Stored, never read — or the text folder was removed. Report the pages as unresolved
+        # rather than returning nothing, so a caller can tell this from a case with no documents.
+        pages = int(manifest.get('pages') or 0)
+        return {'pages': [], 'page_count': pages, 'pages_with_text': 0, 'pages_from_ocr': 0,
+                'pages_unresolved': list(range(1, pages + 1)),
+                'read_status': 'not_read_back', 'complete': False, 'from_store': True}
+    pages, unresolved, from_ocr = [], [], 0
+    for row in rows:
+        try:
+            body = (text_dir / row['file']).read_text(encoding='utf-8')
+        except (OSError, KeyError):
+            body = ''
+        if (row.get('text_source') or '') == 'ocr':
+            from_ocr += 1
+        if not body.strip():
+            unresolved.append(row.get('page'))
+        pages.append({'page': row.get('page'), 'text': body, 'chars': len(body),
+                      'outcome': row.get('outcome'), 'text_source': row.get('text_source'),
+                      'weak_reason': row.get('weak_reason'), 'ocr_error': row.get('ocr_error')})
+    return {'pages': pages, 'page_count': len(pages),
+            'pages_with_text': len(pages) - len(unresolved), 'pages_from_ocr': from_ocr,
+            'pages_unresolved': unresolved,
+            'read_status': index.get('read_status') or 'read',
+            'reader_version': index.get('reader_version'),
+            'complete': not unresolved, 'from_store': True}
+
+
 def _main(argv=None):
     """`python document_store.py reconcile <county> <case> [--apply]` — nothing else.
 

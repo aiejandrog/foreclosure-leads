@@ -559,6 +559,19 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         vision_budget=None, vision_reader=None):
     inventory = enumerate_case(case, collector=collector)
     records = list(records or [])
+    # INDEX EVERY ROW WE WERE HANDED, before the judgment filter throws most of them away.
+    # These carry cfN_MASTER_ID, which is what makes an instrument addressable, and a book/page
+    # citation does not. Until 2026-09-22 only run_documents built that index, so the pilot CLI
+    # could fetch and read a judgment four times and document_walk would still report "0
+    # instruments addressable" — the same six recorded rows, discarded each run. The index is
+    # county metadata and a pure write; nothing downstream changes because of it.
+    try:
+        import document_walk
+        _index = document_walk.RecordIndex()
+        if _index.add_models(records):
+            _index.save()
+    except Exception:
+        pass                       # an index is an optimisation; it never fails a pilot run
     # Filter HERE, not in main(), because the filter needs the case's plaintiffs and the docket we
     # just pulled is where they live.
     plaintiffs = plaintiffs_of(inventory['raw'])

@@ -22,6 +22,20 @@ Two routes out, and this module builds both:
      owner's is the same endpoint, the same transport, the same cost per search — and it reaches
      the prior owner whose mortgage is still open.
 
+WHICH OF THE TWO CARRIES THE WEIGHT — ANSWERED, NOT ASSUMED
+`records_probe` ran on the desktop on 2026-09-22 against book 35287 page 4642, an instrument known
+to exist. All three book/page search shapes came back `accepted_no_hits`: the county issued a
+search token and returned nothing, which is what an IGNORED parameter looks like. So there is no
+confirmed way to ask this endpoint for an instrument by its book and page, and route 1 can only
+address a citation whose instrument is already in `records_index.json`.
+
+That makes route 2 load-bearing rather than supplementary, and it is why `run_name_searches`
+executes instead of only planning. A name search returns the instrument AND indexes it on the way
+past, so the names are run BEFORE the citation pass — running them after would leave a resolvable
+citation unresolved for a whole run. The CFN and folio shapes were never probed (the pilot
+judgment is indexed at folio 0 and its CFN was not to hand), so nothing here claims they do not
+exist; re-run the probe with `--cfn` and `--folio` off a recorded mortgage to settle them.
+
 WHAT THIS MODULE MAY AND MAY NOT DO
 It may fetch, store, read and classify. It may NOT decide anything about equity. Everything it
 finds lands in the dossier's `c` rung as a document with its own provenance, and `c` still does
@@ -297,7 +311,8 @@ def pending_citations(rows, already):
 
 def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=COUNTY,
          depth=DEFAULT_DEPTH, budget=DEFAULT_BUDGET, index=None, searcher=None,
-         caps_path=None, gray_cutoff=None, keep_images=False):
+         caps_path=None, gray_cutoff=None, keep_images=False, name_plan=None,
+         name_searcher=None, folio='', subdivision=''):
     """Follow what the already-read documents cite, `depth` hops deep, `budget` documents wide.
 
     `rows` are `collect_recorded` result rows that have been through
@@ -309,6 +324,14 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
     import miami_judgment as MJ
     index = index if index is not None else RecordIndex()
     index.add_models(models or [])
+    # NAMES FIRST, and this order is the probe's doing. On 2026-09-22 every book/page search shape
+    # came back accepted_no_hits, so a citation that is not already in the index has exactly one
+    # way to become addressable: a search under some other name returns the instrument and indexes
+    # it on the way past. Running the names after the citation pass would leave every one of those
+    # citations unresolved on this run and resolvable only on the next.
+    names = None
+    if name_plan and name_searcher is not None:
+        names = run_name_searches(name_plan, index, name_searcher, folio, subdivision)
     # Everything already fetched is addressed. Without this the first hop re-fetches the document
     # that did the citing, because a recorded instrument's own stamp cites its own book and page.
     seen = {key_of(r.get('doc_book'), r.get('doc_page')) for r in rows or []}
@@ -363,10 +386,143 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
     return new_rows, {
         'depth': int(depth), 'budget': int(budget), 'documents_fetched': spent,
         'followed': followed, 'unresolved': unresolved, 'stopped_because': stopped,
+        'names': names,
         # Said in words rather than left to be inferred from an empty list. A walk that resolved
         # nothing and a walk that was never able to resolve anything look identical otherwise.
         'note': ('Citations are what a document says about another instrument. A followed document '
                  'is evidence at rung c only; nothing here changes the equity verdict.'),
+    }
+
+
+class NameSearcher:
+    """Run one Official Records NAME search, by the same token ladder records_liens uses.
+
+    PROBED AND ANSWERED 2026-09-22 (desktop, `records_search_caps.json`): all three book/page
+    shapes came back `accepted_no_hits`, so there is no confirmed way to ask this endpoint for an
+    instrument by its book and page. Names are therefore not a nice-to-have second route — with
+    the index cold, they are the ONLY way to widen past the current owner, and that is why this
+    executes rather than only planning.
+
+    The ladder is records_liens': cached token -> Camoufox (free) -> 2Captcha (~$0.003). It is not
+    reimplemented here; drifting from the tracer's own token path would make a failure ambiguous
+    between "this name has no records" and "this file mints tokens wrong". A token it earns is
+    written back to records_qs.json, so the same name costs nothing next time.
+    """
+
+    def __init__(self, qs_cache=None, use_camoufox=True):
+        import records_liens as R
+        self.R = R
+        self.qs_cache = qs_cache if qs_cache is not None else {}
+        self.use_camoufox = use_camoufox
+        self._cm = self._browser = None
+        self.spent_free = self.spent_paid = 0
+
+    def _camoufox(self):
+        if self._cm is None and self.use_camoufox:
+            self._cm, self._browser = self.R.camoufox_session()
+            if self._browser is None:
+                self.use_camoufox = False
+        return self._browser
+
+    def search(self, name):
+        """models for this party name, or None when the county could not be asked."""
+        if name in self.qs_cache:
+            models = self.R.records_by_qs(self.qs_cache[name])
+            if models is not None:
+                return models
+        parts = self.R.split_owner(name)
+        if not parts:
+            return None
+        browser = self._camoufox()
+        if browser is not None:
+            try:
+                token = self.R.camoufox_qs(browser, parts)
+            except Exception:
+                token = None
+            if token:
+                models = self.R.records_by_qs(token)
+                if models is not None:
+                    self.spent_free += 1
+                    self.qs_cache[name] = token
+                    return models
+        self.spent_paid += 1
+        return self.R.fetch_via_turnstile(parts)
+
+    def close(self):
+        if self._cm is not None:
+            try:
+                self._cm.__exit__(None, None, None)
+            except Exception:
+                pass
+            self._cm = self._browser = None
+
+
+_OPEN_KILLER_RE = re.compile(r'SATISF|RELEASE|TERMINAT|CANCELLATION|DISCHARGE', re.I)
+_ENCUMBRANCE_RE = re.compile(r'^(MORTGAGE|LIEN|JUDGMENT|NOTICE OF (?:LIEN|COMMENCEMENT)|CLAIM|'
+                             r'FINANCING STATEMENT|TAX)', re.I)
+
+
+def run_name_searches(plan, index, searcher, folio, subdivision=''):
+    """Execute the planned name searches. Index what comes back, and report the encumbrances that
+    sit on the SUBJECT parcel under a name the owner search never used.
+
+    What this reports is evidence, not a verdict. It does not touch `records_liens.analyze`, so no
+    equity number moves because of it: an instrument found here is a question for the operator to
+    put to the owner, on the same footing as Palm Beach's "unaccounted mortgage" line. Folding it
+    into the chain arithmetic is a separate decision, and taking it here would smuggle a new input
+    into the equity engine through a document-reading branch.
+
+    Parcel isolation is the SAME rule `analyze` uses — folio when the record carries one, else the
+    subject subdivision — because a prior owner's name search returns their whole life, and an
+    encumbrance on a different property of theirs says nothing about this house.
+    """
+    import records_liens as R
+    fol = R.norm_folio(folio)
+    sub = (subdivision or '').strip().upper()
+    searched, found = [], []
+    for candidate in plan or []:
+        name = candidate['name']
+        try:
+            models = searcher.search(name)
+        except Exception as exc:
+            searched.append(dict(candidate, outcome='error',
+                                 reason='%s: %s' % (type(exc).__name__, str(exc)[:140])))
+            continue
+        if models is None:
+            # The county was not reached. That is NOT "this name is clean" and must never read as
+            # it: an empty search that prints like a clean title check is the most dangerous
+            # output this repo can produce (records_liens says so in as many words).
+            searched.append(dict(candidate, outcome='not_reached',
+                                 reason='no search token could be obtained for this name'))
+            continue
+        index.add_models(models)
+        on_parcel = []
+        for model in models:
+            doc_type = str(model.get('doC_TYPE') or '').strip()
+            if not _ENCUMBRANCE_RE.match(doc_type) or _OPEN_KILLER_RE.search(doc_type):
+                continue
+            rf = R.norm_folio(model.get('foliO_NUMBER'))
+            sd = str(model.get('subdiV_NAME') or '').strip().upper()
+            if not ((fol and rf == fol) or (sub and sd == sub)):
+                continue
+            on_parcel.append({
+                'doc_type': doc_type, 'rec_date': model.get('reC_DATE'),
+                'book': model.get('reC_BOOK'), 'page_no': model.get('reC_PAGE'),
+                'other_party': str(model.get('seconD_PARTY') or '')[:60],
+                'anchored_by': 'folio' if (fol and rf == fol) else 'subdivision',
+            })
+        searched.append(dict(candidate, outcome='searched', records=len(models),
+                             on_parcel=len(on_parcel)))
+        for row in on_parcel:
+            found.append(dict(row, under_name=name, why=candidate['why']))
+    return {
+        'searched': searched,
+        'found_under_other_names': found,
+        'tokens_free': getattr(searcher, 'spent_free', 0),
+        'tokens_paid': getattr(searcher, 'spent_paid', 0),
+        'note': ('An encumbrance recorded against one of these names sits on the subject parcel '
+                 'and was NOT in the owner-name search that produced the recorded chain. It is '
+                 'reported here and deliberately not folded into the chain arithmetic.'),
     }
 
 
@@ -387,21 +543,87 @@ def name_search_plan(models, folio, subdivision='', docket=None, owner='', limit
                     'see a lien recorded against a prior owner; these names can.')}
 
 
+def stored_rows(county, case):
+    """Documents already on disk for this case, as classified rows the walk can read citations off.
+
+    This is what makes the by-hand CLI worth running. The pilot CLI had already fetched and read
+    the pilot judgment four times when this was written, and `document_walk --case` still printed
+    "index holds 0 instruments" and stopped, because nothing connected the two. A document that
+    has been read is evidence whichever tool read it.
+    """
+    import case_dossier
+    import document_store as DS
+    rows = []
+    for manifest, reading in DS.stored_documents(county, case):
+        row = {'source_ref': manifest.get('source_ref') or manifest.get('doc_name') or '',
+               'status': 'stored', 'doc_type': manifest.get('doc_name'),
+               'document_key': manifest.get('document_key'),
+               'pages': manifest.get('pages'),
+               'read_status': reading.get('read_status'),
+               'path': manifest.get('path'), 'reading': reading,
+               'from_store': True}
+        rows.append(row)
+    case_dossier.classify_documents(rows)
+    return rows
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--case', required=True)
+    parser.add_argument('--county', default=COUNTY)
     parser.add_argument('--depth', type=int, default=DEFAULT_DEPTH)
     parser.add_argument('--budget', type=int, default=DEFAULT_BUDGET)
     parser.add_argument('--index-only', action='store_true',
                         help='print what the index knows and stop; no network')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='list the citations and how each one would resolve; fetch nothing')
+    parser.add_argument('--records', default='',
+                        help='a saved recordingModels file (or_rows.json) to fold into the index '
+                             'first, so its instruments become addressable without a search')
     args = parser.parse_args(argv)
     index = RecordIndex()
     if args.index_only:
         print('%s: %d instrument(s) addressable' % (INDEX, len(index.rows)))
         return 0
-    print('document_walk is driven by run_documents.py --walk-cites; this CLI proves one case.')
-    print('case %s, depth %d, budget %d, index holds %d instrument(s)'
-          % (args.case, args.depth, args.budget, len(index.rows)))
+    if args.records:
+        with open(args.records, encoding='utf-8') as fh:
+            models = json.load(fh)
+        added = index.add_models(models if isinstance(models, list) else [])
+        index.save()
+        print('%s: %d instrument(s) indexed (%d new)' % (args.records, len(models), added))
+
+    rows = stored_rows(args.county, args.case)
+    read = [r for r in rows if (r.get('reading') or {}).get('pages')]
+    print('%s %s: %d document(s) in the store, %d with text'
+          % (args.county, args.case, len(rows), len(read)))
+    if not read:
+        print('Nothing has been read for this case, so there are no citations to follow. A walk '
+              'reads what a document SAYS; it cannot invent citations for a document nobody has '
+              'opened. Fetch and read first:')
+        print('  python -u miami_judgment.py %s --records or_rows.json --keep-images' % args.case)
+        return 4
+
+    citations = pending_citations(rows, set())
+    print('%d citation(s) in the read text:' % len(citations))
+    for cite in citations:
+        outcome = resolve(cite['book'], cite['page_no'], index)
+        state = ('addressable (%s)' % outcome['via']) if outcome.get('record') else outcome['reason']
+        print('  %s/%s  cited by %s p%s  -> %s'
+              % (cite['book'], cite['page_no'], cite['cited_by'], cite['cited_on_page'], state))
+    if args.dry_run:
+        print('--dry-run: nothing fetched.')
+        return 0
+
+    new_rows, report = walk(args.case, rows, county=args.county, index=index,
+                            depth=args.depth, budget=args.budget)
+    print('fetched %d document(s); %d citation(s) unresolved'
+          % (report['documents_fetched'], len(report['unresolved'])))
+    for row in new_rows:
+        print('  %s  %s  %s' % (row.get('source_ref'), row.get('status'),
+                                (row.get('classification') or {}).get('kind', '?')))
+    for miss in report['unresolved']:
+        print('  UNRESOLVED %s/%s: %s' % (miss.get('book'), miss.get('page_no'),
+                                          miss.get('reason')))
     return 0
 
 

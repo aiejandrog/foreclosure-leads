@@ -12,17 +12,30 @@ WHAT IT DOES, IN ORDER, PER CASE
   6. join with the cached recorded chain            -> dossier sections b and d
   7. write the dossier under DEALFLOW_DIR
 
-WHY IT IS STILL OFF BY DEFAULT
-OCR now works: on 2026-09-22 the desktop read all five pages of the pilot judgment and got its
-$14,698.60 grand total right. It also misread 6,796.61 as 5,796.61 and dropped two line items,
-everywhere the clerk's diagonal watermark crosses a figure. The watermark is now stripped from the
-render before OCR (document_store.WATERMARK_GRAY_CUTOFF) — and THAT is what is unproven: the grey
-cutoff has never run against a real clerk scan.
+WHY IT IS STILL OFF BY DEFAULT — and what actually changed on 2026-09-22
+This paragraph used to say the gate stays shut until the grey cutoff reads the four figures the
+watermark spoiled. That condition was MET, by something else, and leaving the old wording here
+would have the file state a test that is not the one this stage passed.
 
-So the gate stays shut until one desktop run shows the four figures the watermark spoiled reading
-correctly and the line items summing to the total. Until then this stage would write dossiers
-carrying numbers nobody has checked, which is worse than writing none. It turns on with `--enable`
-or DEALFLOW_DOCS=1, and nothing else in the pipeline calls it.
+What happened: OCR read all five pages of the pilot judgment and got the $14,698.60 grand total
+right, but misread 6,796.61 as 5,796.61 and dropped 317.05 and 31.19 — every error where the
+clerk's diagonal watermark crosses a figure. Whitening the render above WATERMARK_GRAY_CUTOFF was
+then swept at 160, 200, 130 and 220 and produced the SAME four misses at every cutoff. Identical
+output at four thresholds means the watermark sits ON those digits, so thresholding cannot
+separate them and the cutoff is not the route. The whitening stays because it is cheap and sound;
+it is not what made the pilot pass.
+
+document_vision read them. The page image goes to the Claude API, only on a page carrying a total
+label and only when OCR's own figures did not add up, and its total goes through the SAME sum
+check. Measured that day: $14,698.60, line items reproduce it, $0.0675 per judgment over three
+pages (~$0.045 once page selection stopped buying a prose page).
+
+So the gate is shut for a different reason now, and it is a cost reason rather than a correctness
+one: with --vision this stage spends real money per judgment, and without it Miami scans stay
+partly unread wherever the watermark crosses a figure. Either way every figure read off a scan is
+still refused by miami_judgment.judgment_for_analyze — OCR's and vision's alike — until twelve
+corroborated cases have been eyeballed against their kept page images. Turn it on with `--enable`
+or DEALFLOW_DOCS=1; nothing else in the pipeline calls it.
 
 --walk-cites: FOLLOWING WHAT A DOCUMENT NAMES
 Off by default, and the reason it exists is the 2026-09-22 coverage map. Recorded liens are
@@ -97,6 +110,40 @@ def dossier_path(county, case):
                                                 DS._slug(case) + '.json'))
 
 
+LP_LEADS = os.path.join(HERE, 'lp_leads.json')
+
+
+def _lead_rows(only=None):
+    """The lead files a case may be selected from.
+
+    leads_final.json is the AUCTION board and it is a LIVE file: a case that has been killed as a
+    lead is dropped from it. On 2026-09-22 `--case 2026-020206-CC-25` — the pilot case, the one
+    case in the project with documents already on disk — printed "no Miami case matched" and
+    exited 0, because it had moved to deads.json. An explicit --case naming a real case must not
+    look identical to a typo.
+    """
+    rows = _load(LEADS, []) or []
+    if not only:
+        return rows
+    have = {str(r.get('Case #') or '') for r in rows if isinstance(r, dict)}
+    if only in have:
+        return rows
+    # Only when the named case is absent: fold in the lis-pendens board, whose rows use different
+    # key names. Same translation records_liens.main does, and for the same reason.
+    for row in _load(LP_LEADS, []) or []:
+        if not isinstance(row, dict) or str(row.get('case') or '') != only:
+            continue
+        owner = str(row.get('oname') or '').strip()
+        if ',' in owner:                          # "LAST, FIRST" -> "FIRST LAST"; order is
+            last, rest = owner.split(',', 1)      # load-bearing, see records_liens.main
+            owner = '%s %s' % (rest.strip(), last.strip())
+        rows = rows + [{'Case #': only, 'owner_clean': owner or str(row.get('owners') or ''),
+                        'Folio': str(row.get('folio') or ''), 'county': 'MIAMI-DADE',
+                        '_src': 'lp_leads'}]
+        break
+    return rows
+
+
 def pick_cases(leads, chains, limit, only=None):
     """Miami cases with an owner we can search for free. Newest gap first: a case with no dossier
     yet comes before one we have already written."""
@@ -155,21 +202,33 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
     # the same reading as one we fetched directly.
     if walk_depth and rows:
         import document_walk
+        folio = entry.get('folio') or ''
+        subdivision = (entry.get('chain') or {}).get('subdiv') or ''
+        plan = document_walk.name_search_plan(
+            models, folio, subdivision=subdivision,
+            docket=(inventory or {}).get('raw'), owner=owner, limit=name_budget)
+        # The searcher is built ONLY when there is a budget to spend, so a run with --name-budget 0
+        # cannot launch a browser or reach 2Captcha even by accident.
+        name_searcher = None
+        if plan['planned']:
+            name_searcher = document_walk.NameSearcher(qs_cache=qs_cache)
         try:
             walked, walk_report = document_walk.walk(
                 case, rows, models=models, queue=queue, ocr=ocr, county=COUNTY,
                 depth=walk_depth, budget=walk_budget or document_walk.DEFAULT_BUDGET,
-                gray_cutoff=gray_cutoff, keep_images=keep_images)
+                gray_cutoff=gray_cutoff, keep_images=keep_images,
+                name_plan=plan['planned'], name_searcher=name_searcher,
+                folio=folio, subdivision=subdivision)
             rows.extend(walked)
         except Exception as exc:
             # A walk is an extension, never a reason to lose the documents already read. Its
             # failure is recorded where a reader will see it, not swallowed.
             walk_report = {'followed': [], 'unresolved': [],
                            'stopped_because': '%s: %s' % (type(exc).__name__, str(exc)[:200])}
-        walk_report['name_search'] = document_walk.name_search_plan(
-            models, entry.get('folio') or '',
-            subdivision=(entry.get('chain') or {}).get('subdiv') or '',
-            docket=(inventory or {}).get('raw'), owner=owner, limit=name_budget)
+        finally:
+            if name_searcher is not None:
+                name_searcher.close()
+        walk_report['name_search'] = plan
     if interpreter is not None and budget is not None:
         _interpret(rows, interpreter, budget)
     dossier = case_dossier.build(case, COUNTY, inventory=inventory, chain=entry.get('chain'),
@@ -225,10 +284,12 @@ def main(argv=None):
     parser.add_argument('--walk-budget', type=int, default=12,
                         help='documents the walk may fetch per case (default 12)')
     parser.add_argument('--name-budget', type=int, default=0,
-                        help='extra Official Records NAME searches per case, for the parties on '
-                             'the parcel deeds and the docket. Each one costs a Camoufox run or a '
-                             '2Captcha solve, so the default is 0 and the plan is reported '
-                             'unspent.')
+                        help='extra Official Records NAME searches to RUN per case, over the '
+                             'parties on the parcel deeds and the docket. This is the only route '
+                             'that widens past the current owner (the book/page search shapes were '
+                             'probed on 2026-09-22 and none was confirmed). Each search costs a '
+                             'Camoufox run or a 2Captcha solve, so the default is 0 and the plan '
+                             'is reported unspent.')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
     try:
@@ -267,14 +328,30 @@ def main(argv=None):
         except document_interpreter.NotConfigured as gap:
             parser.exit(2, '--vision cannot run here: %s\n' % gap)
 
-    leads = _load(LEADS, [])
+    leads = _lead_rows(only=args.case or None)
     if not leads:
         print('run_documents: %s is missing or empty; nothing to do.' % LEADS)
-        return 0
+        # Same rule as an unmatched --case below: a named case is a request, and a request that
+        # could not even be looked up does not exit 0.
+        return 3 if args.case else 0
     qs_cache = _load(QS_CACHE, {})
     chains = _load(CHAINS, {})
     picked = pick_cases(leads, chains, args.limit, only=args.case or None)
     if not picked:
+        if args.case:
+            # Exit NON-ZERO and say which file was searched. A named case that matches nothing is
+            # a failed request, not a clean no-op, and exiting 0 with one vague line is how the
+            # pilot case looked identical to a typo for an afternoon.
+            print('run_documents: %s is not in leads_final.json or lp_leads.json. Those are LIVE '
+                  'files; a case killed as a lead is dropped from them, so --case cannot reach '
+                  'it here.' % args.case)
+            print('  For an off-list case whose documents you already have, use the pilot CLI, '
+                  'which takes the recorded rows directly:')
+            print('    python -u miami_judgment.py %s --records or_rows.json --keep-images'
+                  % args.case)
+            print('  then follow its citations with:')
+            print('    python -u document_walk.py --case %s --depth 2 --budget 12' % args.case)
+            return 3
         print('run_documents: no Miami case matched.')
         return 0
     print('run_documents: %d case(s); %d have a cached search token'

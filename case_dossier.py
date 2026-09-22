@@ -199,6 +199,16 @@ def build(case, county, inventory=None, chain=None, documents=None, walk=None):
     if planned:
         gaps.append('%d name(s) on this parcel\'s deeds or docket were never searched; a lien '
                     'recorded against one of them would not be in b' % planned)
+    names = (c.get('walk') or {}).get('names') or {}
+    for row in names.get('found_under_other_names') or []:
+        # NOT a gap in the sense of missing data - it is found data that rung b does not contain,
+        # and the dossier has nowhere else that a reader is guaranteed to look.
+        gaps.append('%s recorded %s against %s sits on this parcel and was NOT in the owner-name '
+                    'search behind b' % (row.get('doc_type'), row.get('rec_date'),
+                                         row.get('under_name')))
+    for row in names.get('searched') or []:
+        if row.get('outcome') in ('not_reached', 'error'):
+            gaps.append('%s was never searched: %s' % (row.get('name'), row.get('reason')))
     return {
         'schema_version': SCHEMA_VERSION,
         'case': case, 'county': county, 'built_at': _now(),
@@ -228,6 +238,12 @@ def _walk_section(walk):
         'budget': walk.get('budget'),
         'stopped_because': walk.get('stopped_because') or '',
         'name_search': walk.get('name_search') or {},
+        # What the extra name searches actually returned. Kept separate from `documents` because
+        # these are INDEX rows, not documents anyone opened — the same distinction rung b already
+        # carries. An entry here is an encumbrance on the subject parcel recorded under a name the
+        # owner search never used, which is the one thing the recorded chain structurally cannot
+        # see.
+        'names': walk.get('names') or None,
         'note': walk.get('note') or '',
     }
 
