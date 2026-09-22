@@ -1843,24 +1843,54 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
     # worse one. Only the REMAINDER of the cap rotates, by day of month, so the whole qualified
     # pool reaches the phone over a month instead of never. Deterministic within a day (same build,
     # same list) and needs no stored cursor.
-    head_n = max(0, min(cap, int(os.environ.get('CALLMODE_HEAD', '200'))))
+    # Head defaults to HALF the cap (200 of the historical 400), so a caller that scales the cap
+    # with the number of seats scales the protected head with it.
+    head_n = max(0, min(cap, int(os.environ.get('CALLMODE_HEAD', str(cap // 2)))))
     total = len(out)
     if total > cap:
         head, tail = out[:head_n], out[head_n:]
         slots = cap - head_n
+        n_fresh = 0
         if slots > 0 and tail:
-            # Stride by the window, not by a small constant: a stride smaller than the window
-            # overlaps consecutive days almost completely, which is the bug it is meant to fix.
-            rot = (_dt.date.today().day * slots) % len(tail)
-            tail = tail[rot:] + tail[:rot]
-            out = head + tail[:slots]
+            # ---- FRESH FILINGS ARE PINNED, NOT ROTATED (2026-09-21) ------------------------------
+            # A brand-new LP has no sale date and no priced equity, so the rank puts it just PAST
+            # the head (ranks 222-251 on the 09-21 book) — which is exactly the front of the tail.
+            # The rotation then skipped that front two days in three: on 09-21, 30 of the 32 leads
+            # filed in the last 7 days were on NEITHER phone. The first call on a fresh filing is
+            # the whole first-mover edge; a lead that waits for its rotation day has lost it.
+            # So tail leads filed within CALLMODE_FRESH_DAYS ride right behind the head, in rank
+            # order, capped at half the slots so the rotation still walks the rest of the book.
+            fresh_days = max(0, int(os.environ.get('CALLMODE_FRESH_DAYS', '14')))
+            _age = {}
+            if fresh_days:
+                _today = _dt.date.today()
+                for d in slim:
+                    c = (d.get('case') or '').strip()
+                    v = str(d.get('filedDate') or '').strip()
+                    try:
+                        _age[c] = (_today - _dt.datetime.strptime(v, '%m/%d/%Y').date()).days
+                    except ValueError:
+                        pass
+            fresh = [r for r in tail if 0 <= _age.get(r.get('c'), -1) <= fresh_days][:slots // 2]
+            _pinned = {id(r) for r in fresh}
+            rest = [r for r in tail if id(r) not in _pinned]
+            n_fresh = len(fresh)
+            left = slots - n_fresh
+            if rest and left > 0:
+                # Stride by the window, not by a small constant: a stride smaller than the window
+                # overlaps consecutive days almost completely, which is the bug it is meant to fix.
+                rot = (_dt.date.today().day * left) % len(rest)
+                rest = rest[rot:] + rest[:rot]
+            out = head + fresh + rest[:max(0, left)]
         else:
             out = head[:cap]
         # NO SILENT CAPS. A list that quietly shrank looks exactly like a list that was always
         # this size — the same rule the dedupe and identity-drop notices above follow.
-        print('call mode: %d qualified, %d shipped — top %d by rank always, the remaining %d slots '
-              'rotate daily through the other %d so the tail reaches the phone'
-              % (total, len(out), head_n, max(0, cap - head_n), len(out) - head_n))
+        print('call mode: %d qualified, %d shipped — top %d by rank always, %d fresh filing(s) '
+              'pinned, the remaining %d slots rotate daily through the other %d so the tail '
+              'reaches the phone'
+              % (total, len(out), len(head), n_fresh, len(out) - len(head) - n_fresh,
+                 max(0, total - len(head) - n_fresh)))
     return out[:cap], total
 
 
@@ -2346,23 +2376,39 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         rows, total = call_rows(slim, optouts, deads)
     else:
         rows, total = rows
-    # BEFORE the seat split — see the coverage-rows note below. A lead carried by the OTHER seat is
-    # still carried, and must not reappear here as uncovered work.
-    _dial_all = list(rows)
     if seat:
         _sn, _si, _sw = seat
         if not (_sn > 1 and 0 <= _si < _sn):
             raise CallModeError('call_mode: bad seat %r (want n>1, 0<=i<n)' % (seat,))
         rows = seat_rows(rows, _sn, _si)
+    # ---- COVERAGE IS CUT AGAINST *THIS PAGE'S* DIAL LIST (2026-09-21) -------------------------
+    # This was cut against the CREW-WIDE list, one line ABOVE the seat split, on the argument that
+    # the nine board lane counts describe the business and halving them per phone would make two
+    # callers read two different books. The argument is right; the code did the opposite of it.
+    #
+    # A seat page shipped `rows` (its own half) plus coverage for everything outside the CREW dial
+    # list — so the OTHER seat's rows were in NEITHER list and were absent from the page entirely.
+    # Every board lane on Alejandro's handset read short by the size of Carlos's queue, and the
+    # leads that went missing were the most callable in the book: they had passed every gate and
+    # made the cap, which is exactly why coverage skipped them. The guard below did not catch it
+    # because it checked the CREW union rather than what this page actually ships.
+    #
+    # Scaling the cap with the crew (1863e22) doubled the hole rather than closing it: the crew
+    # window went 400 -> 800, so ~400 leads now fall off each page instead of ~200.
+    #
+    # Cut against this page's own list and each page carries the WHOLE book: its own rows dialable,
+    # every other lead as a countable, un-dialable coverage row. Both phones then total the same
+    # 2,394 — which is what the crew-wide cut was trying to achieve and did not.
+    _dial_all = list(rows)
     # total stays the CREW-WIDE qualifying count on purpose: "N qualifying" describes the funnel,
     # not this phone. SHOWN (len(rows)) is what this seat actually carries.
     # phone_index stays FULL on both seats: "Who texted me?" must resolve a number from either half.
     #
-    # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead the dial queue
-    # drops (no traced number, auction past the 60-day window, over the cap) as a countable,
-    # sortable, un-dialable row. Cut from the CREW-WIDE dial list, never the seat's: the nine board
-    # lane counts describe the business, and halving them per phone would make two callers read two
-    # different books. See coverage_rows for what is deliberately absent from them.
+    # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead THIS page's
+    # dial queue does not carry (no traced number, auction past the 60-day window, over the cap, or
+    # on the other caller's phone) as a countable, sortable, un-dialable row, so the nine board lane
+    # counts on a handset describe the whole business. See coverage_rows for what is deliberately
+    # absent from them, and the cut note above for why it is this page's list and not the crew's.
     _cov, _cov_sup = coverage_rows(slim, [r.get('c') for r in _dial_all], optouts, deads)
     # EVERY LEAD, OR SAY WHICH ONES ARE MISSING. The whole promise of the board lanes on the phone
     # is that they count the same book the board counts; a lead that falls out of BOTH the dial

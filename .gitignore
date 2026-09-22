@@ -14,6 +14,7 @@ _*.py
 !_textbatchtest.py
 !_calldetailtest.py
 !_batsyntaxtest.py
+!_refreshexittest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html
@@ -172,6 +173,7 @@ worker_notes_snapshots/
 !_skiptracetest.py
 !_phonepagetest.py
 !_autorunstoptest.py
+!_balloonlanetest.py
 # BatchData shared spend ledger + cap config (local money state, not code)
 batchdata_spend.json
 bd_budget.json
@@ -460,6 +462,12 @@ deal_desk.json
 !_phonesrctest.py
 !_queuechurntest.py
 !_audit12test.py
+
+# _seatcoveragetest: a seat page shipped its own half of the dial queue plus coverage cut against
+# the CREW list, so the other seat's rows were on neither list and just vanished off the page.
+# make_callmode's own "every lead, or say which ones are missing" guard asserted over the crew
+# union, not over what the page ships -- a guard over a superset proves nothing about the subset.
+!_seatcoveragetest.py
 
 # publish_watch.py is the only guard in this repo that checks the PUBLISHED site rather than the
 # local build, so it is also the only one that can run from a machine that is not the laptop. Its

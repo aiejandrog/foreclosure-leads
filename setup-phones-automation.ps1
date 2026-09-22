@@ -1,3 +1,18 @@
+param([switch]$Force)
+# =====================================================================
+#  SUPERSEDED 2026-09-21 - same class of problem as setup-automation.ps1;
+#  read that file's header. This one registers the 06:00 phones task with
+#  New-ScheduledTaskSettingsSet and no -IdleSettings, so StopOnIdleEnd
+#  goes back to its default of true on a task that was explicitly set
+#  false on 2026-08-31, and with a 20-minute ExecutionTimeLimit.
+#  Use: pwsh .\desktop-setup\install-tasks.ps1 -Only Phones [-Enable]
+# =====================================================================
+if (-not $Force) {
+    Write-Host "setup-phones-automation.ps1 is superseded - see the header of this file." -ForegroundColor Yellow
+    Write-Host "Use instead:  pwsh .\desktop-setup\install-tasks.ps1 -Only Phones -Enable"
+    exit 1
+}
+
 # Registers DEALFLOW's lean nightly PHONES job as a scheduled task.
 #   - "DEALFLOW Phones", daily 6:00 AM (3h ahead of the 9am full refresh, so numbers are already
 #     cached by the time the heavy pipeline runs -> its own skiptrace spends nothing).
