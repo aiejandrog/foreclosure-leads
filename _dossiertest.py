@@ -324,6 +324,33 @@ class StageTests(unittest.TestCase):
         picked = [p['case'] for p in RD.pick_cases(leads, {}, 0)]
         self.assertEqual(sorted(picked), ['B', 'C'])
 
+    def test_the_oldest_dossier_is_revisited_before_a_fresh_one(self):
+        # Without this the same file-order head is re-read nightly and a satisfaction recorded
+        # after the judgment is never seen on a case lower in the file.
+        import time
+        leads = [{'Case #': c, 'owner_clean': 'X Y', 'county': 'MIAMI-DADE'}
+                 for c in ('OLD-1', 'NEW-2', 'NONE-3')]
+        for case, age in (('OLD-1', 3600), ('NEW-2', 0)):
+            path = RD.dossier_path('MIAMI-DADE', case)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('{}')
+            stamp = time.time() - age
+            os.utime(path, (stamp, stamp))
+        self.assertEqual([p['case'] for p in RD.pick_cases(leads, {}, 0)],
+                         ['NONE-3', 'OLD-1', 'NEW-2'])
+
+    def test_the_nightly_summary_counts_satisfied_judgments_and_skips(self):
+        read = {'case': 'A', 'open_gaps': [],
+                'c_documents': {'fully_read': 2, 'documents': [],
+                                'judgment': {'operative': 'x', 'candidates': ['x'],
+                                             'satisfied_by': ['y']}}}
+        skipped = {'case': 'B', 'open_gaps': ['owner_search: no cached search token'],
+                   'c_documents': {'fully_read': 0, 'judgment': {},
+                                   'documents': [{'status': 'skipped', 'reason': 'no token'}]}}
+        s = RD.summarize([read, skipped])
+        self.assertEqual((s['cases'], s['skipped_no_token'], s['judgment_found'],
+                          s['judgment_satisfied'], s['complete']), (2, 1, 1, 1, 1))
+
     def test_a_lead_without_an_owner_is_skipped(self):
         leads = [{'Case #': 'A'}, {'owner_clean': 'X Y'}, {'Case #': 'B', 'owner_clean': 'X Y'}]
         self.assertEqual([p['case'] for p in RD.pick_cases(leads, {}, 0)], ['B'])

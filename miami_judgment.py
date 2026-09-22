@@ -369,13 +369,42 @@ def enumerate_case(case, collector=None):
     return inventory
 
 
+# A satisfaction or release the PLAINTIFF signed. Measured 2026-09-22 on Palm Beach
+# 50-2026-CA-000685: a $993,885.33 judgment was paid and satisfied two months later, and a stage
+# that fetches only the judgment reports that paid debt as owed. The nightly runs judgments_only,
+# so without this the satisfaction is never even fetched. Party-matched to the plaintiff on
+# purpose: an owner's decades of unrelated mortgage releases stay out, and so does their cost.
+SATISFACTION_TYPE_RE = re.compile(r'^(SATISF|REL(EASE)?\b|PARTIAL\s+REL)', re.I)
+
+
+def _signed_by_plaintiff(row, plaintiff_keys):
+    if not plaintiff_keys or not SATISFACTION_TYPE_RE.match(str(row.get('doC_TYPE') or '').strip()):
+        return False
+    for field in ('firsT_PARTY', 'seconD_PARTY'):
+        key = _party_key(row.get(field))
+        if key and any(key & pk for pk in plaintiff_keys):
+            return True
+    return False
+
+
+def is_satisfaction_row(row):
+    """A fetched satisfaction/release. Its figures RECITE the debt it discharges; they are never a
+    candidate judgment amount and never worth paying the second reader for."""
+    kind = str((row.get('classification') or {}).get('kind') or '')
+    return (kind.startswith('satisfaction')
+            or bool(SATISFACTION_TYPE_RE.match(str(row.get('doc_type') or '').strip())))
+
+
 def recorded_judgments(records, plaintiffs=()):
-    """Rows worth fetching as judgment candidates: a JUDGMENT doc type, OR a court paper recorded
-    between this case's own parties. Pass `plaintiffs` from plaintiffs_of(the docket)."""
+    """Rows worth fetching as judgment evidence: a JUDGMENT doc type, a court paper recorded
+    between this case's own parties, or a satisfaction/release the plaintiff is a party to (the
+    document that says the judgment or the foreclosed loan was paid). Pass `plaintiffs` from
+    plaintiffs_of(the docket)."""
     keys = [k for k in (_party_key(p) for p in plaintiffs) if k]
     return [r for r in records
             if RECORDED_JUDGMENT_RE.match(str(r.get('doC_TYPE') or '').strip())
-            or _is_case_court_paper(r, keys)]
+            or _is_case_court_paper(r, keys)
+            or _signed_by_plaintiff(r, keys)]
 
 
 # The recording stamp the clerk prints on every page of a recorded instrument, top right:
@@ -645,9 +674,10 @@ GRAY_CUTOFF_SWEEP = (160, 200, 130, 220)
 # earlier run", demoted it to `unknown` because a skipped row has no reading to classify, and
 # never exercised the new check on the text at all. The verdict looked right and nothing had
 # re-read anything.
+# 8: the nightly's judgments_only filter now also fetches satisfactions the plaintiff signed.
 # 7: the classifier learned satisfaction_of_judgment (a satisfaction quotes its judgment, so
 # version 6 would have filed it as a final judgment and reported a paid debt as owed).
-PIPELINE_VERSION = 7
+PIPELINE_VERSION = 8
 
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
@@ -695,7 +725,8 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
                 if document_walk.key_of(c['book'], c['page_no']) not in own]
     except Exception:
         pass                       # citations are an addition; they never fail a pilot run
-    candidates = [c for row in rows for c in (row.get('amount_candidates') or [])]
+    candidates = [c for row in rows if not is_satisfaction_row(row)
+                  for c in (row.get('amount_candidates') or [])]
     tried = [t for row in rows for t in (row.get('gray_cutoffs_tried') or [])]
 
     # The second reader, and ONLY when the first one's figures did not add up. If OCR produced a
@@ -704,7 +735,7 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     if vision_budget is not None and not any(c.get('sum_check') for c in candidates):
         vision = {'pages_read': 0, 'usd': 0.0, 'documents': [], 'pages': []}
         for row in rows:
-            if row.get('status') != 'stored' or not row.get('reading'):
+            if row.get('status') != 'stored' or not row.get('reading') or is_satisfaction_row(row):
                 continue
             found, detail = vision_candidates(
                 row['path'], row['reading'], vision_budget, reader=vision_reader,
@@ -867,7 +898,8 @@ def judgment_for_analyze(report, allow_ocr=False):
     images on a run of these, not before.
     """
     good = [r for r in report.get('documents', [])
-            if r.get('page_count_verified') and r.get('read_status') == 'read']
+            if r.get('page_count_verified') and r.get('read_status') == 'read'
+            and not is_satisfaction_row(r)]
     candidates = [c for r in good for c in (r.get('amount_candidates') or [])]
     if allow_ocr:
         # The escape hatch gets a guard. A scanned figure is admissible only when the page's own

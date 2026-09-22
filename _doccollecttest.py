@@ -570,6 +570,37 @@ class JudgmentFilterTests(unittest.TestCase):
     def test_a_real_judgment_doc_type_still_matches_with_no_plaintiffs(self):
         self.assertEqual(len(MJ.recorded_judgments([record()], [])), 1)
 
+    def sat(self, **kw):
+        row = record(doC_TYPE='SATISFACTION - SAT', foliO_NUMBER='0',
+                     firsT_PARTY='GARDEN LAKE TOWERS CONDOMINIUM ASSN INC',
+                     seconD_PARTY='MARTIN MILAGROS J')
+        row.update(kw)
+        return row
+
+    def test_a_satisfaction_the_plaintiff_signed_is_fetched(self):
+        # The nightly runs judgments_only. Without this the satisfaction that says the judgment
+        # was paid is never fetched, and the dossier reports a paid debt as owed.
+        self.assertEqual(len(MJ.recorded_judgments([self.sat()], self.PLAINTIFFS)), 1)
+        rel = self.sat(doC_TYPE='RELEASE - REL', firsT_PARTY='MARTIN MILAGROS J',
+                       seconD_PARTY='GARDEN LAKE TOWERS CONDOMINIUM ASSN INC')
+        self.assertEqual(len(MJ.recorded_judgments([rel], self.PLAINTIFFS)), 1)
+
+    def test_a_stranger_s_satisfaction_is_not_fetched(self):
+        other = self.sat(firsT_PARTY='WELLS FARGO BANK NA')
+        self.assertEqual(MJ.recorded_judgments([other], self.PLAINTIFFS), [])
+
+    def test_no_plaintiffs_means_no_satisfactions(self):
+        # Without the docket's plaintiffs there is nothing to tie a release to this case, and an
+        # owner's unrelated releases would all be bought.
+        self.assertEqual(MJ.recorded_judgments([self.sat()], []), [])
+
+    def test_a_satisfaction_s_recited_figure_is_never_the_judgment_amount(self):
+        sat = {'page_count_verified': True, 'read_status': 'read', 'doc_type': 'SATISFACTION - SAT',
+               'amount_candidates': [{'amount': 993885.33}]}
+        self.assertIsNone(MJ.judgment_for_analyze({'documents': [sat]}))
+        judged = dict(sat, doc_type='JUDGMENT - JUD', amount_candidates=[{'amount': 412880.45}])
+        self.assertEqual(MJ.judgment_for_analyze({'documents': [judged, sat]}), 412880.45)
+
     def test_plaintiffs_are_read_off_the_docket(self):
         raw = {'parties': [{'partyTypeDesc': 'PLAINTIFF', 'partyName': 'GARDEN LAKE TOWERS'},
                            {'partyTypeDesc': 'DEFENDANT', 'partyName': 'MILAGROS J MARTIN'}]}

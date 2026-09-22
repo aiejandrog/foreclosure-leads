@@ -74,8 +74,16 @@ always was — reading a document does not move a lead into a FACT state.
 
 THE LINE FOR refresh-dealflow.bat, to paste AFTER the [2b/5] records step:
 
-    echo [2e/5] Reading Miami court documents (off unless DEALFLOW_DOCS=1)...
-    python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 >> "%LOG%" 2>&1
+    echo [2e/5] Reading Miami court documents - off unless DEALFLOW_DOCS=1
+    python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 10 >> "%LOG%" 2>&1
+
+(No parentheses inside that echo: refresh-dealflow.bat puts stages inside `if` blocks, and cmd ends
+a block at the first unescaped ')'. That exact bug cost [5/5] every run from 08-20 to 09-19.)
+--limit 25 with oldest-dossier-first ordering cycles every live Miami lead; --token-budget 10 is at
+most ten captcha-backed searches a night for owners the 40-a-night filler has not reached (~$0.003
+each is an ESTIMATE from county_plaintiffs.py:368). Each night also writes
+dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no token, read, judgments found, judgments
+SATISFIED, and the commonest open gaps.
 
 --vision needs ANTHROPIC_API_KEY in the environment the SCHEDULED TASK runs in, which means a
 User (or Machine) environment variable on the machine that runs the night, not one typed into a
@@ -170,8 +178,46 @@ def pick_cases(leads, chains, limit, only=None):
         out.append({'case': case, 'owner': owner,
                     'folio': row.get('Folio') or row.get('year_folio') or '',
                     'chain': (chains or {}).get(case)})
-    out.sort(key=lambda r: dossier_path(COUNTY, r['case']).exists())
+    # No dossier first, then the OLDEST dossier. Sorting on existence alone meant that once every
+    # case had one, the same file-order head was re-read every night and a case low in the file
+    # was never revisited — and a revisit is how a satisfaction recorded after the judgment is
+    # ever seen.
+    def _age(r):
+        path = dossier_path(COUNTY, r['case'])
+        try:
+            return (1, path.stat().st_mtime)
+        except OSError:
+            return (0, 0.0)
+    out.sort(key=_age)
     return out[:limit] if limit else out
+
+
+def summarize(dossiers):
+    """One line per case, and the counts a person reads first. Written beside the dossiers so the
+    night's coverage is a file, not a scrollback."""
+    rows, gaps = [], {}
+    for d in dossiers:
+        c = d.get('c_documents') or {}
+        j = c.get('judgment') or {}
+        skipped = [r for r in (c.get('documents') or []) if r.get('status') == 'skipped']
+        rows.append({'case': d.get('case'),
+                     'skipped': skipped[0].get('reason') if skipped else None,
+                     'fully_read': c.get('fully_read') or 0,
+                     'judgment_found': bool(j.get('operative') or j.get('candidates')),
+                     'judgment_satisfied': bool(j.get('satisfied_by')),
+                     'open_gaps': len(d.get('open_gaps') or [])})
+        for g in d.get('open_gaps') or []:
+            key = str(g).split(':', 1)[-1].strip()[:80]
+            gaps[key] = gaps.get(key, 0) + 1
+    return {'written_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+            'county': COUNTY, 'cases': len(rows),
+            'skipped_no_token': sum(1 for r in rows if r['skipped']),
+            'with_a_document_read': sum(1 for r in rows if r['fully_read']),
+            'judgment_found': sum(1 for r in rows if r['judgment_found']),
+            'judgment_satisfied': sum(1 for r in rows if r['judgment_satisfied']),
+            'complete': sum(1 for r in rows if not r['open_gaps']),
+            'top_gaps': sorted(gaps.items(), key=lambda kv: -kv[1])[:10],
+            'per_case': rows}
 
 
 def mint_token(owner, qs_cache):
@@ -501,6 +547,7 @@ def main(argv=None):
     queue = DocumentQueue()
     token_budget = {'left': args.token_budget, 'spent': 0} if args.token_budget else None
     written = read_ok = 0
+    dossiers = []
     try:
         for entry in picked:
             dossier = run_case(entry, qs_cache, queue=queue, ocr=ocr,
@@ -514,6 +561,7 @@ def main(argv=None):
             target.parent.mkdir(parents=True, exist_ok=True)
             DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
             written += 1
+            dossiers.append(dossier)
             read_ok += dossier['c_documents'].get('fully_read') or 0
             print('  %s  %s' % (entry['case'], dossier['conclusion']))
             _print_case(dossier)
@@ -521,6 +569,15 @@ def main(argv=None):
         queue.close()
     print('run_documents: %d dossier(s) written, %d document(s) actually read.'
           % (written, read_ok))
+    if dossiers:
+        summary = summarize(dossiers)
+        target = dossier_path(COUNTY, '_nightly')
+        target.parent.mkdir(parents=True, exist_ok=True)
+        DS._atomic_write_text(str(target), json.dumps(summary, indent=2) + '\n')
+        print('  coverage: %(cases)d case(s), %(skipped_no_token)d skipped for no search token, '
+              '%(with_a_document_read)d with a document read, %(judgment_found)d judgment(s) '
+              'found, %(judgment_satisfied)d satisfied, %(complete)d with no open gap' % summary)
+        print('  summary: %s' % target)
     if budget:
         print('  interpretation spend: $%.4f of $%.2f' % (budget.spent, budget.limit))
     if vision_budget:
