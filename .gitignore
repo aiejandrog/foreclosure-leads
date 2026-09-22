@@ -65,6 +65,13 @@ BSG_Mail_Campaign_*.pdf
 # the recording index, that a scanned page is never called read, and that document evidence cannot
 # reach equity_state's FACT states. Untracked, it would exist on one machine only.
 !_doccollecttest.py
+# Official-records rows saved for miami_judgment --records. They carry owner names, party names
+# and recording keys for a real homeowner, and the pilot run on 2026-09-22 left one of these
+# untracked in the working copy. Named here by kind, per CLAUDE.md's "Never commit".
+or_rows*.json
+*_rows.json
+pilot*.json
+documents/
 _*.html
 _*.json
 _*.txt

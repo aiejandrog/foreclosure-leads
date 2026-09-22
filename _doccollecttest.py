@@ -41,12 +41,32 @@ def pdf_page(text=''):
     return out
 
 
+# The real watermark from the 2026-09-22 pilot, 75 characters — longer than the 40-character
+# floor the first version of this module trusted.
+WATERMARK = 'NOT AN OFFICIAL COPY - PUBLIC ACCESS SYSTEM - MIAMI-DADE COUNTY CLERK OF CT'
+
+
+def scanned_page(stamp=WATERMARK):
+    """A page that is a picture of a page, with a stamp over it. What the clerk actually serves."""
+    fitz = DS._fitz()
+    doc = fitz.open()
+    page = doc.new_page()
+    pix = fitz.Pixmap(fitz.csGRAY, fitz.IRect(0, 0, 1700, 2200), False)
+    pix.clear_with(220)
+    page.insert_image(page.rect, pixmap=pix)
+    if stamp:
+        page.insert_text((40, 30), stamp, fontsize=7)
+    out = doc.tobytes()
+    doc.close()
+    return out
+
+
 JUDGMENT_TEXT = [
-    'IN THE CIRCUIT COURT OF THE ELEVENTH JUDICIAL CIRCUIT',
-    'FINAL JUDGMENT OF FORECLOSURE',
-    'the total sum of $412,880.45 for which let execution issue',
-    'Lot 7, Block 3, SYNTHETIC ESTATES, according to the plat thereof',
-    'DONE AND ORDERED in chambers',
+    'IN THE CIRCUIT COURT OF THE ELEVENTH JUDICIAL CIRCUIT IN AND FOR THE COUNTY',
+    'SUMMARY FINAL JUDGMENT OF FORECLOSURE AS TO COUNT ONE OF THE COMPLAINT',
+    'the total sum of $412,880.45 for which let execution issue forthwith',
+    'Lot 7, Block 3, SYNTHETIC ESTATES, according to the plat thereof as recorded',
+    'DONE AND ORDERED in chambers at Miami-Dade County, Florida, on this day',
 ]
 
 
@@ -321,6 +341,114 @@ class ReadTests(unittest.TestCase):
         self.assertEqual(reading['pages'][0]['outcome'], 'needs_ocr')
 
 
+class ScanDetectionTests(unittest.TestCase):
+    """The 2026-09-22 pilot regression: a stamp is text, and no character count can tell them apart.
+
+    All five pages of the Garden Lake Towers judgment are 100% raster with a 75-character clerk
+    watermark. The first version of this module scored them `text` and called the document `read`.
+    """
+
+    def read(self, pages, **kw):
+        session = Session(manifest=manifest_for(len(pages)), pages=pages)
+        got = DC.MiamiCollector(session=session).retrieve_document(record(pages=len(pages)))
+        return DS.read_pages(DS.validate(got)['content'], **kw)
+
+    def test_the_pilot_document_is_not_read(self):
+        reading = self.read([scanned_page() for _ in range(5)])
+        self.assertEqual(reading['read_status'], 'image_only')
+        self.assertFalse(reading['complete'])
+        self.assertEqual(reading['pages_unresolved'], [1, 2, 3, 4, 5])
+        self.assertEqual(reading['pages_with_text'], 0)
+
+    def test_the_watermark_is_long_enough_to_have_fooled_a_character_count(self):
+        self.assertGreater(len(WATERMARK), DS.MIN_PAGE_CHARS)
+        reading = self.read([scanned_page()])
+        page = reading['pages'][0]
+        self.assertEqual(page['outcome'], 'needs_ocr')
+        self.assertIn('raster image', page['weak_reason'])
+        self.assertGreater(page['image_coverage'], DS.MAX_IMAGE_COVERAGE)
+
+    def test_stamp_text_is_not_offered_as_the_pages_text(self):
+        # If the stamp stayed in `text`, a dollar figure inside a watermark would be extracted
+        # from it and reported as a judgment amount.
+        page = self.read([scanned_page()])['pages'][0]
+        self.assertEqual(page['text'], '')
+        self.assertIn(WATERMARK[:20], page['embedded_text'])
+
+    def test_a_dollar_figure_in_a_watermark_never_becomes_an_amount(self):
+        stamped = scanned_page(WATERMARK + ' FEE $412,880.45 total amount due')
+        self.assertEqual(MJ.judgment_amount_candidates(self.read([stamped])), [])
+
+    def test_identical_text_on_every_page_is_boilerplate_not_content(self):
+        # Catches a stamp on a page that is NOT mostly raster — a born-digital cover sheet whose
+        # only text is the same footer on all of it.
+        fitz = DS._fitz()
+
+        def footer_only():
+            doc = fitz.open()
+            page = doc.new_page()
+            page.insert_text((40, 30), 'NOT AN OFFICIAL COPY - PUBLIC ACCESS SYSTEM - PAGE 1 OF 4',
+                             fontsize=9)
+            out = doc.tobytes()
+            doc.close()
+            return out
+
+        reading = self.read([footer_only() for _ in range(4)])
+        self.assertEqual(reading['read_status'], 'image_only')
+        self.assertIn('stamp', reading['pages'][0]['weak_reason'])
+
+    def test_a_real_text_page_still_reads(self):
+        reading = self.read(judgment_pages())
+        self.assertEqual(reading['read_status'], 'read')
+        self.assertTrue(all(p['text_source'] == 'embedded' for p in reading['pages']))
+
+    def test_garbled_glyphs_do_not_pass_on_length(self):
+        self.assertLess(DS._sane_ratio('\ufffd' * 80), DS.MIN_SANE_RATIO)
+        self.assertGreater(DS._sane_ratio('ORDERED that plaintiff recover the sum'),
+                           DS.MIN_SANE_RATIO)
+
+
+class OcrFallbackTests(unittest.TestCase):
+    def read(self, pages, **kw):
+        session = Session(manifest=manifest_for(len(pages)), pages=pages)
+        got = DC.MiamiCollector(session=session).retrieve_document(record(pages=len(pages)))
+        return DS.read_pages(DS.validate(got)['content'], **kw)
+
+    def fake_ocr(self, text):
+        return lambda paths: {path: text for path in paths}
+
+    def test_ocr_turns_a_scan_into_a_read_document(self):
+        line = 'ORDERED that plaintiff recover the total sum of $412,880.45 from defendant'
+        reading = self.read([scanned_page(), scanned_page()], ocr=self.fake_ocr(line))
+        self.assertEqual(reading['read_status'], 'read')
+        self.assertEqual(reading['pages_from_ocr'], 2)
+        self.assertEqual(reading['pages_with_text'], 0)
+        self.assertTrue(all(p['text_source'] == 'ocr' for p in reading['pages']))
+
+    def test_an_ocr_sourced_amount_is_tagged_as_such(self):
+        line = 'ORDERED that plaintiff recover the total sum of $412,880.45 from defendant'
+        cands = MJ.judgment_amount_candidates(
+            self.read([scanned_page()], ocr=self.fake_ocr(line)))
+        self.assertEqual(cands[0]['amount'], 412880.45)
+        self.assertEqual(cands[0]['text_source'], 'ocr')
+
+    def test_an_unavailable_ocr_bridge_is_a_recorded_reason_on_every_page(self):
+        def broken(paths):
+            raise RuntimeError('winocr exit 1: powershell not found')
+        reading = self.read([scanned_page(), scanned_page()], ocr=broken)
+        self.assertEqual(reading['read_status'], 'image_only')
+        self.assertTrue(all('winocr' in p['ocr_error'] for p in reading['pages']))
+
+    def test_ocr_that_returns_nothing_leaves_the_page_unresolved(self):
+        reading = self.read([scanned_page()], ocr=self.fake_ocr(''))
+        self.assertEqual(reading['pages'][0]['outcome'], 'needs_ocr')
+        self.assertFalse(reading['complete'])
+
+    def test_not_running_ocr_is_recorded(self):
+        self.assertFalse(self.read([scanned_page()])['ocr_attempted'])
+        self.assertTrue(self.read([scanned_page()], ocr=self.fake_ocr('x' * 80))['ocr_attempted'])
+
+
 # ---- judgment extraction -------------------------------------------------------------------------
 class JudgmentTests(unittest.TestCase):
     def reading(self, lines):
@@ -354,6 +482,84 @@ class JudgmentTests(unittest.TestCase):
         self.assertEqual(MJ.judgment_for_analyze({'documents': [row]}), 412880.45)
         for broken in ({'page_count_verified': False}, {'read_status': 'partial'}):
             self.assertIsNone(MJ.judgment_for_analyze({'documents': [dict(row, **broken)]}))
+
+
+class JudgmentFilterTests(unittest.TestCase):
+    """The pilot's judgment is indexed "DADE COURT PAPER - DCP", folio 0, so a doc-type filter
+    alone printed "Nothing to fetch" and skipped the only document the pilot exists to test."""
+
+    PLAINTIFFS = ['GARDEN LAKE TOWERS CONDOMINIUM ASSOCIATION INC']
+
+    def dcp(self, **kw):
+        row = record(doC_TYPE='DADE COURT PAPER - DCP', foliO_NUMBER='0',
+                     firsT_PARTY='MARTIN MILAGROS J',
+                     seconD_PARTY='GARDEN LAKE TOWERS CONDOMINIUM ASSN INC')
+        row.update(kw)
+        return row
+
+    def test_a_plain_doc_type_filter_drops_the_pilot_judgment(self):
+        self.assertEqual(MJ.recorded_judgments([self.dcp()]), [])
+
+    def test_a_court_paper_between_the_cases_parties_is_kept(self):
+        kept = MJ.recorded_judgments([self.dcp()], self.PLAINTIFFS)
+        self.assertEqual(len(kept), 1)
+
+    def test_either_indexed_party_order_matches(self):
+        swapped = self.dcp(firsT_PARTY='GARDEN LAKE TOWERS CONDOMINIUM ASSN INC',
+                           seconD_PARTY='MARTIN MILAGROS J')
+        self.assertEqual(len(MJ.recorded_judgments([swapped], self.PLAINTIFFS)), 1)
+
+    def test_a_court_paper_from_an_unrelated_case_is_not_kept(self):
+        stranger = self.dcp(firsT_PARTY='SOMEBODY ELSE', seconD_PARTY='UNRELATED BANK NA')
+        self.assertEqual(MJ.recorded_judgments([stranger], self.PLAINTIFFS), [])
+
+    def test_corporate_noise_alone_never_matches(self):
+        # "INC", "ASSOCIATION", "THE" are shared by half the index; matching on them would keep
+        # every court paper in the county.
+        noise = self.dcp(firsT_PARTY='THE INC COMPANY', seconD_PARTY='ASSOCIATION OF THE TRUST')
+        self.assertEqual(MJ.recorded_judgments([noise], self.PLAINTIFFS), [])
+
+    def test_a_real_judgment_doc_type_still_matches_with_no_plaintiffs(self):
+        self.assertEqual(len(MJ.recorded_judgments([record()], [])), 1)
+
+    def test_plaintiffs_are_read_off_the_docket(self):
+        raw = {'parties': [{'partyTypeDesc': 'PLAINTIFF', 'partyName': 'GARDEN LAKE TOWERS'},
+                           {'partyTypeDesc': 'DEFENDANT', 'partyName': 'MILAGROS J MARTIN'}]}
+        self.assertEqual(MJ.plaintiffs_of(raw), ['GARDEN LAKE TOWERS'])
+        self.assertEqual(MJ.plaintiffs_of({}), [])
+
+
+class IntegrityTests(unittest.TestCase):
+    def retrieve(self, pages=None, expected=5):
+        pages = pages if pages is not None else judgment_pages()
+        session = Session(manifest=manifest_for(len(pages)), pages=pages)
+        return DC.MiamiCollector(session=session).retrieve_document(record(pages=expected))
+
+    def test_a_damaged_stored_copy_is_replaced_not_trusted(self):
+        case = CASE + '-damaged'
+        pages = judgment_pages()
+        first = DS.store('MIAMI-DADE', case, self.retrieve(pages=pages), source_ref='or/1')
+        with open(first['path'], 'wb') as fh:          # a crash mid-write
+            fh.write(b'%PDF-truncated')
+        again = DS.store('MIAMI-DADE', case, self.retrieve(pages=pages), source_ref='or/1')
+        self.assertTrue(again.get('replaced_damaged_copy'))
+        self.assertTrue(again['stored'])
+        self.assertEqual(DS.read_pages(again['path'])['page_count'], 5)
+
+    def test_an_intact_copy_is_recognised_and_rechecked(self):
+        case = CASE + '-intact'
+        pages = judgment_pages()
+        DS.store('MIAMI-DADE', case, self.retrieve(pages=pages), source_ref='or/1')
+        again = DS.store('MIAMI-DADE', case, self.retrieve(pages=pages), source_ref='or/1')
+        self.assertFalse(again['stored'])
+        self.assertTrue(again['integrity_rechecked'])
+
+    def test_no_temp_file_is_left_behind(self):
+        case = CASE + '-atomic'
+        DS.store('MIAMI-DADE', case, self.retrieve(), source_ref='or/1')
+        leftovers = [f for f in os.listdir(str(DS.case_dir('MIAMI-DADE', case)))
+                     if f.endswith('.tmp')]
+        self.assertEqual(leftovers, [])
 
 
 # ---- queue -----------------------------------------------------------------------------------------

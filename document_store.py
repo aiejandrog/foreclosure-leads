@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 from datetime import datetime, timezone
 
 import case_review
@@ -63,6 +64,25 @@ def source_digest(retrieved):
     if pages:
         return hashlib.sha256(b''.join(pages)).hexdigest()
     return hashlib.sha256(retrieved.get('content') or b'').hexdigest()
+
+
+def _atomic_write_bytes(path, data):
+    """Write through a temp file + fsync + os.replace.
+
+    A direct write that dies half way leaves a truncated PDF on disk under a hash that says it is
+    whole — and the dedupe path would then hand that truncated file to the reader forever.
+    """
+    path = str(path)
+    tmp = path + '.tmp'
+    with open(tmp, 'wb') as fh:
+        fh.write(data)
+        fh.flush()
+        os.fsync(fh.fileno())
+    os.replace(tmp, path)
+
+
+def _atomic_write_text(path, text):
+    _atomic_write_bytes(path, text.encode('utf-8'))
 
 
 def _slug(value):
@@ -203,20 +223,30 @@ def store(county, case, retrieved, source_ref='', doc_name=''):
             prior = json.loads(meta_path.read_text(encoding='utf-8'))
         except (OSError, ValueError):
             prior = {}
-        if prior.get('sha256') == digest:
+        # Re-hash the FILE, not the sidecar's claim about it. A sidecar saying "sha256 X" proves
+        # only what we meant to write; a crash mid-write, or anything that touched the folder
+        # since, leaves a file that no longer matches, and dedupe would hand that file to the
+        # reader forever without ever looking at it.
+        on_disk = sha256(pdf_path.read_bytes())
+        if prior.get('sha256') == digest and prior.get('rebuilt_sha256') in (None, on_disk):
             prior['stored'] = False
             prior['last_seen_at'] = manifest['retrieved_at']
+            prior['integrity_rechecked'] = True
             # A later fetch that now HAS an index count upgrades the verdict; it never downgrades
             # a verified document to unverified.
             if manifest['page_count_verified'] and not prior.get('page_count_verified'):
                 prior.update({k: manifest[k] for k in
                               ('page_count_verified', 'page_count_note', 'pages_expected',
                                'page_count_source')})
-            meta_path.write_text(json.dumps(prior, indent=2) + '\n', encoding='utf-8')
+            _atomic_write_text(meta_path, json.dumps(prior, indent=2) + '\n')
             return prior
-    pdf_path.write_bytes(record['content'])
+        # Same source bytes, different file on disk: the stored copy is damaged. Replace it and
+        # say so, rather than trusting either side silently.
+        if prior.get('sha256') == digest:
+            manifest['replaced_damaged_copy'] = True
+    _atomic_write_bytes(pdf_path, record['content'])
     manifest['stored'] = True
-    meta_path.write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
+    _atomic_write_text(meta_path, json.dumps(manifest, indent=2) + '\n')
     return manifest
 
 
@@ -226,18 +256,163 @@ def load_manifest(path):
 
 
 # ---- reading ----------------------------------------------------------------------------------
-# A page whose embedded text layer yields fewer than this many characters is treated as an image.
-# Scanned clerk documents routinely carry a handful of stray characters from a stamp or a fax
-# header; accepting those as "the page" is how a 5-page judgment reads as blank and is called read.
+# WHY THERE ARE THREE SIGNALS AND NOT ONE
+# The first version of this module used a character floor alone, and the Miami pilot walked
+# straight through it on 2026-09-22: every page of the five-page Garden Lake Towers judgment is
+# 100% raster, and the only text on each one is the clerk's 75-character watermark
+# ("NOT AN OFFICIAL COPY - PUBLIC ACCESS..."). 75 > 40, so all five pages scored `text`, the
+# document was reported `read`, and nothing had been read at all. Had that watermark happened to
+# carry a dollar figure, it would have been reported as a judgment amount.
+#
+# A stamp is text. That is the whole problem, and no character count can tell a stamp from a page.
+# So a page is weak if ANY of these holds:
+#
+#   too little text        under `min_chars` — a page with nothing on it
+#   mostly image           raster images cover >= MAX_IMAGE_COVERAGE of the page. This is the one
+#                          that catches the pilot: a scan is an image of a page, whatever text is
+#                          stamped over it.
+#   garbled glyphs         a broken embedded font extracts as noise that passes a length check
+#
+# and one document-level signal, because a watermark is identical on every page while real pages
+# never are: if every page's text normalises to the same string, that text is boilerplate and none
+# of the pages have been read.
 MIN_PAGE_CHARS = 40
+MAX_IMAGE_COVERAGE = 0.10
+MIN_SANE_RATIO = 0.70
+OCR_DPI = 300
+
+_SANE = set(' \t\r\n0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+            '.,;:\'"()[]/$%&#*+-=<>?!@_|\\')
 
 
-def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS):
-    """Extract embedded text per page. EVERY page gets an outcome; none is skipped.
+def _sane_ratio(text):
+    stripped = text.strip()
+    if not stripped:
+        return 1.0
+    return sum(1 for ch in stripped if ch in _SANE) / len(stripped)
 
-    outcomes: 'text'       — an embedded text layer we can quote from
-              'needs_ocr'  — the page rendered but carries no usable text (a scan)
-              'unreadable' — the page itself failed to open
+
+def _image_coverage(page):
+    """Fraction of the page covered by raster images, clamped to 1.0.
+
+    Overlapping images would double-count, so the sum is capped; for the question being asked —
+    "is this a picture of a page?" — a cap is the right conservative shape.
+    """
+    try:
+        infos = page.get_image_info()
+    except Exception:
+        return 0.0
+    area = abs(page.rect)
+    if area <= 0:
+        return 0.0
+    covered = 0.0
+    for info in infos:
+        try:
+            box = _fitz().Rect(info['bbox']) & page.rect
+            covered += abs(box)
+        except Exception:
+            continue
+    return min(covered / area, 1.0)
+
+
+def _boilerplate_key(text):
+    """Normalise a page's text so a repeated stamp compares equal across pages.
+
+    Digits go too: "Page 1 of 5" and "Page 2 of 5" are the same boilerplate.
+    """
+    return re.sub(r'[^a-z]+', '', (text or '').lower())
+
+
+def _weakness(chars, coverage, sane, min_chars):
+    if chars < min_chars:
+        return 'too little extractable text (%d chars)' % chars
+    if coverage >= MAX_IMAGE_COVERAGE:
+        return 'page is %.0f%% raster image; embedded text is a stamp, not the page' % (coverage * 100)
+    if sane < MIN_SANE_RATIO:
+        return 'extracted text is %.0f%% unreadable glyphs' % ((1 - sane) * 100)
+    return ''
+
+
+def winocr(paths, timeout=600):
+    """Windows' built-in OCR, via the helper fl_lp/broward_pin.py already drives.
+
+    Read-only use of that module: the 14-page sampling parcel reader there is untouched, this
+    only borrows its PowerShell bridge. Raises OcrUnavailable off Windows, or with no PowerShell,
+    which is a recorded per-page reason and never a silent empty result.
+    """
+    from fl_lp.broward_pin import ocr_images
+    return ocr_images(list(paths), timeout=timeout)
+
+
+def ocr_unavailable_error():
+    from fl_lp.broward_pin import OcrUnavailable
+    return OcrUnavailable
+
+
+def _render_and_ocr(doc, indexes, backend, keep_dir=None, dpi=OCR_DPI):
+    """Render weak pages and OCR them. -> ({page_no: text}, {page_no: error}, {page_no: image}).
+
+    When `keep_dir` is given the rendered PNG is kept, so a human can eyeball the page the OCR
+    text came from. That matters more here than usual: an OCR'd digit in a judgment total is the
+    difference between the right mortgage and the wrong one.
+    """
+    fitz = _fitz()
+    workdir = keep_dir or tempfile.mkdtemp(prefix='dealflow-ocr-')
+    os.makedirs(workdir, exist_ok=True)
+    paths = {}
+    errors = {}
+    text = {}
+    images = {}
+    for index in indexes:
+        target = os.path.join(workdir, 'p%d.png' % (index + 1))
+        try:
+            doc.load_page(index).get_pixmap(dpi=dpi, colorspace=fitz.csGRAY).save(target)
+            paths[target] = index + 1
+        except Exception as exc:
+            errors[index + 1] = 'could not render this page for OCR: %s' % str(exc)[:160]
+    if paths:
+        try:
+            got = backend(list(paths))
+        except Exception as exc:
+            # Every requested page carries the SAME reason. An OCR bridge that cannot run is a
+            # recorded gap on each page, not a quietly empty read.
+            reason = '%s: %s' % (type(exc).__name__, str(exc)[:200])
+            errors.update({page: reason for page in paths.values()})
+            got = {}
+        for path, page in paths.items():
+            value = got.get(path)
+            if page in errors:
+                continue
+            if value:
+                text[page] = value
+                if keep_dir:
+                    images[page] = path
+            else:
+                errors[page] = 'OCR returned no text for this page'
+    if not keep_dir:
+        for path in paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        try:
+            os.rmdir(workdir)
+        except OSError:
+            pass
+    return text, errors, images
+
+
+def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_in=None):
+    """Read a document. EVERY page gets an outcome; none is skipped and none is assumed.
+
+    outcomes: 'text'       an embedded text layer we can quote from
+              'ocr_text'   no usable embedded text; these words came from OCR of the page image
+              'needs_ocr'  no usable text and OCR did not run or returned nothing
+              'unreadable' the page itself failed to open
+
+    `ocr` is a callable taking a list of PNG paths and returning {path: text}; pass
+    `document_store.winocr` for the Windows bridge. None means do not OCR, and weak pages stay
+    `needs_ocr` — honest, and not a claim that the page is blank.
     """
     fitz = _fitz()
     if isinstance(content_or_path, (bytes, bytearray)):
@@ -247,28 +422,66 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS):
     pages = []
     try:
         for index in range(doc.page_count):
-            entry = {'page': index + 1, 'chars': 0, 'text': '', 'outcome': 'unreadable'}
+            entry = {'page': index + 1, 'chars': 0, 'text': '', 'outcome': 'unreadable',
+                     'text_source': None, 'image_coverage': None}
             try:
-                text = doc.load_page(index).get_text('text') or ''
-            except Exception as exc:                       # a single corrupt page must not lose the rest
+                page = doc.load_page(index)
+                text = page.get_text('text') or ''
+                coverage = _image_coverage(page)
+            except Exception as exc:
                 entry['error'] = str(exc)[:200]
                 pages.append(entry)
                 continue
-            entry['text'] = text
-            entry['chars'] = len(text.strip())
-            entry['outcome'] = 'text' if entry['chars'] >= min_chars else 'needs_ocr'
+            chars = len(text.strip())
+            sane = _sane_ratio(text)
+            weak = _weakness(chars, coverage, sane, min_chars)
+            entry.update({'text': text, 'chars': chars, 'image_coverage': round(coverage, 4),
+                          'sane_ratio': round(sane, 3)})
+            if weak:
+                entry.update({'outcome': 'needs_ocr', 'weak_reason': weak,
+                              'embedded_text': text})
+                entry['text'] = ''          # a stamp is not this page's text
+            else:
+                entry.update({'outcome': 'text', 'text_source': 'embedded'})
             pages.append(entry)
+
+        # Document-level: identical text on every page is boilerplate, not content.
+        readable = [p for p in pages if p['outcome'] == 'text']
+        if len(readable) > 1 and len({_boilerplate_key(p['text']) for p in readable}) == 1:
+            for p in readable:
+                p.update({'outcome': 'needs_ocr', 'text_source': None,
+                          'embedded_text': p['text'], 'text': '',
+                          'weak_reason': 'identical text on every page: a stamp, not the page'})
+
+        # OCR whatever is still weak.
+        weak_indexes = [p['page'] - 1 for p in pages if p['outcome'] == 'needs_ocr']
+        if ocr is not None and weak_indexes:
+            got, errors, images = _render_and_ocr(doc, weak_indexes, ocr, keep_dir=keep_images_in)
+            for p in pages:
+                value = got.get(p['page'])
+                if value and len(value.strip()) >= min_chars:
+                    p.update({'outcome': 'ocr_text', 'text': value,
+                              'chars': len(value.strip()), 'text_source': 'ocr'})
+                    if images.get(p['page']):
+                        p['image'] = images[p['page']]
+                elif p['page'] in errors:
+                    p['ocr_error'] = errors[p['page']]
+                elif p['page'] in got:
+                    p['ocr_error'] = 'OCR text was below the %d-character floor' % min_chars
     finally:
         doc.close()
-    unresolved = [p['page'] for p in pages if p['outcome'] != 'text']
+    unresolved = [p['page'] for p in pages if p['outcome'] not in ('text', 'ocr_text')]
     return {'pages': pages,
             'page_count': len(pages),
             'pages_with_text': sum(1 for p in pages if p['outcome'] == 'text'),
+            'pages_from_ocr': sum(1 for p in pages if p['outcome'] == 'ocr_text'),
             'pages_unresolved': unresolved,
-            # 'read' requires an outcome of 'text' on every page. Anything else is 'partial', and
-            # a document with zero readable pages is 'image_only' — a real state, not a failure.
+            'ocr_attempted': ocr is not None,
+            # 'read' needs an outcome on every page. `image_only` is a real state, not a failure:
+            # it says the county gave us pictures and nothing has read them yet.
             'read_status': ('read' if pages and not unresolved
-                            else 'image_only' if pages and not any(p['outcome'] == 'text' for p in pages)
+                            else 'image_only' if pages and not any(
+                                p['outcome'] in ('text', 'ocr_text') for p in pages)
                             else 'partial' if pages else 'empty'),
             'complete': bool(pages) and not unresolved}
 
@@ -280,10 +493,14 @@ def record_read(meta_path, reading):
     manifest.update({
         'read_status': reading['read_status'],
         'pages_with_text': reading['pages_with_text'],
+        'pages_from_ocr': reading.get('pages_from_ocr', 0),
         'pages_unresolved': reading['pages_unresolved'],
+        'ocr_attempted': reading.get('ocr_attempted', False),
+        'weak_pages': [{'page': p['page'], 'reason': p.get('weak_reason'),
+                        'image_coverage': p.get('image_coverage'),
+                        'ocr_error': p.get('ocr_error')}
+                       for p in reading['pages'] if p.get('weak_reason')],
         'read_at': _now(),
     })
-    with open(meta_path, 'w', encoding='utf-8') as fh:
-        json.dump(manifest, fh, indent=2)
-        fh.write('\n')
+    _atomic_write_text(meta_path, json.dumps(manifest, indent=2) + '\n')
     return manifest
