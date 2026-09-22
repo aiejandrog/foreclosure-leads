@@ -28,8 +28,14 @@ cannot evaluate ALARMS, it never prints ok. Exit codes match that file so a call
 them the same way:
 
     0 = CLEAN             every check ran and passed
-    2 = ALARM             the live board is stale, shrunken, or behind main
-    3 = CANNOT EVALUATE   the network, the mirror or the coverage stamp was unreadable
+    2 = ALARM             a check ran and failed: the board is stale, shrunken, or behind main
+    3 = CANNOT EVALUATE   a check could not run at all
+
+Exit 0 requires that every check actually RAN. A check that could not be evaluated -- an
+unreadable stamp, a count that is not a number, an engine repo this machine cannot fetch -- is
+exit 3, never exit 0, and never exit 2 either: exit 2 is reserved for a fault that was actually
+observed. When both are present exit 2 wins, because a confirmed fault is the more useful thing
+to report and the unevaluated check is listed alongside it.
 
 WHAT IT READS
   * The mirror's commit list, via a blobless clone (`--filter=blob:none`). The built board is
@@ -92,11 +98,23 @@ HTTP_TIMEOUT = 30
 HEADER_BYTES = 512
 
 ALARMS = []
+UNKNOWNS = []
 NOTES = []
 
 
 def _alarm(msg):    ALARMS.append(msg)
 def _note(msg):     NOTES.append(msg)
+
+
+def _unknown(msg):
+    """A check that could not be evaluated. NOT an alarm -- see the exit codes in the docstring.
+
+    Greptile caught the original conflation: a failed read of the PREVIOUS publish made the run
+    exit 2, reporting a confirmed problem with the current board when all that actually happened
+    was that one comparison could not be made. Exit 2 means "I checked and it is wrong"; this
+    list means "I could not check".
+    """
+    UNKNOWNS.append(msg)
 
 
 def _now():
@@ -112,8 +130,8 @@ def mirror_repo():
     """
     m = re.match(r'^https://([\w.-]+)\.github\.io/([\w.-]+)/?$', board_url.BOARD_URL)
     if not m:
-        _alarm('BOARD_URL %r is not a github.io project page, so the mirror repo cannot be '
-               'derived from it. Teach mirror_repo() the new shape.' % board_url.BOARD_URL)
+        _unknown('BOARD_URL %r is not a github.io project page, so the mirror repo cannot be '
+                 'derived from it. Teach mirror_repo() the new shape.' % board_url.BOARD_URL)
         return None, None, None
     owner, repo = m.group(1), m.group(2)
     return owner, repo, 'https://github.com/%s/%s.git' % (owner, repo)
@@ -141,9 +159,9 @@ def sync_mirror(git_url, cache):
         shutil.rmtree(cache, ignore_errors=True)
     rc, out = _git(['clone', '--filter=blob:none', '--no-checkout', git_url, cache])
     if rc != 0:
-        _alarm('cannot reach the published mirror %s -- %s. The live board cannot be checked '
-               'from here at all, so this run proves nothing either way.'
-               % (git_url, out.splitlines()[-1] if out else 'no output'))
+        _unknown('cannot reach the published mirror %s -- %s. The live board cannot be checked '
+                 'from here at all, so this run proves nothing either way.'
+                 % (git_url, out.splitlines()[-1] if out else 'no output'))
         return False
     return True
 
@@ -156,8 +174,8 @@ def publish_commits(cache, limit):
         rc, out = _git(['log', '--format=%H %cI', '-n', str(limit),
                         '--', 'docs/index.html'], cwd=cache)
     if rc != 0 or not out:
-        _alarm('the mirror has no commit touching docs/index.html -- either the clone is empty '
-               'or the board is published under a different path now.')
+        _unknown('the mirror has no commit touching docs/index.html -- either the clone is '
+                 'empty or the board is published under a different path now.')
         return []
     rows = []
     for line in out.splitlines():
@@ -174,6 +192,11 @@ def coverage_at(owner, repo, sha):
 
     A Range request, not a download. The built board is ~15 MB; the stamp is ~200 bytes and is
     on line 1 exactly so that it is cheap to read.
+
+    A read that fails is CANNOT EVALUATE, never an alarm -- including for the current board.
+    ALARMS in this file means "I checked and it is wrong"; not being able to read a board is not
+    a finding about that board. Reporting it as one meant a single flaky HTTP request against
+    yesterday's publish produced "the published board has a problem".
     """
     url = 'https://raw.githubusercontent.com/%s/%s/%s/docs/index.html' % (owner, repo, sha)
     req = urllib.request.Request(url, headers={'Range': 'bytes=0-%d' % HEADER_BYTES,
@@ -182,20 +205,20 @@ def coverage_at(owner, repo, sha):
         with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as r:
             head = r.read(HEADER_BYTES + 1).decode('utf-8', 'replace')
     except (urllib.error.URLError, OSError) as e:
-        _alarm('could not read the published board at %s (%s). Without the coverage stamp this '
-               'run cannot say whether the site is current.' % (sha[:8], e))
+        _unknown('could not read the published board at %s (%s). Without the coverage stamp this '
+                 'run cannot say whether the site is current.' % (sha[:8], e))
         return None
     m = COV_MARK.search(head)
     if not m:
-        _alarm('the published board at %s carries NO DEALFLOW-COVERAGE stamp on line 1. Either '
-               'docs/index.html was hand-edited -- which CLAUDE.md forbids because the next '
-               'refresh destroys it -- or it was built by a make_tracker that predates the '
-               'census.' % sha[:8])
+        _unknown('the published board at %s carries NO DEALFLOW-COVERAGE stamp on line 1. Either '
+                 'docs/index.html was hand-edited -- which CLAUDE.md forbids because the next '
+                 'refresh destroys it -- or it was built by a make_tracker that predates the '
+                 'census.' % sha[:8])
         return None
     try:
         return json.loads(m.group(1))
     except ValueError as e:
-        _alarm('the coverage stamp at %s is not valid JSON (%s).' % (sha[:8], e))
+        _unknown('the coverage stamp at %s is not valid JSON (%s).' % (sha[:8], e))
         return None
 
 
@@ -229,13 +252,13 @@ def built_time(cov, sha):
     """The stamp's own build time as UTC. See eastern_offset() for why it is not .astimezone()."""
     raw = (cov or {}).get('built')
     if not raw:
-        _alarm('the coverage stamp at %s has no "built" time, so the age of the live board '
-               'cannot be established.' % sha[:8])
+        _unknown('the coverage stamp at %s has no "built" time, so the age of the live board '
+                 'cannot be established.' % sha[:8])
         return None
     try:
         naive = dt.datetime.fromisoformat(raw)
     except ValueError:
-        _alarm('unparseable build time %r in the stamp at %s.' % (raw, sha[:8]))
+        _unknown('unparseable build time %r in the stamp at %s.' % (raw, sha[:8]))
         return None
     if naive.tzinfo is not None:
         return naive.astimezone(dt.timezone.utc)
@@ -245,23 +268,28 @@ def built_time(cov, sha):
 def engine_head():
     """(sha, committed_utc) for origin/main in THIS checkout, after a fetch.
 
-    A fetch failure is a NOTE, not an alarm: plenty of places can read the public mirror without
-    being able to read the private engine. The main-ahead check is then skipped and said to be
-    skipped, rather than quietly passing.
+    A fetch failure is not an alarm: plenty of places can read the public mirror without being
+    able to read the private engine. But it is not nothing either, and the first version got that
+    wrong -- it said the check "did not run" and then ran it anyway against whatever `origin/main`
+    the checkout happened to hold. A remote-tracking ref that is a week old would have been
+    compared as if it were current, which can produce a false alarm or, worse, a clean result.
+    A failed fetch now returns nothing, so the check genuinely does not run.
     """
     rc, out = _git(['fetch', 'origin', 'main'], cwd=HERE)
     if rc != 0:
-        _note('could not fetch the engine repo (%s) -- the "is the live board built from current '
-              'code" check did not run.' % (out.splitlines()[-1] if out else 'no output'))
+        _unknown('could not fetch the engine repo (%s), so origin/main here may be stale -- the '
+                 '"is the live board built from current code" check did not run.'
+                 % (out.splitlines()[-1] if out else 'no output'))
+        return None, None
     rc, out = _git(['log', '-1', '--format=%H %cI', 'origin/main'], cwd=HERE)
     if rc != 0 or not out:
-        _note('no origin/main in this checkout -- the main-ahead check did not run.')
+        _unknown('no origin/main in this checkout -- the main-ahead check did not run.')
         return None, None
     sha, _, iso = out.partition(' ')
     try:
         return sha, dt.datetime.fromisoformat(iso).astimezone(dt.timezone.utc)
     except ValueError:
-        _note('unparseable origin/main date %r -- the main-ahead check did not run.' % iso)
+        _unknown('unparseable origin/main date %r -- the main-ahead check did not run.' % iso)
         return None, None
 
 
@@ -283,10 +311,19 @@ def check_freshness(built, commit_at, max_age_h):
 
 
 def check_shrink(cur, prev, prev_sha):
-    """Only a MATERIAL drop is a fault. See SHRINK_FRACTION."""
+    """Only a MATERIAL drop is a fault. See SHRINK_FRACTION.
+
+    A count that is missing or is not a number used to be skipped in silence, and the run then
+    printed "every check ran and passed". make_tracker always writes both counts as integers, so
+    one arriving malformed means something upstream changed -- exactly the case a watchdog must
+    not sleep through.
+    """
     for key, label in (('leads', 'leads'), ('phones', 'phones')):
         now_v, was_v = cur.get(key), (prev or {}).get(key)
         if not isinstance(now_v, int) or not isinstance(was_v, int) or was_v <= 0:
+            _unknown('cannot compare %s: the stamps carry %r now and %r at %s, so the '
+                     'did-the-board-shrink check did not run for it.'
+                     % (label, now_v, was_v, prev_sha[:8]))
             continue
         if now_v < was_v * (1.0 - SHRINK_FRACTION):
             _alarm('%s fell from %d to %d (-%.0f%%) against the previous publish %s. '
@@ -298,6 +335,19 @@ def check_shrink(cur, prev, prev_sha):
 
 
 def check_main_ahead(built, head_sha, head_at):
+    """Did code land on main that the live board was built before?
+
+    WHAT THIS PROVES, AND WHAT IT DOES NOT. The coverage stamp carries a build time and a content
+    signature, but no engine commit, so the only thing comparable here is ORDER: was the board
+    built before or after that commit landed. A board built AFTER it is not thereby proven to
+    CONTAIN it -- a publish path building from a checkout that failed to pull produces a fresh
+    timestamp over old code, which is not hypothetical: it is the 2026-09-10 bug, where every
+    push from the other machine landed a day late while the repo looked up to date.
+
+    So a clean result here means "no code has been sitting on main unpublished", not "the live
+    board is built from main". Closing that gap needs the engine SHA baked into the stamp by
+    make_tracker(), which is a generator change and not this file's to make.
+    """
     if head_sha is None or head_at is None:
         return
     if built >= head_at:
@@ -340,11 +390,15 @@ def render_text(owner, repo, rows, cur, prev, age, head_sha, head_at):
         L.append('  !! ALARM  %d problem(s) with the published board' % len(ALARMS))
         for a in ALARMS:
             L.append('     - ' + a)
+    if UNKNOWNS:
+        L.append('  ?? CANNOT EVALUATE  %d check(s) did not run' % len(UNKNOWNS))
+        for u in UNKNOWNS:
+            L.append('     - ' + u)
     if NOTES:
         L.append('  .. NOTES  %d observation(s), not a hard fail' % len(NOTES))
         for n in NOTES:
             L.append('     - ' + n)
-    if not ALARMS:
+    if not ALARMS and not UNKNOWNS:
         L.append('  OK -- the live board is current.')
     L.append('=' * W)
     return '\n'.join(L)
@@ -383,11 +437,13 @@ def main():
                             _note('this publish has the same signature as the previous one (%s) '
                                   '-- the rebuild produced an identical board.' % cur.get('sig'))
 
-    # CANNOT EVALUATE beats ALARM: if we never got a stamp, we are not entitled to a verdict.
-    if cur is None or age is None:
-        exit_code = 3
-    elif ALARMS:
+    # Exit 0 requires that every check RAN. A confirmed fault (2) outranks an unevaluated check
+    # (3) because it is the more useful thing to report, and the unevaluated one is printed
+    # beside it either way. What neither may do is collapse into 0.
+    if ALARMS:
         exit_code = 2
+    elif UNKNOWNS or cur is None or age is None:
+        exit_code = 3
     else:
         exit_code = 0
 
@@ -399,7 +455,7 @@ def main():
             'engine_main': {'sha': head_sha,
                             'at': head_at.isoformat() if head_at else None},
             'publishes': [{'sha': s, 'at': w.isoformat()} for s, w in rows],
-            'alarms': ALARMS, 'notes': NOTES, 'exit': exit_code,
+            'alarms': ALARMS, 'unknowns': UNKNOWNS, 'notes': NOTES, 'exit': exit_code,
         }, indent=1))
     else:
         txt = render_text(owner, repo, rows, cur, prev, age, head_sha, head_at)

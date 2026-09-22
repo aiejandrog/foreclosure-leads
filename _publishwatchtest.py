@@ -50,12 +50,19 @@ def _stamp(built, leads=2400, phones=1200, sig='deadbeefcafe'):
 def _run(publishes, stamps, argv):
     """Drive main() with scripted mirror data. `publishes` is [(sha, commit_utc)]."""
     pw.ALARMS[:] = []
+    pw.UNKNOWNS[:] = []
     pw.NOTES[:] = []
     real = (pw.sync_mirror, pw.publish_commits, pw.coverage_at, pw.engine_head, sys.argv)
     try:
         pw.sync_mirror = lambda url, cache: publishes is not None
         pw.publish_commits = lambda cache, limit: list(publishes or [])[:limit]
-        pw.coverage_at = lambda owner, repo, sha: stamps.get(sha)
+        def _cov(owner, repo, sha):
+            # mirror the real function: a failed read records an UNKNOWN and returns None
+            v = stamps.get(sha)
+            if v is None:
+                pw._unknown('scripted read failure at %s' % sha)
+            return v
+        pw.coverage_at = _cov
         pw.engine_head = lambda: (None, None)
         sys.argv = ['publish_watch.py'] + list(argv)
         buf, real_out = io.StringIO(), sys.stdout
@@ -64,7 +71,7 @@ def _run(publishes, stamps, argv):
             rc = pw.main()
         finally:
             sys.stdout = real_out
-        return rc, list(pw.ALARMS), list(pw.NOTES)
+        return rc, list(pw.ALARMS), list(pw.NOTES), list(pw.UNKNOWNS)
     finally:
         (pw.sync_mirror, pw.publish_commits, pw.coverage_at,
          pw.engine_head, sys.argv) = real
@@ -92,8 +99,8 @@ def main():
           pw.built_time(_stamp('2026-09-20T17:41+00:00'), 'abc12345').isoformat(),
           '2026-09-20T17:41:00+00:00')
     check('a stamp with no build time cannot be dated, and says so',
-          (pw.built_time({'leads': 1}, 'abc12345'), bool(pw.ALARMS)), (None, True))
-    pw.ALARMS[:] = []
+          (pw.built_time({'leads': 1}, 'abc12345'), bool(pw.UNKNOWNS)), (None, True))
+    pw.UNKNOWNS[:] = []
 
     now = pw._now()
     eastern = now - dt.timedelta(hours=pw.eastern_offset(now.replace(tzinfo=None)))
@@ -102,14 +109,14 @@ def main():
         return (eastern - dt.timedelta(hours=h)).strftime('%Y-%m-%dT%H:%M')
 
     # 2. FRESH vs STALE. Two hours old is last night's run; forty is a skipped night.
-    rc, alarms, _ = _run(
+    rc, alarms, _, unknowns = _run(
         [('aaa1', now - dt.timedelta(hours=2)), ('bbb2', now - dt.timedelta(hours=26))],
         {'aaa1': _stamp(built_hours_ago(2), leads=2400),
          'bbb2': _stamp(built_hours_ago(26), leads=2390, sig='0ther5ig')},
         ['--json'])
     check('a board built two hours ago is clean, exit 0', (rc, alarms), (0, []))
 
-    rc, alarms, _ = _run(
+    rc, alarms, _, unknowns = _run(
         [('aaa1', now - dt.timedelta(hours=40)), ('bbb2', now - dt.timedelta(hours=64))],
         {'aaa1': _stamp(built_hours_ago(40), leads=2400),
          'bbb2': _stamp(built_hours_ago(64), leads=2390, sig='0ther5ig')},
@@ -120,7 +127,7 @@ def main():
 
     # A publish whose build predates its own push means the publish step ran with no rebuild in
     # front of it — the 09-17 failure, where an already-built board stayed live.
-    rc, alarms, _ = _run(
+    rc, alarms, _, unknowns = _run(
         [('aaa1', now - dt.timedelta(hours=1))],
         {'aaa1': _stamp(built_hours_ago(20))},
         ['--json'])
@@ -129,7 +136,7 @@ def main():
           any('without a rebuild in front of it' in a for a in alarms), True)
 
     # 3. SHRINK. A small drop is life; a cliff is publish_guard being bypassed.
-    rc, _, notes = _run(
+    rc, _, notes, unknowns = _run(
         [('aaa1', now - dt.timedelta(hours=2)), ('bbb2', now - dt.timedelta(hours=26))],
         {'aaa1': _stamp(built_hours_ago(2), leads=2390, phones=1203),
          'bbb2': _stamp(built_hours_ago(26), leads=2400, phones=1205, sig='0ther5ig')},
@@ -138,7 +145,7 @@ def main():
     check('  and the drop is still reported',
           any('normal drop' in n for n in notes), True)
 
-    rc, alarms, _ = _run(
+    rc, alarms, _, unknowns = _run(
         [('aaa1', now - dt.timedelta(hours=2)), ('bbb2', now - dt.timedelta(hours=26))],
         {'aaa1': _stamp(built_hours_ago(2), leads=1400, phones=700),
          'bbb2': _stamp(built_hours_ago(26), leads=2400, phones=1205, sig='0ther5ig')},
@@ -148,14 +155,64 @@ def main():
           any('publish_guard' in a for a in alarms), True)
 
     # 4. FAIL-LOUD. Nothing readable is exit 3, never exit 0.
-    rc, alarms, _ = _run(None, {}, ['--json'])
+    rc, alarms, _, unknowns = _run(None, {}, ['--json'])
     check('an unreachable mirror is CANNOT EVALUATE, exit 3', rc, 3)
 
-    rc, alarms, _ = _run([('aaa1', now - dt.timedelta(hours=2))], {'aaa1': None}, ['--json'])
+    rc, alarms, _, unknowns = _run([('aaa1', now - dt.timedelta(hours=2))], {'aaa1': None}, ['--json'])
     check('a board with no readable coverage stamp is exit 3, not exit 0', rc, 3)
 
-    rc, _, _ = _run([], {}, ['--json'])
+    rc, _, _, unknowns = _run([], {}, ['--json'])
     check('a mirror with no publish commit at all is exit 3', rc, 3)
+
+    # 6. THE FOUR GREPTILE FINDINGS, each pinned so it cannot come back.
+    #    All four were the same mistake in different places: a check that did not run being
+    #    reported as a check that passed, or as a check that failed.
+
+    #    (a) a failed read of the PREVIOUS publish is not a fault in the CURRENT board.
+    rc, alarms, _, unknowns = _run(
+        [('aaa1', now - dt.timedelta(hours=2)), ('bbb2', now - dt.timedelta(hours=26))],
+        {'aaa1': _stamp(built_hours_ago(2)), 'bbb2': None},
+        ['--json'])
+    check('an unreadable PREVIOUS publish is exit 3, not exit 2', (rc, alarms), (3, []))
+    check('  and is listed as a check that did not run', len(unknowns), 1)
+
+    #    (b) a malformed count cannot be skipped in silence.
+    rc, alarms, _, unknowns = _run(
+        [('aaa1', now - dt.timedelta(hours=2)), ('bbb2', now - dt.timedelta(hours=26))],
+        {'aaa1': _stamp(built_hours_ago(2), leads='2400'),
+         'bbb2': _stamp(built_hours_ago(26), leads=2400, sig='0ther5ig')},
+        ['--json'])
+    check('a non-numeric lead count is exit 3, never a silent exit 0', rc, 3)
+    check('  and names the check that could not run',
+          any('did not run' in u for u in unknowns), True)
+
+    #    (c) a failed engine fetch must not fall back on a possibly-stale origin/main.
+    real_git = pw._git
+    try:
+        pw.ALARMS[:] = []
+        pw.UNKNOWNS[:] = []
+        calls = []
+
+        def _fetch_fails(args, cwd=None, timeout=180):
+            calls.append(args[0])
+            return (1, 'fatal: could not read from remote repository') if args[0] == 'fetch' \
+                else (0, 'deadbeefcafe1234 2026-09-01T00:00:00+00:00')
+        pw._git = _fetch_fails
+        check('a failed engine fetch returns nothing at all', pw.engine_head(), (None, None))
+        check('  so the stale ref is never even read', 'log' in calls, False)
+        check('  and it is recorded as a check that did not run', len(pw.UNKNOWNS), 1)
+        check('  not as an alarm', pw.ALARMS, [])
+    finally:
+        pw._git = real_git
+        pw.ALARMS[:] = []
+        pw.UNKNOWNS[:] = []
+
+    #    (d) the main-ahead check may not claim a build CONTAINS a commit it merely postdates.
+    #        Only order is provable from a timestamp, so the docstring has to say so.
+    doc = pw.check_main_ahead.__doc__ or ''
+    check('check_main_ahead documents that a timestamp proves order, not content',
+          ('not thereby proven to' in doc.replace('\n', ' ').replace('  ', ' ')
+           or 'CONTAIN' in doc), True)
 
     # 5. ONE address, derived. board_url.py exists because nine hand-written copies drifted.
     owner, repo, url = pw.mirror_repo()
@@ -171,11 +228,11 @@ def main():
         check('  and moving BOARD_URL moves the mirror with it',
               pw.mirror_repo(), ('someoneelse', 'new-board',
                                  'https://github.com/someoneelse/new-board.git'))
-        pw.ALARMS[:] = []
+        pw.UNKNOWNS[:] = []
         board_url.BOARD_URL = 'https://example.com/not-a-pages-site/'
-        check('  and an address it cannot parse ALARMS instead of guessing',
-              (pw.mirror_repo(), bool(pw.ALARMS)), ((None, None, None), True))
-        pw.ALARMS[:] = []
+        check('  and an address it cannot parse refuses to guess',
+              (pw.mirror_repo(), bool(pw.UNKNOWNS)), ((None, None, None), True))
+        pw.UNKNOWNS[:] = []
     finally:
         board_url.BOARD_URL = real_url
 
