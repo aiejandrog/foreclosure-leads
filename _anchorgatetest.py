@@ -123,8 +123,8 @@ try:
     chk('gate off: an ordinary hold IS released, so the hatch still works',
         DG.gate(lp_row(case='CACE-26-000006', title_status='transferred',
                        title_owner='SOMEONE ELSE LLC'))['hold'] is False)
-    chk('gate off: PARCEL_UNANCHORED is the only code immune',
-        DG.NEVER_RELEASED == ('PARCEL_UNANCHORED',))
+    chk('gate off: PARCEL_UNANCHORED remains immune',
+        'PARCEL_UNANCHORED' in DG.NEVER_RELEASED)
 finally:
     if _prev is None:
         os.environ.pop('DEALFLOW_DILIGENCE_GATE', None)

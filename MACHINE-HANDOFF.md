@@ -335,15 +335,17 @@ outside the repo because the log carries homeowner email addresses.
 
 A runner audit still has to **enumerate** tasks rather than trust any list in this file — see §1.
 
-Two settings decide whether the eight actually fire:
+The tracked installer templates set `DisallowStartIfOnBatteries=false`,
+`StopIfGoingOnBatteries=false`, and `StartWhenAvailable=true`. Those settings prevent a laptop
+unplug or missed wake from killing/skipping a run. Older exported XML in `desktop-setup/tasks/`
+wins over a template, however, so do not infer the live settings from this file. Audit `.Settings`
+on the runner after installation.
 
-- `DisallowStartIfOnBatteries` / `StopIfGoingOnBatteries` are **true on 6 of the 8 tasks**. On a
-  desktop that is inert. On a laptop it means the task is skipped on battery and **killed mid-run**
-  if you unplug it.
-- `StartWhenAvailable` is **false** on *Daily Scrape, Morning Worker, Sheets CRM, SendServerDaily*.
-  If the machine is asleep at the trigger time those four runs are **silently skipped, never caught
-  up**. The other four catch up late — which is why the laptop's 05:30/06:00 tasks landed at
-  10:21/10:33 on 08-22 instead of on time.
+The three unattended network jobs (`DEALFLOW Refresh`, `DEALFLOW Phones`, `DealFlow Replies`) also
+need a `Password` principal on the laptop runner. `Interactive` cannot run while logged out; `S4U`
+has no network/stored-credential access and can fail the final Git Credential Manager HTTPS push.
+After changing them, verify `.Principal.LogonType` is `Password`. A Windows password change requires
+running `schtasks /Change ... /RP *` again.
 
 ---
 
