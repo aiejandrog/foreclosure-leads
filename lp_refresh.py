@@ -79,21 +79,39 @@ def _newest_filing(rows):
     return best.isoformat() if best else ''
 
 
-def _have_trace_key():
-    """Is any skip-trace provider usable on this machine? Mirrors skiptrace.load_key's own rule —
-    env var first, then the key file beside the repo — without importing skiptrace (which would
-    pull its whole provider stack in just to answer a yes/no)."""
-    for env, keyfile in (('TRACERFY_API_KEY', 'tracerfy.key'),
-                         ('BATCHDATA_API_KEY', 'batchdata.key')):
-        if os.environ.get(env, '').strip():
-            return True
-        path = os.path.join(HERE, keyfile)
-        try:
-            if os.path.exists(path) and open(path, encoding='utf-8').read().strip():
-                return True
-        except OSError:
-            pass
-    return False
+def _trace_provider_ready():
+    """The provider skiptrace WOULD pick, if its key is loadable. '' when the step should be skipped.
+
+    ASKS SKIPTRACE, DOES NOT RE-DERIVE (2026-09-22, Greptile P1 on the first version of this
+    function). The first version replicated the rule — env var, then a non-empty key file, tracerfy
+    then batchdata — and that is how this whole class of bug is made: two functions answering the
+    same question by different rules. skiptrace has TWO rules, not one, and they disagree:
+
+      pick_provider()  chooses on os.path.exists(keyfile)  -- EXISTENCE only
+      load_key()       requires the file to be NON-EMPTY
+
+    So an empty or unreadable `tracerfy.key` beside a good `batchdata.key` made the replica answer
+    "yes, batchdata" while skiptrace picked tracerfy on the bare existence of the empty file, failed
+    to load it, and exited 1 — fatal, CHAIN STOPPED, which is the exact outcome this preflight was
+    added to prevent. An empty key file is not exotic: a truncated write or a half-finished key
+    rotation produces one.
+
+    Importing skiptrace costs 0.16s and has no import-time side effects (stdlib + requests +
+    bd_budget), which is cheaper than being wrong.
+
+    NO FAILOVER, ON PURPOSE. This returns skiptrace's own choice and does not go looking for some
+    other provider with a working key. BatchData was exited on 2026-08-11 (BATCHDATA-EXIT.md) and
+    costs $0.15/hit against Tracerfy's $0.10; refresh-dealflow.bat's [3b/5] gate was narrowed to
+    `if exist tracerfy.key` precisely because a Tracerfy key problem used to fail over to the
+    provider we left. A preflight that passed `--provider batchdata` here would rebuild that bug.
+    """
+    try:
+        import skiptrace
+        provider = skiptrace.pick_provider()
+        return provider if skiptrace.load_key(provider) else ''
+    except Exception as e:                       # a broken import must not take the chain with it
+        print(f'(skip-trace preflight failed, treating as no key: {e})')
+        return ''
 
 
 def _stamp():
@@ -173,18 +191,21 @@ def main():
     # chain: the fresh filings shipped without phones. Worth reporting, not worth withholding the
     # board for — so they land in DEGRADED and are carried out in our own exit 4.
     #
-    # 1 IS DELIBERATELY NOT IN THAT LIST. skiptrace exits 1 both for "no API key on this machine"
+    # 1 IS DELIBERATELY NOT IN THAT LIST. skiptrace exits 1 both for an unloadable API key
     # (skiptrace.py:528) and for any uncaught exception, so treating 1 as benign would swallow a
-    # genuine crash. The missing-key half is a PRECONDITION, not a failure, so it is answered by
-    # skipping the step outright — the same shape as refresh-dealflow.bat's own `if exist
-    # tracerfy.key` guard at [3b/5], which this chain never had.
-    if _have_trace_key():
+    # genuine crash. The key half is a PRECONDITION, not a failure, so it is answered by skipping
+    # the step outright — the same shape as refresh-dealflow.bat's own `if exist tracerfy.key`
+    # guard at [3b/5], which this chain never had. _trace_provider_ready() asks skiptrace which
+    # provider it would pick and whether that key loads, so the preflight cannot disagree with the
+    # process it is gating.
+    _provider = _trace_provider_ready()
+    if _provider:
         run('PHONES (LP fast lane)', ['skiptrace.py', '--lp-fresh', '45', '--limit', '25'],
             ok=(0, 2, 3, 4, 5))
     else:
-        DEGRADED.append('PHONES (LP fast lane) (no skip-trace key on this machine)')
-        print('\n===== PHONES (LP fast lane) =====\n(skipped: no skip-trace provider key '
-              '— fresh filings ship without phones)', flush=True)
+        DEGRADED.append('PHONES (LP fast lane) (no loadable skip-trace key on this machine)')
+        print('\n===== PHONES (LP fast lane) =====\n(skipped: the provider skiptrace would pick '
+              'has no loadable key — fresh filings ship without phones)', flush=True)
     if a.rebuild:
         run('REBUILD (make_tracker)', ['-c',
             "import json, foreclosure_leads as F; "

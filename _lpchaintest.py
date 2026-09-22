@@ -120,12 +120,45 @@ rec('phones exit 1 is NOT benign', 1 not in ok_phones,
     'skiptrace exits 1 for a missing key AND for any uncaught exception - '
     'swallowing it would swallow crashes')
 
-print('\n-- a machine with no skip-trace key skips the step instead of dying on it --')
-rec('_have_trace_key() exists', 'def _have_trace_key' in SRC)
-rec('the phones step is guarded by it', re.search(r'if _have_trace_key\(\):\s*\n\s*run\(', SRC)
-    is not None, 'a missing key is a precondition, not a failure')
+print('\n-- a machine with no loadable skip-trace key skips the step instead of dying on it --')
+rec('_trace_provider_ready() exists', 'def _trace_provider_ready' in SRC)
+rec('the phones step is guarded by it',
+    re.search(r'_provider = _trace_provider_ready\(\)\s*\n\s*if _provider:\s*\n\s*run\(', SRC)
+    is not None, 'an unloadable key is a precondition, not a failure')
 rec('and the skip is still reported', re.search(r'else:\s*\n\s*DEGRADED\.append', SRC) is not None,
     'a silently skipped step is how this class of bug hides')
+
+# THE REGRESSION THIS SECTION EXISTS FOR (Greptile P1, 2026-09-22). The first version of the
+# preflight re-derived skiptrace's key rule instead of asking it, and skiptrace has TWO rules that
+# disagree: pick_provider() chooses on os.path.exists(keyfile), load_key() needs it NON-EMPTY. An
+# empty tracerfy.key beside a good batchdata.key made the replica say "yes" while skiptrace picked
+# tracerfy, failed to load it and exited 1 -- fatal, CHAIN STOPPED, the very thing the preflight is
+# for. The fix is to defer, so the assertion is on deferring, not on any particular key rule.
+def _body_src(fname):
+    """A function's EXECUTABLE source, docstring excluded. The checks below assert what the code
+    does, and this function's docstring names the very things the code must not do (the key
+    filenames, `--provider batchdata`) in order to explain why — so scanning the raw text would
+    fail on its own explanation."""
+    fn = next(n for n in TREE.body if isinstance(n, ast.FunctionDef) and n.name == fname)
+    body = fn.body
+    if (body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant)
+            and isinstance(body[0].value.value, str)):
+        body = body[1:]
+    return '\n'.join(ast.unparse(n) for n in body)
+
+
+_pre = _body_src('_trace_provider_ready')
+rec('the preflight defers to skiptrace.pick_provider()', 'skiptrace.pick_provider()' in _pre,
+    'choosing the provider by any other rule can disagree with the process being gated')
+rec('and gates on skiptrace.load_key() of THAT provider', 'skiptrace.load_key(provider)' in _pre,
+    'existence of a key file is not loadability -- that gap is the whole bug')
+rec('the preflight does not re-implement the key filenames',
+    'tracerfy.key' not in _pre and 'batchdata.key' not in _pre,
+    'a second copy of the rule is what broke; naming the files here is that copy')
+rec('the preflight does not override the provider skiptrace picked',
+    '--provider' not in _pre,
+    'BatchData was exited 2026-08-11 at $0.15/hit; failing over to it is a bug the bat already fixed')
+rec('a broken import is treated as no key, not as a crash', 'except Exception' in _pre)
 
 print('\n-- benign is reported, never swallowed --')
 run_src = SRC.split('def run(')[-1].split('\ndef ')[0]
