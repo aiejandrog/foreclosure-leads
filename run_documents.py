@@ -24,8 +24,30 @@ correctly and the line items summing to the total. Until then this stage would w
 carrying numbers nobody has checked, which is worse than writing none. It turns on with `--enable`
 or DEALFLOW_DOCS=1, and nothing else in the pipeline calls it.
 
+--walk-cites: FOLLOWING WHAT A DOCUMENT NAMES
+Off by default, and the reason it exists is the 2026-09-22 coverage map. Recorded liens are
+reached by an OWNER-NAME search, so a mortgage the county recorded against a prior owner, a trust
+or a misspelling is never in the result set — and no better filtering finds it, because filtering
+only narrows. A read document does name it: a satisfaction recites the mortgage it kills, a
+judgment recites the mortgage it forecloses. `--walk-cites` fetches those.
+
+    python -u run_documents.py --limit 10 --walk-cites --walk-depth 2 --walk-budget 12
+
+It costs NO captcha spend on its own: a cited instrument resolves out of `records_index.json`, the
+book/page index that fills itself from every recorded search the pipeline already runs. A citation
+it cannot address is reported as an unresolved citation with the reason, never dropped. Whether
+the clerk endpoint also accepts a direct book/page search is unknown and is `records_probe.py`'s
+question; until a probe on a machine with clerk access answers it, the walk uses the index alone
+and says so.
+
+`--name-budget N` is the other half and defaults to 0: it searches N of the parties named on the
+parcel's own deeds and on the docket, which is the route that reaches a prior owner's open
+mortgage. Each name is a Camoufox run or a 2Captcha solve, so a nightly does not spend it by
+accident; with the budget at 0 the dossier still lists the names it declined to search.
+
 WHAT IT NEVER DOES
-No publish, no board write, no lead write, no suppression surface, no captcha spend. Dossiers go
+No publish, no board write, no lead write, no suppression surface, and no captcha spend
+unless --name-budget is set above 0. Dossiers go
 to DEALFLOW_DIR (outside the repo, outside OneDrive) through case_review.output_path. The equity
 verdict it reports is equity_state's existing one, computed from the recorded chain exactly as it
 always was — reading a document does not move a lead into a FACT state.
@@ -100,12 +122,14 @@ def pick_cases(leads, chains, limit, only=None):
 
 def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpreter=None,
              gray_cutoff=DS.WATERMARK_GRAY_CUTOFF,
-             budget=None, vision_budget=None):
+             budget=None, vision_budget=None, walk_depth=0, walk_budget=0, name_budget=0):
     """One case through all seven steps. Returns its dossier."""
     case, owner = entry['case'], entry['owner']
     token = qs_cache.get(owner)
     report, rows = None, []
     inventory = None
+    models = []
+    walk_report = None
     if token:
         import records_liens
         models = records_liens.records_by_qs(token) or []
@@ -126,10 +150,30 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
                  'reason': 'no cached search token for this owner; not minting one in this stage'}]
 
     case_dossier.classify_documents(rows)
+    # THE WALK. It runs after classification because it needs `cited_instruments`, which
+    # classify_documents attaches, and before interpretation because a walked document deserves
+    # the same reading as one we fetched directly.
+    if walk_depth and rows:
+        import document_walk
+        try:
+            walked, walk_report = document_walk.walk(
+                case, rows, models=models, queue=queue, ocr=ocr, county=COUNTY,
+                depth=walk_depth, budget=walk_budget or document_walk.DEFAULT_BUDGET,
+                gray_cutoff=gray_cutoff, keep_images=keep_images)
+            rows.extend(walked)
+        except Exception as exc:
+            # A walk is an extension, never a reason to lose the documents already read. Its
+            # failure is recorded where a reader will see it, not swallowed.
+            walk_report = {'followed': [], 'unresolved': [],
+                           'stopped_because': '%s: %s' % (type(exc).__name__, str(exc)[:200])}
+        walk_report['name_search'] = document_walk.name_search_plan(
+            models, entry.get('folio') or '',
+            subdivision=(entry.get('chain') or {}).get('subdiv') or '',
+            docket=(inventory or {}).get('raw'), owner=owner, limit=name_budget)
     if interpreter is not None and budget is not None:
         _interpret(rows, interpreter, budget)
     dossier = case_dossier.build(case, COUNTY, inventory=inventory, chain=entry.get('chain'),
-                                 documents=rows)
+                                 documents=rows, walk=walk_report)
     if report:
         MJ.strip_readings(report)
         dossier['judgment_amount_usable'] = report.get('judgment_amount_usable')
@@ -173,6 +217,18 @@ def main(argv=None):
                              'judgment cost $0.0675 on claude-opus-5 (2026-09-22, three pages, '
                              'one of which should not have been sent); the default covers a '
                              'nightly --limit 10 with room to spare.')
+    parser.add_argument('--walk-cites', action='store_true',
+                        help='follow the book/page references a read document makes, so a lien '
+                             'recorded under a name we never searched can still be reached')
+    parser.add_argument('--walk-depth', type=int, default=2,
+                        help='how many citation hops to follow (default 2)')
+    parser.add_argument('--walk-budget', type=int, default=12,
+                        help='documents the walk may fetch per case (default 12)')
+    parser.add_argument('--name-budget', type=int, default=0,
+                        help='extra Official Records NAME searches per case, for the parties on '
+                             'the parcel deeds and the docket. Each one costs a Camoufox run or a '
+                             '2Captcha solve, so the default is 0 and the plan is reported '
+                             'unspent.')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
     try:
@@ -238,7 +294,10 @@ def main(argv=None):
         for entry in picked:
             dossier = run_case(entry, qs_cache, queue=queue, ocr=ocr,
                                keep_images=args.keep_images, interpreter=interpreter,
-                               budget=budget, vision_budget=vision_budget)
+                               budget=budget, vision_budget=vision_budget,
+                               walk_depth=args.walk_depth if args.walk_cites else 0,
+                               walk_budget=args.walk_budget,
+                               name_budget=args.name_budget if args.walk_cites else 0)
             target = dossier_path(COUNTY, entry['case'])
             target.parent.mkdir(parents=True, exist_ok=True)
             DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')

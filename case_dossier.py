@@ -161,11 +161,13 @@ def _d(chain, section_c):
                 'current payoff.' % ' or '.join(equity_state.FACT)))
 
 
-def build(case, county, inventory=None, chain=None, documents=None):
+def build(case, county, inventory=None, chain=None, documents=None, walk=None):
     """Assemble one case's dossier. Pure: everything it reports was handed to it."""
     a = _a(inventory)
     b = _b(chain)
     c = _c(documents)
+    if walk is not None:
+        c['walk'] = _walk_section(walk)
     d = _d(chain, c)
     gaps = []
     if not a.get('pagination_verified'):
@@ -185,6 +187,18 @@ def build(case, county, inventory=None, chain=None, documents=None):
     unfetched = len(c.get('cited_but_not_fetched') or [])
     if unfetched:
         gaps.append('%d instrument(s) cited by a read document have not been fetched' % unfetched)
+    for row in (c.get('walk') or {}).get('unresolved') or []:
+        # An unresolved citation is a named instrument we could not open. It belongs in the gap
+        # list for the same reason an unfetched one does: the document says it exists.
+        gaps.append('cited instrument %s/%s not resolved: %s'
+                    % (row.get('book'), row.get('page_no'), row.get('reason')))
+    stopped = (c.get('walk') or {}).get('stopped_because')
+    if stopped:
+        gaps.append('the citation walk stopped early - %s' % stopped)
+    planned = ((c.get('walk') or {}).get('name_search') or {}).get('skipped') or 0
+    if planned:
+        gaps.append('%d name(s) on this parcel\'s deeds or docket were never searched; a lien '
+                    'recorded against one of them would not be in b' % planned)
     return {
         'schema_version': SCHEMA_VERSION,
         'case': case, 'county': county, 'built_at': _now(),
@@ -193,6 +207,28 @@ def build(case, county, inventory=None, chain=None, documents=None):
         'rests_on': d['rests_on'],
         'open_gaps': gaps,
         'complete': not gaps,
+    }
+
+
+def _walk_section(walk):
+    """What the citation walk followed, and what it could not reach.
+
+    Kept INSIDE c and outside d on purpose. A walked document is a document — it belongs on the
+    same rung as one we fetched from the index, with the extra fact that another document is why
+    we knew to look for it. It does not move the equity verdict, and `d.documents_note` still says
+    so in words.
+    """
+    walk = walk or {}
+    followed = walk.get('followed') or []
+    return {
+        'followed': followed,
+        'documents_fetched': walk.get('documents_fetched') or 0,
+        'unresolved': walk.get('unresolved') or [],
+        'depth': walk.get('depth'),
+        'budget': walk.get('budget'),
+        'stopped_because': walk.get('stopped_because') or '',
+        'name_search': walk.get('name_search') or {},
+        'note': walk.get('note') or '',
     }
 
 
