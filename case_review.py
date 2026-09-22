@@ -14,6 +14,7 @@ from pathlib import Path
 import re
 
 import paths as P
+from case_sources import SOURCES, source_tasks
 
 
 SIGNALS = {
@@ -68,8 +69,10 @@ def _signals(value, reference):
             for name, pattern in SIGNALS.items() if re.search(pattern, text, re.I)]
 
 
-def build_review(payload, case=None):
+def build_review(payload, case=None, county=None):
     case, record = select_case(payload, case)
+    if county is not None and county not in SOURCES:
+        raise ValueError('Unsupported county')
     raw = deepcopy(record)
     digest = hashlib.sha256(json.dumps(raw, sort_keys=True, ensure_ascii=False,
                                       separators=(",", ":")).encode("utf-8")).hexdigest()
@@ -99,6 +102,12 @@ def build_review(payload, case=None):
         signals.extend(_signals(party, f"parties/{index}"))
     return {
         "schema_version": 1, "case": case,
+        "county": county,
+        "verification_policy": {"mode": "automated_evidence_review",
+                                "human_verification_required": False,
+                                "unsubstantiated_findings": "unresolved"},
+        "source_tasks": source_tasks(county) if county else [],
+        "source_routing_status": "pending_identity_check" if county else "county_required",
         "created_at": datetime.now(timezone.utc).isoformat(),
         "source": {"kind": "user_supplied_docket_json", "record_sha256": digest,
                    "official_source_identity_verified": False},
@@ -117,7 +126,7 @@ def build_review(payload, case=None):
             "Read judgment plus all amendments, vacatur, stays and subsequent orders; a title alone is not a finding",
             "Verify death/probate/bankruptcy hints against the correct person and case; a name match or keyword is insufficient",
             "Review linked official records, legal descriptions, assignments, satisfactions and sale/title events",
-            "Record contradictions and unresolved access gaps; require independent review before any downstream decision",
+            "An independent verification agent checks citations and contradictions; no human sign-off is required. Unsupported findings stay unresolved",
         ],
         "limitations": ["Metadata received does not prove the entire docket was fetched",
                         "No document content has been read by this tool",
@@ -148,11 +157,12 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--input", required=True)
     parser.add_argument("--case")
+    parser.add_argument("--county", choices=tuple(SOURCES), help="Route research to the four priority county portals")
     parser.add_argument("--output", required=True, help="New JSON file inside paths.DEALFLOW_DIR")
     args = parser.parse_args(argv)
     try:
         with open(args.input, encoding="utf-8-sig") as source:
-            report = build_review(json.load(source), args.case)
+            report = build_review(json.load(source), args.case, args.county)
         target = output_path(args.output)
         target.parent.mkdir(parents=True, exist_ok=True)
         with target.open("x", encoding="utf-8") as destination:

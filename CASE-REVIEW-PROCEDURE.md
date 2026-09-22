@@ -4,6 +4,11 @@ This is the operating contract for a case review, not a finding about any homeow
 The current automated manifest builder inventories raw docket data. Document retrieval,
 page review and cross-source verification still require the assigned researcher.
 
+All researcher/reviewer roles below are software agents. Alejandro's instruction is automated
+verification with no mandatory human sign-off. An independent verification agent checks source
+citations, identity, chronology and completeness. Missing access, conflicting evidence or uncertain
+legal interpretation remains unresolved; never manufacture certainty or silently release a hold.
+
 ## Assignment and handoff
 
 The coordinator owns one county + case identifier and one evidence manifest. Every task has
@@ -84,7 +89,7 @@ with a reason. Partial releases must be checked against the actual subject prope
 Review related foreclosure, association, probate and other relevant cases when an instrument,
 party record or docket references them. Record title-transfer and bankruptcy/stay signals for
 further verification. Do not infer lien priority, surviving debt, clear title or authority to sell
-from recording date or a keyword alone; unresolved legal conclusions go to qualified review.
+from recording date or a keyword alone; unsupported legal conclusions remain unresolved.
 
 ## 5. Parties, counsel, death and probate
 
@@ -127,7 +132,7 @@ citations, unresolved issues and exact next actions. Recheck new docket entries 
 Create a review manifest from an existing raw export:
 
 ```powershell
-python case_review.py --input C:\Users\olqbb\DEALFLOW\raw-case.json --case CASE_NUMBER --output case-review.json
+python case_review.py --input C:\Users\olqbb\DEALFLOW\raw-case.json --case CASE_NUMBER --county BROWARD --output case-review.json
 ```
 
 The relative output filename is placed under `paths.DEALFLOW_DIR`; existing files are not
@@ -168,10 +173,19 @@ Official discovery sources checked September 22, 2026:
   document-copy routes and guidance to search name variations.
 - [Florida Bar lawyer directory](https://www.floridabar.org/directories/find-mbr/): attorney verification.
 
-Chrome bookmark inventory is PENDING: no readable Bookmarks file was located in this desktop's
-Chrome profile, and browser connection failed twice. These official links are a starting register,
-not a claim that the user's bookmarks have been read. Import the research folder from the active
-Chrome profile or a bookmark export before claiming bookmark coverage.
+Bookmark inventory completed from `bookmarks_9_22_26.html`, supplied September 22, 2026:
+Miami, Broward and PalmBeach contain four priority sources each (12 total). `case_sources.py`
+registers their auction, court, official-records and appraiser URLs and adds four pending agent
+tasks when `--county` is supplied. These are the mandatory first sources for their county.
+The Miami appraiser bookmark points to a particular folio: the registry uses its search root
+so that example parcel cannot contaminate other cases. Unrelated bookmark folders are excluded.
+
+Initial web-reader probe: Broward court search, appraiser, Palm Beach eCaseView, official records
+and appraiser returned readable landing content. Broward official records redirected to its
+disclaimer. Miami's three record/property applications returned no readable text through this
+tool. Auction pages were inaccessible to this tool (Broward returned 403). These are transport
+observations, not declarations that the portals are down or that their case documents were read.
+Browser/API adapters must record successful case/document retrieval separately from landing-page access.
 
 ## Transport and storage
 
