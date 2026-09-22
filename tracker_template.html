@@ -3056,7 +3056,20 @@ function flagChips(r){ let o='';
   // gate blocked contact, amber DON'T QUOTE when it let the lead through but the equity figure on
   // this row is not a real number (eqfake with no debt captured — the whole lis-pendens pool).
   // Reason text comes from Python (ddwhy2) so the card and the build log say the same sentence.
-  if(r.ddhold){
+  // UNANCHORED — the one hold that is about the PROPERTY, not the deal, so it gets its own words
+  // instead of the generic diligence chip. The lis pendens names a defendant whose name sits on
+  // several parcels and nothing in the record picks one; the row is showing candidate addresses,
+  // any of which a reader can mistake for the house. Rendered even if the Python bake did not run
+  // (ddhold undefined), because the whole point is that this row must never read as identified.
+  if(r.unanchored){
+    o+='<span class="chip tax" title="THE PROPERTY IS NOT IDENTIFIED. The defendant\'s name sits on '+
+      (r.anchorN||'several')+' different parcels and nothing in the filing picks one, so the address, '+
+      'the value and the equity on this row are one of '+(r.anchorN||'several')+' guesses.'+
+      (r.anchorWhy?'&#10;&#10;'+esc(r.anchorWhy):'')+
+      '&#10;&#10;Held out of Call Mode, the Morning Worker, the text batch and the Closers cockpit until a '+
+      'record settles the parcel. Read the foreclosed mortgage for its PIN, or order the lis pendens image '+
+      'and match its legal description. Could-not-anchor is an answer; a guess is not.">UNANCHORED &mdash; PROPERTY NOT IDENTIFIED</span>'; }
+  else if(r.ddhold){
     o+='<span class="chip tax" title="DILIGENCE HOLD'+(r.ddcode?' ('+esc(r.ddcode)+')':'')+'. '+
       esc(r.ddwhy2||'The pre-contact diligence gate held this lead.')+
       (r.ddact?'&#10;&#10;DO THIS: '+esc(r.ddact):'')+
