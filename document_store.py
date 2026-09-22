@@ -525,6 +525,8 @@ def _render_and_ocr(doc, indexes, backend, keep_dir=None, dpi=OCR_DPI,
                                   pix.samples.translate(table), False)
             pix.save(target)
             paths[target] = index + 1
+            if keep_dir:
+                images[index + 1] = target
         except Exception as exc:
             errors[index + 1] = 'could not render this page for OCR: %s' % str(exc)[:160]
     if paths:
@@ -618,6 +620,8 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
                                                   keep_dir=keep_images_in,
                                                   gray_cutoff=gray_cutoff)
             for p in pages:
+                if images.get(p['page']):
+                    p['image'] = images[p['page']]
                 value = got.get(p['page'])
                 if value and len(value.strip()) >= min_chars:
                     p.update({'outcome': 'ocr_text', 'text': value,
