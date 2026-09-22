@@ -627,6 +627,79 @@ class CitationExtractionTest(unittest.TestCase):
         found = document_classify.cited_instruments(reading(CITER))
         self.assertTrue(all(c['passage'] for c in found))
 
+    def test_ocr_eating_the_word_book_does_not_lose_the_citation(self):
+        # Measured on the pilot mortgage, 2026-09-22: OCR dropped "Book" out of the standard
+        # Florida recital and the strict pattern missed a real instrument.
+        found = document_classify.cited_instruments(
+            reading(['recorded in Official Records 11732 at Page 780 of the Public Records']))
+        self.assertEqual([(c['book'], c['page_no'], c['pattern']) for c in found],
+                         [('11732', '780', 'ocr_tolerant')])
+
+    def test_the_loose_pattern_never_eats_the_books_own_leading_digit(self):
+        # "Official Records 11732" once parsed as token "1", book "1732" — a confident WRONG
+        # instrument to go and fetch, which is worse than missing the citation.
+        found = document_classify.cited_instruments(
+            reading(['Official Records 11732 at Page 780']))
+        self.assertEqual(found[0]['book'], '11732')
+
+    def test_a_mangled_book_word_is_tolerated(self):
+        found = document_classify.cited_instruments(
+            reading(['Official Records BOCK 11732 at Page 780']))
+        self.assertEqual(found[0]['book'], '11732')
+
+    def test_a_bare_year_and_page_is_not_a_citation(self):
+        self.assertEqual(document_classify.cited_instruments(
+            reading(['the year 2019 at Page 12 of the report'])), [])
+
+    def test_a_strict_hit_anywhere_outranks_a_loose_hit_earlier(self):
+        found = document_classify.cited_instruments(
+            reading(['Official Records 11732 at Page 780',
+                     'in Official Records Book 11732 at Page 780, of the Public']))
+        self.assertEqual([c['pattern'] for c in found], ['strict'])
+
+
+class OwnStampTest(unittest.TestCase):
+    """A document's own recording stamp is not a citation — on any of its pages."""
+
+    def test_every_page_of_a_multi_page_instrument_is_its_own_stamp(self):
+        rows = [{'source_ref': 'official_records/35287-4642', 'pages': 5}]
+        spans = W.own_spans(rows)
+        for page in range(4642, 4647):
+            self.assertIn(W.key_of('35287', page), spans)
+        self.assertNotIn(W.key_of('35287', 4647), spans)
+
+    def test_an_unknown_page_count_claims_only_the_first_page(self):
+        # Inventing a span for a document whose length we do not know could suppress a genuine
+        # citation to the instrument recorded right after it.
+        spans = W.own_spans([{'source_ref': 'official_records/35287-4642'}])
+        self.assertEqual(spans, {W.key_of('35287', '4642')})
+
+    def test_the_judgments_own_five_stamps_are_not_followed(self):
+        index = W.RecordIndex(os.path.join(_TMP, 'stamps.json'))
+        index.add_models([model('35287', str(p)) for p in range(4642, 4647)])
+        fetched = []
+
+        def fake(case, records, **kw):
+            fetched.extend((r['reC_BOOK'], r['reC_PAGE']) for r in records)
+            return [{'source_ref': 'x', 'status': 'stored',
+                     'reading': reading(['none'])} for _ in records]
+
+        import miami_judgment
+        real = miami_judgment.collect_recorded
+        miami_judgment.collect_recorded = fake
+        try:
+            rows = [dict(row_citing('official_records/35287-4642',
+                                    ['BOOK 35287 PAGE 4642', 'BOOK 35287 PAGE 4643',
+                                     'BOOK 35287 PAGE 4644', 'BOOK 35287 PAGE 4645',
+                                     'BOOK 35287 PAGE 4646']), pages=5)]
+            _new, report = W.walk('C1', rows, index=index,
+                                  caps_path=os.path.join(_TMP, 'caps-absent.json'))
+        finally:
+            miami_judgment.collect_recorded = real
+        self.assertEqual(fetched, [])
+        self.assertEqual(report['documents_fetched'], 0)
+        self.assertEqual(report['unresolved'], [])
+
 
 if __name__ == '__main__':
     try:

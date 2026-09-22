@@ -211,18 +211,46 @@ _BOOKPAGE_RE = re.compile(
     r'(?:O\.?\s?R\.?\s?B\.?|OFFICIAL\s+RECORDS?\s+BOOK|BOOK)\s*[.:#]?\s*(\d{3,6})'
     r'[\s,]*(?:AT\s+)?(?:PAGE|PG\.?|P\.)\s*[.:#]?\s*(\d{1,5})', re.I)
 
+# THE WORD "BOOK" IS THE FIRST THING OCR LOSES. Measured 2026-09-22 on the pilot case: the
+# mortgage's page 1 cites an instrument and the strict pattern above missed it, because OCR ate
+# "Book" out of "Official Records Book 11732". The phrase around it survived, and it is a fixed
+# recital that Florida instruments repeat verbatim, so the citation is still there to be had.
+#
+# Deliberately NARROW, because a loose book/page pattern spends money: it must still see
+# "OFFICIAL RECORD(S)", it allows at most ONE short garbled token where BOOK should be, and it
+# requires a 4-to-6-digit book (Miami-Dade books are five digits; the 3-digit floor above exists
+# for the explicit spellings and would turn a stray year into an instrument here).
+# The optional stand-in for BOOK must START WITH A LETTER. Without that guard it happily ate the
+# leading digit of the book itself — "Official Records 11732" parsed as token "1", book "1732" —
+# which is worse than missing the citation: it is a confident wrong instrument to go and fetch.
+_BOOKPAGE_LOOSE_RE = re.compile(
+    r'OFFICIAL\s+RECORDS?\b(?:\s+[A-Z][A-Z0-9.#]{0,7})?\s*[.:#]?\s*(\d{4,6})'
+    r'[\s,]*(?:AT\s+)?(?:PAGE|PG\.?|P\.)\s*[.:#]?\s*(\d{1,5})', re.I)
+
 
 def cited_instruments(reading):
-    """Book/page references the document's own text cites. Candidates to fetch, never findings."""
+    """Book/page references the document's own text cites. Candidates to fetch, never findings.
+
+    Each carries `pattern`: 'strict' when the text named the book outright, 'ocr_tolerant' when
+    the word BOOK had to be assumed from the surrounding recital. A reader deciding whether to
+    trust a citation should be able to see which one found it.
+    """
     out, seen = [], set()
-    for page in _readable(reading):
-        for line in (page.get('text') or '').splitlines():
-            for match in _BOOKPAGE_RE.finditer(line):
-                key = (match.group(1), match.group(2))
-                if key in seen:
-                    continue
-                seen.add(key)
-                out.append({'book': match.group(1), 'page_no': match.group(2),
-                            'cited_on_page': page['page'], 'passage': line.strip()[:240],
-                            'fetched': False, 'source': 'document_text'})
+    # STRICT over the WHOLE document before loose over any of it. Per-line ordering is not enough:
+    # the same instrument is usually cited several times, and whichever pattern reaches it first
+    # decides how it is labelled. A citation the document names outright on page 4 should not be
+    # recorded as OCR-tolerant because page 2's copy was garbled.
+    for pattern, label in ((_BOOKPAGE_RE, 'strict'), (_BOOKPAGE_LOOSE_RE, 'ocr_tolerant')):
+        for page in _readable(reading):
+            for line in (page.get('text') or '').splitlines():
+                for match in pattern.finditer(line):
+                    key = (match.group(1), match.group(2))
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    out.append({'book': match.group(1), 'page_no': match.group(2),
+                                'cited_on_page': page['page'], 'passage': line.strip()[:240],
+                                'fetched': False, 'source': 'document_text',
+                                'pattern': label})
+    out.sort(key=lambda c: (c['cited_on_page'], c['book'], c['page_no']))
     return out

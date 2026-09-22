@@ -293,6 +293,41 @@ def resolve(book, page, index, caps_path=None, searcher=None):
 # ---------------------------------------------------------------------------------------------
 # 4. The walk.
 # ---------------------------------------------------------------------------------------------
+def own_spans(rows):
+    """Every book/page a document in `rows` OCCUPIES — its own recording stamp, all pages.
+
+    MEASURED 2026-09-22 on the pilot case: of the seven "citations" the reader found, FIVE were
+    the judgment's own recording stamp. A five-page instrument recorded at book 35287 page 4642
+    stamps 4642, 4643, 4644, 4645 and 4646 across its pages, and the regex cannot tell a clerk's
+    header from a reference in the body. Excluding only the document's first page (which is what
+    its source_ref carries) left four of them, and a real run would have spent a third of its
+    twelve-document budget re-fetching the document it was standing on.
+
+    So the span is book + [first page .. first page + pages - 1]. Page count comes from the row;
+    when it is missing the span is just the first page, which is the old behaviour and is the
+    honest floor — inventing a span for a document whose length we do not know could suppress a
+    genuine citation to the instrument recorded immediately after it.
+    """
+    spans = set()
+    for row in rows or []:
+        match = re.search(r'official_records/(\d+)-(\d+)', str(row.get('source_ref') or ''))
+        if not match:
+            continue
+        book, first = match.group(1), match.group(2)
+        try:
+            pages = int(row.get('pages') or 0)
+        except (TypeError, ValueError):
+            pages = 0
+        try:
+            start = int(first)
+        except ValueError:
+            spans.add(key_of(book, first))
+            continue
+        for offset in range(max(1, pages)):
+            spans.add(key_of(book, start + offset))
+    return spans
+
+
 def pending_citations(rows, already):
     """Citations on these rows that we have not addressed yet, in the order they were read."""
     out = []
@@ -334,11 +369,7 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
         names = run_name_searches(name_plan, index, name_searcher, folio, subdivision)
     # Everything already fetched is addressed. Without this the first hop re-fetches the document
     # that did the citing, because a recorded instrument's own stamp cites its own book and page.
-    seen = {key_of(r.get('doc_book'), r.get('doc_page')) for r in rows or []}
-    for row in rows or []:
-        match = re.search(r'official_records/(\d+)-(\d+)', str(row.get('source_ref') or ''))
-        if match:
-            seen.add(key_of(match.group(1), match.group(2)))
+    seen = own_spans(rows)
 
     followed, unresolved, new_rows = [], [], []
     frontier, spent, stopped = list(rows or []), 0, ''

@@ -580,6 +580,25 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     rows = collect_recorded(case, records, collector=collector, queue=queue, county=county,
                             ocr=ocr, keep_images=keep_images, gray_cutoff=gray_cutoff,
                             resume=resume)
+    # CITATIONS, HERE, not only inside run_documents. The pilot CLI read seventeen pages of this
+    # case on 2026-09-22 and the report named not one instrument the text pointed at, because
+    # cited_instruments was attached in a branch this tool never enters. The reading is in hand;
+    # extracting what it cites costs nothing and is the whole reason the pages were read.
+    # Self-citations are dropped: a five-page instrument stamps its own book and five pages across
+    # its own pages, and five of the seven "citations" found that day were exactly that.
+    try:
+        import document_classify
+        import document_walk
+        own = document_walk.own_spans(rows)
+        for row in rows:
+            reading = row.get('reading')
+            if not reading:
+                continue
+            row['cited_instruments'] = [
+                c for c in document_classify.cited_instruments(reading)
+                if document_walk.key_of(c['book'], c['page_no']) not in own]
+    except Exception:
+        pass                       # citations are an addition; they never fail a pilot run
     candidates = [c for row in rows for c in (row.get('amount_candidates') or [])]
     tried = [t for row in rows for t in (row.get('gray_cutoffs_tried') or [])]
 
@@ -871,8 +890,18 @@ def main(argv=None):
             print('  recording stamp on the page %s the index (book %s page %s)'
                   % ('AGREES with' if stamp['agrees'] else 'DISAGREES with',
                      stamp['index_book'], stamp['index_page']))
+        for cite in row.get('cited_instruments') or []:
+            print('  CITES %s/%s (page %s, %s): %s'
+                  % (cite['book'], cite['page_no'], cite['cited_on_page'],
+                     cite.get('pattern') or 'strict', cite['passage'][:90]))
         if row.get('text_dir'):
             print('  page text -> %s' % row['text_dir'])
+    _cited = sorted({(c['book'], c['page_no']) for row in report['documents']
+                     for c in (row.get('cited_instruments') or [])})
+    if _cited:
+        print('  %d instrument(s) cited by this case\'s documents and NOT already fetched: %s'
+              % (len(_cited), ', '.join('%s/%s' % bp for bp in _cited)))
+        print('    follow them with: python -u document_walk.py --case %s --dry-run' % case)
     for gap in report['access_gaps']:
         print('  GAP %s — %s' % (gap['source_ref'], gap['reason']))
     if len(report.get('gray_cutoffs_tried') or []) > 1:
