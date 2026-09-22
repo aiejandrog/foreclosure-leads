@@ -116,11 +116,11 @@ behaviour, not a bug to route around.
 
 | path | when | gates |
 |---|---|---|
-| `refresh-dealflow.bat` | nightly 5:30 | healthcheck + publish_guard |
-| `run-leads.bat` | manual | healthcheck + publish_guard |
-| `run-replies-daily.bat` | daily 7:00 | healthcheck + publish_guard |
-| `run-phones-nightly.bat` | nightly 6:00 | healthcheck + publish_guard |
-| `run-phones.bat` | manual one-click | healthcheck + publish_guard (since 2026-09-19) |
+| `refresh-dealflow.bat` | nightly 5:30 | publish_lock + healthcheck + publish_guard |
+| `run-leads.bat` | manual | publish_lock + healthcheck + publish_guard |
+| `run-replies-daily.bat` | daily 8:45 | publish_lock + healthcheck + publish_guard |
+| `run-phones-nightly.bat` | nightly 9:30 | publish_lock + healthcheck + publish_guard |
+| `run-phones.bat` | manual one-click | publish_lock + healthcheck + publish_guard (since 2026-09-19) |
 
 `run-phones.bat` was missing from this table entirely, which is how it stayed an ungated publish
 path for a month after the other four were gated. It is the manual twin of `run-phones-nightly.bat`
@@ -137,6 +137,31 @@ publish does not cost one board, it costs the reference.
 
 If you add a fourth publish path, gate it in the same commit. `grep -l publish_guard *.bat` is the
 check — anything that does `git add docs/` and pushes, and is not in that list, is a hole.
+
+**And it must take the publish lock.** Until 2026-09-22 none of the five took one, so the only thing
+keeping two of them from rebuilding and pushing `docs/` at the same moment was the clock on their
+Task Scheduler triggers. That is not a mechanism. Refresh starts 05:30 and has measured 2h11m,
+2h49m, 3h08m and ~4h on different days, so every "it will be finished by 08:30" ordering is an
+assumption that has already been wrong. `publish_lock.py` is the mechanism:
+
+- `python -u publish_lock.py acquire <runner>.bat` — **exit 9 = another publishing runner on this
+  machine holds the lock.** The runner must not build or push, and must not release: the lock is not
+  its own. Every runner's rc=9 means exactly this.
+- `python -u publish_lock.py release <runner>.bat` — always exits 0, and only removes a lock that
+  runner owns. It runs at the **single funnel label** in each runner, which is why every `exit /b`
+  below an acquire became `set "NEXIT=n"` + `goto :end`. A lock released on the happy path only
+  wedges the machine on the first bad night.
+- A lock older than **six hours** is stale and is broken with a loud log line. Six hours is the
+  longest `ExecutionTimeLimit` any DEALFLOW task carries. If that line appears every morning, a
+  runner is dying mid-flight — find that, do not raise the budget.
+- It is a **local** lock, one file per machine. It says nothing about the other box; that is still
+  repo_guard, publish_guard and the one-armed-machine rule in MACHINE-HANDOFF.
+- `python publish_lock.py status` prints the holder, and `_batsyntaxtest.py` asserts the wiring:
+  one acquire, one release, its own filename in both, and no exit path between them.
+
+`run-replies-daily.bat` takes it **below** its inbox scan and `optout_sync.py`, not at the top: those
+two contend with nothing and are the time-critical work the file exists for, so a held lock there is
+a degraded publish-skip with the STOPs already in the ledger, not a morning with no reply scan.
 
 ## Scheduled tasks
 

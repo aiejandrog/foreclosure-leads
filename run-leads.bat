@@ -4,18 +4,32 @@ echo ==== run %date% %time% ==== >> leads-run.log
 rem  MIRRORFAIL carries the site-mirror outcome to this file's exit code. This file has no
 rem  `setlocal`, so it is initialized explicitly rather than inherited from whatever ran before.
 set "MIRRORFAIL=0"
+rem  NEXIT is the same idea for the early refusals. Before the publish lock went in, the only way
+rem  out of this file above :done was a bare `exit /b`, which skipped the release.
+set "NEXIT=0"
 
 rem  REPO GUARD FIRST. A publish job is the most destructive command in this project and
 rem  until 2026-09-17 none of them checked what they were about to push. See repo_guard.bat.
 call repo_guard.bat "%~dp0" "leads-run.log"
 if errorlevel 1 exit /b 1
+rem  PUBLISH LOCK NEXT. Five .bat files here rebuild docs/ and push it and none of them used to
+rem  check whether another was already mid-run; the trigger times were the whole mechanism. This
+rem  one is the manual weekly refresh, so it is the one most likely to be double-clicked while the
+rem  nightly chain is still running. rc=9 = another runner holds the lock. It exits WITHOUT
+rem  releasing - the lock is not ours to drop. Released once at :done. See publish_lock.py.
+python -u publish_lock.py acquire run-leads.bat >> leads-run.log 2>&1
+if errorlevel 1 (
+  echo     ^!^! PUBLISH LOCK: another publishing runner is mid-run - see leads-run.log. Nothing ran.
+  exit /b 9
+)
 rem  NETWORK NEXT. Same 09-14/16/17 fault as refresh-dealflow.bat: this file scrapes too, and a box
 rem  with no DNS runs it to completion in seconds while reporting nothing wrong. net_ready.py waits
 rem  ~4 minutes and refuses the run if the network never arrives. See its header for the post-mortem.
 python -u net_ready.py >> leads-run.log 2>&1
 if errorlevel 1 (
   echo     ^!^! NETWORK NOT UP - refusing to start. Nothing scraped, live site untouched.>> leads-run.log
-  exit /b 3
+  set "NEXIT=3"
+  goto :done
 )
 rem  PULL THE CODE BEFORE BUILDING WITH IT (2026-09-10). Same fix, same reason as
 rem  refresh-dealflow.bat: the only pull here was the one before the push at the bottom, so a run
@@ -71,9 +85,15 @@ if errorlevel 1 (
 rem  This file did not even have the 6s retry, let alone a check that the push landed. Ask the remote.
 call publish_verify.bat "leads-run.log" "-" "weekly lead refresh"
 :done
+rem  RELEASE THE PUBLISH LOCK. Every exit below the acquire funnels here, which is what makes one
+rem  release enough - a lock released on the happy path only wedges the machine on the first bad
+rem  run. It always exits 0 and only removes a lock this runner owns, so it can neither change the
+rem  code below nor touch another runner's lock.
+python -u publish_lock.py release run-leads.bat >> leads-run.log 2>&1
 echo ==== done ==== >> leads-run.log
 rem  ...and say so in the exit code. This file used to fall off the end, so its result was whatever
 rem  the last `echo` returned: 0, always, including on a run whose mirror never published and whose
 rem  live site therefore did not move. rc=5 = built, gated and pushed here, live site unchanged.
+if not "%NEXIT%"=="0" exit /b %NEXIT%
 if "%MIRRORFAIL%"=="1" exit /b 5
 exit /b 0

@@ -66,10 +66,16 @@ def _reads_mirror_exit(text):
 
 
 def _propagates(text):
-    """Does a mirror failure reach the process exit code? Either via this file's RUNEXIT verdict or
-    via a MIRRORFAIL flag returned as rc=5. A log line the scheduler never sees is half a fix."""
-    sets = 'set "RUNEXIT=5"' in text or 'set "MIRRORFAIL=1"' in text
-    exits = 'exit /b 5' in text or 'exit /b %RUNEXIT%' in text
+    """Does a mirror failure reach the process exit code? Either via this file's RUNEXIT verdict, via
+    a MIRRORFAIL flag returned as rc=5, or via the NEXIT funnel run-phones-nightly.bat adopted when
+    the publish lock went in on 2026-09-22 - its `exit /b 5` became `set "NEXIT=5"` + `goto :end` so
+    that the single `publish_lock.py release` at :end runs on every path out of the file. The
+    mechanism changed; the contract this checks - a mirror failure reaches rc=5 - did not. A log
+    line the scheduler never sees is half a fix."""
+    sets = ('set "RUNEXIT=5"' in text or 'set "MIRRORFAIL=1"' in text
+            or 'set "NEXIT=5"' in text)
+    exits = ('exit /b 5' in text or 'exit /b %RUNEXIT%' in text
+             or 'exit /b %NEXIT%' in text)
     return sets and exits
 
 
@@ -215,9 +221,12 @@ def main():
 
         # MUTATION CHECK. Strip the propagation out of each runner in memory and confirm the check
         # above goes red - otherwise it is asserting something that is true of any file.
+        # Every mechanism _propagates accepts has to be stripped here, or the check quietly stops
+        # being a mutation: NEXIT was added 2026-09-22 with the publish lock.
         broken = [n for n in RUNNERS
                   if not _propagates(_bat(n).replace('set "RUNEXIT=5"', '')
-                                            .replace('set "MIRRORFAIL=1"', ''))]
+                                            .replace('set "MIRRORFAIL=1"', '')
+                                            .replace('set "NEXIT=5"', ''))]
         check('mutation check (drop the propagation and every runner fails)',
               sorted(broken), sorted(RUNNERS))
 

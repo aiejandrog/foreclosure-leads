@@ -21,8 +21,27 @@ rem  MIRRORFAIL carries the site-mirror outcome to the exit code at the bottom. 
 rem  the scheduler never sees is half a fix, and rc=0-while-broken is precisely the pattern that
 rem  cost three days on the scrape, three on the push, and 31 hours on the mirror.
 set "MIRRORFAIL=0"
+rem  NEXIT carries this run's code to :end. Every `exit /b` below the publish-lock acquire became a
+rem  `goto :end` when the lock went in: a lock released on some exit paths and not others wedges the
+rem  machine on the first rebuild failure, and this is the job that runs most reliably.
+set "NEXIT=0"
 
 echo ==== phones-nightly %STAMP% ==== >> "%LOG%"
+
+rem  PUBLISH LOCK. Five .bat files here rebuild docs/ and push it, and until 2026-09-22 the only
+rem  thing keeping two of them apart was the clock on their triggers. THIS file is half of the
+rem  measured collision: on 2026-09-15 at 19:11 run-replies-daily.bat published 709 phones over a
+rem  live 1,148, and one minute later this job published 714 over the same board. rc=9 = another
+rem  publishing runner holds the lock. It exits WITHOUT releasing - the lock is not ours to drop -
+rem  and writes the status file, because rc=9 with a stale green status file is the rc=0-while-broken
+rem  pattern this project has paid for three times. See publish_lock.py.
+python -u publish_lock.py acquire run-phones-nightly.bat >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo [%STAMP%] REFUSED - another publishing runner is mid-run on this machine. Nothing traced, built or pushed. See phones-run.log.> "%STATUS%"
+  echo     ^!^! PUBLISH LOCK: another publishing runner is mid-run - see phones-run.log. Nothing ran.
+  echo ==== refused rc=9 - publish lock held %date% %time% ==== >> "%LOG%"
+  exit /b 9
+)
 
 rem 1) free Sunbiz officer names so LLC-owned leads have a human to trace (skiptrace reads llc_officers.json)
 rem    FIXED 2026-08-05: this called `--all`, a flag llc_officers.py has never accepted (its real args are
@@ -68,7 +87,8 @@ python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('l
 if errorlevel 1 (
   echo [%STAMP%] REBUILD FAILED - nothing pushed. See phones-run.log.> "%STATUS%"
   echo REBUILD FAILED >> "%LOG%"
-  exit /b 1
+  set "NEXIT=1"
+  goto :end
 )
 
 rem 3b) THE GATES. This job published with none of them until 2026-09-17, and it is the job that
@@ -90,14 +110,16 @@ python -u healthcheck.py >> "%LOG%" 2>&1
 if errorlevel 2 (
   echo [%STAMP%] BLOCKED - healthcheck COMPLIANCE fail. Board NOT published; live site left on its last good build. See phones-run.log.> "%STATUS%"
   echo GATE: healthcheck COMPLIANCE fail - publish skipped. >> "%LOG%"
-  exit /b 2
+  set "NEXIT=2"
+  goto :end
 )
 rem  exit 1 is the coverage floor only: advisory, publish_guard decides -- same as refresh-dealflow.bat.
 python -u publish_guard.py >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo [%STAMP%] BLOCKED - publish_guard refused a board poorer than the live one. Live site unchanged. See phones-run.log.> "%STATUS%"
   echo GATE: publish_guard BLOCKED the build - publish skipped. >> "%LOG%"
-  exit /b 2
+  set "NEXIT=2"
+  goto :end
 )
 
 rem 4) publish. ONLY the encrypted board + public Sunbiz officers -- NEVER `git add -A`
@@ -109,7 +131,7 @@ git commit -m "phones: nightly refresh (%PHONESNOTE%)" >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo [%STAMP%] OK - board already current, nothing to push. %PHONESNOTE%.> "%STATUS%"
   echo no changes to commit >> "%LOG%"
-  exit /b 0
+  goto :end
 )
 rem  PULL BEFORE PUSH. Without this a local push is rejected non-fast-forward the moment
 rem  GitHub Actions pushes anything (it publishes the balloon book independently), and the
@@ -146,7 +168,8 @@ rem file from the answer, so this can no longer claim a publish that did not hap
 call publish_verify.bat "%LOG%" "%STATUS%" "%PHONESNOTE%"
 if errorlevel 1 (
   echo ==== done - NOT PUBLISHED %date% %time% ==== >> "%LOG%"
-  exit /b 1
+  set "NEXIT=1"
+  goto :end
 )
 rem  THE ENGINE PUSH LANDED, BUT DID THE LIVE SITE MOVE? publish_verify only asks about origin/main
 rem  in THIS repo - it says so itself - and since the 09-17 split that is not what GitHub Pages
@@ -157,7 +180,15 @@ rem  is still the previous one. The status file has to say the same, or it contr
 if "%MIRRORFAIL%"=="1" (
   echo [%STAMP%] ^!^! Board pushed to the engine repo, but the LIVE SITE IS UNCHANGED - the mirror did not publish. %PHONESNOTE%.> "%STATUS%"
   echo ==== done - ENGINE PUBLISHED, LIVE SITE NOT %date% %time% ==== >> "%LOG%"
-  exit /b 5
+  set "NEXIT=5"
+  goto :end
 )
 echo ==== done %date% %time% ==== >> "%LOG%"
-exit /b 0
+
+:end
+rem  RELEASE THE PUBLISH LOCK, and this is the only place it happens. Every exit below the acquire
+rem  funnels here through NEXIT for exactly that reason. It always exits 0 and only removes a lock
+rem  this runner owns, so it can neither change the code below nor drop another runner's lock.
+rem  `endlocal & exit /b` on one line: both halves are parsed before endlocal discards NEXIT.
+python -u publish_lock.py release run-phones-nightly.bat >> "%LOG%" 2>&1
+endlocal & exit /b %NEXIT%

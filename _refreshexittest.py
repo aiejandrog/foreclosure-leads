@@ -109,6 +109,41 @@ for c in used:
 rec('the codes are contiguous from 1', used == list(range(1, max(used) + 1)) if used else False,
     'uses %s' % (used,))
 
+print('\n-- the publish lock is taken before any work and dropped on every exit --')
+# 2026-09-22: five .bat files rebuild docs/ and push it and none of them took a lock, so the only
+# thing keeping two apart was the clock on their triggers. THIS file is the one that makes the
+# collision likely - its measured chain runs 3h08m from 05:30, so it is still building when
+# DealFlow Replies fires at 06:45 and run-replies-daily.bat rebuilds and pushes the same two paths.
+# _batsyntaxtest.py owns the wiring invariant across all five; these are the parts specific to the
+# nightly, where the ordering against net_ready.py and the RUNEXIT ladder both matter.
+lock_i = [i for i, l in enumerate(lines) if 'publish_lock.py acquire' in l]
+rel_i = [i for i, l in enumerate(lines) if 'publish_lock.py release' in l]
+rec('the nightly acquires the publish lock', len(lock_i) == 1, '%d acquire calls' % len(lock_i))
+rec('and releases it exactly once', len(rel_i) == 1, '%d release calls' % len(rel_i))
+if lock_i and rel_i:
+    net_i = [i for i, l in enumerate(lines) if 'net_ready.py' in l and l.strip().startswith('python')]
+    rec('it is acquired before the four-minute network wait', bool(net_i) and lock_i[0] < net_i[0],
+        'a run that is going to refuse should not spend four minutes first')
+    scrape_i = [i for i, l in enumerate(lines) if 'foreclosure_leads.py' in l and l.strip().startswith('python')]
+    rec('it is acquired before the scrape', bool(scrape_i) and lock_i[0] < min(scrape_i),
+        'nothing is scraped, built or pushed under a lock this run does not hold')
+    end_i = lines.index(':end')
+    rec('the release sits below :end, where every goto lands', rel_i[0] > end_i,
+        'release line %d, :end at line %d' % (rel_i[0], end_i))
+    gotos = [i for i, l in enumerate(lines) if l.strip().lower() == 'goto :end']
+    rec('every goto :end is above the release', all(g < rel_i[0] for g in gotos),
+        '%d goto sites' % len(gotos))
+    # the refusal must NOT release: rc=9 means another runner owns the lock
+    refusal = '\n'.join(lines[lock_i[0]:lock_i[0] + 8])
+    rec('the refusal exits 9', 'exit /b 9' in refusal, refusal.replace('\n', ' / ')[:110])
+    rec('the refusal does not release a lock it failed to take',
+        'publish_lock.py release' not in refusal,
+        'dropping the holder\'s lock is worse than the race it was stopping')
+    rec('rc=9 is NOT part of the RUNEXIT ladder',
+        'set "RUNEXIT=9"' not in BAT,
+        'a run that never started has no verdict to carry; contiguity above still holds')
+    rec('rc=9 is documented in the header table', 9 in documented)
+
 print('\n-- a run that stages nothing at the early publish says so --')
 # `goto :afterearly` appears inside this stage, so split on the LABEL at the start of a line.
 early = re.split(r'^:afterearly', BAT.split('Publishing fresh leads immediately')[-1], flags=re.M)[0]

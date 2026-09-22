@@ -19,6 +19,22 @@ if errorlevel 1 exit /b 1
 echo.>> "%LOG%"
 echo ==================== REFRESH %date% %time% ====================>> "%LOG%"
 
+rem  PUBLISH LOCK NEXT. Five .bat files in this repo rebuild docs/ and push it, and until
+rem  2026-09-22 not one of them checked whether another was already mid-run - the triggers being
+rem  at different times of day was the whole mechanism. This chain runs 3h08m measured, so it is
+rem  still building when DealFlow Replies fires, and run-replies-daily.bat publishes too. On
+rem  2026-09-15 two runners published one minute apart and the poorer board became origin/main,
+rem  which moved the baseline every later publish_guard compared against.
+rem  rc=9 is the "another publishing runner holds the lock" code, and it exits WITHOUT releasing:
+rem  the lock is not ours to drop. Released once at :end, on every other exit path. See
+rem  publish_lock.py for the stale-lock budget and the fail direction.
+python -u publish_lock.py acquire refresh-dealflow.bat >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     ^!^! PUBLISH LOCK: another publishing runner is mid-run - see leads-run.log. Nothing ran.
+  echo ==== REFRESH REFUSED rc=9 - publish lock held %date% %time% ====>> "%LOG%"
+  exit /b 9
+)
+
 rem  RUNEXIT carries the run's verdict to :end. Until 2026-09-18 this file exited 0 no matter what
 rem  happened - Task Scheduler recorded `rc=0` on 09-17 for a run that scraped nothing, published
 rem  nothing and left the board 94 hours stale. An exit code that is 0 whether the night worked or
@@ -39,6 +55,10 @@ rem  `goto :end` without touching RUNEXIT, so a publish_guard block - a content 
 rem  thing healthcheck does not grade - ended the run at rc=0 with "health OK" on the console. Every
 rem  other fault in this list was given a code precisely so the morning could not lie; these two
 rem  were the hole left in that work.
+rem  9 = another publishing runner on this machine holds the publish lock, so this run refused
+rem  before doing anything. It is NOT part of the RUNEXIT ladder on purpose: RUNEXIT is this run's
+rem  verdict, and a run that never started has no verdict to carry. Added 2026-09-22 - see
+rem  publish_lock.py.
 set "RUNEXIT=0"
 
 rem  [0/5] NETWORK FIRST, and this is not defensive padding - it is the 09-14/16/17 post-mortem.
@@ -731,6 +751,11 @@ rem  the answer to "did the night work", which is what anyone reading it already
 rem  Do NOT read this the other way round either: a 0 here means this file finished its work, not
 rem  that the data is fresh - 09-17 exited 0 precisely because the run aborted before the
 rem  healthcheck ever ran. That is the hole this closes.
+rem  RELEASE THE PUBLISH LOCK. Every path out of this file above goes through :end, which is what
+rem  makes one release enough - a lock released on the happy path only is a lock that wedges the
+rem  machine on the first bad night. publish_lock.py always exits 0 here and only ever removes a
+rem  lock this runner owns, so it cannot change the verdict below or touch someone else's lock.
+python -u publish_lock.py release refresh-dealflow.bat >> "%LOG%" 2>&1
 if not "%RUNEXIT%"=="0" echo ==== REFRESH ENDED rc=%RUNEXIT% %date% %time% ====>> "%LOG%"
 endlocal & exit /b %RUNEXIT%
 

@@ -16,7 +16,17 @@ WHY THIS EXISTS
 
    Nothing caught it because nothing reads these files but cmd, and cmd only reads them at 05:30.
 
-2. AN UNGATED PUBLISH PATH. CLAUDE.md: "every path that publishes the board" runs healthcheck.py
+2. TWO RUNNERS PUBLISHING AT ONCE. Five .bat files rebuild `docs/` and push it, and until
+   2026-09-22 not one took a lock: the only thing keeping two of them apart was the clock on their
+   Task Scheduler triggers. On 2026-09-15 at 19:11 run-replies-daily.bat published 709 phones over
+   a live 1,148 and run-phones-nightly.bat published 714 over the same board ONE MINUTE LATER, and
+   the poorer build became origin/main, moving the baseline every later publish_guard compared
+   against. `publish_lock.py` is the mechanism; this suite is what keeps it wired. A lock acquired
+   and not released on some exit path is worse than no lock - it wedges the machine until a human
+   deletes a dotfile - so the check here is not "does it call acquire" but "does every exit below
+   the acquire funnel through the release".
+
+3. AN UNGATED PUBLISH PATH. CLAUDE.md: "every path that publishes the board" runs healthcheck.py
    and publish_guard.py, and `grep -l publish_guard *.bat` is the check. It stayed a manual check,
    so run-phones.bat -- which rebuilds the board, rebases onto main with `-X theirs` and pushes --
    sat ungated for a month after the other four were gated, and was absent from CLAUDE.md's own
@@ -33,9 +43,17 @@ scanner is worse than no sweep, because it is believed.
 Run: python _batsyntaxtest.py
 """
 import glob
+import io
+import json
 import os
 import re
+import shutil
+import subprocess
 import sys
+import tempfile
+import time
+
+import publish_lock as PL
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FAIL = []
@@ -151,6 +169,230 @@ for path in bats:
     rec('%s publishes, so it runs publish_guard.py' % name, 'publish_guard.py' in code)
     rec('%s publishes, so it calls repo_guard.bat' % name,
         bool(re.search(r'call\s+repo_guard\.bat', code, re.I)))
+
+# ---- 4. every publish path takes the lock, and releases it on EVERY exit path -------------------
+# The acquire is the easy half. The half that has actually gone wrong in guards in this repo is the
+# release: run-phones-nightly.bat had seven `exit /b` sites and run-phones.bat six, so a release
+# bolted onto the happy path alone would have left the lock behind on every rebuild failure, every
+# blocked gate and every "nothing to commit" night - and the next morning's run would then refuse
+# for six hours until the stale budget aged it out. The invariant below is what forbids that:
+# exactly one release, and every exit under the acquire is either the rc=9 refusal or below it.
+def lock_wiring(name, code_lines):
+    """-> [(label, ok, detail)] for one runner's lock wiring. A function, not inline, so the
+    fixtures below can prove it actually fails - the same discipline as the paren scanner above."""
+    out = []
+    acq = [i for i, l in enumerate(code_lines) if re.search(r'publish_lock\.py\s+acquire\b', l)]
+    rel = [i for i, l in enumerate(code_lines) if re.search(r'publish_lock\.py\s+release\b', l)]
+    out.append(('%s acquires the publish lock' % name, len(acq) == 1, '%d acquire calls' % len(acq)))
+    out.append(('%s releases it exactly once' % name, len(rel) == 1, '%d release calls' % len(rel)))
+    if len(acq) != 1 or len(rel) != 1:
+        return out
+    ai, ri = acq[0], rel[0]
+    # the name it passes must be its OWN name, or release matches no holder and the lock is permanent
+    for verb, i in (('acquire', ai), ('release', ri)):
+        out.append(('%s passes its own filename to %s' % (name, verb),
+                    re.search(r'publish_lock\.py\s+%s\s+%s(\s|$)' % (verb, re.escape(name)),
+                              code_lines[i]) is not None, code_lines[i].strip()[:90]))
+    out.append(('%s releases AFTER it acquires' % name, ri > ai,
+                'acquire line %d, release line %d' % (ai, ri)))
+    # the refusal: rc=9, and it must NOT release - the lock belongs to the other runner. The
+    # refusal path may jump to a label rather than exiting inline: run-replies-daily.bat takes the
+    # lock below its inbox scan, so a held lock there is a degraded publish-skip rather than a dead
+    # run, and it lands on :nolock. Follow one hop so the check reads the path, not just the branch.
+    refusal_lines = list(code_lines[ai:ai + 8])
+    hop = re.search(r'goto\s+:(\w+)', '\n'.join(refusal_lines))
+    if hop and not re.search(r'exit /b 9\b', '\n'.join(refusal_lines)):
+        label = ':' + hop.group(1)
+        at = [i for i, l in enumerate(code_lines) if l.strip().lower() == label.lower()]
+        if at:
+            for l in code_lines[at[0]:]:
+                refusal_lines.append(l)
+                if 'exit /b' in l:
+                    break
+    refusal = '\n'.join(refusal_lines)
+    out.append(('%s refuses with the documented rc=9' % name,
+                re.search(r'exit /b 9\b', refusal) is not None,
+                refusal.replace('\n', ' / ')[:120]))
+    out.append(('%s does not release a lock it failed to take' % name,
+                'publish_lock.py release' not in refusal, ''))
+    # THE INVARIANT: every exit between the acquire and the release is the rc=9 refusal
+    stranded = []
+    for i in range(ai + 1, ri + 1):
+        for m in re.finditer(r'exit /b\s*(\S*)', code_lines[i]):
+            if m.group(1).strip(')').strip() != '9':
+                stranded.append('L%d %s' % (i, code_lines[i].strip()[:70]))
+    out.append(('%s leaves no exit path that skips the release' % name, stranded == [],
+                '; '.join(stranded)))
+    return out
+
+
+def bat_code_lines(body):
+    return [l for l in body.splitlines()
+            if not l.strip().lower().startswith('rem ') and not l.strip().startswith('::')]
+
+
+print('\nPUBLISH LOCK IS WIRED INTO EVERY PUBLISH PATH')
+publishers = []
+for path in bats:
+    name = os.path.basename(path)
+    code_lines = bat_code_lines(open(path, encoding='utf-8', errors='replace').read())
+    code = '\n'.join(code_lines)
+    if not (re.search(r'git\s+add\b[^\n]*docs', code) and re.search(r'git\s+push\b', code)):
+        continue
+    publishers.append(name)
+    for label, ok, detail in lock_wiring(name, code_lines):
+        rec(label, ok, detail)
+
+rec('all five known publishers were found', len(publishers) == 5, publishers)
+rec('publish_lock.PUBLISHERS matches what is on disk',
+    sorted(PL.PUBLISHERS) == sorted(publishers),
+    'module says %s' % (sorted(PL.PUBLISHERS),))
+
+# The wiring check has to FAIL on the two mistakes it exists to prevent, or it is decoration.
+print('\nWIRING-CHECK SELF-TEST')
+GOOD = ['call repo_guard.bat "%~dp0" "x.log"',
+        'if errorlevel 1 exit /b 1',
+        'python -u publish_lock.py acquire x.bat >> "x.log" 2>&1',
+        'if errorlevel 1 (',
+        '  echo held', '  exit /b 9', ')',
+        'python build.py',
+        'if errorlevel 1 (set "NEXIT=1" & goto :end)',
+        'git add docs/index.html', 'git push origin main',
+        ':end',
+        'python -u publish_lock.py release x.bat >> "x.log" 2>&1',
+        'exit /b %NEXIT%']
+rec('a correctly wired runner passes', all(ok for _, ok, _ in lock_wiring('x.bat', GOOD)),
+    [l for l, ok, _ in lock_wiring('x.bat', GOOD) if not ok])
+
+HOP = ['call repo_guard.bat "%~dp0" "x.log"',
+       'python scan.py',
+       'python -u publish_lock.py acquire x.bat >> "x.log" 2>&1',
+       'if errorlevel 1 (', '  echo held', '  goto :nolock', ')',
+       'git add docs/index.html', 'git push origin main',
+       ':end',
+       'python -u publish_lock.py release x.bat >> "x.log" 2>&1',
+       'exit /b 0',
+       ':nolock', 'exit /b 9']
+rec('a refusal that jumps to a label is followed, not failed',
+    all(ok for _, ok, _ in lock_wiring('x.bat', HOP)),
+    [l for l, ok, _ in lock_wiring('x.bat', HOP) if not ok])
+
+HOPBAD = list(HOP)
+HOPBAD[13] = 'exit /b 0'
+bad = dict((l, ok) for l, ok, _ in lock_wiring('x.bat', HOPBAD))
+rec('a refusal label that does not exit 9 is caught',
+    bad['x.bat refuses with the documented rc=9'] is False,
+    'rc=9 is the code the runners and the log reader both key on')
+
+HOPRELEASE = list(HOP)
+HOPRELEASE[13] = 'python -u publish_lock.py release x.bat & exit /b 9'
+bad = dict((l, ok) for l, ok, _ in lock_wiring('x.bat', HOPRELEASE))
+rec('a refusal label that drops the holder\'s lock is caught',
+    bad.get('x.bat does not release a lock it failed to take', True) is False
+    or bad.get('x.bat releases it exactly once', True) is False)
+
+STRANDED = list(GOOD)
+STRANDED[8] = 'if errorlevel 1 (echo build failed & exit /b 1)'
+bad = dict((l, ok) for l, ok, _ in lock_wiring('x.bat', STRANDED))
+rec('an exit that skips the release is caught',
+    bad['x.bat leaves no exit path that skips the release'] is False,
+    'this is the mistake that wedges the machine for six hours')
+
+WRONGNAME = list(GOOD)
+WRONGNAME[12] = 'python -u publish_lock.py release y.bat >> "x.log" 2>&1'
+bad = dict((l, ok) for l, ok, _ in lock_wiring('x.bat', WRONGNAME))
+rec('a release under the wrong runner name is caught',
+    bad['x.bat passes its own filename to release'] is False,
+    'release matches on the holder name, so a copied line releases nothing')
+
+RELEASESFIRST = list(GOOD)
+RELEASESFIRST[5] = '  python -u publish_lock.py release x.bat & exit /b 9'
+res = lock_wiring('x.bat', RELEASESFIRST)
+bad = dict((l, ok) for l, ok, _ in res)
+rec('a refusal that drops the other runner\'s lock is caught',
+    bad.get('x.bat does not release a lock it failed to take', True) is False
+    or bad.get('x.bat releases it exactly once', True) is False,
+    'rc=9 means the lock is someone else\'s')
+
+# ---- 5. the lock itself does what the runners assume ------------------------------------------
+# No network, no cmd.exe: this drives publish_lock.py directly. A wiring check over a lock that
+# does not actually exclude anything is the "clean sweep from an unproven scanner" this file's
+# header warns about.
+print('\nTHE LOCK ACTUALLY EXCLUDES')
+tmp = tempfile.mkdtemp(prefix='dealflow-lock-')
+try:
+    real_lock, PL.LOCK = PL.LOCK, os.path.join(tmp, '.publish.lock')
+
+    rec('a free lock is acquired', PL.acquire('refresh-dealflow.bat') == 0)
+    rec('a second runner is refused with 9', PL.acquire('run-replies-daily.bat') == 9)
+    rec('the same runner twice is refused too', PL.acquire('refresh-dealflow.bat') == 9,
+        'a double-click while the task is running is the common case')
+    rec('a non-owner release leaves the lock alone',
+        PL.release('run-replies-daily.bat') == 0 and os.path.exists(PL.LOCK))
+    rec('the owner releases it', PL.release('refresh-dealflow.bat') == 0
+        and not os.path.exists(PL.LOCK))
+    rec('releasing twice is not an error', PL.release('refresh-dealflow.bat') == 0)
+    rec('and the lock is free again', PL.acquire('run-leads.bat') == 0)
+    PL.release('run-leads.bat')
+
+    # stale: a runner killed mid-flight must not wedge the machine forever
+    held = {'runner': 'run-phones-nightly.bat', 'pid': 1, 'host': 'gone',
+            'started_at': 'earlier', 'started_epoch': time.time() - (PL.STALE_AFTER + 60)}
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(held))
+    rec('a lock past the %s budget is broken' % PL._ago(PL.STALE_AFTER),
+        PL.acquire('refresh-dealflow.bat') == 0
+        and json.load(io.open(PL.LOCK, encoding='utf-8'))['runner'] == 'refresh-dealflow.bat')
+    PL.release('refresh-dealflow.bat')
+
+    held['started_epoch'] = time.time() - (PL.STALE_AFTER - 600)
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(held))
+    rec('a lock just inside the budget is still honoured',
+        PL.acquire('refresh-dealflow.bat') == 9,
+        'the 3h08m refresh chain must not have its lock stolen at hour five')
+    os.remove(PL.LOCK)
+
+    # a corrupt lock is a LOCK, not an absence. "I cannot read it so I will ignore it" is how a
+    # guard becomes a no-op.
+    io.open(PL.LOCK, 'w', encoding='utf-8').write('not json')
+    rec('an unreadable lock still refuses', PL.acquire('run-leads.bat') == 9)
+    os.utime(PL.LOCK, (time.time() - PL.STALE_AFTER - 60,) * 2)
+    rec('an unreadable lock is aged off its mtime', PL.acquire('run-leads.bat') == 0)
+    PL.release('run-leads.bat')
+
+    rec('the stale budget is the longest runner budget, 6h',
+        PL.STALE_AFTER == 6 * 60 * 60, '%s - DEALFLOW Refresh carries ExecutionTimeLimit PT6H'
+        % PL._ago(PL.STALE_AFTER))
+    rec('a mistyped verb fails CLOSED', PL.main(['publish_lock.py', 'aquire', 'x.bat']) == 9,
+        'a caller that cannot spell the verb must not sail past the guard')
+
+    # and the create is genuinely atomic: copy the module out and race eight processes at it
+    shutil.copy(os.path.join(HERE, 'publish_lock.py'), tmp)
+    procs = [subprocess.Popen([sys.executable, os.path.join(tmp, 'publish_lock.py'),
+                               'acquire', 'racer%d.bat' % i],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+             for i in range(8)]
+    codes = [p.wait() for p in procs]
+    rec('eight runners racing a free lock: exactly one wins',
+        codes.count(0) == 1 and codes.count(9) == 7, codes)
+    os.remove(os.path.join(tmp, '.publish.lock'))
+
+    io.open(os.path.join(tmp, '.publish.lock'), 'w', encoding='utf-8').write(json.dumps(
+        {'runner': 'dead.bat', 'pid': 1, 'host': 'gone', 'started_at': 'earlier',
+         'started_epoch': time.time() - (PL.STALE_AFTER + 60)}))
+    procs = [subprocess.Popen([sys.executable, os.path.join(tmp, 'publish_lock.py'),
+                               'acquire', 'racer%d.bat' % i],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+             for i in range(8)]
+    codes = [p.wait() for p in procs]
+    rec('eight runners racing one STALE lock: exactly one wins',
+        codes.count(0) == 1 and codes.count(9) == 7,
+        '%s - breaking by rename, not by delete, is what makes this hold' % (codes,))
+    rec('breaking a stale lock leaves no litter behind',
+        [f for f in os.listdir(tmp) if '.stale.' in f] == [],
+        [f for f in os.listdir(tmp) if '.stale.' in f])
+finally:
+    PL.LOCK = real_lock
+    shutil.rmtree(tmp, ignore_errors=True)
 
 print('\n%d passed, %d failed' % (len(PASS), len(FAIL)))
 for f in FAIL:

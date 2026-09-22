@@ -476,3 +476,10 @@ deal_desk.json
 # the wrong property. It is a code now (PARCEL_UNANCHORED, in _HOLD_ALWAYS); this suite fails if an
 # unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
 !_anchorgatetest.py
+
+# publish_lock.py's lockfile. Per-machine run state, never repo content: committing it would ship
+# one box's "a runner is publishing right now" to every other checkout and wedge them all until it
+# aged past the six-hour stale budget. The .stale.* form is the rename a stale-lock break goes
+# through; it is deleted immediately and only survives a crash inside the break itself.
+.publish.lock
+.publish.lock.stale.*

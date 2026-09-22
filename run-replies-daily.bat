@@ -29,6 +29,7 @@ REM  four things git cannot: the pipeline's own files are here, this is a work t
 REM  deeper than a stub, and origin is this project. It only ever refuses.
 call repo_guard.bat "%~dp0" "%LOG%"
 if errorlevel 1 exit /b 1
+
 python -u replies.py >> "%LOG%" 2>&1
 
 REM DETECTION IS NOT SUPPRESSION. replies.py only writes stop:true into replies.json; optout_sync.py
@@ -46,6 +47,34 @@ REM Runs on whichever machine is armed, right after the scan that produces its i
 REM rebuild below so a fresh opt-out reaches the board in the same pass. It only ever ADDS and
 REM re-running is a no-op, so a failure here must not stop the publish.
 python -u optout_sync.py >> "%LOG%" 2>&1
+
+REM  PUBLISH LOCK, and this file is the reason the lock exists. Five .bat files rebuild docs/ and
+REM  push it, and until 2026-09-22 the only thing keeping two of them apart was the clock on their
+REM  triggers. On 2026-09-15 at 19:11 this file published 709 phones over a live 1,148 and
+REM  run-phones-nightly.bat published 714 over the same board a minute later; the poorer build became
+REM  origin/main, which moved the baseline every later publish_guard compared against. Refresh runs
+REM  05:30 and has measured 2h11m, 2h49m, 3h08m and ~4h on different days, so "it will be done by
+REM  08:30" is an assumption, not a mechanism. This is the mechanism.
+REM
+REM  IT SITS HERE AND NOT AT THE TOP OF THE FILE, and that placement is the whole design. Everything
+REM  above this line - the inbox scan and optout_sync.py carrying detected STOPs into optouts.json -
+REM  is the time-critical work this file exists for and it contends with nothing: it reads a mailbox
+REM  and appends to a ledger that is add-only. Only the REBUILD AND PUSH below races another runner.
+REM  A guard at the top would have made a locked morning a morning with no reply scan and no opt-out
+REM  sync at all, which is a worse failure than the race it prevents - the STOP has to reach the
+REM  ledger before anything sends at 09:00.
+REM
+REM  So a held lock is a DEGRADED run, not a dead one: replies are scanned, opt-outs are synced, and
+REM  only the board publish is skipped - which is what a blocked gate already does here, and what
+REM  CLAUDE.md names as correct. rc=9 says so. It jumps to :nolock, NOT :end, because :end releases
+REM  the lock and this run never held it.
+python -u publish_lock.py acquire run-replies-daily.bat >> "%LOG%" 2>&1
+if errorlevel 1 (
+  echo     ^!^! PUBLISH LOCK: another publishing runner is mid-run - board NOT rebuilt or pushed. >> "%LOG%"
+  echo     ^!^! Replies were scanned and opt-outs synced above, so nothing warm was lost. >> "%LOG%"
+  echo     ^!^! PUBLISH LOCK: another runner is mid-run - replies saved, publish skipped.
+  goto :nolock
+)
 
 REM Bake the fresh replies into the board and publish. Rebuild-only (no scrape) — this is
 REM the same command the memory file records for time-critical rebuilds, ~2 min total.
@@ -121,9 +150,23 @@ if not errorlevel 1 (
   call publish_verify.bat "%LOG%" "-" "replies: morning scan baked into board"
 )
 :end
+rem  RELEASE THE PUBLISH LOCK. Every path out of this file below the acquire reaches :end, which is
+rem  what makes one release enough - a lock released on the happy path only wedges the machine on
+rem  the first rebuild failure. It always exits 0 and only removes a lock this runner owns, so it
+rem  can neither change the code below nor drop another runner's lock.
+python -u publish_lock.py release run-replies-daily.bat >> "%LOG%" 2>&1
 rem  ...and carry it out. This file ended at `endlocal` with no exit code, so a run whose mirror
 rem  never published - and whose live site therefore did not move - returned 0 like any other.
 rem  rc=5 = the reply was saved, the board was gated and pushed here, the live site is unchanged.
 rem  `endlocal & exit /b` on one line: both halves are parsed before endlocal discards the variable.
 if "%MIRRORFAIL%"=="1" (endlocal & exit /b 5)
 endlocal & exit /b 0
+
+rem  BELOW THE FINAL EXIT ON PURPOSE - control must not fall into it. rc=9 = another publishing
+rem  runner held the lock, so the board was not rebuilt or pushed. NO RELEASE here: the lock is the
+rem  other runner's and dropping it would be worse than the race it was stopping. The scan and the
+rem  opt-out sync above this ran normally, which is why this is a degraded morning and not a failed
+rem  one - but it is still not rc=0, because the live board did not move.
+:nolock
+echo ==== done - DEGRADED, publish lock held, board not published %date% %time% ==== >> "%LOG%"
+endlocal & exit /b 9
