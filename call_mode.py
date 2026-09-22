@@ -2376,23 +2376,39 @@ def make_callmode(slim, codes, encrypt, built, board_sig, optouts=None, deads=No
         rows, total = call_rows(slim, optouts, deads)
     else:
         rows, total = rows
-    # BEFORE the seat split — see the coverage-rows note below. A lead carried by the OTHER seat is
-    # still carried, and must not reappear here as uncovered work.
-    _dial_all = list(rows)
     if seat:
         _sn, _si, _sw = seat
         if not (_sn > 1 and 0 <= _si < _sn):
             raise CallModeError('call_mode: bad seat %r (want n>1, 0<=i<n)' % (seat,))
         rows = seat_rows(rows, _sn, _si)
+    # ---- COVERAGE IS CUT AGAINST *THIS PAGE'S* DIAL LIST (2026-09-21) -------------------------
+    # This was cut against the CREW-WIDE list, one line ABOVE the seat split, on the argument that
+    # the nine board lane counts describe the business and halving them per phone would make two
+    # callers read two different books. The argument is right; the code did the opposite of it.
+    #
+    # A seat page shipped `rows` (its own half) plus coverage for everything outside the CREW dial
+    # list — so the OTHER seat's rows were in NEITHER list and were absent from the page entirely.
+    # Every board lane on Alejandro's handset read short by the size of Carlos's queue, and the
+    # leads that went missing were the most callable in the book: they had passed every gate and
+    # made the cap, which is exactly why coverage skipped them. The guard below did not catch it
+    # because it checked the CREW union rather than what this page actually ships.
+    #
+    # Scaling the cap with the crew (1863e22) doubled the hole rather than closing it: the crew
+    # window went 400 -> 800, so ~400 leads now fall off each page instead of ~200.
+    #
+    # Cut against this page's own list and each page carries the WHOLE book: its own rows dialable,
+    # every other lead as a countable, un-dialable coverage row. Both phones then total the same
+    # 2,394 — which is what the crew-wide cut was trying to achieve and did not.
+    _dial_all = list(rows)
     # total stays the CREW-WIDE qualifying count on purpose: "N qualifying" describes the funnel,
     # not this phone. SHOWN (len(rows)) is what this seat actually carries.
     # phone_index stays FULL on both seats: "Who texted me?" must resolve a number from either half.
     #
-    # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead the dial queue
-    # drops (no traced number, auction past the 60-day window, over the cap) as a countable,
-    # sortable, un-dialable row. Cut from the CREW-WIDE dial list, never the seat's: the nine board
-    # lane counts describe the business, and halving them per phone would make two callers read two
-    # different books. See coverage_rows for what is deliberately absent from them.
+    # COVERAGE ROWS ride the SAME payload. They are the rest of the book — every lead THIS page's
+    # dial queue does not carry (no traced number, auction past the 60-day window, over the cap, or
+    # on the other caller's phone) as a countable, sortable, un-dialable row, so the nine board lane
+    # counts on a handset describe the whole business. See coverage_rows for what is deliberately
+    # absent from them, and the cut note above for why it is this page's list and not the crew's.
     _cov, _cov_sup = coverage_rows(slim, [r.get('c') for r in _dial_all], optouts, deads)
     # EVERY LEAD, OR SAY WHICH ONES ARE MISSING. The whole promise of the board lanes on the phone
     # is that they count the same book the board counts; a lead that falls out of BOTH the dial
