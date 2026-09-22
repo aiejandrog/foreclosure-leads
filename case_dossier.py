@@ -171,16 +171,31 @@ def _operative_judgment(rows):
     settle it. `amount` is carried only when exactly one candidate has one, for the same reason.
     """
     found = [r for r in rows if r.get('is') == 'final_judgment']
+    satisfied_by = [r.get('source_ref') for r in rows if r.get('is') == 'satisfaction_of_judgment']
     if not found:
         return {'operative': None, 'candidates': [], 'certain': False,
-                'why': 'no read document on this case classifies as a final judgment'}
+                'satisfied_by': satisfied_by,
+                'why': 'no read document on this case classifies as a final judgment'
+                       + (' (a satisfaction of judgment WAS read: %s)' % ', '.join(
+                           str(r) for r in satisfied_by) if satisfied_by else '')}
     refs = [r.get('source_ref') for r in found]
     if len(found) == 1:
         amounts = found[0].get('amounts') or []
+        printed = amounts[0]['amount'] if len({a['amount'] for a in amounts}) == 1 else None
+        if satisfied_by:
+            # A satisfaction discharges the judgment. The judgment's figure is history, not a debt:
+            # `amount` goes to None so nothing downstream can read a paid judgment as owed, and
+            # the printed figure survives under a name that says what it is.
+            return {'operative': refs[0], 'candidates': refs, 'certain': True,
+                    'amount': None, 'printed_amount': printed, 'satisfied': True,
+                    'satisfied_by': satisfied_by,
+                    'why': ('the judgment was read AND a satisfaction of it was read (%s): the '
+                            'judgment amount is not an outstanding debt'
+                            % ', '.join(str(r) for r in satisfied_by))}
         return {'operative': refs[0], 'candidates': refs, 'certain': True,
-                'amount': amounts[0]['amount'] if len(
-                    {a['amount'] for a in amounts}) == 1 else None}
+                'amount': printed, 'satisfied': False, 'satisfied_by': []}
     return {'operative': None, 'candidates': refs, 'certain': False,
+            'satisfied_by': satisfied_by,
             'why': ('%d read documents on this case classify as a final judgment (%s). Which one '
                     'controls is a legal question the text does not answer: they may be an '
                     'original and an amended judgment, judgments on separate counts, or one of '
@@ -327,6 +342,9 @@ def _conclusion(case, b, c, d):
     if other:
         part_c += ('; %d other document(s) read belong to a different action against the same '
                    'party and are not evidence about this case' % other)
+    if (c.get('judgment') or {}).get('satisfied_by'):
+        part_c += ('; a satisfaction of judgment was read, so no judgment amount on this case is '
+                   'an outstanding debt')
     return ('%s: %s. %s. The equity verdict rests on %s.'
             % (case, d['short'], part_c,
                ' and '.join(d['rests_on']) or 'nothing'))

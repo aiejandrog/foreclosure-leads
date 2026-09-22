@@ -29,6 +29,17 @@ RULES = {
         [r'\blet\s+execution\s+issue\b', r'\bORDERED\s+AND\s+ADJUDGED\b',
          r'\bthere\s+is\s+due\b', r'\bforeclosure\s+sale\b', r'\bclerk\s+shall\s+sell\b',
          r'\btotal\s+sum\b']),
+    # A satisfaction of judgment QUOTES the judgment it discharges, so on raw title hits it looks
+    # like a final judgment. It is the opposite fact: the debt the judgment fixed is paid. Measured
+    # 2026-09-22 on 50-2026-CA-000685 (Palm Beach): DIN 30 judgment $993,885.33, DIN 40 a filed
+    # satisfaction acknowledging full payment. Reading only the judgment reports a paid debt as owed.
+    'satisfaction_of_judgment': (
+        [r'\bSATISFACTION\s+OF\s+(THE\s+)?(FINAL\s+|MONEY\s+)?JUDGMENT\b',
+         r'\bRELEASE\s+(AND\s+SATISFACTION\s+)?OF\s+(THE\s+)?(FINAL\s+)?JUDGMENT\b',
+         r'\bJUDGMENT\s+(IS|HAS\s+BEEN)\s+(FULLY\s+)?(PAID\s+AND\s+)?SATISFIED\b'],
+        [r'\bpaid\s+in\s+full\b', r'\bfull\s+payment\b', r'\bfully\s+satisfied\b',
+         r'\bsatisfaction\s+of\s+record\b', r'\bcancel\s+(the\s+)?(same\s+)?of\s+record\b',
+         r'\backnowledges?\b']),
     'lis_pendens': (
         [r'\bNOTICE\s+OF\s+LIS\s+PENDENS\b', r'\bLIS\s+PENDENS\b'],
         [r'\baction\s+has\s+been\s+commenced\b', r'\bTO\s+THE\s+DEFENDANTS?\b',
@@ -92,12 +103,14 @@ MIN_MARGIN = 2          # and the runner-up must be this far behind
 # carries its own title and clears MIN_SCORE, the generic one it names is out of contention.
 SUBSUMED_BY = {
     'mortgage': ('satisfaction_of_mortgage', 'assignment_of_mortgage', 'final_judgment'),
-    'order': ('final_judgment',),
+    'order': ('final_judgment', 'satisfaction_of_judgment'),
+    'final_judgment': ('satisfaction_of_judgment',),
 }
 
 # The clerk's own label, mapped to the same vocabulary, PURELY so agreement can be reported.
 # Never used to decide anything.
 INDEX_HINTS = [
+    (re.compile(r'\b(SATISF|RELEASE)\w*\b.*\bJUDG', re.I), 'satisfaction_of_judgment'),
     (re.compile(r'\bJUDG', re.I), 'final_judgment'),
     (re.compile(r'\bLIS\s*PEND', re.I), 'lis_pendens'),
     (re.compile(r'\bSATISFACTION|RELEASE\b', re.I), 'satisfaction_of_mortgage'),

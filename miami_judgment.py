@@ -645,7 +645,9 @@ GRAY_CUTOFF_SWEEP = (160, 200, 130, 220)
 # earlier run", demoted it to `unknown` because a skipped row has no reading to classify, and
 # never exercised the new check on the text at all. The verdict looked right and nothing had
 # re-read anything.
-PIPELINE_VERSION = 6
+# 7: the classifier learned satisfaction_of_judgment (a satisfaction quotes its judgment, so
+# version 6 would have filed it as a final judgment and reported a paid debt as owed).
+PIPELINE_VERSION = 7
 
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,

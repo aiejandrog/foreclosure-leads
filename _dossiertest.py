@@ -137,6 +137,53 @@ class ClassifierTests(unittest.TestCase):
             self.assertEqual(DC.classify(reading_of(lines))['kind'], expected, expected)
 
 
+# Shaped on 50-2026-CA-000685 (Palm Beach, 2026-09-22): the satisfaction names the judgment it
+# discharges, so its text carries "FINAL JUDGMENT" too. Synthetic wording, no party names.
+SATISFACTION = ['IN THE CIRCUIT COURT OF THE FIFTEENTH JUDICIAL CIRCUIT IN AND FOR PALM BEACH',
+                'SATISFACTION OF FINAL JUDGMENT',
+                'Plaintiff acknowledges full payment and satisfaction of the Final Judgment of '
+                'Foreclosure entered May 4, recorded in Official Records Book 36502 Page 322',
+                'and directs the Clerk to cancel the same of record']
+
+
+class SatisfactionOfJudgmentTests(unittest.TestCase):
+    def test_a_satisfaction_that_quotes_its_judgment_is_a_satisfaction(self):
+        self.assertEqual(DC.classify(reading_of(SATISFACTION))['kind'],
+                         'satisfaction_of_judgment')
+
+    def test_a_judgment_alone_is_still_a_judgment(self):
+        self.assertEqual(DC.classify(reading_of(JUDGMENT))['kind'], 'final_judgment')
+
+    def test_the_index_label_maps_to_the_satisfaction_not_the_judgment(self):
+        self.assertEqual(DC.index_kind('SATISFACTION OF JUDGMENT'), 'satisfaction_of_judgment')
+        self.assertEqual(DC.index_kind('FINAL JUDGMENT'), 'final_judgment')
+
+    def _rows(self, with_satisfaction):
+        rows = [{'source_ref': 'court:30', 'is': 'final_judgment',
+                 'amounts': [{'amount': 993885.33}]}]
+        if with_satisfaction:
+            rows.append({'source_ref': 'court:40', 'is': 'satisfaction_of_judgment', 'amounts': []})
+        return rows
+
+    def test_a_satisfied_judgment_carries_no_outstanding_amount(self):
+        j = CD._operative_judgment(self._rows(True))
+        self.assertIsNone(j['amount'])
+        self.assertEqual(j['printed_amount'], 993885.33)
+        self.assertTrue(j['satisfied'])
+        self.assertEqual(j['satisfied_by'], ['court:40'])
+
+    def test_an_unsatisfied_judgment_keeps_its_amount(self):
+        j = CD._operative_judgment(self._rows(False))
+        self.assertEqual(j['amount'], 993885.33)
+        self.assertFalse(j['satisfied'])
+
+    def test_a_satisfaction_without_its_judgment_is_still_reported(self):
+        j = CD._operative_judgment(self._rows(True)[1:])
+        self.assertIsNone(j['operative'])
+        self.assertEqual(j['satisfied_by'], ['court:40'])
+        self.assertIn('satisfaction of judgment WAS read', j['why'])
+
+
 class CitedInstrumentTests(unittest.TestCase):
     """Chain-following starts here: an owner-name search never sees a lien recorded against a
     prior owner, but the document that references it does."""
