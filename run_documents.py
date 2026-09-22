@@ -507,6 +507,19 @@ def main(argv=None):
         except document_interpreter.NotConfigured as gap:
             parser.exit(2, '--vision cannot run here: %s\n' % gap)
 
+    # PREFLIGHT, before any data loads. On 2026-09-22 the desktop batch ran from a fresh worktree:
+    # captcha.key is gitignored, so it was not there, and the first three cases each burned a mint
+    # attempt before anyone noticed. A missing input that makes a whole night useless is an exit
+    # here, not a per-case reason in 349 dossiers.
+    if args.token_budget > 0:          # gen_records_qs.mint_qs solves through 2Captcha only
+        import captcha_solver
+        if not captcha_solver.has_key():
+            parser.exit(2, '--token-budget needs a 2Captcha key (captcha.key in '
+                           'this folder, or TWOCAPTCHA_KEY / CAPTCHA_KEY). A fresh worktree does '
+                           'not have it: it is gitignored. Copy it in, or run with budgets at 0.\n')
+    if not os.path.exists(QS_CACHE) and not args.token_budget:
+        print('run_documents: WARNING %s is missing and --token-budget is 0, so every case will be '
+              'skipped for no search token. Copy it in from the main repo folder.' % QS_CACHE)
     leads = _lead_rows(only=args.case or None)
     if not leads:
         print('run_documents: %s is missing or empty; nothing to do.' % LEADS)

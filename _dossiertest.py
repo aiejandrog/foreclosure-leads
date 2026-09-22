@@ -306,6 +306,17 @@ class StageTests(unittest.TestCase):
             RD.main(['--enable', '--interpret'])
         self.assertEqual(caught.exception.code, 2)
 
+    def test_a_token_budget_without_a_captcha_key_stops_before_any_case(self):
+        import captcha_solver
+        real = captcha_solver.has_key
+        captcha_solver.has_key = lambda: False
+        try:
+            with self.assertRaises(SystemExit) as caught:
+                RD.main(['--enable', '--token-budget', '5'])
+            self.assertEqual(caught.exception.code, 2)
+        finally:
+            captcha_solver.has_key = real
+
     def test_dossiers_land_outside_the_repo_and_outside_onedrive(self):
         path = str(RD.dossier_path('MIAMI-DADE', CASE))
         self.assertTrue(path.startswith(_TMP))
