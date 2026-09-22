@@ -95,7 +95,7 @@ def pick_cases(leads, chains, limit, only=None):
 
 def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpreter=None,
              gray_cutoff=DS.WATERMARK_GRAY_CUTOFF,
-             budget=None):
+             budget=None, vision_budget=None):
     """One case through all seven steps. Returns its dossier."""
     case, owner = entry['case'], entry['owner']
     token = qs_cache.get(owner)
@@ -108,7 +108,8 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
             # resume=True: the nightly stage's job is the day's backlog, not re-reading
             # yesterday's documents. The pilot CLI defaults the other way on purpose.
             report = MJ.run(case, models, queue=queue, ocr=ocr, judgments_only=True,
-                            keep_images=keep_images, gray_cutoff=gray_cutoff, resume=True)
+                            keep_images=keep_images, gray_cutoff=gray_cutoff, resume=True,
+                            vision_budget=vision_budget)
             rows = report['documents']
             inventory = report.get('_inventory')
         except Exception as exc:
@@ -159,6 +160,14 @@ def main(argv=None):
                         help='page-cited extraction through document_interpreter (needs --max-spend)')
     parser.add_argument('--max-spend', type=float, default=0.0,
                         help='hard dollar cap for --interpret. No cap, no interpretation.')
+    parser.add_argument('--vision', action='store_true',
+                        help='read page images through the Claude API when OCR\'s figures do not '
+                             'add up (needs --vision-max-spend and ANTHROPIC_API_KEY)')
+    parser.add_argument('--vision-max-spend', type=float, default=1.00,
+                        help='hard dollar cap for --vision ACROSS THE WHOLE RUN. One measured '
+                             'judgment cost $0.0675 on claude-opus-5 (2026-09-22, three pages, '
+                             'one of which should not have been sent); the default covers a '
+                             'nightly --limit 10 with room to spare.')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
     try:
@@ -183,6 +192,19 @@ def main(argv=None):
         import document_interpreter
         interpreter = document_interpreter.build()
         budget = document_interpreter.Budget(args.max_spend)
+    vision_budget = None
+    if args.vision:
+        # Same rule as --interpret, and for the same reason: validated here, before a single
+        # record is loaded, so a machine that cannot pay finds out before it does the work.
+        if args.vision_max_spend <= 0:
+            parser.exit(2, '--vision needs a positive --vision-max-spend\n')
+        import document_interpreter
+        import document_vision
+        vision_budget = document_interpreter.Budget(args.vision_max_spend)
+        try:
+            document_vision.VisionReader().client()
+        except document_interpreter.NotConfigured as gap:
+            parser.exit(2, '--vision cannot run here: %s\n' % gap)
 
     leads = _load(LEADS, [])
     if not leads:
@@ -211,7 +233,7 @@ def main(argv=None):
         for entry in picked:
             dossier = run_case(entry, qs_cache, queue=queue, ocr=ocr,
                                keep_images=args.keep_images, interpreter=interpreter,
-                               budget=budget)
+                               budget=budget, vision_budget=vision_budget)
             target = dossier_path(COUNTY, entry['case'])
             target.parent.mkdir(parents=True, exist_ok=True)
             DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
@@ -224,6 +246,9 @@ def main(argv=None):
           % (written, read_ok))
     if budget:
         print('  interpretation spend: $%.4f of $%.2f' % (budget.spent, budget.limit))
+    if vision_budget:
+        print('  second-reader spend: $%.4f of $%.2f' % (vision_budget.spent,
+                                                         vision_budget.limit))
     if written and not read_ok:
         print('  NOTE: no document was read. On Miami scans that means OCR did not run or did '
               'not return text — every dossier section c is honestly empty.')

@@ -1273,6 +1273,39 @@ class VisionAdmissibilityTests(unittest.TestCase):
         self.assertFalse(MJ.admissible(found[0]))
         self.assertIsNone(MJ.agreed_amount([c for c in found if MJ.admissible(c)]))
 
+    def test_prose_mentioning_a_grand_total_is_not_paid_for(self):
+        """The 2026-09-22 pilot bought a third page because its body text said "grand total sum"
+        in the middle of a sentence. A label that decides a figure starts its own line."""
+        prose = ('IT IS ORDERED that the defendant shall pay the grand total sum set out above '
+                 'together with interest at the statutory rate.')
+        reading = {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text': prose,
+                              'text_source': 'ocr'},
+                             {'page': 2, 'outcome': 'ocr_text', 'text': RERUN_PAGE2,
+                              'text_source': 'ocr'}]}
+        path = os.path.join(_TMP, 'vision3.pdf')
+        with open(path, 'wb') as fh:
+            fh.write(DS.merge_pages(judgment_pages())[0])
+        self.assertEqual(MJ.total_label_lines(prose), [])
+        _, detail = MJ.vision_candidates(path, reading, DI.Budget(1.0),
+                                         reader=DV.VisionReader(client=FakeAnthropic(VISION_REPLY)))
+        self.assertEqual(sorted(detail['pages']), [2])
+
+    def test_the_run_records_what_each_page_cost(self):
+        found, detail = self._report(VISION_REPLY)
+        self.assertTrue(detail['pages'])
+        for result in detail['pages'].values():
+            self.assertIsNotNone(result.get('usd'))
+            self.assertIsNotNone(result.get('input_tokens'))
+
+    def test_a_vision_figure_is_still_refused_for_the_equity_math(self):
+        """Corroborated is not usable. Alejandro confirmed the refusal on 2026-09-22 and the
+        reader changing does not change the reason for it."""
+        found, _ = self._report(VISION_REPLY)
+        report = {'documents': [{'page_count_verified': True, 'read_status': 'read',
+                                 'amount_candidates': found}]}
+        self.assertIsNone(MJ.judgment_for_analyze(report))
+        self.assertEqual(MJ.judgment_for_analyze(report, allow_ocr=True), 14698.60)
+
     def test_only_pages_carrying_a_total_label_are_paid_for(self):
         reading = {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text': 'no money words here',
                               'text_source': 'ocr'},

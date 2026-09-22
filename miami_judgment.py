@@ -343,6 +343,31 @@ def stamp_identity(reading, record):
             'agrees': bool(agree)}
 
 
+_MONEY_ON_LINE = re.compile(r'\$?\s*\d[\d,]*\.\d{2}')
+
+
+def total_label_lines(text):
+    """Lines that are a total ROW in a table, not prose that happens to mention a total.
+
+    The 2026-09-22 pilot paid to have a third page read because its body text contained the words
+    "grand total sum" in the middle of a sentence. A label that decides a figure sits at the START
+    of its own line, in a label column, and the line either carries the figure or is short because
+    the figure is in the column beside it. A sentence is neither.
+    """
+    out = []
+    for raw in (text or '').splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        match = TOTAL_RE.search(line)
+        # start() > 2 means the words appear inside a sentence, not as the row's label.
+        if not match or match.start() > 2:
+            continue
+        if _MONEY_ON_LINE.search(line) or len(line) <= 48:
+            out.append(line)
+    return out
+
+
 def vision_candidates(path, reading, budget, reader=None, out_dir=None):
     """Ask the second reader for the pages OCR could not resolve. -> (candidates, detail)
 
@@ -353,7 +378,7 @@ def vision_candidates(path, reading, budget, reader=None, out_dir=None):
     """
     wanted = sorted({page['page'] for page in reading['pages']
                      if page['outcome'] in ('text', 'ocr_text')
-                     and TOTAL_RE.search(page.get('text') or '')})
+                     and total_label_lines(page.get('text'))})
     if not wanted:
         # No page claims to carry a total. Reading them all would be spending to find that out.
         wanted = sorted({page['page'] for page in reading['pages']
@@ -501,6 +526,10 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
     return results
 
 
+# How many corroborated judgments to eyeball against their page images before the refusal in
+# judgment_for_analyze is worth revisiting. A number, so the review has an end.
+REVIEW_THRESHOLD = 12
+
 # Grey cutoffs to try, in order, when the first one's reading is not corroborated.
 #
 # One cutoff is a guess, and the 2026-09-22 rerun showed it was the wrong guess: at 160 the
@@ -545,7 +574,7 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     # total the document's line items reproduce, there is nothing left to buy.
     vision = None
     if vision_budget is not None and not any(c.get('sum_check') for c in candidates):
-        vision = {'pages_read': 0, 'usd': 0.0, 'documents': []}
+        vision = {'pages_read': 0, 'usd': 0.0, 'documents': [], 'pages': []}
         for row in rows:
             if row.get('status') != 'stored' or not row.get('reading'):
                 continue
@@ -553,13 +582,30 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
                 row['path'], row['reading'], vision_budget, reader=vision_reader,
                 out_dir=row.get('images_dir'))
             row['vision_candidates'] = found
+            # ALSO on the row's own candidate list. They were only ever in `vision_candidates`,
+            # which judgment_for_analyze and case_dossier do not read, so a correctly read
+            # judgment reached the report and stopped there. Whether the figure is then usable
+            # is a policy question, decided in judgment_for_analyze; it should not be decided by
+            # a figure quietly not arriving.
+            row['amount_candidates'] = (row.get('amount_candidates') or []) + found
             row['vision_figures'] = detail['figures']
             row['vision_errors'] = detail['errors']
             candidates.extend(found)
             vision['pages_read'] += len(detail['pages'])
             vision['usd'] = round(vision['usd'] + detail['usd'], 6)
+            # Per PAGE, not just per document. A nightly cap set from a per-document total is
+            # set from a number nobody can check; the pilot's $0.0675 was three pages, one of
+            # which should never have been sent.
+            per_page = [{'page': no,
+                         'usd': result.get('usd'),
+                         'input_tokens': result.get('input_tokens'),
+                         'output_tokens': result.get('output_tokens')}
+                        for no, result in sorted(detail['pages'].items())]
+            vision['pages'].extend(dict(page, source_ref=row['source_ref'])
+                                   for page in per_page)
             vision['documents'].append({'source_ref': row['source_ref'],
                                         'pages': sorted(detail['pages']),
+                                        'page_costs': per_page,
                                         'figures': len(detail['figures']),
                                         'errors': detail['errors'], 'usd': detail['usd']})
         vision['budget'] = vision_budget.report()
@@ -595,6 +641,15 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         # subtotal the watermark crossed.
         'judgment_amount_corroborated': any(c.get('sum_check') for c in candidates),
     }
+    # Says in WORDS why a corroborated figure still does not reach records_liens.analyze. It is a
+    # reviewed decision (Alejandro, 2026-09-22), and a null field with no reason beside it reads
+    # like a bug to the next person who opens this file.
+    report['judgment_amount_held_back'] = (
+        'corroborated by the document\'s own line items, and still held back from the equity '
+        'math by policy: every figure here is read off a scan, and analyze() picks which mortgage '
+        'is the foreclosing first by closest amount. Revisit after %d of these have been checked '
+        'against the kept page images.' % REVIEW_THRESHOLD
+        if any(c.get('sum_check') for c in candidates) else None)
     # The stricter figure: only from a document that was page-verified AND fully read. This is the
     # one a caller may hand to records_liens.analyze; `judgment_amount_agreed` above is the looser
     # view for a human reading the report.
@@ -617,6 +672,47 @@ def strip_readings(report):
     return report
 
 
+# A figure produced by reading an IMAGE, by either reader. `None` and 'embedded' mean the PDF's
+# own text layer, which is the county's typesetting and not a reading of ink.
+SCAN_SOURCES = ('ocr', 'vision')
+
+
+CORROBORATION_LOG = 'judgment_corroborations.json'
+
+
+def log_corroboration(report, filename=CORROBORATION_LOG):
+    """Append this case to the review log when a scanned figure was corroborated. -> count, path
+
+    The refusal in judgment_for_analyze ends when enough of these have been checked by a human
+    against the kept page images. That needs a count that survives the run, not a number someone
+    remembers. Add-only, one entry per case (the newest wins on a re-run), and it goes to the
+    DealFlow folder through case_review.output_path like every other file carrying case data.
+    """
+    if not report.get('judgment_amount_corroborated'):
+        return None, None
+    import case_review
+    target = case_review.output_path(filename)
+    try:
+        entries = json.loads(target.read_text(encoding='utf-8'))
+        if not isinstance(entries, list):
+            entries = []
+    except (OSError, ValueError):
+        entries = []
+    entries = [e for e in entries if e.get('case') != report['case']]
+    sources = sorted({c.get('text_source') for c in report['judgment_amount_candidates']
+                      if c.get('sum_check')} - {None})
+    entries.append({'case': report['case'], 'county': report['county'],
+                    'amount': report['judgment_amount_agreed'],
+                    'read_by': sources,
+                    'images': sorted({r.get('images_dir') for r in report.get('documents', [])
+                                      if r.get('images_dir')}),
+                    # A human sets this to true once they have compared the figure to the image.
+                    'checked_against_image': False})
+    target.parent.mkdir(parents=True, exist_ok=True)
+    DS._atomic_write_text(str(target), json.dumps(entries, indent=2) + '\n')
+    return len(entries), target
+
+
 def judgment_for_analyze(report, allow_ocr=False):
     """The value a caller MAY pass as `records_liens.analyze(..., judgment=...)`, or None.
 
@@ -624,7 +720,8 @@ def judgment_for_analyze(report, allow_ocr=False):
     whose pages agree on one total. Anything less returns None and the caller keeps the board's
     own figure — which is what happens today.
 
-    OCR-sourced figures are EXCLUDED by default. `analyze` uses this number to pick which open
+    Figures read off a SCAN are EXCLUDED by default — OCR's and the vision reader's alike. The
+    reader changed on 2026-09-22; the reason for the refusal did not. `analyze` uses this number to pick which open
     mortgage is the foreclosing first, by closest amount; one misread digit picks a different
     mortgage and the equity number comes out wrong in a way nothing downstream can see. Every
     Miami judgment seen so far is a scan, so in practice this returns None until a human has
@@ -639,14 +736,14 @@ def judgment_for_analyze(report, allow_ocr=False):
             if r.get('page_count_verified') and r.get('read_status') == 'read']
     candidates = [c for r in good for c in (r.get('amount_candidates') or [])]
     if allow_ocr:
-        # The escape hatch gets a guard. An OCR'd figure is admissible only when the page's own
+        # The escape hatch gets a guard. A scanned figure is admissible only when the page's own
         # line items add up to it: the pilot showed OCR reading a grand total correctly while
         # misreading a subtotal the watermark crossed, with nothing anywhere to say so. Two
         # readings of the same arithmetic agreeing is evidence; one figure is not.
         candidates = [c for c in candidates
-                      if c.get('text_source') != 'ocr' or c.get('sum_check')]
+                      if c.get('text_source') not in SCAN_SOURCES or c.get('sum_check')]
     else:
-        candidates = [c for c in candidates if c.get('text_source') != 'ocr']
+        candidates = [c for c in candidates if c.get('text_source') not in SCAN_SOURCES]
     return agreed_amount(candidates) if candidates else None
 
 
@@ -782,6 +879,10 @@ def main(argv=None):
         v = report['vision']
         print('  second reader (page images): %d page(s), $%.4f of the $%.2f cap'
               % (v['pages_read'], v['usd'], v['budget']['limit_usd']))
+        for page in v.get('pages') or []:
+            print('      page %s: $%.4f (%s in, %s out)'
+                  % (page['page'], page['usd'] or 0.0,
+                     page['input_tokens'], page['output_tokens']))
         for doc in v['documents']:
             for page, why in sorted((doc['errors'] or {}).items()):
                 print('      page %s not read: %s' % (page, why))
@@ -791,10 +892,12 @@ def main(argv=None):
     if agreed is None and report['judgment_amount_rejected']:
         print('  a figure WAS extracted and is not being reported: the document\'s own line items '
               'do not add up to it, so it is as likely to be the wrong row as the right one')
-    usable = report['judgment_amount_usable']
-    if usable is None and report['judgment_amount_usable_with_ocr'] is not None:
-        print('  the only figure came from OCR, and the line items do sum to it — check it '
-              'against the page image, then it is worth quoting')
+    if report.get('judgment_amount_held_back'):
+        print('  NOT a bug: %s' % report['judgment_amount_held_back'])
+        count, target = log_corroboration(report)
+        if count is not None:
+            print('  %d of %d corroborated judgment(s) logged for review -> %s'
+                  % (count, REVIEW_THRESHOLD, target))
     strip_readings(report)
     if args.out:
         import case_review
