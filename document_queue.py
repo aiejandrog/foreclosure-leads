@@ -158,7 +158,7 @@ class DocumentQueue:
         return job
 
     def claim_ref(self, owner, county, case, source_ref, kind, lease=DEFAULT_LEASE,
-                  reader_version=None, can_ocr=False):
+                  reader_version=None, can_ocr=False, force=False):
         """Claim ONE named job, or None when it is genuinely finished or held by someone else.
 
         A caller working a specific document needs this rather than `claim()`: taking "any ready
@@ -173,6 +173,11 @@ class DocumentQueue:
             all, which is what every row written before this change looks like) AND this run can
             OCR where the last one could not.
 
+        `force=True` takes a done job regardless. The version check answers "has the code moved?",
+        which only works if the version covers everything that could change; three runs in a row
+        were skipped because it did not. `force` is the caller saying "read it again" and being
+        obeyed.
+
         A document that this same reader already read to completion is left alone, so a normal
         re-run is still free. Pass neither argument and `done` stays terminal as before.
         """
@@ -184,6 +189,10 @@ class DocumentQueue:
             args.append(reader_version)
         if can_ocr:
             ready.append("(status = 'done' AND (read_status IS NULL OR read_status != 'read'))")
+        if force:
+            # The caller has said it wants this document read again whatever the queue thinks.
+            # A diagnostic tool re-running one document must not be argued with by a cache.
+            ready.append("status = 'done'")
         self.db.execute('BEGIN IMMEDIATE')
         try:
             row = self.db.execute(

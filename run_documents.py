@@ -105,8 +105,10 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
         import records_liens
         models = records_liens.records_by_qs(token) or []
         try:
+            # resume=True: the nightly stage's job is the day's backlog, not re-reading
+            # yesterday's documents. The pilot CLI defaults the other way on purpose.
             report = MJ.run(case, models, queue=queue, ocr=ocr, judgments_only=True,
-                            keep_images=keep_images, gray_cutoff=gray_cutoff)
+                            keep_images=keep_images, gray_cutoff=gray_cutoff, resume=True)
             rows = report['documents']
             inventory = report.get('_inventory')
         except Exception as exc:

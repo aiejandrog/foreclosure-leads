@@ -24,6 +24,7 @@ import document_store as DS               # noqa: E402
 import document_interpreter as DI         # noqa: E402
 import document_queue as DQ               # noqa: E402
 import equity_state                       # noqa: E402
+import document_vision as DV              # noqa: E402
 import miami_judgment as MJ               # noqa: E402
 
 CASE = '2026-000000-CA-01'
@@ -698,21 +699,37 @@ class ResumeTests(unittest.TestCase):
             self.assertIsNone(q.claim_ref('w2', 'MIAMI-DADE', CASE, 'or/2', 'recorded_instrument'))
             self.assertEqual(q.claim('w2')['source_ref'], 'or/1')
 
-    def test_second_run_skips_the_document_it_already_stored(self):
+    def test_a_resuming_run_skips_the_document_it_already_stored(self):
+        # resume=True is the NIGHTLY stage's behaviour: finishing the day's backlog is the point.
         case = CASE + '-resume'
         pages = judgment_pages()
         path = os.path.join(_TMP, 'resume-e2e.db')
         with DQ.DocumentQueue(path) as q:
             first = MJ.collect_recorded(case, [record(pages=5)],
-                                        collector=self.collector(pages), queue=q)
+                                        collector=self.collector(pages), queue=q, resume=True)
         self.assertEqual(first[0]['status'], 'stored')
         self.assertTrue(first[0]['page_count_verified'])
         with DQ.DocumentQueue(path) as q:
             second = MJ.collect_recorded(case, [record(pages=5)],
-                                         collector=self.collector(pages), queue=q)
+                                         collector=self.collector(pages), queue=q, resume=True)
             self.assertEqual(q.coverage('MIAMI-DADE', case)['done'], 1)
         self.assertEqual(second[0]['status'], 'skipped')
         self.assertEqual(second[0]['prior_status'], 'done')
+
+    def test_the_pilot_re_reads_a_document_the_queue_calls_done(self):
+        # THE BUG, THREE TIMES. The pilot exists to run the same document again after a change,
+        # and the queue refused three runs in a row - the last one because `done` was keyed on the
+        # READER version while the change that run shipped was in the amount extraction.
+        case = CASE + '-rereads'
+        pages = judgment_pages()
+        path = os.path.join(_TMP, 'reread-e2e.db')
+        with DQ.DocumentQueue(path) as q:
+            MJ.collect_recorded(case, [record(pages=5)], collector=self.collector(pages), queue=q)
+        with DQ.DocumentQueue(path) as q:
+            again = MJ.collect_recorded(case, [record(pages=5)],
+                                        collector=self.collector(pages), queue=q)
+        self.assertEqual(again[0]['status'], 'stored')     # NOT 'skipped'
+        self.assertNotIn('already done', again[0].get('reason') or '')
 
     def test_an_access_gap_is_recorded_and_not_retried_as_a_download(self):
         case = CASE + '-gap'
@@ -1124,6 +1141,149 @@ class GraySweepTests(unittest.TestCase):
         finally:
             DS.read_pages = real
         self.assertEqual(len(seen), 1)
+
+
+
+# ---- the second reader ---------------------------------------------------------------------------
+class _Usage:
+    def __init__(self, i, o):
+        self.input_tokens, self.output_tokens = i, o
+
+
+class _Block:
+    type = 'text'
+
+    def __init__(self, text):
+        self.text = text
+
+
+class _Msg:
+    def __init__(self, text, i=1800, o=400):
+        self.content = [_Block(text)]
+        self.usage = _Usage(i, o)
+
+
+class FakeAnthropic:
+    """Records what was sent. No network, no spend."""
+
+    def __init__(self, reply):
+        self.reply = reply
+        self.sent = []
+
+        class _Messages:
+            @staticmethod
+            def count_tokens(model=None, system=None, messages=None):
+                return _Usage(1800, 0)
+
+            def create(_self, model=None, max_tokens=None, system=None, messages=None):
+                self.sent.append({'model': model, 'system': system, 'messages': messages})
+                return _Msg(self.reply)
+
+        self.messages = _Messages()
+
+
+# What the page actually says, as a reader looking at the image would transcribe it — including
+# the four figures Windows OCR lost or misread under the watermark.
+VISION_REPLY = json.dumps({
+    'rows': [{'label': 'Assessments subtotal', 'amount': '6,796.61', 'confident': True},
+             {'label': 'Costs subtotal', 'amount': '2,010.74', 'confident': True},
+             {'label': 'Collection fees subtotal', 'amount': '1,835.00', 'confident': True},
+             {'label': 'Attorney fee', 'amount': '4,056.25', 'confident': True}],
+    'grand_total': '$ 14,698.60', 'unreadable': []})
+
+
+class VisionTests(unittest.TestCase):
+    def reader(self, reply=VISION_REPLY):
+        return DV.VisionReader(client=FakeAnthropic(reply))
+
+    def test_a_page_image_is_sent_not_the_text(self):
+        reader = self.reader()
+        got = reader.read_page(b'\x89PNG-fake', DI.Budget(1.0))
+        content = reader._client.sent[0]['messages'][0]['content']
+        self.assertEqual(content[0]['type'], 'image')
+        self.assertEqual(content[0]['source']['media_type'], 'image/png')
+        self.assertEqual(got['grand_total'], 14698.60)
+        self.assertEqual(len(got['rows']), 4)
+
+    def test_the_budget_is_checked_before_the_call_not_after(self):
+        reader = self.reader()
+        budget = DI.Budget(0.0001)          # smaller than any real call
+        with self.assertRaises(DI.BudgetExhausted):
+            reader.read_page(b'x', budget)
+        self.assertEqual(reader._client.sent, [])    # nothing was sent
+
+    def test_the_run_reports_what_it_actually_spent(self):
+        reader = self.reader()
+        budget = DI.Budget(1.0)
+        got = reader.read_page(b'x', budget)
+        # 1800 in @ $5/MTok + 400 out @ $25/MTok = $0.009 + $0.010
+        self.assertAlmostEqual(got['usd'], 0.019, places=6)
+        self.assertAlmostEqual(budget.report()['spent_usd'], 0.019, places=6)
+
+    def test_a_row_whose_amount_cannot_be_read_is_dropped_not_zeroed(self):
+        reply = json.dumps({'rows': [{'label': 'Filing fee', 'amount': 'unreadable'},
+                                     {'label': 'Attorney fee', 'amount': '4,056.25'}],
+                            'grand_total': None, 'unreadable': ['filing fee under the watermark']})
+        got = self.reader(reply).read_page(b'x', DI.Budget(1.0))
+        self.assertEqual([r['amount'] for r in got['rows']], [4056.25])
+        self.assertEqual(got['grand_total'], None)
+
+    def test_a_reply_that_is_not_json_yields_nothing_rather_than_a_guess(self):
+        got = self.reader('I cannot read this page.').read_page(b'x', DI.Budget(1.0))
+        self.assertEqual(got['rows'], [])
+        self.assertIsNone(got['grand_total'])
+
+    def test_no_api_key_is_a_named_gap_never_a_fallback(self):
+        reader = DV.VisionReader()
+        keys = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        try:
+            with self.assertRaises(DI.NotConfigured):
+                reader.client()
+        finally:
+            for k, v in keys.items():
+                if v is not None:
+                    os.environ[k] = v
+
+
+class VisionAdmissibilityTests(unittest.TestCase):
+    """The second reader is a candidate source, not an authority."""
+
+    def _report(self, reply):
+        reading = {'pages': [{'page': 2, 'outcome': 'ocr_text', 'text_source': 'ocr',
+                              'text': RERUN_PAGE2}]}
+        path = os.path.join(_TMP, 'vision.pdf')
+        with open(path, 'wb') as fh:
+            fh.write(DS.merge_pages(judgment_pages())[0])
+        found, detail = MJ.vision_candidates(
+            path, reading, DI.Budget(1.0), reader=DV.VisionReader(client=FakeAnthropic(reply)))
+        return found, detail
+
+    def test_a_vision_total_its_own_line_items_reproduce_is_admissible(self):
+        found, detail = self._report(VISION_REPLY)
+        self.assertEqual(found[0]['amount'], 14698.60)
+        self.assertTrue(found[0]['sum_check'])
+        self.assertTrue(MJ.admissible(found[0]))
+        self.assertEqual(found[0]['text_source'], 'vision')
+
+    def test_a_vision_total_nothing_adds_up_to_is_refused(self):
+        reply = json.dumps({'rows': [{'label': 'Attorney fee', 'amount': '4,056.25'}],
+                            'grand_total': '99,999.99', 'unreadable': []})
+        found, _ = self._report(reply)
+        self.assertFalse(found[0]['sum_check'])
+        self.assertFalse(MJ.admissible(found[0]))
+        self.assertIsNone(MJ.agreed_amount([c for c in found if MJ.admissible(c)]))
+
+    def test_only_pages_carrying_a_total_label_are_paid_for(self):
+        reading = {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text': 'no money words here',
+                              'text_source': 'ocr'},
+                             {'page': 2, 'outcome': 'ocr_text', 'text': RERUN_PAGE2,
+                              'text_source': 'ocr'}]}
+        path = os.path.join(_TMP, 'vision2.pdf')
+        with open(path, 'wb') as fh:
+            fh.write(DS.merge_pages(judgment_pages())[0])
+        _, detail = MJ.vision_candidates(path, reading, DI.Budget(1.0),
+                                         reader=DV.VisionReader(client=FakeAnthropic(VISION_REPLY)))
+        self.assertEqual(sorted(detail['pages']), [2])
 
 
 if __name__ == '__main__':

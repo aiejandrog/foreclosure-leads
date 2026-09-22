@@ -33,6 +33,8 @@ import sys
 
 import document_collectors as DC
 import document_store as DS
+import document_vision as DV
+import document_interpreter as DI
 from document_queue import DocumentQueue
 
 COUNTY = 'MIAMI-DADE'
@@ -230,12 +232,13 @@ def sum_check(pool, total, tolerance=0.011, max_terms=6):
 def admissible(candidate):
     """May this figure be shown as THE judgment amount?
 
-    A figure read off a text layer stands on its own. A figure OCR'd off a scan does not: the
-    2026-09-22 runs produced two different wrong totals, $150.00 and a misread subtotal, both
-    looking exactly like a right one. So an OCR'd figure is admissible only when the document's
-    own line items reproduce it.
+    A figure read off a text layer stands on its own. A figure read off a SCAN does not, whether
+    OCR or the vision reader produced it: the 2026-09-22 runs produced two different wrong totals,
+    $150.00 and a misread subtotal, both looking exactly like a right one, and a model transcribing
+    an image can be wrong with the same confidence. So a figure off a scan is admissible only when
+    the document's own line items reproduce it.
     """
-    return candidate.get('text_source') != 'ocr' or bool(candidate.get('sum_check'))
+    return candidate.get('text_source') in (None, 'embedded') or bool(candidate.get('sum_check'))
 
 
 def judgment_amount_candidates(reading):
@@ -340,6 +343,35 @@ def stamp_identity(reading, record):
             'agrees': bool(agree)}
 
 
+def vision_candidates(path, reading, budget, reader=None, out_dir=None):
+    """Ask the second reader for the pages OCR could not resolve. -> (candidates, detail)
+
+    Runs ONLY on pages that carry a total label, because those are the pages whose figures decide
+    anything, and this reader costs money per page. Its output goes through exactly the same sum
+    check as OCR's: a total the document's own line items do not reproduce is not admissible,
+    whichever reader produced it.
+    """
+    wanted = sorted({page['page'] for page in reading['pages']
+                     if page['outcome'] in ('text', 'ocr_text')
+                     and TOTAL_RE.search(page.get('text') or '')})
+    if not wanted:
+        # No page claims to carry a total. Reading them all would be spending to find that out.
+        wanted = sorted({page['page'] for page in reading['pages']
+                         if page['outcome'] in ('ocr_text', 'needs_ocr')})[:2]
+    detail = DV.read_document(path, wanted, budget, reader=reader, out_dir=out_dir)
+    pool = [f['amount'] for f in detail['figures']]
+    out = []
+    for total in detail['grand_totals']:
+        check = sum_check(pool, total['amount'])
+        out.append({'amount': total['amount'], 'page': total['page'],
+                    'passage': 'grand total transcribed from the page image',
+                    'source': 'page_image', 'match': 'vision_grand_total',
+                    'text_source': 'vision', 'verified': False,
+                    'sum_check': check['ok'], 'sum_check_reason': check['reason'],
+                    'sum_check_components': check['components'], 'column_notes': []})
+    return out, detail
+
+
 def read_with_sweep(path, ocr=None, images_dir=None, gray_cutoff=None):
     """Read a stored document, trying grey cutoffs until the arithmetic corroborates a total.
 
@@ -366,8 +398,16 @@ def read_with_sweep(path, ocr=None, images_dir=None, gray_cutoff=None):
 
 
 def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, ocr=None,
-                     keep_images=False, gray_cutoff=DS.WATERMARK_GRAY_CUTOFF):
-    """Fetch, verify, store and read each recorded instrument. One result row per record."""
+                     keep_images=False, gray_cutoff=None, resume=False):
+    """Fetch, verify, store and read each recorded instrument. One result row per record.
+
+    `resume=False` — the default, and what the pilot CLI uses — re-reads a document the queue has
+    already marked done. This tool exists to run the same document again after a change; needing
+    --no-queue to do the thing the tool is for was a bug three times over.
+
+    `resume=True` is for the nightly stage, where finishing the day's backlog is the point and
+    re-reading yesterday's documents is not.
+    """
     collector = collector or DC.MiamiCollector()
     results = []
     for index, record in enumerate(records):
@@ -386,7 +426,8 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
             # counted a watermark as a read page; the fixed reader then skipped it, because done
             # meant done. A verdict from a reader we have since fixed is not one to keep.
             job = queue.claim_ref(owner, county, case, ref, 'recorded_instrument',
-                                  reader_version=DS.READER_VERSION, can_ocr=ocr is not None)
+                                  reader_version=PIPELINE_VERSION, can_ocr=ocr is not None,
+                                  force=not resume)
             if job is None:
                 # Genuinely finished, or held by another worker. Resuming means not re-fetching.
                 prior = [j for j in queue.jobs(county, case)
@@ -445,7 +486,7 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
                 # The queue records the stable identity, not this fetch's bytes: a queue row
                 # keyed on bytes that change every fetch can never say "we already have this".
                 queue.complete(job['id'], owner, sha256=manifest['document_key'],
-                               reader_version=reading['reader_version'],
+                               reader_version=PIPELINE_VERSION,
                                read_status=reading['read_status'])
         except DC.AccessGap as gap:
             row.update({'status': 'gap', 'reason': str(gap)})
@@ -470,9 +511,23 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
 # cleaning entirely.
 GRAY_CUTOFF_SWEEP = (160, 200, 130, 220)
 
+# WHY THERE IS A PIPELINE VERSION AND NOT JUST A READER VERSION
+#
+# The queue skipped this case's document on three consecutive runs after three code changes, and
+# only --no-queue ever got past it. The first skip was because `done` meant done. The second was
+# fixed. The THIRD, on 51c554a, was this: `done`-ness was keyed on document_store.READER_VERSION,
+# the change that run shipped was in the amount extraction, and the reader had not moved — so by
+# its own rule the job was correctly finished and by every human measure it was not.
+#
+# Anything downstream of the stored bytes can make an old verdict stale, not only the reader. So
+# the number the queue compares is this one, and it covers the reader AND the extraction. Bump it
+# when either changes.
+PIPELINE_VERSION = 5
+
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
-        judgments_only=False, keep_images=False, gray_cutoff=None):
+        judgments_only=False, keep_images=False, gray_cutoff=None, resume=False,
+        vision_budget=None, vision_reader=None):
     inventory = enumerate_case(case, collector=collector)
     records = list(records or [])
     # Filter HERE, not in main(), because the filter needs the case's plaintiffs and the docket we
@@ -481,9 +536,33 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     if judgments_only:
         records = recorded_judgments(records, plaintiffs)
     rows = collect_recorded(case, records, collector=collector, queue=queue, county=county,
-                            ocr=ocr, keep_images=keep_images, gray_cutoff=gray_cutoff)
+                            ocr=ocr, keep_images=keep_images, gray_cutoff=gray_cutoff,
+                            resume=resume)
     candidates = [c for row in rows for c in (row.get('amount_candidates') or [])]
     tried = [t for row in rows for t in (row.get('gray_cutoffs_tried') or [])]
+
+    # The second reader, and ONLY when the first one's figures did not add up. If OCR produced a
+    # total the document's line items reproduce, there is nothing left to buy.
+    vision = None
+    if vision_budget is not None and not any(c.get('sum_check') for c in candidates):
+        vision = {'pages_read': 0, 'usd': 0.0, 'documents': []}
+        for row in rows:
+            if row.get('status') != 'stored' or not row.get('reading'):
+                continue
+            found, detail = vision_candidates(
+                row['path'], row['reading'], vision_budget, reader=vision_reader,
+                out_dir=row.get('images_dir'))
+            row['vision_candidates'] = found
+            row['vision_figures'] = detail['figures']
+            row['vision_errors'] = detail['errors']
+            candidates.extend(found)
+            vision['pages_read'] += len(detail['pages'])
+            vision['usd'] = round(vision['usd'] + detail['usd'], 6)
+            vision['documents'].append({'source_ref': row['source_ref'],
+                                        'pages': sorted(detail['pages']),
+                                        'figures': len(detail['figures']),
+                                        'errors': detail['errors'], 'usd': detail['usd']})
+        vision['budget'] = vision_budget.report()
     report = {
         'case': case, 'county': county,
         'plaintiffs': plaintiffs,
@@ -509,6 +588,7 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         'judgment_amount_rejected': [c for c in candidates if not admissible(c)],
         'judgment_amount_status': 'unverified_extraction',
         'gray_cutoffs_tried': tried,
+        'vision': vision,
         'gray_cutoff': tried[-1]['gray_cutoff'] if tried else None,
         # A total the page's own line items reproduce. This is the evidence that would justify
         # trusting an OCR'd figure one day; on the pilot page it is False, because OCR misread a
@@ -588,13 +668,31 @@ def main(argv=None):
                              ' to strip the clerk watermark crossing the amounts column. Default '
                              'is to sweep %s and stop at the first whose figures add up; 0 '
                              'disables the cleaning.' % (GRAY_CUTOFF_SWEEP,))
+    parser.add_argument('--vision', action='store_true',
+                        help='when OCR\'s figures do not add up, read the page IMAGE with the '
+                             'Claude API as a second reader. Metered; requires --max-spend.')
+    parser.add_argument('--max-spend', type=float,
+                        help='dollar cap for --vision on this run. Checked against each call\'s '
+                             'worst case BEFORE the call is made.')
+    parser.add_argument('--vision-model', default=DI.DEFAULT_MODEL,
+                        help='model for --vision (default %(default)s)')
     parser.add_argument('--no-queue', action='store_true', help='skip the resumable queue')
+    parser.add_argument('--resume', action='store_true',
+                        help='honour the queue\'s done state instead of re-reading. Off by '
+                             'default: this tool is for running the same document again.')
     parser.add_argument('--out', help='write the run report to this JSON file (under DEALFLOW_DIR)')
     args = parser.parse_args(argv)
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
         pass
+
+    # Validated before any data is loaded: a metered flag with no cap is an error whether or not
+    # this case happens to have documents to read.
+    if args.vision and not args.max_spend:
+        parser.exit(2, '--vision is metered: pass --max-spend, e.g. --vision --max-spend 0.50\n')
+    vision_budget = (DI.Budget(args.max_spend, model=args.vision_model)
+                     if args.vision else None)
 
     if args.dry_run:
         inventory = enumerate_case(args.case)
@@ -621,7 +719,10 @@ def main(argv=None):
     try:
         report = run(args.case, records, queue=queue, ocr=ocr,
                      judgments_only=args.judgments_only, keep_images=args.keep_images,
-                     gray_cutoff=args.gray_cutoff)
+                     gray_cutoff=args.gray_cutoff, resume=args.resume,
+                     vision_budget=vision_budget,
+                     vision_reader=(DV.VisionReader(model=args.vision_model)
+                                    if args.vision else None))
     finally:
         if queue:
             queue.close()
@@ -668,6 +769,13 @@ def main(argv=None):
             '' if admissible(candidate) else '  [NOT USED]'))
         for note in (candidate.get('column_notes') or []):
             print('      %s' % note)
+    if report.get('vision'):
+        v = report['vision']
+        print('  second reader (page images): %d page(s), $%.4f of the $%.2f cap'
+              % (v['pages_read'], v['usd'], v['budget']['limit_usd']))
+        for doc in v['documents']:
+            for page, why in sorted((doc['errors'] or {}).items()):
+                print('      page %s not read: %s' % (page, why))
     agreed = report['judgment_amount_agreed']
     shown = ('${:,.2f}'.format(agreed) if agreed is not None else 'not established')
     print('  judgment amount: %s (%s)' % (shown, report['judgment_amount_status']))
