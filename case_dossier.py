@@ -105,7 +105,7 @@ def _c(documents):
             # fetch. They are different things: the clerk re-serialises the PDF per request, so
             # the byte hash changes between fetches of the same instrument.
             'document_key': d.get('document_key'),
-            'source_sha256': d.get('sha256'),
+            'source_sha256': d.get('source_sha256'),
             'recording_stamp_agrees': (d.get('recording_stamp') or {}).get('agrees')
             if d.get('recording_stamp') else None,
             'index_label': verdict.get('index_label') or d.get('doc_type'),

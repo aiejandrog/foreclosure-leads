@@ -1008,6 +1008,124 @@ class RecordingStampTests(unittest.TestCase):
                                             {'reC_BOOK': '35287', 'reC_PAGE': '4642'}))
 
 
+
+# ---- the 2026-09-22 rerun: the $150.00 --------------------------------------------------------
+# OCR lost 31.19 and 2,010.74 where the watermark crosses them, so page 2 came back with 14 labels
+# and 12 figures. Positional pairing shifted, GRAND TOTAL: was handed $150.00 (the Collection
+# Process Fee), and the report printed it as the judgment amount while its own sum check had
+# already failed.
+RERUN_PAGE2 = '\n'.join([
+    'CLERK FILING FEE',
+    'SERVICE OF PROCESS',
+    'COLLECTION PROCESS FEE',
+    'RECORDING FEE',
+    'RESEARCH FEE',
+    'COSTS SUBTOTAL',
+    'COLLECTION FEES',
+    'ATTORNEY FEE',
+    'GRAND TOTAL:',
+    '',
+    '$ 150.00',
+    '$ 70.00',
+    '$ 45.00',
+    '$ 1,835.00',
+    '$ 4,056.25',
+    '$ 14,698.60',
+])
+
+
+class RerunTests(unittest.TestCase):
+    def test_columns_that_do_not_line_up_are_not_paired(self):
+        found = MJ.judgment_amount_candidates(_reading(RERUN_PAGE2))
+        self.assertEqual(len(found), 1)
+        # NOT $150.00. When the two columns are different lengths the only safe statement left is
+        # that a cost table ends with its total.
+        self.assertEqual(found[0]['amount'], 14698.60)
+        self.assertEqual(found[0]['match'], 'tail_figure')
+        self.assertTrue(found[0]['column_notes'])
+
+    def test_a_figure_the_arithmetic_does_not_support_is_not_the_judgment_amount(self):
+        # The gate that failed on the rerun: the strict fields were None, and the human-readable
+        # line and judgment_amount_agreed still carried a wrong number.
+        found = MJ.judgment_amount_candidates(_reading(RERUN_PAGE2))
+        self.assertFalse(found[0]['sum_check'])
+        self.assertFalse(MJ.admissible(found[0]))
+        self.assertIsNone(MJ.agreed_amount([c for c in found if MJ.admissible(c)]))
+
+    def test_a_text_layer_figure_never_needs_the_arithmetic(self):
+        # A figure read off an embedded text layer stands on its own; only OCR has to be
+        # corroborated. Otherwise every judgment stating one number would become unreportable.
+        found = MJ.judgment_amount_candidates(
+            _reading('the total sum of $412,880.45 for which let execution issue', 'text',
+                     'embedded'))
+        self.assertFalse(found[0]['sum_check'])
+        self.assertTrue(MJ.admissible(found[0]))
+
+    def test_the_sum_check_looks_across_pages_not_just_one(self):
+        # It reported "no other figures on this page" while the subtotals it needed sat on page 1.
+        reading = {'pages': [
+            {'page': 1, 'outcome': 'ocr_text', 'text': 'ASSESSMENTS\n\n$ 6,796.61\n',
+             'text_source': 'ocr'},
+            {'page': 2, 'outcome': 'ocr_text', 'text': OCR_COLUMN_TEXT.replace('$ 6,796.61\n', ''),
+             'text_source': 'ocr'},
+        ]}
+        found = [c for c in MJ.judgment_amount_candidates(reading) if c['amount'] == 14698.60]
+        self.assertTrue(found[0]['sum_check'])
+        self.assertIn(6796.61, found[0]['sum_check_components'])
+
+
+class GraySweepTests(unittest.TestCase):
+    def test_the_sweep_stops_at_the_first_cutoff_that_adds_up(self):
+        # One cutoff is a guess and 160 was the wrong guess. The sum check picks, not a person
+        # looking at renders.
+        seen = []
+        texts = {160: RERUN_PAGE2, 200: OCR_COLUMN_TEXT}
+
+        def fake_read(path, ocr=None, keep_images_in=None, gray_cutoff=None):
+            seen.append(gray_cutoff)
+            return {'pages': [{'page': 2, 'outcome': 'ocr_text', 'text_source': 'ocr',
+                               'text': texts.get(gray_cutoff, '')}],
+                    'pages_from_ocr': 1, 'gray_cutoff': gray_cutoff}
+
+        real, DS.read_pages = DS.read_pages, fake_read
+        try:
+            reading, tried = MJ.read_with_sweep('x.pdf', ocr=object())
+        finally:
+            DS.read_pages = real
+        self.assertEqual(seen, [160, 200])
+        self.assertEqual(reading['gray_cutoff'], 200)
+        self.assertEqual([t['corroborated'] for t in tried], [False, True])
+
+    def test_a_pinned_cutoff_is_not_swept(self):
+        seen = []
+
+        def fake_read(path, ocr=None, keep_images_in=None, gray_cutoff=None):
+            seen.append(gray_cutoff)
+            return {'pages': [], 'pages_from_ocr': 0, 'gray_cutoff': gray_cutoff}
+
+        real, DS.read_pages = DS.read_pages, fake_read
+        try:
+            MJ.read_with_sweep('x.pdf', ocr=object(), gray_cutoff=0)
+        finally:
+            DS.read_pages = real
+        self.assertEqual(seen, [0])
+
+    def test_a_document_with_a_text_layer_costs_one_pass(self):
+        seen = []
+
+        def fake_read(path, ocr=None, keep_images_in=None, gray_cutoff=None):
+            seen.append(gray_cutoff)
+            return {'pages': [{'page': 1, 'outcome': 'text', 'text': 'nothing', 'text_source':
+                               'embedded'}], 'pages_from_ocr': 0, 'gray_cutoff': gray_cutoff}
+
+        real, DS.read_pages = DS.read_pages, fake_read
+        try:
+            MJ.read_with_sweep('x.pdf', ocr=object())
+        finally:
+            DS.read_pages = real
+        self.assertEqual(len(seen), 1)
+
+
 if __name__ == '__main__':
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
