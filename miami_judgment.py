@@ -25,6 +25,7 @@ Usage
 (records_liens.records_by_qs / mint_and_fetch) and keep the rows for the subject parcel.
 """
 import argparse
+import itertools
 import json
 import os
 import re
@@ -86,16 +87,123 @@ def _is_case_court_paper(row, plaintiff_keys):
 # Money as a US court writes it. The decimals are required: "$500" in a judgment is nearly always
 # a fee or a cost, while the total carries cents. This is a CANDIDATE extractor, not a reader.
 MONEY_RE = re.compile(r'\$\s?([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})')
-TOTAL_RE = re.compile(r'\b(total\s+(?:sum|amount|indebtedness)|amount\s+due|there\s+is\s+due|'
-                      r'total\s+judgment|judgment\s+is\s+(?:hereby\s+)?entered)\b', re.I)
+# The labels a judgment's total actually carries. "GRAND TOTAL:" is on the pilot document and was
+# missing from the first version of this list, which is half of why a correctly-OCR'd $14,698.60
+# came out "not established"; the other half was that its value sat fifteen lines below it.
+TOTAL_RE = re.compile(r'\b(total\s+(?:sum|amount|indebtedness|due)|grand\s+total|amount\s+due|'
+                      r'there\s+is\s+due|total\s+judgment|total\s*:|'
+                      r'judgment\s+is\s+(?:hereby\s+)?entered)', re.I)
+
+
+# WHY A LABEL AND ITS VALUE ARE NOT ON THE SAME LINE
+#
+# The 2026-09-22 OCR run is the reason this module does column pairing at all. Windows OCR read
+# the judgment's cost table COLUMN BY COLUMN: every label first, then every figure. "GRAND TOTAL:"
+# landed on one line and its "$ 14,698.60" about fifteen lines further down. A same-line match
+# found nothing, so a correctly-read $14,698.60 came out "not established" — and every judgment
+# laid out as a table, which is most of them, would do the same.
+# A line that is nothing but a money figure: an entry in a value column.
+_ONLY_MONEY_RE = re.compile(r'^[\s|:.]*\$?\s?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})[\s|.]*$')
+
+
+def _money_on(line):
+    return [float(m.group(1).replace(',', '')) for m in MONEY_RE.finditer(line)]
+
+
+def _column_pairs(lines):
+    """Pair a block of labels with the block of figures below it. -> {label line index: value}
+
+    OCR does not read a table row by row; it reads the label column, then the value column. So
+    "GRAND TOTAL:" and its "$ 14,698.60" are not near each other, and taking the first figure
+    after a label gives ASSESSMENTS' figure to the grand total — which is worse than finding
+    nothing, because it is confidently wrong.
+
+    The columns are aligned FROM THE BOTTOM: the last label goes with the last figure. A judgment's
+    cost table ends with its total, and OCR dropping a line item (it dropped two on the pilot page)
+    shortens the top of a column, not the bottom.
+    """
+    pairs = {}
+    index, total_lines = 0, len(lines)
+    while index < total_lines:
+        if not _ONLY_MONEY_RE.match(lines[index]):
+            index += 1
+            continue
+        start = index
+        values = []
+        while index < total_lines:
+            match = _ONLY_MONEY_RE.match(lines[index])
+            if match:
+                values.append(float(match.group(1).replace(',', '')))
+            elif lines[index].strip():
+                break
+            index += 1
+        labels = []
+        back = start - 1
+        while back >= 0 and len(labels) < len(values):
+            line = lines[back]
+            if line.strip() and not _ONLY_MONEY_RE.match(line):
+                labels.append(back)
+            elif line.strip():
+                break
+            back -= 1
+        labels.reverse()
+        for offset in range(1, min(len(labels), len(values)) + 1):
+            pairs[labels[-offset]] = values[-offset]
+    return pairs
+
+
+def page_money(text):
+    """Every money figure on a page, in reading order. The raw material for the sum check."""
+    return [value for line in (text or '').splitlines() for value in _money_on(line)]
+
+
+def sum_check(text, total, tolerance=0.011, max_terms=6):
+    """Do some of this page's other figures add up to `total`?
+
+    This is the guard the pilot argued for. OCR read that judgment's grand total correctly and
+    misread one subtotal in the same table — 6,796.61 as 5,796.61 — and dropped two line items,
+    silently, with no error anywhere. So one OCR'd figure cannot be trusted on its own. A total
+    the page's own line items reproduce is a different kind of claim: it is two readings of the
+    same arithmetic agreeing, and a single misread digit breaks it. On the pilot page this check
+    FAILS, which is the correct answer.
+
+    Combinations of 2 to `max_terms` figures, which is the shape a judgment's cost table actually
+    has (assessments + costs + collection fees + attorney fee = grand total). Not a subset-sum
+    solver: a search wide enough to hit any total by chance would corroborate anything.
+
+    Returns {'ok', 'components', 'reason'}. `ok` False never means "the total is wrong" — it means
+    "this page does not corroborate it", which is all that can honestly be said.
+    """
+    values = [v for v in page_money(text) if v > 0]
+    others = list(values)
+    if total in others:
+        others.remove(total)
+    others = [v for v in others if v < total][:24]
+    if not others:
+        return {'ok': False, 'components': [], 'reason': 'no other figures on this page to add up'}
+    for size in range(2, max_terms + 1):
+        if size > len(others):
+            break
+        for combo in itertools.combinations(others, size):
+            if abs(sum(combo) - total) <= tolerance:
+                return {'ok': True, 'components': sorted(combo), 'reason': 'line items sum to it'}
+    return {'ok': False, 'components': [],
+            'reason': 'no 2-%d of this page\'s %d other figures sum to it'
+                      % (max_terms, len(others))}
 
 
 def judgment_amount_candidates(reading):
-    """Dollar figures sitting on a line that also talks about a judgment total.
+    """Dollar figures this document offers as a judgment total, each with its page and passage.
 
-    Returns candidates with page and the verbatim line. NOTHING here is a finding: a scanned page
-    contributes nothing, an OCR'd page contributes whatever OCR got, and two different totals on
-    two pages means we do not know the number — see `agreed_amount`.
+    Two ways a figure reaches a label, and the candidate says which:
+
+      same_line          "$14,698.60" on the line that says GRAND TOTAL. What a text layer gives.
+      column_lookahead   the label on one line and the first value-only line within
+                         TOTAL_LOOKAHEAD below it. What OCR gives, because it reads tables by
+                         column. Weaker, and marked weaker.
+
+    NOTHING here is a finding. A page that was not read contributes nothing, and two pages
+    offering two different totals means we do not know the number — see `agreed_amount`.
     """
     out = []
     for page in reading['pages']:
@@ -105,14 +213,26 @@ def judgment_amount_candidates(reading):
         # judgment total. That is the 2026-09-22 pilot regression.
         if page['outcome'] not in ('text', 'ocr_text'):
             continue
-        for line in (page.get('text') or '').splitlines():
+        body = page.get('text') or ''
+        lines = body.splitlines()
+        pairs = _column_pairs(lines)
+        for index, line in enumerate(lines):
             if not TOTAL_RE.search(line):
                 continue
-            for match in MONEY_RE.finditer(line):
-                out.append({'amount': float(match.group(1).replace(',', '')),
-                            'page': page['page'], 'passage': line.strip()[:300],
-                            'source': 'document_text',
-                            'text_source': page.get('text_source'), 'verified': False})
+            found = [(value, 'same_line', line) for value in _money_on(line)]
+            if not found and index in pairs:
+                found = [(pairs[index], 'column_pairing',
+                          line.strip() + '  ->  ' + '${:,.2f}'.format(pairs[index]))]
+            for value, how, passage in found:
+                candidate = {'amount': value, 'page': page['page'],
+                             'passage': passage.strip()[:300],
+                             'source': 'document_text', 'match': how,
+                             'text_source': page.get('text_source'), 'verified': False}
+                check = sum_check(body, value)
+                candidate['sum_check'] = check['ok']
+                candidate['sum_check_reason'] = check['reason']
+                candidate['sum_check_components'] = check['components']
+                out.append(candidate)
     return out
 
 
@@ -143,8 +263,38 @@ def recorded_judgments(records, plaintiffs=()):
             or _is_case_court_paper(r, keys)]
 
 
+# The recording stamp the clerk prints on every page of a recorded instrument, top right:
+#   CFN 20260305080 BOOK 35287 PAGE 4642
+# It is a free, independent check that the pages we read are the instrument we asked for — the
+# document vouching for its own identity, against the index we fetched it by.
+_STAMP_RE = re.compile(r'BOOK\s*[:#]?\s*(\d{4,6})\s*[,;]?\s*PAGE\s*[:#]?\s*(\d{1,5})', re.I)
+
+
+def stamp_identity(reading, record):
+    """Does the recording stamp on the page agree with the book/page we fetched?
+
+    Returns None when no stamp was legible — which is NOT a mismatch and must never be reported as
+    one. OCR misses stamps routinely; absence of the check is absence of the check.
+    """
+    want = (str(record.get('reC_BOOK') or '').strip(), str(record.get('reC_PAGE') or '').strip())
+    if not want[0] or not want[1]:
+        return None
+    seen = []
+    for page in reading['pages']:
+        for match in _STAMP_RE.finditer(page.get('text') or ''):
+            seen.append({'book': match.group(1), 'page_no': match.group(2),
+                         'on_page': page['page']})
+    if not seen:
+        return None
+    agree = [s for s in seen if (s['book'], s['page_no']) == (want[0].lstrip('0'),
+                                                              want[1].lstrip('0'))
+             or (s['book'], s['page_no']) == want]
+    return {'index_book': want[0], 'index_page': want[1], 'stamps_found': seen[:10],
+            'agrees': bool(agree)}
+
+
 def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, ocr=None,
-                     keep_images=False):
+                     keep_images=False, gray_cutoff=DS.WATERMARK_GRAY_CUTOFF):
     """Fetch, verify, store and read each recorded instrument. One result row per record."""
     collector = collector or DC.MiamiCollector()
     results = []
@@ -158,10 +308,15 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
             # Claim THIS ref, not "any ready job" — claiming whatever came next would fetch one
             # record's bytes under another record's lease, and a resumed run would re-download
             # everything because no claim ever matched what the loop was holding.
-            job = queue.claim_ref(owner, county, case, ref, 'recorded_instrument')
+            #
+            # reader_version and can_ocr are what let a job that an OLDER reader marked done be
+            # taken again. On 2026-09-22 the pilot's judgment had been fetched by the reader that
+            # counted a watermark as a read page; the fixed reader then skipped it, because done
+            # meant done. A verdict from a reader we have since fixed is not one to keep.
+            job = queue.claim_ref(owner, county, case, ref, 'recorded_instrument',
+                                  reader_version=DS.READER_VERSION, can_ocr=ocr is not None)
             if job is None:
-                # Already resolved on an earlier run (done, or a recorded gap). Resuming means
-                # not fetching it again.
+                # Genuinely finished, or held by another worker. Resuming means not re-fetching.
                 prior = [j for j in queue.jobs(county, case)
                          if j['source_ref'] == ref and j['kind'] == 'recorded_instrument']
                 state = prior[0]['status'] if prior else 'leased'
@@ -177,28 +332,40 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
             if keep_images:
                 # Beside the PDF, inside the same guarded case folder — never a new path.
                 images_dir = os.path.join(os.path.dirname(manifest['path']),
-                                          manifest['sha256'][:16] + '-pages')
-            reading = DS.read_pages(manifest['path'], ocr=ocr, keep_images_in=images_dir)
+                                          manifest['document_key'][:16] + '-pages')
+            reading = DS.read_pages(manifest['path'], ocr=ocr, keep_images_in=images_dir,
+                                    gray_cutoff=gray_cutoff)
             DS.record_read(manifest['meta_path'], reading)
-            row.update({'status': 'stored', 'sha256': manifest['sha256'],
+            # The text is evidence and it cost an OCR pass; it gets written down. The pilot run
+            # read five pages and kept none of the words.
+            text_dir = DS.save_page_text(manifest, reading)
+            row.update({'status': 'stored', 'sha256': manifest['source_sha256'],
+                        'document_key': manifest['document_key'],
                         'pages': manifest['pages'],
                         'pages_expected': manifest.get('pages_expected'),
                         'page_count_verified': manifest['page_count_verified'],
                         'page_count_note': manifest.get('page_count_note'),
                         'read_status': reading['read_status'],
+                        'reader_version': reading['reader_version'],
                         'pages_unresolved': reading['pages_unresolved'],
                         'pages_from_ocr': reading.get('pages_from_ocr', 0),
                         'ocr_attempted': reading.get('ocr_attempted', False),
+                        'gray_cutoff': reading.get('gray_cutoff'),
                         'weak_pages': [{'page': p['page'], 'reason': p.get('weak_reason'),
+                                        'outcome': p.get('outcome'),
                                         'ocr_error': p.get('ocr_error')}
                                        for p in reading['pages'] if p.get('weak_reason')],
-                        'path': manifest['path'],
+                        'path': manifest['path'], 'text_dir': text_dir,
+                        'images_dir': images_dir,
+                        'recording_stamp': stamp_identity(reading, record),
                         'amount_candidates': judgment_amount_candidates(reading),
                         # Kept for case_dossier.classify_documents; stripped before the report is
                         # written, because full page text does not belong in a summary file.
                         'reading': reading})
             if job:
-                queue.complete(job['id'], owner, sha256=manifest['sha256'])
+                queue.complete(job['id'], owner, sha256=manifest['source_sha256'],
+                               reader_version=reading['reader_version'],
+                               read_status=reading['read_status'])
         except DC.AccessGap as gap:
             row.update({'status': 'gap', 'reason': str(gap)})
             if job:
@@ -213,7 +380,7 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
 
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
-        judgments_only=False, keep_images=False):
+        judgments_only=False, keep_images=False, gray_cutoff=DS.WATERMARK_GRAY_CUTOFF):
     inventory = enumerate_case(case, collector=collector)
     records = list(records or [])
     # Filter HERE, not in main(), because the filter needs the case's plaintiffs and the docket we
@@ -222,7 +389,7 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     if judgments_only:
         records = recorded_judgments(records, plaintiffs)
     rows = collect_recorded(case, records, collector=collector, queue=queue, county=county,
-                            ocr=ocr, keep_images=keep_images)
+                            ocr=ocr, keep_images=keep_images, gray_cutoff=gray_cutoff)
     candidates = [c for row in rows for c in (row.get('amount_candidates') or [])]
     report = {
         'case': case, 'county': county,
@@ -243,6 +410,10 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         # None whenever the pages disagree, or nothing was readable. Never a best guess.
         'judgment_amount_agreed': agreed_amount(candidates),
         'judgment_amount_status': 'unverified_extraction',
+        # A total the page's own line items reproduce. This is the evidence that would justify
+        # trusting an OCR'd figure one day; on the pilot page it is False, because OCR misread a
+        # subtotal the watermark crossed.
+        'judgment_amount_corroborated': any(c.get('sum_check') for c in candidates),
     }
     # The stricter figure: only from a document that was page-verified AND fully read. This is the
     # one a caller may hand to records_liens.analyze; `judgment_amount_agreed` above is the looser
@@ -287,7 +458,14 @@ def judgment_for_analyze(report, allow_ocr=False):
     good = [r for r in report.get('documents', [])
             if r.get('page_count_verified') and r.get('read_status') == 'read']
     candidates = [c for r in good for c in (r.get('amount_candidates') or [])]
-    if not allow_ocr:
+    if allow_ocr:
+        # The escape hatch gets a guard. An OCR'd figure is admissible only when the page's own
+        # line items add up to it: the pilot showed OCR reading a grand total correctly while
+        # misreading a subtotal the watermark crossed, with nothing anywhere to say so. Two
+        # readings of the same arithmetic agreeing is evidence; one figure is not.
+        candidates = [c for c in candidates
+                      if c.get('text_source') != 'ocr' or c.get('sum_check')]
+    else:
         candidates = [c for c in candidates if c.get('text_source') != 'ocr']
     return agreed_amount(candidates) if candidates else None
 
@@ -303,7 +481,11 @@ def main(argv=None):
     parser.add_argument('--no-ocr', action='store_true',
                         help='do not OCR scanned pages (Windows only; on by default)')
     parser.add_argument('--keep-images', action='store_true',
-                        help='keep the 300-DPI render of each OCR page, to check the text by eye')
+                        help='keep the 300-DPI render of each OCR page (cleaned and raw), to '
+                             'check the text by eye')
+    parser.add_argument('--gray-cutoff', type=int, default=DS.WATERMARK_GRAY_CUTOFF,
+                        help='whiten pixels at or above this grey level before OCR, to strip the '
+                             'clerk watermark that crosses the amounts column (0 disables it)')
     parser.add_argument('--no-queue', action='store_true', help='skip the resumable queue')
     parser.add_argument('--out', help='write the run report to this JSON file (under DEALFLOW_DIR)')
     args = parser.parse_args(argv)
@@ -336,7 +518,8 @@ def main(argv=None):
     queue = None if args.no_queue else DocumentQueue()
     try:
         report = run(args.case, records, queue=queue, ocr=ocr,
-                     judgments_only=args.judgments_only, keep_images=args.keep_images)
+                     judgments_only=args.judgments_only, keep_images=args.keep_images,
+                     gray_cutoff=args.gray_cutoff)
     finally:
         if queue:
             queue.close()
@@ -349,18 +532,43 @@ def main(argv=None):
           % (args.case, report['documents_stored'], len(report['documents']),
              report['documents_page_verified'], report['documents_fully_read']))
     for row in report['documents']:
+        # A weak text layer is not a failed page. Every one of these lines used to read
+        # "NOT READ", including on the five pages OCR had just read end to end, which made a
+        # successful run look like a broken one. The verdict on the TEXT LAYER and the outcome
+        # for the PAGE are two different facts and now print as two different words.
         for weak in (row.get('weak_pages') or []):
-            print('  NOT READ  %s page %s — %s%s'
-                  % (row['source_ref'], weak['page'], weak['reason'],
-                     ('; ' + weak['ocr_error']) if weak.get('ocr_error') else ''))
+            if weak.get('outcome') == 'ocr_text':
+                print('  READ BY OCR  %s page %s — no usable text layer (%s)'
+                      % (row['source_ref'], weak['page'], weak['reason']))
+            else:
+                print('  NOT READ     %s page %s — %s%s'
+                      % (row['source_ref'], weak['page'], weak['reason'],
+                         ('; ' + weak['ocr_error']) if weak.get('ocr_error') else ''))
+        stamp = row.get('recording_stamp')
+        if stamp is not None:
+            print('  recording stamp on the page %s the index (book %s page %s)'
+                  % ('AGREES with' if stamp['agrees'] else 'DISAGREES with',
+                     stamp['index_book'], stamp['index_page']))
+        if row.get('text_dir'):
+            print('  page text -> %s' % row['text_dir'])
     for gap in report['access_gaps']:
         print('  GAP %s — %s' % (gap['source_ref'], gap['reason']))
+    for candidate in report['judgment_amount_candidates']:
+        print('  candidate ${:,.2f} (page {}, {}, {}) — line items {}: {}'.format(
+            candidate['amount'], candidate['page'], candidate.get('text_source') or 'embedded',
+            candidate.get('match'), 'CHECK OUT' if candidate.get('sum_check') else 'do not add up',
+            candidate.get('sum_check_reason')))
     agreed = report['judgment_amount_agreed']
     shown = ('${:,.2f}'.format(agreed) if agreed is not None else 'not established')
     print('  judgment amount: %s (%s)' % (shown, report['judgment_amount_status']))
     usable = report['judgment_amount_usable']
     if usable is None and report['judgment_amount_usable_with_ocr'] is not None:
-        print('  the only figure came from OCR — check it against the page image before quoting it')
+        if report['judgment_amount_corroborated']:
+            print('  the only figure came from OCR, but the page\'s line items sum to it — '
+                  'check it against the page image, then it is worth quoting')
+        else:
+            print('  the only figure came from OCR and the page\'s line items do NOT sum to it — '
+                  'treat it as unread until a human has compared it with the page image')
     strip_readings(report)
     if args.out:
         import case_review

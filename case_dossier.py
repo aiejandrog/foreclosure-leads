@@ -101,7 +101,13 @@ def _c(documents):
             'source_ref': d.get('source_ref'),
             'status': d.get('status'),
             'reason': d.get('reason'),
-            'sha256': d.get('sha256'),
+            # The stable identity of the document, plus the hash of what arrived on the last
+            # fetch. They are different things: the clerk re-serialises the PDF per request, so
+            # the byte hash changes between fetches of the same instrument.
+            'document_key': d.get('document_key'),
+            'source_sha256': d.get('sha256'),
+            'recording_stamp_agrees': (d.get('recording_stamp') or {}).get('agrees')
+            if d.get('recording_stamp') else None,
             'index_label': verdict.get('index_label') or d.get('doc_type'),
             'is': verdict.get('kind', 'unknown'),
             'classified_from': verdict.get('basis'),

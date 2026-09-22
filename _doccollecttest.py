@@ -8,6 +8,7 @@ values. The live check against the real endpoint is a command for the laptop/des
 
 Run:  python _doccollecttest.py          (needs PyMuPDF)
 """
+import json
 import os
 import sys
 import tempfile
@@ -277,25 +278,71 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(manifest['pages'], 1)
 
     def test_identical_bytes_dedupe_instead_of_rewriting(self):
-        # The same bytes fetched twice — a resumed run re-reaching a document it already has.
-        # (Regenerating the fixture PDFs would not work: a PDF carries its creation time, so two
-        # renders of the same text hash differently.)
         pages = judgment_pages()
         first = DS.store('MIAMI-DADE', CASE + '-dupe', self.retrieve(pages=pages), source_ref='or/1')
         second = DS.store('MIAMI-DADE', CASE + '-dupe', self.retrieve(pages=pages), source_ref='or/1')
         self.assertTrue(first['stored'])
         self.assertFalse(second['stored'])
-        self.assertEqual(first['sha256'], second['sha256'])
+        self.assertEqual(first['document_key'], second['document_key'])
 
-    def test_identity_is_the_clerks_bytes_not_our_rebuilt_file(self):
-        # PyMuPDF writes a fresh document ID on every tobytes(), so the rebuilt file is not
-        # reproducible. If identity followed it, every resumed run would re-store the same
-        # document under a new hash and dedupe would never fire.
+    def test_identity_survives_the_clerk_changing_the_bytes(self):
+        # THE 2026-09-22 PILOT BUG. The same five pages of book 35287 page 4642 hashed 3f37483d
+        # on one fetch and 94f3f6cf on the next: the county re-generates the PDF per request. Both
+        # the served bytes AND our rebuild are therefore unstable, and identity built on either
+        # stores the same document twice — which is what happened, in a real case folder.
         pages = judgment_pages()
-        one = DS.validate(self.retrieve(pages=pages))
-        two = DS.validate(self.retrieve(pages=pages))
-        self.assertEqual(one['sha256'], two['sha256'])
-        self.assertNotEqual(one['rebuilt_sha256'], two['rebuilt_sha256'])
+        # Trailing bytes after %%EOF are ignored by every PDF reader, so this is the same document
+        # serialised differently — exactly what the county does when it regenerates the file.
+        refetched = pages[:-1] + [pages[-1] + b'\n%% a second serialisation\n']
+        one = DS.store('MIAMI-DADE', CASE + '-refetch', self.retrieve(pages=pages),
+                       source_ref='or/1')
+        two = DS.store('MIAMI-DADE', CASE + '-refetch', self.retrieve(pages=refetched),
+                       source_ref='or/1')
+        self.assertNotEqual(one['fetches'][0]['source_sha256'],
+                            two['fetches'][-1]['source_sha256'])          # the clerk's bytes moved
+        self.assertEqual(one['document_key'], two['document_key'])        # the document did not
+        self.assertFalse(two['stored'])
+        self.assertTrue(two['bytes_differ_between_fetches'])
+        self.assertEqual(len(two['fetches']), 2)
+        self.assertEqual(len(list(DS.case_dir('MIAMI-DADE', CASE + '-refetch').glob('*.pdf'))), 1)
+
+    def test_identity_rests_on_the_countys_own_record_key(self):
+        manifest = DS.store('MIAMI-DADE', CASE + '-basis', self.retrieve(), source_ref='or/1')
+        self.assertEqual(manifest['identity_basis'], 'record_key')
+
+    def test_reconcile_names_duplicates_and_deletes_nothing(self):
+        # The two copies the pilot left behind, as they sit on disk today.
+        case = CASE + '-recon'
+        folder = DS.case_dir('MIAMI-DADE', case)
+        folder.mkdir(parents=True, exist_ok=True)
+        for stem, read_status in (('aaaaaaaaaaaaaaaa', 'image_only'), ('bbbbbbbbbbbbbbbb', 'read')):
+            (folder / (stem + '.pdf')).write_bytes(b'%PDF-1.4 ')
+            (folder / (stem + '.json')).write_text(json.dumps({
+                'county': 'MIAMI-DADE', 'case': case, 'source_ref': 'or/1', 'pages': 5,
+                'record_key': {'reC_BOOK': '35287', 'reC_PAGE': '4642'},
+                'read_status': read_status, 'retrieved_at': '2026-09-22T10:00:00+00:00'}),
+                encoding='utf-8')
+        report = DS.reconcile('MIAMI-DADE', case, apply=True)
+        self.assertEqual(report['duplicates'], 1)
+        # The copy that was actually read is the keeper.
+        self.assertIn('bbbbbbbbbbbbbbbb', report['groups'][0]['keep']['meta_path'])
+        # Nothing is deleted: these are court records obtained once.
+        self.assertEqual(len(list(folder.glob('*.pdf'))), 2)
+        loser = json.loads((folder / 'aaaaaaaaaaaaaaaa.json').read_text(encoding='utf-8'))
+        self.assertTrue(loser['superseded'])
+        # And a second pass no longer counts it.
+        self.assertEqual(DS.reconcile('MIAMI-DADE', case)['duplicates'], 0)
+
+    def test_page_text_is_written_down_not_thrown_away(self):
+        # The pilot OCR'd five pages and kept none of the words, so the only way to see what OCR
+        # had read was to run it again by hand.
+        manifest = DS.store('MIAMI-DADE', CASE + '-text', self.retrieve(), source_ref='or/1')
+        reading = DS.read_pages(manifest['path'])
+        folder = DS.save_page_text(manifest, reading)
+        index = json.loads(open(os.path.join(folder, 'pages.json'), encoding='utf-8').read())
+        self.assertEqual(len(index['pages']), 5)
+        self.assertIn('SUMMARY FINAL JUDGMENT',
+                      open(os.path.join(folder, 'p02.txt'), encoding='utf-8').read())
 
     def test_store_stays_out_of_the_repo_and_out_of_onedrive(self):
         folder = str(DS.case_dir('MIAMI-DADE', CASE))
@@ -775,6 +822,190 @@ class EquityStateUntouchedTests(unittest.TestCase):
         self.assertEqual(equity_state.state_of({'conf': 'ok', 'liens': [{'amt': 1}, {}]}), 'unpriced')
         self.assertEqual(equity_state.state_of({'conf': 'unpriced', 'liens': [{'amt': 1}]}),
                          'unpriced')
+
+
+
+# ---- what the 2026-09-22 OCR run found -----------------------------------------------------------
+# The desktop ran the pilot with Windows OCR on. It worked — five pages read — and it exposed four
+# more defects, each reproduced here. The page it read is a real judgment cost table, and the OCR
+# errors line up exactly with the clerk's diagonal watermark crossing the amounts column.
+OCR_COLUMN_TEXT = '\n'.join([
+    'ASSESSMENTS',
+    'COLLECTION FEES',
+    'COSTS',
+    'ATTORNEY FEE',
+    'GRAND TOTAL:',
+    '',
+    '$ 6,796.61',
+    '$ 1,835.00',
+    '$ 2,010.74',
+    '$ 4,056.25',
+    '$ 14,698.60',
+])
+
+# The same table as OCR actually read it on 2026-09-22: the grand total right, one subtotal
+# misread where the watermark crosses it (6,796.61 -> 5,796.61).
+OCR_COLUMN_TEXT_MISREAD = OCR_COLUMN_TEXT.replace('6,796.61', '5,796.61')
+
+
+def _reading(text, outcome='ocr_text', source='ocr'):
+    return {'pages': [{'page': 2, 'outcome': outcome, 'text': text, 'text_source': source}]}
+
+
+class AmountLayoutTests(unittest.TestCase):
+    def test_a_total_and_its_value_in_different_columns_are_matched(self):
+        # Before this, "GRAND TOTAL:" and "$ 14,698.60" were fifteen lines apart, the extractor
+        # only looked on the label's own line, and a correctly read total came out "not
+        # established". Every judgment laid out as a table would have done the same.
+        found = MJ.judgment_amount_candidates(_reading(OCR_COLUMN_TEXT))
+        self.assertEqual([c['amount'] for c in found], [14698.60])
+        self.assertEqual(found[0]["match"], "column_pairing")
+
+    def test_the_same_line_match_still_wins_when_there_is_one(self):
+        found = MJ.judgment_amount_candidates(
+            _reading('the total sum of $412,880.45 for which let execution issue', 'text', 'embedded'))
+        self.assertEqual(found[0]['match'], 'same_line')
+
+    def test_a_label_does_not_reach_past_the_next_label(self):
+        text = 'GRAND TOTAL:\nAMOUNT DUE\n$ 1,000.00\n'
+        found = MJ.judgment_amount_candidates(_reading(text))
+        # The figure belongs to AMOUNT DUE, not to the GRAND TOTAL above it.
+        self.assertEqual([(c['amount'], c['passage'].startswith('AMOUNT DUE')) for c in found],
+                         [(1000.0, True)])
+
+    def test_line_items_that_sum_to_the_total_corroborate_it(self):
+        found = MJ.judgment_amount_candidates(_reading(OCR_COLUMN_TEXT))
+        self.assertTrue(found[0]['sum_check'])
+        self.assertEqual(found[0]['sum_check_components'],
+                         [1835.0, 2010.74, 4056.25, 6796.61])
+
+    def test_the_sum_check_catches_the_digit_ocr_actually_misread(self):
+        # THE POINT OF THE CHECK. OCR read the grand total correctly and misread one subtotal the
+        # watermark crossed, with no error anywhere. The arithmetic is what notices.
+        found = MJ.judgment_amount_candidates(_reading(OCR_COLUMN_TEXT_MISREAD))
+        self.assertEqual(found[0]['amount'], 14698.60)
+        self.assertFalse(found[0]['sum_check'])
+
+    def test_an_ocr_figure_is_refused_even_when_it_is_allowed_unless_it_adds_up(self):
+        def report(text):
+            return {'documents': [{'page_count_verified': True, 'read_status': 'read',
+                                   'amount_candidates': MJ.judgment_amount_candidates(
+                                       _reading(text))}]}
+        self.assertIsNone(MJ.judgment_for_analyze(report(OCR_COLUMN_TEXT)))            # refused
+        self.assertEqual(MJ.judgment_for_analyze(report(OCR_COLUMN_TEXT), allow_ocr=True), 14698.60)
+        self.assertIsNone(MJ.judgment_for_analyze(report(OCR_COLUMN_TEXT_MISREAD), allow_ocr=True))
+
+    def test_a_watermark_carrying_a_total_still_yields_nothing(self):
+        # Unchanged and re-asserted here: a page whose text layer was rejected contributes no
+        # figure at all, whatever the stamp said.
+        page = {'page': 1, 'outcome': 'needs_ocr', 'text': '',
+                'embedded_text': 'GRAND TOTAL: $99,999.99 ' + WATERMARK}
+        self.assertEqual(MJ.judgment_amount_candidates({'pages': [page]}), [])
+
+
+class WatermarkRemovalTests(unittest.TestCase):
+    """The clerk's diagonal "NOT AN OFFICIAL COPY" watermark is light grey and the print is black.
+    On the pilot page every OCR error sits where it crosses a figure; the figures it misses read
+    perfectly. So the render is whitened above a grey cutoff before OCR."""
+
+    def _render(self, gray_cutoff):
+        fitz = DS._fitz()
+        doc = fitz.open(stream=scanned_page(), filetype='pdf')
+        seen = {}
+
+        def backend(paths):
+            for path in paths:
+                pix = fitz.Pixmap(path)
+                seen['greys'] = {pix.samples[i] for i in range(0, len(pix.samples), 997)}
+            return {path: 'x' * 100 for path in paths}
+
+        try:
+            DS._render_and_ocr(doc, [0], backend, gray_cutoff=gray_cutoff)
+        finally:
+            doc.close()
+        return seen['greys']
+
+    def test_light_grey_is_whitened_before_ocr(self):
+        # The fixture page is filled with grey 220 — the watermark's band.
+        self.assertNotIn(220, self._render(DS.WATERMARK_GRAY_CUTOFF))
+
+    def test_the_cleaning_can_be_turned_off(self):
+        self.assertIn(220, self._render(0))
+
+    def test_black_print_survives_the_cutoff(self):
+        table = bytes(255 if v >= DS.WATERMARK_GRAY_CUTOFF else v for v in range(256))
+        self.assertEqual(table[0], 0)        # black stays black
+        self.assertEqual(table[120], 120)    # dark grey print is untouched
+        self.assertEqual(table[220], 255)    # the watermark band goes white
+
+
+class QueueRereadTests(unittest.TestCase):
+    """A job marked done by a reader we have since fixed is not finished."""
+
+    def setUp(self):
+        self.path = os.path.join(tempfile.mkdtemp(), 'q.db')
+        self.q = DQ.DocumentQueue(self.path)
+        self.q.add('MIAMI-DADE', CASE, 'or/1', 'recorded_instrument')
+
+    def tearDown(self):
+        self.q.close()
+
+    def _do(self, reader_version, read_status):
+        job = self.q.claim_ref('w', 'MIAMI-DADE', CASE, 'or/1', 'recorded_instrument',
+                               reader_version=reader_version, can_ocr=True)
+        self.assertIsNotNone(job)
+        self.q.complete(job['id'], 'w', sha256='abc', reader_version=reader_version,
+                        read_status=read_status)
+
+    def test_a_done_job_from_an_older_reader_is_claimed_again(self):
+        # THE PILOT BUG: the judgment was fetched by the reader that counted a watermark as a read
+        # page, and the fixed reader then skipped the one document it existed to re-read.
+        self._do(1, 'read')
+        again = self.q.claim_ref('w2', 'MIAMI-DADE', CASE, 'or/1', 'recorded_instrument',
+                                 reader_version=2)
+        self.assertIsNotNone(again)
+
+    def test_a_document_this_reader_already_read_is_left_alone(self):
+        self._do(2, 'read')
+        self.assertIsNone(self.q.claim_ref('w2', 'MIAMI-DADE', CASE, 'or/1', 'recorded_instrument',
+                                           reader_version=2, can_ocr=True))
+
+    def test_an_unread_document_is_retried_when_this_run_can_ocr(self):
+        self._do(2, 'image_only')
+        self.assertIsNotNone(self.q.claim_ref('w2', 'MIAMI-DADE', CASE, 'or/1',
+                                              'recorded_instrument', reader_version=2,
+                                              can_ocr=True))
+
+    def test_an_unread_document_is_not_retried_forever_without_ocr(self):
+        self._do(2, 'image_only')
+        self.assertIsNone(self.q.claim_ref('w2', 'MIAMI-DADE', CASE, 'or/1', 'recorded_instrument',
+                                           reader_version=2, can_ocr=False))
+
+    def test_rows_written_before_this_change_are_migrated_not_abandoned(self):
+        # The desktop's queue.db already has rows in it, and those rows are the ones that need
+        # re-reading. A completion with no reader_version reads as "an unknown, older reader".
+        job = self.q.claim_ref('w', 'MIAMI-DADE', CASE, 'or/1', 'recorded_instrument')
+        self.q.complete(job['id'], 'w', sha256='abc')
+        self.assertIsNotNone(self.q.claim_ref('w2', 'MIAMI-DADE', CASE, 'or/1',
+                                              'recorded_instrument',
+                                              reader_version=DS.READER_VERSION))
+
+
+class RecordingStampTests(unittest.TestCase):
+    def test_the_stamp_on_the_page_is_checked_against_the_index(self):
+        reading = _reading('CFN 20260305080 BOOK 35287 PAGE 4642', 'ocr_text')
+        got = MJ.stamp_identity(reading, {'reC_BOOK': '35287', 'reC_PAGE': '4642'})
+        self.assertTrue(got['agrees'])
+
+    def test_a_stamp_for_another_instrument_disagrees(self):
+        reading = _reading('CFN 20260305080 BOOK 35287 PAGE 9999', 'ocr_text')
+        self.assertFalse(MJ.stamp_identity(reading, {'reC_BOOK': '35287',
+                                                     'reC_PAGE': '4642'})['agrees'])
+
+    def test_no_legible_stamp_is_not_a_mismatch(self):
+        # OCR misses stamps routinely. Absence of the check must never be reported as a failure.
+        self.assertIsNone(MJ.stamp_identity(_reading('nothing here', 'ocr_text'),
+                                            {'reC_BOOK': '35287', 'reC_PAGE': '4642'}))
 
 
 if __name__ == '__main__':

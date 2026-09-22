@@ -22,6 +22,15 @@ STATUSES
 
 `gap` is deliberately terminal and deliberately not `failed`. A restricted or login-walled document
 is a known, reportable hole in coverage (CASE-REVIEW-PROCEDURE.md), not a bug to retry forever.
+
+WHY `done` IS NOT ALWAYS FINAL
+`done` used to mean "never look at this again", and on 2026-09-22 that cost the pilot a run: the
+judgment had been fetched by the reader that mistook a watermark for a page, so the job was marked
+done, and the FIXED reader then skipped the one document it existed to re-read. Done is now
+qualified by HOW it was done — `reader_version` and the `read_status` that reader reached — and
+`claim_ref` will re-take a done job when a better reader now exists, or when the document was
+never actually read and this run can OCR where the last one could not. A document nobody could
+read is not finished; it is waiting for a reader that can.
 """
 import json
 import os
@@ -48,6 +57,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   lease_owner TEXT,
   lease_until REAL,
   sha256      TEXT,
+  reader_version INTEGER,
+  read_status TEXT,
   error       TEXT,
   created_at  TEXT NOT NULL,
   updated_at  TEXT NOT NULL,
@@ -78,6 +89,13 @@ class DocumentQueue:
         self.db.row_factory = sqlite3.Row
         self.db.execute('PRAGMA journal_mode=WAL')
         self.db.executescript(SCHEMA)
+        # Columns added after the first pilot ran. A queue.db already exists on the desktop with
+        # rows in it; those rows are the ones that need re-reading, so migrate rather than start
+        # a new file and lose the record of what was already fetched.
+        have = {row['name'] for row in self.db.execute('PRAGMA table_info(jobs)')}
+        for column, decl in (('reader_version', 'INTEGER'), ('read_status', 'TEXT')):
+            if column not in have:
+                self.db.execute('ALTER TABLE jobs ADD COLUMN %s %s' % (column, decl))
 
     def close(self):
         self.db.close()
@@ -139,19 +157,39 @@ class DocumentQueue:
         job['payload'] = json.loads(job['payload'] or '{}')
         return job
 
-    def claim_ref(self, owner, county, case, source_ref, kind, lease=DEFAULT_LEASE):
-        """Claim ONE named job, or None when it is not ready (already done, gapped, or held).
+    def claim_ref(self, owner, county, case, source_ref, kind, lease=DEFAULT_LEASE,
+                  reader_version=None, can_ocr=False):
+        """Claim ONE named job, or None when it is genuinely finished or held by someone else.
 
         A caller working a specific document needs this rather than `claim()`: taking "any ready
         job" would hand it a lease on a different document than the one in its hand.
+
+        `reader_version` and `can_ocr` describe THIS run's reader, and they are what make a `done`
+        job re-claimable:
+
+          * the job was done by an older reader — the reader has since been fixed, so the verdict
+            it reached is not one to keep. This is the pilot bug.
+          * the job was done but never actually read (`image_only`, `partial`, or no status at
+            all, which is what every row written before this change looks like) AND this run can
+            OCR where the last one could not.
+
+        A document that this same reader already read to completion is left alone, so a normal
+        re-run is still free. Pass neither argument and `done` stays terminal as before.
         """
         now = time.time()
+        ready = ["status = 'pending'", "(status = 'leased' AND lease_until < ?)"]
+        args = [county, case, source_ref, kind, now]
+        if reader_version is not None:
+            ready.append("(status = 'done' AND (reader_version IS NULL OR reader_version < ?))")
+            args.append(reader_version)
+        if can_ocr:
+            ready.append("(status = 'done' AND (read_status IS NULL OR read_status != 'read'))")
         self.db.execute('BEGIN IMMEDIATE')
         try:
             row = self.db.execute(
                 'SELECT * FROM jobs WHERE county = ? AND case_no = ? AND source_ref = ? AND kind = ?'
-                " AND (status = 'pending' OR (status = 'leased' AND lease_until < ?))",
-                (county, case, source_ref, kind, now)).fetchone()
+                ' AND (' + ' OR '.join(ready) + ')',
+                args).fetchone()
             if row is None:
                 self.db.execute('COMMIT')
                 return None
@@ -175,17 +213,23 @@ class DocumentQueue:
         return cur.rowcount == 1
 
     # ---- finish --------------------------------------------------------------------------------
-    def _finish(self, job_id, owner, status, sha=None, error=None):
+    def _finish(self, job_id, owner, status, sha=None, error=None, reader_version=None,
+                read_status=None):
         # lease_owner in the WHERE clause: a worker whose lease already expired and was taken by
         # someone else must NOT be able to overwrite the new holder's result.
         cur = self.db.execute(
-            'UPDATE jobs SET status = ?, sha256 = ?, error = ?, lease_owner = NULL,'
-            ' lease_until = NULL, updated_at = ? WHERE id = ? AND lease_owner = ?',
-            (status, sha, error, _now(), job_id, owner))
+            'UPDATE jobs SET status = ?, sha256 = ?, error = ?, reader_version = ?,'
+            ' read_status = ?, lease_owner = NULL, lease_until = NULL, updated_at = ?'
+            ' WHERE id = ? AND lease_owner = ?',
+            (status, sha, error, reader_version, read_status, _now(), job_id, owner))
         return cur.rowcount == 1
 
-    def complete(self, job_id, owner, sha256=None):
-        return self._finish(job_id, owner, 'done', sha=sha256)
+    def complete(self, job_id, owner, sha256=None, reader_version=None, read_status=None):
+        """Done — and WITH WHAT. A completion that does not say which reader reached which
+        read_status cannot be re-examined when the reader improves, which is how the pilot's
+        stamp-only read became permanent."""
+        return self._finish(job_id, owner, 'done', sha=sha256, reader_version=reader_version,
+                            read_status=read_status)
 
     def gap(self, job_id, owner, reason):
         """An AccessGap. Terminal and reportable — coverage has a hole and we can name it."""

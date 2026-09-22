@@ -50,20 +50,58 @@ def sha256(content):
 
 
 def source_digest(retrieved):
-    """The hash of what the CLERK served, not of the file we rebuilt from it.
+    """The hash of what the CLERK served on THIS fetch. A per-fetch record, NOT an identity.
 
-    PyMuPDF's `tobytes()` is not byte-reproducible — it writes a fresh document ID (and, before
-    metadata is cleared, a creation timestamp) on every call, so two merges of the identical page
-    images hash differently. Content-addressing the rebuilt file would therefore break the one
-    property the queue's dedupe rests on: a resumed run must recognise a document it already has.
+    Two things are true and were confused in the first version of this module:
 
-    So identity is the source bytes, in page order. That is also the more defensible thing to cite
-    in a finding — it attests to what the county sent us, not to how we re-wrapped it.
+      * PyMuPDF's `tobytes()` is not byte-reproducible — it writes a fresh document ID on every
+        call, so hashing the file we rebuild is not stable either;
+      * and, the 2026-09-22 pilot proved, **neither is what the clerk sends**. The same five pages
+        of book 35287 page 4642 hashed `3f37483d...` on one fetch and `94f3f6cf...` on the next.
+        The county re-generates the PDF per request; something inside it (a timestamp, a document
+        ID) differs each time.
+
+    So neither hash can be a filename, and both were tried. Identity is `document_key` below.
+    This value stays because it is worth recording what arrived on a given fetch — it just cannot
+    answer "do we already have this document?".
     """
     pages = retrieved.get('pages')
     if pages:
         return hashlib.sha256(b''.join(pages)).hexdigest()
     return hashlib.sha256(retrieved.get('content') or b'').hexdigest()
+
+
+def document_key(county, case, record, source_ref=''):
+    """Stable identity of a DOCUMENT: who published it and which instrument it is.
+
+    Not the bytes. The bytes change between fetches (see `source_digest`), and a filename that
+    changes between fetches means the same document is stored twice, the queue's dedupe never
+    matches, and a resumed run re-downloads everything. That is precisely what happened on the
+    pilot: two copies of the same five-page judgment in one case folder.
+
+    The key is built from the identifiers that name the instrument in the county's own index —
+    book, page, book type, CFN for a recorded instrument — plus the page count, so a document
+    re-recorded at a different length is a different key rather than a silent overwrite.
+
+    Returns (key, basis). `basis` says what the key rests on, because it matters how strong the
+    identity is: 'record_key' is the county's own, 'source_ref' is ours, and 'source_bytes' is the
+    last resort and is NOT stable — a document identified that way will re-store on every fetch,
+    which is visible in the sidecar rather than hidden.
+    """
+    keys = record.get('record_key') or {}
+    pages = record.get('pages_received') or ''
+    if keys:
+        basis = 'record_key'
+        ident = '|'.join('%s=%s' % (k, keys[k]) for k in sorted(keys) if keys[k] not in (None, ''))
+    elif source_ref:
+        basis = 'source_ref'
+        ident = str(source_ref)
+    else:
+        basis = 'source_bytes'
+        ident = record.get('sha256') or ''
+    material = '\x1f'.join([str(county), str(case), str(record.get('transport') or ''),
+                            ident, str(pages)])
+    return hashlib.sha256(material.encode('utf-8')).hexdigest(), basis
 
 
 def _atomic_write_bytes(path, data):
@@ -188,17 +226,26 @@ def case_dir(county, case):
 
 
 def store(county, case, retrieved, source_ref='', doc_name=''):
-    """Write the original + its provenance sidecar. Content-addressed, so a re-run dedupes.
+    """Write the original + its provenance sidecar, keyed by document identity.
 
-    Returns the manifest dict. `stored` is False when the identical document was already on disk —
-    the caller resumes rather than re-downloading, and the sidecar keeps its first-seen time.
+    Returns the manifest dict. `stored` is False when we already hold this document — which is
+    decided by `document_key`, not by the bytes: the county re-serialises the PDF on every request,
+    so the same instrument arrives with a different hash each time and byte identity would store
+    it again under a new name every run.
+
+    Each fetch is appended to `fetches` with the hash of what arrived, so "the clerk's bytes
+    changed between these two fetches" stays visible instead of becoming a second copy.
     """
     record = validate(retrieved)
     folder = case_dir(county, case)
     folder.mkdir(parents=True, exist_ok=True)
-    digest = record['sha256']
-    pdf_path = folder / (digest[:16] + '.pdf')
-    meta_path = folder / (digest[:16] + '.json')
+    key, basis = document_key(county, case, record, source_ref)
+    source_sha = record['sha256']
+    stem = key[:16]
+    pdf_path = folder / (stem + '.pdf')
+    meta_path = folder / (stem + '.json')
+    fetch = {'at': _now(), 'source_sha256': source_sha, 'bytes': record['bytes'],
+             'rebuilt_sha256': record.get('rebuilt_sha256')}
     manifest = {
         'schema_version': SCHEMA_VERSION,
         'county': county, 'case': case,
@@ -206,17 +253,23 @@ def store(county, case, retrieved, source_ref='', doc_name=''):
         'transport': record.get('transport'),
         'source_urls': record.get('source_urls') or [],
         'record_key': record.get('record_key'),
-        'sha256': digest, 'rebuilt_sha256': record.get('rebuilt_sha256'),
+        'document_key': key, 'identity_basis': basis,
+        # What arrived on the latest fetch. Cite this for "what the county sent us on <date>";
+        # never use it to decide whether we already have the document.
+        'source_sha256': source_sha,
+        'rebuilt_sha256': record.get('rebuilt_sha256'),
+        'fetches': [fetch],
         'bytes': record['bytes'],
         'pages': record['pages_received'],
         'pages_expected': record.get('pages_expected'),
         'page_count_source': record.get('page_count_source'),
         'page_count_verified': record['page_count_verified'],
         'page_count_note': record.get('page_count_note'),
-        'retrieved_at': _now(),
+        'retrieved_at': fetch['at'],
         'path': str(pdf_path), 'meta_path': str(meta_path),
         # Set by the reader, not here. Until then this document has been OBTAINED, not read.
         'read_status': 'unread',
+        'reader_version': None,
     }
     if pdf_path.exists() and meta_path.exists():
         try:
@@ -228,10 +281,15 @@ def store(county, case, retrieved, source_ref='', doc_name=''):
         # since, leaves a file that no longer matches, and dedupe would hand that file to the
         # reader forever without ever looking at it.
         on_disk = sha256(pdf_path.read_bytes())
-        if prior.get('sha256') == digest and prior.get('rebuilt_sha256') in (None, on_disk):
+        intact = prior.get('rebuilt_sha256') in (None, on_disk)
+        if intact and prior.get('pages') == record['pages_received']:
             prior['stored'] = False
-            prior['last_seen_at'] = manifest['retrieved_at']
+            prior['last_seen_at'] = fetch['at']
             prior['integrity_rechecked'] = True
+            prior['fetches'] = (prior.get('fetches') or [])[-9:] + [fetch]
+            if prior.get('source_sha256') and prior['source_sha256'] != source_sha:
+                # Expected, and worth saying out loud: it is why identity is not the bytes.
+                prior['bytes_differ_between_fetches'] = True
             # A later fetch that now HAS an index count upgrades the verdict; it never downgrades
             # a verified document to unverified.
             if manifest['page_count_verified'] and not prior.get('page_count_verified'):
@@ -240,14 +298,79 @@ def store(county, case, retrieved, source_ref='', doc_name=''):
                                'page_count_source')})
             _atomic_write_text(meta_path, json.dumps(prior, indent=2) + '\n')
             return prior
-        # Same source bytes, different file on disk: the stored copy is damaged. Replace it and
-        # say so, rather than trusting either side silently.
-        if prior.get('sha256') == digest:
+        if not intact:
+            # Same document, different file on disk: the stored copy is damaged. Replace it and
+            # say so, rather than trusting either side silently.
             manifest['replaced_damaged_copy'] = True
+        else:
+            # Same key, different length. The key includes the page count, so this can only happen
+            # when an older sidecar was written under a different scheme. Record the change.
+            manifest['replaced_on_page_count_change'] = True
+            manifest['prior_pages'] = prior.get('pages')
+        manifest['fetches'] = (prior.get('fetches') or [])[-9:] + [fetch]
     _atomic_write_bytes(pdf_path, record['content'])
     manifest['stored'] = True
     _atomic_write_text(meta_path, json.dumps(manifest, indent=2) + '\n')
     return manifest
+
+
+def reconcile(county, case, apply=False):
+    """Find sidecars in a case folder that describe the SAME document and report the duplicates.
+
+    The pilot left two copies of one five-page judgment because identity used to be the clerk's
+    bytes and the clerk's bytes changed between fetches. Those copies are already on disk; this
+    names them and, with apply=True, marks the losers `superseded`.
+
+    It does NOT delete anything. These are homeowner court records obtained once; a wrong call
+    here destroys evidence, and a superseded sidecar costs a few kilobytes. Grouping is by
+    (source_ref, record_key, pages) — the same identity the new key is built from — and the
+    keeper is the copy that has been read furthest, then the most recently retrieved.
+    """
+    folder = case_dir(county, case)
+    if not folder.exists():
+        return {'county': county, 'case': case, 'groups': [], 'duplicates': 0, 'applied': apply}
+    rank = {'read': 3, 'partial': 2, 'image_only': 1}
+    groups = {}
+    for meta_path in sorted(folder.glob('*.json')):
+        try:
+            man = json.loads(meta_path.read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            continue
+        if man.get('superseded'):
+            continue
+        keys = man.get('record_key') or {}
+        ident = ('|'.join('%s=%s' % (k, keys[k]) for k in sorted(keys)) or man.get('source_ref')
+                 or str(meta_path.name))
+        groups.setdefault((ident, man.get('pages')), []).append((meta_path, man))
+    out = []
+    duplicates = 0
+    for (ident, pages), members in sorted(groups.items(), key=lambda kv: str(kv[0])):
+        if len(members) < 2:
+            continue
+        members.sort(key=lambda mp: (rank.get(mp[1].get('read_status'), 0),
+                                     mp[1].get('reader_version') or 0,
+                                     mp[1].get('retrieved_at') or ''), reverse=True)
+        keeper, losers = members[0], members[1:]
+        duplicates += len(losers)
+        out.append({
+            'identity': ident, 'pages': pages,
+            'keep': {'meta_path': str(keeper[0]), 'read_status': keeper[1].get('read_status'),
+                     'retrieved_at': keeper[1].get('retrieved_at')},
+            'superseded': [{'meta_path': str(m[0]), 'read_status': m[1].get('read_status'),
+                            'retrieved_at': m[1].get('retrieved_at'),
+                            'source_sha256': m[1].get('source_sha256')} for m in losers],
+        })
+        if apply:
+            for meta_path, man in losers:
+                man['superseded'] = True
+                man['superseded_by'] = str(keeper[0])
+                man['superseded_at'] = _now()
+                man['superseded_note'] = (
+                    'same document as the keeper; stored twice because identity used to be the '
+                    'clerk\'s bytes, which differ between fetches. File left on disk on purpose.')
+                _atomic_write_text(meta_path, json.dumps(man, indent=2) + '\n')
+    return {'county': county, 'case': case, 'groups': out, 'duplicates': duplicates,
+            'applied': bool(apply)}
 
 
 def load_manifest(path):
@@ -276,10 +399,32 @@ def load_manifest(path):
 # and one document-level signal, because a watermark is identical on every page while real pages
 # never are: if every page's text normalises to the same string, that text is boilerplate and none
 # of the pages have been read.
+#
+# READER_VERSION is the version of THAT judgement, and it is recorded on every document read.
+# Bump it whenever read_pages gets materially better at reading a page. The queue uses it to
+# decide whether a job marked `done` may be re-read: the 2026-09-22 pilot fetched this judgment
+# with the character-floor reader, which called a watermark a read page and marked the job done,
+# and the fixed reader then refused to look at it again. A document is not finished being read
+# because an older, worse reader said so.
+READER_VERSION = 3
 MIN_PAGE_CHARS = 40
 MAX_IMAGE_COVERAGE = 0.10
 MIN_SANE_RATIO = 0.70
 OCR_DPI = 300
+
+# WHY THE RENDER IS CLEANED BEFORE OCR
+# Every page image the Miami clerk serves carries a light-grey diagonal watermark reading
+# "NOT AN OFFICIAL COPY - PUBLIC ACCESS", repeated corner to corner. On the pilot judgment it runs
+# straight through the amounts column, and the OCR errors line up with it exactly: 6,796.61 read
+# as 5,796.61 and 2,010.74 read as "40" where the watermark crosses them, 317.05 and 31.19 dropped
+# where it sits on them — while 4,056.25, 1,835.00 and the 14,698.60 grand total, which it does
+# not touch, all read perfectly. Every Miami scan carries it, so this is the general case.
+#
+# The watermark is light grey and the print is black, so whitening everything above a grey cutoff
+# removes it and leaves the text. The cutoff is a starting value, not a measured one: raise it if
+# faint genuine print is being lost, lower it if watermark strokes survive. `--gray-cutoff 0`
+# disables the cleaning entirely, and --keep-images keeps both renders so the two can be compared.
+WATERMARK_GRAY_CUTOFF = 160
 
 _SANE = set(' \t\r\n0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
             '.,;:\'"()[]/$%&#*+-=<>?!@_|\\')
@@ -349,7 +494,8 @@ def ocr_unavailable_error():
     return OcrUnavailable
 
 
-def _render_and_ocr(doc, indexes, backend, keep_dir=None, dpi=OCR_DPI):
+def _render_and_ocr(doc, indexes, backend, keep_dir=None, dpi=OCR_DPI,
+                    gray_cutoff=WATERMARK_GRAY_CUTOFF):
     """Render weak pages and OCR them. -> ({page_no: text}, {page_no: error}, {page_no: image}).
 
     When `keep_dir` is given the rendered PNG is kept, so a human can eyeball the page the OCR
@@ -363,10 +509,21 @@ def _render_and_ocr(doc, indexes, backend, keep_dir=None, dpi=OCR_DPI):
     errors = {}
     text = {}
     images = {}
+    table = (bytes(255 if value >= gray_cutoff else value for value in range(256))
+             if gray_cutoff else None)
     for index in indexes:
         target = os.path.join(workdir, 'p%d.png' % (index + 1))
         try:
-            doc.load_page(index).get_pixmap(dpi=dpi, colorspace=fitz.csGRAY).save(target)
+            pix = doc.load_page(index).get_pixmap(dpi=dpi, colorspace=fitz.csGRAY)
+            if table is not None:
+                if keep_dir:
+                    # Keep the untouched render too, so the cleaning can be judged by eye rather
+                    # than trusted. This is a read of a homeowner's court record; if the cutoff
+                    # ate real print, that has to be visible.
+                    pix.save(os.path.join(workdir, 'p%d-raw.png' % (index + 1)))
+                pix = fitz.Pixmap(fitz.csGRAY, pix.width, pix.height,
+                                  pix.samples.translate(table), False)
+            pix.save(target)
             paths[target] = index + 1
         except Exception as exc:
             errors[index + 1] = 'could not render this page for OCR: %s' % str(exc)[:160]
@@ -402,7 +559,8 @@ def _render_and_ocr(doc, indexes, backend, keep_dir=None, dpi=OCR_DPI):
     return text, errors, images
 
 
-def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_in=None):
+def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_in=None,
+               gray_cutoff=WATERMARK_GRAY_CUTOFF):
     """Read a document. EVERY page gets an outcome; none is skipped and none is assumed.
 
     outcomes: 'text'       an embedded text layer we can quote from
@@ -456,12 +614,16 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
         # OCR whatever is still weak.
         weak_indexes = [p['page'] - 1 for p in pages if p['outcome'] == 'needs_ocr']
         if ocr is not None and weak_indexes:
-            got, errors, images = _render_and_ocr(doc, weak_indexes, ocr, keep_dir=keep_images_in)
+            got, errors, images = _render_and_ocr(doc, weak_indexes, ocr,
+                                                  keep_dir=keep_images_in,
+                                                  gray_cutoff=gray_cutoff)
             for p in pages:
                 value = got.get(p['page'])
                 if value and len(value.strip()) >= min_chars:
                     p.update({'outcome': 'ocr_text', 'text': value,
-                              'chars': len(value.strip()), 'text_source': 'ocr'})
+                              'chars': len(value.strip()), 'text_source': 'ocr',
+                              'watermark_removed': bool(gray_cutoff),
+                              'gray_cutoff': gray_cutoff or None})
                     if images.get(p['page']):
                         p['image'] = images[p['page']]
                 elif p['page'] in errors:
@@ -472,6 +634,8 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
         doc.close()
     unresolved = [p['page'] for p in pages if p['outcome'] not in ('text', 'ocr_text')]
     return {'pages': pages,
+            'reader_version': READER_VERSION,
+            'gray_cutoff': gray_cutoff or None,
             'page_count': len(pages),
             'pages_with_text': sum(1 for p in pages if p['outcome'] == 'text'),
             'pages_from_ocr': sum(1 for p in pages if p['outcome'] == 'ocr_text'),
@@ -492,11 +656,17 @@ def record_read(meta_path, reading):
     manifest = load_manifest(meta_path)
     manifest.update({
         'read_status': reading['read_status'],
+        'reader_version': reading.get('reader_version', READER_VERSION),
         'pages_with_text': reading['pages_with_text'],
         'pages_from_ocr': reading.get('pages_from_ocr', 0),
         'pages_unresolved': reading['pages_unresolved'],
         'ocr_attempted': reading.get('ocr_attempted', False),
+        # `weak_reason` is a verdict on the page's TEXT LAYER, not on the page. A scan whose
+        # stamp was rejected and which OCR then read has a weak_reason AND outcome 'ocr_text' —
+        # it was read. Carrying the outcome here is what lets a caller tell the two apart instead
+        # of printing "NOT READ" over a page it just read, as the pilot run did.
         'weak_pages': [{'page': p['page'], 'reason': p.get('weak_reason'),
+                        'outcome': p.get('outcome'),
                         'image_coverage': p.get('image_coverage'),
                         'ocr_error': p.get('ocr_error')}
                        for p in reading['pages'] if p.get('weak_reason')],
@@ -504,3 +674,72 @@ def record_read(meta_path, reading):
     })
     _atomic_write_text(meta_path, json.dumps(manifest, indent=2) + '\n')
     return manifest
+
+
+def save_page_text(manifest, reading):
+    """Write the text of every page beside the PDF, and return the folder.
+
+    The pilot run OCR'd all five pages and then threw the text away: the report carried page
+    outcomes and no words, so the only way to see what OCR had actually read was to run it again
+    by hand. Text that cost a 300-DPI render and an OCR pass is evidence; it gets written down.
+
+    One `pNN.txt` per page plus `pages.json` with the outcome, source and character count. Inside
+    the same guarded case folder as the PDF — never a path built by string concatenation, and
+    never anywhere git or OneDrive can reach.
+    """
+    stem = (manifest.get('document_key') or manifest.get('sha256') or '')[:16]
+    folder = case_dir(manifest['county'], manifest['case']) / (stem + '-text')
+    folder.mkdir(parents=True, exist_ok=True)
+    index = []
+    for page in reading['pages']:
+        name = 'p%02d.txt' % page['page']
+        body = page.get('text') or page.get('embedded_text') or ''
+        _atomic_write_text(folder / name, body)
+        index.append({'page': page['page'], 'file': name, 'outcome': page['outcome'],
+                      'text_source': page.get('text_source'), 'chars': page.get('chars'),
+                      'weak_reason': page.get('weak_reason'),
+                      'ocr_error': page.get('ocr_error'),
+                      'image': page.get('image')})
+    _atomic_write_text(folder / 'pages.json', json.dumps(
+        {'county': manifest['county'], 'case': manifest['case'],
+         'document_key': manifest.get('document_key'), 'source_ref': manifest.get('source_ref'),
+         'reader_version': reading.get('reader_version'),
+         'read_status': reading['read_status'], 'written_at': _now(),
+         'pages': index}, indent=2) + '\n')
+    return str(folder)
+
+
+def _main(argv=None):
+    """`python document_store.py reconcile <county> <case> [--apply]` — nothing else.
+
+    Reporting only by default; --apply marks duplicates superseded and deletes nothing.
+    """
+    import argparse
+    parser = argparse.ArgumentParser(description='document store maintenance')
+    sub = parser.add_subparsers(dest='command', required=True)
+    rec = sub.add_parser('reconcile', help='report documents stored twice in one case folder')
+    rec.add_argument('county')
+    rec.add_argument('case')
+    rec.add_argument('--apply', action='store_true',
+                     help='mark the duplicates superseded (files are never deleted)')
+    args = parser.parse_args(argv)
+    result = reconcile(args.county, args.case, apply=args.apply)
+    if not result['groups']:
+        print('%s %s: no duplicates' % (args.county, args.case))
+        return 0
+    for group in result['groups']:
+        print('%s (%s pages)' % (group['identity'], group['pages']))
+        print('  KEEP       %s  read=%s  %s' % (group['keep']['meta_path'],
+                                                group['keep']['read_status'],
+                                                group['keep']['retrieved_at']))
+        for loser in group['superseded']:
+            print('  SUPERSEDED %s  read=%s  %s' % (loser['meta_path'], loser['read_status'],
+                                                    loser['retrieved_at']))
+    print('%d duplicate copy(ies)%s' % (result['duplicates'],
+                                        '; marked superseded' if result['applied']
+                                        else '; run again with --apply to mark them'))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(_main())

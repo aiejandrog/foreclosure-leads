@@ -12,12 +12,17 @@ WHAT IT DOES, IN ORDER, PER CASE
   6. join with the cached recorded chain            -> dossier sections b and d
   7. write the dossier under DEALFLOW_DIR
 
-WHY IT IS OFF BY DEFAULT
-It is unproven. As of 2026-09-22 no OCR has run against a real clerk scan in any session, and
-every Miami judgment seen so far is a scan — so on today's evidence this stage would fetch
-documents, read none of them, and write dossiers whose section c is honestly empty. That is
-harmless but pointless, and a nightly stage that does nothing useful is a stage nobody audits.
-It turns on with `--enable` or DEALFLOW_DOCS=1, and nothing else in the pipeline calls it.
+WHY IT IS STILL OFF BY DEFAULT
+OCR now works: on 2026-09-22 the desktop read all five pages of the pilot judgment and got its
+$14,698.60 grand total right. It also misread 6,796.61 as 5,796.61 and dropped two line items,
+everywhere the clerk's diagonal watermark crosses a figure. The watermark is now stripped from the
+render before OCR (document_store.WATERMARK_GRAY_CUTOFF) — and THAT is what is unproven: the grey
+cutoff has never run against a real clerk scan.
+
+So the gate stays shut until one desktop run shows the four figures the watermark spoiled reading
+correctly and the line items summing to the total. Until then this stage would write dossiers
+carrying numbers nobody has checked, which is worse than writing none. It turns on with `--enable`
+or DEALFLOW_DOCS=1, and nothing else in the pipeline calls it.
 
 WHAT IT NEVER DOES
 No publish, no board write, no lead write, no suppression surface, no captcha spend. Dossiers go
@@ -89,6 +94,7 @@ def pick_cases(leads, chains, limit, only=None):
 
 
 def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpreter=None,
+             gray_cutoff=DS.WATERMARK_GRAY_CUTOFF,
              budget=None):
     """One case through all seven steps. Returns its dossier."""
     case, owner = entry['case'], entry['owner']
@@ -100,7 +106,7 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
         models = records_liens.records_by_qs(token) or []
         try:
             report = MJ.run(case, models, queue=queue, ocr=ocr, judgments_only=True,
-                            keep_images=keep_images)
+                            keep_images=keep_images, gray_cutoff=gray_cutoff)
             rows = report['documents']
             inventory = report.get('_inventory')
         except Exception as exc:
@@ -161,8 +167,8 @@ def main(argv=None):
     if not (args.enable or os.environ.get('DEALFLOW_DOCS') == '1'):
         # Exit 0 on purpose: a nightly line calling this must be a clean no-op, not a stage
         # failure that turns the whole run red.
-        print('run_documents: OFF. No OCR has been proven against a real clerk scan yet, so this '
-              'stage would fetch documents and read none of them.')
+        print('run_documents: OFF. Watermark removal before OCR has not been proven against a '
+              'real clerk scan yet, so figures read off one could be wrong and unflagged.')
         print('  Turn it on with --enable, or DEALFLOW_DOCS=1 in the environment.')
         return 0
 
