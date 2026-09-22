@@ -63,6 +63,12 @@ import re
 import document_classify
 import document_collectors as DC
 
+# ONE definition of "what book/page is this", shared by every path that asks. These used to live
+# here, and the dossier path did not call them: a case's own two-page judgment came back as two
+# unfetched citations and an open gap that said a document we were standing on had not been
+# fetched. A rule enforced in two of three places is not a rule.
+from document_classify import key_of, own_spans, _norm      # noqa: F401  (re-exported)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, 'records_index.json')
 COUNTY = 'MIAMI-DADE'
@@ -76,16 +82,6 @@ DEFAULT_NAME_BUDGET = 0    # extra owner-name searches per case. ZERO by default
                            # a Camoufox run or a 2Captcha solve, and a nightly that quietly triples
                            # its captcha spend is a bill nobody agreed to.
 
-
-def _norm(value):
-    """Book and page compare as numbers-without-leading-zeros. The clerk is inconsistent about
-    zero-padding between the index, the recording stamp and the body text of a document, and
-    '04642' != '4642' is the kind of mismatch that reads as 'not found'."""
-    return str(value or '').strip().lstrip('0') or '0'
-
-
-def key_of(book, page):
-    return '%s/%s' % (_norm(book), _norm(page))
 
 
 # ---------------------------------------------------------------------------------------------
@@ -178,6 +174,43 @@ _DEED_RE = re.compile(r'^(DEED|WARRANTY DEED|QUIT ?CLAIM|QUITCLAIM|SPECIAL WARRA
 
 def _name_key(name):
     return re.sub(r'[^A-Z ]', '', _NAME_NOISE_RE.sub(' ', (name or '').upper())).split()
+
+
+def anchor_of(models, folio, subdivision=''):
+    """What ties a record to THIS parcel: a folio, a subdivision, or nothing. -> a dict.
+
+    WHY THIS IS ITS OWN FUNCTION AND WHY IT IS REPORTED
+    On 2024-014334-CA-01 the name search returned 500 records and `on_parcel: 0`, which reads
+    like a finding about the owner and is not one. The case had no cached chain, so `subdivision`
+    arrived empty, and `party_candidates` asks for a deed on the subject FOLIO or the subject
+    SUBDIVISION. With neither, tiers 1 and 2 can match nothing, exactly one candidate came from
+    the docket, and every record the search returned was unanchorable BY CONSTRUCTION. More
+    names would only have bought more unanchored records.
+
+    `records_liens.analyze` solves this by reading the subdivision off a record that DOES carry
+    the subject folio — usually the deed, since folio is blank on most newer mortgages. Same rule
+    here, so the stage anchors itself instead of depending on a chain it may not have.
+    """
+    import records_liens as R
+    fol = R.norm_folio(folio)
+    sub = (subdivision or '').strip().upper()
+    if not sub and fol:
+        for model in models or []:
+            if not isinstance(model, dict):
+                continue
+            if R.norm_folio(model.get('foliO_NUMBER')) != fol:
+                continue
+            sub = str(model.get('subdiV_NAME') or '').strip().upper()
+            if sub:
+                break
+    if fol or sub:
+        return {'folio': fol, 'subdivision': sub, 'anchored': True,
+                'from': 'chain' if (subdivision or '').strip() else
+                        ('a record carrying the subject folio' if sub else 'the lead folio')}
+    return {'folio': '', 'subdivision': '', 'anchored': False,
+            'why': ('this case has no folio and no subdivision, so no record can be tied to the '
+                    'parcel: every search will report 0 on-parcel hits whatever it returns, and '
+                    'the deed tiers of the candidate list cannot match anything')}
 
 
 def party_candidates(models, folio, subdivision='', docket=None, known=()):
@@ -304,41 +337,6 @@ def resolve(book, page, index, caps_path=None, searcher=None):
 # ---------------------------------------------------------------------------------------------
 # 4. The walk.
 # ---------------------------------------------------------------------------------------------
-def own_spans(rows):
-    """Every book/page a document in `rows` OCCUPIES — its own recording stamp, all pages.
-
-    MEASURED 2026-09-22 on the pilot case: of the seven "citations" the reader found, FIVE were
-    the judgment's own recording stamp. A five-page instrument recorded at book 35287 page 4642
-    stamps 4642, 4643, 4644, 4645 and 4646 across its pages, and the regex cannot tell a clerk's
-    header from a reference in the body. Excluding only the document's first page (which is what
-    its source_ref carries) left four of them, and a real run would have spent a third of its
-    twelve-document budget re-fetching the document it was standing on.
-
-    So the span is book + [first page .. first page + pages - 1]. Page count comes from the row;
-    when it is missing the span is just the first page, which is the old behaviour and is the
-    honest floor — inventing a span for a document whose length we do not know could suppress a
-    genuine citation to the instrument recorded immediately after it.
-    """
-    spans = set()
-    for row in rows or []:
-        match = re.search(r'official_records/(\d+)-(\d+)', str(row.get('source_ref') or ''))
-        if not match:
-            continue
-        book, first = match.group(1), match.group(2)
-        try:
-            pages = int(row.get('pages') or 0)
-        except (TypeError, ValueError):
-            pages = 0
-        try:
-            start = int(first)
-        except ValueError:
-            spans.add(key_of(book, first))
-            continue
-        for offset in range(max(1, pages)):
-            spans.add(key_of(book, start + offset))
-    return spans
-
-
 def pending_citations(rows, already):
     """Citations on these rows that we have not addressed yet, in the order they were read."""
     out = []
@@ -420,7 +418,7 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
                              'resolved_via': outcome['via'], 'status': row.get('status'),
                              'doc_type': row.get('doc_type'), 'cited_by': cite['cited_by']})
             new_rows.append(row)
-        case_dossier.classify_documents(new_rows[-len(batch):])
+        case_dossier.classify_documents(new_rows[-len(batch):], case=case)
         frontier = new_rows[-len(batch):]
         if spent >= budget:
             break
@@ -582,6 +580,7 @@ def name_search_plan(models, folio, subdivision='', docket=None, owner='', limit
     plan = candidates[:limit] if limit else []
     return {'candidates': candidates, 'planned': plan, 'limit': int(limit),
             'skipped': max(0, len(candidates) - len(plan)),
+            'anchor': anchor_of(models, folio, subdivision),
             'why': ('Each name is one more Official Records search. The owner-name search cannot '
                     'see a lien recorded against a prior owner; these names can.')}
 
@@ -606,7 +605,7 @@ def stored_rows(county, case):
                'path': manifest.get('path'), 'reading': reading,
                'from_store': True}
         rows.append(row)
-    case_dossier.classify_documents(rows)
+    case_dossier.classify_documents(rows, case=case)
     return rows
 
 

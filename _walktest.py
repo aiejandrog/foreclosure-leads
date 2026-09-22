@@ -21,7 +21,8 @@ os.environ.pop('ONEDRIVE', None)
 os.environ.pop('OneDrive', None)
 
 import case_dossier as CD               # noqa: E402
-import document_classify                # noqa: E402
+import document_classify as DC          # noqa: E402
+document_classify = DC
 import document_walk as W               # noqa: E402
 import records_probe as RP              # noqa: E402
 
@@ -631,6 +632,109 @@ class TokenBudgetTest(unittest.TestCase):
         budget['spent'] += 1
         self.assertEqual(budget['left'], 0)
         self.assertEqual(budget['spent'], 1)
+
+
+class CaseIdentityTest(unittest.TestCase):
+    """A document from a different lawsuit is never this case's judgment."""
+
+    def _reading(self, text):
+        return {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text_source': 'ocr', 'text': text}]}
+
+    def test_the_ocr_mangled_label_does_not_hide_the_case_number(self):
+        # Verbatim from the 2026-09-22 page: the label lost letters, the number did not.
+        self.assertEqual(DC.normalize_case('CASF ao: 2026-058556-SP-26'), '2026-058556-SP-26')
+
+    def test_a_document_naming_another_case_disagrees(self):
+        out = DC.case_identity(self._reading('CASF ao: 2026-058556-SP-26\nDEFAULT FINAL JUDGMENT'),
+                               '2024-014334-CA-01')
+        self.assertIs(out['agrees'], False)
+        self.assertEqual(out['found'], ['2026-058556-SP-26'])
+
+    def test_a_document_with_no_case_number_is_not_a_mismatch(self):
+        # A mortgage, a deed and a lien carry none. Reading that as "wrong case" would reject
+        # every recorded instrument the pipeline exists to read.
+        out = DC.case_identity(self._reading('MORTGAGE DEED\nsum of $100,000.00'),
+                               '2024-014334-CA-01')
+        self.assertIsNone(out['agrees'])
+
+    def test_the_expected_case_printed_on_the_page_agrees(self):
+        out = DC.case_identity(self._reading('CASE NO: 2024-014334-CA-01'), '2024-014334-CA-01')
+        self.assertIs(out['agrees'], True)
+
+    def test_an_other_action_judgment_cannot_fill_this_cases_judgment_slot(self):
+        import case_dossier
+        rows = [{'source_ref': 'official_records/35399-4908', 'status': 'stored',
+                 'read_status': 'read', 'pages': 2, 'page_count_verified': True,
+                 'reading': self._reading('CASF ao: 2026-058556-SP-26\nDEFAULT FINAL JUDGMENT\n'
+                                          'Bank Of American, N.a. Plaintiff(s)')}]
+        case_dossier.classify_documents(rows, case='2024-014334-CA-01')
+        self.assertEqual(rows[0]['classification']['kind'], 'other_action')
+        self.assertEqual(rows[0]['classification']['text_kind'], 'final_judgment')
+        dossier = case_dossier.build('2024-014334-CA-01', 'MIAMI-DADE', documents=rows)
+        c = dossier['c_documents']
+        self.assertEqual(c['fully_read'], 0)
+        self.assertEqual(c['read_from_other_actions'], 1)
+        self.assertNotIn('final_judgment', dossier['conclusion'])
+        self.assertTrue(any('not this case' in g or 'not this case' in g.lower()
+                            for g in dossier['open_gaps']))
+
+
+class DossierSpanTest(unittest.TestCase):
+    def test_a_documents_own_pages_are_not_listed_as_unfetched_citations(self):
+        # The third call site. walk() and the CLI both seed with own_spans; the dossier did not,
+        # so a two-page judgment produced two phantom citations and an open gap saying an
+        # instrument we were standing on had not been fetched.
+        import case_dossier
+        rows = [{'source_ref': 'official_records/35399-4908', 'status': 'stored',
+                 'read_status': 'read', 'pages': 2, 'page_count_verified': True,
+                 'cited_instruments': [
+                     {'book': '35399', 'page_no': '4908', 'cited_on_page': 1},
+                     {'book': '35399', 'page_no': '4909', 'cited_on_page': 2},
+                     {'book': '11732', 'page_no': '780', 'cited_on_page': 1}]}]
+        dossier = case_dossier.build('C1', 'MIAMI-DADE', documents=rows)
+        unfetched = dossier['c_documents']['cited_but_not_fetched']
+        self.assertEqual([(c['book'], c['page_no']) for c in unfetched], [('11732', '780')])
+        self.assertFalse(any('2 instrument' in g for g in dossier['open_gaps']))
+
+
+class AnchorTest(unittest.TestCase):
+    def test_a_case_with_no_folio_and_no_subdivision_is_reported_unanchored(self):
+        out = W.anchor_of([], '', '')
+        self.assertFalse(out['anchored'])
+        self.assertIn('0 on-parcel hits', out['why'])
+
+    def test_the_subdivision_is_read_off_a_record_carrying_the_subject_folio(self):
+        # What records_liens.analyze does, so the stage anchors itself when no chain was traced.
+        models = [{'foliO_NUMBER': '01-2345-678-9012', 'subdiV_NAME': 'CORAL BAY'},
+                  {'foliO_NUMBER': '', 'subdiV_NAME': 'SOMEWHERE ELSE'}]
+        out = W.anchor_of(models, '01-2345-678-9012')
+        self.assertTrue(out['anchored'])
+        self.assertEqual(out['subdivision'], 'CORAL BAY')
+
+
+class ComposedAmountTest(unittest.TestCase):
+    def test_principal_plus_costs_is_captured_when_no_total_is_stated(self):
+        import miami_judgment as MJ
+        reading = {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text_source': 'ocr',
+                              'text': 'the principal sum of $3,941.07, court costs in the '
+                                      'amount of $379.85, for all of which Ict execution issue'}]}
+        found = MJ.judgment_amount_candidates(reading)
+        self.assertEqual([c['amount'] for c in found], [4320.92])
+        self.assertTrue(found[0]['composed'])
+        self.assertEqual(found[0]['sum_check_components'], [3941.07, 379.85])
+
+    def test_a_composed_figure_is_never_admissible(self):
+        # It is our arithmetic on parts nobody totalled, so the document cannot corroborate it.
+        import miami_judgment as MJ
+        reading = {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text_source': 'ocr',
+                              'text': 'principal sum of $3,941.07 and costs of $379.85'}]}
+        self.assertFalse(any(MJ.admissible(c) for c in MJ.judgment_amount_candidates(reading)))
+
+    def test_a_principal_on_its_own_is_not_composed_into_a_total(self):
+        import miami_judgment as MJ
+        reading = {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text_source': 'ocr',
+                              'text': 'the principal sum of $3,941.07 only'}]}
+        self.assertEqual(MJ.judgment_amount_candidates(reading), [])
 
 
 class ProbeVerdictTest(unittest.TestCase):

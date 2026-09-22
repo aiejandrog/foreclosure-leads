@@ -255,14 +255,19 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
                  'reason': minted or ('no cached search token for this owner, and --token-budget '
                                       'is 0 so this stage did not mint one')}]
 
-    case_dossier.classify_documents(rows)
+    case_dossier.classify_documents(rows, case=case)
     # THE WALK. It runs after classification because it needs `cited_instruments`, which
     # classify_documents attaches, and before interpretation because a walked document deserves
     # the same reading as one we fetched directly.
     if walk_depth and rows:
         import document_walk
         folio = entry.get('folio') or ''
-        subdivision = (entry.get('chain') or {}).get('subdiv') or ''
+        # Anchor the parcel from the records themselves when no chain was traced. Without this
+        # the stage inherits an empty subdivision, and the whole deed half of the candidate list
+        # silently matches nothing — which is what produced one candidate and 0 on-parcel hits
+        # out of 500 records on 2024-014334-CA-01.
+        subdivision = ((entry.get('chain') or {}).get('subdiv')
+                       or document_walk.anchor_of(models, folio)['subdivision'])
         plan = document_walk.name_search_plan(
             models, folio, subdivision=subdivision,
             docket=(inventory or {}).get('raw'), owner=owner, limit=name_budget)
@@ -297,6 +302,61 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
         dossier['judgment_amount_usable'] = report.get('judgment_amount_usable')
         dossier['judgment_amount_usable_with_ocr'] = report.get('judgment_amount_usable_with_ocr')
     return dossier
+
+
+def _print_case(dossier):
+    """The per-case detail, on the console, where a person running this can see it.
+
+    The 2026-09-22 run printed one conclusion line and nothing else: no documents, no citations,
+    no name searches, no amounts. Every fact in that run had to be dug out of the dossier JSON
+    afterwards, including the one that mattered — that the document read belonged to a different
+    lawsuit. A stage whose output is only legible by reading its output file is a stage nobody
+    checks.
+    """
+    c = dossier.get('c_documents') or {}
+    for row in c.get('documents') or []:
+        bits = ['%s  %s' % (row.get('source_ref'), row.get('is') or 'unknown')]
+        if row.get('confidence'):
+            bits.append('confidence %s' % row['confidence'])
+        if row.get('read_status') and row['read_status'] != 'read':
+            bits.append(row['read_status'])
+        print('    DOC %s' % ', '.join(bits))
+        for amount in row.get('amounts') or []:
+            print('      $%s (page %s, %s, %s)'
+                  % ('{:,.2f}'.format(amount['amount']), amount.get('page'),
+                     amount.get('text_source') or 'embedded',
+                     'composed from parts, NOT a stated total' if amount.get('composed')
+                     else ('line items check out' if amount.get('sum_check')
+                           else 'line items do not add up')))
+        second = row.get('second_reader')
+        if second:
+            print('      second reader: %d figure(s) transcribed -> %s'
+                  % (len(second['figures']), second.get('saved_to') or 'not saved'))
+    for row in c.get('other_actions') or []:
+        print('    NOT THIS CASE  %s belongs to %s'
+              % (row['source_ref'], ', '.join(row['belongs_to']) or '?'))
+    for cite in c.get('cited_but_not_fetched') or []:
+        print('    CITES %s/%s (page %s) not fetched'
+              % (cite.get('book'), cite.get('page_no'), cite.get('cited_on_page')))
+    walk = c.get('walk') or {}
+    if walk:
+        print('    walk: %d document(s) fetched, %d citation(s) unresolved%s'
+              % (walk.get('documents_fetched') or 0, len(walk.get('unresolved') or []),
+                 ('; stopped: ' + walk['stopped_because']) if walk.get('stopped_because') else ''))
+    plan = walk.get('name_search') or {}
+    if plan:
+        anchor = plan.get('anchor') or {}
+        if not anchor.get('anchored'):
+            print('    NOT ANCHORED to the parcel, so every on-parcel count below is 0 by '
+                  'construction, not by finding')
+        print('    names: %d candidate(s), %d searched, %d unsearched'
+              % (len(plan.get('candidates') or []), len(plan.get('planned') or []),
+                 plan.get('skipped') or 0))
+    for row in (walk.get('names') or {}).get('searched') or []:
+        print('      %s -> %s (%s record(s), %s on this parcel)'
+              % (row.get('name'), row.get('outcome'), row.get('records'), row.get('on_parcel')))
+    for gap in dossier.get('open_gaps') or []:
+        print('    GAP %s' % gap)
 
 
 def _interpret(rows, interpreter, budget):
@@ -448,6 +508,7 @@ def main(argv=None):
             written += 1
             read_ok += dossier['c_documents'].get('fully_read') or 0
             print('  %s  %s' % (entry['case'], dossier['conclusion']))
+            _print_case(dossier)
     finally:
         queue.close()
     print('run_documents: %d dossier(s) written, %d document(s) actually read.'

@@ -202,6 +202,133 @@ def classify(reading, index_label=''):
     return base
 
 
+# ---- WHICH CASE a court paper belongs to ---------------------------------------------------
+# MEASURED 2026-09-22 on 2024-014334-CA-01: the one document the stage read and filed as that
+# foreclosure's `final_judgment` at confidence HIGH was a Bank of America SMALL-CLAIMS default
+# judgment in 2026-058556-SP-26. The owner-name search found it because it shares a defendant,
+# and nothing downstream ever compared the case number printed on the page with the case the
+# document was being filed under. No arithmetic was wrong, because nothing folds into the equity
+# verdict — but a person reading that dossier would believe the foreclosure judgment had been
+# read, and it had not. A confident wrong label is the failure this whole rung exists to avoid.
+#
+# The check is cheap and the evidence is right there in the text, so it is not optional.
+_CASE_FL_RE = re.compile(
+    r'\b(20\d{2})\s*[-–]\s*(\d{4,6})\s*[-–]\s*'
+    r'(CA|CC|SP|CP|DR|FC|MM|CF|CO)\s*[-–]\s*(\d{2})\b', re.I)
+# Broward and the other CACE/COCE counties spell it the other way round.
+_CASE_BROWARD_RE = re.compile(
+    r'\b(CACE|COCE|CONO|COWE|COSO|CEC)\s*[-–]?\s*(\d{2})\s*[-–]?\s*(\d{5,6})\b', re.I)
+
+
+def normalize_case(text):
+    """A case number in one comparable spelling, or '' if this is not one.
+
+    OCR is why this exists in this shape. The page that started it read `CASF ao:
+    2026-058556-SP-26` — the LABEL was mangled and the number was perfect, so the number is what
+    is matched, never the words around it.
+    """
+    raw = str(text or '')
+    match = _CASE_FL_RE.search(raw)
+    if match:
+        return '%s-%s-%s-%s' % (match.group(1), match.group(2).zfill(6),
+                                match.group(3).upper(), match.group(4))
+    match = _CASE_BROWARD_RE.search(raw)
+    if match:
+        return '%s-%s-%s' % (match.group(1).upper(), match.group(2), match.group(3).zfill(6))
+    return ''
+
+
+def case_numbers(reading):
+    """Every case number printed in a document's own text, with the page and line it came from."""
+    out, seen = [], set()
+    for page in _readable(reading):
+        for line in (page.get('text') or '').splitlines():
+            for pattern in (_CASE_FL_RE, _CASE_BROWARD_RE):
+                for hit in pattern.finditer(line):
+                    number = normalize_case(hit.group(0))
+                    if not number or number in seen:
+                        continue
+                    seen.add(number)
+                    out.append({'case': number, 'page': page['page'],
+                                'passage': line.strip()[:240]})
+    return out
+
+
+def case_identity(reading, expected):
+    """Does this document say it belongs to `expected`?
+
+    Three answers, and the third is the one that matters:
+      True   the expected case number is printed on the document.
+      None   the document prints NO case number at all. A mortgage, a deed or a lien has no case
+             number, so this is the normal answer for most of what a search returns and must
+             never be read as a mismatch.
+      False  the document prints case numbers and the expected one is not among them. It belongs
+             to a different action that happens to share a party.
+    """
+    want = normalize_case(expected)
+    found = case_numbers(reading)
+    numbers = [f['case'] for f in found]
+    if not numbers:
+        return {'expected': want or (expected or None), 'found': [], 'agrees': None,
+                'why': 'the document prints no case number, which is normal for a recorded '
+                       'instrument'}
+    if not want:
+        return {'expected': expected or None, 'found': numbers, 'agrees': None,
+                'why': 'no case number was supplied to compare against'}
+    if want in numbers:
+        return {'expected': want, 'found': numbers, 'agrees': True, 'evidence': found[:4]}
+    return {'expected': want, 'found': numbers, 'agrees': False, 'evidence': found[:4],
+            'why': 'this document names %s, not %s; it is a different action against a shared '
+                   'party' % (', '.join(numbers[:3]), want)}
+
+
+# ---- which book/page a document IS ---------------------------------------------------------
+def _norm(value):
+    """Book and page compare as numbers-without-leading-zeros. The clerk is inconsistent about
+    zero-padding between the index, the recording stamp and the body text of a document, and
+    '04642' != '4642' is the kind of mismatch that reads as 'not found'."""
+    return str(value or '').strip().lstrip('0') or '0'
+
+
+def key_of(book, page):
+    return '%s/%s' % (_norm(book), _norm(page))
+
+
+def own_spans(rows):
+    """Every book/page a document in `rows` OCCUPIES — its own recording stamp, all pages.
+
+    MEASURED 2026-09-22 on the pilot case: of the seven "citations" the reader found, FIVE were
+    the judgment's own recording stamp. A five-page instrument recorded at book 35287 page 4642
+    stamps 4642, 4643, 4644, 4645 and 4646 across its pages, and the regex cannot tell a clerk's
+    header from a reference in the body. Excluding only the document's first page (which is what
+    its source_ref carries) left four of them, and a real run would have spent a third of its
+    twelve-document budget re-fetching the document it was standing on.
+
+    So the span is book + [first page .. first page + pages - 1]. Page count comes from the row;
+    when it is missing the span is just the first page, which is the old behaviour and is the
+    honest floor — inventing a span for a document whose length we do not know could suppress a
+    genuine citation to the instrument recorded immediately after it.
+    """
+    spans = set()
+    for row in rows or []:
+        match = re.search(r'official_records/(\d+)-(\d+)', str(row.get('source_ref') or ''))
+        if not match:
+            continue
+        book, first = match.group(1), match.group(2)
+        try:
+            pages = int(row.get('pages') or 0)
+        except (TypeError, ValueError):
+            pages = 0
+        try:
+            start = int(first)
+        except ValueError:
+            spans.add(key_of(book, first))
+            continue
+        for offset in range(max(1, pages)):
+            spans.add(key_of(book, start + offset))
+    return spans
+
+
 # ---- what this document points AT ----------------------------------------------------------------
 # The seed of chain-following: an instrument names the instruments it affects, by book and page.
 # An owner-name search never sees a lien recorded against a prior owner or a misspelled name, but

@@ -28,6 +28,7 @@ import argparse
 import itertools
 import json
 import os
+from datetime import datetime, timezone
 import re
 import sys
 
@@ -283,7 +284,71 @@ def judgment_amount_candidates(reading):
                             'sum_check_reason': check['reason'],
                             'sum_check_components': check['components'],
                             'column_notes': notes if how == 'tail_figure' else []})
-    return out
+    return out + composed_candidates(reading, out)
+
+
+# A judgment that states its parts and never states their sum. The 2026-09-22 read of
+# 2026-058556-SP-26 said, in one sentence, "the principal sum of $3,941.07, court costs in the
+# amount of $379.85" and nothing else — no total line, so TOTAL_RE matched nothing and the
+# extractor recorded NEITHER figure. The document was read, the money was on the page, and the
+# dossier said `amounts: []`.
+_COMPONENT_RES = (
+    ('principal', re.compile(r'principal\s+(?:sum|balance|amount)?[^$\n]{0,30}?' + MONEY_RE.pattern,
+                             re.I)),
+    ('costs', re.compile(r'(?:court\s+)?costs?\b[^$\n]{0,40}?' + MONEY_RE.pattern, re.I)),
+    ('interest', re.compile(r'interest\b[^$\n]{0,40}?' + MONEY_RE.pattern, re.I)),
+    ('attorney_fees', re.compile(r"attorney'?s?\s+fees?\b[^$\n]{0,40}?" + MONEY_RE.pattern, re.I)),
+)
+
+
+def composed_candidates(reading, already):
+    """principal + costs + interest + fees, when the document states no total of its own.
+
+    THE SUM CHECK CANNOT APPLY HERE, and that is the whole point of keeping it separate. Every
+    other candidate is a total the document PRINTED, checked against the parts it printed — two
+    independent statements, one corroborating the other. This figure is arithmetic we did
+    ourselves on parts nobody totalled, so there is no second statement to check it against. It
+    carries `composed: True`, `sum_check: False` and its components, it is never admissible, and
+    `judgment_for_analyze` drops it with every other scan-read figure. It exists so a reader can
+    see the money that is on the page instead of an empty list.
+    """
+    if already:
+        return []
+    parts, pages = {}, set()
+    for page in reading['pages']:
+        if page['outcome'] not in ('text', 'ocr_text'):
+            continue
+        for name, pattern in _COMPONENT_RES:
+            if name in parts:
+                continue
+            match = pattern.search(page.get('text') or '')
+            if not match:
+                continue
+            try:
+                parts[name] = {'amount': float(match.group(1).replace(',', '')),
+                               'page': page['page'],
+                               'passage': match.group(0).strip()[:160],
+                               'text_source': page.get('text_source')}
+            except ValueError:
+                continue
+            pages.add(page['page'])
+    # A principal alone is not a judgment total, it is one line of one. Two named parts is the
+    # floor, otherwise this invents a total out of the only number on the page.
+    if 'principal' not in parts or len(parts) < 2:
+        return []
+    total = round(sum(p['amount'] for p in parts.values()), 2)
+    order = [name for name, _ in _COMPONENT_RES if name in parts]
+    return [{'amount': total, 'page': min(pages),
+             'passage': ' + '.join('%s ${:,.2f}'.format(parts[n]['amount']) % n for n in order),
+             'source': 'document_text', 'match': 'principal_plus_components',
+             'text_source': parts['principal']['text_source'], 'verified': False,
+             'composed': True, 'sum_check': False,
+             'sum_check_reason': ('the document states no total of its own, so this is our '
+                                  'arithmetic on its named parts and nothing in the document '
+                                  'corroborates it'),
+             'sum_check_components': [parts[n]['amount'] for n in order],
+             'component_passages': [dict(parts[n], part=n) for n in order],
+             'column_notes': []}]
 
 
 def agreed_amount(candidates):
@@ -395,6 +460,27 @@ def vision_candidates(path, reading, budget, reader=None, out_dir=None):
                     'sum_check': check['ok'], 'sum_check_reason': check['reason'],
                     'sum_check_components': check['components'], 'column_notes': []})
     return out, detail
+
+
+def _save_vision(row, detail):
+    """Persist the second reader's output beside the page text it was bought to supplement."""
+    target = row.get('text_dir')
+    if not target:
+        return
+    try:
+        path = os.path.join(str(target), 'vision.json')
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump({'read_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
+                       'source_ref': row.get('source_ref'),
+                       'usd': detail.get('usd'),
+                       'pages': {str(k): v for k, v in (detail.get('pages') or {}).items()},
+                       'figures': detail.get('figures') or [],
+                       'grand_totals': detail.get('grand_totals') or [],
+                       'errors': detail.get('errors') or {}}, fh, indent=1, sort_keys=True)
+        row['vision_path'] = path
+    except (OSError, TypeError, ValueError) as exc:
+        # Losing the sidecar must not lose the run; the figures are still on the row.
+        row['vision_save_error'] = '%s: %s' % (type(exc).__name__, str(exc)[:140])
 
 
 def read_with_sweep(path, ocr=None, images_dir=None, gray_cutoff=None):
@@ -622,6 +708,12 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
             row['amount_candidates'] = (row.get('amount_candidates') or []) + found
             row['vision_figures'] = detail['figures']
             row['vision_errors'] = detail['errors']
+            # WRITE DOWN WHAT THE MONEY BOUGHT. The 2026-09-22 run on 2024-014334-CA-01 was
+            # billed $0.0331, produced no grand total, and left nothing on disk: the stored
+            # reading had no vision block, so there was no way to see what the second reader had
+            # actually transcribed or to tell a bad read from an honest "no total on this page".
+            # A metered reader whose output is not persisted is money spent on nothing.
+            _save_vision(row, detail)
             candidates.extend(found)
             vision['pages_read'] += len(detail['pages'])
             vision['usd'] = round(vision['usd'] + detail['usd'], 6)

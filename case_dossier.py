@@ -91,9 +91,15 @@ def _c(documents):
         return _section('What the documents say', 'empty', 'document_text',
                         documents=[],
                         note='no document has been fetched and read for this case')
-    read = [d for d in documents if d.get('read_status') == 'read']
+    # A document from a DIFFERENT action was read, and it is not a document of this case. It is
+    # counted and reported separately so no count above it can quietly include it.
+    elsewhere = [d for d in documents
+                 if (d.get('case_identity') or {}).get('agrees') is False]
+    read = [d for d in documents
+            if d.get('read_status') == 'read' and d not in elsewhere]
     classified = [d for d in documents
-                  if (d.get('classification') or {}).get('kind') not in (None, 'unknown')]
+                  if (d.get('classification') or {}).get('kind') not in (None, 'unknown')
+                  and d not in elsewhere]
     rows = []
     for d in documents:
         verdict = d.get('classification') or {}
@@ -118,6 +124,13 @@ def _c(documents):
             'read_status': d.get('read_status'),
             'pages_unresolved': d.get('pages_unresolved'),
             'amounts': d.get('amount_candidates') or [],
+            # What the metered second reader transcribed, whether or not it produced a total.
+            # Without this a dossier for a page the reader was PAID to read looks identical to
+            # one where it was never run.
+            'second_reader': ({'figures': d.get('vision_figures') or [],
+                               'errors': d.get('vision_errors') or {},
+                               'saved_to': d.get('vision_path')}
+                              if d.get('vision_figures') is not None else None),
             'cites_instruments': d.get('cited_instruments') or [],
         })
     status = 'present' if read else ('fetched_unread' if documents else 'empty')
@@ -125,11 +138,21 @@ def _c(documents):
         'What the documents say', status, 'document_text',
         documents=rows,
         fetched=len(documents), fully_read=len(read), classified=len(classified),
+        read_from_other_actions=len(elsewhere),
         page_verified=sum(1 for d in documents if d.get('page_count_verified')),
         # Every book/page the read documents point at. An owner-name search never sees a lien
         # recorded against a prior owner or a misspelt name; the document that references it does.
         cited_but_not_fetched=[c for d in documents for c in (d.get('cited_instruments') or [])
-                               if not c.get('fetched')],
+                               if not c.get('fetched')
+                               and document_classify.key_of(c.get('book'), c.get('page_no'))
+                               not in document_classify.own_spans(documents)],
+        # Court papers from the owner's OTHER lawsuits, kept out of everything above and listed
+        # here. They are real and they are about this person; they are not about this case.
+        other_actions=[{'source_ref': d.get('source_ref'),
+                        'belongs_to': (d.get('case_identity') or {}).get('found') or [],
+                        'text_kind': (d.get('classification') or {}).get('text_kind')}
+                       for d in documents
+                       if (d.get('case_identity') or {}).get('agrees') is False],
         caveat=('Nothing at this rung is verified. Every amount carries its page and the line it '
                 'came from, and an OCR-sourced figure is marked as such.'))
 
@@ -184,6 +207,9 @@ def build(case, county, inventory=None, chain=None, documents=None, walk=None):
         if not row['page_count_verified']:
             gaps.append('%s: page count never verified against the recording index'
                         % row['source_ref'])
+    for row in c.get('other_actions') or []:
+        gaps.append('%s is a document in %s, not this case, so this case\'s judgment has still '
+                    'not been read' % (row['source_ref'], ', '.join(row['belongs_to']) or '?'))
     unfetched = len(c.get('cited_but_not_fetched') or [])
     if unfetched:
         gaps.append('%d instrument(s) cited by a read document have not been fetched' % unfetched)
@@ -195,6 +221,9 @@ def build(case, county, inventory=None, chain=None, documents=None, walk=None):
     stopped = (c.get('walk') or {}).get('stopped_because')
     if stopped:
         gaps.append('the citation walk stopped early - %s' % stopped)
+    anchor = (((c.get('walk') or {}).get('name_search') or {}).get('anchor') or {})
+    if anchor and not anchor.get('anchored'):
+        gaps.append('the parcel could not be anchored: %s' % anchor.get('why'))
     planned = ((c.get('walk') or {}).get('name_search') or {}).get('skipped') or 0
     if planned:
         gaps.append('%d name(s) on this parcel\'s deeds or docket were never searched; a lien '
@@ -253,19 +282,35 @@ def _conclusion(case, b, c, d):
     if b['status'] == 'missing' and c['status'] == 'empty':
         return ('%s: nothing has been established. No recorded chain, no document read.' % case)
     read = c.get('fully_read') or 0
-    kinds = sorted({r['is'] for r in c.get('documents', []) if r['is'] != 'unknown'})
+    kinds = sorted({r['is'] for r in c.get('documents', [])
+                    if r['is'] not in ('unknown', 'other_action')})
     part_c = ('%d document(s) read (%s)' % (read, ', '.join(kinds) or 'none classified')
               if read else 'no document read')
+    # Saying "no document read" while the store holds one is the kind of half-truth that sends a
+    # reader looking for a bug. Name what was read and say whose case it belongs to.
+    other = c.get('read_from_other_actions') or 0
+    if other:
+        part_c += ('; %d other document(s) read belong to a different action against the same '
+                   'party and are not evidence about this case' % other)
     return ('%s: %s. %s. The equity verdict rests on %s.'
             % (case, d['short'], part_c,
                ' and '.join(d['rests_on']) or 'nothing'))
 
 
-def classify_documents(documents):
-    """Attach a text-based verdict and the instruments each document cites.
+def classify_documents(documents, case=''):
+    """Attach a text-based verdict, the instruments each document cites, and WHICH CASE it is in.
 
     `documents` are collect_recorded rows carrying a `reading`. A row without one keeps
     `unknown` — a document that was not read is not classified from its label.
+
+    `case` is the case these documents are being filed under. An owner-name search returns
+    everything recorded against a person, which includes court papers from that person's OTHER
+    lawsuits, and on 2024-014334-CA-01 exactly one document came back: a small-claims default
+    judgment from 2026-058556-SP-26, filed as this foreclosure's judgment at confidence high.
+    A document whose own text names a different case keeps its text verdict under `text_kind`
+    and is relabelled `other_action`, so it cannot fill this case's judgment slot, cannot reach
+    the conclusion line, and is still listed — it is evidence about the owner, just not about
+    this case.
     """
     for row in documents or []:
         reading = row.get('reading')
@@ -273,6 +318,12 @@ def classify_documents(documents):
             row['classification'] = {'kind': 'unknown', 'confidence': 'none',
                                      'basis': 'not_read', 'index_label': row.get('doc_type')}
             continue
-        row['classification'] = document_classify.classify(reading, row.get('doc_type') or '')
+        verdict = document_classify.classify(reading, row.get('doc_type') or '')
+        identity = document_classify.case_identity(reading, case)
+        row['case_identity'] = identity
+        if identity.get('agrees') is False:
+            verdict = dict(verdict, text_kind=verdict.get('kind'), kind='other_action',
+                           belongs_to=identity['found'], why=identity['why'])
+        row['classification'] = verdict
         row['cited_instruments'] = document_classify.cited_instruments(reading)
     return documents
