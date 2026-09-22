@@ -218,7 +218,7 @@ class DocumentQueue:
     def renew(self, job_id, owner, lease=DEFAULT_LEASE):
         cur = self.db.execute(
             'UPDATE jobs SET lease_until = ?, updated_at = ? WHERE id = ? AND lease_owner = ?'
-            " AND status = 'leased'", (time.time() + lease, _now(), job_id, owner))
+            " AND status = 'leased' AND lease_until > ?", (time.time() + lease, _now(), job_id, owner, time.time()))
         return cur.rowcount == 1
 
     # ---- finish --------------------------------------------------------------------------------
@@ -229,8 +229,8 @@ class DocumentQueue:
         cur = self.db.execute(
             'UPDATE jobs SET status = ?, sha256 = ?, error = ?, reader_version = ?,'
             ' read_status = ?, lease_owner = NULL, lease_until = NULL, updated_at = ?'
-            ' WHERE id = ? AND lease_owner = ?',
-            (status, sha, error, reader_version, read_status, _now(), job_id, owner))
+            " WHERE id = ? AND lease_owner = ? AND status = 'leased' AND lease_until > ?",
+            (status, sha, error, reader_version, read_status, _now(), job_id, owner, time.time()))
         return cur.rowcount == 1
 
     def complete(self, job_id, owner, sha256=None, reader_version=None, read_status=None):
@@ -251,8 +251,8 @@ class DocumentQueue:
         status = 'pending' if attempts < MAX_ATTEMPTS else 'failed'
         cur = self.db.execute(
             'UPDATE jobs SET status = ?, error = ?, lease_owner = NULL, lease_until = NULL,'
-            ' updated_at = ? WHERE id = ? AND lease_owner = ?',
-            (status, str(error)[:500], _now(), job_id, owner))
+            " updated_at = ? WHERE id = ? AND lease_owner = ? AND status = 'leased' AND lease_until > ?",
+            (status, str(error)[:500], _now(), job_id, owner, time.time()))
         return cur.rowcount == 1
 
     # ---- report --------------------------------------------------------------------------------
