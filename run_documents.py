@@ -332,6 +332,14 @@ def _print_case(dossier):
         if second:
             print('      second reader: %d figure(s) transcribed -> %s'
                   % (len(second['figures']), second.get('saved_to') or 'not saved'))
+    judgment = c.get('judgment') or {}
+    if judgment.get('certain'):
+        print('    JUDGMENT %s%s' % (judgment['operative'],
+                                     (' $' + '{:,.2f}'.format(judgment['amount']))
+                                     if judgment.get('amount') else ''))
+    elif judgment.get('candidates'):
+        print('    JUDGMENT unsettled: %d candidates (%s)'
+              % (len(judgment['candidates']), ', '.join(str(r) for r in judgment['candidates'])))
     for row in c.get('other_actions') or []:
         print('    NOT THIS CASE  %s belongs to %s'
               % (row['source_ref'], ', '.join(row['belongs_to']) or '?'))

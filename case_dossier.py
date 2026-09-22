@@ -139,6 +139,7 @@ def _c(documents):
         documents=rows,
         fetched=len(documents), fully_read=len(read), classified=len(classified),
         read_from_other_actions=len(elsewhere),
+        judgment=_operative_judgment(rows),
         page_verified=sum(1 for d in documents if d.get('page_count_verified')),
         # Every book/page the read documents point at. An owner-name search never sees a lien
         # recorded against a prior owner or a misspelt name; the document that references it does.
@@ -155,6 +156,37 @@ def _c(documents):
                        if (d.get('case_identity') or {}).get('agrees') is False],
         caveat=('Nothing at this rung is verified. Every amount carries its page and the line it '
                 'came from, and an OCR-sourced figure is marked as such.'))
+
+
+def _operative_judgment(rows):
+    """Which read document IS this case's judgment, or an honest refusal to say.
+
+    MEASURED 2026-09-22 on 2026-013492-CC-26: TWO documents came back classified
+    `final_judgment`, 35460-173 and 35460-2179, and the dossier reported both without saying
+    which one controls. Picking the later recording would be a guess dressed as a finding: an
+    original and an amended judgment, two judgments on separate counts, and a judgment in a
+    different action that prints no case number all look the same from the text.
+
+    So one candidate is named, several are named as several, and the reader is told what would
+    settle it. `amount` is carried only when exactly one candidate has one, for the same reason.
+    """
+    found = [r for r in rows if r.get('is') == 'final_judgment']
+    if not found:
+        return {'operative': None, 'candidates': [], 'certain': False,
+                'why': 'no read document on this case classifies as a final judgment'}
+    refs = [r.get('source_ref') for r in found]
+    if len(found) == 1:
+        amounts = found[0].get('amounts') or []
+        return {'operative': refs[0], 'candidates': refs, 'certain': True,
+                'amount': amounts[0]['amount'] if len(
+                    {a['amount'] for a in amounts}) == 1 else None}
+    return {'operative': None, 'candidates': refs, 'certain': False,
+            'why': ('%d read documents on this case classify as a final judgment (%s). Which one '
+                    'controls is a legal question the text does not answer: they may be an '
+                    'original and an amended judgment, judgments on separate counts, or one of '
+                    'them may belong to another action that prints no case number. Open them and '
+                    'compare their dates and their decretal paragraphs.'
+                    % (len(refs), ', '.join(str(r) for r in refs)))}
 
 
 def _d(chain, section_c):
@@ -210,6 +242,9 @@ def build(case, county, inventory=None, chain=None, documents=None, walk=None):
     for row in c.get('other_actions') or []:
         gaps.append('%s is a document in %s, not this case, so this case\'s judgment has still '
                     'not been read' % (row['source_ref'], ', '.join(row['belongs_to']) or '?'))
+    judgment = c.get('judgment') or {}
+    if judgment.get('candidates') and not judgment.get('certain'):
+        gaps.append(judgment['why'])
     unfetched = len(c.get('cited_but_not_fetched') or [])
     if unfetched:
         gaps.append('%d instrument(s) cited by a read document have not been fetched' % unfetched)

@@ -635,9 +635,17 @@ GRAY_CUTOFF_SWEEP = (160, 200, 130, 220)
 # its own rule the job was correctly finished and by every human measure it was not.
 #
 # Anything downstream of the stored bytes can make an old verdict stale, not only the reader. So
-# the number the queue compares is this one, and it covers the reader AND the extraction. Bump it
-# when either changes.
-PIPELINE_VERSION = 5
+# the number the queue compares is this one, and it covers the reader, the extraction AND the
+# classification. Bump it when any of them changes.
+#
+# It happened a FOURTH time on b968725, and this comment is the reason it is embarrassing rather
+# than surprising: that commit taught the classifier to reject a document belonging to another
+# lawsuit and taught the extractor to compose principal-plus-costs, and did not bump this number.
+# So the rerun on 2024-014334-CA-01 skipped the Bank of America paper with "already done on an
+# earlier run", demoted it to `unknown` because a skipped row has no reading to classify, and
+# never exercised the new check on the text at all. The verdict looked right and nothing had
+# re-read anything.
+PIPELINE_VERSION = 6
 
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,

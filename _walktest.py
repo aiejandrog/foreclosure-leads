@@ -679,6 +679,58 @@ class CaseIdentityTest(unittest.TestCase):
                             for g in dossier['open_gaps']))
 
 
+class OperativeJudgmentTest(unittest.TestCase):
+    def _row(self, ref, amount=None):
+        return {'source_ref': ref, 'status': 'stored', 'read_status': 'read', 'pages': 1,
+                'page_count_verified': True,
+                'classification': {'kind': 'final_judgment', 'confidence': 'high',
+                                   'basis': 'document_text'},
+                'amount_candidates': ([{'amount': amount, 'page': 1, 'sum_check': True}]
+                                      if amount else [])}
+
+    def test_one_judgment_is_named_with_its_amount(self):
+        import case_dossier
+        d = case_dossier.build('C1', 'MIAMI-DADE',
+                               documents=[self._row('official_records/35460-2179', 11839.10)])
+        j = d['c_documents']['judgment']
+        self.assertTrue(j['certain'])
+        self.assertEqual(j['operative'], 'official_records/35460-2179')
+        self.assertEqual(j['amount'], 11839.10)
+
+    def test_two_judgments_are_not_resolved_by_guessing(self):
+        # Both are real, and the text cannot say which controls. Picking the later recording
+        # would be a guess printed as a finding.
+        import case_dossier
+        d = case_dossier.build('C1', 'MIAMI-DADE',
+                               documents=[self._row('official_records/35460-173'),
+                                          self._row('official_records/35460-2179', 11839.10)])
+        j = d['c_documents']['judgment']
+        self.assertFalse(j['certain'])
+        self.assertIsNone(j['operative'])
+        self.assertEqual(len(j['candidates']), 2)
+        self.assertTrue(any('Which one controls' in g for g in d['open_gaps']))
+
+
+class ResumeStalenessTest(unittest.TestCase):
+    def test_a_skipped_row_can_never_carry_a_classification(self):
+        # The resume path hands back a row with no `reading`. It must come out `unknown` /
+        # `not_read` and never inherit an earlier run's verdict, because the earlier verdict was
+        # produced by the code this run changed.
+        import case_dossier
+        rows = [{'source_ref': 'official_records/35399-4908', 'status': 'skipped',
+                 'reason': 'already done on an earlier run'}]
+        case_dossier.classify_documents(rows, case='2024-014334-CA-01')
+        self.assertEqual(rows[0]['classification']['kind'], 'unknown')
+        self.assertEqual(rows[0]['classification']['basis'], 'not_read')
+
+    def test_the_pipeline_version_is_past_the_classifier_change(self):
+        # PIPELINE_VERSION is what lets the queue re-read a document an older pipeline finished.
+        # b968725 changed the classifier and the extractor and did NOT bump it, so the rerun
+        # skipped the document it was meant to re-examine. This pins the bump.
+        import miami_judgment as MJ
+        self.assertGreaterEqual(MJ.PIPELINE_VERSION, 6)
+
+
 class DossierSpanTest(unittest.TestCase):
     def test_a_documents_own_pages_are_not_listed_as_unfetched_citations(self):
         # The third call site. walk() and the CLI both seed with own_spans; the dossier did not,
