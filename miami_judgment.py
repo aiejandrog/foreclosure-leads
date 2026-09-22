@@ -693,6 +693,17 @@ def main(argv=None):
         parser.exit(2, '--vision is metered: pass --max-spend, e.g. --vision --max-spend 0.50\n')
     vision_budget = (DI.Budget(args.max_spend, model=args.vision_model)
                      if args.vision else None)
+    vision_reader = DV.VisionReader(model=args.vision_model) if args.vision else None
+    if vision_reader is not None:
+        # Fail on the missing key HERE, not at the first call. The 2026-09-22 run that found this
+        # had already downloaded the document and made four OCR passes before anything asked
+        # whether it could pay for the reader it was about to use. A precondition checked after
+        # the work is not a precondition.
+        try:
+            vision_reader.client()
+        except DI.NotConfigured as gap:
+            parser.exit(2, '--vision cannot run here: %s\n'
+                           'Set ANTHROPIC_API_KEY in this shell, or drop --vision.\n' % gap)
 
     if args.dry_run:
         inventory = enumerate_case(args.case)
@@ -720,9 +731,7 @@ def main(argv=None):
         report = run(args.case, records, queue=queue, ocr=ocr,
                      judgments_only=args.judgments_only, keep_images=args.keep_images,
                      gray_cutoff=args.gray_cutoff, resume=args.resume,
-                     vision_budget=vision_budget,
-                     vision_reader=(DV.VisionReader(model=args.vision_model)
-                                    if args.vision else None))
+                     vision_budget=vision_budget, vision_reader=vision_reader)
     finally:
         if queue:
             queue.close()
