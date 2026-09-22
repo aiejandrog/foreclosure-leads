@@ -15,6 +15,7 @@ _*.py
 !_calldetailtest.py
 !_batsyntaxtest.py
 !_refreshexittest.py
+!_lpchaintest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html
@@ -468,6 +469,13 @@ deal_desk.json
 # make_callmode's own "every lead, or say which ones are missing" guard asserted over the crew
 # union, not over what the page ships -- a guard over a superset proves nothing about the subset.
 !_seatcoveragetest.py
+
+# _anchorgatetest: a Broward lis pendens names a defendant, not a parcel, so when that name sits on
+# several properties the row ends with a candidate list and nothing choosing from it. That state
+# lived only as prose in an advisory field, which no gate parsed, and 7 of 17 contacted rows were
+# the wrong property. It is a code now (PARCEL_UNANCHORED, in _HOLD_ALWAYS); this suite fails if an
+# unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
+!_anchorgatetest.py
 
 # publish_watch.py is the only guard in this repo that checks the PUBLISHED site rather than the
 # local build, so it is also the only one that can run from a machine that is not the laptop. Its
