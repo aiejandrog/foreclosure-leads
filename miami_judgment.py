@@ -193,7 +193,10 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
                                         'ocr_error': p.get('ocr_error')}
                                        for p in reading['pages'] if p.get('weak_reason')],
                         'path': manifest['path'],
-                        'amount_candidates': judgment_amount_candidates(reading)})
+                        'amount_candidates': judgment_amount_candidates(reading),
+                        # Kept for case_dossier.classify_documents; stripped before the report is
+                        # written, because full page text does not belong in a summary file.
+                        'reading': reading})
             if job:
                 queue.complete(job['id'], owner, sha256=manifest['sha256'])
         except DC.AccessGap as gap:
@@ -248,6 +251,18 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     report['judgment_amount_usable_with_ocr'] = judgment_for_analyze(report, allow_ocr=True)
     if queue is not None:
         report['coverage'] = queue.coverage(county, case)
+    # For case_dossier section a. Carries the full docket entries, so strip_readings drops it
+    # before anything is written to disk.
+    report['_inventory'] = inventory
+    return report
+
+
+def strip_readings(report):
+    """Drop the per-page text from a report before it is written to disk. The text lives in the
+    stored PDF; duplicating it into every summary bloats the file and scatters homeowner data."""
+    for row in report.get('documents', []):
+        row.pop('reading', None)
+    report.pop('_inventory', None)
     return report
 
 
@@ -342,6 +357,7 @@ def main(argv=None):
     usable = report['judgment_amount_usable']
     if usable is None and report['judgment_amount_usable_with_ocr'] is not None:
         print('  the only figure came from OCR — check it against the page image before quoting it')
+    strip_readings(report)
     if args.out:
         import case_review
         target = case_review.output_path(args.out)
