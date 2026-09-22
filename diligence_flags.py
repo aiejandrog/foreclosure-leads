@@ -260,6 +260,20 @@ def county_of(row):
     return ''
 
 
+def case_county(case):
+    """Return the county encoded by a case number when its dialect is unambiguous."""
+    cs = _s(case).upper().strip()
+    if re.match(r'^(CACE|CONO|COCE|COWE|COSO|CACO)[- ]', cs):
+        return 'BROWARD'
+    # Palm Beach UCNs normally arrive compact (502026CA...), but exports and audit files can
+    # punctuate the same county/year/division prefix as 50-2026-CA-....
+    if re.match(r'^50(?:[- ]?\d{4}[- ]?CA|\d{4}CA)', cs):
+        return 'PALM BEACH'
+    if re.match(r'^\d{4}-\d{6}-(CA|CC)', cs):
+        return 'MIAMI-DADE'
+    return ''
+
+
 def case_year(case):
     """Filing year out of ANY of the four case-number dialects in this repo.
 
@@ -717,6 +731,19 @@ def risk_flags(row):
         county = county_of(r)
         links = _COUNTY_LINKS.get(county, _DEFAULT_LINKS)
 
+        # ---- CASE_COUNTY_MISMATCH — the source county and the court-number dialect disagree.
+        # This is a routing/data-integrity failure, not an enrichment miss.  A lead must never be
+        # pitched from one county's property record while its case belongs to another clerk.
+        numbered_county = case_county(case_of(r))
+        if county and numbered_county and county != numbered_county:
+            out.append(_flag(
+                'CASE_COUNTY_MISMATCH', SEV_CRITICAL,
+                'This row is tagged %s, but case %s is a %s case number. The county source and '
+                'court record disagree, so its property and defendant data cannot be trusted.'
+                % (county, case_of(r) or '<case>', numbered_county),
+                'Do not call, text or mail it. Open the case in the %s clerk, correct the source '
+                'county, then rerun the county resolver before releasing the lead.' % numbered_county))
+
         # ---- TITLE_TRANSFERRED — the ownership_gate already proved it. Highest severity there is.
         if ts == 'transferred':
             who = _s(_first(r, 'title_owner')) or 'someone else'
@@ -1035,7 +1062,8 @@ def severity_of(row):
 # the same reason TAX_DEED_SALE does — and more bluntly: the lead is not a lead until somebody can
 # say which house it is.
 _HOLD_ALWAYS = ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
-                'SOLD_ABOVE_VALUE', 'EQ_UNRELIABLE', 'TAX_DEED_SALE', 'PARCEL_UNANCHORED')
+                'SOLD_ABOVE_VALUE', 'EQ_UNRELIABLE', 'TAX_DEED_SALE', 'PARCEL_UNANCHORED',
+                'CASE_COUNTY_MISMATCH')
 _HOLD_ON_DIVE = ('HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED', 'PARTIES_UNAVAILABLE')
 
 
