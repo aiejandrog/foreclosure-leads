@@ -565,6 +565,53 @@ def title_status_of(row):
     return _s(_d(row).get('title_status')).strip().lower()
 
 
+# A lis pendens resolved to SEVERAL parcels and nothing picking one. lp_leads._candidates_guess()
+# renders that as "ONE OF 8 PARCELS: ..." in the advisory field; rows built by an lp_leads that
+# predates the explicit `unanchored` stamp carry only that string, and the gate has to hold them
+# too or it protects nothing until the next rebuild.
+_UNANCHORED_GUESS_RE = re.compile(r'^\s*ONE\s+OF\s+(\d+)\s+PARCELS\s*:', re.I)
+
+
+def parcel_unanchored(row):
+    """How many candidate parcels this case could not be narrowed past. 0 = anchored, or n/a.
+
+    A Broward lis pendens carries no legal description and no parcel (fl_lp/broward_resolve.py
+    proves that live), so the property is found by the DEFENDANT'S NAME. When that name sits on
+    several parcels, nothing in the filing says which one the case is about — and picking one is
+    the coin flip that put outreach on CACE-26-013184's owner's homestead while the lis pendens
+    was on her rental (2026-09-16). 7 of 17 contacted rows were the wrong property.
+
+    `unanchored` is the contract: lp_leads.py stamps it True with `anchorN` candidates whenever the
+    resolver ended with 2+ parcels and no anchor. The regex is only a fallback for rows baked
+    before that stamp existed. A row that explicitly says `unanchored: False` is believed.
+
+    NOT the same question as "do we have an address". A row with NO candidates at all is a lead we
+    know nothing about; it shows no property, quotes no number and cannot be mis-pitched. This is
+    the narrower and worse case: several concrete addresses on the row, any of which the reader
+    may take for the house. Absence of evidence warns, evidence of ambiguity holds — the same split
+    the whole hold/warn policy below is built on.
+    """
+    try:
+        r = _d(row)
+        if 'unanchored' in r:
+            if not r.get('unanchored'):
+                return 0
+            try:
+                n = int(r.get('anchorN') or 0)
+            except (TypeError, ValueError):
+                n = 0
+            return n if n >= 2 else 2
+        m = _UNANCHORED_GUESS_RE.match(_s(r.get('addrGuess')))
+        if not m:
+            return 0
+        try:
+            return max(2, int(m.group(1)))
+        except (TypeError, ValueError):
+            return 2
+    except Exception:
+        return 0
+
+
 # --------------------------------------------------------------------------------------------
 # (3) JESSE'S RULE #1 — who earns the 3-5 minutes
 # --------------------------------------------------------------------------------------------
@@ -680,6 +727,32 @@ def risk_flags(row):
                 'Stop. Mark it dead. If you want the story, find the OTHER case that issued the '
                 'certificate of title (%s).' % (links['clerk']),
                 who))
+
+        # ---- PARCEL_UNANCHORED — we do not know WHICH HOUSE this case is about.
+        # Every other flag in this file asks whether the deal is real. This one asks whether the
+        # PROPERTY is, and it is the only question that can put a stranger on the other end of the
+        # call. The Broward lis pendens carries no legal description and no parcel, so the resolver
+        # searches the defendant's NAME; when the name sits on several parcels the row ends with a
+        # candidate list and nothing choosing from it. 196 rows landed there. broward_pin.py settled
+        # 123 of them off the foreclosed mortgage's own PIN or the filing's plat book and page; the
+        # rest cannot be settled from any record we can read, and "could not anchor" is that step
+        # WORKING, not a retry to grind down.
+        #
+        # It is CRITICAL and it is in _HOLD_ALWAYS rather than _HOLD_ON_DIVE for the Sisavath
+        # reason: a lis pendens has no judgment, so it never shows a computed equity position, so a
+        # dive-gated version of this flag would be dead code on exactly the pool it exists for.
+        n_cand = parcel_unanchored(r)
+        if n_cand:
+            out.append(_flag(
+                'PARCEL_UNANCHORED', SEV_CRITICAL,
+                'The filing names a defendant whose name sits on %d different parcels and nothing '
+                'in the record picks one, so we do not know which property this case is about. '
+                'Any address, value or equity figure on this row is one of %d guesses.' % (n_cand, n_cand),
+                'Do not call, text or mail this one. Settle the parcel first: read the foreclosed '
+                'mortgage for its PIN (python fl_lp/broward_pin.py --case %s), or order the lis '
+                'pendens image at %s and match its legal description against the candidates. If '
+                'neither settles it, it stays held — a guess is not an answer here.'
+                % (case_of(r) or '<case>', links['records'] or 'the county official records')))
 
         # ---- TAX_DEED_SALE — a different animal wearing a foreclosure lead's clothes.
         # Nothing in the contact path tested for this until 2026-08-31: 34 rows on the board, 15 of
@@ -958,8 +1031,11 @@ def severity_of(row):
 # not in _HOLD_ON_DIVE: a tax deed with no computed equity position is still the wrong pitch to the
 # wrong party, and dive-gating it would repeat the Sisavath mistake of asking whether a lead
 # "earned" a check before checking it.
+# PARCEL_UNANCHORED fires on the DATA (the candidate list is on the row), so it belongs here for
+# the same reason TAX_DEED_SALE does — and more bluntly: the lead is not a lead until somebody can
+# say which house it is.
 _HOLD_ALWAYS = ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
-                'SOLD_ABOVE_VALUE', 'EQ_UNRELIABLE', 'TAX_DEED_SALE')
+                'SOLD_ABOVE_VALUE', 'EQ_UNRELIABLE', 'TAX_DEED_SALE', 'PARCEL_UNANCHORED')
 _HOLD_ON_DIVE = ('HOA_CODEFENDANT', 'RECENT_SALE', 'HIGH_EQUITY_UNVERIFIED', 'PARTIES_UNAVAILABLE')
 
 

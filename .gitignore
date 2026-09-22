@@ -468,3 +468,10 @@ deal_desk.json
 # make_callmode's own "every lead, or say which ones are missing" guard asserted over the crew
 # union, not over what the page ships -- a guard over a superset proves nothing about the subset.
 !_seatcoveragetest.py
+
+# _anchorgatetest: a Broward lis pendens names a defendant, not a parcel, so when that name sits on
+# several properties the row ends with a candidate list and nothing choosing from it. That state
+# lived only as prose in an advisory field, which no gate parsed, and 7 of 17 contacted rows were
+# the wrong property. It is a code now (PARCEL_UNANCHORED, in _HOLD_ALWAYS); this suite fails if an
+# unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
+!_anchorgatetest.py

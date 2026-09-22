@@ -136,7 +136,7 @@ except Exception as _e:                                        # pragma: no cove
 # the old carve-out could not offer at any data state.
 _ALWAYS = tuple(getattr(_DF, '_HOLD_ALWAYS', ()) or
                 ('TITLE_TRANSFERRED', 'SIBLING_CLAIMED', 'UNDERWATER', 'PURCHASE_ANCHOR',
-                 'SOLD_ABOVE_VALUE')) if _DF else ()
+                 'SOLD_ABOVE_VALUE', 'PARCEL_UNANCHORED')) if _DF else ()
 # HOA_CODEFENDANT and RECENT_SALE stay dive-gated holds: a live association case behind our own,
 # and a fresh sale on a distressed parcel, are both affirmative facts about the FILE, not gaps.
 _ON_DIVE = tuple(getattr(_DF, '_HOLD_ON_DIVE', ()) or
@@ -152,9 +152,16 @@ UNCHECKED_CODES = ('GATE_NO_ROW', 'GATE_ERROR', 'GATE_UNAVAILABLE')
 # The conditional one. See the policy essay in the module docstring.
 CONDITIONAL_CODE = 'EQ_UNRELIABLE'
 
+# ONE CODE SURVIVES THE ESCAPE HATCH. Everything in this file is a judgement about whether a lead
+# is worth a call; PARCEL_UNANCHORED is a statement that we do not know which house the case is
+# about, and there is no business reason to switch that off — the lead it releases is a call to
+# whoever happens to live at one of several addresses. The hatch below exists so a policy nobody
+# can afford does not get deleted; this is not a policy, it is the absence of a fact.
+NEVER_RELEASED = ('PARCEL_UNANCHORED',)
+
 # Escape hatch, and it is deliberately awkward to reach. DEALFLOW_DILIGENCE_GATE=off releases
-# everything but every report still prints, in full, what WOULD have been held — so turning the
-# gate off cannot quietly become the same state we were in before it existed.
+# everything EXCEPT the codes above, and every report still prints, in full, what WOULD have been
+# held — so turning the gate off cannot quietly become the same state we were in before it existed.
 def _enabled():
     return str(os.environ.get('DEALFLOW_DILIGENCE_GATE', 'on')).strip().lower() not in ('off', '0', 'no')
 
@@ -288,9 +295,13 @@ def gate(row):
         if not why:                                    # fall back to whatever contact_gate said
             why, action = g.get('why', ''), g.get('action', '')
 
-        if not _enabled():                             # gate switched off via env — say so, release
+        if not _enabled() and code not in NEVER_RELEASED:   # gate off via env — say so, release
             return _v(False, True, code, g, codes,
                       'GATE DISABLED (DEALFLOW_DILIGENCE_GATE=off) — this lead would be held: ' + why,
+                      action)
+        if not _enabled():                             # ... but see NEVER_RELEASED above
+            return _v(True, True, code, g, codes,
+                      'HELD EVEN THOUGH THE GATE IS OFF (DEALFLOW_DILIGENCE_GATE=off). ' + why,
                       action)
         return _v(True, True, code, g, codes, why, action)
     except Exception as e:
