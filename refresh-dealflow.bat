@@ -28,6 +28,12 @@ rem  never came up | 4 healthcheck says DOWN (advisory) | 5 the board built, gat
 rem  here, but the mirror to the public site repo did not publish, so the LIVE SITE still shows the
 rem  previous board - a materially different morning from a clean run, and it went unreported from
 rem  the 09-17 repo split until 09-18 because nobody read publish_site.py's exit code.
+rem  7 = the LIS PENDENS chain did not fully refresh (lp_refresh.py returned non-zero). Documented
+rem  2026-09-21 because _refreshexittest.py's own "exit code 7 is documented in the header" check
+rem  was the one red in its 52, and because the first real 7 on this box reported `LP CHAIN exit 2`
+rem  - a code the legend at :220 does not list either (it names only 3 = every source blocked and
+rem  4 = PARTIAL). The board still rebuilds on the leads already on file, which is the right
+rem  availability call; 7 exists so the night is not reported as clean. An earlier fault wins.
 rem  6 = a pre-publish GATE refused the board. Added 2026-09-21: both gate branches below did
 rem  `goto :end` without touching RUNEXIT, so a publish_guard block - a content regression, the one
 rem  thing healthcheck does not grade - ended the run at rc=0 with "health OK" on the console. Every
