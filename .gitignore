@@ -61,6 +61,10 @@ BSG_Mail_Campaign_*.pdf
 !_nearmetest.py
 !_docroomtest.py
 !_portfoliotest.py
+# _doccollecttest guards county document acquisition: that a short download is rejected against
+# the recording index, that a scanned page is never called read, and that document evidence cannot
+# reach equity_state's FACT states. Untracked, it would exist on one machine only.
+!_doccollecttest.py
 _*.html
 _*.json
 _*.txt
