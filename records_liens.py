@@ -219,11 +219,12 @@ def camoufox_session():
         return None, None
 
 
-def camoufox_qs(browser, party, settle=9000):
+def camoufox_qs(browser, owner_lf, settle=9000):
     """Run one search in the real UI and return the `qs` the county issued, or None.
 
-    party is the LAST NAME ONLY — same rule fetch_via_turnstile documents: the clerk answers
-    isValidSearch:false for anything with a space or comma in it.
+    owner_lf is ``(LAST, FIRST)``.  The county exposes separate last/first inputs; filling both is
+    essential because broad surnames are capped at 500 oldest records and can silently omit the
+    current owner.  Companies have an empty FIRST and continue to use the last-name field alone.
     """
     page = browser.new_page()
     grabbed = {}
@@ -261,7 +262,18 @@ def camoufox_qs(browser, party, settle=9000):
                 continue
         if box is None:
             return None
-        box.fill(party)
+        last, first = ((owner_lf[0], owner_lf[1]) if not isinstance(owner_lf, str)
+                       else (owner_lf, ''))
+        box.fill(last.strip())
+        if first and first.strip():
+            for sel in ('#firstName', 'input[name="firstName"]', 'input[placeholder*="First" i]'):
+                try:
+                    loc = page.locator(sel).first
+                    if loc.count():
+                        loc.fill(first.strip())
+                        break
+                except Exception:
+                    continue
         page.wait_for_timeout(600)
 
         for sel in ('button[type="submit"]', 'button:has-text("SEARCH")', 'button:has-text("Search")'):
@@ -701,7 +713,7 @@ def main():
                     #    Any failure just falls through to the paid path below; it never ends the run.
                     if cf_browser is not None:
                         try:
-                            qs = camoufox_qs(cf_browser, sp[0].strip())
+                            qs = camoufox_qs(cf_browser, sp)
                         except Exception as e:
                             qs = None
                             print(f'  camoufox errored ({str(e)[:70]}) — falling back to 2Captcha')
@@ -752,7 +764,7 @@ def main():
                         continue
                     if cf_browser is not None:
                         try:
-                            _qs = camoufox_qs(cf_browser, _sp[0].strip())
+                            _qs = camoufox_qs(cf_browser, _sp)
                         except Exception:
                             _qs = None
                         if _qs:
