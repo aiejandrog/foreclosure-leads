@@ -79,6 +79,50 @@ def _newest_filing(rows):
     return best.isoformat() if best else ''
 
 
+def _have_trace_key():
+    """Is any skip-trace provider usable on this machine? Mirrors skiptrace.load_key's own rule —
+    env var first, then the key file beside the repo — without importing skiptrace (which would
+    pull its whole provider stack in just to answer a yes/no)."""
+    for env, keyfile in (('TRACERFY_API_KEY', 'tracerfy.key'),
+                         ('BATCHDATA_API_KEY', 'batchdata.key')):
+        if os.environ.get(env, '').strip():
+            return True
+        path = os.path.join(HERE, keyfile)
+        try:
+            if os.path.exists(path) and open(path, encoding='utf-8').read().strip():
+                return True
+        except OSError:
+            pass
+    return False
+
+
+def _stamp():
+    """Write lp_meta.json — the as-of record for the LIS PENDENS data on disk.
+
+    CALLED THE MOMENT THE DATA IS FINAL, which is right after lp_leads.py, NOT at the end of the
+    script (moved 2026-09-22). It used to sit below the PHONES step, so the stamp recorded "the
+    whole chain reached the bottom" rather than "the filings on disk are this fresh" — and those
+    are different facts the moment any later step can fail.
+
+    It did fail: on 2026-09-21 the fast-lane trace hit skiptrace.py's exit 2 (provider rejected the
+    call — balance dry or key expired), the chain stopped there, and the stamp never got written.
+    lp_meta.json therefore still read `ran: 2026-09-18 / newest_filing: 9/9/2026` on a night that
+    had just swept 46 paid solves and folded in 408 Miami-Dade filings never pulled before. Two
+    readers in a row — the operator and a project session — took that stamp at face value and went
+    looking for a dead sweeper, a missing captcha.key and an empty 2Captcha balance. All three were
+    fine. A phone vendor's outage must not be able to make the filings look stale.
+    """
+    try:
+        lp = json.load(open(os.path.join(HERE, 'lis_pendens.json'), encoding='utf-8'))
+        newest = _newest_filing(lp)
+        json.dump({'ran': datetime.datetime.now().isoformat(timespec='seconds'),
+                   'records': len(lp), 'newest_filing': newest},
+                  open(os.path.join(HERE, 'lp_meta.json'), 'w', encoding='utf-8'), indent=1)
+        print(f'\nLP DATA STAMPED: {len(lp)} LP records, newest filing {newest or "unknown"}')
+    except Exception as e:
+        print(f'meta stamp skipped: {e}')
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--days', type=int, default=45)
@@ -108,27 +152,45 @@ def main():
     run('VALUE (lp_values)', ['lp_values.py'])
     run('CASE STATUS (lp_status)', ['lp_status.py'])
     run('BOARD ROWS (lp_leads)', ['lp_leads.py'])
+    # THE LIS PENDENS DATA IS NOW FINAL. Everything below this line is phones and an optional
+    # rebuild; neither changes a filing. Stamp here so the as-of date survives whatever they do.
+    _stamp()
     # FAST-LANE PHONES. A fresh filing with no phone is a lead you cannot be first to — the worker's
     # EARLY lane ("be the first call") has nothing to dial and the funnel dumps it into 'trace'.
     # Runs AFTER lp_leads so it only sees rows that actually resolved to a high-confidence address,
     # and it is bounded twice: --limit here and bd_budget's shared daily dollar cap inside skiptrace
     # (a spent budget exits 5, which run() treats as benign). ~$0.10/hit on Tracerfy.
-    run('PHONES (LP fast lane)', ['skiptrace.py', '--lp-fresh', '45', '--limit', '25'], ok=(0, 5))
+    #
+    # A VENDOR OUTAGE HERE IS BENIGN, and it took a real night to see why (2026-09-22). This is the
+    # LAST step: by the time it runs, the sweep, both resolve passes, values, status and the board
+    # rows have all already succeeded. So "stop the chain" buys nothing — there is nothing after it
+    # to protect — while costing the run its verdict and (until the stamp moved above) its freshness
+    # record. `ok` listed only 5, the shared daily budget cap, so every other vendor outcome killed
+    # the chain instead: 2 = the provider rejected the call, balance dry or key expired (skiptrace's
+    # TraceAborted — the one that actually fired on 09-21); 3 = the provider looks down, aborted
+    # after MAX_STRIKES consecutive failures (a Tracerfy DNS failure did this the same night);
+    # 4 = the run would breach --max-spend so nothing was traced. All four mean one thing to this
+    # chain: the fresh filings shipped without phones. Worth reporting, not worth withholding the
+    # board for — so they land in DEGRADED and are carried out in our own exit 4.
+    #
+    # 1 IS DELIBERATELY NOT IN THAT LIST. skiptrace exits 1 both for "no API key on this machine"
+    # (skiptrace.py:528) and for any uncaught exception, so treating 1 as benign would swallow a
+    # genuine crash. The missing-key half is a PRECONDITION, not a failure, so it is answered by
+    # skipping the step outright — the same shape as refresh-dealflow.bat's own `if exist
+    # tracerfy.key` guard at [3b/5], which this chain never had.
+    if _have_trace_key():
+        run('PHONES (LP fast lane)', ['skiptrace.py', '--lp-fresh', '45', '--limit', '25'],
+            ok=(0, 2, 3, 4, 5))
+    else:
+        DEGRADED.append('PHONES (LP fast lane) (no skip-trace key on this machine)')
+        print('\n===== PHONES (LP fast lane) =====\n(skipped: no skip-trace provider key '
+              '— fresh filings ship without phones)', flush=True)
     if a.rebuild:
         run('REBUILD (make_tracker)', ['-c',
             "import json, foreclosure_leads as F; "
             "F.make_tracker(json.load(open('leads_final.json', encoding='utf-8')))"])
 
-    # freshness stamp for healthcheck + anything that wants the as-of date
-    try:
-        lp = json.load(open(os.path.join(HERE, 'lis_pendens.json'), encoding='utf-8'))
-        newest = _newest_filing(lp)
-        json.dump({'ran': datetime.datetime.now().isoformat(timespec='seconds'),
-                   'records': len(lp), 'newest_filing': newest},
-                  open(os.path.join(HERE, 'lp_meta.json'), 'w', encoding='utf-8'), indent=1)
-        print(f'\nCHAIN DONE: {len(lp)} LP records, newest filing {newest or "unknown"}')
-    except Exception as e:
-        print(f'meta stamp skipped: {e}')
+    print('\nCHAIN DONE.')
     if DEGRADED:
         print('\nDEGRADED RUN — the chain finished, but not everything ran:')
         for d in DEGRADED:

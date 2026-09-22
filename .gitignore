@@ -15,6 +15,7 @@ _*.py
 !_calldetailtest.py
 !_batsyntaxtest.py
 !_refreshexittest.py
+!_lpchaintest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html

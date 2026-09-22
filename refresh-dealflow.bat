@@ -237,10 +237,21 @@ rem  fail-fast, and stamps lp_meta.json so healthcheck can age it. One line repl
 rem  READ THE LP CHAIN'S EXIT CODE (audit 2026-09-21, defect 7). lp_refresh.py is fail-fast and
 rem  stops the moment a step returns a code it does not consider benign - and this line threw that
 rem  away, so a chain that died at RESOLVE looked identical to one that swept three counties clean.
-rem  Codes from lis_pendens.py: 3 = every source blocked, nothing got through anywhere; 4 = PARTIAL,
-rem  some counties swept and some did not. Neither stops the refresh - the board still rebuilds on
-rem  the leads already on file, which is the right availability call - but the night is no longer
-rem  reported as clean. RUNEXIT 7 ^(6 is taken by the publish-guard gate^); an earlier fault wins.
+rem  WHAT LPEXIT ACTUALLY IS, corrected 2026-09-22. This comment used to say "codes from
+rem  lis_pendens.py", which reads as though the sweep is the only thing that can speak here. It is
+rem  not: lp_refresh.py is a chain of EIGHT scripts and run^(^) propagates the first non-benign code
+rem  any of them returns, so LPEXIT is "whichever step stopped the chain", not "how the sweep went".
+rem  That mattered on the first real 7 on this box, 09-21: LPEXIT was 2, nobody could find a 2 in
+rem  lis_pendens.py, and two readers went hunting a dead sweeper, a missing captcha.key and an empty
+rem  2Captcha balance. All three were fine - the 2 came from skiptrace.py at the BOTTOM of the chain
+rem  ^(TraceAborted: the phone vendor rejected the call^). The sweep had worked that night.
+rem  Read LPEXIT as: 4 = DEGRADED, the chain reached the bottom but not everything ran ^(this is
+rem  lp_refresh's own code, and the one a partial sweep or a phone-vendor outage now produces^);
+rem  anything else = the chain STOPPED, and lp_refresh printed "CHAIN STOPPED at <step>" naming
+rem  which one. Read that line, not this legend - only the log knows which script spoke.
+rem  Neither case stops the refresh - the board still rebuilds on the leads already on file, which
+rem  is the right availability call - but the night is no longer reported as clean.
+rem  RUNEXIT 7 ^(6 is taken by the publish-guard gate^); an earlier fault wins.
 set "LPEXIT=0"
 if exist captcha.key python -u lp_refresh.py --days 30 >> "%LOG%" 2>&1
 if exist captcha.key call :lpcode
