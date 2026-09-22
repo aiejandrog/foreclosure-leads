@@ -12909,9 +12909,10 @@ function genMorningWorker(lane, autostart){
     /* ---- bridge health -----------------------------------------------------------------------
        One probe on open, then updated by real send outcomes (doSend calls bridgeUp on every
        resolution) so the badge reflects reality rather than a stale boot-time reading. */
-    +   'var BRIDGE_OK=null;'
+    +   'var BRIDGE_OK=null, BRIDGE_HOLD="";'
     +   'function renderBridge(){'
     +     'var b=document.getElementById("mwbridge"); if(!b) return;'
+    +     'if(BRIDGE_HOLD){ b.className="mwbridge down"; b.innerHTML="<b>Sending paused</b> &middot; "+esc(BRIDGE_HOLD); return; }'
     +     'if(BRIDGE_OK===null){ b.className="mwbridge probing"; b.innerHTML="checking send bridge&hellip;"; return; }'
     +     'if(BRIDGE_OK){ b.className="mwbridge up";'
     +       'b.innerHTML="&#9889; <b>One-click send is ON</b> &middot; Email delivers straight from here";'
@@ -12928,7 +12929,7 @@ function genMorningWorker(lane, autostart){
     +     'var to = ac ? setTimeout(function(){ try{ac.abort();}catch(e){} }, 1500) : null;'
     +     'fetch("http://127.0.0.1:8823/health", ac?{signal:ac.signal}:{})'
     +       '.then(function(resp){ return resp.json(); })'
-    +       '.then(function(j){ if(to) clearTimeout(to); bridgeUp(!!(j && j.ready)); _cacheLive(j&&j.sent_today); })'
+    +       '.then(function(j){ if(to) clearTimeout(to); BRIDGE_HOLD=(j&&j.optout_stale)?"Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer; the queue stays here.":""; bridgeUp(!!(j && j.ready)); renderBridge(); renderRunBar(); _cacheLive(j&&j.sent_today); })'
     +       '.catch(function(){ if(to) clearTimeout(to); bridgeUp(false); });'
     +   '}'
     +   'function renderCap(){'
@@ -13277,6 +13278,7 @@ function genMorningWorker(lane, autostart){
                               "I sent it" confirm card. Nothing counts until the operator says so.
          bridge error/cap  -> resolve explicitly (pause or advance) — never dead-end the run. */
     +   'function doSend(r){'
+    +     'if(BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); pause(); return; }'
     // Subject/body are BAKED ONTO THE CARD by _cardMail on the board. They cannot be rebuilt in
     // here: this tab is a Blob document where DATA and genEmail simply do not exist. The original
     // bridge code tried anyway, threw ReferenceError into a silent catch, and every send in the
@@ -13310,7 +13312,12 @@ function genMorningWorker(lane, autostart){
     +       '.then(function(resp){ return resp.json().then(function(j){ return {status:resp.status, j:j}; }); })'
     +       '.then(function(x){'
     +         'sending=false;'
-    +         'if(x.status===200 && x.j.ok){'
+    +         'if(x.j.blocked==="optout_stale"){'
+    +           'BRIDGE_HOLD="Do-not-contact ledger needs synchronization. Run python ledger_sync.py on this bridge computer, then press Start after the warning clears.";'
+    +           'bridgeUp(true); renderBridge();'
+    +           'addLog("fail", "auto-run", String(x.j.err||BRIDGE_HOLD)+" — run paused; this lead and the remaining queue are unchanged.", "warn");'
+    +           'pause();'
+    +         '} else if(x.status===200 && x.j.ok){'
     +           'bridgeUp(true); _cacheLive(x.j.sent_today);'
     +           'post("sent", {mid:x.j.message_id||"", via:"bridge", portfolio:(r.portfolio||[]).map(function(p){return p.c;})});'
     +           'addLog("sent", r.first||r.owner, "✓ DELIVERED — id "+String(x.j.message_id||"").replace(/[<>]/g,"").slice(0,26));'
@@ -13699,10 +13706,10 @@ function genMorningWorker(lane, autostart){
     +         '+capLeft+" of today’s cap left.";'
     +       'btns="<button class=\'stop\' data-run=\'stop\'>&#9632; STOP the run</button>";'
     +     '} else {'
-    +       'var off=(BRIDGE_OK!==true);'
+    +       'var off=(BRIDGE_OK!==true || (typeof BRIDGE_HOLD!=="undefined" && !!BRIDGE_HOLD));'
     +       'txt=Q.length ? ("<b>"+left+" to work in "+esc(LMETA[lane].t)+"</b>"+((i&&left)?" (resumes at lead "+(i+1)+")":"")+" &middot; "+capLeft+" of today’s cap left.")'
     +         ': ("<b>Nothing queued in "+esc(LMETA[lane].t)+".</b> Pick another lane above.");'
-    +       'if(off) txt+=" <span style=\'color:#8a6d1f\'>Send bridge is not up, so auto-run cannot start &mdash; run <code>send_server.py</code>.</span>";'
+    +       'if(off) txt+=" <span style=\'color:#8a6d1f\'>"+((typeof BRIDGE_HOLD!=="undefined" && BRIDGE_HOLD)?esc(BRIDGE_HOLD):"Send bridge is not up, so auto-run cannot start &mdash; run <code>send_server.py</code>.")+"</span>";'
     +       'btns="<button class=\'go\' data-run=\'lane\'"+((!left||off)?" disabled":"")+">&#9654; Auto-run this lane</button>"'
     +         '+"<button class=\'all\' data-run=\'all\'"+((!allTotal()||off)?" disabled":"")+">&#9654;&#9654; All lanes ("+allTotal()+")</button>";'
     +     '}'
@@ -13732,6 +13739,7 @@ function genMorningWorker(lane, autostart){
     +     'if(auto){ addLog("info","auto-run","already running — ignored a duplicate start (one run at a time)"); return; }'
     +     'if(tbOn){ addLog("fail","auto-run","the text batch is running — stop it first, then start the lane run","warn"); return; }'
     +     'if(sendInFlight()){ addLog("fail","auto-run","a send is still in flight from the last run — it will finish and be recorded on its own. Press Start again in a moment.","warn"); return; }'
+    +     'if(typeof BRIDGE_HOLD!=="undefined" && BRIDGE_HOLD){ addLog("fail","auto-run",BRIDGE_HOLD,"warn"); probeBridge(); return; }'
     +     'if(BRIDGE_OK!==true){'
     +       'addLog("fail","auto-run","⛔ send bridge is not confirmed up — auto-run NOT started (it would fall back to Gmail-compose-and-confirm on every lead). Run send_server.py (or install_send_server_autostart.bat once), then reopen this tab.","warn");'
     +       'return;'
@@ -14104,6 +14112,7 @@ function genMorningWorker(lane, autostart){
     +     'if(fn==="done"){ post("done"); addLog("done", r.first||r.owner, "marked worked"); return advance(); }'
     +   '});'
     +   'renderBridge(); probeBridge(); renderLog(); render(); renderCallQ(); renderTextQ();'
+    +   'setInterval(probeBridge, 30000);'
     /* ---- UNATTENDED START (Windows Task Scheduler opens this at 8:00 AM) ---------------------
        The 8am task opened the worker and then nothing happened until a human clicked "Start
        auto-run" — so on any morning Alejandro was driving, the queue simply sat there.
@@ -14139,6 +14148,7 @@ function genMorningWorker(lane, autostart){
     // a bridge that is down at 8am does not just fail quietly — it opens a real Gmail composer
     // and a "did it send?" prompt for every single queued lead, unattended, all morning. That is
     // the exact failure the operator told us to stop producing.
+    +           'if(BRIDGE_HOLD){ addLog("fail","auto-start",BRIDGE_HOLD,"warn"); renderRunBar(); return; }'
     +           'if(BRIDGE_OK!==true){'
     +             'addLog("fail","auto-start","⛔ send bridge is not confirmed up — auto-run NOT started (it would have opened a Gmail composer and waited for a click on every lead instead). Run send_server.py, then reopen this tab.","warn");'
     +             'renderRunBar(); return;'

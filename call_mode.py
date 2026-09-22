@@ -1592,7 +1592,7 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
         _a1 = (d.get('addr') or '').split(',')[0].strip().upper()
         row = {
             'c': case,
-            'o': (d.get('owners') or '').strip()[:70],          # FULL owners, co-owners included
+            'o': (d.get('owners') or d.get('oname') or '').strip(),
             # GREETING NAME, separate from the display string above.
             # `owners` comes off the county roll as "LAST,FIRST" on 32% of leads (measured across
             # 4,009 real rows; Broward is almost entirely this shape). Deriving a first name from it
@@ -1601,7 +1601,10 @@ def call_rows(slim, optouts=None, deads=None, max_days=60, cap=400):
             # The pipeline already fixes this: owner_clean flips "Last, First" to "First Last"
             # (foreclosure_leads.py:536-539) and ships as `oname`. Ship it and use it. ~14 B/lead.
             'on': _greet_name(d),
-            'a': (d.get('addr') or '')[:60],
+            'a': (d.get('addr') or '').strip(),
+            # Advisory candidates stay separate from the address used by scripts and links.
+            'ag': (d.get('addrGuess') or '').strip() or None,
+            'aw': (d.get('addrWhy') or '').strip() or None,
             'x': d.get('auction') or d.get('filedDate') or d.get('filed') or '',
             'd': days,
             'lp': 1 if is_lp else 0,
@@ -1961,16 +1964,18 @@ def coverage_rows(slim, dial_cases, optouts=None, deads=None):
         # BUDGETED TO ~150 BYTES A ROW. This page's founding rule is that it opens on cell data at a
         # door — ~490 rows in ~100 KB against the board's 6.4 MB — and coverage adds ~1,900 rows to
         # it. Every field here is one a caller reads off the list or a skip-tracer needs to work the
-        # lead; there is no room for anything else. `o` (the full owner string with co-owners) is
-        # dropped whenever `on` can stand in, which is most rows, saving ~25 B each.
+        # lead. Keep the full owner/co-owner string when it differs from the greeting name;
+        # drop only an exact duplicate. Greeting-name truncation must not erase identity context.
         _on = _greet_name(d)
-        _o = (d.get('owners') or '').strip()[:70]
+        _o = (d.get('owners') or d.get('oname') or '').strip()
         _ne = len([e for e in (d.get('emails') or []) if str(e or '').strip()])
         row = {
             'c': case,
-            'o': (None if _on else _o),
+            'o': (_o if _o != _on else None),
             'on': _on,
-            'a': (d.get('addr') or '')[:60],
+            'a': (d.get('addr') or '').strip(),
+            'ag': (d.get('addrGuess') or '').strip() or None,
+            'aw': (d.get('addrWhy') or '').strip() or None,
             # BOARD KEY NAMES from here down — _funnelStage reads these verbatim.
             'auction': (d.get('auction') or ''),
             'days': days,
@@ -4035,6 +4040,14 @@ function boardBar(){
 /* The list behind a board-lane button. Read-only on purpose for the rows that are not dialable:
    the point of putting TRACE on the phone is to be able to SEE and HAND OFF the 1,068 leads nobody
    can call yet, not to invent a way to call them. */
+function propertyLabel(r){
+  if(r.a) return r.a;
+  if(r.ag) return 'Possible property: ' + r.ag + ' — unverified';
+  return 'Property address unresolved — check the case record';
+}
+function ownerLabel(r){
+  return r.o || r.on || 'Owner name unresolved — check the case record';
+}
 function boardList(){
   var k = BLANE, F = FUNNEL[k] || {t:k, ic:'', d:''}, rows = funnelRows(k);
   var head_ = '<div class="card"><b>' + F.ic + ' ' + esc(F.t) + ' &middot; ' + rows.length + '</b>'
@@ -4062,8 +4075,8 @@ function boardList(){
       : bv.emails.length ? 'no phone — email only'
       : 'no phone, no email — skip-trace first';
     return '<div class="card"' + (dial ? ' data-open="' + esc(r.c) + '" style="cursor:pointer"' : '')
-         + '><b>' + esc(r.on || r.o || r.c) + '</b>'
-         + '<div class="sub">' + esc(r.a || '') + '</div>'
+         + '><b>' + esc(ownerLabel(r)) + '</b>'
+         + '<div class="sub">' + esc(propertyLabel(r)) + '</div>'
          + '<div class="sub">' + clock + ' &middot; ' + eq
          + (why ? ' &middot; ' + why : ' &middot; <b style="color:var(--gold)">tap to call</b>') + '</div></div>';
   }).join('');
@@ -4636,8 +4649,10 @@ function screenLead(){
   var when = r.lp ? ('lis pendens filed '+esc(r.x||''))
                   : ((r.d===0?'auction TODAY':(r.d===1?'auction TOMORROW':'auction in '+r.d+' days'))+(r.x?' &middot; '+esc(r.x):''));
 
-  var who = '<div class="addr">'+esc(r.a||'(no address on file)')+'</div>'
-          + '<div class="own">'+esc(r.o||'(owner unknown)')+'</div>';
+  var who = '<div class="addr">'+esc(propertyLabel(r))+'</div>'
+          + '<div class="own">'+esc(ownerLabel(r))+'</div>';
+  if(!r.a && r.ag) who += '<div class="warnbar">Verify this candidate against the case record before quoting it.'
+    + (r.aw ? ' ' + esc(r.aw) : '') + '</div>';
   /* LAST QUO CALL -- what happened last time, in front of him BEFORE he redials. Summary from
      Quo's AI, flags from quo_sync's coach pass. Flags render red because every one of them is a
      sentence that must not be said again on the call he is about to make. */
@@ -5113,8 +5128,8 @@ function screenOutcome(){
   };
   var refRows = '';
   var addRef = function(k, v){ if(v) refRows += '<tr><td class="rk">'+k+'</td><td>'+v+'</td></tr>'; };
-  addRef('Property', esc(r.a || ''));
-  addRef('Owner', esc(r.o || ''));
+  addRef('Property', esc(propertyLabel(r)));
+  addRef('Owner', esc(ownerLabel(r)));
   if(r.v || r.jg || r.py){
     var eqv = (r.v && (r.py || r.jg)) ? (+r.v - (+r.py || +r.jg)) : 0;
     /* UNDERWATER MUST SHOW. Showing equity only when positive quietly hid the single fact that
