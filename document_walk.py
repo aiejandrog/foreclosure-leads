@@ -266,14 +266,25 @@ def resolve(book, page, index, caps_path=None, searcher=None):
     hit = index.get(book, page)
     if hit:
         return Resolution(record=dict(hit), via='index')
-    ok, shape = records_probe.confirmed('book_page',
-                                        caps_path or records_probe.CAPS)
+    ok, shape = records_probe.confirmed('book_page', caps_path)
     if not ok:
-        probed = records_probe.load_caps(caps_path or records_probe.CAPS).get('probed_at')
-        return Resolution(reason=(
-            'not in the index, and no book/page search is available%s'
-            % ('' if probed else ' (records_probe has never run on a machine with clerk access)')),
-            via='unresolved')
+        # Say which of the two very different things is true. "No search is available" because
+        # nobody has ever asked the county is a to-do; "no search is available" because the
+        # county was asked on a named date and answered no is a finding, and a reader who cannot
+        # tell them apart re-runs a probe that has already been paid for.
+        verdict = records_probe.load_caps(caps_path)
+        entry = (verdict.get('capabilities') or {}).get('book_page') or {}
+        # The date on the FILE does not mean this shape was tried. A probe run that solved three
+        # book/page shapes and skipped cfn for want of a CFN writes one `probed_at` and one
+        # capability; reading the file-level date would report the skipped shapes as answered.
+        if entry and verdict.get('probed_at'):
+            detail = ('; probed %s and not found (%s)'
+                      % (verdict['probed_at'][:10], entry.get('best_outcome') or 'no capability'))
+        else:
+            detail = ('; no probe verdict at %s — run records_probe.py --book B --page P from a '
+                      'machine with clerk access' % records_probe.caps_path())
+        return Resolution(reason='not in the index, and no book/page search is available' + detail,
+                          via='unresolved')
     if searcher is None:
         return Resolution(reason='book/page search is confirmed but no searcher was supplied',
                           via='unresolved')
@@ -428,7 +439,8 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
 class NameSearcher:
     """Run one Official Records NAME search, by the same token ladder records_liens uses.
 
-    PROBED AND ANSWERED 2026-09-22 (desktop, `records_search_caps.json`): all three book/page
+    PROBED AND ANSWERED 2026-09-22 (desktop, committed as `records_probe_findings.json`): all three
+    book/page
     shapes came back `accepted_no_hits`, so there is no confirmed way to ask this endpoint for an
     instrument by its book and page. Names are therefore not a nice-to-have second route — with
     the index cold, they are the ONLY way to widen past the current owner, and that is why this
@@ -634,7 +646,11 @@ def main(argv=None):
         print('  python -u miami_judgment.py %s --records or_rows.json --keep-images' % args.case)
         return 4
 
-    citations = pending_citations(rows, set())
+    # Seed with the documents' OWN recording spans, exactly as walk() does. This CLI used to
+    # pass an empty set, so `--dry-run` listed a judgment's own stamps back as citations of
+    # itself: seven lines where the case has one real citation. The suppression is not a
+    # property of walk(), it is a property of what counts as a citation, so both paths seed it.
+    citations = pending_citations(rows, own_spans(rows))
     print('%d citation(s) in the read text:' % len(citations))
     for cite in citations:
         outcome = resolve(cite['book'], cite['page_no'], index)

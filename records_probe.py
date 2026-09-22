@@ -47,7 +47,30 @@ import time
 import urllib.parse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-CAPS = os.path.join(HERE, 'records_search_caps.json')
+
+# WHERE THE VERDICT LIVES, AND WHY IT MOVED
+# A probe verdict is not a cache. It is a live observation of the county that costs a captcha and
+# can only be made from a machine with clerk access; nothing in this repo can rebuild it. It used
+# to sit at the repo root as a gitignored file, which is the house pattern for throwaway data, and
+# on 2026-09-22 it was deleted as throwaway data. The walk then went back to telling everyone the
+# probe had "never run on a machine with clerk access" — a true statement about the file and a
+# false one about the world.
+#
+# So the working copy lives with the rest of the durable data under DEALFLOW, and the answer we
+# already paid for is committed to the repo in `records_probe_findings.json`. LEGACY is still read
+# when it exists so a verdict written by the old build is not orphaned.
+CAPS = None       # resolved lazily: importing paths creates DEALFLOW_DIR, which a test may not want
+LEGACY = os.path.join(HERE, 'records_search_caps.json')
+FINDINGS = os.path.join(HERE, 'records_probe_findings.json')
+
+
+def caps_path():
+    """The working verdict file under DEALFLOW, created on first use."""
+    global CAPS
+    if CAPS is None:
+        import paths as P
+        CAPS = P.out('records_search_caps.json')
+    return CAPS
 
 # Every shape below is a HYPOTHESIS. None has been observed. The names come from the parameters the
 # live endpoint already takes (`partyName`, `documentType`, `dateRangeFrom`, `dateRangeTo`,
@@ -213,20 +236,45 @@ def _capabilities(results):
     return caps
 
 
-def load_caps(path=CAPS):
-    """What a probe observed, or an empty verdict. Never invents a capability."""
+def _read(path):
     try:
         with open(path, encoding='utf-8') as fh:
             data = json.load(fh)
     except (OSError, ValueError):
-        return {'probed_at': None, 'capabilities': {}}
-    if not isinstance(data, dict):
-        return {'probed_at': None, 'capabilities': {}}
-    data.setdefault('capabilities', {})
-    return data
+        return None
+    return data if isinstance(data, dict) else None
 
 
-def confirmed(capability, path=CAPS):
+def load_caps(path=None):
+    """What a probe observed, or an empty verdict. Never invents a capability.
+
+    Three sources, most-local first: the explicit `path` (or the DEALFLOW working file), the
+    legacy repo-root file, then the findings committed to the repo. The committed file is read
+    LAST and has every `confirmed` flag forced to False on the way in. That is the guard that
+    makes shipping a probe result in git safe: a tracked file can record that a capability was
+    looked for and not found, and it cannot, by any edit, hand the resolver a capability nobody
+    observed. An invented capability is the one failure mode this whole module exists to prevent.
+    """
+    data = _read(path or caps_path()) or _read(LEGACY)
+    if data is not None:
+        data.setdefault('capabilities', {})
+        data.setdefault('source', 'probe')
+        return data
+    recorded = _read(FINDINGS)
+    if recorded is None:
+        return {'probed_at': None, 'capabilities': {}, 'source': 'none'}
+    caps = {}
+    for name, entry in (recorded.get('capabilities') or {}).items():
+        entry = dict(entry)
+        entry['confirmed'] = False
+        entry.pop('shape', None)
+        caps[name] = entry
+    recorded['capabilities'] = caps
+    recorded['source'] = 'recorded'
+    return recorded
+
+
+def confirmed(capability, path=None):
     entry = (load_caps(path).get('capabilities') or {}).get(capability) or {}
     return bool(entry.get('confirmed')), entry.get('shape') or {}
 
@@ -246,9 +294,9 @@ def main(argv=None):
         if not caps.get('probed_at'):
             print('No probe has run. Nothing is known about non-name search on this endpoint.')
             return 1
-        print('probed %s against book %s page %s' % (caps['probed_at'],
-                                                     (caps.get('subject') or {}).get('book'),
-                                                     (caps.get('subject') or {}).get('page')))
+        print('probed %s against book %s page %s (source: %s)'
+              % (caps['probed_at'], (caps.get('subject') or {}).get('book'),
+                 (caps.get('subject') or {}).get('page'), caps.get('source') or 'probe'))
         for name, entry in sorted((caps.get('capabilities') or {}).items()):
             print('  %-12s %s  %s' % (name, 'CONFIRMED' if entry.get('confirmed') else 'no',
                                       entry.get('label') or ''))
@@ -262,13 +310,14 @@ def main(argv=None):
     print('subject: book %s page %s%s' % (args.book, args.page,
                                           (' folio ' + args.folio) if args.folio else ''))
     verdict = probe(subject, keep_raw=args.json)
-    with open(CAPS, 'w', encoding='utf-8') as fh:
+    target = caps_path()
+    with open(target, 'w', encoding='utf-8') as fh:
         json.dump(verdict, fh, indent=1, sort_keys=True)
     caps = verdict['capabilities']
     good = [k for k, v in caps.items() if v.get('confirmed')]
     tried = [r for r in verdict['shapes'] if r.get('outcome') != 'not_probed']
     skipped = [r for r in verdict['shapes'] if r.get('outcome') == 'not_probed']
-    print('\n-> %s' % CAPS)
+    print('\n-> %s' % target)
     print('%d shape(s) tried, %d not probed.' % (len(tried), len(skipped)))
     for row in skipped:
         print('  NOT PROBED: %s - %s' % (row['label'], row.get('why')))

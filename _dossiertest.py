@@ -282,14 +282,26 @@ class StageTests(unittest.TestCase):
         self.assertEqual([p['case'] for p in RD.pick_cases(leads, {}, 0)], ['B'])
 
     def test_a_case_with_no_cached_token_is_skipped_not_paid_for(self):
-        entry = {'case': CASE, 'owner': 'NOBODY CACHED', 'chain': None}
-        dossier = RD.run_case(entry, {})
+        # --token-budget can now mint one on request. With no budget passed, the mint must not
+        # be reached at all: this is the stage's only uninvited spend and a nightly runs it
+        # over the whole backlog.
+        import gen_records_qs as G
+        real = G.mint_qs
+
+        def never(lf):
+            raise AssertionError('mint_qs reached with no --token-budget')
+        G.mint_qs = never
+        try:
+            entry = {'case': CASE, 'owner': 'NOBODY CACHED', 'chain': None}
+            dossier = RD.run_case(entry, {})
+        finally:
+            G.mint_qs = real
         row = dossier['c_documents']['documents'][0]
         self.assertEqual(row['source_ref'], 'owner_search')
         self.assertEqual(row['status'], 'skipped')
-        self.assertIn('not minting', row['reason'])
+        self.assertIn('--token-budget is 0', row['reason'])
         # and the skip is visible as an open gap, not swallowed
-        self.assertTrue(any('not minting' in g for g in dossier['open_gaps']))
+        self.assertTrue(any('--token-budget is 0' in g for g in dossier['open_gaps']))
 
 
 if __name__ == '__main__':

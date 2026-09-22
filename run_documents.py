@@ -58,9 +58,16 @@ parcel's own deeds and on the docket, which is the route that reaches a prior ow
 mortgage. Each name is a Camoufox run or a 2Captcha solve, so a nightly does not spend it by
 accident; with the budget at 0 the dossier still lists the names it declined to search.
 
+`--token-budget N` unblocks asking for a case by name at all, and also defaults to 0. Every step
+above needs the owner's cached Official Records token, and `gen_records_qs.py` fills that cache
+40 owners a night in `leads_final.json` file order. So an owner low in that order simply has no
+token yet, and the stage skipped the case rather than spending ~$0.003 uninvited. That is a
+throughput limit, not a case-type one: nothing in the filler looks at whether a case is -CA- or
+-CC-, and `records_liens._lien_kind` reads -CC- as HOA deliberately.
+
 WHAT IT NEVER DOES
 No publish, no board write, no lead write, no suppression surface, and no captcha spend
-unless --name-budget is set above 0. Dossiers go
+unless --name-budget or --token-budget is set above 0. Dossiers go
 to DEALFLOW_DIR (outside the repo, outside OneDrive) through case_review.output_path. The equity
 verdict it reports is equity_state's existing one, computed from the recorded chain exactly as it
 always was — reading a document does not move a lead into a FACT state.
@@ -167,12 +174,63 @@ def pick_cases(leads, chains, limit, only=None):
     return out[:limit] if limit else out
 
 
+def mint_token(owner, qs_cache):
+    """Mint one Official Records search token for `owner` and cache it. Returns (token, reason).
+
+    WHY THIS IS A FLAG AND NOT THE DEFAULT
+    `gen_records_qs.py` fills `records_qs.json` nightly, 40 owners a run under an 8-minute
+    deadline (`refresh-dealflow.bat:182`), walking `leads_final.json` in file order and skipping
+    anyone already cached. Nothing in it filters by case type — `records_liens._lien_kind` reads
+    `-CC-` as HOA on purpose — so which owners have a token is decided by POSITION and budget,
+    not by what kind of case it is. An owner low in that order may never be reached, and asking
+    for that case by name is exactly when you want to pay the ~$0.003 rather than wait a week.
+
+    It stays off by default because it is the only place in this stage that spends money without
+    being asked, and a nightly that silently minted a token per uncached owner would turn a
+    350-lead backlog into a bill.
+
+    The >100-record rule is gen_records_qs's and is kept here deliberately: an owner returning
+    more than MAX_HITS is a common-name over-match, and caching that token would point every
+    later run at a stranger's recorded documents.
+    """
+    import gen_records_qs as G
+    import records_liens as R
+    split = R.split_owner((owner or '').strip())
+    if not split:
+        return None, 'no cached token, and the owner name could not be split for a search'
+    try:
+        token, hits = G.mint_qs(split)
+    except Exception as exc:
+        return None, 'token mint failed: %s: %s' % (type(exc).__name__, str(exc)[:140])
+    if not token:
+        return None, 'token mint returned nothing (no captcha solve, or the clerk refused)'
+    if hits <= 0:
+        return None, 'token minted but the county has no records under this name'
+    if hits > G.MAX_HITS:
+        return None, ('token minted but the name matched %d records (over %d), which is a '
+                      'common-name over-match, so it was not cached' % (hits, G.MAX_HITS))
+    qs_cache[owner] = token
+    try:
+        with open(QS_CACHE, 'w', encoding='utf-8') as fh:
+            json.dump(qs_cache, fh, indent=1, sort_keys=True)
+    except OSError as exc:
+        # The token still works for THIS run; it just will not be free next time.
+        return token, 'token minted but not cached (%s)' % exc
+    return token, ''
+
+
 def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpreter=None,
              gray_cutoff=DS.WATERMARK_GRAY_CUTOFF,
-             budget=None, vision_budget=None, walk_depth=0, walk_budget=0, name_budget=0):
+             budget=None, vision_budget=None, walk_depth=0, walk_budget=0, name_budget=0,
+             token_budget=None):
     """One case through all seven steps. Returns its dossier."""
     case, owner = entry['case'], entry['owner']
     token = qs_cache.get(owner)
+    minted = None
+    if not token and token_budget is not None and token_budget.get('left', 0) > 0:
+        token, minted = mint_token(owner, qs_cache)
+        token_budget['left'] -= 1
+        token_budget['spent'] = token_budget.get('spent', 0) + 1
     report, rows = None, []
     inventory = None
     models = []
@@ -194,7 +252,8 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
                      'reason': '%s: %s' % (type(exc).__name__, str(exc)[:200])}]
     else:
         rows = [{'source_ref': 'owner_search', 'status': 'skipped',
-                 'reason': 'no cached search token for this owner; not minting one in this stage'}]
+                 'reason': minted or ('no cached search token for this owner, and --token-budget '
+                                      'is 0 so this stage did not mint one')}]
 
     case_dossier.classify_documents(rows)
     # THE WALK. It runs after classification because it needs `cited_instruments`, which
@@ -290,6 +349,12 @@ def main(argv=None):
                              'probed on 2026-09-22 and none was confirmed). Each search costs a '
                              'Camoufox run or a 2Captcha solve, so the default is 0 and the plan '
                              'is reported unspent.')
+    parser.add_argument('--token-budget', type=int, default=0,
+                        help='Official Records search tokens this run may MINT for owners who '
+                             'have none, at ~$0.003 each. Default 0. The nightly filler walks '
+                             'leads_final.json in file order, 40 owners a run, so an owner low '
+                             'in that order has no token yet — which is what blocks asking for '
+                             'a named case on demand. Nothing here filters by case type.')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
     try:
@@ -366,6 +431,7 @@ def main(argv=None):
 
     ocr = None if args.no_ocr else DS.winocr
     queue = DocumentQueue()
+    token_budget = {'left': args.token_budget, 'spent': 0} if args.token_budget else None
     written = read_ok = 0
     try:
         for entry in picked:
@@ -374,7 +440,8 @@ def main(argv=None):
                                budget=budget, vision_budget=vision_budget,
                                walk_depth=args.walk_depth if args.walk_cites else 0,
                                walk_budget=args.walk_budget,
-                               name_budget=args.name_budget if args.walk_cites else 0)
+                               name_budget=args.name_budget if args.walk_cites else 0,
+                               token_budget=token_budget)
             target = dossier_path(COUNTY, entry['case'])
             target.parent.mkdir(parents=True, exist_ok=True)
             DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
@@ -390,6 +457,9 @@ def main(argv=None):
     if vision_budget:
         print('  second-reader spend: $%.4f of $%.2f' % (vision_budget.spent,
                                                          vision_budget.limit))
+    if token_budget:
+        print('  search tokens minted: %d of %d allowed'
+              % (token_budget['spent'], args.token_budget))
     if written and not read_ok:
         print('  NOTE: no document was read. On Miami scans that means OCR did not run or did '
               'not return text — every dossier section c is honestly empty.')

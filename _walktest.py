@@ -7,6 +7,8 @@ the equity verdict.
 
 Run:  python _walktest.py
 """
+import contextlib
+import io
 import json
 import os
 import sys
@@ -76,7 +78,12 @@ class RecordIndexTest(unittest.TestCase):
 class ResolveTest(unittest.TestCase):
     def setUp(self):
         self.index = W.RecordIndex(os.path.join(_TMP, 'resolve.json'))
+        # An EXPLICIT verdict file that exists and is empty. A path that does not exist falls
+        # back to the findings committed to the repo, which is a different state and has its own
+        # tests below.
         self.caps = os.path.join(_TMP, 'caps-none.json')
+        with open(self.caps, 'w', encoding='utf-8') as fh:
+            json.dump({'probed_at': None, 'capabilities': {}}, fh)
 
     def test_a_known_instrument_resolves_from_the_index_for_free(self):
         self.index.add_models([model('35287', '4642')])
@@ -88,7 +95,27 @@ class ResolveTest(unittest.TestCase):
         out = W.resolve('1', '1', self.index, caps_path=self.caps)
         self.assertNotIn('record', out)
         self.assertEqual(out['via'], 'unresolved')
-        self.assertIn('records_probe has never run', out['reason'])
+        self.assertIn('no probe verdict at', out['reason'])
+        self.assertIn('records_probe.py', out['reason'])
+
+    def test_a_dated_verdict_does_not_answer_for_a_shape_it_never_tried(self):
+        # A probe run can solve the book/page shapes and skip cfn for want of a CFN. It writes
+        # ONE probed_at. Reading that file-level date as an answer for every capability would
+        # report a shape nobody tried as a shape the county rejected, and that is the difference
+        # between a to-do and a finding.
+        path = os.path.join(_TMP, 'caps-partial.json')
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump({'probed_at': '2026-09-22T00:00:00Z', 'capabilities': {'cfn': {}}}, fh)
+        out = W.resolve('1', '1', self.index, caps_path=path)
+        self.assertIn('no probe verdict at', out['reason'])
+        self.assertNotIn('probed 2026-09-22', out['reason'])
+
+    def test_with_no_working_file_the_committed_finding_is_reported_as_a_finding(self):
+        out = W.resolve('1', '1', self.index, caps_path=os.path.join(_TMP, 'nothing-here.json'))
+        self.assertEqual(out['via'], 'unresolved')
+        self.assertIn('probed 2026-09-22', out['reason'])
+        self.assertIn('accepted_no_hits', out['reason'])
+        self.assertNotIn('never', out['reason'])
 
     def test_an_unconfirmed_capability_is_never_used(self):
         # A probe that RAN and confirmed nothing must not enable the search path. 'accepted but
@@ -517,11 +544,139 @@ class OffListCaseTest(unittest.TestCase):
         self.assertEqual([p['case'] for p in RD.pick_cases(leads, {}, 0)], ['Y'])
 
 
+class TokenBudgetTest(unittest.TestCase):
+    """Minting an Official Records search token is the stage's only uninvited spend."""
+
+    def setUp(self):
+        import run_documents as RD
+        self.RD = RD
+        self.cache = os.path.join(_TMP, 'qs-%s.json' % self.id().rsplit('.', 1)[-1])
+        self._real_cache, RD.QS_CACHE = RD.QS_CACHE, self.cache
+
+    def tearDown(self):
+        self.RD.QS_CACHE = self._real_cache
+
+    def _mint(self, result):
+        import gen_records_qs as G
+        import records_liens as R
+        real_mint, real_split = G.mint_qs, R.split_owner
+        G.mint_qs = lambda lf: result
+        R.split_owner = lambda oc: ('SMITH', 'JANE')
+        self.addCleanup(lambda: (setattr(G, 'mint_qs', real_mint),
+                                 setattr(R, 'split_owner', real_split)))
+
+    def test_a_minted_token_is_written_back_so_it_is_free_next_time(self):
+        self._mint(('QS-TOKEN', 4))
+        cache = {}
+        token, reason = self.RD.mint_token('SMITH JANE', cache)
+        self.assertEqual(token, 'QS-TOKEN')
+        self.assertEqual(reason, '')
+        self.assertEqual(cache['SMITH JANE'], 'QS-TOKEN')
+        with open(self.cache, encoding='utf-8') as fh:
+            self.assertEqual(json.load(fh)['SMITH JANE'], 'QS-TOKEN')
+
+    def test_a_common_name_over_match_is_not_cached(self):
+        # Caching a token that matched 900 records points every later run at a stranger's
+        # recorded documents, which is worse than having no token at all.
+        import gen_records_qs as G
+        self._mint(('QS-TOKEN', G.MAX_HITS + 1))
+        cache = {}
+        token, reason = self.RD.mint_token('SMITH JANE', cache)
+        self.assertIsNone(token)
+        self.assertIn('common-name over-match', reason)
+        self.assertEqual(cache, {})
+        self.assertFalse(os.path.exists(self.cache))
+
+    def test_a_name_with_no_records_is_not_cached_either(self):
+        self._mint((None, 0))
+        token, reason = self.RD.mint_token('SMITH JANE', {})
+        self.assertIsNone(token)
+        self.assertIn('nothing', reason)
+
+    def test_a_failed_mint_is_a_reason_not_a_crash(self):
+        import gen_records_qs as G
+        import records_liens as R
+        real_mint, real_split = G.mint_qs, R.split_owner
+
+        def boom(lf):
+            raise RuntimeError('2captcha down')
+        G.mint_qs, R.split_owner = boom, lambda oc: ('SMITH', 'JANE')
+        try:
+            token, reason = self.RD.mint_token('SMITH JANE', {})
+        finally:
+            G.mint_qs, R.split_owner = real_mint, real_split
+        self.assertIsNone(token)
+        self.assertIn('RuntimeError', reason)
+
+    def test_with_no_budget_nothing_is_minted_and_the_reason_says_why(self):
+        import gen_records_qs as G
+        real = G.mint_qs
+
+        def never(lf):
+            raise AssertionError('mint_qs must not be reached with --token-budget 0')
+        G.mint_qs = never
+        try:
+            dossier = self.RD.run_case({'case': 'C1', 'owner': 'SMITH JANE', 'chain': None},
+                                       {}, token_budget=None)
+        finally:
+            G.mint_qs = real
+        self.assertIn('--token-budget is 0', json.dumps(dossier))
+
+    def test_the_budget_is_spent_once_and_then_exhausted(self):
+        self._mint(('QS-TOKEN', 2))
+        budget = {'left': 1, 'spent': 0}
+        cache = {}
+        self.RD.mint_token('SMITH JANE', cache)
+        budget['left'] -= 1
+        budget['spent'] += 1
+        self.assertEqual(budget['left'], 0)
+        self.assertEqual(budget['spent'], 1)
+
+
 class ProbeVerdictTest(unittest.TestCase):
     def test_no_probe_file_means_no_capability(self):
         ok, shape = RP.confirmed('book_page', os.path.join(_TMP, 'nope.json'))
         self.assertFalse(ok)
         self.assertEqual(shape, {})
+
+    def test_the_committed_findings_can_never_confirm_a_capability(self):
+        # The findings file is in git, so anyone can edit it. Every path that reads it forces
+        # `confirmed` to False and drops the shape, because a capability nobody OBSERVED is the
+        # one failure this module exists to prevent: a resolver built on an invented parameter
+        # answers "no such instrument" for every instrument in the county.
+        path = os.path.join(_TMP, 'findings-tampered.json')
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump({'probed_at': '2026-09-22T00:00:00Z',
+                       'capabilities': {'book_page': {'confirmed': True,
+                                                      'shape': {'searchtype': 'Book/Page'}}}}, fh)
+        old = RP.FINDINGS
+        RP.FINDINGS = path
+        try:
+            caps = RP.load_caps(os.path.join(_TMP, 'absent.json'))
+            self.assertEqual(caps['source'], 'recorded')
+            self.assertFalse(caps['capabilities']['book_page']['confirmed'])
+            self.assertNotIn('shape', caps['capabilities']['book_page'])
+            self.assertEqual(RP.confirmed('book_page', os.path.join(_TMP, 'absent.json')),
+                             (False, {}))
+        finally:
+            RP.FINDINGS = old
+
+    def test_a_working_verdict_file_wins_over_the_committed_one(self):
+        path = os.path.join(_TMP, 'caps-live.json')
+        with open(path, 'w', encoding='utf-8') as fh:
+            json.dump({'probed_at': '2026-10-01T00:00:00Z',
+                       'capabilities': {'book_page': {'confirmed': True,
+                                                      'shape': {'searchtype': 'Book/Page'}}}}, fh)
+        ok, shape = RP.confirmed('book_page', path)
+        self.assertTrue(ok)
+        self.assertEqual(shape, {'searchtype': 'Book/Page'})
+
+    def test_the_shipped_findings_file_confirms_nothing(self):
+        # Guards the file itself, not the loader.
+        with open(RP.FINDINGS, encoding='utf-8') as fh:
+            shipped = json.load(fh)
+        for name, entry in (shipped.get('capabilities') or {}).items():
+            self.assertFalse(entry.get('confirmed'), name)
 
     def test_accepted_with_no_hits_is_not_a_capability(self):
         caps = RP._capabilities([{'capability': 'book_page', 'outcome': 'accepted_no_hits',
@@ -699,6 +854,29 @@ class OwnStampTest(unittest.TestCase):
         self.assertEqual(fetched, [])
         self.assertEqual(report['documents_fetched'], 0)
         self.assertEqual(report['unresolved'], [])
+
+    def test_the_dry_run_cli_suppresses_the_same_stamps_walk_does(self):
+        # The regression this guards: walk() seeded the seen-set with own_spans and main() passed
+        # an empty set, so `--dry-run` reported seven citations on a case with one. Two paths
+        # answering the same question differently is worse than either answer, because the cheap
+        # read-only one is what a person runs first.
+        rows = [dict(row_citing('official_records/35287-4642',
+                                ['BOOK 35287 PAGE 4642', 'BOOK 35287 PAGE 4643',
+                                 'BOOK 35287 PAGE 4644', 'BOOK 35287 PAGE 4645',
+                                 'BOOK 35287 PAGE 4646', 'BOOK 11732 PAGE 780']), pages=5)]
+        real = W.stored_rows
+        W.stored_rows = lambda county, case: rows
+        out = io.StringIO()
+        try:
+            with contextlib.redirect_stdout(out):
+                code = W.main(['--case', 'C1', '--dry-run'])
+        finally:
+            W.stored_rows = real
+        self.assertEqual(code, 0)
+        printed = out.getvalue()
+        self.assertIn('1 citation(s) in the read text', printed)
+        self.assertIn('11732/780', printed)
+        self.assertNotIn('35287/4643', printed)
 
 
 if __name__ == '__main__':

@@ -901,7 +901,7 @@ def main(argv=None):
     if _cited:
         print('  %d instrument(s) cited by this case\'s documents and NOT already fetched: %s'
               % (len(_cited), ', '.join('%s/%s' % bp for bp in _cited)))
-        print('    follow them with: python -u document_walk.py --case %s --dry-run' % case)
+        print('    follow them with: python -u document_walk.py --case %s --dry-run' % args.case)
     for gap in report['access_gaps']:
         print('  GAP %s — %s' % (gap['source_ref'], gap['reason']))
     if len(report.get('gray_cutoffs_tried') or []) > 1:
