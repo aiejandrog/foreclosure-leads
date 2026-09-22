@@ -279,6 +279,10 @@ def judgment_for_analyze(report, allow_ocr=False):
     Miami judgment seen so far is a scan, so in practice this returns None until a human has
     checked the figure against the page image — which is why the rendered image is kept. Pass
     allow_ocr=True to accept OCR, deliberately and with that in view.
+
+    The refusal was put to Alejandro on 2026-09-22 and he confirmed it: it is a reviewed decision,
+    not an unexamined default. Revisit it when OCR accuracy has been measured against kept page
+    images on a run of these, not before.
     """
     good = [r for r in report.get('documents', [])
             if r.get('page_count_verified') and r.get('read_status') == 'read']
