@@ -186,30 +186,43 @@ def steps(lead, sender):
     # instead of dashes, a cushion before the ask, one ask per message. These now match.
     disc = ("\n\nI am not your lender, not the government, not a foreclosure-rescue company, and "
             "not an attorney. Nothing here is legal advice, and there is never a fee to talk to me.")
-    unsub = ("\n\n(If you'd rather not hear from me, reply 'stop' and you won't hear from me again. "
-             "No hard feelings.)")
+    # BODY COPY ONLY (2026-09-22, Alejandro's direction, given twice). Removed, not rewritten:
+    #     "(If you'd rather not hear from me, reply 'stop' and you won't hear from me again.
+    #      No hard feelings.)"
+    # Telling an owner to reply with a keyword reads like a mailing list, which is the one thing
+    # these bodies are written not to sound like. outreach_copy._unsub() went the same way.
+    #
+    # NOTHING ELSE IN THIS FILE IS TOUCHED. The pre-send sweep, the ledger re-read and the stop
+    # detection are the reserved suppression surface (CLAUDE.md) and are exactly as they were.
+    #
+    # !! FLAG, NOT FIXED -- FOR ALEJANDRO. Unlike outreach_email.py and send_server.py, the send
+    # loop below sets Subject/From/To and NO List-Unsubscribe header. Those two paths keep their
+    # header, so the sentence going leaves them with a visible Unsubscribe control in Gmail and
+    # Outlook. This path now has neither the header nor the sentence, so a cadence email offers
+    # no opt-out at all. Adding the header here is one line beside msg['To'] -- deliberately not
+    # done in this commit because that is a logic change on the reserved surface.
     s0 = (f"Hi {first},\n\nMy name is {sn}. I work with a small local team that helps owners in "
           f"foreclosure. Your property at {addr} has an auction scheduled for {auc}.\n\n"
           f"I'm not calling to pressure you. I just want to make sure you've seen your options before "
           f"that date, because most of them close when the sale happens. If you already have a plan, "
           f"keep it. If you want a second look at the numbers, it costs you nothing."
-          + sig + disc + unsub)
+          + sig + disc)
     s1 = (f"Hi {first},\n\nFollowing up on {addr}. Public records suggest there may be money left "
           f"over after the loan is paid off. If there is, it belongs to you and not the bank, but it "
           f"has to be handled before {auc}.\n\nFive minutes on the phone is usually enough to tell "
           f"whether your numbers work that way. It costs you nothing, and I'd rather you know than "
-          f"guess." + sig + disc + unsub)
+          f"guess." + sig + disc)
     s2 = (f"Hi {first},\n\nA few details before {auc}, in plain terms. Owners in your situation "
           f"usually have three real options.\n\n"
           f"  1) Stop the sale and buy time, usually 60 to 90 days, to regroup.\n"
           f"  2) Sell before the auction and keep the equity yourself.\n"
           f"  3) Borrow against the equity and stay in the home.\n\n"
           f"Which one fits comes down to your numbers. I can walk you through all three against your actual "
-          f"property at {addr}, and it costs you nothing." + sig + disc + unsub)
+          f"property at {addr}, and it costs you nothing." + sig + disc)
     s3 = (f"Hi {first},\n\nThis is my last note about {addr}. The {auc} date is close, and once the "
           f"sale happens the options close with it.\n\nWhatever you decide, including deciding to let "
           f"it go, decide it with your own numbers in front of you instead of the bank's. If a 10 "
-          f"minute call helps, I'm around." + sig + disc + unsub)
+          f"minute call helps, I'm around." + sig + disc)
     _street = _MG.safe_street(lead.get('addr'))
     subj = [f"About {_street} before the auction date",
             f"the part of {_street} that belongs to you",

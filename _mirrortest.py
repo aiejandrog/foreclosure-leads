@@ -210,7 +210,14 @@ with sync_playwright() as p:
     rec('signature carries title + phone + email',
         SENDER['title'] in body and 'Phone: ' + SENDER['phone'] in body
         and 'Email: ' + SENDER['email'] in body)
-    rec('opt-out line present', 'reply STOP' in body)
+    # 2026-09-22: no opt-out sentence in body copy (Alejandro's call, given twice). This line used
+    # to assert `'reply STOP' in body` and had been STALE since PR #19 moved the sentence into
+    # outreach_copy._unsub() -- "reply STOP" has not been in a genEmail body since. Now it pins
+    # the actual state, on BOTH sides, which is the only thing this suite is for.
+    import mail_guard as _MG_M
+    rec('no opt-out sentence in the composed body (either side)',
+        not _MG_M._OPTOUT_SENTENCE.search(body)
+        and not _MG_M._OPTOUT_SENTENCE.search(py['body']))
     rec('no sentinel survived into the sent body',
         not any(t in body for t in OC.TOK.values()),
         'tokens found: %s' % [k for k, t in OC.TOK.items() if t in body])
