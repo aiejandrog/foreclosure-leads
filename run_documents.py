@@ -33,7 +33,12 @@ always was — reading a document does not move a lead into a FACT state.
 THE LINE FOR refresh-dealflow.bat, to paste AFTER the [2b/5] records step:
 
     echo [2e/5] Reading Miami court documents (off unless DEALFLOW_DOCS=1)...
-    python -u run_documents.py --limit 10 >> "%LOG%" 2>&1
+    python -u run_documents.py --limit 10 --vision --vision-max-spend 1.00 >> "%LOG%" 2>&1
+
+--vision needs ANTHROPIC_API_KEY in the environment the SCHEDULED TASK runs in, which means a
+User (or Machine) environment variable on the machine that runs the night, not one typed into a
+shell. Without it this stage exits 2 having spent nothing and read nothing; with --vision dropped
+it still runs, and Miami scans simply stay unread where the watermark crosses the figures.
 
 Deliberately not added to the .bat here: cmd reads a batch file by byte offset WHILE it runs, so
 editing a live publish path mid-flight corrupts the running night. Paste it when nothing is running.
