@@ -299,7 +299,7 @@ until 2026-09-18, see the NINTH TASK block in §1. They are identical on both ma
 
 | Task | Time | Cadence | Definition |
 |---|---|---|---|
-| DEALFLOW Refresh | 05:30 | daily | `tasks/` export |
+| DEALFLOW Refresh | 05:30 | daily | `tasks/` export, **or** `task-templates/` — tracked in git |
 | DEALFLOW Phones | 06:00 | daily | `tasks/` export |
 | DealFlow Replies | 06:45 | daily | `tasks/` export |
 | DEALFLOW Daily Scrape | 07:00 | weekly | `tasks/` export |
@@ -313,6 +313,14 @@ until 2026-09-18, see the NINTH TASK block in §1. They are identical on both ma
 paths, so those definitions travel in the transfer bundle. `task-templates/` is the tracked,
 SID-free half — `__REPO__` / `__PROFILE__` / `__USER__` placeholders substituted at install time.
 An export always wins over a template of the same task name.
+
+**Two of the nine now have a tracked template (2026-09-21).** `DEALFLOW Refresh` joined
+`DealFlow Cadence` there, and the reason is the two settings called out at the bottom of this
+section: they decide whether the nightly fires at all, and until today they could not be read,
+diffed or reviewed from anywhere except the armed laptop. Adding the template changes nothing on
+that laptop — the export still wins — but the hardening is now in the repo where a commit can
+carry it, and `_refreshexittest.py` asserts it. The other seven are still export-only; each is one
+`task-templates/` file away from the same treatment.
 
 **DealFlow Cadence sends real email to homeowners.** It runs `cadence-daily.bat`, which repo-guards
 the folder, refuses to send outside 08:00–20:00, then runs `python -u cadence.py`. Log:
