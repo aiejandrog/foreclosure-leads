@@ -36,6 +36,10 @@ import paths as P
 HERE = os.path.dirname(os.path.abspath(__file__))
 KEY = os.path.join(HERE, 'bsg_gmail.key')
 LOG = P.out('warmup_log.json')
+# BSG Warmup runs under pythonw, which has no console: the 'warmup failed' print below went nowhere,
+# LastTaskResult keeps only the latest run, and Task Scheduler history is off on both boxes. So
+# 09-17 and 09-19..21 sent nothing and left no trace of why. Every non-zero exit lands here now.
+ERRLOG = P.out('warmup_errors.log')
 START_DATE = dt.date(2026, 9, 7)
 
 ALIASES = ['alejandro@biscaynesolutionsgroup.com', 'alejandro@bsgfl.com']
@@ -158,9 +162,23 @@ def main():
     return 0
 
 
+def _log_failure(msg):
+    try:
+        with open(ERRLOG, 'a', encoding='utf-8') as f:
+            f.write('%s  %s\n' % (dt.datetime.now().isoformat(timespec='seconds'), msg))
+    except Exception:
+        pass
+
+
 if __name__ == '__main__':
     try:
         sys.exit(main())
+    except SystemExit as e:
+        # creds() refuses with sys.exit('refusing: ...'); argparse exits 2. Both are failures too.
+        if e.code not in (0, None):
+            _log_failure('exit: %s' % e.code)
+        raise
     except Exception as e:
+        _log_failure('%s: %s' % (type(e).__name__, e))
         print('warmup failed: %s' % e)
         sys.exit(1)
