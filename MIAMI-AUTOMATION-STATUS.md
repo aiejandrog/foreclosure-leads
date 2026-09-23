@@ -32,7 +32,7 @@ shared spending controls. This is not complete.
 | Liens | Obligation, identity, attachment, amendment and satisfaction links; no missing-release inference | Candidate lists, not proven balances |
 | Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Index rules plus selected body evidence; incomplete |
 | One-command orchestration | Durable step leases, before-call reservations, idempotent restart and refresh | Not yet integrated |
-| Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Per-case shares on the vision paths (run_documents, backfill, timeline); captcha keeps its own ledger |
+| Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Per-case shares on the vision paths (run_documents, backfill, timeline); run_documents --token-budget now solves only through the real-balance PaidCutoffSolver (one try, free browser first) |
 | Five-case replay | Reproduce prior evidence without hand-selection/transcription within approved cap | Replay tool built; not yet run on the saved pilot evidence |
 | Twelve-case review | Explicit review-policy acceptance and unattended evidence report | Not passed; no gate removed |
 

@@ -75,7 +75,7 @@ always was — reading a document does not move a lead into a FACT state.
 THE LINE FOR refresh-dealflow.bat, to paste AFTER the [2b/5] records step:
 
     echo [2e/5] Reading Miami court documents - off unless DEALFLOW_DOCS=1
-    python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 10 >> "%LOG%" 2>&1
+    python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 10 --captcha-max-spend 1.00 >> "%LOG%" 2>&1
 
 (No parentheses inside that echo: refresh-dealflow.bat puts stages inside `if` blocks, and cmd ends
 a block at the first unescaped ')'. That exact bug cost [5/5] every run from 08-20 to 09-19.)
@@ -221,8 +221,16 @@ def summarize(dossiers):
             'per_case': rows}
 
 
-def mint_token(owner, qs_cache):
+def mint_token(owner, qs_cache, ladder=None):
     """Mint one Official Records search token for `owner` and cache it. Returns (token, reason).
+
+    `ladder` is run_owner_tokens.TokenLadder over a captcha_cost_cutoff.PaidCutoffSolver: cached
+    token, then the free browser session, and only then ONE paid solve, under the 300-submission
+    ceiling and the real-balance cutoff. main() always supplies it when --token-budget is above 0.
+    Until 2026-09-23 this called gen_records_qs.mint_qs with the default solver and three tries,
+    so the nightly's paid captcha path had no balance check and retried a solve whose charge was
+    unknown. A CutoffStopped from the ladder is NOT swallowed here: it ends paid minting for the
+    whole run, which is run_case's job to record.
 
     WHY THIS IS A FLAG AND NOT THE DEFAULT
     `gen_records_qs.py` fills `records_qs.json` nightly, 40 owners a run under an 8-minute
@@ -245,8 +253,14 @@ def mint_token(owner, qs_cache):
     split = R.split_owner((owner or '').strip())
     if not split:
         return None, 'no cached token, and the owner name could not be split for a search'
+    from captcha_cost_cutoff import CutoffStopped
     try:
-        token, hits = G.mint_qs(split)
+        if ladder is not None:
+            token, hits = ladder.search_token(owner, split)
+        else:
+            token, hits = G.mint_qs(split, tries=1)
+    except CutoffStopped:
+        raise
     except Exception as exc:
         return None, 'token mint failed: %s: %s' % (type(exc).__name__, str(exc)[:140])
     if not token:
@@ -275,8 +289,15 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
     token = qs_cache.get(owner)
     minted = None
     if not token and token_budget is not None and token_budget.get('left', 0) > 0:
-        token, minted = mint_token(owner, qs_cache)
-        token_budget['left'] -= 1
+        from captcha_cost_cutoff import CutoffStopped
+        try:
+            token, minted = mint_token(owner, qs_cache, ladder=token_budget.get('ladder'))
+            token_budget['left'] -= 1
+        except CutoffStopped as stop:
+            # The cutoff, the 300 ceiling or an unsettled charge: no further paid minting this run.
+            token, minted = None, 'captcha cutoff stopped paid minting for this run: %s' % stop
+            token_budget['left'] = 0
+            token_budget['stopped'] = str(stop)
         token_budget['spent'] = token_budget.get('spent', 0) + 1
     report, rows = None, []
     inventory = None
@@ -490,6 +511,12 @@ def main(argv=None):
                              'leads_final.json in file order, 40 owners a run, so an owner low '
                              'in that order has no token yet — which is what blocks asking for '
                              'a named case on demand. Nothing here filters by case type.')
+    parser.add_argument('--captcha-max-spend', type=float, default=None,
+                        help='required with --token-budget: the real-balance captcha cutoff in '
+                             'dollars, at most 1.50, enforced by captcha_cost_cutoff against the '
+                             'account balance. It is cumulative on its ledger and cannot be raised.')
+    parser.add_argument('--captcha-state', default='captcha/run_documents-captcha.json',
+                        help='captcha ledger under DEALFLOW_DIR (default %(default)s)')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
     if args.backfill:
@@ -549,6 +576,10 @@ def main(argv=None):
     # attempt before anyone noticed. A missing input that makes a whole night useless is an exit
     # here, not a per-case reason in 349 dossiers.
     if args.token_budget > 0:          # gen_records_qs.mint_qs solves through 2Captcha only
+        cap = args.captcha_max_spend
+        if cap is None or not math.isfinite(cap) or not 0 < cap <= 1.50:
+            parser.exit(2, '--token-budget needs --captcha-max-spend (dollars, above 0, at most '
+                           '1.50). Paid captcha runs only under the real-balance cutoff.\n')
         import captcha_solver
         if not captcha_solver.has_key():
             parser.exit(2, '--token-budget needs a 2Captcha key (captcha.key in '
@@ -599,8 +630,23 @@ def main(argv=None):
         vision_budget = CaseAllocator(PersistentBudget(args.vision_max_spend, MemoryState()),
                                       [entry['case'] for entry in picked])
     ocr = None if args.no_ocr else DS.winocr
-    queue = DocumentQueue()
     token_budget = {'left': args.token_budget, 'spent': 0} if args.token_budget else None
+    captcha_state = solver = None
+    if token_budget:
+        import captcha_solver
+        from captcha_cost_cutoff import PaidCutoffSolver
+        from document_backfill import State
+        from run_owner_tokens import TokenLadder
+        ledger = case_review.output_path(args.captcha_state)
+        ledger.parent.mkdir(parents=True, exist_ok=True)
+        captcha_state = State(ledger).__enter__()
+        try:
+            solver = PaidCutoffSolver(captcha_state, args.captcha_max_spend, captcha_solver._key())
+        except ValueError as exc:
+            captcha_state.__exit__(None, None, None)
+            parser.exit(2, 'captcha cutoff refused: %s\n' % exc)
+        token_budget['ladder'] = TokenLadder(qs_cache, solver)
+    queue = DocumentQueue()
     written = read_ok = 0
     dossiers = []
     try:
@@ -622,6 +668,15 @@ def main(argv=None):
             _print_case(dossier)
     finally:
         queue.close()
+        if captcha_state is not None:
+            from captcha_cost_cutoff import CutoffStopped
+            token_budget['ladder'].close()
+            try:
+                token_budget['captcha_balance'] = solver.finish()
+            except CutoffStopped as stop:
+                token_budget['captcha_balance'] = {'balance_check_failed': True,
+                                                   'reason': str(stop)}
+            captcha_state.__exit__(None, None, None)
     print('run_documents: %d dossier(s) written, %d document(s) actually read.'
           % (written, read_ok))
     if dossiers:
@@ -640,8 +695,10 @@ def main(argv=None):
               % (vision_budget.budget.spent, vision_budget.budget.limit,
                  len(vision_budget.batch['roster']), vision_budget.batch['share']))
     if token_budget:
-        print('  search tokens minted: %d of %d allowed'
-              % (token_budget['spent'], args.token_budget))
+        print('  search tokens attempted: %d of %d allowed; captcha %s%s'
+              % (token_budget['spent'], args.token_budget,
+                 json.dumps(token_budget.get('captcha_balance')),
+                 ('; STOPPED: ' + token_budget['stopped']) if token_budget.get('stopped') else ''))
     if written and not read_ok:
         print('  NOTE: no document was read. On Miami scans that means OCR did not run or did '
               'not return text — every dossier section c is honestly empty.')

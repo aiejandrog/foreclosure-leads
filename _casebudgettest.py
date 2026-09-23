@@ -228,6 +228,40 @@ class RunnerWiringTests(unittest.TestCase):
         self.assertAlmostEqual(seen[0][1], 0.10)  # first case: its own third, nothing more
 
 
+class CaptchaCutoffWiringTests(unittest.TestCase):
+    """The nightly's paid captcha path goes through the real-balance cutoff, or not at all."""
+
+    def test_token_budget_without_a_cutoff_is_refused_before_any_data(self):
+        import run_documents as RD
+        with self.assertRaises(SystemExit) as caught:
+            RD.main(['--enable', '--token-budget', '2'])
+        self.assertEqual(caught.exception.code, 2)
+        for bad in ('0', '1.51', 'nan'):
+            with self.assertRaises(SystemExit):
+                RD.main(['--enable', '--token-budget', '2', '--captcha-max-spend', bad])
+
+    def test_mint_goes_through_the_ladder_and_a_cutoff_stop_ends_minting_for_the_run(self):
+        from unittest.mock import patch
+        import run_documents as RD
+        import records_liens as R
+        from captcha_cost_cutoff import CutoffStopped
+        calls = []
+        class Ladder:
+            def search_token(self, owner, parts):
+                calls.append(owner)
+                raise CutoffStopped('Next task could exceed the approved cutoff')
+        budget = {'left': 5, 'spent': 0, 'ladder': Ladder()}
+        with patch.object(R, 'split_owner', return_value=('SMITH', 'JANE')), \
+                patch('gen_records_qs.mint_qs', side_effect=AssertionError('unguarded mint')):
+            first = RD.run_case({'case': ROSTER[0], 'owner': 'SMITH JANE', 'chain': None}, {},
+                                token_budget=budget)
+            RD.run_case({'case': ROSTER[1], 'owner': 'DOE JOHN', 'chain': None}, {},
+                        token_budget=budget)
+        self.assertEqual(calls, ['SMITH JANE'])          # the second case never reached a solve
+        self.assertEqual(budget['left'], 0)
+        self.assertIn('captcha cutoff stopped', json.dumps(first))
+
+
 class ReplayTests(unittest.TestCase):
     """replay_paid_selection over synthetic saved evidence: no client, no queue, $0."""
 
