@@ -138,6 +138,16 @@ def resume(county, case, limit=10, interpret=False):
 
 def interpret_document(base, key, result):
     manifest, reading = result['manifest'], result['reading']
+    expected = manifest.get('pages')
+    numbers = [page.get('page') for page in reading.get('pages', [])]
+    if (type(expected) is not int or expected <= 0
+            or any(type(number) is not int for number in numbers)
+            or sorted(numbers) != list(range(1, expected + 1))):
+        result['interpretation'] = {
+            'status': 'incomplete', 'findings': [], 'pages_assessed': 0,
+            'unresolved': ['Page inventory does not match the stored document; re-extract all pages.']}
+        write(base / (key + '.json'), result)
+        return dict(result['interpretation'], resumable=False)
     digest = hashlib.sha256(Path(manifest['path']).read_bytes()).hexdigest()
     findings, gaps = [], []
     for start in range(0, len(reading['pages']), 5):

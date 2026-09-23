@@ -9,6 +9,20 @@ from document_queue import DocumentQueue
 
 
 class PipelineTests(unittest.TestCase):
+    def test_missing_or_duplicate_pages_cannot_complete_interpretation(self):
+        for numbers in ([1], [1, 1], [1, 3], []):
+            with self.subTest(numbers=numbers), tempfile.TemporaryDirectory() as tmp:
+                base = Path(tmp)
+                pdf = base / 'sample.pdf'
+                pdf.write_bytes(b'fixture')
+                result = {'manifest': {'path': str(pdf), 'pages': 2},
+                          'reading': {'pages': [{'page': n, 'text': 'Evidence'} for n in numbers]}}
+                answer = {'status': 'complete', 'findings': [], 'unresolved': [], 'resumable': False}
+                with patch.object(p.agents, 'run_agent', return_value=answer):
+                    outcome = p.interpret_document(base, 'key', result)
+                self.assertEqual(outcome['status'], 'incomplete')
+                self.assertTrue(outcome['unresolved'])
+
     def test_expired_owner_cannot_finish(self):
         with tempfile.TemporaryDirectory() as tmp:
             with DocumentQueue(str(Path(tmp) / 'q.db')) as q:
@@ -24,7 +38,7 @@ class PipelineTests(unittest.TestCase):
             base = Path(tmp)
             pdf = base / 'sample.pdf'
             pdf.write_bytes(b'fixture')
-            result = {'manifest': {'path': str(pdf)}, 'reading': {'pages': [{'page': 1, 'text': 'Evidence'}]}}
+            result = {'manifest': {'path': str(pdf), 'pages': 1}, 'reading': {'pages': [{'page': 1, 'text': 'Evidence'}]}}
             reader = {'status': 'complete', 'findings': [], 'unresolved': ['Missing exhibit'], 'resumable': False}
             verifier = {'status': 'complete', 'findings': [], 'unresolved': [], 'resumable': False}
             with patch.object(p.agents, 'run_agent', side_effect=[reader, verifier]) as agent:
