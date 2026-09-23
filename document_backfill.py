@@ -11,12 +11,13 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 import uuid
+from datetime import date, datetime, timedelta
 
 import document_store as DS
 from document_interpreter import Budget, BudgetExhausted
 
 
-def select_cases(rows, chains):
+def select_cases(rows, chains, today=None):
     """Include ownerless cases; deduplicate case identities, not people or properties."""
     selected = {}
     for row in rows:
@@ -36,11 +37,37 @@ def select_cases(rows, chains):
         if case in selected and selected[case] != entry:
             raise ValueError('Conflicting duplicate case rows; resolve before backfill')
         selected[case] = entry
-    return list(selected.values())
+    today = today or date.today()
+    def priority(entry):
+        auction = None
+        for fmt in ('%m/%d/%Y', '%Y-%m-%d'):
+            try:
+                auction = datetime.strptime(entry['auction_date'], fmt).date()
+                break
+            except ValueError:
+                continue
+        if auction is None:
+            return (3, 0, entry['case'])
+        if today <= auction <= today + timedelta(days=45):
+            return (0, auction.toordinal(), entry['case'])
+        if auction > today:
+            return (1, auction.toordinal(), entry['case'])
+        return (2, -auction.toordinal(), entry['case'])
+    return sorted(selected.values(), key=priority)
 
 
 def fingerprint(entry):
     return hashlib.sha256(json.dumps(entry, sort_keys=True).encode()).hexdigest()
+
+
+def progress(entries, data):
+    statuses = []
+    for entry in entries:
+        old = data['cases'].get(entry['case'], {})
+        statuses.append(old.get('status') if old.get('fingerprint') == fingerprint(entry) else 'pending')
+    done = sum(s in ('complete', 'assessed_with_gaps') for s in statuses)
+    return {'cases_total': len(entries), 'cases_done': done,
+            'cases_complete': statuses.count('complete'), 'cases_left': len(entries) - done}
 
 
 def snapshot(path):
@@ -186,6 +213,8 @@ def run(args, runner):
                                      max(0, args.vision_max_spend - charged)))
     print('  This is a spending ceiling, NOT a price to finish every case. Captcha spend: $0.00.')
     print('  resume checkpoint: %s' % path)
+    print('  order: auctions in next 45 days first, nearest date first; then later auctions, '
+          'past auctions nearest first, unknown dates last')
     if args.dry_run:
         print('  DRY RUN: no clients, requests, downloads, OCR, or checkpoint writes.')
         return 0
@@ -196,6 +225,7 @@ def run(args, runner):
         budget = PersistentBudget(args.vision_max_spend, state) if args.vision else None
         if budget and budget.spent >= budget.limit:
             print('  PAUSED: cumulative cap exhausted; no API client started.')
+            print('  progress: %s' % json.dumps(progress(picked, state.data), sort_keys=True))
             return 4
         if budget:
             import document_vision
@@ -225,4 +255,10 @@ def run(args, runner):
             queue.close()
             print('  API actual $%.6f; unresolved request reservations $%.6f'
                   % (state.data['actual_usd'], sum(state.data['reserved'].values())))
+            summary = dict(progress(picked, state.data), actual_usd=state.data['actual_usd'],
+                           reserved_usd=sum(state.data['reserved'].values()),
+                           cap_usd=args.vision_max_spend)
+            state.data['last_summary'] = summary
+            state.save()
+            print('  progress: %s' % json.dumps(summary, sort_keys=True))
     return 0

@@ -7,6 +7,28 @@ import document_store as store
 
 
 class ShortOCRTests(unittest.TestCase):
+    def test_unreadable_source_is_assessed_content_gap_and_survives_readback(self):
+        reading = {'pages': [{'page': 1, 'outcome': 'needs_ocr', 'text': ''}]}
+        store.apply_page_assessment(reading, 1, {'outcome': 'unreadable_source',
+            'text': '', 'reason': '450 DPI reread: source body remains obscured', 'confident': True})
+        self.assertEqual(reading['pages_assessed'], 1)
+        self.assertEqual(reading['pages_content_gaps'], [1])
+        self.assertFalse(reading['complete'])
+        with tempfile.TemporaryDirectory() as folder:
+            from unittest.mock import patch
+            root = Path(folder)
+            manifest = {'county': 'MIAMI-DADE', 'case': 'fixture', 'pages': 1, 'document_key': 'a'*64}
+            with patch.object(store, 'case_dir', return_value=root):
+                store.save_page_text(manifest, reading)
+                saved = store._read_back(root, manifest)
+            self.assertEqual(saved['pages'][0]['outcome'], 'unreadable_source')
+            self.assertFalse(saved['complete'])
+
+    def test_unreadable_source_requires_reason(self):
+        with self.assertRaises(ValueError):
+            store.apply_page_assessment({'pages': [{'page': 1}]}, 1,
+                {'outcome': 'unreadable_source', 'confident': True})
+
     def test_short_exhibit_is_read_as_label(self):
         with fitz.open() as pdf:
             pdf.new_page()

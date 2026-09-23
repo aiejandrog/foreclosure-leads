@@ -122,7 +122,9 @@ class VisionReader:
             client = client.with_options(max_retries=0)
         content = [
             {'type': 'image',
-             'source': {'type': 'base64', 'media_type': 'image/png',
+             'source': {'type': 'base64',
+                        'media_type': ('image/jpeg' if png_bytes.startswith(b'\xff\xd8\xff')
+                                       else 'image/png'),
                         'data': base64.standard_b64encode(png_bytes).decode('ascii')}},
             {'type': 'text', 'text': 'Transcribe the money amounts on this page.'},
         ]

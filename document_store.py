@@ -491,7 +491,7 @@ def label_only(text):
 
 
 READ_OUTCOMES = ('text', 'ocr_text', 'vision_text', 'read_as_label', 'exhibit_divider')
-ASSESSED_OUTCOMES = READ_OUTCOMES + ('redacted_or_blank',)
+ASSESSED_OUTCOMES = READ_OUTCOMES + ('redacted_or_blank', 'unreadable_source')
 
 
 def summarize_reading(reading):
@@ -514,8 +514,10 @@ def apply_page_assessment(reading, page_no, assessment):
     if len(matches) != 1:
         raise ValueError('page must occur exactly once')
     outcome = assessment.get('outcome')
-    if outcome not in ('vision_text', 'read_as_label', 'exhibit_divider', 'redacted_or_blank', 'unreadable'):
+    if outcome not in ('vision_text', 'read_as_label', 'exhibit_divider', 'redacted_or_blank', 'unreadable', 'unreadable_source'):
         raise ValueError('invalid page assessment')
+    if outcome == 'unreadable_source' and not str(assessment.get('reason') or '').strip():
+        raise ValueError('unreadable_source requires a source failure reason')
     if not assessment.get('confident'):
         outcome = 'unreadable'
     text = assessment.get('text') or ''
@@ -835,7 +837,7 @@ def _read_back(folder, manifest):
         if not body.strip():
             unresolved.append(row.get('page'))
         pages.append({'page': row.get('page'), 'text': body, 'chars': len(body),
-                      'outcome': row.get('outcome') if body.strip() or row.get('outcome') in ('redacted_or_blank', 'exhibit_divider') else 'needs_ocr',
+                      'outcome': row.get('outcome') if body.strip() or row.get('outcome') in ('redacted_or_blank', 'exhibit_divider', 'unreadable_source') else 'needs_ocr',
                       'text_source': row.get('text_source'), 'assessment': row.get('assessment'),
                       'weak_reason': row.get('weak_reason'), 'ocr_error': row.get('ocr_error')})
     reading = summarize_reading({'pages': pages, 'page_count': len(pages),

@@ -5,6 +5,7 @@ import json
 import tempfile
 import unittest
 from types import SimpleNamespace
+from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
@@ -12,6 +13,26 @@ import run_documents as RD
 
 
 class BackfillTests(unittest.TestCase):
+    def test_auction_order_prioritizes_next_45_days_then_future_past_unknown(self):
+        import document_backfill as BF
+        rows = [{'Case #': name, 'county': 'MIAMI-DADE', 'AuctionDate': when}
+                for name, when in [('past','09/22/2026'), ('later','12/01/2026'),
+                    ('edge','11/07/2026'), ('unknown','bad'), ('next','09/24/2026'),
+                    ('today','2026-09-23'), ('outside','11/08/2026')]]
+        picked = BF.select_cases(rows, {}, today=date(2026, 9, 23))
+        self.assertEqual([r['case'] for r in picked],
+                         ['today', 'next', 'edge', 'outside', 'later', 'past', 'unknown'])
+
+    def test_progress_separates_finished_attempts_from_complete_cases(self):
+        import document_backfill as BF
+        entries = [{'case': n} for n in ('done', 'gaps', 'paused', 'new')]
+        data = {'cases': {e['case']: {'fingerprint': BF.fingerprint(e), 'status': status}
+                         for e, status in zip(entries, ('complete','assessed_with_gaps','budget_paused'))}}
+        result = BF.progress(entries, data)
+        self.assertEqual(result['cases_done'], 2)
+        self.assertEqual(result['cases_complete'], 1)
+        self.assertEqual(result['cases_left'], 2)
+
     def test_dry_run_includes_ownerless_dedupes_and_has_no_clients(self):
         rows = [
             {'Case #': '2099-000001-CA-01', 'county': 'MIAMI-DADE', 'owner_clean': 'TEST'},
