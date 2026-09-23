@@ -9,7 +9,19 @@ from datetime import datetime
 
 def name_key(value):
     """Comparison only; do not discard LLC/trust/suffix identity information."""
-    return re.sub(r'[^A-Z0-9]+', ' ', str(value or '').upper()).strip()
+    value = str(value or '').upper().strip()
+    entity = re.search(r'\b(LLC|L\.?L\.?C|LLP|LP|INC|CORP|CORPORATION|COMPANY|CO|TRUST|TRUSTEE|BANK|ASSOCIATION|ESTATE|HEIRS)\b', value)
+    # Only an explicit recorder-style comma licenses reordering. Never sort all
+    # tokens: that would collapse different people and entity trade names.
+    if not entity and value.count(',') == 1:
+        surname, given = [part.strip() for part in value.split(',')]
+        suffix = re.search(r'\s+(JR\.?|SR\.?|II|III|IV)$', given)
+        suffix_text = (' ' + suffix.group(1)) if suffix else ''
+        if suffix:
+            given = given[:suffix.start()].strip()
+        if surname and given and not re.fullmatch(r'JR\.?|SR\.?|II|III|IV', given):
+            value = given + ' ' + surname + suffix_text
+    return re.sub(r'[^A-Z0-9]+', ' ', value).strip()
 
 
 def _folio(value):

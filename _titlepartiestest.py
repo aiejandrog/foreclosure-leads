@@ -10,6 +10,19 @@ def deed(book, date, grantor, grantee, folio='1234567890123'):
 
 
 class TitlePartiesTests(unittest.TestCase):
+    def test_inverted_person_name_matches_docket_without_changing_display(self):
+        got = T.build_title_parties([deed('3','1/1/2024','OLD LLC','Example Middle Person')], [],
+            {'parties':[{'partyName':'PERSON, EXAMPLE MIDDLE','partyTypeDesc':'DEFENDANT'}]}, '1234567890123')
+        self.assertEqual(got['owners_not_named'], [])
+        self.assertEqual(got['defendants_not_on_title'], [])
+        self.assertEqual(got['title_parties'][1]['name'], 'Example Middle Person')
+
+    def test_entity_commas_not_reordered_and_suffix_preserved(self):
+        self.assertNotEqual(T.name_key('ALPHA, BETA LLC'), T.name_key('BETA LLC ALPHA'))
+        self.assertNotEqual(T.name_key('ALPHA, BETA TRUST'), T.name_key('BETA TRUST ALPHA'))
+        self.assertEqual(T.name_key('PERSON, EXAMPLE JR'), T.name_key('EXAMPLE PERSON JR'))
+        self.assertNotEqual(T.name_key('PERSON, EXAMPLE JR'), T.name_key('EXAMPLE PERSON SR'))
+        self.assertEqual(T.name_key('EXAMPLE PERSON, JR.'), T.name_key('EXAMPLE PERSON JR'))
     def test_statutory_deed_identification_and_qualified_parties(self):
         row = deed('3','1/1/2024 12:00:00 AM','','','0')
         doc = {'source_ref':'official_records/3-1','stored':{'source_sha256':'abc'},'reading':{'pages':[

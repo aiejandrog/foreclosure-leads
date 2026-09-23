@@ -214,6 +214,11 @@ def investigate(entry, searcher, document_limit=30):
             'title_parties':title, 'other_name_searches':searches,
             'citations':citations, 'gaps':list(dict.fromkeys(gaps)),
             'owner_baseline_records':None if owner_models is None else len(owner_models),
+            'stored_instruments_absent_from_owner_query':[
+                {'book':m.get('reC_BOOK'), 'page_no':m.get('reC_PAGE'),
+                 'doc_type':m.get('doC_TYPE'), 'recorded_date':m.get('reC_DATE'),
+                 'basis':'Already-stored evidence absent from this run owner query; not necessarily new debt'}
+                for m in missed_records(seeds, owner_models)],
             'private_search_results':capture.results,
             'vision_actual_usd':0.0,
             'vision_note':'Existing OCR/vision reused; new documents use local OCR. Unreadable content remains unknown.'}
@@ -282,6 +287,7 @@ def main(argv=None):
         try:
             for entry in entries:
                 report = investigate(entry, searcher)
+                report['vision_cap_usd'] = args.vision_max_spend
                 report['captcha'] = budget.report()
                 report['captcha_gaps'] = searcher.gaps
                 report['gaps'].extend(str(g) for g in searcher.gaps)
