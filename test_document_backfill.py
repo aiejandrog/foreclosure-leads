@@ -4,6 +4,8 @@ import io
 import json
 import tempfile
 import unittest
+import os
+import threading
 from types import SimpleNamespace
 from datetime import date
 from pathlib import Path
@@ -13,6 +15,24 @@ import run_documents as RD
 
 
 class BackfillTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows replacement sharing semantics')
+    def test_checkpoint_survives_reader_temporarily_blocking_replace(self):
+        import document_backfill as BF
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / 'state.json'
+            with BF.State(path) as state:
+                state.save()
+                reader = open(path, 'rb')
+                release = threading.Timer(.15, reader.close)
+                release.start()
+                try:
+                    state.data['actual_usd'] = .25
+                    state.save()
+                finally:
+                    release.join()
+                    reader.close()
+            self.assertEqual(BF.snapshot(path)['actual_usd'], .25)
+
     def test_auction_order_prioritizes_next_45_days_then_future_past_unknown(self):
         import document_backfill as BF
         rows = [{'Case #': name, 'county': 'MIAMI-DADE', 'AuctionDate': when}

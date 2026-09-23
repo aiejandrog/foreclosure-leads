@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 import uuid
+import time
 from datetime import date, datetime, timedelta
 
 import document_store as DS
@@ -120,7 +121,17 @@ class State:
         self.lock.close()
 
     def save(self):
-        DS._atomic_write_text(str(self.path), json.dumps(self.data, indent=2) + '\n')
+        payload = json.dumps(self.data, indent=2) + '\n'
+        for attempt in range(5):
+            try:
+                DS._atomic_write_text(str(self.path), payload)
+                return
+            except PermissionError:
+                # Windows readers/antivirus may briefly deny os.replace. Never
+                # proceed to a paid request without a durable reservation.
+                if attempt == 4:
+                    raise
+                time.sleep(.1 * (2 ** attempt))
 
     def pending(self, entry, retry_gaps=False):
         old = self.data['cases'].get(entry['case'], {})
