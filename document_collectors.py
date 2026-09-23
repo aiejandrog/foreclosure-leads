@@ -241,7 +241,7 @@ class MiamiCollector(CountyCollector):
 
 
 class BrowardCollector(CountyCollector):
-    """Not implemented. Deliberate stub — scope for this branch is the Miami pilot.
+    """Full recorded-instrument PDF transport; court enumeration remains an access gap.
 
     Broward's document transport is NOT this shape: officialrecords.broward.org/AcclaimWeb holds a
     server-side session in a cookie jar the existing county client owns, and browardclerk.org/web2
@@ -251,13 +251,41 @@ class BrowardCollector(CountyCollector):
     county = 'BROWARD'
 
     def refresh_session(self):
-        return None
+        from fl_lp import broward_pin as pin
+        session = pin.BL.start_session()
+        if session is None:
+            raise AccessGap('Broward records session unavailable')
+        return session
 
     def enumerate_documents(self, case):
         raise AccessGap('Broward document transport not implemented')
 
     def retrieve_document(self, record):
-        raise AccessGap('Broward document transport not implemented')
+        import tempfile
+        from pathlib import Path
+        import paths
+        from fl_lp import broward_pin as pin
+        instrument = str(record.get('instrument') or record.get('InstrumentNumber') or '')
+        if not re.fullmatch(r'[0-9]{1,20}', instrument):
+            raise AccessGap('Broward recorded instrument requires a numeric identifier')
+        html, detail = pin._details_html(instrument)
+        if not detail or detail.get('i') != instrument:
+            raise AccessGap('Broward instrument identity unavailable or mismatched')
+        root = Path(paths.DEALFLOW_DIR) / 'documents' / 'BROWARD'
+        root.mkdir(parents=True, exist_ok=True)
+        with tempfile.TemporaryDirectory(prefix='acquire-', dir=root) as directory:
+            pdf = pin._pdf_of(html, instrument, directory)
+            if not pdf:
+                raise AccessGap('Broward instrument PDF unavailable')
+            content = Path(pdf).read_bytes()
+        if not content.startswith(b'%PDF-'):
+            raise AccessGap('Broward returned non-PDF document content')
+        # The existing download endpoint returns all pages; never call the sampled PIN reader.
+        # No independent page total is exposed by parse_details, so do not claim verification.
+        return {'content': content, 'transport': 'broward_recorded_all_pages',
+                'source_urls': [pin.BL.BASE + '/details/JumpToInstrumentNumber/27/' + instrument],
+                'pages_expected': None, 'page_count_verified': False, 'page_count_source': None,
+                'record_key': {'instrument': instrument, 'doc_type': detail.get('t')}}
 
     def attachments(self, case, entry):
         raise AccessGap('Broward document transport not implemented')
