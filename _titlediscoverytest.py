@@ -1,0 +1,64 @@
+"""Synthetic integration contracts for the opt-in Miami title investigation."""
+import unittest
+import miami_title_discovery as T
+
+
+class DossierTests(unittest.TestCase):
+    def test_release_must_explicitly_cite_claim_and_never_resolves_attachment(self):
+        claims = [{'book':'12', 'page_no':'34', 'attachment_status':'unknown'}]
+        release = {'source_ref':'r', 'classification':{'kind':'satisfaction'},
+                   'cited_instruments':[{'book':'12', 'page_no':'34', 'cited_on_page':2,
+                                         'passage':'Satisfies book 12 page 34'}]}
+        result = T.reconcile_claims(claims, [release])
+        self.assertEqual(result[0]['satisfaction_status'], 'referenced_release_found_unresolved')
+        self.assertEqual(result[0]['attachment_status'], 'unknown')
+        self.assertEqual(T.reconcile_claims(claims, [])[0]['satisfaction_status'], 'unknown')
+
+    def test_stored_deed_seed_keeps_recording_identity_without_inventing_folio(self):
+        manifest = {'record_key': {'book': 123, 'page': 4, 'cfn_master_id': 9,
+                    'doc_type':'DEED - DEE', 'rec_date':'1/2/2020'}, 'pages':2}
+        result = T.record_from_manifest(manifest)
+        self.assertEqual(result['reC_BOOK'], 123)
+        self.assertEqual(result['doC_TYPE'], 'DEED - DEE')
+        self.assertNotIn('foliO_NUMBER', result)
+
+    def test_capture_search_reuses_successful_result_but_not_failure(self):
+        class Source:
+            count = 0
+            def search(self, name):
+                self.count += 1
+                return [] if name == 'TEST LLC' else None
+        source = Source()
+        search = T.CapturedSearch(source)
+        search.search('TEST LLC')
+        search.search('TEST LLC')
+        search.search('UNKNOWN')
+        self.assertEqual(source.count, 2)
+        self.assertEqual(search.results, {'TEST LLC': []})
+
+    def test_additive_report_keeps_equity_picture_unchanged(self):
+        old = {'case': '2026-000001-CA-01', 'd_picture': {'value': 123},
+               'complete': True, 'open_gaps': []}
+        result = T.attach_report(old, {'status': 'unknown', 'gaps': ['deed missing']})
+        self.assertEqual(result['d_picture'], {'value': 123})
+        self.assertEqual(old['open_gaps'], [])
+        self.assertFalse(result['complete'])
+        self.assertIn('title discovery: deed missing', result['open_gaps'])
+
+    def test_missing_baseline_is_not_proof_of_owner_search_miss(self):
+        self.assertEqual(T.missed_records([{'reC_BOOK': '1', 'reC_PAGE': '2'}], None), [])
+
+    def test_same_instrument_is_not_new_just_because_name_differs(self):
+        baseline = [{'reC_BOOK': '001', 'reC_PAGE': '002'}]
+        found = baseline + [{'reC_BOOK': '1', 'reC_PAGE': '3'}]
+        self.assertEqual(T.missed_records(found, baseline), [found[1]])
+
+    def test_case_input_rejects_path_and_non_miami_shapes(self):
+        for value in ('../bad', '50-2026-CA-1234', ''):
+            with self.assertRaises(ValueError):
+                T.validate_case(value)
+        self.assertEqual(T.validate_case('2026-000001-CC-26'), '2026-000001-CC-26')
+
+
+if __name__ == '__main__':
+    unittest.main()
