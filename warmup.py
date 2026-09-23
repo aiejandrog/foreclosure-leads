@@ -28,6 +28,7 @@ import random
 import smtplib
 import ssl
 import sys
+import time
 from email.mime.text import MIMEText
 from email.utils import formataddr, make_msgid
 
@@ -38,8 +39,13 @@ KEY = os.path.join(HERE, 'bsg_gmail.key')
 LOG = P.out('warmup_log.json')
 # BSG Warmup runs under pythonw, which has no console: the 'warmup failed' print below went nowhere,
 # LastTaskResult keeps only the latest run, and Task Scheduler history is off on both boxes. So
-# 09-17 and 09-19..21 sent nothing and left no trace of why. Every non-zero exit lands here now.
+# 09-17 and 09-19..21 sent nothing and left no trace of why. Every failed attempt lands here now,
+# and so does a retry that recovered, so an entry with no 'recovered' after it is a lost day.
 ERRLOG = P.out('warmup_errors.log')
+# One failed attempt used to cost the whole day: the task fires once, and a login or network error
+# before the first send meant zero warm-up that day. Retry twice. main() re-reads today's log on
+# every attempt and sends only what is still missing, so a retry can never double-send.
+RETRY_WAITS = (600, 1800)   # seconds before the 2nd and the 3rd attempt
 START_DATE = dt.date(2026, 9, 7)
 
 ALIASES = ['alejandro@biscaynesolutionsgroup.com', 'alejandro@bsgfl.com']
@@ -170,15 +176,28 @@ def _log_failure(msg):
         pass
 
 
+def run():
+    tries = 1 + len(RETRY_WAITS)
+    for attempt, wait in enumerate((0,) + tuple(RETRY_WAITS), 1):
+        if wait:
+            time.sleep(wait)
+        try:
+            rc = main()
+        except SystemExit as e:
+            # creds() refuses with sys.exit('refusing: ...'); argparse exits 2. A retry cannot fix
+            # either, so log and stop.
+            if e.code not in (0, None):
+                _log_failure('exit: %s' % e.code)
+            raise
+        except Exception as e:
+            _log_failure('attempt %d of %d: %s: %s' % (attempt, tries, type(e).__name__, e))
+            print('warmup failed: %s' % e)
+            continue
+        if attempt > 1:
+            _log_failure('recovered on attempt %d of %d' % (attempt, tries))
+        return rc
+    return 1
+
+
 if __name__ == '__main__':
-    try:
-        sys.exit(main())
-    except SystemExit as e:
-        # creds() refuses with sys.exit('refusing: ...'); argparse exits 2. Both are failures too.
-        if e.code not in (0, None):
-            _log_failure('exit: %s' % e.code)
-        raise
-    except Exception as e:
-        _log_failure('%s: %s' % (type(e).__name__, e))
-        print('warmup failed: %s' % e)
-        sys.exit(1)
+    sys.exit(run())
