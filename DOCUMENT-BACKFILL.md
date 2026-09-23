@@ -11,6 +11,11 @@ python -u run_documents.py --backfill --vision --vision-max-spend 1.00 --dry-run
 ownerless cases as explicit gaps and ignores the nightly default case limit.
 Conflicting duplicate case rows stop the run rather than choosing one silently.
 
+Order: auctions from today through 45 days ahead first, nearest date first;
+then later future auctions, past auctions nearest first, and unknown dates last.
+The final progress report distinguishes finished attempts (`cases_done`) from
+fully complete cases (`cases_complete`), and reports pending/paused `cases_left`.
+
 After explicit spending approval, replace `--dry-run` with `--enable`.
 This is **not** a nightly activation instruction. The preview's dollar figure is
 the cumulative ceiling, not an estimated price to finish every case. The current
