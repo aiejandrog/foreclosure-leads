@@ -60,7 +60,21 @@ SHORT = {'clear': 'CLEAR', 'priced': 'VERIFIED', 'unpriced': 'CEILING',
          'none': 'UNVERIFIED', 'unchecked': 'NOT CHECKED'}
 
 
-def state_of(chain):
+# A lender is foreclosing on this parcel: there IS a mortgage, whatever the recorded search found.
+LENDER_CASE_TYPES = ('Bank/Mortgage',)
+
+
+def lender_foreclosure(lead):
+    """True when the lead's own case is a lender's mortgage foreclosure (foreclosure_leads.classify).
+
+    Board rows carry the type as `ctype`, raw lead rows as `case_type`.
+    """
+    if not isinstance(lead, dict):
+        return False
+    return str(lead.get('ctype') or lead.get('case_type') or '') in LENDER_CASE_TYPES
+
+
+def state_of(chain, lead=None):
     """chain = the per-case record from records_liens / broward_liens / palmbeach_liens
     (or None). Returns one of the five states above. Never raises, never guesses upward.
 
@@ -99,6 +113,13 @@ def state_of(chain):
     if (chain.get('mtg_open_unpriced') or 0) > 0:
         return 'unpriced'
     if conf == 'ok':
+        # A BANK SUING TO FORECLOSE IS PROOF OF A MORTGAGE. Salkey (accuracy audit 2026-09-23)
+        # rendered VERIFIED CLEAR while a lender's foreclosure sat on the same parcel: the search
+        # missed the very mortgage being foreclosed, and "no surviving mortgage" was the one thing
+        # the case file itself contradicts. An empty chain cannot prove a negative the lawsuit
+        # disproves, so it falls to UNVERIFIED, never to a FACT.
+        if lender_foreclosure(lead):
+            return 'none'
         # searched the index against a real anchor and found nothing surviving. THAT is the fact.
         return 'clear'
     if conf in ('low', 'none'):
@@ -109,9 +130,13 @@ def state_of(chain):
 def apply(lead, chain):
     """Stamp `eqstate` (+ label/short) onto a board lead. Call this for EVERY lead, including
     the ones whose chain came back empty — that emptiness is the finding."""
-    st = state_of(chain)
+    st = state_of(chain, lead)
     lead['eqstate'] = st
     lead['eqstate_why'] = LABEL[st]
+    if (st == 'none' and isinstance(chain, dict) and str(chain.get('conf') or '').lower() == 'ok'
+            and lender_foreclosure(lead)):
+        lead['eqstate_why'] = ('UNVERIFIED — a lender is foreclosing on this parcel, but the '
+                               'recorded search found no open mortgage; the chain missed it')
     if isinstance(chain, dict):
         # how hard did we look? an operator deserves to see 30-records-examined vs 0.
         if chain.get('nrec') is not None:

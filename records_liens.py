@@ -406,6 +406,7 @@ def analyze(models, folio, judgment, ftype=''):
         m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (r.get('reC_DATE', '') or '').strip())
         return (m.group(3), m.group(1).zfill(2), m.group(2).zfill(2)) if m else ('0000', '00', '00')
     liens, opens = [], []
+    seen_instruments = set()
     for r in sorted(models, key=sortkey):
         if not (r.get('doC_TYPE', '') or '').upper().startswith('MORTGAGE'):
             continue
@@ -418,6 +419,17 @@ def analyze(models, folio, judgment, ftype=''):
         if amt <= 0:
             continue                                   # $0 doc = modification/piggyback placeholder, not a real balance
         bp = (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip())
+        # ONE INSTRUMENT, ONE ROW. The owner search returns the same recording once per name it
+        # matched (co-owners, AKA spellings), and every copy used to become its own lien: Elharrar
+        # (accuracy audit 2026-09-23) showed two mortgages four times, $790,000 of face amount
+        # where the county records $395,000. Book/page identifies a recording; the CFN is the
+        # fallback when either half is blank. A row with neither is kept, never merged on a guess.
+        ident = (('bp',) + bp) if all(bp) else (
+            ('cfn', str(r.get('cfN_MASTER_ID') or '').strip()) if r.get('cfN_MASTER_ID') else None)
+        if ident is not None:
+            if ident in seen_instruments:
+                continue
+            seen_instruments.add(ident)
         is_open = bp not in satisfied
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'amt': amt, 'party': (r.get('seconD_PARTY', '') or '')[:40],
                'bp': r.get('reC_BOOKPAGE', ''), 'st': 'OPEN' if is_open else 'SATISFIED',
