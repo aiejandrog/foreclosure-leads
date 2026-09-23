@@ -268,7 +268,7 @@ def mint_token(owner, qs_cache):
 def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpreter=None,
              gray_cutoff=DS.WATERMARK_GRAY_CUTOFF,
              budget=None, vision_budget=None, walk_depth=0, walk_budget=0, name_budget=0,
-             token_budget=None):
+             token_budget=None, resume=True):
     """One case through all seven steps. Returns its dossier."""
     case, owner = entry['case'], entry['owner']
     token = qs_cache.get(owner)
@@ -285,10 +285,9 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
         import records_liens
         models = records_liens.records_by_qs(token) or []
         try:
-            # resume=True: the nightly stage's job is the day's backlog, not re-reading
-            # yesterday's documents. The pilot CLI defaults the other way on purpose.
+            # Nightly runs keep done jobs; explicit --case runs deliberately re-read.
             report = MJ.run(case, models, queue=queue, ocr=ocr, judgments_only=True,
-                            keep_images=keep_images, gray_cutoff=gray_cutoff, resume=True,
+                            keep_images=keep_images, gray_cutoff=gray_cutoff, resume=resume,
                             vision_budget=vision_budget)
             rows = report['documents']
             inventory = report.get('_inventory')
@@ -441,7 +440,7 @@ def main(argv=None):
     parser.add_argument('--enable', action='store_true',
                         help='actually run (or set DEALFLOW_DOCS=1). Off by default.')
     parser.add_argument('--limit', type=int, default=10, help='cases this run (default 10)')
-    parser.add_argument('--case', default='', help='one case number, ignoring the lead file order')
+    parser.add_argument('--case', default='', help='one case number; re-read even completed documents')
     parser.add_argument('--no-ocr', action='store_true', help='do not OCR scanned pages')
     parser.add_argument('--keep-images', action='store_true',
                         help='keep the 300-DPI render of each OCR page for a visual check')
@@ -577,7 +576,7 @@ def main(argv=None):
                                walk_depth=args.walk_depth if args.walk_cites else 0,
                                walk_budget=args.walk_budget,
                                name_budget=args.name_budget if args.walk_cites else 0,
-                               token_budget=token_budget)
+                               token_budget=token_budget, resume=not bool(args.case))
             target = dossier_path(COUNTY, entry['case'])
             target.parent.mkdir(parents=True, exist_ok=True)
             DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
