@@ -381,10 +381,56 @@ def _inst(s):
     return re.sub(r'[^A-Z]', '', s)
 
 
+def _rec_key(r):
+    """The recorded instrument a result row describes, or None when the row names none.
+
+    Book/page is the recorder's own identity for an instrument: two different documents never start
+    on the same page of the same book. The clerk file number is used first when the row carries one.
+    """
+    for k, v in r.items():
+        if 'cfn' in str(k).lower() and str(v or '').strip().strip('0'):
+            return 'CFN:' + str(v).strip()
+    bk, pg = str(r.get('reC_BOOK', '') or '').strip(), str(r.get('reC_PAGE', '') or '').strip()
+    if bk.strip('0') and pg.strip('0'):
+        return 'BP:%s/%s' % (bk.lstrip('0'), pg.lstrip('0'))
+    return None
+
+
+def dedupe_records(models):
+    """One row per recorded instrument (2026-09-23 Miami accuracy audit, Elharrar case).
+
+    The clerk's name search returns an instrument once per matching INDEX ENTRY, so a mortgage both
+    spouses signed can come back twice. analyze() then saw two copies of each open mortgage: the
+    copy that was not the foreclosing loan landed in `junior`/`surv` as a phantom surviving lien,
+    and the satisfaction rules could release one copy and leave its twin OPEN. broward_liens.py
+    learned the same lesson (_dedupe); Miami-Dade never did. Rows that name no instrument are kept
+    as they are -- dropping an unidentified row could hide a real lien, and keeping it is the old
+    behaviour.
+    """
+    seen, out = set(), []
+    for r in models or []:
+        k = _rec_key(r) if isinstance(r, dict) else None
+        if k is not None:
+            k = (k, (r.get('doC_TYPE', '') or '').strip().upper())
+            if k in seen:
+                continue
+            seen.add(k)
+        out.append(r)
+    return out
+
+
+def has_duplicate_liens(res):
+    """True when a CACHED result lists the same recorded mortgage twice (pre-dedupe trace)."""
+    bps = [str(x.get('bp') or '').strip() for x in ((res or {}).get('liens') or []) if isinstance(x, dict)]
+    bps = [b for b in bps if b.strip('0/ -')]
+    return len(bps) != len(set(bps))
+
+
 def analyze(models, folio, judgment, ftype=''):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
     ftype='HOA' means the whole first mortgage survives the sale (surface `surv`), not just a 2nd."""
+    models = dedupe_records(models)
     fol = norm_folio(folio)
     if not fol:
         return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'surv': 0, 'surv_first': 0,
@@ -661,6 +707,10 @@ def main():
             # Capped per run: a mint costs ~$0.003, so retries are bounded like fresh pulls.
             if (out.get(case) or {}).get('conf') == 'none':
                 md_retries.append(r)
+            elif has_duplicate_liens(out.get(case)):
+                # traced before dedupe_records existed: the cached chain double counts a mortgage.
+                # Re-pull it FIRST — a known-wrong number outranks a still-unknown one.
+                md_retries.insert(0, r)
             continue
         picked.append(r)
     if a.limit: picked = picked[:a.limit]

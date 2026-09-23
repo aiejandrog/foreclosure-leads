@@ -476,3 +476,4 @@ deal_desk.json
 # the wrong property. It is a code now (PARCEL_UNANCHORED, in _HOLD_ALWAYS); this suite fails if an
 # unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
 !_anchorgatetest.py
+!_boardaccuracytest.py

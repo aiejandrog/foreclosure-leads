@@ -174,6 +174,7 @@ AUCTION_HORIZON_DAYS = int(os.environ.get('DEALFLOW_AUCTION_HORIZON_DAYS', '120'
 from phone_src import (MAX_PHONES, SHARED_PHONE_MIN_OWNERS, PHSRC_TRACE, PHSRC_WP,
                        PHSRC_HOUSEHOLD, PHSRC_NAME, PHSRC_AGENT, PHSRC_SHARED, PHSRC_NOT_OWNER,
                        tag_shared_numbers, tag_listing_agents)   # noqa: F401
+from sale_pick import newest_sale
 
 
 def _month_starts(start, horizon_days):
@@ -394,8 +395,9 @@ def enrich(leads):
             ma = d.get('MailingAddress') or {}
             mkt = next((a['TotalValue'] for a in (d.get('Assessment') or {}).get('AssessmentInfos') or [] if a.get('TotalValue')), 0)
             benefits = (d.get('Benefit') or {}).get('BenefitInfos') or []
-            sales = d.get('SalesInfos') or []
-            last_sale = sales[0] if sales else {}
+            # newest by DATE, not SalesInfos[0]: the appraiser does not always list newest first,
+            # and on the 09-23 audit two leads showed a previous owner's purchase (sale_pick.py)
+            last_sale = newest_sale(d.get('SalesInfos') or [])
             r.update({
                 'enriched': True, 'owners': '; '.join(owners),
                 'mailing_address': ', '.join(x for x in [ma.get('Address1',''), ma.get('Address2',''), ma.get('City',''), ma.get('State',''), ma.get('ZipCode','')] if x),
@@ -1688,6 +1690,21 @@ def make_tracker(leads):
     if os.path.exists(_rlf):
         try: rl = json.load(open(_rlf, encoding='utf-8'))
         except Exception: rl = {}
+    # A chain traced before records_liens.dedupe_records (2026-09-23) can list one mortgage twice,
+    # and its junior/surviving totals then count that debt twice. records_liens re-pulls those
+    # first; until it has, the chain is not allowed to read as verified — LOW confidence is the
+    # board's existing "a chain exists, check it in Official Records" state. No figure is changed.
+    try:
+        from records_liens import has_duplicate_liens as _dupl
+        _nd = 0
+        for _c, _h in list(rl.items()):
+            if isinstance(_h, dict) and _h.get('conf') == 'ok' and _dupl(_h):
+                rl[_c] = dict(_h, conf='low', dupliens=True); _nd += 1
+        if _nd:
+            print(f"lien chains listing the same mortgage twice: {_nd} held at LOW confidence "
+                  f"until records_liens.py re-pulls them")
+    except Exception as _e:
+        print('duplicate-lien check skipped:', _e)
     # BatchData property source (produced by batchdata_liens.py) — the SECOND lien feed, covering the
     # counties/leads the captcha-walled Official Records scrape can't (Palm Beach especially) and
     # carrying a current-estimated balance + AVM value. Used as a FALLBACK: only where the recorded
