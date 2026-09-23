@@ -8000,6 +8000,15 @@ function _heldToday(auction){
   return +m[3] === now.getFullYear() && +m[1] === now.getMonth()+1 && +m[2] === now.getDate()
       && now.getHours() >= SALE_HOUR;
 }
+// ms from `now` to the next sale hour (a few seconds past it). boot() re-syncs r.days there, because
+// _aucPassed -> _workerEligible read r.days, and the 15-minute tick alone could leave sale-day
+// cases eligible for up to 15 minutes after the sale started.
+function _msToSaleHour(now){
+  now = now || new Date();
+  var t = new Date(now.getFullYear(), now.getMonth(), now.getDate(), SALE_HOUR, 0, 5);
+  if(t <= now) t.setDate(t.getDate() + 1);
+  return t - now;
+}
 function _clockTxt(r){
   if(_hasClock(r)) return 'in ' + r.days + 'd';
   if(typeof r.days === 'number' && r.days >= NO_SALE) return 'no sale date yet';
@@ -18647,6 +18656,8 @@ async function boot(){
     }catch(e){}
   };
   setInterval(_dayTick, 15*60*1000);
+  // the sale hour is a boundary, not just another tick (see _msToSaleHour)
+  (function _armSaleHour(){ setTimeout(function(){ _dayTick(); _armSaleHour(); }, _msToSaleHour()); })();
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState === 'visible') _dayTick();
   });

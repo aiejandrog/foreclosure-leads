@@ -13,12 +13,12 @@ Run:  python _boardaccuracytest.py    (exit 0 = safe; no network, no browser, no
      Miami-Dade chain could hold the same open mortgage twice and count it as a surviving junior.
      (The one-instrument rule itself is PR #50's, ported verbatim; this checks the cache side.)
   4. A LENDER'S SEPARATE FORECLOSURE. An association case read VERIFIED CLEAR while a bank had its
-     own foreclosure filed on the same unit (Salkey). The chain now looks for it, and the board
+     own foreclosure filed on the same unit (audit case S). The chain now looks for it, and the board
      re-settles the label after orsecond / sib are attached.
   5. NO MORTGAGE FOUND IS NOT VERIFIED CLEAR. An empty chain reads CLEAR only when it records how
      it searched (records returned, not capped, lender-foreclosure check asked). A mortgage with no
      published amount is a ceiling, never zero debt. Cached clears without that record revalidate.
-  6. ELHARRAR REFRESHED. A cached four-copy $790,000 chain re-pulls to the county's $395,000.
+  6. AUDIT CASE E, REFRESHED. A cached four-copy $790,000 chain re-pulls to the county's $395,000.
 """
 import json
 import os
@@ -62,7 +62,7 @@ check('enrich() no longer reads SalesInfos[0]', 'sales[0] if sales' not in _fl a
 
 
 # ---------------------------------------------------------------- 3. duplicate mortgages
-FOLIO = '3021150101230'
+FOLIO = '0100000000001'          # synthetic
 
 
 def rec(doc, date, bk, pg, amt=0, second='', first='OWNER JOHN', folio=FOLIO, **kw):
@@ -99,11 +99,11 @@ check('liens: a clean cached chain is not', not RL.has_duplicate_liens(clean) an
 import datetime
 import equity_state as ES
 _recent = (datetime.date.today() - datetime.timedelta(days=200)).strftime('%m/%d/%Y')
-lp_bank = rec('LIS PENDENS', _recent, '34900', '10', 0, 'SALKEY AND ASSOCIATES INC',
+lp_bank = rec('LIS PENDENS', _recent, '34900', '10', 0, 'TESTOWNER HOLDINGS INC',
               first='US BANK NATIONAL ASSOCIATION AS TRUSTEE')
-lp_hoa = rec('LIS PENDENS', _recent, '34800', '5', 0, 'SALKEY AND ASSOCIATES INC',
-             first='OCEAN TOWERS CONDOMINIUM ASSOCIATION INC')
-lp_old = rec('LIS PENDENS', '3/3/2011', '27000', '9', 0, 'SALKEY AND ASSOCIATES INC',
+lp_hoa = rec('LIS PENDENS', _recent, '34800', '5', 0, 'TESTOWNER HOLDINGS INC',
+             first='TEST TOWERS CONDOMINIUM ASSOCIATION INC')
+lp_old = rec('LIS PENDENS', '3/3/2011', '27000', '9', 0, 'TESTOWNER HOLDINGS INC',
              first='WELLS FARGO BANK NA')
 hoa_clear = RL.analyze([deed, lp_hoa], FOLIO, 12000, ftype='HOA')
 hoa_bank = RL.analyze([deed, lp_hoa, lp_bank], FOLIO, 12000, ftype='HOA')
@@ -120,6 +120,23 @@ check('bank fc: a released lis pendens does not count',
 check('bank fc: another parcel\'s filing does not count',
       RL.analyze([deed, dict(lp_bank, foliO_NUMBER='3099999999999', subdiV_NAME='ELSEWHERE')],
                  FOLIO, 12000, ftype='HOA')['second_fc'] is None)
+other_unit_deed = rec('WARRANTY DEED', '1/1/2019', '31000', '500', 0, 'TESTOWNER HOLDINGS INC',
+                      first='TESTSELLER C', folio='0100000000002')
+lp_blank = dict(lp_bank, foliO_NUMBER='')
+_pin = RL.analyze([deed, lp_hoa, lp_blank], FOLIO, 12000, ftype='HOA')
+check('bank fc: a blank-folio filing pins to the unit when the owner has no other unit there',
+      bool(_pin['second_fc']) and not _pin['second_fc_unsure'], str(_pin.get('second_fc')))
+_two = RL.analyze([deed, other_unit_deed, lp_hoa, lp_blank], FOLIO, 12000, ftype='HOA')
+check('bank fc: ...but with a second unit in the building it is NOT pinned to this one (no 2ND FC flag)',
+      _two['second_fc'] is None and bool(_two['second_fc_unsure']), str(_two.get('second_fc_unsure')))
+check('bank fc: ...and the subject still cannot read CLEAR on it', ES.state_of(_two) == 'none'
+      and not ES.coverage_documented(_two))
+check('bank fc: a filing on the owner\'s OTHER folio in the same building does not count',
+      RL.analyze([deed, other_unit_deed, lp_hoa, dict(lp_bank, foliO_NUMBER='0100000000002')],
+                 FOLIO, 12000, ftype='HOA')['second_fc'] is None)
+check('bank fc: the other unit\'s own filing does not make this one unsure',
+      RL.analyze([deed, other_unit_deed, lp_hoa, dict(lp_bank, foliO_NUMBER='0100000000002')],
+                 FOLIO, 12000, ftype='HOA')['second_fc_unsure'] is None)
 check('bank fc: a bank case lead is not asked (its own lis pendens is the case)',
       RL.analyze([deed, lp_bank], FOLIO, 12000, ftype='MORTGAGE')['second_fc'] is None)
 check('bank fc: a clear with no coverage record is re-pulled first',
@@ -132,7 +149,7 @@ DOCUMENTED = {'conf': 'ok', 'liens': [], 'nrec': 12, 'second_fc': None, 'mtg_ope
 
 
 def _row(**kw):
-    r = {'case': '2025-145272-CC-23'}
+    r = {'case': '2099-000001-CC-01'}
     ES.apply(r, dict(DOCUMENTED))
     r.update(kw)
     return r
@@ -141,10 +158,10 @@ def _row(**kw):
 r1 = _row(orsecond={'case': 'lis pendens recorded 01/02/2026', 'party': 'US BANK NA'})
 check('board: CLEAR beside the chain\'s own 2ND FORECLOSURE becomes UNVERIFIED',
       ES.demote_for_bank_fc(r1) and r1['eqstate'] == 'none' and 'separate case' in r1['eqstate_why'])
-r2 = _row(sib=[{'case': '2025-011111-CA-01', 'sold': False, 'conf': 'high', 'pl': 'NATIONSTAR'}])
+r2 = _row(sib=[{'case': '2099-000002-CA-01', 'sold': False, 'conf': 'high', 'pl': 'NATIONSTAR'}])
 check('board: CLEAR beside an open bank sibling case becomes UNVERIFIED',
       ES.demote_for_bank_fc(r2) and r2['eqstate'] == 'none')
-r3 = _row(sib=[{'case': '2025-011111-CA-01', 'sold': False, 'conf': 'low'}])
+r3 = _row(sib=[{'case': '2099-000002-CA-01', 'sold': False, 'conf': 'low'}])
 check('board: a low-confidence (namesake) sibling does not demote', not ES.demote_for_bank_fc(r3)
       and r3['eqstate'] == 'clear')
 r4 = _row()
@@ -170,7 +187,7 @@ check('coverage: a capped or truncated search proves nothing',
 check('coverage: never asked whether a lender is foreclosing -> not clear',
       ES.state_of({k: v for k, v in DOCUMENTED.items() if k != 'second_fc'}) == 'none')
 check('coverage: a lender foreclosing the unit -> not clear',
-      ES.state_of(dict(DOCUMENTED, second_fc={'case': 'lis pendens 34829/883'})) == 'none')
+      ES.state_of(dict(DOCUMENTED, second_fc={'case': 'lis pendens 99999/1'})) == 'none')
 check('coverage: an open mortgage with no published amount is a CEILING, not zero debt',
       ES.state_of(dict(DOCUMENTED, mtg_open_unpriced=1)) == 'unpriced')
 check('coverage: priced list plus an unpriced mortgage is a CEILING, not priced',
@@ -205,27 +222,27 @@ check('own case: a priced chain on a bank case stays priced',
       ES.state_of(dict(DOCUMENTED, liens=[{'amt': 100000}]), {'ctype': 'Bank/Mortgage'}) == 'priced')
 
 
-# ---------------------------------------------------------------- 6. Elharrar, refreshed
+# ---------------------------------------------------------------- 6. audit case E, refreshed
 # Two open mortgages ($300,000 + $95,000) that the name search returned under both owners. The cached
 # chain from before the one-instrument rule held all four copies: $790,000. Re-pulling it (the
 # refresh has_duplicate_liens queues first) must give the county's $395,000.
-e_deed = rec('WARRANTY DEED', '2/2/2016', '29900', '300', 0, 'ELHARRAR A', first='SELLER B')
-e_m1 = rec('MORTGAGE', '2/2/2016', '29900', '301', 300000, 'BANK OF AMERICA NA', first='ELHARRAR A')
-e_m2 = rec('MORTGAGE', '8/8/2020', '32000', '77', 95000, 'TD BANK NA', first='ELHARRAR A', folio='')
-e_dups = [dict(e_m1, firsT_PARTY='ELHARRAR M'), dict(e_m2, firsT_PARTY='ELHARRAR M')]
+e_deed = rec('WARRANTY DEED', '2/2/2016', '29900', '300', 0, 'TESTOWNER A', first='TESTSELLER B')
+e_m1 = rec('MORTGAGE', '2/2/2016', '29900', '301', 300000, 'BANK OF AMERICA NA', first='TESTOWNER A')
+e_m2 = rec('MORTGAGE', '8/8/2020', '32000', '77', 95000, 'TD BANK NA', first='TESTOWNER A', folio='')
+e_dups = [dict(e_m1, firsT_PARTY='TESTOWNER M'), dict(e_m2, firsT_PARTY='TESTOWNER M')]
 e_cached = {'conf': 'ok', 'liens': [
     {'bp': '29900/301', 'amt': 300000, 'st': 'OPEN'}, {'bp': '32000/77', 'amt': 95000, 'st': 'OPEN'},
     {'bp': '29900/301', 'amt': 300000, 'st': 'OPEN'}, {'bp': '32000/77', 'amt': 95000, 'st': 'OPEN'}]}
-check('elharrar: the stale cached chain sums $790,000', sum(l['amt'] for l in e_cached['liens']) == 790000)
-check('elharrar: the stale cached chain is queued for a re-pull', RL.has_duplicate_liens(e_cached))
+check('case E: the stale cached chain sums $790,000', sum(l['amt'] for l in e_cached['liens']) == 790000)
+check('case E: the stale cached chain is queued for a re-pull', RL.has_duplicate_liens(e_cached))
 e_new = RL.analyze([e_deed, e_m1, e_m2] + e_dups, FOLIO, 0, ftype='HOA')
 _e_open = [l for l in e_new['liens'] if l['st'] == 'OPEN']
-check('elharrar: the refreshed chain holds two mortgages totalling $395,000',
+check('case E: the refreshed chain holds two mortgages totalling $395,000',
       len(_e_open) == 2 and sum(l['amt'] for l in _e_open) == 395000 and e_new['surv'] == 395000,
       '%d open, $%s' % (len(_e_open), sum(l['amt'] for l in _e_open)))
-check('elharrar: ...and is no longer flagged', not RL.has_duplicate_liens(e_new))
+check('case E: ...and is no longer flagged', not RL.has_duplicate_liens(e_new))
 _flx = open(os.path.join(HERE, 'foreclosure_leads.py'), encoding='utf-8').read()
-check('elharrar: until it is re-pulled the board flags the stale chain LOW (overstated, never clear)',
+check('case E: until it is re-pulled the board flags the stale chain LOW (overstated, never clear)',
       'has_duplicate_liens' in _flx and "conf='low', dupliens=True" in _flx
       and ES.state_of(dict(e_cached, conf='low')) != 'clear')
 
@@ -241,6 +258,9 @@ live = CM._region(CMSRC, 'function _heldNow(x){', '\nfunction liveDays(r){', 'he
     CM._region(CMSRC, 'function liveDays(r){', '\n}\n', 'liveDays') + '\n}\n'
 biz = CM._region(CMSRC, 'function _bizDays(r){', '\n}\n', 'bizDays') + '\n}\n'
 check('call mode lifts _heldToday with the clock block', 'function _heldToday' in clock)
+check('worker cutoff: boot re-syncs the countdowns AT the sale hour, not only on the 15-min tick',
+      'function _msToSaleHour' in clock and '_msToSaleHour()' in TPL and '_armSaleHour' in TPL)
+
 
 HARNESS = r'''
 var FIX = %(fix)s;
@@ -265,7 +285,8 @@ FIX.forEach(function(f){
   %(biz)s
   var r = {auction: f.auc, days: 0, x: f.auc};
   var d = _saleDays(r); r.days = d;
-  out[f.k] = {saleDays: d, passed: _aucPassed(r), clock: _clockTxt(r), live: liveDays(r), biz: _bizDays(r)};
+  out[f.k] = {saleDays: d, passed: _aucPassed(r), clock: _clockTxt(r), live: liveDays(r), biz: _bizDays(r),
+              ms: _msToSaleHour()};
 });
 Date = _RealDate;
 console.log(JSON.stringify(out));
@@ -301,6 +322,10 @@ if R:
         check('sale day %s: says "sale held today", not "passed"' % k[6:], b['clock'] == 'sale held today', b['clock'])
     c = R['tomorrow']
     check('tomorrow at 3pm: 1 day, untouched', c['saleDays'] == 1 and not c['passed'] and c['live'] == 1, str(c))
+    check('worker cutoff: at 08:59 the boundary fires ~1 minute later', 60000 <= R['today_0859']['ms'] <= 66000,
+          str(R['today_0859']['ms']))
+    check('worker cutoff: after 9am it arms for tomorrow\'s sale hour',
+          R['today_1500']['ms'] == (18 * 3600 + 5) * 1000, str(R['today_1500']['ms']))
     y = R['yesterday']
     check('yesterday: passed as before', y['saleDays'] == -1 and y['passed'] and y['clock'] == 'passed', str(y))
 

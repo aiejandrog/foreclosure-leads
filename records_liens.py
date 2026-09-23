@@ -400,8 +400,7 @@ BANK_FC_YEARS = 5
 
 
 def bank_foreclosure(models, fol, subj_subdiv, today=None):
-    """A lender's lis pendens on the SUBJECT parcel, or None (2026-09-23 audit, Salkey,
-    2025-145272-CC-23).
+    """A lender's lis pendens on the SUBJECT parcel, or None (2026-09-23 audit, Salkey).
 
     Only asked of an HOA/condo lead. The association's small case is what reached the board, and
     the chain came back with no open mortgage, so the board printed VERIFIED CLEAR -- while a bank
@@ -409,9 +408,17 @@ def bank_foreclosure(models, fol, subj_subdiv, today=None):
     open, and under an association sale that whole mortgage survives. broward_liens has flagged
     this as `second_fc` since the Bloom / Tucker cases; Miami-Dade never looked.
 
-    Parcel-anchored the same way the mortgages are (folio, else subdivision). Recent only
-    (BANK_FC_YEARS): an unreleased lis pendens from a foreclosure a decade ago says nothing about
-    today. Released ones (a release/discharge pointing at its book/page) are skipped.
+    Parcel-anchored. A filing that carries a folio counts only when it is the subject folio. One
+    with a BLANK folio is matched on the subdivision, which proves the parcel only when the owner
+    has no other folio in that subdivision: the search is owner-wide, and a condo is one
+    subdivision with many units, so a lender foreclosing the owner's OTHER unit would otherwise
+    land on this one. When other units are seen the match comes back marked `unsure` -- analyze()
+    keeps it off the board's 2ND FORECLOSURE flag, and equity_state still refuses to call the
+    subject clear, because a lender foreclosing one of this owner's units in the building is not
+    something an empty chain can rule out.
+
+    Recent only (BANK_FC_YEARS): an unreleased lis pendens from a foreclosure a decade ago says
+    nothing about today. Released ones (a release/discharge pointing at its book/page) are skipped.
     """
     today = today or datetime.date.today()
     released = set()
@@ -419,14 +426,24 @@ def bank_foreclosure(models, fol, subj_subdiv, today=None):
         t = (r.get('doC_TYPE', '') or '').upper()
         if 'LIS PEND' in t and re.search(r'REL|DISCH|CANCEL|WITHDR|TERMIN', t):
             released.add((str(r.get('oriG_REC_BOOK', '')).strip(), str(r.get('oriG_REC_PAGE', '')).strip()))
-    best = None
+    # the owner's OTHER parcels in the subject subdivision, as far as the results show them
+    other_units = {norm_folio(r.get('foliO_NUMBER', '')) for r in models
+                   if subj_subdiv and (r.get('subdiV_NAME', '') or '').strip().upper() == subj_subdiv
+                   and norm_folio(r.get('foliO_NUMBER', '')) not in ('', fol)}
+    best, unsure = None, None
     for r in models:
         t = (r.get('doC_TYPE', '') or '').upper()
         if 'LIS PEND' not in t or re.search(r'REL|DISCH|CANCEL|WITHDR|TERMIN', t):
             continue
         rf = norm_folio(r.get('foliO_NUMBER', ''))
         sd = (r.get('subdiV_NAME', '') or '').strip().upper()
-        if not ((rf and rf == fol) or (subj_subdiv and sd == subj_subdiv)):
+        if rf:
+            if rf != fol:
+                continue                               # another parcel's filing
+            exact = True
+        elif subj_subdiv and sd == subj_subdiv:
+            exact = not other_units                    # subdivision proves the unit only if it is the only one
+        else:
             continue
         if (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip()) in released:
             continue
@@ -440,11 +457,17 @@ def bank_foreclosure(models, fol, subj_subdiv, today=None):
                 break
         if not lender:
             continue
-        if best is None or d > best[0]:
-            best = (d, {'case': 'lis pendens %s recorded %s' % (r.get('reC_BOOKPAGE', '') or '',
-                                                                 d.strftime('%m/%d/%Y')),
-                        'party': lender[:40], 'bp': r.get('reC_BOOKPAGE', ''), 'd': d.isoformat()})
-    return best[1] if best else None
+        hit = (d, {'case': 'lis pendens %s recorded %s' % (r.get('reC_BOOKPAGE', '') or '',
+                                                            d.strftime('%m/%d/%Y')),
+                   'party': lender[:40], 'bp': r.get('reC_BOOKPAGE', ''), 'd': d.isoformat()})
+        if exact:
+            if best is None or d > best[0]:
+                best = hit
+        elif unsure is None or d > unsure[0]:
+            unsure = hit
+    if best:
+        return best[1]
+    return dict(unsure[1], unsure=True) if unsure else None
 
 
 _UNPRICED_SKIP_RE = re.compile(r'MODIF|ASSUMP|SUBORD|SPREAD|AMEND|ASSIGN|RELEASE|SATIS|CORRECT', re.I)
@@ -661,11 +684,15 @@ def analyze(models, folio, judgment, ftype=''):
     if len(models) > 45: conf = 'low'                  # busy/common name -> results unreliable
     # always present (None = looked, found none), so a cached chain from before this check can be
     # told apart from one that passed it -- see clear_undocumented()
-    second_fc = bank_foreclosure(models, fol, subj_subdiv) if ftype == 'HOA' else None
+    _fc = bank_foreclosure(models, fol, subj_subdiv) if ftype == 'HOA' else None
+    second_fc = _fc if _fc and not _fc.get('unsure') else None
+    # a lender filing on one of this owner's units in the building, unit not established: never a
+    # 2ND FORECLOSURE flag on this parcel, never a clear either (equity_state.coverage_documented)
+    second_fc_unsure = _fc if _fc and _fc.get('unsure') else None
     # SEARCH COVERAGE, written down so a CLEAR can be checked rather than trusted (equity_state
     # .coverage_documented): how many records the search returned, what anchored the parcel, and
     # the mortgages whose amount the index does not publish.
-    return {'second_fc': second_fc, 'nrec': len(models),
+    return {'second_fc': second_fc, 'second_fc_unsure': second_fc_unsure, 'nrec': len(models),
             'anchor': 'folio+subdivision' if subj_subdiv else '',
             'mtg_open_unpriced': unpriced_open,
             'liens': liens, 'open_count': len(opens), 'junior': junior, 'first_est': first_amt,

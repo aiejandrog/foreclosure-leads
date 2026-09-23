@@ -222,7 +222,8 @@ def coverage_documented(chain):
       * not capped / truncated -- a search that stopped early cannot prove nothing is left.
       * `second_fc` present and empty -- the chain asked whether a LENDER is foreclosing the same
         property and found no one. A bank's foreclosure proves an open mortgage (Salkey); the key
-        being absent means the question was never asked.
+        being absent means the question was never asked. A lender filing on one of the owner's
+        units in the same building whose unit could not be pinned (`second_fc_unsure`) is not a no.
     Missing amounts are handled before this is reached: they are a ceiling, never zero debt.
     """
     if not isinstance(chain, dict):
@@ -233,4 +234,5 @@ def coverage_documented(chain):
         n = 0
     if n <= 0 or chain.get('capped') or chain.get('truncated'):
         return False
-    return 'second_fc' in chain and not chain.get('second_fc')
+    return ('second_fc' in chain and not chain.get('second_fc')
+            and not chain.get('second_fc_unsure'))
