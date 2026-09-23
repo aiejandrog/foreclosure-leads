@@ -196,6 +196,8 @@ def investigate(entry, searcher, document_limit=30):
         for party in title['search_names']:
             if party['name'] not in searched:
                 gaps.append(party['name'] + ': unknown; citation-discovered name needs another search pass.')
+        from miami_claim_evidence import enrich_claims
+        searches = enrich_claims(searches, capture.results, rows)
         for search in searches:
             search['potential_title_party_claims'] = reconcile_claims(
                 search.get('potential_title_party_claims', []), rows)
@@ -283,8 +285,14 @@ def refresh_saved_report(report, rows, seeds):
          'recorded_date':m.get('reC_DATE'), 'basis':'Already-stored evidence absent from owner query; not necessarily new debt'}
         for m in missed_records(seeds, baseline)]
     CD.classify_documents(rows, result['case'])
+    from miami_claim_evidence import enrich_claims
+    result['other_name_searches'] = enrich_claims(result.get('other_name_searches', []), raw, rows)
     for search in result.get('other_name_searches', []):
         search['potential_title_party_claims'] = reconcile_claims(search.get('potential_title_party_claims', []), rows)
+        for gap in search.get('gaps', []):
+            message = '%s: %s' % (gap['name'], gap.get('reason') or 'search coverage unknown')
+            if message not in result['gaps']:
+                result['gaps'].append(message)
     result['reconciled_at'] = datetime.now(timezone.utc).isoformat()
     return result
 
