@@ -232,13 +232,8 @@ def sum_check(pool, total, tolerance=0.011, max_terms=6):
 
 
 def labeled_sum_check(rows, total):
-    """Exact-cent check of ordered, labeled page items, never a subset search.
-
-    Subtotals must match their preceding contiguous item block (or the cumulative
-    items for a cumulative subtotal). Ambiguous layouts fail closed rather than
-    selecting convenient figures. Rates are not balances; accrued interest is.
-    """
-    components, block = [], []
+    """Validate typed vision rows. Labels never decide which amounts to sum."""
+    components = []
 
     def fail(reason):
         return {'ok': False, 'components': [float(v) for v in components], 'reason': reason}
@@ -251,28 +246,38 @@ def labeled_sum_check(rows, total):
 
     try:
         stated = cents(total)
+        rates, charges, subtotals, totals, ids = set(), {}, [], [], set()
         for row in rows:
-            label = str(row.get('label') or '').strip().lower()
-            if not label or row.get('confident') is False:
-                return fail('unlabeled or uncertain figure in labeled table')
-            # A date-range interest award may mention its percentage; that does
-            # not make the awarded dollar amount a rate.
-            rate = (re.search(r'\brate\b|\bpercentage\b|/\s*day\b|\bper[- ]day\b', label)
-                    or re.search(r'\(per diem\)|^per diem\s*$', label)
-                    or re.fullmatch(r'[\d.]+\s*%', label))
-            if rate:
+            kind, identifier = row.get('kind'), row.get('id')
+            if (kind not in ('charge', 'rate', 'subtotal', 'total')
+                    or not isinstance(identifier, str) or not identifier or identifier in ids
+                    or row.get('confident') is not True):
+                return fail('missing/duplicate id, missing kind, or uncertain figure; review required')
+            ids.add(identifier)
+            if kind == 'rate':
+                rate = Decimal(str(row.get('amount')))
+                if not rate.is_finite():
+                    return fail('invalid rate')
+                rates.add(rate)
                 continue
             amount = cents(row.get('amount'))
-            if re.search(r'\bsub[- ]?total\b', label):
-                if not block or (sum(block) != amount and sum(components) != amount):
-                    return fail('printed subtotal disagrees with its item block: ' + label)
-                block = []
-            elif re.search(r'\btotal\b', label):
-                if amount != stated:
-                    return fail('printed total disagrees with stated grand total')
+            if kind == 'subtotal':
+                subtotals.append((amount, row.get('item_ids')))
+            elif kind == 'total':
+                totals.append(amount)
             else:
+                charges[identifier] = amount
                 components.append(amount)
-                block.append(amount)
+        if any(amount in rates for amount in components):
+            return fail('charge equals a stated rate; review required')
+        if not totals or any(amount != stated for amount in totals):
+            return fail('missing or disagreeing kind=total')
+        for amount, members in subtotals:
+            if (not isinstance(members, list) or not members
+                    or any(not isinstance(m, str) or m not in charges for m in members)
+                    or len(members) != len(set(members))
+                    or sum(charges[m] for m in members) != amount):
+                return fail('printed subtotal lacks valid members or disagrees with its own items')
         if not components or sum(components) != stated:
             return fail('all labeled additive items do not equal the stated total to the cent')
     except (InvalidOperation, ValueError, TypeError):

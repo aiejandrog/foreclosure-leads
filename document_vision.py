@@ -51,8 +51,17 @@ INSTRUCTION = (
     'Rules: transcribe only what is printed. Never compute a figure, never correct one, and never '
     'fill in a figure you cannot read — mark it unreadable instead. If a digit is genuinely '
     'ambiguous under the watermark, say so for that row rather than guessing. '
+    'Give every row a unique id and kind: charge, rate, subtotal, or total. '
+    'A charge is an awarded additive dollar amount, even if its label mentions a rate: '
+    '"interest at $197/day: $13,199.00" is a charge of 13199.00. A standalone '
+    '"per diem (inline in label)" of 197.00 is kind rate. Percentages are rates. '
+    'Transcribe printed subtotals and totals as their own rows, never as charges. '
+    'For each subtotal give item_ids containing exactly the charge row ids it summarizes; '
+    'if the membership is unclear, leave item_ids empty and mark it unreadable. '
+    'Do not invent totals, charges or memberships to make arithmetic work. '
     'Reply with JSON only, shaped: '
-    '{"rows": [{"label": "...", "amount": "1234.56", "confident": true}], '
+    '{"rows": [{"id":"1", "kind":"charge", "label": "...", "amount": "1234.56", '
+    '"confident": true, "item_ids":[]}], '
     '"grand_total": "1234.56" or null, "unreadable": ["..."]}'
 )
 
@@ -136,14 +145,18 @@ def _parse(text):
         except ValueError:
             return {'rows': [], 'grand_total': None, 'unreadable': ['reply was not JSON']}
     rows = []
+    unreadable = [str(u)[:200] for u in (data.get('unreadable') or [])]
     for row in (data.get('rows') or []):
         amount = _amount(row.get('amount'))
         if amount is None:
+            unreadable.append('row amount unreadable: ' + str(row.get('label') or '')[:120])
             continue
         rows.append({'label': str(row.get('label') or '')[:120], 'amount': amount,
+                     'id': row.get('id'), 'kind': row.get('kind'),
+                     'item_ids': row.get('item_ids', []),
                      'confident': bool(row.get('confident', True))})
     return {'rows': rows, 'grand_total': _amount(data.get('grand_total')),
-            'unreadable': [str(u)[:200] for u in (data.get('unreadable') or [])]}
+            'unreadable': unreadable}
 
 
 def render_page(path, page_no, dpi=VISION_DPI, out_dir=None):
@@ -191,8 +204,7 @@ def read_document(path, pages, budget, reader=None, out_dir=None):
         out['pages'][page_no] = result
         out['usd'] = round(out['usd'] + result.get('usd', 0.0), 6)
         for row in result['rows']:
-            out['figures'].append({'amount': row['amount'], 'label': row['label'],
-                                   'page': page_no, 'confident': row['confident']})
+            out['figures'].append(dict(row, page=page_no))
         if result.get('grand_total') is not None:
             out['grand_totals'].append({'amount': result['grand_total'], 'page': page_no})
     return out
