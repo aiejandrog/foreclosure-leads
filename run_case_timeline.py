@@ -1,4 +1,4 @@
-"""Miami whole-case timelines using the existing acquisition queue; no paid calls."""
+"""Miami whole-case timelines; free OCR and opt-in, cumulatively capped vision."""
 import argparse
 import hashlib
 import json
@@ -101,22 +101,31 @@ def write_timeline(dossier_path, timeline, markdown):
     return {'json': str(json_path), 'markdown': str(md_path)}
 
 
-def read_amounts(rows, base, budget):
-    """Only the selector's amount pages; persistent reader cache handles restart."""
+def read_amounts(rows, base, budget=None):
+    """Reuse hash-bound private evidence; paid selection requires an explicit budget."""
     import miami_timeline_amounts as amounts
     result = {'figures': [], 'gaps': [], 'evidence_files': []}
     for row in rows:
-        if not amounts.amount_page_numbers(row.get('reading') or {}):
-            continue
-        detail = amounts.assess_amount_pages(row, budget)
-        detail['source_ref'] = row.get('source_ref')
-        detail['document_key'] = (row.get('manifest') or {}).get('document_key')
-        detail['document_hash'] = ((row.get('manifest') or {}).get('source_sha256') or
-                                   (row.get('manifest') or {}).get('sha256'))
-        detail['entry_id'] = row.get('entry_ref')
+        current_hash = ((row.get('manifest') or {}).get('source_sha256') or
+                        (row.get('manifest') or {}).get('sha256'))
         key = hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest()
         path = Path(base) / ('amount-vision-' + key + '.json')
-        DS.pipeline_write(path, detail)
+        if budget is None:
+            detail = DS.pipeline_load(path)
+            if (not detail or not current_hash or detail.get('document_hash') != current_hash or
+                    detail.get('source_ref') != row.get('source_ref')):
+                continue
+            detail = dict(detail)
+        else:
+            if not amounts.amount_page_numbers(row.get('reading') or {}):
+                continue
+            detail = amounts.assess_amount_pages(row, budget)
+        detail['source_ref'] = row.get('source_ref')
+        detail['document_key'] = (row.get('manifest') or {}).get('document_key')
+        detail['document_hash'] = current_hash
+        detail['entry_id'] = row.get('entry_ref')
+        if budget is not None:
+            DS.pipeline_write(path, detail)
         result['evidence_files'].append(str(path))
         result['gaps'].extend(dict(gap, source_ref=row.get('source_ref')) for gap in detail.get('gaps', []))
         result['figures'].extend(dict(figure, source_ref=row.get('source_ref'),
@@ -174,9 +183,18 @@ def main(argv=None):
             # Preserve the free whole-case analysis even if a paid reader fails.
             timeline['vision_budget'] = budget_snapshot(ledger, args.vision_max_spend)
             timeline['counts'] = summary_counts(rows, timeline)
+            cached_amounts = read_amounts(rows, base)
+            if cached_amounts['evidence_files']:
+                timeline['amount_vision'] = cached_amounts
+                timeline.setdefault('gaps', []).extend(cached_amounts['gaps'])
+                timeline.setdefault('amounts', []).extend(cached_amounts['figures'])
+                if cached_amounts['gaps']:
+                    timeline['coverage_complete'] = False
             write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
                            miami_case_timeline.render_markdown(timeline))
             if budget is not None:
+                # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
+                timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=args.as_of.isoformat())
                 amounts = read_amounts(rows, DS.pipeline_folder(COUNTY, case), budget)
                 timeline['amount_vision'] = amounts
                 timeline.setdefault('gaps', []).extend(amounts['gaps'])

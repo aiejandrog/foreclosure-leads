@@ -173,6 +173,45 @@ class TimelineTests(unittest.TestCase):
         r = run([entry(1, 'Motion for Attorneys Fees'), entry(2, 'Order Awarding Attorney Fees')])
         self.assertFalse([p for p in r['pending'] if p['type'] == 'motion'])
 
+    def test_mentions_do_not_create_disposition(self):
+        for text in ('Objection to Certificate of Sale', 'Appeal of Final Judgment', 'Response concerning Certificate of Title'):
+            with self.subTest(text=text):
+                self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, text)])['status']['kind'], 'judgment_entered')
+
+    def test_vacatur_not_judgment_entered(self):
+        self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, 'Order vacating final judgment')])['status']['kind'], 'unclear')
+
+    def test_discovery_stay_not_bankruptcy(self):
+        self.assertEqual(run([entry(1, 'Complaint'), entry(2, 'Order staying discovery')])['status']['kind'], 'active_pre_judgment')
+
+    def test_dismissal_count_not_whole_case(self):
+        self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, 'Notice of voluntary dismissal of Count II')])['status']['kind'], 'judgment_entered')
+
+    def test_partial_stay_relief_does_not_clear_stays(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of bankruptcy'), entry(3, 'Order granting partial relief from bankruptcy stay')])
+        self.assertEqual(r['status']['kind'], 'unclear')
+
+    def test_ambiguous_multiple_motions_not_all_closed(self):
+        r = run([entry(1, 'Motion to dismiss by Defendant A'), entry(2, 'Motion to dismiss by Defendant B'), entry(3, 'Order denying motion to dismiss by Defendant A')])
+        self.assertEqual([p['entry_id'] for p in r['pending'] if p['type'] == 'motion'], ['1', '2'])
+
+    def test_unreadable_page_gap_preserves_evidence_reason(self):
+        d = {'entry_ref': '1', 'source_ref': 'court:1:9', 'manifest': {'source_sha256': 'abc'}, 'reading': {'pages': [{'page': 1, 'outcome': 'unreadable_source', 'assessment': {'reason': 'County image blacked out'}}]}}
+        r = run([entry(1, 'Final Judgment')], [d])
+        gap = next(g for g in r['gaps'] if g.get('page') == 1)
+        self.assertEqual(gap['reason'], 'County image blacked out')
+        self.assertEqual(gap['document_hash'], 'abc')
+        self.assertEqual(gap['source_ref'], 'court:1:9')
+        self.assertEqual(gap['outcome'], 'unreadable_source')
+
+    def test_denied_vacatur_leaves_judgment(self):
+        self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, 'Order denying motion to vacate final judgment')])['status']['kind'], 'judgment_entered')
+
+    def test_motion_requesting_order_is_not_order(self):
+        for text in ('Motion for order of dismissal', 'Emergency motion for order of dismissal', 'Amended motion for order of dismissal', 'Renewed motion for order of dismissal'):
+            with self.subTest(text=text):
+                self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, text)])['status']['kind'], 'judgment_entered')
+
 
 if __name__ == '__main__':
     unittest.main()

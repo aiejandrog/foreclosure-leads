@@ -9,6 +9,24 @@ import run_case_timeline as R
 
 
 class AcquisitionTests(unittest.TestCase):
+    def test_free_cached_amounts_never_call_reader_and_reject_wrong_hash(self):
+        import hashlib
+        import miami_timeline_amounts as A
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            row = {'source_ref': 'court:1:2', 'entry_ref': '1',
+                   'manifest': {'source_sha256': 'current'}, 'reading': {'pages': []}}
+            path = base / ('amount-vision-' + hashlib.sha256(b'court:1:2').hexdigest() + '.json')
+            detail = {'source_ref': 'court:1:2', 'document_hash': 'current',
+                      'figures': [{'page': 1, 'amount': 10}], 'gaps': [{'page': 2, 'reason': 'cap'}]}
+            path.write_text(json.dumps(detail))
+            with patch.object(A, 'assess_amount_pages', side_effect=AssertionError('paid call forbidden')):
+                report = R.read_amounts([row], base)
+                self.assertEqual(len(report['figures']), 1)
+                self.assertEqual(report['gaps'][0]['reason'], 'cap')
+                row['manifest']['source_sha256'] = 'changed'
+                self.assertEqual(R.read_amounts([row], base)['figures'], [])
+
     def test_paid_failure_leaves_free_timeline_on_disk(self):
         import case_review
         import run_documents
@@ -18,11 +36,15 @@ class AcquisitionTests(unittest.TestCase):
             ledger.write_text(json.dumps({'version': 1, 'cases': {}, 'actual_usd': .08, 'reserved': {}}))
             dossier = base / 'case.json'
             inventory = {'pagination_verified': True, 'entries': []}
+            def fail_paid(rows, base, budget=None):
+                if budget is not None:
+                    raise RuntimeError('reader stopped')
+                return {'figures': [], 'gaps': [], 'evidence_files': []}
             with patch.object(case_review, 'output_path', return_value=ledger), \
                  patch.object(run_documents, 'dossier_path', return_value=dossier), \
                  patch.object(R.DS, 'pipeline_folder', return_value=base), \
                  patch.object(R, 'acquire', return_value=(inventory, [])), \
-                 patch.object(R, 'read_amounts', side_effect=RuntimeError('reader stopped')):
+                 patch.object(R, 'read_amounts', side_effect=fail_paid):
                 with self.assertRaises(RuntimeError):
                     R.main(['--case', '2026-000001-CA-01', '--vision', '--vision-max-spend', '1'])
             self.assertTrue((base / 'case-timeline.json').exists())

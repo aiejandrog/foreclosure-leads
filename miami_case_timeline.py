@@ -37,12 +37,16 @@ def classify(text):
     """Classify operative title, not mentions of earlier documents in body prose."""
     s = re.sub(r'\s+', ' ', str(text or '')).lower()
     if re.match(r'(?:response|reply|opposition)\b', s): return 'response'
+    if re.match(r'(?:notice of )?appeal\b', s): return 'appeal'
+    if re.match(r'objection\b', s): return 'objection'
     if re.match(r'(?:amended\s+)?(?:notice|request)\s+(?:of|for)\s+(?:a\s+)?(?:special set\s+|evidentiary\s+)?hearing\b', s): return 'hearing'
-    if re.search(r'\bmotion\b', s) and not re.search(r'\border\b', s):
+    if re.match(r'(?:(?:amended|emergency|renewed)\s+)*motion\b', s) or (re.search(r'\bmotion\b', s) and not re.search(r'\border\b', s)):
         if 'summary judgment' in s: return 'motion_for_summary_judgment'
         if 'dismiss' in s: return 'motion_to_dismiss'
         return 'motion'
     checks = [
+        ('order_on_motion', r'^order.*(?:denying|denied)'),
+        ('vacatur', r'order.*(?:vacat|set.*aside).*judgment'),
         ('notice_of_voluntary_dismissal', r'voluntary dismissal'),
         ('order_on_motion', r'order.*(?:denying|denied)'),
         ('relief_from_stay', r'(?:order|notice).*(?:relief from|lift|terminat).*(?:stay)'),
@@ -54,7 +58,8 @@ def classify(text):
         ('certificate_of_title', r'certificate of title'),
         ('certificate_of_sale', r'certificate of sale'),
         ('suggestion_of_bankruptcy', r'suggestion of bankruptcy|notice of bankruptcy'),
-        ('stay', r'order.*stay|automatic stay'),
+        ('stay', r'order.*stay.*bankrupt|order.*bankrupt.*stay|automatic stay'),
+        ('nonbankruptcy_stay', r'order.*stay'),
         ('order_on_motion', r'order.*motion|order (?:granting|denying|awarding)'),
         ('amended_complaint', r'amended complaint'),
         ('complaint', r'\bcomplaint\b'),
@@ -101,6 +106,7 @@ def _transition(e):
                 'suggestion_of_bankruptcy': 'stayed_by_bankruptcy', 'stay': 'stayed_by_bankruptcy',
                 'notice_of_voluntary_dismissal': 'dismissed', 'order_of_dismissal': 'dismissed',
                 'satisfaction': 'satisfied_redeemed', 'certificate_of_sale': 'sold', 'certificate_of_title': 'sold'}
+    if kind == 'vacatur': return {'kind': 'unclear', 'evidence': [e['entry_id']], 'reason': 'Judgment vacatur found; subsequent case posture requires explicit evidence.'}
     result = statuses.get(kind)
     if result is None: return None
     r = {'kind': result, 'evidence': [e['entry_id']], 'reason': e['operative_text']}
@@ -147,6 +153,7 @@ def build_timeline(case, inventory, document_rows, as_of):
              'index_agrees': body_kind == ik if body_kind else None,
              'operative_text': title or index_text, 'calendar_event': str(meta.get('eventType', '')).lower() == 'hearing'}
         e['limited_scope'] = bool(re.search(r'(?:dismiss\w*|satisf\w*|releas\w*)[^\n.]{0,100}(?:\bas to\b|\bone defendant\b|\bpartial\b|\bonly\b)|\bpartial (?:dismissal|satisfaction)|\bas to (?:defendant|party)\b', scope_text, re.I))
+        if re.search(r'\b(?:count\s+[IVX\d]+|cause of action|partial relief|limited relief)\b', scope_text, re.I): e['limited_scope'] = True
         if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'
         e['sale_passages'] = [index_text] if re.search(r'\bsale\b', index_text, re.I) else []
         body_lines = [line for p in pages for line in str(p.get('text') or '').splitlines()]
@@ -157,6 +164,11 @@ def build_timeline(case, inventory, document_rows, as_of):
             if reasons: e['operative_text'] += ' — ' + ' '.join(reasons[:3])
         expected = item.get('expected_documents', meta.get('numberOfDocuments', 0)) or 0
         failed = [p for p in pages if p.get('outcome') not in ('text', 'ocr_text', 'vision_text', 'read_as_label', 'exhibit_divider')]
+        for page in failed:
+            assessment = page.get('assessment') or {}
+            reason = assessment.get('reason') if isinstance(assessment, dict) else str(assessment)
+            reason = reason or page.get('ocr_error') or page.get('weak_reason') or page.get('error') or 'No readable page outcome was recorded.'
+            gaps.append({'entry_id': ident, 'kind': 'page_unreadable', 'source_ref': page.get('_source_ref'), 'document_hash': page.get('_document_hash'), 'page': page.get('page'), 'outcome': page.get('outcome'), 'reason': reason})
         e['image_status'] = 'unreadable_pages' if failed else ('read' if pages else ('not_fetched' if expected else 'no_image_indexed'))
         if len(matched) < int(expected) and pages: e['image_status'] = 'missing_attachments'
         for d in matched:
@@ -195,13 +207,16 @@ def build_timeline(case, inventory, document_rows, as_of):
             pending.append({'type': 'motion', 'entry_id': e['entry_id'], 'date': e['date'], 'description': e['description'], 'status': 'no_matching_order_identified'})
         for passage in e.get('motion_disposition_passages', []):
             topics = ('summary judgment', 'default', 'dismiss', 'cancel', 'attorney fees', "attorney's fees")
-            pending[:] = [p for p in pending if not (p['type'] == 'motion' and p['date'] < e['date'] and any(topic in _topic_text(passage) and topic in _topic_text(p['description']) for topic in topics))]
+            _close_unique_motion(pending, passage, e['date'], topics)
         if e['kind'] in ('order_cancelling_sale', 'order_resetting_sale', 'order_of_dismissal') or (e['kind'] == 'order_on_motion' and re.search(r'\b(granting|denying|granted|denied|awarding)\b', e['operative_text'], re.I)):
             # Only close a motion when its substantive phrase is explicitly repeated.
             text = e['operative_text'].lower()
             topics = ('dismiss', 'summary judgment', 'cancel', 'reset', 'attorney fees', "attorney's fees", 'default')
-            pending[:] = [p for p in pending if not (p['type'] == 'motion' and p['date'] < e['date'] and any(topic in _topic_text(text) and topic in _topic_text(p['description']) for topic in topics))]
+            _close_unique_motion(pending, text, e['date'], topics)
         if e['kind'] == 'relief_from_stay':
+            if e.get('limited_scope'):
+                status = {'kind': 'unclear', 'evidence': unresolved_stay + [e['entry_id']], 'reason': 'Partial or limited stay relief does not establish that all foreclosure restrictions ended.'}
+                continue
             unresolved_stay = []
             if pre_stay:
                 status = dict(pre_stay, evidence=pre_stay['evidence'] + [e['entry_id']], reason=e['operative_text'])
@@ -231,6 +246,12 @@ def build_timeline(case, inventory, document_rows, as_of):
 
 def _topic_text(text):
     return re.sub(r"\battorney(?:s|['’]s)?\b", 'attorney', str(text).lower())
+
+
+def _close_unique_motion(pending, text, order_date, topics):
+    matches = [p for p in pending if p['type'] == 'motion' and p['date'] < order_date and any(topic in _topic_text(text) and topic in _topic_text(p['description']) for topic in topics)]
+    if len(matches) == 1:
+        pending.remove(matches[0])
 
 
 def render_markdown(result):
