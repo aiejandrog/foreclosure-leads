@@ -29,6 +29,7 @@ import itertools
 import json
 import os
 from datetime import datetime, timezone
+from decimal import Decimal, InvalidOperation
 import re
 import sys
 
@@ -228,6 +229,56 @@ def sum_check(pool, total, tolerance=0.011, max_terms=6):
     return {'ok': False, 'components': [],
             'reason': 'no 2-%d of the document\'s %d other figures sum to it'
                       % (max_terms, len(unique))}
+
+
+def labeled_sum_check(rows, total):
+    """Exact-cent check of ordered, labeled page items, never a subset search.
+
+    Subtotals must match their preceding contiguous item block (or the cumulative
+    items for a cumulative subtotal). Ambiguous layouts fail closed rather than
+    selecting convenient figures. Rates are not balances; accrued interest is.
+    """
+    components, block = [], []
+
+    def fail(reason):
+        return {'ok': False, 'components': [float(v) for v in components], 'reason': reason}
+
+    def cents(value):
+        amount = Decimal(str(value))
+        if not amount.is_finite() or amount != amount.quantize(Decimal('0.01')):
+            raise ValueError('not an exact cent amount')
+        return amount
+
+    try:
+        stated = cents(total)
+        for row in rows:
+            label = str(row.get('label') or '').strip().lower()
+            if not label or row.get('confident') is False:
+                return fail('unlabeled or uncertain figure in labeled table')
+            # A date-range interest award may mention its percentage; that does
+            # not make the awarded dollar amount a rate.
+            rate = (re.search(r'\brate\b|\bpercentage\b|/\s*day\b|\bper[- ]day\b', label)
+                    or re.search(r'\(per diem\)|^per diem\s*$', label)
+                    or re.fullmatch(r'[\d.]+\s*%', label))
+            if rate:
+                continue
+            amount = cents(row.get('amount'))
+            if re.search(r'\bsub[- ]?total\b', label):
+                if not block or (sum(block) != amount and sum(components) != amount):
+                    return fail('printed subtotal disagrees with its item block: ' + label)
+                block = []
+            elif re.search(r'\btotal\b', label):
+                if amount != stated:
+                    return fail('printed total disagrees with stated grand total')
+            else:
+                components.append(amount)
+                block.append(amount)
+        if not components or sum(components) != stated:
+            return fail('all labeled additive items do not equal the stated total to the cent')
+    except (InvalidOperation, ValueError, TypeError):
+        return fail('invalid or sub-cent monetary figure')
+    return {'ok': True, 'components': [float(v) for v in components],
+            'reason': 'all labeled additive items sum exactly to stated total; subtotals agree'}
 
 
 def admissible(candidate):
@@ -478,10 +529,15 @@ def vision_candidates(path, reading, budget, reader=None, out_dir=None):
         wanted = sorted({page['page'] for page in reading['pages']
                          if page['outcome'] in ('ocr_text', 'needs_ocr')})[:2]
     detail = DV.read_document(path, wanted, budget, reader=reader, out_dir=out_dir)
-    pool = [f['amount'] for f in detail['figures']]
     out = []
     for total in detail['grand_totals']:
-        check = sum_check(pool, total['amount'])
+        # Vision returns labels: never let the legacy OCR subset search override
+        # a rejected full table. Do not mix figures from different pages.
+        page_rows = [f for f in detail['figures'] if f['page'] == total['page']]
+        check = labeled_sum_check(page_rows, total['amount'])
+        page_detail = detail.get('pages', {}).get(total['page'], {})
+        if page_detail.get('unreadable') or detail.get('errors'):
+            check = {'ok': False, 'components': [], 'reason': 'vision has unresolved reading errors'}
         out.append({'amount': total['amount'], 'page': total['page'],
                     'passage': 'grand total transcribed from the page image',
                     'source': 'page_image', 'match': 'vision_grand_total',
