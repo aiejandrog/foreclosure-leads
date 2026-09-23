@@ -37,7 +37,7 @@ def classify(text):
     """Classify operative title, not mentions of earlier documents in body prose."""
     s = re.sub(r'\s+', ' ', str(text or '')).lower()
     if re.match(r'(?:response|reply|opposition)\b', s): return 'response'
-    if re.match(r'(?:amended\s+)?(?:notice|request)\s+(?:of|for)\s+(?:a\s+)?hearing\b', s): return 'hearing'
+    if re.match(r'(?:amended\s+)?(?:notice|request)\s+(?:of|for)\s+(?:a\s+)?(?:special set\s+|evidentiary\s+)?hearing\b', s): return 'hearing'
     if re.search(r'\bmotion\b', s) and not re.search(r'\border\b', s):
         if 'summary judgment' in s: return 'motion_for_summary_judgment'
         if 'dismiss' in s: return 'motion_to_dismiss'

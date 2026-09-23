@@ -160,6 +160,7 @@ class TimelineTests(unittest.TestCase):
 
     def test_notice_hearing_with_motion_topic_not_motion(self):
         self.assertEqual(T.classify('Notice of Hearing on Motion for Summary Judgment'), 'hearing')
+        self.assertEqual(T.classify("NOTICE OF SPECIAL SET HEARING MOTION FOR ATTORNEY'S FEES AND COSTS"), 'hearing')
         self.assertEqual(T.classify('Request for Hearing on Motion to dismiss'), 'hearing')
 
     def test_notice_judicial_sale_and_short_year(self):
