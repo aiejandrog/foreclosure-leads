@@ -265,6 +265,15 @@ class WalkTest(unittest.TestCase):
         _new, report = W.walk('C1', rows, index=self.index, caps_path=self.caps, depth=1)
         self.assertNotIn(('31000', '5'), self.fetched)
         self.assertEqual(report['depth'], 1)
+        self.assertEqual([(u['book'], u['page_no']) for u in report['unresolved']], [('31000', '5')])
+
+    def test_missing_fetch_result_is_a_named_gap(self):
+        import miami_judgment
+        miami_judgment.collect_recorded = lambda *a, **k: []
+        self.index.add_models([model('28001', '1234')])
+        _new, report = W.walk('C1', [row_citing('official_records/9-9', CITER)], index=self.index)
+        self.assertTrue(any(u['book'] == '28001' and u['status'] == 'cited_but_not_fetched'
+                            for u in report['unresolved']))
 
     def test_depth_two_follows_the_second_hop(self):
         self.index.add_models([model('28001', '1234'), model('29500', '77'),
@@ -383,7 +392,7 @@ class NameSearchTest(unittest.TestCase):
 
     def test_a_prior_owners_mortgage_on_this_parcel_is_reported(self):
         searcher = FakeSearcher({'ROSALES MARIA': [PRIOR_OWNER_MORTGAGE]})
-        out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010')
+        out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010', owner_models=[])
         found = out['found_under_other_names']
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0]['under_name'], 'ROSALES MARIA')
@@ -424,7 +433,7 @@ class NameSearchTest(unittest.TestCase):
         searcher = FakeSearcher({'ROSALES MARIA': [no_folio]})
         out = W.run_name_searches(self.plan(), self.index, searcher, '3059130020010',
                                   subdivision='GARDEN LAKE TOWERS')
-        self.assertEqual(out['found_under_other_names'][0]['anchored_by'], 'subdivision')
+        self.assertEqual(out['uncertain_parcel_candidates'][0]['anchored_by'], 'subdivision')
 
     def test_no_plan_means_no_search_is_run(self):
         searcher = FakeSearcher({})
@@ -1033,6 +1042,54 @@ class OwnStampTest(unittest.TestCase):
         self.assertIn('1 citation(s) in the read text', printed)
         self.assertIn('11732/780', printed)
         self.assertNotIn('35287/4643', printed)
+
+
+class SearchCoverageTest(unittest.TestCase):
+    def run_search(self, records, baseline=None):
+        return W.run_name_searches([{'name': 'TEST OWNER', 'why': 'title'}],
+            W.RecordIndex(os.path.join(_TMP, 'coverage.json')),
+            FakeSearcher({'TEST OWNER': records}), '1234567890123', 'TEST CONDO',
+            owner_models=baseline)
+
+    def test_cap_is_unknown_and_named(self):
+        out = self.run_search([model('1', str(i)) for i in range(500)], [])
+        self.assertEqual(out['searched'][0]['coverage'], 'unknown')
+        self.assertEqual(out['gaps'][0]['name'], 'TEST OWNER')
+
+    def test_owner_baseline_is_required_before_claiming_missed(self):
+        record = model('1', '2', folio='1234567890123')
+        self.assertEqual(self.run_search([record])['found_under_other_names'], [])
+        self.assertEqual(self.run_search([record], [record])['found_under_other_names'], [])
+        self.assertEqual(len(self.run_search([record], [])['found_under_other_names']), 1)
+
+    def test_conflicting_folio_never_falls_back_to_subdivision(self):
+        out = self.run_search([model('1', '2', folio='9999999999999', subdiv='TEST CONDO')], [])
+        self.assertEqual(out['found_under_other_names'], [])
+
+    def test_subdivision_candidate_is_not_confirmed_parcel(self):
+        out = self.run_search([model('1', '2', subdiv='TEST CONDO')], [])
+        self.assertEqual(out['found_under_other_names'], [])
+        self.assertEqual(out['uncertain_parcel_candidates'][0]['parcel_status'], 'unknown')
+
+    def test_nonparcel_judgment_retained_without_claiming_attachment(self):
+        record = dict(model('1', '2', doc_type='FEDERAL TAX LIEN'), amount=500)
+        claim = self.run_search([record], [])['potential_title_party_claims'][0]
+        self.assertEqual(claim['amount'], 500)
+        self.assertEqual(claim['attachment_status'], 'unknown')
+        self.assertEqual(claim['satisfaction_status'], 'unknown')
+
+    def test_releases_preserved_for_body_reference_matching(self):
+        out = self.run_search([model('8', '9', doc_type='SATISFACTION OF JUDGMENT')], [])
+        self.assertEqual(out['satisfaction_candidates'][0]['book'], '8')
+
+    def test_paid_transport_can_be_capped_by_caller(self):
+        def blocked(parts):
+            raise RuntimeError('captcha cap reached')
+        searcher = W.NameSearcher(use_camoufox=False, paid_search=blocked)
+        out = W.run_name_searches([{'name': 'TEST OWNER', 'why': 'title'}],
+            W.RecordIndex(os.path.join(_TMP, 'blocked.json')), searcher, '1234567890123')
+        self.assertEqual(out['gaps'][0]['name'], 'TEST OWNER')
+        self.assertIn('captcha cap reached', out['gaps'][0]['reason'])
 
 
 if __name__ == '__main__':

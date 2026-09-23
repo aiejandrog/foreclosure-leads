@@ -375,7 +375,8 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
     # citations unresolved on this run and resolvable only on the next.
     names = None
     if name_plan and name_searcher is not None:
-        names = run_name_searches(name_plan, index, name_searcher, folio, subdivision)
+        names = run_name_searches(name_plan, index, name_searcher, folio, subdivision,
+                                  owner_models=models)
     # Everything already fetched is addressed. Without this the first hop re-fetches the document
     # that did the citing, because a recorded instrument's own stamp cites its own book and page.
     seen = own_spans(rows)
@@ -402,10 +403,17 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
             batch.append((cite, outcome))
         if not batch:
             continue
-        fetched = MJ.collect_recorded(case, [o['record'] for _c, o in batch],
+        current_rows = []
+        for cite, outcome in batch:
+            fetched = MJ.collect_recorded(case, [outcome['record']],
                                       collector=collector, queue=queue, county=county, ocr=ocr,
                                       keep_images=keep_images, gray_cutoff=gray_cutoff)
-        for (cite, outcome), row in zip(batch, fetched):
+            if not fetched:
+                unresolved.append(dict(cite, reason='collector returned no document row', via='fetch_missing'))
+                continue
+            row = fetched[0]
+            if row.get('status') != 'stored':
+                unresolved.append(dict(cite, reason=row.get('reason') or 'document was not stored', via='fetch_failed'))
             # Provenance travels with the document. A reader looking at the dossier must be able to
             # see that this instrument is here because another document named it, and which line of
             # which page did the naming — that passage is the whole argument for trusting it.
@@ -418,10 +426,17 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
                              'resolved_via': outcome['via'], 'status': row.get('status'),
                              'doc_type': row.get('doc_type'), 'cited_by': cite['cited_by']})
             new_rows.append(row)
-        case_dossier.classify_documents(new_rows[-len(batch):], case=case)
-        frontier = new_rows[-len(batch):]
+            current_rows.append(row)
+        case_dossier.classify_documents(current_rows, case=case)
+        frontier = current_rows
         if spent >= budget:
             break
+    for cite in pending_citations(frontier, seen):
+        reason = stopped or ('budget reached' if spent >= budget else 'depth limit reached')
+        stopped = reason
+        unresolved.append(dict(cite, reason=reason, via='not_attempted'))
+    for gap in unresolved:
+        gap['status'] = 'cited_but_not_fetched'
     index.save()
     return new_rows, {
         'depth': int(depth), 'budget': int(budget), 'documents_fetched': spent,
@@ -450,11 +465,12 @@ class NameSearcher:
     written back to records_qs.json, so the same name costs nothing next time.
     """
 
-    def __init__(self, qs_cache=None, use_camoufox=True):
+    def __init__(self, qs_cache=None, use_camoufox=True, paid_search=None):
         import records_liens as R
         self.R = R
         self.qs_cache = qs_cache if qs_cache is not None else {}
         self.use_camoufox = use_camoufox
+        self.paid_search = paid_search
         self._cm = self._browser = None
         self.spent_free = self.spent_paid = 0
 
@@ -487,7 +503,7 @@ class NameSearcher:
                     self.qs_cache[name] = token
                     return models
         self.spent_paid += 1
-        return self.R.fetch_via_turnstile(parts)
+        return (self.paid_search or self.R.fetch_via_turnstile)(parts)
 
     def close(self):
         if self._cm is not None:
@@ -503,7 +519,7 @@ _ENCUMBRANCE_RE = re.compile(r'^(MORTGAGE|LIEN|JUDGMENT|NOTICE OF (?:LIEN|COMMEN
                              r'FINANCING STATEMENT|TAX)', re.I)
 
 
-def run_name_searches(plan, index, searcher, folio, subdivision=''):
+def run_name_searches(plan, index, searcher, folio, subdivision='', owner_models=None):
     """Execute the planned name searches. Index what comes back, and report the encumbrances that
     sit on the SUBJECT parcel under a name the owner search never used.
 
@@ -513,57 +529,93 @@ def run_name_searches(plan, index, searcher, folio, subdivision=''):
     into the chain arithmetic is a separate decision, and taking it here would smuggle a new input
     into the equity engine through a document-reading branch.
 
-    Parcel isolation is the SAME rule `analyze` uses — folio when the record carries one, else the
-    subject subdivision — because a prior owner's name search returns their whole life, and an
-    encumbrance on a different property of theirs says nothing about this house.
+    Exact folios are parcel matches. A conflicting folio cannot fall back to subdivision;
+    subdivision-only hits are uncertain candidates. Money judgments and tax liens remain
+    search-result candidates even without parcel linkage, never established attachments.
     """
     import records_liens as R
     fol = R.norm_folio(folio)
     sub = (subdivision or '').strip().upper()
-    searched, found = [], []
+    searched, found, candidates, uncertain, claims, gaps = [], [], [], [], [], []
+    releases = []
+    baseline = None if owner_models is None else {
+        key_of(m.get('reC_BOOK'), m.get('reC_PAGE')) for m in owner_models}
     for candidate in plan or []:
         name = candidate['name']
         try:
             models = searcher.search(name)
         except Exception as exc:
             searched.append(dict(candidate, outcome='error',
+                                 coverage='unknown',
                                  reason='%s: %s' % (type(exc).__name__, str(exc)[:140])))
+            gaps.append(dict(searched[-1]))
             continue
         if models is None:
             # The county was not reached. That is NOT "this name is clean" and must never read as
             # it: an empty search that prints like a clean title check is the most dangerous
             # output this repo can produce (records_liens says so in as many words).
             searched.append(dict(candidate, outcome='not_reached',
+                                 coverage='unknown',
                                  reason='no search token could be obtained for this name'))
+            gaps.append(dict(searched[-1]))
             continue
         index.add_models(models)
         on_parcel = []
         for model in models:
             doc_type = str(model.get('doC_TYPE') or '').strip()
-            if not _ENCUMBRANCE_RE.match(doc_type) or _OPEN_KILLER_RE.search(doc_type):
+            if _OPEN_KILLER_RE.search(doc_type):
+                releases.append({'book': model.get('reC_BOOK'), 'page_no': model.get('reC_PAGE'),
+                                 'doc_type': doc_type, 'rec_date': model.get('reC_DATE'),
+                                 'under_name': name, 'reference_status': 'not_checked',
+                                 'record': dict(model)})
+                continue
+            money_claim = bool(re.search(r'JUDGMENT|(?:FEDERAL|STATE).*TAX.*LIEN|TAX.*LIEN', doc_type, re.I))
+            if (not _ENCUMBRANCE_RE.match(doc_type) and not money_claim) or _OPEN_KILLER_RE.search(doc_type):
                 continue
             rf = R.norm_folio(model.get('foliO_NUMBER'))
             sd = str(model.get('subdiV_NAME') or '').strip().upper()
-            if not ((fol and rf == fol) or (sub and sd == sub)):
-                continue
-            on_parcel.append({
+            exact = bool(fol and rf == fol)
+            subdivision_only = bool(not rf and sub and sd == sub)
+            row = {
                 'doc_type': doc_type, 'rec_date': model.get('reC_DATE'),
                 'book': model.get('reC_BOOK'), 'page_no': model.get('reC_PAGE'),
                 'other_party': str(model.get('seconD_PARTY') or '')[:60],
-                'anchored_by': 'folio' if (fol and rf == fol) else 'subdivision',
-            })
+                'anchored_by': 'folio' if exact else ('subdivision' if subdivision_only else None),
+                'parcel_status': 'matched' if exact else 'unknown',
+                'under_name': name, 'why': candidate.get('why', ''),
+                'amount': model.get('amount', model.get('consideratioN_1')),
+                'amount_basis': 'index_metadata_unverified',
+                'owner_search_missed': None if baseline is None else key_of(model.get('reC_BOOK'), model.get('reC_PAGE')) not in baseline,
+            }
+            if money_claim:
+                claims.append(dict(row, attachment_status='unknown',
+                    identity_status='search_result_only', satisfaction_status='unknown'))
+            if exact:
+                on_parcel.append(row)
+                candidates.append(row)
+            elif subdivision_only:
+                uncertain.append(row)
         searched.append(dict(candidate, outcome='searched', records=len(models),
-                             on_parcel=len(on_parcel)))
+                             on_parcel=len(on_parcel), coverage='unknown' if len(models) >= 500 else 'returned_records',
+                             reason='500-record search cap; remaining records unknown' if len(models) >= 500 else ''))
+        if len(models) >= 500:
+            gaps.append(dict(searched[-1]))
         for row in on_parcel:
-            found.append(dict(row, under_name=name, why=candidate['why']))
+            if row['owner_search_missed'] is True:
+                found.append(row)
     return {
         'searched': searched,
         'found_under_other_names': found,
+        'parcel_candidates': candidates,
+        'uncertain_parcel_candidates': uncertain,
+        'potential_title_party_claims': claims,
+        'satisfaction_candidates': releases,
+        'gaps': gaps,
         'tokens_free': getattr(searcher, 'spent_free', 0),
         'tokens_paid': getattr(searcher, 'spent_paid', 0),
-        'note': ('An encumbrance recorded against one of these names sits on the subject parcel '
-                 'and was NOT in the owner-name search that produced the recorded chain. It is '
-                 'reported here and deliberately not folded into the chain arithmetic.'),
+        'note': ('Only exact-folio instruments absent from a supplied owner-search baseline are '
+                 'reported as missed. Subdivision and debtor-name matches remain uncertain; '
+                 'attachment and satisfaction require document evidence. No equity changes.'),
     }
 
 
