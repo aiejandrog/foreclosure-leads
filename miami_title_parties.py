@@ -54,7 +54,7 @@ def build_title_parties(models, documents, docket, folio):
         own_folio = _folio(model.get('foliO_NUMBER'))
         target = _folio(folio)
         printed = { _folio(m.group(1)) for p in pages for m in re.finditer(
-            r'\b(?:folio|parcel(?:\s+id)?)\s*(?:number|no\.?|#)?\s*:?\s*([\d-]{10,20})',
+            r'\b(?:folio|parcel(?:\s+(?:id|identification))?)\s*(?:number|no\.?|#)?\s*:?\s*([\d-]{10,20})',
             p.get('text') or '', re.I)}
         anchored = bool(target and ((own_folio == target) or (not own_folio and printed == {target})))
         if not anchored:
@@ -83,6 +83,15 @@ def build_title_parties(models, documents, docket, folio):
             match = re.search(
                 r'\bbetween\s+([^,;.]{2,180}),\s*hereinafter\s+(?:called|referred to as)\s+(?:the\s+)?grantors?,?\s+and\s+'
                 r'([^,;.]{2,180}),\s*hereinafter\s+(?:called|referred to as)\s+(?:the\s+)?grantees?\b', prose, re.I)
+            if not match:
+                # Statutory deed form: extract only text before the explicit capacity
+                # clause, not its address or a notary/signatory's name. Bounds prevent
+                # a stray reference to grantor from consuming the rest of a document.
+                capacity = r'(?:a|an)\s+(?:single\s+(?:man|woman|person)|married\s+(?:man|woman|person)|(?:Florida\s+)?(?:corporation|limited liability company))'
+                match = re.search(
+                    r'\bbetween\s+([^,;]{2,180}),\s*' + capacity +
+                    r'\b.{0,600}?\bGrantor\s*,\s*to\s+([^,;]{2,180}),\s*' + capacity +
+                    r'\b.{0,600}?\bGrantee\s*:', prose, re.I)
             if match:
                 for role, name in zip(('grantor','grantee'), match.groups()):
                     parties.append({'name':name.strip(),'role':role,'evidence':{
@@ -121,7 +130,10 @@ def build_title_parties(models, documents, docket, folio):
                 for i,p in enumerate((docket or {}).get('parties') or []) if isinstance(p,dict)]
     for ref, page, text in sources:
         for line in text.splitlines():
-            if re.search(r'\b(death certificate|probate|estate of|heirs of|deceased)\b', line, re.I):
+            # "estate" also means an interest in property, not a decedent's estate.
+            signal_text = re.sub(r'\b(?:claim|right|interest|title)(?:\s*,?\s*(?:or|and)\s+)estate\s+of\b',
+                                 'property interest of', line, flags=re.I)
+            if re.search(r'\b(death certificate|probate|estate of|heirs of|deceased)\b', signal_text, re.I):
                 flags.append({'source_ref':ref,'page':page,'passage':line,
                               'conditional':bool(re.search(r'\bif\s+(?:\w+\s+){0,3}deceased\b',line,re.I)),
                               'death_established':False,'status':'identity_sensitive_unresolved'})

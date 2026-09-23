@@ -10,6 +10,23 @@ def deed(book, date, grantor, grantee, folio='1234567890123'):
 
 
 class TitlePartiesTests(unittest.TestCase):
+    def test_statutory_deed_identification_and_qualified_parties(self):
+        row = deed('3','1/1/2024 12:00:00 AM','','','0')
+        doc = {'source_ref':'official_records/3-1','stored':{'source_sha256':'abc'},'reading':{'pages':[
+            {'page':1,'outcome':'ocr_text','text':
+             'Parcel Identification No 12-3456-789-0123\nThis indenture between Example Services Corp Inc., a Florida Corporation, '
+             'whose post office address is 123 Example Street, of the County of Florida Grantor,\n'
+             'to Example James Person, a single man, post office address is 456 Sample Road, of the County of Miami-Dade, Florida, Grantee:'}]}}
+        got = T.build_title_parties([row], [doc], {}, '1234567890123')
+        self.assertEqual([p['name'] for p in got['title_parties']], ['Example Services Corp Inc.', 'Example James Person'])
+        self.assertEqual(got['current_deed_candidate']['book_page'], '3/1')
+
+    def test_property_estate_boilerplate_is_not_death_flag(self):
+        doc = {'source_ref':'x','reading':{'pages':[{'page':1,'text':
+            'The claim or estate of Defendant is inferior to Plaintiff.\nEstate of Example Person, deceased.'}]}}
+        got = T.build_title_parties([], [doc], {}, '1234567890123')
+        self.assertEqual(len(got['identity_flags']), 1)
+        self.assertEqual(got['identity_flags'][0]['passage'], 'Estate of Example Person, deceased.')
     def test_ordinary_between_clause_names_have_explicit_role_evidence(self):
         row = deed('3','1/1/2024','','')
         doc = {'source_ref':'official_records/3-1','stored':{'source_sha256':'abc'},'reading':{'pages':[
