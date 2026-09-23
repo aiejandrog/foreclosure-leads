@@ -2009,6 +2009,9 @@ def make_tracker(leads):
                          'conf': s.get('conf','')} for s in _sb['sibs']]
             d['sibclaimed'] = bool(_sb.get('claimed'))
         d['county'] = 'MIAMI-DADE'
+        # orsecond and sib are attached above, AFTER _es.apply stamped the label — so a CLEAR can sit
+        # beside a lender's separate foreclosure on the same property. Settle it now (equity_state).
+        _es.demote_for_bank_fc(d)
         slim.append(d)
 
     # BALLOON LANE (2026-09-08): refresh balloon_leads.json from hardmoney_balloon so the county merge
@@ -2166,6 +2169,7 @@ def make_tracker(leads):
                     _d['orirs'] = _h.get('irs_open', 0); _d['orjuniors'] = _h.get('juniors_post', 0)
                 if _h:
                     _fwd_flags(_d, _h, _cft)                          # surviving-1st / TAKEN / 2nd-foreclosure flags
+                _es.demote_for_bank_fc(_d)                            # CLEAR beside a 2ND FORECLOSURE -> UNVERIFIED
                 # skip-traced phones/emails for this county lead (skiptrace.py now covers all counties)
                 _ph = st.get(_d.get('case', ''))
                 if _ph and _ph.get('phones'):
