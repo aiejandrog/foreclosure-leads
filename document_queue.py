@@ -35,6 +35,7 @@ read is not finished; it is waiting for a reader that can.
 import json
 import os
 import sqlite3
+from contextlib import contextmanager
 import time
 from datetime import datetime, timezone
 
@@ -215,6 +216,23 @@ class DocumentQueue:
         job['payload'] = json.loads(job['payload'] or '{}')
         return job
 
+    @contextmanager
+    def fenced_write(self, job_id, owner):
+        """Serialize short evidence publication and reject an expired worker.
+
+        Fetch/OCR occurs outside this transaction. A worker which loses its lease
+        may finish computing, but cannot publish artifacts or mark a job done.
+        """
+        self.db.execute('BEGIN IMMEDIATE')
+        try:
+            if not self.renew(job_id, owner):
+                raise RuntimeError('Lease lost before evidence publication')
+            yield
+            self.db.execute('COMMIT')
+        except BaseException:
+            self.db.execute('ROLLBACK')
+            raise
+
     def renew(self, job_id, owner, lease=DEFAULT_LEASE):
         cur = self.db.execute(
             'UPDATE jobs SET lease_until = ?, updated_at = ? WHERE id = ? AND lease_owner = ?'
@@ -294,3 +312,78 @@ class DocumentQueue:
                 # Complete means every job resolved AND none of them resolved as a gap. A case with
                 # a login-walled exhibit is NOT complete, however many pages we did read.
                 'collection_complete': bool(total) and total == c.get('done', 0)}
+
+
+def resume_case_documents(county, case, limit=10, interpret=False):
+    import hashlib
+    import uuid
+    import document_store as store
+    import document_collectors as collectors
+    import document_classify as classify
+    from document_store import pipeline_folder as folder, pipeline_load as load, pipeline_write as write, pipeline_report as report
+    from document_store import page_inventory_complete, interpretation_complete
+    VERSION = store.READER_VERSION
+    if interpret:
+        raise ValueError('Subscription interpretation removed; use run_documents --interpret with an API --max-spend cap')
+    base = folder(county, case)
+    if not (base / 'inventory.json').exists():
+        raise ValueError('Collect the case inventory first')
+    client = collectors.collector_for(county)
+    owner = uuid.uuid4().hex
+    with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
+        for job in queue.jobs(county, case):
+            if job['kind'] != 'acquire':
+                continue
+            if limit <= 0:
+                break
+            ref = job['source_ref']
+            key = hashlib.sha256(ref.encode()).hexdigest()
+            saved = base / (key + '.json')
+            result = load(saved)
+            has_bytes = bool(result and os.path.isfile(result.get('manifest', {}).get('path', '')))
+            if job['status'] == 'done' and has_bytes and not store.needs_reextraction(result):
+                continue
+            if job['status'] != 'done' or not has_bytes:
+                claimed = queue.claim_ref(owner, county, case, ref, 'acquire', force=not has_bytes)
+                if claimed is None:
+                    continue
+                try:
+                    retrieved = client.retrieve_document(job['payload'])
+                    with queue.fenced_write(claimed['id'], owner):
+                        manifest = store.store(county, case, retrieved, source_ref=ref,
+                            doc_name=job['payload'].get('documentName') or job['payload'].get('doC_TYPE', ''))
+                        result = {'manifest': manifest, 'source_ref': ref}
+                        write(saved, result)
+                        if not queue.complete(claimed['id'], owner, sha256=manifest['document_key']):
+                            raise RuntimeError('Collection lease lost')
+                except collectors.AccessGap as exc:
+                    queue.gap(claimed['id'], owner, exc)
+                    continue
+                except Exception as exc:
+                    queue.fail(claimed['id'], owner, type(exc).__name__)
+                    continue
+            if not result:
+                continue
+            # Each extraction has its own persistent lease; a completed download is not a completed read.
+            queue.add(county, case, ref, 'read')
+            reading_job = queue.claim_ref(owner, county, case, ref, 'read', reader_version=VERSION,
+                                          can_ocr=True, force=store.needs_reextraction(result))
+            if reading_job:
+                try:
+                    manifest = result['manifest']
+                    images = base / (key + '-pages') / owner
+                    store.reextract_result(result, images, persist=False)
+                    reading = result['reading']
+                    result.update(reading=reading, classification=classify.classify(reading, manifest['document_name']),
+                                  references=classify.cited_instruments(reading))
+                    with queue.fenced_write(reading_job['id'], owner):
+                        store.record_read(manifest['meta_path'], reading)
+                        store.save_page_text(manifest, reading)
+                        write(saved, result)
+                        if not queue.complete(reading_job['id'], owner, reader_version=VERSION, read_status=reading['read_status']):
+                            raise RuntimeError('Read lease lost')
+                except Exception as exc:
+                    queue.fail(reading_job['id'], owner, type(exc).__name__)
+                    continue
+            limit -= 1
+    return report(county, case)

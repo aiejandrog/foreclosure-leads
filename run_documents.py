@@ -498,7 +498,7 @@ def main(argv=None):
         if args.max_spend <= 0:
             parser.exit(2, '--interpret needs --max-spend; there is no uncapped mode\n')
         import document_interpreter
-        interpreter = document_interpreter.build()
+        interpreter = document_interpreter.build('api')
         budget = document_interpreter.Budget(args.max_spend)
     vision_budget = None
     if args.vision:

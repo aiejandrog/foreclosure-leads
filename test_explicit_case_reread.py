@@ -7,9 +7,17 @@ from unittest.mock import patch
 import document_queue
 import miami_judgment as MJ
 import run_documents as RD
+import document_interpreter as DI
 
 
 class ExplicitCaseRereadTests(unittest.TestCase):
+    def test_interpretation_cannot_select_subscription_from_environment(self):
+        with patch.dict('os.environ', {'DEALFLOW_INTERPRETER': 'cli'}), \
+             patch.object(DI, 'BACKENDS', {'api': DI.ApiInterpreter,
+                 'cli': lambda **kw: (_ for _ in ()).throw(AssertionError('subscription selected'))}), \
+             patch.object(RD, '_lead_rows', return_value=[]):
+            self.assertEqual(RD.main(['--enable', '--interpret', '--max-spend', '1', '--dry-run']), 0)
+
     def test_explicit_case_reclaims_done_but_nightly_skips(self):
         for explicit in (False, True):
             with self.subTest(explicit=explicit), tempfile.TemporaryDirectory() as folder:

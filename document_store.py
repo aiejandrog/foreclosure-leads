@@ -29,6 +29,7 @@ import os
 import re
 import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 
 import case_review
 import paths as P
@@ -469,10 +470,10 @@ def _boilerplate_key(text):
 
 
 def _weakness(chars, coverage, sane, min_chars):
-    if not chars:
-        return 'no extractable content'
     if coverage >= MAX_IMAGE_COVERAGE:
         return 'page is %.0f%% raster image; embedded text is a stamp, not the page' % (coverage * 100)
+    if not chars:
+        return 'no extractable content beyond a stamp or empty text layer'
     if sane < MIN_SANE_RATIO:
         return 'extracted text is %.0f%% unreadable glyphs' % ((1 - sane) * 100)
     return ''
@@ -481,7 +482,7 @@ def _weakness(chars, coverage, sane, min_chars):
 def content_text(text):
     """Discard known clerk stamps, not short document content."""
     return '\n'.join(line for line in (text or '').splitlines()
-                     if not re.search(r'NOT AN OFFICIAL COPY|PUBLIC ACCESS|^\s*Page \d+ of \d+\s*$',
+                     if not re.search(r'NOT AN OFFICIAL COPY|PUBLIC ACCESS|^\s*FILED\s*$|^\s*Page \d+ of \d+\s*$',
                                       line, re.I)).strip()
 
 
@@ -633,7 +634,8 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
                      'text_source': None, 'image_coverage': None}
             try:
                 page = doc.load_page(index)
-                text = content_text(page.get_text('text') or '')
+                embedded = page.get_text('text') or ''
+                text = content_text(embedded)
                 coverage = _image_coverage(page)
             except Exception as exc:
                 entry['error'] = str(exc)[:200]
@@ -646,7 +648,7 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
                           'sane_ratio': round(sane, 3)})
             if weak:
                 entry.update({'outcome': 'needs_ocr', 'weak_reason': weak,
-                              'embedded_text': text})
+                              'embedded_text': embedded})
                 entry['text'] = ''          # a stamp is not this page's text
             else:
                 entry.update({'outcome': 'read_as_label' if label_only(text) else 'text',
@@ -716,12 +718,17 @@ def record_read(meta_path, reading):
     """Fold a reading result back into the stored sidecar. Text itself is NOT written to the
     sidecar — it is the document's content and belongs in the document, not duplicated beside it."""
     manifest = load_manifest(meta_path)
+    if not page_inventory_complete({'manifest': manifest, 'reading': reading}):
+        reading.update(read_status='partial', complete=False,
+                       coverage_error='page inventory differs from stored manifest')
     manifest.update({
         'read_status': reading['read_status'],
         'reader_version': reading.get('reader_version', READER_VERSION),
         'pages_with_text': reading['pages_with_text'],
         'pages_from_ocr': reading.get('pages_from_ocr', 0),
         'pages_unresolved': reading['pages_unresolved'],
+        'pages_assessed': reading.get('pages_assessed'),
+        'pages_content_gaps': reading.get('pages_content_gaps', []),
         'ocr_attempted': reading.get('ocr_attempted', False),
         # `weak_reason` is a verdict on the page's TEXT LAYER, not on the page. A scan whose
         # stamp was rejected and which OCR then read has a weak_reason AND outcome 'ocr_text' —
@@ -761,7 +768,7 @@ def save_page_text(manifest, reading):
                       'text_source': page.get('text_source'), 'chars': page.get('chars'),
                       'weak_reason': page.get('weak_reason'),
                       'ocr_error': page.get('ocr_error'),
-                      'image': page.get('image')})
+                      'image': page.get('image'), 'assessment': page.get('assessment')})
     _atomic_write_text(folder / 'pages.json', json.dumps(
         {'county': manifest['county'], 'case': manifest['case'],
          'document_key': manifest.get('document_key'), 'source_ref': manifest.get('source_ref'),
@@ -828,14 +835,22 @@ def _read_back(folder, manifest):
         if not body.strip():
             unresolved.append(row.get('page'))
         pages.append({'page': row.get('page'), 'text': body, 'chars': len(body),
-                      'outcome': row.get('outcome'), 'text_source': row.get('text_source'),
+                      'outcome': row.get('outcome') if body.strip() or row.get('outcome') in ('redacted_or_blank', 'exhibit_divider') else 'needs_ocr',
+                      'text_source': row.get('text_source'), 'assessment': row.get('assessment'),
                       'weak_reason': row.get('weak_reason'), 'ocr_error': row.get('ocr_error')})
-    return {'pages': pages, 'page_count': len(pages),
+    reading = summarize_reading({'pages': pages, 'page_count': len(pages),
             'pages_with_text': len(pages) - len(unresolved), 'pages_from_ocr': from_ocr,
             'pages_unresolved': unresolved,
             'read_status': index.get('read_status') or 'read',
             'reader_version': index.get('reader_version'),
-            'complete': not unresolved, 'from_store': True}
+            'complete': not unresolved, 'from_store': True})
+    if not page_inventory_complete({'manifest': manifest, 'reading': reading}):
+        present = {p.get('page') for p in pages}
+        missing = [n for n in range(1, int(manifest.get('pages') or 0)+1) if n not in present]
+        reading.update(complete=False, read_status='partial',
+                       pages_unresolved=sorted(set(reading['pages_unresolved'] + missing)),
+                       coverage_error='page inventory differs from stored manifest')
+    return reading
 
 
 def _main(argv=None):
@@ -872,3 +887,132 @@ def _main(argv=None):
 
 if __name__ == '__main__':
     raise SystemExit(_main())
+
+
+def page_inventory_complete(result):
+    expected = result.get('manifest', {}).get('pages')
+    numbers = [page.get('page') for page in result.get('reading', {}).get('pages', [])]
+    return (type(expected) is int and expected > 0
+            and all(type(number) is int for number in numbers)
+            and sorted(numbers) == list(range(1, expected + 1)))
+
+
+def interpretation_complete(result):
+    interpretation = result.get('interpretation', {})
+    return (page_inventory_complete(result)
+            and all(p.get('outcome') in READ_OUTCOMES for p in result['reading']['pages'])
+            and interpretation.get('status') == 'complete'
+            and interpretation.get('pages_assessed') == result['manifest']['pages']
+            and not interpretation.get('unresolved'))
+
+
+def needs_reextraction(result):
+    reading = (result or {}).get('reading', {})
+    return (not page_inventory_complete(result or {})
+            or (reading.get('reader_version') or 0) < READER_VERSION
+            or any(p.get('outcome') not in ASSESSED_OUTCOMES for p in reading.get('pages', [])))
+
+
+def reextract_result(result, images, persist=True):
+    """Resume from stored bytes, not another download. Coverage must match the PDF."""
+    manifest = result['manifest']
+    prior = result.get('reading', {})
+    reading = read_pages(manifest['path'], ocr=winocr, keep_images_in=images, gray_cutoff=0)
+    # Preserve explicit image assessments only when the stored bytes still match
+    # the manifest whose page numbers were assessed.
+    digest = hashlib.sha256(Path(manifest['path']).read_bytes()).hexdigest()
+    if digest == manifest.get('source_sha256'):
+        for page in prior.get('pages', []):
+            if page.get('assessment') and page.get('text_source') == 'vision':
+                apply_page_assessment(reading, page['page'], page['assessment'])
+    result['reading'] = reading
+    if not page_inventory_complete(result):
+        reading.update(complete=False, read_status='partial',
+                       coverage_error='page inventory differs from stored manifest')
+    if persist:
+        record_read(manifest['meta_path'], reading)
+        save_page_text(manifest, reading)
+    # Re-extraction invalidates text-dependent interpretation checkpoints.
+    result.pop('interpretation', None)
+    return result
+
+
+def pipeline_folder(county, case):
+    return case_review.output_path('document_pipeline/' + _slug(county) + '/' + _slug(case) + '/inventory.json').parent
+
+
+def pipeline_write(path, value):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    _atomic_write_text(path, json.dumps(value, indent=2, ensure_ascii=False))
+
+
+def pipeline_load(path, default=None):
+    try:
+        return json.loads(Path(path).read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return default
+
+
+def pipeline_report(county, case):
+    import case_dossier
+    from document_queue import DocumentQueue
+    base = pipeline_folder(county, case)
+    inventory = pipeline_load(base / 'inventory.json', {})
+    rows = [pipeline_load(p) for p in base.glob('*.json') if len(p.stem) == 64]
+    rows = [r for r in rows if r and 'manifest' in r]
+    for row in rows:
+        if not page_inventory_complete(row):
+            row.setdefault('reading', {}).update(read_status='partial', complete=False)
+    gaps = [e.get('gap') for e in inventory.get('entries', []) if e.get('inventory_status') == 'gap']
+    if not inventory.get('pagination_verified'):
+        gaps.append('Full docket pagination not yet corroborated')
+    if not inventory.get('official_records_supplied'):
+        gaps.append('Official records search not completed')
+    if inventory.get('recorded_search_may_be_capped'):
+        gaps.append('Official records search may be truncated at 500')
+    with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
+        jobs = queue.jobs(county, case)
+    outstanding = [j for j in jobs if j['status'] != 'done']
+    acquisition_outstanding = [j for j in outstanding if j['kind'] == 'acquire']
+    available_refs = {r.get('source_ref') for r in rows
+                      if os.path.isfile(r['manifest'].get('path', ''))}
+    missing_artifacts = [j['source_ref'] for j in jobs
+                         if j['kind'] == 'acquire' and j['source_ref'] not in available_refs]
+    if missing_artifacts:
+        gaps.append('%d acquisition(s) lack saved document evidence' % len(missing_artifacts))
+    findings = [f for row in rows for f in row.get('interpretation', {}).get('findings', []) if f.get('status') == 'verified']
+    unresolved_refs = []
+    for row in rows:
+        for reference in row.get('references', []):
+            matches = []
+            for target in rows:
+                record_key = target['manifest'].get('record_key') or {}
+                book, first = record_key.get('book'), record_key.get('page')
+                if str(book) == str(reference['book']) and first is not None:
+                    if int(first) <= int(reference['page_no']) < int(first) + target['manifest']['pages']:
+                        matches.append(target['manifest']['document_key'])
+            reference['fetched'] = bool(matches)
+            reference['resolved_document_keys'] = sorted(set(matches))
+            if not matches:
+                unresolved_refs.append(dict(reference, parent_source_ref=row['source_ref']))
+    if unresolved_refs:
+        gaps.append('%d cited references need county lookup' % len(unresolved_refs))
+    dossier_rows = [dict(r['manifest'], source_ref=r['source_ref'], status='stored',
+        reading=r.get('reading'), classification=r.get('classification'),
+        cited_instruments=r.get('references', []), read_status=r.get('reading', {}).get('read_status', 'unread')) for r in rows]
+    chains = pipeline_load(Path(__file__).parent / 'records_liens.json', {})
+    dossier = case_dossier.build(case, county, inventory=inventory, chain=chains.get(case), documents=dossier_rows)
+    dossier['c_documents']['verified_findings'] = findings
+    dossier['c_documents']['interpretation_complete'] = bool(rows) and all(interpretation_complete(r) for r in rows)
+    dossier['complete'] = False  # Cross-document reconciliation and full-source coverage still required.
+    pipeline_write(base / 'dossier.json', dossier)
+    return {'case': case, 'county': county, 'entries': len(inventory.get('entries', [])),
+        'documents_obtained': len(rows), 'pages_obtained': sum(r['manifest']['pages'] for r in rows),
+        'pages_extracted': sum(sum(p['outcome'] in READ_OUTCOMES for p in r.get('reading', {}).get('pages', [])) for r in rows),
+        'pages_assessed': sum(sum(p['outcome'] in ASSESSED_OUTCOMES for p in r.get('reading', {}).get('pages', [])) for r in rows),
+        'pages_content_gaps': sum(sum(p['outcome'] not in READ_OUTCOMES for p in r.get('reading', {}).get('pages', [])) for r in rows),
+        'verified_findings': findings, 'gaps': gaps, 'unresolved_references': unresolved_refs, 'outstanding_jobs': len(outstanding),
+        'collection_complete': bool(rows) and not gaps and not acquisition_outstanding,
+        'interpretation_complete': bool(rows) and all(interpretation_complete(r) for r in rows),
+        'document_summaries': [{'source_ref': r['source_ref'], 'classification': r.get('classification'),
+            'references': r.get('references', []), 'interpretation': r.get('interpretation', {}).get('status', 'pending')} for r in rows]}

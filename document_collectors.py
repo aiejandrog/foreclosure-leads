@@ -337,3 +337,39 @@ def judgment_candidates(inventory):
                             matched_terms=sorted({m.group(0).lower()
                                                   for m in FINAL_JUDGMENT_RE.finditer(text)})))
     return out
+
+
+def collect_case_documents(county, case, records=None):
+    from document_store import pipeline_folder as folder, pipeline_write as write, pipeline_report as report
+    from document_queue import DocumentQueue
+    base = folder(county, case)
+    client = collector_for(county)
+    inventory = client.enumerate_documents(case)
+    jobs = []
+    for entry in inventory['entries']:
+        count = entry['expected_documents']
+        if count == 0:
+            entry['inventory_status'] = 'county_reports_no_document'
+            continue
+        try:
+            attachments = client.attachments(case, entry['metadata'])
+            entry['attachments'] = attachments
+            entry['inventory_status'] = 'enumerated'
+            for index, attachment in enumerate(attachments):
+                ref = 'court:' + entry['source_id'] + ':' + str(attachment.get('documentID', index))
+                jobs.append((ref, 'acquire', attachment))
+        except (AccessGap, ValueError, OSError) as exc:
+            entry.update(inventory_status='gap', gap=str(exc)[:300])
+        except Exception as exc:
+            entry.update(inventory_status='gap', gap=type(exc).__name__)
+    for record in records or []:
+        ref = 'recorded:' + str(record.get('cfN_MASTER_ID') or record.get('instrument') or '')
+        if ref == 'recorded:':
+            raise ValueError('Recorded document missing stable identifier')
+        jobs.append((ref, 'acquire', record))
+    inventory.update(county=county, case=case, official_records_supplied=records is not None,
+                     recorded_search_may_be_capped=bool(records and len(records) >= 500))
+    write(base / 'inventory.json', inventory)
+    with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
+        queue.add_many(county, case, jobs)
+    return report(county, case)

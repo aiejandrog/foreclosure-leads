@@ -10,7 +10,7 @@ from document_queue import DocumentQueue
 
 class PipelineTests(unittest.TestCase):
     def test_report_rejects_legacy_complete_with_missing_page(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(p, 'folder', return_value=Path(tmp)):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(p.store, 'pipeline_folder', return_value=Path(tmp)):
             p.write(Path(tmp) / 'inventory.json', {'entries': [], 'pagination_verified': False})
             p.write(Path(tmp) / ('a' * 64 + '.json'), {
                 'source_ref': 'court:1',
@@ -30,11 +30,8 @@ class PipelineTests(unittest.TestCase):
                 pdf.write_bytes(b'fixture')
                 result = {'manifest': {'path': str(pdf), 'pages': 2},
                           'reading': {'pages': [{'page': n, 'text': 'Evidence'} for n in numbers]}}
-                answer = {'status': 'complete', 'findings': [], 'unresolved': [], 'resumable': False}
-                with patch.object(p.agents, 'run_agent', return_value=answer):
-                    outcome = p.interpret_document(base, 'key', result)
-                self.assertEqual(outcome['status'], 'incomplete')
-                self.assertTrue(outcome['unresolved'])
+                result['interpretation'] = {'status': 'complete', 'pages_assessed': 2, 'unresolved': []}
+                self.assertFalse(p.interpretation_complete(result))
 
     def test_expired_owner_cannot_finish(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -52,12 +49,11 @@ class PipelineTests(unittest.TestCase):
             pdf = base / 'sample.pdf'
             pdf.write_bytes(b'fixture')
             result = {'manifest': {'path': str(pdf), 'pages': 1}, 'reading': {'pages': [{'page': 1, 'text': 'Evidence'}]}}
-            reader = {'status': 'complete', 'findings': [], 'unresolved': ['Missing exhibit'], 'resumable': False}
-            verifier = {'status': 'complete', 'findings': [], 'unresolved': [], 'resumable': False}
-            with patch.object(p.agents, 'run_agent', side_effect=[reader, verifier]) as agent:
-                self.assertEqual(p.interpret_document(base, 'key', result)['status'], 'incomplete')
-                self.assertEqual(p.interpret_document(base, 'key', result)['status'], 'incomplete')
-                self.assertEqual(agent.call_count, 2)
+            result['reading']['pages'][0]['outcome'] = 'text'
+            result['interpretation'] = {'status': 'complete', 'pages_assessed': 1,
+                                        'unresolved': ['Missing exhibit']}
+            p.write(base/'cached.json', result)
+            self.assertFalse(p.interpretation_complete(p.load(base/'cached.json')))
 
     def test_collection_accounts_for_missing_attachment_and_empty_entry(self):
         client = Mock()
@@ -65,7 +61,7 @@ class PipelineTests(unittest.TestCase):
             {'source_id': '1', 'expected_documents': 1, 'metadata': {'encID': 'x'}},
             {'source_id': '2', 'expected_documents': 0, 'metadata': {}}]}
         client.attachments.side_effect = p.collectors.AccessGap('Missing exhibit')
-        with tempfile.TemporaryDirectory() as tmp, patch.object(p, 'folder', return_value=Path(tmp)), patch.object(p.collectors, 'collector_for', return_value=client):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(p.store, 'pipeline_folder', return_value=Path(tmp)), patch.object(p.collectors, 'collector_for', return_value=client):
             result = p.collect('MIAMI-DADE', 'case')
             inventory = p.load(Path(tmp) / 'inventory.json')
             self.assertEqual(inventory['entries'][1]['inventory_status'], 'county_reports_no_document')
@@ -73,11 +69,15 @@ class PipelineTests(unittest.TestCase):
             self.assertFalse(result['collection_complete'])
 
     def test_report_never_equates_extraction_with_interpretation(self):
-        with tempfile.TemporaryDirectory() as tmp, patch.object(p, 'folder', return_value=Path(tmp)):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(p.store, 'pipeline_folder', return_value=Path(tmp)):
             p.write(Path(tmp) / 'inventory.json', {'entries': [], 'pagination_verified': False})
             result = p.report('MIAMI-DADE', 'case')
             self.assertFalse(result['interpretation_complete'])
             self.assertEqual(result['verified_findings'], [])
+
+    def test_subscription_path_is_disabled(self):
+        with self.assertRaisesRegex(ValueError, 'Subscription interpretation removed'):
+            p.resume('MIAMI-DADE', 'case', interpret=True)
 
 
 if __name__ == '__main__':

@@ -467,7 +467,8 @@ class OcrFallbackTests(unittest.TestCase):
 
     def test_ocr_turns_a_scan_into_a_read_document(self):
         line = 'ORDERED that plaintiff recover the total sum of $412,880.45 from defendant'
-        reading = self.read([scanned_page(), scanned_page()], ocr=self.fake_ocr(line))
+        reading = self.read([scanned_page(), scanned_page()], ocr=lambda paths: {
+            path: line + (' First page' if i == 0 else ' Second page') for i, path in enumerate(paths)})
         self.assertEqual(reading['read_status'], 'read')
         self.assertEqual(reading['pages_from_ocr'], 2)
         self.assertEqual(reading['pages_with_text'], 0)
@@ -1192,6 +1193,7 @@ class _Msg:
     def __init__(self, text, i=1800, o=400):
         self.content = [_Block(text)]
         self.usage = _Usage(i, o)
+        self.stop_reason = 'end_turn'
 
 
 class FakeAnthropic:
@@ -1216,10 +1218,13 @@ class FakeAnthropic:
 # What the page actually says, as a reader looking at the image would transcribe it — including
 # the four figures Windows OCR lost or misread under the watermark.
 VISION_REPLY = json.dumps({
-    'rows': [{'label': 'Assessments subtotal', 'amount': '6,796.61', 'confident': True},
-             {'label': 'Costs subtotal', 'amount': '2,010.74', 'confident': True},
-             {'label': 'Collection fees subtotal', 'amount': '1,835.00', 'confident': True},
-             {'label': 'Attorney fee', 'amount': '4,056.25', 'confident': True}],
+    # Synthetic typed table; subtotal members are explicit, never inferred.
+    'rows': [{'id': 'a', 'kind': 'charge', 'label': 'Assessments', 'amount': '6,796.61', 'confident': True},
+             {'id': 'b', 'kind': 'charge', 'label': 'Costs', 'amount': '2,010.74', 'confident': True},
+             {'id': 'c', 'kind': 'charge', 'label': 'Collection fees', 'amount': '1,835.00', 'confident': True},
+             {'id': 'd', 'kind': 'charge', 'label': 'Attorney fee', 'amount': '4,056.25', 'confident': True},
+             {'id': 's', 'kind': 'subtotal', 'label': 'Costs subtotal', 'amount': '2,010.74', 'confident': True, 'item_ids': ['b']},
+             {'id': 't', 'kind': 'total', 'label': 'TOTAL', 'amount': '14,698.60', 'confident': True}],
     'grand_total': '$ 14,698.60', 'unreadable': []})
 
 
@@ -1234,7 +1239,7 @@ class VisionTests(unittest.TestCase):
         self.assertEqual(content[0]['type'], 'image')
         self.assertEqual(content[0]['source']['media_type'], 'image/png')
         self.assertEqual(got['grand_total'], 14698.60)
-        self.assertEqual(len(got['rows']), 4)
+        self.assertEqual(len(got['rows']), 6)
 
     def test_the_budget_is_checked_before_the_call_not_after(self):
         reader = self.reader()
