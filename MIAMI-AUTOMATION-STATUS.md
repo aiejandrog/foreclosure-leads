@@ -32,8 +32,8 @@ shared spending controls. This is not complete.
 | Liens | Obligation, identity, attachment, amendment and satisfaction links; no missing-release inference | Candidate lists, not proven balances |
 | Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Index rules plus selected body evidence; incomplete |
 | One-command orchestration | Durable step leases, before-call reservations, idempotent restart and refresh | Not yet integrated |
-| Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Components under development; legacy integration outstanding |
-| Five-case replay | Reproduce prior evidence without hand-selection/transcription within approved cap | Not passed |
+| Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Per-case shares on the vision paths (run_documents, backfill, timeline); captcha keeps its own ledger |
+| Five-case replay | Reproduce prior evidence without hand-selection/transcription within approved cap | Replay tool built; not yet run on the saved pilot evidence |
 | Twelve-case review | Explicit review-policy acceptance and unattended evidence report | Not passed; no gate removed |
 
 ## Implementation sequence
@@ -48,11 +48,20 @@ shared spending controls. This is not complete.
 
 ## Current increment
 
-`document_prioritizer.prioritize` is offline and ranks full-OCS acquisition
-candidates without declaring a controlling judgment or authorizing paid calls.
-Critical orders precede judgment candidates; recent judgments precede historical
-ones. Missing dates, future entries and missing image counts remain named gaps.
-Certificates of service do not become judgments merely by mentioning one.
+Priority 1 is wired, not yet proven on the pilot evidence.
 
-This component is not yet wired into run_documents or a production analyzer.
+- `document_prioritizer.recorded_read_order` ranks a case's stored Official Records documents
+  for PAID reading before any call: the page prints this case number (tier 0), its recording
+  date lines up with a docket judgment entry (tier 1), otherwise tier 2. It refuses to pay for a
+  page printing another case number, anything recorded before the case-number year, and
+  satisfactions, and names each refusal. `timeline_read_order` orders the whole-case timeline's
+  amount reads by the docket plan. Neither decides which judgment controls; later docket orders
+  are listed beside each judgment for review.
+- `document_case_budget.CaseAllocator` splits one cumulative cap over a fixed roster. A case may
+  spend its own share plus what finished cases left, never a pending case's share. Reservations
+  record their page, and an unsettled paid call is a named `uncertain_paid_call` gap, never
+  retried. Wired into `run_documents` (nightly and backfill) and `run_case_timeline`.
+- `replay_paid_selection.py` replays selection and shares over saved evidence at $0. It has not
+  been run on the five pilot cases: their evidence is on the desktop.
+
 The full goal remains active until the acceptance matrix is evidenced end to end.

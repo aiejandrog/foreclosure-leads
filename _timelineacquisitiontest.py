@@ -60,7 +60,7 @@ class AcquisitionTests(unittest.TestCase):
             ledger.write_text(json.dumps({'version': 1, 'cases': {}, 'actual_usd': .08, 'reserved': {}}))
             dossier = base / 'case.json'
             inventory = {'pagination_verified': True, 'entries': []}
-            def fail_paid(rows, base, budget=None):
+            def fail_paid(rows, base, budget=None, plan=None):
                 if budget is not None:
                     raise RuntimeError('reader stopped')
                 return {'figures': [], 'gaps': [], 'evidence_files': []}
@@ -101,7 +101,9 @@ class AcquisitionTests(unittest.TestCase):
             detail = {'pages': {}, 'figures': [{'page': 1, 'amount': 100, 'kind': 'total'}],
                       'gaps': [{'page': 1, 'reason': 'unverified'}], 'usd': 0}
             with State(ledger) as state, patch.object(A, 'assess_amount_pages', return_value=detail):
-                report = R.read_amounts([row], base, PersistentBudget(1, state))
+                # Paid reads follow a docket plan; an entry the plan holds eligible is readable.
+                plan = {'documents': [{'entry_id': '1', 'eligible_for_acquisition': True, 'gaps': []}]}
+                report = R.read_amounts([row], base, PersistentBudget(1, state), plan=plan)
             self.assertEqual(report['figures'][0]['verification_status'], 'unverified')
             self.assertEqual(report['figures'][0]['source_ref'], 'court:1:2')
             self.assertEqual(report['figures'][0]['document_hash'], 'b' * 64)

@@ -790,7 +790,7 @@ PIPELINE_VERSION = 10
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         judgments_only=False, keep_images=False, gray_cutoff=None, resume=False,
-        vision_budget=None, vision_reader=None, reuse_done=False):
+        vision_budget=None, vision_reader=None, reuse_done=False, as_of=None):
     inventory = enumerate_case(case, collector=collector)
     records = list(records or [])
     # INDEX EVERY ROW WE WERE HANDED, before the judgment filter throws most of them away.
@@ -837,14 +837,59 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
                   for c in (row.get('amount_candidates') or [])]
     tried = [t for row in rows for t in (row.get('gray_cutoffs_tried') or [])]
 
-    # The second reader, and ONLY when the first one's figures did not add up. If OCR produced a
-    # total the document's line items reproduce, there is nothing left to buy.
+    # SELECTION BEFORE SPENDING. The paid reader used to walk `rows` in the order the owner-name
+    # search returned them, so on the 2026-09-23 five-case pilot the first case bought pages of
+    # historical and other-lawsuit judgments until the approval ran out, before it reached its own
+    # current judgment. recorded_read_order ranks from free facts (docket judgment dates, the case
+    # number printed on the page, the recording date, the case year) and names every row it will
+    # not pay for, with the reason. It decides what to BUY first, never which judgment controls.
+    selection = None
+    if vision_budget is not None:
+        import document_prioritizer as DP
+        plan, plan_gap = None, None
+        try:
+            plan = DP.prioritize(case, inventory, as_of or datetime.now().date().isoformat())
+        except ValueError as exc:
+            plan_gap = str(exc)
+        selection = DP.recorded_read_order(case, rows, records, plan)
+        selection['plan_gap'] = plan_gap
+        selected_refs = {r['source_ref'] for r in selection['order']}
+        for item in selection['deferred']:
+            for row in rows:
+                if row.get('source_ref') == item['source_ref']:
+                    row['paid_read'] = dict(item, selected=False)
+        for item in selection['order']:
+            item['row']['paid_read'] = {'selected': True, 'tier': item['tier'],
+                                        'recorded': item['recorded'],
+                                        'docket_judgment_date': item['docket_judgment_date'],
+                                        'later_orders': item['later_orders']}
+        # Only a corroborated figure on a SELECTED document makes the second reader unnecessary. A
+        # corroborated total on another lawsuit's judgment is not this case's amount, and letting it
+        # switch the reader off would leave the real one unread.
+        already = any(c.get('sum_check') for row in rows
+                      if row.get('source_ref') in selected_refs
+                      for c in (row.get('amount_candidates') or []))
     vision = None
-    if vision_budget is not None and not any(c.get('sum_check') for c in candidates):
-        vision = {'pages_read': 0, 'usd': 0.0, 'documents': [], 'pages': []}
-        for row in rows:
-            if row.get('status') != 'stored' or not row.get('reading') or is_satisfaction_row(row):
-                continue
+    if vision_budget is not None and not already:
+        vision = {'pages_read': 0, 'usd': 0.0, 'documents': [], 'pages': [],
+                  'selection': {'order': [{k: v for k, v in r.items() if k != 'row'}
+                                          for r in selection['order']],
+                                'deferred': selection['deferred'],
+                                'docket_judgment_dates': selection['docket_judgment_dates'],
+                                'plan_gap': selection['plan_gap'],
+                                'basis': selection['basis']},
+                  'not_read_budget': []}
+        for position, item in enumerate(selection['order']):
+            row = item['row']
+            if getattr(vision_budget, 'exhausted', False):
+                # This case's share is spent. Every selected document not yet bought is a named
+                # gap, in selection order, so a reader sees exactly what the money did not reach.
+                for rest in selection['order'][position:]:
+                    rest['row']['vision_figures'] = []
+                    rest['row']['vision_errors'] = {'*': 'budget_exhausted: this case\'s vision '
+                                                         'share was spent before this document'}
+                    vision['not_read_budget'].append(rest['source_ref'])
+                break
             found, detail = vision_candidates(
                 row['path'], row['reading'], vision_budget, reader=vision_reader,
                 out_dir=row.get('images_dir'))

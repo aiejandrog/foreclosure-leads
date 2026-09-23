@@ -1,5 +1,5 @@
 """Offline docket-first acquisition order. Ranking never establishes legal effect."""
-from datetime import date
+from datetime import date, timedelta
 import re
 from miami_case_timeline import classify, _date
 
@@ -56,3 +56,143 @@ def prioritize(case, inventory, as_of):
             'controlling_judgment_established':False,'coverage_complete':False,
             'paid_calls_authorized':False,'full_ocs_entries':len(entries),
             'next_step':'Acquire accessible controlling-order and latest judgment candidates; validate bodies before paid amount reading.'}
+
+
+# ---- PAID-READ ORDER ---------------------------------------------------------------------------
+# prioritize() above orders what to ACQUIRE from the docket. The functions below order what to PAY
+# to read, and they are the fix for the 2026-09-23 five-case pilot: the reader walked a case's
+# recorded documents in the order the owner-NAME search returned them and spent the approval on
+# historical and other-lawsuit judgments before it reached the current one. Selection now happens
+# before any paid call, from facts that are already free: the docket's own judgment entry dates,
+# the case number printed on the page (read by free OCR/text), the recording date in the county
+# index, and the year the case number itself says the case was filed.
+#
+# What this does NOT do: decide which judgment controls. A later judgment can be vacated, an
+# amended one can replace an earlier one only in part. Order is an acquisition priority; operative
+# effect is reconciled from the documents, and `later_orders` names the docket orders a reader has
+# to look at before calling any judgment current.
+
+# A recording lags its docket entry; an amended judgment is recorded after the entry it amends.
+RECORDING_WINDOW_BEFORE = timedelta(days=3)
+RECORDING_WINDOW_AFTER = timedelta(days=120)
+
+_SATISFACTION_TYPE = re.compile(r'^(SATISF|REL(EASE)?\b|PARTIAL\s+REL)', re.I)
+
+
+def _record_date(value):
+    stamp = _date(str(value or '').strip()[:10])
+    return date.fromisoformat(stamp) if stamp else None
+
+
+def _case_year_start(case):
+    match = re.match(r'(\d{4})-', case or '')
+    return date(int(match.group(1)), 1, 1) if match else None
+
+
+def docket_judgment_dates(plan):
+    """Dates of the docket's own final-judgment entries (amended ones included), newest first."""
+    out = []
+    for doc in (plan or {}).get('documents') or []:
+        if doc.get('kind') == 'final_judgment' and doc.get('date') and \
+                'future_entry_not_current_evidence' not in (doc.get('gaps') or []):
+            out.append(date.fromisoformat(doc['date']))
+    return sorted(set(out), reverse=True)
+
+
+def later_orders(plan, when):
+    """Docket orders dated on/after a judgment that could change it: a reader must review these
+    before calling that judgment current. Listing them is not a finding that they apply."""
+    out = []
+    for doc in (plan or {}).get('documents') or []:
+        if doc.get('kind') in CRITICAL and doc.get('date') and \
+                date.fromisoformat(doc['date']) >= when:
+            out.append({'entry_id': doc['entry_id'], 'kind': doc['kind'], 'date': doc['date']})
+    return out
+
+
+def _is_satisfaction(row):
+    kind = str((row.get('classification') or {}).get('kind') or '')
+    return kind.startswith('satisfaction') or bool(
+        _SATISFACTION_TYPE.match(str(row.get('doc_type') or '').strip()))
+
+
+def recorded_read_order(case, rows, records=(), plan=None):
+    """Order stored Official Records rows for PAID reading, before any paid call.
+
+    Tiers, cheapest-to-justify first:
+      0  the page prints THIS case number
+      1  prints no case number, and its recording date lines up with a docket judgment entry
+      2  prints no case number, and nothing ties it to a docket judgment (or no docket dates)
+    Never bought (listed in `deferred` with the reason, and still read for free):
+      - a page that prints a DIFFERENT case number: another lawsuit against a shared party
+      - anything recorded before the year this case number was filed in: it cannot be this
+        case's judgment, whatever a name search matched it on
+      - satisfactions and releases: their figures recite the debt they discharge
+      - rows with no stored reading: there is nothing to price, and the fetch gap stands
+    Within a tier, newest recording first; that is an acquisition order, not a verdict that the
+    newest judgment controls.
+    """
+    import document_classify
+    by_ref = {}
+    for record in records or ():
+        ref = 'official_records/%s-%s' % (record.get('reC_BOOK'), record.get('reC_PAGE'))
+        by_ref.setdefault(ref, record)
+    judgments = docket_judgment_dates(plan)
+    year_start = _case_year_start(case)
+    ranked, deferred = [], []
+    for row in rows:
+        ref = row.get('source_ref')
+        if row.get('status') != 'stored' or not row.get('reading'):
+            deferred.append({'source_ref': ref, 'reason': 'no_stored_reading'})
+            continue
+        if _is_satisfaction(row):
+            deferred.append({'source_ref': ref, 'reason': 'satisfaction_read_free_only'})
+            continue
+        identity = document_classify.case_identity(row['reading'], case)
+        if identity['agrees'] is False:
+            deferred.append({'source_ref': ref, 'reason': 'other_action',
+                             'detail': 'prints %s' % ', '.join(identity['found'][:3])})
+            continue
+        recorded = _record_date((by_ref.get(ref) or {}).get('reC_DATE') or row.get('recorded_date'))
+        if recorded and year_start and recorded < year_start:
+            deferred.append({'source_ref': ref, 'reason': 'recorded_before_case_year',
+                             'detail': 'recorded %s; case %s was filed no earlier than %s'
+                                       % (recorded.isoformat(), case, year_start.isoformat())})
+            continue
+        matched = None
+        if recorded:
+            matched = next((d for d in judgments if d - RECORDING_WINDOW_BEFORE <= recorded
+                            <= d + RECORDING_WINDOW_AFTER), None)
+        tier = 0 if identity['agrees'] is True else 1 if matched else 2
+        ranked.append({'row': row, 'source_ref': ref, 'tier': tier,
+                       'recorded': recorded.isoformat() if recorded else None,
+                       'docket_judgment_date': matched.isoformat() if matched else None,
+                       'later_orders': later_orders(plan, matched) if matched else []})
+    ranked.sort(key=lambda r: (r['tier'], -(date.fromisoformat(r['recorded']).toordinal()
+                                             if r['recorded'] else 0), str(r['source_ref'])))
+    return {'order': ranked, 'deferred': deferred,
+            'docket_judgment_dates': [d.isoformat() for d in judgments],
+            'basis': 'docket judgment dates, printed case number, recording date, case year; '
+                     'selection is not a finding that any judgment controls'}
+
+
+def timeline_read_order(plan, rows):
+    """Order whole-case timeline rows ('court:<entry>:...') for paid amount reading by the docket
+    plan: potentially controlling orders, then judgments newest first. Entries the plan holds as
+    gaps (undated, future, no image count) are deferred with the plan's own reasons."""
+    position = {d['entry_id']: (i, d) for i, d in enumerate((plan or {}).get('documents') or [])}
+    ranked, deferred = [], []
+    for row in rows:
+        entry = str(row.get('entry_ref') or '')
+        found = position.get(entry)
+        if found is None:
+            deferred.append({'source_ref': row.get('source_ref'), 'reason': 'not_in_docket_plan'})
+            continue
+        index, doc = found
+        if not doc['eligible_for_acquisition']:
+            deferred.append({'source_ref': row.get('source_ref'),
+                             'reason': ','.join(doc['gaps']) or 'not_eligible'})
+            continue
+        ranked.append((index, str(row.get('source_ref')), row))
+    ranked.sort(key=lambda r: (r[0], r[1]))
+    return {'order': [r[2] for r in ranked], 'deferred': deferred}

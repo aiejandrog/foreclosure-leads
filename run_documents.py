@@ -282,6 +282,10 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
     inventory = None
     models = []
     walk_report = None
+    # This case's share of the vision cap. With a CaseAllocator no case can spend a share another
+    # still-pending case has not used (document_case_budget); a plain Budget is passed through.
+    case_budget = (vision_budget.for_case(case) if hasattr(vision_budget, 'for_case')
+                   else vision_budget)
     if token:
         import records_liens
         models = records_liens.records_by_qs(token) or []
@@ -289,7 +293,7 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
             # Nightly runs keep done jobs; explicit --case runs deliberately re-read.
             report = MJ.run(case, models, queue=queue, ocr=ocr, judgments_only=True,
                             keep_images=keep_images, gray_cutoff=gray_cutoff, resume=resume,
-                            vision_budget=vision_budget, reuse_done=reuse_done)
+                            vision_budget=case_budget, reuse_done=reuse_done)
             rows = report['documents']
             inventory = report.get('_inventory')
         except Exception as exc:
@@ -339,6 +343,10 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
             if name_searcher is not None:
                 name_searcher.close()
         walk_report['name_search'] = plan
+    if hasattr(vision_budget, 'finish'):
+        # Paid reading for this case is over: what it left unspent is now borrowable by the cases
+        # still pending, and not before.
+        vision_budget.finish(case)
     if interpreter is not None and budget is not None:
         _interpret(rows, interpreter, budget)
     dossier = case_dossier.build(case, COUNTY, inventory=inventory, chain=entry.get('chain'),
@@ -529,6 +537,7 @@ def main(argv=None):
             parser.exit(2, '--vision needs a positive --vision-max-spend\n')
         import document_interpreter
         import document_vision
+        # Split into per-case shares below, once the roster is known.
         vision_budget = document_interpreter.Budget(args.vision_max_spend)
         try:
             document_vision.VisionReader().client()
@@ -584,6 +593,11 @@ def main(argv=None):
                      'yes' if entry['chain'] else 'no'))
         return 0
 
+    if vision_budget is not None:
+        from document_backfill import PersistentBudget
+        from document_case_budget import CaseAllocator, MemoryState
+        vision_budget = CaseAllocator(PersistentBudget(args.vision_max_spend, MemoryState()),
+                                      [entry['case'] for entry in picked])
     ocr = None if args.no_ocr else DS.winocr
     queue = DocumentQueue()
     token_budget = {'left': args.token_budget, 'spent': 0} if args.token_budget else None
@@ -622,8 +636,9 @@ def main(argv=None):
     if budget:
         print('  interpretation spend: $%.4f of $%.2f' % (budget.spent, budget.limit))
     if vision_budget:
-        print('  second-reader spend: $%.4f of $%.2f' % (vision_budget.spent,
-                                                         vision_budget.limit))
+        print('  second-reader spend: $%.4f of $%.2f (%d case share(s) of $%.4f)'
+              % (vision_budget.budget.spent, vision_budget.budget.limit,
+                 len(vision_budget.batch['roster']), vision_budget.batch['share']))
     if token_budget:
         print('  search tokens minted: %d of %d allowed'
               % (token_budget['spent'], args.token_budget))

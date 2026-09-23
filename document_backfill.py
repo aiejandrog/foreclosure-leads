@@ -241,6 +241,14 @@ def run(args, runner):
         if budget:
             import document_vision
             document_vision.VisionReader().client()
+            # Per-case shares over a FIXED roster: every case in this backfill. Cases already
+            # finished in the checkpoint release their share at once; a pending case's share is
+            # protected from every other case (document_case_budget).
+            from document_case_budget import CaseAllocator
+            budget = CaseAllocator(budget, [entry['case'] for entry in picked])
+            for entry in picked:
+                if not state.pending(entry, args.retry_gaps):
+                    budget.finish(entry['case'])
         qs_cache = runner._load(runner.QS_CACHE, {})
         queue = runner.DocumentQueue()
         try:
@@ -257,7 +265,9 @@ def run(args, runner):
                 target = runner.dossier_path(runner.COUNTY, entry['case'])
                 target.parent.mkdir(parents=True, exist_ok=True)
                 DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
-                paused = bool(budget and budget.exhausted)
+                # One case spending its share pauses nothing: the next case has its own. The
+                # backfill pauses only when the cumulative cap itself is spent.
+                paused = bool(budget and budget.budget.exhausted)
                 state.finish(entry, dossier, paused=paused)
                 print('  %s: %s' % (entry['case'], state.data['cases'][entry['case']]['status']))
                 if paused:

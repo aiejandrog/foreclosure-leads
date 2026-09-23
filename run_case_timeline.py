@@ -129,11 +129,33 @@ def write_timeline(dossier_path, timeline, markdown):
     return {'json': str(json_path), 'markdown': str(md_path)}
 
 
-def read_amounts(rows, base, budget=None):
-    """Reuse hash-bound private evidence; paid selection requires an explicit budget."""
+def read_amounts(rows, base, budget=None, plan=None):
+    """Reuse hash-bound private evidence; paid selection requires an explicit budget.
+
+    Paid reads follow the docket plan (document_prioritizer.timeline_read_order), not the order the
+    evidence files sort in on disk, and stop at this case's share of the cap: every document the
+    share did not reach is a named `budget_exhausted` gap rather than a silent omission.
+    """
     import miami_timeline_amounts as amounts
     result = {'figures': [], 'gaps': [], 'evidence_files': []}
+    if budget is not None:
+        import document_prioritizer as DP
+        selection = DP.timeline_read_order(plan, rows)
+        result['selection'] = {'order': [r.get('source_ref') for r in selection['order']],
+                               'deferred': selection['deferred']}
+        result['gaps'].extend(dict(item, reason='paid_read_not_selected: ' + item['reason'])
+                              for item in selection['deferred']
+                              if amounts.amount_page_numbers(
+                                  next((r.get('reading') or {} for r in rows
+                                        if r.get('source_ref') == item['source_ref']), {})))
+        rows = selection['order']
     for row in rows:
+        if budget is not None and getattr(budget, 'exhausted', False):
+            if amounts.amount_page_numbers(row.get('reading') or {}):
+                result['gaps'].append({'source_ref': row.get('source_ref'),
+                                       'reason': 'budget_exhausted: this case\'s vision share '
+                                                 'was spent before this document'})
+            continue
         current_hash = ((row.get('manifest') or {}).get('source_sha256') or
                         (row.get('manifest') or {}).get('sha256'))
         key = hashlib.sha256(str(row.get('source_ref')).encode()).hexdigest()
@@ -202,9 +224,14 @@ def main(argv=None):
     except ValueError as exc:
         parser.error(str(exc))
     from document_backfill import State, PersistentBudget
+    from document_case_budget import CaseAllocator
+    import document_prioritizer
     with (State(ledger) if args.vision else nullcontext()) as state:
-        budget = PersistentBudget(args.vision_max_spend, state) if args.vision else None
+        # One share per named case: the first case cannot spend what the others were given.
+        shared = (CaseAllocator(PersistentBudget(args.vision_max_spend, state), cases)
+                  if args.vision else None)
         for case in cases:
+            budget = shared.for_case(case) if shared is not None else None
             inventory, rows = acquire(case, collect=args.collect, docket_cache=args.docket_cache)
             import miami_timeline_ocr
             base = DS.pipeline_folder(COUNTY, case)
@@ -227,7 +254,12 @@ def main(argv=None):
                 # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
                 timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=args.as_of.isoformat())
                 timeline['source_comparison'] = inventory.get('source_comparison')
-                amounts = read_amounts(rows, DS.pipeline_folder(COUNTY, case), budget)
+                try:
+                    plan = document_prioritizer.prioritize(case, inventory, args.as_of.isoformat())
+                except ValueError:
+                    plan = None      # every row is then deferred as not_in_docket_plan
+                amounts = read_amounts(rows, DS.pipeline_folder(COUNTY, case), budget, plan=plan)
+                shared.finish(case)
                 timeline['amount_vision'] = amounts
                 timeline.setdefault('gaps', []).extend(amounts['gaps'])
                 timeline.setdefault('amounts', []).extend(amounts['figures'])
@@ -236,6 +268,7 @@ def main(argv=None):
             spending = budget_snapshot(ledger, args.vision_max_spend)
             if budget is not None:
                 spending['paid_requests_this_command'] = budget.calls
+                spending['case_share'] = shared.report(case)
             timeline['vision_budget'] = spending
             timeline['counts'] = summary_counts(rows, timeline)
             paths = write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
