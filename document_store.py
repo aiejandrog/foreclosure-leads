@@ -406,8 +406,8 @@ def load_manifest(path):
 # with the character-floor reader, which called a watermark a read page and marked the job done,
 # and the fixed reader then refused to look at it again. A document is not finished being read
 # because an older, worse reader said so.
-READER_VERSION = 4
-MIN_PAGE_CHARS = 40
+READER_VERSION = 5
+MIN_PAGE_CHARS = 0  # Compatibility argument only; content is not judged by length.
 MAX_IMAGE_COVERAGE = 0.10
 MIN_SANE_RATIO = 0.70
 OCR_DPI = 300
@@ -469,13 +469,60 @@ def _boilerplate_key(text):
 
 
 def _weakness(chars, coverage, sane, min_chars):
-    if chars < min_chars:
-        return 'too little extractable text (%d chars)' % chars
+    if not chars:
+        return 'no extractable content'
     if coverage >= MAX_IMAGE_COVERAGE:
         return 'page is %.0f%% raster image; embedded text is a stamp, not the page' % (coverage * 100)
     if sane < MIN_SANE_RATIO:
         return 'extracted text is %.0f%% unreadable glyphs' % ((1 - sane) * 100)
     return ''
+
+
+def content_text(text):
+    """Discard known clerk stamps, not short document content."""
+    return '\n'.join(line for line in (text or '').splitlines()
+                     if not re.search(r'NOT AN OFFICIAL COPY|PUBLIC ACCESS|^\s*Page \d+ of \d+\s*$',
+                                      line, re.I)).strip()
+
+
+def label_only(text):
+    return bool(re.fullmatch(r'\s*exhibit\s*[\"\u201c\u201d\u2018\u2019\x27]?\s*[A-Za-z0-9]+\s*[\"\u201c\u201d\u2018\u2019\x27]?\s*', text or '', re.I))
+
+
+READ_OUTCOMES = ('text', 'ocr_text', 'vision_text', 'read_as_label', 'exhibit_divider')
+ASSESSED_OUTCOMES = READ_OUTCOMES + ('redacted_or_blank',)
+
+
+def summarize_reading(reading):
+    pages = reading['pages']
+    unresolved = [p['page'] for p in pages if p.get('outcome') not in ASSESSED_OUTCOMES]
+    gaps = [p['page'] for p in pages if p.get('outcome') not in READ_OUTCOMES]
+    reading.update(page_count=len(pages), pages_unresolved=unresolved,
+        pages_content_gaps=gaps, pages_assessed=len(pages)-len(unresolved),
+        pages_with_text=sum(p.get('text_source') == 'embedded' for p in pages),
+        pages_from_ocr=sum(p.get('text_source') == 'ocr' for p in pages),
+        complete=bool(pages) and not gaps,
+        read_status=('read' if pages and not gaps else 'partial' if any(
+            p.get('outcome') in ASSESSED_OUTCOMES for p in pages) else 'image_only' if pages else 'empty'))
+    return reading
+
+
+def apply_page_assessment(reading, page_no, assessment):
+    """Apply explicit image evidence; never turn a redacted page into a read page."""
+    matches = [p for p in reading['pages'] if p['page'] == page_no]
+    if len(matches) != 1:
+        raise ValueError('page must occur exactly once')
+    outcome = assessment.get('outcome')
+    if outcome not in ('vision_text', 'read_as_label', 'exhibit_divider', 'redacted_or_blank', 'unreadable'):
+        raise ValueError('invalid page assessment')
+    if not assessment.get('confident'):
+        outcome = 'unreadable'
+    text = assessment.get('text') or ''
+    if outcome in ('vision_text', 'read_as_label') and not content_text(text):
+        outcome = 'unreadable'
+    matches[0].update(outcome=outcome, text=text, chars=len(text), text_source='vision',
+                      assessment=assessment)
+    return summarize_reading(reading)
 
 
 def winocr(paths, timeout=600):
@@ -586,7 +633,7 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
                      'text_source': None, 'image_coverage': None}
             try:
                 page = doc.load_page(index)
-                text = page.get_text('text') or ''
+                text = content_text(page.get_text('text') or '')
                 coverage = _image_coverage(page)
             except Exception as exc:
                 entry['error'] = str(exc)[:200]
@@ -602,7 +649,8 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
                               'embedded_text': text})
                 entry['text'] = ''          # a stamp is not this page's text
             else:
-                entry.update({'outcome': 'text', 'text_source': 'embedded'})
+                entry.update({'outcome': 'read_as_label' if label_only(text) else 'text',
+                              'text_source': 'embedded'})
             pages.append(entry)
 
         # Document-level: identical text on every page is boilerplate, not content.
@@ -622,9 +670,9 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
             for p in pages:
                 if images.get(p['page']):
                     p['image'] = images[p['page']]
-                value = got.get(p['page'])
-                if value and len(value.strip()) >= min_chars:
-                    p.update({'outcome': 'ocr_text', 'text': value,
+                value = content_text(got.get(p['page']))
+                if value and _sane_ratio(value) >= MIN_SANE_RATIO:
+                    p.update({'outcome': 'read_as_label' if label_only(value) else 'ocr_text', 'text': value,
                               'chars': len(value.strip()), 'text_source': 'ocr',
                               'watermark_removed': bool(gray_cutoff),
                               'gray_cutoff': gray_cutoff or None})
@@ -636,11 +684,18 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
                     # Short OCR can be an exhibit divider or a fragment of obscured content.
                     # Preserve it for image assessment, but do not admit it as complete text.
                     p['provisional_ocr_text'] = value
-                    p['ocr_error'] = 'OCR text was below the %d-character floor' % min_chars
+                    p['ocr_error'] = 'OCR returned only boilerplate or unreadable glyphs'
     finally:
         doc.close()
+    # Repeated OCR boilerplate is no more evidence than repeated embedded stamps.
+    content_pages = [p for p in pages if p['outcome'] in ('text', 'ocr_text')]
+    if (len(content_pages) == len(pages) and len(pages) > 1
+            and len({_boilerplate_key(p['text']) for p in content_pages}) == 1):
+        for p in content_pages:
+            p.update(outcome='needs_ocr', provisional_ocr_text=p['text'], text='',
+                     weak_reason='identical boilerplate on every page', text_source=None)
     unresolved = [p['page'] for p in pages if p['outcome'] not in ('text', 'ocr_text')]
-    return {'pages': pages,
+    return summarize_reading({'pages': pages,
             'reader_version': READER_VERSION,
             'gray_cutoff': gray_cutoff or None,
             'page_count': len(pages),
@@ -654,7 +709,7 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
                             else 'image_only' if pages and not any(
                                 p['outcome'] in ('text', 'ocr_text') for p in pages)
                             else 'partial' if pages else 'empty'),
-            'complete': bool(pages) and not unresolved}
+            'complete': bool(pages) and not unresolved})
 
 
 def record_read(meta_path, reading):

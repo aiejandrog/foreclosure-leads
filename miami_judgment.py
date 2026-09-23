@@ -245,9 +245,16 @@ def labeled_sum_check(rows, total):
         return amount
 
     try:
-        stated = cents(total)
+        stated = cents(total) if total is not None else None
         rates, charges, subtotals, totals, ids = set(), {}, [], [], set()
         for row in rows:
+            # Guard only: label text never chooses a kind. A mis-typed charge
+            # equal to a printed daily/percentage rate requires review.
+            label = str(row.get('label') or '')
+            for value in re.findall(r'\$?([\d,]+(?:\.\d+)?)\s*(?:/\s*day\b|per\s+(?:day|diem)\b|%)', label, re.I):
+                rates.add(Decimal(value.replace(',', '')))
+            for value in re.findall(r'per\s+diem\s*:\s*\$?([\d,]+(?:\.\d+)?)', label, re.I):
+                rates.add(Decimal(value.replace(',', '')))
             kind, identifier = row.get('kind'), row.get('id')
             if (kind not in ('charge', 'rate', 'subtotal', 'total')
                     or not isinstance(identifier, str) or not identifier or identifier in ids
@@ -270,7 +277,7 @@ def labeled_sum_check(rows, total):
                 components.append(amount)
         if any(amount in rates for amount in components):
             return fail('charge equals a stated rate; review required')
-        if not totals or any(amount != stated for amount in totals):
+        if stated is not None and (not totals or any(amount != stated for amount in totals)):
             return fail('missing or disagreeing kind=total')
         for amount, members in subtotals:
             if (not isinstance(members, list) or not members
@@ -278,7 +285,7 @@ def labeled_sum_check(rows, total):
                     or len(members) != len(set(members))
                     or sum(charges[m] for m in members) != amount):
                 return fail('printed subtotal lacks valid members or disagrees with its own items')
-        if not components or sum(components) != stated:
+        if stated is not None and (not components or sum(components) != stated):
             return fail('all labeled additive items do not equal the stated total to the cent')
     except (InvalidOperation, ValueError, TypeError):
         return fail('invalid or sub-cent monetary figure')
@@ -534,12 +541,19 @@ def vision_candidates(path, reading, budget, reader=None, out_dir=None):
         wanted = sorted({page['page'] for page in reading['pages']
                          if page['outcome'] in ('ocr_text', 'needs_ocr')})[:2]
     detail = DV.read_document(path, wanted, budget, reader=reader, out_dir=out_dir)
+    subtotal_failures = []
+    for page_no in {f['page'] for f in detail['figures'] if f.get('kind') == 'subtotal'}:
+        checked = labeled_sum_check([f for f in detail['figures'] if f['page'] == page_no], None)
+        if not checked['ok']:
+            subtotal_failures.append('page %s: %s' % (page_no, checked['reason']))
     out = []
     for total in detail['grand_totals']:
         # Vision returns labels: never let the legacy OCR subset search override
         # a rejected full table. Do not mix figures from different pages.
         page_rows = [f for f in detail['figures'] if f['page'] == total['page']]
         check = labeled_sum_check(page_rows, total['amount'])
+        if subtotal_failures:
+            check = {'ok': False, 'components': [], 'reason': '; '.join(subtotal_failures)}
         page_detail = detail.get('pages', {}).get(total['page'], {})
         if page_detail.get('unreadable') or detail.get('errors'):
             check = {'ok': False, 'components': [], 'reason': 'vision has unresolved reading errors'}

@@ -68,6 +68,14 @@ class LabeledJudgmentTests(unittest.TestCase):
     def test_missing_kind_is_not_inferred(self):
         self.assertFalse(self.candidate([row('Principal', 10, None)], 10)['sum_check'])
 
+    def test_charge_equal_to_inline_rate_requires_review(self):
+        self.assertFalse(self.candidate([row('interest at $197/day', 197)], 197)['sum_check'])
+
+    def test_string_false_is_not_confident(self):
+        parsed = MJ.DV._parse('{"rows":[{"id":"a","kind":"charge","label":"A",'
+                              '"amount":"10","confident":"false"}]}')
+        self.assertFalse(parsed['rows'][0]['confident'])
+
     def test_subtotal_without_explicit_members_fails(self):
         self.assertFalse(self.candidate([row('A', 10), row('Subtotal', 10, 'subtotal')], 10)['sum_check'])
 
@@ -77,6 +85,16 @@ class LabeledJudgmentTests(unittest.TestCase):
                               '"grand_total":null,"unreadable":[]}')
         self.assertEqual(parsed['rows'][0].get('kind'), 'subtotal')
         self.assertEqual(parsed['rows'][0].get('item_ids'), ['a'])
+
+    def test_bad_subtotal_on_other_page_fails_document(self):
+        figures = [dict(row('A', 10), page=1, id='a'),
+                   dict(row('Subtotal', 11, 'subtotal', item_ids=['a']), page=1, id='s'),
+                   dict(row('B', 100), id='b'), dict(row('Total', 100, 'total'), id='t')]
+        detail = {'figures': figures, 'pages': {}, 'errors': {},
+                  'grand_totals': [{'amount': 100, 'page': 2}]}
+        with patch.object(MJ.DV, 'read_document', return_value=detail):
+            candidates, _ = MJ.vision_candidates('unused', {'pages': []}, None)
+        self.assertFalse(candidates[0]['sum_check'])
 
 
 if __name__ == '__main__':
