@@ -55,7 +55,33 @@ def load_rows(base):
     return rows
 
 
-def acquire(case, base=None, collect=False):
+def source_comparison(case, inventory, cache_path):
+    """The compact board cache is comparison-only, never timeline evidence."""
+    raw = inventory.get('raw') or {}
+    entries = raw.get('dockets')
+    if ((raw.get('caseNumber') or raw.get('caseNo')) != case or
+            not isinstance(entries, list)):
+        raise ValueError('Full OCS case payload required; refresh with --collect')
+    if [e.get('metadata') for e in inventory.get('entries', [])] != entries:
+        raise ValueError('Inventory differs from full OCS entries/comments; refresh with --collect')
+    try:
+        cache = DS.pipeline_load(cache_path) or {}
+        cached = cache.get(case) or {}
+        compact = cached.get('ents')
+        count = len(compact) if isinstance(compact, list) else None
+        cache_status = 'available' if count is not None else 'case_or_cache_missing'
+    except (ValueError, OSError, AttributeError):
+        cached, count, cache_status = {}, None, 'unreadable_cache'
+    return {'timeline_source': 'full OCS GetSingleCaseResult payload',
+            'full_ocs_entries': len(entries), 'timeline_entries': len(inventory['entries']),
+            'cache_entries': count, 'cache_reported_total': cached.get('n'),
+            'cache_path': str(cache_path), 'cache_status': cache_status,
+            'cache_date': cached.get('ts'),
+            'counts_differ': len(entries) != count if count is not None else None,
+            'note': 'Cache is comparison-only; its reported total is not its retained entry count. OCS pagination completeness remains unproven.'}
+
+
+def acquire(case, base=None, collect=False, docket_cache=None):
     """One complete queue sweep; download/read failures remain named queue gaps."""
     validate_case(case)
     base = Path(base) if base is not None else DS.pipeline_folder(COUNTY, case)
@@ -64,6 +90,8 @@ def acquire(case, base=None, collect=False):
     inventory = DS.pipeline_load(base / 'inventory.json')
     if inventory is None:
         raise ValueError('No existing docket inventory; use --collect to obtain it')
+    inventory['source_comparison'] = source_comparison(
+        case, inventory, docket_cache or Path(__file__).with_name('dockets.json'))
     with DQ.DocumentQueue(str(base / 'queue.sqlite3')) as queue:
         count = sum(job['kind'] == 'acquire' for job in queue.jobs(COUNTY, case))
     # The existing worker's default limit is ten. A whole-case pass must cover all jobs.
@@ -153,6 +181,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--case', action='append', required=True)
     parser.add_argument('--collect', action='store_true', help='Refresh using the existing county collector')
+    parser.add_argument('--docket-cache', type=Path, default=Path(__file__).with_name('dockets.json'),
+                        help='Compact cache to compare only; never used to build timeline')
     parser.add_argument('--as-of', default=date.today().isoformat(), type=date.fromisoformat)
     parser.add_argument('--vision-max-spend', required=True, type=float,
                         help='Existing shared cumulative cap, at most $1')
@@ -175,11 +205,12 @@ def main(argv=None):
     with (State(ledger) if args.vision else nullcontext()) as state:
         budget = PersistentBudget(args.vision_max_spend, state) if args.vision else None
         for case in cases:
-            inventory, rows = acquire(case, collect=args.collect)
+            inventory, rows = acquire(case, collect=args.collect, docket_cache=args.docket_cache)
             import miami_timeline_ocr
             base = DS.pipeline_folder(COUNTY, case)
             rows = [miami_timeline_ocr.supplement(row, base / 'timeline-ocr') for row in rows]
             timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=args.as_of.isoformat())
+            timeline['source_comparison'] = inventory.get('source_comparison')
             # Preserve the free whole-case analysis even if a paid reader fails.
             timeline['vision_budget'] = budget_snapshot(ledger, args.vision_max_spend)
             timeline['counts'] = summary_counts(rows, timeline)
@@ -195,6 +226,7 @@ def main(argv=None):
             if budget is not None:
                 # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
                 timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=args.as_of.isoformat())
+                timeline['source_comparison'] = inventory.get('source_comparison')
                 amounts = read_amounts(rows, DS.pipeline_folder(COUNTY, case), budget)
                 timeline['amount_vision'] = amounts
                 timeline.setdefault('gaps', []).extend(amounts['gaps'])
@@ -209,7 +241,8 @@ def main(argv=None):
             paths = write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
                                    miami_case_timeline.render_markdown(timeline))
             print(json.dumps({'case': case, 'status': timeline.get('status'), 'files': paths,
-                              'counts': timeline['counts'], 'vision_budget': spending}), flush=True)
+                              'counts': timeline['counts'], 'source_comparison': timeline.get('source_comparison'),
+                              'vision_budget': spending}), flush=True)
     return 0
 
 

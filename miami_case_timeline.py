@@ -261,6 +261,11 @@ def render_markdown(result):
              '| Entry | Date | Kind | Filed by | Description | Image |', '|---|---|---|---|---|---|']
     if 'sale_date' in result['status']:
         lines.insert(4, f"Sale date: {result['status']['sale_date'] or 'unknown'}. Reset: {bool(result['status'].get('reset'))}.")
+    source = result.get('source_comparison')
+    if source:
+        lines.insert(4, 'Source counts: full OCS = %s; timeline = %s; dockets.json retained = %s; cache reported total = %s. Counts differ: %s. %s' % (
+            source['full_ocs_entries'], source['timeline_entries'], source['cache_entries'],
+            source['cache_reported_total'], source['counts_differ'], source['note']))
     for e in result['entries']:
         lines.append('| ' + ' | '.join(esc(e.get(k)) for k in ('entry_id', 'date', 'kind', 'filed_by', 'description', 'image_status')) + ' |')
     for section in ('pending', 'amounts', 'gaps'):

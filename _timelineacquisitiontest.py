@@ -9,6 +9,30 @@ import run_case_timeline as R
 
 
 class AcquisitionTests(unittest.TestCase):
+    def test_full_source_comparison_retains_old_entries_and_long_comments(self):
+        case = '2026-000001-CA-01'
+        raw = [{'eventID': i, 'comments': 'X' * 220} for i in range(45)]
+        inventory = {'raw': {'caseNumber': case, 'dockets': raw},
+                     'entries': [{'metadata': e} for e in raw]}
+        with tempfile.TemporaryDirectory() as folder:
+            cache = Path(folder) / 'dockets.json'
+            cache.write_text(json.dumps({case: {'n':45, 'ents':[{}]*40}}))
+            report = R.source_comparison(case, inventory, cache)
+            self.assertEqual(report['full_ocs_entries'], 45)
+            self.assertEqual(report['cache_entries'], 40)
+            self.assertEqual(report['cache_reported_total'], 45)
+            self.assertTrue(report['counts_differ'])
+            inventory['entries'][0]['metadata'] = dict(raw[0], comments='X'*160)
+            with self.assertRaises(ValueError):
+                R.source_comparison(case, inventory, cache)
+
+    def test_missing_raw_or_truncated_inventory_cannot_be_timeline_source(self):
+        with self.assertRaises(ValueError):
+            R.source_comparison('2026-000001-CA-01', {'entries':[]}, Path('missing'))
+        with self.assertRaises(ValueError):
+            R.source_comparison('2026-000001-CA-01', {'raw':{'caseNumber':'2026-000001-CA-01',
+                'dockets':[{'eventID':1}]}, 'entries':[]}, Path('missing'))
+
     def test_free_cached_amounts_never_call_reader_and_reject_wrong_hash(self):
         import hashlib
         import miami_timeline_amounts as A
@@ -111,7 +135,8 @@ class AcquisitionTests(unittest.TestCase):
     def test_read_all_jobs_not_default_ten_and_keep_no_image_entries(self):
         with tempfile.TemporaryDirectory() as folder:
             base = Path(folder)
-            inventory = {'entries': [{'source_id': '1', 'expected_documents': 0}]}
+            inventory = {'raw': {'caseNumber':'2026-000001-CA-01', 'dockets':[{}]},
+                         'entries': [{'source_id': '1', 'expected_documents': 0, 'metadata':{}}]}
             (base / 'inventory.json').write_text(json.dumps(inventory))
             from document_queue import DocumentQueue
             with DocumentQueue(str(base / 'queue.sqlite3')) as queue:
@@ -122,7 +147,8 @@ class AcquisitionTests(unittest.TestCase):
                 self.assertFalse(interpret)
             with patch.object(R.DQ, 'resume_case_documents', side_effect=resume):
                 loaded, rows = R.acquire('2026-000001-CA-01', base)
-            self.assertEqual(loaded, inventory)
+            self.assertEqual(loaded['entries'], inventory['entries'])
+            self.assertEqual(loaded['source_comparison']['full_ocs_entries'], 1)
             self.assertEqual(len(rows), 15)
             self.assertEqual(rows[0]['acquisition_gap'], 'Document acquisition pending')
             self.assertEqual(rows[0]['entry_ref'], '2')
