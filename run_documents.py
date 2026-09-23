@@ -344,6 +344,14 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
     dossier = case_dossier.build(case, COUNTY, inventory=inventory, chain=entry.get('chain'),
                                  documents=rows, walk=walk_report)
     if report:
+        # The nightly is where corroborated scan figures will actually come from, and until
+        # 2026-09-23 only the pilot CLI logged them, so the review count toward
+        # MJ.REVIEW_THRESHOLD could never move on its own. Logging is a local write; a failure to
+        # log never costs the case.
+        try:
+            MJ.log_corroboration(report)
+        except Exception as exc:
+            print('    review log not written: %s: %s' % (type(exc).__name__, str(exc)[:120]))
         MJ.strip_readings(report)
         dossier['judgment_amount_usable'] = report.get('judgment_amount_usable')
         dossier['judgment_amount_usable_with_ocr'] = report.get('judgment_amount_usable_with_ocr')

@@ -863,19 +863,50 @@ def log_corroboration(report, filename=CORROBORATION_LOG):
             entries = []
     except (OSError, ValueError):
         entries = []
+    prior = next((e for e in entries if e.get('case') == report['case']), None)
     entries = [e for e in entries if e.get('case') != report['case']]
     sources = sorted({c.get('text_source') for c in report['judgment_amount_candidates']
                       if c.get('sum_check')} - {None})
-    entries.append({'case': report['case'], 'county': report['county'],
-                    'amount': report['judgment_amount_agreed'],
-                    'read_by': sources,
-                    'images': sorted({r.get('images_dir') for r in report.get('documents', [])
-                                      if r.get('images_dir')}),
-                    # A human sets this to true once they have compared the figure to the image.
-                    'checked_against_image': False})
+    entry = {'case': report['case'], 'county': report['county'],
+             'amount': report['judgment_amount_agreed'],
+             'read_by': sources,
+             'images': sorted({r.get('images_dir') for r in report.get('documents', [])
+                               if r.get('images_dir')}),
+             # WHERE each corroborated figure sits, so judgment_review.py can put the page image
+             # beside it. Without the PDF path and page the log was a count with nothing to look at.
+             'figures': corroborated_figures(report),
+             # A human sets this to true once they have compared the figure to the image.
+             'checked_against_image': False}
+    # A re-run must not erase a review. Before 2026-09-23 the newest entry replaced the old one
+    # outright, so re-reading a case Alejandro had already checked reset it to unchecked and the
+    # count toward REVIEW_THRESHOLD went backwards. The verdict survives while the figure it was
+    # given for is unchanged; a different figure is a different claim and needs a new look.
+    if prior and prior.get('amount') == entry['amount']:
+        for key in ('checked_against_image', 'review'):
+            if key in prior:
+                entry[key] = prior[key]
+    entries.append(entry)
     target.parent.mkdir(parents=True, exist_ok=True)
     DS._atomic_write_text(str(target), json.dumps(entries, indent=2) + '\n')
     return len(entries), target
+
+
+def corroborated_figures(report):
+    """Each figure the document's own line items reproduced, with the PDF and page it came off."""
+    out = []
+    for row in report.get('documents', []):
+        for c in row.get('amount_candidates') or []:
+            if not c.get('sum_check'):
+                continue
+            out.append({'amount': c['amount'], 'page': c.get('page'),
+                        'text_source': c.get('text_source'),
+                        'passage': (c.get('passage') or '')[:300],
+                        'components': c.get('sum_check_components') or [],
+                        'sum_check_reason': c.get('sum_check_reason'),
+                        'source_ref': row.get('source_ref'),
+                        'pdf': row.get('path'),
+                        'images_dir': row.get('images_dir')})
+    return out
 
 
 def judgment_for_analyze(report, allow_ocr=False):
