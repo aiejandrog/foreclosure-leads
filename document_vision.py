@@ -29,6 +29,7 @@ must not depend on a human's chat quota, and must not silently start spending ei
 import base64
 import json
 import os
+import hashlib
 import re
 import tempfile
 
@@ -106,7 +107,19 @@ class VisionReader:
         """One page image -> {'rows': [...], 'grand_total': ..., 'usd': ...}."""
         if budget is None:
             raise ValueError('VisionReader requires a Budget')
+        cache_key = None
+        if hasattr(budget, 'cached_read'):
+            cache_key = hashlib.sha256(png_bytes + json.dumps(
+                [self.model, self.max_tokens, instruction, DS.READER_VERSION,
+                 (parser or _parse).__name__], ensure_ascii=True).encode()).hexdigest()
+            cached = budget.cached_read(cache_key)
+            if cached is not None:
+                return cached
         client = self.client()
+        if cache_key is not None:
+            # A retry after an ambiguous transport error could be a second bill.
+            # Backfill retains the reservation and resumes explicitly instead.
+            client = client.with_options(max_retries=0)
         content = [
             {'type': 'image',
              'source': {'type': 'base64', 'media_type': 'image/png',
@@ -119,15 +132,17 @@ class VisionReader:
         budget.check(counted.input_tokens, self.max_tokens)
         response = client.messages.create(model=self.model, max_tokens=self.max_tokens,
                                           system=instruction, messages=messages)
-        before = budget.spent
-        budget.record(response.usage.input_tokens, response.usage.output_tokens)
         out = (parser or _parse)(''.join(b.text for b in response.content if b.type == 'text'))
         if response.stop_reason == 'max_tokens':
             out['unreadable'] = ['response truncated']
             out['confident'] = False
-        out['usd'] = round(budget.spent - before, 6)
+        out['usd'] = round(budget.price(response.usage.input_tokens, response.usage.output_tokens), 6)
         out['input_tokens'] = response.usage.input_tokens
         out['output_tokens'] = response.usage.output_tokens
+        if cache_key is not None:
+            budget.record_read(response.usage.input_tokens, response.usage.output_tokens, cache_key, out)
+        else:
+            budget.record(response.usage.input_tokens, response.usage.output_tokens)
         return out
 
     def assess_page(self, png_bytes, budget):

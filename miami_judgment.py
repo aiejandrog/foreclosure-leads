@@ -612,8 +612,33 @@ def read_with_sweep(path, ocr=None, images_dir=None, gray_cutoff=None):
     return first, tried
 
 
+def _stored_recorded_row(county, case, ref, record, document_key):
+    """Reuse completed acquisition/OCR for backfill's still-pending vision stage."""
+    row = {'source_ref': ref, 'doc_type': record.get('doC_TYPE')}
+    for manifest, reading in DS.stored_documents(county, case):
+        if (manifest.get('document_key') != document_key
+                or manifest.get('source_ref') != ref):
+            continue
+        if (not os.path.isfile(manifest.get('path') or '')
+                or not DS.page_inventory_complete({'manifest': manifest, 'reading': reading})):
+            break
+        text_dir = os.path.join(os.path.dirname(manifest['path']), document_key[:16] + '-text')
+        row.update({k: manifest.get(k) for k in (
+            'document_key', 'source_sha256', 'path', 'pages', 'pages_expected',
+            'page_count_verified', 'page_count_note')})
+        row.update(status='stored', from_store=True, text_dir=text_dir,
+                   reading=reading, read_status=reading['read_status'],
+                   pages_unresolved=reading.get('pages_unresolved', []),
+                   pages_from_ocr=reading.get('pages_from_ocr', 0),
+                   recording_stamp=stamp_identity(reading, record),
+                   amount_candidates=judgment_amount_candidates(reading))
+        return row
+    row.update(status='gap', reason='done job has missing or incomplete saved document evidence')
+    return row
+
+
 def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, ocr=None,
-                     keep_images=False, gray_cutoff=None, resume=False):
+                     keep_images=False, gray_cutoff=None, resume=False, reuse_done=False):
     """Fetch, verify, store and read each recorded instrument. One result row per record.
 
     `resume=False` — the default, and what the pilot CLI uses — re-reads a document the queue has
@@ -648,6 +673,10 @@ def collect_recorded(case, records, collector=None, queue=None, county=COUNTY, o
                 prior = [j for j in queue.jobs(county, case)
                          if j['source_ref'] == ref and j['kind'] == 'recorded_instrument']
                 state = prior[0]['status'] if prior else 'leased'
+                if reuse_done and state == 'done':
+                    cached = _stored_recorded_row(county, case, ref, record, prior[0]['sha256'])
+                    results.append(cached)
+                    continue
                 row.update({'status': 'skipped', 'reason': 'already %s on an earlier run' % state,
                             'prior_status': state,
                             'document_key': prior[0]['sha256'] if prior else None})
@@ -760,7 +789,7 @@ PIPELINE_VERSION = 9
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         judgments_only=False, keep_images=False, gray_cutoff=None, resume=False,
-        vision_budget=None, vision_reader=None):
+        vision_budget=None, vision_reader=None, reuse_done=False):
     inventory = enumerate_case(case, collector=collector)
     records = list(records or [])
     # INDEX EVERY ROW WE WERE HANDED, before the judgment filter throws most of them away.
@@ -783,7 +812,7 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         records = recorded_judgments(records, plaintiffs)
     rows = collect_recorded(case, records, collector=collector, queue=queue, county=county,
                             ocr=ocr, keep_images=keep_images, gray_cutoff=gray_cutoff,
-                            resume=resume)
+                            resume=resume, reuse_done=reuse_done)
     # CITATIONS, HERE, not only inside run_documents. The pilot CLI read seventeen pages of this
     # case on 2026-09-22 and the report named not one instrument the text pointed at, because
     # cited_instruments was attached in a branch this tool never enters. The reading is in hand;

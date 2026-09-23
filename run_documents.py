@@ -95,6 +95,7 @@ editing a live publish path mid-flight corrupts the running night. Paste it when
 """
 import argparse
 import json
+import math
 import os
 import sys
 from datetime import datetime, timezone
@@ -268,7 +269,7 @@ def mint_token(owner, qs_cache):
 def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpreter=None,
              gray_cutoff=DS.WATERMARK_GRAY_CUTOFF,
              budget=None, vision_budget=None, walk_depth=0, walk_budget=0, name_budget=0,
-             token_budget=None, resume=True):
+             token_budget=None, resume=True, reuse_done=False):
     """One case through all seven steps. Returns its dossier."""
     case, owner = entry['case'], entry['owner']
     token = qs_cache.get(owner)
@@ -288,7 +289,7 @@ def run_case(entry, qs_cache, queue=None, ocr=None, keep_images=False, interpret
             # Nightly runs keep done jobs; explicit --case runs deliberately re-read.
             report = MJ.run(case, models, queue=queue, ocr=ocr, judgments_only=True,
                             keep_images=keep_images, gray_cutoff=gray_cutoff, resume=resume,
-                            vision_budget=vision_budget)
+                            vision_budget=vision_budget, reuse_done=reuse_done)
             rows = report['documents']
             inventory = report.get('_inventory')
         except Exception as exc:
@@ -441,6 +442,11 @@ def main(argv=None):
                         help='actually run (or set DEALFLOW_DOCS=1). Off by default.')
     parser.add_argument('--limit', type=int, default=10, help='cases this run (default 10)')
     parser.add_argument('--case', default='', help='one case number; re-read even completed documents')
+    parser.add_argument('--backfill', action='store_true',
+                        help='resumable pass over EVERY Miami lead; requires explicit vision cap')
+    parser.add_argument('--leads-file', help='backfill input snapshot (default leads_final.json)')
+    parser.add_argument('--retry-gaps', action='store_true',
+                        help='backfill: retry finished attempts with outstanding gaps')
     parser.add_argument('--no-ocr', action='store_true', help='do not OCR scanned pages')
     parser.add_argument('--keep-images', action='store_true',
                         help='keep the 300-DPI render of each OCR page for a visual check')
@@ -451,7 +457,7 @@ def main(argv=None):
     parser.add_argument('--vision', action='store_true',
                         help='read page images through the Claude API when OCR\'s figures do not '
                              'add up (needs --vision-max-spend and ANTHROPIC_API_KEY)')
-    parser.add_argument('--vision-max-spend', type=float, default=1.00,
+    parser.add_argument('--vision-max-spend', type=float, default=None,
                         help='hard dollar cap for --vision ACROSS THE WHOLE RUN. One measured '
                              'judgment cost $0.0675 on claude-opus-5 (2026-09-22, three pages, '
                              'one of which should not have been sent); the default covers a '
@@ -478,6 +484,21 @@ def main(argv=None):
                              'a named case on demand. Nothing here filters by case type.')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
+    if args.backfill:
+        if (args.vision_max_spend is None or not math.isfinite(args.vision_max_spend)
+                or args.vision_max_spend <= 0):
+            parser.error('--backfill requires an explicit finite positive --vision-max-spend')
+        if args.case or args.interpret or args.token_budget or args.name_budget:
+            parser.error('--backfill excludes --case, --interpret and paid token/name searches')
+        import document_backfill
+        try:
+            return document_backfill.run(args, sys.modules[__name__])
+        except (OSError, ValueError, RuntimeError) as exc:
+            parser.exit(2, 'backfill stopped: %s\n' % type(exc).__name__)
+    if args.leads_file or args.retry_gaps:
+        parser.error('--leads-file and --retry-gaps require --backfill')
+    if args.vision_max_spend is None:
+        args.vision_max_spend = 1.00  # Preserve the existing nightly default.
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
     except Exception:
