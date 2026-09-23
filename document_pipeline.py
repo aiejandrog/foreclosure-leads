@@ -22,6 +22,22 @@ from document_queue import DocumentQueue
 VERSION = 1
 
 
+def page_inventory_complete(result):
+    expected = result.get('manifest', {}).get('pages')
+    numbers = [page.get('page') for page in result.get('reading', {}).get('pages', [])]
+    return (type(expected) is int and expected > 0
+            and all(type(number) is int for number in numbers)
+            and sorted(numbers) == list(range(1, expected + 1)))
+
+
+def interpretation_complete(result):
+    interpretation = result.get('interpretation', {})
+    return (page_inventory_complete(result)
+            and interpretation.get('status') == 'complete'
+            and interpretation.get('pages_assessed') == result['manifest']['pages']
+            and not interpretation.get('unresolved'))
+
+
 def folder(county, case):
     return case_review.output_path('document_pipeline/' + store._slug(county) + '/' + store._slug(case) + '/inventory.json').parent
 
@@ -88,8 +104,9 @@ def resume(county, case, limit=10, interpret=False):
             key = hashlib.sha256(ref.encode()).hexdigest()
             saved = base / (key + '.json')
             result = load(saved)
-            if (job['status'] == 'done' and result and result.get('reading', {}).get('read_status') == 'read'
-                    and (not interpret or result.get('interpretation', {}).get('status') == 'complete')):
+            if (job['status'] == 'done' and result and page_inventory_complete(result)
+                    and result.get('reading', {}).get('read_status') == 'read'
+                    and (not interpret or interpretation_complete(result))):
                 continue
             if job['status'] != 'done':
                 claimed = queue.claim_ref(owner, county, case, ref, 'acquire')
@@ -113,7 +130,8 @@ def resume(county, case, limit=10, interpret=False):
                 continue
             # Each extraction has its own persistent lease; a completed download is not a completed read.
             queue.add(county, case, ref, 'read')
-            reading_job = queue.claim_ref(owner, county, case, ref, 'read', reader_version=VERSION, can_ocr=True)
+            reading_job = queue.claim_ref(owner, county, case, ref, 'read', reader_version=VERSION,
+                                          can_ocr=True, force=not page_inventory_complete(result))
             if reading_job:
                 try:
                     manifest = result['manifest']
@@ -138,11 +156,7 @@ def resume(county, case, limit=10, interpret=False):
 
 def interpret_document(base, key, result):
     manifest, reading = result['manifest'], result['reading']
-    expected = manifest.get('pages')
-    numbers = [page.get('page') for page in reading.get('pages', [])]
-    if (type(expected) is not int or expected <= 0
-            or any(type(number) is not int for number in numbers)
-            or sorted(numbers) != list(range(1, expected + 1))):
+    if not page_inventory_complete(result):
         result['interpretation'] = {
             'status': 'incomplete', 'findings': [], 'pages_assessed': 0,
             'unresolved': ['Page inventory does not match the stored document; re-extract all pages.']}
@@ -214,7 +228,7 @@ def report(county, case):
     chains = load(Path(__file__).parent / 'records_liens.json', {})
     dossier = case_dossier.build(case, county, inventory=inventory, chain=chains.get(case), documents=dossier_rows)
     dossier['c_documents']['verified_findings'] = findings
-    dossier['c_documents']['interpretation_complete'] = bool(rows) and all(r.get('interpretation', {}).get('status') == 'complete' for r in rows)
+    dossier['c_documents']['interpretation_complete'] = bool(rows) and all(interpretation_complete(r) for r in rows)
     dossier['complete'] = False  # Cross-document reconciliation and full-source coverage still required.
     write(base / 'dossier.json', dossier)
     return {'case': case, 'county': county, 'entries': len(inventory.get('entries', [])),
@@ -222,7 +236,7 @@ def report(county, case):
         'pages_extracted': sum(sum(p['outcome'] in ('text', 'ocr_text') for p in r.get('reading', {}).get('pages', [])) for r in rows),
         'verified_findings': findings, 'gaps': gaps, 'unresolved_references': unresolved_refs, 'outstanding_jobs': len(outstanding),
         'collection_complete': bool(rows) and not gaps and not acquisition_outstanding,
-        'interpretation_complete': bool(rows) and all(r.get('interpretation', {}).get('status') == 'complete' for r in rows),
+        'interpretation_complete': bool(rows) and all(interpretation_complete(r) for r in rows),
         'document_summaries': [{'source_ref': r['source_ref'], 'classification': r.get('classification'),
             'references': r.get('references', []), 'interpretation': r.get('interpretation', {}).get('status', 'pending')} for r in rows]}
 

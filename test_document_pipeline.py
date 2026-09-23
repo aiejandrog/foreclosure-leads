@@ -9,6 +9,19 @@ from document_queue import DocumentQueue
 
 
 class PipelineTests(unittest.TestCase):
+    def test_report_rejects_legacy_complete_with_missing_page(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(p, 'folder', return_value=Path(tmp)):
+            p.write(Path(tmp) / 'inventory.json', {'entries': [], 'pagination_verified': False})
+            p.write(Path(tmp) / ('a' * 64 + '.json'), {
+                'source_ref': 'court:1',
+                'manifest': {'pages': 2, 'document_key': 'digest'},
+                'reading': {'read_status': 'read', 'pages': [{'page': 1, 'outcome': 'text', 'text': 'Evidence'}]},
+                'interpretation': {'status': 'complete', 'pages_assessed': 1, 'findings': []}})
+            result = p.report('MIAMI-DADE', 'case')
+            self.assertFalse(result['interpretation_complete'])
+            dossier = p.load(Path(tmp) / 'dossier.json')
+            self.assertFalse(dossier['c_documents']['interpretation_complete'])
+
     def test_missing_or_duplicate_pages_cannot_complete_interpretation(self):
         for numbers in ([1], [1, 1], [1, 3], []):
             with self.subTest(numbers=numbers), tempfile.TemporaryDirectory() as tmp:
