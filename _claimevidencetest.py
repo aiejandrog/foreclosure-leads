@@ -45,6 +45,14 @@ class ClaimEvidenceTest(unittest.TestCase):
         first = E.enrich_claims(reports, raw, docs)
         self.assertEqual(len(E.enrich_claims(first, raw, docs)[0]['potential_title_party_claims']), 1)
 
+    def test_saved_unknown_amount_is_replaced_by_new_corroborated_evidence(self):
+        reports, raw, docs = self.fixture()
+        first = E.enrich_claims(reports, raw, docs)
+        docs[0]['amount_candidates'] = [{'amount':100,'sum_check':True,'page':2}]
+        result = E.enrich_claims(first, raw, docs)[0]['potential_title_party_claims']
+        self.assertEqual(len(result), 1)
+        self.assertEqual(result[0]['amount'], 100)
+
     def test_only_corroborated_amount_is_kept_with_page_evidence(self):
         reports, raw, docs = self.fixture()
         docs[0]['amount_candidates'] = [
@@ -54,6 +62,35 @@ class ClaimEvidenceTest(unittest.TestCase):
         self.assertEqual(claim['amount'], 100)
         self.assertEqual(claim['amount_evidence']['page'], 2)
         self.assertEqual(claim['amount_evidence']['line'], 'TOTAL $100.00')
+
+
+class SavedVisionTest(unittest.TestCase):
+    def detail(self):
+        return {'source_ref':'recorded:synthetic','errors':[], 'pages':{'1':{'unreadable':False}},
+                'figures':[{'page':1,'id':i,'kind':k,'amount':a,'confident':True,'label':i}
+                           for i,k,a in [('a','charge',70),('b','charge',30),('r','rate',5),('t','total',100)]],
+                'grand_totals':[{'page':1,'amount':100}]}
+
+    def test_saved_typed_charges_are_rechecked_free(self):
+        result = E.saved_vision_candidates(self.detail(), 'recorded:synthetic')
+        self.assertEqual(result[0]['amount'], 100)
+        self.assertEqual(result[0]['sum_check_components'], [70,30])
+        self.assertFalse(result[0]['verified'])
+
+    def test_wrong_source_rejected(self):
+        self.assertEqual(E.saved_vision_candidates(self.detail(), 'recorded:other'), [])
+
+    def test_bad_subtotal_on_other_page_rejects_total(self):
+        data = self.detail()
+        data['figures'].append({'page':2,'id':'s','kind':'subtotal','amount':12,
+                                'confident':True,'item_ids':['missing']})
+        self.assertEqual(E.saved_vision_candidates(data, 'recorded:synthetic'), [])
+
+    def test_unreadable_and_errors_reject(self):
+        for field, value in [('errors',['failed']), ('pages',{'1':{'unreadable':True}})]:
+            data = self.detail()
+            data[field] = value
+            self.assertEqual(E.saved_vision_candidates(data, 'recorded:synthetic'), [])
 
 
 if __name__ == '__main__':

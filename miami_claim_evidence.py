@@ -5,6 +5,38 @@ import re
 from document_walk import key_of
 
 
+def saved_vision_candidates(detail, expected_source_ref):
+    """Recheck saved typed arithmetic only; no reader/API calls or fresh verification."""
+    from miami_judgment import labeled_sum_check
+    if (not isinstance(detail, dict) or not expected_source_ref
+            or detail.get('source_ref') != expected_source_ref
+            or detail.get('errors') or detail.get('unreadable')):
+        return []
+    figures = detail.get('figures') or []
+    pages = detail.get('pages') or {}
+    if not isinstance(pages, dict) or any(not isinstance(p, dict) or p.get('unreadable') or p.get('errors')
+                                          for p in pages.values()):
+        return []
+    if any(not isinstance(f, dict) or not f.get('page') for f in figures):
+        return []
+    for page in {f['page'] for f in figures if f.get('kind') == 'subtotal'}:
+        if not labeled_sum_check([f for f in figures if f['page'] == page], None)['ok']:
+            return []
+    results = []
+    for total in detail.get('grand_totals') or []:
+        if not isinstance(total, dict) or not total.get('page'):
+            return []
+        check = labeled_sum_check([f for f in figures if f['page'] == total['page']], total.get('amount'))
+        if not check['ok'] or total.get('amount') is None:
+            return []
+        results.append({'amount':total['amount'],'page':total['page'],
+            'sum_check':True,'sum_check_components':check['components'],
+            'sum_check_reason':check['reason'],'text_source':'vision','verified':False,
+            'passage':total.get('passage') or 'grand total transcribed from the page image',
+            'source_ref':expected_source_ref,'evidence_status':'saved_read_rechecked_not_fresh_vision'})
+    return results
+
+
 def enrich_claims(search_reports, raw_results, documents):
     """Keep body-classified judgment candidates; never decide attachment or equity."""
     reports = copy.deepcopy(search_reports)
@@ -37,7 +69,8 @@ def enrich_claims(search_reports, raw_results, documents):
                 if not re.search('judgment', kind, re.I) or re.search('satisf|release|discharge', kind, re.I):
                     continue
                 if (key, name) in seen:
-                    continue
+                    claims[:] = [c for c in claims if
+                        (key_of(c.get('book'), c.get('page_no')), c.get('under_name')) != (key, name)]
                 seen.add((key, name))
                 checked = [c for c in doc.get('amount_candidates', [])
                            if c.get('sum_check') is True and not c.get('composed') and c.get('amount') is not None]

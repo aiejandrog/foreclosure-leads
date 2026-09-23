@@ -80,6 +80,16 @@ def stored_evidence(case):
                      'document_key':current['document_key'], 'path':current['path'],
                      'doc_type':current.get('document_name'), 'pages':current.get('pages'),
                      'status':'stored', 'reading':reading, 'read_status':reading.get('read_status')})
+    from miami_claim_evidence import saved_vision_candidates
+    for row in rows:
+        manifest = row.get('stored') or {}
+        record = manifest.get('record_key') or {}
+        if not record.get('book') or not record.get('page'):
+            continue
+        folder = Path(manifest['path']).parent / (manifest['document_key'][:16] + '-text')
+        detail = DS.pipeline_load(folder / 'vision.json', {})
+        expected = 'official_records/%s-%s' % (record['book'], record['page'])
+        row['amount_candidates'] = saved_vision_candidates(detail, expected)
     return rows, [record_from_manifest(m) for m in manifests.values() if m.get('record_key')]
 
 
@@ -184,6 +194,10 @@ def investigate(entry, searcher, document_limit=30):
         known = {W.key_of(m.get('reC_BOOK'), m.get('reC_PAGE')) for m in models}
         new_manifests = [r.get('stored') for r in new_rows if isinstance(r.get('stored'), dict)]
         new_manifests.extend(m for m, _ in DS.stored_documents('MIAMI-DADE', case))
+        by_document = {m['document_key']:m for m in new_manifests if m.get('document_key')}
+        for row in rows:
+            if row.get('document_key') in by_document:
+                row['stored'] = by_document[row['document_key']]
         for manifest in new_manifests:
             if not manifest.get('record_key'):
                 continue
@@ -334,6 +348,8 @@ def main(argv=None):
     private = case_review.output_path('title_discovery')
     private.mkdir(parents=True, exist_ok=True)
     if args.report_only:
+        from document_backfill import snapshot
+        vision_state = snapshot(private / 'vision-budget.json')
         for entry in entries:
             path = private / (entry['case'] + '.json')
             report = RD._load(path, None)
@@ -342,6 +358,10 @@ def main(argv=None):
             report.update(owner=entry['owner'], folio=entry['folio'])
             rows, seeds = stored_evidence(entry['case'])
             report = refresh_saved_report(report, rows, seeds)
+            report['vision_actual_usd'] = vision_state['actual_usd']
+            report['vision_reserved_usd'] = sum(vision_state['reserved'].values())
+            report['vision_budget_scope'] = 'shared title-discovery run, not per-case spend'
+            report['vision_note'] = 'Saved reading revalidated without new API calls by this report operation.'
             DS.pipeline_write(path, report)
             dossier = RD.dossier_path('MIAMI-DADE', entry['case'])
             DS.pipeline_write(dossier, attach_report(RD._load(dossier, {}),
