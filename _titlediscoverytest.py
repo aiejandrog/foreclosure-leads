@@ -88,6 +88,11 @@ class NameDedupeTests(unittest.TestCase):
                                                      {'name': 'SMITH, JOHN JR'}]})]
         self.assertEqual(names, ['JOHN SMITH', 'SMITH, JOHN JR'])
 
+    def test_entities_with_the_same_words_stay_apart(self):
+        names = [c['name'] for c in T.discovery_names(
+            {'owner': 'ALPHA, BETA LLC'}, {'defendants': [{'name': 'BETA LLC ALPHA'}]})]
+        self.assertEqual(names, ['ALPHA, BETA LLC', 'BETA LLC ALPHA'])
+
 
 if __name__ == '__main__':
     unittest.main()

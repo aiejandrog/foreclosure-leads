@@ -21,8 +21,10 @@ def discovery_names(entry, title):
     for candidate in candidates:
         name = candidate['name'].strip()
         # 'SMITH, JOHN' from the docket and 'JOHN SMITH' from a deed are one search, not two
-        # paid ones: compare the words, not the spelling (Greptile on #50, 2026-09-23).
-        key = tuple(sorted(re.findall(r'[A-Z0-9&]+', name.upper())))
+        # paid ones. name_key reorders only on a recorder-style comma and never for an entity,
+        # so different parties with the same words stay apart (Greptile on #50, 2026-09-23).
+        from miami_title_parties import name_key
+        key = name_key(name)
         if name and key not in seen:
             seen.add(key)
             result.append(candidate)
