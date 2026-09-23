@@ -6,6 +6,31 @@ from unittest.mock import patch
 
 
 class SearchBudgetTests(unittest.TestCase):
+    def test_explicit_surname_first_preserves_multiword_surname(self):
+        import miami_search_budget as M
+        with tempfile.TemporaryDirectory() as tmp:
+            with M.CaptchaBudget(Path(tmp) / 'budget.json', 1) as budget:
+                searcher = M.CappedNameSearcher(budget)
+                seen = []
+                def county(browser, parts):
+                    seen.append(parts)
+                    return 'fresh'
+                with patch.object(searcher, '_camoufox', return_value=object()), \
+                     patch.object(searcher.R, 'camoufox_qs', side_effect=county), \
+                     patch.object(searcher.R, 'records_by_qs', return_value=[]):
+                    searcher.search('TEST DE SAMPLE, JANE')
+                self.assertEqual(seen, [('TEST DE SAMPLE', 'JANE')])
+
+    def test_company_comma_is_not_person_name_boundary(self):
+        import miami_search_budget as M
+        for name in ('SYNTHETIC, LLC', 'SAMPLE, FAMILY TRUST', 'SAMPLE, L.L.C.'):
+            self.assertEqual(M.search_name_parts(name), (name, ''))
+
+    def test_unmarked_name_keeps_legacy_fallback(self):
+        import miami_search_budget as M
+        self.assertEqual(M.search_name_parts('JANE SAMPLE'), ('SAMPLE', 'JANE'))
+        self.assertIsNone(M.search_name_parts('SAMPLE, '))
+
     def test_cap_is_required_and_finite(self):
         import miami_search_budget as M
         with tempfile.TemporaryDirectory() as tmp:

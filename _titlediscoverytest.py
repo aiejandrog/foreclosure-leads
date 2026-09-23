@@ -4,6 +4,11 @@ import miami_title_discovery as T
 
 
 class DossierTests(unittest.TestCase):
+    def test_owner_and_docket_names_still_searched_when_deed_missing(self):
+        plan = T.discovery_names({'owner':'TEST LLC'}, {'search_names':[],
+             'defendants':[{'name':'JANE TEST', 'source_ref':'party/1'}]})
+        self.assertEqual([p['name'] for p in plan], ['TEST LLC', 'JANE TEST'])
+
     def test_release_must_explicitly_cite_claim_and_never_resolves_attachment(self):
         claims = [{'book':'12', 'page_no':'34', 'attachment_status':'unknown'}]
         release = {'source_ref':'r', 'classification':{'kind':'satisfaction'},

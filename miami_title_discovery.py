@@ -12,6 +12,20 @@ def record_from_manifest(manifest):
         ('doC_TYPE','doc_type'), ('reC_DATE','rec_date'), ('booK_TYPE','book_type'))}
 
 
+def discovery_names(entry, title):
+    candidates = [{'name':entry['owner'], 'why':'lead owner; title not independently established', 'source_ref':'lead'}]
+    candidates.extend(title.get('search_names', []))
+    candidates.extend(dict(p, why='OCS defendant; title interest not established')
+                      for p in title.get('defendants', []))
+    result, seen = [], set()
+    for candidate in candidates:
+        name = candidate['name'].strip()
+        if name and name.upper() not in seen:
+            seen.add(name.upper())
+            result.append(candidate)
+    return result
+
+
 def reconcile_claims(claims, documents):
     from document_walk import key_of
     results = copy.deepcopy(claims)
@@ -38,6 +52,16 @@ def stored_evidence(case):
     import document_walk as W
     rows = W.stored_rows('MIAMI-DADE', case)
     manifests = {m.get('document_key'):m for m, _ in DS.stored_documents('MIAMI-DADE', case)}
+    valid = {}
+    for key, manifest in manifests.items():
+        pdf = Path(manifest.get('path') or '')
+        expected = manifest.get('rebuilt_sha256') or manifest.get('source_sha256')
+        if pdf.is_file() and hashlib.sha256(pdf.read_bytes()).hexdigest() == expected:
+            valid[key] = manifest
+    rows = [dict(row, stored=valid[row['document_key']],
+                 doc_type=valid[row['document_key']].get('document_name') or row.get('doc_type'))
+            for row in rows if row.get('document_key') in valid]
+    manifests = valid
     for path in DS.pipeline_folder('MIAMI-DADE', case).glob('*.json'):
         saved = DS.pipeline_load(path, {})
         manifest = saved.get('manifest') or {}
@@ -135,7 +159,7 @@ def investigate(entry, searcher, document_limit=30):
                 rows.extend(new)
                 present.add(ref)
             title = TP.build_title_parties(models, rows, inventory.get('raw'), folio)
-            plan = [p for p in title['search_names'] if p['name'] not in searched]
+            plan = [p for p in discovery_names(entry, title) if p['name'] not in searched]
             if not plan:
                 break
             report = W.run_name_searches(plan, index, capture, folio, owner_models=owner_models)
@@ -157,6 +181,17 @@ def investigate(entry, searcher, document_limit=30):
             queue=queue, ocr=DS.winocr, index=index, depth=3,
             budget=max(0, document_limit-fetched), keep_images=True)
         rows.extend(new_rows)
+        known = {W.key_of(m.get('reC_BOOK'), m.get('reC_PAGE')) for m in models}
+        new_manifests = [r.get('stored') for r in new_rows if isinstance(r.get('stored'), dict)]
+        new_manifests.extend(m for m, _ in DS.stored_documents('MIAMI-DADE', case))
+        for manifest in new_manifests:
+            if not manifest.get('record_key'):
+                continue
+            record = record_from_manifest(manifest)
+            key = W.key_of(record.get('reC_BOOK'), record.get('reC_PAGE'))
+            if key not in known:
+                known.add(key)
+                models.append(record)
         title = TP.build_title_parties(models, rows, inventory.get('raw'), folio)
         for party in title['search_names']:
             if party['name'] not in searched:

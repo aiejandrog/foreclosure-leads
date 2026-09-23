@@ -18,6 +18,25 @@ class CaptchaCapReached(RuntimeError):
     pass
 
 
+def search_name_parts(name):
+    """Honor explicit LAST, FIRST without changing the legacy shared parser.
+
+    Entity names keep commas and suffixes intact. For names without an explicit
+    comma, the legacy FIRST LAST fallback remains a search heuristic: it cannot
+    establish where an unmarked compound surname starts.
+    """
+    import records_liens as R
+    clean = ' '.join(str(name or '').strip().split())
+    if R.COMPANY_RE.search(clean) or R.COMPANY_SUFFIX_RE.search(clean):
+        return (clean, '')
+    if ',' in clean:
+        surname, given = (part.strip() for part in clean.split(',', 1))
+        if not surname or not given or ',' in given:
+            return None
+        return (surname, given)
+    return R.split_owner(clean)
+
+
 def _money(value, positive=False):
     try:
         amount = Decimal(str(value))
@@ -116,7 +135,7 @@ class CappedNameSearcher(NameSearcher):
                 self.raw_results[name] = models
                 self.routes[name] = 'cached_qs'
                 return models
-        parts = self.R.split_owner(name)
+        parts = search_name_parts(name)
         if not parts:
             self.gaps.append({'name': name, 'status': 'unknown', 'reason': 'name_not_searchable'})
             return None
