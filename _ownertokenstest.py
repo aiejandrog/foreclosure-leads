@@ -8,6 +8,48 @@ import run_owner_tokens as T
 
 
 class TokenTests(unittest.TestCase):
+    def test_cli_final_balance_checked_after_interruption_without_new_solves(self):
+        events=[]
+        class Solver:
+            def __init__(self,*args): pass
+            def finish(self):
+                events.append('balance')
+                return {'balance_spend_usd':None}
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            (base/'leads.json').write_text('[]')
+            (base/'key').write_text('synthetic-test-key')
+            with patch('captcha_cost_cutoff.PaidCutoffSolver',Solver), patch.object(T,'process',side_effect=KeyboardInterrupt), patch.object(T.TokenLadder,'close',side_effect=lambda:events.append('close')):
+                with self.assertRaises(KeyboardInterrupt):
+                    T.main(['--leads-file',str(base/'leads.json'),'--state',str(base/'state.json'),
+                            '--key-file',str(base/'key'),'--qs-cache',str(base/'cache.json'),
+                            '--token-budget','5','--captcha-max-spend','1.50'])
+            self.assertEqual(events,['close','balance'])
+
+    def test_cache_then_free_then_paid_and_no_paid_for_empty_or_broad_results(self):
+        import records_liens as R
+        from document_walk import NameSearcher
+        for cached, free, rows, expected in [
+            ('cached',None,[{}],['cached']),
+            ('expired','free',[{}],['expired','browser','free']),
+            (None,'free',[],['browser','free']),
+            (None,'free',[{}]*500,['browser','free']),
+            (None,None,None,['browser','paid']),
+        ]:
+            events=[]
+            def records(token):
+                events.append(token)
+                return None if token=='expired' else rows
+            def browser_token(*args):
+                events.append('browser'); return free
+            def paid(*args,**kwargs):
+                events.append('paid'); return ('paid-token',2)
+            with patch.object(R,'records_by_qs',side_effect=records), patch.object(R,'camoufox_qs',side_effect=browser_token), patch.object(NameSearcher,'_camoufox',return_value=object()):
+                ladder=T.TokenLadder({'Owner':cached} if cached else {},object(),paid)
+                token,hits=ladder.search_token('Owner',('Owner',''))
+                self.assertEqual(events,expected)
+                self.assertEqual(hits,2 if expected[-1]=='paid' else len(rows))
+
     def test_cli_cannot_raise_authorized_cutoff(self):
         with self.assertRaises(SystemExit):
             T.main(['--leads-file','absent','--state','absent','--token-budget','284',

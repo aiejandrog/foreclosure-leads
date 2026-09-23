@@ -1,7 +1,7 @@
-"""Explicitly approved conservative cutoff, NOT a provider-enforced hard cap.
+"""Durable 300-submission ceiling and real account-balance spend checks.
 
-The provider reports cost after solving: one request may exceed the cutoff.
-Unknown costs halt the run and preserve a durable pending marker for reconciliation.
+Balance change is account-wide, so concurrent spending/refunds affect the report.
+Unknown task costs retain their pending marker; no estimated dollar reservation.
 """
 from decimal import Decimal, InvalidOperation
 import threading
@@ -24,14 +24,14 @@ def _money(value):
 
 
 class PaidCutoffSolver:
-    reserve = Decimal('0.003')
+    max_paid_attempts = 300
 
     def __init__(self, state, limit, key, session=None, sleep=time.sleep):
         if not getattr(state, 'lock', None) or state.lock.closed:
             raise ValueError('An entered exclusive State is required')
         self.state, self.limit = state, _money(limit)
-        if self.limit <= 0:
-            raise ValueError('Positive cutoff required')
+        if self.limit <= 0 or self.limit > Decimal('1.50'):
+            raise ValueError('Cutoff must be positive and at most 1.50')
         prior = state.data.get('captcha_cutoff_decimal')
         if prior is not None and self.limit > _money(prior):
             raise ValueError('Existing cutoff cannot be raised')
@@ -47,7 +47,52 @@ class PaidCutoffSolver:
         state.data['captcha_cutoff_decimal'] = str(self.limit)
         state.data.setdefault('captcha_actual_decimal', str(_money(state.data['actual_usd'])))
         state.data.setdefault('captcha_receipts', [])
+        derived = len(state.data['captcha_receipts']) + int(bool(state.data.get('captcha_pending')))
+        count = state.data.get('captcha_paid_attempts', derived)
+        if type(count) is not int or count < 0:
+            raise ValueError('Invalid paid attempt count')
+        state.data['captcha_paid_attempts'] = max(count, derived)
         state.save()
+
+    def _balance(self):
+        data = self.state.data
+        baseline = data.get('captcha_balance_before_decimal')
+        if baseline is None and (data['captcha_paid_attempts'] or _money(data['captcha_actual_decimal']) > 0):
+            raise CutoffStopped('Historical paid run has no starting balance; cannot invent a baseline')
+        try:
+            result = self._post('getBalance', {})
+            if result.get('errorId') != 0 or 'balance' not in result:
+                raise ValueError('Invalid balance response')
+            balance = _money(result['balance'])
+        except (CutoffStopped, ValueError):
+            data['captcha_halted'] = 'Account balance unavailable; paid work stopped'
+            self.state.save()
+            raise CutoffStopped(data['captcha_halted']) from None
+        if baseline is None:
+            baseline = str(balance)
+            data['captcha_balance_before_decimal'] = baseline
+        debit = _money(baseline) - balance
+        data['captcha_balance_after_decimal'] = str(balance)
+        data['captcha_balance_debit_decimal'] = str(debit)
+        data['captcha_final_balance_unsettled'] = bool(data.get('captcha_pending'))
+        if debit > self.limit:
+            data['captcha_halted'] = 'Account balance drop exceeds approved cutoff'
+        self.state.save()
+        if debit > self.limit:
+            raise CutoffStopped(data['captcha_halted'])
+        return {'balance_before_usd': float(_money(baseline)),
+                'balance_after_usd': float(balance), 'balance_spend_usd': float(debit),
+                'paid_attempts': data['captcha_paid_attempts'],
+                'final_balance_unsettled': data['captcha_final_balance_unsettled']}
+
+    def finish(self):
+        """Read and persist final balance, including when called after interruption."""
+        if not self.guard.acquire(blocking=False):
+            raise CutoffStopped('Cannot finalize while a paid request is running')
+        try:
+            return self._balance()
+        finally:
+            self.guard.release()
 
     def _post(self, method, payload):
         try:
@@ -80,10 +125,11 @@ class PaidCutoffSolver:
         if data.get('captcha_pending') or data.get('captcha_halted') or data.get('reserved'):
             raise CutoffStopped('Unresolved prior request or stop marker; no new paid task permitted')
         actual = _money(data['captcha_actual_decimal'])
-        if actual >= self.limit or self.limit - actual < self.reserve:
-            raise CutoffStopped('Conservative paid cutoff reached')
+        if data['captcha_paid_attempts'] >= self.max_paid_attempts:
+            raise CutoffStopped('Hard ceiling of 300 paid submissions reached')
+        self._balance()
         data['captcha_pending'] = {'stage': 'submitting', 'task_id': None}
-        data['reserved']['captcha_pending'] = float(self.reserve)
+        data['captcha_paid_attempts'] += 1
         self.state.save()  # MUST be durable before createTask can charge.
         created = self._post('createTask', {'task': {'type': 'TurnstileTaskProxyless',
                                                  'websiteURL': page_url, 'websiteKey': site_key}})
@@ -121,5 +167,6 @@ class PaidCutoffSolver:
                 raise CutoffStopped(data['captcha_halted']) from None
             if data.get('captcha_halted'):
                 raise CutoffStopped(data['captcha_halted'])
+            self._balance()
             return token
         raise CutoffStopped('Polling deadline reached; pending charge retained')
