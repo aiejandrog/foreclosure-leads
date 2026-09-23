@@ -406,7 +406,7 @@ def load_manifest(path):
 # with the character-floor reader, which called a watermark a read page and marked the job done,
 # and the fixed reader then refused to look at it again. A document is not finished being read
 # because an older, worse reader said so.
-READER_VERSION = 3
+READER_VERSION = 4
 MIN_PAGE_CHARS = 40
 MAX_IMAGE_COVERAGE = 0.10
 MIN_SANE_RATIO = 0.70
@@ -633,6 +633,9 @@ def read_pages(content_or_path, min_chars=MIN_PAGE_CHARS, ocr=None, keep_images_
                 elif p['page'] in errors:
                     p['ocr_error'] = errors[p['page']]
                 elif p['page'] in got:
+                    # Short OCR can be an exhibit divider or a fragment of obscured content.
+                    # Preserve it for image assessment, but do not admit it as complete text.
+                    p['provisional_ocr_text'] = value
                     p['ocr_error'] = 'OCR text was below the %d-character floor' % min_chars
     finally:
         doc.close()
