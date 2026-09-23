@@ -7,6 +7,8 @@ python miami_title_discovery.py --case YYYY-NNNNNN-CA-NN --captcha-max-spend 1.0
 ```
 
 Repeat `--case` for a shared capped run; remove `--dry-run` to request county records.
+Use `--report-only` instead to reconcile previously saved evidence without county
+requests or paid reading.
 Only Miami leads are accepted. Evidence and the persistent CAPTCHA ledger live in
 the private DealFlow `title_discovery` directory. The dossier receives an additive
 `title_discovery` section; section d remains unchanged.

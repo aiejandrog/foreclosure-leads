@@ -244,6 +244,51 @@ def missed_records(records, owner_records):
     return [row for row in records if key(row) not in known]
 
 
+def case_search_gaps(report, gaps):
+    names = {report.get('owner')}
+    names.update(row['name'] for search in report.get('other_name_searches', [])
+                 for row in search.get('searched', []))
+    return [gap for gap in gaps if gap.get('name') in names]
+
+
+def refresh_saved_report(report, rows, seeds):
+    """Reconcile saved evidence without repeating county requests or paid reading."""
+    import miami_title_parties as TP
+    import document_walk as W
+    import case_dossier as CD
+    result = copy.deepcopy(report)
+    old_captcha = result.get('captcha_gaps', [])
+    result['captcha_gaps'] = case_search_gaps(result, old_captcha)
+    result['gaps'] = [g for g in result.get('gaps', []) if g not in [str(c) for c in old_captcha]]
+    result['gaps'].extend(str(c) for c in result['captcha_gaps'])
+    old_title = result['title_parties']
+    models = list(seeds)
+    known = {W.key_of(m.get('reC_BOOK'), m.get('reC_PAGE')) for m in models}
+    raw = result.get('private_search_results') or {}
+    for records in raw.values():
+        for record in records:
+            key = W.key_of(record.get('reC_BOOK'), record.get('reC_PAGE'))
+            if key not in known:
+                known.add(key)
+                models.append(record)
+    docket = {'parties':[{'partyName':p['name'], 'partyTypeDesc':'DEFENDANT'}
+                         for p in old_title.get('defendants', [])]}
+    title = TP.build_title_parties(models, rows, docket, result['folio'])
+    result['title_parties'] = title
+    result['gaps'] = [g for g in result.get('gaps', []) if g not in old_title.get('gaps', [])]
+    result['gaps'].extend(title['gaps'])
+    baseline = raw.get(result['owner'])
+    result['stored_instruments_absent_from_owner_query'] = [
+        {'book':m.get('reC_BOOK'), 'page_no':m.get('reC_PAGE'), 'doc_type':m.get('doC_TYPE'),
+         'recorded_date':m.get('reC_DATE'), 'basis':'Already-stored evidence absent from owner query; not necessarily new debt'}
+        for m in missed_records(seeds, baseline)]
+    CD.classify_documents(rows, result['case'])
+    for search in result.get('other_name_searches', []):
+        search['potential_title_party_claims'] = reconcile_claims(search.get('potential_title_party_claims', []), rows)
+    result['reconciled_at'] = datetime.now(timezone.utc).isoformat()
+    return result
+
+
 def validate_case(case):
     if not re.fullmatch(r'20\d{2}-\d{6}-(?:CA|CC)-\d{2}', case):
         raise ValueError('Expected a Miami civil case identifier')
@@ -262,6 +307,7 @@ def main(argv=None):
     parser.add_argument('--captcha-max-spend', type=float, required=True)
     parser.add_argument('--vision-max-spend', type=float, required=True)
     parser.add_argument('--dry-run', action='store_true')
+    parser.add_argument('--report-only', action='store_true', help='reconcile saved private evidence without network or spending')
     args = parser.parse_args(argv)
     for cap in (args.captcha_max_spend, args.vision_max_spend):
         if not math.isfinite(cap) or cap <= 0:
@@ -279,6 +325,21 @@ def main(argv=None):
         return 0
     private = case_review.output_path('title_discovery')
     private.mkdir(parents=True, exist_ok=True)
+    if args.report_only:
+        for entry in entries:
+            path = private / (entry['case'] + '.json')
+            report = RD._load(path, None)
+            if not report:
+                parser.error('No saved investigation for ' + entry['case'])
+            report.update(owner=entry['owner'], folio=entry['folio'])
+            rows, seeds = stored_evidence(entry['case'])
+            report = refresh_saved_report(report, rows, seeds)
+            DS.pipeline_write(path, report)
+            dossier = RD.dossier_path('MIAMI-DADE', entry['case'])
+            DS.pipeline_write(dossier, attach_report(RD._load(dossier, {}),
+                {k:v for k,v in report.items() if k != 'private_search_results'}))
+            print(entry['case'] + ': saved evidence reconciled; no requests or spend')
+        return 0
     cache_path = private / 'records_qs.json'
     qs = RD._load(RD.QS_CACHE, {})
     qs.update(RD._load(cache_path, {}))
@@ -287,10 +348,11 @@ def main(argv=None):
         try:
             for entry in entries:
                 report = investigate(entry, searcher)
+                report.update(owner=entry['owner'], folio=entry['folio'])
                 report['vision_cap_usd'] = args.vision_max_spend
                 report['captcha'] = budget.report()
-                report['captcha_gaps'] = searcher.gaps
-                report['gaps'].extend(str(g) for g in searcher.gaps)
+                report['captcha_gaps'] = case_search_gaps(report, searcher.gaps)
+                report['gaps'].extend(str(g) for g in report['captcha_gaps'])
                 DS.pipeline_write(private / (entry['case'] + '.json'), report)
                 path = RD.dossier_path('MIAMI-DADE', entry['case'])
                 old = RD._load(path, {'case':entry['case'], 'county':'MIAMI-DADE', 'complete':False})

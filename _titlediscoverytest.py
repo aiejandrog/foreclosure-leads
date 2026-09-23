@@ -4,6 +4,21 @@ import miami_title_discovery as T
 
 
 class DossierTests(unittest.TestCase):
+    def test_shared_run_does_not_assign_another_cases_captcha_gap(self):
+        result = T.case_search_gaps({'owner':'SECOND', 'other_name_searches':[]},
+                  [{'name':'FIRST','reason':'blocked'}, {'name':'SECOND','reason':'blocked'}])
+        self.assertEqual(result, [{'name':'SECOND','reason':'blocked'}])
+
+    def test_saved_reconciliation_keeps_owner_baseline_distinct_from_other_names(self):
+        report = {'case':'2099-000001-CA-01', 'owner':'TEST OWNER', 'folio':'123',
+                  'title_parties':{'defendants':[], 'gaps':[]}, 'gaps':[],
+                  'private_search_results':{'TEST OWNER':[{'reC_BOOK':1,'reC_PAGE':2}],
+                                            'PRIOR OWNER':[{'reC_BOOK':3,'reC_PAGE':4}]}}
+        seeds = [{'reC_BOOK':3,'reC_PAGE':4,'doC_TYPE':'MORTGAGE'}]
+        result = T.refresh_saved_report(report, [], seeds)
+        self.assertEqual(result['stored_instruments_absent_from_owner_query'][0]['book'], 3)
+        self.assertNotIn('reconciled_at', report)
+
     def test_owner_and_docket_names_still_searched_when_deed_missing(self):
         plan = T.discovery_names({'owner':'TEST LLC'}, {'search_names':[],
              'defendants':[{'name':'JANE TEST', 'source_ref':'party/1'}]})
