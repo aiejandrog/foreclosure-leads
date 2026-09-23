@@ -80,5 +80,14 @@ class DossierTests(unittest.TestCase):
         self.assertEqual(T.validate_case('2026-000001-CC-26'), '2026-000001-CC-26')
 
 
+class NameDedupeTests(unittest.TestCase):
+    def test_one_person_in_two_spellings_is_searched_once(self):
+        # Greptile on #50: two spellings would spend two paid searches.
+        names = [c['name'] for c in T.discovery_names(
+            {'owner': 'JOHN SMITH'}, {'defendants': [{'name': 'SMITH, JOHN'},
+                                                     {'name': 'SMITH, JOHN JR'}]})]
+        self.assertEqual(names, ['JOHN SMITH', 'SMITH, JOHN JR'])
+
+
 if __name__ == '__main__':
     unittest.main()

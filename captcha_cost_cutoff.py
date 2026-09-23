@@ -75,10 +75,13 @@ class PaidCutoffSolver:
         data['captcha_balance_after_decimal'] = str(balance)
         data['captcha_balance_debit_decimal'] = str(debit)
         data['captcha_final_balance_unsettled'] = bool(data.get('captcha_pending'))
-        if debit > self.limit:
-            data['captcha_halted'] = 'Account balance drop exceeds approved cutoff'
+        # This run's own receipts count too: a refund or credit elsewhere on the account can
+        # hide real charges from the balance, never the other way round (Greptile on #50).
+        spent = max(debit, _money(data['captcha_actual_decimal']))
+        if spent > self.limit:
+            data['captcha_halted'] = 'Spend (balance drop or receipts) exceeds approved cutoff'
         self.state.save()
-        if debit > self.limit:
+        if spent > self.limit:
             raise CutoffStopped(data['captcha_halted'])
         return {'balance_before_usd': float(_money(baseline)),
                 'balance_after_usd': float(balance), 'balance_spend_usd': float(debit),
@@ -127,7 +130,16 @@ class PaidCutoffSolver:
         actual = _money(data['captcha_actual_decimal'])
         if data['captcha_paid_attempts'] >= self.max_paid_attempts:
             raise CutoffStopped('Hard ceiling of 300 paid submissions reached')
-        self._balance()
+        spent = _money(self._balance()['balance_spend_usd'])
+        spent = max(spent, actual)
+        # The price of a task is known only after it is charged. Refuse the next one when the
+        # dearest task this run has paid for would no longer fit, so a run near its cutoff stops
+        # below it instead of one task over (Greptile on #50, 2026-09-23).
+        dearest = max((_money(r['cost']) for r in data['captcha_receipts']), default=Decimal(0))
+        if spent >= self.limit or spent + dearest > self.limit:
+            data['captcha_halted'] = 'Next task could exceed the approved cutoff; paid work stopped'
+            self.state.save()
+            raise CutoffStopped(data['captcha_halted'])
         data['captcha_pending'] = {'stage': 'submitting', 'task_id': None}
         data['captcha_paid_attempts'] += 1
         self.state.save()  # MUST be durable before createTask can charge.

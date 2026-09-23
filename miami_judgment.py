@@ -778,13 +778,14 @@ GRAY_CUTOFF_SWEEP = (160, 200, 130, 220)
 # earlier run", demoted it to `unknown` because a skipped row has no reading to classify, and
 # never exercised the new check on the text at all. The verdict looked right and nothing had
 # re-read anything.
+# 10: a PARTIAL satisfaction of judgment is its own kind and no longer clears the judgment.
 # 9: vision totals are admitted only by labeled_sum_check (typed rows, every charge summed to the
 # cent, subtotals checked) and the reader moved to READER_VERSION 5, both on 2026-09-23 without a
 # bump here, so the nightly's resume skip would have kept every v8 verdict unchecked.
 # 8: the nightly's judgments_only filter now also fetches satisfactions the plaintiff signed.
 # 7: the classifier learned satisfaction_of_judgment (a satisfaction quotes its judgment, so
 # version 6 would have filed it as a final judgment and reported a paid debt as owed).
-PIPELINE_VERSION = 9
+PIPELINE_VERSION = 10
 
 
 def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,

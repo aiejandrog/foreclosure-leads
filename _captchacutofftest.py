@@ -56,6 +56,28 @@ class CutoffTests(unittest.TestCase):
         with self.assertRaises(CutoffStopped): solver.finish()
         self.assertEqual(state.data['captcha_paid_attempts'],1)
 
+    def test_own_receipts_stop_the_run_even_when_the_balance_was_refunded(self):
+        # Greptile on #50: a credit elsewhere on the account can hide this run's charges.
+        state = self.run_state()
+        state.data.update(captcha_balance_before_decimal='10', captcha_actual_decimal='1.50',
+                          captcha_receipts=[{'task_id': 1, 'cost': '0.003'}],
+                          captcha_paid_attempts=1)
+        session = Session([], state, balances=[10])
+        solver = PaidCutoffSolver(state, 1.5, 'key', session=session, sleep=lambda _: None)
+        with self.assertRaises(CutoffStopped): solver('s', 'https://example.com')
+        self.assertFalse(any(x.endswith('createTask') for x in session.calls))
+
+    def test_a_task_that_would_not_fit_is_never_submitted(self):
+        # Greptile on #50: price is known only after the charge, so stop BELOW the cutoff.
+        state = self.run_state()
+        state.data.update(captcha_balance_before_decimal='10', captcha_actual_decimal='0.998',
+                          captcha_receipts=[{'task_id': 1, 'cost': '0.003'}],
+                          captcha_paid_attempts=1)
+        session = Session([], state, balances=[9.002])
+        solver = PaidCutoffSolver(state, 1.0, 'key', session=session, sleep=lambda _: None)
+        with self.assertRaises(CutoffStopped): solver('s', 'https://example.com')
+        self.assertFalse(any(x.endswith('createTask') for x in session.calls))
+
     def test_malformed_balance_cannot_submit(self):
         state = self.run_state(); session = Session([],state,balances=[{'errorId':0,'balance':'NaN'}])
         solver = PaidCutoffSolver(state,1.5,'key',session=session)

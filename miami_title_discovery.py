@@ -20,8 +20,11 @@ def discovery_names(entry, title):
     result, seen = [], set()
     for candidate in candidates:
         name = candidate['name'].strip()
-        if name and name.upper() not in seen:
-            seen.add(name.upper())
+        # 'SMITH, JOHN' from the docket and 'JOHN SMITH' from a deed are one search, not two
+        # paid ones: compare the words, not the spelling (Greptile on #50, 2026-09-23).
+        key = tuple(sorted(re.findall(r'[A-Z0-9&]+', name.upper())))
+        if name and key not in seen:
+            seen.add(key)
             result.append(candidate)
     return result
 

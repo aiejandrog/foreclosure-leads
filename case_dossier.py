@@ -192,8 +192,18 @@ def _operative_judgment(rows):
                     'why': ('the judgment was read AND a satisfaction of it was read (%s): the '
                             'judgment amount is not an outstanding debt'
                             % ', '.join(str(r) for r in satisfied_by))}
-        return {'operative': refs[0], 'candidates': refs, 'certain': True,
-                'amount': printed, 'satisfied': False, 'satisfied_by': []}
+        partial = [r.get('source_ref') for r in rows
+                   if r.get('is') == 'partial_satisfaction_of_judgment']
+        out = {'operative': refs[0], 'candidates': refs, 'certain': True,
+               'amount': printed, 'satisfied': False, 'satisfied_by': []}
+        if partial:
+            # A payment was acknowledged but the judgment is not discharged. The printed figure
+            # is now an upper bound, not the balance, and the reader is told which paper says so.
+            out.update({'partially_satisfied_by': partial,
+                        'why': ('a PARTIAL satisfaction was read (%s): part of the judgment '
+                                'amount was paid, so the printed figure overstates what is owed'
+                                % ', '.join(str(r) for r in partial))})
+        return out
     return {'operative': None, 'candidates': refs, 'certain': False,
             'satisfied_by': satisfied_by,
             'why': ('%d read documents on this case classify as a final judgment (%s). Which one '

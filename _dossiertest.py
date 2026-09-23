@@ -165,6 +165,21 @@ class SatisfactionOfJudgmentTests(unittest.TestCase):
             rows.append({'source_ref': 'court:40', 'is': 'satisfaction_of_judgment', 'amounts': []})
         return rows
 
+    def test_a_partial_satisfaction_is_its_own_kind(self):
+        # Greptile on #50: a partial release acknowledges a payment, not a discharge.
+        lines = [l.replace('SATISFACTION OF FINAL', 'PARTIAL SATISFACTION OF FINAL')
+                 .replace('full payment and satisfaction', 'partial payment') for l in SATISFACTION]
+        self.assertEqual(DC.classify(reading_of(lines))['kind'], 'partial_satisfaction_of_judgment')
+
+    def test_a_partial_satisfaction_keeps_the_amount_and_says_so(self):
+        rows = self._rows(False) + [{'source_ref': 'court:41',
+                                     'is': 'partial_satisfaction_of_judgment', 'amounts': []}]
+        j = CD._operative_judgment(rows)
+        self.assertEqual(j['amount'], 993885.33)
+        self.assertFalse(j['satisfied'])
+        self.assertEqual(j['partially_satisfied_by'], ['court:41'])
+
+
     def test_a_satisfied_judgment_carries_no_outstanding_amount(self):
         j = CD._operative_judgment(self._rows(True))
         self.assertIsNone(j['amount'])

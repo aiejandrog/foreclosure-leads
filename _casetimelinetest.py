@@ -213,5 +213,14 @@ class TimelineTests(unittest.TestCase):
                 self.assertEqual(run([entry(1, 'Final Judgment'), entry(2, text)])['status']['kind'], 'judgment_entered')
 
 
+class VacaturTests(unittest.TestCase):
+    def test_an_order_vacating_a_certificate_is_not_a_sale(self):
+        # Greptile on #50, 2026-09-23.
+        for title in ('Order vacating certificate of title', 'ORDER VACATING CERTIFICATE OF SALE',
+                      'Order setting aside foreclosure sale'):
+            self.assertEqual(T.classify(title), 'vacatur', title)
+        self.assertEqual(T.classify('Certificate of title'), 'certificate_of_title')
+
+
 if __name__ == '__main__':
     unittest.main()

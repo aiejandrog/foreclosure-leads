@@ -123,6 +123,9 @@ INDEX_HINTS = [
 ]
 
 
+_PARTIAL_RE = re.compile(r'\bPARTIAL\s+(RELEASE|SATISFACTION)\b', re.I)
+
+
 def index_kind(label):
     for pattern, kind in INDEX_HINTS:
         if pattern.search(str(label or '')):
@@ -204,6 +207,12 @@ def classify(reading, index_label=''):
                      'runner_up': runner, 'index_agrees': None})
         return base
 
+    if top == 'satisfaction_of_judgment' and any(
+            _PARTIAL_RE.search(p.get('text') or '') for p in pages):
+        # A PARTIAL satisfaction acknowledges a payment, not a discharge. Filing it under the
+        # full kind would let case_dossier clear the whole judgment (Greptile on #50, 2026-09-23).
+        top = 'partial_satisfaction_of_judgment'
+        evidence[top] = evidence['satisfaction_of_judgment']
     title_hits = [h for h in evidence[top] if h.get('as') == 'title']
     on_first = any(h['page'] == pages[0]['page'] for h in title_hits)
     confidence = 'high' if (on_first and top_score >= TITLE_ON_FIRST_PAGE + CORROBORATOR) else (

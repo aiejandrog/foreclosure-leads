@@ -46,7 +46,9 @@ def classify(text):
         return 'motion'
     checks = [
         ('order_on_motion', r'^order.*(?:denying|denied)'),
-        ('vacatur', r'order.*(?:vacat|set.*aside).*judgment'),
+        # An order undoing a certificate or the sale must not fall through to the certificate
+        # rules below and read as fresh evidence of a sale (Greptile on #50, 2026-09-23).
+        ('vacatur', r'order.*(?:vacat|set.*aside).*(?:judgment|certificate of (?:title|sale)|sale)'),
         ('notice_of_voluntary_dismissal', r'voluntary dismissal'),
         ('order_on_motion', r'order.*(?:denying|denied)'),
         ('relief_from_stay', r'(?:order|notice).*(?:relief from|lift|terminat).*(?:stay)'),
@@ -106,7 +108,7 @@ def _transition(e):
                 'suggestion_of_bankruptcy': 'stayed_by_bankruptcy', 'stay': 'stayed_by_bankruptcy',
                 'notice_of_voluntary_dismissal': 'dismissed', 'order_of_dismissal': 'dismissed',
                 'satisfaction': 'satisfied_redeemed', 'certificate_of_sale': 'sold', 'certificate_of_title': 'sold'}
-    if kind == 'vacatur': return {'kind': 'unclear', 'evidence': [e['entry_id']], 'reason': 'Judgment vacatur found; subsequent case posture requires explicit evidence.'}
+    if kind == 'vacatur': return {'kind': 'unclear', 'evidence': [e['entry_id']], 'reason': 'Order vacating the judgment, certificate or sale found; subsequent case posture requires explicit evidence.'}
     result = statuses.get(kind)
     if result is None: return None
     r = {'kind': result, 'evidence': [e['entry_id']], 'reason': e['operative_text']}
