@@ -266,6 +266,15 @@ try:
           _stay(NOF('02/01/2026', 'Voluntary Petition Chapter 13'))[0] is True)
     check('a bare dismissal of a defendant never ends a bankruptcy stay',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Voluntary Dismissal as to Defendant Unknown Tenant'))[0] is True)
+    # 2025-012246-CA-01 (sweep of all Miami leads, 2026-09-24), verbatim from the fresh docket: the
+    # foreclosure court's agreed order DENYING a motion to dismiss the foreclosure, with no bankruptcy
+    # number on it, read as the stay's dismissal and left a 10-05 sale callable under a live petition.
+    _sg = lambda c: {'docketCode': 'SGBK', 'docketDescrition': 'Suggestion of Bankruptcy', 'eventDate': '09/30/2025', 'comments': c}
+    check('an order denying a motion to dismiss the foreclosure never ends a bankruptcy stay',
+          _stay(_sg('AMENDED BKC: 25-20935-RAM'), _sg('NO BANKRUPTCY CASE NUMBER'),
+                {'docketCode': 'NCHRCV', 'docketDescrition': 'Notice of Cancellation of Hearing', 'eventDate': '02/17/2026', 'comments': ''},
+                {'docketCode': 'ODMDCV', 'docketDescrition': 'Order Denying Motion to Dismiss', 'eventDate': '02/17/2026',
+                 'comments': 'AGREED ORDER DENYING MOTION TO DISMISS'})[0] is True)
     check('a MORTGAGE reinstatement is not a bankruptcy',
           _stay({'docketDescrition': 'Emergency Motion to Cancel Sale', 'eventDate': '09/24/2026',
                  'comments': 'reinstatement amount 230283.71'}) == (False, '', ''))
