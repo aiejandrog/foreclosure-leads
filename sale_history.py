@@ -266,13 +266,37 @@ def main():
             surv, sched, done, who = _count(dks)
             bk = _bk_count(dks)
             bkact, bkd, lifted = _bk_stay(dks)
+            # A STAY WE ALREADY HOLD ENDS ONLY ON THE SAME EVIDENCE THAT OPENED IT. The prior stay is
+            # the cached one or, when the cache entry is gone, the flag on the row itself. It is cleared
+            # only when this read shows a bankruptcy filing on or after the prior filing date AND a
+            # closing line after that filing (_bk_stay's own pairing). An empty or short answer, a
+            # closing line with no filing line, an older stay's closure, or a prior date we cannot
+            # read all keep the stay: a wrongly kept stay costs a call, a wrongly cleared one is a
+            # §362 contact.
+            _prev = ent if isinstance(ent, dict) else {}
+            if not bkact and (_prev.get('a') or r.get('sale_bk_active')):
+                _pbd = _prev.get('bd') or r.get('sale_bk_date') or ''
+                _piso = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else _iso_date(_pbd)
+                if not (_piso and bkd and bkd >= _piso and lifted):
+                    # still active: drop any lift date from an OLDER closed stay in this read, since
+                    # the board's gates read a lift date as "contact is legal again"
+                    bkact, bkd, lifted = True, _pbd or bkd, ''
             # a standalone bankruptcy filing IS the owner's move — attribute when cancels didn't
             if bk and not who:
                 who = 'owner'
             r['sale_survived'] = surv; r['sale_scheduled'] = sched
             if who: r['sale_who'] = who
             if bk: r['sale_bk'] = bk
-            if bkact: r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+            if bkact:
+                r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+                r.pop('sale_stay_lifted', None)      # gates read a lift date as "contact is legal"
+            else:
+                # A LIVE READ saying no stay is active overrides a flag already on the row. Since
+                # 2026-09-24 foreclosure_leads.main() writes the cached stays into leads_final.json
+                # before this step runs, so a stay the docket now shows lifted would otherwise stay
+                # on the row (and gate the lead) until the next scrape. Only a successful fetch
+                # clears; a failed one (dks None) and a cache hit never do.
+                r.pop('sale_bk_active', None); r.pop('sale_bk_date', None)
             if lifted: r['sale_stay_lifted'] = lifted
             cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 'b': bk,
                            'a': bkact, 'bd': bkd, 'sl': lifted, 't': now, 'v': CACHE_VER}
