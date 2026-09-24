@@ -136,17 +136,6 @@ def _bk_stay(dks):
     return active, latest, lifted
 
 
-def _bk_closes(dks):
-    """ISO dates of every stay-closing line (dismissal, discharge, relief) on the docket."""
-    out = []
-    for e in dks or []:
-        tx = (e.get('docketDescrition') or e.get('docketDescription') or '') + ' ' + (e.get('comments') or '')
-        iso = _iso_date(e.get('eventDate'))
-        if iso and _BKCLOSE.search(tx):
-            out.append(iso)
-    return out
-
-
 def _bk_active(dks):
     """kimi's original contract, preserved for its callers/tests."""
     active, latest, _ = _bk_stay(dks)
@@ -277,20 +266,18 @@ def main():
             surv, sched, done, who = _count(dks)
             bk = _bk_count(dks)
             bkact, bkd, lifted = _bk_stay(dks)
-            # ONLY A CLOSING LINE ENDS A STAY WE ALREADY KNEW ABOUT. The prior stay is the cached one
-            # or, when the cache entry is gone, the flag on the row itself. A read that shows no
-            # bankruptcy line, or only filings older than the one we hold, is not evidence it ended:
-            # an empty or short docket answer would otherwise flip it to inactive here and in the
-            # cache and make the lead callable. A dismissal / discharge / relief line on or after
-            # the prior filing date ends it, even when this read no longer shows the filing itself.
+            # A STAY WE ALREADY HOLD ENDS ONLY ON THE SAME EVIDENCE THAT OPENED IT. The prior stay is
+            # the cached one or, when the cache entry is gone, the flag on the row itself. It is cleared
+            # only when this read shows a bankruptcy filing on or after the prior filing date AND a
+            # closing line after that filing (_bk_stay's own pairing). An empty or short answer, a
+            # closing line with no filing line, an older stay's closure, or a prior date we cannot
+            # read all keep the stay: a wrongly kept stay costs a call, a wrongly cleared one is a
+            # §362 contact.
             _prev = ent if isinstance(ent, dict) else {}
             if not bkact and (_prev.get('a') or r.get('sale_bk_active')):
                 _pbd = _prev.get('bd') or r.get('sale_bk_date') or ''
-                _floor = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else ''
-                _ended = [c for c in _bk_closes(dks) if c >= _floor]
-                if _ended:
-                    lifted = max(_ended)
-                else:
+                _piso = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else _iso_date(_pbd)
+                if not (_piso and bkd and bkd >= _piso and lifted):
                     # still active: drop any lift date from an OLDER closed stay in this read, since
                     # the board's gates read a lift date as "contact is legal again"
                     bkact, bkd, lifted = True, _pbd or bkd, ''

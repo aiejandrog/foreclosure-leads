@@ -105,9 +105,11 @@ try:
         '2099-000007-CA-01': [],                                           # row flagged, cache entry gone
         '2099-000008-CA-01': [BK('05/01/2026'), CLOSE('06/01/2026')],     # only an OLDER stay, closed
         '2099-000009-CA-01': [BK('09/15/2026')],                           # new stay, row has an old lift
+        '2099-000010-CA-01': [BK('05/01/2026'), CLOSE('06/01/2026')],     # older stay closed; prior date slash-form
     }
     extra_cache = {'2099-000006-CA-01': {'a': True, 'bd': '2026-07-10'},
-                   '2099-000008-CA-01': {'a': True, 'bd': '2026-09-10'}}
+                   '2099-000008-CA-01': {'a': True, 'bd': '2026-09-10'},
+                   '2099-000010-CA-01': {'a': True, 'bd': '09/10/2026'}}
     _cf = os.path.join(tmp, 'sale_history_cache.json')
     json.dump(dict(json.load(open(_cf)), **extra_cache), open(_cf, 'w'))
     _lf = os.path.join(tmp, 'leads_final.json')
@@ -115,7 +117,8 @@ try:
         {'Case #': '2099-000006-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-07-10'},
         {'Case #': '2099-000007-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-06-01'},
         {'Case #': '2099-000008-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-09-10'},
-        {'Case #': '2099-000009-CA-01', 'sale_stay_lifted': '2026-01-01'}], open(_lf, 'w'))
+        {'Case #': '2099-000009-CA-01', 'sale_stay_lifted': '2026-01-01'},
+        {'Case #': '2099-000010-CA-01', 'sale_bk_active': True, 'sale_bk_date': '09/10/2026'}], open(_lf, 'w'))
     _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time')}
     _argv = sys.argv
     try:
@@ -137,20 +140,23 @@ try:
     check('an empty docket never ends a cached stay (row or cache)',
           on('2099-000005-CA-01') and after_sh['2099-000005-CA-01'].get('sale_bk_date') == '07/01/2026'
           and _cache_now['2099-000005-CA-01'].get('a') is True)
-    check('a closing line ends a cached stay even when the read omits the filing line',
-          not on('2099-000006-CA-01') and _cache_now['2099-000006-CA-01'].get('a') is False
-          and _cache_now['2099-000006-CA-01'].get('sl') == '2026-08-01')
+    check('a closing line with no filing line does not end a cached stay (it may close another matter)',
+          on('2099-000006-CA-01') and _cache_now['2099-000006-CA-01'].get('a') is True
+          and not _cache_now['2099-000006-CA-01'].get('sl'))
     check('an empty docket never ends a stay flagged on the row when its cache entry is gone',
           on('2099-000007-CA-01') and _cache_now['2099-000007-CA-01'].get('a') is True)
     check('closing an OLDER stay does not end the newer one we hold, and leaves no lift date',
           on('2099-000008-CA-01') and not after_sh['2099-000008-CA-01'].get('sale_stay_lifted')
           and _cache_now['2099-000008-CA-01'].get('a') is True and not _cache_now['2099-000008-CA-01'].get('sl'))
+    check('an older stay closing does not end the one we hold when its date is slash-form',
+          on('2099-000010-CA-01') and _cache_now['2099-000010-CA-01'].get('a') is True)
     check('a new active stay drops a stale lift date from the row (gates read it as "contact is legal")',
           on('2099-000009-CA-01') and not after_sh['2099-000009-CA-01'].get('sale_stay_lifted'))
     rebuilt = list(after_sh.values())
     F.restore_stays_from_cache(rebuilt)
     check('the rebuild does not re-activate the lifted stay from the cache',
-          [r['Case #'] for r in rebuilt if r.get('sale_bk_active')] == ['2099-000002-CA-01', '2099-000005-CA-01', '2099-000007-CA-01', '2099-000008-CA-01', '2099-000009-CA-01'])
+          [r['Case #'] for r in rebuilt if r.get('sale_bk_active')] == ['2099-000002-CA-01', '2099-000005-CA-01', '2099-000006-CA-01', '2099-000007-CA-01',
+                                                                   '2099-000008-CA-01', '2099-000009-CA-01', '2099-000010-CA-01'])
     os.remove(os.path.join(tmp, 'sale_history_cache.json'))
     check('no cache file: nothing restored, nothing raised', F.restore_stays_from_cache([{'Case #': 'x'}]) == 0)
 finally:
