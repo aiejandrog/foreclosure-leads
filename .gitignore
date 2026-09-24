@@ -505,6 +505,12 @@ deal_desk.json
 !_anchorgatetest.py
 !_boardaccuracytest.py
 
+# _stayfiletest: healthcheck's §362 rule counts stay flags in leads_final.json, but main() wrote that
+# file before the sale-history cache restored them (the restore ran only inside make_tracker, in
+# memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
+# blocked the publish. This suite fails if the file is written before the restore.
+!_stayfiletest.py
+
 # publish_lock.py's lockfile. Per-machine run state, never repo content: committing it would ship
 # one box's "a runner is publishing right now" to every other checkout and wedge them all until it
 # aged past the six-hour stale budget. The .stale.* form is the rename a stale-lock break goes
