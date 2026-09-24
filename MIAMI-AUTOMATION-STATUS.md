@@ -25,11 +25,11 @@ shared spending controls. This is not complete.
 | Fresh selection | Current auction status joined to case/folio; stale dates cannot imply sold | Outstanding |
 | Docket completeness | Full OCS response preserved; independent coverage reconciliation or explicit unverified gap | Full response supported; completeness unproven |
 | All document/page outcomes | Attachment inventory and source-bound page outcomes; no count-only completion | `document_coverage`: one row per expected attachment, each read / read_partial / fetched_unread / queued / failed / restricted / access_gap / not_enumerated / county_no_document, saved with every timeline. A restricted or refused court filing stays a gap; a stored public Official Records copy of the same instrument (prints this case number, same kind, recorded -3/+120 days) is linked as `same_instrument_unverified`, never counted as the court copy. Where none is stored, `alternate_copy_needed` names the book/page the docket cites. Fetching that copy automatically is not wired: it needs the clerk endpoints, reachable only from the desktop |
-| Official Records relevance | Current parcel/title identity, capped search gaps and retained later instruments | Candidate-only matching remains |
+| Official Records relevance | Current parcel/title identity, capped search gaps and retained later instruments | A deed without this parcel's folio is kept as `legal_description_match_required` with its parties and the legal description it prints (a deed with another parcel's folio is kept as `folio_conflict`), never dropped and never the current deed on its own. Matching the legal description to the parcel is still a person's job; title discovery does not yet fetch unanchored deeds |
 | Free-first reading | Embedded/layout OCR before vision; automatic cross-page extraction | Text and OCR rows are extracted and checked across page breaks with no transcription; vision buys the page before a total only when that total's own page cannot reproduce it and OCR shows money there. Not yet replayed on Walker and Blue Water |
 | Amount verification | All typed charges and credits sum exactly; printed subtotals match; consistent across outputs | One contract (`judgment_money`) on the OCR/text, vision, saved-vision and timeline paths: exact cents, credits subtract, rates kept and reported, subtotal membership explicit or rows-above, no subset search, no tolerance. Not yet replayed on Walker and Blue Water |
-| Current title | Continuous evidence-backed conveyance chain, entity/probate uncertainty explicit | Historical deed candidates only |
-| Liens | Obligation, identity, attachment, amendment and satisfaction links; no missing-release inference | Candidate lists, not proven balances |
+| Current title | Continuous evidence-backed conveyance chain, entity/probate uncertainty explicit | `present_title.ownership`: the newest folio-anchored deed as a candidate, a chain-of-title link per consecutive deed pair (continuous / names_differ / court_transfer_not_compared / unknown), and `possibly_conveyed_later` when an unanchored later deed names the current grantee as grantor. Entity grantees get a Sunbiz record (`--sunbiz`, free, cached 30 days) with title and contact authority `not_established` and `call_ready` False. Death and probate stay quoted flags, never findings |
+| Liens | Obligation, identity, attachment, amendment and satisfaction links; no missing-release inference | `present_title.claims`: one row per instrument, labelled by parcel link (folio_matched / subdivision_only / name_search_only) and by whose name it was found under (current_grantee / prior_title_party / defendant_not_on_title / lead_owner_not_on_title / other_name). `debt` is always `not_established`; no satisfaction found reads `no_satisfaction_found_not_proof_open`. A claim under a historical grantee's name is kept and never counted against the current owner. Attachment by legal description and amounts from the recorded body remain open |
 | Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Docket-index reconciliation: each final judgment is operative, superseded, vacated (or partially), satisfied (or partially) or unclear, with the entry that changed it; a controlling judgment is named only when exactly one is operative. Stays carry a history (stayed, relief, reinstated, bankruptcy dismissed). A dismissal naming some defendants is party-limited. A past sale date without a certificate is `unknown_no_certificate`. Judgment BODIES are not yet read for scope; the index can be wrong |
 | One-command orchestration | Durable step leases, before-call reservations, idempotent restart and refresh | `run_documents --backfill --timeline [--collect-dockets]`: per case, a documents step then a whole-case timeline step, each recorded in the one backfill checkpoint with its own fingerprint; a restart resumes at the first unfinished step. Both steps draw on one vision ledger and one per-case share; reservations are durable before each call, cached page reads are free, unsettled calls are never retried. Title discovery and the owner-token worker stay separate commands (they spend captcha, which the backfill refuses) |
 | Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Per-case shares on the vision paths (run_documents, backfill, timeline); run_documents --token-budget now solves only through the real-balance PaidCutoffSolver (one try, free browser first) |
@@ -132,5 +132,19 @@ Priority 5 is wired for inventory and linking; retrieval of missing public copie
 - Not closable here: the docket's own document counts cannot be verified against OCS, and a
   login-walled filing cannot be read without an account this project does not have. Both are
   written into every coverage block rather than hidden.
+
+Priority 6 is wired as a report; nothing here changes equity or the board.
+
+- `miami_title_parties` keeps unanchored deeds, builds the chain of title and questions the
+  current deed when a later unanchored deed conveys away from its grantee.
+- `miami_present_title.present_title` is saved as `present_title` in every title-discovery report
+  and dossier (live and `--report-only`).
+- `sunbiz_entities` wraps `llc_officers._lookup` (now with an injectable fetch) so an unreachable
+  registry is an `error`, never `not_found`. Trusts, estates and institutions are
+  `not_applicable`. Officers and the registered agent are people to research, each labelled with
+  the limit of what the filing shows. `--report-only --sunbiz` reads the cache and makes no request.
+- Not closable here: matching a legal description to a parcel automatically (condo unit and
+  plat-lot descriptions vary too much to decide without a person), and any statement that a debt
+  is open. Both stay explicit.
 
 The full goal remains active until the acceptance matrix is evidenced end to end.
