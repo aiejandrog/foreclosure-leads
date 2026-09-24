@@ -1138,7 +1138,23 @@ def main():
         from_addr = None
         if _active:
             _cand = _SS._lane_from(_cfg, lane)
-            if _cand and _cand != user:
+            # THE CAP IS METERED ON THE ADDRESS, NOT ON WHETHER IT IS THE LOGIN (2026-09-22).
+            #
+            # This is the same defect PR #23 fixed in send_server.py on 09-18, left behind in this
+            # CLI cousin. The check used to sit inside `if _cand != user`, so the one address that
+            # is BOTH a lane target and the login -- alejandro@bsgflorida.com -- was never metered
+            # here at all; only DAILY_MAX (50) applied, which is already ABOVE the 40 senders.json
+            # allows that domain. Two ways it bites:
+            #
+            #   * while ramp_start is in the future, _lane_from() routes EVERY lane back to the
+            #     main domain, so no send from this module was capped at all -- the same state
+            #     that let the bridge deliver 182 in sixteen minutes on 09-18.
+            #   * after the ramp opens it does not go away: `replied` and `urgent` point at the
+            #     login by design, so those two lanes would stay uncapped forever.
+            #
+            # `from_addr` still stays None when the lane address IS the login (nothing to rewrite
+            # in the From: header), but the ceiling is read and enforced either way.
+            if _cand:
                 _cap = _SS._ramp_cap(_cfg, _cand)
                 _sent = _SS._alias_sent_today(_cand)
                 if _sent >= _cap:
@@ -1146,7 +1162,7 @@ def main():
                     print(f'  [{i:3}/{len(entries)}] SKIP -> {e["to"]}  {_cand} at its warm-up cap for today '
                           f'({_sent}/{_cap}) — the {lane} lane resumes tomorrow')
                     continue
-                from_addr = _cand
+                from_addr = _cand if _cand != user else None
         try:
             mid, resp = _smtp_send(user, pw, from_display, e['to'], e['subj'], e['body'], from_addr=from_addr)
             _append_ledger({

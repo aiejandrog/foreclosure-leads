@@ -480,3 +480,4 @@ deal_desk.json
 # overwrite a number already held. Untracked, the suite that proves the equity pair keeps filling
 # would live on one laptop.
 !_archivefilltest.py
+!_boardaccuracytest.py

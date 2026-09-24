@@ -54,6 +54,13 @@ State as of the claim: cadence calls `replies.is_stop_text()` (no local detector
 is add-only with both case and `'@email'` keys plus `bounced_emails.json`, cadence re-reads the
 ledger before every send, and identity keys publish hashed via `'@' + _addr_key(email)`.
 
+## Full case research
+
+For requests to review dockets, judgments, parties, attorneys, probate or recorded instruments,
+follow [CASE-REVIEW-PROCEDURE.md](CASE-REVIEW-PROCEDURE.md). Create a pending inventory with
+`case_review.py` from full raw docket JSON. The compact board docket is not a complete case file.
+Document metadata and keyword signals must never be represented as documents read or verified findings.
+
 ## The website
 
 Live: https://aiejandrog.github.io/dealflow-board/ (GitHub Pages from `docs/`)
