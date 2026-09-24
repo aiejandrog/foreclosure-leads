@@ -273,6 +273,13 @@ def main():
             if who: r['sale_who'] = who
             if bk: r['sale_bk'] = bk
             if bkact: r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+            else:
+                # A LIVE READ saying no stay is active overrides a flag already on the row. Since
+                # 2026-09-24 foreclosure_leads.main() writes the cached stays into leads_final.json
+                # before this step runs, so a stay the docket now shows lifted would otherwise stay
+                # on the row (and gate the lead) until the next scrape. Only a successful fetch
+                # clears; a failed one (dks None) and a cache hit never do.
+                r.pop('sale_bk_active', None); r.pop('sale_bk_date', None)
             if lifted: r['sale_stay_lifted'] = lifted
             cache[case] = {'s': surv, 'n': sched, 'd': done, 'w': who, 'b': bk,
                            'a': bkact, 'bd': bkd, 'sl': lifted, 't': now, 'v': CACHE_VER}
