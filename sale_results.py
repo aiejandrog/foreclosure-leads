@@ -178,6 +178,7 @@ def classify(dockets, sale, today=None, listed=None):
     ents = [t for t in _entries(dockets) if t[0] >= sale - datetime.timedelta(days=AMENDED_DAYS)]
 
     held = cancel = vacated = None
+    held_lines, cert = [], None        # for sale_held, named as #53's miami_case_timeline names it
     new_date = None
     pending = []                       # (date, text) motions to stop the sale with no order yet
     bk_before = None
@@ -250,6 +251,9 @@ def classify(dockets, sale, today=None, listed=None):
             continue
 
         if (_HELD.search(t) or code in _HELD_CODES) and d >= sale and not _CANCEL.search(desc):
+            held_lines.append(desc + ((' :: ' + cmt[:80]) if cmt else ''))
+            if re.search(r'certificate of (?:sale|title)', desc, re.I):
+                cert = cert or d
             if held is None:
                 held = (d, desc, cmt)
                 bid = _money(t) if re.search(r'bid|deposit|certificate of sale', t, re.I) else None
@@ -293,6 +297,13 @@ def classify(dockets, sale, today=None, listed=None):
         res['why'] = 'the court set the sale aside'
     elif held:
         res['st'], res['d'] = 'held', held[0].isoformat()
+        # Same vocabulary as miami_case_timeline.sale_held() / status.sale_outcome (PR #53), so the
+        # two readers can be folded into one: bid (sale_bid, BIDSCV) and deposit (sale_deposit,
+        # MFDPCV) entries say the sale was HELD; only a certificate says it went through.
+        res['sale_outcome'] = 'sold' if cert else 'held_no_certificate_yet'
+        res['sale_held'] = {'date': held[0].isoformat(), 'evidence': held_lines[:4],
+                            'certificate': cert.isoformat() if cert else None,
+                            'bankruptcy_same_day': bool(bk_before and bk_before == sale)}
         res['why'] = ('sold back to the plaintiff' if res.get('pl') else 'sale went ahead') + \
             (' (bid $%s)' % format(int(res['bid']), ',') if res.get('bid') else '')
         if bk_before and bk_before == sale:
@@ -322,6 +333,7 @@ def classify(dockets, sale, today=None, listed=None):
         # the date passed and the docket shows neither a result nor a cancellation yet: the
         # certificate of sale can lag a day or two. Say so instead of guessing either way.
         res['st'] = 'unknown'
+        res['sale_outcome'] = 'unknown_no_certificate'
         res['why'] = 'sale date passed; no result on the docket yet'
     res['ev'] = sorted(res['ev'], key=lambda e: e['d'])[-6:]
     return res

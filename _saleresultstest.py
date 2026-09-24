@@ -41,6 +41,7 @@ held_bk = [
 ]
 v = S.classify(held_bk, '09/23/2026', D(2026, 9, 24))
 check('held: bid + certificate after the sale date', v['st'] == 'held', v)
+check('held: certificate on file -> sale_outcome sold', v.get('sale_outcome') == 'sold' and v['sale_held']['certificate'] == '2026-09-24', v.get('sale_held'))
 check('held: bid amount read from the comment', v.get('bid') == 1061518.12, v.get('bid'))
 check('held: bankruptcy on the sale day flagged', v.get('bkb') == '2026-09-23', v.get('bkb'))
 check('held: the why says the sale may not stand', 'may not stand' in v.get('why', ''), v.get('why'))
@@ -186,6 +187,8 @@ T = D(2026, 9, 24)
 v = S.classify(R_023462, '09/23/2026', T)
 check('REAL 023462: held', v['st'] == 'held', v)
 check('REAL 023462: plaintiff took it back', v.get('pl') == 1 and 'plaintiff' in v['why'], v.get('why'))
+check('REAL 023462: #53 vocabulary', v.get('sale_outcome') == 'held_no_certificate_yet'
+      and v['sale_held']['certificate'] is None and v['sale_held']['bankruptcy_same_day'] is True, v.get('sale_held'))
 check('REAL 023462: bankruptcy on the sale day flagged', v.get('bkb') == '2026-09-23' and 'sale day' in v['why'], v.get('why'))
 v = S.classify(R_013492, '10/05/2026', T)
 check('REAL 013492: scheduled', v['st'] == 'scheduled' and 'amj' not in v, v)
