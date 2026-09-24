@@ -29,7 +29,7 @@ def dossier(case='2024-009959-CA-01', judgment=None, read=1, fetched=2, gaps=('a
             'open_gaps': list(gaps)}
 
 
-ONE = {'operative': 'ocs-event/231457022/1', 'candidates': ['ocs-event/231457022/1'],
+ONE = {'operative': 'court:231457022:1', 'candidates': ['court:231457022:1'],
        'certain': True, 'amount': 555499.25, 'satisfied': False, 'satisfied_by': []}
 
 
@@ -38,12 +38,12 @@ class Summarize(unittest.TestCase):
         s = DB.summarize(dossier(judgment=ONE))
         self.assertEqual(s['j'], 'one')
         self.assertEqual(s['amt'], 555499.25)
-        self.assertEqual(s['ref'], 'ocs-event/231457022/1')
+        self.assertEqual(s['ref'], 'court:231457022:1')
         self.assertEqual((s['n'], s['f'], s['g'], s['at']), (1, 2, 2, '2026-09-24'))
 
     def test_a_satisfied_judgment_ships_no_amount(self):
         sat = dict(ONE, amount=None, printed_amount=555499.25, satisfied=True,
-                   satisfied_by=['ocs-event/9/1'])
+                   satisfied_by=['court:9:1'])
         s = DB.summarize(dossier(judgment=sat))
         self.assertEqual(s['j'], 'sat')
         self.assertNotIn('amt', s)
@@ -59,6 +59,32 @@ class Summarize(unittest.TestCase):
         s = DB.summarize(dossier(judgment=dict(ONE, partially_satisfied_by=['p'])))
         self.assertEqual(s['j'], 'part')
         self.assertEqual(s['amt'], 555499.25)
+
+    def test_a_recorded_copy_ships_no_amount(self):
+        rec = dict(ONE, operative='official_records/34429-1360', candidates=['official_records/34429-1360'])
+        s = DB.summarize(dossier(judgment=rec))
+        self.assertEqual((s['j'], s['src']), ('one', 'rec'))
+        self.assertNotIn('amt', s)
+        self.assertNotIn('ctl', s)
+        s = DB.summarize(dossier(judgment=dict(ONE, operative='recorded:123')))
+        self.assertEqual(s['src'], 'rec')
+        self.assertNotIn('amt', s)
+
+    def test_a_satisfaction_from_official_records_does_not_mark_it_paid(self):
+        # 2025-018660: another person's 2011 records made the dossier say "no outstanding debt".
+        sat = dict(ONE, amount=None, printed_amount=270322.07, satisfied=True,
+                   satisfied_by=['official_records/27636-1385'])
+        s = DB.summarize(dossier(judgment=sat))
+        self.assertEqual((s['j'], s['amt']), ('one', 270322.07))
+
+    def test_controlling_comes_only_from_a_refreshed_timeline(self):
+        d = dossier(judgment=ONE)
+        self.assertNotIn('ctl', DB.summarize(d))
+        self.assertNotIn('ctl', DB.summarize(d, {'status': {'kind': 'sale_scheduled'}}))
+        self.assertNotIn('ctl', DB.summarize(d, {'judgments': {'controlling_entry': None}}))
+        self.assertIs(DB.summarize(d, {'judgments': {'controlling_entry': '231457022'}})['ctl'], True)
+        # 2024-014878: the case's own vacated FJ was read; the timeline names the later one.
+        self.assertIs(DB.summarize(d, {'judgments': {'controlling_entry': '999'}})['ctl'], False)
 
     def test_gap_text_never_travels(self):
         s = DB.summarize(dossier(gaps=['MORTGAGE recorded 2019 against JOHN DOE sits on this parcel']))
@@ -94,19 +120,21 @@ class LoadAndAttach(unittest.TestCase):
         # overwrite the real summary with an empty one.
         self.write('2024-009959-CA-01.json', dossier(judgment=ONE))
         self.write('2024-009959-CA-01-timeline.json',
-                   {'case': '2024-009959-CA-01', 'stay_in_effect': True, 'entries': []})
+                   {'case': '2024-009959-CA-01', 'stay_in_effect': True, 'entries': [],
+                    'judgments': {'controlling_entry': '231457022'}})
         got = DB.load(self.dir)
         self.assertEqual(list(got), ['2024009959CA01'])
         self.assertEqual(got['2024009959CA01']['amt'], 555499.25)
-        self.assertIs(got['2024009959CA01']['stay'], True)
+        self.assertIs(got['2024009959CA01']['ctl'], True)
 
-    def test_no_timeline_or_unknown_stay_ships_no_stay_key(self):
-        self.write('2024-009959-CA-01.json', dossier(judgment=ONE))
-        self.write('2022-012065-CA-01.json', dossier(case='2022-012065-CA-01'))
-        self.write('2022-012065-CA-01-timeline.json', {'case': '2022-012065-CA-01', 'stay_in_effect': None})
-        got = DB.load(self.dir)
-        self.assertNotIn('stay', got['2024009959CA01'])
-        self.assertNotIn('stay', got['2022012065CA01'])
+    def test_the_timeline_stay_never_ships(self):
+        # verify-12: the timeline's stay reading was right in 2 of 3 stay cases and misses
+        # bankruptcy orders filed as "Notice of Filing:". Stays come from the section-362 flag only.
+        for tl in ({'stay_in_effect': True}, {'stay_in_effect': False},
+                   {'status': {'kind': 'stayed_by_bankruptcy'}},
+                   {'status': {'kind': 'unclear', 'reason': 'unresolved bankruptcy stay'}}):
+            self.assertNotIn('stay', DB.summarize(dossier(judgment=ONE), tl))
+        self.assertFalse(hasattr(DB, '_stay'))
 
     def test_a_timeline_stub_dossier_is_not_a_document_summary(self):
         # write_timeline creates {'case','county','complete'} when no dossier existed yet.
@@ -161,6 +189,7 @@ class Chip(unittest.TestCase):
         self.assertIn('JUDG $555k?', html)
         self.assertIn('UNVERIFIED', html)
         self.assertIn('NOT in the equity number', html)
+        self.assertIn('Liens, surviving debt, CLEAR and stays are not shown here', html)
         self.assertNotIn('BOARD', html.split('>')[1])
 
     def test_disagreement_with_the_clerk_is_flagged(self):
@@ -174,13 +203,30 @@ class Chip(unittest.TestCase):
         sev = DB.summarize(dossier(judgment={'candidates': ['x', 'y'], 'certain': False}))
         self.assertIn('2+ JUDGMENTS', self.render({'docs': sev}))
 
-    def test_a_stay_leads_the_chip(self):
+    def test_no_stay_on_the_chip(self):
         s = DB.summarize(dossier(judgment=ONE), {'stay_in_effect': True})
-        html = self.render({'judg': 555499.25, 'docs': s})
-        self.assertIn('STAY?', html)
-        self.assertLess(html.index('STAY?'), html.index('JUDG'))
-        s = DB.summarize(dossier(judgment=ONE), {'stay_in_effect': False})
-        self.assertNotIn('STAY', self.render({'judg': 555499.25, 'docs': s}))
+        self.assertNotIn('STAY?', self.render({'judg': 555499.25, 'docs': s}))
+        self.assertEqual(self.render({'docs': {'stay': True}}), '')
+
+    def test_controlling_marks(self):
+        d = dossier(judgment=ONE)
+        html = self.render({'judg': 555499.25, 'docs': DB.summarize(d)})
+        self.assertIn('JUDG $555k? &middot; CTRL?', html)
+        self.assertIn('Not yet confirmed as the controlling judgment', html)
+        tl = {'judgments': {'controlling_entry': '231457022'}}
+        html = self.render({'judg': 555499.25, 'docs': DB.summarize(d, tl)})
+        self.assertIn('JUDG $555k?', html)
+        self.assertNotIn('CTRL?', html)
+        self.assertIn('docchip dj', html)
+        html = self.render({'judg': 555499.25, 'docs': DB.summarize(d, {'judgments': {'controlling_entry': '9'}})})
+        self.assertIn('JUDG NOT CONTROLLING', html)
+        self.assertNotIn('$555k', html.split('>')[1])
+
+    def test_recorded_copy_chip_shows_no_amount(self):
+        rec = dict(ONE, operative='official_records/34429-1360')
+        html = self.render({'judg': 1, 'docs': DB.summarize(dossier(judgment=rec))})
+        self.assertIn('JUDG REC COPY', html)
+        self.assertNotIn('$555k', html)
 
     def test_a_partial_reading_still_shows_its_judgment(self):
         d = dossier(judgment=ONE, read=0, fetched=1)
@@ -193,29 +239,9 @@ class Chip(unittest.TestCase):
         self.assertIn('1 partly read', html)
         self.assertIn('PART READ', self.render({'docs': {'n': 0, 'p': 2, 'f': 2, 'j': 'none'}}))
 
-    def test_stay_from_the_timeline_status_on_main(self):
-        # The timeline on main has no stay_in_effect; the answer is in status.kind.
-        self.assertIs(DB._stay({'status': {'kind': 'stayed_by_bankruptcy'}}), True)
-        self.assertEqual(DB._stay({'status': {'kind': 'unclear', 'reason': 'Later foreclosure '
-                                   'activity conflicts with an unresolved bankruptcy stay'}}), 'unclear')
-        self.assertIsNone(DB._stay({'status': {'kind': 'unclear', 'reason': 'No dated dispositive entry.'}}))
-        self.assertIsNone(DB._stay({'status': {'kind': 'sale_scheduled'}}))
-        # #53's explicit answer wins over the status.
-        self.assertIs(DB._stay({'stay_in_effect': False, 'status': {'kind': 'stayed_by_bankruptcy'}}), False)
-        # Relief granted with no earlier status to restore: the CASE status is unclear, the stay is not.
-        self.assertIs(DB._stay({'status': {'kind': 'unclear', 'reason': 'Stay relief found without '
-                               'established pre-stay state.'}}), False)
-        self.assertEqual(DB._stay({'status': {'kind': 'unclear', 'reason': 'Partial or limited stay '
-                                   'relief does not establish that all foreclosure restrictions ended.'}}), 'unclear')
-        s = DB.summarize(dossier(judgment=ONE), {'status': {'kind': 'unclear', 'reason':
-                         'Later foreclosure activity conflicts with an unresolved bankruptcy stay'}})
-        html = self.render({'judg': 555499.25, 'docs': s})
-        self.assertIn('STAY UNCLEAR', html)
-        self.assertIn('JUDG $555k?', html)      # the stay never hides the judgment
-
     def test_read_but_unread_states(self):
         self.assertIn('DOC UNREAD', self.render({'docs': {'n': 0, 'f': 3, 'j': 'none'}}))
-        self.assertIn('NO JUDG', self.render({'docs': {'n': 2, 'f': 3, 'j': 'none'}}))
+        self.assertIn('NO JUDG READ', self.render({'docs': {'n': 2, 'f': 3, 'j': 'none'}}))
 
     def test_chip_sits_in_both_row_layouts(self):
         src = _template()

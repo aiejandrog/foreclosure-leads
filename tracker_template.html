@@ -8104,53 +8104,56 @@ function _codeLienChip(r){
 function _docChip(r){
   // What the Miami document dossier (doc_board.py) read off the court papers. The border is DASHED
   // on purpose: nothing here is verified until the 12-case review, and none of it is in the equity
-  // number beside it. `amt` is the printed judgment figure from OCR/vision; it is shown as a claim
-  // with a question mark, never swapped in for r.judg. Rows with no dossier render nothing.
+  // number beside it. `amt` is the printed judgment figure, shipped only when it was read from the
+  // COURT's copy (the one thing verify-12 found reliable), shown as a claim with a question mark and
+  // never swapped in for r.judg. No lien, surviving-debt, CLEAR or stay reading rides here: those
+  // failed the 12-case check. Rows with no dossier render nothing.
   var d = r && r.docs;
-  if(!d || !(d.n || d.f || d.stay === true || d.stay === 'unclear')) return '';
-  var tail = ' Read ' + (d.at || '?') + '; ' + (d.n||0) + ' of ' + (d.f||0) + ' fetched document(s) fully read'
-    + (d.p ? ', ' + d.p + ' partly read' : '') + '; '
+  if(!d || !(d.n || d.f)) return '';
+  var tail = ' Read ' + (d.at || '?') + '; the pipeline counts ' + (d.n||0) + ' of ' + (d.f||0)
+    + ' fetched document(s) fully read' + (d.p ? ', ' + d.p + ' partly read' : '') + '; '
     + (d.g||0) + ' open gap(s) listed in the dossier on the machine. UNVERIFIED until the 12-case review, '
-    + 'and NOT in the equity number shown.';
-  // A stay gets its own chip IN FRONT of the judgment chip, never instead of it.
-  var stay = d.stay === true
-    ? ' <span class="docchip dx" title="' + esc('The court filings read for this case say a STAY is in '
-      + 'effect (bankruptcy or court order), so the sale may not go ahead. Read from the docket text, not '
-      + 'confirmed with the bankruptcy court.' + tail) + '">DOC &middot; STAY?</span>'
-    : d.stay === 'unclear'
-    ? ' <span class="docchip dx" title="' + esc('The filings mention a STAY, but whether it is still in '
-      + 'effect is unclear from the docket (for example, a bankruptcy notice with later sale activity and no '
-      + 'relief order found). Check before treating the sale date as real.' + tail) + '">DOC &middot; STAY UNCLEAR</span>'
-    : '';
-  if(!d.n && !d.f) return stay;
-  return stay + _docJudgChip(r, d, tail);
+    + 'and NOT in the equity number shown. Liens, surviving debt, CLEAR and stays are not shown here.';
+  return _docJudgChip(r, d, tail);
 }
 function _docJudgChip(r, d, tail){
   if(!d.n && !d.p && (!d.j || d.j === 'none'))
     return ' <span class="docchip dn" title="' + esc('Documents were fetched but none could be read yet.' + tail)
       + '">DOC UNREAD</span>';
   if(d.j === 'sat')
-    return ' <span class="docchip dx" title="' + esc('A SATISFACTION of this case\'s judgment was read: the '
-      + 'judgment appears to have been paid, so its amount is not an outstanding debt. Confirm on the '
-      + 'docket before calling.' + tail) + '">DOC &middot; JUDG PAID?</span>';
+    return ' <span class="docchip dx" title="' + esc('The court\'s copy of a SATISFACTION of this case\'s '
+      + 'judgment was read: the judgment appears to have been paid, so its amount is not an outstanding '
+      + 'debt. Confirm on the docket before calling.' + tail) + '">DOC &middot; JUDG PAID?</span>';
   if(d.j === 'several')
     return ' <span class="docchip dx" title="' + esc('More than one read document classifies as a final '
       + 'judgment. Which one controls (original vs amended, separate counts, another action) is not '
       + 'decided from the text, so no amount is shown.' + tail) + '">DOC &middot; 2+ JUDGMENTS</span>';
   if(d.j === 'one' || d.j === 'part'){
+    if(d.src !== 'court')
+      return ' <span class="docchip dx" title="' + esc('A judgment was read, but from a recorded copy in '
+        + 'Official Records (' + (d.ref||'') + '), not the court\'s own copy. Recorded-copy matches have '
+        + 'pulled in other people\'s papers, so no amount is shown.' + tail) + '">DOC &middot; JUDG REC COPY</span>';
+    if(d.ctl === false)
+      return ' <span class="docchip dx" title="' + esc('The judgment read (' + (d.ref||'') + ') is NOT the '
+        + 'one the docket timeline names as controlling (it may be vacated or amended), so no amount is '
+        + 'shown.' + tail) + '">DOC &middot; JUDG NOT CONTROLLING</span>';
     var board = +(r.judg||0), amt = +(d.amt||0);
     var differs = amt > 0 && board > 0 && Math.abs(amt - board) >= 1;
-    var what = amt > 0 ? ('Judgment read from the document: ' + fmtMoney(amt) + ' (' + (d.ref||'') + ').')
-                       : ('The judgment document was read (' + (d.ref||'') + ') but no single printed amount was found.');
+    var what = amt > 0 ? ('Judgment read from the court\'s copy: ' + fmtMoney(amt) + ' (' + (d.ref||'') + ').')
+                       : ('The court\'s copy of the judgment was read (' + (d.ref||'') + ') but no single printed amount was found.');
+    what += d.ctl === true ? ' The docket timeline names it as the controlling judgment.'
+                           : ' Not yet confirmed as the controlling judgment: an amended or vacated judgment may exist.';
     if(d.j === 'part') what += ' A PARTIAL satisfaction was also read, so the printed figure overstates what is owed.';
     if(differs) what += ' The board shows ' + fmtMoney(board) + ' from the clerk; the two disagree.';
-    return ' <span class="docchip ' + (differs || d.j === 'part' ? 'dx' : 'dj') + '" title="' + esc(what + tail) + '">DOC'
+    return ' <span class="docchip ' + (differs || d.j === 'part' || d.ctl !== true ? 'dx' : 'dj') + '" title="'
+      + esc(what + tail) + '">DOC'
       + (amt > 0 ? ' &middot; JUDG ' + esc(fmtK(amt)) + '?' : ' &middot; JUDG READ')
+      + (d.ctl === true ? '' : ' &middot; CTRL?')
       + (d.j === 'part' ? ' &middot; PART PAID' : '') + (differs ? ' &ne; BOARD' : '') + '</span>';
   }
   return ' <span class="docchip dn" title="' + esc('Documents were read' + (d.n ? '' : ' only in part')
-    + ', and none of them is this case\'s final judgment.' + tail) + '">DOC ' + (d.n ? 'READ' : 'PART READ')
-    + ' &middot; NO JUDG</span>';
+    + ', and none of them is this case\'s final judgment. That does not mean there is no judgment.' + tail)
+    + '">DOC ' + (d.n ? 'READ' : 'PART READ') + ' &middot; NO JUDG READ</span>';
 }
 function _elderChip(r){
   // FS 825.103 guardrail (Playbook §0.5). This is the ONLY chip on the board that exists to stop
