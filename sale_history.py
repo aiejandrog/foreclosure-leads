@@ -109,14 +109,9 @@ def _iso_date(us):
     m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (us or '').strip())
     return f'{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}' if m else ''
 
-def _bk_stay(dks):
-    """(active, latest_filing_iso, lifted_iso). A bankruptcy filing line (or a sale cancelled PER
-    the stay) opens; a dismissal / discharge / stay-relief line closes. Active = the newest opening
-    has no closing on/after it. Closing lines are checked FIRST ('Notice of Filing: ...ORDER OF
-    DISMISSAL' contains 'filing' but closes).
-    lifted_iso = the court date the LAST stay closed (when none is active) — the door signal: the
-    owner's shield just dropped, the sale is about to be reset, and contact is legal again. The
-    freshest-dismissed leads are the most rescuable calls on the board."""
+def _bk_events(dks):
+    """(opening ISO dates, closing ISO dates) of the bankruptcy lines on a docket. Closing lines are
+    checked FIRST ('Notice of Filing: ...ORDER OF DISMISSAL' contains 'filing' but closes)."""
     opens, closes = [], []
     for e in dks or []:
         t = (e.get('docketDescrition') or e.get('docketDescription') or '')
@@ -128,6 +123,18 @@ def _bk_stay(dks):
             closes.append(iso)
         elif _BKFILE.search(t) or _BANKR.search(tx):
             opens.append(iso)                          # 'CANCELLED PER BANKRUPTCY' = the stay acting
+    return opens, closes
+
+
+def _bk_stay(dks):
+    """(active, latest_filing_iso, lifted_iso). A bankruptcy filing line (or a sale cancelled PER
+    the stay) opens; a dismissal / discharge / stay-relief line closes. Active = the newest opening
+    has no closing on/after it. Closing lines are checked FIRST ('Notice of Filing: ...ORDER OF
+    DISMISSAL' contains 'filing' but closes).
+    lifted_iso = the court date the LAST stay closed (when none is active) — the door signal: the
+    owner's shield just dropped, the sale is about to be reset, and contact is legal again. The
+    freshest-dismissed leads are the most rescuable calls on the board."""
+    opens, closes = _bk_events(dks)
     if not opens:
         return False, '', ''
     latest = max(opens)
@@ -277,7 +284,13 @@ def main():
             if not bkact and (_prev.get('a') or r.get('sale_bk_active')):
                 _pbd = _prev.get('bd') or r.get('sale_bk_date') or ''
                 _piso = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else _iso_date(_pbd)
-                if not (_piso and bkd and bkd >= _piso and lifted):
+                # _bk_stay only pairs the LATEST filing with a close. When a newer filing sits after
+                # the one we hold, that newer case closing says nothing about ours: require a closing
+                # line dated from our filing up to (not including) the next filing after it.
+                _op, _cl = _bk_events(dks)
+                _nxt = min([o for o in _op if _piso and o > _piso] or ['9999-99-99'])
+                _ours_closed = any(_piso <= c < _nxt for c in _cl) if _piso else False
+                if not (_piso and bkd and bkd >= _piso and lifted and _ours_closed):
                     # still active: drop any lift date from an OLDER closed stay in this read, since
                     # the board's gates read a lift date as "contact is legal again"
                     bkact, bkd, lifted = True, _pbd or bkd, ''
