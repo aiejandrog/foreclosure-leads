@@ -177,7 +177,8 @@ def investigate(entry, searcher, document_limit=30):
             plan = [p for p in discovery_names(entry, title) if p['name'] not in searched]
             if not plan:
                 break
-            report = W.run_name_searches(plan, index, capture, folio, owner_models=owner_models)
+            report = W.run_name_searches(plan, index, capture, folio, owner_models=owner_models,
+                                         this_case=W.this_case_of(inventory))
             searches.append(report)
             searched.update(p['name'] for p in plan)
             known = {W.key_of(m.get('reC_BOOK'), m.get('reC_PAGE')) for m in models}
@@ -188,9 +189,9 @@ def investigate(entry, searcher, document_limit=30):
                         known.add(key)
                         models.append(model)
         title = TP.build_title_parties(models, rows, inventory.get('raw'), folio)
-        for party in title['search_names']:
-            if party['name'] not in searched:
-                gaps.append(party['name'] + ': unknown; discovery-round limit left name unsearched.')
+        unsearched = [party['name'] for party in title['search_names'] if party['name'] not in searched]
+        for name in unsearched:
+            gaps.append(name + ': unknown; discovery-round limit left name unsearched.')
         CD.classify_documents(rows, case)
         new_rows, citations = W.walk(case, rows, models=models, collector=collector,
             queue=queue, ocr=DS.winocr, index=index, depth=3,
@@ -215,6 +216,8 @@ def investigate(entry, searcher, document_limit=30):
         for party in title['search_names']:
             if party['name'] not in searched:
                 gaps.append(party['name'] + ': unknown; citation-discovered name needs another search pass.')
+                if party['name'] not in unsearched:
+                    unsearched.append(party['name'])
         from miami_claim_evidence import enrich_claims
         searches = enrich_claims(searches, capture.results, rows)
         for search in searches:
@@ -235,6 +238,7 @@ def investigate(entry, searcher, document_limit=30):
             'title_parties':title, 'other_name_searches':searches,
             'citations':citations, 'gaps':list(dict.fromkeys(gaps)),
             'owner_baseline_records':None if owner_models is None else len(owner_models),
+            **search_coverage(owner_models, searches, models, folio, unsearched),
             'stored_instruments_absent_from_owner_query':[
                 {'book':m.get('reC_BOOK'), 'page_no':m.get('reC_PAGE'),
                  'doc_type':m.get('doC_TYPE'), 'recorded_date':m.get('reC_DATE'),
@@ -243,6 +247,24 @@ def investigate(entry, searcher, document_limit=30):
             'private_search_results':capture.results,
             'vision_actual_usd':0.0,
             'vision_note':'Existing OCR/vision reused; new documents use local OCR. Unreadable content remains unknown.'}
+
+
+def search_coverage(owner_models, searches, models, folio, unsearched):
+    """12-case verification defect 3: what keeps a title search from reading as complete.
+
+    `search_capped` when the owner search or any name search hit the county's 500-record page,
+    `parcel_found` False when no returned record carries this folio (2024-009959's search found
+    a different person), and the names the three discovery rounds left unsearched (2025-023462).
+    Raising the round limit or paging past 500 costs owner-search tokens; that is Alex's call.
+    """
+    import records_liens as RL
+    capped = (owner_models is not None and len(owner_models) >= 500) or any(
+        (row.get('records') or 0) >= 500 for report in searches for row in report.get('searched', []))
+    target = RL.norm_folio(folio) if folio else ''
+    return {'search_capped': bool(capped),
+            'parcel_found': any(RL.norm_folio(m.get('foliO_NUMBER')) == target for m in models)
+                            if target else None,
+            'names_left_unsearched': list(unsearched)}
 
 
 def attach_report(dossier, report):

@@ -1020,6 +1020,37 @@ class OwnStampTest(unittest.TestCase):
         self.assertEqual(report['documents_fetched'], 0)
         self.assertEqual(report['unresolved'], [])
 
+    def test_an_exhibit_copys_page_stamps_are_one_instrument(self):
+        # 12-case verification defect 8, 2025-023462: a court filing's mortgage exhibit carries
+        # the mortgage's own stamp on every page and was logged as ten instruments. own_spans()
+        # cannot see it: the filing is a court document, not an Official Records fetch.
+        stamps = ['CFN 20240512345 BOOK 34472 PAGE %d' % p for p in range(1351, 1361)]
+        row = row_citing('court:231000001:1', ['MOTION FOR FINAL JUDGMENT'] + stamps
+                         + ['Assignment recorded in Official Records Book 35000, Page 12'])
+        skipped = []
+        cites = W.pending_citations([row], W.own_spans([row]), skipped)
+        self.assertEqual([(c['book'], c['page_no']) for c in cites],
+                         [('34472', '1351'), ('35000', '12')])
+        self.assertEqual(len(skipped), 9)
+        self.assertTrue(all('page stamp' in s['reason'] for s in skipped))
+        self.assertNotIn(('34472', '1352'), {(c['book'], c['page_no']) for c in
+                                             CD.build('C1', 'MIAMI-DADE', documents=[row])
+                                             ['c_documents']['cited_but_not_fetched']})
+
+    def test_two_real_citations_of_one_book_are_not_a_stamp_run(self):
+        row = row_citing('court:231000001:1', ['Mortgage in OR Book 34472 Page 1351',
+                                               'recorded in OR Book 34472 Page 1900'])
+        self.assertEqual(len(W.pending_citations([row], set())), 2)
+
+    def test_a_condominium_declaration_recital_is_not_followed(self):
+        # 2023-013492 logged its condominium declaration 13491/2403 as an instrument to fetch.
+        row = row_citing('court:231000002:1', [
+            'Unit 5, according to the Declaration of Condominium thereof, recorded in Official '
+            'Records Book 13491, Page 2403'])
+        skipped = []
+        self.assertEqual(W.pending_citations([row], set(), skipped), [])
+        self.assertIn('declaration', skipped[0]['reason'])
+
     def test_the_dry_run_cli_suppresses_the_same_stamps_walk_does(self):
         # The regression this guards: walk() seeded the seen-set with own_spans and main() passed
         # an empty set, so `--dry-run` reported seven citations on a case with one. Two paths

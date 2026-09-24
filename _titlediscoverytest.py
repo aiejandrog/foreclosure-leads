@@ -94,5 +94,61 @@ class NameDedupeTests(unittest.TestCase):
         self.assertEqual(names, ['ALPHA, BETA LLC', 'BETA LLC ALPHA'])
 
 
+    def test_a_capped_or_parcel_less_search_says_so(self):
+        # 12-case verification defect 3: 2025-018660 hit the 500 cap, 2024-009959 searched a
+        # different person, 2025-023462's round limit left names unsearched.
+        folio = '3059130020010'
+        big = [{'foliO_NUMBER': '0101000000010'}] * 500
+        got = T.search_coverage([], [{'searched': [{'name': 'X', 'records': 500}]}], big, folio, ['Y'])
+        self.assertEqual(got, {'search_capped': True, 'parcel_found': False,
+                               'names_left_unsearched': ['Y']})
+        got = T.search_coverage([{'foliO_NUMBER': '30-5913-002-0010'}], [], [{'foliO_NUMBER': '30-5913-002-0010'}],
+                                folio, [])
+        self.assertEqual((got['search_capped'], got['parcel_found']), (False, True))
+
+
+class OwnCaseTests(unittest.TestCase):
+    """12-case verification defect 7: 2024-014878's own vacated judgment 34932/1256 was a claim."""
+
+    class Searcher:
+        def __init__(self, models):
+            self.models = models
+
+        def search(self, name):
+            return self.models
+
+    def search(self, models, this_case):
+        import document_walk as W
+        return W.run_name_searches([{'name': 'OWNER', 'why': 'title'}], W.RecordIndex(), self.Searcher(models),
+                                   '3059130020010', owner_models=[], this_case=this_case)
+
+    def judgment(self, book, page, first, second='OWNER'):
+        return {'reC_BOOK': book, 'reC_PAGE': page, 'doC_TYPE': 'JUDGMENT', 'reC_DATE': '1/1/2025',
+                'foliO_NUMBER': '', 'firsT_PARTY': first, 'seconD_PARTY': second}
+
+    def test_this_cases_judgment_is_marked_own_case_not_a_claim(self):
+        this_case = {'plaintiffs': ['WILMINGTON SAVINGS FUND SOCIETY FSB'], 'book_pages': set()}
+        out = self.search([self.judgment('34932', '1256', 'WILMINGTON SAVINGS FUND SOCIETY'),
+                        self.judgment('30000', '1', 'CITY OF MIAMI')], this_case)
+        self.assertEqual([(c['book'], c['page_no']) for c in out['potential_title_party_claims']],
+                         [('30000', '1')])
+        own = out['own_case_instruments']
+        self.assertEqual([(o['book'], o['own_case'], o['this_case']) for o in own],
+                         [('34932', True, 'plaintiff_party')])
+
+    def test_the_dockets_own_book_and_page_is_own_case(self):
+        import document_walk as W
+        tc = W.this_case_of({'raw': {}, 'entries': [{'metadata': {'bookAndPage': '34932 / 1256'}}]})
+        out = self.search([self.judgment('34932', '1256', 'SOMEONE ELSE')], tc)
+        self.assertEqual(out['own_case_instruments'][0]['this_case'], 'docket_book_page')
+        self.assertEqual(out['potential_title_party_claims'], [])
+
+    def test_a_different_lender_sharing_only_generic_words_is_still_a_claim(self):
+        this_case = {'plaintiffs': ['U S BANK NATIONAL ASSOCIATION'], 'book_pages': set()}
+        out = self.search([self.judgment('30000', '2', 'PNC BANK NATIONAL ASSOCIATION')], this_case)
+        self.assertEqual(len(out['potential_title_party_claims']), 1)
+        self.assertEqual(out['own_case_instruments'], [])
+
+
 if __name__ == '__main__':
     unittest.main()

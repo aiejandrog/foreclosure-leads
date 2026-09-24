@@ -68,6 +68,7 @@ import document_collectors as DC
 # unfetched citations and an open gap that said a document we were standing on had not been
 # fetched. A rule enforced in two of three places is not a rule.
 from document_classify import key_of, own_spans, _norm      # noqa: F401  (re-exported)
+from document_classify import stamp_run_pages, not_followed_reason  # noqa: F401  (re-exported)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 INDEX = os.path.join(HERE, 'records_index.json')
@@ -337,15 +338,26 @@ def resolve(book, page, index, caps_path=None, searcher=None):
 # ---------------------------------------------------------------------------------------------
 # 4. The walk.
 # ---------------------------------------------------------------------------------------------
-def pending_citations(rows, already):
-    """Citations on these rows that we have not addressed yet, in the order they were read."""
+def pending_citations(rows, already, skipped=None):
+    """Citations on these rows that we have not addressed yet, in the order they were read.
+
+    Page stamps after an exhibit's first page and declaration or plat recitals are not followed;
+    when `skipped` is a list they are appended to it with the reason."""
     out = []
     for row in rows or []:
-        for cite in row.get('cited_instruments') or []:
+        cites = row.get('cited_instruments') or []
+        stamps = stamp_run_pages(cites)
+        for cite in cites:
             key = key_of(cite.get('book'), cite.get('page_no'))
             if key in already:
                 continue
             already.add(key)
+            reason = not_followed_reason(cite, stamps)
+            if reason:
+                if skipped is not None:
+                    skipped.append({'book': cite.get('book'), 'page_no': cite.get('page_no'),
+                                    'cited_by': row.get('source_ref'), 'reason': reason})
+                continue
             out.append({'book': cite.get('book'), 'page_no': cite.get('page_no'),
                         'cited_by': row.get('source_ref'),
                         'cited_on_page': cite.get('cited_on_page'),
@@ -381,10 +393,10 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
     # that did the citing, because a recorded instrument's own stamp cites its own book and page.
     seen = own_spans(rows)
 
-    followed, unresolved, new_rows = [], [], []
+    followed, unresolved, new_rows, not_followed = [], [], [], []
     frontier, spent, stopped = list(rows or []), 0, ''
     for hop in range(1, max(1, int(depth)) + 1):
-        citations = pending_citations(frontier, seen)
+        citations = pending_citations(frontier, seen, not_followed)
         if not citations:
             break
         batch = []
@@ -440,7 +452,8 @@ def walk(case, rows, models=None, collector=None, queue=None, ocr=None, county=C
     index.save()
     return new_rows, {
         'depth': int(depth), 'budget': int(budget), 'documents_fetched': spent,
-        'followed': followed, 'unresolved': unresolved, 'stopped_because': stopped,
+        'followed': followed, 'unresolved': unresolved, 'not_followed': not_followed,
+        'stopped_because': stopped,
         'names': names,
         # Said in words rather than left to be inferred from an empty list. A walk that resolved
         # nothing and a walk that was never able to resolve anything look identical otherwise.
@@ -519,7 +532,50 @@ _ENCUMBRANCE_RE = re.compile(r'^(MORTGAGE|LIEN|JUDGMENT|NOTICE OF (?:LIEN|COMMEN
                              r'FINANCING STATEMENT|TAX)', re.I)
 
 
-def run_name_searches(plan, index, searcher, folio, subdivision='', owner_models=None):
+def _distinct_party(name):
+    # One rule for "same party" across the paid-read tie and this filter: generic lender words
+    # ("BANK", "NATIONAL") never make two lenders one party.
+    import document_prioritizer as DP
+    return DP._distinct_party(name)
+
+
+def this_case_of(inventory):
+    """What marks a recorded instrument as this foreclosure's own: the plaintiff's names and the
+    book/page the docket says its own filings were recorded at."""
+    import miami_judgment as MJ
+    raw = (inventory or {}).get('raw') or {}
+    pages = set()
+    for entry in (inventory or {}).get('entries') or []:
+        m = re.search(r'(\d{3,6})\D+(\d{1,5})', str((entry.get('metadata') or {}).get('bookAndPage') or ''))
+        if m:
+            pages.add(key_of(m.group(1), m.group(2)))
+    return {'plaintiffs': MJ.plaintiffs_of(raw), 'book_pages': pages}
+
+
+def own_case_basis(model, this_case):
+    """'docket_book_page', 'plaintiff_party' or None. A judgment or lis pendens the docket itself
+    recorded, or one between this case's plaintiff and anyone, is this foreclosure's own filing
+    (2024-014878's vacated judgment 34932/1256 was counted as a claim: 12-case verification,
+    defect 7). A lender name that is only generic words never matches."""
+    if not this_case:
+        return None
+    if key_of(model.get('reC_BOOK'), model.get('reC_PAGE')) in (this_case.get('book_pages') or ()):
+        return 'docket_book_page'
+    if not re.search(r'JUDGMENT|LIS PENDENS', str(model.get('doC_TYPE') or ''), re.I):
+        return None
+    for plaintiff in this_case.get('plaintiffs') or ():
+        want = _distinct_party(plaintiff)
+        if not want:
+            continue
+        for field in ('firsT_PARTY', 'seconD_PARTY'):
+            have = _distinct_party(model.get(field))
+            if have and (want <= have or have <= want):
+                return 'plaintiff_party'
+    return None
+
+
+def run_name_searches(plan, index, searcher, folio, subdivision='', owner_models=None,
+                      this_case=None):
     """Execute the planned name searches. Index what comes back, and report the encumbrances that
     sit on the SUBJECT parcel under a name the owner search never used.
 
@@ -532,11 +588,15 @@ def run_name_searches(plan, index, searcher, folio, subdivision='', owner_models
     Exact folios are parcel matches. A conflicting folio cannot fall back to subdivision;
     subdivision-only hits are uncertain candidates. Money judgments and tax liens remain
     search-result candidates even without parcel linkage, never established attachments.
+
+    `this_case` (from this_case_of) moves this foreclosure's own recorded judgments and lis
+    pendens out of the claims into `own_case_instruments`, each marked `own_case`.
     """
     import records_liens as R
     fol = R.norm_folio(folio)
     sub = (subdivision or '').strip().upper()
     searched, found, candidates, uncertain, claims, gaps = [], [], [], [], [], []
+    own = []
     releases = []
     baseline = None if owner_models is None else {
         key_of(m.get('reC_BOOK'), m.get('reC_PAGE')) for m in owner_models}
@@ -587,7 +647,11 @@ def run_name_searches(plan, index, searcher, folio, subdivision='', owner_models
                 'amount_basis': 'index_metadata_unverified',
                 'owner_search_missed': None if baseline is None else key_of(model.get('reC_BOOK'), model.get('reC_PAGE')) not in baseline,
             }
-            if money_claim:
+            basis = own_case_basis(model, this_case)
+            if basis:
+                row.update(own_case=True, this_case=basis)
+                own.append(row)
+            elif money_claim:
                 claims.append(dict(row, attachment_status='unknown',
                     identity_status='search_result_only', satisfaction_status='unknown'))
             if exact:
@@ -609,6 +673,7 @@ def run_name_searches(plan, index, searcher, folio, subdivision='', owner_models
         'parcel_candidates': candidates,
         'uncertain_parcel_candidates': uncertain,
         'potential_title_party_claims': claims,
+        'own_case_instruments': own,
         'satisfaction_candidates': releases,
         'gaps': gaps,
         'tokens_free': getattr(searcher, 'spent_free', 0),
