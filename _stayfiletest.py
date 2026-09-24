@@ -127,7 +127,7 @@ try:
                               {'docketDescrition': 'Sale Cancelled', 'comments': 'CANCELLED PER BANKRUPTCY', 'eventDate': '03/10/2026'},
                               DISMISS('06/01/2026', '26-11111')],          # the stay acting, then its own dismissal
         '2099-000021-CA-01': [BK('03/01/2026'), {'docketDescrition': 'Notice of Bankruptcy', 'eventDate': '03/01/2026'},
-                              DISMISS('06/01/2026')],                      # two petition lines one day, one case
+                              CLOSE('06/01/2026', 'Order Dismissing Bankruptcy Case')],  # two petition lines one day, one case
         '2099-000022-CA-01': [BK('03/01/2026', '26-11111'), BK('08/01/2026', '26-33333'),
                               DISMISS('09/15/2026', '26-11111')],          # same as 18, but no stay held yet
         '2099-000023-CA-01': [BK('03/01/2026', '26-11111'), BK('05/01/2026', '26-22222'), BK('08/01/2026', '26-33333'),
@@ -234,6 +234,33 @@ try:
           on('2099-000025-CA-01') and _cache_now['2099-000025-CA-01'].get('a') is True)
     check('an older case reinstated after the newer one closed is active again',
           on('2099-000026-CA-01') and _cache_now['2099-000026-CA-01'].get('a') is True)
+    # DEFECT 9 (12-case verification 2026-09-24): bankruptcy orders reach the state docket as
+    # "Notice of Filing: ..." and name the chapter, not the word bankruptcy. The exact clerk text
+    # for 2018-026274 lives on the desktop; these are the shapes it takes.
+    NOF = lambda d, t, c='': {'docketDescrition': 'Notice of Filing: ' + t, 'eventDate': d, 'comments': c}
+    _stay = lambda *rows: SH._bk_stay(list(rows))
+    check('a chapter 13 dismissal filed as a Notice of Filing ends the stay',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'))[0] is False)
+    check('a chapter 13 REINSTATEMENT after that dismissal makes the stay active again',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Reinstating Chapter 13 Case'))[0] is True)
+    check('a reinstatement naming only the federal case number counts too',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Case 23-17967'),
+                NOF('01/31/2024', 'Order Granting Motion to Reinstate Case 23-17967'))[0] is True)
+    check('a dismissal naming only the federal case number ends that stay',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Case 23-17967'))[0] is False)
+    check('an order vacating the dismissal and reinstating the case is a reinstatement, not a dismissal',
+          _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
+                NOF('01/31/2024', 'Order Vacating Dismissal and Reinstating Chapter 13 Case'))[0] is True)
+    check('a voluntary chapter 13 petition filed as a Notice of Filing opens a stay',
+          _stay(NOF('02/01/2026', 'Voluntary Petition Chapter 13'))[0] is True)
+    check('a bare dismissal of a defendant never ends a bankruptcy stay',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026', 'Voluntary Dismissal as to Defendant Unknown Tenant'))[0] is True)
+    check('a MORTGAGE reinstatement is not a bankruptcy',
+          _stay({'docketDescrition': 'Emergency Motion to Cancel Sale', 'eventDate': '09/24/2026',
+                 'comments': 'reinstatement amount 230283.71'}) == (False, '', ''))
+    check('relief from the automatic stay still ends it with no bankruptcy word on the line',
+          _stay(BK('02/01/2026'), CLOSE('03/01/2026'))[0] is False)
     check('a new active stay drops a stale lift date from the row (gates read it as "contact is legal")',
           on('2099-000009-CA-01') and not after_sh['2099-000009-CA-01'].get('sale_stay_lifted'))
     rebuilt = list(after_sh.values())

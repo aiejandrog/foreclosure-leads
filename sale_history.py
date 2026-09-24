@@ -58,7 +58,10 @@ _DEFT = re.compile(r'defendant|mortgagor|\bowner\b', re.I)
 
 _MOTION = re.compile(r'\bmotion\b', re.I)
 _DENY = re.compile(r'deny|denied|denial', re.I)
-_BANKR = re.compile(r'bankrupt', re.I)
+# 'bankrupt', or the chapter / petition words a bankruptcy order uses without it. 12-case
+# verification 2026-09-24, defect 9: orders arrive on the state docket as "Notice of Filing: ..."
+# and name the chapter ("Order Reinstating Chapter 13 Case") rather than the word bankruptcy.
+_BANKR = re.compile(r'bankrupt|\bchapter\s*(?:7|11|12|13)\b|\bch\.?\s*(?:7|11|12|13)\b|voluntary petition', re.I)
 # DISTINCT bankruptcy filings — Jose's strongest staller screen ("they've already done 3-4
 # bankruptcies, they know the game"), and a signal the sale-cancel scan is structurally blind to:
 # a Suggestion/Notice of Bankruptcy line never contains the word 'sale', and the automatic stay
@@ -110,22 +113,35 @@ def _iso_date(us):
     return f'{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}' if m else ''
 
 _BKSTART = re.compile(r'suggestion of bankruptcy|notice of bankruptcy', re.I)   # a new petition, not the stay acting
+_BKSTAYREL = re.compile(r'relief from (?:the )?(?:automatic )?stay|lift\w* (?:the )?(?:automatic )?stay|'
+                        r'stay (?:is |was )?(?:lifted|terminated|annulled|vacated)|annul\w* (?:the )?stay', re.I)
+_BKREINSTATE = re.compile(r'reinstat', re.I)       # only ever read on a line already about a bankruptcy
 
 def _bk_lines(dks):
     """(opens, closes) of the bankruptcy lines on a docket. opens are (ISO date, federal case numbers
     cited, starts-a-petition); closes are (ISO date, case numbers). Closing lines are checked FIRST
     ('Notice of Filing: ...ORDER OF DISMISSAL' contains 'filing' but closes)."""
-    opens, closes = [], []
+    rows = []
     for e in dks or []:
         t = (e.get('docketDescrition') or e.get('docketDescription') or '')
         tx = t + ' ' + (e.get('comments') or '')
         iso = _iso_date(e.get('eventDate'))
-        if not iso:
+        if iso:
+            rows.append((iso, t, tx, frozenset(_BKNUM.findall(tx))))
+    # A line is about a bankruptcy only when it says so: a filing line, the bankruptcy / chapter
+    # words, stay relief, or a federal case number an earlier bankruptcy line already cited. A bare
+    # "Order of Dismissal" or "Voluntary Dismissal" is about this lawsuit (a defendant, a motion)
+    # and used to close a live stay (12-case verification 2026-09-24, defect 9).
+    known = frozenset().union(*[n for _, t, tx, n in rows if _BKFILE.search(t) or _BANKR.search(tx)])
+    opens, closes = [], []
+    for iso, t, tx, nums in rows:
+        if not (_BKFILE.search(t) or _BANKR.search(tx) or _BKSTAYREL.search(tx) or (nums & known)):
             continue
-        nums = frozenset(_BKNUM.findall(tx))
-        if _BKCLOSE.search(tx):
+        if _BKREINSTATE.search(tx):
+            opens.append((iso, nums, False))           # the case is back: its stay is live again
+        elif _BKCLOSE.search(tx):
             closes.append((iso, nums))
-        elif _BKFILE.search(t) or _BANKR.search(tx):
+        else:
             opens.append((iso, nums, bool(_BKSTART.search(t))))  # 'CANCELLED PER BANKRUPTCY' = the stay acting
     return opens, closes
 
