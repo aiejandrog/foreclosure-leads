@@ -22,7 +22,7 @@ shared spending controls. This is not complete.
 
 | Requirement | Evidence needed | Current state |
 |---|---|---|
-| Fresh selection | Current auction status joined to case/folio; stale dates cannot imply sold | Outstanding |
+| Fresh selection | Current auction status joined to case/folio; stale dates cannot imply sold | `miami_ranking`: the auction calendar (archive last_seen vs the newest scrape) joined to the docket status. A past date is `past_date_outcome_unknown`, a future date missing from the newest calendar is `dropped_from_calendar_unknown`, and only a certificate on the docket is sold. Appraiser owner (7 days), Tax Collector (30 days) and skip-trace (180 days) each carry their read date; a stale or missing one holds the case. Not yet run on the desktop's data |
 | Docket completeness | Full OCS response preserved; independent coverage reconciliation or explicit unverified gap | Full response supported; completeness unproven |
 | All document/page outcomes | Attachment inventory and source-bound page outcomes; no count-only completion | `document_coverage`: one row per expected attachment, each read / read_partial / fetched_unread / queued / failed / restricted / access_gap / not_enumerated / county_no_document, saved with every timeline. A restricted or refused court filing stays a gap; a stored public Official Records copy of the same instrument (prints this case number, same kind, recorded -3/+120 days) is linked as `same_instrument_unverified`, never counted as the court copy. Where none is stored, `alternate_copy_needed` names the book/page the docket cites. Fetching that copy automatically is not wired: it needs the clerk endpoints, reachable only from the desktop |
 | Official Records relevance | Current parcel/title identity, capped search gaps and retained later instruments | A deed without this parcel's folio is kept as `legal_description_match_required` with its parties and the legal description it prints (a deed with another parcel's folio is kept as `folio_conflict`), never dropped and never the current deed on its own. Matching the legal description to the parcel is still a person's job; title discovery does not yet fetch unanchored deeds |
@@ -146,5 +146,23 @@ Priority 6 is wired as a report; nothing here changes equity or the board.
 - Not closable here: matching a legal description to a parcel automatically (condo unit and
   plat-lot descriptions vary too much to decide without a person), and any statement that a debt
   is open. Both stay explicit.
+
+Priority 7 is wired as a daily report; it does not feed the board.
+
+- `python -u miami_ranking.py --all [--refresh-appraiser] [--refresh-tax]` writes
+  `reports/miami-ranking-<date>.json` and `.md`: qualified cases ranked by sale date, then fewest
+  open gaps; every other case held with its reasons; and every fact that changed since the previous
+  report. Without the refresh flags it reads caches only. All sources are free public pages.
+- Held unless: sale scheduled on the newest calendar (or no sale date yet), docket status clear with
+  one controlling judgment, no stay in effect, ownership `candidate`, appraiser owner fresh, `clear`
+  and matching a deed grantee, taxes read within 30 days, and a fresh phone traced for a person on
+  the current deed. An entity-only owner, or a number that belongs to an LLC officer, is never
+  call-ready.
+- Equity is not an input (#51 owns it). Tax amounts and certificates are reported as facts with no
+  priority or survival conclusion. "Qualified" is an evidence statement: opt-out, DNC and send-time
+  gates are untouched and still decide every contact.
+- Not closable here: a sale that happened but whose certificate has not reached the docket reads as
+  `past_date_outcome_unknown` until it does, and a calendar row that disappears cannot be told apart
+  between cancelled and reset without the docket.
 
 The full goal remains active until the acceptance matrix is evidenced end to end.
