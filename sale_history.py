@@ -109,10 +109,12 @@ def _iso_date(us):
     m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (us or '').strip())
     return f'{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}' if m else ''
 
+_BKSTART = re.compile(r'suggestion of bankruptcy|notice of bankruptcy', re.I)   # a new petition, not the stay acting
+
 def _bk_lines(dks):
-    """(opens, closes) of the bankruptcy lines on a docket, each (ISO date, frozenset of the federal
-    case numbers the line cites). Closing lines are checked FIRST ('Notice of Filing: ...ORDER OF
-    DISMISSAL' contains 'filing' but closes)."""
+    """(opens, closes) of the bankruptcy lines on a docket. opens are (ISO date, federal case numbers
+    cited, starts-a-petition); closes are (ISO date, case numbers). Closing lines are checked FIRST
+    ('Notice of Filing: ...ORDER OF DISMISSAL' contains 'filing' but closes)."""
     opens, closes = [], []
     for e in dks or []:
         t = (e.get('docketDescrition') or e.get('docketDescription') or '')
@@ -124,52 +126,72 @@ def _bk_lines(dks):
         if _BKCLOSE.search(tx):
             closes.append((iso, nums))
         elif _BKFILE.search(t) or _BANKR.search(tx):
-            opens.append((iso, nums))                  # 'CANCELLED PER BANKRUPTCY' = the stay acting
+            opens.append((iso, nums, bool(_BKSTART.search(t))))  # 'CANCELLED PER BANKRUPTCY' = the stay acting
     return opens, closes
 
 
 def _bk_events(dks):
     """(opening ISO dates, closing ISO dates) of the bankruptcy lines on a docket."""
     opens, closes = _bk_lines(dks)
-    return [d for d, _ in opens], [d for d, _ in closes]
+    return [o[0] for o in opens], [c[0] for c in closes]
 
 
-def _held_closed(dks, piso):
-    """Does this docket show a closing line for the bankruptcy filed on `piso`, the stay we hold?
-    _bk_stay pairs only the LATEST filing with a close, so on a repeat filer it cannot say whether
-    OUR case closed. A line citing a federal case number answers for that case only, whatever its
-    date. A line citing none counts only between our filing and the next filing after it. When two
-    numbered cases were filed on our date, every one of them needs its own numbered closing line.
-    Two numberless filings on one date cannot be told from one filing's two lines, so they read as one."""
-    if not piso:
-        return False
+def _bk_cases(dks):
+    """The bankruptcy CASES on a docket, oldest first: [(start ISO, case numbers, close ISO or '')].
+    A petition line (suggestion / notice of bankruptcy) starts a new case unless it cites only
+    numbers the current case already has, or is a second numberless petition on the same day. Any
+    other bankruptcy line (a stay order, a sale cancelled per bankruptcy, a reinstatement) is the
+    current case acting; a line citing a different federal case number is a different case.
+    A case is closed by a closing line dated on or after its LAST line (a reinstatement reopens it):
+    one citing its number counts whatever its date; one citing no number counts only before the
+    next case starts, and never for cases filed on the same day as another; a numbered one on a
+    numberless case counts in that window when the number belongs to no other case."""
     opens, closes = _bk_lines(dks)
-    held = frozenset().union(*[n for d, n in opens if d == piso])
-    others = frozenset().union(*[n for d, n in opens if d != piso]) - held
-    nxt = min([d for d, _ in opens if d > piso] or ['9999-99-99'])
-    closes = [(d, n) for d, n in closes if d >= piso]
-    if len(held) > 1:
-        return all(any(h in n for _, n in closes) for h in held)
-    if held:
-        return any((n & held) if n else d < nxt for d, n in closes)
-    return any(d < nxt and not (n & others) for d, n in closes)
+    cases = []                                         # [start, numbers, last line]
+    for d, n, st in sorted(opens, key=lambda o: o[0]):
+        cur = cases[-1] if cases else None
+        if (cur is None or (n and cur[1] and not (n & cur[1]))
+                or (st and not (n and n <= cur[1]) and not (not n and d == cur[0]))):
+            cases.append([d, set(n), d])
+        else:
+            cur[1] |= n; cur[2] = d
+    out = []
+    for i, (st, nums, last) in enumerate(cases):
+        end = min([c[0] for c in cases if c[0] > st] or ['9999-99-99'])
+        shared = sum(1 for c in cases if c[0] == st) > 1
+        others = set().union(*[c[1] for j, c in enumerate(cases) if j != i]) - nums
+        hits = [d for d, n in closes if d >= last and (
+            (n & nums) if n and nums else
+            (d < end and not (n & others)) if n else
+            (d < end and not shared))]
+        out.append((st, frozenset(nums), max(hits or [''])))
+    return out
+
+
+def _stay_end(cases, since):
+    """Close date of the stay made of every case started on/after the case in force on `since`
+    ('' while any of them is open)."""
+    if not cases:
+        return ''
+    held = max([c[0] for c in cases if c[0] <= since] or [cases[0][0]])
+    ends = [c[2] for c in cases if c[0] >= held]
+    return max(ends) if all(ends) else ''
 
 
 def _bk_stay(dks):
     """(active, latest_filing_iso, lifted_iso). A bankruptcy filing line (or a sale cancelled PER
-    the stay) opens; a dismissal / discharge / stay-relief line closes. Active = the newest opening
-    has no closing on/after it. Closing lines are checked FIRST ('Notice of Filing: ...ORDER OF
-    DISMISSAL' contains 'filing' but closes).
+    the stay) opens; a dismissal / discharge / stay-relief line closes. Active = a case started on
+    the newest petition date has no closing line of its own (_bk_cases), so an OLDER case's late
+    dismissal never ends a newer one.
     lifted_iso = the court date the LAST stay closed (when none is active) — the door signal: the
     owner's shield just dropped, the sale is about to be reset, and contact is legal again. The
     freshest-dismissed leads are the most rescuable calls on the board."""
-    opens, closes = _bk_events(dks)
+    opens, _ = _bk_events(dks)
     if not opens:
         return False, '', ''
     latest = max(opens)
-    active = not closes or max(closes) < latest
-    lifted = '' if active else max(c for c in closes if c >= latest)
-    return active, latest, lifted
+    lifted = _stay_end(_bk_cases(dks), latest)
+    return not lifted, latest, lifted
 
 
 def _bk_active(dks):
@@ -305,7 +327,7 @@ def main():
             # A STAY WE ALREADY HOLD ENDS ONLY ON THE SAME EVIDENCE THAT OPENED IT. The prior stay is
             # the cached one or, when the cache entry is gone, the flag on the row itself. It is cleared
             # only when this read shows a bankruptcy filing on or after the prior filing date AND a
-            # closing line after that filing (_bk_stay's own pairing). An empty or short answer, a
+            # closing line of its own for every case from that filing on (_bk_cases). An empty or short answer, a
             # closing line with no filing line, an older stay's closure, or a prior date we cannot
             # read all keep the stay: a wrongly kept stay costs a call, a wrongly cleared one is a
             # §362 contact.
@@ -313,9 +335,13 @@ def main():
             if not bkact and (_prev.get('a') or r.get('sale_bk_active')):
                 _pbd = _prev.get('bd') or r.get('sale_bk_date') or ''
                 _piso = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else _iso_date(_pbd)
-                # _bk_stay only pairs the LATEST filing with a close; a newer case closing says
-                # nothing about ours, so ours needs its own closing line (_held_closed).
-                if not (_piso and bkd and bkd >= _piso and lifted and _held_closed(dks, _piso)):
+                # _bk_stay answers for the NEWEST case only; a newer case closing says nothing
+                # about ours. The stay ends only when ours and every case filed after it each show
+                # their own closing line (_bk_cases), and the lift date is the last of those.
+                _end = _stay_end(_bk_cases(dks), _piso) if _piso else ''
+                if _piso and bkd and bkd >= _piso and lifted and _end:
+                    lifted = max(_end, lifted)
+                else:
                     # still active: drop any lift date from an OLDER closed stay in this read, since
                     # the board's gates read a lift date as "contact is legal again"
                     bkact, bkd, lifted = True, _pbd or bkd, ''
