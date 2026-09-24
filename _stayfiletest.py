@@ -271,6 +271,39 @@ try:
                  'comments': 'reinstatement amount 230283.71'}) == (False, '', ''))
     check('relief from the automatic stay still ends it with no bankruptcy word on the line',
           _stay(BK('02/01/2026'), CLOSE('03/01/2026'))[0] is False)
+    # NEAR SALES (sweep of all Miami leads, 2026-09-24): suggestions of bankruptcy filed 09-22 to
+    # 09-24 on 09-28 sales, under a 7-day TTL a read from the week before stood until the auction.
+    _nt = tempfile.mkdtemp()
+    _now = __import__('time').time()
+    _ad = lambda days: __import__('time').strftime('%m/%d/%Y', __import__('time').localtime(_now + days * 86400))
+    _old = {'s': 0, 'n': 1, 'd': 0, 'w': '', 'b': 0, 'a': False, 'bd': '', 'sl': '', 't': _now - 3 * 86400, 'v': SH.CACHE_VER}
+    json.dump({'2099-000031-CA-01': dict(_old), '2099-000032-CA-01': dict(_old)},
+              open(os.path.join(_nt, 'sale_history_cache.json'), 'w'))
+    json.dump([{'Case #': '2099-000032-CA-01', 'AuctionDate': _ad(30)},       # far sale, fresh read
+               {'Case #': '2099-000033-CA-01', 'AuctionDate': _ad(40)},       # far sale, never read
+               {'Case #': '2099-000031-CA-01', 'AuctionDate': _ad(4)},        # near sale, fresh read
+               {'Case #': '2099-000034-CA-01', 'AuctionDate': _ad(5)}],       # near sale, never read
+              open(os.path.join(_nt, 'leads_final.json'), 'w'))
+    _fetched = []
+    _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time')}
+    try:
+        SH.HERE = _nt; SH.CACHE = os.path.join(_nt, 'sale_history_cache.json')
+        SH._fetch = lambda session, case: _fetched.append(case) or [BK(_ad(-1)[:10])]
+        SH.time = types.SimpleNamespace(time=__import__('time').time, sleep=lambda s: None)
+        sys.argv = ['sale_history.py', '--limit', '2']
+        SH.main()
+    finally:
+        for k, v in _sh.items():
+            setattr(SH, k, v)
+        sys.argv = _argv
+    _near = {r['Case #']: r for r in json.load(open(os.path.join(_nt, 'leads_final.json')))}
+    check('a near sale is re-read although its cached read is 3 days old, and shows the new stay',
+          '2099-000031-CA-01' in _fetched and _near['2099-000031-CA-01'].get('sale_bk_active') is True, _fetched)
+    check('a far sale keeps its 3-day-old read (7-day TTL)', '2099-000032-CA-01' not in _fetched, _fetched)
+    check('near sales are fetched before the --limit budget reaches distant ones',
+          sorted(_fetched) == ['2099-000031-CA-01', '2099-000034-CA-01'], _fetched)
+    check('the leads file keeps its order', list(_near) == ['2099-000032-CA-01', '2099-000033-CA-01',
+                                                              '2099-000031-CA-01', '2099-000034-CA-01'], list(_near))
     check('a new active stay drops a stale lift date from the row (gates read it as "contact is legal")',
           on('2099-000009-CA-01') and not after_sh['2099-000009-CA-01'].get('sale_stay_lifted'))
     rebuilt = list(after_sh.values())

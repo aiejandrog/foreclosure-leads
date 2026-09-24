@@ -26,6 +26,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime
 
 import requests
 
@@ -288,6 +289,11 @@ def main():
                          'path: yesterday\'s stay flags beat shipping the board with the compliance '
                          'layer stripped (the 2026-07-21 hole: [1b/5] published 67 stay-active leads '
                          'with live outreach buttons).')
+    ap.add_argument('--near-days', type=float, default=14.0,
+                    help='a lead whose auction is this many days away or fewer is re-read on the short TTL')
+    ap.add_argument('--near-ttl-hours', type=float, default=20.0,
+                    help='TTL for near-sale leads: a bankruptcy filed days before the sale is the most '
+                         'common one, and a 7-day-old read cannot see it')
     ap.add_argument('--refresh-bk', action='store_true',
                     help='force-refetch every BK-relevant entry (active stay or any BK count) ignoring TTL')
     a = ap.parse_args()
@@ -299,6 +305,18 @@ def main():
     cache = _load_cache()
     now = time.time()
     ttl = a.ttl_days * 86400
+    near_ttl = a.near_ttl_hours * 3600
+
+    def _days_to_sale(r):
+        try:
+            t = datetime.strptime((r.get('AuctionDate') or '').strip()[:10], '%m/%d/%Y').timestamp()
+        except ValueError:
+            return None
+        return (t - now) / 86400.0
+
+    def _near(r):
+        d = _days_to_sale(r)
+        return d is not None and -1 <= d <= a.near_days
     session = requests.Session()
     session.headers.update({'User-Agent': UA, 'Referer': CLERK + '/ocs/'})
 
@@ -308,7 +326,11 @@ def main():
     # normal steady state: once the cache is warm, a run legitimately fetches nothing. They still
     # have to be written to disk — see the write guard at the bottom.
     applied = 0
-    for r in leads:
+    # NEAR SALES FIRST, ON A SHORT TTL (sweep of all Miami leads, 2026-09-24): three 09-28 sales had
+    # a suggestion of bankruptcy filed 09-22 to 09-24, and a 7-day TTL let a read from the week before
+    # stand until the sale. A petition is most likely in the days before an auction, so those leads
+    # are re-read every run and fetched before the --limit budget runs out on distant ones.
+    for r in sorted(leads, key=lambda r: not _near(r)):
         case = (r.get('Case #') or '').strip()
         if a.case and case != a.case:
             continue
@@ -316,7 +338,7 @@ def main():
         if r.get('sale_type') == 'TD' or not re.match(r'\d{4}-\d+-\w+-\d+', case):
             continue
         ent = cache.get(case)
-        _fresh = ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < ttl
+        _fresh = ent and ent.get('v') == CACHE_VER and (now - ent.get('t', 0)) < (near_ttl if _near(r) else ttl)
         _bkforce = a.refresh_bk and ent and (ent.get('a') or ent.get('b'))
         # cache-only: TRUST any structurally-compatible entry (v4+ carries the BK fields) — the
         # point is a fetch-free apply so the early-publish never ships without the compliance layer.
