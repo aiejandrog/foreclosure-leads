@@ -8112,14 +8112,20 @@ function _docChip(r){
     + (d.p ? ', ' + d.p + ' partly read' : '') + '; '
     + (d.g||0) + ' open gap(s) listed in the dossier on the machine. UNVERIFIED until the 12-case review, '
     + 'and NOT in the equity number shown.';
-  if(d.stay === true)
-    return ' <span class="docchip dx" title="' + esc('The court filings read for this case say a STAY is in '
+  // A stay gets its own chip IN FRONT of the judgment chip, never instead of it.
+  var stay = d.stay === true
+    ? ' <span class="docchip dx" title="' + esc('The court filings read for this case say a STAY is in '
       + 'effect (bankruptcy or court order), so the sale may not go ahead. Read from the docket text, not '
-      + 'confirmed with the bankruptcy court.' + tail) + '">DOC &middot; STAY?</span>';
-  if(d.stay === 'unclear')
-    return ' <span class="docchip dx" title="' + esc('The filings mention a STAY, but whether it is still in '
+      + 'confirmed with the bankruptcy court.' + tail) + '">DOC &middot; STAY?</span>'
+    : d.stay === 'unclear'
+    ? ' <span class="docchip dx" title="' + esc('The filings mention a STAY, but whether it is still in '
       + 'effect is unclear from the docket (for example, a bankruptcy notice with later sale activity and no '
-      + 'relief order found). Check before treating the sale date as real.' + tail) + '">DOC &middot; STAY UNCLEAR</span>';
+      + 'relief order found). Check before treating the sale date as real.' + tail) + '">DOC &middot; STAY UNCLEAR</span>'
+    : '';
+  if(!d.n && !d.f) return stay;
+  return stay + _docJudgChip(r, d, tail);
+}
+function _docJudgChip(r, d, tail){
   if(!d.n && !d.p && (!d.j || d.j === 'none'))
     return ' <span class="docchip dn" title="' + esc('Documents were fetched but none could be read yet.' + tail)
       + '">DOC UNREAD</span>';

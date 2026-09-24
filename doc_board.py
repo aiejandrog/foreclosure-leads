@@ -85,8 +85,9 @@ def _stay(timeline):
     """True / False / 'unclear' from the whole-case timeline, or None when it says nothing.
 
     #53 writes an explicit stay_in_effect from the stay history, and that wins. Without it (the
-    timeline on main) the case status carries the answer: 'stayed_by_bankruptcy' is a stay, and an
-    'unclear' status whose reason is about a stay stays unclear rather than becoming a yes or no."""
+    timeline on main) the case status carries the answer: 'stayed_by_bankruptcy' is a stay; an
+    'unclear' status is read by its reason - relief granted is no stay, limited relief or later
+    activity against an unresolved stay stays unclear."""
     if not isinstance(timeline, dict):
         return None
     explicit = timeline.get('stay_in_effect')
@@ -97,7 +98,14 @@ def _stay(timeline):
         return None
     if status.get('kind') == 'stayed_by_bankruptcy':
         return True
-    if status.get('kind') == 'unclear' and 'stay' in str(status.get('reason') or '').lower():
+    if status.get('kind') != 'unclear':
+        return None
+    # Match the timeline's own reasons (miami_case_timeline), not the word "stay": relief granted
+    # with no earlier status to restore is an unclear CASE status, but the stay itself is lifted.
+    reason = str(status.get('reason') or '').lower()
+    if reason.startswith('stay relief found without'):
+        return False
+    if 'partial or limited stay relief' in reason or 'unresolved bankruptcy stay' in reason:
         return 'unclear'
     return None
 

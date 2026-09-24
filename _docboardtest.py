@@ -135,7 +135,7 @@ class LoadAndAttach(unittest.TestCase):
 
 def _chip_js():
     src = _template()
-    m = re.search(r'function _docChip\(r\)\{.*?\n\}\n', src, re.S)
+    m = re.search(r'function _docChip\(r\)\{.*?\nfunction _docJudgChip\(r, d, tail\)\{.*?\n\}\n', src, re.S)
     assert m, '_docChip not found in tracker_template.html'
     return m.group(0)
 
@@ -176,7 +176,9 @@ class Chip(unittest.TestCase):
 
     def test_a_stay_leads_the_chip(self):
         s = DB.summarize(dossier(judgment=ONE), {'stay_in_effect': True})
-        self.assertIn('STAY?', self.render({'judg': 555499.25, 'docs': s}))
+        html = self.render({'judg': 555499.25, 'docs': s})
+        self.assertIn('STAY?', html)
+        self.assertLess(html.index('STAY?'), html.index('JUDG'))
         s = DB.summarize(dossier(judgment=ONE), {'stay_in_effect': False})
         self.assertNotIn('STAY', self.render({'judg': 555499.25, 'docs': s}))
 
@@ -200,8 +202,16 @@ class Chip(unittest.TestCase):
         self.assertIsNone(DB._stay({'status': {'kind': 'sale_scheduled'}}))
         # #53's explicit answer wins over the status.
         self.assertIs(DB._stay({'stay_in_effect': False, 'status': {'kind': 'stayed_by_bankruptcy'}}), False)
-        s = DB.summarize(dossier(judgment=ONE), {'status': {'kind': 'unclear', 'reason': 'stay relief'}})
-        self.assertIn('STAY UNCLEAR', self.render({'docs': s}))
+        # Relief granted with no earlier status to restore: the CASE status is unclear, the stay is not.
+        self.assertIs(DB._stay({'status': {'kind': 'unclear', 'reason': 'Stay relief found without '
+                               'established pre-stay state.'}}), False)
+        self.assertEqual(DB._stay({'status': {'kind': 'unclear', 'reason': 'Partial or limited stay '
+                                   'relief does not establish that all foreclosure restrictions ended.'}}), 'unclear')
+        s = DB.summarize(dossier(judgment=ONE), {'status': {'kind': 'unclear', 'reason':
+                         'Later foreclosure activity conflicts with an unresolved bankruptcy stay'}})
+        html = self.render({'judg': 555499.25, 'docs': s})
+        self.assertIn('STAY UNCLEAR', html)
+        self.assertIn('JUDG $555k?', html)      # the stay never hides the judgment
 
     def test_read_but_unread_states(self):
         self.assertIn('DOC UNREAD', self.render({'docs': {'n': 0, 'f': 3, 'j': 'none'}}))
