@@ -31,7 +31,7 @@ shared spending controls. This is not complete.
 | Current title | Continuous evidence-backed conveyance chain, entity/probate uncertainty explicit | Historical deed candidates only |
 | Liens | Obligation, identity, attachment, amendment and satisfaction links; no missing-release inference | Candidate lists, not proven balances |
 | Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Docket-index reconciliation: each final judgment is operative, superseded, vacated (or partially), satisfied (or partially) or unclear, with the entry that changed it; a controlling judgment is named only when exactly one is operative. Stays carry a history (stayed, relief, reinstated, bankruptcy dismissed). A dismissal naming some defendants is party-limited. A past sale date without a certificate is `unknown_no_certificate`. Judgment BODIES are not yet read for scope; the index can be wrong |
-| One-command orchestration | Durable step leases, before-call reservations, idempotent restart and refresh | Not yet integrated |
+| One-command orchestration | Durable step leases, before-call reservations, idempotent restart and refresh | `run_documents --backfill --timeline [--collect-dockets]`: per case, a documents step then a whole-case timeline step, each recorded in the one backfill checkpoint with its own fingerprint; a restart resumes at the first unfinished step. Both steps draw on one vision ledger and one per-case share; reservations are durable before each call, cached page reads are free, unsettled calls are never retried. Title discovery and the owner-token worker stay separate commands (they spend captcha, which the backfill refuses) |
 | Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Per-case shares on the vision paths (run_documents, backfill, timeline); run_documents --token-budget now solves only through the real-balance PaidCutoffSolver (one try, free browser first) |
 | Five-case replay | Reproduce prior evidence without hand-selection/transcription within approved cap | Replay tool built; not yet run on the saved pilot evidence |
 | Twelve-case review | Explicit review-policy acceptance and unattended evidence report | Not passed; no gate removed |
@@ -106,5 +106,20 @@ Priority 3 is wired on the docket index, not yet on judgment bodies.
   its body. When the index cites no date and more than one judgment could be meant, the answer
   is `unclear`, not a guess. The 6828 and McCray acceptance runs need their saved dockets, which
   are on the desktop.
+
+Priority 4 is wired, not yet run end to end on the desktop.
+
+- `run_case_timeline.timeline_case` is the one per-case timeline body; the standalone command and
+  the backfill both call it, so they cannot drift.
+- `run_documents --backfill --timeline` runs each case's documents step, then its timeline step,
+  under one checkpoint (`_backfill_state`) and one `CaseAllocator`. `State.steps` records each
+  step with its own fingerprint, so a crash mid-timeline resumes at the timeline without re-running
+  the documents step or re-buying a page. A case with no saved OCS docket is a named
+  `timeline:` gap unless `--collect-dockets` refreshes it (free).
+- Not unified, on purpose: title discovery and `run_owner_tokens` spend captcha, and the backfill
+  refuses paid token/name searches. They keep their own ledgers (`captcha/`, `title_discovery/`),
+  so the total exposure of a night that runs all three is the sum of their caps, stated here rather
+  than hidden. The standalone `run_case_timeline` keeps the `title_discovery/vision-budget.json`
+  ledger the pilot's authorization was recorded in.
 
 The full goal remains active until the acceptance matrix is evidenced end to end.

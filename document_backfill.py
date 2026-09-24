@@ -139,17 +139,33 @@ class State:
                 or old.get('status') in (None, 'running', 'budget_paused', 'failed')
                 or (retry_gaps and old.get('status') == 'assessed_with_gaps'))
 
+    def steps(self, case):
+        """Per-step records for one case: {step: {'fingerprint', 'status', ...}}. They survive
+        start() and finish(), so a restart resumes at the first step not yet done."""
+        return self.data['cases'].setdefault(case, {}).setdefault('steps', {})
+
+    def step_done(self, case, step, fp):
+        record = self.steps(case).get(step) or {}
+        return record.get('fingerprint') == fp and record.get('status') in ('done', 'gap')
+
+    def mark_step(self, case, step, fp, status, **detail):
+        self.steps(case)[step] = dict(detail, fingerprint=fp, status=status)
+        self.save()
+
     def start(self, entry):
+        steps = self.data['cases'].get(entry['case'], {}).get('steps', {})
         self.data['cases'][entry['case']] = {
-            'fingerprint': fingerprint(entry), 'status': 'running'}
+            'fingerprint': fingerprint(entry), 'status': 'running', 'steps': steps}
         self.save()
 
     def finish(self, entry, dossier, paused=False):
+        steps = self.data['cases'].get(entry['case'], {}).get('steps', {})
         self.data['cases'][entry['case']] = {
             'fingerprint': fingerprint(entry),
             'status': ('budget_paused' if paused else
                        'complete' if dossier.get('complete') is True else 'assessed_with_gaps'),
             'open_gaps': dossier.get('open_gaps', []),
+            'steps': steps,
         }
         self.save()
 
@@ -197,6 +213,38 @@ class PersistentBudget(Budget):
         result = self.state.data.get('page_reads', {}).get(key)
         return dict(result, usd=0.0, cache_reused=True) if result is not None else None
 
+def _timeline_step(args, runner, state, entry, budget, target, dossier):
+    import run_case_timeline
+    case = entry['case']
+    fp = fingerprint({'case': case, 'processing': entry['_processing'],
+                      'as_of': date.today().isoformat(),
+                      'collect': bool(getattr(args, 'collect_dockets', False))})
+    if state.step_done(case, 'timeline', fp):
+        return DS.pipeline_load(target) or dossier
+    try:
+        timeline, _ = run_case_timeline.timeline_case(
+            case, date.today(), collect=bool(getattr(args, 'collect_dockets', False)),
+            shared=budget)
+    except ValueError as exc:
+        # No saved full OCS inventory, or a truncated one. A named gap, never a silent skip.
+        gap = 'timeline: %s' % exc
+        dossier = dict(DS.pipeline_load(target) or dossier)
+        dossier['complete'] = False
+        dossier['open_gaps'] = list(dossier.get('open_gaps') or []) + [gap]
+        DS.pipeline_write(target, dossier)
+        state.mark_step(case, 'timeline', fp, 'gap', reason=str(exc)[:300])
+        return dossier
+    dossier = dict(DS.pipeline_load(target) or dossier)
+    if not timeline.get('coverage_complete'):
+        dossier['complete'] = False
+        dossier['open_gaps'] = list(dossier.get('open_gaps') or []) + [
+            'timeline: %d gap(s) in the whole-case docket' % len(timeline.get('gaps') or [])]
+        DS.pipeline_write(target, dossier)
+    state.mark_step(case, 'timeline', fp, 'done', status_kind=(timeline.get('status') or {}).get('kind'),
+                    controlling_judgment=(timeline.get('judgments') or {}).get('controlling_entry'))
+    return dossier
+
+
 def run(args, runner):
     """Use the existing case pipeline and document queue, never a second reader."""
     source = Path(args.leads_file or runner.LEADS)
@@ -214,6 +262,10 @@ def run(args, runner):
             'walk_depth': args.walk_depth if args.walk_cites else 0,
             'walk_budget': args.walk_budget,
         }
+        if getattr(args, 'timeline', False):
+            # Only when asked, so turning the step on re-opens cases and a run without it keeps
+            # the checkpoint fingerprints it always had.
+            entry['_processing']['timeline'] = True
     path = runner.dossier_path(runner.COUNTY, '_backfill_state')
     data = snapshot(path)
     charged = data['actual_usd'] + sum(data['reserved'].values())
@@ -256,15 +308,29 @@ def run(args, runner):
                 if not state.pending(entry, args.retry_gaps):
                     continue
                 state.start(entry)
-                dossier = runner.run_case(
-                    entry, qs_cache, queue=queue,
-                    ocr=None if args.no_ocr else DS.winocr,
-                    keep_images=args.keep_images, vision_budget=budget,
-                    walk_depth=args.walk_depth if args.walk_cites else 0,
-                    walk_budget=args.walk_budget, resume=True, reuse_done=True)
-                target = runner.dossier_path(runner.COUNTY, entry['case'])
-                target.parent.mkdir(parents=True, exist_ok=True)
-                DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
+                case = entry['case']
+                target = runner.dossier_path(runner.COUNTY, case)
+                # STEP 1, documents: the recorded instruments through run_case. Skipped on a
+                # restart when this exact step already finished for this exact entry.
+                docs_fp = fingerprint(dict(entry, _processing={
+                    k: v for k, v in entry['_processing'].items() if k != 'timeline'}))
+                saved = DS.pipeline_load(target) if state.step_done(case, 'documents', docs_fp) else None
+                if saved is not None:
+                    dossier = saved
+                else:
+                    dossier = runner.run_case(
+                        entry, qs_cache, queue=queue,
+                        ocr=None if args.no_ocr else DS.winocr,
+                        keep_images=args.keep_images, vision_budget=budget,
+                        walk_depth=args.walk_depth if args.walk_cites else 0,
+                        walk_budget=args.walk_budget, resume=True, reuse_done=True)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    DS._atomic_write_text(str(target), json.dumps(dossier, indent=2) + '\n')
+                    state.mark_step(case, 'documents', docs_fp, 'done')
+                # STEP 2, timeline: the whole-case docket and its filings, through the SAME
+                # ledger and the SAME per-case share (run_case_timeline.timeline_case).
+                if getattr(args, 'timeline', False):
+                    dossier = _timeline_step(args, runner, state, entry, budget, target, dossier)
                 # One case spending its share pauses nothing: the next case has its own. The
                 # backfill pauses only when the cumulative cap itself is spent.
                 paused = bool(budget and budget.budget.exhausted)

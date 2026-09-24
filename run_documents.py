@@ -474,6 +474,13 @@ def main(argv=None):
     parser.add_argument('--backfill', action='store_true',
                         help='resumable pass over EVERY Miami lead; requires explicit vision cap')
     parser.add_argument('--leads-file', help='backfill input snapshot (default leads_final.json)')
+    parser.add_argument('--timeline', action='store_true',
+                        help='backfill: after each case\'s documents, build its whole-case docket '
+                             'timeline (run_case_timeline) in the same checkpoint and the same '
+                             'per-case vision share')
+    parser.add_argument('--collect-dockets', action='store_true',
+                        help='backfill --timeline: refresh each case\'s full OCS docket first '
+                             '(free; without it a case with no saved docket is a named gap)')
     parser.add_argument('--retry-gaps', action='store_true',
                         help='backfill: retry finished attempts with outstanding gaps')
     parser.add_argument('--no-ocr', action='store_true', help='do not OCR scanned pages')
@@ -530,8 +537,8 @@ def main(argv=None):
             return document_backfill.run(args, sys.modules[__name__])
         except (OSError, ValueError, RuntimeError) as exc:
             parser.exit(2, 'backfill stopped: %s\n' % type(exc).__name__)
-    if args.leads_file or args.retry_gaps:
-        parser.error('--leads-file and --retry-gaps require --backfill')
+    if args.leads_file or args.retry_gaps or args.timeline or args.collect_dockets:
+        parser.error('--leads-file, --retry-gaps, --timeline and --collect-dockets require --backfill')
     if args.vision_max_spend is None:
         args.vision_max_spend = 1.00  # Preserve the existing nightly default.
     try:

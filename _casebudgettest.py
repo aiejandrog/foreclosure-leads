@@ -228,6 +228,91 @@ class RunnerWiringTests(unittest.TestCase):
         self.assertAlmostEqual(seen[0][1], 0.10)  # first case: its own third, nothing more
 
 
+
+class OrchestrationTests(unittest.TestCase):
+    """Priority 4: one command (run_documents --backfill --timeline) runs each case's documents
+    step and its whole-case timeline step in one checkpoint and one vision ledger, and a restart
+    resumes at the first unfinished step without paying twice."""
+
+    def run_backfill(self, folder, process, timeline, extra=()):
+        from unittest.mock import patch
+        import run_documents as RD
+        import run_case_timeline as RCT
+        rows = [{'Case #': c, 'county': 'MIAMI-DADE', 'owner_clean': 'TEST'} for c in ROSTER[:2]]
+        source = Path(folder) / 'leads.json'
+        source.write_text(json.dumps(rows))
+        with patch.object(RD, 'dossier_path',
+                          side_effect=lambda county, name: Path(folder) / (name + '.json')), \
+             patch.object(RD, 'DocumentQueue', side_effect=lambda: __import__(
+                 'document_queue').DocumentQueue(str(Path(folder) / 'queue.db'))), \
+             patch.object(DV.VisionReader, 'client', return_value=Client()), \
+             patch.object(RD, 'run_case', side_effect=process), \
+             patch.object(RCT, 'timeline_case', side_effect=timeline):
+            return RD.main(['--backfill', '--enable', '--vision', '--timeline', '--leads-file',
+                            str(source), '--vision-max-spend', '0.30', '--no-ocr'] + list(extra))
+
+    def test_a_crash_in_the_timeline_resumes_there_and_pays_nothing_twice(self):
+        documents, timelines, paid = [], [], []
+
+        def process(entry, qs, **kwargs):
+            documents.append(entry['case'])
+            share = kwargs['vision_budget'].for_case(entry['case'])
+            reader = DV.VisionReader(client=Client())
+            reader.read_page(b'page-of-' + entry['case'].encode(), share)   # one paid page
+            paid.append(entry['case'])
+            return {'complete': True, 'open_gaps': []}
+
+        crash = {'armed': True}
+
+        def timeline(case, as_of, collect=False, shared=None, **kw):
+            self.assertIsInstance(shared, CB.CaseAllocator)     # the same ledger and shares
+            timelines.append(case)
+            if case == ROSTER[1] and crash['armed']:
+                crash['armed'] = False
+                raise KeyboardInterrupt('killed mid-timeline')
+            return {'coverage_complete': True, 'status': {'kind': 'judgment_entered'},
+                    'judgments': {'controlling_entry': '7'}}, {}
+
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaises(KeyboardInterrupt):
+                self.run_backfill(folder, process, timeline)
+            state = json.loads((Path(folder) / '_backfill_state.json').read_text())
+            spent_before = state['actual_usd']
+            self.assertEqual(self.run_backfill(folder, process, timeline), 0)
+            state = json.loads((Path(folder) / '_backfill_state.json').read_text())
+        # Case 1 was finished and was not touched again; case 2's documents step had finished,
+        # so the restart went straight to its timeline.
+        self.assertEqual(documents, ROSTER[:2])
+        self.assertEqual(timelines, [ROSTER[0], ROSTER[1], ROSTER[1]])
+        self.assertEqual(state['actual_usd'], spent_before)
+        self.assertEqual(state['reserved'], {})
+        steps = state['cases'][ROSTER[1]]['steps']
+        self.assertEqual({k: v['status'] for k, v in steps.items()},
+                         {'documents': 'done', 'timeline': 'done'})
+        self.assertEqual(steps['timeline']['controlling_judgment'], '7')
+        self.assertEqual(state['cases'][ROSTER[1]]['status'], 'complete')
+
+    def test_a_case_with_no_saved_docket_is_a_named_gap(self):
+        def process(entry, qs, **kwargs):
+            return {'complete': True, 'open_gaps': []}
+
+        def timeline(case, as_of, **kw):
+            raise ValueError('No existing docket inventory; use --collect to obtain it')
+
+        with tempfile.TemporaryDirectory() as folder:
+            self.run_backfill(folder, process, timeline)
+            state = json.loads((Path(folder) / '_backfill_state.json').read_text())
+            dossier = json.loads((Path(folder) / (ROSTER[0] + '.json')).read_text())
+        self.assertEqual(state['cases'][ROSTER[0]]['status'], 'assessed_with_gaps')
+        self.assertEqual(state['cases'][ROSTER[0]]['steps']['timeline']['status'], 'gap')
+        self.assertIn('timeline: No existing docket inventory', ' '.join(dossier['open_gaps']))
+
+    def test_timeline_flags_need_the_backfill(self):
+        import run_documents as RD
+        with self.assertRaises(SystemExit):
+            RD.main(['--enable', '--timeline'])
+
+
 class CaptchaCutoffWiringTests(unittest.TestCase):
     """The nightly's paid captcha path goes through the real-balance cutoff, or not at all."""
 

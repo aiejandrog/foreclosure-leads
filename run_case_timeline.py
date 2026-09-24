@@ -218,6 +218,68 @@ def summary_counts(rows, timeline):
             'pending_types': dict(Counter(p.get('type', 'unknown') for p in timeline.get('pending', [])))}
 
 
+def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, ledger=None,
+                  cap=None):
+    """One case's whole-case timeline: acquire, free reading, then (with `shared`, a
+    document_case_budget.CaseAllocator) paid amount reads within this case's share.
+
+    The one per-case body behind both this command and `run_documents --backfill --timeline`, so
+    the orchestrated run and the standalone run cannot drift apart. -> (timeline, paths)
+    """
+    import miami_case_timeline
+    import miami_timeline_ocr
+    import document_prioritizer
+    import run_documents
+    as_of = as_of.isoformat() if hasattr(as_of, 'isoformat') else str(as_of)
+    budget = shared.for_case(case) if shared is not None else None
+    inventory, rows = acquire(case, collect=collect,
+                              docket_cache=docket_cache or Path(__file__).with_name('dockets.json'))
+    base = DS.pipeline_folder(COUNTY, case)
+    rows = [miami_timeline_ocr.supplement(row, base / 'timeline-ocr') for row in rows]
+    timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
+    timeline['source_comparison'] = inventory.get('source_comparison')
+    # Preserve the free whole-case analysis even if a paid reader fails.
+    if ledger is not None:
+        timeline['vision_budget'] = budget_snapshot(ledger, cap)
+    timeline['counts'] = summary_counts(rows, timeline)
+    cached_amounts = read_amounts(rows, base)
+    if cached_amounts['evidence_files']:
+        timeline['amount_vision'] = cached_amounts
+        timeline.setdefault('gaps', []).extend(cached_amounts['gaps'])
+        timeline.setdefault('amounts', []).extend(cached_amounts['figures'])
+        if cached_amounts['gaps']:
+            timeline['coverage_complete'] = False
+    write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
+                   miami_case_timeline.render_markdown(timeline))
+    if budget is not None:
+        # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
+        timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
+        timeline['source_comparison'] = inventory.get('source_comparison')
+        try:
+            plan = document_prioritizer.prioritize(case, inventory, as_of)
+        except ValueError:
+            plan = None      # every row is then deferred as not_in_docket_plan
+        amounts = read_amounts(rows, base, budget, plan=plan)
+        shared.finish(case)
+        timeline['amount_vision'] = amounts
+        timeline.setdefault('gaps', []).extend(amounts['gaps'])
+        timeline.setdefault('amounts', []).extend(amounts['figures'])
+        if amounts['gaps']:
+            timeline['coverage_complete'] = False
+    spending = budget_snapshot(ledger, cap) if ledger is not None else {}
+    if budget is not None:
+        spending['paid_requests_this_command'] = budget.calls
+        spending['case_share'] = shared.report(case)
+    timeline['vision_budget'] = spending
+    timeline['counts'] = summary_counts(rows, timeline)
+    paths = write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
+                           miami_case_timeline.render_markdown(timeline))
+    print(json.dumps({'case': case, 'status': timeline.get('status'), 'files': paths,
+                      'counts': timeline['counts'], 'source_comparison': timeline.get('source_comparison'),
+                      'vision_budget': spending}), flush=True)
+    return timeline, paths
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--case', action='append', required=True)
@@ -230,8 +292,6 @@ def main(argv=None):
     parser.add_argument('--vision', action='store_true', help='Read only amount-bearing pages within shared cap')
     args = parser.parse_args(argv)
     import case_review
-    import run_documents
-    import miami_case_timeline
     try:
         cases = list(dict.fromkeys(validate_case(case) for case in args.case))
         ledger = case_review.output_path('title_discovery/vision-budget.json')
@@ -244,57 +304,13 @@ def main(argv=None):
         parser.error(str(exc))
     from document_backfill import State, PersistentBudget
     from document_case_budget import CaseAllocator
-    import document_prioritizer
     with (State(ledger) if args.vision else nullcontext()) as state:
         # One share per named case: the first case cannot spend what the others were given.
         shared = (CaseAllocator(PersistentBudget(args.vision_max_spend, state), cases)
                   if args.vision else None)
         for case in cases:
-            budget = shared.for_case(case) if shared is not None else None
-            inventory, rows = acquire(case, collect=args.collect, docket_cache=args.docket_cache)
-            import miami_timeline_ocr
-            base = DS.pipeline_folder(COUNTY, case)
-            rows = [miami_timeline_ocr.supplement(row, base / 'timeline-ocr') for row in rows]
-            timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=args.as_of.isoformat())
-            timeline['source_comparison'] = inventory.get('source_comparison')
-            # Preserve the free whole-case analysis even if a paid reader fails.
-            timeline['vision_budget'] = budget_snapshot(ledger, args.vision_max_spend)
-            timeline['counts'] = summary_counts(rows, timeline)
-            cached_amounts = read_amounts(rows, base)
-            if cached_amounts['evidence_files']:
-                timeline['amount_vision'] = cached_amounts
-                timeline.setdefault('gaps', []).extend(cached_amounts['gaps'])
-                timeline.setdefault('amounts', []).extend(cached_amounts['figures'])
-                if cached_amounts['gaps']:
-                    timeline['coverage_complete'] = False
-            write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
-                           miami_case_timeline.render_markdown(timeline))
-            if budget is not None:
-                # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
-                timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=args.as_of.isoformat())
-                timeline['source_comparison'] = inventory.get('source_comparison')
-                try:
-                    plan = document_prioritizer.prioritize(case, inventory, args.as_of.isoformat())
-                except ValueError:
-                    plan = None      # every row is then deferred as not_in_docket_plan
-                amounts = read_amounts(rows, DS.pipeline_folder(COUNTY, case), budget, plan=plan)
-                shared.finish(case)
-                timeline['amount_vision'] = amounts
-                timeline.setdefault('gaps', []).extend(amounts['gaps'])
-                timeline.setdefault('amounts', []).extend(amounts['figures'])
-                if amounts['gaps']:
-                    timeline['coverage_complete'] = False
-            spending = budget_snapshot(ledger, args.vision_max_spend)
-            if budget is not None:
-                spending['paid_requests_this_command'] = budget.calls
-                spending['case_share'] = shared.report(case)
-            timeline['vision_budget'] = spending
-            timeline['counts'] = summary_counts(rows, timeline)
-            paths = write_timeline(run_documents.dossier_path(COUNTY, case), timeline,
-                                   miami_case_timeline.render_markdown(timeline))
-            print(json.dumps({'case': case, 'status': timeline.get('status'), 'files': paths,
-                              'counts': timeline['counts'], 'source_comparison': timeline.get('source_comparison'),
-                              'vision_budget': spending}), flush=True)
+            timeline_case(case, args.as_of, collect=args.collect, docket_cache=args.docket_cache,
+                          shared=shared, ledger=ledger, cap=args.vision_max_spend)
     return 0
 
 
