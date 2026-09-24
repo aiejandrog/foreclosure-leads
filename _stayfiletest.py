@@ -235,8 +235,7 @@ try:
     check('an older case reinstated after the newer one closed is active again',
           on('2099-000026-CA-01') and _cache_now['2099-000026-CA-01'].get('a') is True)
     # DEFECT 9 (12-case verification 2026-09-24): bankruptcy orders reach the state docket as
-    # "Notice of Filing: ..." and name the chapter, not the word bankruptcy. The exact clerk text
-    # for 2018-026274 lives on the desktop; these are the shapes it takes.
+    # "Notice of Filing: ..." and name the chapter, not the word bankruptcy. The shapes it takes:
     NOF = lambda d, t, c='': {'docketDescrition': 'Notice of Filing: ' + t, 'eventDate': d, 'comments': c}
     _stay = lambda *rows: SH._bk_stay(list(rows))
     check('a chapter 13 dismissal filed as a Notice of Filing ends the stay',
@@ -252,6 +251,17 @@ try:
     check('an order vacating the dismissal and reinstating the case is a reinstatement, not a dismissal',
           _stay(BK('01/10/2024', '23-17967'), NOF('01/20/2024', 'Order Dismissing Chapter 13 Case'),
                 NOF('01/31/2024', 'Order Vacating Dismissal and Reinstating Chapter 13 Case'))[0] is True)
+    # The clerk's own entries on 2018-026274-CA-01 (events 209208510 and 209744732, code NFILCV),
+    # copied verbatim from the raw docket by the desktop session: the description is the bare
+    # "Notice of Filing:" and the order is only in the comments. The first comment never says
+    # "bankruptcy", so only the chapter words find it.
+    RAW = lambda d, c: {'docketCode': 'NFILCV', 'docketDescrition': 'Notice of Filing:', 'eventDate': d, 'comments': c}
+    _dismissed = RAW('01/12/2024', 'ORDER DENYING CONFIRMATION AND DISMISSING CHAPTER 13 CASE')
+    _reinstated = RAW('02/02/2024', 'copy Order Reinstating Chapter 13 Bankruptcy')
+    check("the clerk's verbatim chapter 13 dismissal notice ends the stay",
+          _stay(BK('06/15/2023', '23-17967'), _dismissed)[0] is False)
+    check("the clerk's verbatim reinstatement notice brings the stay back",
+          _stay(BK('06/15/2023', '23-17967'), _dismissed, _reinstated)[0] is True)
     check('a voluntary chapter 13 petition filed as a Notice of Filing opens a stay',
           _stay(NOF('02/01/2026', 'Voluntary Petition Chapter 13'))[0] is True)
     check('a bare dismissal of a defendant never ends a bankruptcy stay',
