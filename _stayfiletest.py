@@ -95,16 +95,32 @@ try:
     # When a live docket read now shows the stay closed, the row has to lose the flag, and the
     # [4/5] rebuild's make_tracker restore must not put it back from the (now updated) cache.
     import sale_history as SH
-    _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', '_count', '_bk_count', '_bk_stay', 'time')}
+    BK = lambda d: {'docketDescrition': 'Suggestion of Bankruptcy', 'eventDate': d}
+    CLOSE = lambda d, t='Order Granting Relief from Automatic Stay': {'docketDescrition': t, 'eventDate': d}
+    dockets = {                                               # real docket arrays through the real parser
+        '2099-000001-CA-01': [BK('09/01/2026'), CLOSE('09/20/2026')],     # lifted since it was cached
+        '2099-000002-CA-01': None,                                         # fetch fails
+        '2099-000005-CA-01': [],                                           # empty answer
+        '2099-000006-CA-01': [CLOSE('08/01/2026', 'Order of Dismissal')],  # close line, filing line not shown
+        '2099-000007-CA-01': [],                                           # row flagged, cache entry gone
+        '2099-000008-CA-01': [BK('05/01/2026'), CLOSE('06/01/2026')],     # only an OLDER stay, closed
+        '2099-000009-CA-01': [BK('09/15/2026')],                           # new stay, row has an old lift
+    }
+    extra_cache = {'2099-000006-CA-01': {'a': True, 'bd': '2026-07-10'},
+                   '2099-000008-CA-01': {'a': True, 'bd': '2026-09-10'}}
+    _cf = os.path.join(tmp, 'sale_history_cache.json')
+    json.dump(dict(json.load(open(_cf)), **extra_cache), open(_cf, 'w'))
+    _lf = os.path.join(tmp, 'leads_final.json')
+    json.dump(json.load(open(_lf)) + [
+        {'Case #': '2099-000006-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-07-10'},
+        {'Case #': '2099-000007-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-06-01'},
+        {'Case #': '2099-000008-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-09-10'},
+        {'Case #': '2099-000009-CA-01', 'sale_stay_lifted': '2026-01-01'}], open(_lf, 'w'))
+    _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time')}
     _argv = sys.argv
-    live = {'2099-000001-CA-01': (False, '09/01/2026', '09/20/2026'),   # stay lifted since cached
-            '2099-000003-CA-01': (False, '', '')}
     try:
-        SH.HERE = tmp; SH.CACHE = os.path.join(tmp, 'sale_history_cache.json')
-        SH._fetch = lambda session, case: None if case == '2099-000002-CA-01' else case   # 000002: fetch fails
-        SH._count = lambda dks: (0, 0, 0, '')
-        SH._bk_count = lambda dks: 1
-        SH._bk_stay = lambda case: live.get(case, (False, '', ''))
+        SH.HERE = tmp; SH.CACHE = _cf
+        SH._fetch = lambda session, case: dockets.get(case, [])
         SH.time = types.SimpleNamespace(time=__import__('time').time, sleep=lambda s: None)
         sys.argv = ['sale_history.py']
         SH.main()
@@ -112,20 +128,29 @@ try:
         for k, v in _sh.items():
             setattr(SH, k, v)
         sys.argv = _argv
-    after_sh = {r['Case #']: r for r in json.load(open(os.path.join(tmp, 'leads_final.json')))}
+    after_sh = {r['Case #']: r for r in json.load(open(_lf))}
+    _cache_now = json.load(open(_cf))
+    on = lambda c: after_sh[c].get('sale_bk_active') is True
     check('a live read showing the stay lifted clears the flag the scrape step wrote',
-          not after_sh['2099-000001-CA-01'].get('sale_bk_active')
-          and after_sh['2099-000001-CA-01'].get('sale_stay_lifted') == '09/20/2026')
-    check('a failed live read never clears a stay', after_sh['2099-000002-CA-01'].get('sale_bk_active') is True)
-    _cache_now = json.load(open(os.path.join(tmp, 'sale_history_cache.json')))
-    check('a read showing NO bankruptcy line at all never ends a cached stay (row or cache)',
-          after_sh['2099-000005-CA-01'].get('sale_bk_active') is True
-          and after_sh['2099-000005-CA-01'].get('sale_bk_date') == '07/01/2026'
+          not on('2099-000001-CA-01') and after_sh['2099-000001-CA-01'].get('sale_stay_lifted') == '2026-09-20')
+    check('a failed live read never clears a stay', on('2099-000002-CA-01'))
+    check('an empty docket never ends a cached stay (row or cache)',
+          on('2099-000005-CA-01') and after_sh['2099-000005-CA-01'].get('sale_bk_date') == '07/01/2026'
           and _cache_now['2099-000005-CA-01'].get('a') is True)
+    check('a closing line ends a cached stay even when the read omits the filing line',
+          not on('2099-000006-CA-01') and _cache_now['2099-000006-CA-01'].get('a') is False
+          and _cache_now['2099-000006-CA-01'].get('sl') == '2026-08-01')
+    check('an empty docket never ends a stay flagged on the row when its cache entry is gone',
+          on('2099-000007-CA-01') and _cache_now['2099-000007-CA-01'].get('a') is True)
+    check('closing an OLDER stay does not end the newer one we hold, and leaves no lift date',
+          on('2099-000008-CA-01') and not after_sh['2099-000008-CA-01'].get('sale_stay_lifted')
+          and _cache_now['2099-000008-CA-01'].get('a') is True and not _cache_now['2099-000008-CA-01'].get('sl'))
+    check('a new active stay drops a stale lift date from the row (gates read it as "contact is legal")',
+          on('2099-000009-CA-01') and not after_sh['2099-000009-CA-01'].get('sale_stay_lifted'))
     rebuilt = list(after_sh.values())
     F.restore_stays_from_cache(rebuilt)
     check('the rebuild does not re-activate the lifted stay from the cache',
-          [r['Case #'] for r in rebuilt if r.get('sale_bk_active')] == ['2099-000002-CA-01', '2099-000005-CA-01'])
+          [r['Case #'] for r in rebuilt if r.get('sale_bk_active')] == ['2099-000002-CA-01', '2099-000005-CA-01', '2099-000007-CA-01', '2099-000008-CA-01', '2099-000009-CA-01'])
     os.remove(os.path.join(tmp, 'sale_history_cache.json'))
     check('no cache file: nothing restored, nothing raised', F.restore_stays_from_cache([{'Case #': 'x'}]) == 0)
 finally:

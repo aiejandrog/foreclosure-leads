@@ -136,6 +136,17 @@ def _bk_stay(dks):
     return active, latest, lifted
 
 
+def _bk_closes(dks):
+    """ISO dates of every stay-closing line (dismissal, discharge, relief) on the docket."""
+    out = []
+    for e in dks or []:
+        tx = (e.get('docketDescrition') or e.get('docketDescription') or '') + ' ' + (e.get('comments') or '')
+        iso = _iso_date(e.get('eventDate'))
+        if iso and _BKCLOSE.search(tx):
+            out.append(iso)
+    return out
+
+
 def _bk_active(dks):
     """kimi's original contract, preserved for its callers/tests."""
     active, latest, _ = _bk_stay(dks)
@@ -266,19 +277,32 @@ def main():
             surv, sched, done, who = _count(dks)
             bk = _bk_count(dks)
             bkact, bkd, lifted = _bk_stay(dks)
-            # ONLY A CLOSING LINE ENDS A STAY. A read that shows no bankruptcy line at all (bkd '')
-            # is not evidence the stay we cached ended: an empty or short docket answer would
-            # otherwise flip a cached active stay to inactive, here and in the cache, and make the
-            # lead callable. Keep the stay until a dismissal / discharge / relief line appears.
-            if not bkact and not bkd and isinstance(ent, dict) and ent.get('a'):
-                bkact, bkd = True, ent.get('bd', '')
+            # ONLY A CLOSING LINE ENDS A STAY WE ALREADY KNEW ABOUT. The prior stay is the cached one
+            # or, when the cache entry is gone, the flag on the row itself. A read that shows no
+            # bankruptcy line, or only filings older than the one we hold, is not evidence it ended:
+            # an empty or short docket answer would otherwise flip it to inactive here and in the
+            # cache and make the lead callable. A dismissal / discharge / relief line on or after
+            # the prior filing date ends it, even when this read no longer shows the filing itself.
+            _prev = ent if isinstance(ent, dict) else {}
+            if not bkact and (_prev.get('a') or r.get('sale_bk_active')):
+                _pbd = _prev.get('bd') or r.get('sale_bk_date') or ''
+                _floor = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else ''
+                _ended = [c for c in _bk_closes(dks) if c >= _floor]
+                if _ended:
+                    lifted = max(_ended)
+                else:
+                    # still active: drop any lift date from an OLDER closed stay in this read, since
+                    # the board's gates read a lift date as "contact is legal again"
+                    bkact, bkd, lifted = True, _pbd or bkd, ''
             # a standalone bankruptcy filing IS the owner's move — attribute when cancels didn't
             if bk and not who:
                 who = 'owner'
             r['sale_survived'] = surv; r['sale_scheduled'] = sched
             if who: r['sale_who'] = who
             if bk: r['sale_bk'] = bk
-            if bkact: r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+            if bkact:
+                r['sale_bk_active'] = True; r['sale_bk_date'] = bkd
+                r.pop('sale_stay_lifted', None)      # gates read a lift date as "contact is legal"
             else:
                 # A LIVE READ saying no stay is active overrides a flag already on the row. Since
                 # 2026-09-24 foreclosure_leads.main() writes the cached stays into leads_final.json
