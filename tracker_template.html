@@ -8107,10 +8107,14 @@ function _docChip(r){
   // number beside it. `amt` is the printed judgment figure from OCR/vision; it is shown as a claim
   // with a question mark, never swapped in for r.judg. Rows with no dossier render nothing.
   var d = r && r.docs;
-  if(!d || !(d.n || d.f)) return '';
+  if(!d || !(d.n || d.f || d.stay === true)) return '';
   var tail = ' Read ' + (d.at || '?') + '; ' + (d.n||0) + ' of ' + (d.f||0) + ' fetched document(s) fully read; '
     + (d.g||0) + ' open gap(s) listed in the dossier on the machine. UNVERIFIED until the 12-case review, '
     + 'and NOT in the equity number shown.';
+  if(d.stay === true)
+    return ' <span class="docchip dx" title="' + esc('The court filings read for this case say a STAY is in '
+      + 'effect (bankruptcy or court order), so the sale may not go ahead. Read from the docket text, not '
+      + 'confirmed with the bankruptcy court.' + tail) + '">DOC &middot; STAY?</span>';
   if(!d.n)
     return ' <span class="docchip dn" title="' + esc('Documents were fetched but none could be read yet.' + tail)
       + '">DOC UNREAD</span>';

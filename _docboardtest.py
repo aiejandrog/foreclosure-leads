@@ -88,6 +88,34 @@ class LoadAndAttach(unittest.TestCase):
         got = DB.load(self.dir)
         self.assertEqual(list(got), ['2024009959CA01'])
 
+    def test_timeline_file_rides_with_its_dossier_and_never_replaces_it(self):
+        # run_case_timeline.write_timeline puts <case>-timeline.json BESIDE the dossier. It has a
+        # 'case' key too, and it sorts after the dossier, so reading it as a dossier would
+        # overwrite the real summary with an empty one.
+        self.write('2024-009959-CA-01.json', dossier(judgment=ONE))
+        self.write('2024-009959-CA-01-timeline.json',
+                   {'case': '2024-009959-CA-01', 'stay_in_effect': True, 'entries': []})
+        got = DB.load(self.dir)
+        self.assertEqual(list(got), ['2024009959CA01'])
+        self.assertEqual(got['2024009959CA01']['amt'], 555499.25)
+        self.assertIs(got['2024009959CA01']['stay'], True)
+
+    def test_no_timeline_or_unknown_stay_ships_no_stay_key(self):
+        self.write('2024-009959-CA-01.json', dossier(judgment=ONE))
+        self.write('2022-012065-CA-01.json', dossier(case='2022-012065-CA-01'))
+        self.write('2022-012065-CA-01-timeline.json', {'case': '2022-012065-CA-01', 'stay_in_effect': None})
+        got = DB.load(self.dir)
+        self.assertNotIn('stay', got['2024009959CA01'])
+        self.assertNotIn('stay', got['2022012065CA01'])
+
+    def test_a_timeline_stub_dossier_is_not_a_document_summary(self):
+        # write_timeline creates {'case','county','complete'} when no dossier existed yet.
+        self.assertIsNone(DB.summarize({'case': 'x', 'county': 'MIAMI-DADE', 'complete': False}))
+
+    def test_folder_matches_run_documents(self):
+        import document_store as DS
+        self.assertEqual(DB.COUNTY_DIR, DS._slug('MIAMI-DADE'))
+
     def test_missing_folder_is_empty(self):
         self.assertEqual(DB.load(os.path.join(self.dir, 'nope')), {})
 
@@ -145,6 +173,12 @@ class Chip(unittest.TestCase):
         self.assertIn('JUDG PAID?', self.render({'docs': sat}))
         sev = DB.summarize(dossier(judgment={'candidates': ['x', 'y'], 'certain': False}))
         self.assertIn('2+ JUDGMENTS', self.render({'docs': sev}))
+
+    def test_a_stay_leads_the_chip(self):
+        s = DB.summarize(dossier(judgment=ONE), {'stay_in_effect': True})
+        self.assertIn('STAY?', self.render({'judg': 555499.25, 'docs': s}))
+        s = DB.summarize(dossier(judgment=ONE), {'stay_in_effect': False})
+        self.assertNotIn('STAY', self.render({'judg': 555499.25, 'docs': s}))
 
     def test_read_but_unread_states(self):
         self.assertIn('DOC UNREAD', self.render({'docs': {'n': 0, 'f': 3, 'j': 'none'}}))

@@ -21,14 +21,20 @@ SHAPE (one row, short keys because it rides in every build):
      'j': 'one' | 'several' | 'none' | 'sat' | 'part',
      'amt': printed judgment amount, only when j is 'one' or 'part' and one figure was printed,
      'ref': the operative document's source_ref, when there is one,
-     'g': number of open gaps, 'at': YYYY-MM-DD the dossier was built}
+     'g': number of open gaps, 'at': YYYY-MM-DD the dossier was built,
+     'stay': True/False, only when the whole-case timeline (#53, <case>-timeline.json beside the
+             dossier) says whether a stay is in effect; absent when there is no timeline or it
+             could not tell}
 """
 import json
 import os
 import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-COUNTY_DIR = 'miami-dade'
+# run_documents.dossier_path slugs COUNTY='MIAMI-DADE' as-is, so the folder is upper case (and case
+# matters off Windows).
+COUNTY_DIR = 'MIAMI-DADE'
+TIMELINE_SUFFIX = '-timeline.json'
 
 
 def case_key(case):
@@ -41,9 +47,9 @@ def dossier_dir():
     return os.path.join(P.DEALFLOW_DIR, 'dossiers', COUNTY_DIR)
 
 
-def summarize(dossier):
-    """One dossier -> the board summary, or None when it is not a case dossier."""
-    if not isinstance(dossier, dict) or not dossier.get('case'):
+def summarize(dossier, timeline=None):
+    """One dossier (and its timeline, if any) -> the board summary, or None when not a dossier."""
+    if not isinstance(dossier, dict) or not dossier.get('case') or 'c_documents' not in dossier:
         return None
     c = dossier.get('c_documents') or {}
     jd = c.get('judgment') or {}
@@ -63,7 +69,18 @@ def summarize(dossier):
         out['amt'] = round(float(amt), 2)
     if jd.get('operative'):
         out['ref'] = str(jd['operative'])[:60]
+    stay = (timeline or {}).get('stay_in_effect') if isinstance(timeline, dict) else None
+    if isinstance(stay, bool):
+        out['stay'] = stay
     return out
+
+
+def _read(path):
+    try:
+        with open(path, encoding='utf-8') as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return None
 
 
 def load(folder=None):
@@ -75,14 +92,12 @@ def load(folder=None):
     except OSError:
         return out
     for name in names:
-        if not name.endswith('.json') or name.startswith('_'):
-            continue            # _nightly.json and any other run summary are not cases
-        try:
-            with open(os.path.join(folder, name), encoding='utf-8') as fh:
-                dossier = json.load(fh)
-        except (OSError, ValueError):
+        if not name.endswith('.json') or name.startswith('_') or name.endswith(TIMELINE_SUFFIX):
+            continue            # _nightly.json is a run summary; <case>-timeline.json rides below
+        dossier = _read(os.path.join(folder, name))
+        if dossier is None:
             continue
-        s = summarize(dossier)
+        s = summarize(dossier, _read(os.path.join(folder, name[:-5] + TIMELINE_SUFFIX)))
         if s:
             out[case_key(dossier['case'])] = s
     return out
