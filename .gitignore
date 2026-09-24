@@ -505,6 +505,7 @@ deal_desk.json
 !_anchorgatetest.py
 !_boardaccuracytest.py
 !_recordsqstest.py
+!_docboardtest.py
 # _stayfiletest: healthcheck's §362 rule counts stay flags in leads_final.json, but main() wrote that
 # file before the sale-history cache restored them (the restore ran only inside make_tracker, in
 # memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
