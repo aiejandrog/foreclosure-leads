@@ -69,6 +69,49 @@ def out(*parts):
     return os.path.join(DEALFLOW_DIR, *parts)
 
 
+# The owner-keyed Miami Official Records search-token cache (owner_clean -> qs). Every key is a
+# homeowner's name, so it belongs here and not in the checkout, where it sat until 2026-09-24.
+RECORDS_QS = os.path.join(DEALFLOW_DIR, 'records_qs.json')
+_REPO = os.path.dirname(os.path.abspath(__file__))
+
+
+def records_qs():
+    """Path of the Official Records token cache, moving a legacy checkout copy in first.
+
+    A records_qs.json still in the repo folder is merged into RECORDS_QS (keys already there win)
+    and then deleted, so the first run after the pull does the move and every later one is a stat.
+    Only when DEALFLOW_DIR is the default: tests and GitHub Actions point DEALFLOW_DIR at a throwaway
+    folder, and a move there would carry the real cache into a directory about to be deleted.
+    If the move fails for any reason, the legacy file is returned untouched so no token is lost.
+    """
+    legacy = os.path.join(_REPO, 'records_qs.json')
+    if 'DEALFLOW_DIR' in os.environ or not os.path.exists(legacy):
+        return RECORDS_QS
+    import json as _json
+    try:
+        with open(legacy, encoding='utf-8') as fh:
+            old = _json.load(fh)
+        cur = {}
+        if os.path.exists(RECORDS_QS):
+            with open(RECORDS_QS, encoding='utf-8') as fh:
+                cur = _json.load(fh)
+        if not isinstance(old, dict) or not isinstance(cur, dict):
+            raise ValueError('records_qs.json is not an owner -> token map')
+        for k, v in old.items():
+            cur.setdefault(k, v)
+        ensure()
+        tmp = RECORDS_QS + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as fh:
+            _json.dump(cur, fh, indent=1, sort_keys=True)
+        os.replace(tmp, RECORDS_QS)
+        os.remove(legacy)
+    except (OSError, ValueError) as exc:
+        import sys as _sys
+        print('paths: records_qs.json left in the repo folder, not moved (%s)' % exc, file=_sys.stderr)
+        return legacy if not os.path.exists(RECORDS_QS) else RECORDS_QS
+    return RECORDS_QS
+
+
 def ensure():
     """Create DEALFLOW_DIR and return it."""
     os.makedirs(DEALFLOW_DIR, exist_ok=True)

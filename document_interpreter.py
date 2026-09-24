@@ -47,6 +47,26 @@ class NotConfigured(RuntimeError):
 KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'anthropic.key')
 
 
+# messages.count_tokens (every read is priced BEFORE it is sent) is not on the non-beta client until
+# anthropic 0.41. The laptop had 0.37.1 on 2026-09-24, which would have failed on the first page of
+# the first night; 0.37-0.39 also fail to construct at all beside httpx 0.28.
+MIN_SDK = '0.41'
+
+
+def api_client(anthropic, **kw):
+    """anthropic.Anthropic() for a metered reader, or NotConfigured naming the fix."""
+    need = 'pip install -U "anthropic>=%s"' % MIN_SDK
+    try:
+        client = anthropic.Anthropic(**api_client_kwargs(), **kw)
+    except TypeError as exc:
+        raise NotConfigured('the anthropic SDK %s cannot start here (%s): %s'
+                            % (getattr(anthropic, '__version__', '?'), exc, need))
+    if not hasattr(client.messages, 'count_tokens'):
+        raise NotConfigured('the anthropic SDK %s has no messages.count_tokens: %s'
+                            % (getattr(anthropic, '__version__', '?'), need))
+    return client
+
+
 def api_client_kwargs():
     """Credentials for anthropic.Anthropic(): the environment first, then anthropic.key.
 
@@ -140,7 +160,7 @@ class ApiInterpreter(Interpreter):
             raise NotConfigured('the anthropic SDK is not installed (pip install anthropic)')
         # Deliberately not falling through to the CLI when this raises. An unattended run that
         # quietly switched billing model is the failure this module exists to prevent.
-        self._client = anthropic.Anthropic(**api_client_kwargs())
+        self._client = api_client(anthropic)
         return self._client
 
     def interpret(self, pages, budget, instruction=INSTRUCTION):

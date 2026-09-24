@@ -831,6 +831,26 @@ class BudgetTests(unittest.TestCase):
                 if v is not None:
                     os.environ[k] = v
 
+    def test_an_sdk_without_count_tokens_is_a_named_gap_before_any_spend(self):
+        class _Messages:
+            pass
+
+        class _Client:
+            def __init__(self, **kw):
+                self.messages = _Messages()
+
+        class _OldSdk:
+            __version__ = '0.37.1'
+            Anthropic = _Client
+
+        os.environ['ANTHROPIC_API_KEY'] = 'sk-test-not-a-real-key'
+        try:
+            with self.assertRaises(DI.NotConfigured) as ctx:
+                DI.api_client(_OldSdk)
+        finally:
+            del os.environ['ANTHROPIC_API_KEY']
+        self.assertIn('anthropic>=', str(ctx.exception))
+
     def test_the_key_file_is_used_when_the_environment_has_no_key(self):
         saved = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
         key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'anthropic.key')

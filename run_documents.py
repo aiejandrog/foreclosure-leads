@@ -106,11 +106,12 @@ import case_dossier
 import case_review
 import document_store as DS
 import miami_judgment as MJ
+import paths as P
 from document_queue import DocumentQueue
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 LEADS = os.path.join(HERE, 'leads_final.json')
-QS_CACHE = os.path.join(HERE, 'records_qs.json')
+QS_CACHE = P.records_qs()
 CHAINS = os.path.join(HERE, 'records_liens.json')
 COUNTY = 'MIAMI-DADE'
 
@@ -549,7 +550,7 @@ def main(argv=None):
                            'not have it: it is gitignored. Copy it in, or run with budgets at 0.\n')
     if not os.path.exists(QS_CACHE) and not args.token_budget:
         print('run_documents: WARNING %s is missing and --token-budget is 0, so every case will be '
-              'skipped for no search token. Copy it in from the main repo folder.' % QS_CACHE)
+              'skipped for no search token. Copy it in from the machine that has one.' % QS_CACHE)
     leads = _lead_rows(only=args.case or None)
     if not leads:
         print('run_documents: %s is missing or empty; nothing to do.' % LEADS)

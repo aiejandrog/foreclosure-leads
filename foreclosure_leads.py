@@ -1671,7 +1671,7 @@ def make_tracker(leads):
         except Exception: cq = {}
     # direct-to-results Official Records tokens per owner (produced by gen_records_qs.py, gitignored)
     rq = {}
-    _rqf = os.path.join(HERE, 'records_qs.json')
+    _rqf = P.records_qs()
     if os.path.exists(_rqf):
         try: rq = json.load(open(_rqf, encoding='utf-8'))
         except Exception: rq = {}
