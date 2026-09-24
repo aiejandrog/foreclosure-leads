@@ -139,24 +139,28 @@ def _bk_events(dks):
 def _bk_cases(dks):
     """The bankruptcy CASES on a docket, oldest first: [(start ISO, case numbers, close ISO or '')].
     A petition line (suggestion / notice of bankruptcy) starts a new case unless it cites only
-    numbers the current case already has, or is a second numberless petition on the same day. Any
+    numbers one case already has, or is a second numberless petition on the same day. Any
     other bankruptcy line (a stay order, a sale cancelled per bankruptcy, a reinstatement) is the
-    current case acting; a line citing a different federal case number is a different case.
+    current case acting; a line citing a different federal case number is a different case, unless
+    that number belongs to an earlier case, in which case it is that earlier case acting.
     A case is closed by a closing line dated on or after its LAST line (a reinstatement reopens it):
     one citing its number counts whatever its date; one citing no number counts only before the
     next case starts, and never for cases filed on the same day as another; a numbered one on a
     numberless case counts in that window when the number belongs to no other case."""
     opens, closes = _bk_lines(dks)
-    cases = []                                         # [start, numbers, last line]
+    cases = []                                         # [start, numbers, last line, line dates]
     for d, n, st in sorted(opens, key=lambda o: o[0]):
         cur = cases[-1] if cases else None
-        if (cur is None or (n and cur[1] and not (n & cur[1]))
+        own = [c for c in cases if n and n & c[1]]
+        if own and (not st or n <= own[-1][1]):
+            cur = own[-1]                              # a line for a case we already have
+        elif (cur is None or (n and cur[1] and not (n & cur[1]))
                 or (st and not (n and n <= cur[1]) and not (not n and d == cur[0]))):
-            cases.append([d, set(n), d])
-        else:
-            cur[1] |= n; cur[2] = d
+            cases.append([d, set(n), d, {d}])
+            continue
+        cur[1] |= n; cur[2] = d; cur[3].add(d)
     out = []
-    for i, (st, nums, last) in enumerate(cases):
+    for i, (st, nums, last, dates) in enumerate(cases):
         end = min([c[0] for c in cases if c[0] > st] or ['9999-99-99'])
         shared = sum(1 for c in cases if c[0] == st) > 1
         others = set().union(*[c[1] for j, c in enumerate(cases) if j != i]) - nums
@@ -164,17 +168,18 @@ def _bk_cases(dks):
             (n & nums) if n and nums else
             (d < end and not (n & others)) if n else
             (d < end and not shared))]
-        out.append((st, frozenset(nums), max(hits or [''])))
+        out.append((st, frozenset(nums), max(hits or ['']), frozenset(dates)))
     return out
 
 
 def _stay_end(cases, since):
-    """Close date of the stay made of every case started on/after the case in force on `since`
-    ('' while any of them is open)."""
-    if not cases:
+    """Close date of the stay made of the case holding a line dated `since` and every case started
+    after it ('' while any of them is open, or when no line on this docket is dated `since`: a
+    stay ends only on a read that still shows the line that opened it)."""
+    held = [c[0] for c in cases if since in c[3]]
+    if not held:
         return ''
-    held = max([c[0] for c in cases if c[0] <= since] or [cases[0][0]])
-    ends = [c[2] for c in cases if c[0] >= held]
+    ends = [c[2] for c in cases if c[0] >= min(held) or since in c[3]]
     return max(ends) if all(ends) else ''
 
 

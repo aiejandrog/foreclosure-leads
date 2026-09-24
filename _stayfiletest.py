@@ -132,13 +132,24 @@ try:
                               DISMISS('09/15/2026', '26-11111')],          # same as 18, but no stay held yet
         '2099-000023-CA-01': [BK('03/01/2026', '26-11111'), BK('05/01/2026', '26-22222'), BK('08/01/2026', '26-33333'),
                               DISMISS('09/10/2026', '26-11111'), DISMISS('09/15/2026', '26-33333')],  # middle case open
+        '2099-000024-CA-01': [BK('03/01/2026', '26-11111'), BK('08/01/2026', '26-33333'),
+                              {'docketDescrition': 'Order Case Pending Bankruptcy Stay', 'eventDate': '08/15/2026',
+                               'comments': '26-11111'},
+                              DISMISS('09/15/2026', '26-11111')],          # older case acts after the newer filing, then closes
+        '2099-000025-CA-01': [BK('03/01/2026', '26-11111'), DISMISS('04/01/2026', '26-11111'),
+                              BK('08/01/2026', '26-33333'), DISMISS('09/15/2026', '26-33333')],  # the held 05-01 filing is missing
+        '2099-000026-CA-01': [BK('03/01/2026', '26-11111'), BK('08/01/2026', '26-33333'), DISMISS('08/20/2026', '26-33333'),
+                              DISMISS('09/01/2026', '26-11111'),
+                              {'docketDescrition': 'Notice of Reinstatement', 'eventDate': '09/10/2026',
+                               'comments': 'bankruptcy 26-11111 reinstated'}],   # older case reinstated after both closed
     }
     extra_cache = {'2099-000006-CA-01': {'a': True, 'bd': '2026-07-10'},
                    '2099-000008-CA-01': {'a': True, 'bd': '2026-09-10'},
                    '2099-000010-CA-01': {'a': True, 'bd': '09/10/2026'},
                    '2099-000011-CA-01': {'a': True, 'bd': '2026-03-01'},
                    '2099-000012-CA-01': {'a': True, 'bd': '2026-03-01'},
-                   **{'2099-0000%d-CA-01' % i: {'a': True, 'bd': '2026-03-01'} for i in (*range(13, 22), 23)}}
+                   **{'2099-0000%d-CA-01' % i: {'a': True, 'bd': '2026-03-01'} for i in (*range(13, 22), 23, 26)},
+                   '2099-000025-CA-01': {'a': True, 'bd': '2026-05-01'}}
     _cf = os.path.join(tmp, 'sale_history_cache.json')
     json.dump(dict(json.load(open(_cf)), **extra_cache), open(_cf, 'w'))
     _lf = os.path.join(tmp, 'leads_final.json')
@@ -151,7 +162,9 @@ try:
         {'Case #': '2099-000011-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-03-01'},
         {'Case #': '2099-000012-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-03-01'}] +
         [{'Case #': '2099-0000%d-CA-01' % i, 'sale_bk_active': True, 'sale_bk_date': '2026-03-01'} for i in (*range(13, 22), 23)] +
-        [{'Case #': '2099-000022-CA-01'}],
+        [{'Case #': '2099-000022-CA-01'}, {'Case #': '2099-000024-CA-01'},
+         {'Case #': '2099-000025-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-05-01'},
+         {'Case #': '2099-000026-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-03-01'}],
         open(_lf, 'w'))
     _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time')}
     _argv = sys.argv
@@ -215,6 +228,12 @@ try:
           on('2099-000022-CA-01') and after_sh['2099-000022-CA-01'].get('sale_bk_date') == '2026-08-01')
     check('a case filed between ours and the newest, still open, keeps the stay',
           on('2099-000023-CA-01') and _cache_now['2099-000023-CA-01'].get('a') is True)
+    check('an older case acting after a newer filing stays that older case; its close does not hide the newer one',
+          on('2099-000024-CA-01'))
+    check('a read that no longer shows the held filing never ends the stay, even when the cases around it closed',
+          on('2099-000025-CA-01') and _cache_now['2099-000025-CA-01'].get('a') is True)
+    check('an older case reinstated after the newer one closed is active again',
+          on('2099-000026-CA-01') and _cache_now['2099-000026-CA-01'].get('a') is True)
     check('a new active stay drops a stale lift date from the row (gates read it as "contact is legal")',
           on('2099-000009-CA-01') and not after_sh['2099-000009-CA-01'].get('sale_stay_lifted'))
     rebuilt = list(after_sh.values())
@@ -224,7 +243,8 @@ try:
                                                                    '2099-000008-CA-01', '2099-000009-CA-01', '2099-000010-CA-01',
                                                                    '2099-000011-CA-01', '2099-000013-CA-01', '2099-000015-CA-01',
                                                                    '2099-000017-CA-01', '2099-000018-CA-01', '2099-000019-CA-01', '2099-000023-CA-01',
-                                                                   '2099-000022-CA-01'],
+                                                                   '2099-000022-CA-01', '2099-000024-CA-01', '2099-000025-CA-01',
+                                                                   '2099-000026-CA-01'],
           [r['Case #'] for r in rebuilt if r.get('sale_bk_active')])
     os.remove(os.path.join(tmp, 'sale_history_cache.json'))
     check('no cache file: nothing restored, nothing raised', F.restore_stays_from_cache([{'Case #': 'x'}]) == 0)
