@@ -167,6 +167,96 @@ class TextTableTests(unittest.TestCase):
         self.assertEqual(sorted(total['sum_check_components']), [379.85, 3941.07])
 
 
+
+# The two acceptance cases' line shapes, with synthetic figures. A Word-made text layer pads the
+# dollar sign with no-break spaces; a lender's cost exhibit prints each label on its own line with
+# its figure on the next, year-by-year lines, parenthesised credits, running SUBTOTALs and a bare
+# TOTAL.
+NB = '\xa0'
+PADDED_P1 = '\n'.join([
+    'CASE NO: 2099-000002-CA-01',
+    NB * 11 + ' Principal due on the note secured by the mortgage foreclosed:' + NB * 8 + ' $100,000.00',
+    NB * 11 + ' Interest on the note and mortgage from 6/12/2026 to 6/16/2026' + NB * 6 + ' $' + NB * 6
+    + ' 200.00',
+    NB * 11 + ' ' + NB * 11 + ' ($50.00 per diem)',
+    'Costs per cost declaration' + NB * 66 + ' $' + NB * 3 + ' 1,500.25',
+    NB * 11 + ' Attorneys’ Fees Total' + NB * 60 + ' ' + NB * 11 + ' $' + NB * 3 + ' 2,000.00',
+    'Case No: 2099-000002-CA-01',
+])
+PADDED_P2 = NB * 23 + ' GRAND TOTAL' + NB * 65 + ' $103,700.25'
+
+EXHIBIT_P2 = '\n'.join([
+    'Principal', '$90,000.00', 'Interest to 06/01/2026', '$5,000.00',
+    'Taxes and insurance advanced:',
+])
+EXHIBIT_P3 = '\n'.join([
+    '2026: $1,000.00  ', '2025: $2,000.00 ', 'Hazard insurance', '2026: $300.00 ',
+    'Escrow balance', '($400.00)', 'Suspense balance', '($100.00)',
+    'Property Registration', '$50.00', 'Property Preservation', '$1050.00',
+    'SUBTOTAL', '$98,900.00',
+    'Complaint Filing Fees', '$1,000.00', 'Summonses', '$95.00',
+    'SUBTOTAL', '$99,995.00',
+    'Foreclosure counsel attorney’s fees', '$2,000.00',
+    'Case No: 2099-000003-CA-01',
+])
+EXHIBIT_P4 = '\n'.join(['Litigation counsel attorney’s fees', '$3,000.00', 'TOTAL', '$104,995.00',
+                        'Interest. The grand total amount referenced in Paragraph 1 shall bear interest'])
+
+
+def pages(*texts):
+    return {'pages': [{'page': n, 'outcome': 'text', 'text': t, 'text_source': 'embedded'}
+                      for n, t in enumerate(texts, 1)]}
+
+
+class AcceptanceShapeTests(unittest.TestCase):
+    def test_no_break_spaces_after_the_dollar_sign_keep_every_charge(self):
+        found = [c for c in MJ.judgment_amount_candidates(pages(PADDED_P1, PADDED_P2))
+                 if c['amount'] == 103700.25][0]
+        self.assertTrue(found['sum_check'], found['sum_check_reason'])
+        self.assertEqual(sorted(found['sum_check_components']), [200.0, 1500.25, 2000.0, 100000.0])
+        self.assertEqual([r['value'] for r in found['sum_check_rates']], [50.0])
+        self.assertEqual(found['sum_check_run'], 'continued_from_page_1')
+
+    def test_value_lines_with_credits_unpadded_thousands_and_year_lines_all_become_rows(self):
+        rows = JM.text_rows(pages(EXHIBIT_P2, EXHIBIT_P3, EXHIBIT_P4), MJ.TOTAL_RE)
+        got = [(r['page'], r['label'], r['kind'], r['amount']) for r in rows if not r['barrier']]
+        self.assertIn((2, '2026', 'charge', '1000.00'), got)
+        self.assertIn((2, '2026', 'charge', '300.00'), got)
+        self.assertIn((2, 'Escrow balance', 'credit', '400.00'), got)
+        self.assertIn((2, 'Suspense balance', 'credit', '100.00'), got)
+        self.assertIn((2, 'Property Preservation', 'charge', '1050.00'), got)
+        self.assertIn((3, 'TOTAL', 'total', '104995.00'), got)
+        self.assertEqual([r for r in rows if r['barrier']], [])
+
+    def test_a_bare_total_after_running_subtotals_verifies_through_both(self):
+        found = [c for c in MJ.judgment_amount_candidates(pages(EXHIBIT_P2, EXHIBIT_P3, EXHIBIT_P4))
+                 if c['amount'] == 104995.0]
+        self.assertEqual(len(found), 1)
+        found = found[0]
+        self.assertTrue(found['sum_check'], found['sum_check_reason'])
+        self.assertEqual(found['match'], 'column_pairing')
+        self.assertEqual([c['amount'] for c in found['sum_check_credits']], [-400.0, -100.0])
+        subtotals = {s['amount']: s['membership'] for s in found['sum_check_subtotals']}
+        self.assertEqual(subtotals, {98900.0: 'rows_above', 99995.0: 'running_from_subtotal'})
+        self.assertEqual(found['sum_check_pages'], [1, 2, 3])
+
+    def test_a_misread_figure_anywhere_in_the_exhibit_fails(self):
+        bad = EXHIBIT_P3.replace('$1050.00', '$1060.00')
+        found = [c for c in MJ.judgment_amount_candidates(pages(EXHIBIT_P2, bad, EXHIBIT_P4))
+                 if c['amount'] == 104995.0][0]
+        self.assertFalse(found['sum_check'])
+
+    def test_a_bare_total_with_no_subtotals_before_it_is_not_offered(self):
+        page = '\n'.join(['Filing fee', '$100.00', 'Service', '$50.00', 'TOTAL', '$150.00'])
+        self.assertEqual([c for c in MJ.judgment_amount_candidates(pages(page))
+                          if c['amount'] == 150.0], [])
+
+    def test_a_figure_with_no_label_above_it_is_a_barrier_not_dropped(self):
+        rows = JM.text_rows(pages('Late charge: $10.00\n$25.00\nGRAND TOTAL: $10.00'), MJ.TOTAL_RE)
+        self.assertEqual([(r['amount'], r['barrier']) for r in rows if r['how'] == 'unlabelled'],
+                         [('25.00', True)])
+
+
 # ---- vision --------------------------------------------------------------------------------------
 
 def row(i, kind, amount, label='', members=None):

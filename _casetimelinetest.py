@@ -224,11 +224,11 @@ class VacaturTests(unittest.TestCase):
 
 
 # ---- priority 3: amendment, vacatur, satisfaction and stay reconciliation (2026-09-24) -----------
-def run_with_parties(entries, defendants):
+def run_with_parties(entries, defendants, docs=()):
     parties = [{'partyName': 'BANK OF EXAMPLE NA', 'partyTypeDesc': 'PLAINTIFF'}] + [
         {'partyName': d, 'partyTypeDesc': 'DEFENDANT'} for d in defendants]
     return T.build_timeline('SYNTHETIC', {'entries': entries, 'pagination_verified': True,
-                                          'raw': {'parties': parties}}, (), '2026-09-23')
+                                          'raw': {'parties': parties}}, docs, '2026-09-23')
 
 
 class ReconciliationTests(unittest.TestCase):
@@ -335,6 +335,87 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(j['2']['status'], 'vacated')
         self.assertIn('document body', j['2']['reason'])
         self.assertNotIn('_body', r['entries'][2])
+
+    def test_6828_as_the_docket_really_reads(self):
+        # Desktop replay, 2026-09-24: an affidavit, a certificate of service and a motion each had
+        # a judgment on page 1; two judgment entries share one day; the agreed vacatur names that
+        # day and is limited "as to" two defendants; an amended judgment follows.
+        def doc(n, text):
+            return {'source_ref': 'court:%d:1' % n, 'entry_ref': str(n), 'reading': {'pages': [
+                {'page': 1, 'outcome': 'text', 'text': text}]}}
+        judgment = 'FINAL JUDGMENT OF FORECLOSURE\nIT IS ORDERED AND ADJUDGED'
+        docs = [doc(49, judgment), doc(56, judgment), doc(58, judgment), doc(65, judgment),
+                doc(67, 'AGREED ORDER VACATING FINAL JUDGMENT OF FORECLOSURE AND\n'
+                        'CANCELLING FORECLOSURE SALE\n1. The Final Judgment of Foreclosure entered on '
+                        'September 8, 2025, and recorded in Official Records Book 1, Page 2, is hereby '
+                        'VACATED as to Defendants EXAMPLE HOLDINGS LLC and JOHN DOE.\n'
+                        '2. The foreclosure sale currently scheduled for October 20, 2025, is CANCELLED.'),
+                doc(82, 'AMENDED FINAL JUDGMENT OF FORECLOSURE')]
+        r = run_with_parties([
+            entry(49, 'Affidavit of Indebtedness', '07/01/2025', expected=1),
+            entry(56, 'Final Judgment by Judge', '09/08/2025', expected=1),
+            entry(57, 'Final Judgment by Judge', '09/08/2025'),
+            entry(58, 'Certificate of Service', '09/09/2025', expected=1,
+                  comments='OF SERVING FINAL JUDGMENT OF MORTGAGE FORECLOSURE'),
+            entry(65, 'Motion to Cancel Sale', '10/13/2025', expected=1),
+            entry(67, 'Order to Vacate Judgment', '10/16/2025', expected=1,
+                  comments='(AGREED)AND CANCEL FORECLOSURE SALE SET FOR OCTOBER 20, 2025 AT 9:00 A.M.'),
+            entry(82, 'Amended Final Judgment', '08/19/2026', expected=1)],
+            ['EXAMPLE HOLDINGS LLC', 'JOHN DOE', 'JANE DOE'], docs)
+        kinds = {e['entry_id']: e['kind'] for e in r['entries']}
+        self.assertEqual([kinds[n] for n in ('49', '58', '65')],
+                         ['affidavit', 'certificate_of_service', 'motion'])
+        self.assertEqual(r['entries'][0]['attached_document_kind'], 'final_judgment')
+        j = {x['entry_id']: x for x in r['judgments']['judgments']}
+        self.assertEqual(sorted(j), ['56', '57', '82'])
+        for n in ('56', '57'):
+            self.assertEqual(j[n]['status'], 'superseded')
+            self.assertEqual(j[n]['by'], ['67', '82'])
+        self.assertEqual(j['82']['replaces'], ['56', '57'])
+        self.assertEqual(r['judgments']['controlling_entry'], '82')
+
+    def test_the_partial_vacatur_alone_leaves_the_same_day_pair_partially_vacated(self):
+        body = {'source_ref': 'court:3:1', 'entry_ref': '3', 'reading': {'pages': [
+            {'page': 1, 'outcome': 'text', 'text': 'AGREED ORDER VACATING FINAL JUDGMENT\nThe Final '
+             'Judgment entered on September 8, 2025 is hereby VACATED as to Defendant JOHN DOE.'}]}}
+        r = run_with_parties([entry(1, 'Final Judgment by Judge', '09/08/2025'),
+                              entry(2, 'Final Judgment by Judge', '09/08/2025'),
+                              entry(3, 'Order to Vacate Judgment', '10/16/2025', expected=1)],
+                             ['JOHN DOE', 'JANE DOE'], [body])
+        j = {x['entry_id']: x for x in r['judgments']['judgments']}
+        self.assertEqual([j['1']['status'], j['2']['status']], ['partially_vacated'] * 2)
+        self.assertIn('shared by 2 judgment entries that day', j['1']['reason'])
+        self.assertIn('limited to', j['1']['reason'])
+
+    def test_two_same_day_judgments_nothing_names_stay_unclear(self):
+        r = run([entry(1, 'Final Judgment by Judge', '09/08/2025'),
+                 entry(2, 'Final Judgment by Judge', '09/08/2025')])
+        j = r['judgments']['judgments']
+        self.assertEqual({x['status'] for x in j}, {'unclear'})
+        self.assertIn('same day', j[0]['reason'])
+        self.assertIsNone(r['judgments']['controlling_entry'])
+
+    def test_a_reinstated_chapter_13_case_puts_the_stay_back_in_effect(self):
+        # McCray filing 125's attached order: the case is reinstated and "the automatic stay under
+        # 11 U.S.C. 362(a) is once again in effect".
+        body = {'source_ref': 'court:3:1', 'entry_ref': '3', 'reading': {'pages': [
+            {'page': 3, 'outcome': 'text', 'text': 'ORDER AND REINSTATING CHAPTER 13 CASE\n'
+                                                   'This case is REINSTATED effective upon entry of this order.'},
+            {'page': 4, 'outcome': 'text', 'text': 'until entry of this order. Immediately upon entry of this '
+                                                   'order, the automatic stay\nunder 11 U.S.C. \u00a7 362(a) is '
+                                                   'once again in effect.'}]}}
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Suggestion of Bankruptcy', expected=1, comments='BKV: 26-00001-XYZ')], [body])
+        e3 = r['entries'][2]
+        self.assertEqual((e3['kind'], e3['stay_passages'][0]['page']), ('stay_reinstated', 4))
+        self.assertIn('once again in effect', e3['stay_passages'][0]['passage'])
+        self.assertTrue(r['stay_in_effect'])
+
+    def test_a_stay_that_would_be_in_effect_again_only_if_asked_is_not_one(self):
+        body = {'source_ref': 'court:2:1', 'entry_ref': '2', 'reading': {'pages': [
+            {'page': 2, 'outcome': 'text', 'text': 'If the case is reinstated, the stay is once again in effect.'}]}}
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy', expected=1)], [body])
+        self.assertEqual(r['entries'][1]['kind'], 'suggestion_of_bankruptcy')
 
     def test_long_form_dates_are_read(self):
         self.assertEqual(T._dates_in('entered October 14, 2025 and the 3rd day of Nov., 2025'),

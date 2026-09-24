@@ -183,7 +183,9 @@ class AcquisitionTests(unittest.TestCase):
             (base / ('a' * 64 + '.json')).write_text(json.dumps(row))
             inventory = {'pagination_verified': True, 'entries': [
                 {'source_id': '123', 'source_ref': 'dockets/0', 'expected_documents': 1,
-                 'metadata': {'eventID': 123, 'description': 'Motion', 'date': '2026-01-01'}}]}
+                 # Not 'Motion': a judgment on page 1 of an entry the docket calls a motion is an
+                 # exhibit (6828, desktop replay 2026-09-24). This test is about the join.
+                 'metadata': {'eventID': 123, 'description': 'Order', 'date': '2026-01-01'}}]}
             timeline = T.build_timeline('2026-000001-CA-01', inventory, R.load_rows(base), '2026-02-01')
             self.assertEqual(timeline['entries'][0]['kind'], 'final_judgment')
 

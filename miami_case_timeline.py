@@ -52,6 +52,11 @@ def classify(text):
             and not re.search(r'bankrupt|\bstay\b|voluntary dismissal', s)):
         return 'notice_of_filing'
     if re.match(r'(?:amended\s+)?proposed\b', s): return 'proposed_order'
+    # Filed ABOUT a judgment, not the judgment: 6828's "Certificate of Service of serving final
+    # judgment" and "Affidavit of Indebtedness" both read as judgments (desktop replay, 09-24).
+    if re.match(r'(?:amended\s+)?certificate of (?:service|mailing|compliance|filing)\b', s):
+        return 'certificate_of_service'
+    if re.match(r'(?:amended\s+|supplemental\s+)?affidavit\b', s): return 'affidavit'
     checks = [
         ('order_on_motion', r'^order.*(?:denying|denied)'),
         # An order that reinstates a stay, or vacates the order that lifted it, would otherwise
@@ -142,12 +147,21 @@ def _transition(e):
     return r
 
 
+# What a docket description names when the filing is ABOUT a judgment, sale or title.
+_FILED_ABOUT_RE = re.compile(r'(?:(?:amended|emergency|renewed|agreed|verified|supplemental)\s+)*'
+                             r'(?:motion|affidavit|certificate of (?:service|mailing|compliance)|'
+                             r'notice of (?:filing|serving|service|compliance)|response|reply|'
+                             r'objection|proposed)\b', re.I)
+_DISPOSITIVE_BODIES = {'final_judgment', 'certificate_of_title', 'certificate_of_sale', 'satisfaction',
+                       'vacatur', 'order_of_dismissal'}
 _STAY_CARRIERS = {'suggestion_of_bankruptcy', 'stay', 'relief_from_stay', 'notice_of_filing',
                   'nonbankruptcy_stay', 'order_on_motion', 'bankruptcy_dismissed'}
 _REINSTATED_RE = re.compile(
     r'\b(?:stay\b[^.;]{0,120}?\b(?:is|are|be|shall be|hereby|was|has been)\s+(?:hereby\s+)?'
     r'(?:reinstated|reimposed|re-imposed)'
     r'|(?:reinstat|reimpos)\w*\s+(?:the\s+)?(?:automatic\s+)?stay\b'
+    r'|stay\b[^.;]{0,120}?\b(?:is|are|shall be|be|remains?)\s+(?:hereby\s+)?(?:once\s+)?again\s+'
+    r'in\s+(?:full\s+)?(?:force\s+and\s+)?effect'
     r'|(?:is|are|be|hereby)\s+(?:hereby\s+)?vacated[^.;]{0,80}(?:relief from|lifting|terminating)[^.;]{0,40}\bstay'
     r'|(?:relief from|lifting|terminating)[^.;]{0,60}\bstay\b[^.;]{0,60}\b(?:is|are|be|hereby)\s+(?:hereby\s+)?vacated)',
     re.I)
@@ -208,12 +222,21 @@ def build_timeline(case, inventory, document_rows, as_of):
         body_kind, title = _body_kind(pages)
         scope_text = index_text + '\n' + '\n'.join(str(p.get('text') or '') for p in pages[:2])
         ik = classify(index_text)
+        attached = None
+        if body_kind in _DISPOSITIVE_BODIES and _FILED_ABOUT_RE.match(description.strip()):
+            # The docket says this entry is a motion, affidavit or certificate; a judgment on its
+            # first page is an exhibit or the thing it certifies, not a new judgment (6828 #49,
+            # #58, #65). The docket description alone decides, not its comments.
+            attached, body_kind, title = body_kind, None, None
+            ik = classify(description)
         e = {'entry_id': ident, 'date': _date(meta.get('eventDate') or item.get('date')),
              'description': description, 'comments': comments, 'filed_by': meta.get('filedBy') or meta.get('filed_by') or 'unknown',
              'listed_parties': meta.get('partiesName') or '', 'index_kind': ik,
              'kind': body_kind or ik, 'kind_source': 'document' if body_kind else 'docket_text',
              'index_agrees': body_kind == ik if body_kind else None,
              'operative_text': title or index_text, 'calendar_event': str(meta.get('eventType', '')).lower() == 'hearing'}
+        if attached:
+            e['attached_document_kind'] = attached
         e['limited_scope'], e['dismissed_parties'] = scope_of(e['kind'], scope_text, defendants)
         if e['kind'] in ('final_judgment', 'vacatur', 'satisfaction'):
             # Only for linking judgments to what acts on them; dropped before the timeline is saved.
@@ -341,7 +364,7 @@ def scope_of(kind, text, defendants=()):
     """-> (limited_scope, parties named). Limited when the text says partial/as to/only/a count,
     or when a dismissal, vacatur or satisfaction names some defendants and not the action or all
     of them: "Order dismissing Defendant UNKNOWN TENANT" does not end the foreclosure."""
-    limited = bool(re.search(r'(?:dismiss\w*|satisf\w*|releas\w*)[^\n.]{0,100}(?:\bas to\b|\bone defendant\b|\bpartial\b|\bonly\b)|\bpartial (?:dismissal|satisfaction)|\bas to (?:defendant|party)\b', text, re.I))
+    limited = bool(re.search(r'(?:dismiss\w*|satisf\w*|releas\w*|vacat\w*)[^\n.]{0,100}(?:\bas to\b|\bone defendant\b|\bpartial\b|\bonly\b)|\bpartial (?:dismissal|satisfaction|vacatur)|\bas to (?:defendants?|party)\b', text, re.I))
     if re.search(r'\b(?:count\s+[IVX\d]+|cause of action|partial relief|limited relief)\b', text, re.I):
         limited = True
     named = (_named_parties(text, defendants)
@@ -439,15 +462,16 @@ def reconcile_judgments(entries, today):
                  'role': 'supplemental' if _ADDS_TO.search(text) else 'replacement' if _REPLACES.search(text) else 'judgment',
                  'status': 'operative', 'by': [], 'satisfaction': 'no_satisfaction_found', 'reason': ''}
             if j['role'] == 'replacement':
-                target, basis = _target(judgments, text)
-                if target is None and e.get('_body'):
-                    body_target, body_basis = _target(judgments, e['_body'])
-                    if body_target:
-                        target, basis = body_target, body_basis + ' in the document body'
-                if target:
+                targets, basis = _target(judgments, text)
+                if not targets and e.get('_body'):
+                    body_targets, body_basis = _target(judgments, e['_body'])
+                    if body_targets:
+                        targets, basis = body_targets, body_basis + ' in the document body'
+                for target in targets:
                     target.update(status='superseded', reason='replaced by %s (%s)' % (j['entry_id'], basis))
                     target['by'].append(j['entry_id'])
-                    j['replaces'] = target['entry_id']
+                if targets:
+                    j['replaces'] = targets[0]['entry_id'] if len(targets) == 1 else [t['entry_id'] for t in targets]
                 else:
                     j['reason'] = basis
             elif j['role'] == 'supplemental':
@@ -456,39 +480,44 @@ def reconcile_judgments(entries, today):
             else:
                 live = [x for x in judgments if x['status'] == 'operative' and x['role'] != 'supplemental']
                 if live:
+                    same_day = all(x['date'] == j['date'] for x in live)
                     for x in live + [j]:
-                        x.update(status='unclear', reason='more than one final judgment with no amendment, vacatur or scope linking them')
+                        x.update(status='unclear', reason=(
+                            'more than one final judgment entry the same day and nothing yet names one; '
+                            'possibly one judgment filed twice' if same_day else
+                            'more than one final judgment with no amendment, vacatur or scope linking them'))
             judgments.append(j)
             continue
         action = {'vacatur': 'vacated', 'satisfaction': 'satisfied'}.get(e['kind'])
         if not action or (action == 'vacated' and not re.search(r'judgment', text, re.I)):
             continue
-        target, basis = _target(judgments, text)
-        if target is None and e.get('_body'):
+        targets, basis = _target(judgments, text)
+        if not targets and e.get('_body'):
             # The docket title often says only "Order vacating final judgment"; the order itself
             # usually names the judgment by its date (6828, desktop replay 2026-09-24).
-            body_target, body_basis = _target(judgments, e['_body'])
-            if body_target:
-                target, basis = body_target, body_basis + ' in the document body'
-        if action == 'vacated' and target is None:
+            body_targets, body_basis = _target(judgments, e['_body'])
+            if body_targets:
+                targets, basis = body_targets, body_basis + ' in the document body'
+        if action == 'vacated' and not targets:
             # A vacated judgment needs its target; an unmatched vacatur leaves every candidate open.
             for x in judgments:
                 if x['status'] in ('operative', 'superseded'):
                     x.update(status='unclear', reason='%s vacates a judgment it does not identify (%s)' % (e['entry_id'], basis))
             continue
-        if target is None:
+        if not targets:
             events.append({'entry_id': e['entry_id'], 'kind': e['kind'], 'reason': basis})
             continue
         partial = 'partially_' if e.get('limited_scope') else ''
-        if action == 'satisfied':
-            target['satisfaction'] = partial + 'satisfied'
-            target['by'].append(e['entry_id'])
-            if not partial:
-                target.update(status='satisfied', reason='satisfaction %s (%s)' % (e['entry_id'], basis))
-        else:
-            target['by'].append(e['entry_id'])
-            target.update(status=partial + 'vacated', reason='vacatur %s (%s)%s' % (
-                e['entry_id'], basis, '; limited to %s' % ', '.join(e.get('dismissed_parties') or ['some parties']) if partial else ''))
+        for target in targets:
+            if action == 'satisfied':
+                target['satisfaction'] = partial + 'satisfied'
+                target['by'].append(e['entry_id'])
+                if not partial:
+                    target.update(status='satisfied', reason='satisfaction %s (%s)' % (e['entry_id'], basis))
+            else:
+                target['by'].append(e['entry_id'])
+                target.update(status=partial + 'vacated', reason='vacatur %s (%s)%s' % (
+                    e['entry_id'], basis, '; limited to %s' % ', '.join(e.get('dismissed_parties') or ['some parties']) if partial else ''))
     operative = [j for j in judgments if j['status'] in ('operative', 'partially_vacated') and j['role'] != 'supplemental']
     unclear = [j for j in judgments if j['status'] == 'unclear']
     controlling = operative[0]['entry_id'] if len(operative) == 1 and not unclear else None
@@ -500,17 +529,27 @@ def reconcile_judgments(entries, today):
 
 
 def _target(judgments, text):
-    """-> (judgment, basis) or (None, why)."""
+    """-> ([judgment], basis) or ([], why).
+
+    Several only when they are the entries of ONE day: 6828 has two "Final Judgment" entries on
+    2025-09-08 and an order vacating "the Final Judgment of Foreclosure entered on September 8,
+    2025". Whatever the second entry is (the same judgment filed twice, or two that day), the
+    order names the day, so it acts on that day's entries together."""
     cited = _dates_in(text)
     by_date = [j for j in judgments if j['date'] in cited and j['role'] != 'supplemental']
-    if len(by_date) == 1:
-        return by_date[0], 'cites its date %s' % by_date[0]['date']
-    live = [j for j in judgments if j['status'] in ('operative', 'unclear') and j['role'] != 'supplemental']
-    if len(live) == 1 and not cited:
-        return live[0], 'the only operative judgment'
+    if by_date and len({j['date'] for j in by_date}) == 1:
+        return by_date, 'cites its date %s%s' % (by_date[0]['date'], _same_day(by_date))
+    live = [j for j in judgments if j['status'] in ('operative', 'unclear', 'partially_vacated')
+            and j['role'] != 'supplemental']
+    if live and len({j['date'] for j in live}) == 1 and not cited:
+        return live, 'the only operative judgment' + _same_day(live)
     if not live:
-        return None, 'no earlier judgment on the docket'
-    return None, 'cites no date that matches exactly one earlier judgment'
+        return [], 'no earlier judgment on the docket'
+    return [], 'cites no date that matches exactly one earlier judgment'
+
+
+def _same_day(group):
+    return '' if len(group) == 1 else ', shared by %d judgment entries that day' % len(group)
 
 
 def _topic_text(text):

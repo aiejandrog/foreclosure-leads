@@ -91,7 +91,7 @@ def _is_case_court_paper(row, plaintiff_keys):
 
 # Money as a US court writes it. The decimals are required: "$500" in a judgment is nearly always
 # a fee or a cost, while the total carries cents. This is a CANDIDATE extractor, not a reader.
-MONEY_RE = re.compile(r'\$\s?([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})')
+MONEY_RE = re.compile(r'\$\s*([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})')
 # The labels a judgment's total actually carries. "GRAND TOTAL:" is on the pilot document and was
 # missing from the first version of this list, which is half of why a correctly-OCR'd $14,698.60
 # came out "not established"; the other half was that its value sat fifteen lines below it.
@@ -259,8 +259,12 @@ def judgment_amount_candidates(reading):
             continue
         lines = (page.get('text') or '').splitlines()
         pairs, notes = column_values(lines)
+        number = JM._page_no(page['page'])
+        # A bare "TOTAL" closing a table of SUBTOTALs (judgment_money._bare_totals) is offered too.
+        closing = {r['line'] for r in rows if r['page'] == number and r['kind'] == 'total'
+                   and r.get('note', '').startswith('bare TOTAL')}
         for index, line in enumerate(lines):
-            if not TOTAL_RE.search(line):
+            if not TOTAL_RE.search(line) and index not in closing:
                 continue
             found = [(value, 'same_line', line) for value in _money_on(line)]
             if not found and index in pairs:

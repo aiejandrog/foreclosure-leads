@@ -168,7 +168,8 @@ def _prepare(rows):
     state = {'rows': rows, 'values': values, 'rates': rates, 'subtotals': {}}
     for index, row in enumerate(rows):
         if not row.get('barrier') and row['kind'] == 'subtotal':
-            state['subtotals'][row['gid']] = _resolve_subtotal(rows, index, values)
+            state['subtotals'][row['gid']] = _resolve_subtotal(rows, index, values,
+                                                               state['subtotals'])
     return state
 
 
@@ -176,8 +177,12 @@ def _additive(row):
     return not row.get('barrier') and row['kind'] in ('charge', 'credit')
 
 
-def _resolve_subtotal(rows, index, values):
-    """-> {'members': [gid], 'membership': how}; raises _Fail when the subtotal does not agree."""
+def _resolve_subtotal(rows, index, values, resolved=None):
+    """-> {'members': [gid], 'membership': how}; raises _Fail when the subtotal does not agree.
+
+    `resolved`: the subtotals above this one, already resolved. A text subtotal may be a RUNNING
+    one, the subtotal before it plus the rows since (Blue Water: 327,395.70 + eight costs =
+    331,511.79); its members are then that subtotal and those rows."""
     row = rows[index]
     amount = values[row['gid']]
     members = row.get('members')
@@ -210,6 +215,11 @@ def _resolve_subtotal(rows, index, values):
     run, back = [], index - 1
     while back >= 0 and len(run) < MAX_RUN_ROWS:
         prior = rows[back]
+        if (run and not prior.get('barrier') and prior['kind'] == 'subtotal'
+                and (resolved or {}).get(prior['gid'])):
+            if values[prior['gid']] + sum(values[m] for m in run) == amount:
+                return {'members': [prior['gid']] + run, 'membership': 'running_from_subtotal'}
+            break
         if not _additive(prior):
             break
         run.insert(0, prior['gid'])
@@ -222,18 +232,30 @@ def _resolve_subtotal(rows, index, values):
 def _structural_fixups(state):
     """A text line labelled like a subtotal whose rows above do not add up to it is treated as a
     charge. Safe in both directions: if it really was a subtotal of misread rows, counting it AND
-    its members breaks the total; if it was a one-line item, it is counted once, as it should be."""
+    its members breaks the total; if it was a one-line item, it is counted once, as it should be.
+
+    Except a line labelled SUBTOTAL itself. That word is never a one-line item, so rows above it
+    that do not add up mean a row was misread or missed, and counting it as a charge would let the
+    total "verify" through the bad rows (a running SUBTOTAL, then the fees after it). It becomes a
+    barrier instead: no run may cross it, so the total fails unless it is reproduced below it."""
     for gid, resolved in list(state['subtotals'].items()):
         if resolved is None:
             row = next(r for r in state['rows'] if r['gid'] == gid)
-            row['kind'] = 'charge'
-            row['note'] = 'subtotal label with no agreeing rows above it; counted as a line item'
+            if _SUBTOTAL_WORD_RE.search(row.get('label') or ''):
+                row['barrier'] = True
+                row['note'] = 'SUBTOTAL whose rows above do not add up to it; not crossed'
+            else:
+                row['kind'] = 'charge'
+                row['note'] = 'subtotal label with no agreeing rows above it; counted as a line item'
             del state['subtotals'][gid]
 
 
 def _component(row, values):
-    return {'gid': row['gid'], 'page': row['page'], 'label': row['label'],
-            'amount': float(values[row['gid']])}
+    out = {'gid': row['gid'], 'page': row['page'], 'label': row['label'],
+           'amount': float(values[row['gid']])}
+    if row.get('note'):
+        out['note'] = row['note']
+    return out
 
 
 def _summary(state, run_rows, total_row, reason, how):
@@ -413,7 +435,7 @@ def verify_document(figures, grand_totals, read_pages=None):
 # ---- rows from a text layer or OCR -----------------------------------------------------------
 
 _FIGURE_RE = re.compile(
-    r'(?P<open>\(\s*)?(?P<minus>-\s*)?\$\s?(?P<num>[0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})'
+    r'(?P<open>\(\s*)?(?P<minus>-\s*)?\$\s*(?P<num>[0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})'
     r'(?P<close>\s*\))?')
 _RATE_AFTER_RE = re.compile(r'^\s*(?:/\s*(?:day|hour|hr)\b|per\s+(?:day|diem|hour)\b'
                             r'|an?\s+(?:day|hour)\b|daily\b|hourly\b)', re.I)
@@ -426,6 +448,9 @@ _SUBTOTAL_RE = re.compile(
     r'|attorney)'
     r'|\b(?:costs?|fees?|interest|assessments?|charges|expenses|advances)\s+total\b'
     r'|^\W*total\W*$', re.I)
+# A bare "TOTAL" is a section total until the table shows otherwise: see _bare_totals.
+_BARE_TOTAL_RE = re.compile(r'^\W*total\W*$', re.I)
+_SUBTOTAL_WORD_RE = re.compile(r'\bsub-?\s?total\b', re.I)
 _CREDIT_RE = re.compile(r'^\W*(?:less|minus)\b|\bcredits?\b|\bsuspense\b|\bunapplied\b'
                         r'|\bpayments?\s+received\b|\bescrow\s+(?:balance|surplus)\b', re.I)
 
@@ -442,27 +467,44 @@ def _text_kind(fragment, after, negative, total_re):
     return 'charge'
 
 
-# A line that is nothing but a money figure: an entry in a value column.
-ONLY_MONEY_RE = re.compile(r'^[\s|:.]*\$?\s?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})[\s|.]*$')
+# A line that is nothing but a money figure: an entry in a value column. A text layer pads the
+# dollar sign with runs of no-break spaces ('$\xa0\xa0\xa0 6,935.74'), prints thousands without a
+# comma ('$1050.00') and prints a credit in parentheses ('($422.11)'); all three are value lines.
+ONLY_MONEY_RE = re.compile(r'^[\s|:.]*(?P<open>\(\s*)?(?P<minus>-\s*)?\$?\s*'
+                           r'(?P<num>[0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})'
+                           r'\s*(?P<close>\))?[\s|.]*$')
+
+
+def only_money(line):
+    """The figure on a value-only line, negative when printed in parentheses or with a minus."""
+    match = ONLY_MONEY_RE.match(line)
+    if not match or bool(match.group('open')) != bool(match.group('close')):
+        return None
+    value = float(match.group('num').replace(',', ''))
+    return -value if (match.group('open') or match.group('minus')) else value
 
 
 def column_blocks(lines):
     """Each run of value-only lines, with the label lines standing directly above it.
 
-    -> [(label_line_indexes, [(value_line_index, value)])]
+    -> [(label_line_indexes, [(value_line_index, value)])]; a value printed as a credit is negative.
+
+    The labels stop at the first line above that carries a figure of its own. That line is a row
+    in its own right ("2024: $835.00"), not a label; taking it as one hid Blue Water's year-by-year lines
+    and both credits, and a label run that long never pairs, so every figure below it was lost too.
     """
     blocks = []
     index, count = 0, len(lines)
     while index < count:
-        if not ONLY_MONEY_RE.match(lines[index]):
+        if only_money(lines[index]) is None:
             index += 1
             continue
         start = index
         values = []
         while index < count:
-            match = ONLY_MONEY_RE.match(lines[index])
-            if match:
-                values.append((index, float(match.group(1).replace(',', ''))))
+            value = only_money(lines[index])
+            if value is not None:
+                values.append((index, value))
             elif lines[index].strip():
                 break
             index += 1
@@ -470,7 +512,7 @@ def column_blocks(lines):
         back = start - 1
         while back >= 0:
             line = lines[back]
-            if ONLY_MONEY_RE.match(line):
+            if only_money(line) is not None or _FIGURE_RE.search(line):
                 break
             if line.strip():
                 labels.append(back)
@@ -500,21 +542,27 @@ def text_rows(reading, total_re):
         column_lines = set()
         for labels, values in column_blocks(lines):
             column_lines.update(i for i, _ in values)
-            if not labels or not values:
+            if not values:
+                continue
+            if not labels:
+                # A figure with no label line above it is unknown, not absent: a barrier.
+                for n, (line_no, value) in enumerate(values):
+                    rows.append(_text_row(number, line_no, 0, '', None, abs(value), 'unlabelled',
+                                          source))
                 continue
             column_lines.update(labels)
             if len(labels) == len(values):
                 for label, (_, value) in zip(labels, values):
-                    kind = _text_kind(lines[label], '', False, total_re)
-                    rows.append(_text_row(number, label, 0, lines[label].strip(), kind, value,
+                    kind = _text_kind(lines[label], '', value < 0, total_re)
+                    rows.append(_text_row(number, label, 0, lines[label].strip(), kind, abs(value),
                                           'column_pairing', source))
                 continue
             for n, (_, value) in enumerate(values[:-1]):
-                rows.append(_text_row(number, labels[0], -len(values) + n, '', None, value,
+                rows.append(_text_row(number, labels[0], -len(values) + n, '', None, abs(value),
                                       'unpaired', source))
-            kind = _text_kind(lines[labels[-1]], '', False, total_re)
+            kind = _text_kind(lines[labels[-1]], '', values[-1][1] < 0, total_re)
             rows.append(_text_row(number, labels[-1], 0, lines[labels[-1]].strip(),
-                                  kind if kind == 'total' else None, values[-1][1],
+                                  kind if kind == 'total' else None, abs(values[-1][1]),
                                   'tail_figure', source))
         for i, line in enumerate(lines):
             if i in column_lines:
@@ -532,7 +580,32 @@ def text_rows(reading, total_re):
                     rows[-1]['rate_unit'] = 'hour'
                 start = match.end()
     rows.sort(key=lambda r: (r['page'], r['line'], r['k']))
+    _bare_totals(rows)
     return rows
+
+
+def _bare_totals(rows):
+    """A bare "TOTAL" that closes a table of printed SUBTOTALs is that table's total.
+
+    Alone, "TOTAL" is as often a section total as the judgment's, so _text_kind types it a
+    subtotal. Blue Water's table says which it is: two rows labelled SUBTOTAL, then TOTAL, larger
+    than both, with no other total between. Only that shape is retyped; the arithmetic still has
+    to reproduce it (verify_total), so a wrong call here can only fail to verify.
+    """
+    for index, row in enumerate(rows):
+        if (row['barrier'] or row['kind'] != 'subtotal'
+                or not _BARE_TOTAL_RE.match(row['label'] or '')):
+            continue
+        earlier = []
+        for prior in reversed(rows[:index]):
+            if prior['page'] < row['page'] - (MAX_SPAN_PAGES - 1) or prior['kind'] == 'total':
+                break
+            if not prior['barrier'] and prior['kind'] == 'subtotal':
+                earlier.append(prior)
+        named = [p for p in earlier if _SUBTOTAL_WORD_RE.search(p['label'] or '')]
+        if named and all(float(p['amount']) < float(row['amount']) for p in earlier):
+            row['kind'] = 'total'
+            row['note'] = 'bare TOTAL closing a table of printed SUBTOTALs'
 
 
 def _text_row(page, line, k, label, kind, value, how, text_source):
