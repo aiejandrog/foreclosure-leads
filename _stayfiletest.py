@@ -38,9 +38,10 @@ CACHE = {
     '2099-000001-CA-01': {'a': True, 'bd': '09/01/2026', 'b': 1, 's': 2, 'n': 3},
     '2099-000002-CA-01': {'a': True, 'bd': '08/15/2026'},
     '2099-000003-CA-01': {'a': False, 'b': 1, 'sl': True},        # stay lifted: not active
+    '2099-000005-CA-01': {'a': True, 'bd': '07/01/2026'},
 }
 scrape = [{'Case #': c} for c in ('2099-000001-CA-01', '2099-000002-CA-01', '2099-000003-CA-01',
-                                  '2099-000004-CA-01')]
+                                  '2099-000004-CA-01', '2099-000005-CA-01')]
 
 tmp = tempfile.mkdtemp()
 json.dump(CACHE, open(os.path.join(tmp, 'sale_history_cache.json'), 'w'))
@@ -50,17 +51,17 @@ try:
     cache_act = sum(1 for e in CACHE.values() if e.get('a'))
     before = sum(1 for r in scrape if r.get('sale_bk_active'))
     check('reproduced: a fresh scrape carries no stay flags (healthcheck read leads 0 -> STRIPPED)',
-          before == 0 and cache_act == 2)
+          before == 0 and cache_act == 3)
     n = F.restore_stays_from_cache(scrape)
     after = sum(1 for r in scrape if r.get('sale_bk_active'))
-    check('restore puts every active cached stay back on the lead rows', n == 2 and after == cache_act,
+    check('restore puts every active cached stay back on the lead rows', n == 3 and after == cache_act,
           '%d restored, %d on rows' % (n, after))
     check('a lifted stay is not re-activated',
           not scrape[2].get('sale_bk_active') and scrape[2].get('sale_stay_lifted') is True)
     check('the stay date rides along', scrape[0].get('sale_bk_date') == '09/01/2026')
     check('a case the cache does not know is untouched', scrape[3] == {'Case #': '2099-000004-CA-01'})
     check('running it twice changes nothing', F.restore_stays_from_cache(scrape) == 0
-          and sum(1 for r in scrape if r.get('sale_bk_active')) == 2)
+          and sum(1 for r in scrape if r.get('sale_bk_active')) == 3)
 
     # THE PRODUCTION WRITE: run main() itself with the network stages stubbed, then read the file it
     # wrote. A check that dumps its own restored rows proves nothing about what main() persists.
@@ -116,10 +117,15 @@ try:
           not after_sh['2099-000001-CA-01'].get('sale_bk_active')
           and after_sh['2099-000001-CA-01'].get('sale_stay_lifted') == '09/20/2026')
     check('a failed live read never clears a stay', after_sh['2099-000002-CA-01'].get('sale_bk_active') is True)
+    _cache_now = json.load(open(os.path.join(tmp, 'sale_history_cache.json')))
+    check('a read showing NO bankruptcy line at all never ends a cached stay (row or cache)',
+          after_sh['2099-000005-CA-01'].get('sale_bk_active') is True
+          and after_sh['2099-000005-CA-01'].get('sale_bk_date') == '07/01/2026'
+          and _cache_now['2099-000005-CA-01'].get('a') is True)
     rebuilt = list(after_sh.values())
     F.restore_stays_from_cache(rebuilt)
     check('the rebuild does not re-activate the lifted stay from the cache',
-          [r['Case #'] for r in rebuilt if r.get('sale_bk_active')] == ['2099-000002-CA-01'])
+          [r['Case #'] for r in rebuilt if r.get('sale_bk_active')] == ['2099-000002-CA-01', '2099-000005-CA-01'])
     os.remove(os.path.join(tmp, 'sale_history_cache.json'))
     check('no cache file: nothing restored, nothing raised', F.restore_stays_from_cache([{'Case #': 'x'}]) == 0)
 finally:

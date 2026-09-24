@@ -266,6 +266,12 @@ def main():
             surv, sched, done, who = _count(dks)
             bk = _bk_count(dks)
             bkact, bkd, lifted = _bk_stay(dks)
+            # ONLY A CLOSING LINE ENDS A STAY. A read that shows no bankruptcy line at all (bkd '')
+            # is not evidence the stay we cached ended: an empty or short docket answer would
+            # otherwise flip a cached active stay to inactive, here and in the cache, and make the
+            # lead callable. Keep the stay until a dismissal / discharge / relief line appears.
+            if not bkact and not bkd and isinstance(ent, dict) and ent.get('a'):
+                bkact, bkd = True, ent.get('bd', '')
             # a standalone bankruptcy filing IS the owner's move — attribute when cancels didn't
             if bk and not who:
                 who = 'owner'
