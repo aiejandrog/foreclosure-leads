@@ -30,7 +30,7 @@ shared spending controls. This is not complete.
 | Amount verification | All typed charges and credits sum exactly; printed subtotals match; consistent across outputs | One contract (`judgment_money`) on the OCR/text, vision, saved-vision and timeline paths: exact cents, credits subtract, rates kept and reported, subtotal membership explicit or rows-above, no subset search, no tolerance. Not yet replayed on Walker and Blue Water |
 | Current title | Continuous evidence-backed conveyance chain, entity/probate uncertainty explicit | Historical deed candidates only |
 | Liens | Obligation, identity, attachment, amendment and satisfaction links; no missing-release inference | Candidate lists, not proven balances |
-| Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Index rules plus selected body evidence; incomplete |
+| Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Docket-index reconciliation: each final judgment is operative, superseded, vacated (or partially), satisfied (or partially) or unclear, with the entry that changed it; a controlling judgment is named only when exactly one is operative. Stays carry a history (stayed, relief, reinstated, bankruptcy dismissed). A dismissal naming some defendants is party-limited. A past sale date without a certificate is `unknown_no_certificate`. Judgment BODIES are not yet read for scope; the index can be wrong |
 | One-command orchestration | Durable step leases, before-call reservations, idempotent restart and refresh | Not yet integrated |
 | Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Per-case shares on the vision paths (run_documents, backfill, timeline); run_documents --token-budget now solves only through the real-balance PaidCutoffSolver (one try, free browser first) |
 | Five-case replay | Reproduce prior evidence without hand-selection/transcription within approved cap | Replay tool built; not yet run on the saved pilot evidence |
@@ -86,5 +86,25 @@ Priority 2 is wired, not yet proven on Walker and Blue Water.
   or a person reads it. The vision instruction was deliberately not changed (it is part of every
   cached read's key, and changing it would re-bill pages already paid for); it has no `credit`
   kind, so a vision credit verifies only when the reader keeps its minus sign or parentheses.
+
+Priority 3 is wired on the docket index, not yet on judgment bodies.
+
+- `miami_case_timeline.reconcile_judgments`: newest is not controlling. An amended/corrected/
+  substituted judgment supersedes the judgment whose date it cites, or the only operative one; a
+  vacatur and a satisfaction act the same way; a supplemental fee/cost judgment adds to one and
+  replaces nothing; two unlinked plain judgments are both `unclear`. `no_satisfaction_found` is
+  stated as exactly that, never an open balance. `document_prioritizer.prioritize` carries the
+  same reconciliation, and each paid-read candidate is labelled with its docket judgment's status
+  (superseded/vacated/satisfied ones are bought after operative ones in the same tier).
+- Stays: "order reinstating stay" and "order vacating the order granting relief" are
+  `stay_reinstated` (they used to match relief_from_stay and read as the stay ENDING); a
+  dismissed bankruptcy is `bankruptcy_dismissed` (it used to match order_of_dismissal and close
+  the foreclosure). `stay_history` and `stay_in_effect` are in every timeline.
+- Dismissals, vacaturs and satisfactions that name some defendants (by docket party name, or
+  unknown tenant/spouse/heirs) and not the action or all defendants are `limited_scope`.
+- Not closable from the index alone: what a vacatur or an amended judgment actually changes is in
+  its body. When the index cites no date and more than one judgment could be meant, the answer
+  is `unclear`, not a guess. The 6828 and McCray acceptance runs need their saved dockets, which
+  are on the desktop.
 
 The full goal remains active until the acceptance matrix is evidenced end to end.

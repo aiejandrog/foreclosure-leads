@@ -46,6 +46,17 @@ def classify(text):
         return 'motion'
     checks = [
         ('order_on_motion', r'^order.*(?:denying|denied)'),
+        # An order that reinstates a stay, or vacates the order that lifted it, would otherwise
+        # match relief_from_stay below and read as the stay ENDING (priority 3, McCray).
+        ('stay_reinstated', r'(?:reinstat|reimpos)\w*[^.;]*\bstay\b'
+                            r'|vacat\w*[^.;]*(?:relief from|lift\w*|terminat\w*)[^.;]*\bstay\b'),
+        # A dismissed BANKRUPTCY is not a dismissed foreclosure; without this it matched
+        # order_of_dismissal and closed the case.
+        # Only a dismissal OF the bankruptcy: "order dismissing case due to bankruptcy" is the
+        # foreclosure being dismissed and still falls through to order_of_dismissal.
+        ('bankruptcy_dismissed', r'dismiss\w*\s+(?:of\s+)?(?:the\s+)?(?:debtor\S*\s+)?(?:chapter\s+\d+\s+)?bankruptcy'
+                                 r'|bankruptcy\s+(?:case\s+|petition\s+|proceeding\s+)?(?:no\.?\s*[\w-]+\s+)?'
+                                 r'(?:was\s+|has\s+been\s+|is\s+|been\s+)?dismissed'),
         # An order undoing a certificate or the sale must not fall through to the certificate
         # rules below and read as fresh evidence of a sale (Greptile on #50, 2026-09-23).
         ('vacatur', r'order.*(?:vacat|set.*aside).*(?:judgment|certificate of (?:title|sale)|sale)'),
@@ -107,7 +118,8 @@ def _transition(e):
                 'order_resetting_sale': 'sale_scheduled', 'order_cancelling_sale': 'sale_cancelled',
                 'suggestion_of_bankruptcy': 'stayed_by_bankruptcy', 'stay': 'stayed_by_bankruptcy',
                 'notice_of_voluntary_dismissal': 'dismissed', 'order_of_dismissal': 'dismissed',
-                'satisfaction': 'satisfied_redeemed', 'certificate_of_sale': 'sold', 'certificate_of_title': 'sold'}
+                'satisfaction': 'satisfied_redeemed', 'certificate_of_sale': 'sold', 'certificate_of_title': 'sold',
+                'stay_reinstated': 'stayed_by_bankruptcy'}
     if kind == 'vacatur': return {'kind': 'unclear', 'evidence': [e['entry_id']], 'reason': 'Order vacating the judgment, certificate or sale found; subsequent case posture requires explicit evidence.'}
     result = statuses.get(kind)
     if result is None: return None
@@ -118,6 +130,7 @@ def _transition(e):
         if not r['sale_date'] and e['calendar_event']: r['sale_date'] = e['date']
         r['reset'] = kind == 'order_resetting_sale'
     if kind == 'suggestion_of_bankruptcy': r['qualification'] = 'Bankruptcy suggested on docket; scope and continuing effect not independently adjudicated.'
+    if kind == 'stay_reinstated': r['qualification'] = 'Stay reinstated after earlier relief; foreclosure activity needs new relief.'
     return r
 
 
@@ -135,6 +148,7 @@ def build_timeline(case, inventory, document_rows, as_of):
             bucket = docs.setdefault(source.split(':')[1], [])
             if row not in bucket: bucket.append(row)
     entries, gaps, amounts, pending = [], [], [], []
+    defendants = docket_defendants(inventory)
     if not inventory.get('pagination_verified'):
         gaps.append({'kind': 'inventory_completeness_unknown', 'reason': 'Docket pagination completeness is not verified.'})
     for i, item in enumerate(inventory.get('entries', [])):
@@ -154,8 +168,7 @@ def build_timeline(case, inventory, document_rows, as_of):
              'kind': body_kind or ik, 'kind_source': 'document' if body_kind else 'docket_text',
              'index_agrees': body_kind == ik if body_kind else None,
              'operative_text': title or index_text, 'calendar_event': str(meta.get('eventType', '')).lower() == 'hearing'}
-        e['limited_scope'] = bool(re.search(r'(?:dismiss\w*|satisf\w*|releas\w*)[^\n.]{0,100}(?:\bas to\b|\bone defendant\b|\bpartial\b|\bonly\b)|\bpartial (?:dismissal|satisfaction)|\bas to (?:defendant|party)\b', scope_text, re.I))
-        if re.search(r'\b(?:count\s+[IVX\d]+|cause of action|partial relief|limited relief)\b', scope_text, re.I): e['limited_scope'] = True
+        e['limited_scope'], e['dismissed_parties'] = scope_of(e['kind'], scope_text, defendants)
         if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'
         e['sale_passages'] = [index_text] if re.search(r'\bsale\b', index_text, re.I) else []
         body_lines = [line for p in pages for line in str(p.get('text') or '').splitlines()]
@@ -202,6 +215,7 @@ def build_timeline(case, inventory, document_rows, as_of):
     status = {'kind': 'unclear', 'evidence': [], 'reason': 'No dated dispositive entry.'}
     pre_stay = None
     unresolved_stay = []
+    stay_history = []
     day_changes = {}
     for e in entries:
         if not e['date'] or e['date'] > today: continue
@@ -215,7 +229,13 @@ def build_timeline(case, inventory, document_rows, as_of):
             text = e['operative_text'].lower()
             topics = ('dismiss', 'summary judgment', 'cancel', 'reset', 'attorney fees', "attorney's fees", 'default')
             _close_unique_motion(pending, text, e['date'], topics)
-        if e['kind'] == 'relief_from_stay':
+        if e['kind'] in ('relief_from_stay', 'bankruptcy_dismissed', 'stay_reinstated', 'suggestion_of_bankruptcy', 'stay'):
+            stay_history.append({'entry_id': e['entry_id'], 'date': e['date'], 'event': {
+                'relief_from_stay': 'limited_relief' if e.get('limited_scope') else 'relief',
+                'bankruptcy_dismissed': 'bankruptcy_dismissed', 'stay_reinstated': 'reinstated',
+                'suggestion_of_bankruptcy': 'stayed', 'stay': 'stayed'}[e['kind']],
+                'text': e['operative_text'][:200]})
+        if e['kind'] in ('relief_from_stay', 'bankruptcy_dismissed'):
             if e.get('limited_scope'):
                 status = {'kind': 'unclear', 'evidence': unresolved_stay + [e['entry_id']], 'reason': 'Partial or limited stay relief does not establish that all foreclosure restrictions ended.'}
                 continue
@@ -241,9 +261,169 @@ def build_timeline(case, inventory, document_rows, as_of):
             day_changes[e['date']] = dict(status)
     undated = [e['entry_id'] for e in entries if not e['date'] and _transition(e)]
     if undated: status = {'kind': 'unclear', 'evidence': status['evidence'] + undated, 'reason': 'Undated dispositive entry prevents reliable chronology.'}
+    if status['kind'] == 'sale_scheduled' and status.get('sale_date') and status['sale_date'] < today:
+        # A past sale date is not a sale. Only a certificate of sale or title says one happened.
+        status = dict(status, sale_outcome='unknown_no_certificate',
+                      reason=status['reason'] + ' | Sale date has passed and no certificate of sale is on the docket; whether a sale occurred is unknown.')
+    stay_now = None
+    if stay_history:
+        last = stay_history[-1]['event']
+        stay_now = (True if last in ('stayed', 'reinstated') else False if last in ('relief', 'bankruptcy_dismissed') else None)
     return {'case': case, 'county': 'MIAMI-DADE', 'as_of': today, 'entries': entries, 'status': status,
+            'judgments': reconcile_judgments(entries, today),
+            'stay_history': stay_history, 'stay_in_effect': stay_now,
             'pending': pending, 'amounts': amounts, 'gaps': gaps, 'coverage_complete': not gaps,
             'qualification': 'Status is derived from available docket evidence, not confirmation of a complete court record. Amount extractions are not verified balances or equity inputs.'}
+
+
+def scope_of(kind, text, defendants=()):
+    """-> (limited_scope, parties named). Limited when the text says partial/as to/only/a count,
+    or when a dismissal, vacatur or satisfaction names some defendants and not the action or all
+    of them: "Order dismissing Defendant UNKNOWN TENANT" does not end the foreclosure."""
+    limited = bool(re.search(r'(?:dismiss\w*|satisf\w*|releas\w*)[^\n.]{0,100}(?:\bas to\b|\bone defendant\b|\bpartial\b|\bonly\b)|\bpartial (?:dismissal|satisfaction)|\bas to (?:defendant|party)\b', text, re.I))
+    if re.search(r'\b(?:count\s+[IVX\d]+|cause of action|partial relief|limited relief)\b', text, re.I):
+        limited = True
+    named = (_named_parties(text, defendants)
+             if kind in ('notice_of_voluntary_dismissal', 'order_of_dismissal', 'vacatur', 'satisfaction') else [])
+    if named and not _whole_case(text):
+        limited = True
+    if re.search(r'\bas to all (?:defendants|parties)\b', text, re.I) and not re.search(r'\bcount\s+[IVX\d]+', text, re.I):
+        limited = False
+    return limited, named
+
+
+def docket_defendants(inventory):
+    return [str(p.get('partyName') or '') for p in ((inventory.get('raw') or {}).get('parties') or [])
+            if 'DEFENDANT' in str(p.get('partyTypeDesc') or p.get('partyType') or '').upper()]
+
+
+_NAME_NOISE = re.compile(r'\b(?:INC|CORP|CO|LLC|L\.?L\.?C|LP|LLP|LTD|PA|PLLC|NA|N\.?A|THE|OF|AND|A|AN|ASSN|ASSOC'
+                         r'|ASSOCIATION|TRUST|COMPANY|UNKNOWN|MR|MRS|MS|JR|SR|II|III|AS|TRUSTEE)\b', re.I)
+
+
+def _name_tokens(name):
+    return {t for t in re.split(r'[^A-Z0-9]+', _NAME_NOISE.sub(' ', str(name or '').upper())) if len(t) > 2}
+
+
+def _named_parties(text, defendants):
+    """Defendants this text names. Unknown tenants/spouses count by their role; a named party
+    counts when every distinctive word of the party name appears in the text."""
+    upper = str(text or '').upper()
+    words = set(re.split(r'[^A-Z0-9]+', upper))
+    named = [d for d in defendants if _name_tokens(d) and _name_tokens(d) <= words]
+    for role in re.findall(r'UNKNOWN\s+(?:TENANT|SPOUSE|PART(?:Y|IES)|HEIRS?)[^,.;\n]{0,20}', upper):
+        named.append(role.strip())
+    if re.search(r'\bAS TO (?:THE )?DEFENDANTS?\b|\bDEFENDANTS?,?\s+[A-Z]{2,}', upper) and not named:
+        named.append('a named defendant')
+    return list(dict.fromkeys(named))
+
+
+def _whole_case(text):
+    return bool(re.search(r'\b(?:this|the|above[- ]styled|entire|instant)\s+(?:action|case|cause|matter|lawsuit|complaint)\b'
+                          r'[^.;]{0,80}\bdismiss|\bdismiss\w*\b[^.;]{0,80}\b(?:this|the|above[- ]styled|entire|instant)\s+'
+                          r'(?:action|case|cause|matter|lawsuit)\b|\ball (?:defendants|parties)\b', str(text or ''), re.I))
+
+
+_REPLACES = re.compile(r'\b(?:amended|corrected|amending|substitut\w*|replacement|re-?entered)\b', re.I)
+_ADDS_TO = re.compile(r'\bsupplemental\b|\b(?:attorney.?s?|attorneys)\s+fees?\b|\bcosts? judgment\b', re.I)
+
+
+def _dates_in(text):
+    out = set()
+    for raw in re.findall(r'\b\d{1,2}/\d{1,2}/(?:\d{4}|\d{2})\b', str(text or '')):
+        value = _date(raw)
+        if value:
+            out.add(value)
+    return out
+
+
+def reconcile_judgments(entries, today):
+    """Which final judgment is current, and what later docket entries did to each one.
+
+    Newest is not controlling. Each judgment is 'operative' until a LATER dated entry acts on it:
+      superseded   an amended/corrected/substituted judgment replaces it
+      vacated      an order vacating or setting aside a judgment
+      satisfied    a satisfaction of judgment
+    and the 'partially_' form of vacated/satisfied when that entry is limited to some parties.
+    A later entry acts on the judgment whose date it cites; with no cited date, on the one
+    operative judgment there is; with several and no citation, nothing is decided and both are
+    'unclear'. A supplemental judgment (fees, costs) adds to the one it follows and replaces
+    nothing. Two plain final judgments with no link between them are both 'unclear'.
+
+    'no_satisfaction_found' on an operative judgment is exactly that. It is not an open balance.
+    """
+    judgments, events = [], []
+    for e in entries:
+        if not e.get('date') or e['date'] > today:
+            continue
+        text = ' '.join(str(e.get(k) or '') for k in ('operative_text', 'description', 'comments'))
+        if e['kind'] == 'final_judgment':
+            j = {'entry_id': e['entry_id'], 'date': e['date'], 'title': str(e.get('operative_text') or '')[:200],
+                 'role': 'supplemental' if _ADDS_TO.search(text) else 'replacement' if _REPLACES.search(text) else 'judgment',
+                 'status': 'operative', 'by': [], 'satisfaction': 'no_satisfaction_found', 'reason': ''}
+            if j['role'] == 'replacement':
+                target, basis = _target(judgments, text)
+                if target:
+                    target.update(status='superseded', reason='replaced by %s (%s)' % (j['entry_id'], basis))
+                    target['by'].append(j['entry_id'])
+                    j['replaces'] = target['entry_id']
+                else:
+                    j['reason'] = basis
+            elif j['role'] == 'supplemental':
+                prior = [x for x in judgments if x['status'] == 'operative' and x['role'] != 'supplemental']
+                j['adds_to'] = prior[-1]['entry_id'] if prior else None
+            else:
+                live = [x for x in judgments if x['status'] == 'operative' and x['role'] != 'supplemental']
+                if live:
+                    for x in live + [j]:
+                        x.update(status='unclear', reason='more than one final judgment with no amendment, vacatur or scope linking them')
+            judgments.append(j)
+            continue
+        action = {'vacatur': 'vacated', 'satisfaction': 'satisfied'}.get(e['kind'])
+        if not action or (action == 'vacated' and not re.search(r'judgment', text, re.I)):
+            continue
+        target, basis = _target(judgments, text)
+        if action == 'vacated' and target is None:
+            # A vacated judgment needs its target; an unmatched vacatur leaves every candidate open.
+            for x in judgments:
+                if x['status'] in ('operative', 'superseded'):
+                    x.update(status='unclear', reason='%s vacates a judgment it does not identify (%s)' % (e['entry_id'], basis))
+            continue
+        if target is None:
+            events.append({'entry_id': e['entry_id'], 'kind': e['kind'], 'reason': basis})
+            continue
+        partial = 'partially_' if e.get('limited_scope') else ''
+        if action == 'satisfied':
+            target['satisfaction'] = partial + 'satisfied'
+            target['by'].append(e['entry_id'])
+            if not partial:
+                target.update(status='satisfied', reason='satisfaction %s (%s)' % (e['entry_id'], basis))
+        else:
+            target['by'].append(e['entry_id'])
+            target.update(status=partial + 'vacated', reason='vacatur %s (%s)%s' % (
+                e['entry_id'], basis, '; limited to %s' % ', '.join(e.get('dismissed_parties') or ['some parties']) if partial else ''))
+    operative = [j for j in judgments if j['status'] in ('operative', 'partially_vacated') and j['role'] != 'supplemental']
+    unclear = [j for j in judgments if j['status'] == 'unclear']
+    controlling = operative[0]['entry_id'] if len(operative) == 1 and not unclear else None
+    return {'judgments': judgments, 'unmatched': events, 'controlling_entry': controlling,
+            'controlling_reason': ('one operative judgment after amendments, vacaturs and satisfactions' if controlling
+                                   else 'no operative judgment' if not operative and not unclear
+                                   else 'judgments conflict or could not be linked; review required'),
+            'qualification': 'Docket-index reconciliation. The judgment bodies decide scope; no satisfaction found is not proof of an open balance.'}
+
+
+def _target(judgments, text):
+    """-> (judgment, basis) or (None, why)."""
+    cited = _dates_in(text)
+    by_date = [j for j in judgments if j['date'] in cited and j['role'] != 'supplemental']
+    if len(by_date) == 1:
+        return by_date[0], 'cites its date %s' % by_date[0]['date']
+    live = [j for j in judgments if j['status'] in ('operative', 'unclear') and j['role'] != 'supplemental']
+    if len(live) == 1 and not cited:
+        return live[0], 'the only operative judgment'
+    if not live:
+        return None, 'no earlier judgment on the docket'
+    return None, 'cites no date that matches exactly one earlier judgment'
 
 
 def _topic_text(text):
@@ -270,6 +450,15 @@ def render_markdown(result):
             source['cache_reported_total'], source['counts_differ'], source['note']))
     for e in result['entries']:
         lines.append('| ' + ' | '.join(esc(e.get(k)) for k in ('entry_id', 'date', 'kind', 'filed_by', 'description', 'image_status')) + ' |')
+    recon = result.get('judgments') or {}
+    if recon.get('judgments'):
+        lines += ['', '## Judgments', '', 'Controlling: %s (%s). %s' % (
+            recon.get('controlling_entry') or 'not established', recon.get('controlling_reason'), recon.get('qualification')), '']
+        lines += ['- %s %s: %s, %s; satisfaction: %s. %s' % (j['entry_id'], j['date'], j['role'], j['status'], j['satisfaction'], esc(j['reason']))
+                  for j in recon['judgments']]
+    if result.get('stay_history'):
+        lines += ['', '## Stay history', '', 'Stay in effect now: %s.' % {True: 'yes', False: 'no', None: 'unknown'}[result.get('stay_in_effect')], '']
+        lines += ['- %s %s: %s' % (h['entry_id'], h['date'], h['event']) for h in result['stay_history']]
     for section in ('pending', 'amounts', 'gaps'):
         lines += ['', f'## {section.title()}', '']
         lines += ['- ' + '; '.join(f'{k}: {esc(v)}' for k, v in row.items()) for row in result[section]] or ['No items identified in available evidence; completeness is not implied.']

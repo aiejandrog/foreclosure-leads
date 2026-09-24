@@ -222,5 +222,131 @@ class VacaturTests(unittest.TestCase):
         self.assertEqual(T.classify('Certificate of title'), 'certificate_of_title')
 
 
+
+# ---- priority 3: amendment, vacatur, satisfaction and stay reconciliation (2026-09-24) -----------
+def run_with_parties(entries, defendants):
+    parties = [{'partyName': 'BANK OF EXAMPLE NA', 'partyTypeDesc': 'PLAINTIFF'}] + [
+        {'partyName': d, 'partyTypeDesc': 'DEFENDANT'} for d in defendants]
+    return T.build_timeline('SYNTHETIC', {'entries': entries, 'pagination_verified': True,
+                                          'raw': {'parties': parties}}, (), '2026-09-23')
+
+
+class ReconciliationTests(unittest.TestCase):
+    """Shapes of the pilot's 6828 (replacement judgment) and McCray (reinstated stay) cases, and
+    defendant-specific dismissals. Synthetic; no homeowner data."""
+
+    def test_an_amended_judgment_replaces_the_one_it_amends(self):
+        r = run([entry(1, 'Final Judgment of Foreclosure'),
+                 entry(2, 'Amended Final Judgment of Foreclosure')])
+        j = {x['entry_id']: x for x in r['judgments']['judgments']}
+        self.assertEqual(j['1']['status'], 'superseded')
+        self.assertEqual(j['2']['replaces'], '1')
+        self.assertEqual(r['judgments']['controlling_entry'], '2')
+
+    def test_a_vacated_judgment_and_its_replacement(self):
+        r = run([entry(1, 'Final Judgment of Foreclosure', '03/01/2026'),
+                 entry(2, 'Order vacating final judgment entered 03/01/2026', '05/01/2026'),
+                 entry(3, 'Final Judgment of Foreclosure', '07/01/2026')])
+        j = {x['entry_id']: x for x in r['judgments']['judgments']}
+        self.assertEqual(j['1']['status'], 'vacated')
+        self.assertIn('03/01', j['1']['reason'].replace('2026-03-01', '03/01'))
+        self.assertEqual(j['3']['status'], 'operative')
+        self.assertEqual(r['judgments']['controlling_entry'], '3')
+        self.assertEqual(r['status']['kind'], 'judgment_entered')
+
+    def test_newest_is_not_controlling_when_nothing_links_two_judgments(self):
+        r = run([entry(1, 'Final Judgment of Foreclosure'), entry(2, 'Final Judgment')])
+        self.assertIsNone(r['judgments']['controlling_entry'])
+        self.assertEqual({x['status'] for x in r['judgments']['judgments']}, {'unclear'})
+
+    def test_a_vacatur_that_names_no_judgment_decides_nothing_when_there_are_two(self):
+        r = run([entry(1, 'Final Judgment', '03/01/2026'),
+                 entry(2, 'Amended Final Judgment', '04/01/2026'),
+                 entry(3, 'Final Judgment', '05/01/2026'),
+                 entry(4, 'Order vacating judgment', '06/01/2026')])
+        self.assertIsNone(r['judgments']['controlling_entry'])
+
+    def test_a_supplemental_fee_judgment_adds_and_replaces_nothing(self):
+        r = run([entry(1, 'Final Judgment of Foreclosure'),
+                 entry(2, "Supplemental Final Judgment for Attorney's Fees and Costs")])
+        j = {x['entry_id']: x for x in r['judgments']['judgments']}
+        self.assertEqual(j['1']['status'], 'operative')
+        self.assertEqual(j['2']['adds_to'], '1')
+        self.assertEqual(r['judgments']['controlling_entry'], '1')
+
+    def test_no_satisfaction_found_is_not_an_open_balance(self):
+        r = run([entry(1, 'Final Judgment')])
+        [j] = r['judgments']['judgments']
+        self.assertEqual(j['satisfaction'], 'no_satisfaction_found')
+        self.assertIn('not proof of an open balance', r['judgments']['qualification'])
+
+    def test_a_satisfaction_marks_the_judgment(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Satisfaction of Judgment')])
+        [j] = r['judgments']['judgments']
+        self.assertEqual((j['status'], j['satisfaction']), ('satisfied', 'satisfied'))
+
+    def test_a_reinstated_stay_is_a_stay_again(self):
+        # McCray's shape: stayed, relief granted, then the stay reinstated. Reading the
+        # reinstatement as relief restored the judgment as if nothing stood in the way.
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order granting relief from bankruptcy stay'),
+                 entry(4, 'Order vacating order granting relief from stay')])
+        self.assertEqual(r['entries'][3]['kind'], 'stay_reinstated')
+        self.assertEqual(r['status']['kind'], 'stayed_by_bankruptcy')
+        self.assertTrue(r['stay_in_effect'])
+        self.assertEqual([h['event'] for h in r['stay_history']], ['stayed', 'relief', 'reinstated'])
+
+    def test_a_sale_after_a_reinstated_stay_is_a_conflict(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order granting relief from bankruptcy stay'),
+                 entry(4, 'Order reinstating automatic stay'),
+                 entry(5, 'Notice of sale on 10/20/2026')])
+        self.assertEqual(r['status']['kind'], 'unclear')
+        self.assertIn('4', r['status']['evidence'])
+
+    def test_relief_after_the_reinstatement_ends_it_again(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Order granting relief from bankruptcy stay'),
+                 entry(4, 'Order reinstating automatic stay'),
+                 entry(5, 'Order granting relief from stay')])
+        self.assertEqual(r['status']['kind'], 'judgment_entered')
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_a_dismissed_bankruptcy_is_not_a_dismissed_foreclosure(self):
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of dismissal of bankruptcy')])
+        self.assertEqual(r['entries'][2]['kind'], 'bankruptcy_dismissed')
+        self.assertEqual(r['status']['kind'], 'judgment_entered')
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_dismissing_one_named_defendant_does_not_dismiss_the_case(self):
+        r = run_with_parties([entry(1, 'Complaint'), entry(2, 'Final Judgment'),
+                              entry(3, 'Order dismissing defendant JANE Q DOE')],
+                             ['JOHN DOE', 'JANE Q DOE', 'UNKNOWN TENANT'])
+        self.assertTrue(r['entries'][2]['limited_scope'])
+        self.assertEqual(r['entries'][2]['dismissed_parties'], ['JANE Q DOE'])
+        self.assertEqual(r['status']['kind'], 'judgment_entered')
+
+    def test_dropping_unknown_tenants_does_not_dismiss_the_case(self):
+        r = run_with_parties([entry(1, 'Complaint'),
+                              entry(2, 'Notice of voluntary dismissal of Unknown Tenant in possession')],
+                             ['JOHN DOE', 'UNKNOWN TENANT'])
+        self.assertTrue(r['entries'][1]['limited_scope'])
+        self.assertEqual(r['status']['kind'], 'active_pre_judgment')
+
+    def test_dismissing_the_action_still_dismisses(self):
+        r = run_with_parties([entry(1, 'Complaint'),
+                              entry(2, 'Order of dismissal: this action is dismissed as to all defendants')],
+                             ['JOHN DOE', 'UNKNOWN TENANT'])
+        self.assertFalse(r['entries'][1]['limited_scope'])
+        self.assertEqual(r['status']['kind'], 'dismissed')
+
+    def test_a_past_sale_date_is_not_a_sale(self):
+        r = run([entry(1, 'Final Judgment', '06/01/2026'),
+                 entry(2, 'Notice of sale on 08/20/2026', '07/01/2026')])
+        self.assertEqual(r['status']['kind'], 'sale_scheduled')
+        self.assertEqual(r['status']['sale_outcome'], 'unknown_no_certificate')
+
+
 if __name__ == '__main__':
     unittest.main()

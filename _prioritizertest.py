@@ -113,6 +113,20 @@ class PaidReadOrderTests(unittest.TestCase):
         self.assertEqual(got['order'][1]['later_orders'][0]['kind'], 'vacatur')
         self.assertEqual(got['docket_judgment_dates'], ['2026-08-15'])
 
+    def test_each_purchase_carries_what_the_docket_says_became_of_its_judgment(self):
+        # Priority 3: 6828's shape. The first judgment is vacated and a replacement entered; the
+        # plan names the replacement as the one operative judgment and labels each recording.
+        rows_docket = DOCKET + [row(4, 'Final Judgment of Foreclosure', '09/10/2026')]
+        plan = prioritize(MIAMI, docket(MIAMI, rows_docket), '2026-09-23')
+        self.assertEqual(plan['judgments']['controlling_entry'], '4')
+        rows = [stored('100-7', 'FINAL JUDGMENT Case No. %s' % MIAMI),
+                stored('100-8', 'FINAL JUDGMENT Case No. %s' % MIAMI)]
+        records = [record('100-7', '08/17/2026'), record('100-8', '09/12/2026')]
+        got = DP.recorded_read_order(MIAMI, rows, records, plan)
+        status = {r['source_ref'][-5:]: r['docket_judgment_status'] for r in got['order']}
+        self.assertEqual(status, {'100-7': 'vacated', '100-8': 'operative'})
+        self.assertEqual(got['order'][0]['source_ref'][-5:], '100-8')
+
     def test_without_a_docket_plan_nothing_is_tier_one(self):
         rows, records = name_search_rows()
         got = DP.recorded_read_order(MIAMI, rows, records, None)

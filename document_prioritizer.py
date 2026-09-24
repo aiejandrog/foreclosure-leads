@@ -1,10 +1,11 @@
 """Offline docket-first acquisition order. Ranking never establishes legal effect."""
 from datetime import date, timedelta
 import re
-from miami_case_timeline import classify, _date
+from miami_case_timeline import classify, _date, docket_defendants, reconcile_judgments, scope_of
 
 CRITICAL={'vacatur','satisfaction','notice_of_voluntary_dismissal','order_of_dismissal',
-          'suggestion_of_bankruptcy','relief_from_stay','order_cancelling_sale','order_resetting_sale'}
+          'suggestion_of_bankruptcy','relief_from_stay','order_cancelling_sale','order_resetting_sale',
+          'stay_reinstated','bankruptcy_dismissed'}
 
 
 def prioritize(case, inventory, as_of):
@@ -50,9 +51,17 @@ def prioritize(case, inventory, as_of):
             'eligible_for_acquisition':not reasons,'requires_body_identity_check':True,
             'selection_basis':'full_case_docket_index_only','gaps':reasons})
         gaps.extend({'entry_id':ident,'reason':reason} for reason in reasons)
+    # What the docket index alone says each final judgment's status is. Bodies still decide.
+    defendants=docket_defendants(inventory)
+    judgments=reconcile_judgments(
+        [dict(d,operative_text=d['description'],
+              limited_scope=scope_of(d['kind'],d['description']+' '+d['comments'],defendants)[0],
+              dismissed_parties=scope_of(d['kind'],d['description']+' '+d['comments'],defendants)[1])
+         for d in sorted(documents,key=lambda d:(d['date'] or '9999',d['entry_id']))],
+        as_of)
     documents.sort(key=lambda d:(not d['eligible_for_acquisition'],d['priority'],
         -date.fromisoformat(d['date']).toordinal() if d['date'] else 0,d['entry_id']))
-    return {'case':case,'as_of':as_of,'documents':documents,'gaps':gaps,
+    return {'case':case,'as_of':as_of,'documents':documents,'gaps':gaps,'judgments':judgments,
             'controlling_judgment_established':False,'coverage_complete':False,
             'paid_calls_authorized':False,'full_ocs_entries':len(entries),
             'next_step':'Acquire accessible controlling-order and latest judgment candidates; validate bodies before paid amount reading.'}
@@ -110,6 +119,18 @@ def later_orders(plan, when):
     return out
 
 
+_SPENT_STATUSES = ('superseded', 'vacated', 'satisfied')
+
+
+def _docket_status(plan, matched):
+    """The reconciled status of the docket judgment(s) dated `matched`, or None."""
+    if matched is None:
+        return None
+    found = {j['status'] for j in ((plan or {}).get('judgments') or {}).get('judgments') or []
+             if j.get('date') == matched.isoformat() and j.get('role') != 'supplemental'}
+    return found.pop() if len(found) == 1 else ('unclear' if found else None)
+
+
 def _is_satisfaction(row):
     kind = str((row.get('classification') or {}).get('kind') or '')
     return kind.startswith('satisfaction') or bool(
@@ -164,12 +185,18 @@ def recorded_read_order(case, rows, records=(), plan=None):
             matched = next((d for d in judgments if d - RECORDING_WINDOW_BEFORE <= recorded
                             <= d + RECORDING_WINDOW_AFTER), None)
         tier = 0 if identity['agrees'] is True else 1 if matched else 2
+        status = _docket_status(plan, matched)
         ranked.append({'row': row, 'source_ref': ref, 'tier': tier,
                        'recorded': recorded.isoformat() if recorded else None,
                        'docket_judgment_date': matched.isoformat() if matched else None,
+                       'docket_judgment_status': status,
                        'later_orders': later_orders(plan, matched) if matched else []})
-    ranked.sort(key=lambda r: (r['tier'], -(date.fromisoformat(r['recorded']).toordinal()
-                                             if r['recorded'] else 0), str(r['source_ref'])))
+    # Within a tier, a recording that lines up with a judgment the docket shows superseded,
+    # vacated or satisfied is bought after one that lines up with an operative judgment. It is
+    # still bought when the share allows: the docket index is not the judgment's body.
+    ranked.sort(key=lambda r: (r['tier'], r['docket_judgment_status'] in _SPENT_STATUSES,
+                               -(date.fromisoformat(r['recorded']).toordinal()
+                                 if r['recorded'] else 0), str(r['source_ref'])))
     return {'order': ranked, 'deferred': deferred,
             'docket_judgment_dates': [d.isoformat() for d in judgments],
             'basis': 'docket judgment dates, printed case number, recording date, case year; '
