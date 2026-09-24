@@ -72,6 +72,13 @@ class AuctionTests(unittest.TestCase):
                              dict(timeline(), sale_held=dict(tl['sale_held'], date='2025-10-28')), TODAY)
         self.assertEqual(got['state'], 'scheduled')
 
+    def test_a_reset_sale_date_in_the_archive_beats_the_leads_past_date(self):
+        # Greptile on #53: the lead keeps the original, past date after a reset.
+        got = R.auction_fact({'AuctionDate': '09/10/2026'},
+                             {'last_seen': '2026-09-24', 'auction': '10/15/2026'}, '2026-09-24',
+                             timeline(), TODAY)
+        self.assertEqual((got['sale_date'], got['state']), ('2026-10-15', 'scheduled'))
+
     def test_stale_calendar_and_stay(self):
         self.assertEqual(R.auction_fact({'AuctionDate': '10/01/2026'}, {'last_seen': '2026-09-20'},
                                         '2026-09-20', timeline(), TODAY)['state'], 'stale_calendar')
@@ -141,6 +148,11 @@ class RankingTests(unittest.TestCase):
         self.assertEqual(held['D'], ['ownership: possibly conveyed later'])
         self.assertEqual(held['E'], ['appraiser owner vs deed grantee: differs'])
 
+    def test_a_pre_judgment_case_never_qualifies(self):
+        # Greptile on #53: with no sale date it passed every other gate.
+        row = R.rank([self.item('P', sale='', tl=timeline('active_pre_judgment', controlling=None))], TODAY)[0]
+        self.assertEqual(row['held_because'], ['no judgment entered yet'])
+
     def test_no_timeline_or_title_summary_holds(self):
         row = R.rank([{'case': 'X', 'facts': facts(), 'timeline': None, 'present': None}], TODAY)[0]
         self.assertIn('no whole-case timeline saved', row['held_because'])
@@ -189,6 +201,9 @@ class MainTests(unittest.TestCase):
             dossier.parent.mkdir(parents=True, exist_ok=True)
             DS.pipeline_write(dossier, {'case': CASE})
             DS.pipeline_write(dossier.with_name(dossier.stem + '-timeline.json'), timeline())
+            # Checkpoint and summary files share the folder and are not cases (Greptile on #53).
+            DS.pipeline_write(dossier.with_name('_nightly.json'), {'cases': 3})
+            DS.pipeline_write(dossier.with_name('_backfill_state.json'), {'version': 1})
             title = Path(folder) / 'title_discovery'
             title.mkdir()
             (title / (CASE + '.json')).write_text(json.dumps({'owner': 'JANE OWNER', 'present_title': present()}))
@@ -210,6 +225,13 @@ class MainTests(unittest.TestCase):
             self.assertEqual(out['cases'][0]['facts']['auction']['state'], 'scheduled')
             self.assertIn('appraiser owner not read in the last 7 days', out['cases'][0]['held_because'])
             self.assertTrue((reports / ('miami-ranking-%s.md' % date.today())).is_file())
+            # A second run the same day compares against the first, not an older day.
+            with patch.object(R, 'load_sources', return_value=sources), \
+                    patch.object(RD, '_lead_rows', return_value=[lead]), \
+                    patch('ownership_gate.check_lead', side_effect=AssertionError('network')):
+                self.assertEqual(R.main(['--all']), 0)
+            out = json.loads((reports / ('miami-ranking-%s.json' % date.today())).read_text())
+            self.assertEqual((out['previous'], out['changes']), (str(date.today()), []))
 
 
 if __name__ == '__main__':

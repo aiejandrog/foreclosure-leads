@@ -63,14 +63,18 @@ def stored(ref, text, doc_type='JUDGMENT'):
             'reading': page(text), 'path': '/nonexistent/' + ref + '.pdf'}
 
 
-def record(ref, when, doc_type='JUDGMENT'):
+PLAINTIFF = 'ACME LENDING LLC'
+
+
+def record(ref, when, doc_type='JUDGMENT', first=PLAINTIFF, second='OWNER'):
     book, pg = ref.split('-')
     return {'reC_BOOK': book, 'reC_PAGE': pg, 'reC_DATE': when, 'doC_TYPE': doc_type,
-            'firsT_PARTY': 'OWNER', 'seconD_PARTY': 'BANK'}
+            'firsT_PARTY': first, 'seconD_PARTY': second}
 
 
-def docket(case, rows):
-    raw = {'caseNumber': case, 'dockets': rows, 'parties': []}
+def docket(case, rows, plaintiffs=(PLAINTIFF,)):
+    raw = {'caseNumber': case, 'dockets': rows,
+           'parties': [{'partyName': p, 'partyTypeDesc': 'PLAINTIFF'} for p in plaintiffs]}
     return {'raw': raw, 'pagination_verified': False,
             'entries': [{'source_id': str(r['eventID']), 'source_ref': 'dockets/%d' % i,
                          'metadata': r, 'expected_documents': 1} for i, r in enumerate(rows)]}
@@ -115,6 +119,22 @@ class PaidReadOrderTests(unittest.TestCase):
         # The vacatur dated after the docket judgment is named for review, not applied.
         self.assertEqual(got['order'][1]['later_orders'][0]['kind'], 'vacatur')
         self.assertEqual(got['docket_judgment_dates'], ['2026-08-15'])
+
+    def test_a_date_alone_never_ties_a_judgment_to_this_case(self):
+        # Greptile on #53: another lawsuit's judgment against a shared party, recorded in the
+        # window of this case's docket judgment, was bought and its amount admitted.
+        plan = prioritize(MIAMI, docket(MIAMI, DOCKET), '2026-09-23')
+        rows = [stored('100-6', 'FINAL JUDGMENT, no case number on the page')]
+        other = [record('100-6', '08/20/2026', first='CITY OF MIAMI')]
+        got = DP.recorded_read_order(MIAMI, rows, other, plan)
+        self.assertEqual(got['order'], [])
+        self.assertEqual(got['deferred'][0]['reason'], 'recorded_near_judgment_between_other_parties')
+        # A generic lender name is no match either, and no plaintiff at all cannot be checked.
+        self.assertIsNone(DP.names_a_plaintiff({'firsT_PARTY': 'PNC BANK NATIONAL ASSOCIATION'},
+                                               ['U S BANK NATIONAL ASSOCIATION']))
+        plan = prioritize(MIAMI, docket(MIAMI, DOCKET, plaintiffs=()), '2026-09-23')
+        got = DP.recorded_read_order(MIAMI, rows, [record('100-6', '08/20/2026')], plan)
+        self.assertEqual(got['deferred'][0]['reason'], 'recorded_near_judgment_party_unchecked')
 
     def test_each_purchase_carries_what_the_docket_says_became_of_its_judgment(self):
         # Priority 3: 6828's shape. The first judgment is vacated and a replacement entered; the

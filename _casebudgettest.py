@@ -307,6 +307,31 @@ class OrchestrationTests(unittest.TestCase):
         self.assertEqual(state['cases'][ROSTER[0]]['steps']['timeline']['status'], 'gap')
         self.assertIn('timeline: No existing docket inventory', ' '.join(dossier['open_gaps']))
 
+    def test_retry_gaps_reruns_a_timeline_gap_and_clears_it(self):
+        # Greptile on #53: a same-day --retry-gaps skipped the timeline because 'gap' counted as
+        # finished, and a later success left the stale 'timeline:' gap in the dossier.
+        def process(entry, qs, **kwargs):
+            return {'complete': True, 'open_gaps': []}
+
+        docket = {'saved': False}
+
+        def timeline(case, as_of, **kw):
+            if not docket['saved']:
+                raise ValueError('No existing docket inventory; use --collect to obtain it')
+            return {'coverage_complete': True, 'status': {'kind': 'judgment_entered'},
+                    'judgments': {'controlling_entry': '7'}}, {}
+
+        with tempfile.TemporaryDirectory() as folder:
+            self.run_backfill(folder, process, timeline)
+            docket['saved'] = True
+            self.run_backfill(folder, process, timeline, extra=['--retry-gaps'])
+            state = json.loads((Path(folder) / '_backfill_state.json').read_text())
+            dossier = json.loads((Path(folder) / (ROSTER[0] + '.json')).read_text())
+        self.assertEqual(state['cases'][ROSTER[0]]['steps']['timeline']['status'], 'done')
+        self.assertEqual(dossier['open_gaps'], [])
+        self.assertTrue(dossier['complete'])
+        self.assertEqual(state['cases'][ROSTER[0]]['status'], 'complete')
+
     def test_timeline_flags_need_the_backfill(self):
         import run_documents as RD
         with self.assertRaises(SystemExit):

@@ -841,7 +841,7 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     for row in rows:
         if row.get('reading'):
             row['case_tie'] = DP.case_tie(case, row, by_ref.get(row.get('source_ref')),
-                                          judgment_dates)
+                                          judgment_dates, plaintiffs=plaintiffs)
         else:
             row['case_tie'] = {'tier': None, 'reason': 'no_stored_reading'}
     candidates = [c for row in rows if not is_satisfaction_row(row) and _tied(row)

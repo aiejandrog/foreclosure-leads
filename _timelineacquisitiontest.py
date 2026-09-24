@@ -75,6 +75,24 @@ class AcquisitionTests(unittest.TestCase):
             self.assertTrue((base / 'case-timeline.md').exists())
             self.assertIn('whole_case_timeline', json.loads(dossier.read_text()))
 
+    def test_a_deferred_documents_saved_figures_survive_the_paid_pass(self):
+        # Greptile on #53: the paid pass rebuilt the timeline from its selected rows only.
+        import hashlib
+        path = lambda ref: '/b/amount-vision-%s.json' % hashlib.sha256(ref.encode()).hexdigest()
+        cached = {'evidence_files': [path('court:1:1'), path('court:2:1')],
+                  'figures': [{'source_ref': 'court:1:1', 'amount': 1.0},
+                              {'source_ref': 'court:2:1', 'amount': 2.0}],
+                  'amount_checks': [{'source_ref': 'court:2:1', 'ok': True}], 'gaps': []}
+        paid = {'evidence_files': [path('court:1:1')],
+                'figures': [{'source_ref': 'court:1:1', 'amount': 1.5}], 'amount_checks': [],
+                'gaps': [{'source_ref': 'court:2:1', 'reason': 'budget_exhausted: spent'}]}
+        got = R.keep_cached_amounts(paid, cached)
+        self.assertEqual(sorted((f['source_ref'], f['amount']) for f in got['figures']),
+                         [('court:1:1', 1.5), ('court:2:1', 2.0)])
+        self.assertEqual(got['amount_checks'], [{'source_ref': 'court:2:1', 'ok': True}])
+        self.assertEqual(got['gaps'], [])
+        self.assertIs(R.keep_cached_amounts(paid, {'evidence_files': [path('court:1:1')]}), paid)
+
     def test_counts_separate_embedded_supplement_and_unreadable_source(self):
         rows = [{'manifest': {'pages': 3}, 'reading': {'pages': [
             {'page': 1, 'outcome': 'text', 'supplemental_ocr': {'outcome': 'ocr_text'}},

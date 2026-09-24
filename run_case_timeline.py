@@ -205,6 +205,42 @@ def read_amounts(rows, base, budget=None, plan=None):
     return result
 
 
+def keep_cached_amounts(paid, cached):
+    """Put back the saved figures of documents the paid pass did not read.
+
+    The paid pass reads only the documents it selects, up to this case's share. A document it
+    deferred or never reached keeps the figures its saved, hash-checked evidence already gives
+    (Greptile on #53: they vanished from the final timeline). Its 'not selected' or
+    'budget exhausted' gap is dropped, because the saved evidence answers it."""
+    read = set(paid.get('evidence_files') or [])
+    kept = {}
+    for path in cached.get('evidence_files') or []:
+        if path not in read:
+            kept[path] = None
+    if not kept:
+        return paid
+    refs = {f.get('source_ref') for f in cached.get('figures') or []} | {
+        c.get('source_ref') for c in cached.get('amount_checks') or []}
+    refs = {r for r in refs if _evidence_path_of(r, cached) in kept}
+    out = dict(paid)
+    out['evidence_files'] = list(paid.get('evidence_files') or []) + list(kept)
+    out['figures'] = list(paid.get('figures') or []) + [
+        f for f in cached.get('figures') or [] if f.get('source_ref') in refs]
+    out['amount_checks'] = list(paid.get('amount_checks') or []) + [
+        c for c in cached.get('amount_checks') or [] if c.get('source_ref') in refs]
+    out['gaps'] = [g for g in paid.get('gaps') or []
+                   if not (g.get('source_ref') in refs and str(g.get('reason') or '').startswith(
+                       ('paid_read_not_selected', 'budget_exhausted')))] + [
+        g for g in cached.get('gaps') or [] if g.get('source_ref') in refs]
+    return out
+
+
+def _evidence_path_of(source_ref, cached):
+    key = hashlib.sha256(str(source_ref).encode()).hexdigest()
+    return next((p for p in cached.get('evidence_files') or []
+                 if Path(p).name == 'amount-vision-' + key + '.json'), None)
+
+
 def summary_counts(rows, timeline):
     pages = [p for row in rows for p in (row.get('reading') or {}).get('pages', [])]
     return {'entries': len(timeline.get('entries', [])),
@@ -282,7 +318,7 @@ def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, le
             plan = document_prioritizer.prioritize(case, inventory, as_of)
         except ValueError:
             plan = None      # every row is then deferred as not_in_docket_plan
-        amounts = read_amounts(rows, base, budget, plan=plan)
+        amounts = keep_cached_amounts(read_amounts(rows, base, budget, plan=plan), cached_amounts)
         shared.finish(case)
         timeline['amount_vision'] = amounts
         timeline.setdefault('gaps', []).extend(amounts['gaps'])

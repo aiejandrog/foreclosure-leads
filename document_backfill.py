@@ -144,9 +144,10 @@ class State:
         start() and finish(), so a restart resumes at the first step not yet done."""
         return self.data['cases'].setdefault(case, {}).setdefault('steps', {})
 
-    def step_done(self, case, step, fp):
+    def step_done(self, case, step, fp, retry_gaps=False):
         record = self.steps(case).get(step) or {}
-        return record.get('fingerprint') == fp and record.get('status') in ('done', 'gap')
+        return record.get('fingerprint') == fp and record.get('status') in (
+            ('done',) if retry_gaps else ('done', 'gap'))
 
     def mark_step(self, case, step, fp, status, **detail):
         self.steps(case)[step] = dict(detail, fingerprint=fp, status=status)
@@ -219,7 +220,9 @@ def _timeline_step(args, runner, state, entry, budget, target, dossier):
     fp = fingerprint({'case': case, 'processing': entry['_processing'],
                       'as_of': date.today().isoformat(),
                       'collect': bool(getattr(args, 'collect_dockets', False))})
-    if state.step_done(case, 'timeline', fp):
+    # --retry-gaps retries a timeline that ended in a gap (no saved docket yet) the same day,
+    # instead of the checkpoint calling it finished (Greptile on #53).
+    if state.step_done(case, 'timeline', fp, retry_gaps=bool(getattr(args, 'retry_gaps', False))):
         return DS.pipeline_load(target) or dossier
     try:
         timeline, _ = run_case_timeline.timeline_case(
@@ -235,10 +238,16 @@ def _timeline_step(args, runner, state, entry, budget, target, dossier):
         state.mark_step(case, 'timeline', fp, 'gap', reason=str(exc)[:300])
         return dossier
     dossier = dict(DS.pipeline_load(target) or dossier)
+    # An earlier run's timeline gap is answered by this run, whatever it found.
+    earlier = [g for g in dossier.get('open_gaps') or [] if str(g).startswith('timeline: ')]
+    if earlier:
+        dossier['open_gaps'] = [g for g in dossier['open_gaps'] if g not in earlier]
+        dossier['complete'] = not dossier['open_gaps']      # case_dossier's own rule
     if not timeline.get('coverage_complete'):
         dossier['complete'] = False
         dossier['open_gaps'] = list(dossier.get('open_gaps') or []) + [
             'timeline: %d gap(s) in the whole-case docket' % len(timeline.get('gaps') or [])]
+    if earlier or not timeline.get('coverage_complete'):
         DS.pipeline_write(target, dossier)
     state.mark_step(case, 'timeline', fp, 'done', status_kind=(timeline.get('status') or {}).get('kind'),
                     controlling_judgment=(timeline.get('judgments') or {}).get('controlling_entry'))

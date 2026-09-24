@@ -45,6 +45,7 @@ it reads caches only and makes no request.
 import argparse
 import json
 import os
+import re
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -80,7 +81,11 @@ def _age(when, as_of):
 def auction_fact(lead, archive_entry, calendar_day, timeline, as_of):
     lead = lead or {}
     archive_entry = archive_entry or {}
-    sale = _day(lead.get('AuctionDate') or lead.get('auction') or archive_entry.get('auction'))
+    # The later of the lead's date and the calendar archive's: a reset moves the sale forward in
+    # the archive while the lead can keep the original, past date (Greptile on #53).
+    dates = [d for d in (_day(lead.get('AuctionDate') or lead.get('auction')),
+                         _day(archive_entry.get('auction'))) if d]
+    sale = max(dates) if dates else None
     age = _age(calendar_day, as_of)
     on_calendar = bool(archive_entry and calendar_day and archive_entry.get('last_seen') == str(calendar_day))
     status = (timeline or {}).get('status') or {}
@@ -193,6 +198,22 @@ def timeline_state(timeline, as_of):
     return None
 
 
+_CASE_FILE_RE = re.compile(r'^\d{4}-\d{6}-[A-Z]{2}-\d{2}$')
+
+
+def previous_report(folder, as_of):
+    """The run to compare against: today's earlier run when there is one, which this run is about
+    to overwrite, else the newest earlier day (Greptile on #53: a second run the same day compared
+    against yesterday and missed the morning's changes)."""
+    folder = Path(folder)
+    if not folder.is_dir():
+        return None
+    today = folder / ('miami-ranking-%s.json' % as_of)
+    if today.is_file():
+        return today
+    return max((p for p in folder.glob('miami-ranking-*.json') if p.stem < today.stem), default=None)
+
+
 def qualify(case, facts, timeline, present, as_of=None):
     """-> (qualified, reasons). Every reason is a sentence a person can act on."""
     reasons = []
@@ -211,7 +232,11 @@ def qualify(case, facts, timeline, present, as_of=None):
         if timeline.get('stay_in_effect') is None and timeline.get('stay_history'):
             reasons.append('stay state unknown')
         judgments = timeline.get('judgments') or {}
-        if kind in ('judgment_entered', 'sale_scheduled') and not judgments.get('controlling_entry'):
+        if kind == 'active_pre_judgment':
+            # No judgment yet, so nothing to rank on (Greptile on #53: a pre-judgment case with no
+            # sale date passed every other gate).
+            reasons.append('no judgment entered yet')
+        elif kind not in (None, 'unclear') and not judgments.get('controlling_entry'):
             reasons.append('no single controlling judgment')
     if present is None:
         reasons.append('no present-title summary (run title discovery)')
@@ -415,8 +440,9 @@ def main(argv=None):
     cases = list(args.case)
     if args.all:
         folder = Path(RD.dossier_path(COUNTY, 'x')).parent
+        # Only case files: the folder also holds _nightly.json and _backfill_state.json.
         cases += sorted(p.stem for p in folder.glob('*.json')
-                        if not p.stem.endswith('-timeline')) if folder.is_dir() else []
+                        if _CASE_FILE_RE.match(p.stem)) if folder.is_dir() else []
     cases = list(dict.fromkeys(cases))
     if not cases:
         parser.error('name --case or --all')
@@ -439,8 +465,7 @@ def main(argv=None):
         refresh_timelines(cases, as_of)
     loaded = [load_case(c, leads.get(c), sources, as_of, args.refresh_appraiser) for c in cases]
     folder = case_review.output_path('reports')
-    previous_path = max((p for p in Path(folder).glob('miami-ranking-*.json')
-                         if p.stem != 'miami-ranking-%s' % as_of), default=None) if Path(folder).is_dir() else None
+    previous_path = previous_report(folder, as_of)
     ranked = rank(loaded, as_of)
     report = {'as_of': as_of.isoformat(), 'cases': ranked,
               'summary': {'cases': len(ranked), 'qualified': sum(r['qualified'] for r in ranked),

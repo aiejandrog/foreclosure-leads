@@ -61,7 +61,9 @@ def prioritize(case, inventory, as_of):
         as_of)
     documents.sort(key=lambda d:(not d['eligible_for_acquisition'],d['priority'],
         -date.fromisoformat(d['date']).toordinal() if d['date'] else 0,d['entry_id']))
+    import miami_judgment as MJ
     return {'case':case,'as_of':as_of,'documents':documents,'gaps':gaps,'judgments':judgments,
+            'plaintiffs':MJ.plaintiffs_of(raw),
             'controlling_judgment_established':False,'coverage_complete':False,
             'paid_calls_authorized':False,'full_ocs_entries':len(entries),
             'next_step':'Acquire accessible controlling-order and latest judgment candidates; validate bodies before paid amount reading.'}
@@ -137,14 +139,41 @@ def _is_satisfaction(row):
         _SATISFACTION_TYPE.match(str(row.get('doc_type') or '').strip()))
 
 
-def case_tie(case, row, record=None, judgments=(), year_start=None):
+# Words every lender's name shares; a tie on them alone would make any two banks one party.
+_GENERIC_PARTY_RE = re.compile(
+    r'\b(?:BANK|NATIONAL|FEDERAL|SAVINGS|MORTGAGE|TRUSTEE|FSB|LOAN|LOANS|FINANCIAL|SERVICES|'
+    r'SERVICING|CREDIT|UNION|FUNDING|CAPITAL|HOME|HOMES|AMERICA|AMERICAN|FLORIDA|FUND|SUCCESSOR|'
+    r'INTEREST|ASSIGNEE|INDIVIDUALLY|SOLELY|CAPACITY|NOT|BUT|FOR|AS)\b', re.I)
+
+
+def _distinct_party(name):
+    import miami_judgment as MJ
+    return MJ._party_key(_GENERIC_PARTY_RE.sub(' ', str(name or '').upper()))
+
+
+def names_a_plaintiff(record, plaintiffs):
+    """True when either index party of a recorded instrument is one of this case's plaintiffs,
+    None when that cannot be checked (no plaintiffs, no parties, or only generic lender words)."""
+    wants = [w for w in (_distinct_party(p) for p in plaintiffs or ()) if w]
+    haves = [h for h in (_distinct_party((record or {}).get(f)) for f in ('firsT_PARTY', 'seconD_PARTY')) if h]
+    if not wants or not haves:
+        return None
+    return any(w <= h or h <= w for w in wants for h in haves)
+
+
+def case_tie(case, row, record=None, judgments=(), year_start=None, plaintiffs=()):
     """What ties a stored Official Records row to THIS case, from free facts.
 
     -> {'tier': 0 | 1 | None, 'reason', 'detail', 'recorded', 'docket_judgment_date'}
       tier 0  the page prints this case number
-      tier 1  prints no case number, recorded within the window of a docket judgment date
+      tier 1  prints no case number, recorded within the window of a docket judgment date, and
+              an index party is this case's plaintiff
       None    not this case's: prints another case number ('other_action'), recorded before the
-              case-number year, or nothing ties it ('not_tied_to_this_case')
+              case-number year, recorded near a judgment date between other parties, or nothing
+              ties it ('not_tied_to_this_case')
+    A date alone never ties a document (Greptile on #53): another lawsuit's judgment against a
+    shared party can be recorded in the same window. When the parties cannot be checked, the row
+    is 'party_unchecked' and is not tied either.
     The same test decides what the paid reader may buy and which figures may stand as this case's
     judgment amount: on 2025-018660 a 2011 judgment against another person set "$3,037.43" and
     "no outstanding debt" while the real judgment is $270,322.07 (verify-12 defect 5).
@@ -172,7 +201,14 @@ def case_tie(case, row, record=None, judgments=(), year_start=None):
     if identity['agrees'] is True:
         return dict(out, tier=0, reason='prints_this_case_number')
     if matched:
-        return dict(out, tier=1, reason='recorded_near_docket_judgment')
+        party = names_a_plaintiff(record, plaintiffs)
+        if party:
+            return dict(out, tier=1, reason='recorded_near_docket_judgment')
+        return dict(out, reason=('recorded_near_judgment_between_other_parties' if party is False
+                                 else 'recorded_near_judgment_party_unchecked'),
+                    detail='recorded %s near docket judgment %s; its index parties %s this case\'s '
+                           'plaintiff' % (out['recorded'], out['docket_judgment_date'],
+                                          'do not name' if party is False else 'could not be checked against'))
     # Nothing ties it to this case: a name-search judgment against a shared party, most often an
     # old one. The 2026-09-24 desktop replay showed four of five pilot cases would still have
     # bought one of these first, because none of their own judgments was in the recorded store.
@@ -215,7 +251,8 @@ def recorded_read_order(case, rows, records=(), plan=None):
         if _is_satisfaction(row):
             deferred.append({'source_ref': ref, 'reason': 'satisfaction_read_free_only'})
             continue
-        tie = case_tie(case, row, by_ref.get(ref), judgments, year_start)
+        tie = case_tie(case, row, by_ref.get(ref), judgments, year_start,
+                       plaintiffs=(plan or {}).get('plaintiffs') or ())
         if tie['tier'] is None:
             deferred.append({'source_ref': ref, 'reason': tie['reason'], 'detail': tie['detail']})
             continue
