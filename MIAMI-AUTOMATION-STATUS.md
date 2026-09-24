@@ -24,7 +24,7 @@ shared spending controls. This is not complete.
 |---|---|---|
 | Fresh selection | Current auction status joined to case/folio; stale dates cannot imply sold | Outstanding |
 | Docket completeness | Full OCS response preserved; independent coverage reconciliation or explicit unverified gap | Full response supported; completeness unproven |
-| All document/page outcomes | Attachment inventory and source-bound page outcomes; no count-only completion | Partial acquisition/read coverage |
+| All document/page outcomes | Attachment inventory and source-bound page outcomes; no count-only completion | `document_coverage`: one row per expected attachment, each read / read_partial / fetched_unread / queued / failed / restricted / access_gap / not_enumerated / county_no_document, saved with every timeline. A restricted or refused court filing stays a gap; a stored public Official Records copy of the same instrument (prints this case number, same kind, recorded -3/+120 days) is linked as `same_instrument_unverified`, never counted as the court copy. Where none is stored, `alternate_copy_needed` names the book/page the docket cites. Fetching that copy automatically is not wired: it needs the clerk endpoints, reachable only from the desktop |
 | Official Records relevance | Current parcel/title identity, capped search gaps and retained later instruments | Candidate-only matching remains |
 | Free-first reading | Embedded/layout OCR before vision; automatic cross-page extraction | Text and OCR rows are extracted and checked across page breaks with no transcription; vision buys the page before a total only when that total's own page cannot reproduce it and OCR shows money there. Not yet replayed on Walker and Blue Water |
 | Amount verification | All typed charges and credits sum exactly; printed subtotals match; consistent across outputs | One contract (`judgment_money`) on the OCR/text, vision, saved-vision and timeline paths: exact cents, credits subtract, rates kept and reported, subtotal membership explicit or rows-above, no subset search, no tolerance. Not yet replayed on Walker and Blue Water |
@@ -121,5 +121,16 @@ Priority 4 is wired, not yet run end to end on the desktop.
   so the total exposure of a night that runs all three is the sum of their caps, stated here rather
   than hidden. The standalone `run_case_timeline` keeps the `title_discovery/vision-budget.json`
   ledger the pilot's authorization was recorded in.
+
+Priority 5 is wired for inventory and linking; retrieval of missing public copies is not.
+
+- `document_coverage.coverage` states what became of every attachment the docket claims, in the
+  timeline JSON and markdown. Restricted filings ("County login required", confidential, sealed)
+  are their own state and stay gaps.
+- Authorized alternate copies are public recorded copies already in the store, linked only when
+  exactly one fits; two candidates are `ambiguous` and not chosen.
+- Not closable here: the docket's own document counts cannot be verified against OCS, and a
+  login-walled filing cannot be read without an account this project does not have. Both are
+  written into every coverage block rather than hidden.
 
 The full goal remains active until the acceptance matrix is evidenced end to end.

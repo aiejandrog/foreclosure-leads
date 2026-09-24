@@ -456,6 +456,15 @@ def render_markdown(result):
             recon.get('controlling_entry') or 'not established', recon.get('controlling_reason'), recon.get('qualification')), '']
         lines += ['- %s %s: %s, %s; satisfaction: %s. %s' % (j['entry_id'], j['date'], j['role'], j['status'], j['satisfaction'], esc(j['reason']))
                   for j in recon['judgments']]
+    cov = result.get('coverage') or {}
+    if cov.get('attachments'):
+        lines += ['', '## Document coverage', '', '%s of %s expected attachment(s) read. %s' % (
+            cov.get('read'), cov.get('expected'), ', '.join('%s: %s' % kv for kv in sorted((cov.get('counts') or {}).items()))),
+            cov.get('qualification', ''), '']
+        lines += ['- %s %s: %s%s%s' % (a['entry_id'], esc(a.get('description')), a['state'],
+                                        ' (%s)' % esc('; '.join(a['detail'])) if a.get('detail') else '',
+                                        ' | public recorded copy candidate: %s' % a['alternate_copy'] if a.get('alternate_copy') else '')
+                  for a in cov['attachments'] if a['state'] not in ('read', 'county_no_document')]
     if result.get('stay_history'):
         lines += ['', '## Stay history', '', 'Stay in effect now: %s.' % {True: 'yes', False: 'no', None: 'unknown'}[result.get('stay_in_effect')], '']
         lines += ['- %s %s: %s' % (h['entry_id'], h['date'], h['event']) for h in result['stay_history']]

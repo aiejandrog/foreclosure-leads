@@ -218,6 +218,27 @@ def summary_counts(rows, timeline):
             'pending_types': dict(Counter(p.get('type', 'unknown') for p in timeline.get('pending', [])))}
 
 
+def recorded_copies(case):
+    """Stored Official Records documents for this case, each with the kind its own text reads
+    as and its recording date: the pool an unreadable court filing's public copy can come from."""
+    import document_classify
+    out = []
+    for manifest, reading in DS.stored_documents(COUNTY, case):
+        ref = str(manifest.get('source_ref') or '')
+        if not ref.startswith('official_records/'):
+            continue
+        out.append({'source_ref': ref, 'reading': reading,
+                    'recorded_date': (manifest.get('record_key') or {}).get('rec_date'),
+                    'kind': document_classify.classify(reading).get('kind')})
+    return out
+
+
+def case_coverage(case, inventory, rows, timeline):
+    import document_coverage
+    return document_coverage.coverage(inventory, rows, timeline.get('entries'),
+                                      recorded_copies(case), case)
+
+
 def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, ledger=None,
                   cap=None):
     """One case's whole-case timeline: acquire, free reading, then (with `shared`, a
@@ -238,6 +259,7 @@ def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, le
     rows = [miami_timeline_ocr.supplement(row, base / 'timeline-ocr') for row in rows]
     timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
     timeline['source_comparison'] = inventory.get('source_comparison')
+    timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
     # Preserve the free whole-case analysis even if a paid reader fails.
     if ledger is not None:
         timeline['vision_budget'] = budget_snapshot(ledger, cap)
@@ -255,6 +277,7 @@ def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, le
         # Rebuild before replacing cached figures so the paid refresh cannot duplicate them.
         timeline = miami_case_timeline.build_timeline(case, inventory, rows, as_of=as_of)
         timeline['source_comparison'] = inventory.get('source_comparison')
+        timeline['coverage'] = case_coverage(case, inventory, rows, timeline)
         try:
             plan = document_prioritizer.prioritize(case, inventory, as_of)
         except ValueError:
