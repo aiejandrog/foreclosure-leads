@@ -81,11 +81,14 @@ class AcquisitionTests(unittest.TestCase):
             exhausted = False
         plan = {'documents': [
             {'entry_id': '7', 'kind': 'final_judgment', 'eligible_for_acquisition': True, 'gaps': []},
-            {'entry_id': '8', 'kind': 'notice_of_filing', 'eligible_for_acquisition': True, 'gaps': []}]}
+            {'entry_id': '8', 'kind': 'notice_of_filing', 'eligible_for_acquisition': True, 'gaps': []},
+            {'entry_id': '9', 'kind': 'motion_for_summary_judgment', 'eligible_for_acquisition': True,
+             'gaps': []}]}
         scan = {'pages': [{'page': 1, 'outcome': 'text', 'text': 'FINAL JUDGMENT OF FORECLOSURE for plaintiff'},
                           {'page': 2, 'outcome': 'ocr_text', 'text': 'NOT AN OFFICIAL COPY'}]}
         rows = [{'source_ref': 'court:7:1', 'entry_ref': '7', 'reading': scan},
-                {'source_ref': 'court:8:1', 'entry_ref': '8', 'reading': scan}]
+                {'source_ref': 'court:8:1', 'entry_ref': '8', 'reading': scan},
+                {'source_ref': 'court:9:1', 'entry_ref': '9', 'reading': scan}]
         with tempfile.TemporaryDirectory() as folder:
             got = R.read_amounts(rows, folder, Budget(), plan=plan)
         self.assertEqual([g['source_ref'] for g in got['gaps']], ['court:7:1'])

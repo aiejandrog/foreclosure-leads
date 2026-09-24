@@ -78,6 +78,12 @@ class AuctionTests(unittest.TestCase):
                              {'last_seen': '2026-09-24', 'auction': '10/15/2026'}, '2026-09-24',
                              timeline(), TODAY)
         self.assertEqual((got['sale_date'], got['state']), ('2026-10-15', 'scheduled'))
+        # An archive date the newest calendar no longer lists never overrides a corrected, earlier
+        # lead date: that sale date has passed and its outcome is unknown.
+        got = R.auction_fact({'AuctionDate': '09/10/2026'},
+                             {'last_seen': '2026-09-01', 'auction': '10/15/2026'}, '2026-09-24',
+                             timeline(), TODAY)
+        self.assertEqual((got['sale_date'], got['state']), ('2026-09-10', 'past_date_outcome_unknown'))
 
     def test_stale_calendar_and_stay(self):
         self.assertEqual(R.auction_fact({'AuctionDate': '10/01/2026'}, {'last_seen': '2026-09-20'},

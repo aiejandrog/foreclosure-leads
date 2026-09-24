@@ -209,12 +209,16 @@ def read_amounts(rows, base, budget=None, plan=None):
     return result
 
 
+_AMOUNT_KINDS = ('final_judgment', 'judgment')
+
+
 def no_amount_text_gap(row, kind):
     """A judgment whose pages carry no dollar text is a gap, not "no amount" (Greptile on #53):
     its money page may be a scan OCR could not read, or a watermark. Other filings with no dollar
     text are not gaps; most have no amount."""
     import document_coverage as COV
-    if not re.search(r'judgment', str(kind or ''), re.I):
+    # Only the judgment itself must state an amount; a motion for summary judgment need not.
+    if kind not in _AMOUNT_KINDS:
         return None
     pages = (row.get('reading') or {}).get('pages') or []
     unread = [p.get('page') for p in pages if not COV.page_is_read(p)]

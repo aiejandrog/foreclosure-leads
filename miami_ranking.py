@@ -81,13 +81,13 @@ def _age(when, as_of):
 def auction_fact(lead, archive_entry, calendar_day, timeline, as_of):
     lead = lead or {}
     archive_entry = archive_entry or {}
-    # The later of the lead's date and the calendar archive's: a reset moves the sale forward in
-    # the archive while the lead can keep the original, past date (Greptile on #53).
-    dates = [d for d in (_day(lead.get('AuctionDate') or lead.get('auction')),
-                         _day(archive_entry.get('auction'))) if d]
-    sale = max(dates) if dates else None
     age = _age(calendar_day, as_of)
     on_calendar = bool(archive_entry and calendar_day and archive_entry.get('last_seen') == str(calendar_day))
+    # The newest calendar decides when it lists the case: after a reset the lead can keep the
+    # original date. Otherwise the lead's date stands, since the append-only archive can keep a
+    # date the sale has since moved from, in either direction (Greptile on #53, twice).
+    listed = _day(archive_entry.get('auction')) if on_calendar else None
+    sale = listed or _day(lead.get('AuctionDate') or lead.get('auction') or archive_entry.get('auction'))
     status = (timeline or {}).get('status') or {}
     fact = {'sale_date': sale.isoformat() if sale else None, 'calendar_read': str(calendar_day) if calendar_day else None,
             'calendar_age_days': age, 'on_newest_calendar': on_calendar,
