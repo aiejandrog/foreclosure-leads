@@ -42,7 +42,10 @@ _IMAGE_GAP_REASON = {
 # A docket line about the bankruptcy court's case, which a notice often carries: "Notice of Filing:
 # Order Dismissing Chapter 13 Case". Without this the notice_of_filing rule swallowed it and the
 # stay history never saw it (2018-026274 entries 209208510 and 209744732, verify-12 defect 9).
-_BK_CASE = r'(?:(?:chapter\s+(?:7|11|12|13)|bankruptcy)\s+(?:case|petition|proceeding)|debtor\S*\s+case)'
+# On a state foreclosure docket "chapter 13" is always the bankruptcy: the clerk's reinstatement
+# reads "copy Order Reinstating Chapter 13 Bankruptcy", with no "case" after it.
+_BK_CASE = (r'(?:chapter\s+(?:7|11|12|13)\b|bankruptcy\s+(?:case|petition|proceeding)'
+            r'|debtor\S*\s+case)')
 _BANKRUPTCY_CONTEXT_RE = re.compile(r'\bchapter\s+(?:7|11|12|13)\b|\bdebtor|\b11\s+u\.?\s?s\.?\s?c|'
                                     r'\b362\b|bankruptcy court|\bu\.?\s?s\.? trustee', re.I)
 

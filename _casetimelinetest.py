@@ -456,6 +456,20 @@ class ReconciliationTests(unittest.TestCase):
                          ['stayed', 'bankruptcy_dismissed', 'reinstated'])
         self.assertTrue(r['stay_in_effect'])
 
+    def test_the_clerks_verbatim_2018_026274_notices(self):
+        # Events 209208510 and 209744732 (NFILCV), copied from the raw docket by the desktop: the
+        # description is the bare "Notice of Filing:" and the order is only in the comments. The
+        # same two entries pin sale_history's reader in _stayfiletest.
+        raw = lambda n, d, c: entry(n, 'Notice of Filing:', d, docketCode='NFILCV', comments=c)
+        r = run([entry(1, 'Final Judgment', '01/10/2023'),
+                 entry(2, 'Suggestion of Bankruptcy', '06/15/2023'),
+                 raw(3, '01/12/2024', 'ORDER DENYING CONFIRMATION AND DISMISSING CHAPTER 13 CASE'),
+                 raw(4, '02/02/2024', 'copy Order Reinstating Chapter 13 Bankruptcy')])
+        self.assertEqual([e['kind'] for e in r['entries']][2:], ['bankruptcy_dismissed', 'stay_reinstated'])
+        self.assertEqual([h['event'] for h in r['stay_history']],
+                         ['stayed', 'bankruptcy_dismissed', 'reinstated'])
+        self.assertTrue(r['stay_in_effect'])
+
     def test_bankruptcy_notice_wordings_and_a_discharge(self):
         for text in ('Notice of Filing Bankruptcy Petition', 'Notice of Bankruptcy Filing',
                      'Notice of Commencement of Chapter 13 Case', 'Voluntary Petition'):
