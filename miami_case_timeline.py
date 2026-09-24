@@ -432,9 +432,10 @@ def sale_held(entries, today):
     """The newest sale the clerk's bid and deposit entries say was held, or None.
 
     -> {'date', 'evidence': [entry ids], 'certificate': entry id or None, 'bankruptcy_same_day':
-    [entry ids], 'qualification'}. The docket gives dates, not times: a bankruptcy entry on the
-    sale day (2025-023462, "FILED AFTER THE SALE" by its own comment, the petition itself entered
-    before) leaves whether the sale stands to the bankruptcy court."""
+    [entry ids], 'bankruptcy_order', 'qualification'}. The docket gives dates, not times, so a
+    bankruptcy entry on the sale day leaves 'bankruptcy_order' 'unresolved'. A clerk comment saying
+    before or after the sale is never taken as the time: 2025-023462's says "FILED AFTER THE SALE"
+    and the petition's own image shows it entered at 08:41, before the sale."""
     marks = [e for e in entries if e['kind'] in ('sale_bid', 'sale_deposit') and e.get('date')
              and e['date'] <= today]
     if not marks:
@@ -446,11 +447,13 @@ def sale_held(entries, today):
     bankrupt = [e['entry_id'] for e in entries if e.get('date') == day
                 and e['kind'] in ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated')]
     return {'date': day, 'evidence': evidence, 'certificate': certificate,
-            'bankruptcy_same_day': bankrupt,
+            'bankruptcy_same_day': bankrupt, 'bankruptcy_order': 'unresolved' if bankrupt else None,
             'qualification': ('Held per the clerk\'s bid and deposit entries. A certificate of sale '
                               'follows if no objection is sustained; the sale can still be vacated.'
                               + (' A bankruptcy entry the same day: whether the petition preceded the '
-                                 'sale decides whether the sale is void under the automatic stay.'
+                                 'sale decides whether the sale is void under the automatic stay. '
+                                 'Unresolved until the petition\'s filing time is read against the '
+                                 'sale time; the docket comment is not that evidence.'
                                  if bankrupt else ''))}
 
 

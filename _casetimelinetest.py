@@ -532,6 +532,9 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual((held['date'], held['evidence'], held['certificate'], held['bankruptcy_same_day']),
                          ('2026-09-23', ['5', '6', '7'], None, ['3']))
         self.assertIn('void', held['qualification'])
+        # The comment says "FILED AFTER THE SALE"; the petition was entered at 08:41, before it.
+        # Dates alone cannot order them, and the comment is not taken as the time.
+        self.assertEqual(held['bankruptcy_order'], 'unresolved')
         # Without the bankruptcy, a past sale date with bid entries is held, not unknown.
         r = T.build_timeline('SYNTHETIC', {'entries': entries[:2] + entries[3:], 'pagination_verified': True},
                              [], '2026-09-24')

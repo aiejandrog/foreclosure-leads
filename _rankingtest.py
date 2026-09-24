@@ -63,7 +63,10 @@ class AuctionTests(unittest.TestCase):
                   sale_held={'date': '2026-09-23', 'evidence': ['72', '73'], 'certificate': None,
                              'bankruptcy_same_day': ['70']})
         got = R.auction_fact({'AuctionDate': '09/23/2026'}, {}, '2026-09-24', tl, TODAY)
-        self.assertEqual(got['state'], 'sale_held_no_certificate_yet')
+        self.assertEqual(got['state'], 'sale_held_bankruptcy_same_day_unresolved')
+        clean = dict(tl, sale_held=dict(tl['sale_held'], bankruptcy_same_day=[]))
+        self.assertEqual(R.auction_fact({'AuctionDate': '09/23/2026'}, {}, '2026-09-24', clean, TODAY)['state'],
+                         'sale_held_no_certificate_yet')
         # An older held sale (a prior auction later vacated) does not answer a newer sale date.
         got = R.auction_fact({'AuctionDate': '10/01/2026'}, {'last_seen': '2026-09-24'}, '2026-09-24',
                              dict(timeline(), sale_held=dict(tl['sale_held'], date='2025-10-28')), TODAY)

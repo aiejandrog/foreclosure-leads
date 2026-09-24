@@ -91,8 +91,10 @@ def auction_fact(lead, archive_entry, calendar_day, timeline, as_of):
     if status.get('kind') in _CLOSED:
         state = _CLOSED[status['kind']]
     elif held and not held.get('certificate') and (sale is None or _day(held['date']) >= sale):
-        # The clerk's bid and deposit entries (verify-12 defect 10): held, certificate not yet.
-        state = 'sale_held_no_certificate_yet'
+        # The clerk's bid and deposit entries (verify-12 defect 10): held, certificate not yet. A
+        # bankruptcy entry the same day leaves whether the sale stands unresolved (2025-023462).
+        state = ('sale_held_bankruptcy_same_day_unresolved' if held.get('bankruptcy_same_day')
+                 else 'sale_held_no_certificate_yet')
         fact['sale_held'] = held
     elif (timeline or {}).get('stay_in_effect') is True:
         state = 'stayed'
