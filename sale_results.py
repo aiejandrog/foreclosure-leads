@@ -58,6 +58,8 @@ MD_CASE = re.compile(r'^\d{4}-\d{6}-(CA|CC)-\d{2}$', re.I)
 PAST_DAYS = 7              # held sales stay reported for a week
 AHEAD_DAYS = 30            # upcoming sales watched this far out
 LOOKBACK_DAYS = 45         # docket lines this far before the sale date can change it
+AMENDED_DAYS = 60          # an amended judgment this far back still changed THIS sale's amount
+                           # (2018-026274: amended 08-11 together with the reset to 09-28)
 THROTTLE_S = float(os.environ.get('DOCKET_THROTTLE', '2.2'))   # gen_dockets.py's measured pace
 DEADLINE_S = int(os.environ.get('SALE_RESULTS_DEADLINE', '420'))
 VER = 1
@@ -70,7 +72,12 @@ _DENY = re.compile(r'\bden(?:y|ied|ying|ial)\b|\bstricken\b|\bwithdraw', re.I)
 _ORDER = re.compile(r'\border\b', re.I)
 _SALEWORD = re.compile(r'\bsale\b|\bauction\b', re.I)
 _VACATE = re.compile(r'vacat|set(?:ting)?\s+aside', re.I)
+# Real Miami-Dade wording (2025-023462, sold 09-23-2026): 'Bid Amount :: PL/53643' (BIDSCV) and
+# 'Mortgage Foreclosure Deposit :: 24-PL/53643/DOC STAMPS' (MFDPCV) on the sale day; the certificate
+# of sale follows a day or more later. 'Mortgage Foreclosure Sale' (SALE, a Hearing) is only the
+# calendar slot and appears before every sale, held or not, so it is NOT evidence of anything.
 _HELD = re.compile(r'certificate of sale|bid amount|\bhigh(?:est)? bid|winning bid|sale deposit|'
+                   r'foreclosure deposit|'
                    r'\bdeposit\b.*\bsale\b|certificate of disbursement|certificate of title|'
                    r'sale\s+(?:was\s+)?held|\bsold\b', re.I)
 _CANCEL = re.compile(r'cancel|postpon|continu|reschedul|reset', re.I)
@@ -85,6 +92,11 @@ _AMENDED_FJ = re.compile(r'amended\s+(?:(?:uniform|consent|agreed|in rem|summary
                          r'(?:final\s+)?(?:summary\s+)?judgment', re.I)
 _MONEY = re.compile(r'\$\s*([\d]{1,3}(?:,\d{3})+(?:\.\d{2})?|\d+\.\d{2})')
 _DATE = re.compile(r'\b(\d{1,2})/(\d{1,2})/(\d{2,4})\b')
+# Orders spell the dates out: 'Sale Date: AUGUST 24, 2026 AND RESET FOR SEPTEMBER 23, 2026 AT 9:00'
+_MONTHS = ('january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september',
+           'october', 'november', 'december')
+_WDATE = re.compile(r'\b(' + '|'.join(_MONTHS) + r')\s+(\d{1,2}),?\s+(\d{4})\b', re.I)
+_HELD_CODES = {'BIDSCV', 'MFDPCV'}
 _ISO = re.compile(r'\b(\d{4})-(\d{2})-(\d{2})\b')
 
 
@@ -110,6 +122,11 @@ def _dates_in(text):
         d = _to_date(m.group(0))
         if d:
             out.append(d)
+    for m in _WDATE.finditer(text or ''):
+        try:
+            out.append(datetime.date(int(m.group(3)), _MONTHS.index(m.group(1).lower()) + 1, int(m.group(2))))
+        except ValueError:
+            pass
     return out
 
 
@@ -136,7 +153,7 @@ def _entries(dockets):
         cmt = str(e.get('comments') or e.get('c') or '').strip()
         if not d or not (desc or cmt):
             continue
-        out.append((d, desc, cmt))
+        out.append((d, desc, cmt, str(e.get('docketCode') or e.get('k') or '').strip().upper()))
     out.sort(key=lambda t: t[0])
     return out
 
@@ -158,7 +175,7 @@ def classify(dockets, sale, today=None, listed=None):
         res['why'] = 'no readable sale date'
         return res
     lo = sale - datetime.timedelta(days=LOOKBACK_DAYS)
-    ents = [t for t in _entries(dockets) if t[0] >= lo]
+    ents = [t for t in _entries(dockets) if t[0] >= sale - datetime.timedelta(days=AMENDED_DAYS)]
 
     held = cancel = vacated = None
     new_date = None
@@ -173,7 +190,7 @@ def classify(dockets, sale, today=None, listed=None):
         if item not in res['ev']:
             res['ev'].append(item)
 
-    for d, desc, cmt in ents:
+    for d, desc, cmt, code in ents:
         t = desc + ' ' + cmt
         is_motion = bool(_MOTION.search(desc)) and not _ORDER.search(desc)
         denied = bool(_DENY.search(t))
@@ -183,6 +200,8 @@ def classify(dockets, sale, today=None, listed=None):
             amj = {'d': d.isoformat(), 'amt': _money(t)}
             ev(d, desc, cmt)
             continue
+        if d < lo:
+            continue                     # older lines only count for the amended judgment above
 
         # bankruptcy near the sale: a SALE fact here, never a stay flag (sale_history owns that).
         # A dismissal/discharge/relief line after it closes it for this purpose.
@@ -195,12 +214,16 @@ def classify(dockets, sale, today=None, listed=None):
                 ev(d, desc, cmt)
             # 'SALE CANCELLED PER BANKRUPTCY' is also a cancellation; fall through for that
 
-        if not (_SALEWORD.search(t) or _HELD.search(t)):
+        if not (_SALEWORD.search(t) or _HELD.search(t) or code in _HELD_CODES):
             continue
 
         # a line that SETS this very sale date (the reset or notice that created it) is history:
         # anything cancelled before it was an earlier sale
-        if sale in _dates_in(t) and (_RESET.search(t) or _NOTICE_SALE.search(desc)) and d < sale:
+        # ('Order Cancelling Foreclosure Sale :: Sale Date: AUGUST 17, 2026 AND RESET FOR SEPTEMBER
+        # 28, 2026' SET the 09-28 sale; a line naming this date AND a later one cancelled it.)
+        _ds = _dates_in(t)
+        if (sale in _ds and not any(x > sale for x in _ds) and d < sale and not is_motion
+                and (_RESET.search(t) or _NOTICE_SALE.search(desc))):
             cancel, new_date, pending = None, None, []
             continue
 
@@ -226,12 +249,15 @@ def classify(dockets, sale, today=None, listed=None):
                 pending = [p for p in pending if p[0] > d]
             continue
 
-        if _HELD.search(t) and d >= sale and not _CANCEL.search(desc):
+        if (_HELD.search(t) or code in _HELD_CODES) and d >= sale and not _CANCEL.search(desc):
             if held is None:
                 held = (d, desc, cmt)
                 bid = _money(t) if re.search(r'bid|deposit|certificate of sale', t, re.I) else None
                 if bid:
                     res['bid'] = bid
+            # 'Bid Amount :: PL/53643' = the plaintiff took it back (no third-party buyer)
+            if re.search(r'bid|deposit', desc, re.I) and re.search(r'(?:^|[\s/-])PL/', cmt):
+                res['pl'] = 1
             ev(d, desc, cmt)
             continue
 
@@ -267,9 +293,13 @@ def classify(dockets, sale, today=None, listed=None):
         res['why'] = 'the court set the sale aside'
     elif held:
         res['st'], res['d'] = 'held', held[0].isoformat()
-        res['why'] = 'sale went ahead' + (' (bid $%s)' % format(int(res['bid']), ',') if res.get('bid') else '')
-        if bk_before:
-            res['why'] += '; a bankruptcy was filed on or before the sale date, so the sale may not stand'
+        res['why'] = ('sold back to the plaintiff' if res.get('pl') else 'sale went ahead') + \
+            (' (bid $%s)' % format(int(res['bid']), ',') if res.get('bid') else '')
+        if bk_before and bk_before == sale:
+            res['why'] += ('; a bankruptcy was filed on the sale day: if it was entered before the '
+                           'sale started, the sale may not stand')
+        elif bk_before:
+            res['why'] += '; a bankruptcy was filed before the sale date, so the sale may not stand'
         if obj:
             res['why'] += '; an objection to the sale was filed'
     elif cancel and new_date:
@@ -347,7 +377,7 @@ def _save(data):
     os.replace(tmp, OUT)
 
 
-BOARD_KEYS = ('st', 'd', 'why', 'nd', 'amj', 'ama', 'bkb', 'obj', 'bid', 'sale', 'ts')
+BOARD_KEYS = ('st', 'd', 'why', 'nd', 'amj', 'ama', 'bkb', 'obj', 'bid', 'pl', 'sale', 'ts')
 
 
 def load_for_board(rows, path=OUT):
