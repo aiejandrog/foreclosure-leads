@@ -368,11 +368,42 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(r['entries'][0]['attached_document_kind'], 'final_judgment')
         j = {x['entry_id']: x for x in r['judgments']['judgments']}
         self.assertEqual(sorted(j), ['56', '57', '82'])
-        for n in ('56', '57'):
-            self.assertEqual(j[n]['status'], 'superseded')
-            self.assertEqual(j[n]['by'], ['67', '82'])
-        self.assertEqual(j['82']['replaces'], ['56', '57'])
+        # #57 has no image on a day #56 has one: the docket listing one judgment twice.
+        self.assertEqual((j['57']['role'], j['57']['status']), ('docket_duplicate', 'docket_duplicate_inferred'))
+        self.assertEqual(j['56']['status'], 'superseded')
+        self.assertEqual(j['56']['by'], ['67', '82'])
+        self.assertEqual(j['82']['replaces'], '56')
         self.assertEqual(r['judgments']['controlling_entry'], '82')
+        self.assertEqual(r['judgments']['docket_duplicates_inferred'], ['57'])
+
+    def test_an_image_less_same_day_judgment_entry_is_a_docket_duplicate(self):
+        # Walker #79/#80, McCray #91/#92, Blue Water #174/#177: the imaged entry controls,
+        # whichever of the two the docket lists first.
+        doc = {'source_ref': 'court:2:1', 'entry_ref': '2', 'reading': {'pages': [
+            {'page': 1, 'outcome': 'text', 'text': 'FINAL JUDGMENT OF FORECLOSURE'}]}}
+        r = run([entry(1, 'Final Judgment', '06/16/2026'),
+                 entry(2, 'Final Judgment', '06/16/2026', expected=1)], [doc])
+        self.assertEqual(r['judgments']['controlling_entry'], '2')
+        self.assertIn('listed twice', r['judgments']['controlling_reason'])
+
+    def test_two_imaged_same_day_judgments_stay_unclear(self):
+        docs = [{'source_ref': 'court:%d:1' % n, 'entry_ref': str(n), 'reading': {'pages': [
+            {'page': 1, 'outcome': 'text', 'text': 'FINAL JUDGMENT OF FORECLOSURE'}]}} for n in (1, 2)]
+        r = run([entry(1, 'Final Judgment', '06/16/2026', expected=1),
+                 entry(2, 'Final Judgment', '06/16/2026', expected=1)], docs)
+        self.assertIsNone(r['judgments']['controlling_entry'])
+
+    def test_filings_that_carry_a_judgment_copy_are_not_judgments(self):
+        judgment = {'page': 1, 'outcome': 'text', 'text': 'FINAL JUDGMENT OF FORECLOSURE'}
+        docs = [{'source_ref': 'court:%d:1' % n, 'entry_ref': str(n), 'reading': {'pages': [judgment]}}
+                for n in (2, 3, 4, 5)]
+        r = run([entry(1, 'Final Judgment', '01/10/2026'),
+                 entry(2, 'Memorandum', '02/01/2026', expected=1),
+                 entry(3, 'Notice', '02/02/2026', expected=1, comments='STATUS REPORT'),
+                 entry(4, 'Request: FOR JUDICIAL NOTICE', '02/03/2026', expected=1),
+                 entry(5, 'Final Judgment', '03/01/2026', expected=1)], docs)
+        self.assertEqual([e['kind'] for e in r['entries'][1:4]], ['other', 'other', 'other'])
+        self.assertEqual([j['entry_id'] for j in r['judgments']['judgments']], ['1', '5'])
 
     def test_the_partial_vacatur_alone_leaves_the_same_day_pair_partially_vacated(self):
         body = {'source_ref': 'court:3:1', 'entry_ref': '3', 'reading': {'pages': [
@@ -416,6 +447,12 @@ class ReconciliationTests(unittest.TestCase):
             {'page': 2, 'outcome': 'text', 'text': 'If the case is reinstated, the stay is once again in effect.'}]}}
         r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy', expected=1)], [body])
         self.assertEqual(r['entries'][1]['kind'], 'suggestion_of_bankruptcy')
+
+    def test_render_survives_page_numbers_in_coverage_detail(self):
+        r = run([entry(1, 'Final Judgment')])
+        r['coverage'] = {'read': 0, 'expected': 1, 'counts': {'unread': 1}, 'attachments': [
+            {'entry_id': '1', 'description': 'Final Judgment', 'state': 'unread', 'detail': [4, 'p5']}]}
+        self.assertIn('(4; p5)', T.render_markdown(r))
 
     def test_long_form_dates_are_read(self):
         self.assertEqual(T._dates_in('entered October 14, 2025 and the 3rd day of Nov., 2025'),

@@ -240,6 +240,38 @@ class AcceptanceShapeTests(unittest.TestCase):
         self.assertEqual(subtotals, {98900.0: 'rows_above', 99995.0: 'running_from_subtotal'})
         self.assertEqual(found['sum_check_pages'], [1, 2, 3])
 
+    def test_the_exhibit_as_the_desktop_read_it(self):
+        # Blue Water's real layout (desktop dump, 2026-09-24): a heading above the first figure
+        # of each block, a per-diem inside the table, and the escrow advances printed as five
+        # year lines, an UNLABELLED total, then more year lines on the next page.
+        p2 = '\n'.join([
+            'Amounts due. Plaintiff is due:', 'Principal', '$60,000.00', 'Deferred Balance',
+            '$20,000.00', 'Interest\xa0 due from 05/01/2021 to 04/18/2026', '$5,000.00',
+            'Per diem interest at $8.21 from 04/19/2026 to ', '06/11/2026', '$400.00',
+            'Escrow advances', 'Taxes', '2025: $1,000.00 ', '2024: $1,500.00 ', '$4,000.00'])
+        p3 = '\n'.join([
+            '2026: $1,000.00 ', '2025: $500.00 ', 'Escrow Credits', '($100.00)',
+            'Property Registration', '$50.00', 'SUBTOTAL', '$89,350.00',
+            'Court costs', 'Complaint Filing Fees', '$1,000.00', 'Summonses', '$95.00',
+            'SUBTOTAL', '$90,445.00',
+            'Attorney fees', 'Foreclosure counsel attorney\u2019s fees', '$2,000.00'])
+        p4 = '\n'.join(['Litigation counsel attorney\u2019s fees', '$3,000.00', 'TOTAL', '$95,445.00'])
+        rows = JM.text_rows(pages(p2, p3, p4), MJ.TOTAL_RE)
+        self.assertEqual([r['gid'] for r in rows if r['barrier']], [])
+        section = [r for r in rows if r.get('section_total')]
+        self.assertEqual([(r['amount'], len(r['members'])) for r in section], [('4000.00', 4)])
+        found = [c for c in MJ.judgment_amount_candidates(pages(p2, p3, p4)) if c['amount'] == 95445.0][0]
+        self.assertTrue(found['sum_check'], found['sum_check_reason'])
+        self.assertEqual({s['amount']: s['membership'] for s in found['sum_check_subtotals']},
+                         {4000.0: 'section_rows', 89350.0: 'rows_above',
+                          90445.0: 'running_from_subtotal'})
+        self.assertEqual([r['value'] for r in found['sum_check_rates']], [8.21])
+        self.assertNotIn(4000.0, found['sum_check_components'])
+        # The escrow total counted as well as its rows would be a double count: it must fail.
+        doubled = p2.replace('\n$4,000.00', '\nEscrow total\n$4,000.00')
+        bad = [c for c in MJ.judgment_amount_candidates(pages(doubled, p3, p4)) if c['amount'] == 95445.0][0]
+        self.assertFalse(bad['sum_check'])
+
     def test_a_misread_figure_anywhere_in_the_exhibit_fails(self):
         bad = EXHIBIT_P3.replace('$1050.00', '$1060.00')
         found = [c for c in MJ.judgment_amount_candidates(pages(EXHIBIT_P2, bad, EXHIBIT_P4))

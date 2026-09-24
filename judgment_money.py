@@ -186,6 +186,10 @@ def _resolve_subtotal(rows, index, values, resolved=None):
     row = rows[index]
     amount = values[row['gid']]
     members = row.get('members')
+    if row.get('section_total'):
+        if members and all(m in values for m in members) and sum(values[m] for m in members) == amount:
+            return {'members': list(members), 'membership': 'section_rows'}
+        return None
     if row.get('explicit'):
         by_gid = {r['gid']: r for r in rows if not r.get('barrier')}
         if (not isinstance(members, list) or not members
@@ -212,18 +216,28 @@ def _resolve_subtotal(rows, index, values, resolved=None):
         raise _Fail('printed subtotal lacks valid members or disagrees with its own items')
     # Text rows: the additive rows directly above the subtotal, back to the previous subtotal,
     # total or barrier. The shortest run that agrees; none agreeing is not a subtotal (see below).
-    run, back = [], index - 1
+    run, sections, back = [], [], index - 1
+    resolved = resolved or {}
     while back >= 0 and len(run) < MAX_RUN_ROWS:
         prior = rows[back]
+        if not prior.get('barrier') and prior['kind'] == 'rate':
+            back -= 1          # a per-diem inside the table is reported, not summed
+            continue
+        if (not prior.get('barrier') and prior.get('section_total')
+                and resolved.get(prior['gid'])):
+            sections.append(set(resolved[prior['gid']]['members']))
+            back -= 1          # counted through its rows, which the walk collects
+            continue
         if (run and not prior.get('barrier') and prior['kind'] == 'subtotal'
-                and (resolved or {}).get(prior['gid'])):
-            if values[prior['gid']] + sum(values[m] for m in run) == amount:
+                and resolved.get(prior['gid'])):
+            if (values[prior['gid']] + sum(values[m] for m in run) == amount
+                    and all(s <= set(run) for s in sections)):
                 return {'members': [prior['gid']] + run, 'membership': 'running_from_subtotal'}
             break
         if not _additive(prior):
             break
         run.insert(0, prior['gid'])
-        if sum(values[m] for m in run) == amount:
+        if sum(values[m] for m in run) == amount and all(s <= set(run) for s in sections):
             return {'members': list(run), 'membership': 'rows_above'}
         back -= 1
     return None
@@ -241,7 +255,7 @@ def _structural_fixups(state):
     for gid, resolved in list(state['subtotals'].items()):
         if resolved is None:
             row = next(r for r in state['rows'] if r['gid'] == gid)
-            if _SUBTOTAL_WORD_RE.search(row.get('label') or ''):
+            if row.get('section_total') or _SUBTOTAL_WORD_RE.search(row.get('label') or ''):
                 row['barrier'] = True
                 row['note'] = 'SUBTOTAL whose rows above do not add up to it; not crossed'
             else:
@@ -551,6 +565,13 @@ def text_rows(reading, total_re):
                                           source))
                 continue
             column_lines.update(labels)
+            if len(values) == 1 and len(labels) > 1 and page.get('outcome') == 'text':
+                # One figure under a heading and its label ("Court costs" / "Complaint Filing
+                # Fees" / "$1,930.00"). A text layer does not drop figures the way OCR does, so
+                # the label line directly above the figure is its label and the lines above
+                # that are headings. Only for one figure: with more, which label goes with
+                # which is a guess.
+                labels = labels[-1:]
             if len(labels) == len(values):
                 for label, (_, value) in zip(labels, values):
                     kind = _text_kind(lines[label], '', value < 0, total_re)
@@ -581,7 +602,55 @@ def text_rows(reading, total_re):
                 start = match.end()
     rows.sort(key=lambda r: (r['page'], r['line'], r['k']))
     _bare_totals(rows)
+    _section_totals(rows)
     return rows
+
+
+def _section_totals(rows, reach=30):
+    """An unlabelled figure that is the exact sum of the rows around it is their section total.
+
+    Blue Water prints its escrow advances as five year lines, then "$48,738.51" with no label,
+    then nine more year lines on the next page; 48,738.51 is exactly all fourteen. Left as an
+    unknown figure it is a barrier and the table cannot verify; counted as a charge it counts
+    the escrow twice. As a subtotal it is counted once, through its rows.
+
+    Safe in the direction that matters: its value equals its rows', so counting the rows instead
+    of it changes no sum. If it was really a separate charge that happened to equal its
+    neighbours, leaving it out makes the total FAIL, never falsely pass. Only unlabelled figures,
+    only a unique window of at least two contiguous charges or credits on each side.
+    """
+    def additive(row):
+        return not row['barrier'] and row['kind'] in ('charge', 'credit')
+
+    def signed(row):
+        amount = cents(row['amount'])
+        return -amount if row['kind'] == 'credit' else amount
+
+    for index, row in enumerate(rows):
+        if row['how'] != 'unlabelled' or not row['barrier']:
+            continue
+        target = cents(row['amount'])
+        before, back = [], index - 1
+        while back >= 0 and len(before) < reach and additive(rows[back]):
+            before.insert(0, rows[back])
+            back -= 1
+        after, ahead = [], index + 1
+        while ahead < len(rows) and len(after) < reach and additive(rows[ahead]):
+            after.append(rows[ahead])
+            ahead += 1
+        found = []
+        for a in range(len(before) + 1):
+            left = before[len(before) - a:]
+            left_sum = sum((signed(r) for r in left), Decimal('0'))
+            for b in range(len(after) + 1):
+                if a + b < 2:
+                    continue
+                if left_sum + sum((signed(r) for r in after[:b]), Decimal('0')) == target:
+                    found.append(left + after[:b])
+        if len(found) == 1:
+            row.update(kind='subtotal', barrier=False, section_total=True,
+                       members=[r['gid'] for r in found[0]],
+                       note='unlabelled figure equal to the rows around it; counted through them')
 
 
 def _bare_totals(rows):

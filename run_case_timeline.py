@@ -289,7 +289,8 @@ def timeline_case(case, as_of, collect=False, docket_cache=None, shared=None, le
         timeline.setdefault('amounts', []).extend(amounts['figures'])
         if amounts['gaps']:
             timeline['coverage_complete'] = False
-    spending = budget_snapshot(ledger, cap) if ledger is not None else {}
+    spending = (budget_snapshot(ledger, cap) if ledger is not None
+                else {'status': 'free_run', 'paid_requests_this_command': 0})
     if budget is not None:
         spending['paid_requests_this_command'] = budget.calls
         spending['case_share'] = shared.report(case)
@@ -310,16 +311,24 @@ def main(argv=None):
     parser.add_argument('--docket-cache', type=Path, default=Path(__file__).with_name('dockets.json'),
                         help='Compact cache to compare only; never used to build timeline')
     parser.add_argument('--as-of', default=date.today().isoformat(), type=date.fromisoformat)
-    parser.add_argument('--vision-max-spend', required=True, type=float,
-                        help='Existing shared cumulative cap, at most $1')
+    parser.add_argument('--vision-max-spend', type=float, default=None,
+                        help='Existing shared cumulative cap, at most $1. Required with --vision; '
+                             'without --vision it is optional and only reported')
     parser.add_argument('--vision', action='store_true', help='Read only amount-bearing pages within shared cap')
     args = parser.parse_args(argv)
     import case_review
     try:
         cases = list(dict.fromkeys(validate_case(case) for case in args.case))
         ledger = case_review.output_path('title_discovery/vision-budget.json')
-        spending = budget_snapshot(ledger, args.vision_max_spend)
-        if args.vision_max_spend > 1:
+        if args.vision_max_spend is None or args.vision_max_spend == 0:
+            # A free run: nothing is authorized, so there is no cap to observe against.
+            if args.vision:
+                raise ValueError('--vision needs a positive --vision-max-spend')
+            ledger, args.vision_max_spend = None, None
+            spending = {}
+        else:
+            spending = budget_snapshot(ledger, args.vision_max_spend)
+        if (args.vision_max_spend or 0) > 1:
             raise ValueError('This run is authorized for at most $1 cumulative vision spend')
         if args.vision and spending['status'] != 'observed':
             raise ValueError('Existing shared vision ledger required; refusing to reset cumulative spend')

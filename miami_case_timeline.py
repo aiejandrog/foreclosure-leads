@@ -143,15 +143,18 @@ def _transition(e):
         if not r['sale_date'] and e['calendar_event']: r['sale_date'] = e['date']
         r['reset'] = kind == 'order_resetting_sale'
     if kind == 'suggestion_of_bankruptcy': r['qualification'] = 'Bankruptcy suggested on docket; scope and continuing effect not independently adjudicated.'
-    if kind == 'stay_reinstated': r['qualification'] = 'Stay reinstated after earlier relief; foreclosure activity needs new relief.'
+    if kind == 'stay_reinstated': r['qualification'] = 'The document puts the bankruptcy stay back in effect; foreclosure activity needs new relief from the bankruptcy court.'
     return r
 
 
 # What a docket description names when the filing is ABOUT a judgment, sale or title.
-_FILED_ABOUT_RE = re.compile(r'(?:(?:amended|emergency|renewed|agreed|verified|supplemental)\s+)*'
+# 2018-026274's Memorandum (#117) and Status Report (#119) and Blue Water's Request for Judicial
+# Notice (#152) each carried a judgment copy and read as judgments (desktop rerun, 09-24).
+_FILED_ABOUT_RE = re.compile(r'(?:(?:amended|emergency|renewed|agreed|verified|supplemental|joint)\s+)*'
                              r'(?:motion|affidavit|certificate of (?:service|mailing|compliance)|'
-                             r'notice of (?:filing|serving|service|compliance)|response|reply|'
-                             r'objection|proposed)\b', re.I)
+                             r'notice\b|response|reply|objection|proposed|memorandum|status report|'
+                             r'request|brief|exhibit|transcript|stipulation|letter|correspondence|'
+                             r'praecipe|designation|return of service|summons|subpoena|deposition)\b', re.I)
 _DISPOSITIVE_BODIES = {'final_judgment', 'certificate_of_title', 'certificate_of_sale', 'satisfaction',
                        'vacatur', 'order_of_dismissal'}
 _STAY_CARRIERS = {'suggestion_of_bankruptcy', 'stay', 'relief_from_stay', 'notice_of_filing',
@@ -408,6 +411,8 @@ def _whole_case(text):
                           r'(?:action|case|cause|matter|lawsuit)\b|\ball (?:defendants|parties)\b', str(text or ''), re.I))
 
 
+_NO_IMAGE = ('no_image_indexed', 'county_no_document')
+_NOT_A_JUDGMENT_OF_RECORD = ('supplemental', 'docket_duplicate')
 _REPLACES = re.compile(r'\b(?:amended|corrected|amending|substitut\w*|replacement|re-?entered)\b', re.I)
 _ADDS_TO = re.compile(r'\bsupplemental\b|\b(?:attorney.?s?|attorneys)\s+fees?\b|\bcosts? judgment\b', re.I)
 
@@ -453,6 +458,12 @@ def reconcile_judgments(entries, today):
     'no_satisfaction_found' on an operative judgment is exactly that. It is not an open balance.
     """
     judgments, events = [], []
+    # A judgment entry the county holds no image for, on a day another judgment entry does have
+    # one, is taken as the docket listing that judgment twice (Walker #79/#80, McCray #91/#92,
+    # Blue Water #174/#177). Without this the image-less entry blocks, or even becomes, the
+    # controlling judgment. Inferred from the docket, so it is labelled, not hidden.
+    imaged_days = {e['date'] for e in entries if e['kind'] == 'final_judgment' and e.get('date')
+                   and e.get('image_status') not in _NO_IMAGE}
     for e in entries:
         if not e.get('date') or e['date'] > today:
             continue
@@ -461,6 +472,13 @@ def reconcile_judgments(entries, today):
             j = {'entry_id': e['entry_id'], 'date': e['date'], 'title': str(e.get('operative_text') or '')[:200],
                  'role': 'supplemental' if _ADDS_TO.search(text) else 'replacement' if _REPLACES.search(text) else 'judgment',
                  'status': 'operative', 'by': [], 'satisfaction': 'no_satisfaction_found', 'reason': ''}
+            if (j['role'] == 'judgment' and e.get('image_status') in _NO_IMAGE
+                    and e['date'] in imaged_days):
+                j.update(role='docket_duplicate', status='docket_duplicate_inferred',
+                         reason='no document image; another judgment entry the same day has one, so '
+                                'this is taken as the same judgment listed twice (inferred, not read)')
+                judgments.append(j)
+                continue
             if j['role'] == 'replacement':
                 targets, basis = _target(judgments, text)
                 if not targets and e.get('_body'):
@@ -475,10 +493,10 @@ def reconcile_judgments(entries, today):
                 else:
                     j['reason'] = basis
             elif j['role'] == 'supplemental':
-                prior = [x for x in judgments if x['status'] == 'operative' and x['role'] != 'supplemental']
+                prior = [x for x in judgments if x['status'] == 'operative' and x['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
                 j['adds_to'] = prior[-1]['entry_id'] if prior else None
             else:
-                live = [x for x in judgments if x['status'] == 'operative' and x['role'] != 'supplemental']
+                live = [x for x in judgments if x['status'] == 'operative' and x['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
                 if live:
                     same_day = all(x['date'] == j['date'] for x in live)
                     for x in live + [j]:
@@ -518,11 +536,16 @@ def reconcile_judgments(entries, today):
                 target['by'].append(e['entry_id'])
                 target.update(status=partial + 'vacated', reason='vacatur %s (%s)%s' % (
                     e['entry_id'], basis, '; limited to %s' % ', '.join(e.get('dismissed_parties') or ['some parties']) if partial else ''))
-    operative = [j for j in judgments if j['status'] in ('operative', 'partially_vacated') and j['role'] != 'supplemental']
+    operative = [j for j in judgments if j['status'] in ('operative', 'partially_vacated') and j['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
     unclear = [j for j in judgments if j['status'] == 'unclear']
     controlling = operative[0]['entry_id'] if len(operative) == 1 and not unclear else None
+    duplicates = [j['entry_id'] for j in judgments if j['role'] == 'docket_duplicate']
     return {'judgments': judgments, 'unmatched': events, 'controlling_entry': controlling,
-            'controlling_reason': ('one operative judgment after amendments, vacaturs and satisfactions' if controlling
+            'docket_duplicates_inferred': duplicates,
+            'controlling_reason': ('one operative judgment after amendments, vacaturs and satisfactions'
+                                   + ('; image-less same-day entr%s %s taken as the same judgment listed twice'
+                                      % ('y' if len(duplicates) == 1 else 'ies', ', '.join(duplicates))
+                                      if duplicates else '') if controlling
                                    else 'no operative judgment' if not operative and not unclear
                                    else 'judgments conflict or could not be linked; review required'),
             'qualification': 'Docket-index reconciliation. The judgment bodies decide scope; no satisfaction found is not proof of an open balance.'}
@@ -536,11 +559,11 @@ def _target(judgments, text):
     2025". Whatever the second entry is (the same judgment filed twice, or two that day), the
     order names the day, so it acts on that day's entries together."""
     cited = _dates_in(text)
-    by_date = [j for j in judgments if j['date'] in cited and j['role'] != 'supplemental']
+    by_date = [j for j in judgments if j['date'] in cited and j['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
     if by_date and len({j['date'] for j in by_date}) == 1:
         return by_date, 'cites its date %s%s' % (by_date[0]['date'], _same_day(by_date))
     live = [j for j in judgments if j['status'] in ('operative', 'unclear', 'partially_vacated')
-            and j['role'] != 'supplemental']
+            and j['role'] not in _NOT_A_JUDGMENT_OF_RECORD]
     if live and len({j['date'] for j in live}) == 1 and not cited:
         return live, 'the only operative judgment' + _same_day(live)
     if not live:
@@ -588,7 +611,7 @@ def render_markdown(result):
             cov.get('read'), cov.get('expected'), ', '.join('%s: %s' % kv for kv in sorted((cov.get('counts') or {}).items()))),
             cov.get('qualification', ''), '']
         lines += ['- %s %s: %s%s%s' % (a['entry_id'], esc(a.get('description')), a['state'],
-                                        ' (%s)' % esc('; '.join(a['detail'])) if a.get('detail') else '',
+                                        ' (%s)' % esc('; '.join(str(d) for d in a['detail'])) if a.get('detail') else '',
                                         ' | public recorded copy candidate: %s' % a['alternate_copy'] if a.get('alternate_copy') else '')
                   for a in cov['attachments'] if a['state'] not in ('read', 'county_no_document')]
     if result.get('stay_history'):
