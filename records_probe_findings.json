@@ -1,0 +1,16 @@
+{
+ "_comment": "TRACKED probe findings. This file records NEGATIVES ONLY and load_caps() strips any confirmed:true entry it carries, so it can never grant a capability the reader has not observed itself. It exists because a probe verdict is an expensive live observation that cannot be rebuilt without clerk access, and the working copy under DEALFLOW has been deleted once already.",
+ "probed_at": "2026-09-22T00:00:00Z",
+ "source": "recorded",
+ "machine": "DESKTOP-35NNMFL",
+ "subject": {"book": "35287", "page": "4642", "cfn": "", "folio": ""},
+ "capabilities": {
+  "book_page": {
+   "confirmed": false,
+   "best_outcome": "accepted_no_hits",
+   "label": "all three book/page shapes: a qs was issued and zero rows came back, which is what an IGNORED parameter looks like",
+   "shapes_tried": 3
+  }
+ },
+ "not_probed": ["cfn", "legal"]
+}
