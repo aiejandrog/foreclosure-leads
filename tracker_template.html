@@ -8107,15 +8107,20 @@ function _docChip(r){
   // number beside it. `amt` is the printed judgment figure from OCR/vision; it is shown as a claim
   // with a question mark, never swapped in for r.judg. Rows with no dossier render nothing.
   var d = r && r.docs;
-  if(!d || !(d.n || d.f || d.stay === true)) return '';
-  var tail = ' Read ' + (d.at || '?') + '; ' + (d.n||0) + ' of ' + (d.f||0) + ' fetched document(s) fully read; '
+  if(!d || !(d.n || d.f || d.stay === true || d.stay === 'unclear')) return '';
+  var tail = ' Read ' + (d.at || '?') + '; ' + (d.n||0) + ' of ' + (d.f||0) + ' fetched document(s) fully read'
+    + (d.p ? ', ' + d.p + ' partly read' : '') + '; '
     + (d.g||0) + ' open gap(s) listed in the dossier on the machine. UNVERIFIED until the 12-case review, '
     + 'and NOT in the equity number shown.';
   if(d.stay === true)
     return ' <span class="docchip dx" title="' + esc('The court filings read for this case say a STAY is in '
       + 'effect (bankruptcy or court order), so the sale may not go ahead. Read from the docket text, not '
       + 'confirmed with the bankruptcy court.' + tail) + '">DOC &middot; STAY?</span>';
-  if(!d.n)
+  if(d.stay === 'unclear')
+    return ' <span class="docchip dx" title="' + esc('The filings mention a STAY, but whether it is still in '
+      + 'effect is unclear from the docket (for example, a bankruptcy notice with later sale activity and no '
+      + 'relief order found). Check before treating the sale date as real.' + tail) + '">DOC &middot; STAY UNCLEAR</span>';
+  if(!d.n && !d.p && (!d.j || d.j === 'none'))
     return ' <span class="docchip dn" title="' + esc('Documents were fetched but none could be read yet.' + tail)
       + '">DOC UNREAD</span>';
   if(d.j === 'sat')
@@ -8137,8 +8142,9 @@ function _docChip(r){
       + (amt > 0 ? ' &middot; JUDG ' + esc(fmtK(amt)) + '?' : ' &middot; JUDG READ')
       + (d.j === 'part' ? ' &middot; PART PAID' : '') + (differs ? ' &ne; BOARD' : '') + '</span>';
   }
-  return ' <span class="docchip dn" title="' + esc('Documents were read, and none of them is this case\'s '
-    + 'final judgment.' + tail) + '">DOC READ &middot; NO JUDG</span>';
+  return ' <span class="docchip dn" title="' + esc('Documents were read' + (d.n ? '' : ' only in part')
+    + ', and none of them is this case\'s final judgment.' + tail) + '">DOC ' + (d.n ? 'READ' : 'PART READ')
+    + ' &middot; NO JUDG</span>';
 }
 function _elderChip(r){
   // FS 825.103 guardrail (Playbook §0.5). This is the ONLY chip on the board that exists to stop

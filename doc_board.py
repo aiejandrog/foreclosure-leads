@@ -22,9 +22,9 @@ SHAPE (one row, short keys because it rides in every build):
      'amt': printed judgment amount, only when j is 'one' or 'part' and one figure was printed,
      'ref': the operative document's source_ref, when there is one,
      'g': number of open gaps, 'at': YYYY-MM-DD the dossier was built,
-     'stay': True/False, only when the whole-case timeline (#53, <case>-timeline.json beside the
-             dossier) says whether a stay is in effect; absent when there is no timeline or it
-             could not tell}
+     'p': documents read only partially (present when > 0),
+     'stay': True / False / 'unclear', from the whole-case timeline (<case>-timeline.json beside
+             the dossier); absent when there is no timeline or it says nothing about a stay}
 """
 import json
 import os
@@ -69,10 +69,37 @@ def summarize(dossier, timeline=None):
         out['amt'] = round(float(amt), 2)
     if jd.get('operative'):
         out['ref'] = str(jd['operative'])[:60]
-    stay = (timeline or {}).get('stay_in_effect') if isinstance(timeline, dict) else None
-    if isinstance(stay, bool):
+    partial = sum(1 for d in (c.get('documents') or [])
+                  if isinstance(d, dict) and d.get('read_status') == 'partial')
+    if partial:
+        # A partial reading can still carry a judgment or satisfaction classification, so a zero
+        # fully-read count must not read as "nothing was read".
+        out['p'] = partial
+    stay = _stay(timeline)
+    if stay is not None:
         out['stay'] = stay
     return out
+
+
+def _stay(timeline):
+    """True / False / 'unclear' from the whole-case timeline, or None when it says nothing.
+
+    #53 writes an explicit stay_in_effect from the stay history, and that wins. Without it (the
+    timeline on main) the case status carries the answer: 'stayed_by_bankruptcy' is a stay, and an
+    'unclear' status whose reason is about a stay stays unclear rather than becoming a yes or no."""
+    if not isinstance(timeline, dict):
+        return None
+    explicit = timeline.get('stay_in_effect')
+    if isinstance(explicit, bool):
+        return explicit
+    status = timeline.get('status') or {}
+    if not isinstance(status, dict):
+        return None
+    if status.get('kind') == 'stayed_by_bankruptcy':
+        return True
+    if status.get('kind') == 'unclear' and 'stay' in str(status.get('reason') or '').lower():
+        return 'unclear'
+    return None
 
 
 def _read(path):

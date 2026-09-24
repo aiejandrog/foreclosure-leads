@@ -180,6 +180,29 @@ class Chip(unittest.TestCase):
         s = DB.summarize(dossier(judgment=ONE), {'stay_in_effect': False})
         self.assertNotIn('STAY', self.render({'judg': 555499.25, 'docs': s}))
 
+    def test_a_partial_reading_still_shows_its_judgment(self):
+        d = dossier(judgment=ONE, read=0, fetched=1)
+        d['c_documents']['documents'] = [{'read_status': 'partial', 'is': 'final_judgment'}]
+        s = DB.summarize(d)
+        self.assertEqual((s['n'], s['p'], s['j']), (0, 1, 'one'))
+        html = self.render({'judg': 555499.25, 'docs': s})
+        self.assertIn('JUDG $555k?', html)
+        self.assertNotIn('UNREAD', html)
+        self.assertIn('1 partly read', html)
+        self.assertIn('PART READ', self.render({'docs': {'n': 0, 'p': 2, 'f': 2, 'j': 'none'}}))
+
+    def test_stay_from_the_timeline_status_on_main(self):
+        # The timeline on main has no stay_in_effect; the answer is in status.kind.
+        self.assertIs(DB._stay({'status': {'kind': 'stayed_by_bankruptcy'}}), True)
+        self.assertEqual(DB._stay({'status': {'kind': 'unclear', 'reason': 'Later foreclosure '
+                                   'activity conflicts with an unresolved bankruptcy stay'}}), 'unclear')
+        self.assertIsNone(DB._stay({'status': {'kind': 'unclear', 'reason': 'No dated dispositive entry.'}}))
+        self.assertIsNone(DB._stay({'status': {'kind': 'sale_scheduled'}}))
+        # #53's explicit answer wins over the status.
+        self.assertIs(DB._stay({'stay_in_effect': False, 'status': {'kind': 'stayed_by_bankruptcy'}}), False)
+        s = DB.summarize(dossier(judgment=ONE), {'status': {'kind': 'unclear', 'reason': 'stay relief'}})
+        self.assertIn('STAY UNCLEAR', self.render({'docs': s}))
+
     def test_read_but_unread_states(self):
         self.assertIn('DOC UNREAD', self.render({'docs': {'n': 0, 'f': 3, 'j': 'none'}}))
         self.assertIn('NO JUDG', self.render({'docs': {'n': 2, 'f': 3, 'j': 'none'}}))
