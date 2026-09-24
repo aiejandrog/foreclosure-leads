@@ -96,7 +96,8 @@ MONEY_RE = re.compile(r'\$\s*([0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2
 # missing from the first version of this list, which is half of why a correctly-OCR'd $14,698.60
 # came out "not established"; the other half was that its value sat fifteen lines below it.
 TOTAL_RE = re.compile(r'\b(total\s+(?:sum|amount|indebtedness|due)|grand\s+total|amount\s+due|'
-                      r'there\s+is\s+due|total\s+judgment|total\s*:|'
+                      r'there\s+is\s+due|total\s+judgment|total\s*:|(?:amended|final)\s+total\b|'
+                      r'total\s+including\b|'
                       r'judgment\s+is\s+(?:hereby\s+)?entered)', re.I)
 
 
@@ -152,11 +153,18 @@ def _column_blocks(lines):
             for labels, values in JM.column_blocks(lines)]
 
 
-def column_values(lines):
-    """-> ({label line index: (value, how)}, [notes]) for the label/value columns on a page."""
+def column_values(lines, text_layer=False):
+    """-> ({label line index: (value, how)}, [notes]) for the label/value columns on a page.
+
+    `text_layer`: the page is an embedded text layer, where one figure under several lines is
+    labelled by the line above it and the lines it runs on from (JM.label_span), as in text_rows."""
     pairs, notes = {}, []
     for labels, values in _column_blocks(lines):
         if not labels or not values:
+            continue
+        if text_layer and len(values) == 1 and len(labels) > 1:
+            first, _ = JM.label_span(lines, labels)
+            pairs[first] = (abs(values[0]), 'column_pairing')
             continue
         if len(labels) == len(values):
             for label, value in zip(labels, values):
@@ -258,7 +266,7 @@ def judgment_amount_candidates(reading):
         if page['outcome'] not in ('text', 'ocr_text'):
             continue
         lines = (page.get('text') or '').splitlines()
-        pairs, notes = column_values(lines)
+        pairs, notes = column_values(lines, text_layer=page['outcome'] == 'text')
         number = JM._page_no(page['page'])
         # A bare "TOTAL" closing a table of SUBTOTALs (judgment_money._bare_totals) is offered too.
         closing = {r['line'] for r in rows if r['page'] == number and r['kind'] == 'total'
@@ -292,7 +300,8 @@ def _check_fields(check):
             'sum_check_rates': check.get('rates') or [],
             'sum_check_subtotals': check.get('subtotals') or [],
             'sum_check_pages': check.get('pages') or [],
-            'sum_check_run': check.get('run')}
+            'sum_check_run': check.get('run'),
+            'sum_check_disagreeing_subtotals': check.get('disagreeing_subtotals') or []}
 
 
 # A judgment that states its parts and never states their sum. The 2026-09-22 read of

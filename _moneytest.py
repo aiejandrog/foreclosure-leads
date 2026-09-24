@@ -272,6 +272,65 @@ class AcceptanceShapeTests(unittest.TestCase):
         bad = [c for c in MJ.judgment_amount_candidates(pages(doubled, p3, p4)) if c['amount'] == 95445.0][0]
         self.assertFalse(bad['sum_check'])
 
+    def test_a_per_diem_inside_a_label_does_not_orphan_its_value(self):
+        # 6828 (desktop dump, 2026-09-24): "Accrued Interest ... (per diem: $645.06)" over
+        # "$86,438.04". The label's per-diem stopped the label walk and the value became a barrier.
+        p2 = '\n'.join([
+            '2. Amounts Due and Owing. Plaintiff is now due:', 'Principal', '\xa0$1,000.00',
+            '\xa0Accrued Interest at 8.75% from December 1, ', '2023 through February 23, 2026',
+            '\xa0$100.00', '\xa0Per Diem (Good through 2/23/2026)', '\xa0$5.00',
+            '\xa0Accrued Interest at 8.75% from February 24, ', '2026 through July 7, 2026 (per diem: $0.25)',
+            '\xa0$30.00', 'Total Deferred Amount', '\xa0$0.68', 'Late Charges', '\xa0$20.00',
+            'Case No: 2099-000004-CA-01'])
+        p3 = '\n'.join(["Attorney`s Fees", '\xa0$50.00', 'GRAND TOTAL DUE', '\xa0$1,205.68',
+                        "4. Attorney's Fees. The Court finds that the total sum of $50.00 is reasonable."])
+        found = [c for c in MJ.judgment_amount_candidates(pages(p2, p3)) if c['amount'] == 1205.68][0]
+        self.assertTrue(found['sum_check'], found['sum_check_reason'])
+        self.assertEqual([r['value'] for r in found['sum_check_rates']], [0.25])
+        self.assertIn(5.0, found['sum_check_components'])
+
+    def test_ocr_columns_with_a_footer_a_stray_fragment_and_a_breakdown_below_its_heading(self):
+        # McCray (desktop dump): OCR read seven labels, the running footer, then the values with
+        # a stray "02" and "$4, 750.00"; "Attorney's Fees" is printed above its own three parts;
+        # the column ends in a bare TOTAL.
+        p1 = '\n'.join([
+            'THIS ACTION was heard before the Court at Non-Jury Trial on May 20, 2025.',
+            'l. Amounts Due and Owing. Plaintiff is due:', 'Principal Balance',
+            'Interest from 5/08/2022 to 5/16/2025',
+            'Per Diem Interest at $10.00 per day from 5/17/25 to 5/20/25', 'Taxes', 'Insurance',
+            "Attorney's Fees", "Attorney 's fees", 'Case No: 2099-000005-CA-OI', '$10,000.00',
+            '$1,000.00', '02', '$40.00', '$150.00', '$250.00', '$4,900.00', '$4, 500.00', 'Page I of 6'])
+        p2 = '\n'.join(["Additional Attorney 's fees", "Trial Attorney 's fees", '$250.00', '$150.00',
+                        'Court costs', 'Title', 'TOTAL', '$1,000.00', '$75.00', '$17,415.00',
+                        'forward at the prevailing legal rate of interest, 9.15% a year.'])
+        reading = {'pages': [{'page': n, 'outcome': 'ocr_text', 'text': t, 'text_source': 'ocr'}
+                             for n, t in ((1, p1), (2, p2))]}
+        rows = JM.text_rows(reading, MJ.TOTAL_RE)
+        self.assertEqual([r['gid'] for r in rows if r['barrier']], [])
+        found = [c for c in MJ.judgment_amount_candidates(reading) if c['amount'] == 17415.0][0]
+        self.assertTrue(found['sum_check'], found['sum_check_reason'])
+        self.assertEqual({s['amount']: s['membership'] for s in found['sum_check_subtotals']},
+                         {4900.0: 'section_rows'})
+        self.assertEqual([r['value'] for r in found['sum_check_rates']], [10.0])
+
+    def test_a_total_whose_label_wraps_is_offered_and_a_disagreeing_subtotal_is_named(self):
+        # 2018-026274 (desktop dump): "AMENDED TOTAL INCLUDING POST" / "JUDGMENT STATUTORY
+        # INTEREST" over the total, and a printed interest subtotal its own yearly rows miss by
+        # $0.60. The total is offered; it does not verify, and the reason names the subtotal.
+        page = '\n'.join([
+            'Plaintiff is due:', 'Principal', '$1,000.00', 'INTEREST BEARING SUBTOTAL', '$1,000.00',
+            '2019 Statutory Interest from 7/17/2019 \u2013 12/31/2019 ', '(195 days) @ 6.77%', '$10.30',
+            '2020 Statutory Interest from 1/1/2020 \u2013 12/31/20 (365 ', 'days) @ 6.83%', '$20.30',
+            'Post-Judgment Statutory Interest Total as of ', '8/11/2026', '$30.00',
+            'AMENDED TOTAL INCLUDING POST ', 'JUDGMENT STATUTORY INTEREST', '$1,030.00'])
+        found = [c for c in MJ.judgment_amount_candidates(pages(page)) if c['amount'] == 1030.0]
+        self.assertEqual(len(found), 1)
+        self.assertFalse(found[0]['sum_check'])
+        self.assertEqual([s['amount'] for s in found[0]['sum_check_disagreeing_subtotals']], [30.0])
+        good = page.replace('$20.30', '$19.70')
+        ok = [c for c in MJ.judgment_amount_candidates(pages(good)) if c['amount'] == 1030.0][0]
+        self.assertTrue(ok['sum_check'], ok['sum_check_reason'])
+
     def test_a_misread_figure_anywhere_in_the_exhibit_fails(self):
         bad = EXHIBIT_P3.replace('$1050.00', '$1060.00')
         found = [c for c in MJ.judgment_amount_candidates(pages(EXHIBIT_P2, bad, EXHIBIT_P4))

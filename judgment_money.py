@@ -388,8 +388,15 @@ def verify_total(rows, total_gid, read_pages=None, stated=None, whole_total_page
         back -= 1
     if not matches:
         additive = [values[r['gid']] for r in rows[:index] if _additive(r) and r['page'] == page]
-        return _fail('no contiguous run of rows ending at the total adds up to it to the cent '
-                     '(tried up to %d page(s) back)' % (MAX_SPAN_PAGES - 1), additive)
+        out = _fail('no contiguous run of rows ending at the total adds up to it to the cent '
+                    '(tried up to %d page(s) back)' % (MAX_SPAN_PAGES - 1), additive)
+        # A printed subtotal its own rows do not reproduce is usually why (2018-026274's interest
+        # subtotal is $0.60 off its eight yearly rows). Name it rather than leave only "no run".
+        out['disagreeing_subtotals'] = [
+            {'page': r['page'], 'label': r['label'], 'amount': float(cents(r['amount']))}
+            for r in rows[:index] if r.get('note', '').startswith(('subtotal label', 'SUBTOTAL whose'))
+            and r['page'] >= page - (MAX_SPAN_PAGES - 1)]
+        return out
     distinct = {frozenset(r['gid'] for r in m if _additive(r) and values[r['gid']] != 0)
                 for m in matches}
     if len(distinct) > 1:
@@ -485,7 +492,7 @@ def _text_kind(fragment, after, negative, total_re):
 # dollar sign with runs of no-break spaces ('$\xa0\xa0\xa0 6,935.74'), prints thousands without a
 # comma ('$1050.00') and prints a credit in parentheses ('($422.11)'); all three are value lines.
 ONLY_MONEY_RE = re.compile(r'^[\s|:.]*(?P<open>\(\s*)?(?P<minus>-\s*)?\$?\s*'
-                           r'(?P<num>[0-9]{1,3}(?:,[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})'
+                           r'(?P<num>[0-9]{1,3}(?:\s?,\s?[0-9]{3})+\.[0-9]{2}|[0-9]+\.[0-9]{2})'
                            r'\s*(?P<close>\))?[\s|.]*$')
 
 
@@ -494,8 +501,26 @@ def only_money(line):
     match = ONLY_MONEY_RE.match(line)
     if not match or bool(match.group('open')) != bool(match.group('close')):
         return None
-    value = float(match.group('num').replace(',', ''))
+    value = float(re.sub(r'[\s,]', '', match.group('num')))
     return -value if (match.group('open') or match.group('minus')) else value
+
+
+# Page furniture between a label column and its values: the running footer, a page number, a
+# stray OCR fragment ("02", "1. "). McCray's OCR put "Case No" and "02" inside its value column.
+_FURNITURE_RE = re.compile(r'^\s*(?:case\s+no\b.*|page\s+\S+\s+[o0]f\s+\S+\s*|filing\s*#.*'
+                           r'|\W*\d{1,3}\W*)$', re.I)
+# The line that opens a judgment's amounts table. Lines above it are recitals, not labels.
+_TABLE_HEAD_RE = re.compile(r'\b(?:is|are)\s+(?:now\s+)?due\b|\bdue\s+and\s+owing\b', re.I)
+
+
+def _own_figure(line):
+    """Does the line carry a figure that is a row of its own? A per-diem inside a label
+    ("... (per diem: $645.06)") is not one: 6828's label kept its rate and lost its value."""
+    for match in _FIGURE_RE.finditer(line):
+        if not (_RATE_AFTER_RE.match(line[match.end():].lstrip(')').lstrip())
+                or _RATE_BEFORE_RE.search(line[:match.start()].rstrip('(').rstrip())):
+            return True
+    return False
 
 
 def column_blocks(lines):
@@ -519,21 +544,45 @@ def column_blocks(lines):
             value = only_money(lines[index])
             if value is not None:
                 values.append((index, value))
-            elif lines[index].strip():
+            elif lines[index].strip() and not _FURNITURE_RE.match(lines[index]):
                 break
             index += 1
-        labels = []
+        labels, head = [], None
         back = start - 1
         while back >= 0:
             line = lines[back]
-            if only_money(line) is not None or _FIGURE_RE.search(line):
+            if only_money(line) is not None or _own_figure(line):
                 break
-            if line.strip():
+            if _TABLE_HEAD_RE.search(line):
+                head = back
+                break
+            if line.strip() and not _FURNITURE_RE.match(line):
                 labels.append(back)
             back -= 1
+        if not labels and head is not None:
+            labels.append(head)     # the heading is the only text above: it is the label
         labels.reverse()
         blocks.append((labels, values))
     return blocks
+
+
+_DANGLING_RE = re.compile(r'(?:\b(?:of|to|from|including|post|pre|and|or|the|at|for|through|on|in|'
+                          r'by|with|per|as|less)|[(,&/-])\s*$', re.I)
+
+
+def label_span(lines, labels):
+    """The label of ONE figure standing under several text lines: the line directly above it,
+    joined with the lines above that it continues ("AMENDED TOTAL INCLUDING POST" / "JUDGMENT
+    STATUTORY INTEREST"; "(365 " / "days) @ 6.83%"). Lines that do not run on are headings.
+    -> (first_line_index, text)"""
+    first = labels[-1]
+    text = lines[first].strip()
+    for index in reversed(labels[:-1]):
+        above = lines[index].strip()
+        if index != first - 1 or not (_DANGLING_RE.search(above) or above.count('(') > above.count(')')):
+            break
+        first, text = index, above + ' ' + text
+    return first, text
 
 
 def text_rows(reading, total_re):
@@ -568,10 +617,15 @@ def text_rows(reading, total_re):
             if len(values) == 1 and len(labels) > 1 and page.get('outcome') == 'text':
                 # One figure under a heading and its label ("Court costs" / "Complaint Filing
                 # Fees" / "$1,930.00"). A text layer does not drop figures the way OCR does, so
-                # the label line directly above the figure is its label and the lines above
-                # that are headings. Only for one figure: with more, which label goes with
-                # which is a guess.
-                labels = labels[-1:]
+                # the label line directly above the figure is its label (with any lines it
+                # runs on from) and the lines above that are headings. Only for one figure:
+                # with more, which label goes with which is a guess.
+                first, text = label_span(lines, labels)
+                value = values[0][1]
+                rows.append(_text_row(number, first, 0, text,
+                                      _text_kind(text, '', value < 0, total_re), abs(value),
+                                      'column_pairing', source))
+                continue
             if len(labels) == len(values):
                 for label, (_, value) in zip(labels, values):
                     kind = _text_kind(lines[label], '', value < 0, total_re)
@@ -586,16 +640,17 @@ def text_rows(reading, total_re):
                                   kind if kind == 'total' else None, abs(values[-1][1]),
                                   'tail_figure', source))
         for i, line in enumerate(lines):
-            if i in column_lines:
-                continue
             start = 0
             for k, match in enumerate(_FIGURE_RE.finditer(line)):
                 fragment = line[start:match.start()]
                 negative = bool(match.group('minus')) or bool(match.group('open')
                                                               and match.group('close'))
                 kind = _text_kind(fragment, line[match.end():], negative, total_re)
+                if i in column_lines and kind != 'rate':
+                    continue    # a label line: only the per-diem it carries is reported
                 value = float(match.group('num').replace(',', ''))
-                rows.append(_text_row(number, i, k, fragment.strip(' :.-$(')[:160], kind, value,
+                rows.append(_text_row(number, i, k + (50 if i in column_lines else 0),
+                                      fragment.strip(' :.-$(')[:160], kind, value,
                                       'same_line', source))
                 if kind == 'rate' and _HOURLY_RE.match(line[match.end():]):
                     rows[-1]['rate_unit'] = 'hour'
@@ -626,7 +681,30 @@ def _section_totals(rows, reach=30):
         amount = cents(row['amount'])
         return -amount if row['kind'] == 'credit' else amount
 
+    def words(label):
+        return {w for w in re.findall(r'[a-z]{4,}', (label or '').lower())}
+
     for index, row in enumerate(rows):
+        heading = (row['how'] == 'column_pairing' and not row['barrier'] and row['kind'] == 'charge'
+                   and words(row['label']))
+        if heading:
+            # A labelled figure printed ABOVE its own breakdown: McCray's "Attorney's Fees
+            # $8,975.00" over "Attorney's fees", "Additional Attorney's fees", "Trial Attorney's
+            # fees". Rows after it only, and every one must carry the heading's words.
+            need, after, ahead = words(row['label']), [], index + 1
+            while (ahead < len(rows) and len(after) < reach and additive(rows[ahead])
+                   and need <= words(rows[ahead]['label'])):
+                after.append(rows[ahead])
+                ahead += 1
+            target, running = cents(row['amount']), Decimal('0')
+            for b, member in enumerate(after, 1):
+                running += signed(member)
+                if b >= 2 and running == target:
+                    row.update(kind='subtotal', section_total=True,
+                               members=[r['gid'] for r in after[:b]],
+                               note='figure printed above its own breakdown; counted through it')
+                    break
+            continue
         if row['how'] != 'unlabelled' or not row['barrier']:
             continue
         target = cents(row['amount'])
@@ -675,6 +753,15 @@ def _bare_totals(rows):
         if named and all(float(p['amount']) < float(row['amount']) for p in earlier):
             row['kind'] = 'total'
             row['note'] = 'bare TOTAL closing a table of printed SUBTOTALs'
+            continue
+        # McCray: no SUBTOTALs, just a column that ends in TOTAL. A section's TOTAL (court costs)
+        # is smaller than the principal above it; the judgment's is larger than every figure in
+        # the table. Only then is it offered, so a costs total never stands in for the judgment.
+        span = [p for p in rows[:index] if p['page'] >= row['page'] - (MAX_SPAN_PAGES - 1)]
+        if (sum(1 for p in span if not p['barrier'] and p['kind'] in ('charge', 'credit')) >= 3
+                and all(float(p['amount']) < float(row['amount']) for p in span)):
+            row['kind'] = 'total'
+            row['note'] = 'bare TOTAL larger than every figure in its table'
 
 
 def _text_row(page, line, k, label, kind, value, how, text_source):
