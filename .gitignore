@@ -69,6 +69,9 @@ BSG_Mail_Campaign_*.pdf
 # index label is never a substitute for reading, and that reading a document never moves a lead
 # into an equity FACT state.
 !_dossiertest.py
+# _optionstest guards the homeowner options strategy: that unverified equity never yields a sell
+# path, that a stay stops everything, and that only the wholesale path ever pays us.
+!_optionstest.py
 # _walktest guards the citation walk: that an unresolvable citation is reported rather than
 # dropped, that a search capability is never assumed without a probe observing it, and that a
 # walked document stays at rung c and cannot move the equity verdict.
