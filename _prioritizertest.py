@@ -104,11 +104,14 @@ class PaidReadOrderTests(unittest.TestCase):
         rows, records = name_search_rows()
         plan = prioritize(MIAMI, docket(MIAMI, DOCKET), '2026-09-23')
         got = DP.recorded_read_order(MIAMI, rows, records, plan)
-        self.assertEqual([r['source_ref'][-5:] for r in got['order']], ['100-7', '100-6', '100-5'])
-        self.assertEqual([r['tier'] for r in got['order']], [0, 1, 2])
+        self.assertEqual([r['source_ref'][-5:] for r in got['order']], ['100-7', '100-6'])
+        self.assertEqual([r['tier'] for r in got['order']], [0, 1])
         reasons = {d['source_ref'][-5:]: d['reason'] for d in got['deferred']}
+        # 100-5 prints no case number and lines up with no docket judgment: nothing ties it to
+        # this case, so it is read free and never bought (the 2026-09-24 desktop replay).
         self.assertEqual(reasons, {'100-1': 'other_action', '100-2': 'recorded_before_case_year',
-                                   '100-3': 'other_action', '100-4': 'satisfaction_read_free_only'})
+                                   '100-3': 'other_action', '100-4': 'satisfaction_read_free_only',
+                                   '100-5': 'not_tied_to_this_case_read_free_only'})
         # The vacatur dated after the docket judgment is named for review, not applied.
         self.assertEqual(got['order'][1]['later_orders'][0]['kind'], 'vacatur')
         self.assertEqual(got['docket_judgment_dates'], ['2026-08-15'])
@@ -130,8 +133,11 @@ class PaidReadOrderTests(unittest.TestCase):
     def test_without_a_docket_plan_nothing_is_tier_one(self):
         rows, records = name_search_rows()
         got = DP.recorded_read_order(MIAMI, rows, records, None)
-        self.assertEqual([r['tier'] for r in got['order']], [0, 2, 2])
-        self.assertEqual(got['order'][1]['source_ref'][-5:], '100-6')   # newest first in a tier
+        # Without the docket nothing but a printed case number ties a page to this case.
+        self.assertEqual([r['tier'] for r in got['order']], [0])
+        untied = sorted(d['source_ref'][-5:] for d in got['deferred']
+                        if d['reason'] == 'not_tied_to_this_case_read_free_only')
+        self.assertEqual(untied, ['100-5', '100-6'])
 
     def test_unstored_row_is_deferred_not_priced(self):
         got = DP.recorded_read_order(MIAMI, [{'source_ref': 'official_records/1-1',
@@ -237,17 +243,18 @@ class FiveCaseReplayTests(unittest.TestCase):
             self.assertFalse(any(b.endswith(('100-1.pdf', '100-2.pdf', '100-3.pdf', '100-4.pdf'))
                                  for b in bought), (case, bought))
             vision = report['vision']
-            self.assertEqual(len(vision['selection']['deferred']), 4)
+            self.assertEqual(len(vision['selection']['deferred']), 5)
             if case == self.CASES[0]:
                 # First case, nothing to borrow yet: one page, then its share is spent and the
                 # rest of its selection is a named gap instead of another case's money.
                 self.assertEqual(len(bought), 1)
-                self.assertEqual(vision['not_read_budget'], ['official_records/100-5'])
-                row = [r for r in report['documents'] if r['source_ref'].endswith('100-5')][0]
-                self.assertIn('budget_exhausted', row['vision_errors']['*'])
+                # With history no longer bought, its selection is two documents; the second is
+                # refused by the share at the check, before any charge.
+                row = [r for r in report['documents'] if r['source_ref'].endswith('100-6')][0]
+                self.assertIn('budget', str(row['vision_errors']))
             else:
                 # Later cases may borrow what FINISHED cases left, so they reach further.
-                self.assertEqual(len(bought), 3)
+                self.assertEqual(len(bought), 2)
         self.assertLessEqual(alloc.budget.spent, 0.30 + 1e-9)
 
 

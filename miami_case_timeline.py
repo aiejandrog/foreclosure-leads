@@ -44,6 +44,14 @@ def classify(text):
         if 'summary judgment' in s: return 'motion_for_summary_judgment'
         if 'dismiss' in s: return 'motion_to_dismiss'
         return 'motion'
+    # A notice ABOUT a judgment is not the judgment: "Notice of serving final judgment" was read
+    # as a sixth final judgment on 6828 (desktop replay, 2026-09-24) and blocked a controlling
+    # entry. Bankruptcy and stay notices keep their own meaning below.
+    if (re.match(r'(?:amended\s+)?notice of (?:serving|service of|filing|intent|compliance|mailing|'
+                 r'dropping|appearance|designation|submitting|lodging)\b', s)
+            and not re.search(r'bankrupt|\bstay\b|voluntary dismissal', s)):
+        return 'notice_of_filing'
+    if re.match(r'(?:amended\s+)?proposed\b', s): return 'proposed_order'
     checks = [
         ('order_on_motion', r'^order.*(?:denying|denied)'),
         # An order that reinstates a stay, or vacates the order that lifted it, would otherwise
@@ -134,6 +142,44 @@ def _transition(e):
     return r
 
 
+_STAY_CARRIERS = {'suggestion_of_bankruptcy', 'stay', 'relief_from_stay', 'notice_of_filing',
+                  'nonbankruptcy_stay', 'order_on_motion', 'bankruptcy_dismissed'}
+_REINSTATED_RE = re.compile(
+    r'\b(?:stay\b[^.;]{0,120}?\b(?:is|are|be|shall be|hereby|was|has been)\s+(?:hereby\s+)?'
+    r'(?:reinstated|reimposed|re-imposed)'
+    r'|(?:reinstat|reimpos)\w*\s+(?:the\s+)?(?:automatic\s+)?stay\b'
+    r'|(?:is|are|be|hereby)\s+(?:hereby\s+)?vacated[^.;]{0,80}(?:relief from|lifting|terminating)[^.;]{0,40}\bstay'
+    r'|(?:relief from|lifting|terminating)[^.;]{0,60}\bstay\b[^.;]{0,60}\b(?:is|are|be|hereby)\s+(?:hereby\s+)?vacated)',
+    re.I)
+# Only what sits right before the match: "Motion to reinstate", "request for", "if the stay is".
+_NOT_OPERATIVE_RE = re.compile(r'(?:\b(?:motion|request|petition|application)\s+(?:to|for)\s+(?:the\s+)?$'
+                               r'|\b(?:moves?|moving|seeks?|seeking|asks?|asking|requests?|requesting|'
+                               r'intends?|wishes)\s+(?:(?:the|this)\s+court\s+)?(?:to\s+)?$'
+                               r'|\b(?:if|whether|unless|until)\b[^.;]{0,40}$)', re.I)
+# Citation periods would end a sentence early: "11 U.S.C. 362(a) is hereby reinstated".
+_ABBREV_RE = re.compile(r'\b(?:U\.\s?S\.\s?C|U\.\s?S|Fla\.\s?Stat|Stat|No|Bankr|Fed|R|P)\.', re.I)
+
+
+def stay_reinstatement_passages(pages):
+    """Operative sentences in a document's body saying the bankruptcy stay is back in force.
+    A motion asking for it, or a conditional, is not one: the words just before the match must
+    not be 'motion to', 'if', 'whether' and the like."""
+    out = []
+    for page in pages or []:
+        text = re.sub(r'[ \t]+', ' ', str(page.get('text') or ''))
+        flat = _ABBREV_RE.sub(lambda m: m.group(0).replace('.', ''), re.sub(r'\s*\n\s*', ' ', text))
+        for match in _REINSTATED_RE.finditer(flat):
+            before = flat[max(0, match.start() - 60):match.start()]
+            if _NOT_OPERATIVE_RE.search(before):
+                continue
+            start = max(flat.rfind('.', 0, match.start()) + 1, match.start() - 200)
+            end = flat.find('.', match.end())
+            passage = flat[start:(end + 1 if end != -1 else match.end() + 120)].strip()
+            out.append({'page': page.get('page'), 'source_ref': page.get('_source_ref'),
+                        'passage': passage[:300]})
+    return out
+
+
 def build_timeline(case, inventory, document_rows, as_of):
     today = _date(as_of)
     if not today: raise ValueError('as_of must be a valid date')
@@ -169,6 +215,18 @@ def build_timeline(case, inventory, document_rows, as_of):
              'index_agrees': body_kind == ik if body_kind else None,
              'operative_text': title or index_text, 'calendar_event': str(meta.get('eventType', '')).lower() == 'hearing'}
         e['limited_scope'], e['dismissed_parties'] = scope_of(e['kind'], scope_text, defendants)
+        if e['kind'] in ('final_judgment', 'vacatur', 'satisfaction'):
+            # Only for linking judgments to what acts on them; dropped before the timeline is saved.
+            e['_body'] = '\n'.join(str(p.get('text') or '') for p in pages[:3])[:6000]
+        # A bankruptcy filing often carries the bankruptcy court's own order as an attachment.
+        # McCray's reinstated stay was on pages 3-4 of such a filing, and the docket title only
+        # said "suggestion of bankruptcy", so the index never saw it (desktop replay, 2026-09-24).
+        if e['kind'] in _STAY_CARRIERS:
+            passages = stay_reinstatement_passages(pages)
+            if passages:
+                e.update(kind='stay_reinstated', kind_source='document_passage',
+                         stay_passages=passages, index_agrees=False,
+                         operative_text=passages[0]['passage'])
         if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'
         e['sale_passages'] = [index_text] if re.search(r'\bsale\b', index_text, re.I) else []
         body_lines = [line for p in pages for line in str(p.get('text') or '').splitlines()]
@@ -269,8 +327,11 @@ def build_timeline(case, inventory, document_rows, as_of):
     if stay_history:
         last = stay_history[-1]['event']
         stay_now = (True if last in ('stayed', 'reinstated') else False if last in ('relief', 'bankruptcy_dismissed') else None)
+    judgments = reconcile_judgments(entries, today)
+    for e in entries:
+        e.pop('_body', None)
     return {'case': case, 'county': 'MIAMI-DADE', 'as_of': today, 'entries': entries, 'status': status,
-            'judgments': reconcile_judgments(entries, today),
+            'judgments': judgments,
             'stay_history': stay_history, 'stay_in_effect': stay_now,
             'pending': pending, 'amounts': amounts, 'gaps': gaps, 'coverage_complete': not gaps,
             'qualification': 'Status is derived from available docket evidence, not confirmation of a complete court record. Amount extractions are not verified balances or equity inputs.'}
@@ -328,12 +389,28 @@ _REPLACES = re.compile(r'\b(?:amended|corrected|amending|substitut\w*|replacemen
 _ADDS_TO = re.compile(r'\bsupplemental\b|\b(?:attorney.?s?|attorneys)\s+fees?\b|\bcosts? judgment\b', re.I)
 
 
+_MONTHS = {m: i for i, m in enumerate(('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep',
+                                      'oct', 'nov', 'dec'), 1)}
+_LONG_DATE_RE = re.compile(
+    r'\b(?:(?P<m1>jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?\s+(?P<d1>\d{1,2})(?:st|nd|rd|th)?,?\s+(?P<y1>\d{4})'
+    r'|(?P<d2>\d{1,2})(?:st|nd|rd|th)?\s+day\s+of\s+(?P<m2>jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?,?\s+(?P<y2>\d{4}))',
+    re.I)
+
+
 def _dates_in(text):
+    """Every date a passage cites: 10/14/2025, October 14, 2025, the 14th day of October, 2025."""
     out = set()
     for raw in re.findall(r'\b\d{1,2}/\d{1,2}/(?:\d{4}|\d{2})\b', str(text or '')):
         value = _date(raw)
         if value:
             out.add(value)
+    for m in _LONG_DATE_RE.finditer(str(text or '')):
+        month = _MONTHS.get((m.group('m1') or m.group('m2')).lower()[:3])
+        day, year = int(m.group('d1') or m.group('d2')), int(m.group('y1') or m.group('y2'))
+        try:
+            out.add(datetime(year, month, day).date().isoformat())
+        except ValueError:
+            pass
     return out
 
 
@@ -363,6 +440,10 @@ def reconcile_judgments(entries, today):
                  'status': 'operative', 'by': [], 'satisfaction': 'no_satisfaction_found', 'reason': ''}
             if j['role'] == 'replacement':
                 target, basis = _target(judgments, text)
+                if target is None and e.get('_body'):
+                    body_target, body_basis = _target(judgments, e['_body'])
+                    if body_target:
+                        target, basis = body_target, body_basis + ' in the document body'
                 if target:
                     target.update(status='superseded', reason='replaced by %s (%s)' % (j['entry_id'], basis))
                     target['by'].append(j['entry_id'])
@@ -383,6 +464,12 @@ def reconcile_judgments(entries, today):
         if not action or (action == 'vacated' and not re.search(r'judgment', text, re.I)):
             continue
         target, basis = _target(judgments, text)
+        if target is None and e.get('_body'):
+            # The docket title often says only "Order vacating final judgment"; the order itself
+            # usually names the judgment by its date (6828, desktop replay 2026-09-24).
+            body_target, body_basis = _target(judgments, e['_body'])
+            if body_target:
+                target, basis = body_target, body_basis + ' in the document body'
         if action == 'vacated' and target is None:
             # A vacated judgment needs its target; an unmatched vacatur leaves every candidate open.
             for x in judgments:

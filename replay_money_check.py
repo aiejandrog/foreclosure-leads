@@ -23,7 +23,7 @@ DEALFLOW_DIR/reports. A total that does not verify is reported with the reason, 
 import argparse
 import json
 import re
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import case_review
@@ -143,7 +143,9 @@ def main(argv=None):
     if not cases:
         parser.error('name --case or --all')
     result = replay(cases, args.grep)
-    target = case_review.output_path('reports/money-check-replay-%s.json' % date.today())
+    # One file per run: the --grep run and the --all run on one day used to overwrite each other.
+    target = case_review.output_path('reports/money-check-replay-%s-%s.json'
+                                     % (date.today(), datetime.now().strftime('%H%M%S')))
     Path(target).parent.mkdir(parents=True, exist_ok=True)
     DS._atomic_write_text(str(target), json.dumps(result, indent=2) + '\n')
     s = result['summary']

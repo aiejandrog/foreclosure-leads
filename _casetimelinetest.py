@@ -296,6 +296,58 @@ class ReconciliationTests(unittest.TestCase):
         self.assertTrue(r['stay_in_effect'])
         self.assertEqual([h['event'] for h in r['stay_history']], ['stayed', 'relief', 'reinstated'])
 
+    def test_a_reinstatement_inside_a_bankruptcy_filing_body_is_read(self):
+        # McCray as it really is (desktop replay, 2026-09-24): the docket title says "Suggestion
+        # of Bankruptcy"; the bankruptcy court's order reinstating the stay is on pages 3-4.
+        body = {'source_ref': 'court:3:1', 'entry_ref': '3', 'reading': {'pages': [
+            {'page': 1, 'outcome': 'text', 'text': 'SUGGESTION OF BANKRUPTCY'},
+            {'page': 3, 'outcome': 'text', 'text': 'ORDER GRANTING MOTION TO REINSTATE AUTOMATIC STAY\n'
+                                                   'ORDERED that the automatic stay under 11 U.S.C. 362(a)\n'
+                                                   'is hereby REINSTATED as to the Debtor.'}]}}
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Suggestion of Bankruptcy', expected=1)], [body])
+        e3 = r['entries'][2]
+        self.assertEqual((e3['kind'], e3['kind_source']), ('stay_reinstated', 'document_passage'))
+        self.assertEqual(e3['stay_passages'][0]['page'], 3)
+        self.assertIn('REINSTATED', e3['stay_passages'][0]['passage'])
+        self.assertEqual([h['event'] for h in r['stay_history']][-1], 'reinstated')
+        self.assertTrue(r['stay_in_effect'])
+
+    def test_a_motion_asking_for_reinstatement_is_not_one(self):
+        body = {'source_ref': 'court:2:1', 'entry_ref': '2', 'reading': {'pages': [
+            {'page': 2, 'outcome': 'text', 'text': 'Debtor moves to reinstate the automatic stay.\n'
+                                                   'The Debtor filed a Motion to reinstate the stay.\n'
+                                                   'If the stay is reinstated, the sale is cancelled.'}]}}
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy')], [body])
+        self.assertEqual(r['entries'][1]['kind'], 'suggestion_of_bankruptcy')
+
+    def test_a_vacatur_that_names_its_judgment_only_in_the_body_is_linked(self):
+        # 6828's shape: two judgments, and a docket title that says only "Order vacating
+        # final judgment". The order's own text names the judgment by a long-form date.
+        body = {'source_ref': 'court:3:1', 'entry_ref': '3', 'reading': {'pages': [
+            {'page': 1, 'outcome': 'text', 'text': 'ORDER VACATING FINAL JUDGMENT\nThe Final Judgment of '
+             'Foreclosure entered on the 1st day of April, 2026 is hereby vacated. Hearing held May 20, 2026.'}]}}
+        r = run([entry(1, 'Final Judgment of Foreclosure', '03/01/2026'),
+                 entry(2, 'Final Judgment of Foreclosure', '04/01/2026'),
+                 entry(3, 'Order vacating final judgment', '06/01/2026', expected=1),
+                 entry(4, 'Amended Final Judgment of Foreclosure', '08/01/2026')], [body])
+        j = {x['entry_id']: x for x in r['judgments']['judgments']}
+        self.assertEqual(j['2']['status'], 'vacated')
+        self.assertIn('document body', j['2']['reason'])
+        self.assertNotIn('_body', r['entries'][2])
+
+    def test_long_form_dates_are_read(self):
+        self.assertEqual(T._dates_in('entered October 14, 2025 and the 3rd day of Nov., 2025'),
+                         {'2025-10-14', '2025-11-03'})
+
+    def test_a_notice_of_serving_a_judgment_is_not_a_judgment(self):
+        # 6828 (desktop replay): "Notice of serving final judgment" was a sixth judgment.
+        r = run([entry(1, 'Final Judgment of Foreclosure'), entry(2, 'Notice of Serving Final Judgment'),
+                 entry(3, 'Notice of Filing Proposed Final Judgment')])
+        self.assertEqual([e['kind'] for e in r['entries']],
+                         ['final_judgment', 'notice_of_filing', 'notice_of_filing'])
+        self.assertEqual(r['judgments']['controlling_entry'], '1')
+
     def test_a_sale_after_a_reinstated_stay_is_a_conflict(self):
         r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
                  entry(3, 'Order granting relief from bankruptcy stay'),

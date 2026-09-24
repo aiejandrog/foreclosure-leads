@@ -143,8 +143,9 @@ def recorded_read_order(case, rows, records=(), plan=None):
     Tiers, cheapest-to-justify first:
       0  the page prints THIS case number
       1  prints no case number, and its recording date lines up with a docket judgment entry
-      2  prints no case number, and nothing ties it to a docket judgment (or no docket dates)
     Never bought (listed in `deferred` with the reason, and still read for free):
+      - a page that prints no case number and lines up with no docket judgment date: nothing ties
+        it to this case (without a saved docket, that is every page without the case number)
       - a page that prints a DIFFERENT case number: another lawsuit against a shared party
       - anything recorded before the year this case number was filed in: it cannot be this
         case's judgment, whatever a name search matched it on
@@ -185,6 +186,17 @@ def recorded_read_order(case, rows, records=(), plan=None):
             matched = next((d for d in judgments if d - RECORDING_WINDOW_BEFORE <= recorded
                             <= d + RECORDING_WINDOW_AFTER), None)
         tier = 0 if identity['agrees'] is True else 1 if matched else 2
+        if tier == 2:
+            # Nothing ties it to this case: a name-search judgment against a shared party, most
+            # often an old one. The 2026-09-24 desktop replay showed four of five pilot cases
+            # would still have bought one of these first, because none of their own judgments
+            # was in the recorded store. Its figure is not this case's amount; read it free.
+            deferred.append({'source_ref': ref, 'reason': 'not_tied_to_this_case_read_free_only',
+                             'detail': 'prints no case number and was recorded %s, not within the '
+                                       'window of any docket judgment date (%s)'
+                                       % (recorded.isoformat() if recorded else 'on an unknown date',
+                                          ', '.join(d.isoformat() for d in judgments) or 'none known')})
+            continue
         status = _docket_status(plan, matched)
         ranked.append({'row': row, 'source_ref': ref, 'tier': tier,
                        'recorded': recorded.isoformat() if recorded else None,

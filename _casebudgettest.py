@@ -385,14 +385,28 @@ class ReplayTests(unittest.TestCase):
                                  side_effect=AssertionError('no network')):
                 RP.main(['--case', case, '--cap', '0.10', '--as-of', '2026-09-23',
                          '--index', str(index_path)])
-            report = json.loads((Path(folder) / 'reports' /
-                                 'paid-selection-replay-2026-09-23.json').read_text())
+            [path] = list((Path(folder) / 'reports').glob('paid-selection-replay-2026-09-23-*.json'))
+            report = json.loads(path.read_text())
         row = report['cases'][0]
         self.assertEqual(row['would_read_within_share'][0]['source_ref'], 'official_records/100-7')
         self.assertEqual(row['refused'][0]['reason'], 'other_action')
         self.assertAlmostEqual(row['pilot_usd_now_refused'], .0675)
         self.assertTrue(row['reaches_tier0_or_tier1'])
         self.assertEqual(report['api_requests'], 0)
+
+
+    def test_replay_finds_a_pilot_inventory_saved_under_another_name(self):
+        import paths as P
+        import replay_paid_selection as RP
+        from unittest.mock import patch
+        case = '2026-000123-CA-01'
+        with tempfile.TemporaryDirectory() as folder, patch.object(P, 'DEALFLOW_DIR', folder):
+            self.assertIsNone(RP.find_inventory(case, folder))
+            pilot = Path(folder) / 'five-case-pilot-20260923'
+            pilot.mkdir()
+            (pilot / (case + '-fresh-inventory.json')).write_text(json.dumps({'entries': []}))
+            self.assertEqual(RP.find_inventory(case, pilot), {'entries': []})
+            self.assertIsNone(RP.find_inventory('2026-000999-CA-01', pilot))
 
 
 if __name__ == '__main__':

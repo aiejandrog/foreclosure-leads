@@ -20,7 +20,7 @@ ESTIMATED_PAGE_USD and the report marks that figure as an estimate.
 """
 import argparse
 import json
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 import case_review
@@ -68,8 +68,20 @@ def index_records(rows, index_path):
     return out
 
 
-def docket_plan(case, as_of):
+def find_inventory(case, inventory_dir=None):
+    """The saved full OCS inventory: the timeline stage's own file, else one named for the case
+    in --inventory-dir (the pilot saved its as five-case-pilot-20260923/<case>-fresh-inventory.json)."""
     inventory = _json(DS.pipeline_folder(COUNTY, case) / 'inventory.json')
+    if inventory is None and inventory_dir:
+        for path in sorted(Path(inventory_dir).glob('*%s*inventory*.json' % case)):
+            inventory = _json(path)
+            if inventory is not None:
+                break
+    return inventory
+
+
+def docket_plan(case, as_of, inventory_dir=None):
+    inventory = find_inventory(case, inventory_dir)
     if inventory is None:
         return None, 'no saved full OCS inventory for this case'
     try:
@@ -100,14 +112,14 @@ def page_cost(row):
     return min(pages, 2) * ESTIMATED_PAGE_USD, 'estimate'
 
 
-def replay(cases, cap, as_of, index_path):
+def replay(cases, cap, as_of, index_path, inventory_dir=None):
     share = cap / len(cases)
     released = 0.0            # what finished cases left unspent, borrowable by later cases
     report = {'as_of': as_of, 'cap_usd': cap, 'share_usd': round(share, 6), 'cases': [],
               'network_requests': 0, 'api_requests': 0}
     for case in cases:
         rows = recorded_rows(case)
-        plan, plan_gap = docket_plan(case, as_of)
+        plan, plan_gap = docket_plan(case, as_of, inventory_dir)
         selection = DP.recorded_read_order(case, rows, index_records(rows, index_path), plan)
         allowance = share + released
         spent, would_read, not_reached = 0.0, [], []
@@ -150,6 +162,8 @@ def replay(cases, cap, as_of, index_path):
             'would_read_within_share': would_read,
             'selected_but_share_spent': not_reached,
             'reaches_tier0_or_tier1': any(r['tier'] <= 1 for r in would_read),
+            'own_judgment_in_recorded_store': bool(selection['order']),
+            'first_court_read': timeline_read[0]['source_ref'] if timeline_read else None,
             'timeline_would_read': timeline_read,
             'timeline_refused': t_order['deferred'],
             'timeline_pilot_usd': round(sum(r['pilot_usd'] for r in timeline), 6),
@@ -170,10 +184,14 @@ def main(argv=None):
                         help='the cap to split, for the replay only; nothing is spent')
     parser.add_argument('--as-of', default=date.today().isoformat())
     parser.add_argument('--index', default=str(Path(__file__).with_name('records_index.json')))
+    parser.add_argument('--inventory-dir', help='folder holding <case>*inventory*.json when the '
+                                                'timeline stage has not saved one')
     args = parser.parse_args(argv)
     cases = list(dict.fromkeys(args.case))
-    result = replay(cases, args.cap, args.as_of, args.index)
-    target = case_review.output_path('reports/paid-selection-replay-%s.json' % args.as_of)
+    result = replay(cases, args.cap, args.as_of, args.index, args.inventory_dir)
+    # One file per run: two runs on one day used to overwrite each other.
+    target = case_review.output_path('reports/paid-selection-replay-%s-%s.json'
+                                     % (args.as_of, datetime.now().strftime('%H%M%S')))
     Path(target).parent.mkdir(parents=True, exist_ok=True)
     DS._atomic_write_text(str(target), json.dumps(result, indent=2) + '\n')
     print('replay: %d case(s), $%.2f cap split into $%.4f shares; $0 spent, no requests'
@@ -182,9 +200,12 @@ def main(argv=None):
         first = (row['would_read_within_share'] or [{}])[0]
         print('  %s  docket judgments %s' % (row['case'], ', '.join(row['docket_judgment_dates'])
                                              or 'none found'))
-        print('    first paid read: %s (tier %s)  reaches current-judgment tier: %s'
+        print('    first paid recorded read: %s (tier %s)  reaches current-judgment tier: %s'
               % (first.get('source_ref', 'nothing'), first.get('tier', '-'),
-                 'YES' if row['reaches_tier0_or_tier1'] else 'NO'))
+                 'YES' if row['reaches_tier0_or_tier1'] else
+                 'NO' if row['own_judgment_in_recorded_store'] else
+                 'n/a, no recorded copy tied to this case is stored'))
+        print('    first paid court read: %s' % (row['first_court_read'] or 'nothing'))
         print('    refused %d; pilot money on now-refused documents $%.4f; replay spend $%.4f'
               % (len(row['refused']), row['pilot_usd_now_refused'], row['replay_usd']))
         if row['docket_plan_gap']:
