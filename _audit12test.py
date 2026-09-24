@@ -75,8 +75,12 @@ eq("ok + one lien with no amount is not priced",
    ES.state_of({'conf': 'ok', 'liens': [{'amt': 0}]}), 'unpriced')
 eq("LOW confidence + empty chain is UNVERIFIED, not VERIFIED CLEAR",
    ES.state_of({'conf': 'low', 'liens': []}), 'none')
-eq("ok + empty chain is still the real finding: clear",
-   ES.state_of({'conf': 'ok', 'liens': []}), 'clear')
+# 2026-09-23 accuracy audit (Salkey): an empty list proves a negative only when the chain records
+# how it searched (equity_state.coverage_documented). Without that record it is a guess.
+eq("ok + empty chain WITH documented coverage is the real finding: clear",
+   ES.state_of({'conf': 'ok', 'liens': [], 'nrec': 12, 'second_fc': None, 'mtg_open_unpriced': 0}), 'clear')
+eq("ok + empty chain with NO coverage record is UNVERIFIED, not VERIFIED CLEAR",
+   ES.state_of({'conf': 'ok', 'liens': []}), 'none')
 eq("ok + every lien priced is still priced",
    ES.state_of({'conf': 'ok', 'liens': [{'amt': 100000}, {'amt': 50000}]}), 'priced')
 eq("PB instruments counted but unpriced", ES.state_of({'conf': 'ok', 'liens': [], 'mtg_open_unpriced': 2}), 'unpriced')
