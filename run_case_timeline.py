@@ -136,8 +136,9 @@ def read_amounts(rows, base, budget=None, plan=None):
     evidence files sort in on disk, and stop at this case's share of the cap: every document the
     share did not reach is a named `budget_exhausted` gap rather than a silent omission.
     """
+    import judgment_money as JM
     import miami_timeline_amounts as amounts
-    result = {'figures': [], 'gaps': [], 'evidence_files': []}
+    result = {'figures': [], 'gaps': [], 'evidence_files': [], 'amount_checks': []}
     if budget is not None:
         import document_prioritizer as DP
         selection = DP.timeline_read_order(plan, rows)
@@ -178,9 +179,27 @@ def read_amounts(rows, base, budget=None, plan=None):
             DS.pipeline_write(path, detail)
         result['evidence_files'].append(str(path))
         result['gaps'].extend(dict(gap, source_ref=row.get('source_ref')) for gap in detail.get('gaps', []))
+        # The one exact-cents check (judgment_money): a figure inside a run of printed rows that
+        # reproduces the document's own printed total is 'in_verified_table'. That is arithmetic
+        # agreement on one filing, never an award, an open balance or an equity input.
+        checks = JM.verify_document(detail.get('figures') or [], detail.get('grand_totals') or [],
+                                    {JM._page_no(p) for p in (detail.get('pages') or {})})
+        if detail.get('gaps') or detail.get('errors'):
+            checks = [dict(c, ok=False, reason='amount pages have unresolved reading gaps')
+                      for c in checks]
+        in_table = {r['gid'] for c in checks if c['ok'] for r in c['component_rows']}
+        result.setdefault('amount_checks', []).extend(
+            {'source_ref': row.get('source_ref'), 'entry_id': detail['entry_id'],
+             'amount': c['amount'], 'page': c['page'], 'ok': c['ok'], 'reason': c['reason'],
+             'pages': c['pages'], 'run': c['run'], 'components': c['components'],
+             'credits': c['credits'], 'rates': c['rates'], 'subtotals': c['subtotals']}
+            for c in checks)
         result['figures'].extend(dict(figure, source_ref=row.get('source_ref'),
             document_key=detail['document_key'], document_hash=detail['document_hash'],
-            entry_id=detail['entry_id'], verification_status='unverified',
+            entry_id=detail['entry_id'],
+            verification_status=('in_verified_table'
+                                 if 'p%d:%s' % (JM._page_no(figure.get('page')), figure.get('id'))
+                                 in in_table else 'unverified'),
             interpretation='Vision-extracted amount; not an accepted judgment or equity input')
             for figure in detail.get('figures', []))
     return result

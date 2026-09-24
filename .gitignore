@@ -17,6 +17,7 @@ _*.py
 !_refreshexittest.py
 !_lpchaintest.py
 !_casebudgettest.py
+!_moneytest.py
 BSG_Mail_Campaign_*.html
 BSG_Cards_SHEET_*.pdf
 BSG_Cards_SHEET_*.html

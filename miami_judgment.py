@@ -37,6 +37,7 @@ import document_collectors as DC
 import document_store as DS
 import document_vision as DV
 import document_interpreter as DI
+import judgment_money as JM
 from document_queue import DocumentQueue
 
 COUNTY = 'MIAMI-DADE'
@@ -118,7 +119,7 @@ TOTAL_RE = re.compile(r'\b(total\s+(?:sum|amount|indebtedness|due)|grand\s+total
 # only admissible if the arithmetic below corroborates it.
 
 # A line that is nothing but a money figure: an entry in a value column.
-_ONLY_MONEY_RE = re.compile(r'^[\s|:.]*\$?\s?([0-9]{1,3}(?:,[0-9]{3})*\.[0-9]{2})[\s|.]*$')
+_ONLY_MONEY_RE = JM.ONLY_MONEY_RE
 
 
 def _money_on(line):
@@ -147,33 +148,8 @@ def _column_blocks(lines):
 
     -> [(label_line_indexes, [values])]
     """
-    blocks = []
-    index, count = 0, len(lines)
-    while index < count:
-        if not _ONLY_MONEY_RE.match(lines[index]):
-            index += 1
-            continue
-        start = index
-        values = []
-        while index < count:
-            match = _ONLY_MONEY_RE.match(lines[index])
-            if match:
-                values.append(float(match.group(1).replace(',', '')))
-            elif lines[index].strip():
-                break
-            index += 1
-        labels = []
-        back = start - 1
-        while back >= 0:
-            line = lines[back]
-            if _ONLY_MONEY_RE.match(line):
-                break
-            if line.strip():
-                labels.append(back)
-            back -= 1
-        labels.reverse()
-        blocks.append((labels, values))
-    return blocks
+    return [(labels, [value for _, value in values])
+            for labels, values in JM.column_blocks(lines)]
 
 
 def column_values(lines):
@@ -209,6 +185,13 @@ def sum_check(pool, total, tolerance=0.011, max_terms=6):
 
     Returns {'ok', 'components', 'reason'}. `ok` False never means "the total is wrong" — it means
     "the document does not corroborate it", which is all that can honestly be said.
+
+    NO LONGER ADMITS ANYTHING (priority 2, 2026-09-24). Up to six of up to twenty-four figures is
+    ~134,000 combinations, enough to hit a five-figure total to the cent by coincidence, and it
+    never knew which figure was which. Every candidate is now checked by
+    judgment_money.verify_text_total: one contiguous run of labelled rows ending at the total,
+    every row in it counted, exact cents. This stays for callers that only want to see whether
+    some figures happen to add up.
     """
     others = [v for v in pool if 0 < v < total]
     seen, unique = set(), []
@@ -232,65 +215,9 @@ def sum_check(pool, total, tolerance=0.011, max_terms=6):
 
 
 def labeled_sum_check(rows, total):
-    """Validate typed vision rows. Labels never decide which amounts to sum."""
-    components = []
-
-    def fail(reason):
-        return {'ok': False, 'components': [float(v) for v in components], 'reason': reason}
-
-    def cents(value):
-        amount = Decimal(str(value))
-        if not amount.is_finite() or amount != amount.quantize(Decimal('0.01')):
-            raise ValueError('not an exact cent amount')
-        return amount
-
-    try:
-        stated = cents(total) if total is not None else None
-        rates, charges, subtotals, totals, ids = set(), {}, [], [], set()
-        for row in rows:
-            # Guard only: label text never chooses a kind. A mis-typed charge
-            # equal to a printed daily/percentage rate requires review.
-            label = str(row.get('label') or '')
-            for value in re.findall(r'\$?([\d,]+(?:\.\d+)?)\s*(?:/\s*day\b|per\s+(?:day|diem)\b|%)', label, re.I):
-                rates.add(Decimal(value.replace(',', '')))
-            for value in re.findall(r'per\s+diem\s*:\s*\$?([\d,]+(?:\.\d+)?)', label, re.I):
-                rates.add(Decimal(value.replace(',', '')))
-            kind, identifier = row.get('kind'), row.get('id')
-            if (kind not in ('charge', 'rate', 'subtotal', 'total')
-                    or not isinstance(identifier, str) or not identifier or identifier in ids
-                    or row.get('confident') is not True):
-                return fail('missing/duplicate id, missing kind, or uncertain figure; review required')
-            ids.add(identifier)
-            if kind == 'rate':
-                rate = Decimal(str(row.get('amount')))
-                if not rate.is_finite():
-                    return fail('invalid rate')
-                rates.add(rate)
-                continue
-            amount = cents(row.get('amount'))
-            if kind == 'subtotal':
-                subtotals.append((amount, row.get('item_ids')))
-            elif kind == 'total':
-                totals.append(amount)
-            else:
-                charges[identifier] = amount
-                components.append(amount)
-        if any(amount in rates for amount in components):
-            return fail('charge equals a stated rate; review required')
-        if stated is not None and (not totals or any(amount != stated for amount in totals)):
-            return fail('missing or disagreeing kind=total')
-        for amount, members in subtotals:
-            if (not isinstance(members, list) or not members
-                    or any(not isinstance(m, str) or m not in charges for m in members)
-                    or len(members) != len(set(members))
-                    or sum(charges[m] for m in members) != amount):
-                return fail('printed subtotal lacks valid members or disagrees with its own items')
-        if stated is not None and (not components or sum(components) != stated):
-            return fail('all labeled additive items do not equal the stated total to the cent')
-    except (InvalidOperation, ValueError, TypeError):
-        return fail('invalid or sub-cent monetary figure')
-    return {'ok': True, 'components': [float(v) for v in components],
-            'reason': 'all labeled additive items sum exactly to stated total; subtotals agree'}
+    """Validate typed vision rows as ONE table: every row counts. Labels never decide which
+    amounts to sum. The contract itself lives in judgment_money.check_all."""
+    return JM.check_all(JM.vision_rows(rows), total)
 
 
 def admissible(candidate):
@@ -320,7 +247,9 @@ def judgment_amount_candidates(reading):
     decides whether it may be spoken as the amount.
     """
     out = []
-    pool = document_money(reading)
+    rows = JM.text_rows(reading, TOTAL_RE)
+    read_pages = {JM._page_no(p.get('page')) for p in reading['pages']
+                  if p['outcome'] in ('text', 'ocr_text')}
     for page in reading['pages']:
         # 'text' and 'ocr_text' only. A page that is still `needs_ocr` contributes NOTHING —
         # its `text` is empty by construction, and the stamp that used to sit there is parked in
@@ -338,16 +267,28 @@ def judgment_amount_candidates(reading):
                 value, how = pairs[index]
                 found = [(value, how, line.strip() + '  ->  ' + '${:,.2f}'.format(value))]
             for value, how, passage in found:
-                check = sum_check(pool, value)
-                out.append({'amount': value, 'page': page['page'],
-                            'passage': passage.strip()[:300],
-                            'source': 'document_text', 'match': how,
-                            'text_source': page.get('text_source'), 'verified': False,
-                            'sum_check': check['ok'],
-                            'sum_check_reason': check['reason'],
-                            'sum_check_components': check['components'],
-                            'column_notes': notes if how == 'tail_figure' else []})
+                check = JM.verify_text_total(rows, JM._page_no(page['page']), index, value,
+                                             read_pages)
+                out.append(dict({'amount': value, 'page': page['page'],
+                                 'passage': passage.strip()[:300],
+                                 'source': 'document_text', 'match': how,
+                                 'text_source': page.get('text_source'), 'verified': False,
+                                 'column_notes': notes if how == 'tail_figure' else []},
+                                **_check_fields(check)))
     return out + composed_candidates(reading, out)
+
+
+def _check_fields(check):
+    """The judgment_money result as candidate fields. Rates, credits and subtotal membership are
+    kept so a reviewer sees exactly which printed rows made the total, and which were rates."""
+    return {'sum_check': check['ok'], 'sum_check_reason': check['reason'],
+            'sum_check_components': check['components'],
+            'sum_check_rows': check.get('component_rows') or [],
+            'sum_check_credits': check.get('credits') or [],
+            'sum_check_rates': check.get('rates') or [],
+            'sum_check_subtotals': check.get('subtotals') or [],
+            'sum_check_pages': check.get('pages') or [],
+            'sum_check_run': check.get('run')}
 
 
 # A judgment that states its parts and never states their sum. The 2026-09-22 read of
@@ -541,29 +482,63 @@ def vision_candidates(path, reading, budget, reader=None, out_dir=None):
         wanted = sorted({page['page'] for page in reading['pages']
                          if page['outcome'] in ('ocr_text', 'needs_ocr')})[:2]
     detail = DV.read_document(path, wanted, budget, reader=reader, out_dir=out_dir)
-    subtotal_failures = []
-    for page_no in {f['page'] for f in detail['figures'] if f.get('kind') == 'subtotal'}:
-        checked = labeled_sum_check([f for f in detail['figures'] if f['page'] == page_no], None)
-        if not checked['ok']:
-            subtotal_failures.append('page %s: %s' % (page_no, checked['reason']))
+    checks = JM.verify_document(detail['figures'], detail['grand_totals'], set(detail['pages']))
+    # A cost table that runs across a page break totals on a page whose own rows cannot reproduce
+    # it. Buy the page before, once, when OCR shows money on it; the same check then decides
+    # whether the run that crosses the break adds up.
+    before = continuation_pages(reading, detail, checks)
+    if before and not detail['errors']:
+        more = DV.read_document(path, before, budget, reader=reader, out_dir=out_dir)
+        detail['pages'].update(more['pages'])
+        detail['figures'] = sorted(detail['figures'] + more['figures'],
+                                   key=lambda f: JM._page_no(f.get('page')))
+        detail['grand_totals'] = sorted(detail['grand_totals'] + more['grand_totals'],
+                                        key=lambda t: JM._page_no(t.get('page')))
+        detail['usd'] = round(detail['usd'] + more['usd'], 6)
+        detail['errors'].update(more['errors'])
+        detail['continuation_pages'] = before
+        checks = JM.verify_document(detail['figures'], detail['grand_totals'],
+                                    set(detail['pages']))
     out = []
-    for total in detail['grand_totals']:
-        # Vision returns labels: never let the legacy OCR subset search override
-        # a rejected full table. Do not mix figures from different pages.
-        page_rows = [f for f in detail['figures'] if f['page'] == total['page']]
-        check = labeled_sum_check(page_rows, total['amount'])
-        if subtotal_failures:
-            check = {'ok': False, 'components': [], 'reason': '; '.join(subtotal_failures)}
-        page_detail = detail.get('pages', {}).get(total['page'], {})
-        if page_detail.get('unreadable') or detail.get('errors'):
-            check = {'ok': False, 'components': [], 'reason': 'vision has unresolved reading errors'}
-        out.append({'amount': total['amount'], 'page': total['page'],
-                    'passage': 'grand total transcribed from the page image',
-                    'source': 'page_image', 'match': 'vision_grand_total',
-                    'text_source': 'vision', 'verified': False,
-                    'sum_check': check['ok'], 'sum_check_reason': check['reason'],
-                    'sum_check_components': check['components'], 'column_notes': []})
+    for total, check in zip(detail['grand_totals'], checks):
+        unreadable = [p for p in (check.get('pages') or [total['page']])
+                      if (detail.get('pages', {}).get(p) or {}).get('unreadable')]
+        if unreadable or detail.get('errors'):
+            check = dict(check, ok=False, reason='vision has unresolved reading errors')
+        out.append(dict({'amount': total['amount'], 'page': total['page'],
+                         'passage': 'grand total transcribed from the page image',
+                         'source': 'page_image', 'match': 'vision_grand_total',
+                         'text_source': 'vision', 'verified': False, 'column_notes': []},
+                        **_check_fields(check)))
     return out, detail
+
+
+def _page_has_money(page):
+    text = '\n'.join((page.get('text') or '', page.get('provisional_ocr_text') or '',
+                      (page.get('supplemental_ocr') or {}).get('text') or ''))
+    return bool(re.search(r'\$\s?\d[\d,]*\.\d{2}', text))
+
+
+def continuation_pages(reading, detail, checks):
+    """Pages to buy because a total's table may start on them. -> sorted page numbers.
+
+    Only the page directly before a total whose own page did not reproduce it, only when that
+    page was not already read or refused, and only when its text shows a money figure: selection
+    before paying, not a second pass over the document.
+    """
+    by_page = {JM._page_no(p.get('page')): p for p in reading.get('pages') or []}
+    out = set()
+    for check in checks:
+        # Either the run or a subtotal may need the rows that end the page before.
+        if check['ok'] or not str(check['reason']).startswith(('no contiguous run',
+                                                               'printed subtotal')):
+            continue
+        prior = JM._page_no(check.get('page')) - 1
+        page = by_page.get(prior)
+        if (prior >= 1 and page is not None and prior not in detail['pages']
+                and prior not in detail['errors'] and _page_has_money(page)):
+            out.add(prior)
+    return sorted(out)
 
 
 def _save_vision(row, detail):

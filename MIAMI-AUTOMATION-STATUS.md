@@ -26,8 +26,8 @@ shared spending controls. This is not complete.
 | Docket completeness | Full OCS response preserved; independent coverage reconciliation or explicit unverified gap | Full response supported; completeness unproven |
 | All document/page outcomes | Attachment inventory and source-bound page outcomes; no count-only completion | Partial acquisition/read coverage |
 | Official Records relevance | Current parcel/title identity, capped search gaps and retained later instruments | Candidate-only matching remains |
-| Free-first reading | Embedded/layout OCR before vision; automatic cross-page extraction | Targeted agent transcription still required in pilot |
-| Amount verification | All typed charges and credits sum exactly; printed subtotals match; consistent across outputs | Validator exists; extraction/output integration incomplete |
+| Free-first reading | Embedded/layout OCR before vision; automatic cross-page extraction | Text and OCR rows are extracted and checked across page breaks with no transcription; vision buys the page before a total only when that total's own page cannot reproduce it and OCR shows money there. Not yet replayed on Walker and Blue Water |
+| Amount verification | All typed charges and credits sum exactly; printed subtotals match; consistent across outputs | One contract (`judgment_money`) on the OCR/text, vision, saved-vision and timeline paths: exact cents, credits subtract, rates kept and reported, subtotal membership explicit or rows-above, no subset search, no tolerance. Not yet replayed on Walker and Blue Water |
 | Current title | Continuous evidence-backed conveyance chain, entity/probate uncertainty explicit | Historical deed candidates only |
 | Liens | Obligation, identity, attachment, amendment and satisfaction links; no missing-release inference | Candidate lists, not proven balances |
 | Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Index rules plus selected body evidence; incomplete |
@@ -63,5 +63,28 @@ Priority 1 is wired, not yet proven on the pilot evidence.
   retried. Wired into `run_documents` (nightly and backfill) and `run_case_timeline`.
 - `replay_paid_selection.py` replays selection and shares over saved evidence at $0. It has not
   been run on the five pilot cases: their evidence is on the desktop.
+
+Priority 2 is wired, not yet proven on Walker and Blue Water.
+
+- `judgment_money` is the one exact-cents check. A printed total is verified by one contiguous
+  run of printed rows ending at it, which may start up to two pages earlier; every row in the run
+  counts, credits subtract, rates are kept out and reported, and every printed subtotal must equal
+  its members (the reader's ids, continued from the page before when they open the page, or for
+  text the rows directly above it). A run cannot cross an unread page, an unlabelled figure or a
+  different total; two runs that differ by more than zero rows are ambiguous. Vision rows must
+  cover every row on the total's own page.
+- The retired 2-to-6-figure subset search no longer admits anything (it could hit a five-figure
+  total by coincidence and never knew which figure was which). `labeled_sum_check`,
+  `vision_candidates`, `saved_vision_candidates` and the timeline's `read_amounts` all call the
+  same contract; timeline figures inside a verified table are `in_verified_table`, still not an
+  award or an equity input.
+- `replay_money_check.py --all [--grep NAME]` re-checks every saved text and vision reading at $0
+  and reports, per total, the run, pages, credits, rates, subtotal membership, and where the
+  retired subset search's verdict differs. It has not been run: the evidence is on the desktop.
+- Not closable in code alone: a credit whose parentheses AND label OCR both lost reads as a
+  charge; the check refuses that table rather than guessing, so it stays unverified until vision
+  or a person reads it. The vision instruction was deliberately not changed (it is part of every
+  cached read's key, and changing it would re-bill pages already paid for); it has no `credit`
+  kind, so a vision credit verifies only when the reader keeps its minus sign or parentheses.
 
 The full goal remains active until the acceptance matrix is evidenced end to end.
