@@ -72,18 +72,17 @@ to DEALFLOW_DIR (outside the repo, outside OneDrive) through case_review.output_
 verdict it reports is equity_state's existing one, computed from the recorded chain exactly as it
 always was — reading a document does not move a lead into a FACT state.
 
-THE LINE FOR refresh-dealflow.bat, to paste AFTER the [2b/5] records step:
+THE NIGHTLY LINE is refresh-dealflow.bat's [2e/5] stage, after the [2b/5] records step:
 
-    echo [2e/5] Reading Miami court documents - off unless DEALFLOW_DOCS=1
-    python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 10 >> "%LOG%" 2>&1
+    if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
 
-(No parentheses inside that echo: refresh-dealflow.bat puts stages inside `if` blocks, and cmd ends
-a block at the first unescaped ')'. That exact bug cost [5/5] every run from 08-20 to 09-19.)
---limit 25 with oldest-dossier-first ordering cycles every live Miami lead; --token-budget 10 is at
-most ten captcha-backed searches a night for owners the 40-a-night filler has not reached (~$0.003
-each is an ESTIMATE from county_plaintiffs.py:368). Each night also writes
-dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no token, read, judgments found, judgments
-SATISFIED, and the commonest open gaps.
+It does nothing until DEALFLOW_DOCS=1 is set; setting it is the decision to spend up to $1.00 a
+night on vision reads. --token-budget stays 0 (no paid owner-search tokens) until #53 routes token
+minting through PaidCutoffSolver; raising it is a separate change and then needs
+--captcha-max-spend. --max-minutes 20 starts no new case after twenty minutes, so a slow clerk
+cannot hold the board rebuild behind it. --limit 25 with oldest-dossier-first ordering cycles every
+live Miami lead. Each night also writes dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no
+token, read, judgments found, judgments SATISFIED, and the commonest open gaps.
 
 --vision needs an Anthropic API key the SCHEDULED TASK can see: put it in anthropic.key beside the
 code (gitignored by *.key, read like captcha.key). Do NOT set a User or Machine ANTHROPIC_API_KEY:
@@ -92,14 +91,15 @@ ANTHROPIC_API_KEY already in the environment still wins, as TWOCAPTCHA_KEY does 
 Without either this stage exits 2 having spent nothing and read nothing; with --vision dropped it
 still runs, and Miami scans simply stay unread where the watermark crosses the figures.
 
-Deliberately not added to the .bat here: cmd reads a batch file by byte offset WHILE it runs, so
-editing a live publish path mid-flight corrupts the running night. Paste it when nothing is running.
+Never pull a change to that .bat while a refresh is running: cmd reads a batch file by byte offset
+WHILE it runs, so changing a live publish path mid-flight corrupts the running night.
 """
 import argparse
 import json
 import math
 import os
 import sys
+import time
 from datetime import datetime, timezone
 
 import case_dossier
@@ -485,6 +485,10 @@ def main(argv=None):
                              'leads_final.json in file order, 40 owners a run, so an owner low '
                              'in that order has no token yet — which is what blocks asking for '
                              'a named case on demand. Nothing here filters by case type.')
+    parser.add_argument('--max-minutes', type=float, default=0,
+                        help='start no new case after this many minutes (0 = no limit). The '
+                             'nightly line sets it so a slow clerk cannot push the board rebuild '
+                             'and publish that run after this stage back by hours')
     parser.add_argument('--dry-run', action='store_true', help='list the cases and stop')
     args = parser.parse_args(argv)
     if args.backfill:
@@ -592,8 +596,13 @@ def main(argv=None):
     token_budget = {'left': args.token_budget, 'spent': 0} if args.token_budget else None
     written = read_ok = 0
     dossiers = []
+    started = time.monotonic()
     try:
         for entry in picked:
+            if args.max_minutes and time.monotonic() - started > args.max_minutes * 60:
+                print('run_documents: --max-minutes %g reached; %d case(s) left for the next run.'
+                      % (args.max_minutes, len(picked) - written))
+                break
             dossier = run_case(entry, qs_cache, queue=queue, ocr=ocr,
                                keep_images=args.keep_images, interpreter=interpreter,
                                budget=budget, vision_budget=vision_budget,

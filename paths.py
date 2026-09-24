@@ -73,6 +73,20 @@ def out(*parts):
 # homeowner's name, so it belongs here and not in the checkout, where it sat until 2026-09-24.
 RECORDS_QS = os.path.join(DEALFLOW_DIR, 'records_qs.json')
 _REPO = os.path.dirname(os.path.abspath(__file__))
+_DEFAULT_DIR = os.path.join(_HOME, 'DEALFLOW')
+
+
+def _same_dir(a, b):
+    return os.path.normcase(os.path.abspath(a)) == os.path.normcase(os.path.abspath(b))
+
+
+def _readable_map(path):
+    import json as _json
+    try:
+        with open(path, encoding='utf-8') as fh:
+            return isinstance(_json.load(fh), dict)
+    except (OSError, ValueError):
+        return False
 
 
 def records_qs():
@@ -80,12 +94,14 @@ def records_qs():
 
     A records_qs.json still in the repo folder is merged into RECORDS_QS (keys already there win)
     and then deleted, so the first run after the pull does the move and every later one is a stat.
-    Only when DEALFLOW_DIR is the default: tests and GitHub Actions point DEALFLOW_DIR at a throwaway
-    folder, and a move there would carry the real cache into a directory about to be deleted.
-    If the move fails for any reason, the legacy file is returned untouched so no token is lost.
+    Only when DEALFLOW_DIR resolves to the default ~/DEALFLOW (set explicitly or not): tests and
+    GitHub Actions point it at a throwaway folder, and a move there would carry the real cache into
+    a directory about to be deleted. If the move fails, the legacy file is left untouched and
+    whichever copy is readable is returned, so no token is lost or hidden.
     """
     legacy = os.path.join(_REPO, 'records_qs.json')
-    if 'DEALFLOW_DIR' in os.environ or not os.path.exists(legacy):
+    if not os.path.exists(legacy) or not _same_dir(DEALFLOW_DIR, _DEFAULT_DIR):
+        ensure()           # a fresh machine: writers must not mint a token and then fail to save it
         return RECORDS_QS
     import json as _json
     try:
@@ -108,7 +124,9 @@ def records_qs():
     except (OSError, ValueError) as exc:
         import sys as _sys
         print('paths: records_qs.json left in the repo folder, not moved (%s)' % exc, file=_sys.stderr)
-        return legacy if not os.path.exists(RECORDS_QS) else RECORDS_QS
+        # Use whichever copy can actually be read: an unreadable destination must not hide the
+        # valid tokens still sitting in the legacy file.
+        return RECORDS_QS if _readable_map(RECORDS_QS) or not _readable_map(legacy) else legacy
     return RECORDS_QS
 
 

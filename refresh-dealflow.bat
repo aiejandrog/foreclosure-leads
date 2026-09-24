@@ -229,7 +229,8 @@ rem  from here until #53 routes run_documents' token minting through PaidCutoffS
 rem  a separate one-line change. Setting DEALFLOW_DOCS=1 is the decision to spend up to $1.00 a
 rem  night on vision reads; it is off until someone sets it on purpose. Exit code deliberately
 rem  unread: a document stage failing must never stop or mark the board rebuild.
-if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 0 >> "%LOG%" 2>&1
+rem  --max-minutes 20: no new case starts after twenty minutes, so a slow clerk cannot delay the rebuild.
+if "%DEALFLOW_DOCS%"=="1" python -u run_documents.py --limit 25 --vision --vision-max-spend 1.00 --token-budget 0 --max-minutes 20 >> "%LOG%" 2>&1
 
 echo [2c/5] Fresh LIS PENDENS front-of-funnel (name-sweep top plaintiffs, ISO dates -> lp_leads.json)...
 rem  The docket-wide blank-name sweep is walled, but NAME searches aren't: sweep the ~34 lenders who
