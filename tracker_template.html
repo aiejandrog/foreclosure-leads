@@ -4589,7 +4589,8 @@ function _advisorBrief(r){
     + (r.co ? ' [company/trust]' : ''));
   L.push('Sale: ' + ((d == null || d >= 9000)
       ? ((r.filedDate || r.filed || 'n/a') + ' filed — NO auction date yet (months of runway)')
-      : (d < 0 ? (r.auction + ' — PASSED ' + (-d) + 'd ago (surplus talk only)')
+      : (d < 0 ? (_heldToday(r.auction) ? (r.auction + ' — SALE HELD THIS MORNING, check RealForeclose for the result (surplus talk only)')
+                                        : (r.auction + ' — PASSED ' + (-d) + 'd ago (surplus talk only)'))
                : (r.auction + ' — in ' + d + ' day' + (d === 1 ? '' : 's'))))
     + (r.saleSurv ? ' | survived ' + r.saleSurv + ' prior sale date' + (r.saleSurv === 1 ? '' : 's') + ' (staller)' : ''));
   /* jaccr = TOTAL interest accrued (FS 55.03), not per-day — and payoff already CONTAINS it, so
@@ -7982,9 +7983,36 @@ function _hasClock(r){ return typeof r.days === 'number' && r.days >= 0 && r.day
 // the worker must never queue them, and before this helper they fell through _saleDays()'s null
 // into the EARLY lane as "fresh filing, be the first call" (a 3-days-past auction pitched as new).
 function _aucPassed(r){ return !!String((r&&r.auction)||'').trim() && typeof r.days === 'number' && r.days < 0; }
+// SALE DAY STOPS AT THE HAMMER, not at midnight (2026-09-23 audit). The counties run their online
+// sales from 9am, and the nightly build lands at ~05:30 — so every sale-day case shipped as
+// "0 days, URGENT" and stayed that way all day. On 09-23 two of those had SOLD by mid-morning and a
+// third had been CANCELLED for bankruptcy, and the board was still queueing all three to call and
+// text. The page cannot see the result, but it can see the clock: once the sale hour passes on the
+// sale date, the case is treated as held (days -1) everywhere _saleDays feeds — lanes, the worker,
+// the text batch, the funnel — and _clockTxt says "sale held today" so nobody reads it as a typo.
+// Earliest county start on purpose: a Broward/Palm Beach 10am sale is gone from the queue an hour
+// early, which costs nothing — no deal closes on sale morning (the attorney needs ~3 days).
+var SALE_HOUR = 9;
+function _heldToday(auction){
+  var m = String(auction||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if(!m) return false;
+  var now = new Date();
+  return +m[3] === now.getFullYear() && +m[1] === now.getMonth()+1 && +m[2] === now.getDate()
+      && now.getHours() >= SALE_HOUR;
+}
+// ms from `now` to the next sale hour (a few seconds past it). boot() re-syncs r.days there, because
+// _aucPassed -> _workerEligible read r.days, and the 15-minute tick alone could leave sale-day
+// cases eligible for up to 15 minutes after the sale started.
+function _msToSaleHour(now){
+  now = now || new Date();
+  var t = new Date(now.getFullYear(), now.getMonth(), now.getDate(), SALE_HOUR, 0, 5);
+  if(t <= now) t.setDate(t.getDate() + 1);
+  return t - now;
+}
 function _clockTxt(r){
   if(_hasClock(r)) return 'in ' + r.days + 'd';
   if(typeof r.days === 'number' && r.days >= NO_SALE) return 'no sale date yet';
+  if(r && _heldToday(r.auction)) return 'sale held today';
   return 'passed';
 }
 // Is this lead actually workable, or is it a filing we have not resolved to a property yet? A lis
@@ -12083,7 +12111,10 @@ function _saleDays(r){
   if(m){
     var t = new Date(+m[3], +m[1]-1, +m[2]);
     var td = new Date(); td.setHours(0,0,0,0);
-    return Math.round((t - td)/864e5);
+    var d = Math.round((t - td)/864e5);
+    // sale morning past the sale hour -> held. -1 is the board's one word for "passed": every lane,
+    // _aucPassed (after _refreshDays) and the funnel already read it that way. See _heldToday.
+    return (d === 0 && _heldToday(r.auction)) ? -1 : d;
   }
   return _hasClock(r) ? r.days : null;
 }
@@ -18625,6 +18656,8 @@ async function boot(){
     }catch(e){}
   };
   setInterval(_dayTick, 15*60*1000);
+  // the sale hour is a boundary, not just another tick (see _msToSaleHour)
+  (function _armSaleHour(){ setTimeout(function(){ _dayTick(); _armSaleHour(); }, _msToSaleHour()); })();
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState === 'visible') _dayTick();
   });
