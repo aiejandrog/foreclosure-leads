@@ -26,6 +26,7 @@ WHAT THIS DOES NOT DO — ownership lines, on purpose:
     rests on (`ev`), so a person can check it in one look.
 
 Verdicts (st), most decisive first:
+  redeemed   the clerk records the property redeemed after the sale (the debt was paid)
   vacated    an order set aside the sale or its certificate after the sale date
   held       the sale went ahead (certificate of sale, bid amount, sale deposit, disbursement, title)
   cancelled  an order or clerk line cancelled the sale, with no new date seen
@@ -178,7 +179,8 @@ def classify(dockets, sale, today=None, listed=None):
     lo = sale - datetime.timedelta(days=LOOKBACK_DAYS)
     ents = [t for t in _entries(dockets) if t[0] >= sale - datetime.timedelta(days=AMENDED_DAYS)]
 
-    held = cancel = vacated = None
+    held = cancel = vacated = redeemed = None
+    challenged = None                  # a motion to set the sale aside, filed on/after the sale
     held_lines, cert = [], None        # for sale_held, named as #53's miami_case_timeline names it
     new_date = None
     pending = []                       # (date, text) motions to stop the sale with no order yet
@@ -232,6 +234,18 @@ def classify(dockets, sale, today=None, listed=None):
         # an order undoing the sale or its certificate, on or after the sale
         if _VACATE.search(desc) and _ORDER.search(desc) and d >= sale and not denied:
             vacated = (d, desc, cmt)
+            ev(d, desc, cmt)
+            continue
+
+        # 'Mortgage Foreclosure Deposit :: PROPERTY REDEEMED AFTER SALE BY: ...' (2026-007129): the
+        # deposit line that would read as held says the owner's side paid it off instead.
+        if re.search(r'redeem|redemption', t, re.I) and d >= sale and not is_motion and not denied:
+            redeemed = redeemed or (d, desc, cmt)
+            ev(d, desc, cmt)
+            continue
+
+        if is_motion and _VACATE.search(t) and d >= sale:
+            challenged = challenged or d   # 2025-000483: 'Motion to Set Aside/Vacate' on the sale day
             ev(d, desc, cmt)
             continue
 
@@ -308,7 +322,10 @@ def classify(dockets, sale, today=None, listed=None):
     if obj:
         res['obj'] = obj.isoformat()
 
-    if vacated:
+    if redeemed:
+        res['st'], res['d'] = 'redeemed', redeemed[0].isoformat()
+        res['why'] = 'property redeemed after the sale: the debt was paid, there is no sale to work'
+    elif vacated:
         res['st'], res['d'] = 'vacated', vacated[0].isoformat()
         res['why'] = 'the court set the sale aside'
     elif held:
@@ -335,6 +352,21 @@ def classify(dockets, sale, today=None, listed=None):
     elif cancel:
         res['st'], res['d'] = 'cancelled', cancel[0].isoformat()
         res['why'] = 'sale cancelled' + (' (bankruptcy)' if _BK.search(cancel[1] + ' ' + cancel[2]) else '')
+    elif sale < today and not (cancel and new_date):
+        # the date passed and the docket shows neither a result nor a cancellation yet: the bid
+        # and certificate can lag a day or two. Say so, with what IS on the docket, rather than
+        # guessing either way. (A pending motion or a bankruptcy line on a PASSED sale is no
+        # longer a risk to it; it is a reason the result may never come.)
+        res['st'] = 'unknown'
+        res['sale_outcome'] = 'unknown_no_certificate'
+        res['why'] = 'sale date passed; no result on the docket yet'
+        if bk_before:
+            res['why'] += '; a bankruptcy was filed %s, which usually stops the sale' % (
+                'on the sale day' if bk_before == sale else 'before it')
+        if challenged:
+            res['why'] += '; a motion to set the sale aside was filed'
+        elif pending:
+            res['why'] += '; a motion to stop the sale was pending'
     elif pending:
         p = pending[-1]
         res['st'], res['d'] = 'at_risk', p[0].isoformat()
@@ -345,12 +377,6 @@ def classify(dockets, sale, today=None, listed=None):
     elif bk_before and bk_before >= lo:
         res['st'], res['d'] = 'at_risk', bk_before.isoformat()
         res['why'] = 'bankruptcy filed before the sale'
-    elif sale < today:
-        # the date passed and the docket shows neither a result nor a cancellation yet: the
-        # certificate of sale can lag a day or two. Say so instead of guessing either way.
-        res['st'] = 'unknown'
-        res['sale_outcome'] = 'unknown_no_certificate'
-        res['why'] = 'sale date passed; no result on the docket yet'
     res['ev'] = sorted(res['ev'], key=lambda e: e['d'])[-6:]
     return res
 
@@ -443,7 +469,7 @@ def _pull(case):
 
 def report(res, today=None):
     today = today or datetime.date.today()
-    order = {'vacated': 0, 'held': 1, 'cancelled': 2, 'reset': 3, 'at_risk': 4, 'unknown': 5, 'scheduled': 6}
+    order = {'redeemed': 0, 'vacated': 0, 'held': 1, 'cancelled': 2, 'reset': 3, 'at_risk': 4, 'unknown': 5, 'scheduled': 6}
     rows = sorted(res.items(), key=lambda kv: (order.get(kv[1].get('st'), 9), kv[1].get('sale', '')))
     counts = {}
     for _, v in rows:

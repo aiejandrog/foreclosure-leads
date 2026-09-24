@@ -4716,7 +4716,7 @@ function screenLead(){
   if(r.cs)           clock += '<span class="chip">case '+esc(r.cs)+'</span>';
   if(r.sr){ var _sm=function(i){var m=String(i||'').match(/^\d{4}-(\d{2})-(\d{2})$/);return m?m[1]+'/'+m[2]:'';};
     var _sl={held:'SOLD '+_sm(r.sr.d), cancelled:'sale CANCELLED '+_sm(r.sr.d), reset:'sale MOVED to '+_sm(r.sr.nd),
-             vacated:'sale SET ASIDE', at_risk:'sale AT RISK', unknown:'result not on docket yet'}[r.sr.st]||'';
+             vacated:'sale SET ASIDE', redeemed:'REDEEMED after sale', at_risk:'sale AT RISK', unknown:'result not on docket yet'}[r.sr.st]||'';
     if(_sl) clock += '<span class="chip '+((r.sr.st==='cancelled'||r.sr.st==='reset')?'hot':(r.sr.st==='held'?'bad':''))+'" title="'+esc(r.sr.why||'')+'">'+esc(_sl)+'</span>';
     if(r.sr.bkb && r.sr.st==='held') clock += '<span class="chip bad">BK filed '+esc(_sm(r.sr.bkb))+', sale may not stand</span>';
     if(r.sr.amj) clock += '<span class="chip">amended judgment '+esc(_sm(r.sr.amj))+(r.sr.ama?' $'+Math.round(r.sr.ama).toLocaleString():'')+'</span>'; }
