@@ -504,3 +504,4 @@ deal_desk.json
 # unanchored row can reach the dial queue, the Morning Worker, the text batch or the Closers.
 !_anchorgatetest.py
 !_boardaccuracytest.py
+!_docboardtest.py

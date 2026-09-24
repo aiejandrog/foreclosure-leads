@@ -2274,6 +2274,17 @@ def make_tracker(leads):
         except Exception as e:
             print(f"code_liens.json skipped ({e})")
 
+    # bake the Miami document dossiers (doc_board.py over run_documents' DEALFLOW_DIR/dossiers). A
+    # read judgment is NOT verified until the 12-case review, so `docs` rides beside the row and
+    # nothing here writes judg, payoff or eq. Never fatal: no folder = no chips.
+    try:
+        import doc_board
+        _dbn = doc_board.attach(slim, doc_board.load())
+        if _dbn:
+            print(f"documents: {_dbn} lead(s) carry a read-document summary (unverified, not in equity)")
+    except Exception as e:
+        print(f"document dossiers skipped ({e})")
+
     # bake the PropStream overlay (propstream_import.py, CSV bridge — PropStream has no API).
     # Advisory context on leads we already have: their AVM vs ours, open-loan balance, distress
     # flags we cannot scrape (divorce, bankruptcy, tax-delinquent). psPhones/psEmails stay
@@ -3182,6 +3193,9 @@ def make_tracker(leads):
         'taxes':     sum(1 for d in slim if d.get('taxChecked')),
         'judgdt':    sum(1 for d in slim if d.get('jdate')),
         'ownflip':   sum(1 for d in slim if d.get('paOwner')),
+        # Miami rows carrying a document-dossier summary (doc_board). Census only for now: it is not in
+        # publish_guard.FIELDS until a few nights of real counts say what a wipeout looks like.
+        'docs':      sum(1 for d in slim if d.get('docs')),
         'built':  datetime.now().strftime('%Y-%m-%dT%H:%M'),
     }
     # (the final bounce sweep runs ABOVE, before the Desktop twin is written — one sweep, not two)
