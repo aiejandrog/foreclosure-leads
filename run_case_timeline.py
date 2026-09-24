@@ -139,6 +139,7 @@ def read_amounts(rows, base, budget=None, plan=None):
     import judgment_money as JM
     import miami_timeline_amounts as amounts
     result = {'figures': [], 'gaps': [], 'evidence_files': [], 'amount_checks': []}
+    kinds = {str(d.get('entry_id')): d.get('kind') for d in (plan or {}).get('documents') or []}
     if budget is not None:
         import document_prioritizer as DP
         selection = DP.timeline_read_order(plan, rows)
@@ -169,6 +170,9 @@ def read_amounts(rows, base, budget=None, plan=None):
             detail = dict(detail)
         else:
             if not amounts.amount_page_numbers(row.get('reading') or {}):
+                gap = no_amount_text_gap(row, kinds.get(str(row.get('entry_ref') or '')))
+                if gap:
+                    result['gaps'].append(gap)
                 continue
             detail = amounts.assess_amount_pages(row, budget)
         detail['source_ref'] = row.get('source_ref')
@@ -203,6 +207,22 @@ def read_amounts(rows, base, budget=None, plan=None):
             interpretation='Vision-extracted amount; not an accepted judgment or equity input')
             for figure in detail.get('figures', []))
     return result
+
+
+def no_amount_text_gap(row, kind):
+    """A judgment whose pages carry no dollar text is a gap, not "no amount" (Greptile on #53):
+    its money page may be a scan OCR could not read, or a watermark. Other filings with no dollar
+    text are not gaps; most have no amount."""
+    import document_coverage as COV
+    if not re.search(r'judgment', str(kind or ''), re.I):
+        return None
+    pages = (row.get('reading') or {}).get('pages') or []
+    unread = [p.get('page') for p in pages if not COV.page_is_read(p)]
+    return {'source_ref': row.get('source_ref'),
+            'reason': ('amount_page_unreadable: no dollar text found and %d of %d page(s) unread '
+                       '(%s)' % (len(unread), len(pages), ', '.join(str(p) for p in unread[:8]))
+                       if unread or not pages else
+                       'amount_text_not_found: every page was read and none carries a dollar figure')}
 
 
 def keep_cached_amounts(paid, cached):

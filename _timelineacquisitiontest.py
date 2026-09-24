@@ -75,6 +75,23 @@ class AcquisitionTests(unittest.TestCase):
             self.assertTrue((base / 'case-timeline.md').exists())
             self.assertIn('whole_case_timeline', json.loads(dossier.read_text()))
 
+    def test_a_judgment_with_no_readable_dollar_text_is_a_gap(self):
+        # Greptile on #53: an unreadable or watermark-only money page was skipped silently.
+        class Budget:
+            exhausted = False
+        plan = {'documents': [
+            {'entry_id': '7', 'kind': 'final_judgment', 'eligible_for_acquisition': True, 'gaps': []},
+            {'entry_id': '8', 'kind': 'notice_of_filing', 'eligible_for_acquisition': True, 'gaps': []}]}
+        scan = {'pages': [{'page': 1, 'outcome': 'text', 'text': 'FINAL JUDGMENT OF FORECLOSURE for plaintiff'},
+                          {'page': 2, 'outcome': 'ocr_text', 'text': 'NOT AN OFFICIAL COPY'}]}
+        rows = [{'source_ref': 'court:7:1', 'entry_ref': '7', 'reading': scan},
+                {'source_ref': 'court:8:1', 'entry_ref': '8', 'reading': scan}]
+        with tempfile.TemporaryDirectory() as folder:
+            got = R.read_amounts(rows, folder, Budget(), plan=plan)
+        self.assertEqual([g['source_ref'] for g in got['gaps']], ['court:7:1'])
+        self.assertTrue(got['gaps'][0]['reason'].startswith('amount_page_unreadable: '))
+        self.assertIn('1 of 2 page(s) unread (2)', got['gaps'][0]['reason'])
+
     def test_a_deferred_documents_saved_figures_survive_the_paid_pass(self):
         # Greptile on #53: the paid pass rebuilt the timeline from its selected rows only.
         import hashlib
