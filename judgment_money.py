@@ -228,6 +228,16 @@ def _resolve_subtotal(rows, index, values, resolved=None):
             sections.append(set(resolved[prior['gid']]['members']))
             back -= 1          # counted through its rows, which the walk collects
             continue
+        if (not prior.get('barrier') and prior['kind'] == 'subtotal' and prior['gid'] in resolved
+                and resolved[prior['gid']] is None and not prior.get('section_total')
+                and not _SUBTOTAL_WORD_RE.search(prior.get('label') or '')):
+            # "Attorney's fees total: $3,450.00" with no rows of its own is a line item (see
+            # _structural_fixups), so the subtotal below it counts it as one (2018-026274).
+            run.insert(0, prior['gid'])
+            if sum(values[m] for m in run) == amount and all(s <= set(run) for s in sections):
+                return {'members': list(run), 'membership': 'rows_above'}
+            back -= 1
+            continue
         if (run and not prior.get('barrier') and prior['kind'] == 'subtotal'
                 and resolved.get(prior['gid'])):
             if (values[prior['gid']] + sum(values[m] for m in run) == amount
@@ -682,7 +692,9 @@ def _section_totals(rows, reach=30):
         return -amount if row['kind'] == 'credit' else amount
 
     def words(label):
-        return {w for w in re.findall(r'[a-z]{4,}', (label or '').lower())}
+        # OCR splits a word's first letter off ("A ttorney 's fees"); rejoin before comparing.
+        joined = re.sub(r'(?:(?<=\s)|^)([A-Z]) (?=[a-z]{2,})', r'\1', label or '')
+        return {w for w in re.findall(r'[a-z]{4,}', joined.lower())}
 
     for index, row in enumerate(rows):
         heading = (row['how'] == 'column_pairing' and not row['barrier'] and row['kind'] == 'charge'

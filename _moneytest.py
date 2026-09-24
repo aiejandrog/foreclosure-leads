@@ -331,6 +331,27 @@ class AcceptanceShapeTests(unittest.TestCase):
         ok = [c for c in MJ.judgment_amount_candidates(pages(good)) if c['amount'] == 1030.0][0]
         self.assertTrue(ok['sum_check'], ok['sum_check_reason'])
 
+    def test_a_one_line_fees_total_counts_inside_the_subtotal_below_it(self):
+        # 2018-026274 p1-2: "Attorney's fees total: $3,450.00" is one charge, and the INTEREST
+        # BEARING SUBTOTAL below it includes it.
+        page = '\n'.join(['Plaintiff is due:', 'Principal', '$1,000.00', "Attorney's fees total:",
+                          '$50.00', 'Filing Fee', '$25.00', 'Less: Bankruptcy Payments', '($5.00)',
+                          'INTEREST BEARING SUBTOTAL', '$1,070.00', 'Interest', '$30.00',
+                          'GRAND TOTAL:', '$1,100.00'])
+        found = [c for c in MJ.judgment_amount_candidates(pages(page)) if c['amount'] == 1100.0][0]
+        self.assertTrue(found['sum_check'], found['sum_check_reason'])
+        self.assertEqual({s['amount']: s['membership'] for s in found['sum_check_subtotals']},
+                         {1070.0: 'rows_above'})
+
+    def test_ocr_letter_spacing_does_not_hide_a_fees_breakdown(self):
+        # McCray's OCS copy: "A ttorney 's fees" under "Attorney's Fees".
+        page = '\n'.join(['Plaintiff is due:', 'Principal', "Attorney's Fees", "A ttorney 's fees",
+                          "Trial Attorney 's fees", '$1,000.00', '$300.00', '$200.00', '$100.00',
+                          'TOTAL', '$1,300.00'])
+        reading = {'pages': [{'page': 1, 'outcome': 'ocr_text', 'text': page, 'text_source': 'ocr'}]}
+        found = [c for c in MJ.judgment_amount_candidates(reading) if c['amount'] == 1300.0][0]
+        self.assertTrue(found['sum_check'], found['sum_check_reason'])
+
     def test_a_misread_figure_anywhere_in_the_exhibit_fails(self):
         bad = EXHIBIT_P3.replace('$1050.00', '$1060.00')
         found = [c for c in MJ.judgment_amount_candidates(pages(EXHIBIT_P2, bad, EXHIBIT_P4))
