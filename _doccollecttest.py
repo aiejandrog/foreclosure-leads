@@ -821,10 +821,29 @@ class BudgetTests(unittest.TestCase):
 
     def test_missing_api_credentials_raise_rather_than_switching_to_the_cli(self):
         saved = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'no-such-anthropic.key')
         try:
             with self.assertRaises((DI.NotConfigured, ValueError)):
                 DI.ApiInterpreter().client()
         finally:
+            DI.KEY_FILE = key_file
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
+
+    def test_the_key_file_is_used_when_the_environment_has_no_key(self):
+        saved = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'anthropic.key')
+        try:
+            with open(DI.KEY_FILE, 'w', encoding='utf-8') as fh:
+                fh.write('sk-test-not-a-real-key\n')
+            self.assertEqual(DI.api_client_kwargs(), {'api_key': 'sk-test-not-a-real-key'})
+            os.environ['ANTHROPIC_API_KEY'] = 'from-env'
+            self.assertEqual(DI.api_client_kwargs(), {}, 'the environment wins, as in captcha_solver')
+        finally:
+            os.environ.pop('ANTHROPIC_API_KEY', None)
+            os.remove(DI.KEY_FILE)
+            DI.KEY_FILE = key_file
             for k, v in saved.items():
                 if v is not None:
                     os.environ[k] = v
@@ -1274,10 +1293,12 @@ class VisionTests(unittest.TestCase):
     def test_no_api_key_is_a_named_gap_never_a_fallback(self):
         reader = DV.VisionReader()
         keys = {k: os.environ.pop(k, None) for k in ('ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN')}
+        key_file, DI.KEY_FILE = DI.KEY_FILE, os.path.join(_TMP, 'no-such-anthropic.key')
         try:
             with self.assertRaises(DI.NotConfigured):
                 reader.client()
         finally:
+            DI.KEY_FILE = key_file
             for k, v in keys.items():
                 if v is not None:
                     os.environ[k] = v

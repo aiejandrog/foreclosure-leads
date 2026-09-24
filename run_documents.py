@@ -85,10 +85,12 @@ each is an ESTIMATE from county_plaintiffs.py:368). Each night also writes
 dossiers/MIAMI-DADE/_nightly.json: cases, skipped for no token, read, judgments found, judgments
 SATISFIED, and the commonest open gaps.
 
---vision needs ANTHROPIC_API_KEY in the environment the SCHEDULED TASK runs in, which means a
-User (or Machine) environment variable on the machine that runs the night, not one typed into a
-shell. Without it this stage exits 2 having spent nothing and read nothing; with --vision dropped
-it still runs, and Miami scans simply stay unread where the watermark crosses the figures.
+--vision needs an Anthropic API key the SCHEDULED TASK can see: put it in anthropic.key beside the
+code (gitignored by *.key, read like captcha.key). Do NOT set a User or Machine ANTHROPIC_API_KEY:
+that makes every Claude Code session on the machine bill the API instead of the subscription. An
+ANTHROPIC_API_KEY already in the environment still wins, as TWOCAPTCHA_KEY does over captcha.key.
+Without either this stage exits 2 having spent nothing and read nothing; with --vision dropped it
+still runs, and Miami scans simply stay unread where the watermark crosses the figures.
 
 Deliberately not added to the .bat here: cmd reads a batch file by byte offset WHILE it runs, so
 editing a live publish path mid-flight corrupts the running night. Paste it when nothing is running.
@@ -456,7 +458,7 @@ def main(argv=None):
                         help='hard dollar cap for --interpret. No cap, no interpretation.')
     parser.add_argument('--vision', action='store_true',
                         help='read page images through the Claude API when OCR\'s figures do not '
-                             'add up (needs --vision-max-spend and ANTHROPIC_API_KEY)')
+                             'add up (needs --vision-max-spend and anthropic.key)')
     parser.add_argument('--vision-max-spend', type=float, default=None,
                         help='hard dollar cap for --vision ACROSS THE WHOLE RUN. One measured '
                              'judgment cost $0.0675 on claude-opus-5 (2026-09-22, three pages, '

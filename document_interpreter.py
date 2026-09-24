@@ -41,6 +41,27 @@ class NotConfigured(RuntimeError):
     """This backend cannot run here, and no other backend will be substituted for it."""
 
 
+# A gitignored key file beside the code, read the way captcha_solver reads captcha.key. It exists so
+# the key reaches only the processes that read documents: a User-wide ANTHROPIC_API_KEY also makes
+# every Claude Code session on that machine bill the API instead of the subscription.
+KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'anthropic.key')
+
+
+def api_client_kwargs():
+    """Credentials for anthropic.Anthropic(): the environment first, then anthropic.key.
+
+    Raises NotConfigured when neither exists. Never returns or logs the key anywhere else."""
+    if os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN'):
+        return {}
+    if os.path.exists(KEY_FILE):
+        with open(KEY_FILE, encoding='utf-8') as fh:
+            key = fh.read().strip()
+        if key:
+            return {'api_key': key}
+    raise NotConfigured('no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment '
+                        'and no anthropic.key beside the code')
+
+
 class BudgetExhausted(RuntimeError):
     """The run's dollar cap would be exceeded by the next call. The call is not made."""
 
@@ -117,11 +138,9 @@ class ApiInterpreter(Interpreter):
             import anthropic
         except ImportError:
             raise NotConfigured('the anthropic SDK is not installed (pip install anthropic)')
-        if not (os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN')):
-            # Deliberately not falling through to the CLI. An unattended run that quietly switched
-            # billing model is the failure this module exists to prevent.
-            raise NotConfigured('no ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in the environment')
-        self._client = anthropic.Anthropic()
+        # Deliberately not falling through to the CLI when this raises. An unattended run that
+        # quietly switched billing model is the failure this module exists to prevent.
+        self._client = anthropic.Anthropic(**api_client_kwargs())
         return self._client
 
     def interpret(self, pages, budget, instruction=INSTRUCTION):
