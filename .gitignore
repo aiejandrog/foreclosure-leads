@@ -509,3 +509,8 @@ deal_desk.json
 # memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
 # blocked the publish. This suite fails if the file is written before the restore.
 !_stayfiletest.py
+# sale_results.json: docket sale verdicts per case (sale_results.py), rebuilt nightly, carries docket text.
+sale_results.json
+sale_results.json.tmp
+# _saleresultstest: sale_results.classify() on synthetic held / cancelled / moved / at-risk / amended dockets.
+!_saleresultstest.py

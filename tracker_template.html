@@ -4593,6 +4593,7 @@ function _advisorBrief(r){
                                         : (r.auction + ' — PASSED ' + (-d) + 'd ago (surplus talk only)'))
                : (r.auction + ' — in ' + d + ' day' + (d === 1 ? '' : 's'))))
     + (r.saleSurv ? ' | survived ' + r.saleSurv + ' prior sale date' + (r.saleSurv === 1 ? '' : 's') + ' (staller)' : ''));
+  if(r.sr && _srLabel(r.sr)) L.push('Docket sale result: ' + _srLabel(r.sr) + (r.sr.why ? ' — ' + r.sr.why : '') + ' (verify on the clerk docket)');
   /* jaccr = TOTAL interest accrued (FS 55.03), not per-day — and payoff already CONTAINS it, so
      it only prints beside a bare judgment. */
   var owed = _payoffOf(r);
@@ -8252,6 +8253,31 @@ function _stayChip(r){
   if(ld >= 0 && ld <= 45)
     return '<span class="frchip fr-lift" title="BANKRUPTCY STAY LIFTED '+esc(r.saleLift)+' ('+ld+'d ago) — the court dismissed/closed the bankruptcy, the §362 shield is GONE and contact is legal again. The sale gets reset next, so this owner just went from untouchable to maximally motivated. Call before the next Notice of Sale lands.">🔔 STAY LIFTED · '+ld+'d ago</span> ';
   return '';
+}
+// SALE RESULT from the court docket (sale_results.py -> row.sr, Miami-Dade). The waiting list we
+// scrape cannot show a result, a cancellation or a reset (past results are login-gated), so these
+// come from the clerk's docket lines, which the chip's tooltip quotes. Display only: the §362 gate
+// stays on saleBkAct. _srLabel is shared by the chip and the live call brief.
+function _srMD(iso){ var m = String(iso||'').match(/^\d{4}-(\d{2})-(\d{2})$/); return m ? m[1]+'/'+m[2] : String(iso||''); }
+function _srLabel(sr){
+  if(!sr || !sr.st) return '';
+  var t = {held:'SOLD '+_srMD(sr.d), cancelled:'SALE CANCELLED '+_srMD(sr.d), reset:'SALE MOVED to '+_srMD(sr.nd),
+           vacated:'SALE SET ASIDE '+_srMD(sr.d), at_risk:'SALE AT RISK', unknown:'RESULT NOT ON DOCKET YET'}[sr.st] || '';
+  if(sr.st === 'held' && sr.bkb) t += ' · BK filed '+_srMD(sr.bkb);
+  if(sr.st === 'held' && sr.obj) t += ' · objection filed';
+  if(sr.amj) t += (t ? ' · ' : '') + 'AMENDED JUDGMENT '+_srMD(sr.amj) + (sr.ama ? ' '+fmtK(sr.ama) : '');
+  return t;
+}
+function _saleResultChip(r){
+  var sr = r && r.sr; var lab = _srLabel(sr);
+  if(!lab) return '';
+  var cls = {held:'fr-stale', vacated:'fr-warn', cancelled:'fr-lift', reset:'fr-lift', at_risk:'fr-warn'}[sr.st] || 'fr-warn';
+  var tip = 'From the court docket'+(sr.ts?' (read '+sr.ts+')':'')+': '+(sr.why||'')
+    + (sr.amj ? '. Amended final judgment entered '+sr.amj+(sr.ama?' for $'+(+sr.ama).toLocaleString():' — amount not in the docket text, read the order before quoting a number') : '')
+    + (sr.st==='held' ? '. A sold house is not a wholesale deal; surplus talk only.' : '')
+    + ((sr.st==='cancelled'||sr.st==='reset') ? '. The owner has more time: this lead is live again.' : '')
+    + '. Verify on the clerk docket before telling the owner.';
+  return '<span class="frchip '+cls+'" title="'+esc(tip)+'">'+esc(lab)+'</span> ';
 }
 function _freshChip(r){
   // REAL staller signal (sale_history.py): saleSurv = times this owner already dodged a scheduled
@@ -17324,7 +17350,7 @@ function render(){
           ? '<span class="clamp2 legalline" title="No street address on the filing yet. This is the LEGAL DESCRIPTION from the lis pendens — paste it (or the owner name) into the appraiser search to pull the folio, and the value, photo and comps follow.">'+esc(r.legal)+'</span>'+copyBtn(r.legal,'legal description')
           : '<span class="clamp2 legalline">no address on the filing</span>');
     const prop = '<div class="addrline">'+_addrLine+'</div>'+
-      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+_saleResultChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       (r.warn && !r.mr?'<div class="warn">'+esc(r.warn)+'</div>':'');
     // Status ladder now runs all the way to the money. It used to stop at 'Appointment', so a deal
     // that actually CLOSED had nowhere to be recorded — and PLAYBOOK §11 ("review the funnel math:
@@ -17393,7 +17419,7 @@ function render(){
         ? '<div class="meta">tax sale &middot; no plaintiff (county)</div>'+(r.cert?'<div class="meta">Cert #'+esc(r.cert)+'</div>':'')
         : (r.plaintiff?'<div class="meta">vs '+esc(r.plaintiff)+'</div>':'')+defsHtml)+
       '<div class="caddr addrline"><span>'+esc(r.addr)+'</span>'+copyBtn(r.addr,'property address')+'</div>'+
-      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
+      '<div class="submeta">'+_elderChip(r)+_seenChip(r)+_idChip(r)+_stayChip(r)+_saleResultChip(r)+(r.county&&r.county!=='MIAMI-DADE'?'<span class="ctychip">'+esc(r.county)+'</span> ':'')+_ptypeChip(r)+_zstatusChip(r)+_freshChip(r)+_valChip(r)+_valXChip(r)+_taxChip(r)+_codeLienChip(r)+_psChip(r)+_caseDeadChip(r)+_mismatchChip(r)+_guessAddrChip(r)+(_unresolved(r) ? '' : ' · '+(r.st==='TD'?fmtK(r.obid)+' opening bid':((_payoffOf(r)||0)?fmtK(_payoffOf(r))+' owed':'judgment not posted')))+(_basisOf(r)?((r.eqfake||(r.st!=='TD'&&r.condo))?' · <span class="eqfake" title="Approximate — a condo special assessment (40-yr recert) or an untraced junior can shrink this. Verify the full debt on the Call Sheet (Debt + Math).">~'+_eqPct(r)+'% eq</span>':' · '+_eqPct(r)+'% '+(r.st==='TD'?'margin':'eq')):'')+(r.hs?' · <span class="hs">HS</span>':'')+'</div>'+
       '<div class="submeta">'+esc(r.auction)+' · <span class="'+(r.days<7?'urgent':'')+'">'+_clockTxt(r)+'</span> · '+ctype+'</div>'+
       (r.mail?'<div class="meta addrline"><span>Mailing &middot; '+esc(r.mail)+'</span>'+copyBtn(r.mail,'mailing address')+'</div>':'')+
       '<div class="clinks">'+linksHtml+'</div>'+
