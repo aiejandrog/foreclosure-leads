@@ -784,12 +784,18 @@ def main():
                     help='max previously-FAILED traces to retry this run (nightly default 40; '
                          'raise to clear a backlog — camoufox mints are free, 2Captcha ~$0.003)')
     ap.add_argument('--cached-only', action='store_true', help="only owners with a cached search token (fast, no browser)")
+    ap.add_argument('--reanalyze', action='store_true',
+                    help="$0: re-run the chain analysis on cached chains traced before the lien rows "
+                         "existed (no 'other' key), using ONLY cached search tokens. Never mints, never "
+                         "opens a browser, never pays; a dead token leaves the old chain as it was.")
     ap.add_argument('--no-camoufox', action='store_true',
                     help="skip the free Camoufox token mint and go straight to 2Captcha "
                          "(escape hatch for the day the county stops issuing tokens to it)")
     ap.add_argument('--persist', action='store_true', help="never give up on the captcha — keep minting with back-off until it yields (per-lead cap via MINT_ATTEMPTS env, default 25). This is how we FIGURE OUT the surviving-senior for every lead no matter how hostile the wall is.")
     ap.add_argument('--dry-run', action='store_true')
     a = ap.parse_args()
+    if a.reanalyze:
+        a.cached_only = True                                  # no mint, no browser, no captcha: $0
 
     leads = json.load(open(LEADS, encoding='utf-8'))
     # THE LP BOARD WAS NEVER PULLED. leads_final.json is the AUCTION board — 370 rows that already
@@ -852,6 +858,7 @@ def main():
 
     picked = []
     md_retries = []          # previously-failed traces, retried within the run's budget
+    no_token = []            # --reanalyze: pre-lien chains with no cached token (counted, never minted)
     skipped = {}
     for r in leads:
         case = r.get('Case #', '') or ''
@@ -866,6 +873,15 @@ def main():
             if why:
                 skipped.setdefault(why, []).append(oc)
                 continue
+        if a.reanalyze:
+            # 12-case verification 2026-09-24, defect 1: chains traced before the lien rows existed
+            # dropped liens their own search returned. The token is cached, so re-reading the same
+            # search and re-running analyze() costs a plain GET and nothing else. A chain with no
+            # cached token is only counted: a fresh search needs a mint, which is Alex's call.
+            _old = out.get(case) or {}
+            if case in out and 'other' not in _old and _old.get('conf') in ('ok', 'low'):
+                (picked if oc in qs_cache else no_token).append(r)
+            continue
         if a.cached_only and oc not in qs_cache: continue
         if case in out and not a.case:
             # A FAILED trace is not a result. Miami-Dade cached conf 'none' FOREVER, so 259 of 370
@@ -898,6 +914,9 @@ def main():
 
     cached = sum(1 for r in picked if (r.get('owner_clean','') or '').strip() in qs_cache)
     print(f"{len(picked)} lead(s) to pull ({cached} via cached token / requests, {len(picked)-cached} need a mint)")
+    if a.reanalyze:
+        print(f"  --reanalyze: {len(no_token)} older chain(s) have no cached token and stay as they are "
+              f"(a fresh search would need a mint, ~$0.0033 each; not done here)")
     # Say what was dropped and why. A silent filter reads as "there was nothing there".
     for why, names in sorted(skipped.items()):
         uniq = sorted(set(names))
@@ -1005,6 +1024,8 @@ def main():
                 continue
             res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '')
             res['searched_as'] = _searched
+            if a.reanalyze:
+                res = dict(out.get(case) or {}, **res)       # keep keys other steps wrote (chain_note)
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
             out[case] = res
             done += 1
@@ -1022,6 +1043,9 @@ def main():
                 pass
 
     print(f"\nDONE: {done} traced, {hits} with a surviving 2nd mortgage. -> records_liens.json")
+    if a.reanalyze:
+        print(f"     --reanalyze: {len(picked) - done} cached token(s) had expired; those chains, and the "
+              f"{len(no_token)} without a token, keep their old lien picture until a paid re-pull")
     if cf_free or paid:
         # paid counts owners that reached fetch_via_turnstile; each of those is a 2Captcha solve
         # (~$0.003) that a free Camoufox token would have avoided.

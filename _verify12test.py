@@ -140,5 +140,51 @@ check('dossier d: an association case with a documented empty chain still reads 
 full = CD.build('2099-000099-CA-01', 'MIAMI-DADE', chain=capped)
 check('dossier gaps name the 500-record cap', any('500-record cap' in g for g in full['open_gaps']))
 
+# ---- $0 re-analysis of chains traced before the lien rows existed
+import json, tempfile, types
+_tmp = tempfile.mkdtemp()
+_leads = [{'Case #': '2099-000101-CA-01', 'owner_clean': 'OWNER A', 'Folio': FOLIO, 'judgment': 1, 'plaintiff': PLAINTIFF},
+          {'Case #': '2099-000102-CA-01', 'owner_clean': 'JOHN QUINCY TESTER', 'Folio': FOLIO, 'judgment': 1},
+          {'Case #': '2099-000103-CA-01', 'owner_clean': 'OWNER C', 'Folio': FOLIO, 'judgment': 1}]
+json.dump(_leads, open(os.path.join(_tmp, 'leads_final.json'), 'w'))
+json.dump({c['Case #']: {'conf': 'ok', 'liens': [], 'chain_note': 'kept'} for c in _leads},
+          open(os.path.join(_tmp, 'records_liens.json'), 'w'))
+json.dump({'OWNER A': 'tokA', 'JOHN QUINCY TESTER': 'tokDEAD'}, open(os.path.join(_tmp, 'records_qs.json'), 'w'))
+_spent = []
+open(os.path.join(_tmp, 'gen_records_qs.py'), 'w').write('')
+_saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
+                                       'camoufox_session', 'mint_and_fetch', 'time')}
+_argv = sys.argv
+try:
+    RL.LEADS, RL.OUT = os.path.join(_tmp, 'leads_final.json'), os.path.join(_tmp, 'records_liens.json')
+    RL.QS_CACHE, RL.HERE = os.path.join(_tmp, 'records_qs.json'), _tmp
+    RL.records_by_qs = lambda qs: [deed, city1] if qs == 'tokA' else None
+    RL.fetch_via_turnstile = lambda *a, **k: _spent.append('turnstile')
+    RL.camoufox_session = lambda: _spent.append('camoufox') or (None, None)
+    RL.mint_and_fetch = lambda *a, **k: _spent.append('mint')
+    RL.time = types.SimpleNamespace(strftime=__import__('time').strftime, sleep=lambda s: None,
+                                    time=__import__('time').time)
+    import io, contextlib
+    _dry = io.StringIO()
+    sys.argv = ['records_liens.py', '--reanalyze', '--dry-run']
+    with contextlib.redirect_stdout(_dry):
+        RL.main()
+    sys.argv = ['records_liens.py', '--reanalyze']
+    RL.main()
+finally:
+    for k, v in _saved.items():
+        setattr(RL, k, v)
+    sys.argv = _argv
+_out = json.load(open(os.path.join(_tmp, 'records_liens.json')))
+check('--reanalyze re-runs a cached chain from its cached token and adds the lien rows',
+      len(_out['2099-000101-CA-01'].get('other', [])) == 1 and _out['2099-000101-CA-01']['other_open_unpriced'] == 1)
+check('--reanalyze keeps keys other steps wrote', _out['2099-000101-CA-01'].get('chain_note') == 'kept')
+check('--reanalyze leaves a dead-token or untokened chain exactly as it was',
+      'other' not in _out['2099-000102-CA-01'] and 'other' not in _out['2099-000103-CA-01'])
+check('--reanalyze never mints, opens a browser or pays', _spent == [], _spent)
+check('--reanalyze --dry-run counts the untokened chain it will not touch',
+      '1 older chain(s) have no cached token' in _dry.getvalue() and '2 lead(s) to pull' in _dry.getvalue(),
+      _dry.getvalue()[-300:])
+
 print('\nOK: 0 failure(s)' if not FAILS else '\nFAIL: %d failure(s)' % len(FAILS))
 sys.exit(1 if FAILS else 0)
