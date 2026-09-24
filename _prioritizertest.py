@@ -206,6 +206,27 @@ class FiveCaseReplayTests(unittest.TestCase):
                 yield case, report, list(bought)
                 bought.clear()
 
+    def test_another_persons_judgment_never_sets_this_cases_amount(self):
+        # verify-12 defect 5 (2025-018660): a 2011 judgment against another person set "$3,037.43"
+        # and "no outstanding debt"; the real judgment is $270,322.07. No vision budget: the tie
+        # applies to every run, not only to what the paid reader buys.
+        import miami_judgment as MJ
+        case = self.CASES[0]
+        rows, records = name_search_rows(case)
+        for r in rows:
+            amount = {'100-2': 3037.43, '100-7': 270322.07}.get(r['source_ref'][-5:])
+            r['amount_candidates'] = ([{'amount': amount, 'sum_check': True, 'text_source': None}]
+                                      if amount else [])
+        with patch('document_walk.RecordIndex', NoIndex), \
+             patch.object(MJ, 'collect_recorded', return_value=rows):
+            report = MJ.run(case, records, collector=FakeCollector(case), as_of='2026-09-23')
+        self.assertEqual([c['amount'] for c in report['judgment_amount_candidates']], [270322.07])
+        other = report['judgment_amount_other_instruments']
+        self.assertEqual([(o['amount'], o['reason']) for o in other],
+                         [(3037.43, 'recorded_before_case_year')])
+        self.assertEqual(MJ.corroborated_figures(report)[0]['amount'], 270322.07)
+        self.assertEqual(len(MJ.corroborated_figures(report)), 1)
+
     def test_old_shape_first_case_takes_everything(self):
         """What the pilot did: no selection, one shared budget. Reproduced by walking the rows in
         search order through a plain Budget."""

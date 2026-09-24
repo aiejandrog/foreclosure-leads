@@ -6,6 +6,7 @@ record; this step asks what is true TODAY and holds every case the evidence does
     python -u miami_ranking.py --all                  # every Miami case with a saved dossier
     python -u miami_ranking.py --case 2025-023462-CA-01
     python -u miami_ranking.py --all --refresh-appraiser --refresh-tax
+    python -u miami_ranking.py --all --refresh-timelines   # rebuild each timeline first (free)
 
 FACTS, each with the date it was read and whether that is fresh enough to act on
   auction    the auction calendar (auction_archive last_seen against the newest scrape) joined to
@@ -18,6 +19,13 @@ FACTS, each with the date it was read and whether that is fresh enough to act on
              certificate). Reported as facts. No priority or survival conclusion is drawn here.
   contact    the skip-trace record for the case, and whether the name traced is a person on the
              current deed. An entity-only owner is never call-ready.
+
+  timeline   the whole-case timeline must be from today or yesterday and carry the judgment
+             reconciliation. On 2026-09-24 the ranking ran at 12:52 on timelines refreshed at 14:21
+             and in an older format, and said "no single controlling judgment" for three cases whose
+             controlling judgment was known (verify-12 defect 14). An old or stale timeline now holds
+             the case as exactly that, and --refresh-timelines rebuilds it first (free: docket pull
+             and stored pages, no paid read).
 
 QUALIFIED means every fact is fresh and none of them holds the case. Everything else is HELD with
 the reasons, sorted so the case closest to qualifying comes first. Qualified cases rank by sale
@@ -46,6 +54,7 @@ CALENDAR_MAX_AGE = 2      # the calendar is scraped nightly; two days covers one
 APPRAISER_MAX_AGE = 7     # ownership_gate.TTL_DAYS
 TAX_MAX_AGE = 30
 TRACE_MAX_AGE = 180
+TIMELINE_MAX_AGE = 1      # a sale-week docket changes daily (a motion to cancel, an amended judgment)
 _CLOSED = {'sold': 'sold_per_docket', 'dismissed': 'case_dismissed_per_docket',
            'satisfied_redeemed': 'satisfied_per_docket', 'sale_cancelled': 'cancelled_per_docket'}
 
@@ -78,8 +87,13 @@ def auction_fact(lead, archive_entry, calendar_day, timeline, as_of):
     fact = {'sale_date': sale.isoformat() if sale else None, 'calendar_read': str(calendar_day) if calendar_day else None,
             'calendar_age_days': age, 'on_newest_calendar': on_calendar,
             'docket_status': status.get('kind'), 'fresh': age is not None and age <= CALENDAR_MAX_AGE}
+    held = (timeline or {}).get('sale_held')
     if status.get('kind') in _CLOSED:
         state = _CLOSED[status['kind']]
+    elif held and not held.get('certificate') and (sale is None or _day(held['date']) >= sale):
+        # The clerk's bid and deposit entries (verify-12 defect 10): held, certificate not yet.
+        state = 'sale_held_no_certificate_yet'
+        fact['sale_held'] = held
     elif (timeline or {}).get('stay_in_effect') is True:
         state = 'stayed'
     elif not fact['fresh']:
@@ -164,14 +178,30 @@ def contact_fact(trace, present, as_of):
     return fact
 
 
-def qualify(case, facts, timeline, present):
+def timeline_state(timeline, as_of):
+    """-> None when the timeline can be relied on today, else the reason it cannot."""
+    if timeline is None:
+        return 'no whole-case timeline saved'
+    if 'judgments' not in timeline or 'stay_history' not in timeline:
+        return 'timeline predates judgment and stay reconciliation (rerun with --refresh-timelines)'
+    built = _day(timeline.get('as_of'))
+    if built is None or _age(built, as_of) > TIMELINE_MAX_AGE:
+        return 'timeline as of %s is older than %d day(s) (rerun with --refresh-timelines)' % (
+            timeline.get('as_of') or 'an unknown date', TIMELINE_MAX_AGE)
+    return None
+
+
+def qualify(case, facts, timeline, present, as_of=None):
     """-> (qualified, reasons). Every reason is a sentence a person can act on."""
     reasons = []
     auction = facts['auction']
     if auction['state'] not in ('scheduled', 'no_sale_date'):
         reasons.append('auction: %s' % auction['state'].replace('_', ' '))
-    if timeline is None:
-        reasons.append('no whole-case timeline saved')
+    unusable = timeline_state(timeline, as_of) if as_of is not None else (
+        'no whole-case timeline saved' if timeline is None else None)
+    if unusable:
+        # A stale or old-format timeline's own verdicts are not repeated as if current.
+        reasons.append(unusable)
     else:
         kind = (timeline.get('status') or {}).get('kind')
         if kind in (None, 'unclear'):
@@ -210,7 +240,8 @@ def rank(cases, as_of):
     """`cases`: [{'case', 'facts', 'timeline', 'present'}] -> the report's case list, ranked."""
     out = []
     for item in cases:
-        ok, reasons = qualify(item['case'], item['facts'], item.get('timeline'), item.get('present'))
+        ok, reasons = qualify(item['case'], item['facts'], item.get('timeline'), item.get('present'),
+                              as_of)
         timeline = item.get('timeline') or {}
         out.append({'case': item['case'], 'qualified': ok, 'held_because': reasons,
                     'facts': item['facts'], 'open_gaps': _gaps(item.get('timeline'), item.get('present')),
@@ -296,6 +327,24 @@ def load_case(case, lead, sources, as_of, refresh_appraiser=False):
     return {'case': case, 'facts': facts, 'timeline': timeline, 'present': present, 'folio': folio}
 
 
+def refresh_timelines(cases, as_of, build=None):
+    """Rebuild each case's timeline before ranking it: a free run (docket pull, stored pages, no
+    vision). A case whose rebuild fails keeps its old timeline, which then holds it as stale."""
+    if build is None:
+        import run_case_timeline
+        build = lambda case: run_case_timeline.timeline_case(case, as_of, collect=True)
+    failed = []
+    for case in cases:
+        try:
+            build(case)
+        except Exception as exc:          # one unreachable docket must not stop the ranking
+            failed.append((case, str(exc)[:160]))
+    print('timelines: rebuilt %d of %d (free)%s' % (
+        len(cases) - len(failed), len(cases),
+        ''.join('\n  %s: %s' % f for f in failed)), flush=True)
+    return failed
+
+
 def load_sources():
     import auction_archive as AA
     import county_taxes as CT
@@ -356,6 +405,9 @@ def main(argv=None):
                         help='re-read stale appraiser owners (free public page, 7-day cache)')
     parser.add_argument('--refresh-tax', action='store_true',
                         help='re-read missing or stale Tax Collector bills (free, needs playwright)')
+    parser.add_argument('--refresh-timelines', action='store_true',
+                        help='rebuild each whole-case timeline from a fresh docket pull first (free; '
+                             'no paid read)')
     args = parser.parse_args(argv)
     as_of = date.today()
     cases = list(args.case)
@@ -381,6 +433,8 @@ def main(argv=None):
         if stale:
             print('tax: reading %d folio(s) from the Tax Collector (free)' % len(stale), flush=True)
             refresh_taxes(stale, sources)
+    if args.refresh_timelines:
+        refresh_timelines(cases, as_of)
     loaded = [load_case(c, leads.get(c), sources, as_of, args.refresh_appraiser) for c in cases]
     folder = case_review.output_path('reports')
     previous_path = max((p for p in Path(folder).glob('miami-ranking-*.json')

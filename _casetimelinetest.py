@@ -442,6 +442,92 @@ class ReconciliationTests(unittest.TestCase):
         self.assertIn('once again in effect', e3['stay_passages'][0]['passage'])
         self.assertTrue(r['stay_in_effect'])
 
+    def test_bankruptcy_orders_filed_as_notices_reach_the_stay_history(self):
+        # verify-12 defect 9 (2018-026274): the Ch13 dismissal and the reinstatement were each filed
+        # as "Notice of Filing: ..." and read as plain notices, so stay_history missed both.
+        r = run([entry(1, 'Final Judgment', '01/10/2023'),
+                 entry(2, 'Suggestion of Bankruptcy', '06/01/2023'),
+                 entry(3, 'Notice of Filing: Order Dismissing Chapter 13 Case', '01/05/2024'),
+                 entry(4, 'Notice of Filing: Order Reinstating Chapter 13 Case', '01/31/2024')])
+        kinds = [e['kind'] for e in r['entries']]
+        self.assertEqual(kinds, ['final_judgment', 'suggestion_of_bankruptcy', 'bankruptcy_dismissed',
+                                 'stay_reinstated'])
+        self.assertEqual([h['event'] for h in r['stay_history']],
+                         ['stayed', 'bankruptcy_dismissed', 'reinstated'])
+        self.assertTrue(r['stay_in_effect'])
+
+    def test_bankruptcy_notice_wordings_and_a_discharge(self):
+        for text in ('Notice of Filing Bankruptcy Petition', 'Notice of Bankruptcy Filing',
+                     'Notice of Commencement of Chapter 13 Case', 'Voluntary Petition'):
+            self.assertEqual(T.classify(text), 'suggestion_of_bankruptcy', text)
+        self.assertEqual(T.classify('Notice of Filing: Order Discharging Debtor'), 'bankruptcy_discharged')
+        self.assertEqual(T.classify('Notice of Filing: Order Vacating Order Dismissing Chapter 13 Case'),
+                         'stay_reinstated')
+        # Not bankruptcy: still a plain notice, and a foreclosure dismissal is still a dismissal.
+        self.assertEqual(T.classify('Notice of Filing Original Note'), 'notice_of_filing')
+        self.assertEqual(T.classify('Order Dismissing Case'), 'order_of_dismissal')
+        r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
+                 entry(3, 'Notice of Filing: Order Discharging Debtor')])
+        self.assertEqual([h['event'] for h in r['stay_history']], ['stayed', 'discharged'])
+        self.assertFalse(r['stay_in_effect'])
+
+    def test_a_login_walled_judgment_is_labelled_and_its_duplicate_inference_says_so(self):
+        # verify-12 defect 11, 2024-009959's real shape: #79 FJUDJUD read (eventType Event), and a
+        # minute later an eventType Judgment FJUDJUD entry with 0 documents and a link, behind the
+        # county login. It was labelled no_image_indexed.
+        read = {'source_ref': 'court:1:1', 'entry_ref': '1', 'reading': {'pages': [
+            {'page': 1, 'outcome': 'text', 'text': 'FINAL JUDGMENT OF FORECLOSURE entered in this case'}]}}
+        imaged = entry(1, 'Final Judgment by Judge', '06/16/2026', docketCode='FJUDJUD', eventType='Event')
+        imaged['expected_documents'] = 1
+        walled = entry(2, 'Final Judgment by Judge', '06/16/2026', docketCode='FJUDJUD',
+                       eventType='Judgment', numberOfDocuments=0, encID='x')
+        other_code = entry(3, 'Final Judgment by Judge', '06/16/2026', docketCode='SUJU',
+                           eventType='Judgment', numberOfDocuments=0, encID='y')
+        r = run([imaged, walled, other_code], [read])
+        by = {e['entry_id']: e for e in r['entries']}
+        self.assertEqual(by['2']['image_status'], 'login_required_likely')
+        self.assertIn('login', next(g['reason'] for g in r['gaps'] if g.get('entry_id') == '2'))
+        j = {x['entry_id']: x for x in r['judgments']['judgments']}
+        self.assertEqual((j['2']['role'], j['2']['twin']), ('docket_duplicate', '1'))
+        self.assertIn('behind the county login', j['2']['reason'])
+        # A different docket code is not taken as the same listing.
+        self.assertNotEqual(j['3']['role'], 'docket_duplicate')
+
+    def test_a_watermark_only_page_is_a_gap_not_a_read(self):
+        doc = {'source_ref': 'court:1:1', 'entry_ref': '1', 'reading': {'pages': [
+            {'page': 1, 'outcome': 'ocr_text', 'text': 'o'}]}}
+        e = entry(1, 'Returned Mail')
+        e['expected_documents'] = 1
+        r = run([e], [doc])
+        self.assertEqual(r['entries'][0]['image_status'], 'unreadable_pages')
+        self.assertIn('watermark', next(g['reason'] for g in r['gaps'] if g['kind'] == 'page_unreadable'))
+
+    def test_bid_and_deposit_entries_mark_a_held_sale(self):
+        # verify-12 defect 10, 2025-023462's real docket on 09-23 (sale-calendar entry, Notice of
+        # Bankruptcy "FILED AFTER THE SALE", receipt, Bid Amount, two deposits; no certificate).
+        entries = [entry(1, 'Final Judgment', '06/01/2026'),
+                   entry(2, 'Notice of Sale', '06/05/2026', comments='sale 09/23/2026'),
+                   entry(3, 'Notice of Bankruptcy', '09/23/2026',
+                         comments='CASE NO. 26-22668-RAM FILED AFTER THE SALE'),
+                   entry(4, 'Receipt:', '09/23/2026', comments='Doc. Stamps - Deed'),
+                   entry(5, 'Bid Amount', '09/23/2026', comments='PL/53643'),
+                   entry(6, 'Mortgage Foreclosure Deposit', '09/23/2026', comments='24-PL/53643/DOC STAMPS'),
+                   entry(7, 'Mortgage Foreclosure Deposit', '09/23/2026', comments='24-PL/53643/SURTAX')]
+        r = T.build_timeline('SYNTHETIC', {'entries': entries, 'pagination_verified': True}, [], '2026-09-24')
+        held = r['sale_held']
+        self.assertEqual((held['date'], held['evidence'], held['certificate'], held['bankruptcy_same_day']),
+                         ('2026-09-23', ['5', '6', '7'], None, ['3']))
+        self.assertIn('void', held['qualification'])
+        # Without the bankruptcy, a past sale date with bid entries is held, not unknown.
+        r = T.build_timeline('SYNTHETIC', {'entries': entries[:2] + entries[3:], 'pagination_verified': True},
+                             [], '2026-09-24')
+        self.assertEqual(r['status']['sale_outcome'], 'held_no_certificate_yet')
+        # A certificate after the bid entries is named.
+        cert = entry(8, 'Certificate of Sale', '09/26/2026', comments='Sale Date September 23, 2026.')
+        r = T.build_timeline('SYNTHETIC', {'entries': entries + [cert], 'pagination_verified': True},
+                             [], '2026-09-27')
+        self.assertEqual(r['sale_held']['certificate'], '8')
+
     def test_a_stay_that_would_be_in_effect_again_only_if_asked_is_not_one(self):
         body = {'source_ref': 'court:2:1', 'entry_ref': '2', 'reading': {'pages': [
             {'page': 2, 'outcome': 'text', 'text': 'If the case is reinstated, the stay is once again in effect.'}]}}

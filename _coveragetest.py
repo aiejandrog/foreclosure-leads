@@ -25,7 +25,7 @@ def court_row(entry, doc, pages=None, status=None, gap=None, page_count=None):
     return row
 
 
-def page(n, outcome='text', text='x'):
+def page(n, outcome='text', text='IN THE CIRCUIT COURT OF THE ELEVENTH JUDICIAL CIRCUIT'):
     return {'page': n, 'outcome': outcome, 'text': text}
 
 
@@ -109,6 +109,34 @@ class CoverageTests(unittest.TestCase):
         inventory = {'entries': [inv_entry(1, 'Complaint', 1)]}
         got = COV.coverage(inventory, [court_row(1, 'a', [page(1)])], case=CASE)
         self.assertTrue(got['complete'])
+
+
+class Verify12Tests(unittest.TestCase):
+    def test_a_page_with_only_the_watermark_or_one_character_is_not_read(self):
+        # verify-12 defect 12: 2022-012065 court:230325655 p1 read as 'o' (a returned-mail
+        # envelope) and pages reading 'AL COPY / Nor Atv copy' were counted as read.
+        self.assertFalse(COV.page_is_read(page(1, 'ocr_text', 'o')))
+        self.assertFalse(COV.page_is_read(page(1, 'ocr_text', 'AL COPY\nNor Atv copy')))
+        self.assertFalse(COV.page_is_read(page(1, 'ocr_text', 'NOT AN OFFICIAL COPY - PUBLIC ACCESS')))
+        self.assertTrue(COV.page_is_read(page(1, 'read_as_label', 'EXHIBIT 1')))
+        self.assertTrue(COV.page_is_read(page(1, 'ocr_text', 'ORDER GRANTING MOTION TO CANCEL SALE')))
+        inventory = {'entries': [inv_entry(1, 'Motion', 1)]}
+        rows = [court_row(1, 1, [page(1, 'ocr_text', 'o'), page(2)])]
+        got = COV.coverage(inventory, rows, case=CASE)
+        self.assertEqual([(r['state'], r['detail']) for r in got['attachments']], [('read_partial', [1])])
+
+    def test_a_linked_but_uncounted_judgment_is_restricted_not_no_document(self):
+        # verify-12 defect 11: eventType Judgment, numberOfDocuments 0, an encID; the county
+        # answered each fetch with its login page.
+        walled = inv_entry(1, 'Final Judgment by Judge', 0, status='pending')
+        walled['metadata'].update(eventType='Judgment', numberOfDocuments=0, encID='abc')
+        plain = inv_entry(2, 'Hearing', 0, status='county_reports_no_document')
+        plain['metadata'].update(eventType='Hearing', numberOfDocuments=0)
+        fetched = inv_entry(3, 'Summary Final Judgment', 0, status='gap', gap='County login required')
+        got = COV.coverage({'entries': [walled, plain, fetched]}, [], case=CASE)
+        self.assertEqual([(r['entry_id'], r['state']) for r in got['attachments']],
+                         [('1', 'restricted_likely'), ('2', 'county_no_document'), ('3', 'restricted')])
+        self.assertFalse(got['complete'])
 
 
 if __name__ == '__main__':

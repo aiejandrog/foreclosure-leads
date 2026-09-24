@@ -41,7 +41,7 @@ def report(case=CASE, amount=1000.00, pdf=None, source='ocr', sum_check=True):
             'judgment_amount_corroborated': sum_check,
             'judgment_amount_candidates': [candidate],
             'documents': [{'source_ref': 'rec:1', 'path': pdf, 'images_dir': None,
-                           'page_count_verified': True, 'read_status': 'read',
+                           'page_count_verified': True, 'read_status': 'read', 'case_tie': {'tier': 0},
                            'amount_candidates': [candidate]}]}
 
 

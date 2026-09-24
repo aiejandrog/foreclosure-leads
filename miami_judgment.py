@@ -821,8 +821,37 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
                 if document_walk.key_of(c['book'], c['page_no']) not in own]
     except Exception:
         pass                       # citations are an addition; they never fail a pilot run
-    candidates = [c for row in rows if not is_satisfaction_row(row)
+    # WHOSE INSTRUMENT IS IT. A name search returns other people's judgments too, and before
+    # 2026-09-24 every figure read off any of them could become "the judgment amount": on
+    # 2025-018660 a 2011 judgment against another person set $3,037.43 and "no outstanding debt"
+    # while the real judgment is $270,322.07 (verify-12 defect 5). The same free test that decides
+    # what the paid reader may buy now decides which figures may stand for this case. The others
+    # are still read and reported, under judgment_amount_other_instruments.
+    import document_prioritizer as DP
+    plan, plan_gap = None, None
+    try:
+        plan = DP.prioritize(case, inventory, as_of or datetime.now().date().isoformat())
+    except ValueError as exc:
+        plan_gap = str(exc)
+    by_ref = {}
+    for record in records:
+        by_ref.setdefault('official_records/%s-%s' % (record.get('reC_BOOK'), record.get('reC_PAGE')),
+                          record)
+    judgment_dates = DP.docket_judgment_dates(plan)
+    for row in rows:
+        if row.get('reading'):
+            row['case_tie'] = DP.case_tie(case, row, by_ref.get(row.get('source_ref')),
+                                          judgment_dates)
+        else:
+            row['case_tie'] = {'tier': None, 'reason': 'no_stored_reading'}
+    candidates = [c for row in rows if not is_satisfaction_row(row) and _tied(row)
                   for c in (row.get('amount_candidates') or [])]
+    other_instruments = [{'source_ref': row.get('source_ref'), 'amount': c.get('amount'),
+                          'sum_check': bool(c.get('sum_check')),
+                          'reason': row['case_tie'].get('reason'),
+                          'detail': row['case_tie'].get('detail')}
+                         for row in rows if not is_satisfaction_row(row) and not _tied(row)
+                         for c in (row.get('amount_candidates') or [])]
     tried = [t for row in rows for t in (row.get('gray_cutoffs_tried') or [])]
 
     # SELECTION BEFORE SPENDING. The paid reader used to walk `rows` in the order the owner-name
@@ -833,12 +862,6 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     # not pay for, with the reason. It decides what to BUY first, never which judgment controls.
     selection = None
     if vision_budget is not None:
-        import document_prioritizer as DP
-        plan, plan_gap = None, None
-        try:
-            plan = DP.prioritize(case, inventory, as_of or datetime.now().date().isoformat())
-        except ValueError as exc:
-            plan_gap = str(exc)
         selection = DP.recorded_read_order(case, rows, records, plan)
         selection['plan_gap'] = plan_gap
         selected_refs = {r['source_ref'] for r in selection['order']}
@@ -896,7 +919,7 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
             # actually transcribed or to tell a bad read from an honest "no total on this page".
             # A metered reader whose output is not persisted is money spent on nothing.
             _save_vision(row, detail)
-            candidates.extend(found)
+            candidates.extend(found)      # selected rows are tied to this case (tier 0 or 1)
             vision['pages_read'] += len(detail['pages'])
             vision['usd'] = round(vision['usd'] + detail['usd'], 6)
             # Per PAGE, not just per document. A nightly cap set from a per-document total is
@@ -938,6 +961,8 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
         # arithmetic does not corroborate is not "the judgment amount" anywhere in this report.
         'judgment_amount_agreed': agreed_amount([c for c in candidates if admissible(c)]),
         'judgment_amount_rejected': [c for c in candidates if not admissible(c)],
+        # Figures on instruments nothing ties to this case: read, reported, never this case's.
+        'judgment_amount_other_instruments': other_instruments,
         'judgment_amount_status': 'unverified_extraction',
         'gray_cutoffs_tried': tried,
         'vision': vision,
@@ -967,6 +992,12 @@ def run(case, records=None, collector=None, queue=None, county=COUNTY, ocr=None,
     # before anything is written to disk.
     report['_inventory'] = inventory
     return report
+
+
+def _tied(row):
+    """Is this stored row tied to the case (prints its number, or recorded near a docket judgment)?
+    A row with no `case_tie` at all is not: an untested instrument never sets a case's amount."""
+    return (row.get('case_tie') or {}).get('tier') in (0, 1)
 
 
 def strip_readings(report):
@@ -1036,6 +1067,8 @@ def corroborated_figures(report):
     """Each figure the document's own line items reproduced, with the PDF and page it came off."""
     out = []
     for row in report.get('documents', []):
+        if not _tied(row):
+            continue
         for c in row.get('amount_candidates') or []:
             if not c.get('sum_check'):
                 continue
@@ -1071,7 +1104,7 @@ def judgment_for_analyze(report, allow_ocr=False):
     """
     good = [r for r in report.get('documents', [])
             if r.get('page_count_verified') and r.get('read_status') == 'read'
-            and not is_satisfaction_row(r)]
+            and not is_satisfaction_row(r) and _tied(r)]
     candidates = [c for r in good for c in (r.get('amount_candidates') or [])]
     if allow_ocr:
         # The escape hatch gets a guard. A scanned figure is admissible only when the page's own

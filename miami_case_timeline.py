@@ -33,6 +33,20 @@ def _sale_dates(passages):
     return reset or regular
 
 
+_LOGIN_RE = re.compile(r'login|log in|sign in', re.I)
+_IMAGE_GAP_REASON = {
+    'login_required': 'The county answered with its login page: the document exists and was not read.',
+    'login_required_likely': ('The docket links a document it does not count (eventType Judgment, 0 '
+                              'documents); the county holds these behind its login. Not read.')}
+
+# A docket line about the bankruptcy court's case, which a notice often carries: "Notice of Filing:
+# Order Dismissing Chapter 13 Case". Without this the notice_of_filing rule swallowed it and the
+# stay history never saw it (2018-026274 entries 209208510 and 209744732, verify-12 defect 9).
+_BK_CASE = r'(?:(?:chapter\s+(?:7|11|12|13)|bankruptcy)\s+(?:case|petition|proceeding)|debtor\S*\s+case)'
+_BANKRUPTCY_CONTEXT_RE = re.compile(r'\bchapter\s+(?:7|11|12|13)\b|\bdebtor|\b11\s+u\.?\s?s\.?\s?c|'
+                                    r'\b362\b|bankruptcy court|\bu\.?\s?s\.? trustee', re.I)
+
+
 def classify(text):
     """Classify operative title, not mentions of earlier documents in body prose."""
     s = re.sub(r'\s+', ' ', str(text or '')).lower()
@@ -49,7 +63,8 @@ def classify(text):
     # entry. Bankruptcy and stay notices keep their own meaning below.
     if (re.match(r'(?:amended\s+)?notice of (?:serving|service of|filing|intent|compliance|mailing|'
                  r'dropping|appearance|designation|submitting|lodging)\b', s)
-            and not re.search(r'bankrupt|\bstay\b|voluntary dismissal', s)):
+            and not re.search(r'bankrupt|\bstay\b|voluntary dismissal', s)
+            and not _BANKRUPTCY_CONTEXT_RE.search(s)):
         return 'notice_of_filing'
     if re.match(r'(?:amended\s+)?proposed\b', s): return 'proposed_order'
     # Filed ABOUT a judgment, not the judgment: 6828's "Certificate of Service of serving final
@@ -62,14 +77,26 @@ def classify(text):
         # An order that reinstates a stay, or vacates the order that lifted it, would otherwise
         # match relief_from_stay below and read as the stay ENDING (priority 3, 2023-020247).
         ('stay_reinstated', r'(?:reinstat|reimpos)\w*[^.;]*\bstay\b'
-                            r'|vacat\w*[^.;]*(?:relief from|lift\w*|terminat\w*)[^.;]*\bstay\b'),
+                            r'|vacat\w*[^.;]*(?:relief from|lift\w*|terminat\w*)[^.;]*\bstay\b'
+                            # The bankruptcy CASE reinstated, or its dismissal vacated: the stay
+                            # comes back with it (2018-026274's 01-31 reinstatement, verify-12 #9).
+                            r'|(?:reinstat|reimpos)\w*[^.;]*' + _BK_CASE +
+                            r'|vacat\w*[^.;]*dismiss\w*[^.;]*' + _BK_CASE),
         # A dismissed BANKRUPTCY is not a dismissed foreclosure; without this it matched
         # order_of_dismissal and closed the case.
         # Only a dismissal OF the bankruptcy: "order dismissing case due to bankruptcy" is the
         # foreclosure being dismissed and still falls through to order_of_dismissal.
         ('bankruptcy_dismissed', r'dismiss\w*\s+(?:of\s+)?(?:the\s+)?(?:debtor\S*\s+)?(?:chapter\s+\d+\s+)?bankruptcy'
                                  r'|bankruptcy\s+(?:case\s+|petition\s+|proceeding\s+)?(?:no\.?\s*[\w-]+\s+)?'
-                                 r'(?:was\s+|has\s+been\s+|is\s+|been\s+)?dismissed'),
+                                 r'(?:was\s+|has\s+been\s+|is\s+|been\s+)?dismissed'
+                                 # "Order Dismissing Chapter 13 Case", filed as a Notice of Filing
+                                 # (2018-026274, verify-12 defect 9).
+                                 r'|dismiss\w*\s+(?:the\s+)?(?:debtor\S*\s+)?chapter\s+(?:7|11|12|13)\b'
+                                 r'|chapter\s+(?:7|11|12|13)\s+(?:case\s+|petition\s+)?(?:no\.?\s*[\w-]+\s+)?'
+                                 r'(?:was\s+|has\s+been\s+|is\s+)?dismissed'),
+        # A discharge ends the automatic stay (11 U.S.C. 362(c)(2)(C)); the lien survives it.
+        ('bankruptcy_discharged', r'discharg\w*[^.;]*(?:debtor|chapter\s+(?:7|11|12|13)\b|bankruptcy)'
+                                  r'|(?:debtor|chapter\s+(?:7|11|12|13)\b|bankruptcy)[^.;]*discharg'),
         # An order undoing a certificate or the sale must not fall through to the certificate
         # rules below and read as fresh evidence of a sale (Greptile on #50, 2026-09-23).
         ('vacatur', r'order.*(?:vacat|set.*aside).*(?:judgment|certificate of (?:title|sale)|sale)'),
@@ -81,9 +108,17 @@ def classify(text):
         ('order_cancelling_sale', r'order.*cancel.*sale|order.*sale.*cancel'),
         ('order_of_dismissal', r'order.*(?:of dismissal|dismissing|granting.*dismiss)'),
         ('satisfaction', r'satisfaction of (?:final )?judgment|certificate of redemption'),
+        # The clerk's own sale-day entries: "Bid Amount" (BIDSCV) and "Mortgage Foreclosure
+        # Deposit" (MFDPCV) are posted when a sale is held, days before the certificate
+        # (2025-023462 on 09-23, 2024-006803 on 10-28-2025; verify-12 defect 10).
+        ('sale_bid', r'^bid amount\b'),
+        ('sale_deposit', r'^mortgage foreclosure deposit\b'),
         ('certificate_of_title', r'certificate of title'),
         ('certificate_of_sale', r'certificate of sale'),
-        ('suggestion_of_bankruptcy', r'suggestion of bankruptcy|notice of bankruptcy'),
+        ('suggestion_of_bankruptcy', r'suggestion of bankruptcy|notice of bankruptcy'
+                                     r'|bankruptcy\s+(?:petition|notice|filing)'
+                                     r'|(?:petition|filing)\s+(?:for|of|in)\s+bankruptcy'
+                                     r'|voluntary petition|notice of (?:commencement|filing)[^.;]*chapter\s+(?:7|11|12|13)\b'),
         ('stay', r'order.*stay.*bankrupt|order.*bankrupt.*stay|automatic stay'),
         ('nonbankruptcy_stay', r'order.*stay'),
         ('order_on_motion', r'order.*motion|order (?:granting|denying|awarding)'),
@@ -158,7 +193,8 @@ _FILED_ABOUT_RE = re.compile(r'(?:(?:amended|emergency|renewed|agreed|verified|s
 _DISPOSITIVE_BODIES = {'final_judgment', 'certificate_of_title', 'certificate_of_sale', 'satisfaction',
                        'vacatur', 'order_of_dismissal'}
 _STAY_CARRIERS = {'suggestion_of_bankruptcy', 'stay', 'relief_from_stay', 'notice_of_filing',
-                  'nonbankruptcy_stay', 'order_on_motion', 'bankruptcy_dismissed'}
+                  'nonbankruptcy_stay', 'order_on_motion', 'bankruptcy_dismissed', 'bankruptcy_discharged',
+                  'stay_reinstated'}
 _REINSTATED_RE = re.compile(
     r'\b(?:stay\b[^.;]{0,120}?\b(?:is|are|be|shall be|hereby|was|has been)\s+(?:hereby\s+)?'
     r'(?:reinstated|reimposed|re-imposed)'
@@ -198,6 +234,8 @@ def stay_reinstatement_passages(pages):
 
 
 def build_timeline(case, inventory, document_rows, as_of):
+    import document_collectors as DC
+    import document_coverage as COV
     today = _date(as_of)
     if not today: raise ValueError('as_of must be a valid date')
     docs = {}
@@ -251,7 +289,7 @@ def build_timeline(case, inventory, document_rows, as_of):
             passages = stay_reinstatement_passages(pages)
             if passages:
                 e.update(kind='stay_reinstated', kind_source='document_passage',
-                         stay_passages=passages, index_agrees=False,
+                         stay_passages=passages, index_agrees=e['index_kind'] == 'stay_reinstated',
                          operative_text=passages[0]['passage'])
         if e['calendar_event'] and e['kind'] != 'notice_of_sale': e['kind'] = 'hearing'
         e['sale_passages'] = [index_text] if re.search(r'\bsale\b', index_text, re.I) else []
@@ -262,13 +300,29 @@ def build_timeline(case, inventory, document_rows, as_of):
             reasons = [line for line in body_lines if re.search(r'\b(?:because|due to|reason|cancel\w*)\b', line, re.I)]
             if reasons: e['operative_text'] += ' — ' + ' '.join(reasons[:3])
         expected = item.get('expected_documents', meta.get('numberOfDocuments', 0)) or 0
-        failed = [p for p in pages if p.get('outcome') not in ('text', 'ocr_text', 'vision_text', 'read_as_label', 'exhibit_divider')]
+        failed = [p for p in pages if not COV.page_is_read(p)]
         for page in failed:
+            if page.get('outcome') in COV.READABLE:
+                # A readable outcome with nothing on it but the watermark (verify-12 defect 12).
+                page = dict(page, weak_reason=page.get('weak_reason') or 'watermark or stamp only; '
+                            'no page content was read')
             assessment = page.get('assessment') or {}
             reason = assessment.get('reason') if isinstance(assessment, dict) else str(assessment)
             reason = reason or page.get('ocr_error') or page.get('weak_reason') or page.get('error') or 'No readable page outcome was recorded.'
             gaps.append({'entry_id': ident, 'kind': 'page_unreadable', 'source_ref': page.get('_source_ref'), 'document_hash': page.get('_document_hash'), 'page': page.get('page'), 'outcome': page.get('outcome'), 'reason': reason})
-        e['image_status'] = 'unreadable_pages' if failed else ('read' if pages else ('not_fetched' if expected else 'no_image_indexed'))
+        e['docket_code'] = meta.get('docketCode')
+        if failed:
+            e['image_status'] = 'unreadable_pages'
+        elif pages:
+            e['image_status'] = 'read'
+        elif item.get('inventory_status') == 'gap' and _LOGIN_RE.search(str(item.get('gap') or '')):
+            e['image_status'] = 'login_required'
+        elif DC.links_uncounted_document(meta):
+            # verify-12 defect 11: these were labelled no_image_indexed; the county holds them
+            # behind its login. Not fetched yet, so "likely", and a gap either way.
+            e['image_status'] = 'login_required_likely'
+        else:
+            e['image_status'] = 'not_fetched' if expected else 'no_image_indexed'
         if len(matched) < int(expected) and pages: e['image_status'] = 'missing_attachments'
         for d in matched:
             manifest = d.get('manifest') or {}
@@ -280,7 +334,7 @@ def build_timeline(case, inventory, document_rows, as_of):
                 if missing:
                     e['image_status'] = 'unassessed_pages'
                     gaps.append({'entry_id': ident, 'kind': 'unassessed_pages', 'source_ref': d.get('source_ref'), 'pages': missing, 'reason': 'Expected document pages have no assessment.'})
-        if e['image_status'] != 'read': gaps.append({'entry_id': ident, 'kind': e['image_status'], 'reason': 'No image indexed by county.' if not expected and not pages else 'Image not fetched or one or more pages unresolved.', 'pages': [p.get('page') for p in failed]})
+        if e['image_status'] != 'read': gaps.append({'entry_id': ident, 'kind': e['image_status'], 'reason': _IMAGE_GAP_REASON.get(e['image_status']) or ('No image indexed by county.' if not expected and not pages else 'Image not fetched or one or more pages unresolved.'), 'pages': [p.get('page') for p in failed]})
         for d in matched:
             if d.get('acquisition_gap'): gaps.append({'entry_id': ident, 'kind': 'acquisition_gap', 'source_ref': d.get('source_ref'), 'reason': str(d['acquisition_gap'])})
             for gap in d.get('supplemental_ocr_gaps', []): gaps.append(dict(gap, entry_id=ident, kind='supplemental_ocr_failed', source_ref=d.get('source_ref')))
@@ -313,13 +367,13 @@ def build_timeline(case, inventory, document_rows, as_of):
             text = e['operative_text'].lower()
             topics = ('dismiss', 'summary judgment', 'cancel', 'reset', 'attorney fees', "attorney's fees", 'default')
             _close_unique_motion(pending, text, e['date'], topics)
-        if e['kind'] in ('relief_from_stay', 'bankruptcy_dismissed', 'stay_reinstated', 'suggestion_of_bankruptcy', 'stay'):
+        if e['kind'] in ('relief_from_stay', 'bankruptcy_dismissed', 'bankruptcy_discharged', 'stay_reinstated', 'suggestion_of_bankruptcy', 'stay'):
             stay_history.append({'entry_id': e['entry_id'], 'date': e['date'], 'event': {
                 'relief_from_stay': 'limited_relief' if e.get('limited_scope') else 'relief',
-                'bankruptcy_dismissed': 'bankruptcy_dismissed', 'stay_reinstated': 'reinstated',
-                'suggestion_of_bankruptcy': 'stayed', 'stay': 'stayed'}[e['kind']],
+                'bankruptcy_dismissed': 'bankruptcy_dismissed', 'bankruptcy_discharged': 'discharged',
+                'stay_reinstated': 'reinstated', 'suggestion_of_bankruptcy': 'stayed', 'stay': 'stayed'}[e['kind']],
                 'text': e['operative_text'][:200]})
-        if e['kind'] in ('relief_from_stay', 'bankruptcy_dismissed'):
+        if e['kind'] in ('relief_from_stay', 'bankruptcy_dismissed', 'bankruptcy_discharged'):
             if e.get('limited_scope'):
                 status = {'kind': 'unclear', 'evidence': unresolved_stay + [e['entry_id']], 'reason': 'Partial or limited stay relief does not establish that all foreclosure restrictions ended.'}
                 continue
@@ -345,22 +399,56 @@ def build_timeline(case, inventory, document_rows, as_of):
             day_changes[e['date']] = dict(status)
     undated = [e['entry_id'] for e in entries if not e['date'] and _transition(e)]
     if undated: status = {'kind': 'unclear', 'evidence': status['evidence'] + undated, 'reason': 'Undated dispositive entry prevents reliable chronology.'}
+    held = sale_held(entries, today)
     if status['kind'] == 'sale_scheduled' and status.get('sale_date') and status['sale_date'] < today:
-        # A past sale date is not a sale. Only a certificate of sale or title says one happened.
-        status = dict(status, sale_outcome='unknown_no_certificate',
-                      reason=status['reason'] + ' | Sale date has passed and no certificate of sale is on the docket; whether a sale occurred is unknown.')
+        # A past sale date is not a sale. Only a certificate of sale or title says one happened;
+        # the clerk's bid and deposit entries say it was HELD, which is not the same thing.
+        mine = held if held and held['date'] >= status['sale_date'] else None
+        if mine:
+            status = dict(status, sale_outcome='held_no_certificate_yet', sale_held=mine,
+                          reason=status['reason'] + ' | The clerk posted the sale-day bid and deposit '
+                          'entries on %s; no certificate of sale is on the docket yet.' % mine['date'])
+        else:
+            status = dict(status, sale_outcome='unknown_no_certificate',
+                          reason=status['reason'] + ' | Sale date has passed and no certificate of sale is on the docket; whether a sale occurred is unknown.')
     stay_now = None
     if stay_history:
         last = stay_history[-1]['event']
-        stay_now = (True if last in ('stayed', 'reinstated') else False if last in ('relief', 'bankruptcy_dismissed') else None)
+        stay_now = (True if last in ('stayed', 'reinstated') else False if last in ('relief', 'bankruptcy_dismissed', 'discharged') else None)
     judgments = reconcile_judgments(entries, today)
     for e in entries:
         e.pop('_body', None)
     return {'case': case, 'county': 'MIAMI-DADE', 'as_of': today, 'entries': entries, 'status': status,
             'judgments': judgments,
-            'stay_history': stay_history, 'stay_in_effect': stay_now,
+            'stay_history': stay_history, 'stay_in_effect': stay_now, 'sale_held': held,
             'pending': pending, 'amounts': amounts, 'gaps': gaps, 'coverage_complete': not gaps,
             'qualification': 'Status is derived from available docket evidence, not confirmation of a complete court record. Amount extractions are not verified balances or equity inputs.'}
+
+
+def sale_held(entries, today):
+    """The newest sale the clerk's bid and deposit entries say was held, or None.
+
+    -> {'date', 'evidence': [entry ids], 'certificate': entry id or None, 'bankruptcy_same_day':
+    [entry ids], 'qualification'}. The docket gives dates, not times: a bankruptcy entry on the
+    sale day (2025-023462, "FILED AFTER THE SALE" by its own comment, the petition itself entered
+    before) leaves whether the sale stands to the bankruptcy court."""
+    marks = [e for e in entries if e['kind'] in ('sale_bid', 'sale_deposit') and e.get('date')
+             and e['date'] <= today]
+    if not marks:
+        return None
+    day = max(e['date'] for e in marks)
+    evidence = [e['entry_id'] for e in marks if e['date'] == day]
+    certificate = next((e['entry_id'] for e in entries if e['kind'] in ('certificate_of_sale', 'certificate_of_title')
+                        and e.get('date') and e['date'] >= day), None)
+    bankrupt = [e['entry_id'] for e in entries if e.get('date') == day
+                and e['kind'] in ('suggestion_of_bankruptcy', 'stay', 'stay_reinstated')]
+    return {'date': day, 'evidence': evidence, 'certificate': certificate,
+            'bankruptcy_same_day': bankrupt,
+            'qualification': ('Held per the clerk\'s bid and deposit entries. A certificate of sale '
+                              'follows if no objection is sustained; the sale can still be vacated.'
+                              + (' A bankruptcy entry the same day: whether the petition preceded the '
+                                 'sale decides whether the sale is void under the automatic stay.'
+                                 if bankrupt else ''))}
 
 
 def scope_of(kind, text, defendants=()):
@@ -412,6 +500,8 @@ def _whole_case(text):
 
 
 _NO_IMAGE = ('no_image_indexed', 'county_no_document')
+# The document exists and was not read: the county holds it behind a login.
+_LOGIN_WALLED = ('login_required', 'login_required_likely')
 _NOT_A_JUDGMENT_OF_RECORD = ('supplemental', 'docket_duplicate')
 _REPLACES = re.compile(r'\b(?:amended|corrected|amending|substitut\w*|replacement|re-?entered)\b', re.I)
 _ADDS_TO = re.compile(r'\bsupplemental\b|\b(?:attorney.?s?|attorneys)\s+fees?\b|\bcosts? judgment\b', re.I)
@@ -462,8 +552,12 @@ def reconcile_judgments(entries, today):
     # one, is taken as the docket listing that judgment twice (2024-009959 #79/#80, 2023-020247 #91/#92,
     # 2022-012065 #174/#177). Without this the image-less entry blocks, or even becomes, the
     # controlling judgment. Inferred from the docket, so it is labelled, not hidden.
-    imaged_days = {e['date'] for e in entries if e['kind'] == 'final_judgment' and e.get('date')
-                   and e.get('image_status') not in _NO_IMAGE}
+    # The pilot's image-less entries turned out to be the county's login-walled "Judgment" events
+    # (verify-12 defect 11), so the inference now also needs the same docket code (or, without
+    # one, the same description) as the imaged entry, and says when the other copy is behind a
+    # login rather than absent.
+    imaged = [e for e in entries if e['kind'] == 'final_judgment' and e.get('date')
+              and e.get('image_status') == 'read']
     for e in entries:
         if not e.get('date') or e['date'] > today:
             continue
@@ -472,11 +566,19 @@ def reconcile_judgments(entries, today):
             j = {'entry_id': e['entry_id'], 'date': e['date'], 'title': str(e.get('operative_text') or '')[:200],
                  'role': 'supplemental' if _ADDS_TO.search(text) else 'replacement' if _REPLACES.search(text) else 'judgment',
                  'status': 'operative', 'by': [], 'satisfaction': 'no_satisfaction_found', 'reason': ''}
-            if (j['role'] == 'judgment' and e.get('image_status') in _NO_IMAGE
-                    and e['date'] in imaged_days):
-                j.update(role='docket_duplicate', status='docket_duplicate_inferred',
-                         reason='no document image; another judgment entry the same day has one, so '
-                                'this is taken as the same judgment listed twice (inferred, not read)')
+            twin = next((o for o in imaged if o['date'] == e['date'] and o is not e
+                         and _same_listing(o, e)), None)
+            if (j['role'] == 'judgment' and twin is not None
+                    and e.get('image_status') in _NO_IMAGE + _LOGIN_WALLED):
+                walled = e.get('image_status') in _LOGIN_WALLED
+                j.update(role='docket_duplicate', status='docket_duplicate_inferred', twin=twin['entry_id'],
+                         reason=('its document is behind the county login and was not read; entry %s the '
+                                 'same day with the same docket code has a read copy, so this is taken as '
+                                 'the same judgment listed twice (inferred, not read)' % twin['entry_id'])
+                         if walled else
+                         ('no document image; entry %s the same day with the same docket code has one, '
+                          'so this is taken as the same judgment listed twice (inferred, not read)'
+                          % twin['entry_id']))
                 judgments.append(j)
                 continue
             if j['role'] == 'replacement':
@@ -549,6 +651,14 @@ def reconcile_judgments(entries, today):
                                    else 'no operative judgment' if not operative and not unclear
                                    else 'judgments conflict or could not be linked; review required'),
             'qualification': 'Docket-index reconciliation. The judgment bodies decide scope; no satisfaction found is not proof of an open balance.'}
+
+
+def _same_listing(a, b):
+    """Same docket code when both carry one; otherwise the same docket description."""
+    if a.get('docket_code') and b.get('docket_code'):
+        return a['docket_code'] == b['docket_code']
+    norm = lambda e: re.sub(r'\s+', ' ', str(e.get('description') or '')).strip().lower()
+    return norm(a) == norm(b)
 
 
 def _target(judgments, text):

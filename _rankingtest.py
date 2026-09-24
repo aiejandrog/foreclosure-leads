@@ -13,9 +13,9 @@ TODAY = date(2026, 9, 24)
 CASE = '2025-000001-CA-01'
 
 
-def timeline(kind='sale_scheduled', controlling='e7', stay=None, history=()):
+def timeline(kind='sale_scheduled', controlling='e7', stay=None, history=(), as_of='2026-09-24'):
     return {'status': {'kind': kind}, 'stay_in_effect': stay, 'stay_history': list(history),
-            'judgments': {'controlling_entry': controlling}, 'gaps': []}
+            'judgments': {'controlling_entry': controlling}, 'gaps': [], 'as_of': as_of}
 
 
 def present(persons=('JANE OWNER',), entities=(), status='candidate'):
@@ -57,6 +57,17 @@ class AuctionTests(unittest.TestCase):
         got = R.auction_fact({'AuctionDate': '10/01/2026'}, {'last_seen': '2026-09-20'}, '2026-09-24',
                              timeline(), TODAY)
         self.assertEqual(got['state'], 'dropped_from_calendar_unknown')
+
+    def test_bid_and_deposit_entries_say_the_sale_was_held(self):
+        tl = dict(timeline('stayed_by_bankruptcy', stay=True),
+                  sale_held={'date': '2026-09-23', 'evidence': ['72', '73'], 'certificate': None,
+                             'bankruptcy_same_day': ['70']})
+        got = R.auction_fact({'AuctionDate': '09/23/2026'}, {}, '2026-09-24', tl, TODAY)
+        self.assertEqual(got['state'], 'sale_held_no_certificate_yet')
+        # An older held sale (a prior auction later vacated) does not answer a newer sale date.
+        got = R.auction_fact({'AuctionDate': '10/01/2026'}, {'last_seen': '2026-09-24'}, '2026-09-24',
+                             dict(timeline(), sale_held=dict(tl['sale_held'], date='2025-10-28')), TODAY)
+        self.assertEqual(got['state'], 'scheduled')
 
     def test_stale_calendar_and_stay(self):
         self.assertEqual(R.auction_fact({'AuctionDate': '10/01/2026'}, {'last_seen': '2026-09-20'},
@@ -131,6 +142,31 @@ class RankingTests(unittest.TestCase):
         row = R.rank([{'case': 'X', 'facts': facts(), 'timeline': None, 'present': None}], TODAY)[0]
         self.assertIn('no whole-case timeline saved', row['held_because'])
         self.assertIn('no present-title summary (run title discovery)', row['held_because'])
+
+    def test_a_stale_or_old_format_timeline_holds_as_exactly_that(self):
+        # verify-12 defect 14: the 09-24 ranking ran on timelines older than the refresh and in a
+        # format with no judgments block, and said "no single controlling judgment".
+        old = timeline(controlling=None)
+        del old['judgments']
+        rows = R.rank([self.item('OLD', tl=old), self.item('STALE', tl=timeline(as_of='2026-09-22')),
+                       self.item('YESTERDAY', tl=timeline(as_of='2026-09-23'))], TODAY)
+        held = {r['case']: r['held_because'] for r in rows}
+        self.assertEqual(held['OLD'], ['timeline predates judgment and stay reconciliation '
+                                       '(rerun with --refresh-timelines)'])
+        self.assertEqual(held['STALE'], ['timeline as of 2026-09-22 is older than 1 day(s) '
+                                         '(rerun with --refresh-timelines)'])
+        self.assertEqual(held['YESTERDAY'], [])
+
+    def test_refresh_timelines_rebuilds_each_case_and_survives_a_failure(self):
+        built = []
+
+        def build(case):
+            built.append(case)
+            if case == 'BAD':
+                raise OSError('docket unreachable')
+        failed = R.refresh_timelines(['A', 'BAD', 'C'], TODAY, build=build)
+        self.assertEqual(built, ['A', 'BAD', 'C'])
+        self.assertEqual(failed, [('BAD', 'docket unreachable')])
 
     def test_changes_name_every_moved_fact(self):
         first = {'cases': R.rank([self.item('A', sale='2026-10-01'), self.item('B')], TODAY)}

@@ -123,6 +123,16 @@ def present_title(report, entities=None):
             kept['party'] = claim['party']
         for field in ('amount', 'body_kind'):
             kept[field] = kept.get(field) or claim.get(field)
+    # A hit under a name that is nobody on this title (a lender, HUD, a finance company) and not
+    # tied to the parcel is a search artifact, not a claim: 2023-020247 listed 131 such rows from
+    # creditor-name searches capped at 500 each (verify-12 defect 6). They are counted, by name,
+    # and never listed as claims. A folio or subdivision match keeps a row whatever the name.
+    unlisted = {}
+    for claim in list(merged.values()):
+        if claim['parcel'] == 'name_search_only' and claim['party'] == 'other_name':
+            del merged[claim['book_page']]
+            for name in claim['under_names']:
+                unlisted[name] = unlisted.get(name, 0) + 1
     claims = sorted(merged.values(), key=lambda c: (c['parcel'] != 'folio_matched', c['book_page']))
     for claim in claims:
         claim.pop('under_name', None)
@@ -139,7 +149,9 @@ def present_title(report, entities=None):
             'counts': {'claims': len(claims),
                        'folio_matched': sum(c['parcel'] == 'folio_matched' for c in claims),
                        'name_search_only': sum(c['parcel'] == 'name_search_only' for c in claims),
-                       'under_prior_title_party': sum(c['party'] == 'prior_title_party' for c in claims)},
+                       'under_prior_title_party': sum(c['party'] == 'prior_title_party' for c in claims),
+                       'unlisted_other_name_hits': sum(unlisted.values())},
+            'unlisted_other_name_hits': dict(sorted(unlisted.items())),
             'open_debt': 'not_established',
             'call_ready': False,
             'held_because': held,

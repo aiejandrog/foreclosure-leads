@@ -50,6 +50,27 @@ shared spending controls. This is not complete.
 come from the saved text and OCR alone. The verdict column is written from the code's output by
 hand: no module emits supported / incomplete / conflicted yet.
 
+## 12-case verification defects (09-24)
+
+Source: `verify-12/MIAMI-VERIFY-12-2026-09-24.md` in the project files. Fixed on this branch,
+because each one is in code this branch adds or made worse by it:
+
+| Defect | Fix |
+|---|---|
+| D5 other people's instruments corroborate this case's judgment | `document_prioritizer.case_tie()` tags every recorded row; only tier 0 (prints this case) or tier 1 (recorded -3/+120 days of a docket judgment) can set or corroborate the amount. The rest are listed under `judgment_amount_other_instruments` |
+| D6 creditor-name hits flood the claims | `present_title` drops name-search-only hits on another name and counts them in `unlisted_other_name_hits` |
+| D9 bankruptcy orders filed as "Notice of Filing:" | notices that carry bankruptcy context (chapter N, debtor, 11 USC, 362, bankruptcy court, US trustee) reach the stay history; reinstated, reimposed, chapter-N dismissed and discharged wordings are classified |
+| D10 held sale missed | `sale_held()` reads Bid Amount (BIDSCV) and Mortgage Foreclosure Deposit (MFDPCV) entries: `sale_outcome = held_no_certificate_yet`, a bankruptcy filed the same day is named |
+| D11 login-walled entries called "no image" / "no document" | a Judgment entry that counts 0 documents but links one is fetched; its gap is `login_required` / `login_required_likely` in the timeline and `restricted_likely` in coverage. A duplicate judgment needs the same day and the same docket code |
+| D12 watermark-only pages marked read | `document_coverage.page_is_read()` needs 12 characters that are not watermark words; the timeline uses the same test |
+| D14 stale timelines ranked | a timeline older than a day or without judgment and stay blocks disqualifies the case; `miami_ranking.py --refresh-timelines` rebuilds them first |
+
+Left for the follow-up PR (main code, not this branch's): D8 exhibit page stamps read as
+instruments; D7 and the root of D6, an own-case and vacated filter in
+`document_walk.run_name_searches`; D3's three discovery rounds and 500-record cap (more searches
+cost owner-search tokens, so it waits for Alex); the rest of D13 (a paid read on the recorded
+copy while the court copy had text, one image-only judgment, and the unverified-extraction label).
+
 ## Implementation sequence
 
 1. Docket-first prioritizer and fair persistent per-case spending allocation.

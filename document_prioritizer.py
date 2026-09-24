@@ -137,6 +137,52 @@ def _is_satisfaction(row):
         _SATISFACTION_TYPE.match(str(row.get('doc_type') or '').strip()))
 
 
+def case_tie(case, row, record=None, judgments=(), year_start=None):
+    """What ties a stored Official Records row to THIS case, from free facts.
+
+    -> {'tier': 0 | 1 | None, 'reason', 'detail', 'recorded', 'docket_judgment_date'}
+      tier 0  the page prints this case number
+      tier 1  prints no case number, recorded within the window of a docket judgment date
+      None    not this case's: prints another case number ('other_action'), recorded before the
+              case-number year, or nothing ties it ('not_tied_to_this_case')
+    The same test decides what the paid reader may buy and which figures may stand as this case's
+    judgment amount: on 2025-018660 a 2011 judgment against another person set "$3,037.43" and
+    "no outstanding debt" while the real judgment is $270,322.07 (verify-12 defect 5).
+    """
+    import document_classify
+    if year_start is None:
+        year_start = _case_year_start(case)
+    out = {'tier': None, 'reason': None, 'detail': None, 'recorded': None,
+           'docket_judgment_date': None}
+    identity = document_classify.case_identity(row.get('reading') or {'pages': []}, case)
+    if identity['agrees'] is False:
+        return dict(out, reason='other_action', detail='prints %s' % ', '.join(identity['found'][:3]))
+    recorded = _record_date((record or {}).get('reC_DATE') or row.get('recorded_date'))
+    out['recorded'] = recorded.isoformat() if recorded else None
+    if recorded and year_start and recorded < year_start:
+        return dict(out, reason='recorded_before_case_year',
+                    detail='recorded %s; case %s was filed no earlier than %s'
+                           % (recorded.isoformat(), case, year_start.isoformat()))
+    matched = None
+    if recorded:
+        matched = next((d for d in judgments if d - RECORDING_WINDOW_BEFORE <= recorded
+                        <= d + RECORDING_WINDOW_AFTER), None)
+    if matched:
+        out['docket_judgment_date'] = matched.isoformat()
+    if identity['agrees'] is True:
+        return dict(out, tier=0, reason='prints_this_case_number')
+    if matched:
+        return dict(out, tier=1, reason='recorded_near_docket_judgment')
+    # Nothing ties it to this case: a name-search judgment against a shared party, most often an
+    # old one. The 2026-09-24 desktop replay showed four of five pilot cases would still have
+    # bought one of these first, because none of their own judgments was in the recorded store.
+    return dict(out, reason='not_tied_to_this_case_read_free_only',
+                detail='prints no case number and was recorded %s, not within the window of any '
+                       'docket judgment date (%s)'
+                       % (recorded.isoformat() if recorded else 'on an unknown date',
+                          ', '.join(d.isoformat() for d in judgments) or 'none known'))
+
+
 def recorded_read_order(case, rows, records=(), plan=None):
     """Order stored Official Records rows for PAID reading, before any paid call.
 
@@ -154,7 +200,6 @@ def recorded_read_order(case, rows, records=(), plan=None):
     Within a tier, newest recording first; that is an acquisition order, not a verdict that the
     newest judgment controls.
     """
-    import document_classify
     by_ref = {}
     for record in records or ():
         ref = 'official_records/%s-%s' % (record.get('reC_BOOK'), record.get('reC_PAGE'))
@@ -170,33 +215,13 @@ def recorded_read_order(case, rows, records=(), plan=None):
         if _is_satisfaction(row):
             deferred.append({'source_ref': ref, 'reason': 'satisfaction_read_free_only'})
             continue
-        identity = document_classify.case_identity(row['reading'], case)
-        if identity['agrees'] is False:
-            deferred.append({'source_ref': ref, 'reason': 'other_action',
-                             'detail': 'prints %s' % ', '.join(identity['found'][:3])})
+        tie = case_tie(case, row, by_ref.get(ref), judgments, year_start)
+        if tie['tier'] is None:
+            deferred.append({'source_ref': ref, 'reason': tie['reason'], 'detail': tie['detail']})
             continue
-        recorded = _record_date((by_ref.get(ref) or {}).get('reC_DATE') or row.get('recorded_date'))
-        if recorded and year_start and recorded < year_start:
-            deferred.append({'source_ref': ref, 'reason': 'recorded_before_case_year',
-                             'detail': 'recorded %s; case %s was filed no earlier than %s'
-                                       % (recorded.isoformat(), case, year_start.isoformat())})
-            continue
-        matched = None
-        if recorded:
-            matched = next((d for d in judgments if d - RECORDING_WINDOW_BEFORE <= recorded
-                            <= d + RECORDING_WINDOW_AFTER), None)
-        tier = 0 if identity['agrees'] is True else 1 if matched else 2
-        if tier == 2:
-            # Nothing ties it to this case: a name-search judgment against a shared party, most
-            # often an old one. The 2026-09-24 desktop replay showed four of five pilot cases
-            # would still have bought one of these first, because none of their own judgments
-            # was in the recorded store. Its figure is not this case's amount; read it free.
-            deferred.append({'source_ref': ref, 'reason': 'not_tied_to_this_case_read_free_only',
-                             'detail': 'prints no case number and was recorded %s, not within the '
-                                       'window of any docket judgment date (%s)'
-                                       % (recorded.isoformat() if recorded else 'on an unknown date',
-                                          ', '.join(d.isoformat() for d in judgments) or 'none known')})
-            continue
+        tier = tie['tier']
+        recorded = _record_date(tie['recorded'])
+        matched = date.fromisoformat(tie['docket_judgment_date']) if tie['docket_judgment_date'] else None
         status = _docket_status(plan, matched)
         ranked.append({'row': row, 'source_ref': ref, 'tier': tier,
                        'recorded': recorded.isoformat() if recorded else None,

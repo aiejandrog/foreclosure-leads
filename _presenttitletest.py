@@ -196,6 +196,16 @@ class PresentTitleTests(unittest.TestCase):
         self.assertEqual(only['party'], 'current_grantee')
         self.assertEqual(sorted(only['under_names']), ['OLD OWNER', 'OWNER PERSON'])
 
+    def test_hits_under_a_creditor_name_off_the_parcel_are_counted_not_listed(self):
+        # verify-12 defect 6: 2023-020247 listed 131 claims from creditor-name searches.
+        hud = [claim(str(70 + n), 'US DEPT OF HOUSING') for n in range(3)]
+        on_parcel = dict(claim('80', 'ONEMAIN FINANCIAL'), parcel_status='matched')
+        got = MPT.present_title(report(hud + [claim('81', 'ONEMAIN FINANCIAL'), claim('50', 'OLD OWNER')],
+                                       parcel=[on_parcel]))
+        self.assertEqual(sorted(c['book_page'] for c in got['claims']), ['50/5', '80/5'])
+        self.assertEqual(got['unlisted_other_name_hits'], {'ONEMAIN FINANCIAL': 1, 'US DEPT OF HOUSING': 3})
+        self.assertEqual(got['counts']['unlisted_other_name_hits'], 4)
+
     def test_entity_only_owner_is_held_and_never_call_ready(self):
         deeds = [deed('1', '1/1/2010', 'FIRST', 'OLD OWNER'), deed('2', '1/1/2020', 'OLD OWNER', 'EXAMPLE HOLDINGS LLC')]
         record = SE.resolve('EXAMPLE HOLDINGS LLC', lookup=lambda n: {

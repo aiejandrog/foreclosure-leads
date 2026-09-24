@@ -241,6 +241,14 @@ class TransportTests(unittest.TestCase):
         self.assertEqual(len(found), 1)
         self.assertEqual(found[0]['match'], 'candidate_by_keyword')
 
+    def test_a_judgment_that_counts_no_document_but_links_one_is_fetched(self):
+        # verify-12: all five such entries answered with the login 'Redirect' row.
+        walled = {'eventType': 'Judgment', 'numberOfDocuments': 0, 'encID': 'abc'}
+        self.assertTrue(DC.links_uncounted_document(walled))
+        self.assertFalse(DC.links_uncounted_document(dict(walled, encID='')))
+        self.assertFalse(DC.links_uncounted_document(dict(walled, eventType='Event')))
+        self.assertFalse(DC.links_uncounted_document(dict(walled, numberOfDocuments=2)))
+
 
 # ---- verification and store ---------------------------------------------------------------------
 class StoreTests(unittest.TestCase):
@@ -526,10 +534,13 @@ class JudgmentTests(unittest.TestCase):
                          412880.45)
 
     def test_judgment_for_analyze_requires_verified_and_fully_read(self):
-        row = {'page_count_verified': True, 'read_status': 'read',
+        row = {'page_count_verified': True, 'read_status': 'read', 'case_tie': {'tier': 0},
                'amount_candidates': [{'amount': 412880.45}]}
         self.assertEqual(MJ.judgment_for_analyze({'documents': [row]}), 412880.45)
-        for broken in ({'page_count_verified': False}, {'read_status': 'partial'}):
+        for broken in ({'page_count_verified': False}, {'read_status': 'partial'},
+                       # verify-12 defect 5: another case's instrument, or one never tested.
+                       {'case_tie': {'tier': None, 'reason': 'recorded_before_case_year'}},
+                       {'case_tie': None}):
             self.assertIsNone(MJ.judgment_for_analyze({'documents': [dict(row, **broken)]}))
 
 
@@ -596,7 +607,7 @@ class JudgmentFilterTests(unittest.TestCase):
         self.assertEqual(MJ.recorded_judgments([self.sat()], []), [])
 
     def test_a_satisfaction_s_recited_figure_is_never_the_judgment_amount(self):
-        sat = {'page_count_verified': True, 'read_status': 'read', 'doc_type': 'SATISFACTION - SAT',
+        sat = {'page_count_verified': True, 'read_status': 'read', 'case_tie': {'tier': 0}, 'doc_type': 'SATISFACTION - SAT',
                'amount_candidates': [{'amount': 993885.33}]}
         self.assertIsNone(MJ.judgment_for_analyze({'documents': [sat]}))
         judged = dict(sat, doc_type='JUDGMENT - JUD', amount_candidates=[{'amount': 412880.45}])
@@ -939,7 +950,7 @@ class AmountLayoutTests(unittest.TestCase):
 
     def test_an_ocr_figure_is_refused_even_when_it_is_allowed_unless_it_adds_up(self):
         def report(text):
-            return {'documents': [{'page_count_verified': True, 'read_status': 'read',
+            return {'documents': [{'page_count_verified': True, 'read_status': 'read', 'case_tie': {'tier': 0},
                                    'amount_candidates': MJ.judgment_amount_candidates(
                                        _reading(text))}]}
         self.assertIsNone(MJ.judgment_for_analyze(report(OCR_COLUMN_TEXT)))            # refused
@@ -1358,7 +1369,7 @@ class VisionAdmissibilityTests(unittest.TestCase):
         """Corroborated is not usable. Alejandro confirmed the refusal on 2026-09-22 and the
         reader changing does not change the reason for it."""
         found, _ = self._report(VISION_REPLY)
-        report = {'documents': [{'page_count_verified': True, 'read_status': 'read',
+        report = {'documents': [{'page_count_verified': True, 'read_status': 'read', 'case_tie': {'tier': 0},
                                  'amount_candidates': found}]}
         self.assertIsNone(MJ.judgment_for_analyze(report))
         self.assertEqual(MJ.judgment_for_analyze(report, allow_ocr=True), 14698.60)

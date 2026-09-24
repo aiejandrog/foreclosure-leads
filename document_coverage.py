@@ -14,6 +14,8 @@ One row per expected attachment of every docket entry, in one of these states:
   queued              a queue job exists and has not finished
   failed              the queue gave up after its retries
   restricted          the county requires a login (or says the filing is confidential/sealed)
+  restricted_likely   the docket links a document it does not count (eventType Judgment, 0
+                      documents), which the county holds behind its login; not fetched yet
   access_gap          the county refused or returned something unusable, with its reason
   not_enumerated      the entry's attachment list itself could not be obtained
   county_no_document  the docket says this entry carries no document. The docket's claim, not a
@@ -62,6 +64,26 @@ def _mdy(value):
         return None
 
 
+# The clerk's watermark and stamp words, and what OCR makes of them ("AL COPY / Nor Atv copy").
+_WATERMARK_WORDS_RE = re.compile(r'\b(?:not|an|official|copy|public|access|al|nor|atv)\b', re.I)
+MIN_CONTENT_CHARS = 12
+
+
+def page_is_read(page):
+    """Is this page read, not just given a readable outcome?
+
+    A page OCR turns into one character ('o', a returned-mail envelope) or into the watermark alone
+    ('AL COPY Nor Atv copy') was counted as read (2022-012065, verify-12 defect 12): nothing on it
+    was read. Labels and exhibit dividers ('EXHIBIT 1') are short on purpose and stay read."""
+    outcome = page.get('outcome')
+    if outcome not in READABLE:
+        return False
+    if outcome in ('read_as_label', 'exhibit_divider'):
+        return True
+    content = re.sub(r'[^A-Za-z0-9]', '', _WATERMARK_WORDS_RE.sub(' ', str(page.get('text') or '')))
+    return len(content) >= MIN_CONTENT_CHARS
+
+
 def _reading_state(row):
     manifest = row.get('manifest') or {}
     reading = row.get('reading') or {}
@@ -73,7 +95,7 @@ def _reading_state(row):
     count = manifest.get('pages') or reading.get('page_count') or reading.get('pages_total')
     seen = {p.get('page') for p in pages}
     missing = [n for n in range(1, count + 1) if n not in seen] if isinstance(count, int) else []
-    bad = [p.get('page') for p in pages if p.get('outcome') not in READABLE]
+    bad = [p.get('page') for p in pages if not page_is_read(p)]
     if missing or bad:
         return 'read_partial', sorted(set(missing + bad), key=lambda n: (n is None, n))
     return 'read', []
@@ -121,14 +143,22 @@ def coverage(inventory, rows, entries=(), recorded=(), case=''):
         base = {'entry_id': ident, 'date': (kinds.get(ident) or {}).get('date') or str(_mdy(meta.get('eventDate')) or ''),
                 'kind': (kinds.get(ident) or {}).get('kind'),
                 'description': str(meta.get('docketDescrition') or meta.get('docketDescription') or '')[:120]}
-        if not expected or status == 'county_reports_no_document':
-            out.append(dict(base, document=None, state='county_no_document', detail=[]))
-            continue
         if status == 'gap':
             gap = str(item.get('gap') or '')
             state = 'restricted' if _RESTRICTED_RE.search(gap) else 'not_enumerated'
             out.extend(dict(base, document=None, index=n, state=state, detail=[gap[:200]])
-                       for n in range(int(expected)))
+                       for n in range(max(int(expected or 0), 1)))
+            continue
+        import document_collectors as DC
+        if not expected and DC.links_uncounted_document(meta):
+            # verify-12 defect 11: five of these were reported as county_no_document; every one
+            # the county was asked for answered with its login page.
+            out.append(dict(base, document=None, index=0, state='restricted_likely',
+                            detail=['docket links a document it counts as 0 (eventType Judgment); '
+                                    'the county holds these behind its login']))
+            continue
+        if not expected or status == 'county_reports_no_document':
+            out.append(dict(base, document=None, state='county_no_document', detail=[]))
             continue
         found = by_entry.get(ident, [])
         for row in found:
