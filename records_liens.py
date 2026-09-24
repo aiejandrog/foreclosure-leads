@@ -219,11 +219,12 @@ def camoufox_session():
         return None, None
 
 
-def camoufox_qs(browser, party, settle=9000):
+def camoufox_qs(browser, owner_lf, settle=9000):
     """Run one search in the real UI and return the `qs` the county issued, or None.
 
-    party is the LAST NAME ONLY — same rule fetch_via_turnstile documents: the clerk answers
-    isValidSearch:false for anything with a space or comma in it.
+    owner_lf is ``(LAST, FIRST)``.  The county exposes separate last/first inputs; filling both is
+    essential because broad surnames are capped at 500 oldest records and can silently omit the
+    current owner.  Companies have an empty FIRST and continue to use the last-name field alone.
     """
     page = browser.new_page()
     grabbed = {}
@@ -261,7 +262,18 @@ def camoufox_qs(browser, party, settle=9000):
                 continue
         if box is None:
             return None
-        box.fill(party)
+        last, first = ((owner_lf[0], owner_lf[1]) if not isinstance(owner_lf, str)
+                       else (owner_lf, ''))
+        box.fill(last.strip())
+        if first and first.strip():
+            for sel in ('#firstName', 'input[name="firstName"]', 'input[placeholder*="First" i]'):
+                try:
+                    loc = page.locator(sel).first
+                    if loc.count():
+                        loc.fill(first.strip())
+                        break
+                except Exception:
+                    continue
         page.wait_for_timeout(600)
 
         for sel in ('button[type="submit"]', 'button:has-text("SEARCH")', 'button:has-text("Search")'):
@@ -369,6 +381,107 @@ def _inst(s):
     return re.sub(r'[^A-Z]', '', s)
 
 
+def has_duplicate_liens(res):
+    """True when a CACHED result lists the same recorded mortgage twice (pre-dedupe trace)."""
+    bps = [str(x.get('bp') or '').strip() for x in ((res or {}).get('liens') or []) if isinstance(x, dict)]
+    bps = [b for b in bps if b.strip('0/ -')]
+    return len(bps) != len(set(bps))
+
+
+# Who forecloses a MORTGAGE. Deliberately wider than analyze()'s satisfaction-side _LENDER_RE: the
+# plaintiff on a lis pendens is usually a servicer or a trustee, not a bank by name.
+_FC_LENDER_RE = re.compile(r'BANK|MORTGAGE|MTGE|LOAN|FINANC|SAVING|CREDIT|FUNDING|SERVIC|FEDERAL|'
+                           r'NATIONAL|TRUSTEE|\bTRUST\b|NATIONSTAR|NEWREZ|PENNYMAC|MR\.?\s*COOPER|'
+                           r'LAKEVIEW|CARRINGTON|SHELLPOINT|ROCKET|QUICKEN|FANNIE|FREDDIE|'
+                           r'HOUSING AND URBAN|SECRETARY OF HOUSING|\bHUD\b|LENDING', re.I)
+_FC_ASSN_RE = re.compile(r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|COMMUNITY|PROPERTY\s+OWNERS?|'
+                         r'TOWNHO|MAINTENANCE|(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
+BANK_FC_YEARS = 5
+
+
+def bank_foreclosure(models, fol, subj_subdiv, today=None):
+    """A lender's lis pendens on the SUBJECT parcel, or None (2026-09-23 audit, Salkey).
+
+    Only asked of an HOA/condo lead. The association's small case is what reached the board, and
+    the chain came back with no open mortgage, so the board printed VERIFIED CLEAR -- while a bank
+    had its own foreclosure filed against the same unit. A lender foreclosing proves a mortgage is
+    open, and under an association sale that whole mortgage survives. broward_liens has flagged
+    this as `second_fc` since the Bloom / Tucker cases; Miami-Dade never looked.
+
+    Parcel-anchored. A filing that carries a folio counts only when it is the subject folio. One
+    with a BLANK folio is matched on the subdivision, which proves the parcel only when the owner
+    has no other folio in that subdivision: the search is owner-wide, and a condo is one
+    subdivision with many units, so a lender foreclosing the owner's OTHER unit would otherwise
+    land on this one. When other units are seen the match comes back marked `unsure` -- analyze()
+    keeps it off the board's 2ND FORECLOSURE flag, and equity_state still refuses to call the
+    subject clear, because a lender foreclosing one of this owner's units in the building is not
+    something an empty chain can rule out.
+
+    Recent only (BANK_FC_YEARS): an unreleased lis pendens from a foreclosure a decade ago says
+    nothing about today. Released ones (a release/discharge pointing at its book/page) are skipped.
+    """
+    today = today or datetime.date.today()
+    released = set()
+    for r in models:
+        t = (r.get('doC_TYPE', '') or '').upper()
+        if 'LIS PEND' in t and re.search(r'REL|DISCH|CANCEL|WITHDR|TERMIN', t):
+            released.add((str(r.get('oriG_REC_BOOK', '')).strip(), str(r.get('oriG_REC_PAGE', '')).strip()))
+    # the owner's OTHER parcels in the subject subdivision, as far as the results show them
+    other_units = {norm_folio(r.get('foliO_NUMBER', '')) for r in models
+                   if subj_subdiv and (r.get('subdiV_NAME', '') or '').strip().upper() == subj_subdiv
+                   and norm_folio(r.get('foliO_NUMBER', '')) not in ('', fol)}
+    best, unsure = None, None
+    for r in models:
+        t = (r.get('doC_TYPE', '') or '').upper()
+        if 'LIS PEND' not in t or re.search(r'REL|DISCH|CANCEL|WITHDR|TERMIN', t):
+            continue
+        rf = norm_folio(r.get('foliO_NUMBER', ''))
+        sd = (r.get('subdiV_NAME', '') or '').strip().upper()
+        if rf:
+            if rf != fol:
+                continue                               # another parcel's filing
+            exact = True
+        elif subj_subdiv and sd == subj_subdiv:
+            exact = not other_units                    # subdivision proves the unit only if it is the only one
+        else:
+            continue
+        if (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip()) in released:
+            continue
+        d = _parse_recd(r.get('reC_DATE', ''))
+        if not d or (today - d).days > BANK_FC_YEARS * 366:
+            continue
+        lender = ''
+        for p in (r.get('firsT_PARTY', ''), r.get('seconD_PARTY', '')):
+            if p and _FC_LENDER_RE.search(p) and not _FC_ASSN_RE.search(p):
+                lender = p
+                break
+        if not lender:
+            continue
+        hit = (d, {'case': 'lis pendens %s recorded %s' % (r.get('reC_BOOKPAGE', '') or '',
+                                                            d.strftime('%m/%d/%Y')),
+                   'party': lender[:40], 'bp': r.get('reC_BOOKPAGE', ''), 'd': d.isoformat()})
+        if exact:
+            if best is None or d > best[0]:
+                best = hit
+        elif unsure is None or d > unsure[0]:
+            unsure = hit
+    if best:
+        return best[1]
+    return dict(unsure[1], unsure=True) if unsure else None
+
+
+_UNPRICED_SKIP_RE = re.compile(r'MODIF|ASSUMP|SUBORD|SPREAD|AMEND|ASSIGN|RELEASE|SATIS|CORRECT', re.I)
+
+
+def clear_undocumented(res, case=''):
+    """True for a cached chain that would read CLEAR but carries no record of HOW it was searched
+    (traced before `nrec` / `second_fc` / `mtg_open_unpriced` were written). equity_state already
+    refuses to call it clear; this puts it at the front of the re-pull queue so it can earn it."""
+    res = res or {}
+    return (res.get('conf') == 'ok' and not res.get('liens')
+            and not ('nrec' in res and 'second_fc' in res and 'mtg_open_unpriced' in res))
+
+
 def analyze(models, folio, judgment, ftype=''):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
@@ -394,6 +507,7 @@ def analyze(models, folio, judgment, ftype=''):
         m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (r.get('reC_DATE', '') or '').strip())
         return (m.group(3), m.group(1).zfill(2), m.group(2).zfill(2)) if m else ('0000', '00', '00')
     liens, opens = [], []
+    seen_instruments = set()
     for r in sorted(models, key=sortkey):
         if not (r.get('doC_TYPE', '') or '').upper().startswith('MORTGAGE'):
             continue
@@ -403,13 +517,35 @@ def analyze(models, folio, judgment, ftype=''):
             continue                                   # subject parcel only (folio when present, else subdivision)
         it, cons = num(r.get('intangible')), num(r.get('consideratioN_1'))
         amt = round(it / 0.002) if it > 0 else round(cons)
+        nopx = False
         if amt <= 0:
-            continue                                   # $0 doc = modification/piggyback placeholder, not a real balance
+            # $0 doc = modification/piggyback placeholder, not a real balance -- usually. But a plain
+            # MORTGAGE on the parcel with no stamp amount is a loan whose size the index does not
+            # publish, and dropping it is how an unknown became "no surviving debt". It runs through
+            # the same release rules as a priced loan, is never summed, and leaves as a COUNT:
+            # equity_state reads mtg_open_unpriced as a CEILING, never a clear.
+            if _UNPRICED_SKIP_RE.search(r.get('doC_TYPE', '') or '') or not (
+                    str(r.get('reC_BOOK', '')).strip() and str(r.get('reC_PAGE', '')).strip()):
+                continue
+            nopx = True
         bp = (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip())
+        # ONE INSTRUMENT, ONE ROW. The owner search returns the same recording once per name it
+        # matched (co-owners, AKA spellings), and every copy used to become its own lien: Elharrar
+        # (accuracy audit 2026-09-23) showed two mortgages four times, $790,000 of face amount
+        # where the county records $395,000. Book/page identifies a recording; the CFN is the
+        # fallback when either half is blank. A row with neither is kept, never merged on a guess.
+        ident = (('bp',) + bp) if all(bp) else (
+            ('cfn', str(r.get('cfN_MASTER_ID') or '').strip()) if r.get('cfN_MASTER_ID') else None)
+        if ident is not None:
+            if ident in seen_instruments:
+                continue
+            seen_instruments.add(ident)
         is_open = bp not in satisfied
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'amt': amt, 'party': (r.get('seconD_PARTY', '') or '')[:40],
                'bp': r.get('reC_BOOKPAGE', ''), 'st': 'OPEN' if is_open else 'SATISFIED',
                '_dt': '-'.join(sortkey(r)), '_lend': _inst(r.get('seconD_PARTY'))}
+        if nopx:
+            row['_nopx'] = True
         liens.append(row)
         if is_open:
             opens.append(row)
@@ -465,7 +601,10 @@ def analyze(models, folio, judgment, ftype=''):
     # (Echeverri's real New Century senior) can't be killed by a different loan's satisfaction.
     for s in sorted(sats2, key=lambda x: x['_dt']):
         if not (s['_dt'] and _LENDER_RE.search(s.get('seconD_PARTY') or '')): continue
-        prior = [o for o in opens if o['_dt'] < s['_dt'] and 3 <= _months(o['_dt'], s['_dt'][:10]) <= 24]
+        # an unpriced row never absorbs a release here: it would free the priced loan the release
+        # was really for, and rule 2 is a guess about WHICH loan, not proof
+        prior = [o for o in opens if not o.get('_nopx') and o['_dt'] < s['_dt']
+                 and 3 <= _months(o['_dt'], s['_dt'][:10]) <= 24]
         if prior:
             newest = max(prior, key=lambda o: o['_dt'])
             newest['st'] = 'SATISFIED'
@@ -473,13 +612,16 @@ def analyze(models, folio, judgment, ftype=''):
     # rule 3: refi-kill ONLY in true-refi shape — newer different-lender mortgage >=90% of the
     # older balance within 24 months (a junior second is usually far smaller, so it can't pose as one)
     for o in liens:
-        if o['st'] != 'OPEN': continue
+        if o['st'] != 'OPEN' or o.get('_nopx'): continue     # refi shape needs a balance to compare
         chain3 = chain_of(o['_lend'], o['_dt'])
         for m2 in liens:
             if m2 is o or m2['_dt'] <= o['_dt']: continue
             if (_months(o['_dt'], m2['_dt']) <= 24 and m2['amt'] >= o['amt'] * 0.9
                     and m2['_lend'] != o['_lend'] and m2['_lend'] not in chain3):
                 o['st'] = 'SATISFIED'; break
+    # unpriced loans leave the list here: counted, never summed, never shown as a $0 lien
+    unpriced_open = sum(1 for o in liens if o.get('_nopx') and o['st'] == 'OPEN')
+    liens = [o for o in liens if not o.get('_nopx')]
     opens = [o for o in liens if o['st'] == 'OPEN']
     junior = first_amt = surv = surv_first = 0
     juniors_post = 0
@@ -540,7 +682,20 @@ def analyze(models, folio, judgment, ftype=''):
     if not subj_subdiv: conf = 'low'                   # couldn't anchor the property (no folio-carrying record)
     if len(opens) > 4: conf = 'low'                    # one parcel rarely has >4 live mortgages
     if len(models) > 45: conf = 'low'                  # busy/common name -> results unreliable
-    return {'liens': liens, 'open_count': len(opens), 'junior': junior, 'first_est': first_amt,
+    # always present (None = looked, found none), so a cached chain from before this check can be
+    # told apart from one that passed it -- see clear_undocumented()
+    _fc = bank_foreclosure(models, fol, subj_subdiv) if ftype == 'HOA' else None
+    second_fc = _fc if _fc and not _fc.get('unsure') else None
+    # a lender filing on one of this owner's units in the building, unit not established: never a
+    # 2ND FORECLOSURE flag on this parcel, never a clear either (equity_state.coverage_documented)
+    second_fc_unsure = _fc if _fc and _fc.get('unsure') else None
+    # SEARCH COVERAGE, written down so a CLEAR can be checked rather than trusted (equity_state
+    # .coverage_documented): how many records the search returned, what anchored the parcel, and
+    # the mortgages whose amount the index does not publish.
+    return {'second_fc': second_fc, 'second_fc_unsure': second_fc_unsure, 'nrec': len(models),
+            'anchor': 'folio+subdivision' if subj_subdiv else '',
+            'mtg_open_unpriced': unpriced_open,
+            'liens': liens, 'open_count': len(opens), 'junior': junior, 'first_est': first_amt,
             'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
             'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open,
             'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv}
@@ -649,6 +804,13 @@ def main():
             # Capped per run: a mint costs ~$0.003, so retries are bounded like fresh pulls.
             if (out.get(case) or {}).get('conf') == 'none':
                 md_retries.append(r)
+            elif has_duplicate_liens(out.get(case)) or clear_undocumented(out.get(case), case):
+                # traced before the one-instrument rule / the coverage record existed: the cached
+                # chain either double counts a mortgage or claims CLEAR with no record of how it
+                # searched (and, on an association case, never asked whether a lender is
+                # foreclosing the same unit). Re-pull it FIRST — a known-wrong answer outranks a
+                # still-unknown one.
+                md_retries.insert(0, r)
             continue
         picked.append(r)
     if a.limit: picked = picked[:a.limit]
@@ -701,7 +863,7 @@ def main():
                     #    Any failure just falls through to the paid path below; it never ends the run.
                     if cf_browser is not None:
                         try:
-                            qs = camoufox_qs(cf_browser, sp[0].strip())
+                            qs = camoufox_qs(cf_browser, sp)
                         except Exception as e:
                             qs = None
                             print(f'  camoufox errored ({str(e)[:70]}) — falling back to 2Captcha')
@@ -752,7 +914,7 @@ def main():
                         continue
                     if cf_browser is not None:
                         try:
-                            _qs = camoufox_qs(cf_browser, _sp[0].strip())
+                            _qs = camoufox_qs(cf_browser, _sp)
                         except Exception:
                             _qs = None
                         if _qs:
