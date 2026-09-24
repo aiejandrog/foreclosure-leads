@@ -94,11 +94,19 @@ check('clerk cancel line: cancelled (bankruptcy)', v['st'] == 'cancelled' and 'b
 
 # an earlier sale's cancellation must not cancel the current one
 prior = [
-    e('08/19/2026', 'Order Cancelling Foreclosure Sale'),
-    e('08/20/2026', 'Mortgage Foreclosure Sale Cancelled'),
+    e('08/19/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: AUGUST 20, 2026'),
+    e('08/26/2026', 'Notice of Sale', 'SALE OF 9/28/2026'),
 ]
-v = S.classify(prior, '09/28/2026', D(2026, 9, 24), listed=D(2026, 9, 24))
-check('listing after the cancel: an older sale, still scheduled', v['st'] == 'scheduled', v)
+v = S.classify(prior, '09/28/2026', D(2026, 9, 24))
+check('a cancel naming an earlier sale date: still scheduled', v['st'] == 'scheduled', v)
+v = S.classify([e('09/18/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: SEPTEMBER 22, 2026')], '09/22/2026', D(2026, 9, 24))
+check('sweep shape: cancelled before a passed sale -> cancelled, not unknown', v['st'] == 'cancelled', v)
+# sweep: board says 09-28, the docket reset it to 01/04/2027 months ago
+stale = [e('03/10/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: APRIL 6, 2026 AND RESET FOR SEPTEMBER 28, 2026'),
+         e('06/15/2026', 'Order Cancelling Foreclosure Sale', 'Sale Date: SEPTEMBER 28, 2026 AND RESET FOR JANUARY 4, 2027'),
+         e('11/20/2026', 'Notice of Sale', 'SALE OF 1/4/2027')]
+v = S.classify(stale[:2], '09/28/2026', D(2026, 9, 24))
+check('stale board date: the docket moved it to 01/04/2027', v['st'] == 'reset' and v.get('nd') == '2027-01-04', v)
 
 # passed with nothing on the docket yet
 v = S.classify([e('08/30/2026', 'Notice of Sale')], '09/21/2026', D(2026, 9, 22))

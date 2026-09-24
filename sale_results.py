@@ -162,10 +162,11 @@ def classify(dockets, sale, today=None, listed=None):
     """The verdict for ONE scheduled sale. `sale` is the sale date (date or string), `dockets` the
     OCS docket (raw or compact). Pure: no I/O, so the suite can pin every rule.
 
-    `listed` is the last day RealForeclose still showed this sale as waiting (the archive's
-    last_seen). A cancellation dated BEFORE that day belongs to an earlier sale date: the listing
-    proves this one was still on after it. Without this, the 08-19 cancellation that led to a
-    09-28 reset reads as the 09-28 sale being cancelled."""
+    Which sale a cancellation belongs to is read from its own text, not from when RealForeclose
+    last listed the case: the waiting list can keep showing a cancelled item (the 2026-09-22 list
+    carried six sales the docket shows no bid for). A cancellation naming only other, earlier dates
+    was an earlier sale's; one naming this date, or no date, is this one's. `listed` is accepted
+    and ignored, kept so callers need not change."""
     today = today or datetime.date.today()
     sale = sale if isinstance(sale, datetime.date) else _to_date(sale)
     listed = listed if isinstance(listed, datetime.date) or listed is None else _to_date(listed)
@@ -266,8 +267,9 @@ def classify(dockets, sale, today=None, listed=None):
             continue
 
         if _CANCEL.search(t) and d <= sale + datetime.timedelta(days=1):
-            if listed and d < listed:
-                continue                 # predates a listing that still showed this sale on
+            _cd = _dates_in(t)
+            if _cd and sale not in _cd and not any(x > sale for x in _cd):
+                continue                 # it names an earlier sale date, not this one
             cancel = (d, desc, cmt)
             pending = []                 # the ask was granted (or the clerk pulled the sale anyway)
             later = [x for x in _dates_in(t) if x > sale]
@@ -282,6 +284,20 @@ def classify(dockets, sale, today=None, listed=None):
             if later:
                 new_date = max(later)
                 ev(d, desc, cmt)
+
+    # THE BOARD'S DATE CAN BE STALE (sweep 09-24: 2009-074573 and 2024-000195 listed 09-28, the
+    # docket says 2027-01-04 and 2026-11-09). If the newest line that names any sale date names a
+    # LATER one — a notice of sale, or a reset order — the sale was moved, however long ago.
+    if not (held or vacated or cancel):
+        _setting = [(d, max(_dates_in(desc + ' ' + cmt))) for d, desc, cmt, code in _entries(dockets)
+                    if _dates_in(desc + ' ' + cmt) and not (_MOTION.search(desc) and not _ORDER.search(desc))
+                    and (_NOTICE_SALE.search(desc) or code == 'NOTSCV'
+                         or (_ORDER.search(desc) and _SALEWORD.search(desc) and _CANCEL.search(desc + ' ' + cmt)))]
+        if _setting:
+            _last = max(_setting, key=lambda x: x[0])
+            if _last[1] > sale:
+                cancel, new_date = (_last[0], 'docket sets a later sale date', ''), _last[1]
+                res['ev'].append({'d': _last[0].isoformat(), 'x': 'newest sale-setting line names %s' % _last[1].strftime('%m/%d/%Y')})
 
     if amj:
         res['amj'] = amj['d']
