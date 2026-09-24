@@ -12,7 +12,7 @@ Until priority 2 of the Miami automation goal, four paths checked money four dif
   saved vision       the same page-only rule, re-applied to a stored reading.
   timeline reader    no check at all; every figure left 'unverified'.
 
-The pilot's Walker and Blue Water figures were only verified because an agent transcribed them by
+The pilot's 2024-009959 and 2022-012065 figures were only verified because an agent transcribed them by
 hand. This module is the check that replaces the transcription, and every path above now calls it.
 
 THE CHECK
@@ -181,7 +181,7 @@ def _resolve_subtotal(rows, index, values, resolved=None):
     """-> {'members': [gid], 'membership': how}; raises _Fail when the subtotal does not agree.
 
     `resolved`: the subtotals above this one, already resolved. A text subtotal may be a RUNNING
-    one, the subtotal before it plus the rows since (Blue Water: 327,395.70 + eight costs =
+    one, the subtotal before it plus the rows since (2022-012065: 327,395.70 + eight costs =
     331,511.79); its members are then that subtotal and those rows."""
     row = rows[index]
     amount = values[row['gid']]
@@ -307,6 +307,29 @@ def _fail(reason, components=()):
             'run': None, 'total_gid': None}
 
 
+def _nearest_rows_above(rows, index, values):
+    """The run of rows directly above a disagreeing subtotal that comes closest to it, so the
+    report says HOW it disagrees ("225,243.83 printed, its 8 rows add to 225,244.43")."""
+    printed = values.get(rows[index]['gid'], cents(rows[index]['amount']))
+    best, run, total, back = None, 0, Decimal('0'), index - 1
+    while back >= 0 and run < MAX_RUN_ROWS:
+        prior = rows[back]
+        if not prior.get('barrier') and prior['kind'] == 'rate':
+            back -= 1
+            continue
+        if not _additive(prior):
+            break
+        run += 1
+        total += values[prior['gid']]
+        if best is None or abs(printed - total) < abs(printed - best[1]):
+            best = (run, total)
+        back -= 1
+    if best is None:
+        return {'rows_above': 0}
+    return {'rows_above': best[0], 'rows_above_sum': float(best[1]),
+            'difference': float(printed - best[1])}
+
+
 def check_all(rows, total=None):
     """Every row counts: the strict one-table check (miami_judgment.labeled_sum_check).
 
@@ -402,10 +425,16 @@ def verify_total(rows, total_gid, read_pages=None, stated=None, whole_total_page
                     '(tried up to %d page(s) back)' % (MAX_SPAN_PAGES - 1), additive)
         # A printed subtotal its own rows do not reproduce is usually why (2018-026274's interest
         # subtotal is $0.60 off its eight yearly rows). Name it rather than leave only "no run".
+        # A one-line total that a resolved subtotal below it counted ("Attorney's fees total:
+        # $3,450.00") agreed with everything; it is not a reason.
+        counted = set().union(*members_of.values()) if members_of else set()
         out['disagreeing_subtotals'] = [
-            {'page': r['page'], 'label': r['label'], 'amount': float(cents(r['amount']))}
-            for r in rows[:index] if r.get('note', '').startswith(('subtotal label', 'SUBTOTAL whose'))
-            and r['page'] >= page - (MAX_SPAN_PAGES - 1)]
+            dict({'page': r['page'], 'label': r['label'],
+                  'amount': float(values.get(r['gid'], cents(r['amount'])))},
+                 **_nearest_rows_above(rows, i, values))
+            for i, r in enumerate(rows[:index])
+            if r.get('note', '').startswith(('subtotal label', 'SUBTOTAL whose'))
+            and r['gid'] not in counted and r['page'] >= page - (MAX_SPAN_PAGES - 1)]
         return out
     distinct = {frozenset(r['gid'] for r in m if _additive(r) and values[r['gid']] != 0)
                 for m in matches}
@@ -516,7 +545,7 @@ def only_money(line):
 
 
 # Page furniture between a label column and its values: the running footer, a page number, a
-# stray OCR fragment ("02", "1. "). McCray's OCR put "Case No" and "02" inside its value column.
+# stray OCR fragment ("02", "1. "). 2023-020247's OCR put "Case No" and "02" inside its value column.
 _FURNITURE_RE = re.compile(r'^\s*(?:case\s+no\b.*|page\s+\S+\s+[o0]f\s+\S+\s*|filing\s*#.*'
                            r'|\W*\d{1,3}\W*)$', re.I)
 # The line that opens a judgment's amounts table. Lines above it are recitals, not labels.
@@ -539,7 +568,7 @@ def column_blocks(lines):
     -> [(label_line_indexes, [(value_line_index, value)])]; a value printed as a credit is negative.
 
     The labels stop at the first line above that carries a figure of its own. That line is a row
-    in its own right ("2024: $835.00"), not a label; taking it as one hid Blue Water's year-by-year lines
+    in its own right ("2024: $835.00"), not a label; taking it as one hid 2022-012065's year-by-year lines
     and both credits, and a label run that long never pairs, so every figure below it was lost too.
     """
     blocks = []
@@ -674,7 +703,7 @@ def text_rows(reading, total_re):
 def _section_totals(rows, reach=30):
     """An unlabelled figure that is the exact sum of the rows around it is their section total.
 
-    Blue Water prints its escrow advances as five year lines, then "$48,738.51" with no label,
+    2022-012065 prints its escrow advances as five year lines, then "$48,738.51" with no label,
     then nine more year lines on the next page; 48,738.51 is exactly all fourteen. Left as an
     unknown figure it is a barrier and the table cannot verify; counted as a charge it counts
     the escrow twice. As a subtotal it is counted once, through its rows.
@@ -700,7 +729,7 @@ def _section_totals(rows, reach=30):
         heading = (row['how'] == 'column_pairing' and not row['barrier'] and row['kind'] == 'charge'
                    and words(row['label']))
         if heading:
-            # A labelled figure printed ABOVE its own breakdown: McCray's "Attorney's Fees
+            # A labelled figure printed ABOVE its own breakdown: 2023-020247's "Attorney's Fees
             # $8,975.00" over "Attorney's fees", "Additional Attorney's fees", "Trial Attorney's
             # fees". Rows after it only, and every one must carry the heading's words.
             need, after, ahead = words(row['label']), [], index + 1
@@ -747,7 +776,7 @@ def _bare_totals(rows):
     """A bare "TOTAL" that closes a table of printed SUBTOTALs is that table's total.
 
     Alone, "TOTAL" is as often a section total as the judgment's, so _text_kind types it a
-    subtotal. Blue Water's table says which it is: two rows labelled SUBTOTAL, then TOTAL, larger
+    subtotal. 2022-012065's table says which it is: two rows labelled SUBTOTAL, then TOTAL, larger
     than both, with no other total between. Only that shape is retyped; the arithmetic still has
     to reproduce it (verify_total), so a wrong call here can only fail to verify.
     """
@@ -766,7 +795,7 @@ def _bare_totals(rows):
             row['kind'] = 'total'
             row['note'] = 'bare TOTAL closing a table of printed SUBTOTALs'
             continue
-        # McCray: no SUBTOTALs, just a column that ends in TOTAL. A section's TOTAL (court costs)
+        # 2023-020247: no SUBTOTALs, just a column that ends in TOTAL. A section's TOTAL (court costs)
         # is smaller than the principal above it; the judgment's is larger than every figure in
         # the table. Only then is it offered, so a costs total never stands in for the judgment.
         span = [p for p in rows[:index] if p['page'] >= row['page'] - (MAX_SPAN_PAGES - 1)]

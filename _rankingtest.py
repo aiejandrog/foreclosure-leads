@@ -84,7 +84,7 @@ class FactTests(unittest.TestCase):
 
     def test_entity_only_owner_is_never_call_ready(self):
         got = R.contact_fact({'name': 'RICHARD ROE', 'phones': ['1'], 'traced': '2026-09-01',
-                              'entity': 'BLUE WATER LLC'}, present((), ('BLUE WATER LLC',)), TODAY)
+                              'entity': 'EXAMPLE LLC'}, present((), ('EXAMPLE LLC',)), TODAY)
         self.assertEqual((got['state'], got['call_ready']), ('entity_only', False))
 
     def test_phone_must_belong_to_a_person_on_the_deed(self):
@@ -108,7 +108,7 @@ class RankingTests(unittest.TestCase):
     def test_fully_evidenced_cases_rank_by_sale_date_and_the_rest_are_held(self):
         rows = R.rank([self.item('C-late', sale='2026-10-20'), self.item('C-soon', sale='2026-09-30'),
                        self.item('C-past', sale='2026-09-01'),
-                       self.item('C-entity', pres=present((), ('BLUE WATER LLC',)))], TODAY)
+                       self.item('C-entity', pres=present((), ('EXAMPLE LLC',)))], TODAY)
         self.assertEqual([(r['case'], r['rank']) for r in rows[:2]], [('C-soon', 1), ('C-late', 2)])
         held = {r['case']: r['held_because'] for r in rows if not r['qualified']}
         self.assertIn('auction: past date outcome unknown', held['C-past'])

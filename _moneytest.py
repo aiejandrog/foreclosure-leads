@@ -241,7 +241,7 @@ class AcceptanceShapeTests(unittest.TestCase):
         self.assertEqual(found['sum_check_pages'], [1, 2, 3])
 
     def test_the_exhibit_as_the_desktop_read_it(self):
-        # Blue Water's real layout (desktop dump, 2026-09-24): a heading above the first figure
+        # 2022-012065's real layout (desktop dump, 2026-09-24): a heading above the first figure
         # of each block, a per-diem inside the table, and the escrow advances printed as five
         # year lines, an UNLABELLED total, then more year lines on the next page.
         p2 = '\n'.join([
@@ -290,7 +290,7 @@ class AcceptanceShapeTests(unittest.TestCase):
         self.assertIn(5.0, found['sum_check_components'])
 
     def test_ocr_columns_with_a_footer_a_stray_fragment_and_a_breakdown_below_its_heading(self):
-        # McCray (desktop dump): OCR read seven labels, the running footer, then the values with
+        # 2023-020247 (desktop dump): OCR read seven labels, the running footer, then the values with
         # a stray "02" and "$4, 750.00"; "Attorney's Fees" is printed above its own three parts;
         # the column ends in a bare TOTAL.
         p1 = '\n'.join([
@@ -343,8 +343,22 @@ class AcceptanceShapeTests(unittest.TestCase):
         self.assertEqual({s['amount']: s['membership'] for s in found['sum_check_subtotals']},
                          {1070.0: 'rows_above'})
 
+    def test_only_the_subtotal_that_really_disagrees_is_named_with_its_gap(self):
+        # 2018-026274 round 4: the fees one-liner agreed (the subtotal below counted it) but was
+        # still listed; the interest subtotal is the one $0.60 off, and the report says by how much.
+        page = '\n'.join(['Plaintiff is due:', 'Principal', '$1,000.00', "Attorney's fees total:",
+                          '$50.00', 'INTEREST BEARING SUBTOTAL', '$1,050.00',
+                          '2019 Statutory Interest', '$10.30', '2020 Statutory Interest', '$20.30',
+                          'Post-Judgment Statutory Interest Total as of ', '8/11/2026', '$30.00',
+                          'AMENDED TOTAL INCLUDING POST ', 'JUDGMENT STATUTORY INTEREST', '$1,080.00'])
+        found = [c for c in MJ.judgment_amount_candidates(pages(page)) if c['amount'] == 1080.0][0]
+        self.assertFalse(found['sum_check'])
+        bad = found['sum_check_disagreeing_subtotals']
+        self.assertEqual([(s['amount'], s['rows_above'], s['rows_above_sum'], s['difference'])
+                          for s in bad], [(30.0, 2, 30.6, -0.6)])
+
     def test_ocr_letter_spacing_does_not_hide_a_fees_breakdown(self):
-        # McCray's OCS copy: "A ttorney 's fees" under "Attorney's Fees".
+        # 2023-020247's OCS copy: "A ttorney 's fees" under "Attorney's Fees".
         page = '\n'.join(['Plaintiff is due:', 'Principal', "Attorney's Fees", "A ttorney 's fees",
                           "Trial Attorney 's fees", '$1,000.00', '$300.00', '$200.00', '$100.00',
                           'TOTAL', '$1,300.00'])

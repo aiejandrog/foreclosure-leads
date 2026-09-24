@@ -2,10 +2,10 @@
 
     python -u replay_money_check.py --all
     python -u replay_money_check.py --case 2025-023462-CA-01 --case ...
-    python -u replay_money_check.py --all --grep WALKER --grep "BLUE WATER"
+    python -u replay_money_check.py --all --grep "AMENDED TOTAL"
 
-This is the acceptance run for priority 2 of the Miami automation goal: the pilot's Walker and Blue
-Water totals were verified by an agent transcribing the figures by hand. Here the same saved
+This is the acceptance run for priority 2 of the Miami automation goal: the pilot's 2024-009959 and
+2022-012065 totals were verified by an agent transcribing the figures by hand. Here the same saved
 evidence goes through judgment_money with no transcription, and the report shows, per total:
 
   - whether one run of printed rows ending at it adds up to the cent, and across which pages
@@ -52,14 +52,16 @@ def _text_of(reading):
 
 def _brief(check):
     return {k: check.get(k) for k in ('ok', 'reason', 'run', 'pages', 'components', 'credits',
-                                      'rates', 'subtotals', 'excluded_before_run')}
+                                      'rates', 'subtotals', 'excluded_before_run',
+                                      'disagreeing_subtotals')}
 
 
 def _candidate_brief(c):
     return {'ok': c.get('sum_check'), 'reason': c.get('sum_check_reason'),
             'run': c.get('sum_check_run'), 'pages': c.get('sum_check_pages'),
             'components': c.get('sum_check_components'), 'credits': c.get('sum_check_credits'),
-            'rates': c.get('sum_check_rates'), 'subtotals': c.get('sum_check_subtotals')}
+            'rates': c.get('sum_check_rates'), 'subtotals': c.get('sum_check_subtotals'),
+            'disagreeing_subtotals': c.get('sum_check_disagreeing_subtotals')}
 
 
 def check_document(manifest, reading):
@@ -132,6 +134,17 @@ def replay(cases, patterns=()):
     return report
 
 
+def _print_disagreeing(t):
+    for d in t.get('disagreeing_subtotals') or ():
+        if 'rows_above_sum' in d:
+            print('      printed subtotal $%s p%s %r: its %d row(s) above add to $%s (off by $%s)' % (
+                '{:,.2f}'.format(d['amount']), d['page'], d['label'], d['rows_above'],
+                '{:,.2f}'.format(d['rows_above_sum']), '{:,.2f}'.format(d['difference'])))
+        else:
+            print('      printed subtotal $%s p%s %r: no rows above it' % (
+                '{:,.2f}'.format(d['amount']), d['page'], d['label']))
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     parser.add_argument('--case', action='append', default=[])
@@ -161,10 +174,12 @@ def main(argv=None):
                         case['case'], doc['source_ref'], '{:,.2f}'.format(t['amount'] or 0),
                         t['page'], 'VERIFIED' if t['ok'] else 'not verified',
                         t['run'] if t['ok'] else t['reason']))
+                    _print_disagreeing(t)
         for t in case['timeline']:
             print('  %s  %s  $%s p%s  %s  %s' % (
                 case['case'], t['source_ref'], '{:,.2f}'.format(t['amount'] or 0), t['page'],
                 'VERIFIED' if t['ok'] else 'not verified', t['run'] if t['ok'] else t['reason']))
+            _print_disagreeing(t)
     print('  report: %s' % target)
     return 0
 

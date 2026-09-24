@@ -26,15 +26,29 @@ shared spending controls. This is not complete.
 | Docket completeness | Full OCS response preserved; independent coverage reconciliation or explicit unverified gap | Full response supported; completeness unproven |
 | All document/page outcomes | Attachment inventory and source-bound page outcomes; no count-only completion | `document_coverage`: one row per expected attachment, each read / read_partial / fetched_unread / queued / failed / restricted / access_gap / not_enumerated / county_no_document, saved with every timeline. A restricted or refused court filing stays a gap; a stored public Official Records copy of the same instrument (prints this case number, same kind, recorded -3/+120 days) is linked as `same_instrument_unverified`, never counted as the court copy. Where none is stored, `alternate_copy_needed` names the book/page the docket cites. Fetching that copy automatically is not wired: it needs the clerk endpoints, reachable only from the desktop |
 | Official Records relevance | Current parcel/title identity, capped search gaps and retained later instruments | A deed without this parcel's folio is kept as `legal_description_match_required` with its parties and the legal description it prints (a deed with another parcel's folio is kept as `folio_conflict`), never dropped and never the current deed on its own. Matching the legal description to the parcel is still a person's job; title discovery does not yet fetch unanchored deeds |
-| Free-first reading | Embedded/layout OCR before vision; automatic cross-page extraction | Text and OCR rows are extracted and checked across page breaks with no transcription; vision buys the page before a total only when that total's own page cannot reproduce it and OCR shows money there. Not yet replayed on Walker and Blue Water |
-| Amount verification | All typed charges and credits sum exactly; printed subtotals match; consistent across outputs | One contract (`judgment_money`) on the OCR/text, vision, saved-vision and timeline paths: exact cents, credits subtract, rates kept and reported, subtotal membership explicit or rows-above, no subset search, no tolerance. Not yet replayed on Walker and Blue Water |
+| Free-first reading | Embedded/layout OCR before vision; automatic cross-page extraction | Text and OCR rows are extracted and checked across page breaks with no transcription; vision buys the page before a total only when that total's own page cannot reproduce it and OCR shows money there. Replayed at $0 on the desktop 09-24: 2024-009959, 2022-012065, 6828 and 2023-020247 verify from saved text/OCR alone |
+| Amount verification | All typed charges and credits sum exactly; printed subtotals match; consistent across outputs | One contract (`judgment_money`) on the OCR/text, vision, saved-vision and timeline paths: exact cents, credits subtract, rates kept and reported, subtotal membership explicit or rows-above, no subset search, no tolerance. Replayed at $0 on 09-24: 258 saved totals in 78 cases, 65 verify (17 across a page break); nothing that verified earlier stopped verifying. A total that fails names each printed subtotal its rows do not reproduce and by how much |
 | Current title | Continuous evidence-backed conveyance chain, entity/probate uncertainty explicit | `present_title.ownership`: the newest folio-anchored deed as a candidate, a chain-of-title link per consecutive deed pair (continuous / names_differ / court_transfer_not_compared / unknown), and `possibly_conveyed_later` when an unanchored later deed names the current grantee as grantor. Entity grantees get a Sunbiz record (`--sunbiz`, free, cached 30 days) with title and contact authority `not_established` and `call_ready` False. Death and probate stay quoted flags, never findings |
 | Liens | Obligation, identity, attachment, amendment and satisfaction links; no missing-release inference | `present_title.claims`: one row per instrument, labelled by parcel link (folio_matched / subdivision_only / name_search_only) and by whose name it was found under (current_grantee / prior_title_party / defendant_not_on_title / lead_owner_not_on_title / other_name). `debt` is always `not_established`; no satisfaction found reads `no_satisfaction_found_not_proof_open`. A claim under a historical grantee's name is kept and never counted against the current owner. Attachment by legal description and amounts from the recorded body remain open |
-| Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Docket-index reconciliation: each final judgment is operative, superseded, vacated (or partially), satisfied (or partially) or unclear, with the entry that changed it; a controlling judgment is named only when exactly one is operative. Stays carry a history (stayed, relief, reinstated, bankruptcy dismissed). A dismissal naming some defendants is party-limited. A past sale date without a certificate is `unknown_no_certificate`. Judgment BODIES are not yet read for scope; the index can be wrong |
+| Timeline | Document-supported scope, amendments, vacatur, stay/relief and sale status | Docket-index reconciliation: each final judgment is operative, superseded, vacated (or partially), satisfied (or partially) or unclear, with the entry that changed it; a controlling judgment is named only when exactly one is operative. Stays carry a history (stayed, relief, reinstated, bankruptcy dismissed). A dismissal naming some defendants is party-limited. A past sale date without a certificate is `unknown_no_certificate`. A filing that carries a judgment copy (motion, notice, memorandum, affidavit…) is classified by its description, not the attached body; an image-less plain judgment on the same day as an imaged one is `docket_duplicate`. Judgment BODIES are not yet read for scope; the index can be wrong |
 | One-command orchestration | Durable step leases, before-call reservations, idempotent restart and refresh | `run_documents --backfill --timeline [--collect-dockets]`: per case, a documents step then a whole-case timeline step, each recorded in the one backfill checkpoint with its own fingerprint; a restart resumes at the first unfinished step. Both steps draw on one vision ledger and one per-case share; reservations are durable before each call, cached page reads are free, unsettled calls are never retried. Title discovery and the owner-token worker stay separate commands (they spend captcha, which the backfill refuses) |
 | Spend isolation | Fixed batch roster; protected pending-case shares; common paid-call controls | Per-case shares on the vision paths (run_documents, backfill, timeline); run_documents --token-budget now solves only through the real-balance PaidCutoffSolver (one try, free browser first) |
-| Five-case replay | Reproduce prior evidence without hand-selection/transcription within approved cap | Replay tool built; not yet run on the saved pilot evidence |
+| Five-case replay | Reproduce prior evidence without hand-selection/transcription within approved cap | Passed at $0 on the desktop (09-24, four rounds), no hand selection or transcription; see "Five-case acceptance" below |
 | Twelve-case review | Explicit review-policy acceptance and unattended evidence report | Not passed; no gate removed |
+
+## Five-case acceptance (09-24, desktop, $0, saved evidence only)
+
+| Case | Verdict | Evidence the code produced |
+|---|---|---|
+| 2024-014878 | supported | $1,746,032.70 verifies on court:232820355:1 pp. 2-3 (13 rows; per-diem 645.06 and 330.00 kept out). Controlling judgment #82 (232820355); #57 is a docket duplicate, #56 superseded by #67 and #82. Sale 2026-09-28 |
+| 2022-012065 | supported | $373,482.79 verifies on court:231714504:1 pp. 2-4 (section total $48,738.51 and a running subtotal both reproduced). Controlling #174 (231714504) |
+| 2024-009959 | supported (amount and posture) | $555,499.25 verifies on court:231457022:1 pp. 1-2. Controlling #79 (231457022). Contact authority for the estate is not established |
+| 2023-020247 | supported | Stay in effect: #125 (233382143) p4 reinstates it. $305,151.92 verifies on both copies of 224002597 pp. 1-2. Controlling #91 (224002597) |
+| 2018-026274 | conflicted; amount incomplete | Stay #93 (206433383), no relief order found, vs amended judgment #140 (232632335) and sale notice #143 for 2026-09-28. $785,670.31 does not verify: the judgment's own printed interest subtotal $225,243.83 is $0.60 below its eight yearly rows ($225,244.43) |
+
+2024-009959's and 2022-012065's amounts were first produced by an agent transcribing pages; they now
+come from the saved text and OCR alone. The verdict column is written from the code's output by
+hand: no module emits supported / incomplete / conflicted yet.
 
 ## Implementation sequence
 
@@ -64,7 +78,7 @@ Priority 1 is wired, not yet proven on the pilot evidence.
 - `replay_paid_selection.py` replays selection and shares over saved evidence at $0. It has not
   been run on the five pilot cases: their evidence is on the desktop.
 
-Priority 2 is wired, not yet proven on Walker and Blue Water.
+Priority 2 is wired and proven at $0 on the five pilot cases (see "Five-case acceptance").
 
 - `judgment_money` is the one exact-cents check. A printed total is verified by one contiguous
   run of printed rows ending at it, which may start up to two pages earlier; every row in the run
@@ -104,8 +118,8 @@ Priority 3 is wired on the docket index, not yet on judgment bodies.
   unknown tenant/spouse/heirs) and not the action or all defendants are `limited_scope`.
 - Not closable from the index alone: what a vacatur or an amended judgment actually changes is in
   its body. When the index cites no date and more than one judgment could be meant, the answer
-  is `unclear`, not a guess. The 6828 and McCray acceptance runs need their saved dockets, which
-  are on the desktop.
+  is `unclear`, not a guess. The 2024-014878 and 2023-020247 acceptance runs passed on the desktop's
+  saved dockets on 09-24 (see "Five-case acceptance").
 
 Priority 4 is wired, not yet run end to end on the desktop.
 

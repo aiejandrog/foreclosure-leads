@@ -232,7 +232,7 @@ def run_with_parties(entries, defendants, docs=()):
 
 
 class ReconciliationTests(unittest.TestCase):
-    """Shapes of the pilot's 6828 (replacement judgment) and McCray (reinstated stay) cases, and
+    """Shapes of the pilot's 6828 (replacement judgment) and 2023-020247 (reinstated stay) cases, and
     defendant-specific dismissals. Synthetic; no homeowner data."""
 
     def test_an_amended_judgment_replaces_the_one_it_amends(self):
@@ -286,7 +286,7 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual((j['status'], j['satisfaction']), ('satisfied', 'satisfied'))
 
     def test_a_reinstated_stay_is_a_stay_again(self):
-        # McCray's shape: stayed, relief granted, then the stay reinstated. Reading the
+        # 2023-020247's shape: stayed, relief granted, then the stay reinstated. Reading the
         # reinstatement as relief restored the judgment as if nothing stood in the way.
         r = run([entry(1, 'Final Judgment'), entry(2, 'Suggestion of Bankruptcy'),
                  entry(3, 'Order granting relief from bankruptcy stay'),
@@ -297,7 +297,7 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual([h['event'] for h in r['stay_history']], ['stayed', 'relief', 'reinstated'])
 
     def test_a_reinstatement_inside_a_bankruptcy_filing_body_is_read(self):
-        # McCray as it really is (desktop replay, 2026-09-24): the docket title says "Suggestion
+        # 2023-020247 as it really is (desktop replay, 2026-09-24): the docket title says "Suggestion
         # of Bankruptcy"; the bankruptcy court's order reinstating the stay is on pages 3-4.
         body = {'source_ref': 'court:3:1', 'entry_ref': '3', 'reading': {'pages': [
             {'page': 1, 'outcome': 'text', 'text': 'SUGGESTION OF BANKRUPTCY'},
@@ -377,7 +377,7 @@ class ReconciliationTests(unittest.TestCase):
         self.assertEqual(r['judgments']['docket_duplicates_inferred'], ['57'])
 
     def test_an_image_less_same_day_judgment_entry_is_a_docket_duplicate(self):
-        # Walker #79/#80, McCray #91/#92, Blue Water #174/#177: the imaged entry controls,
+        # 2024-009959 #79/#80, 2023-020247 #91/#92, 2022-012065 #174/#177: the imaged entry controls,
         # whichever of the two the docket lists first.
         doc = {'source_ref': 'court:2:1', 'entry_ref': '2', 'reading': {'pages': [
             {'page': 1, 'outcome': 'text', 'text': 'FINAL JUDGMENT OF FORECLOSURE'}]}}
@@ -427,7 +427,7 @@ class ReconciliationTests(unittest.TestCase):
         self.assertIsNone(r['judgments']['controlling_entry'])
 
     def test_a_reinstated_chapter_13_case_puts_the_stay_back_in_effect(self):
-        # McCray filing 125's attached order: the case is reinstated and "the automatic stay under
+        # 2023-020247 filing 125's attached order: the case is reinstated and "the automatic stay under
         # 11 U.S.C. 362(a) is once again in effect".
         body = {'source_ref': 'court:3:1', 'entry_ref': '3', 'reading': {'pages': [
             {'page': 3, 'outcome': 'text', 'text': 'ORDER AND REINSTATING CHAPTER 13 CASE\n'

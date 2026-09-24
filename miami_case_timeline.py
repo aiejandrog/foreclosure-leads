@@ -60,7 +60,7 @@ def classify(text):
     checks = [
         ('order_on_motion', r'^order.*(?:denying|denied)'),
         # An order that reinstates a stay, or vacates the order that lifted it, would otherwise
-        # match relief_from_stay below and read as the stay ENDING (priority 3, McCray).
+        # match relief_from_stay below and read as the stay ENDING (priority 3, 2023-020247).
         ('stay_reinstated', r'(?:reinstat|reimpos)\w*[^.;]*\bstay\b'
                             r'|vacat\w*[^.;]*(?:relief from|lift\w*|terminat\w*)[^.;]*\bstay\b'),
         # A dismissed BANKRUPTCY is not a dismissed foreclosure; without this it matched
@@ -148,7 +148,7 @@ def _transition(e):
 
 
 # What a docket description names when the filing is ABOUT a judgment, sale or title.
-# 2018-026274's Memorandum (#117) and Status Report (#119) and Blue Water's Request for Judicial
+# 2018-026274's Memorandum (#117) and Status Report (#119) and 2022-012065's Request for Judicial
 # Notice (#152) each carried a judgment copy and read as judgments (desktop rerun, 09-24).
 _FILED_ABOUT_RE = re.compile(r'(?:(?:amended|emergency|renewed|agreed|verified|supplemental|joint)\s+)*'
                              r'(?:motion|affidavit|certificate of (?:service|mailing|compliance)|'
@@ -245,7 +245,7 @@ def build_timeline(case, inventory, document_rows, as_of):
             # Only for linking judgments to what acts on them; dropped before the timeline is saved.
             e['_body'] = '\n'.join(str(p.get('text') or '') for p in pages[:3])[:6000]
         # A bankruptcy filing often carries the bankruptcy court's own order as an attachment.
-        # McCray's reinstated stay was on pages 3-4 of such a filing, and the docket title only
+        # 2023-020247's reinstated stay was on pages 3-4 of such a filing, and the docket title only
         # said "suggestion of bankruptcy", so the index never saw it (desktop replay, 2026-09-24).
         if e['kind'] in _STAY_CARRIERS:
             passages = stay_reinstatement_passages(pages)
@@ -459,8 +459,8 @@ def reconcile_judgments(entries, today):
     """
     judgments, events = [], []
     # A judgment entry the county holds no image for, on a day another judgment entry does have
-    # one, is taken as the docket listing that judgment twice (Walker #79/#80, McCray #91/#92,
-    # Blue Water #174/#177). Without this the image-less entry blocks, or even becomes, the
+    # one, is taken as the docket listing that judgment twice (2024-009959 #79/#80, 2023-020247 #91/#92,
+    # 2022-012065 #174/#177). Without this the image-less entry blocks, or even becomes, the
     # controlling judgment. Inferred from the docket, so it is labelled, not hidden.
     imaged_days = {e['date'] for e in entries if e['kind'] == 'final_judgment' and e.get('date')
                    and e.get('image_status') not in _NO_IMAGE}

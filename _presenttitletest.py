@@ -82,8 +82,8 @@ class ChainOfTitleTests(unittest.TestCase):
         self.assertEqual(chain[1]['link'], 'court_transfer_not_compared')
 
 
-SEARCH_HTML = ('<a href="/Inquiry/CorporationSearch/SearchResultDetail?x=1&amp;y=2">BLUE WATER HOLDINGS LLC</a>'
-               '<a href="/Inquiry/CorporationSearch/SearchResultDetail?x=3">BLUE WATERS INC</a>')
+SEARCH_HTML = ('<a href="/Inquiry/CorporationSearch/SearchResultDetail?x=1&amp;y=2">EXAMPLE HOLDINGS LLC</a>'
+               '<a href="/Inquiry/CorporationSearch/SearchResultDetail?x=3">EXAMPLE WATERS INC</a>')
 DETAIL_HTML = ('<div>Document Number <span>L19000123456</span> Date Filed <span>01/02/2019</span>'
                '<label>Status</label> <span>ACTIVE</span> Registered Agent Name &amp; Address '
                '<span>DOE, JANE</span><span>1 MAIN ST</span><span>MIAMI FL</span> '
@@ -106,7 +106,7 @@ class SunbizTests(unittest.TestCase):
         def fetch(url):
             calls.append(url)
             return DETAIL_HTML if 'SearchResultDetail' in url else SEARCH_HTML
-        raw = LO._lookup('BLUE WATER HOLDINGS LLC', fetch=fetch)
+        raw = LO._lookup('EXAMPLE HOLDINGS LLC', fetch=fetch)
         self.assertFalse(raw['not_found'])
         self.assertEqual(raw['status'], 'ACTIVE')
         self.assertEqual(len(calls), 2)
@@ -114,7 +114,7 @@ class SunbizTests(unittest.TestCase):
 
     def test_found_entity_carries_no_authority_and_is_never_call_ready(self):
         fetch = lambda u: DETAIL_HTML if 'SearchResultDetail' in u else SEARCH_HTML
-        record = SE.resolve('BLUE WATER HOLDINGS LLC', lookup=lambda n: LO._lookup(n, fetch=fetch))
+        record = SE.resolve('EXAMPLE HOLDINGS LLC', lookup=lambda n: LO._lookup(n, fetch=fetch))
         self.assertEqual(record['lookup'], 'found')
         self.assertEqual(record['status'], 'ACTIVE')
         self.assertEqual(record['document_number'], 'L19000123456')
@@ -128,7 +128,7 @@ class SunbizTests(unittest.TestCase):
     def test_unreachable_is_an_error_not_a_not_found(self):
         def boom(name):
             raise SE.SunbizUnreachable('curl exit 7')
-        record = SE.resolve('BLUE WATER HOLDINGS LLC', lookup=boom)
+        record = SE.resolve('EXAMPLE HOLDINGS LLC', lookup=boom)
         self.assertEqual(record['lookup'], 'error')
         self.assertIn('curl exit 7', record['reason'])
 
@@ -197,9 +197,9 @@ class PresentTitleTests(unittest.TestCase):
         self.assertEqual(sorted(only['under_names']), ['OLD OWNER', 'OWNER PERSON'])
 
     def test_entity_only_owner_is_held_and_never_call_ready(self):
-        deeds = [deed('1', '1/1/2010', 'FIRST', 'OLD OWNER'), deed('2', '1/1/2020', 'OLD OWNER', 'BLUE WATER HOLDINGS LLC')]
-        record = SE.resolve('BLUE WATER HOLDINGS LLC', lookup=lambda n: {
-            'not_found': False, 'matched': 'BLUE WATER HOLDINGS LLC', 'status': 'ACTIVE',
+        deeds = [deed('1', '1/1/2010', 'FIRST', 'OLD OWNER'), deed('2', '1/1/2020', 'OLD OWNER', 'EXAMPLE HOLDINGS LLC')]
+        record = SE.resolve('EXAMPLE HOLDINGS LLC', lookup=lambda n: {
+            'not_found': False, 'matched': 'EXAMPLE HOLDINGS LLC', 'status': 'ACTIVE',
             'officers': [{'t': 'MGR', 'n': 'ROE, RICHARD', 'a': ''}]})
         got = MPT.present_title(report(deeds=deeds), entities=[record])
         self.assertFalse(got['call_ready'])
@@ -209,12 +209,12 @@ class PresentTitleTests(unittest.TestCase):
         self.assertIn('owner is an entity; no person is established as able to act for it', got['held_because'])
 
     def test_entity_owner_without_lookup_is_not_run_not_missing(self):
-        deeds = [deed('2', '1/1/2020', 'OLD OWNER', 'BLUE WATER HOLDINGS LLC')]
+        deeds = [deed('2', '1/1/2020', 'OLD OWNER', 'EXAMPLE HOLDINGS LLC')]
         got = MPT.present_title(report(deeds=deeds))
         self.assertEqual(got['owner_entities'][0]['lookup'], 'not_run')
 
     def test_report_only_reads_the_cache_and_never_the_registry(self):
-        deeds = [deed('2', '1/1/2020', 'OLD OWNER', 'BLUE WATER HOLDINGS LLC')]
+        deeds = [deed('2', '1/1/2020', 'OLD OWNER', 'EXAMPLE HOLDINGS LLC')]
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'cache.json'
             got = TD.present_title_for(report(deeds=deeds), sunbiz=True, network=False, cache_file=path)
