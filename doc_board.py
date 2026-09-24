@@ -22,8 +22,8 @@ SHAPE (one row, short keys because it rides in every build):
      'j': 'one' | 'several' | 'none' | 'sat' | 'part',
      'src': 'court' when the judgment document read is the court's own copy (a 'court:' ref),
             'rec' when it is a recorded copy from Official Records,
-     'amt': printed judgment amount, only when j is 'one' or 'part', one figure was printed AND
-            src is 'court',
+     'amt': printed judgment amount, only when j is 'one' or 'part', one figure was printed,
+            src is 'court' AND ctl is True,
      'ctl': True when the refreshed timeline names this same docket entry as the controlling
             judgment, False when it names a different one; absent when there is no refreshed
             timeline (no 'judgments' block) or it could not name one,
@@ -92,11 +92,15 @@ def summarize(dossier, timeline=None):
     if op:
         out['ref'] = op[:60]
         out['src'] = 'court' if court else 'rec'
-    if j in ('one', 'part') and court and isinstance(amt, (int, float)) and amt > 0:
-        out['amt'] = round(float(amt), 2)
     ctl = _controlling(timeline, op) if court and j in ('one', 'part', 'sat') else None
     if ctl is not None:
         out['ctl'] = ctl
+    # Both halves of what verify-12 found reliable, or no figure: the court's copy AND the refreshed
+    # timeline naming it controlling. The timeline on main has no judgments block, so until #53's
+    # timeline is written no amount ships; a lone read judgment may be vacated or amended
+    # (2024-014878 read its own vacated FJ; 2025-013918 has an amended FJ entered 09-24).
+    if j in ('one', 'part') and court and ctl is True and isinstance(amt, (int, float)) and amt > 0:
+        out['amt'] = round(float(amt), 2)
     partial = sum(1 for d in (c.get('documents') or [])
                   if isinstance(d, dict) and d.get('read_status') == 'partial')
     if partial:

@@ -8140,9 +8140,9 @@ function _docJudgChip(r, d, tail){
     var board = +(r.judg||0), amt = +(d.amt||0);
     var differs = amt > 0 && board > 0 && Math.abs(amt - board) >= 1;
     var what = amt > 0 ? ('Judgment read from the court\'s copy: ' + fmtMoney(amt) + ' (' + (d.ref||'') + ').')
-                       : ('The court\'s copy of the judgment was read (' + (d.ref||'') + ') but no single printed amount was found.');
+                       : ('The court\'s copy of the judgment was read (' + (d.ref||'') + ').');
     what += d.ctl === true ? ' The docket timeline names it as the controlling judgment.'
-                           : ' Not yet confirmed as the controlling judgment: an amended or vacated judgment may exist.';
+                           : ' Not yet confirmed as the controlling judgment (an amended or vacated judgment may exist), so its amount is withheld.';
     if(d.j === 'part') what += ' A PARTIAL satisfaction was also read, so the printed figure overstates what is owed.';
     if(differs) what += ' The board shows ' + fmtMoney(board) + ' from the clerk; the two disagree.';
     return ' <span class="docchip ' + (differs || d.j === 'part' || d.ctl !== true ? 'dx' : 'dj') + '" title="'

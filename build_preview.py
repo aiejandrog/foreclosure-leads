@@ -85,7 +85,7 @@ FAKE = [
 # Two invented document-dossier summaries (doc_board.py shape) so the DOC chip is in the preview:
 # one read judgment that disagrees with the clerk figure, one case with two judgment candidates.
 FAKE[0]['docs'] = {'n': 2, 'f': 3, 'j': 'one', 'amt': 412880.45, 'ref': 'court:000000001:1',
-                   'src': 'court',
+                   'src': 'court', 'ctl': True,
                    'g': 2, 'at': '2026-09-24'}
 FAKE[1]['docs'] = {'n': 3, 'f': 3, 'j': 'several', 'g': 1, 'at': '2026-09-24'}
 

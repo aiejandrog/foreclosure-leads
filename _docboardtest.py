@@ -29,13 +29,14 @@ def dossier(case='2024-009959-CA-01', judgment=None, read=1, fetched=2, gaps=('a
             'open_gaps': list(gaps)}
 
 
+CTL = {'judgments': {'controlling_entry': '231457022'}}
 ONE = {'operative': 'court:231457022:1', 'candidates': ['court:231457022:1'],
        'certain': True, 'amount': 555499.25, 'satisfied': False, 'satisfied_by': []}
 
 
 class Summarize(unittest.TestCase):
     def test_one_judgment_carries_its_amount_and_ref(self):
-        s = DB.summarize(dossier(judgment=ONE))
+        s = DB.summarize(dossier(judgment=ONE), CTL)
         self.assertEqual(s['j'], 'one')
         self.assertEqual(s['amt'], 555499.25)
         self.assertEqual(s['ref'], 'court:231457022:1')
@@ -56,7 +57,7 @@ class Summarize(unittest.TestCase):
         self.assertNotIn('ref', s)
 
     def test_partial_satisfaction_is_its_own_state(self):
-        s = DB.summarize(dossier(judgment=dict(ONE, partially_satisfied_by=['p'])))
+        s = DB.summarize(dossier(judgment=dict(ONE, partially_satisfied_by=['p'])), CTL)
         self.assertEqual(s['j'], 'part')
         self.assertEqual(s['amt'], 555499.25)
 
@@ -74,17 +75,21 @@ class Summarize(unittest.TestCase):
         # 2025-018660: another person's 2011 records made the dossier say "no outstanding debt".
         sat = dict(ONE, amount=None, printed_amount=270322.07, satisfied=True,
                    satisfied_by=['official_records/27636-1385'])
-        s = DB.summarize(dossier(judgment=sat))
+        s = DB.summarize(dossier(judgment=sat), CTL)
         self.assertEqual((s['j'], s['amt']), ('one', 270322.07))
 
     def test_controlling_comes_only_from_a_refreshed_timeline(self):
         d = dossier(judgment=ONE)
         self.assertNotIn('ctl', DB.summarize(d))
+        # The timeline on main has no judgments block: no confirmation, so no figure ships.
+        self.assertNotIn('amt', DB.summarize(d))
+        self.assertNotIn('amt', DB.summarize(d, {'status': {'kind': 'sale_scheduled'}}))
         self.assertNotIn('ctl', DB.summarize(d, {'status': {'kind': 'sale_scheduled'}}))
         self.assertNotIn('ctl', DB.summarize(d, {'judgments': {'controlling_entry': None}}))
         self.assertIs(DB.summarize(d, {'judgments': {'controlling_entry': '231457022'}})['ctl'], True)
         # 2024-014878: the case's own vacated FJ was read; the timeline names the later one.
         self.assertIs(DB.summarize(d, {'judgments': {'controlling_entry': '999'}})['ctl'], False)
+        self.assertNotIn('amt', DB.summarize(d, {'judgments': {'controlling_entry': '999'}}))
 
     def test_gap_text_never_travels(self):
         s = DB.summarize(dossier(gaps=['MORTGAGE recorded 2019 against JOHN DOE sits on this parcel']))
@@ -154,7 +159,7 @@ class LoadAndAttach(unittest.TestCase):
         before = dict(row)
         self.assertEqual(DB.attach([row, other], DB.load(self.dir)), 1)
         self.assertEqual({k: v for k, v in row.items() if k != 'docs'}, before)
-        self.assertEqual(row['docs']['amt'], 555499.25)
+        self.assertEqual(row['docs']['ref'], 'court:231457022:1')
         self.assertNotIn('docs', other)
 
     def test_case_numbers_match_across_punctuation(self):
@@ -185,7 +190,7 @@ class Chip(unittest.TestCase):
         self.assertEqual(self.render({'docs': {'n': 0, 'f': 0}}), '')
 
     def test_amount_is_a_question_and_says_unverified(self):
-        html = self.render({'judg': 555499.25, 'docs': DB.summarize(dossier(judgment=ONE))})
+        html = self.render({'judg': 555499.25, 'docs': DB.summarize(dossier(judgment=ONE), CTL)})
         self.assertIn('JUDG $555k?', html)
         self.assertIn('UNVERIFIED', html)
         self.assertIn('NOT in the equity number', html)
@@ -193,7 +198,7 @@ class Chip(unittest.TestCase):
         self.assertNotIn('BOARD', html.split('>')[1])
 
     def test_disagreement_with_the_clerk_is_flagged(self):
-        html = self.render({'judg': 400000, 'docs': DB.summarize(dossier(judgment=ONE))})
+        html = self.render({'judg': 400000, 'docs': DB.summarize(dossier(judgment=ONE), CTL)})
         self.assertIn('&ne; BOARD', html)
         self.assertIn('the two disagree', html)
 
@@ -211,16 +216,16 @@ class Chip(unittest.TestCase):
     def test_controlling_marks(self):
         d = dossier(judgment=ONE)
         html = self.render({'judg': 555499.25, 'docs': DB.summarize(d)})
-        self.assertIn('JUDG $555k? &middot; CTRL?', html)
-        self.assertIn('Not yet confirmed as the controlling judgment', html)
-        tl = {'judgments': {'controlling_entry': '231457022'}}
-        html = self.render({'judg': 555499.25, 'docs': DB.summarize(d, tl)})
+        self.assertIn('JUDG READ &middot; CTRL?', html)
+        self.assertIn('so its amount is withheld', html)
+        self.assertNotIn('555', html)
+        html = self.render({'judg': 555499.25, 'docs': DB.summarize(d, CTL)})
         self.assertIn('JUDG $555k?', html)
         self.assertNotIn('CTRL?', html)
         self.assertIn('docchip dj', html)
         html = self.render({'judg': 555499.25, 'docs': DB.summarize(d, {'judgments': {'controlling_entry': '9'}})})
         self.assertIn('JUDG NOT CONTROLLING', html)
-        self.assertNotIn('$555k', html.split('>')[1])
+        self.assertNotIn('555', html)
 
     def test_recorded_copy_chip_shows_no_amount(self):
         rec = dict(ONE, operative='official_records/34429-1360')
@@ -231,7 +236,7 @@ class Chip(unittest.TestCase):
     def test_a_partial_reading_still_shows_its_judgment(self):
         d = dossier(judgment=ONE, read=0, fetched=1)
         d['c_documents']['documents'] = [{'read_status': 'partial', 'is': 'final_judgment'}]
-        s = DB.summarize(d)
+        s = DB.summarize(d, CTL)
         self.assertEqual((s['n'], s['p'], s['j']), (0, 1, 'one'))
         html = self.render({'judg': 555499.25, 'docs': s})
         self.assertIn('JUDG $555k?', html)
