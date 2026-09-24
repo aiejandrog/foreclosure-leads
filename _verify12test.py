@@ -1,0 +1,144 @@
+"""The 12-case verification's lien defects (MIAMI-VERIFY-12-2026-09-24), on synthetic records.
+
+Every case, folio, book/page and name below is invented. The shapes are the ones the
+verification found on real Miami-Dade dockets:
+
+  1. liens the owner search returned never reached the chain: one City release released every City
+     lien, amountless liens were skipped, the lienor was read from one party column only, and lis
+     pendens / tax warrant rows never matched the filter;
+  2. the foreclosed debt was priced at the mortgage's face instead of the judgment;
+  3. a 500-record search or one that never returned the subject folio could still read CLEAR;
+  4. the dossier called VERIFIED CLEAR on a lender's foreclosure whose mortgage the search missed;
+  7. the case's own (vacated) final judgment was counted as another claim.
+"""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+
+import case_dossier as CD
+import equity_state as ES
+import records_liens as RL
+
+FAILS = []
+
+
+def check(name, cond, detail=''):
+    print(('PASS ' if cond else 'FAIL ') + name + (('  -- ' + str(detail)) if detail and not cond else ''))
+    if not cond:
+        FAILS.append(name)
+
+
+FOLIO = '0100000000099'
+PLAINTIFF = 'SYNTHETIC SAVINGS BANK NA'
+
+
+def rec(doc, date, bk, pg, amt=0, second='OWNER TESTER', first='OWNER TESTER', folio=FOLIO, **kw):
+    r = {'doC_TYPE': doc, 'reC_DATE': date, 'reC_BOOK': bk, 'reC_PAGE': pg,
+         'reC_BOOKPAGE': '%s/%s' % (bk, pg), 'consideratioN_1': amt, 'intangible': 0,
+         'seconD_PARTY': second, 'firsT_PARTY': first, 'foliO_NUMBER': folio,
+         'subdiV_NAME': 'TEST GARDENS'}
+    r.update(kw)
+    return r
+
+
+deed = rec('DEED', '2/1/2008', '26100', '10', 0, 'OWNER TESTER', first='PRIOR SELLER')
+mtg = rec('MORTGAGE', '2/1/2008', '26100', '11', 0, PLAINTIFF, intangible=834)       # $417,000 face
+city1 = rec('LIEN', '5/5/2019', '31100', '1', 0, 'OWNER TESTER', first='CITY OF MIAMI')
+city2 = rec('LIEN', '6/6/2020', '31900', '2', 0, 'OWNER TESTER', first='CITY OF MIAMI')
+city3 = rec('LIEN', '7/7/2021', '32500', '3', 1500, 'CITY OF MIAMI', first='OWNER TESTER')
+# a City release of a DIFFERENT lien, elsewhere: it must not release the three above
+city_rel = rec('RELEASE', '8/8/2022', '33000', '4', 0, 'OWNER TESTER', first='CITY OF MIAMI',
+               oriG_REC_BOOK='29000', oriG_REC_PAGE='9')
+wasd = rec('LIEN', '9/9/2022', '33400', '5', 812, 'OWNER TESTER', first='MIAMI-DADE WATER AND SEWER')
+wasd_rel = rec('RELEASE', '1/1/2023', '33600', '6', 0, 'OWNER TESTER', first='MIAMI-DADE WATER AND SEWER',
+               oriG_REC_BOOK='33400', oriG_REC_PAGE='5')
+assn_lp = rec('LIS PENDENS', '3/3/2025', '34900', '7', 0, 'OWNER TESTER',
+              first='TEST GARDENS CONDOMINIUM ASSOCIATION INC')
+warrant = rec('WARRANT', '4/4/2011', '27400', '8', 2200, 'OWNER TESTER',
+              first='STATE OF FLORIDA DEPARTMENT OF REVENUE', folio='')
+own_lp = rec('LIS PENDENS', '1/10/2024', '34000', '9', 0, 'OWNER TESTER', first=PLAINTIFF)
+own_fj_vacated = rec('JUDGMENT', '5/5/2025', '34932', '1256', 1022358, 'OWNER TESTER', first=PLAINTIFF)
+elsewhere = rec('LIEN', '2/2/2020', '31700', '1', 900, 'OWNER TESTER', first='CITY OF HOMESTEAD',
+                folio='3099999999999', subdiV_NAME='ELSEWHERE')
+
+models = [deed, mtg, city1, city2, city3, city_rel, wasd, wasd_rel, assn_lp, warrant, own_lp,
+          own_fj_vacated, elsewhere]
+res = RL.analyze(models, FOLIO, 1022358.91, ftype='MORTGAGE', plaintiff=PLAINTIFF)
+other = {r['bp']: r for r in res['other']}
+
+# ---- defect 1: what the search found reaches the chain
+check('all three City liens on the parcel are rows, not dropped',
+      all(bp in other for bp in ('31100/1', '31900/2', '32500/3')), sorted(other))
+check('a City release of a different book/page releases none of them',
+      all(other[bp]['st'] == 'OPEN' for bp in ('31100/1', '31900/2', '32500/3')))
+check('the lienor is read from either party column',
+      other['31100/1']['kind'] == 'code' and other['32500/3']['kind'] == 'code')
+check('amountless open liens are counted, never summed as zero',
+      res['other_open_unpriced'] == 2 and other['31100/1']['amt'] is None, res['other_open_unpriced'])
+check('a lien released by a release naming its own book/page is RELEASED and not summed',
+      other['33400/5']['st'] == 'RELEASED')
+check('code_open sums only priced, open, non-own liens', res['code_open'] == 1500, res['code_open'])
+check("the association's lis pendens on the parcel is a row", other.get('34900/7', {}).get('kind') == 'lis_pendens')
+check('a Department of Revenue warrant rides person-wide, with its amount',
+      other.get('27400/8', {}).get('kind') == 'state_tax' and res['irs_open'] == 2200, res['irs_open'])
+check("a lien on another parcel of the same owner stays out", '31700/1' not in other)
+
+# ---- defect 7: the case's own filings are this case, not another claim
+check("the case's own lis pendens is marked this case", other['34000/9'].get('own_case') is True)
+check("the case's own (vacated) final judgment is marked this case and never summed",
+      other['34932/1256'].get('own_case') is True and res['code_open'] == 1500)
+_noplaintiff = RL.analyze(models, FOLIO, 1022358.91, ftype='MORTGAGE')
+check('without the plaintiff, a lender judgment is still a money judgment (unchanged behaviour)',
+      _noplaintiff['code_open'] == 1500 + 1022358, _noplaintiff['code_open'])
+
+# ---- defect 2: the debt is the judgment
+check('the chain keeps the recorded face apart from the judgment',
+      res['first_face'] == 417000 and res['judgment'] == 1022358.91 and res['first_bp'] == '26100/11',
+      (res['first_face'], res['judgment'], res['first_bp']))
+b = CD._b(res)
+check('dossier b prices the foreclosed debt at the judgment, not the face',
+      b['foreclosed_debt']['amount'] == 1022358.91 and b['foreclosed_debt']['recorded_face'] == 417000,
+      b['foreclosed_debt'])
+check('dossier b lists the other instruments with the own-case ones marked',
+      len(b['other_instruments']) == len(res['other'])
+      and any(x['this_case'] for x in b['other_instruments']))
+_old = dict(res); _old.pop('judgment'); _old.pop('first_face')
+check('an older cached chain shows its face as a face, never as the debt',
+      CD._b(_old)['foreclosed_debt']['amount'] is None
+      and CD._b(_old)['foreclosed_debt']['recorded_face'] == res['first_est'])
+
+# ---- equity: an unpriced open lien is a ceiling, never a fact
+check('open liens with no published amount keep the verdict off VERIFIED',
+      ES.state_of(res) == 'unpriced', ES.state_of(res))
+_lead = {}
+ES.apply(_lead, res)
+check('the ceiling counts those liens', _lead.get('eqopen', 0) >= 2, _lead)
+
+# ---- defect 3: a capped or wrong-person search can never be clear
+empty = RL.analyze([deed], FOLIO, 12000, ftype='HOA')
+check('fixture: an anchored, documented empty HOA chain is clear', ES.state_of(empty) == 'clear', ES.state_of(empty))
+capped = RL.analyze([deed] + [rec('DEED', '1/1/1999', str(20000 + i), '1', 0, folio='')
+                              for i in range(499)], FOLIO, 12000, ftype='HOA')
+check('a 500-record search is marked capped and never clear',
+      capped['capped'] is True and ES.state_of(capped) != 'clear', (capped['capped'], ES.state_of(capped)))
+stranger = RL.analyze([rec('DEED', '1/1/2015', '29000', '1', folio='3011111111111')], FOLIO, 12000, ftype='HOA')
+check('a search that never returned the subject folio says so and is never clear',
+      stranger['parcel_found'] is False and ES.state_of(stranger) != 'clear')
+check('coverage_documented refuses parcel_found False even on a hand-built chain',
+      not ES.coverage_documented(dict(empty, parcel_found=False)))
+
+# ---- defect 4: the dossier applies the lender rule
+lender_empty = RL.analyze([deed], FOLIO, 358247.93, ftype='MORTGAGE', plaintiff=PLAINTIFF)
+d = CD._d(lender_empty, {'status': 'empty'})
+check('dossier d: a lender foreclosure with no mortgage found is not VERIFIED CLEAR',
+      d['eqstate'] == 'none' and 'lender is foreclosing' in d['verdict'], (d['eqstate'], d['verdict']))
+d_hoa = CD._d(empty, {'status': 'empty'})
+check('dossier d: an association case with a documented empty chain still reads clear',
+      d_hoa['eqstate'] == 'clear')
+full = CD.build('2099-000099-CA-01', 'MIAMI-DADE', chain=capped)
+check('dossier gaps name the 500-record cap', any('500-record cap' in g for g in full['open_gaps']))
+
+print('\nOK: 0 failure(s)' if not FAILS else '\nFAIL: %d failure(s)' % len(FAILS))
+sys.exit(1 if FAILS else 0)

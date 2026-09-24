@@ -69,17 +69,44 @@ def _b(chain):
         return _section('What the records index shows', 'missing', 'records_index',
                         note='no recorded chain has been pulled for this case')
     liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
+    other = [l for l in (chain.get('other') or []) if isinstance(l, dict)]
+    # THE FORECLOSED DEBT IS THE JUDGMENT, NOT THE MORTGAGE'S FACE (12-case verification
+    # 2026-09-24, defect 2: 2024-006803 read $417,000, the 2008 face, against a $1,022,358.91
+    # judgment). The judgment is the auction listing's figure the board already prices from; the
+    # face is kept, under a name that says it is a recorded face.
+    judgment = chain.get('judgment') or 0
+    face = chain.get('first_face', chain.get('first_est'))
+    if chain.get('ftype') == 'MORTGAGE' and judgment:
+        foreclosed = {'amount': judgment, 'basis': 'auction listing final judgment',
+                      'recorded_face': face or None, 'instrument': chain.get('first_bp') or None}
+    elif chain.get('ftype') == 'MORTGAGE' and face:
+        foreclosed = {'amount': None, 'basis': 'no judgment amount on the listing',
+                      'recorded_face': face, 'instrument': chain.get('first_bp') or None,
+                      'note': 'the recorded face is what was lent, not what is owed'}
+    else:
+        foreclosed = None
     return _section(
         'What the records index shows', 'present', 'records_index',
         confidence=chain.get('conf'),
         records_examined=chain.get('nrec'),
         surviving_instruments=chain.get('open_count'),
         surviving_total=chain.get('surv'),
-        first_mortgage_estimate=chain.get('first_est'),
+        first_mortgage_face=face,
+        foreclosed_debt=foreclosed,
         hoa_open=chain.get('hoa_open'), code_open=chain.get('code_open'),
         irs_open=chain.get('irs_open'),
         liens=[{'date': l.get('d'), 'amount': l.get('amt'), 'party': l.get('party'),
                 'book_page': l.get('bp'), 'status': l.get('st')} for l in liens],
+        # liens, judgments, lis pendens and tax warrants the search returned for this parcel or
+        # person, priced or not. A row the index gives no amount is a count, never a zero.
+        other_instruments=[{'date': l.get('d'), 'type': l.get('doc'), 'kind': l.get('kind'),
+                            'amount': l.get('amt'), 'party': l.get('party'),
+                            'book_page': l.get('bp'), 'status': l.get('st'),
+                            'anchored_by': l.get('anchor'),
+                            'this_case': bool(l.get('own_case'))} for l in other],
+        other_open_unpriced=chain.get('other_open_unpriced'),
+        search_capped=chain.get('capped'),
+        parcel_found=chain.get('parcel_found'),
         anchored_to=chain.get('subdiv') or None,
         caveat='Index rows and party names. Amounts are RECORDED figures, never a current payoff.')
 
@@ -217,9 +244,19 @@ def _operative_judgment(rows):
                     % (len(refs), ', '.join(str(r) for r in refs)))}
 
 
-def _d(chain, section_c):
+def _d(chain, section_c, lead=None):
     """d) The picture, and which rungs it rests on."""
-    state = equity_state.state_of(chain)
+    # A LENDER FORECLOSING PROVES A MORTGAGE (12-case verification 2026-09-24, defect 4:
+    # 2025-013918 read VERIFIED CLEAR on a 7-record search that missed the mortgage being
+    # foreclosed). The board applies that rule with the lead; the dossier used to call state_of
+    # without one, so it never did. With no lead, a circuit-court mortgage case (the chain's own
+    # ftype) is taken as a lender's: that can only move CLEAR down, never up.
+    if lead is None and isinstance(chain, dict) and chain.get('ftype') == 'MORTGAGE':
+        lead = {'case_type': equity_state.LENDER_CASE_TYPES[0]}
+    state = equity_state.state_of(chain, lead)
+    verdict = equity_state.LABEL[state]
+    if state == 'none' and equity_state.lender_foreclosure(lead) and equity_state.state_of(chain) == 'clear':
+        verdict = equity_state.LENDER_OWN_CASE_WHY
     rests_on = ['b'] if chain else []
     doc_note = None
     if section_c['status'] == 'empty':
@@ -235,7 +272,7 @@ def _d(chain, section_c):
     return _section(
         'The picture', 'present' if chain else 'missing', 'equity_state',
         eqstate=state,
-        verdict=equity_state.LABEL[state],
+        verdict=verdict,
         short=equity_state.SHORT[state],
         speakable_as_fact=state in equity_state.FACT,
         rests_on=rests_on,
@@ -244,19 +281,27 @@ def _d(chain, section_c):
                 'current payoff.' % ' or '.join(equity_state.FACT)))
 
 
-def build(case, county, inventory=None, chain=None, documents=None, walk=None):
+def build(case, county, inventory=None, chain=None, documents=None, walk=None, lead=None):
     """Assemble one case's dossier. Pure: everything it reports was handed to it."""
     a = _a(inventory)
     b = _b(chain)
     c = _c(documents)
     if walk is not None:
         c['walk'] = _walk_section(walk)
-    d = _d(chain, c)
+    d = _d(chain, c, lead)
     gaps = []
     if not a.get('pagination_verified'):
         gaps.append('the docket may be incomplete: no pagination cursor is published')
     if b['status'] == 'missing':
         gaps.append('no recorded chain pulled')
+    if b.get('search_capped'):
+        gaps.append('the owner search hit the county\'s 500-record cap: records past it were never seen')
+    if b.get('parcel_found') is False:
+        gaps.append('the owner search returned no record carrying this folio: it may be another '
+                    'person\'s records')
+    if b.get('other_open_unpriced'):
+        gaps.append('%d open lien(s) on this parcel or owner carry no published amount'
+                    % b['other_open_unpriced'])
     if c['status'] != 'present':
         gaps.append('no document has been read')
     for row in c.get('documents', []):

@@ -515,3 +515,7 @@ deal_desk.json
 # memory), so a clean scrape left the lead files flagless while the board carried 80 and the rule
 # blocked the publish. This suite fails if the file is written before the restore.
 !_stayfiletest.py
+# 12-case verification (2026-09-24): liens the owner search found but the chain dropped, the
+# foreclosed debt priced at the face, capped/wrong-person searches read as CLEAR, and the case's
+# own judgment counted as another claim. Synthetic records only.
+!_verify12test.py

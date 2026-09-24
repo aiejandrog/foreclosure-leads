@@ -482,10 +482,12 @@ def clear_undocumented(res, case=''):
             and not ('nrec' in res and 'second_fc' in res and 'mtg_open_unpriced' in res))
 
 
-def analyze(models, folio, judgment, ftype=''):
+def analyze(models, folio, judgment, ftype='', plaintiff=''):
     """Open-mortgage picture for the SUBJECT parcel only. Precision > recall: without a folio to isolate
     by, we return nothing rather than risk a namesake's mortgages polluting the number.
-    ftype='HOA' means the whole first mortgage survives the sale (surface `surv`), not just a 2nd."""
+    ftype='HOA' means the whole first mortgage survives the sale (surface `surv`), not just a 2nd.
+    plaintiff = this case's plaintiff, so the case's OWN lis pendens and judgments (a vacated one
+    included) are shown as this case and never counted as another claim."""
     fol = norm_folio(folio)
     if not fol:
         return {'liens': [], 'open_count': 0, 'junior': 0, 'first_est': 0, 'surv': 0, 'surv_first': 0,
@@ -494,6 +496,7 @@ def analyze(models, folio, judgment, ftype=''):
     # folio is blank on most newer mortgages, but subdivision is consistent — so subdivision + owner-name
     # isolates the property, while folio alone would drop the very mortgages we need.
     subj_subdiv = ''
+    parcel_found = any(norm_folio(r.get('foliO_NUMBER', '')) == fol for r in models)
     for r in models:
         if norm_folio(r.get('foliO_NUMBER', '')) == fol:
             sd = (r.get('subdiV_NAME', '') or '').strip().upper()
@@ -625,6 +628,7 @@ def analyze(models, folio, judgment, ftype=''):
     opens = [o for o in liens if o['st'] == 'OPEN']
     junior = first_amt = surv = surv_first = 0
     juniors_post = 0
+    first_bp = ''
     if opens:
         if ftype == 'HOA':                             # HOA sale: the WHOLE first mortgage survives
             surv = sum(o['amt'] for o in opens)
@@ -633,6 +637,7 @@ def analyze(models, folio, judgment, ftype=''):
             anchor = (lambda o: abs(o['amt'] - judgment)) if (judgment and judgment > 0) else (lambda o: -o['amt'])
             fore = min(opens, key=anchor)              # the foreclosing 1st (closest to judgment, else largest)
             first_amt = fore['amt']
+            first_bp = fore.get('bp') or ''
             junior = surv = sum(o['amt'] for o in opens if o is not fore)
             # DATES COMPARE AS DATES. `o['d']` is 'M/D/YYYY' straight from the clerk — '1/10/2006'
             # sorts lexically ABOVE '10/31/2006', so string comparison silently classified 1-Jan
@@ -642,41 +647,100 @@ def analyze(models, folio, judgment, ftype=''):
             fd = _parse_recd(fore['d'])
             juniors_post = sum(o['amt'] for o in opens if o is not fore and _parse_recd(o['d']) and fd and _parse_recd(o['d']) >= fd)
     # --- open non-mortgage liens (kimi: feeds the deal-modal HOA / code / IRS prefills) ------------
-    # Lien/Judgment/Notice records, bucketed by holder. code+HOA require the same parcel isolation the
-    # mortgages use (folio/subdivision); IRS + money judgments attach to the person and ride anyway.
+    # Every lien, judgment, lis pendens and tax warrant the search returned on this parcel is a ROW
+    # in `other`, priced or not, so a reader sees what was found rather than a total that silently
+    # dropped it. 12-case verification 2026-09-24, defect 1: City of Miami and county liens that
+    # were in the saved search never reached the chain, because
+    #   * one City release anywhere released EVERY City lien (the match was on the holder's name),
+    #   * a lien the index publishes no amount for was skipped instead of counted as unpriced,
+    #   * the holder was read from seconD_PARTY only, and the index does not put the lienor on a
+    #     fixed side, and
+    #   * LIS PENDENS and tax WARRANT rows never matched the document filter.
+    # A lien is RELEASED only by a satisfaction/release that points at its own book/page. Code and
+    # association liens need the same parcel isolation the mortgages use; IRS, state tax warrants
+    # and money judgments attach to the person and ride anyway. The case's own lis pendens and
+    # judgments are this case, not another claim: shown, never summed (defect 7, 2024-014878's
+    # vacated final judgment 34932/1256).
     _IRS_RE = re.compile(r'INTERNAL\s+REV|UNITED\s+STATES|\bIRS\b', re.I)
-    _CODE_RE = re.compile(r'\bCITY\s+OF\b|\bCOUNTY\b|CODE\s+ENFORCEMENT|MUNICIPAL|MIAMI-?DADE|STATE OF FLORIDA|PACE|CLEAN ENERGY', re.I)
+    _DOR_RE = re.compile(r'DEPARTMENT\s+OF\s+REVENUE|DEPT\.?\s+OF\s+REV|\bDOR\b', re.I)
+    _CODE_RE = re.compile(r'\bCITY\s+OF\b|\bCOUNTY\b|CODE\s+ENFORCEMENT|MUNICIPAL|MIAMI-?DADE|STATE OF FLORIDA|PACE|CLEAN ENERGY|WATER\s+(?:AND|&)\s+SEWER|\bWASD\b', re.I)
     _HOA_DOC_RE = re.compile(r'HOMEOWNERS?|CONDOMINIUM|\bCONDO\b|\bMASTER\b|\bVILLAS?\b|COMMUNITY|PROPERTY\s+OWNERS?|TOWNHO|MAINTENANCE', re.I)
     _ASSN_DOC_RE = re.compile(r'(?<!NATIONAL\s)\bASS(?:N|OC(?:IATION)?)\b', re.I)
-    _LIEN_DOC_RE = re.compile(r'^(LIEN|JUDGMENT|NOTICE|CLAIM|CERT|FINANCING STATEMENT)', re.I)
-    def _norm_party(s):
-        s = (s or '').upper()
-        s = re.sub(r'\b(NA|N A|INC|CORP|CO|LLC|LP|USA|TRUST|COMPANY|OF|THE|AND|ASSN|ASSOC|ASSOCIATION)\b', '', s)
-        return re.sub(r'[^A-Z]', '', s)
-    sats_parties = {_norm_party(r.get('seconD_PARTY')) for r in models if 'SATISFACTION' in (r.get('doC_TYPE', '') or '').upper()
-                    or 'RELEASE' in (r.get('doC_TYPE', '') or '').upper()}
+    _OTHER_DOC_RE = re.compile(r'\bLIEN\b|JUDGMENT|LIS PENDENS|WARRANT|^NOTICE|^CLAIM|^CERT|^FINANCING STATEMENT', re.I)
+    _NOT_A_CLAIM_RE = re.compile(r'SATISF|RELEASE|TERMINAT|CANCEL|DISCHARGE|NOTICE OF COMMENCEMENT|^MORTGAGE', re.I)
+    _CREDITOR_RE = re.compile('|'.join(x.pattern for x in (_IRS_RE, _DOR_RE, _CODE_RE, _HOA_DOC_RE, _ASSN_DOC_RE)), re.I)
+    released_bp = {(str(r.get('oriG_REC_BOOK', '')).strip(), str(r.get('oriG_REC_PAGE', '')).strip())
+                   for r in models if re.search(r'SATISF|RELEASE', (r.get('doC_TYPE', '') or '').upper())}
+    released_bp.discard(('', ''))
+    _pl = _inst(plaintiff)
+    def _is_plaintiff(*parties):
+        if len(_pl) < 5:
+            return False
+        for p in parties:
+            q = _inst(p)
+            if len(q) >= 5 and (q[:12] == _pl[:12] or q in _pl or _pl in q):
+                return True
+        return False
+    other = []
     hoa_open = code_open = irs_open = 0
-    for r in models:
-        if not _LIEN_DOC_RE.match((r.get('doC_TYPE', '') or '').upper().strip()):
+    other_unpriced = 0
+    seen_other = set()
+    for r in sorted(models, key=sortkey):
+        doc = (r.get('doC_TYPE', '') or '').upper().strip()
+        if not _OTHER_DOC_RE.search(doc) or _NOT_A_CLAIM_RE.search(doc):
             continue
-        amt = num(r.get('consideratioN_1'))
-        if amt <= 0:
-            continue
-        party = r.get('seconD_PARTY') or ''
+        bp = (str(r.get('reC_BOOK', '')).strip(), str(r.get('reC_PAGE', '')).strip())
+        ident = (('bp',) + bp) if all(bp) else (
+            ('cfn', str(r.get('cfN_MASTER_ID') or '').strip()) if r.get('cfN_MASTER_ID') else None)
+        if ident is not None:
+            if ident in seen_other:
+                continue                                    # one instrument, one row (co-owner copies)
+            seen_other.add(ident)
+        p1, p2 = r.get('firsT_PARTY') or '', r.get('seconD_PARTY') or ''
+        both = p1 + ' | ' + p2
         rf = norm_folio(r.get('foliO_NUMBER', ''))
         sd = (r.get('subdiV_NAME') or '').strip().upper()
         on_parcel = bool((rf and rf == fol) or (subj_subdiv and sd == subj_subdiv))
-        holder = _norm_party(party)
-        if holder and holder in sats_parties:
-            continue                                          # released by a same-party satisfaction
-        if _IRS_RE.search(party):
-            irs_open += amt                                 # person-wide, attaches regardless
-        elif _HOA_DOC_RE.search(party) or _ASSN_DOC_RE.search(party):
-            if on_parcel: hoa_open += amt
-        elif _CODE_RE.search(party):
-            if on_parcel: code_open += amt
-        elif 'JUDGMENT' in (r.get('doC_TYPE', '') or '').upper():
-            code_open += amt                                # debt-buyer money judgments ride as surviving liens
+        if 'LIS PENDENS' in doc:
+            kind = 'lis_pendens'
+        elif _IRS_RE.search(both):
+            kind = 'irs'
+        elif _DOR_RE.search(both) or 'WARRANT' in doc:
+            kind = 'state_tax'
+        elif _HOA_DOC_RE.search(both) or _ASSN_DOC_RE.search(both):
+            kind = 'association'
+        elif _CODE_RE.search(both):
+            kind = 'code'
+        elif 'JUDGMENT' in doc:
+            kind = 'judgment'
+        else:
+            kind = 'other'
+        person_wide = kind in ('irs', 'state_tax', 'judgment')
+        if not (on_parcel or person_wide):
+            continue                                        # another property of the same owner
+        own_case = _is_plaintiff(p1, p2) and kind in ('lis_pendens', 'judgment', 'association', 'other')
+        amt = num(r.get('consideratioN_1')) or num(r.get('amount'))
+        released = all(bp) and bp in released_bp
+        row = {'d': (r.get('reC_DATE', '') or '')[:10], 'doc': doc[:40], 'kind': kind,
+               'party': (p1 if _is_plaintiff(p1) or _CREDITOR_RE.search(p1) else p2)[:40],
+               'parties': both[:90], 'bp': r.get('reC_BOOKPAGE', '') or '/'.join(bp),
+               'amt': round(amt) if amt > 0 else None,
+               'st': 'RELEASED' if released else 'OPEN',
+               'anchor': 'folio' if (rf and rf == fol) else ('subdivision' if on_parcel else 'person')}
+        if own_case:
+            row['own_case'] = True                          # this foreclosure's own filing: never a claim
+        other.append(row)
+        if released or own_case or kind in ('lis_pendens', 'other'):
+            continue
+        if not row['amt']:
+            other_unpriced += 1                             # found, open, amount not published: a count
+            continue
+        if kind in ('irs', 'state_tax'):
+            irs_open += row['amt']
+        elif kind == 'association':
+            hoa_open += row['amt']
+        else:
+            code_open += row['amt']                         # code/muni + debt-buyer money judgments
     # confidence: we must have isolated by a real anchor, sane count, and not a common-name over-match
     conf = 'ok'
     if not subj_subdiv: conf = 'low'                   # couldn't anchor the property (no folio-carrying record)
@@ -698,6 +762,15 @@ def analyze(models, folio, judgment, ftype=''):
             'liens': liens, 'open_count': len(opens), 'junior': junior, 'first_est': first_amt,
             'surv': surv, 'surv_first': surv_first, 'juniors_post': juniors_post,
             'hoa_open': hoa_open, 'code_open': code_open, 'irs_open': irs_open,
+            'other': other, 'other_open_unpriced': other_unpriced,
+            # the foreclosed first's RECORDED face, and the judgment it is foreclosed for: the debt
+            # is the judgment, never the face (verification defect 2: 2024-006803 $417,000 face,
+            # $1,022,358.91 judgment)
+            'first_face': first_amt, 'first_bp': first_bp, 'judgment': judgment or 0,
+            # the county search returns at most 500 records; a full page cannot prove what is not
+            # on it (equity_state.coverage_documented), and a search that never returned the
+            # subject folio may be a namesake's records (verification defect 3)
+            'capped': len(models) >= 500, 'parcel_found': parcel_found,
             'ftype': ftype, 'conf': conf, 'subdiv': subj_subdiv}
 
 
@@ -930,7 +1003,7 @@ def main():
             if models is None:
                 print(f"  --  {case:22} {oc:26} (no records / blocked)")
                 continue
-            res = analyze(models, folio, judg, ftype=_fc_type(case))
+            res = analyze(models, folio, judg, ftype=_fc_type(case), plaintiff=r.get('plaintiff') or '')
             res['searched_as'] = _searched
             res['traced'] = time.strftime('%Y-%m-%d'); res['folio'] = norm_folio(folio); res['owner'] = oc
             out[case] = res

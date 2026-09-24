@@ -100,6 +100,17 @@ def state_of(chain, lead=None):
     """
     if not chain or not isinstance(chain, dict):
         return 'unchecked'
+    st = _state_of(chain, lead)
+    # AN OPEN LIEN WITH NO PUBLISHED AMOUNT (12-case verification 2026-09-24, defect 1). A city,
+    # county, association or tax lien the search found on the parcel, still open, whose amount the
+    # index does not publish, means the surviving total is not established: a ceiling, never a
+    # FACT, exactly like an unpriced mortgage.
+    if st in FACT and (chain.get('other_open_unpriced') or 0) > 0:
+        return 'unpriced'
+    return st
+
+
+def _state_of(chain, lead=None):
     conf = str(chain.get('conf') or '').strip().lower()
     liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
     # NO MORTGAGE FOUND IS NOT VERIFIED CLEAR (2026-09-23 accuracy audit). An empty list only proves
@@ -156,7 +167,7 @@ def apply(lead, chain):
             # a part-priced list from any county has to be counted here, or the lead renders a
             # CEILING of 0 and reads like a clear one.
             _liens = [l for l in (chain.get('liens') or []) if isinstance(l, dict)]
-            lead['eqopen'] = (chain.get('mtg_open_unpriced') or 0) or len(_liens)
+            lead['eqopen'] = ((chain.get('mtg_open_unpriced') or 0) or len(_liens)) + (chain.get('other_open_unpriced') or 0)
             _gap = [l for l in _liens if not l.get('amt')]
             if _gap:
                 lead['eqgap'] = len(_gap)   # instruments with no published figure
@@ -232,7 +243,7 @@ def coverage_documented(chain):
         n = int(chain.get('nrec') or 0)
     except (TypeError, ValueError):
         n = 0
-    if n <= 0 or chain.get('capped') or chain.get('truncated'):
+    if n <= 0 or chain.get('capped') or chain.get('truncated') or chain.get('parcel_found') is False:
         return False
     return ('second_fc' in chain and not chain.get('second_fc')
             and not chain.get('second_fc_unsure'))
