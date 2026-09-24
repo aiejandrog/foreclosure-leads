@@ -109,9 +109,10 @@ def _iso_date(us):
     m = re.match(r'(\d{1,2})/(\d{1,2})/(\d{4})', (us or '').strip())
     return f'{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}' if m else ''
 
-def _bk_events(dks):
-    """(opening ISO dates, closing ISO dates) of the bankruptcy lines on a docket. Closing lines are
-    checked FIRST ('Notice of Filing: ...ORDER OF DISMISSAL' contains 'filing' but closes)."""
+def _bk_lines(dks):
+    """(opens, closes) of the bankruptcy lines on a docket, each (ISO date, frozenset of the federal
+    case numbers the line cites). Closing lines are checked FIRST ('Notice of Filing: ...ORDER OF
+    DISMISSAL' contains 'filing' but closes)."""
     opens, closes = [], []
     for e in dks or []:
         t = (e.get('docketDescrition') or e.get('docketDescription') or '')
@@ -119,11 +120,39 @@ def _bk_events(dks):
         iso = _iso_date(e.get('eventDate'))
         if not iso:
             continue
+        nums = frozenset(_BKNUM.findall(tx))
         if _BKCLOSE.search(tx):
-            closes.append(iso)
+            closes.append((iso, nums))
         elif _BKFILE.search(t) or _BANKR.search(tx):
-            opens.append(iso)                          # 'CANCELLED PER BANKRUPTCY' = the stay acting
+            opens.append((iso, nums))                  # 'CANCELLED PER BANKRUPTCY' = the stay acting
     return opens, closes
+
+
+def _bk_events(dks):
+    """(opening ISO dates, closing ISO dates) of the bankruptcy lines on a docket."""
+    opens, closes = _bk_lines(dks)
+    return [d for d, _ in opens], [d for d, _ in closes]
+
+
+def _held_closed(dks, piso):
+    """Does this docket show a closing line for the bankruptcy filed on `piso`, the stay we hold?
+    _bk_stay pairs only the LATEST filing with a close, so on a repeat filer it cannot say whether
+    OUR case closed. A line citing a federal case number answers for that case only, whatever its
+    date. A line citing none counts only between our filing and the next filing after it. When two
+    numbered cases were filed on our date, every one of them needs its own numbered closing line.
+    Two numberless filings on one date cannot be told from one filing's two lines, so they read as one."""
+    if not piso:
+        return False
+    opens, closes = _bk_lines(dks)
+    held = frozenset().union(*[n for d, n in opens if d == piso])
+    others = frozenset().union(*[n for d, n in opens if d != piso]) - held
+    nxt = min([d for d, _ in opens if d > piso] or ['9999-99-99'])
+    closes = [(d, n) for d, n in closes if d >= piso]
+    if len(held) > 1:
+        return all(any(h in n for _, n in closes) for h in held)
+    if held:
+        return any((n & held) if n else d < nxt for d, n in closes)
+    return any(d < nxt and not (n & others) for d, n in closes)
 
 
 def _bk_stay(dks):
@@ -284,13 +313,9 @@ def main():
             if not bkact and (_prev.get('a') or r.get('sale_bk_active')):
                 _pbd = _prev.get('bd') or r.get('sale_bk_date') or ''
                 _piso = _pbd if re.match(r'\d{4}-\d{2}-\d{2}$', _pbd) else _iso_date(_pbd)
-                # _bk_stay only pairs the LATEST filing with a close. When a newer filing sits after
-                # the one we hold, that newer case closing says nothing about ours: require a closing
-                # line dated from our filing up to (not including) the next filing after it.
-                _op, _cl = _bk_events(dks)
-                _nxt = min([o for o in _op if _piso and o > _piso] or ['9999-99-99'])
-                _ours_closed = any(_piso <= c < _nxt for c in _cl) if _piso else False
-                if not (_piso and bkd and bkd >= _piso and lifted and _ours_closed):
+                # _bk_stay only pairs the LATEST filing with a close; a newer case closing says
+                # nothing about ours, so ours needs its own closing line (_held_closed).
+                if not (_piso and bkd and bkd >= _piso and lifted and _held_closed(dks, _piso)):
                     # still active: drop any lift date from an OLDER closed stay in this read, since
                     # the board's gates read a lift date as "contact is legal again"
                     bkact, bkd, lifted = True, _pbd or bkd, ''

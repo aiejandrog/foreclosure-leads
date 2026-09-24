@@ -95,8 +95,9 @@ try:
     # When a live docket read now shows the stay closed, the row has to lose the flag, and the
     # [4/5] rebuild's make_tracker restore must not put it back from the (now updated) cache.
     import sale_history as SH
-    BK = lambda d: {'docketDescrition': 'Suggestion of Bankruptcy', 'eventDate': d}
-    CLOSE = lambda d, t='Order Granting Relief from Automatic Stay': {'docketDescrition': t, 'eventDate': d}
+    BK = lambda d, n='': {'docketDescrition': 'Suggestion of Bankruptcy', 'eventDate': d, 'comments': n}
+    CLOSE = lambda d, t='Order Granting Relief from Automatic Stay', n='': {'docketDescrition': t, 'eventDate': d, 'comments': n}
+    DISMISS = lambda d, n='': CLOSE(d, 'Order of Dismissal', n)
     dockets = {                                               # real docket arrays through the real parser
         '2099-000001-CA-01': [BK('09/01/2026'), CLOSE('09/20/2026')],     # lifted since it was cached
         '2099-000002-CA-01': None,                                         # fetch fails
@@ -108,12 +109,22 @@ try:
         '2099-000010-CA-01': [BK('05/01/2026'), CLOSE('06/01/2026')],     # older stay closed; prior date slash-form
         '2099-000011-CA-01': [BK('03/01/2026'), BK('08/01/2026'), CLOSE('09/15/2026')],   # only the NEWER case closed
         '2099-000012-CA-01': [BK('03/01/2026'), CLOSE('04/01/2026'), BK('08/01/2026'), CLOSE('09/15/2026')],  # both closed
+        '2099-000013-CA-01': [BK('03/01/2026', '26-11111'), BK('03/01/2026', '26-22222'),
+                              DISMISS('09/15/2026', '26-22222')],          # two cases filed the same day, one closed
+        '2099-000014-CA-01': [BK('03/01/2026', '26-11111'), BK('08/01/2026', '26-33333'),
+                              DISMISS('09/01/2026', '26-33333'), DISMISS('09/15/2026', '26-11111')],  # held case dismissed late
+        '2099-000015-CA-01': [BK('03/01/2026', '26-11111'), BK('08/01/2026', '26-33333'),
+                              DISMISS('09/15/2026', '26-33333')],          # numbered: only the newer case closed
+        '2099-000016-CA-01': [BK('03/01/2026', '26-11111'), BK('03/01/2026', '26-22222'),
+                              DISMISS('09/10/2026', '26-11111'), DISMISS('09/15/2026', '26-22222')],  # same-day pair, both closed
+        '2099-000017-CA-01': [BK('03/01/2026'), BK('08/01/2026'), DISMISS('09/01/2026'), DISMISS('09/15/2026')],  # numberless late closes
     }
     extra_cache = {'2099-000006-CA-01': {'a': True, 'bd': '2026-07-10'},
                    '2099-000008-CA-01': {'a': True, 'bd': '2026-09-10'},
                    '2099-000010-CA-01': {'a': True, 'bd': '09/10/2026'},
                    '2099-000011-CA-01': {'a': True, 'bd': '2026-03-01'},
-                   '2099-000012-CA-01': {'a': True, 'bd': '2026-03-01'}}
+                   '2099-000012-CA-01': {'a': True, 'bd': '2026-03-01'},
+                   **{'2099-0000%d-CA-01' % i: {'a': True, 'bd': '2026-03-01'} for i in range(13, 18)}}
     _cf = os.path.join(tmp, 'sale_history_cache.json')
     json.dump(dict(json.load(open(_cf)), **extra_cache), open(_cf, 'w'))
     _lf = os.path.join(tmp, 'leads_final.json')
@@ -124,7 +135,9 @@ try:
         {'Case #': '2099-000009-CA-01', 'sale_stay_lifted': '2026-01-01'},
         {'Case #': '2099-000010-CA-01', 'sale_bk_active': True, 'sale_bk_date': '09/10/2026'},
         {'Case #': '2099-000011-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-03-01'},
-        {'Case #': '2099-000012-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-03-01'}], open(_lf, 'w'))
+        {'Case #': '2099-000012-CA-01', 'sale_bk_active': True, 'sale_bk_date': '2026-03-01'}] +
+        [{'Case #': '2099-0000%d-CA-01' % i, 'sale_bk_active': True, 'sale_bk_date': '2026-03-01'} for i in range(13, 18)],
+        open(_lf, 'w'))
     _sh = {k: getattr(SH, k) for k in ('HERE', 'CACHE', '_fetch', 'time')}
     _argv = sys.argv
     try:
@@ -162,6 +175,18 @@ try:
     check('when both the held stay and a newer one show a closing line, the stay ends',
           not on('2099-000012-CA-01') and _cache_now['2099-000012-CA-01'].get('a') is False
           and _cache_now['2099-000012-CA-01'].get('sl') == '2026-09-15')
+    check('two cases filed the same day: the other one closing does not end ours',
+          on('2099-000013-CA-01') and _cache_now['2099-000013-CA-01'].get('a') is True
+          and not after_sh['2099-000013-CA-01'].get('sale_stay_lifted'))
+    check('the held case dismissed AFTER a newer filing (its number cited) ends the stay once both closed',
+          not on('2099-000014-CA-01') and _cache_now['2099-000014-CA-01'].get('a') is False
+          and _cache_now['2099-000014-CA-01'].get('sl') == '2026-09-15')
+    check('numbered lines: only the newer case closing does not end the older stay we hold',
+          on('2099-000015-CA-01') and _cache_now['2099-000015-CA-01'].get('a') is True)
+    check('two cases filed the same day, each with its own closing line: the stay ends',
+          not on('2099-000016-CA-01') and _cache_now['2099-000016-CA-01'].get('a') is False)
+    check('numberless closes after a newer filing cannot be tied to ours: the stay is kept',
+          on('2099-000017-CA-01') and _cache_now['2099-000017-CA-01'].get('a') is True)
     check('a new active stay drops a stale lift date from the row (gates read it as "contact is legal")',
           on('2099-000009-CA-01') and not after_sh['2099-000009-CA-01'].get('sale_stay_lifted'))
     rebuilt = list(after_sh.values())
@@ -169,7 +194,8 @@ try:
     check('the rebuild does not re-activate the lifted stay from the cache',
           [r['Case #'] for r in rebuilt if r.get('sale_bk_active')] == ['2099-000002-CA-01', '2099-000005-CA-01', '2099-000006-CA-01', '2099-000007-CA-01',
                                                                    '2099-000008-CA-01', '2099-000009-CA-01', '2099-000010-CA-01',
-                                                                   '2099-000011-CA-01'])
+                                                                   '2099-000011-CA-01', '2099-000013-CA-01', '2099-000015-CA-01',
+                                                                   '2099-000017-CA-01'])
     os.remove(os.path.join(tmp, 'sale_history_cache.json'))
     check('no cache file: nothing restored, nothing raised', F.restore_stays_from_cache([{'Case #': 'x'}]) == 0)
 finally:
