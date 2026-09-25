@@ -43,23 +43,30 @@ CLAUDE.md names as correct behaviour.
 
 EXIT CODES
     acquire   0 = the lock is yours, proceed
-              9 = DID NOT ACQUIRE. Either another runner holds a live lock, or the lock could
-                  not be written/read at all. The caller must NOT build or push. 9 is the
-                  runner-level "another publishing runner is mid-run" code in all five .bat
-                  files; it collides with nothing they already use (0-7).
+              9 = DID NOT ACQUIRE, for one of two reasons, and the printed lines say which:
+                  another runner holds a live lock, or the lock is UNUSABLE - it could not be
+                  created, read or aged. Both are fail-closed and the caller must NOT build or
+                  push either way, but they are different events: Greptile's 2026-09-25 point was
+                  that reporting an unwritable lock as contention sends whoever reads
+                  leads-run.log hunting for a run that never existed. So rc=9 means "the lock was
+                  not obtained", the five runners say that rather than naming a cause, and
+                  _refuse / _refuse_unusable print the cause. 9 collides with nothing the runners
+                  already use (0-7).
     release   0 always, by construction. Releasing is the last thing a run does and it must
               never be the thing that turns a good run into a failed one. It only ever removes
               a lock THIS runner owns; a mismatch is logged and left alone.
     status    0 always. Prints the holder, for `python publish_lock.py status` by hand.
 
-KNOWN EDGE CASE, stated rather than hidden: ownership is matched on the runner's own filename.
-Two DIFFERENT runners can never release each other's lock. Two concurrent runs of the SAME
-runner, where the first has gone stale and had its lock broken by the second, would let the
-first one's release remove the second one's lock. Task Scheduler's MultipleInstancesPolicy is
-IgnoreNew on these tasks, and the manual twin of a scheduled runner has a different filename
-(run-phones.bat vs run-phones-nightly.bat), so reaching it needs a hand-started duplicate of one
-file more than six hours after its twin. It is a real hole and it is narrower than the one this
-file closes.
+OWNERSHIP is matched on the runner's filename AND on the ppid recorded in the lock - the cmd.exe
+that ran the .bat, which is shared by that run's acquire and its release and differs between two
+runs of the same file. Two DIFFERENT runners could never release each other's lock; the filename
+alone was not enough for two runs of the SAME one, where the first overruns six hours, has its
+lock broken by the second, and then releases the second's live lock on its way out. That was
+shipped documented-not-closed and Greptile refused it on 2026-09-25; it is closed. What remains is
+narrower by an order of magnitude: Windows reuses pids, so two runs of one runner more than six
+hours apart could in principle draw the same cmd.exe pid, which needs a pid collision ON TOP OF
+the overrun. A lock file written before this change carries no ppid and falls back to the filename
+match rather than wedging.
 """
 import errno
 import json
@@ -105,6 +112,32 @@ def _say(msg):
     sys.stdout.flush()
 
 
+def _identity(raw):
+    """The bytes-level fingerprint of one particular lock file.
+
+    Used to prove that the file being renamed out of the way as stale is still the SAME file that
+    was read and judged stale, and not a fresh lock written by a new holder in the gap between the
+    two. Greptile flagged that gap on 2026-09-25 and it is real: rename is an interlock over WHO
+    gets to break a lock, and says nothing about WHICH lock it moved.
+
+    stat alone is not enough - mtime granularity is coarse enough on NTFS that a replacement
+    written in the same tick can share it - so the raw payload is part of the fingerprint.
+    """
+    try:
+        st = os.stat(LOCK)
+    except OSError:
+        return None
+    return (raw, st.st_size, st.st_mtime_ns)
+
+
+def _raw_lock():
+    try:
+        with open(LOCK, encoding='utf-8') as fh:
+            return fh.read()
+    except IOError:
+        return None
+
+
 def _read_holder():
     """-> (dict|None, age_seconds|None, problem|None).
 
@@ -143,6 +176,13 @@ def _write_lock(runner):
     payload = json.dumps({
         'runner': runner,
         'pid': os.getpid(),
+        # The pid of the cmd.exe running the .bat, not of this python. Both the acquire and the
+        # release in one runner are spawned by the same cmd.exe, so this is the only thing the two
+        # separate python processes share that is unique to ONE RUN of that runner. It is what
+        # closes the hole Greptile flagged on 2026-09-25: release used to match on the runner's
+        # FILENAME, so where a stale run's lock had been broken by a second run of the same file,
+        # the first one's release removed the second one's live lock.
+        'ppid': os.getppid(),
         'host': socket.gethostname(),
         'started_at': time.strftime('%Y-%m-%d %H:%M:%S'),
         'started_epoch': time.time(),
@@ -158,21 +198,60 @@ def _write_lock(runner):
     return True
 
 
-def _break_stale(held, age):
-    """Rename the stale lock out of the way, then delete it.
+def _break_stale(held, age, sig):
+    """Rename the stale lock out of the way, then delete it - but only if it is still the same file.
 
-    The rename is the interlock: os.rename to a name that does not exist fails on Windows if the
-    destination is taken, so of two runners both finding the same stale lock at the same instant,
-    exactly one wins the rename and goes on to create a fresh lock. The loser's rename fails, it
-    finds no lock to break, and its own O_EXCL create then fails against the winner's. Deleting
-    the file directly has no such interlock - both would delete and both would acquire.
+    The rename is the interlock over WHO breaks: os.rename to a name that does not exist fails on
+    Windows if the destination is taken, so of two runners both finding the same stale lock at the
+    same instant, exactly one wins the rename and goes on to create a fresh lock. The loser's
+    rename fails, it finds no lock to break, and its own O_EXCL create then fails against the
+    winner's. Deleting the file directly has no such interlock - both would delete and both would
+    acquire.
+
+    What the rename does NOT do is prove which file it moved, and that is the race Greptile found
+    on 2026-09-25: read an expired lock, have its owner release and a THIRD runner take a fresh
+    one in the gap, and this rename carries the fresh lock away and clears the path for a second
+    publisher. So the fingerprint taken at read time is re-checked twice - once immediately before
+    the rename, and once on the renamed file, which is the only check that cannot be raced, because
+    by then nothing else can touch it. If the renamed file turns out to be fresh, it is put back
+    byte-for-byte and this runner refuses. Restoring is an O_EXCL create rather than a rename back,
+    so it can never overwrite a lock somebody took in the meantime.
     """
+    if sig is not None and _identity(_raw_lock()) != sig:
+        _say('     .. PUBLISH LOCK: the lock changed while it was being judged stale - not breaking it.')
+        return False
     doomed = '%s.stale.%d.%d' % (LOCK, os.getpid(), int(time.time() * 1000))
     try:
         os.rename(LOCK, doomed)
     except OSError as exc:
         _say('     .. PUBLISH LOCK: another runner is breaking the same stale lock - %s' % exc)
         return False
+    if sig is not None:
+        try:
+            with open(doomed, encoding='utf-8') as fh:
+                moved = fh.read()
+        except IOError:
+            moved = None
+        if moved != sig[0]:
+            # A fresh lock was written between the check above and the rename. Put it back.
+            _say('     !! PUBLISH LOCK: the stale lock was replaced by a live one mid-break.')
+            restored = False
+            if moved is not None:
+                try:
+                    fd = os.open(LOCK, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+                except OSError:
+                    pass
+                else:
+                    with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+                        fh.write(moved)
+                    restored = True
+            _say('     !! Its holder is still publishing, so it was %s and this runner refuses.'
+                 % ('put back' if restored else 'already replaced again'))
+            try:
+                os.remove(doomed)
+            except OSError:
+                pass
+            return False
     _say('     !! PUBLISH LOCK: BROKE A STALE LOCK - %s' % _describe(held, age))
     _say('     !! Over the %s budget, so the run that took it is dead, not working.'
          % _ago(STALE_AFTER))
@@ -193,25 +272,38 @@ def acquire(runner):
                      % (runner, os.getpid(), socket.gethostname()))
                 return 0
         except OSError as exc:
-            _say('     !! PUBLISH LOCK: cannot create %s - %s' % (LOCK, exc))
-            _say('     !! REFUSING to publish. A lock that cannot be written is not a lock.')
-            return 9
+            return _refuse_unusable('cannot create %s - %s' % (LOCK, exc), runner)
 
+        raw = _raw_lock()
+        sig = _identity(raw)
         held, age, problem = _read_holder()
         if problem:
-            _say('     !! PUBLISH LOCK: %s' % problem)
-            _say('     !! REFUSING to publish - cannot tell whether another runner is mid-run.')
-            return 9
+            return _refuse_unusable(problem, runner)
         if held is None:
             # It vanished between the create and the read: the holder released in that gap.
             # One retry, then give up rather than spin.
             continue
         if age is not None and age > STALE_AFTER:
-            if attempt == 1 and _break_stale(held, age):
+            if attempt == 1 and _break_stale(held, age, sig):
                 continue
             return _refuse(held, age, runner)
         return _refuse(held, age, runner)
-    _say('     !! PUBLISH LOCK: the lock changed hands twice while starting - refusing.')
+    return _refuse_unusable('the lock changed hands twice while starting', runner)
+
+
+def _refuse_unusable(problem, runner):
+    """rc=9 for a lock that could not be created, read or aged - NOT for contention.
+
+    Both refusals exit 9 and both are fail-closed, because a guard that disappears when the disk
+    or the permissions are wrong is not a guard. But they are different events and Greptile was
+    right that saying "another publishing runner is mid-run" for this one sends whoever reads
+    leads-run.log looking for a run that was never there. rc=9 means the lock was NOT OBTAINED;
+    these lines say which of the two reasons it was.
+    """
+    _say('     !! PUBLISH LOCK: %s' % problem)
+    _say('     !! The lock is UNUSABLE - this is not another runner holding it.')
+    _say('     !! %s REFUSING to start. Nothing built, nothing pushed, live site untouched.' % runner)
+    _say('     !! Fix the file or the folder, then re-run. Do not delete the guard to get past it.')
     return 9
 
 
@@ -235,6 +327,30 @@ def release(runner):
     if held.get('runner') != runner:
         _say('     !! PUBLISH LOCK: %s will not release a lock it does not own - %s'
              % (runner, _describe(held, age)))
+        return 0
+    # SAME RUNNER, DIFFERENT RUN. Matching on the runner's filename alone was the one ownership
+    # hole this file shipped documented rather than closed, and Greptile refused it on 2026-09-25:
+    # if one run of a runner overruns six hours and a second run of the SAME file breaks its stale
+    # lock and takes a fresh one, the first run's release would then delete the second run's live
+    # lock and let a third publisher in. The recorded ppid is the cmd.exe that ran the .bat, so it
+    # is the same for this runner's acquire and its release and different for a different run.
+    #
+    # Refusing here cannot lose a lock that should have been dropped: the worst case is a lock left
+    # behind, which is exactly what a crashed run leaves, and the six-hour stale break is already
+    # the backstop for that. An older lock file with no 'ppid' key falls back to the filename match
+    # rather than wedging on a key that did not exist when it was written.
+    #
+    # Residual, smaller than what it replaces: Windows reuses pids, so two runs of one runner more
+    # than six hours apart could in principle draw the same cmd.exe pid. That needs a pid collision
+    # ON TOP OF the overrun this closes.
+    own = held.get('ppid')
+    if own is not None and own != os.getppid():
+        _say('     !! PUBLISH LOCK: this lock belongs to a DIFFERENT run of %s - not releasing.' % runner)
+        _say('     !! %s' % _describe(held, age))
+        _say('     !! Its run started under process %s, this one under %s. A run that overran the'
+             % (own, os.getppid()))
+        _say('     !! %s budget had its lock broken, and the run that took it is still going.'
+             % _ago(STALE_AFTER))
         return 0
     try:
         os.remove(LOCK)

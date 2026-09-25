@@ -144,11 +144,16 @@ Task Scheduler triggers. That is not a mechanism. Refresh starts 05:30 and has m
 2h49m, 3h08m and ~4h on different days, so every "it will be finished by 08:30" ordering is an
 assumption that has already been wrong. `publish_lock.py` is the mechanism:
 
-- `python -u publish_lock.py acquire <runner>.bat` — **exit 9 = another publishing runner on this
-  machine holds the lock.** The runner must not build or push, and must not release: the lock is not
-  its own. Every runner's rc=9 means exactly this.
+- `python -u publish_lock.py acquire <runner>.bat` — **exit 9 = the lock was not obtained**, for one
+  of two reasons, and the lines it prints say which: another publishing runner on this machine holds
+  a live lock, or the lock is **unusable** — it could not be created, read or aged. Both are
+  fail-closed and in both the runner must not build or push, and must not release: the lock is not
+  its own. Do not read rc=9 as "another runner is mid-run" without reading the lines; an unwritable
+  lock reported as contention sends you hunting through `leads-run.log` for a run that never existed.
 - `python -u publish_lock.py release <runner>.bat` — always exits 0, and only removes a lock that
-  runner owns. It runs at the **single funnel label** in each runner, which is why every `exit /b`
+  runner owns: same runner filename **and** same `ppid`, the cmd.exe that ran the `.bat`. The ppid is
+  what stops a run that overran the six-hour budget, and had its lock broken, from deleting on its
+  way out the live lock of the second run of the same file. It runs at the **single funnel label** in each runner, which is why every `exit /b`
   below an acquire became `set "NEXIT=n"` + `goto :end`. A lock released on the happy path only
   wedges the machine on the first bad night.
 - A lock older than **six hours** is stale and is broken with a loud log line. Six hours is the
@@ -157,7 +162,8 @@ assumption that has already been wrong. `publish_lock.py` is the mechanism:
 - It is a **local** lock, one file per machine. It says nothing about the other box; that is still
   repo_guard, publish_guard and the one-armed-machine rule in MACHINE-HANDOFF.
 - `python publish_lock.py status` prints the holder, and `_batsyntaxtest.py` asserts the wiring:
-  one acquire, one release, its own filename in both, and no exit path between them.
+  one acquire, one release, its own filename in both, no exit path between them, and no `goto` that
+  jumps past the release.
 
 `run-replies-daily.bat` takes it **below** its inbox scan and `optout_sync.py`, not at the top: those
 two contend with nothing and are the time-critical work the file exists for, so a held lock there is

@@ -38,7 +38,7 @@ rem  pattern this project has paid for three times. See publish_lock.py.
 python -u publish_lock.py acquire run-phones-nightly.bat >> "%LOG%" 2>&1
 if errorlevel 1 (
   echo [%STAMP%] REFUSED - another publishing runner is mid-run on this machine. Nothing traced, built or pushed. See phones-run.log.> "%STATUS%"
-  echo     ^!^! PUBLISH LOCK: another publishing runner is mid-run - see phones-run.log. Nothing ran.
+  echo     ^!^! PUBLISH LOCK not obtained - see phones-run.log for which. Nothing ran.
   echo ==== refused rc=9 - publish lock held %date% %time% ==== >> "%LOG%"
   exit /b 9
 )

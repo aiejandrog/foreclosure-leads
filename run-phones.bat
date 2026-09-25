@@ -22,7 +22,7 @@ rem  is hand-run and the person is looking at the window. NEXIT funnels every ex
 rem  :end so the lock is released on failures too, and that is where the single `pause` now lives.
 set "NEXIT=0"
 python -u publish_lock.py acquire run-phones.bat
-if errorlevel 1 (echo PUBLISH LOCK: another publishing runner is mid-run on this machine - nothing traced, built or pushed. & pause & exit /b 9)
+if errorlevel 1 (echo PUBLISH LOCK not obtained - reason is in the lines above. Nothing traced, built or pushed. & pause & exit /b 9)
 python skiptrace.py
 if errorlevel 1 (echo TRACE FAILED - nothing rebuilt or pushed & set "NEXIT=1" & goto :end)
 python -c "import json, foreclosure_leads as F; F.make_tracker(json.load(open('leads_final.json', encoding='utf-8')))"

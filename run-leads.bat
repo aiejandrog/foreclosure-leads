@@ -19,7 +19,7 @@ rem  nightly chain is still running. rc=9 = another runner holds the lock. It ex
 rem  releasing - the lock is not ours to drop. Released once at :done. See publish_lock.py.
 python -u publish_lock.py acquire run-leads.bat >> leads-run.log 2>&1
 if errorlevel 1 (
-  echo     ^!^! PUBLISH LOCK: another publishing runner is mid-run - see leads-run.log. Nothing ran.
+  echo     ^!^! PUBLISH LOCK not obtained - see leads-run.log for which. Nothing ran.
   exit /b 9
 )
 rem  NETWORK NEXT. Same 09-14/16/17 fault as refresh-dealflow.bat: this file scrapes too, and a box

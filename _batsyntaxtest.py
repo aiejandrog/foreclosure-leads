@@ -199,10 +199,11 @@ def lock_wiring(name, code_lines):
     # refusal path may jump to a label rather than exiting inline: run-replies-daily.bat takes the
     # lock below its inbox scan, so a held lock there is a degraded publish-skip rather than a dead
     # run, and it lands on :nolock. Follow one hop so the check reads the path, not just the branch.
+    refusal_label = None
     refusal_lines = list(code_lines[ai:ai + 8])
     hop = re.search(r'goto\s+:(\w+)', '\n'.join(refusal_lines))
     if hop and not re.search(r'exit /b 9\b', '\n'.join(refusal_lines)):
-        label = ':' + hop.group(1)
+        refusal_label = label = ':' + hop.group(1)
         at = [i for i, l in enumerate(code_lines) if l.strip().lower() == label.lower()]
         if at:
             for l in code_lines[at[0]:]:
@@ -223,6 +224,26 @@ def lock_wiring(name, code_lines):
                 stranded.append('L%d %s' % (i, code_lines[i].strip()[:70]))
     out.append(('%s leaves no exit path that skips the release' % name, stranded == [],
                 '; '.join(stranded)))
+    # ...AND every `goto` between them lands at or above the release. Greptile's 2026-09-25 point:
+    # the scan above reads literal `exit /b` lines, so a future branch could `goto :somewhere` that
+    # sits BELOW the release, exit there, and pass a check whose whole job is to forbid exactly
+    # that. cmd.exe does not care that the jump is indirect and neither does the lock: the file
+    # stays on disk and the next runner refuses until the six-hour budget breaks it. The one
+    # legitimate jump past the release is the rc=9 refusal, which must not release, and a `goto` to
+    # a label that does not exist is its own bug - cmd.exe falls through to the end of the file.
+    jumps = []
+    for i in range(ai + 1, ri):
+        for m in re.finditer(r'goto\s+:?(\w+)', code_lines[i]):
+            label = ':' + m.group(1)
+            if refusal_label and label.lower() == refusal_label.lower():
+                continue
+            at = [j for j, l in enumerate(code_lines) if l.strip().lower() == label.lower()]
+            if not at:
+                jumps.append('L%d %s -> no such label' % (i, label))
+            elif at[0] > ri:
+                jumps.append('L%d %s -> L%d, past the release at L%d' % (i, label, at[0], ri))
+    out.append(('%s has no goto that jumps past the release' % name, jumps == [],
+                '; '.join(jumps)))
     return out
 
 
@@ -314,6 +335,25 @@ rec('a refusal that drops the other runner\'s lock is caught',
     or bad.get('x.bat releases it exactly once', True) is False,
     'rc=9 means the lock is someone else\'s')
 
+STRANDEDJUMP = list(GOOD)
+STRANDEDJUMP[8] = 'if errorlevel 1 (set "NEXIT=1" & goto :bail)'
+STRANDEDJUMP = STRANDEDJUMP + [':bail', 'exit /b 1']
+bad = dict((l, ok) for l, ok, _ in lock_wiring('x.bat', STRANDEDJUMP))
+rec('a goto that jumps past the release is caught',
+    bad['x.bat has no goto that jumps past the release'] is False,
+    'the exit is at :bail, so scanning for a literal `exit /b` between the two lines misses it')
+
+GHOSTJUMP = list(GOOD)
+GHOSTJUMP[8] = 'if errorlevel 1 (set "NEXIT=1" & goto :finish)'
+bad = dict((l, ok) for l, ok, _ in lock_wiring('x.bat', GHOSTJUMP))
+rec('a goto to a label that does not exist is caught',
+    bad['x.bat has no goto that jumps past the release'] is False,
+    'cmd.exe falls through to the end of the file, so the release never runs')
+
+rec('the legitimate jump to the refusal label is still allowed',
+    dict((l, ok) for l, ok, _ in lock_wiring('x.bat', HOP))['x.bat has no goto that jumps past the release'],
+    'run-replies-daily.bat:nolock sits below the release on purpose and must not release')
+
 # ---- 5. the lock itself does what the runners assume ------------------------------------------
 # No network, no cmd.exe: this drives publish_lock.py directly. A wiring check over a lock that
 # does not actually exclude anything is the "clean sweep from an unproven scanner" this file's
@@ -390,6 +430,69 @@ try:
     rec('breaking a stale lock leaves no litter behind',
         [f for f in os.listdir(tmp) if '.stale.' in f] == [],
         [f for f in os.listdir(tmp) if '.stale.' in f])
+
+    # -- a stale break must not carry off a FRESH lock (Greptile P1, 2026-09-25) --
+    # The race: runner A reads the lock and judges it stale; its holder releases and runner C takes
+    # a fresh one; A's rename then moves C's live lock aside and A acquires alongside C. Both
+    # publish, which is the whole failure this file exists to stop. It is reproduced here by
+    # swapping the file underneath the break, which is what that interleaving amounts to.
+    stale = {'runner': 'run-phones-nightly.bat', 'pid': 1, 'ppid': 2, 'host': 'H',
+             'started_at': 'earlier', 'started_epoch': time.time() - (PL.STALE_AFTER + 60)}
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(stale))
+    sig = PL._identity(PL._raw_lock())
+    fresh = dict(stale, runner='run-leads.bat', pid=3, ppid=4, started_epoch=time.time())
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(fresh))
+    broke = PL._break_stale(stale, PL.STALE_AFTER + 60, sig)
+    rec('a stale break refuses once the lock has been replaced', broke is False,
+        'rename is an interlock over WHO breaks, not over WHICH file it moved')
+    rec('and the fresh lock is still there afterwards',
+        os.path.exists(PL.LOCK)
+        and json.load(io.open(PL.LOCK, encoding='utf-8'))['runner'] == 'run-leads.bat',
+        'restored by an O_EXCL create, so it can never overwrite a newer holder')
+    rec('so the runner that lost the break is refused',
+        PL.acquire('run-phones-nightly.bat') == 9)
+    rec('and no .stale litter is left by the aborted break',
+        [f for f in os.listdir(tmp) if '.stale.' in f] == [],
+        [f for f in os.listdir(tmp) if '.stale.' in f])
+    os.remove(PL.LOCK)
+
+    # -- release must not drop a DIFFERENT run of the same runner's lock (Greptile P1) --
+    # The hole this file shipped documented: one run overruns six hours, a second run of the SAME
+    # .bat breaks its stale lock and takes a fresh one, and then the first one's release removes
+    # the second one's live lock. Matching on the runner filename alone cannot tell them apart;
+    # the recorded ppid - the cmd.exe that ran the .bat - can.
+    rec('the lock records the cmd.exe that ran the runner, not just the runner',
+        PL.acquire('run-phones.bat') == 0
+        and json.load(io.open(PL.LOCK, encoding='utf-8'))['ppid'] == os.getppid())
+    other = json.load(io.open(PL.LOCK, encoding='utf-8'))
+    other['ppid'] = os.getppid() + 90001          # a different run of the same file
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(other))
+    rec('an earlier run will not release the replacement lock',
+        PL.release('run-phones.bat') == 0 and os.path.exists(PL.LOCK),
+        'same filename, different run - this is the hole Greptile refused')
+    rec('and a third publisher is still shut out',
+        PL.acquire('refresh-dealflow.bat') == 9)
+    del other['ppid']                              # a lock written before this change
+    io.open(PL.LOCK, 'w', encoding='utf-8').write(json.dumps(other))
+    rec('a lock with no ppid falls back to the filename match',
+        PL.release('run-phones.bat') == 0 and not os.path.exists(PL.LOCK),
+        'a new key must not wedge a lock written by the previous version')
+
+    # -- rc=9 for an unusable lock says so, instead of blaming a runner that never ran --
+    unusable = io.StringIO()
+    real_say, PL._say = PL._say, lambda m: unusable.write(m + '\n')
+    try:
+        os.mkdir(PL.LOCK)                          # a directory where the lock file goes
+        rc = PL.acquire('run-leads.bat')
+    finally:
+        PL._say = real_say
+        os.rmdir(PL.LOCK)
+    said = unusable.getvalue()
+    rec('a lock that cannot be created still refuses with 9', rc == 9)
+    rec('and it is reported as UNUSABLE, not as another runner mid-run',
+        'UNUSABLE' in said and 'another publishing runner is mid-run' not in said,
+        said.strip().replace('\n', ' / ')[:110])
+
 finally:
     PL.LOCK = real_lock
     shutil.rmtree(tmp, ignore_errors=True)

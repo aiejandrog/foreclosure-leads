@@ -70,9 +70,9 @@ REM  CLAUDE.md names as correct. rc=9 says so. It jumps to :nolock, NOT :end, be
 REM  the lock and this run never held it.
 python -u publish_lock.py acquire run-replies-daily.bat >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo     ^!^! PUBLISH LOCK: another publishing runner is mid-run - board NOT rebuilt or pushed. >> "%LOG%"
+  echo     ^!^! PUBLISH LOCK not obtained - reason is in the lines above. Board NOT rebuilt or pushed. >> "%LOG%"
   echo     ^!^! Replies were scanned and opt-outs synced above, so nothing warm was lost. >> "%LOG%"
-  echo     ^!^! PUBLISH LOCK: another runner is mid-run - replies saved, publish skipped.
+  echo     ^!^! PUBLISH LOCK not obtained - replies saved, publish skipped.
   goto :nolock
 )
 

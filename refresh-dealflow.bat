@@ -30,7 +30,7 @@ rem  the lock is not ours to drop. Released once at :end, on every other exit pa
 rem  publish_lock.py for the stale-lock budget and the fail direction.
 python -u publish_lock.py acquire refresh-dealflow.bat >> "%LOG%" 2>&1
 if errorlevel 1 (
-  echo     ^!^! PUBLISH LOCK: another publishing runner is mid-run - see leads-run.log. Nothing ran.
+  echo     ^!^! PUBLISH LOCK not obtained - see leads-run.log for which. Nothing ran.
   echo ==== REFRESH REFUSED rc=9 - publish lock held %date% %time% ====>> "%LOG%"
   exit /b 9
 )
