@@ -304,9 +304,12 @@ def _ledger_save(charged=None, final=False):
     _lock_touch()
     run = _SPEND['submits'] * (_SPEND.get('unit') or PAID_SOLVE_USD)
     total = _SPEND['prior'] + max(run, charged or 0)
+    # the end-of-run balance drop is a price too: a run of under 20 solves never re-reads the
+    # balance mid-run, and must still teach the next run what a solve really cost
+    seen = (charged / _SPEND['submits']) if (charged and _SPEND['submits']) else 0
     led = dict(_SPEND.get('led') or {}, cap=_SPEND['cap'], counted_usd=round(total, 4),
                unit_usd=round(max(float((_SPEND.get('led') or {}).get('unit_usd') or 0),
-                                  _SPEND.get('unit') or PAID_SOLVE_USD), 6))
+                                  _SPEND.get('unit') or PAID_SOLVE_USD, seen), 6))
     if final:
         led['runs'] = list(led.get('runs') or []) + [{'at': time.strftime('%Y-%m-%d %H:%M'),
                                                      'solves': _SPEND['submits'], 'counted_usd': round(run, 4),

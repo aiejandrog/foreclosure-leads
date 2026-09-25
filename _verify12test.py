@@ -586,7 +586,12 @@ try:
     check('--spend-ledger: a later run counts at the price an earlier run learned, from its first solve',
           len(_fake_cs.calls) == 10, len(_fake_cs.calls))
     del _fake_cs.calls[:]
-    RL._SPEND.update(unit=RL.PAID_SOLVE_USD, prior=0.0, led=None)
+    _ls = os.path.join(_tmp, 'short.json')
+    RL._SPEND.update(cap=0.10, prior=0.0, led=None, submits=6, unit=RL.PAID_SOLVE_USD, ledger=_ls, stopped='', lock=None)
+    RL._ledger_save(charged=6 * 0.0066, final=True)
+    check('--spend-ledger: a short run still records the price its balance drop showed',
+          abs(json.load(open(_ls))['unit_usd'] - 0.0066) < 1e-6, json.load(open(_ls)))
+    RL._SPEND.update(unit=RL.PAID_SOLVE_USD, prior=0.0, led=None, ledger=None, submits=0)
     _real_save = RL._ledger_save
     RL._ledger_save = lambda *a, **k: RL._SPEND.update(stopped='the spend ledger could not be written')
     RL._SPEND.update(cap=1.00, submits=0, bal0=10.0, prior=0.0, ledger='x', stopped='')
