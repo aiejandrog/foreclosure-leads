@@ -477,9 +477,10 @@ _wide = {'conf': 'ok', 'liens': [{'d': '2/1/2008', 'amt': 150000, 'st': 'OPEN', 
 _narrow = RL.analyze([deed, city3], FOLIO, 12000, ftype='HOA', owner='OWNER TESTER')
 check("a narrower re-read is narrower, not a payoff", RL._mortgages_narrower(_wide, _narrow))
 _lay = RL._lay_lien_rows(_wide, _narrow)
-check("the earlier search's mortgages stay and the new lien rows are laid over them",
-      _lay['liens'] == _wide['liens'] and _lay['other'] == _narrow['other'] and _lay['code_open'] == 1500
-      and 'mtg_kept' in _lay, _lay)
+check("a narrower re-read keeps the earlier chain whole and only lists the new lien rows",
+      {k: v for k, v in _lay.items() if k not in ('other_seen', 'wider_repull')} == _wide
+      and 'other' not in _lay and _lay['other_seen'] == _narrow['other'] and _lay['code_open'] == 300
+      and 'not counted' in _lay['wider_repull'], _lay)
 check("an unpriced loan the old chain counted is not lost either",
       RL._mortgages_narrower({'liens': [], 'mtg_open_unpriced': 1}, _narrow))
 check("a re-read that shows the old loan released by a satisfaction naming it is news, not narrower",
@@ -531,16 +532,20 @@ check("the board stops netting only when the chain took the association's own cl
 # review round 18: a kept total the own claim was taken out of is netted once, not twice
 _oc = {'own_case': True, 'kind': 'association', 'amt': 9000, 'd': '3/1/2024', 'doc': 'CLAIM OF LIEN', 'st': 'OPEN',
        'old_bucket': 'hoa_open'}
-_lr = RL._lay_lien_rows({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 80, 'traced': '2025-06-01'},
-                        {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30, 'other': [_oc]})
+def _carried(old, new):
+    _c = dict(old, **new)
+    RL._carry_lien_totals(old, new, _c)
+    return _c
+_lr = _carried({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 80, 'traced': '2025-06-01'},
+               {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30, 'other': [_oc]})
 check("a kept association total with the plaintiff's claim taken out is not netted against the judgment again",
       _lr['hoa_open'] == 5000 and not _lr.get('hoa_own_in') and FLD._hoa_own_out(_lr), _lr)
-_lr2 = RL._lay_lien_rows({'conf': 'ok', 'liens': [], 'hoa_open': 5000, 'code_open': 3000, 'nrec': 80},
-                         {'conf': 'ok', 'liens': [], 'hoa_open': 5000, 'code_open': 0, 'nrec': 30, 'other': [_oc]})
+_lr2 = _carried({'conf': 'ok', 'liens': [], 'hoa_open': 5000, 'code_open': 3000, 'nrec': 80},
+                {'conf': 'ok', 'liens': [], 'hoa_open': 5000, 'code_open': 0, 'nrec': 30, 'other': [_oc]})
 check("a kept City total does not switch the association netting back on", FLD._hoa_own_out(_lr2)
       and _lr2['code_open'] == 3000 and _lr2.get('lien_totals_kept'), _lr2)
-_lr3 = RL._lay_lien_rows({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 80},
-                         {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30,
+_lr3 = _carried({'conf': 'ok', 'liens': [], 'hoa_open': 14000, 'nrec': 80},
+                {'conf': 'ok', 'liens': [], 'hoa_open': 0, 'nrec': 30,
                           'other': [dict(_oc, doc='FINAL JUDGMENT', amt=9500, d='3/1/2025')]})
 check("a kept association total that still holds the plaintiff's claim keeps the netting",
       _lr3.get('hoa_own_in') and not FLD._hoa_own_out(_lr3), _lr3)
@@ -581,9 +586,10 @@ _ca = {'conf': 'ok', 'ftype': 'MORTGAGE', 'judgment': 60000, 'nrec': 20, 'second
        'first_est': 300000, 'open_count': 1}
 _lr19 = RL._lay_lien_rows(_ca, {'conf': 'ok', 'ftype': 'HOA', 'liens': [], 'nrec': 5, 'other': [],
                                 'second_fc': {'party': 'SOME BANK NA'}, 'judgment': 60000})
-check("a kept mortgage re-settles when the case turns out to be an association's: the whole first survives",
-      _lr19['ftype'] == 'HOA' and _lr19['surv'] == 300000 and _lr19['surv_first'] == 300000, _lr19)
-check("a lender's foreclosure the narrower re-read found is kept", _lr19.get('second_fc'), _lr19)
+check("a narrower re-read changes no type, survival or foreclosure flag the board counts",
+      _lr19['ftype'] == 'MORTGAGE' and _lr19['surv'] == 0 and _lr19['second_fc'] is None, _lr19)
+check("a lender's foreclosure the narrower re-read saw is named in the re-pull flag",
+      'SOME BANK NA' in _lr19['wider_repull'], _lr19)
 
 # review round 20: cents, and what a narrower re-read still knows about the case
 _fjc = RL.analyze([deed, rec('JUDGMENT', '5/5/2024', '34932', '1256', 1022358.91, 'OWNER TESTER', first=PLAINTIFF)],
@@ -599,9 +605,9 @@ _lr20 = RL._lay_lien_rows({'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 200, 'seco
                                      {'d': '2/1/2012', 'amt': 50000, 'st': 'OPEN', 'bp': '28100/11'}]},
                           {'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 40, 'other': [], 'judgment': 412345.67,
                            'capped': True, 'liens': [{'d': '2/1/2008', 'amt': 300000, 'st': 'OPEN', 'bp': '26100/11'}]})
-check("a narrower re-read keeps the listing's judgment, the search cap and the foreclosed first's book/page",
-      _lr20.get('judgment') == 412345.67 and _lr20.get('capped') and _lr20.get('first_bp') == '26100/11'
-      and _lr20['surv'] == 50000, _lr20)
+check("a narrower re-read writes nothing but the listed rows and the flag onto the earlier chain",
+      set(_lr20) == {'conf', 'ftype', 'nrec', 'second_fc', 'liens', 'other_seen', 'wider_repull'}
+      and _lr20['nrec'] == 200 and _lr20['other_seen'] == [], _lr20)
 _fd20 = CD._b({'conf': 'ok', 'ftype': 'MORTGAGE', 'first_est': 300000, 'liens': []})['foreclosed_debt']
 check("dossier b: an old chain with no stored judgment does not claim the listing has none",
       _fd20['basis'] == 'the judgment was not stored with this chain', _fd20)
@@ -634,9 +640,15 @@ _nm = RL._lay_lien_rows({'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 50, 'mtg_ope
                          'liens': [{'d': '2/1/2008', 'amt': 300000, 'st': 'OPEN', 'bp': '26100/11'}]},
                         {'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 10, 'other': [], 'mtg_open_unpriced': 1,
                          'liens': [{'d': '2/1/2015', 'amt': 80000, 'st': 'OPEN', 'bp': '29000/5', '_dt': 'x'}]})
-check("a narrower re-read keeps the mortgages it found that the old search did not, and its unpriced count",
-      [l['bp'] for l in _nm['liens']] == ['26100/11', '29000/5'] and _nm['mtg_open_unpriced'] == 1
-      and _nm['surv'] == 80000 and '_dt' not in _nm['liens'][1] and ES.state_of(_nm) == 'unpriced', _nm)
+check("a mortgage only the narrower re-read found is listed, not counted",
+      [l['bp'] for l in _nm['liens']] == ['26100/11'] and _nm['mtg_open_unpriced'] == 0
+      and [(l['bp'], l['kind']) for l in _nm['other_seen']] == [('29000/5', 'mortgage')]
+      and '_dt' not in _nm['other_seen'][0], _nm)
+_dnm = CD._b(_nm)
+check("dossier b lists the narrower re-read's rows apart from every total, and says a wider search is needed",
+      _dnm['listed_not_counted'][0]['book_page'] == '29000/5' and _dnm['wider_search_needed']
+      and not _dnm['other_instruments'], _dnm)
+check("a chain never re-read narrower lists nothing", CD._b({'conf': 'ok', 'liens': []})['listed_not_counted'] is None)
 for _ix in ('PEREZ A', 'PEREZ ANTONIO'):
     _mi = RL.analyze([deed, rec('NOTICE - NOT', '4/4/2022', '33600', '23', 48000, _ix, first='INTERNAL REVENUE SERVICE',
                                 folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='JOSE A PEREZ')
@@ -716,9 +728,8 @@ _sat22 = RL._lay_lien_rows({'conf': 'ok', 'ftype': 'MORTGAGE', 'judgment': 30000
                            {'conf': 'ok', 'ftype': 'MORTGAGE', 'nrec': 10, 'other': [], 'judgment': 300000,
                             'liens': [{'d': '2/1/2004', 'amt': 90000, 'st': 'SATISFIED', 'bp': '26100/11',
                                        'sat_by': 'book/page'}]})
-check("a narrower re-read still takes a satisfaction that names a kept loan's book/page",
-      [l['st'] for l in _sat22['liens']] == ['SATISFIED', 'OPEN'] and _sat22['surv'] == 0
-      and _sat22['open_count'] == 1, _sat22)
+check("a narrower re-read's satisfaction retires nothing; the kept loans stay open until a wider search",
+      [l['st'] for l in _sat22['liens']] == ['OPEN', 'OPEN'] and _sat22['other_seen'] == [], _sat22)
 _lt = tempfile.mkdtemp()
 _lg = os.path.join(_lt, 'led.json')
 json.dump({'cap': 5.0, 'counted_usd': 0.099, 'unit_usd': 0.0033, 'runs': [{'solves': 10}, {'solves': 20}]}, open(_lg, 'w'))
@@ -779,9 +790,10 @@ check('--reanalyze re-runs a cached chain from its cached token and adds the lie
 check('--reanalyze keeps keys other steps wrote', _out['2099-000101-CA-01'].get('chain_note') == 'kept')
 check('--reanalyze never lowers a lien total the old chain carried', _out['2099-000101-CA-01'].get('code_open') == 12000,
       _out['2099-000101-CA-01'].get('code_open'))
-check("--reanalyze never drops a mortgage a wider earlier search found; it only adds the lien rows",
-      _out['2099-000100-CA-01']['liens'] == _wide['liens'] and 'other' in _out['2099-000100-CA-01']
-      and _out['2099-000100-CA-01'].get('mtg_kept'), _out['2099-000100-CA-01'])
+check("--reanalyze never drops a mortgage a wider earlier search found; the new rows are only listed",
+      _out['2099-000100-CA-01']['liens'] == _wide['liens'] and 'other' not in _out['2099-000100-CA-01']
+      and _out['2099-000100-CA-01'].get('other_seen') and _out['2099-000100-CA-01'].get('wider_repull')
+      and not _out['2099-000100-CA-01'].get('repull_tried'), _out['2099-000100-CA-01'])
 check('--reanalyze leaves a dead-token or untokened chain exactly as it was',
       'other' not in _out['2099-000102-CA-01'] and 'other' not in _out['2099-000103-CA-01'])
 check('--reanalyze keeps the old chain when the re-read comes back empty',
@@ -975,13 +987,18 @@ try:
                {'Case #': '2099-000204-CA-01', 'owner_clean': 'JANE PARTIAL', 'Folio': FOLIO, 'judgment': 1},
                {'Case #': '2099-000205-CA-01', 'owner_clean': 'ZED BLOCKED', 'Folio': FOLIO, 'judgment': 1},
                {'Case #': '2099-000206-CA-01', 'owner_clean': 'BOB OWNERZ', 'Folio': FOLIO, 'judgment': 1,
-                'defendants': 'Blockedsn, Carl'}],
+                'defendants': 'Blockedsn, Carl'},
+               {'Case #': '2099-000207-CA-01', 'owner_clean': 'KIM FRESH', 'Folio': FOLIO, 'judgment': 1},
+               {'Case #': '2099-000208-CA-01', 'owner_clean': 'LEE WIDER', 'Folio': FOLIO, 'judgment': 1}],
               open(os.path.join(_t2, 'leads_final.json'), 'w'))
     _mtg_chain = {'conf': 'ok', 'liens': [{'d': '2/1/2008', 'amt': 350000, 'st': 'OPEN', 'bp': '26100/11'}],
                   'searched_as': 'JANE DOE (defendant)'}
     json.dump({'2099-000201-CA-01': {'conf': 'ok', 'liens': []}, '2099-000202-CA-01': {'conf': 'ok', 'liens': []},
                '2099-000203-CA-01': _mtg_chain, '2099-000204-CA-01': _mtg_chain,
-               '2099-000205-CA-01': {'conf': 'ok', 'liens': []}, '2099-000206-CA-01': {'conf': 'ok', 'liens': []}},
+               '2099-000205-CA-01': {'conf': 'ok', 'liens': []}, '2099-000206-CA-01': {'conf': 'ok', 'liens': []},
+               '2099-000207-CA-01': _mtg_chain,
+               '2099-000208-CA-01': {'conf': 'ok', 'liens': [], 'other_seen': [{'doc': 'LIEN'}],
+                                     'wider_repull': 'an earlier narrower re-read'}},
               open(os.path.join(_t2, 'records_liens.json'), 'w'))
     json.dump({'BOB OWNERZ': 'tokOTHER', 'JOHN NEWOWNER': 'tokDEEDONLY', 'JANE PARTIAL': 'tokSATONLY'},
               open(os.path.join(_t2, 'records_qs.json'), 'w'))
@@ -996,7 +1013,8 @@ try:
         # the owner's fresh search comes back too, just not on this parcel
         # ANN NOTHING's search is answered with no records; ZED BLOCKED's and CARL BLOCKEDSN's never are
         return ([deed, city1] if sp == ('TESTER', 'JOHN') else [_far] if sp == ('OWNERZ', 'BOB')
-                else [] if sp == ('NOTHING', 'ANN') else None)
+                else [] if sp == ('NOTHING', 'ANN') else [deed, city1] if sp in (('FRESH', 'KIM'), ('WIDER', 'LEE'))
+                else None)
     _saved = {k: getattr(RL, k) for k in ('LEADS', 'OUT', 'QS_CACHE', 'HERE', 'records_by_qs', 'fetch_via_turnstile',
                                            'camoufox_session', 'mint_and_fetch', 'time')}
     try:
@@ -1026,6 +1044,16 @@ try:
           _o2['2099-000204-CA-01']['liens'] == _mtg_chain['liens'], _o2['2099-000204-CA-01'])
     check("--repull never replaces a chain's mortgages with a narrower search that shows none",
           _o2['2099-000203-CA-01']['liens'] == _mtg_chain['liens'], _o2['2099-000203-CA-01'])
+    for _c in ('2099-000203-CA-01', '2099-000204-CA-01'):
+        check("--repull: a cached token's narrower re-read lists its rows, flags the chain and marks nothing",
+              'other' not in _o2[_c] and _o2[_c].get('wider_repull') and not _o2[_c].get('repull_tried'), _o2[_c])
+    check("--repull: a fresh search that comes back narrower keeps the chain whole, flags it, and is never paid twice",
+          _o2['2099-000207-CA-01']['liens'] == _mtg_chain['liens'] and 'other' not in _o2['2099-000207-CA-01']
+          and _o2['2099-000207-CA-01'].get('wider_repull') and _o2['2099-000207-CA-01'].get('repull_tried')
+          and _asked.count(('FRESH', 'KIM')) == 1, (_asked, _o2['2099-000207-CA-01']))
+    check("--repull: a wider re-read answers an earlier narrower one's flag and listed rows",
+          'other' in _o2['2099-000208-CA-01'] and 'other_seen' not in _o2['2099-000208-CA-01']
+          and 'wider_repull' not in _o2['2099-000208-CA-01'], _o2['2099-000208-CA-01'])
     check('--repull marks a chain it paid to search and found nothing for, and never pays for it again',
           _o2['2099-000202-CA-01'].get('repull_tried') and _asked.count(('NOTHING', 'ANN')) == 1, (_asked, _o2))
     check('--repull never marks a chain whose search the clerk never answered: the next run tries again',

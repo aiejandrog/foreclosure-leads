@@ -227,9 +227,6 @@ def _mortgages_narrower(old, new):
     return False
 
 
-_LIEN_KEYS = ('other', 'other_open_unpriced', 'case_type', 'searched_as')
-
-
 def _carry_lien_totals(old, new, out):
     """A lien total never goes down on a narrower re-read (a spouse's judgment the surname-only search
     found). But a chain the old analyzer wrote (no 'other' rows) summed this case's own judgment, the
@@ -278,45 +275,27 @@ def _carry_lien_totals(old, new, out):
 
 
 def _lay_lien_rows(old, new):
-    """The old chain with the new read's lien rows on it. Each lien total per _carry_lien_totals."""
+    """A narrower re-read (_mortgages_narrower) changes nothing the board counts. The old chain stands
+    whole: its mortgages, its totals, its type and survival. What the new read found that the old chain
+    does not hold rides along under 'other_seen' (its lien rows, and any open mortgage the old chain
+    lacks), for a person to read and never summed, and the chain is flagged for a wider re-pull.
+    'other' stays absent, so the chain is still picked by the next --reanalyze / --repull."""
     out = dict(old)
-    for k in _LIEN_KEYS:
-        if k in new:
-            out[k] = new[k]
-    _carry_lien_totals(old, new, out)
-    # a lender's foreclosure the new read found is news, whatever else it missed
-    for k in ('second_fc', 'second_fc_unsure'):
-        if new.get(k):
-            out[k] = new[k]
-    # a satisfaction that names a kept loan's book/page is a payoff, whatever else the new read missed
-    _sat = {str(l.get('bp')): l for l in new.get('liens') or [] if isinstance(l, dict) and l.get('bp')
-            and l.get('sat_by') == 'book/page' and str(l.get('st') or '').upper() == 'SATISFIED'}
-    out['liens'] = [dict(l, st='SATISFIED', sat_by='book/page')
-                    if isinstance(l, dict) and str(l.get('bp') or '') in _sat
-                    and str(l.get('st') or 'OPEN').upper() == 'OPEN' else l
-                    for l in out.get('liens') or []]
-    # a re-read only ADDS: a mortgage the new read found that the old one did not is kept too
-    _have = {str(l.get('bp') or '') for l in out.get('liens') or [] if isinstance(l, dict)}
-    out['liens'] = list(out.get('liens') or []) + [
-        {k: v for k, v in l.items() if not k.startswith('_')} for l in new.get('liens') or []
-        if isinstance(l, dict) and l.get('bp') and str(l['bp']) not in _have
-        and str(l.get('st') or 'OPEN').upper() == 'OPEN']
-    out['mtg_open_unpriced'] = max(old.get('mtg_open_unpriced') or 0, new.get('mtg_open_unpriced') or 0)
-    # the listing's judgment and whether the new search hit the county's cap describe this read too
-    if new.get('judgment'):
-        out['judgment'] = new['judgment']
-    out['capped'] = bool(old.get('capped') or new.get('capped'))
-    # the case's type decides what survives: a circuit association case the old analyzer read as a
-    # bank's keeps its mortgages, but the whole first now survives the association's sale. Re-settled
-    # on the kept mortgages every time, so first_bp / first_face exist on an old chain that lacked them.
-    if new.get('ftype'):
-        out['ftype'] = new['ftype']
-    _op = [l for l in out.get('liens') or [] if isinstance(l, dict) and l.get('amt')
-           and str(l.get('st') or 'OPEN').upper() == 'OPEN']
-    _sv = _surv_of(_op, out.get('ftype') or '', out.get('judgment') or 0)
-    out.update(_sv, first_face=_sv['first_est'], open_count=len(_op))
-    out['mtg_kept'] = ("mortgages from the earlier search (searched as %s); the %s re-read did not reach "
-                       "all of them" % (old.get('searched_as') or old.get('owner') or '?', time.strftime('%Y-%m-%d')))
+    _have = {str(l.get('bp') or '') for l in old.get('liens') or [] if isinstance(l, dict)}
+    seen = [{k: v for k, v in o.items() if not k.startswith('_')}
+            for o in new.get('other') or [] if isinstance(o, dict)]
+    seen += [dict({k: v for k, v in l.items() if not k.startswith('_')}, kind='mortgage')
+             for l in new.get('liens') or [] if isinstance(l, dict) and l.get('bp')
+             and str(l['bp']) not in _have and str(l.get('st') or 'OPEN').upper() == 'OPEN']
+    out['other_seen'] = seen
+    _fc = new.get('second_fc') or new.get('second_fc_unsure')
+    out['wider_repull'] = ("%s: a re-read searched as %s did not reach every mortgage the earlier search "
+                           "found (searched as %s); the earlier chain is kept whole and the %d row(s) this "
+                           "re-read found are listed, not counted%s"
+                           % (time.strftime('%Y-%m-%d'), new.get('searched_as') or '?',
+                              old.get('searched_as') or old.get('owner') or '?', len(seen),
+                              ('; it also saw a lender\'s foreclosure (%s)'
+                               % ((_fc.get('party') if isinstance(_fc, dict) else _fc) or '?')) if _fc else ''))
     return out
 
 
@@ -1616,8 +1595,9 @@ def _run(a, ap):
                 _co = _sr.people_from(r.get('defendants') or '')
             except Exception:
                 _co = []
+            _cached = None
             if oc in qs_cache:
-                models = records_by_qs(qs_cache[oc])          # free: reuse a still-valid cached token
+                models = _cached = records_by_qs(qs_cache[oc])   # free: reuse a still-valid cached token
                 if a.repull and not _parcel_in(models, folio):
                     # an expired token can come back EMPTY rather than failing, and a chain first found
                     # through a defendant's name is not in the owner's results: either way the cached
@@ -1742,15 +1722,24 @@ def _run(a, ap):
                         json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
                     continue
                 if _old and _mortgages_narrower(_old, res):
-                    # A re-read ONLY ADDS lien rows. The old chain may have come from a wider search
-                    # (a surname-only 2Captcha search, a defendant's name) than the token re-read now:
-                    # its mortgage picture stays, and the new lien rows and totals are laid over it.
-                    res = _lay_lien_rows(_old, res)
+                    # The old chain may have come from a wider search (a surname-only 2Captcha search,
+                    # a defendant's name) than this re-read. It stands whole; the new lien rows are
+                    # listed beside it, not counted, and the chain waits for a wider search.
+                    out[case] = _lay_lien_rows(_old, res)
+                    if a.repull and models is not _cached:
+                        # a fresh search (free or paid) came back narrower: never paid for again.
+                        # The cached token's re-read found out nothing a $0 --reanalyze had not.
+                        out[case]['repull_tried'] = time.strftime('%Y-%m-%d')
                     merged += 1
-                    print(f"  ++  {case:22} {oc:26} lien rows added; the earlier search's mortgages kept")
+                    print(f"  ++  {case:22} {oc:26} narrower re-read: earlier chain kept, "
+                          f"{len(out[case]['other_seen'])} lien row(s) listed, not counted")
+                    json.dump(out, open(OUT, 'w', encoding='utf-8'), indent=1)
+                    continue
                 else:
                     _new = res
                     res = dict(_old or {}, **res)            # keep keys other steps wrote (chain_note)
+                    for _k in ('other_seen', 'wider_repull'):
+                        res.pop(_k, None)                    # an earlier narrower re-read's, now answered
                     if _old:
                         # the mortgages agree, but the new search may still be narrower on liens
                         _carry_lien_totals(_old, _new, res)
@@ -1772,14 +1761,14 @@ def _run(a, ap):
 
     print(f"\nDONE: {done} traced, {hits} with a surviving 2nd mortgage. -> records_liens.json")
     if a.repull:
-        print(f"     --repull: {done} chain(s) re-read ({merged} kept the earlier search's mortgages and took "
-              f"only the lien rows), {kept} re-read(s) found nothing on the parcel "
+        print(f"     --repull: {done} chain(s) re-read, {merged} narrower than the earlier search (earlier "
+              f"chain kept, needs a wider search), {kept} re-read(s) found nothing on the parcel "
               f"(old chain kept), {capped} not pulled because of the cap, "
-              f"{len(picked) - done - kept - capped} with no records or blocked")
+              f"{len(picked) - done - merged - kept - capped} with no records or blocked")
     elif a.reanalyze:
-        print(f"     --reanalyze: {done} chain(s) re-read ({merged} kept the earlier search's mortgages and took "
-              f"only the lien rows)")
-        print(f"     --reanalyze: {len(picked) - done - kept} cached token(s) had expired and {kept} re-read(s) "
+        print(f"     --reanalyze: {done} chain(s) re-read, {merged} narrower than the earlier search (earlier "
+              f"chain kept, lien rows listed not counted: a --repull candidate)")
+        print(f"     --reanalyze: {len(picked) - done - merged - kept} cached token(s) had expired and {kept} re-read(s) "
               f"found nothing on the parcel; those chains, and the {len(no_token)} without a token, keep "
               f"their old lien picture until a paid re-pull")
     if cf_free or paid:

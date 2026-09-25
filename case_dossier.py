@@ -133,6 +133,12 @@ def _b(chain, lead=None):
                             'anchored_by': l.get('anchor'),
                             'this_case': bool(l.get('own_case'))} for l in other],
         other_open_unpriced=chain.get('other_open_unpriced'),
+        # a narrower re-read's lien rows: listed for a person to read, never in any total above
+        listed_not_counted=[{'date': l.get('d'), 'type': l.get('doc'), 'kind': l.get('kind'), 'amount': l.get('amt'),
+                             'party': l.get('party'), 'book_page': l.get('bp'), 'status': l.get('st'),
+                             'this_case': bool(l.get('own_case'))}
+                            for l in (chain.get('other_seen') or []) if isinstance(l, dict)] or None,
+        wider_search_needed=chain.get('wider_repull') or None,
         search_capped=chain.get('capped'),
         parcel_found=chain.get('parcel_found'),
         anchored_to=chain.get('subdiv') or None,
