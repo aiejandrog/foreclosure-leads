@@ -290,6 +290,13 @@ class Assess(unittest.TestCase):
             got = self.run_assess([('9', 'final_judgment', True, []), ('5', 'order_on_motion', True, [])],
                                   {'judgments': {'controlling_entry': '9'}})
         self.assertNotIn('price_is_floor', got)
+        self.assertTrue(got['whole_case_is_floor'])      # but the whole-case count is a floor
+        # a judgment the plan holds out of the order has no 'before'
+        with mock.patch('judgment_money.verify_document', return_value=ok):
+            got = self.run_assess([('5', 'vacatur', True, []),
+                                   ('9', 'final_judgment', False, ['entry_date_unknown'])],
+                                  {'judgments': {'controlling_entry': '9'}})
+        self.assertNotIn('price_is_floor', got)
 
     def test_repeatable_failure_is_not_priced(self):
         ref = _row(self.base, '9', '$1.00', 'j')
@@ -419,9 +426,9 @@ class Render(unittest.TestCase):
                  'pages_to_judgment': 0, 'pages_all': 0}]
         out = JP.render(rows, ['2026A00001'], 0.02, 10, date(2026, 9, 25))
         self.assertIn('| next 7 days | 1 | 3 | $0.06 | 5 | $0.10 |', out)
-        rows[0]['price_is_floor'] = True
-        self.assertIn('| next 7 days | 1 | 3+ | $0.06 or more (1 case missing free OCR) |',
-                      JP.render(rows, [], 0.02, 10, date(2026, 9, 25)))
+        rows[0]['price_is_floor'] = rows[0]['whole_case_is_floor'] = True
+        self.assertIn('| next 7 days | 1 | 3+ | $0.06 or more (1 case missing free OCR) | 5+ | '
+                      '$0.10 or more |', JP.render(rows, [], 0.02, 10, date(2026, 9, 25)))
         self.assertIn('| verified | 0 | 0 | 1 | 0 | 0 | 1 |', out)
         self.assertIn('(all sale dates): 1', out)
 

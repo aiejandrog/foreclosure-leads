@@ -264,11 +264,16 @@ def assess(case, base, timeline, as_of, timeline_mtime=None):
     if any(r.get('_ocr_unreachable') for r in order
            if str(r.get('entry_ref') or '') == target):
         out['ocr_unreachable'] = True
-    elif any(r.get('_ocr_unreachable') for r in order[:max(
-            [i for i, r in enumerate(order) if str(r.get('entry_ref') or '') == target] or [-1])]):
-        # Only a filing the reader walks BEFORE the judgment can add to the cost of reaching it.
-        out['price_is_floor'] = True
-        notes.append('free OCR missing for a filing read before the judgment: its pages are not '
+    else:
+        at = [i for i, r in enumerate(order) if str(r.get('entry_ref') or '') == target]
+        missing = [i for i, r in enumerate(order) if r.get('_ocr_unreachable')]
+        if missing:
+            out['whole_case_is_floor'] = True        # every unseen page is out of the whole-case count
+        # Only a filing the reader walks BEFORE the judgment can add to the cost of reaching it; a
+        # judgment the plan holds out of the order has no 'before'.
+        if at and any(i < max(at) for i in missing):
+            out['price_is_floor'] = True
+            notes.append('free OCR missing for a filing read before the judgment: its pages are not '
                      'in the price, so pages to the judgment is a floor')
     if out.get('ocr_unreachable'):
         notes.append('the free OCR for a document is not reachable here (stored PDF or its OCR '
@@ -426,10 +431,12 @@ def render(rows, skipped_ids, rate, sample, today):
         pa = sum(r['pages_all'] for r in need)
         floors = sum(1 for r in need if r.get('price_is_floor'))
         # A floor case's hidden pages are not in its count: the totals then are a lower bound.
-        lines.append('| %s | %d | %d%s | $%.2f%s | %d | $%.2f |'
+        whole = sum(1 for r in need if r.get('whole_case_is_floor'))
+        lines.append('| %s | %d | %d%s | $%.2f%s | %d%s | $%.2f%s |'
                      % (name, len(need), pj, '+' if floors else '', pj * per_page,
                         ' or more (%d case%s missing free OCR)' % (floors, '' if floors == 1 else 's')
-                        if floors else '', pa, pa * per_page))
+                        if floors else '', pa, '+' if whole else '', pa * per_page,
+                        ' or more' if whole else ''))
     lines += ['', '"read_not_verified": the judgment was already read in full and its figures do not '
               'reproduce its printed total to the cent; paying again buys the same answer, so it '
               'needs a person or the paid clerk copy, not another read.']
