@@ -362,6 +362,19 @@ _mj = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '37', 45000, 'GARCIA MA
                       folio='3099999999999')], FOLIO, 12000, ftype='HOA', owner='MARIA-JOSE GARCIA')
 check("a neighbour sharing the owner's surname and first name does not release the owner's lien",
       _mj['other'][0]['st'] == 'OPEN' and _mj['code_open'] == 45000, _mj['other'])
+_ph2 = RL.analyze([deed, rec('CLAIM OF LIEN', '1/1/2024', '34000', '40', 9000, 'OWNER TESTER',
+                             first='SUNSET HOMEOWNERS ASSOCIATION INC'),
+                   rec('CLAIM OF LIEN', '1/2/2024', '34000', '41', 15000, 'OWNER TESTER',
+                       first='SUNSET HOMEOWNERS ASSOCIATION PHASE II INC')],
+                  FOLIO, 9500, ftype='HOA', plaintiff='SUNSET HOMEOWNERS ASSOCIATION INC', owner='OWNER TESTER',
+                  case='2024-000001-CC-05')
+check("a sibling association whose name EXTENDS the plaintiff's is another claim",
+      [bool(o.get('own_case')) for o in _ph2['other']] == [True, False] and _ph2['hoa_open'] == 15000, _ph2['other'])
+_cj = RL.analyze([deed, rec('JUDGMENT', '3/1/2025', '35000', '2', 9510, 'OWNER TESTER', first='CITY OF MIAMI')],
+                 FOLIO, 9500, ftype='HOA', plaintiff='SUNSET HOMEOWNERS ASSOCIATION INC', owner='OWNER TESTER',
+                 case='2024-000001-CC-05')
+check("a City's judgment near this case's figure is still the City's", not _cj['other'][0].get('own_case')
+      and _cj['code_open'] == 9510, _cj['other'])
 check("a hyphenated first name still names the owner",
       RL._names_owner('GARCIA MARIA-JOSE', [RL._owner_words('MARIA-JOSE GARCIA')]))
 _boa2 = RL.analyze([deed, rec('JUDGMENT', '6/1/2025', '35000', '1', 8500, 'TESTER OWNER', first='BANK OF AMERICA NA',
@@ -567,6 +580,14 @@ try:
     check("--spend-ledger: a lock another run took over is not ours to delete",
           open(_got).read() != RL._SPEND.get('lock_id'))
     os.remove(_got)
+    _st = os.path.join(_tmp, 'stale.json')
+    open(_st + '.lock', 'w').write('1 crashed')
+    os.utime(_st + '.lock', (1, 1))
+    _a1 = RL._ledger_lock(_st)
+    _a2 = RL._ledger_lock(_st)
+    check("--spend-ledger: a crashed run's lock is taken over by exactly one run", bool(_a1) and _a2 is None,
+          (_a1, _a2))
+    os.remove(_a1)
     check('--spend-ledger: a second paying run cannot start while one holds the ledger',
           _locked and len(_fake_cs.calls) == _n2)
     check('--spend-ledger: a second run gets only what the first left, and cannot raise the cap',

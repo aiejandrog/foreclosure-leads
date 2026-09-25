@@ -214,10 +214,17 @@ def _ledger_lock(path):
         except FileExistsError:
             try:
                 if time.time() - os.path.getmtime(lock) > 12 * 3600:
-                    os.remove(lock)
+                    # take a crashed run's lock over by RENAMING it: only one of two runs starting
+                    # together can move it, and the loser then meets the winner's fresh lock
+                    stale = '%s.stale-%s' % (lock, os.urandom(4).hex())
+                    os.rename(lock, stale)
+                    try:
+                        os.remove(stale)
+                    except OSError:
+                        pass
                     continue
             except OSError:
-                pass
+                continue                                        # someone else moved it: look again
             return None
     return None
 
@@ -862,21 +869,22 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     _case_year = int(_cy.group(1)) if _cy else None
     def _is_plaintiff(*parties):
         # A name that normalizes short ("PNC BANK" -> "PNC") must match exactly; a containment
-        # test on three letters would call every party with "PNC" in it the plaintiff. One name must
-        # START the other (the index truncates names): a sibling association ("VILLAGES OF KENDALL
-        # MASTER" vs "... HOMEOWNERS") only shares a start, and "BANK OF AMERICA" (-> OFAMERICA)
-        # sits inside "UNITED STATES OF AMERICA" without starting it.
+        # test on three letters would call every party with "PNC" in it the plaintiff. The INDEX
+        # name may be the plaintiff's cut short, never longer: "SUNSET HOMEOWNERS ASSOCIATION PHASE II"
+        # is a sibling of "SUNSET HOMEOWNERS ASSOCIATION", "VILLAGES OF KENDALL MASTER" only shares a
+        # start with "... HOMEOWNERS", and "BANK OF AMERICA" (-> OFAMERICA) sits inside "UNITED
+        # STATES OF AMERICA" without starting it.
         if len(_pl) < 2:
             return False
         for p in parties:
             q = _pnorm(p)
             if not q:
                 continue
-            if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and (q.startswith(_pl) or _pl.startswith(q))):
+            if q == _pl or (len(_pl) >= 5 and len(q) >= 5 and _pl.startswith(q)):
                 return True
         return False
     def _own_judgment(doc, amt, d):
-        # the case's own final judgment, whatever name the index files it under: same figure
+        # the case's figure on a judgment recorded no earlier than the case
         return ('JUDGMENT' in doc and amt > 0 and judgment and judgment > 0
                 and abs(amt - judgment) <= max(1.0, 0.01 * judgment) and not _before_case(d))
     def _before_case(d):
@@ -961,9 +969,14 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
         # suit (a credit card), not this one.
         _other_suit = ('JUDGMENT' in doc and not on_parcel and amt > 0 and judgment and judgment > 0
                        and not _own_judgment(doc, amt, r.get('reC_DATE', '')))
+        # The figure alone names this case's judgment only on this parcel and only when the creditor
+        # is not a City, an association or a tax authority: a City's $9,510 judgment is not the
+        # association's $9,500 one. (The index filing the plaintiff under another name, a servicer,
+        # is what this is for.)
         own_case = ((_is_plaintiff(p1, p2) and (kind in ('association', 'other') or _suit_doc)
                      and not (_suit_doc and _before_case(r.get('reC_DATE', ''))) and not _other_suit)
-                    or _own_judgment(doc, amt, r.get('reC_DATE', '')))
+                    or (_own_judgment(doc, amt, r.get('reC_DATE', '')) and on_parcel
+                        and kind in ('judgment', 'other')))
         released = all(bp) and bp in released_bp
         row = {'d': (r.get('reC_DATE', '') or '')[:10], 'doc': doc[:40], 'kind': kind,
                'party': (cred if cred is not both else
