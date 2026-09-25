@@ -904,6 +904,20 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
     _pnorm = lambda x: _inst(re.sub(r'\s(?:AS\s+)?(?:TRUSTEE|TR)\b.*$', '', re.sub(r'[.,]', ' ', (x or '').upper())))
     _pl = _pnorm(plaintiff)
     _ow = [w for w in [_owner_words(owner)] + [('person', l, f) for l, f in (co_owners or ())] if w] or None
+    # The parcel's own deeds name the household too ('SMITH JOHN & HELEN'), and an LP lead carries no
+    # defendants: every given name recorded beside the owner's surname on a deed to this folio is an owner.
+    _o0 = _owner_words(owner)
+    if _o0 and _o0[0] == 'person':
+        _sn = re.findall(r'[A-Z0-9]+', _o0[1].replace("'", ''))
+        for r in models:
+            if 'DEED' not in (r.get('doC_TYPE', '') or '').upper() or norm_folio(r.get('foliO_NUMBER', '')) != fol:
+                continue
+            for side in (r.get('firsT_PARTY'), r.get('seconD_PARTY')):
+                toks = re.findall(r'[A-Z0-9]+', (side or '').upper().replace("'", ''))
+                if _sn and all(t in toks for t in _sn):
+                    for g in toks:
+                        if len(g) > 1 and g not in _sn and g not in ('AND', 'HW', 'WF', 'HUSB', 'WIFE', 'ET', 'AL', 'UX', 'VIR'):
+                            _ow.append(('person', _o0[1], g))
     _cy = re.match(r'\s*(\d{4})-', case or '')
     _case_year = int(_cy.group(1)) if _cy else None
     def _is_plaintiff(*parties):
@@ -921,7 +935,7 @@ def analyze(models, folio, judgment, ftype='', plaintiff='', owner='', case='', 
                 continue
             # an index name that ENDS in a legal suffix is whole, not cut short: it must match exactly
             # ("SUNSET HOMEOWNERS ASSOCIATION INC" is not "... ASSOCIATION PHASE II INC")
-            whole = re.search(r'\b(?:INC|LLC|CORP|CO|LTD|LP|ASSN|ASSOCIATION|NA|N A|FSB|TRUST)\.?\s*$',
+            whole = re.search(r'\b(?:INC|LLC|CORP|CO|LTD|LP|ASSN|ASSOC|ASSOCIATION|NA|N A|FSB|TRUST)\.?\s*$',
                               re.sub(r'[.,]', ' ', p or '').upper().strip())
             if q == _pl or (not whole and len(_pl) >= 5 and len(q) >= 5 and _pl.startswith(q)):
                 return True
@@ -1474,8 +1488,12 @@ def _run(a, ap):
             res['searched_as'] = _searched
             res['case_type'] = r.get('case_type') or ''     # the lead's own reading of who is foreclosing
             if a.reanalyze:
+                # --repull: every mortgage the old chain had OPEN must still be there, open or shown
+                # satisfied; a fresh search that simply does not reach one is narrower, not a payoff
                 _had = [l for l in ((out.get(case) or {}).get('liens') or []) if isinstance(l, dict)]
-                _lost = a.repull and _had and not res.get('liens') and not res.get('mtg_open_unpriced')
+                _now = {str(l.get('bp') or '') for l in (res.get('liens') or []) if isinstance(l, dict)}
+                _lost = a.repull and any(str(l.get('st') or 'OPEN').upper() == 'OPEN'
+                                         and (not l.get('bp') or str(l['bp']) not in _now) for l in _had)
                 if out.get(case) and (not (res.get('nrec') and res.get('parcel_found')) or _lost):
                     if a.repull and _SPEND['stopped']:
                         # the cap stopped the search part-way (the defendants were never asked):

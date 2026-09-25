@@ -345,6 +345,16 @@ _trunc = RL.analyze([deed, rec('CLAIM OF LIEN', '1/1/2024', '34000', '54', 9000,
                     FOLIO, 4000, ftype='HOA', plaintiff='SUNSET HOMEOWNERS ASSOCIATION PHASE II INC',
                     owner='OWNER TESTER', case='2024-000001-CC-05')
 check("an index name cut short is still the plaintiff's", _trunc['other'][0].get('own_case') is True, _trunc['other'])
+_hh = RL.analyze([rec('DEED', '2/1/2008', '26100', '10', 0, 'SMITH JOHN & HELEN', first='PRIOR SELLER'),
+                  rec('LIEN', '3/3/2022', '33500', '56', 30000, 'SMITH HELEN', first='INTERNAL REVENUE SERVICE',
+                      folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='JOHN SMITH')
+check("a spouse named on the parcel's deed is the household: her IRS lien rides with no defendants list",
+      _hh['irs_open'] == 30000, _hh['other'])
+_assoc = RL.analyze([deed, rec('CLAIM OF LIEN', '1/1/2024', '34000', '57', 9000, 'OWNER TESTER',
+                               first='SUNSET HOMEOWNERS ASSOC')],
+                    FOLIO, 4000, ftype='HOA', plaintiff='SUNSET HOMEOWNERS ASSOCIATION PHASE II INC',
+                    owner='OWNER TESTER', case='2024-000001-CC-05')
+check("'... ASSOC' is a whole name too", not _assoc['other'][0].get('own_case') and _assoc['hoa_open'] == 9000, _assoc['other'])
 for _ini in ('SMITH J', 'SMITH'):
     _irs = RL.analyze([deed, rec('LIEN', '3/3/2022', '33500', '55', 40000, 'INTERNAL REVENUE SERVICE', first=_ini,
                                  folio='', subdiV_NAME='')], FOLIO, 12000, ftype='HOA', owner='JOHN SMITH')
@@ -639,14 +649,19 @@ try:
     json.dump([{'Case #': '2099-000201-CA-01', 'owner_clean': 'BOB OWNERZ', 'Folio': FOLIO, 'judgment': 1,
                 'defendants': 'Tester, John'},
                {'Case #': '2099-000202-CA-01', 'owner_clean': 'ANN NOTHING', 'Folio': FOLIO, 'judgment': 1},
-               {'Case #': '2099-000203-CA-01', 'owner_clean': 'JOHN NEWOWNER', 'Folio': FOLIO, 'judgment': 1}],
+               {'Case #': '2099-000203-CA-01', 'owner_clean': 'JOHN NEWOWNER', 'Folio': FOLIO, 'judgment': 1},
+               {'Case #': '2099-000204-CA-01', 'owner_clean': 'JANE PARTIAL', 'Folio': FOLIO, 'judgment': 1}],
               open(os.path.join(_t2, 'leads_final.json'), 'w'))
     _mtg_chain = {'conf': 'ok', 'liens': [{'d': '2/1/2008', 'amt': 350000, 'st': 'OPEN', 'bp': '26100/11'}],
                   'searched_as': 'JANE DOE (defendant)'}
     json.dump({'2099-000201-CA-01': {'conf': 'ok', 'liens': []}, '2099-000202-CA-01': {'conf': 'ok', 'liens': []},
-               '2099-000203-CA-01': _mtg_chain},
+               '2099-000203-CA-01': _mtg_chain, '2099-000204-CA-01': _mtg_chain},
               open(os.path.join(_t2, 'records_liens.json'), 'w'))
-    json.dump({'BOB OWNERZ': 'tokOTHER', 'JOHN NEWOWNER': 'tokDEEDONLY'}, open(os.path.join(_t2, 'records_qs.json'), 'w'))
+    json.dump({'BOB OWNERZ': 'tokOTHER', 'JOHN NEWOWNER': 'tokDEEDONLY', 'JANE PARTIAL': 'tokSATONLY'},
+              open(os.path.join(_t2, 'records_qs.json'), 'w'))
+    _oldm = rec('MORTGAGE', '1/1/2001', '19000', '1', 90000, 'SOME LENDER', first='OWNER TESTER')
+    _oldsat = rec('SATISFACTION', '1/1/2005', '23000', '1', 0, 'OWNER TESTER', first='SOME LENDER',
+                  oriG_REC_BOOK='19000', oriG_REC_PAGE='1')
     open(os.path.join(_t2, 'gen_records_qs.py'), 'w').write('')
     _far = rec('DEED', '1/1/2010', '20000', '1', folio='3099999999999', subdiV_NAME='ELSEWHERE')
     _asked = []
@@ -659,7 +674,8 @@ try:
     try:
         RL.LEADS, RL.OUT = os.path.join(_t2, 'leads_final.json'), os.path.join(_t2, 'records_liens.json')
         RL.QS_CACHE, RL.HERE = os.path.join(_t2, 'records_qs.json'), _t2
-        RL.records_by_qs = lambda qs: [_far] if qs == 'tokOTHER' else ([deed] if qs == 'tokDEEDONLY' else None)
+        RL.records_by_qs = lambda qs: ([_far] if qs == 'tokOTHER' else [deed] if qs == 'tokDEEDONLY'
+                                       else [deed, _oldm, _oldsat] if qs == 'tokSATONLY' else None)
         RL.fetch_via_turnstile = _ft
         RL.camoufox_session = lambda: (None, None)
         RL.mint_and_fetch = lambda *a, **k: None
@@ -678,6 +694,8 @@ try:
     check('--repull searches the defendant when the owner name misses the parcel',
           ('TESTER', 'JOHN') in _asked and 'other' in _o2['2099-000201-CA-01']
           and _o2['2099-000201-CA-01'].get('searched_as') == 'JOHN TESTER (defendant)', (_asked, _o2['2099-000201-CA-01']))
+    check("--repull never drops an open mortgage the fresh search does not reach, even beside a satisfied one",
+          _o2['2099-000204-CA-01']['liens'] == _mtg_chain['liens'], _o2['2099-000204-CA-01'])
     check("--repull never replaces a chain's mortgages with a narrower search that shows none",
           _o2['2099-000203-CA-01']['liens'] == _mtg_chain['liens'], _o2['2099-000203-CA-01'])
     check('--repull marks a chain it paid to search and found nothing for, and never pays for it again',
